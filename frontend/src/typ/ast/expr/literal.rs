@@ -174,6 +174,15 @@ impl Literal {
         }
     }
 
+    pub fn try_fdiv(self, b: Literal) -> Option<Literal> {
+        match (self, b) {
+            (Literal::Real(a), Literal::Real(b)) => {
+                Some(Literal::Real(a / b))
+            }
+            _ => None,
+        }
+    }
+
     pub fn try_and(self, b: Literal) -> Option<Literal> {
         match (self, b) {
             (Literal::Boolean(a), Literal::Boolean(b)) => {
