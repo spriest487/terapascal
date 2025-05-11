@@ -7,13 +7,11 @@ use crate::ast;
 use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
-use crate::ast::IdentPath;
 use crate::ast::TypeAnnotation;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_expr;
-use crate::typ::typecheck_type;
-use crate::typ::typecheck_type_params;
+use crate::typ::{typecheck_type_params, MismatchedMethodDecl};
 use crate::typ::typecheck_type_path;
 use crate::typ::validate_generic_constraints;
 use crate::typ::Binding;
@@ -27,9 +25,6 @@ use crate::typ::GenericError;
 use crate::typ::GenericResult;
 use crate::typ::GenericTarget;
 use crate::typ::InvalidOverloadKind;
-use crate::typ::NameContainer;
-use crate::typ::NameError;
-use crate::typ::NameResult;
 use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
@@ -41,6 +36,7 @@ use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use crate::typ::{typecheck_type, NameContainer, NameError};
 use common::span::Span;
 use common::span::Spanned;
 use derivative::Derivative;
@@ -262,26 +258,16 @@ impl FunctionDecl {
                         }
 
                         // method definition
-                        _ => match explicit_owning_ty.full_path() {
-                            Some(ty_name) => {
-                                validate_method_def_matches_decl(
-                                    &ty_name,
-                                    &decl.name.ident,
-                                    &method_sig,
-                                    decl.kind,
-                                    ctx,
-                                    decl.span(),
-                                ).map_err(|err| {
-                                    TypeError::from_name_err(err, decl.span.clone())
-                                })?;
-                            }
-
-                            None => {
-                                return Err(TypeError::InvalidMethodInstanceType {
-                                    ty: explicit_owning_ty.clone(),
-                                    span: explicit_ty_span.clone(),
-                                });
-                            }
+                        _ => {
+                            validate_method_def_matches_decl(
+                                &explicit_owning_ty,
+                                &explicit_ty_span,
+                                &decl.name.ident,
+                                &method_sig,
+                                decl.kind,
+                                ctx,
+                                decl.span(),
+                            )?;
                         }
                     }
                 }
@@ -460,38 +446,86 @@ fn typecheck_params(
 }
 
 fn validate_method_def_matches_decl(
-    owning_ty_name: &IdentPath,
+    owning_ty: &Type,
+    owning_ty_span: &Span,
     method_ident: &Ident,
     method_sig: &FunctionSig,
     method_kind: FunctionDeclKind,
     ctx: &Context,
     def_span: &Span,
-) -> NameResult<()> {
-    let (_, owning_ty) = ctx.find_type(owning_ty_name)?;
+) -> TypeResult<()> {
+    let Some(owning_ty_name) = owning_ty.full_name() else {
+        return Err(TypeError::InvalidMethodInstanceType {
+            ty: owning_ty.clone(),
+            span: owning_ty_span.clone(),
+        });
+    };
+    
+    let owning_ty = match &owning_ty_name.type_args {
+        // unspecialized
+        None => ctx.find_type(&owning_ty_name.full_path)
+            .map_err(|err| {
+                TypeError::from_name_err(err, owning_ty_span.clone())
+            })?.1
+            .clone(),
+        
+        // specialized
+        Some(owning_ty_args) => Type::specialize(owning_ty, &owning_ty_args, ctx)
+            .map_err(|err| {
+                TypeError::from_generic_err(err, owning_ty_span.clone())
+            })?
+            .into_owned(),
+    };
 
-    match owning_ty.find_method(method_ident, method_sig, ctx)? {
-        None => Err(NameError::MemberNotFound {
+    let decl_method = owning_ty
+        .methods(ctx)
+        .map(|methods| {
+            methods
+                .into_iter()
+                .filter_map(|m| if m.func_decl.ident() == method_ident {
+                    Some(m.func_decl)
+                } else {
+                    None
+                })
+                .collect::<Vec<_>>()
+        })
+        .map_err(|err| {
+            TypeError::from_name_err(err, def_span.clone())
+        })?;
+    
+    if decl_method.is_empty() {
+        return Err(TypeError::from_name_err(NameError::MemberNotFound {
             base: NameContainer::Type(owning_ty.clone()),
             member: method_ident.clone(),
-        }),
-
-        Some((_method_index, declared_method)) => {
-            let declared_sig = declared_method.func_decl.sig();
-
-            if *method_sig != declared_sig || declared_method.func_decl.kind != method_kind {
-                // eprintln!("expect: {:?} {:#?}",  declared_method.decl.kind, declared_sig);
-                // eprintln!("actual: {:?} {:#?}", method_kind, method_sig);
-                
-                Err(NameError::DefDeclMismatch {
-                    def: def_span.clone(),
-                    decl: declared_method.func_decl.span.clone(),
-                    path: owning_ty_name.clone().child(method_ident.clone()),
-                })
-            } else {
-                Ok(())
-            }
-        }
+        }, def_span.clone()));
     }
+    
+    let matches = decl_method
+        .iter()
+        .any(|decl_method| {
+            let declared_sig = decl_method.sig();
+
+            *method_sig == declared_sig && decl_method.kind == method_kind
+        });
+    
+    if !matches {
+        return Err(TypeError::MethodDefMismatch {
+            span: def_span.clone(),
+            decls: decl_method
+                .into_iter()
+                .map(|m| MismatchedMethodDecl {
+                    name: m.name.ident.clone(),
+                    kind: m.kind,
+                    span: m.span.clone(),
+                })
+                .collect(),
+            method_ident: method_ident.clone(),
+            actual_kind: method_kind,
+            owning_ty,
+        });
+    }
+    
+    Ok(())
 }
 
 pub fn typecheck_func_def(

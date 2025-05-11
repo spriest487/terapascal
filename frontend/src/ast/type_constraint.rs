@@ -78,7 +78,7 @@ impl WhereClause<TypeName> {
         let clause = Self { constraints, span };
 
         if clause.constraints.is_empty() {
-            return Err(TracedError::trace(ParseError::EmptyWhereClause(clause)));
+            Err(TracedError::trace(ParseError::EmptyWhereClause(clause)))
         } else {
             Ok(clause)
         }

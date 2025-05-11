@@ -591,7 +591,7 @@ impl LibraryBuilder {
 
         let iface_ty_name = virtual_key
             .iface_ty
-            .full_path()
+            .full_name()
             .expect("interface type must not be unnamed");
 
         let iface_method_decl = virtual_key.iface_ty
@@ -607,8 +607,7 @@ impl LibraryBuilder {
             .unwrap_or_else(|| {
                 let src_iface_def = self
                     .src_metadata
-                    .find_iface_def(&iface_ty_name)
-                    .cloned()
+                    .instantiate_iface_def(&iface_ty_name)
                     .unwrap_or_else(|_err| panic!(
                         "instantiate_virtual_method: failed to get interface def {} referenced in metadata",
                         iface_ty_name,
@@ -719,10 +718,8 @@ impl LibraryBuilder {
         self.library.functions.insert(id, function);
     }
 
-    pub fn find_iface_decl(&self, iface_ident: &IdentPath) -> Option<ir::InterfaceID> {
-        let name = ir::NamePath::from_parts(iface_ident
-            .iter()
-            .map(Ident::to_string));
+    pub fn find_iface_decl(&mut self, iface_name: &typ::Symbol) -> Option<ir::InterfaceID> {
+        let name = translate_name(iface_name, &GenericContext::empty(), self);
 
         self.library.metadata
             .ifaces()
@@ -779,19 +776,10 @@ impl LibraryBuilder {
         }
     }
 
-    pub fn find_type(&self, src_ty: &typ::Type) -> ir::Type {
+    pub fn find_type(&mut self, src_ty: &typ::Type) -> ir::Type {
         match src_ty {
             typ::Type::Nothing => ir::Type::Nothing,
             typ::Type::Nil => ir::Type::Nothing.ptr(),
-
-            typ::Type::Interface(iface) => {
-                let iface_id = match self.find_iface_decl(iface) {
-                    Some(id) => id,
-                    None => panic!("missing IR definition for interface {}", iface),
-                };
-
-                ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id))
-            },
 
             typ::Type::Primitive(typ::Primitive::Boolean) => ir::Type::Bool,
 
@@ -815,7 +803,7 @@ impl LibraryBuilder {
             typ::Type::Pointer(target) => self.find_type(target).ptr(),
 
             typ::Type::Record(class) | typ::Type::Class(class) => {
-                expect_no_generic_args(&class, class.type_args.as_ref());
+                expect_no_unspec_args(&class, class.type_args.as_ref());
 
                 let ty_name = ir::NamePath::from_decl(class.as_ref().clone(), self);
                 let struct_id = match self.metadata().find_type_decl(&ty_name) {
@@ -833,6 +821,17 @@ impl LibraryBuilder {
 
                     _ => unreachable!(),
                 }
+            },
+
+            typ::Type::Interface(iface) => {
+                expect_no_unspec_args(&iface, iface.type_args.as_ref());
+
+                let iface_id = match self.find_iface_decl(&iface) {
+                    Some(id) => id,
+                    None => panic!("missing IR definition for interface {}", iface),
+                };
+
+                ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id))
             },
 
             typ::Type::Array(array_ty) => {
@@ -858,7 +857,7 @@ impl LibraryBuilder {
             },
 
             typ::Type::Variant(variant) => {
-                expect_no_generic_args(&variant, variant.type_args.as_ref());
+                expect_no_unspec_args(&variant, variant.type_args.as_ref());
 
                 let ty_name = ir::NamePath::from_decl(variant.as_ref().clone(), self);
 
@@ -1001,11 +1000,8 @@ impl LibraryBuilder {
                 }
             }
 
-            typ::Type::Interface(iface_def) => {
-                let iface_def = self.src_metadata
-                    .find_iface_def(iface_def)
-                    .cloned()
-                    .unwrap();
+            typ::Type::Interface(iface_sym) => {
+                let iface_def = self.src_metadata.instantiate_iface_def(iface_sym).unwrap();
 
                 let iface_name = translate_name(&iface_def.name, generic_ctx, self);
                 let id = self.library.metadata.declare_iface(&iface_name);
@@ -1962,7 +1958,7 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
     lib.gen_runtime_type(&class_ty);
 }
 
-fn expect_no_generic_args<T: fmt::Display>(target: &T, type_args: Option<&typ::TypeArgList>) {
+fn expect_no_unspec_args<T: fmt::Display>(target: &T, type_args: Option<&typ::TypeArgList>) {
     if let Some(type_args) = type_args {
         let any_generic_args = type_args.items.iter().any(|arg| arg.is_generic_param());
         assert!(

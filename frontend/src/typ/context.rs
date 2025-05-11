@@ -19,13 +19,13 @@ pub use self::scope::*;
 pub use self::ufcs::InstanceMethod;
 pub use self::value_kind::*;
 use crate::ast as syn;
-use crate::ast::{Access, MethodOwner};
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Path;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
-use crate::ast::INTERFACE_METHOD_ACCESS;
+use crate::ast::IFACE_METHOD_ACCESS;
+use crate::ast::{Access, MethodOwner};
 use crate::typ::ast::EnumDecl;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;
@@ -38,11 +38,11 @@ use crate::typ::ast::StructDef;
 use crate::typ::ast::VariantDef;
 use crate::typ::ast::SELF_TY_NAME;
 use crate::typ::specialize_by_return_ty;
+use crate::typ::specialize_iface_def;
 use crate::typ::specialize_struct_def;
 use crate::typ::specialize_variant_def;
 use crate::typ::FunctionSig;
 use crate::typ::Primitive;
-use crate::typ::Specializable;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
@@ -87,6 +87,17 @@ pub enum InstanceMember {
 pub enum TypeMember {
     Method(MethodGroupMember),
     MethodGroup(Vec<MethodGroupMember>),
+}
+
+impl TypeMember {
+    pub fn from_method_members(mut members: Vec<MethodGroupMember>) -> TypeMember {
+        if members.len() == 1 {
+            let single_method = members.remove(0);
+            TypeMember::Method(single_method)
+        } else {
+            TypeMember::MethodGroup(members)
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -613,7 +624,8 @@ impl Context {
         visibility: Visibility,
     ) -> TypeResult<()> {
         let name = iface.name.ident().clone();
-        let iface_ty = Type::interface(iface.name.full_path.clone());
+        let iface_ty = Type::interface(iface.name.clone());
+
         self.declare_type(name.clone(), iface_ty, visibility, iface.forward)?;
 
         if !iface.forward {
@@ -917,11 +929,11 @@ impl Context {
 
         match ty {
             Type::Interface(iface_name) => {
-                // check the method exists
-                let iface = self.find_iface_def(&iface_name)?;
-                let iface_ty = Type::Interface(iface_name);
+                let iface_ty = Type::interface((*iface_name).clone());
 
-                if iface.get_method(&def.decl.name.ident).is_none() {
+                // check the method exists
+                let generic_def = self.instantiate_iface_def(&iface_name)?;
+                if generic_def.get_method(&def.decl.name.ident).is_none() {
                     return Err(NameError::MemberNotFound {
                         base: NameContainer::Type(iface_ty),
                         member: method.clone(),
@@ -1000,7 +1012,7 @@ impl Context {
             .method_defs
             .entry(ty.clone())
             .or_insert_with(MethodCollection::new);
-        
+
         let key = MethodKey {
             name: def.decl.ident().clone(),
             sig: Rc::new(def.decl.sig()),
@@ -1258,7 +1270,7 @@ impl Context {
                     DefKey::Unique => Some(def),
                     DefKey::Sig(..) => None,
                 }
-            })                
+            })
             .filter_map(|def| match def {
                 Def::Struct(struct_def) => {
                     Some(Type::from_struct_type(struct_def.name.clone(), struct_def.kind))
@@ -1269,7 +1281,7 @@ impl Context {
                 },
 
                 Def::Interface(iface_def) => {
-                    Some(Type::interface(iface_def.name.full_path.clone()))
+                    Some(Type::interface(iface_def.name.clone()))
                 },
 
                 Def::Set(set_def) => {
@@ -1351,18 +1363,15 @@ impl Context {
         name.expect_not_unspecialized()?;
 
         let base_def = self.find_variant_def(&name.full_path)?;
-
-        let instance_def = match &name.type_args {
-            Some(type_args) => {
-                let instance_def = specialize_variant_def(base_def.as_ref(), type_args, self)?;
-
-                Rc::new(instance_def)
-            },
-
-            None => base_def.clone(),
+        
+        let Some(type_args) = &name.type_args else {
+            assert!(name.type_args.is_none(), "name must not be specialized for non-generic variant type");
+            
+            return Ok(base_def.clone());
         };
 
-        Ok(instance_def)
+        let instance_def = specialize_variant_def(base_def.as_ref(), type_args, self)?;
+        Ok(Rc::new(instance_def))
     }
 
     pub fn find_iface(&self, name: &IdentPath) -> NameResult<IdentPath> {
@@ -1408,6 +1417,19 @@ impl Context {
 
             None => Err(NameError::not_found(name.clone())),
         }
+    }
+    
+    pub fn instantiate_iface_def(&self, name: &Symbol) -> NameResult<Rc<InterfaceDecl>> {
+        name.expect_not_unspecialized()?;
+
+        let generic_def = self.find_iface_def(&name.full_path)?;
+        
+        let Some(type_args) = &name.type_args else {
+            return Ok(generic_def.clone());
+        };
+        
+        let specialized_def = specialize_iface_def(generic_def, type_args, self)?;
+        Ok(specialized_def)
     }
     
     pub fn find_set(&self, name: &IdentPath) -> NameResult<&Rc<SetDecl>> {
@@ -1640,29 +1662,55 @@ impl Context {
         ctx: &Context,
     ) -> TypeResult<TypeMember> {
         let result = match ty {
-            Type::Interface(iface) => {
+            Type::Interface(iface_sym) => {
                 let iface_def = self
-                    .find_iface_def(iface)
+                    .instantiate_iface_def(&iface_sym)
                     .map_err(|e| TypeError::from_name_err(e, span.clone()))?;
                 
-                let method_index = iface_def.methods
+                let methods: Vec<_> = iface_def.methods
                     .iter()
-                    .position(|m| m.decl.ident() == member_ident);
+                    .enumerate()
+                    .filter(|(_, m)| m.decl.ident() == member_ident)
+                    .collect();
 
-                method_index
-                    .map(|method_index| {
-                        let method_decl = &iface_def.methods[method_index];
+                if !methods.is_empty() {
+                    let mut method_group = Vec::new();
 
-                        TypeMember::Method(MethodGroupMember {
+                    for (method_index, method) in methods {
+                        let method_sig = method.decl.sig();
+
+                        let spec_iface_sym =
+                            specialize_by_return_ty(
+                                iface_sym,
+                                &method_sig,
+                                expect_return_ty,
+                                span,
+                                ctx,
+                            )
+                            .map_err(|e| TypeError::from_generic_err(e, span.clone()))?
+                            .into_owned();
+
+                        let spec_def = ctx
+                            .instantiate_iface_def(&spec_iface_sym)
+                            .map_err(|e| TypeError::from_name_err(e, span.clone()))?;
+
+                        let spec_method = spec_def.methods[method_index].clone();
+
+                        method_group.push(MethodGroupMember {
                             method: MethodDecl {
-                                func_decl: method_decl.decl.clone(),
-                                access: INTERFACE_METHOD_ACCESS,
+                                func_decl: spec_method.decl,
+                                access: IFACE_METHOD_ACCESS,
                             },
                             index: method_index,
-                            iface_ty: ty.clone(),
+                            iface_ty: Type::interface(spec_iface_sym),
                         })
-                    })
-            },
+                    }
+
+                    Some(TypeMember::from_method_members(method_group))
+                } else {
+                    None
+                }
+            }
 
             Type::Class(struct_name) | Type::Record(struct_name) => {
                 let struct_kind = ty.struct_kind().unwrap();
@@ -1687,9 +1735,7 @@ impl Context {
                     for (method_index, method) in methods {
                         let method_sig = method.func_decl.sig();
 
-                        // if the struct name isn't already specialized, try to infer it from
-                        // the return type
-                        let spec_struct_name = if struct_name.is_unspecialized_generic() {
+                        let spec_struct_name = 
                             specialize_by_return_ty(
                                 struct_name,
                                 &method_sig,
@@ -1698,10 +1744,7 @@ impl Context {
                                 ctx,
                             )
                             .map_err(|e| TypeError::from_generic_err(e, span.clone()))?
-                            .into_owned()
-                        } else {
-                            (**struct_name).clone()
-                        };
+                            .into_owned();
 
                         let spec_def = ctx
                             .instantiate_struct_def(&spec_struct_name, struct_kind)
@@ -1716,12 +1759,7 @@ impl Context {
                         })
                     }
                     
-                    if method_group.len() == 1 {
-                        let single_method = method_group.remove(0);
-                        Some(TypeMember::Method(single_method))
-                    } else {
-                        Some(TypeMember::MethodGroup(method_group))
-                    }
+                    Some(TypeMember::from_method_members(method_group))
                 } else {
                     None
                 }
@@ -1747,7 +1785,7 @@ impl Context {
                     for (method_index, generic_method) in methods {
                         let method_sig = generic_method.func_decl.sig();
 
-                        let spec_variant_name = if variant_name.is_unspecialized_generic() {
+                        let spec_variant_name =
                             specialize_by_return_ty(
                                 variant_name,
                                 &method_sig,
@@ -1756,10 +1794,7 @@ impl Context {
                                 ctx,
                             )
                             .map_err(|e| TypeError::from_generic_err(e, span.clone()))?
-                            .into_owned()
-                        } else {
-                            (**variant_name).clone()
-                        };
+                            .into_owned();
 
                         let spec_def = ctx
                             .instantiate_variant_def(&spec_variant_name)
@@ -1774,12 +1809,7 @@ impl Context {
                         })
                     }
 
-                    if method_group.len() == 1 {
-                        let single_method = method_group.remove(0);
-                        Some(TypeMember::Method(single_method))
-                    } else {
-                        Some(TypeMember::MethodGroup(method_group))
-                    }
+                    Some(TypeMember::from_method_members(method_group))
                 } else {
                     None
                 }

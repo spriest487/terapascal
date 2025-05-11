@@ -7,7 +7,7 @@ use crate::ast;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Operator;
-use crate::ast::INTERFACE_METHOD_ACCESS;
+use crate::ast::IFACE_METHOD_ACCESS;
 use crate::typ::ast::check_overload_visibility;
 use crate::typ::ast::collection_ctor_elements;
 use crate::typ::ast::const_eval_integer;
@@ -317,7 +317,7 @@ fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Opt
         Some(index) => {
             let method_decl = MethodDecl {
                 func_decl: displayable_iface.methods[index].decl.clone(),
-                access: INTERFACE_METHOD_ACCESS,
+                access: IFACE_METHOD_ACCESS,
             };
 
             (index, method_decl)

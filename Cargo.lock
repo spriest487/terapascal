@@ -572,9 +572,9 @@ checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "libffi"
-version = "3.2.0"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce826c243048e3d5cec441799724de52e2d42f820468431fc3fceee2341871e2"
+checksum = "ebfd30a67b482a08116e753d0656cb626548cf4242543e5cc005be7639d99838"
 dependencies = [
  "libc",
  "libffi-sys",
@@ -582,9 +582,9 @@ dependencies = [
 
 [[package]]
 name = "libffi-sys"
-version = "2.3.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f36115160c57e8529781b4183c2bb51fdc1f6d6d1ed345591d84be7703befb3c"
+checksum = "533b573e9409458c66dc2bd2a2daed08c30388ea7426d368b9b051e92c486b25"
 dependencies = [
  "cc",
 ]

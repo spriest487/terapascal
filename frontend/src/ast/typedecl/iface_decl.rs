@@ -1,5 +1,6 @@
-use crate::ast::{Annotation, FunctionName};
+use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
+use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::TypeDeclName;
 use crate::parse::LookAheadTokenStream;
@@ -9,9 +10,9 @@ use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::Keyword;
 use crate::Separator;
-use derivative::*;
 use common::span::Span;
 use common::span::Spanned;
+use derivative::*;
 use std::fmt;
 use std::rc::Rc;
 

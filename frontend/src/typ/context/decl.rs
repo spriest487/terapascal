@@ -100,8 +100,8 @@ impl Decl {
     pub fn is_valid_builtin_redecl(&self) -> bool {
         match self {
             Decl::Type { ty: Type::Interface(iface), .. } => {
-                **iface == builtin_displayable_name().full_path
-                    || **iface == builtin_comparable_name().full_path
+                **iface == builtin_displayable_name()
+                    || **iface == builtin_comparable_name()
             },
 
             Decl::Type { ty: Type::Class(sym), .. } => {

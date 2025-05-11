@@ -4,11 +4,12 @@ use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::ast::infer_from_structural_ty_args;
 use crate::typ::ast::try_unwrap_inferred_args;
 use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::InterfaceDecl;
+use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::StructDef;
 use crate::typ::ast::TypedFunctionName;
 use crate::typ::ast::VariantDef;
-use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::GenericContext;
 use crate::typ::GenericError;
@@ -21,6 +22,7 @@ use crate::typ::TypeArgList;
 use crate::typ::TypeArgResolver;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
+use crate::typ::Context;
 use common::span::Span;
 use common::span::Spanned;
 use std::borrow::Cow;
@@ -84,29 +86,18 @@ pub fn specialize_struct_def<'a>(
             })
         })
         .collect::<GenericResult<_>>()?;
-
-    let methods: Vec<_> = generic_def
-        .methods()
-        .map(|generic_method| {
-            let self_ty = Type::from_struct_type(
-                specialized_name.clone(),
-                generic_def.kind
-            );
-
-            let specialized_decl = specialize_method_decl(
-                &generic_def.name.full_path,
-                self_ty,
-                &generic_method.func_decl,
-                struct_ty_params,
-                ty_args,
-            )?;
-            
-            Ok(MethodDecl {
-                access: generic_method.access,
-                func_decl: Rc::new(specialized_decl),
-            })
-        })
-        .collect::<GenericResult<_>>()?;
+    
+    let self_ty = Type::from_struct_type(
+        specialized_name.clone(),
+        generic_def.kind
+    );
+    
+    let methods = specialize_methods(
+        &self_ty,
+        &generic_def.methods,
+        &struct_ty_params,
+        ty_args
+    )?;
 
     Ok(Rc::new(StructDef {
         name: specialized_name,
@@ -157,23 +148,13 @@ pub fn specialize_variant_def(
         })
         .collect::<GenericResult<_>>()?;
     
-    let mut methods = Vec::new();
-
     let self_ty = Type::variant(parameterized_name.clone());
-    for method in &variant.methods{ 
-        let specialized_decl = specialize_method_decl(
-            &parameterized_name.full_path,
-            self_ty.clone(),
-            &method.func_decl,
-            variant_ty_params,
-            args
-        )?;
-        
-        methods.push(MethodDecl {
-            func_decl: Rc::new(specialized_decl),
-            access: method.access,
-        });
-    }
+    let methods = specialize_methods(
+        &self_ty,
+        &variant.methods,
+        variant_ty_params,
+        args
+    )?;
 
     Ok(VariantDef {
         name: Rc::new(parameterized_name),
@@ -183,6 +164,52 @@ pub fn specialize_variant_def(
         implements,
         methods,
     })
+}
+
+pub fn specialize_iface_def<'a>(
+    generic_def: &Rc<InterfaceDecl>,
+    ty_args: &TypeArgList,
+    ctx: &Context,
+) -> GenericResult<Rc<InterfaceDecl>> {
+    let iface_ty_params = match &generic_def.name.type_params {
+        None => return Ok(generic_def.clone()),
+        Some(param_list) => param_list,
+    };
+
+    let specialized_name = generic_def.name.specialize(ty_args, ctx)?.into_owned();
+
+    // let implements = specialize_implements_clause(
+    //     &generic_def.implements,
+    //     iface_ty_params,
+    //     ty_args
+    // );
+
+    let self_ty = Type::interface(specialized_name.clone());
+
+    let methods: Vec<_> = generic_def.methods
+        .iter()
+        .map(|generic_method| {
+            let specialized_decl = specialize_method_decl(
+                &generic_def.name.full_path,
+                self_ty.clone(),
+                &generic_method.decl,
+                iface_ty_params,
+                ty_args,
+            )?;
+
+            Ok(InterfaceMethodDecl {
+                decl: Rc::new(specialized_decl),
+            })
+        })
+        .collect::<GenericResult<_>>()?;
+
+    Ok(Rc::new(InterfaceDecl {
+        name: specialized_name,
+        // implements,
+        methods,
+        span: generic_def.span.clone(),
+        forward: generic_def.forward,
+    }))
 }
 
 fn specialize_implements_clause(
@@ -198,6 +225,37 @@ fn specialize_implements_clause(
                 .apply_type_args(params, args)
         })
         .collect()
+}
+
+fn specialize_methods(
+    self_ty: &Type,
+    generic_methods: &[MethodDecl],
+    ty_params: &TypeParamList,
+    ty_args: &TypeArgList,
+) -> GenericResult<Vec<MethodDecl>> {
+    let self_ty_name = self_ty
+        .full_path()
+        .expect("must be a named type");
+
+    let methods = generic_methods
+        .iter()
+        .map(|generic_method| {
+            let specialized_decl = specialize_method_decl(
+                self_ty_name.as_ref(),
+                self_ty.clone(),
+                &generic_method.func_decl,
+                ty_params,
+                ty_args,
+            )?;
+
+            Ok(MethodDecl {
+                access: generic_method.access,
+                func_decl: Rc::new(specialized_decl),
+            })
+        })
+        .collect::<GenericResult<_>>()?;
+
+    Ok(methods)
 }
 
 fn specialize_method_decl(
@@ -235,6 +293,8 @@ fn specialize_method_decl(
     Ok(method)
 }
 
+/// if the symbol isn't already specialized, try to infer it by matching the return type of
+/// one of its methods to the expected return type
 pub fn specialize_by_return_ty<'a>(
     name: &'a Symbol,
     generic_sig: &FunctionSig,

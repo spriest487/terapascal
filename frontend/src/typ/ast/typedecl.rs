@@ -81,6 +81,7 @@ pub fn typecheck_struct_decl(
     let mut implements = Vec::new();
     for implements_name in &struct_def.implements {
         let implements_ty = typecheck_type(implements_name, ctx)?;
+
         match implements_ty {
             iface_ty @ Type::Interface(..) => implements.push(iface_ty),
 
@@ -192,58 +193,63 @@ pub fn typecheck_methods(
     }
 
     for iface_ty in implements.iter() {
-        if let Type::Interface(iface_name) = &iface_ty {            
-            let iface = ctx
-                .find_iface_def(iface_name.as_ref())
-                .map_err(|e| {
-                    TypeError::from_name_err(e, iface_name.span().clone())
-                })?;
+        let Type::Interface(iface_name) = &iface_ty else {
+           unreachable!("already checked that only valid types are accepted")
+        };
 
-            let mut missing_methods = Vec::new();
-            let mut mismatched_methods = Vec::new();
+        let iface_def = ctx
+            .instantiate_iface_def(iface_name)
+            .map_err(|e| {
+                TypeError::from_name_err(e, iface_name.span().clone())
+            })?;
 
-            for iface_method in &iface.methods {
-                let expect_sig = iface_method.decl.sig().with_self(owning_type);
+        let mut missing_methods = Vec::new();
+        let mut mismatched_methods = Vec::new();
+        
+        let mut per_method_mismatches = Vec::new();
 
-                let actual_method = methods
-                    .iter()
-                    .find(|method| {
-                        method.func_decl.name.ident() == iface_method.ident()
+        'iface_method_loop: for iface_method in &iface_def.methods {
+            let expect_sig = iface_method.decl.sig().with_self(owning_type);
+            
+            for impl_method in methods.iter() {
+                if impl_method.func_decl.name.ident() != iface_method.ident() {
+                    continue;
+                }
+
+                let actual_sig = impl_method.func_decl.sig();
+
+                if actual_sig == expect_sig {
+                    // if we have an exact match, we don't care about other methods that
+                    // don't match
+                    per_method_mismatches.clear();
+                    continue 'iface_method_loop;
+                } else {                    
+                    per_method_mismatches.push(MismatchedImplementation {
+                        impl_method_name: impl_method.func_decl.name.clone(),
+                        iface_method_name: iface_method.decl.name.clone(),
+                        expect_sig: expect_sig.clone(),
+                        actual_sig,
                     });
-
-                match actual_method {
-                    None => {
-                        missing_methods.push(MissingImplementation {
-                            method_name: iface_method.decl.name.clone(),
-                            sig: expect_sig,
-                        });
-                    }
-
-                    Some(impl_method) => {
-                        let actual_sig = impl_method.func_decl.sig();
-
-                        if actual_sig != expect_sig {
-                            mismatched_methods.push(MismatchedImplementation {
-                                impl_method_name: impl_method.func_decl.name.clone(),
-                                iface_method_name: iface_method.decl.name.clone(),
-                                expect_sig,
-                                actual_sig,
-                            });
-                        }
-                    }
                 }
             }
 
-            if !missing_methods.is_empty() || !mismatched_methods.is_empty() {
-                return Err(TypeError::InvalidImplementation {
-                    ty: owning_type.clone(),
-                    span: implements_span.clone(),
-                    missing: missing_methods,
-                    mismatched: mismatched_methods,
+            if per_method_mismatches.is_empty() {
+                missing_methods.push(MissingImplementation {
+                    method_name: iface_method.decl.name.clone(),
+                    sig: expect_sig,
                 });
+            } else {
+                mismatched_methods.append(&mut per_method_mismatches);
             }
-        } else {
-            unreachable!("already checked that only valid types are accepted")
+        }
+
+        if !missing_methods.is_empty() || !mismatched_methods.is_empty() {
+            return Err(TypeError::InvalidImplementation {
+                ty: owning_type.clone(),
+                span: implements_span.clone(),
+                missing: missing_methods,
+                mismatched: mismatched_methods,
+            });
         }
     }
     
@@ -313,13 +319,15 @@ pub fn typecheck_iface(
 
         methods.push(ast::InterfaceMethodDecl { decl: Rc::new(method_decl) });
     }
-
-    Ok(InterfaceDecl {
+    
+    let iface_decl = InterfaceDecl {
         name,
         forward: iface.forward,
         span: iface.span.clone(),
         methods,
-    })
+    };
+    
+    Ok(iface_decl)
 }
 
 pub fn typecheck_variant(

@@ -14,7 +14,7 @@ pub enum Access {
     Private,
 }
 
-pub const INTERFACE_METHOD_ACCESS: Access = Access::Published;
+pub const IFACE_METHOD_ACCESS: Access = Access::Published;
 
 fn unwrap_tt(tt: TokenTree) -> Access {
     match tt {

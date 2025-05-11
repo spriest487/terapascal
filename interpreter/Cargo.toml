@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 ir-lang = { path = "../ir_lang" }
 common = { path = "../common" }
-libffi = "3.2.0"
+libffi = "4.1.0"
 dlopen = "0.1.8"
 cast = "0.3.0"
 smallvec = "1.8.0"

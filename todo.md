@@ -1,11 +1,10 @@
-# critical
-* leak cleanup pass
-* project files/don't auto load used units
-
 # features
 * generic interfaces 
+* add a named type case to typ::Type for all the things that use full_path, full_name etc
 * Object should be an interface?
   * need interface inheritance so Object can imply Comparable and Displayable
+* explicit type args to func calls:
+  * `MyFunc with [Integer]();`
 * @-attributes - replace `external` etc with these (eventually make them available at runtime but not now)
 * property syntax
 * numeric compiler error codes

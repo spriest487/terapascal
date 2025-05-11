@@ -6,13 +6,13 @@ use ir_lang::*;
 use typ::Specializable;
 
 pub trait NamePathExt {
-    fn from_decl(name: typ::Symbol, metadata: &LibraryBuilder) -> Self;
+    fn from_decl(name: typ::Symbol, metadata: &mut LibraryBuilder) -> Self;
     fn from_ident_path(ident: &syn::IdentPath, type_args: Option<Vec<Type>>) -> Self;
     fn from_parts<Iter: IntoIterator<Item = String>>(iter: Iter) -> Self;
 }
 
 impl NamePathExt for NamePath {
-    fn from_decl(name: typ::Symbol, builder: &LibraryBuilder) -> Self {
+    fn from_decl(name: typ::Symbol, builder: &mut LibraryBuilder) -> Self {
         let path_parts = name
             .full_path
             .into_iter()

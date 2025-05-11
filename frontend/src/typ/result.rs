@@ -1,8 +1,8 @@
 use crate::ast;
-use crate::ast::{Access, FunctionDeclKind};
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Operator;
+use crate::ast::{Access, FunctionDeclKind};
 use crate::parse::InvalidStatement;
 use crate::typ::annotation::Value;
 use crate::typ::ast::Call;
@@ -13,11 +13,11 @@ use crate::typ::ast::Stmt;
 use crate::typ::ast::TypedFunctionName;
 use crate::typ::ast::VariantDef;
 use crate::typ::context::NameError;
-use crate::typ::FunctionSig;
 use crate::typ::GenericError;
 use crate::typ::Type;
 use crate::typ::ValueKind;
 use crate::typ::MAX_FLAGS_BITS;
+use crate::typ::FunctionSig;
 use crate::IntConstant;
 use common::span::*;
 use common::Backtrace;
@@ -267,6 +267,13 @@ pub enum TypeError {
         method_ident: Ident,
         span: Span,
     },
+    MethodDefMismatch {
+        owning_ty: Type,
+        method_ident: Ident,
+        decls: Vec<MismatchedMethodDecl>,
+        actual_kind: FunctionDeclKind,
+        span: Span,
+    },
 
     InvalidMethodInstanceType {
         ty: Type,
@@ -453,6 +460,7 @@ impl Spanned for TypeError {
             TypeError::InvalidMethodOwningType { span, .. } => span,
             TypeError::InvalidMethodInstanceType { span, .. } => span,
             TypeError::NoMethodContext { span, .. } => span,
+            TypeError::MethodDefMismatch { span, .. } => span,
             TypeError::InvalidImplementation { span, .. } => span,
             TypeError::AbstractMethodDefinition { span, .. } => span,
             TypeError::InvalidBaseType { span, .. } => span,
@@ -608,6 +616,7 @@ impl DiagnosticOutput for TypeError {
             TypeError::AbstractMethodDefinition { .. } => "Cannot define abstract method",
 
             TypeError::NoMethodContext { .. } => "Method requires enclosing type",
+            TypeError::MethodDefMismatch { .. } => "Method definition mismatch",
 
             TypeError::NameNotVisible { .. } => "Name is not visible",
             
@@ -811,14 +820,18 @@ impl DiagnosticOutput for TypeError {
                 prev_decls
                     .iter()
                     .map(|ident| {
-                        DiagnosticMessage {
-                            label: Some(DiagnosticLabel {
-                                text: None,
-                                span: ident.span.clone(),
-                            }),
-                            title: format!("{} previously declared here", ident),
-                            notes: Vec::new(),
-                        }  
+                        DiagnosticMessage::new(format!("{} previously declared here", ident))
+                            .with_label(DiagnosticLabel::new(ident.span.clone()))
+                    })
+                    .collect()
+            }
+            
+            TypeError::MethodDefMismatch { decls, .. } => {
+                decls
+                    .iter()
+                    .map(|decl| {
+                        DiagnosticMessage::new(format!("declaration of {} {} here", decl.kind, decl.name))
+                            .with_label(DiagnosticLabel::new(decl.span.clone()))
                     })
                     .collect()
             }
@@ -1142,12 +1155,17 @@ impl fmt::Display for TypeError {
                 write!(f, "method `{}` is not declared within a type", method_ident)
             }
 
+            TypeError::MethodDefMismatch { method_ident, owning_ty, actual_kind, .. } => {
+                writeln!(f, "definition of {} `{}.{}` does not match previous declaration", actual_kind, owning_ty, method_ident)?;
+                Ok(())
+            }
+
             TypeError::InvalidMethodInstanceType { ty, .. } => {
                 write!(f, "`{}` is not a type which supports methods", ty)
             }
             
             TypeError::InvalidImplementation { ty, missing, mismatched, .. } => {
-                write!(f, "type `{}` is missing the following methods for interfaces it implements: ", ty)?;
+                writeln!(f, "type `{}` is missing the following methods for interfaces it implements:", ty)?;
                 let names = mismatched.iter()
                     .map(|item| &item.iface_method_name)
                     .chain(missing
@@ -1157,7 +1175,7 @@ impl fmt::Display for TypeError {
 
                 for (i, name) in names {
                     if i > 0 {
-                        write!(f, ", ")?;
+                        write!(f, "\n")?;
                     }
                     write!(f, "{}", name)?;
                 }
@@ -1301,4 +1319,11 @@ impl fmt::Display for InvalidTypeParamsDeclKind {
             InvalidTypeParamsDeclKind::Set => write!(f, "Set"),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct MismatchedMethodDecl {
+    pub name: Ident,
+    pub span: Span,
+    pub kind: FunctionDeclKind,
 }

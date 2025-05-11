@@ -27,11 +27,11 @@ use crate::ast::IdentPath;
 use crate::ast::IdentTypeName;
 use crate::ast::StructKind;
 use crate::ast::TypeAnnotation;
-use crate::ast::INTERFACE_METHOD_ACCESS;
+use crate::ast::IFACE_METHOD_ACCESS;
 use crate::typ::ast::FieldDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::SELF_TY_NAME;
-use crate::typ::builtin_span;
+use crate::typ::{builtin_span, InvalidTypeParamsDeclKind};
 use crate::typ::builtin_unit_path;
 use crate::typ::Context;
 use crate::typ::Def;
@@ -64,7 +64,7 @@ pub enum Type {
     Function(Rc<FunctionSig>),
     Record(Rc<Symbol>),
     Class(Rc<Symbol>),
-    Interface(Rc<IdentPath>),
+    Interface(Rc<Symbol>),
     Variant(Rc<Symbol>),
     Array(Rc<ArrayType>),
     DynArray { element: Rc<Type> },
@@ -109,7 +109,7 @@ impl Type {
         Type::Set(set.into())
     }
     
-    pub fn interface(name: impl Into<IdentPath>) -> Self {
+    pub fn interface(name: impl Into<Symbol>) -> Self {
         Type::Interface(Rc::new(name.into()))
     }
     
@@ -160,16 +160,38 @@ impl Type {
             _ => None,
         }
     }
+
+    pub fn full_name(&self) -> Option<Cow<Symbol>> {
+        fn builtin_sym(name: &str) -> Option<Cow<Symbol>> {
+            Some(Cow::Owned(Symbol::from(builtin_unit_path(name))))
+        }
+        
+        match self {
+            Type::Nothing => builtin_sym(NOTHING_TYPE_NAME),
+            Type::Any => builtin_sym(ANY_TYPE_NAME),
+            Type::Primitive(p) => builtin_sym(p.name()),
+
+            // Type::MethodSelf => Some(Cow::Owned(IdentPath::from(Ident::new(SELF_TY_NAME, builtin_span())))),
+
+            Type::Interface(decl_name)
+            | Type::Record(decl_name)
+            | Type::Class(decl_name)
+            | Type::Variant(decl_name) => Some(Cow::Borrowed(decl_name)),
+
+            _ => None,
+        }
+    }
     
     pub fn full_path(&self) -> Option<Cow<IdentPath>> {
         match self {
             Type::Nothing => Some(Cow::Owned(builtin_unit_path(NOTHING_TYPE_NAME))),
             Type::Any => Some(Cow::Owned(builtin_unit_path(ANY_TYPE_NAME))),
-            Type::MethodSelf => Some(Cow::Owned(IdentPath::from(Ident::new(SELF_TY_NAME, builtin_span())))),
             Type::Primitive(p) => Some(Cow::Owned(builtin_unit_path(p.name()))),
-            Type::Interface(iface) => Some(Cow::Borrowed(iface.as_ref())),
             
-            Type::Record(decl_name) 
+            // Type::MethodSelf => Some(Cow::Owned(IdentPath::from(Ident::new(SELF_TY_NAME, builtin_span())))),
+            
+            Type::Interface(decl_name)
+            | Type::Record(decl_name) 
             | Type::Class(decl_name) 
             | Type::Variant(decl_name) => Some(Cow::Borrowed(&decl_name.full_path)),
             
@@ -284,14 +306,18 @@ impl Type {
             },
 
             ast::TypeDeclItem::Interface(iface) => {
-                Ok(Type::interface(iface.name.full_path.clone()))
+                Ok(Type::interface(iface.name.clone()))
             },
 
             ast::TypeDeclItem::Enum(enum_decl) => {
+                enum_decl.name.expect_no_type_params(InvalidTypeParamsDeclKind::Enum)?;
+                
                 Ok(Type::enumeration(enum_decl.name.full_path.clone()))
             },
             
             ast::TypeDeclItem::Set(set_decl) => {
+                set_decl.name.expect_no_type_params(InvalidTypeParamsDeclKind::Set)?;
+
                 let name = &set_decl.name.full_path;
                 let set_decl = ctx
                     .find_type_def(name)
@@ -744,14 +770,19 @@ impl Type {
     
     pub fn methods(&self, ctx: &Context) -> NameResult<Vec<MethodDecl>> {
         match self {
-            Type::Interface(iface) => {
-                let iface_def = ctx.find_iface_def(iface)?;
+            Type::Interface(name) => {
+                let iface_def = if name.is_unspecialized_generic() {
+                    ctx.find_iface_def(&name.full_path)?.clone()
+                } else {
+                    ctx.instantiate_iface_def(&name)?
+                };
+
                 let methods = iface_def
                     .methods
                     .iter()
                     .map(|m| MethodDecl { 
                         func_decl: m.decl.clone(),
-                        access: Access::Published,
+                        access: IFACE_METHOD_ACCESS,
                     })
                     .collect();
                 
@@ -822,7 +853,11 @@ impl Type {
     ) -> NameResult<Option<usize>> {
         match self {
             Type::Interface(iface_name) => {
-                let iface_def = ctx.find_iface_def(iface_name)?;
+                let iface_def = if iface_name.is_unspecialized_generic() {
+                    ctx.find_iface_def(&iface_name.full_path)?.clone()
+                } else {
+                    ctx.instantiate_iface_def(&iface_name)?
+                };
 
                 let index = iface_def
                     .methods
@@ -877,16 +912,20 @@ impl Type {
 
     pub fn get_method(&self, method_index: usize, ctx: &Context) -> NameResult<MethodDecl> {
         match self {
-            Type::Interface(iface) => {
-                let iface_def = ctx.find_iface_def(iface)?;
+            Type::Interface(name) => {
+                let iface_def = if name.is_unspecialized_generic() {
+                    ctx.find_iface_def(&name.full_path)?.clone()
+                } else {
+                    ctx.instantiate_iface_def(&name)?
+                };
 
                 let iface_method = iface_def.methods
                     .get(method_index)
-                    .unwrap_or_else(|| panic!("invalid method index: {} in {}", method_index, iface));
+                    .unwrap_or_else(|| panic!("invalid method index: {} in {}", method_index, name));
                 
                 Ok(MethodDecl {
                     func_decl: iface_method.decl.clone(),
-                    access: INTERFACE_METHOD_ACCESS,
+                    access: IFACE_METHOD_ACCESS,
                 })
             },
 
@@ -1025,7 +1064,7 @@ impl Type {
         }
     }
 
-    pub fn as_iface(&self) -> Option<&IdentPath> {
+    pub fn as_iface(&self) -> Option<&Symbol> {
         match self {
             Type::Interface(iface) => Some(iface),
             _ => None,
@@ -1111,6 +1150,13 @@ impl Type {
 
                 Cow::Owned(variant_ty)
             },
+            
+            Type::Interface(iface) => {
+                let sym = iface.specialize(args, ctx)?;
+                let iface_ty = Type::Interface(Rc::new(sym.into_owned()));
+
+                Cow::Owned(iface_ty)
+            }
 
             not_parameterized => {
                 return Err(GenericError::ArgsLenMismatch {
@@ -1392,7 +1438,16 @@ pub fn typecheck_type(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<Type>
                         .into_owned()
                 },
 
-                None => raw_ty.clone(),
+                None if raw_ty.is_unspecialized_generic() => {
+                    return Err(TypeError::from_generic_err(GenericError::IllegalUnspecialized {
+                        ty: raw_ty,
+                    }, ty.span().clone()));
+                }
+
+                None => {
+                    // eprintln!("using RAW: {raw_ty:?}");
+                    raw_ty.clone()
+                },
             };
 
             Ok(ty.indirect_by(*indirection))
@@ -1447,11 +1502,11 @@ impl Specializable for Type {
     type GenericID = IdentPath;
 
     fn is_unspecialized_generic(&self) -> bool {
-        match self {
-            Type::Class(sym) | Type::Record(sym) | Type::Variant(sym) => {
-                sym.is_unspecialized_generic()
-            },
+        if let Some(full_name) = self.full_name() {
+            return full_name.is_unspecialized_generic();
+        }
 
+        match self {
             Type::Array(array_ty) => array_ty.element_ty.is_unspecialized_generic(),
 
             Type::DynArray { element } => element.is_unspecialized_generic(),

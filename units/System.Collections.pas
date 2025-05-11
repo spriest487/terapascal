@@ -15,7 +15,7 @@ type
     
     LinkedListSequence[T] = record
     private
-        next: Option[LinkedListNode[T]];    
+        next: Option[LinkedListNode[T]];
     public
         function Next: Option[T];
     end;

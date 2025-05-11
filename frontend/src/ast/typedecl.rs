@@ -6,7 +6,7 @@ mod set_decl;
 mod access;
 
 pub use self::access::Access;
-pub use self::access::INTERFACE_METHOD_ACCESS;
+pub use self::access::IFACE_METHOD_ACCESS;
 pub use self::enum_decl::*;
 pub use self::iface_decl::*;
 pub use self::set_decl::*;

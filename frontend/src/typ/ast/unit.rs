@@ -17,7 +17,7 @@ use crate::typ::ast::typecheck_variant;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::SetDecl;
-use crate::typ::typecheck_type;
+use crate::typ::{typecheck_type, InvalidTypeParamsDeclKind};
 use crate::typ::Binding;
 use crate::typ::ConstValue;
 use crate::typ::Context;
@@ -219,7 +219,7 @@ fn typecheck_type_decl_item(
         }
 
         ast::TypeDeclItem::Interface(_) => {
-            let ty = Type::interface(full_name.full_path.clone());
+            let ty = Type::interface(full_name.clone());
             typecheck_type_decl_item_with_def(full_name, ty, type_decl, visibility, ctx)
         },
         ast::TypeDeclItem::Variant(_) => {
@@ -227,6 +227,8 @@ fn typecheck_type_decl_item(
             typecheck_type_decl_item_with_def(full_name, ty, type_decl, visibility, ctx)
         },
         ast::TypeDeclItem::Enum(_) => {
+            full_name.expect_no_type_params(InvalidTypeParamsDeclKind::Enum)?;
+            
             let ty = Type::enumeration(full_name.full_path.clone());
             typecheck_type_decl_item_with_def(full_name, ty, type_decl, visibility, ctx)
         },
