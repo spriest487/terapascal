@@ -1,3 +1,4 @@
+use crate::ast::iface_method_start;
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
@@ -5,6 +6,7 @@ use crate::ast::Ident;
 use crate::ast::TypeDeclName;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::MatchOneOf;
+use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
@@ -96,8 +98,18 @@ impl InterfaceDecl<Span> {
         } else {
             let methods = InterfaceMethodDecl::parse_seq(tokens)?;
             tokens.match_one_maybe(Separator::Semicolon);
-
-            let end = tokens.match_one(Keyword::End)?;
+            
+            // no more methods found, must be "end" next, but if there's an invalid token, the error
+            // should indicate that it could've been a method too
+            let end = tokens
+                .match_one(Keyword::End)
+                .map_err(|mut err| {
+                    if let ParseError::UnexpectedToken(_, Some(expected)) = &mut err.err {
+                        *expected |= iface_method_start()
+                    }
+                    
+                    err
+                })?;
 
             Ok(InterfaceDecl {
                 name,

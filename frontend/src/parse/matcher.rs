@@ -5,8 +5,10 @@ use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::token_tree::*;
 use std::fmt;
+use std::mem;
 use std::ops::Add;
 use std::ops::BitOr;
+use std::ops::BitOrAssign;
 
 #[derive(Clone, Debug)]
 pub enum Matcher {
@@ -93,6 +95,14 @@ impl<Rhs> BitOr<Rhs> for Matcher where Rhs: Into<Matcher> {
 
     fn bitor(self, rhs: Rhs) -> Self::Output {
         self.or(rhs.into())
+    }
+}
+
+impl<Rhs> BitOrAssign<Rhs> for Matcher where Rhs: Into<Matcher> {
+    fn bitor_assign(&mut self, rhs: Rhs) {
+        let mut temp = Matcher::AnyToken;
+        mem::swap(&mut temp, self);
+        *self = temp.or(rhs);
     }
 }
 
