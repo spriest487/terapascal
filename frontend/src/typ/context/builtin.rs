@@ -190,6 +190,7 @@ pub fn builtin_comparable_iface() -> ast::InterfaceDecl {
 
     ast::InterfaceDecl {
         name: builtin_comparable_name(),
+        supers: Vec::new(),
         methods: vec![
             ast::InterfaceMethodDecl {
                 decl: Rc::new(builtin_comparable_compare_method(iface_ty, Type::MethodSelf)),
@@ -245,6 +246,7 @@ pub fn builtin_displayable_iface() -> ast::InterfaceDecl {
 
     ast::InterfaceDecl {
         name: builtin_displayable_name(),
+        supers: Vec::new(),
         methods: vec![
             ast::InterfaceMethodDecl {
                 decl: Rc::new(builtin_displayable_display_method(iface_ty, Type::MethodSelf)),

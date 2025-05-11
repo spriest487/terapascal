@@ -9,7 +9,6 @@ use crate::ast::IdentPath;
 use crate::ast::Literal;
 use crate::ast::MethodOwner;
 use crate::ast::SetDeclRange;
-use crate::ast::StructKind;
 use crate::ast::Visibility;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::const_eval_integer;
@@ -23,6 +22,7 @@ use crate::typ::ConstValue;
 use crate::typ::Context;
 use crate::typ::Def;
 use crate::typ::FunctionSig;
+use crate::typ::InvalidBaseTypeReason;
 use crate::typ::InvalidTypeParamsDeclKind;
 use crate::typ::MismatchedImplementation;
 use crate::typ::MissingImplementation;
@@ -67,32 +67,56 @@ impl VariantDef {
     }
 }
 
+// "of" type list (implements clause for a concrete type or supers clause for an interface)
+fn typecheck_base_types(
+    base_types: &[ast::TypeName],
+    self_ty: &Type,
+    ctx: &mut Context
+) -> TypeResult<Vec<Type>> {
+    let mut base_tys = Vec::new();
+
+    for base_ty_name in base_types {
+        let implements_ty = typecheck_type(base_ty_name, ctx)?;
+
+        match implements_ty {
+            Type::Interface(iface_name) => {
+                let iface_def = ctx.find_iface_def(&iface_name.full_path)
+                    .map_err(|err| TypeError::from_name_err(err, base_ty_name.span().clone()))?;
+                let iface_ty = Type::Interface(iface_name);
+                
+                if iface_def.forward {
+                    return Err(TypeError::InvalidBaseType {
+                        ty: self_ty.clone(),
+                        invalid_base_ty: iface_ty,
+                        reason: InvalidBaseTypeReason::Forward,
+                        span: base_ty_name.span().clone(),
+                    })
+                }
+                
+                base_tys.push(iface_ty)
+            },
+
+            invalid_base_ty => return Err(TypeError::InvalidBaseType {
+                ty: self_ty.clone(),
+                invalid_base_ty,
+                reason: InvalidBaseTypeReason::NotInterface,
+                span: base_ty_name.span().clone(),
+            }),
+        }
+    }
+    
+    Ok(base_tys)
+}
+
 pub fn typecheck_struct_decl(
     name: Symbol,
     struct_def: &ast::StructDecl<Span>,
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<StructDef> {
-    let self_ty = match struct_def.kind {
-        StructKind::Record => Type::record(name.clone()),
-        StructKind::Class => Type::class(name.clone()),
-    };
+    let self_ty = Type::from_struct_type(name.clone(), struct_def.kind);
 
-    let mut implements = Vec::new();
-    for implements_name in &struct_def.implements {
-        let implements_ty = typecheck_type(implements_name, ctx)?;
-
-        match implements_ty {
-            iface_ty @ Type::Interface(..) => implements.push(iface_ty),
-
-            invalid_base_ty => return Err(TypeError::InvalidBaseType {
-                invalid_base_ty,
-                span: implements_name.span().clone(),
-                ty: self_ty.clone(),
-            }),
-        }
-    }
-
+    let implements = typecheck_base_types(&struct_def.implements, &self_ty, ctx)?;
     let implements_span = Span::range(&struct_def.implements)
         .unwrap_or_else(|| struct_def.name.span.clone());
 
@@ -285,15 +309,14 @@ pub fn typecheck_iface(
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<InterfaceDecl> {
+    let iface_ty = Type::interface(name.clone());
+
     // declare Self type - type decls are always in their own scope so we don't need to push
     // another one
     ctx.declare_self_ty(Type::MethodSelf, iface.name.span().clone())?;
-    ctx.declare_type(
-        iface.name.ident.clone(),
-        Type::interface(name.full_path.clone()),
-        visibility,
-        true
-    )?;
+    ctx.declare_type(iface.name.ident.clone(), iface_ty.clone(), visibility, true)?;
+    
+    let supers = typecheck_base_types(&iface.supers, &iface_ty, ctx)?;
 
     let mut methods: Vec<InterfaceMethodDecl> = Vec::new();
     for method in &iface.methods {
@@ -322,6 +345,7 @@ pub fn typecheck_iface(
     
     let iface_decl = InterfaceDecl {
         name,
+        supers,
         forward: iface.forward,
         span: iface.span.clone(),
         methods,
@@ -339,16 +363,12 @@ pub fn typecheck_variant(
     if variant_def.cases.is_empty() {
         return Err(TypeError::EmptyVariantDecl(Box::new(variant_def.clone())));
     }
-    
-    let mut implements = Vec::new();
-    for implements_ty in &variant_def.implements {
-        implements.push(typecheck_type(implements_ty, ctx)?);
-    }
 
+    let variant_ty = Type::variant(name.clone());
+
+    let implements = typecheck_base_types(&variant_def.implements, &variant_ty, ctx)?;
     let implements_span = Span::range(&variant_def.implements)
         .unwrap_or_else(|| variant_def.name.span.clone());
-    
-    let variant_ty = Type::variant(name.clone());
 
     ctx.declare_type(
         variant_def.name.ident.clone(),

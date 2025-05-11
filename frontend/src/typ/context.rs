@@ -1486,8 +1486,27 @@ impl Context {
             Type::Record(name) | Type::Class(name) => {
                 let struct_kind = self_ty.struct_kind().unwrap();
                 let def = self.instantiate_struct_def(name, struct_kind)?;
-                Ok(def.implements.contains(iface_ty))
+                
+                for implements_ty in &def.implements {
+                    if self.is_implementation(implements_ty, iface_ty)? {
+                        return Ok(true);
+                    }
+                }
+                
+                Ok(false)
             },
+            
+            Type::Interface(name) => {
+                let def = self.instantiate_iface_def(name)?;
+                
+                for super_ty in &def.supers {
+                    if self.is_implementation(super_ty, iface_ty)? {
+                        return Ok(true);
+                    }
+                }
+
+                Ok(false)
+            }
 
             _ => Ok(false),
         }

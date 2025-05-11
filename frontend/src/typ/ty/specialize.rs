@@ -177,12 +177,12 @@ pub fn specialize_iface_def<'a>(
     };
 
     let specialized_name = generic_def.name.specialize(ty_args, ctx)?.into_owned();
-
-    // let implements = specialize_implements_clause(
-    //     &generic_def.implements,
-    //     iface_ty_params,
-    //     ty_args
-    // );
+    
+    let supers = specialize_implements_clause(
+        &generic_def.supers,
+        iface_ty_params,
+        ty_args
+    );
 
     let self_ty = Type::interface(specialized_name.clone());
 
@@ -205,7 +205,7 @@ pub fn specialize_iface_def<'a>(
 
     Ok(Rc::new(InterfaceDecl {
         name: specialized_name,
-        // implements,
+        supers,
         methods,
         span: generic_def.span.clone(),
         forward: generic_def.forward,

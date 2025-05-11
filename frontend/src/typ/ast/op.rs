@@ -878,7 +878,7 @@ pub fn typecheck_unary_op(
                     | Type::MethodSelf { .. }
                     | Type::Variant(..)
                     | Type::GenericParam(..),
-                ) if !ctx.allow_unsafe() => Err(TypeError::UnsafeAddressoOfNotAllowed {
+                ) if !ctx.allow_unsafe() => Err(TypeError::UnsafeAddressOfNotAllowed {
                     ty: ty.into_owned(),
                     span,
                 }),

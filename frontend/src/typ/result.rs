@@ -290,6 +290,7 @@ pub enum TypeError {
     InvalidBaseType { 
         ty: Type,
         invalid_base_ty: Type,
+        reason: InvalidBaseTypeReason,
         span: Span,
     },
 
@@ -316,7 +317,7 @@ pub enum TypeError {
         to: Type,
         span: Span,
     },
-    UnsafeAddressoOfNotAllowed {
+    UnsafeAddressOfNotAllowed {
         ty: Type,
         span: Span,
     },
@@ -468,7 +469,7 @@ impl Spanned for TypeError {
             TypeError::TypeMemberInaccessible { span, .. } => span,
             
             TypeError::UnsafeConversionNotAllowed { span, .. } => span,
-            TypeError::UnsafeAddressoOfNotAllowed { span, .. } => span,
+            TypeError::UnsafeAddressOfNotAllowed { span, .. } => span,
             TypeError::InvalidConstExpr { expr } => expr.span(),
             TypeError::InvalidCaseExprBlock { span } => span,
             TypeError::InvalidCast { span, .. } => span,
@@ -625,7 +626,7 @@ impl DiagnosticOutput for TypeError {
             TypeError::DuplicateParamName { .. } => "Duplicate parameter name",
             TypeError::DuplicateNamedArg { .. } => "Duplicate named argument",
             TypeError::UnsafeConversionNotAllowed { .. } => "Conversion not allowed in a safe context",
-            TypeError::UnsafeAddressoOfNotAllowed { .. } => "Address operator not allowed on this type in a safe context",
+            TypeError::UnsafeAddressOfNotAllowed { .. } => "Address operator not allowed on this type in a safe context",
 
             TypeError::InvalidConstExpr { .. } => "Invalid constant expression",
 
@@ -1182,8 +1183,15 @@ impl fmt::Display for TypeError {
                 Ok(())
             }
             
-            TypeError::InvalidBaseType { ty, invalid_base_ty, .. } => {
-                write!(f, "`{}` is not valid as a base type for `{}`", invalid_base_ty, ty)
+            TypeError::InvalidBaseType { ty, invalid_base_ty, reason, .. } => {
+                write!(f, "`{}` is not valid as a base type for `{}`: ", invalid_base_ty, ty)?;
+                
+                match reason {
+                    InvalidBaseTypeReason::NotInterface => write!(f, "type is not an interface")?,
+                    InvalidBaseTypeReason::Forward => write!(f, "base type cannot be a forward declaration")?,
+                }
+                
+                writeln!(f)
             }
             
             TypeError::AbstractMethodDefinition { owning_ty, method, .. } => {
@@ -1210,7 +1218,7 @@ impl fmt::Display for TypeError {
                 write!(f, "conversion from `{}` to `{}` is only allowed in an unsafe context", from, to)
             }
 
-            TypeError::UnsafeAddressoOfNotAllowed { ty, .. } => {
+            TypeError::UnsafeAddressOfNotAllowed { ty, .. } => {
                 write!(f, "value of type `{}` can only have its address taken in an unsafe context", ty)
             }
 
@@ -1326,4 +1334,10 @@ pub struct MismatchedMethodDecl {
     pub name: Ident,
     pub span: Span,
     pub kind: FunctionDeclKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum InvalidBaseTypeReason {
+    NotInterface,
+    Forward,
 }

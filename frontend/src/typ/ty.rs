@@ -52,6 +52,7 @@ use crate::Operator;
 use common::span::Span;
 use common::span::Spanned;
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::fmt;
 use std::rc::Rc;
 
@@ -992,37 +993,64 @@ impl Type {
             None => Access::Public,
         }
     }
+    
+    fn implemented_ifaces_rec(
+        base_tys: &[Type],
+        all_ifaces: &mut HashSet<Type>,
+        ctx: &Context
+    ) -> NameResult<()> {
+        for base_ty in base_tys {
+            let Type::Interface(iface_name) = base_ty else {
+               panic!("all base types must be interfaces")
+            };
 
-    pub fn implemented_ifaces(&self, ctx: &Context) -> NameResult<Vec<Type>> {
+            let iface_def = ctx.instantiate_iface_def(iface_name)?;
+            Self::implemented_ifaces_rec(&iface_def.supers, all_ifaces, ctx)?;
+
+            all_ifaces.insert(base_ty.clone());
+        }
+        
+        Ok(())
+    }
+
+    pub fn implemented_ifaces(&self, ctx: &Context) -> NameResult<HashSet<Type>> {
         match self {
             Type::GenericParam(param_ty) => match &param_ty.is_ty {
-                Type::Any => Ok(Vec::new()),
+                Type::Any => Ok(HashSet::new()),
 
-                is_iface => Ok(vec![is_iface.clone()]),
+                is_iface => Ok(HashSet::from([is_iface.clone()])),
             },
 
             Type::Primitive(primitive) => {
-                Ok(ctx.get_primitive_impls(*primitive).to_vec())
+                Ok(ctx.get_primitive_impls(*primitive).iter().cloned().collect())
             }
 
             Type::Record(name) | Type::Class(name) => {
                 let struct_kind = self.struct_kind().unwrap();
                 let def = ctx.instantiate_struct_def(name, struct_kind)?;
-                Ok(def.implements.clone())
+                
+                let mut implements = HashSet::new();
+                Self::implemented_ifaces_rec(&def.implements, &mut implements, ctx)?;
+                
+                Ok(implements)
             }
             
             Type::Variant(name) => {
                 let def = ctx.instantiate_variant_def(name)?;
-                Ok(def.implements.clone())
+                
+                let mut implements = HashSet::new();
+                Self::implemented_ifaces_rec(&def.implements, &mut implements, ctx)?;
+
+                Ok(implements)
             }
 
             _ => {
-                Ok(Vec::new())
+                Ok(HashSet::new())
             },
         }
     }
     
-    pub fn implemented_ifaces_at(&self, ctx: &Context, at: &Span) -> TypeResult<Vec<Type>> {
+    pub fn implemented_ifaces_at(&self, ctx: &Context, at: &Span) -> TypeResult<HashSet<Type>> {
         self.implemented_ifaces(ctx)
             .map_err(|err| TypeError::from_name_err(err, at.clone()))
     }

@@ -1,4 +1,4 @@
-use crate::ast::iface_method_start;
+use crate::ast::{iface_method_start, parse_implements_clause};
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
@@ -67,6 +67,8 @@ impl ParseSeq for InterfaceMethodDecl<Span> {
 pub struct InterfaceDecl<A: Annotation> {
     pub name: A::Name,
     pub methods: Vec<InterfaceMethodDecl<A>>,
+
+    pub supers: Vec<A::Type>,
     
     pub forward: bool,
 
@@ -91,11 +93,14 @@ impl InterfaceDecl<Span> {
         if tokens.look_ahead().match_one(Separator::Semicolon).is_some() {
             Ok(InterfaceDecl {
                 name,
+                supers: Vec::new(),
                 span: iface_kw.into_span(),
                 forward: true,
                 methods: Vec::new()
             })
         } else {
+            let supers = parse_implements_clause(tokens)?;
+            
             let methods = InterfaceMethodDecl::parse_seq(tokens)?;
             tokens.match_one_maybe(Separator::Semicolon);
             
@@ -113,6 +118,7 @@ impl InterfaceDecl<Span> {
 
             Ok(InterfaceDecl {
                 name,
+                supers,
                 span: iface_kw.span().to(end.span()),
                 forward: false,
                 methods,
