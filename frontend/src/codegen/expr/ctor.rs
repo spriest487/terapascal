@@ -81,8 +81,10 @@ pub fn translate_collection_ctor(ctor: &typ::ast::CollectionCtor, builder: &mut 
             translate_static_array_ctor(ctor, &array_ty.element_ty, array_ty.dim, builder)
         },
 
-        typ::Type::DynArray { element } => translate_dyn_array_ctor(ctor, element, builder),
-        
+        typ::Type::DynArray { element } => {
+            translate_dyn_array_ctor(ctor, element, builder)
+        },
+
         typ::Type::Set(set_type) => {
             let flags_type = builder.translate_type(ctor_ty.as_ref());
             translate_set_ctor(ctor, set_type, flags_type, builder)
@@ -101,31 +103,30 @@ fn translate_static_array_ctor(
     let el_ty = builder.translate_type(element);
 
     let array_ty = el_ty.clone().array(dim);
-    let arr = builder.local_temp(array_ty.clone());
+    let arr = builder.local_new(array_ty.clone(), None);
 
-    builder.begin_scope();
+    if dim > 0 {
+        builder.scope(|builder| {
+            let el_ptr = builder.local_temp(el_ty.clone().ptr());
 
-    let el_ptr = builder.local_temp(el_ty.clone().ptr());
+            for (i, el) in ctor.elements.iter().enumerate() {
+                builder.scope(|builder| {
+                    let index = i32::try_from(i).expect("invalid array index in array ctor");
 
-    for (i, el) in ctor.elements.iter().enumerate() {
-        builder.begin_scope();
+                    builder.append(Instruction::Element {
+                        out: el_ptr.clone(),
+                        a: arr.clone(),
+                        index: Value::LiteralI32(index),
+                        element: el_ty.clone(),
+                    });
 
-        let index = i32::try_from(i).expect("invalid array index in array ctor");
+                    let el_init = translate_expr(&el.value, builder);
 
-        builder.append(Instruction::Element {
-            out: el_ptr.clone(),
-            a: arr.clone(),
-            index: Value::LiteralI32(index),
-            element: el_ty.clone(),
+                    builder.mov(el_ptr.clone().to_deref(), el_init);
+                });
+            }
         });
-
-        let el_init = expr::translate_expr(&el.value, builder);
-
-        builder.mov(el_ptr.clone().to_deref(), el_init);
-        builder.end_scope();
     }
-
-    builder.end_scope();
 
     arr
 }
