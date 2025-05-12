@@ -10,6 +10,7 @@ use crate::consts::IntConstant;
 use crate::consts::RealConstant;
 use crate::parse::Matchable;
 use crate::parse::Matcher;
+use crate::parse::ParseResult;
 use crate::parse::SequenceMatcher;
 pub use crate::parse::TokenStream;
 use crate::pp::PreprocessedUnit;
@@ -147,6 +148,16 @@ pub struct DelimitedGroup {
     pub inner: Vec<TokenTree>,
 
     pub span: Span,
+}
+
+impl DelimitedGroup {
+    pub fn parse(tokens: &mut TokenStream, delim: DelimiterPair) -> ParseResult<Self> {
+        let group = tokens.match_one(delim)?
+            .into_delimited_group()
+            .unwrap();
+        
+        Ok(group)
+    }
 }
 
 impl DelimitedGroup {

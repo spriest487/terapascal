@@ -1,6 +1,6 @@
 use crate::ast::expression::parse::CompoundExpressionPart;
 use crate::ast::type_name::TypeName;
-use crate::ast::ArgList;
+use crate::ast::{ArgList, ObjectCtor, ObjectCtorArgs};
 use crate::ast::BinOp;
 use crate::ast::Call;
 use crate::ast::Cast;
@@ -16,6 +16,7 @@ use common::span::Span;
 use common::span::Spanned;
 use common::TracedError;
 use std::cmp::Ordering;
+use crate::ast::expression::explicit_spec::ExplicitSpecExpr;
 
 fn resolve_postfix<F>(
     parts: Vec<CompoundExpressionPart>,
@@ -100,7 +101,36 @@ pub(super) fn resolve_ops_by_precedence(
                 type_args,
             }));
 
-            let merged_parts: Vec<_> = vec![CompoundExpressionPart::Operand(op_expr)]
+            let merged_parts: Vec<_> = [CompoundExpressionPart::Operand(op_expr)]
+                .into_iter()
+                .chain(after_op[1..].iter().cloned())
+                .collect();
+
+            assert!(!merged_parts.is_empty());
+            resolve_ops_by_precedence(merged_parts)
+        }
+
+        OperatorPart::ObjectCtor { args, type_args } => {
+            let (before_op, after_op) = parts.split_at(lo_op_index);
+
+            let (target, span) = if before_op.is_empty() {
+                (None, args.span.clone())
+            } else {
+                // everything on the left becomes the target, presumably an expression referencing
+                // the type to be constructed
+                let type_expr = resolve_ops_by_precedence(before_op.to_vec())?;
+                let span = type_expr.span().to(&args.span); 
+                (Some(type_expr), span)
+            };
+
+            let op_expr = Expr::from(ObjectCtor {
+                annotation: span,
+                type_expr: target,
+                type_args,
+                args,
+            });
+
+            let merged_parts: Vec<_> = [CompoundExpressionPart::Operand(op_expr)]
                 .into_iter()
                 .chain(after_op[1..].iter().cloned())
                 .collect();
@@ -194,10 +224,23 @@ pub(super) fn resolve_ops_by_precedence(
         OperatorPart::AsCast { ty, kw_span } => {
             resolve_postfix(parts, lo_op_index, &kw_span, |operand| {
                 let span = operand.span().to(&ty);
+
                 Expr::from(Cast {
                     expr: operand,
                     annotation: span,
                     as_type: ty,
+                })
+            })
+        }
+        
+        OperatorPart::WithTypeArgs { arg_types, kw_span} => {
+            resolve_postfix(parts, lo_op_index, &kw_span, |operand| {
+                let span = operand.span().to(&arg_types.span);
+
+                Expr::from(ExplicitSpecExpr {
+                    type_expr: operand,
+                    type_args: arg_types,
+                    annotation: span,
                 })
             })
         }
@@ -218,7 +261,13 @@ pub enum OperatorPart {
 
     // () operator with inner argument list
     Call {
-        args: ArgList<Span>,
+        args: ArgList,
+        type_args: Option<TypeList<TypeName>>,
+    },
+
+    // () operator with inner field name/value pairs
+    ObjectCtor {
+        args: ObjectCtorArgs,
         type_args: Option<TypeList<TypeName>>,
     },
 
@@ -226,32 +275,56 @@ pub enum OperatorPart {
     AsCast {
         kw_span: Span,
         ty: TypeName,
-    }
+    },
+
+    // `with [..]` specialization operator followed by typename list
+    WithTypeArgs {
+        kw_span: Span,
+        arg_types: TypeList<TypeName>,
+    },
 }
 
 impl OperatorPart {
     pub fn position(&self) -> Position {
         match self {
             OperatorPart::Call { .. } => Position::Postfix,
+            OperatorPart::ObjectCtor { .. } => Position::Postfix,
             OperatorPart::OperatorSymbol(sym) => sym.pos,
             OperatorPart::AsCast { .. } => Position::Postfix,
+            OperatorPart::WithTypeArgs { .. } => Position::Postfix,
         }
     }
 
     pub fn op(&self) -> Operator {
         match self {
+            // for operator precedence purposes, calls and constructor invocations are the same
+            OperatorPart::ObjectCtor { .. } => Operator::Call,
             OperatorPart::Call { .. } => Operator::Call,
             OperatorPart::OperatorSymbol(sym) => sym.op,
             OperatorPart::AsCast { .. } => Operator::As,
+            OperatorPart::WithTypeArgs { .. } => Operator::With,
         }
     }
 
     pub fn span(&self) -> Span {
         match self {
             OperatorPart::OperatorSymbol(sym) => sym.span.clone(),
-            OperatorPart::Call { args, type_args: Some(ty_args), .. } => ty_args.span().to(&args.close),
+            
+            OperatorPart::Call { args, type_args: Some(ty_args), .. } => {
+                ty_args.span().to(&args.close)
+            },
+
+            OperatorPart::ObjectCtor { args, .. } => {
+                args.span.clone()
+            },
+            
             OperatorPart::Call { args, .. } => args.open.to(&args.close),
+            
             OperatorPart::AsCast { kw_span, ty } => kw_span.to(ty.span()),
+            
+            OperatorPart::WithTypeArgs { kw_span, arg_types } => {
+                kw_span.to(arg_types.span())
+            },
         }
     }
 }

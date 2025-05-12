@@ -1,5 +1,4 @@
 # features
-* generic interfaces 
 * add a named type case to typ::Type for all the things that use full_path, full_name etc
 * Object should be an interface?
   * need interface inheritance so Object can imply Comparable and Displayable

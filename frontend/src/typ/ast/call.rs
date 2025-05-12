@@ -13,8 +13,8 @@ use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::ObjectCtor;
-use crate::typ::typecheck_type;
 use crate::typ::Context;
+use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::FunctionValue;
 use crate::typ::GenericError;
@@ -30,11 +30,11 @@ use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use crate::typ::Value;
 use crate::typ::TypedValue;
 use crate::typ::UfcsValue;
+use crate::typ::Value;
 use crate::typ::ValueKind;
-use crate::typ::FunctionSig;
+use crate::typ::typecheck_type;
 pub use args::*;
 use common::span::Span;
 use common::span::Spanned as _;
@@ -213,8 +213,12 @@ fn typecheck_func_call(
     expect_ty: &Type,
     ctx: &mut Context
 ) -> TypeResult<Invocation> {
-    let target = typecheck_expr(&func_call.target, expect_ty, ctx)?;
+    if func_call.target.to_string() == "LinkedList.Create" {
+        eprintln!("here")
+    };
 
+    let target = typecheck_expr(&func_call.target, expect_ty, ctx)?;
+    
     // if the call target is a no-args call itself and this is also a no-args call, we are just
     // applying an empty argument list to the same call, so just unwrap it here
     // e.g. if we call `procedure X;` with `X()`, `X` is already a valid call on its own

@@ -1,10 +1,9 @@
 #[cfg(test)]
 mod test;
 
-use crate::ast::{Annotation, TypeArgList};
 use crate::ast::Expr;
 use crate::ast::Ident;
-use crate::ast::IdentPath;
+use crate::ast::{Annotation, TypeArgList};
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -14,9 +13,9 @@ use crate::parse::TokenStream;
 use crate::DelimiterPair;
 use crate::Separator;
 use crate::TokenTree;
-use derivative::*;
 use common::span::Span;
 use common::span::Spanned;
+use derivative::*;
 use std::fmt;
 
 #[derive(Eq, Clone, Derivative)]
@@ -72,7 +71,7 @@ impl ParseSeq for ObjectCtorMember<Span> {
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct ObjectCtorArgs<A: Annotation> {
+pub struct ObjectCtorArgs<A: Annotation = Span> {
     pub members: Vec<ObjectCtorMember<A>>,
 
     #[derivative(Hash = "ignore")]
@@ -164,18 +163,18 @@ impl ParseSeq for CollectionCtorElement<Span> {
 
 #[derive(Eq, PartialEq, Clone, Hash, Debug)]
 pub struct ObjectCtor<A: Annotation = Span> {
-    pub ident: Option<IdentPath>,
+    pub type_expr: Option<Expr<A>>,
     
     pub args: ObjectCtorArgs<A>,
-    pub ty_args: Option<TypeArgList<A>>,
+    pub type_args: Option<TypeArgList<A>>,
 
     pub annotation: A,
 }
 
 impl<A: Annotation> fmt::Display for ObjectCtor<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(ident) = &self.ident {
-            write!(f, "{}", ident)?;
+        if let Some(type_expr) = &self.type_expr {
+            write!(f, "{}", type_expr)?;
         }
         write!(f, "{}", self.args)
     }

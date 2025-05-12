@@ -110,20 +110,14 @@ impl FunctionCall {
             return None;
         }
 
-        // for now, the type paths used for constructors must be name-only, so we can just try
-        // to convert the target into an ident path. if it becomes possible to construct things
-        // via more complicated paths e.g. with multiple sets of type args, this will need to be
-        // extended to be able to convert expressions to a TypeDeclName path
-        let ty_path = self.target.try_into_ident_path()?;
-
         let ctor = ObjectCtor {
-            ident: Some(ty_path),
+            type_expr: Some(self.target),
             
             args: ast::ObjectCtorArgs {
                 span: self.args_span,
                 members: Vec::new(),
             },
-            ty_args: self.type_args,
+            type_args: self.type_args,
             
             annotation: self.annotation,
         };
@@ -339,7 +333,7 @@ impl ParseSeq for ArgListItem {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ArgList<A: Annotation> {
+pub struct ArgList<A: Annotation = Span> {
     pub open: Span,
     pub close: Span,
     pub args: Vec<Expr<A>>,

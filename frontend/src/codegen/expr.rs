@@ -75,6 +75,8 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
         syn::Expr::Cast(cast) => translate_cast_expr(cast, builder),
 
         syn::Expr::AnonymousFunction(def) => builder.build_closure_expr(def),
+        
+        syn::Expr::ExplicitSpec(..) => unreachable!(),
     };
 
     builder.pop_debug_context();

@@ -4,7 +4,7 @@ uses
     System.Collections;
 
 begin
-    var x: LinkedList[Integer] := LinkedList.Create;
+    var x := LinkedList with [Integer].Create;
 
     WriteLn('len of x: ' + x.Length);
 
@@ -17,7 +17,7 @@ begin
         WriteLn('x[0]: ' + n)
     else
         WriteLn('missing item 0! should be 123');
-    
+
     if x.TryGet(1) is Option.Some n then
         WriteLn('x[1]: ' + n)
     else

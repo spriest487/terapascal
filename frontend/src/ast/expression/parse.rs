@@ -165,12 +165,7 @@ impl fmt::Display for CompoundExpressionPart {
             CompoundExpressionPart::Operator(OperatorPart::Call { args, type_args }) => {
                 write!(f, "call: ")?;
                 if let Some(type_args) = type_args {
-                    for (i, arg) in type_args.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{}", arg)?;
-                    }
+                    write!(f, "{}", type_args)?;
                 }
 
                 write!(f, "], arg list (")?;
@@ -183,8 +178,22 @@ impl fmt::Display for CompoundExpressionPart {
                 write!(f, ")")?;
                 Ok(())
             },
+            
+            CompoundExpressionPart::Operator(OperatorPart::ObjectCtor { args, type_args }) => {
+                write!(f, "ctor")?;
+                if let Some(type_args) = type_args {
+                    write!(f, " {}", type_args)?;
+                }
+                
+                write!(f, ": {args}")
+            },
+
             CompoundExpressionPart::Operator(OperatorPart::AsCast { ty, .. }) => {
                 write!(f, "cast to {}", ty)
+            },
+
+            CompoundExpressionPart::Operator(OperatorPart::WithTypeArgs { arg_types, .. }) => {
+                write!(f, "specialization with type args {}", arg_types)
             },
         }
     }
@@ -381,13 +390,13 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
         // if the inner group is completely empty, the only valid way to parse it is as an empty object ctor
         if tokens.look_ahead().next().is_none() {
             sub_expr = Expr::from(ObjectCtor {
-                ident: None,
+                type_expr: None,
                 annotation: open_bracket.to(&close_bracket),
                 args: ObjectCtorArgs {
                     span: open_bracket.to(&close_bracket),
                     members: Vec::new(),
                 },
-                ty_args: None,
+                type_args: None,
             });
         } else {
             sub_expr = Expr::parse(&mut tokens)?;
@@ -410,19 +419,17 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
                     }
 
                     sub_expr = Expr::from(ObjectCtor {
-                        ident: None,
+                        type_expr: None,
                         annotation: open_bracket.to(&close_bracket),
                         args: ObjectCtorArgs {
                             span: open_bracket.to(&close_bracket),
                             members: items,
                         },
-                        ty_args: None,
+                        type_args: None,
                     });
                 }
             }
         }
-
-
 
         tokens.finish()?;
 
@@ -437,23 +444,13 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
         self.parts.push(part);
     }
 
-    fn pop_operand(&mut self) -> Expr<Span> {
-        match self.parts.pop() {
-            Some(CompoundExpressionPart::Operand(operand)) => operand,
-            _ => unreachable!("last should always exist and be an operand here"),
-        }
-    }
-
-    fn parse_invocation(&mut self, ty_args: Option<TypeArgList>) -> ParseResult<()> {
-        // replace the last operand with a function call targeting that expr
-        let last_was_ident = match self.parts.last() {
-            Some(CompoundExpressionPart::Operand(expr)) => expr.as_ident().is_some(),
-            _ => false,
-        };
-
-        let match_arg_list = Matcher::Delimited(DelimiterPair::Bracket);
+    fn parse_invocation(&mut self, type_args: Option<TypeArgList>) -> ParseResult<()> {
+        let match_arg_list = Matcher::from(DelimiterPair::Bracket);
+        
         let mut inner_tokens = match self.tokens.look_ahead().next() {
-            Some(TokenTree::Delimited(group)) => group.to_inner_tokens(),
+            Some(TokenTree::Delimited(group)) => {
+                group.to_inner_tokens()
+            },
 
             Some(bad) => {
                 return Err(TracedError::trace(ParseError::UnexpectedToken(
@@ -478,23 +475,20 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
             .match_sequence(ctor_matcher)
             .is_some();
 
-        if is_ctor_ahead && last_was_ident {
+        if is_ctor_ahead {
             let args = ObjectCtorArgs::parse(&mut self.tokens)?;
-            let ident = self.pop_operand().into_ident().unwrap();
-
-            let span = ident.span().to(&args.span);
-            let ctor = ObjectCtor {
-                ident: Some(ident.into()),
-                ty_args,
+            
+            self.parts.push(CompoundExpressionPart::Operator(OperatorPart::ObjectCtor {
                 args,
-                annotation: span.clone(),
-            };
-
-            self.push_operand(Expr::from(ctor));
+                type_args
+            }));
         } else {
             let args = ArgList::parse(&mut self.tokens)?;
 
-            self.push_operator_call(args, ty_args);
+            self.parts.push(CompoundExpressionPart::Operator(OperatorPart::Call { 
+                args, 
+                type_args
+            }));
         }
 
         self.last_was_operand = true;
@@ -522,12 +516,12 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
 
     fn parse_operator(&mut self) -> ParseResult<bool> {
         let operator_matcher = Matcher::AnyOperatorInPosition(Position::Binary)
-            .or(Matcher::AnyOperatorInPosition(Position::Postfix));
+            | Matcher::AnyOperatorInPosition(Position::Postfix);
 
         let match_after_operand = operator_matcher
-            .or(DelimiterPair::SquareBracket) // array element access or explicit generic args
-            .or(DelimiterPair::Bracket) // function call argument list
-            .or(Operator::Period); // member access
+            | DelimiterPair::SquareBracket // array element access or explicit generic args
+            | DelimiterPair::Bracket // function call argument list
+            | Operator::Period; // member access
 
         let mut look_ahead = self.tokens.look_ahead();
 
@@ -573,6 +567,33 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
 
                     self.last_was_operand = true;
                     self.push_operator_cast(op_tt, as_typename);
+                } else if op == Operator::With {
+                    let with_group = DelimitedGroup::parse(
+                        self.tokens, 
+                        DelimiterPair::SquareBracket
+                    )?;
+                    
+                    let with_span = with_group.span.clone();
+                    
+                    let mut with_tokens = with_group.to_inner_tokens();
+                    let mut arg_types = Vec::new();
+                    loop {
+                        if !arg_types.is_empty() {
+                            if self.tokens.look_ahead().match_one(Separator::Comma).is_none() {
+                                break;
+                            }
+                        }
+                        
+                        let arg_type = TypeName::parse(&mut with_tokens)?;
+                        arg_types.push(arg_type);
+                    }
+
+                    with_tokens.finish()?;
+                    
+                    let arg_types = TypeList::new(arg_types, with_span);
+                    
+                    self.last_was_operand = true;
+                    self.push_operator_with(op_tt, arg_types);
                 } else if op.is_valid_in_pos(Position::Postfix) {
                     // assumes there are no postfix operators that are also valid in infix position
                     // expect another operator
@@ -633,11 +654,6 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
         Ok(())
     }
 
-    fn push_operator_call(&mut self, args: ArgList<Span>, type_args: Option<TypeArgList>) {
-        let op_call = OperatorPart::Call { args, type_args };
-        self.parts.push(CompoundExpressionPart::Operator(op_call));
-    }
-
     fn push_operator_cast(&mut self, op_tt: TokenTree, ty: TypeName) {
         let op_as = OperatorPart::AsCast {
             kw_span: op_tt.into_span(),
@@ -645,6 +661,16 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
         };
 
         let part = CompoundExpressionPart::Operator(op_as);
+        self.parts.push(part);
+    }
+
+    fn push_operator_with(&mut self, op_tt: TokenTree, arg_types: TypeList<TypeName>) {
+        let op_with = OperatorPart::WithTypeArgs {
+            kw_span: op_tt.into_span(),
+            arg_types,
+        };
+
+        let part = CompoundExpressionPart::Operator(op_with);
         self.parts.push(part);
     }
 

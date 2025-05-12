@@ -3,7 +3,7 @@ mod test;
 
 use crate::ast;
 use crate::typ::ast::cast::implicit_conversion;
-use crate::typ::ast::create_default_literal;
+use crate::typ::ast::{create_default_literal, Expr};
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ArrayType;
@@ -39,24 +39,27 @@ pub fn typecheck_object_ctor(
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<ObjectCtor> {
-    let ty_args = match &ctor.ty_args {
+    let ty_args = match &ctor.type_args {
         Some(list) => Some(typecheck_type_args(list, ctx)?),
         None => None,
     };
     
-    let ctor_ty = find_ctor_ty(ctor, expect_ty, ty_args.as_ref(), &span, ctx)?;
+    let type_expr = match &ctor.type_expr {
+        Some(expr) => Some(typecheck_expr(expr, &Type::Nothing, ctx)?),
+        None => None,
+    };
 
-    let ty_name = ctor_ty
-        .full_path()
+    let ctor_ty = find_ctor_ty(expect_ty, ty_args.as_ref(), type_expr.as_ref(), &span, ctx)?;
+    let ctor_ty_name = ctor_ty
+        .full_name()
         .ok_or_else(|| TypeError::InvalidCtorType {
             ty: ctor_ty.clone(),
             span: span.clone(),
-        })?
-        .into_owned();
+        })?;
 
     if ctor_ty.is_unspecialized_generic() {
         let err = GenericError::CannotInferArgs {
-            target: GenericTarget::Name(ty_name.clone()),
+            target: GenericTarget::Type(ctor_ty),
             hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
         };
 
@@ -66,9 +69,9 @@ pub fn typecheck_object_ctor(
         });
     }
 
-    if !ctx.is_visible(&ty_name) {
+    if !ctx.is_visible(&ctor_ty_name.full_path) {
         return Err(TypeError::NameNotVisible {
-            name: ty_name,
+            name: ctor_ty_name.into_owned().full_path,
             span,
         });
     }
@@ -176,68 +179,62 @@ pub fn typecheck_object_ctor(
     .into();
 
     Ok(ObjectCtor {
-        ident: Some(ty_name),
+        type_expr,
         args,
-        ty_args,
+        type_args: ty_args,
         annotation,
     })
 }
 
 fn find_ctor_ty(
-    ctor: &ast::ObjectCtor,
     expect_ty: &Type,
     ty_args: Option<&TypeArgList>,
+    type_expr: Option<&Expr>,
     span: &Span,
     ctx: &mut Context
 ) -> TypeResult<Type>  {
-    let ctor_ty = match &ctor.ident {
-        Some(ctor_ident) => {
-            let (_, generic_ty) = ctx
-                .find_type(&ctor_ident)
-                .map_err(|err| {
-                    TypeError::from_name_err(err, ctor_ident.span().clone())
-                })?;
-
-            let raw_ty_name = generic_ty
-                .full_path()
-                .ok_or_else(|| TypeError::InvalidCtorType {
-                    ty: generic_ty.clone(),
-                    span: span.clone(),
-                })?;
-            
-            match &ty_args {
-                Some(ty_arg_list) => {
-                    generic_ty
-                        .specialize(*ty_arg_list, ctx)
-                        .map_err(|err| {
-                            TypeError::from_generic_err(err, span.clone())
-                        })?
-                        .into_owned()
-                }
-
+    let Some(type_expr) = type_expr else {
+        return Ok(expect_ty.clone());
+    };
+    
+    match type_expr.annotation() {
+        Value::Type(generic_ty, _) => {
+            match ty_args {
                 None => {
                     // infer the type args from the expected type of the expression
-                    generic_ty
+                    let spec_ty = generic_ty
                         .infer_specialized_from_hint(expect_ty)
                         .ok_or_else(|| {
                             // eprintln!("specialization failed:\n{:#?}\ninto:\n{:#?}", generic_ty, expect_ty);
-                            
+
                             TypeError::from_generic_err(GenericError::CannotInferArgs {
-                                target: GenericTarget::Name(raw_ty_name.into_owned()),
+                                target: GenericTarget::Type(generic_ty.clone()),
                                 hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
                             }, span.clone())
                         })?
-                        .clone()
-                }
+                        .clone();
+
+                    Ok(spec_ty)
+                },
+
+                Some(args) => {
+                    let spec_ty = generic_ty
+                        .specialize(args, ctx)
+                        .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
+                        .into_owned();
+
+                    Ok(spec_ty)
+                },
             }
         }
-
-        None => {
-            expect_ty.clone()
-        },
-    };
-
-    Ok(ctor_ty)
+        
+        other => {
+            Err(TypeError::InvalidCtorType {
+                ty: other.ty().into_owned(),
+                span: span.clone(),
+            })
+        }
+    }
 }
 
 pub fn typecheck_collection_ctor(

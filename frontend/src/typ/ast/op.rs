@@ -17,7 +17,6 @@ use crate::typ::ast::op::variant_case::{typecheck_variant_type_member, VariantTy
 use crate::typ::ast::overload_to_no_args_call;
 use crate::typ::ast::try_resolve_overload;
 use crate::typ::ast::typecheck_expr;
-use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Call;
 use crate::typ::ast::Expr;
 use crate::typ::ast::MethodCall;
@@ -591,37 +590,44 @@ fn typecheck_member_of(
         },
 
         // a.B(x: x)
-        ast::Expr::ObjectCtor(ctor) => {
-            match lhs.annotation() {
-                // a must be a namespace qualifier before the constructed object name
-                Value::Namespace(ns_path, ..) => {
-                    assert_eq!(
-                        1,
-                        ctor.ident.as_ref().unwrap().as_slice().len(),
-                        "parsed ctor should only have a single ident in its path until this point, but found {}",
-                        ctor.ident.as_ref().unwrap()
-                    );
-
-                    let qualified_ident = ns_path
-                        .clone()
-                        .child(ctor.ident.as_ref().unwrap().last().clone());
-                    let qualified_ctor = ast::ObjectCtor {
-                        ident: Some(qualified_ident),
-                        ..(**ctor).clone()
-                    };
-
-                    let span = lhs.annotation().span().to(qualified_ctor.annotation.span());
-
-                    let ctor = typecheck_object_ctor(&qualified_ctor, span, expect_ty, ctx)?;
-                    Ok(Expr::from(ctor))
-                },
-
-                _ => Err(TypeError::InvalidCtorType {
-                    ty: lhs.annotation().ty().into_owned(),
-                    span,
-                }),
-            }
-        },
+        // ast::Expr::ObjectCtor(ctor) => {
+        //     match lhs.annotation() {
+        //         // a must be a namespace qualifier before the constructed object name
+        //         Value::Namespace(ns_path, ..) => {
+        //             let ctor_type_name = ctor.type_expr
+        //                 .as_ref()
+        //                 .and_then(|ty| ty.as_ident())
+        //                 .ok_or_else(|| {
+        //                     Err(TypeError::InvalidBinOp {
+        //                         lhs: lhs.annotation().ty().into_owned(),
+        //                         rhs: rhs.annotation().ty().into_owned(),
+        //                         span,
+        //                         op: Operator::Period,
+        //                     })
+        //                 });
+        // 
+        //             let qualified_ident = ns_path
+        //                 .clone()
+        //                 .child(ctor_type_name.clone());
+        //             let new_
+        // 
+        //             let qualified_ctor = ast::ObjectCtor {
+        //                 ident: Some(qualified_ident),
+        //                 ..(**ctor).clone()
+        //             };
+        // 
+        //             let span = lhs.annotation().span().to(qualified_ctor.annotation.span());
+        // 
+        //             let ctor = typecheck_object_ctor(&qualified_ctor, span, expect_ty, ctx)?;
+        //             Ok(Expr::from(ctor))
+        //         },
+        // 
+        //         _ => Err(TypeError::InvalidCtorType {
+        //             ty: lhs.annotation().ty().into_owned(),
+        //             span,
+        //         }),
+        //     }
+        // },
 
         _ => {
             let rhs = typecheck_expr(rhs, &Type::Nothing, ctx)?;

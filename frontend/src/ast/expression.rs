@@ -1,4 +1,5 @@
 mod parse;
+mod explicit_spec;
 
 #[cfg(test)]
 pub(crate) mod test;
@@ -29,6 +30,7 @@ use common::TracedError;
 use derivative::Derivative;
 use std::fmt;
 use std::rc::Rc;
+use crate::ast::expression::explicit_spec::ExplicitSpecExpr;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Literal<T: TypeAnnotation> {
@@ -87,6 +89,7 @@ pub enum Expr<A: Annotation = Span> {
     Match(Box<MatchExpr<A>>),
     Cast(Box<Cast<A>>),
     AnonymousFunction(Box<AnonymousFunctionDef<A>>),
+    ExplicitSpec(Box<ExplicitSpecExpr<A>>)
 }
 
 impl<A: Annotation + From<Span>> From<Ident> for Expr<A> {
@@ -192,6 +195,7 @@ impl<A: Annotation> Expr<A> {
             Expr::Match(_) => "match expr",
             Expr::Cast(_) => "cast",
             Expr::AnonymousFunction(_) => "anonymous function",
+            Expr::ExplicitSpec(_) => "with expr",
         }
     }
     
@@ -212,6 +216,7 @@ impl<A: Annotation> Expr<A> {
             Expr::Exit(exit) => exit.annotation(),
             Expr::Cast(cast) => &cast.annotation,
             Expr::AnonymousFunction(def) => &def.annotation,
+            Expr::ExplicitSpec(expr) => &expr.annotation,
         }
     }
 
@@ -232,6 +237,7 @@ impl<A: Annotation> Expr<A> {
             Expr::Exit(exit) => exit.annotation_mut(),
             Expr::Cast(cast) => &mut cast.annotation,
             Expr::AnonymousFunction(def) => &mut def.annotation,
+            Expr::ExplicitSpec(expr) => &mut expr.annotation,
         }
     }
 
@@ -356,6 +362,7 @@ impl<A: Annotation> fmt::Display for Expr<A> {
             Expr::Exit(exit) => write!(f, "{}", exit),
             Expr::Cast(cast) => write!(f, "{}", cast),
             Expr::AnonymousFunction(def) => write!(f, "{}", def),
+            Expr::ExplicitSpec(with_expr) => write!(f, "{}", with_expr),
         }
     }
 }

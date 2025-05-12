@@ -350,7 +350,7 @@ pub fn translate_unary_op(
                 typ::Type::Primitive(typ::Primitive::NativeInt) => Value::LiteralISize(0),
                 typ::Type::Primitive(typ::Primitive::NativeUInt) => Value::LiteralUSize(0),
                 typ::Type::Primitive(typ::Primitive::Real32) => Value::LiteralF32(0.0),
-                _ => unimplemented!("unary negation of {}", op_ty),
+                _ => unimplemented!("IR for unary negation of {}", op_ty),
             };
 
             builder.sub(out_val.clone(), zero_val, operand_ref);

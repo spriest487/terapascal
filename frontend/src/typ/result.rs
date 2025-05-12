@@ -368,6 +368,10 @@ pub enum TypeError {
         next_ident: Ident,
         next_val: i128,
     },
+    
+    InvalidExplicitSpec {
+        target: Value,
+    }
 }
 
 impl TypeError {
@@ -481,6 +485,7 @@ impl Spanned for TypeError {
             TypeError::InvalidLoopSeqType { span, .. } => span,
             TypeError::InvalidDeclWithTypeParams { span, .. } => span,
             TypeError::EnumValuesMustBeAscending { span, .. } => span,
+            TypeError::InvalidExplicitSpec { target, .. } => target.span(),
         }
     }
 }
@@ -641,6 +646,7 @@ impl DiagnosticOutput for TypeError {
             TypeError::InvalidLoopSeqType { .. } => "Invalid loop sequence type",
             TypeError::InvalidDeclWithTypeParams { .. } => "Invalid type declared with type params",
             TypeError::EnumValuesMustBeAscending { .. } => "Enumeration values must be ascending",
+            TypeError::InvalidExplicitSpec { .. } => "Invalid explicit specialization",
         })
     }
 
@@ -1275,6 +1281,10 @@ impl fmt::Display for TypeError {
 
             TypeError::EnumValuesMustBeAscending { prev_ident, prev_val, next_ident, next_val, .. } => {
                 write!(f, "item `{}` has lower value ({}) than previous item `{}` ({})", next_ident, next_val, prev_ident, prev_val)
+            }
+            
+            TypeError::InvalidExplicitSpec { target, .. } => {
+                write!(f, "{target} cannot be explicitly specialized with type arguments")
             }
         }
     }

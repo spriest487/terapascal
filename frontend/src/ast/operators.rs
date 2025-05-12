@@ -23,6 +23,8 @@ pub enum Operator {
     Not,
     Or,
 
+    With,
+
     // no bitwise xor since the caret operator used for derefs doubles as that
     BitAnd,
     BitNot,
@@ -40,13 +42,13 @@ pub enum Operator {
     In,
 
     Period,
-    Index,
 
     Shl,
     Shr,
 
     // not used as a syntactical operator, but included so it can easily
     // participate in precedence comparisons
+    Index,
     Call,
 }
 
@@ -56,33 +58,44 @@ impl fmt::Display for Operator {
             Operator::Period => write!(f, "."),
             Operator::Caret => write!(f, "^"),
             Operator::AddressOf => write!(f, "@"),
+            
             Operator::Assignment => write!(f, ":="),
             Operator::CompoundAssignment(a) => write!(f, "{}", a),
+            
             Operator::Equals => write!(f, "="),
             Operator::NotEquals => write!(f, "<>"),
+            
             Operator::Shl => write!(f, "shl"),
             Operator::Shr => write!(f, "shr"),
+            
             Operator::Add => write!(f, "+"),
             Operator::Sub => write!(f, "-"),
             Operator::Mul => write!(f, "*"),
             Operator::FDiv => write!(f, "/"),
             Operator::IDiv => write!(f, "div"),
             Operator::Mod => write!(f, "mod"),
+            
             Operator::And => write!(f, "and"),
             Operator::Not => write!(f, "not"),
             Operator::Or => write!(f, "or"),
+            
             Operator::Gt => write!(f, ">"),
             Operator::Gte => write!(f, ">="),
             Operator::Lt => write!(f, "<"),
             Operator::Lte => write!(f, "<="),
+            
             Operator::In => write!(f, "in"),
             Operator::RangeInclusive => write!(f, ".."),
-            Operator::Call => write!(f, "(...)"),
-            Operator::Index => write!(f, "[...]"),
+            
+            Operator::With => write!(f, "with"),
+            
             Operator::As => write!(f, "as"),
             Operator::BitAnd => write!(f, "&"),
             Operator::BitNot => write!(f, "~"),
             Operator::BitOr => write!(f, "|"),
+
+            Operator::Index => write!(f, "[...]"),
+            Operator::Call => write!(f, "(...)"),
         }
     }
 }
@@ -160,9 +173,10 @@ impl From<CompoundAssignmentOperator> for Operator {
 
 /// canonical operator precedence ordering. operations higher in the list
 /// take precedence over ones below them
-static PRECEDENCE: [(Operator, Position); 36] = [
+static PRECEDENCE: [(Operator, Position); 37] = [
     (Operator::Index, Position::Binary),
     (Operator::Period, Position::Binary),
+    (Operator::With, Position::Postfix),
     (Operator::Call, Position::Postfix),
     (Operator::Caret, Position::Postfix),
     (Operator::AddressOf, Position::Prefix),
@@ -241,6 +255,7 @@ impl Operator {
             "as" => Some(Operator::As),
             "div" => Some(Operator::IDiv),
             "mod" => Some(Operator::Mod),
+            "with" => Some(Operator::With),
             _ => None,
         }
     }

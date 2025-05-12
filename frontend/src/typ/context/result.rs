@@ -150,7 +150,10 @@ impl fmt::Display for GenericError {
                 write!(f, "cannot infer type arguments for {}", target)?;
 
                 match hint {
-                    GenericTypeHint::Unknown => Ok(()),
+                    GenericTypeHint::Unknown 
+                    | GenericTypeHint::ExpectedValueType(Type::Nothing) => Ok(()),
+                    | GenericTypeHint::ExpectedReturnType(Type::Nothing) => Ok(()),
+                    
                     hint => write!(f, " from {}", hint),
                 }
             },

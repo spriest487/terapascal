@@ -8,7 +8,7 @@ use crate::ast::Visibility;
 pub use crate::typ::ast::call::typecheck_call;
 pub use crate::typ::ast::call::Invocation;
 use crate::typ::ast::cast::typecheck_cast_expr;
-use crate::typ::ast::check_overload_visibility;
+use crate::typ::ast::{check_overload_visibility, typecheck_type_args};
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::overload_to_no_args_call;
 use crate::typ::ast::try_resolve_overload;
@@ -139,6 +139,27 @@ pub fn typecheck_expr(
             let anon_func = typecheck_func_expr(def, expect_ty, ctx)?;
             Ok(ast::Expr::from(anon_func))
         },
+        
+        ast::Expr::ExplicitSpec(with_expr) => {
+            let mut base_expr = typecheck_expr(&with_expr.type_expr, &Type::Nothing, ctx)?;
+            let type_args = typecheck_type_args(&with_expr.type_args, ctx)?;
+            
+            match base_expr.annotation() {
+                Value::Type(generic_ty, span) => {
+                    let spec_ty = generic_ty
+                        .specialize(&type_args, ctx)
+                        .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
+                        .into_owned();
+                    
+                    *base_expr.annotation_mut() = Value::Type(spec_ty, span.clone());
+                    Ok(base_expr)
+                }
+                
+                other=> Err(TypeError::InvalidExplicitSpec {
+                    target: other.clone(),
+                }),
+            }
+        }
     }
 }
 

@@ -31,7 +31,7 @@ fn to_ctor(expr: Expr) -> ObjectCtor {
 #[test]
 fn empty_ctor_valid() {
     let ctor = to_ctor(expr_from_src("A()"));
-    assert_eq!("A", ctor.ident.unwrap().to_string());
+    assert_eq!("A", ctor.type_expr.unwrap().to_string());
     assert_eq!(0, ctor.args.members.len());
 }
 
@@ -44,7 +44,7 @@ fn partial_argument_invalid() {
 #[test]
 fn single_arg_valid() {
     let ctor = to_ctor(expr_from_src("A(a: 1)"));
-    assert_eq!("A", ctor.ident.unwrap().to_string());
+    assert_eq!("A", ctor.type_expr.unwrap().to_string());
     assert_eq!(1, ctor.args.members.len());
 
     assert_eq!("a", ctor.args.members[0].ident.name.as_str());
@@ -54,7 +54,7 @@ fn single_arg_valid() {
 #[test]
 fn multi_arg_valid() {
     let ctor = to_ctor(expr_from_src("A(a: 1; b: 'test')"));
-    assert_eq!("A", ctor.ident.unwrap().to_string());
+    assert_eq!("A", ctor.type_expr.unwrap().to_string());
     assert_eq!(2, ctor.args.members.len());
     
     assert_eq!("a", ctor.args.members[0].ident.name.as_str());
@@ -73,9 +73,9 @@ fn trailing_comma_invalid() {
 #[test]
 fn ty_args_valid() {
     let ctor = to_ctor(expr_from_src("A[B, C]()"));
-    assert_eq!("A", ctor.ident.unwrap().to_string());
+    assert_eq!("A", ctor.type_expr.unwrap().to_string());
     
-    let ty_args = ctor.ty_args.expect("no type args were parsed");
+    let ty_args = ctor.type_args.expect("no type args were parsed");
     
     assert_eq!(2, ty_args.len());
     assert_eq!("B", ty_args[0].to_string());

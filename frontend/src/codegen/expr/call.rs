@@ -264,7 +264,7 @@ fn build_method_call(
     let call_target = match builder.translate_type(&self_ty) {
         Type::RcPointer(VirtualTypeID::Interface(iface_id)) => {
             if ty_args.is_some() {
-                unimplemented!("virtual call with type args")
+                unimplemented!("IR for virtual call with type args")
             }
 
             CallTarget::Virtual {

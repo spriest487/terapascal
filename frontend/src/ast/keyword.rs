@@ -64,7 +64,6 @@ pub enum Keyword {
     Finally,
     Raise,
 
-    With,
     Exit,
     Is,
     
@@ -146,7 +145,6 @@ impl Keyword {
             "typeinfo" => Some(Keyword::TypeInfo),
             
             "is" => Some(Keyword::Is),
-            "with" => Some(Keyword::With),
             "where" => Some(Keyword::Where),
             
             "public" => Some(Keyword::Public),
@@ -231,7 +229,6 @@ impl fmt::Display for Keyword {
 
             Keyword::Is => "is",
             Keyword::Where => "where",
-            Keyword::With => "with",
 
             Keyword::SizeOf => "sizeof",
             Keyword::Default => "default",

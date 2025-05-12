@@ -149,6 +149,8 @@ pub fn expect_expr_initialized(expr: &Expr, ctx: &Context) -> TypeResult<()> {
         ast::Expr::Cast(cast) => expect_expr_initialized(&cast.expr, ctx),
 
         ast::Expr::AnonymousFunction(_) => Ok(()),
+
+        ast::Expr::ExplicitSpec(..) => unreachable!("should be resolve to specialized expression during expression typechecking"),
     }?;
 
     Ok(())

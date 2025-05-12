@@ -19,7 +19,12 @@ pub fn translate_object_ctor(ctor: &typ::ast::ObjectCtor, builder: &mut Builder)
 
     let struct_def = builder
         .get_struct(struct_id)
-        .unwrap_or_else(|| panic!("struct {} referenced in object ctor must exist", ctor.ident.as_ref().unwrap()))
+        .unwrap_or_else(|| {
+            panic!("target type {} referenced in object ctor must exist", ctor.type_expr
+                .as_ref()
+                .map(|expr| expr.to_string())
+                .unwrap_or_else(|| object_ty.to_string()))
+        })
         .clone();
 
     // either local struct of the correct type for value types, or a rc pointer to the struct
