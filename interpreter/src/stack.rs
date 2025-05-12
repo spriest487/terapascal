@@ -22,6 +22,7 @@ struct Block {
     decls: Vec<ir::LocalID>,
 
     initial_stack_offset: usize,
+    initial_local_count: usize,
 }
 
 #[derive(Debug)]
@@ -56,7 +57,11 @@ pub(super) struct StackFrame {
 }
 
 impl StackFrame {
-    pub fn new(name: Rc<String>, marshaller: Rc<Marshaller>, stack_size: usize) -> Self {
+    pub fn new(
+        name: Rc<String>,
+        marshaller: Rc<Marshaller>,
+        stack_size: usize,
+    ) -> Self {
         let sentinel_size = size_of::<usize>();
         let mut stack_mem = vec![0; stack_size + sentinel_size];
         stack_mem[stack_size..].copy_from_slice(&SENTINEL.to_ne_bytes());
@@ -65,9 +70,11 @@ impl StackFrame {
             name: name.into(),
 
             locals: Vec::new(),
+            
             block_stack: vec![Block {
                 decls: Vec::new(),
                 initial_stack_offset: 0,
+                initial_local_count: 0, 
             }],
             
             debug_ctx_stack: Vec::new(),
@@ -158,6 +165,7 @@ impl StackFrame {
         let start_offset = self.stack_offset;
         let alloc_slice = &mut self.stack_mem[start_offset..];
         let size = self.marshaller.marshal(value, alloc_slice)?;
+        
         self.stack_offset += size;
 
         Ok(start_offset)
@@ -192,6 +200,7 @@ impl StackFrame {
         self.block_stack.push(Block {
             decls: Vec::new(),
             initial_stack_offset: self.stack_offset,
+            initial_local_count: self.locals.len(),
         });
     }
 
@@ -203,7 +212,10 @@ impl StackFrame {
 
         let new_stack_offset = popped_block.initial_stack_offset;
         self.stack_offset = new_stack_offset;
-        self.locals.retain(|l| l.stack_offset < new_stack_offset);
+
+        while self.locals.len() > popped_block.initial_local_count {
+            self.locals.pop();
+        }
 
         Ok(())
     }
