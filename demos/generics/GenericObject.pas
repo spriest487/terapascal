@@ -11,11 +11,13 @@ begin
 end;
 
 initialization
-    // first line needs explicit args, second can be inferred from type of var 
-    var box := TestBox with [Integer](val: 1);
-    box := TestBox(val: 1);
-
-    var val := UnwrapTestBox[Integer](box);
+    // first ctor needs explicit types, subsequently can be inferred from type of var 
+    var box := TestBox with [array[1] of Integer](val: [5]);
     
-    WriteLn(IntToStr(val));
+    box := TestBox[array[1] of Integer](val: [3]);
+    
+    box := TestBox(val: [1]);
+
+    var val := UnwrapTestBox(box);
+    WriteLn(IntToStr(val[0]));
 end
