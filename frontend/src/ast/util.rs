@@ -11,17 +11,24 @@ use common::BuildOptions;
 use common::DiagnosticLabel;
 use common::DiagnosticOutput;
 
-pub fn tokens_from_string(unit_name: &str, src: &str) -> TokenStream {
+pub fn try_tokens_from_string(unit_name: &str, src: &str) -> Result<TokenStream, String> {
     let pp = Preprocessor::new(format!("{}.pas", unit_name), BuildOptions::default());
-    let pp_unit = pp.preprocess(src).unwrap();
+    let pp_unit = pp.preprocess(src)
+        .map_err(|err| err.to_string())?;
 
-    let tokens = TokenTree::tokenize(pp_unit).unwrap();
+    let tokens = TokenTree::tokenize(pp_unit)
+        .map_err(|err| err.to_string())?;
+
     let context = tokens
         .get(0)
         .map(|tt| tt.span().clone())
         .unwrap_or_else(|| Span::zero(unit_name));
     
-    TokenStream::new(tokens, context)
+    Ok(TokenStream::new(tokens, context))
+}
+
+pub fn tokens_from_string(unit_name: &str, src: &str) -> TokenStream {
+    try_tokens_from_string(unit_name, src).unwrap()
 }
 
 pub fn try_parse_from_string<T: Parse>(unit_name: &str, src: &str) -> ParseResult<T> {
