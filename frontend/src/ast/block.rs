@@ -143,6 +143,15 @@ fn parse_block_stmts(
         if !statements.is_empty() {
             tokens.match_one(Separator::Semicolon)?;
         }
+        
+        // we want to be able to asser than when we reinterpret an invalid statement as the output
+        // expr, it's actually the expr starting from the same token as where we tried to parse the
+        // statement. if it isn't, a statement nested within this has failed to properly handle
+        // an InvalidStatement error itself!
+        let stmt_start = tokens
+            .look_ahead()
+            .next()
+            .map(|tt| tt.span().start);
 
         match Stmt::parse(tokens) {
             Ok(stmt) => {
@@ -167,6 +176,13 @@ fn parse_block_stmts(
                     let ParseError::InvalidStatement(InvalidStatement(bad_expr)) = err else {
                         unreachable!()
                     };
+                    
+                    assert_eq!(
+                        Some(bad_expr.span().start), 
+                        stmt_start, 
+                        "expression @ {} used as block output has the wrong position (child statement failed to handle invalid statement correctly)", 
+                        bad_expr.span()
+                    );
 
                     output_expr = Some(*bad_expr);
                     break;
