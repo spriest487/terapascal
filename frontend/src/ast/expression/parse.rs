@@ -579,7 +579,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
                     let mut arg_types = Vec::new();
                     loop {
                         if !arg_types.is_empty() {
-                            if self.tokens.look_ahead().match_one(Separator::Comma).is_none() {
+                            if with_tokens.match_one_maybe(Separator::Comma).is_none() {
                                 break;
                             }
                         }
