@@ -13,6 +13,7 @@ use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::ObjectCtor;
+use crate::typ::typecheck_type;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
@@ -34,7 +35,6 @@ use crate::typ::TypedValue;
 use crate::typ::UfcsValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
-use crate::typ::typecheck_type;
 pub use args::*;
 use common::span::Span;
 use common::span::Spanned as _;
@@ -315,18 +315,13 @@ fn typecheck_func_call(
         },
 
         Value::VariantCase(variant, ..) => {
-            if let Some(args_list) = &func_call.type_args {
-                return Err(TypeError::InvalidExplicitVariantCtorTypeArgs {
-                    span: args_list.span.clone(),
-                });
-            }
-
             let ctor_call = typecheck_variant_ctor_call(
                 &variant.variant_name,
                 &variant.case,
                 &func_call.args,
                 func_call.span().clone(),
                 expect_ty,
+                func_call.type_args.as_ref(),
                 ctx,
             )?;
 
@@ -856,6 +851,7 @@ fn typecheck_variant_ctor_call(
     args: &[ast::Expr<Span>],
     span: Span,
     expect_ty: &Type,
+    type_args: Option<&ast::TypeArgList<Span>>,
     ctx: &mut Context,
 ) -> TypeResult<Call> {
     if !ctx.is_visible(&variant.full_path) {
@@ -865,21 +861,26 @@ fn typecheck_variant_ctor_call(
         });
     }
     
-    let unspecialized_def = ctx
-        .find_variant_def(&variant.full_path)
-        .cloned()
-        .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
+    let variant_sym = match type_args {
+        Some(type_name_list) => {
+            let type_list = typecheck_type_args(type_name_list, ctx)?;
 
-    // infer the specialized generic type if the written one is generic and the hint is a specialized
-    // version of that same generic variant
-    let variant_sym = match expect_ty {
-        Type::Variant(expect_variant)
-            if expect_variant.full_path == unspecialized_def.name.full_path =>
-        {
-            (*expect_variant).as_ref()
+            variant.specialize(&type_list, ctx)
+                .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
+                .into_owned()
         },
+        
+        None => {
+            // infer the specialized generic type if the written one is generic and the hint is a specialized
+            // version of that same generic variant
+            match expect_ty {
+                Type::Variant(expect_variant) if expect_variant.full_path == variant.full_path => {
+                    (**expect_variant).clone()
+                },
 
-        _ => &unspecialized_def.name,
+                _ => variant.clone(),
+            }
+        }
     };
 
     if variant_sym.is_unspecialized_generic() {

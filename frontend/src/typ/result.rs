@@ -235,10 +235,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    InvalidExplicitVariantCtorTypeArgs { 
-        span: Span,
-    },
-
     NoLoopContext {
         stmt: Box<ast::Stmt<Span>>,
     },
@@ -454,7 +450,6 @@ impl Spanned for TypeError {
 
             TypeError::EmptyVariantDecl(variant) => variant.span(),
             TypeError::EmptyVariantCaseBinding { span, .. } => span,
-            TypeError::InvalidExplicitVariantCtorTypeArgs { span, .. } => span,
             
             TypeError::NoLoopContext { stmt, .. } => stmt.annotation().span(),
             TypeError::NoFunctionContext { stmt, .. } => stmt.annotation().span(),
@@ -590,9 +585,6 @@ impl DiagnosticOutput for TypeError {
             TypeError::EmptyVariantDecl(..) => "Empty variant declaration",
             TypeError::EmptyVariantCaseBinding { .. } => {
                 "Empty variant case binding"
-            }
-            TypeError::InvalidExplicitVariantCtorTypeArgs { .. } => {
-                "Invalid variant constructor type arguments"
             }
 
             TypeError::NoLoopContext { .. } => "Statement requires loop context",
@@ -1115,10 +1107,6 @@ impl fmt::Display for TypeError {
 
             TypeError::EmptyVariantDecl(variant) => {
                 write!(f, "variant declaration `{}` has no cases", variant.name)
-            }
-
-            TypeError::InvalidExplicitVariantCtorTypeArgs { .. } => {
-                write!(f, "variant constructor cannot have explicit type arguments")
             }
 
             TypeError::EmptyVariantCaseBinding { variant, case_index, .. } => {

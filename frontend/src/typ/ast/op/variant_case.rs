@@ -26,7 +26,7 @@ pub enum VariantTypeMemberValue {
     Ctor(Expr),
 }
 
-pub fn typecheck_variant_type_member(    
+pub fn typecheck_variant_type_member(
     variant_name: &Symbol,
     member_ident: &Ident,
     span: &Span,
@@ -39,13 +39,6 @@ pub fn typecheck_variant_type_member(
     let case_exists = variant_def.find_case(member_ident).is_some();
 
     if case_exists {
-        // illegal to specify args directly when writing a case constructor
-        if let Some(args_list) = &variant_name.type_args {
-            return Err(TypeError::InvalidExplicitVariantCtorTypeArgs {
-                span: args_list.span.clone(),
-            });
-        }
-
         let ctor_annotation = VariantCaseValue {
             variant_name: Rc::new(variant_name.clone()),
             case: member_ident.clone(),
