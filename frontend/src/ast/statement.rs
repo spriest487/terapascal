@@ -317,7 +317,7 @@ impl Parse for Stmt<Span> {
             },
 
             Some(tt) if tt.is_delimited(DelimiterPair::CaseEnd) => {
-                let case = CaseBlock::parse(tokens)?;
+                let case = CaseBlock::parse_stmt(tokens)?;
 
                 Ok(Stmt::Case(Box::new(case)))
             },

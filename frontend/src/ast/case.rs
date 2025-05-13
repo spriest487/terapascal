@@ -1,15 +1,25 @@
 #[cfg(test)]
 mod test;
 
-use crate::ast::{Annotation, Expr, Stmt};
-use crate::parse::{MatchOneOf, Parse, ParseResult, TokenStream};
-use crate::{DelimiterPair, Keyword, Separator, TokenTree};
-use common::span::{Span, Spanned};
+use crate::ast::Annotation;
+use crate::ast::Expr;
+use crate::ast::Stmt;
+use crate::parse::MatchOneOf;
+use crate::parse::Parse;
+use crate::parse::ParseResult;
+use crate::parse::TokenStream;
+use crate::token_tree::DelimitedGroup;
+use crate::DelimiterPair;
+use crate::Keyword;
+use crate::Separator;
+use common::span::Span;
+use common::span::Spanned;
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
+use std::hash::Hasher;
 
-pub type CaseStmt<A> = CaseBlock<A, Stmt<A>>;
-pub type CaseExpr<A> = CaseBlock<A, Expr<A>>;
+pub type CaseStmt<A = Span> = CaseBlock<A, Stmt<A>>;
+pub type CaseExpr<A = Span> = CaseBlock<A, Expr<A>>;
 
 #[derive(Debug, Clone, Eq)]
 pub struct CaseBlock<A: Annotation, B> {
@@ -73,15 +83,9 @@ where
     }
 }
 
-impl<B> CaseBlock<Span, B>
-where
-    B: Parse + Spanned
-{
-    pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
-        let group = match tokens.match_one(DelimiterPair::CaseEnd)? {
-            TokenTree::Delimited(group) => group,
-            _ => unreachable!("matcher failed"),
-        };
+impl CaseBlock<Span, Expr> {
+    pub fn parse_expr(tokens: &mut TokenStream) -> ParseResult<Self> {
+        let group = DelimitedGroup::parse(tokens, DelimiterPair::CaseEnd)?;
 
         let case_kw = group.open.clone();
         let end_kw = group.close.clone();
@@ -98,7 +102,6 @@ where
         let cond_expr = Expr::parse(tokens)?;
 
         tokens.match_one(Keyword::Of)?;
-
         let mut branches = Vec::new();
 
         // is there a valid separator between the last and current statements?
@@ -111,7 +114,7 @@ where
 
             if branches.len() > 0 {
                 if let Some(..) = tokens.match_one_maybe(Keyword::Else) {
-                    let else_item = B::parse(tokens)?;
+                    let else_item = Expr::parse(tokens)?;
 
                     // allow a semicolon separator between the "else" stmt and the end keyword
                     tokens.match_one_maybe(Separator::Semicolon);
@@ -119,15 +122,7 @@ where
                     break Some(else_item);
                 }
             } else if !prev_sep {
-                // this match will fail - there was no separator after the last branch,
-                // so we expected the end
-                if branches.len() > 0 {
-                    tokens.match_one(Keyword::End.or(Keyword::Else))?;
-                } else {
-                    tokens.match_one(Keyword::End)?;
-                };
-
-                unreachable!("previous match will always fail");
+                Self::expect_end(&branches, tokens)?;
             }
 
             let case_branch = CaseBranch::parse(tokens)?;
@@ -147,6 +142,85 @@ where
             branches,
             else_branch: else_branch.map(Box::new),
         })
+    }
+}
+
+impl CaseBlock<Span, Stmt> {
+    pub fn parse_stmt(tokens: &mut TokenStream) -> ParseResult<Self> {
+        let group = DelimitedGroup::parse(tokens, DelimiterPair::CaseEnd)?;
+
+        let case_kw = group.open.clone();
+        let end_kw = group.close.clone();
+        let mut group_tokens = group.to_inner_tokens();
+
+        let result = Self::parse_group(&mut group_tokens, case_kw, end_kw)?;
+
+        group_tokens.finish()?;
+
+        Ok(result)
+    }
+
+    fn parse_group(tokens: &mut TokenStream, case_kw: Span, end_kw: Span) -> ParseResult<Self> {
+        let cond_expr = Expr::parse(tokens)?;
+
+        tokens.match_one(Keyword::Of)?;
+        let mut branches = Vec::new();
+
+        // is there a valid separator between the last and current statements?
+        let mut prev_sep = true;
+
+        let else_branch = loop {
+            if tokens.look_ahead().next().is_none() {
+                break None;
+            }
+
+            if branches.len() > 0 {
+                if let Some(..) = tokens.match_one_maybe(Keyword::Else) {
+                    let else_item = Stmt::parse(tokens)?;
+
+                    // allow a semicolon separator between the "else" stmt and the end keyword
+                    tokens.match_one_maybe(Separator::Semicolon);
+
+                    break Some(else_item);
+                }
+            } else if !prev_sep {
+                Self::expect_end(&branches, tokens)?;
+            }
+
+            let case_branch = CaseBranch::parse(tokens)?;
+            branches.push(case_branch);
+
+            // a semicolon is required to separate branches, but not before the final "end"
+            // or "else" keywords. if a stmt isn't followed by the separator, it must be the
+            // last one, and if not we'll get a parse error
+            prev_sep = tokens.match_one_maybe(Separator::Semicolon).is_some();
+        };
+
+        let span = case_kw.to(&end_kw);
+
+        Ok(CaseBlock {
+            cond_expr: Box::new(cond_expr),
+            annotation: span,
+            branches,
+            else_branch: else_branch.map(Box::new),
+        })
+    }
+}
+
+impl<B> CaseBlock<Span, B>
+where
+    B: Parse + Spanned,
+{
+    fn expect_end(branches: &[CaseBranch<Span, B>], tokens: &mut TokenStream) -> ParseResult<()> {
+        // this match will fail - there was no separator after the last branch,
+        // so we expected the end
+        if branches.len() > 0 {
+            tokens.match_one(Keyword::End.or(Keyword::Else))?;
+        } else {
+            tokens.match_one(Keyword::End)?;
+        };
+
+        unreachable!("previous match will always fail");
     }
 }
 

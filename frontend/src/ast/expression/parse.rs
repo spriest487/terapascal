@@ -135,7 +135,7 @@ fn parse_type_info_expr(tokens: &mut TokenStream) -> ParseResult<Expr> {
 }
 
 pub fn parse_case_expr(tokens: &mut TokenStream) -> ParseResult<Expr> {
-    let case = CaseExpr::parse(tokens)?;
+    let case = CaseExpr::parse_expr(tokens)?;
     let expr = Expr::Case(Box::new(case));
 
     Ok(expr)
@@ -268,7 +268,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
                     },
 
                     DelimiterPair::CaseEnd => {
-                        let case = CaseExpr::parse(&mut self.tokens)?;
+                        let case = CaseExpr::parse_expr(&mut self.tokens)?;
                         self.push_operand(Expr::from(case))
                     },
 
