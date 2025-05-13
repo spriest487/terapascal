@@ -836,6 +836,7 @@ impl Parse for AnonymousFunctionDef<Span> {
             tokens.match_one(Separator::Colon)?;
 
             let body_expr = Expr::parse(tokens)?;
+
             let body = Block {
                 annotation: body_expr.span().clone(),
                 begin: body_expr.span().clone(),
@@ -855,13 +856,21 @@ impl Parse for AnonymousFunctionDef<Span> {
                 captures: Default::default(),
             }
         } else {
-            let mut params_tokens = match tokens.match_one(DelimiterPair::Bracket)? {
-                TokenTree::Delimited(group) => group.to_inner_tokens(),
-                _ => unreachable!(),
-            };
+            let params = match tokens.match_one_maybe(DelimiterPair::Bracket) {
+                Some(tt) => {
+                    let TokenTree::Delimited(params_group) = tt else {
+                        unreachable!()
+                    };
+                    
+                    let mut params_tokens = params_group.to_inner_tokens();
+                    let params = FunctionDecl::parse_params(&mut params_tokens)?;
+                    params_tokens.finish()?;
+                    
+                    params
+                }
 
-            let params = FunctionDecl::parse_params(&mut params_tokens)?;
-            params_tokens.finish()?;
+                None => Vec::new(),
+            };
 
             let return_ty = if tokens.match_one_maybe(Separator::Colon).is_some() {
                 TypeName::parse(tokens)?
