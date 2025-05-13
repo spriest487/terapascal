@@ -283,8 +283,9 @@ fn typecheck_bitwise_op(
     })
 }
 
-// turn value `x` that implements System.Displayable into a call to `System.Displayable.ToString(x)`
-// when `x` is evaluated in a context where a string is expected e.g. string concat
+// turn value `x` that implements the displayable (IToString) interface into a call to 
+// the `ToString(x)` method of that interface, when `x` is evaluated in a context where 
+// a string is expected e.g. string concat
 fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
     let src_ty = expr.annotation().ty();
 

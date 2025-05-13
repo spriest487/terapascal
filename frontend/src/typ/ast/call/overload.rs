@@ -166,7 +166,7 @@ pub fn resolve_overload(
             .map(|arg_expr| arg_expr.annotation().ty().into_owned())
             .collect();
 
-        // if it's a direct interface method invocation (e.g. `Comparable.Compare(1, 2)`),
+        // if it's a direct interface method invocation (e.g. `IComparable.Compare(1, 2)`),
         // we don't actually know at this point whether that implementation exists!
         if self_arg.is_none() {
             if let OverloadCandidate::Method {

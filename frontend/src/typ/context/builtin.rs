@@ -42,12 +42,12 @@ pub const TYPEINFO_METHODS_METHOD: &str = "Methods";
 pub const METHOD_TYPE_NAME: &str = "MethodInfo";
 pub const METHOD_NAME_METHOD: &str = "Name";
 
-pub const COMPARABLE_IFACE_NAME: &str = "Comparable";
+pub const COMPARABLE_IFACE_NAME: &str = "IComparable";
 pub const COMPARABLE_COMPARE_NAME: &str = "Compare";
 
 // TODO: we can probably eventually replace this with an "Object" interface which all class? types
 // implicitly implement, and has GetType() etc equivalents
-pub const DISPLAYABLE_IFACE_NAME: &str = "Displayable";
+pub const DISPLAYABLE_IFACE_NAME: &str = "IToString";
 pub const DISPLAYABLE_TOSTRING_METHOD: &str = "ToString";
 
 pub const STRING_TYPE_NAME: &str = "String";

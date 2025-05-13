@@ -51,7 +51,7 @@ type
         function Next: Option[Byte];
     end;
 
-    String = class of Displayable, Comparable
+    String = class of IToString, IComparable
         chars: ^Byte;
         len: Int32;
 
@@ -73,11 +73,11 @@ type
         function Sequence: CharSequence;
     end;
 
-    Comparable = interface
+    IComparable = interface
         function Compare(other: Self): Integer;
     end;
 
-    Displayable = interface
+    IToString = interface
         function ToString: String;
     end;
 
@@ -147,8 +147,8 @@ function StringFromBytes(bytes: ^Byte; len: Integer): String;
 function StringLenNullTerminated(chars: ^Byte): Integer;
 function CompareStr(a, b: String): Integer;
 
-function Max[T](a, b: T): T where T is Comparable;
-function Min[T](a, b: T): T where T is Comparable;
+function Max[T](a, b: T): T where T is IComparable;
+function Min[T](a, b: T): T where T is IComparable;
 
 function ArraySetLengthInternal(arr: Object; len: Integer; defaultVal: Pointer): Object; external 'rt';
 
@@ -736,14 +736,14 @@ end;
 
 function Max[T](a, b: T): T
 where
-    T is Comparable;
+    T is IComparable;
 begin
     if a.Compare(b) > 0 then a else b
 end;
 
 function Min[T](a, b: T): T
 where
-    T is Comparable;
+    T is IComparable;
 begin
     if a.Compare(b) < 0 then a else b
 end;

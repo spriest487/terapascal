@@ -12,7 +12,7 @@ initialization
     while true do 
     begin
         var command := ReadLn.Trim;
-    
+
         if command.Compare('exit') = 0 then 
             break;
     

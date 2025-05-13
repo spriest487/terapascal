@@ -1,13 +1,6 @@
 # features
-* maybe get rid of 
 * add a named type case to typ::Type for all the things that use full_path, full_name etc
-* Object should be an interface?
-  * auto-generated implementations of ToString and Equals for everything if they don't do it themselves
-* explicit type args to func calls:
-  * `MyFunc with [Integer]();`
-  * can this be avoided if we do evil stuff to detect typenames in [] groups and give them special treatment
-    so the typechecker can sort it out later?
-* @-attributes - replace `external` etc with these (eventually make them available at runtime but not now)
+* attributes - replace `external` etc with these (eventually make them available at runtime but not now)
 * property syntax
 * numeric compiler error codes
 * compound assignment bitwise ops

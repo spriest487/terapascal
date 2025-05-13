@@ -2,13 +2,13 @@ interface
 uses System;
 
 function QuickSort[T](arr: array of T)
-    where T is Comparable;
+    where T is IComparable;
 
 implementation
 
 function QuickSortPartition[T](arr: array of T; left, right: Integer): Integer
 where 
-    T is Comparable;
+    T is IComparable;
 begin
     var l := left;
     var r := right;
@@ -43,7 +43,7 @@ end;
 
 function QuickSortRange[T](arr: array of T; left, right: Integer)
 where 
-    T is Comparable;
+    T is IComparable;
 begin
     if left < right then begin
         var pivot := arr.QuickSortPartition(left, right);
@@ -59,7 +59,7 @@ end;
 
 function QuickSort[T](arr: array of T)
 where 
-    T is Comparable;
+    T is IComparable;
 begin
     arr.QuickSortRange(0, arr.Length - 1);
 end;
