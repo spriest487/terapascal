@@ -872,7 +872,11 @@ impl Parse for AnonymousFunctionDef<Span> {
                 None => Vec::new(),
             };
 
-            let return_ty = if tokens.match_one_maybe(Separator::Colon).is_some() {
+            let can_have_result = !func_kw.is_keyword(Keyword::Procedure);
+            let expect_result = can_have_result
+                && tokens.match_one_maybe(Separator::Colon).is_some();
+            
+            let return_ty = if expect_result {
                 TypeName::parse(tokens)?
             } else {
                 TypeName::Unspecified(func_kw.span().clone())
