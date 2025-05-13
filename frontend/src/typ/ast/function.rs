@@ -816,7 +816,7 @@ pub fn typecheck_func_expr(
         });
 
     let closure_env = match ctx.pop_scope(body_scope_id).into_env() {
-        Environment::ClosureBody(body) => body,
+        Environment::ClosureBody(body_env) => body_env,
         _ => unreachable!(),
     };
     
@@ -830,7 +830,7 @@ pub fn typecheck_func_expr(
     };
 
     if return_ty == Type::Nothing {
-        assert!(body.output.is_none());
+        assert_eq!(None, body.output);
     }
 
     let sig = Rc::new(FunctionSig {
