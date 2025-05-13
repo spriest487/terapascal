@@ -323,21 +323,26 @@ impl Expr<Span> {
         
         // handle any expressions which get parsed by the expression parser but aren't actually
         // valid expressions - i.e. assignment operators
-        if let Expr::BinOp(bin_op) = &expr {
-            let stmt_only = match bin_op.op {
-                Operator::Assignment | Operator::CompoundAssignment(..) => true,
-                _ => false,
-            };
-            
-            if stmt_only {
-                let stmt = Stmt::try_from_expr(expr.clone())
-                    .map_err(|bad_expr| {
-                        let err = ParseError::InvalidStatement(InvalidStatement(Box::new(bad_expr)));
-                        TracedError::trace(err)
-                    })?;
-                
-                return Err(TracedError::trace(ParseError::IsStatement(Box::new(stmt))));
+        let is_stmt = match &expr {
+            Expr::BinOp(bin_op) => {
+                matches!(bin_op.op, Operator::Assignment | Operator::CompoundAssignment(..))
             }
+            
+            Expr::Block(block) => {
+                block.output.is_none() && block.stmts.is_empty()
+            }
+
+            _ => false,
+        };
+        
+        if is_stmt {
+            let stmt = Stmt::try_from_expr(expr.clone())
+                .map_err(|bad_expr| {
+                    let err = ParseError::InvalidStatement(InvalidStatement(Box::new(bad_expr)));
+                    TracedError::trace(err)
+                })?;
+
+            return Err(TracedError::trace(ParseError::IsStatement(Box::new(stmt))));
         }
         
         Ok(expr)
