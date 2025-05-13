@@ -11,17 +11,17 @@ pub use self::exit::Exit;
 pub use self::local_binding::LocalBinding;
 use crate::ast::case::CaseBlock;
 use crate::ast::case::CaseStmt;
+use crate::ast::Annotation;
 use crate::ast::Block;
 use crate::ast::Call;
 use crate::ast::Expr;
 use crate::ast::ForLoop;
+use crate::ast::FunctionCallNoArgs;
 use crate::ast::Ident;
 use crate::ast::IfCond;
 use crate::ast::MatchStmt;
 use crate::ast::Raise;
 use crate::ast::WhileLoop;
-use crate::ast::Annotation;
-use crate::ast::FunctionCallNoArgs;
 use crate::parse::InvalidStatement;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
@@ -224,17 +224,21 @@ impl Stmt<Span> {
             },
 
             Expr::IfCond(if_cond) => {
-                let then_branch = Self::try_from_expr(if_cond.then_branch)?;
-                let else_branch = match if_cond.else_branch {
-                    Some(else_expr) => Some(Self::try_from_expr(else_expr)?),
-                    None => None,
+                let then_as_expr = Self::try_from_expr(if_cond.then_branch);
+                let else_as_expr = match if_cond.else_branch {
+                    Some(expr) => Self::try_from_expr(expr).map(Some),
+                    None => Ok(None)
+                };
+                
+                let (Ok(then_stmt), Ok(else_stmt)) = (then_as_expr, else_as_expr) else {
+                    return Err(expr);
                 };
 
                 Ok(Stmt::If(Box::new(IfCond {
                     cond: if_cond.cond,
                     is_pattern: if_cond.is_pattern,
-                    then_branch,
-                    else_branch,
+                    then_branch: then_stmt,
+                    else_branch: else_stmt,
                     annotation: if_cond.annotation,
                 })))
             },
@@ -325,7 +329,7 @@ impl Parse for Stmt<Span> {
             },
 
             Some(tt) if tt.is_keyword(Keyword::If) => {
-                let if_cond = IfCond::parse(tokens)?;
+                let if_cond = IfCond::parse_stmt(tokens)?;
 
                 Ok(Stmt::If(Box::new(if_cond)))
             }

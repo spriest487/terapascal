@@ -811,7 +811,7 @@ pub fn typecheck_func_expr(
             let expect_block_return = known_return_ty
                 .as_ref()
                 .unwrap_or(&Type::Nothing);
-    
+
             typecheck_block(&src_def.body, &expect_block_return, ctx)
         });
 
@@ -828,6 +828,10 @@ pub fn typecheck_func_expr(
         Some(ty) => ty,
         None => body.annotation.ty().into_owned(),
     };
+
+    if return_ty == Type::Nothing {
+        assert!(body.output.is_none());
+    }
 
     let sig = Rc::new(FunctionSig {
         return_ty: return_ty.clone(),

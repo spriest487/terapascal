@@ -44,6 +44,7 @@ pub fn typecheck_block(
                         if *expect_ty != Type::Nothing {
                             output_stmt_expr = implicit_conversion(output_stmt_expr, expect_ty, ctx)?;
                         }
+
                         output = Some(output_stmt_expr);
                     },
 
@@ -65,7 +66,7 @@ pub fn typecheck_block(
             // and that value might be an expression that's syntactically valid as a statement,
             // but not semantically. in that case, we'll get InvalidStatement, and can set the
             // output now
-            let allow_output_expr = output.is_none() && is_last_stmt;
+            let allow_output_expr = block.output.is_none() && output.is_none() && is_last_stmt;
 
             match typecheck_stmt(stmt, &Type::Nothing, ctx) {
                 Ok(stmt) => {
@@ -82,8 +83,8 @@ pub fn typecheck_block(
             }
         }
 
-        // process the parsed output expr (this is mutually exclusive with converting the final
-        // stmt into an output)
+        // if the parser already identified the output expression, process that now
+        // (this is mutually exclusive with converting the final stmt into an output)
         // the block's body statements can alter the context by declaring vars, initializing decls,
         // etc, so this has to be checked *after* we've processed the rest of the statements
         if let Some(src_output_expr) = &block.output {
@@ -94,6 +95,7 @@ pub fn typecheck_block(
             if *expect_ty != Type::Nothing && !expect_ty.contains_unresolved_params(ctx) {
                 out_expr = implicit_conversion(out_expr, expect_ty, ctx)?;
             }
+
             output = Some(out_expr);
         }
 

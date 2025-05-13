@@ -104,13 +104,13 @@ impl Block<Span> {
             return Some(self.clone());
         }
 
+        // block where we can reinterpret the final stmt as an output expr?
         let final_stmt_expr = self
             .stmts
             .last()
             .and_then(|final_stmt| final_stmt.clone().to_expr());
 
         if let Some(output_expr) = final_stmt_expr {
-            // block where we can reinterpret the final stmt as an output expr
             let mut statements = self.stmts.clone();
             statements.pop();
 
@@ -144,10 +144,6 @@ fn parse_block_stmts(
             tokens.match_one(Separator::Semicolon)?;
         }
 
-        // record the start position of this stmt, because if it fails to parse as a stmt we can
-        // take a second attempt at parsing the same tokens as an output expr
-        let stmt_start_pos = tokens.position();
-
         match Stmt::parse(tokens) {
             Ok(stmt) => {
                 statements.push(stmt);
@@ -167,9 +163,12 @@ fn parse_block_stmts(
                     if stmt_after_tokens.is_some() {
                         return Err(TracedError::trace(err));
                     }
-                    
-                    tokens.seek(stmt_start_pos);
-                    output_expr = Some(Expr::parse(tokens)?);
+
+                    let ParseError::InvalidStatement(InvalidStatement(bad_expr)) = err else {
+                        unreachable!()
+                    };
+
+                    output_expr = Some(*bad_expr);
                     break;
                 },
 
@@ -188,19 +187,29 @@ fn parse_block_stmts(
 
 impl<A: Annotation> fmt::Display for Block<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "begin")?;
-        for (i, stmt) in self.stmts.iter().enumerate() {
-            write!(f, "{}", stmt)?;
+        write!(f, "begin")?;
+        
+        if !self.stmts.is_empty() || self.output.is_some() {
+            writeln!(f)?;
 
-            // only add a ; on the last stmt if there's also an output expr
-            if i != self.stmts.len() - 1 || self.output.is_some() {
-                writeln!(f, ";")?;
+            for (i, stmt) in self.stmts.iter().enumerate() {
+                write!(f, "{}", stmt)?;
+
+                // only add a ; on the last stmt if there's also an output expr
+                if i < self.stmts.len() - 1 || self.output.is_some() {
+                    write!(f, ";")?;
+                }
+
+                writeln!(f, "")?;
             }
+
+            if let Some(output) = &self.output {
+                write!(f, "{}", output)?;
+            }
+        } else {
+            write!(f, " ")?;
         }
-        if let Some(output) = &self.output {
-            write!(f, "{}", output)?;
-        }
-        writeln!(f)?;
+
         write!(f, "end")
     }
 }

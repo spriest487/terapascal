@@ -327,7 +327,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
             },
 
             Some(tt) if tt.is_keyword(Keyword::If) => {
-                let cond = IfCond::parse(self.tokens)?;
+                let cond = IfCond::parse_expr(self.tokens)?;
                 let expr = Expr::from(cond);
                 self.push_operand(expr);
             },
