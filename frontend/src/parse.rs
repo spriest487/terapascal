@@ -73,16 +73,16 @@ pub enum ParseError {
 }
 
 impl ParseError {
-    pub fn is_expr(expr: impl Into<Expr>) -> Self {
-        Self::IsExpr(IllegalStatement(Box::new(expr.into())))
+    pub fn is_expr(expr: impl Into<Box<Expr>>) -> Self {
+        Self::IsExpr(IllegalStatement(expr.into()))
     }
 
-    pub fn illegal_expr(expr: impl Into<Expr>) -> Self {
-        Self::IllegalExpr(IllegalStatement(Box::new(expr.into())))
+    pub fn illegal_expr(expr: impl Into<Box<Expr>>) -> Self {
+        Self::IllegalExpr(IllegalStatement(expr.into()))
     }
 
-    pub fn is_stmt(stmt: impl Into<Stmt>) -> Self {
-        Self::IllegalStatement(Box::new(stmt.into()))
+    pub fn is_stmt(stmt: impl Into<Box<Stmt>>) -> Self {
+        Self::IllegalStatement(stmt.into())
     }
     
     pub fn expr_is_illegal(self) -> Self {

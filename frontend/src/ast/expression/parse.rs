@@ -273,7 +273,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
                     },
 
                     DelimiterPair::MatchEnd => {
-                        let match_expr = MatchExpr::parse(&mut self.tokens)?;
+                        let match_expr = MatchExpr::parse_expr(&mut self.tokens)?;
                         self.push_operand(Expr::from(match_expr))
                     },
                 }

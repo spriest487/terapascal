@@ -142,7 +142,7 @@ impl<T> TracedError<T> {
     }
     
     pub fn trace(err: T) -> Self {
-        Self::trace_skip(err, 1)
+        Self::trace_skip(err, 4)
     }
 
     pub fn chain<TNext: From<T>>(self) -> TracedError<TNext> {
@@ -166,7 +166,7 @@ impl<T> TracedError<T> {
 
 impl<T> From<T> for TracedError<T> {
     fn from(value: T) -> Self {
-        Self::trace_skip(value, 1)
+        Self::trace_skip(value, 4)
     }
 }
 

@@ -276,7 +276,7 @@ impl<A: Annotation> Spanned for Stmt<A> {
 impl Parse for Stmt<Span> {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Stmt<Span>> {
         let stmt_start = stmt_start_matcher();
-
+        
         match tokens.look_ahead().match_one(stmt_start.clone()) {
             Some(tt) if tt.is_keyword(Keyword::Var) => {
                 let binding = LocalBinding::parse(tokens)?;
@@ -322,7 +322,7 @@ impl Parse for Stmt<Span> {
             },
 
             Some(tt) if tt.is_delimited(DelimiterPair::MatchEnd) => {
-                let case = MatchStmt::parse(tokens)?;
+                let case = MatchStmt::parse_stmt(tokens)?;
 
                 Ok(Stmt::Match(Box::new(case)))
             },

@@ -154,7 +154,7 @@ impl fmt::Display for Matcher {
                 Position::Prefix => "prefix",
                 Position::Postfix => "postfix",
                 Position::Binary => "infix",
-            })
+            }),
         }
     }
 }
