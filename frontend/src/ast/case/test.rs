@@ -9,11 +9,8 @@ fn try_parse_case_stmt(s: &str) -> Result<CaseStmt, String> {
 }
 
 #[test]
-fn empty_case_parses() {
-    let case = try_parse_case_stmt("case 1 of end").unwrap();
-
-    assert_eq!(0, case.branches.len());
-    assert_eq!(None, case.else_branch);
+fn empty_case_is_err() {
+    assert!(try_parse_case_stmt("case 1 of end").is_err());
 }
 
 #[test]
@@ -48,8 +45,25 @@ fn case_with_separated_branches() {
 }
 
 #[test]
+fn case_with_only_else() {
+    let case = try_parse_case_stmt(r"
+        case 1 of
+            else a()
+        end
+    ").unwrap();
+
+    assert_eq!(0, case.branches.len());
+    assert!(case.else_branch.is_some());
+}
+
+#[test]
 fn case_with_unseparated_else() {
-    let case = try_parse_case_stmt("case 1 of 1: a() else b() end").unwrap();
+    let case = try_parse_case_stmt(r"
+        case 1 of
+            1: a()
+            else b()
+        end
+    ").unwrap();
     assert_eq!(1, case.branches.len());
     assert!(case.else_branch.is_some());
 }

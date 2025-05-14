@@ -106,14 +106,18 @@ impl CaseExpr {
         tokens: &mut TokenStream,
         branches: &mut Vec<CaseBranch<Span, Expr>>
     ) -> ParseResult<Option<Expr>> {
-        let expect_else = loop {
-            let branch = CaseBranch::parse(tokens)?;
-            branches.push(branch);
+        let expect_else = if tokens.match_one_maybe(Keyword::Else).is_some() {
+            true
+        } else {
+            loop {
+                let branch = CaseBranch::parse(tokens)?;
+                branches.push(branch);
 
-            match MatchExpr::match_end_of_branches(tokens) {
-                MatchBranchNextItem::Branch => continue,
-                MatchBranchNextItem::ElseBranch => break true,
-                MatchBranchNextItem::End => break false,
+                match MatchExpr::match_end_of_branches(tokens) {
+                    MatchBranchNextItem::Branch => continue,
+                    MatchBranchNextItem::ElseBranch => break true,
+                    MatchBranchNextItem::End => break false,
+                }
             }
         };
 
@@ -133,65 +137,69 @@ impl CaseStmt {
 
         let mut branches = Vec::new();
 
-        let expect_else = loop {
-            let values = parse_case_values(&mut group.tokens)?;
+        let expect_else = if group.tokens.match_one_maybe(Keyword::Else).is_some() { 
+            true 
+        } else {
+            loop {
+                let values = parse_case_values(&mut group.tokens)?;
 
-            match Stmt::parse(&mut group.tokens) {
-                Ok(branch_stmt) => {
-                    branches.push(CaseBranch::new(values, branch_stmt))
-                },
+                match Stmt::parse(&mut group.tokens) {
+                    Ok(branch_stmt) => {
+                        branches.push(CaseBranch::new(values, branch_stmt))
+                    },
 
-                // if the first branch is only valid as an expression, convert it into a case-expr
-                // branch and parse the rest of the branches as expressions too
-                Err(TracedError { err: ParseError::IsExpr(illegal), .. }) => {
-                    let mut expr_branches = Vec::new();
-                    for branch in branches {
-                        match branch.item.to_expr() {
-                            Some(branch_expr) => {
-                                expr_branches.push(CaseBranch::new(branch.case_values, branch_expr))
-                            },
+                    // if the first branch is only valid as an expression, convert it into a case-expr
+                    // branch and parse the rest of the branches as expressions too
+                    Err(TracedError { err: ParseError::IsExpr(illegal), .. }) => {
+                        let mut expr_branches = Vec::new();
+                        for branch in branches {
+                            match branch.item.to_expr() {
+                                Some(branch_expr) => {
+                                    expr_branches.push(CaseBranch::new(branch.case_values, branch_expr))
+                                },
 
-                            // if any previous branch was not a valid expression, this case block
-                            // cannot be a valid expression at all
-                            None => {
-                                return Err(ParseError::illegal_expr(illegal.0).into());
+                                // if any previous branch was not a valid expression, this case block
+                                // cannot be a valid expression at all
+                                None => {
+                                    return Err(ParseError::illegal_expr(illegal.0).into());
+                                }
                             }
                         }
+
+                        expr_branches.push(CaseBranch::new(values, *illegal.0));
+
+                        let else_branch = match MatchExpr::match_end_of_branches(&mut group.tokens) {
+                            MatchBranchNextItem::Branch => {
+                                CaseExpr::parse_branches(&mut group.tokens, &mut expr_branches)?
+                            }
+                            MatchBranchNextItem::ElseBranch => {
+                                Some(MatchExpr::parse_else_item(&mut group.tokens)?)
+                            }
+                            MatchBranchNextItem::End => None,
+                        };
+
+                        group.tokens.finish()?;
+
+                        let match_expr = CaseExpr {
+                            cond_expr: Box::new(group.cond_expr),
+                            branches: expr_branches,
+                            else_branch: else_branch.map(Box::new),
+                            annotation: group.span,
+                        };
+
+                        return Err(ParseError::is_expr(Expr::from(match_expr)).into());
                     }
 
-                    expr_branches.push(CaseBranch::new(values, *illegal.0));
+                    Err(other) => {
+                        return Err(other);
+                    }
+                };
 
-                    let else_branch = match MatchExpr::match_end_of_branches(&mut group.tokens) {
-                        MatchBranchNextItem::Branch => {
-                            CaseExpr::parse_branches(&mut group.tokens, &mut expr_branches)?
-                        }
-                        MatchBranchNextItem::ElseBranch => {
-                            Some(MatchExpr::parse_else_item(&mut group.tokens)?)
-                        }
-                        MatchBranchNextItem::End => None,
-                    };
-
-                    group.tokens.finish()?;
-
-                    let match_expr = CaseExpr {
-                        cond_expr: Box::new(group.cond_expr),
-                        branches: expr_branches,
-                        else_branch: else_branch.map(Box::new),
-                        annotation: group.span,
-                    };
-
-                    return Err(ParseError::is_expr(Expr::from(match_expr)).into());
+                match MatchStmt::match_end_of_branches(&mut group.tokens) {
+                    MatchBranchNextItem::Branch => continue,
+                    MatchBranchNextItem::ElseBranch => break true,
+                    MatchBranchNextItem::End => break false,
                 }
-
-                Err(other) => {
-                    return Err(other);
-                }
-            };
-
-            match MatchStmt::match_end_of_branches(&mut group.tokens) {
-                MatchBranchNextItem::Branch => continue,
-                MatchBranchNextItem::ElseBranch => break true,
-                MatchBranchNextItem::End => break false,
             }
         };
 

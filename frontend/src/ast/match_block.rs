@@ -57,14 +57,18 @@ impl MatchExpr {
         tokens: &mut TokenStream,
         branches: &mut Vec<MatchBlockBranch<Span, Expr>>
     ) -> ParseResult<Option<Expr>> {
-        let expect_else = loop {
-            let branch = MatchBlockBranch::parse(tokens)?;
-            branches.push(branch);
+        let expect_else = if tokens.match_one_maybe(Keyword::Else).is_some() { 
+            true 
+        } else {
+            loop {
+                let branch = MatchBlockBranch::parse(tokens)?;
+                branches.push(branch);
 
-            match Self::match_end_of_branches(tokens) {
-                MatchBranchNextItem::Branch => continue,
-                MatchBranchNextItem::ElseBranch => break true,
-                MatchBranchNextItem::End => break false,
+                match Self::match_end_of_branches(tokens) {
+                    MatchBranchNextItem::Branch => continue,
+                    MatchBranchNextItem::ElseBranch => break true,
+                    MatchBranchNextItem::End => break false,
+                }
             }
         };
 
@@ -83,66 +87,70 @@ impl MatchStmt {
         let mut block = Self::parse_block_group(tokens)?;
 
         let mut branches = Vec::new();
-        let expect_else = loop {
-            let pattern = TypeNamePattern::parse(&mut block.tokens)?;
-            block.tokens.match_one(Separator::Colon)?;
+        let expect_else = if tokens.match_one_maybe(Keyword::Else).is_some() {
+            true
+        } else {
+            loop {
+                let pattern = TypeNamePattern::parse(&mut block.tokens)?;
+                block.tokens.match_one(Separator::Colon)?;
 
-            match Stmt::parse(&mut block.tokens) {
-                Ok(branch_stmt) => {
-                    branches.push(MatchBlockBranch::new(pattern, branch_stmt))
-                },
+                match Stmt::parse(&mut block.tokens) {
+                    Ok(branch_stmt) => {
+                        branches.push(MatchBlockBranch::new(pattern, branch_stmt))
+                    },
 
-                // if the first branch is only valid as an expression, convert it into a match-expr
-                // branch and parse the rest of the branches as expressions too
-                Err(TracedError { err: ParseError::IsExpr(illegal), .. }) => {
-                    let mut expr_branches = Vec::new();
-                    for branch in branches {
-                        match branch.item.to_expr() {
-                            Some(branch_expr) => {
-                                expr_branches.push(MatchBlockBranch::new(branch.pattern, branch_expr));
-                            },
+                    // if the first branch is only valid as an expression, convert it into a match-expr
+                    // branch and parse the rest of the branches as expressions too
+                    Err(TracedError { err: ParseError::IsExpr(illegal), .. }) => {
+                        let mut expr_branches = Vec::new();
+                        for branch in branches {
+                            match branch.item.to_expr() {
+                                Some(branch_expr) => {
+                                    expr_branches.push(MatchBlockBranch::new(branch.pattern, branch_expr));
+                                },
 
-                            // if any previous branch was not a valid expression, this match block
-                            // cannot be a valid expression at all
-                            None => {
-                                return Err(ParseError::illegal_expr(illegal.0).into());
+                                // if any previous branch was not a valid expression, this match block
+                                // cannot be a valid expression at all
+                                None => {
+                                    return Err(ParseError::illegal_expr(illegal.0).into());
+                                }
                             }
                         }
+
+                        expr_branches.push(MatchBlockBranch::new(pattern, *illegal.0));
+
+                        let else_branch = match Self::match_end_of_branches(&mut block.tokens) {
+                            MatchBranchNextItem::Branch => {
+                                MatchExpr::parse_branches(&mut block.tokens, &mut expr_branches)?
+                            }
+                            MatchBranchNextItem::ElseBranch => {
+                                Some(MatchExpr::parse_else_item(&mut block.tokens)?)
+                            }
+                            MatchBranchNextItem::End => None,
+                        };
+
+                        block.tokens.finish()?;
+
+                        let match_expr = MatchExpr {
+                            cond_expr: block.cond_expr,
+                            branches: expr_branches,
+                            else_branch,
+                            annotation: block.span,
+                        };
+
+                        return Err(ParseError::is_expr(Expr::from(match_expr)).into());
                     }
 
-                    expr_branches.push(MatchBlockBranch::new(pattern, *illegal.0));
+                    Err(other) => {
+                        return Err(other);
+                    }
+                };
 
-                    let else_branch = match Self::match_end_of_branches(&mut block.tokens) {
-                        MatchBranchNextItem::Branch => {
-                            MatchExpr::parse_branches(&mut block.tokens, &mut expr_branches)?
-                        }
-                        MatchBranchNextItem::ElseBranch => {
-                            Some(MatchExpr::parse_else_item(&mut block.tokens)?)
-                        }
-                        MatchBranchNextItem::End => None,
-                    };
-                    
-                    block.tokens.finish()?;
-
-                    let match_expr = MatchExpr {
-                        cond_expr: block.cond_expr,
-                        branches: expr_branches,
-                        else_branch,
-                        annotation: block.span,
-                    };
-
-                    return Err(ParseError::is_expr(Expr::from(match_expr)).into());
+                match Self::match_end_of_branches(&mut block.tokens) {
+                    MatchBranchNextItem::Branch => continue,
+                    MatchBranchNextItem::ElseBranch => break true,
+                    MatchBranchNextItem::End => break false,
                 }
-                
-                Err(other) => {
-                    return Err(other);
-                }
-            };
-
-            match Self::match_end_of_branches(&mut block.tokens) {
-                MatchBranchNextItem::Branch => continue,
-                MatchBranchNextItem::ElseBranch => break true,
-                MatchBranchNextItem::End => break false,
             }
         };
 
@@ -197,7 +205,7 @@ impl<B> MatchBlock<Span, B> {
 
             // else without a separating semicolon
             Some(tt) if tt.is_keyword(Keyword::Else) => { 
-                MatchBranchNextItem::Branch
+                MatchBranchNextItem::ElseBranch
             }
             
             // neither (either next token is the end, or it's invalid)
