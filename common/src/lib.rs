@@ -2,6 +2,7 @@ pub mod source_map;
 pub mod span;
 
 use crate::span::*;
+pub use backtrace::Backtrace;
 use encoding_rs::{Encoding, UTF_8};
 use std::{
     cmp::Ordering,
@@ -13,8 +14,6 @@ use std::{
     ops::Deref,
     path::{Path, PathBuf},
 };
-
-pub use backtrace::Backtrace;
 
 pub trait DiagnosticOutput: fmt::Display {
     fn title(&self) -> String {
@@ -131,17 +130,19 @@ pub struct TracedError<T> {
 }
 
 impl<T> TracedError<T> {
-    pub fn trace(err: T) -> Self {
-        const SKIP_FRAMES: usize = 0;
-
+    fn trace_skip(err: T, skip_frames: usize) -> Self {
         let mut frames: Vec<_> = Backtrace::new().into();
-        frames.rotate_left(SKIP_FRAMES);
-        frames.truncate(frames.len() - SKIP_FRAMES);
+        frames.rotate_left(skip_frames);
+        frames.truncate(frames.len() - skip_frames);
 
         Self {
             err,
             bt: frames.into(),
         }
+    }
+    
+    pub fn trace(err: T) -> Self {
+        Self::trace_skip(err, 1)
     }
 
     pub fn chain<TNext: From<T>>(self) -> TracedError<TNext> {
@@ -160,6 +161,12 @@ impl<T> TracedError<T> {
     
     pub fn into_inner(self) -> T {
         self.err
+    }
+}
+
+impl<T> From<T> for TracedError<T> {
+    fn from(value: T) -> Self {
+        Self::trace_skip(value, 1)
     }
 }
 

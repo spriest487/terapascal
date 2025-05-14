@@ -5,7 +5,7 @@ pub use self::assign::CompoundAssignment;
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::Operator;
-use crate::parse::InvalidStatement;
+use crate::parse::IllegalStatement;
 use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::expr::typecheck_call;
 use crate::typ::ast::expr::Invocation;
@@ -155,7 +155,7 @@ pub fn typecheck_stmt(
             Invocation::Call(call) => Ok(ast::Stmt::Call(call)),
             Invocation::Ctor(ctor) => {
                 let ctor_expr = Expr::from(*ctor);
-                let invalid_stmt = InvalidStatement::from(ctor_expr);
+                let invalid_stmt = IllegalStatement::from(ctor_expr);
                 Err(TypeError::InvalidStatement(invalid_stmt))
             },
         },
@@ -237,7 +237,7 @@ fn typecheck_ident_stmt(ident: &Ident, span: &Span, ctx: &mut Context) -> TypeRe
 
         invalid => {
             // this would only be valid as an expression
-            let invalid_stmt = InvalidStatement(Box::new(invalid));
+            let invalid_stmt = IllegalStatement(Box::new(invalid));
             return Err(TypeError::InvalidStatement(invalid_stmt));
         }
     }

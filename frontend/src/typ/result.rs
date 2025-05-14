@@ -3,7 +3,7 @@ use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Operator;
 use crate::ast::{Access, FunctionDeclKind};
-use crate::parse::InvalidStatement;
+use crate::parse::IllegalStatement;
 use crate::typ::annotation::Value;
 use crate::typ::ast::Call;
 use crate::typ::ast::DeclMod;
@@ -208,7 +208,7 @@ pub enum TypeError {
     InvalidRefExpression {
         expr: Box<Expr>,
     },
-    InvalidStatement(InvalidStatement<Value>),
+    InvalidStatement(IllegalStatement<Value>),
     
     InvalidSetValueType {
         actual: Type,

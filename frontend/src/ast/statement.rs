@@ -22,7 +22,6 @@ use crate::ast::IfCond;
 use crate::ast::MatchStmt;
 use crate::ast::Raise;
 use crate::ast::WhileLoop;
-use crate::parse::InvalidStatement;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -339,16 +338,14 @@ impl Parse for Stmt<Span> {
                 let stmt = match Expr::parse(tokens) {
                     // statement is not actually a valid expression, but that's fine because we
                     // want a statement here anyway
-                    Err(TracedError { err: ParseError::IsStatement(stmt), .. }) => *stmt,
+                    Err(TracedError { err: ParseError::IllegalStatement(stmt), .. }) => *stmt,
                     
                     // statement is a valid expression, but we're expecting a statement here,
                     // so it must be convertible to one
                     Ok(expr) => {
                         Self::try_from_expr(expr.clone())
                             .map_err(|invalid_expr| {
-                                let invalid_stmt = InvalidStatement::from(invalid_expr);
-                                let err = ParseError::InvalidStatement(invalid_stmt);
-                                TracedError::trace(err)
+                                TracedError::from(ParseError::is_expr(invalid_expr))
                             })?
                     }
                     

@@ -5,7 +5,7 @@ use crate::ast::Annotation;
 use crate::ast::Expr;
 use crate::ast::Stmt;
 use crate::ast::TypeNamePattern;
-use crate::parse::InvalidStatement;
+use crate::parse::IllegalStatement;
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
@@ -102,7 +102,7 @@ impl IfCond<Span, Stmt> {
         let then_branch = match Stmt::parse(tokens) {
             Ok(stmt) => stmt,
             
-            Err(TracedError { err: ParseError::InvalidStatement(InvalidStatement(then_expr)), .. } ) => {
+            Err(TracedError { err: ParseError::IsExpr(IllegalStatement(then_expr)), .. } ) => {
                 // if the `then` branch is only valid as an expression, parse the else branch
                 // as one too and return the whole thing as an invalid expression
                 let (else_expr, span) = IfCond::parse_else_branch(tokens, &if_token.span(), &then_expr)?;
@@ -114,9 +114,7 @@ impl IfCond<Span, Stmt> {
                     annotation: span,
                 }));
                 
-                return Err(TracedError::trace(ParseError::InvalidStatement(InvalidStatement(
-                    Box::new(invalid_expr)
-                ))));
+                return Err(ParseError::is_expr(invalid_expr).into());
             },
             
             Err(other) => return Err(other),
@@ -129,8 +127,8 @@ impl IfCond<Span, Stmt> {
 
                     // if the `else` branch is only valid as an expression, then the `then` branch
                     // should have been one too
-                    Err(TracedError { err: ParseError::InvalidStatement(InvalidStatement(..)), .. } ) => {
-                        return Err(TracedError::trace(ParseError::IsStatement(Box::new(then_branch))));
+                    Err(TracedError { err: ParseError::IsExpr(..), .. } ) => {
+                        return Err(ParseError::IllegalStatement(Box::new(then_branch)).into());
                     },
 
                     Err(other) => return Err(other),

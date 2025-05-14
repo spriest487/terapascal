@@ -14,23 +14,23 @@ use common::TracedError;
 use std::fmt;
 
 #[derive(Debug)]
-pub struct InvalidStatement<A: Annotation>(pub Box<Expr<A>>);
+pub struct IllegalStatement<A: Annotation>(pub Box<Expr<A>>);
 
-impl<A: Annotation> fmt::Display for InvalidStatement<A> {
+impl<A: Annotation> fmt::Display for IllegalStatement<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "the expr `{}` is not valid as a stmt", self.0)
+        write!(f, "expected a statement, got expression `{}`", self.0)
     }
 }
 
-impl<A: Annotation> InvalidStatement<A> {
+impl<A: Annotation> IllegalStatement<A> {
     pub fn title(&self) -> String {
-        "Invalid stmt".to_string()
+        "Illegal statement".to_string()
     }
 }
 
-impl<A: Annotation> From<Expr<A>> for InvalidStatement<A> {
+impl<A: Annotation> From<Expr<A>> for IllegalStatement<A> {
     fn from(expr: Expr<A>) -> Self {
-        InvalidStatement(Box::new(expr))
+        IllegalStatement(Box::new(expr))
     }
 }
 
@@ -43,8 +43,10 @@ pub enum ParseError {
     EmptyOperand { operator: Span, before: bool },
     UnexpectedOperator { operator: Span },
 
-    IsStatement(Box<Stmt<Span>>),
-    InvalidStatement(InvalidStatement<Span>),
+    IllegalStatement(Box<Stmt<Span>>),
+    IllegalExpr(IllegalStatement<Span>),
+    IsExpr(IllegalStatement<Span>),
+
     UnterminatedStatement { span: Span },
     InvalidForLoopInit(Stmt<Span>),
     
@@ -70,6 +72,27 @@ pub enum ParseError {
     EmptyTypeDecl { span: Span },
 }
 
+impl ParseError {
+    pub fn is_expr(expr: impl Into<Expr>) -> Self {
+        Self::IsExpr(IllegalStatement(Box::new(expr.into())))
+    }
+
+    pub fn illegal_expr(expr: impl Into<Expr>) -> Self {
+        Self::IllegalExpr(IllegalStatement(Box::new(expr.into())))
+    }
+
+    pub fn is_stmt(stmt: impl Into<Stmt>) -> Self {
+        Self::IllegalStatement(Box::new(stmt.into()))
+    }
+    
+    pub fn expr_is_illegal(self) -> Self {
+        match self {
+            ParseError::IsExpr(expr) => ParseError::IllegalExpr(expr), 
+            other => other,
+        }
+    }
+}
+
 pub type ParseResult<T> = Result<T, TracedError<ParseError>>;
 
 impl Spanned for ParseError {
@@ -83,8 +106,9 @@ impl Spanned for ParseError {
             ParseError::UnexpectedEOF(_, tt) => tt.span(),
             ParseError::EmptyOperand { operator, .. } => operator.span(),
             ParseError::UnexpectedOperator { operator } => operator.span(),
-            ParseError::IsStatement(stmt) => stmt.span(),
-            ParseError::InvalidStatement(invalid) => invalid.0.annotation().span(),
+            ParseError::IllegalStatement(stmt) => stmt.span(),
+            ParseError::IsExpr(IllegalStatement(expr)) => expr.annotation().span(),
+            ParseError::IllegalExpr(IllegalStatement(expr)) => expr.annotation().span(),
             ParseError::DuplicateModifier { new, .. } => new.span(),
             ParseError::CtorWithTypeArgs { span } => span,
             ParseError::TypeConstraintAlreadySpecified(c) => c.span(),
@@ -115,8 +139,11 @@ impl fmt::Display for ParseError {
             ParseError::EmptyOperand { .. } => write!(f, "Empty operand"),
             ParseError::UnexpectedOperator { .. } => write!(f, "Unexpected operator"),
 
-            ParseError::IsStatement(..) => write!(f, "Statement is not a valid expression"),
-            ParseError::InvalidStatement(invalid) => write!(f, "{}", invalid.title()),
+            ParseError::IllegalStatement(..) => write!(f, "Statement is not legal here"),
+            
+            ParseError::IllegalExpr(invalid) => write!(f, "{}", invalid.title()),
+            ParseError::IsExpr(invalid) => write!(f, "{}", invalid.title()),
+
             ParseError::UnterminatedStatement { .. } => write!(f, "Unterminated stmt"),
             ParseError::InvalidForLoopInit( .. ) => write!(f, "Invalid for-loop initialization stmt"),
             
@@ -164,9 +191,10 @@ impl DiagnosticOutput for ParseError {
 
             ParseError::UnexpectedOperator { .. } => Some("expected operand, found operator".to_string()),
             
-            ParseError::IsStatement(..) => None,
+            ParseError::IllegalStatement(..) => None,
+            ParseError::IllegalExpr(..) => None,
 
-            ParseError::InvalidStatement(invalid_stmt) => Some(invalid_stmt.to_string()),
+            ParseError::IsExpr(invalid_stmt) => Some(invalid_stmt.to_string()),
 
             ParseError::DuplicateModifier { new, .. } => Some(format!(
                 "the modifier `{}` is already present on this declaration",

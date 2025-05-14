@@ -163,7 +163,7 @@ fn parse_block_stmts(
                 // expr, assume it's the block output. some expressions (eg calls) are
                 // always valid as statements regardless of type, so in some cases the block
                 // output can't be determined until typechecking
-                err @ ParseError::InvalidStatement(InvalidStatement(..)) => {
+                err @ ParseError::IsExpr(..) => {
                     // if there's more statements after this, we can't use it as the output
                     let stmt_after_tokens = tokens
                         .look_ahead()
@@ -173,7 +173,7 @@ fn parse_block_stmts(
                         return Err(TracedError::trace(err));
                     }
 
-                    let ParseError::InvalidStatement(InvalidStatement(bad_expr)) = err else {
+                    let ParseError::IsExpr(IllegalStatement(bad_expr)) = err else {
                         unreachable!()
                     };
                     
@@ -186,7 +186,7 @@ fn parse_block_stmts(
 
                     output_expr = Some(*bad_expr);
                     break;
-                },
+                }
 
                 // failed for other reasons, this is an actual error
                 _ => return Err(traced_err),

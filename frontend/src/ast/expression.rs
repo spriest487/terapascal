@@ -338,11 +338,10 @@ impl Expr<Span> {
         if is_stmt {
             let stmt = Stmt::try_from_expr(expr.clone())
                 .map_err(|bad_expr| {
-                    let err = ParseError::InvalidStatement(InvalidStatement(Box::new(bad_expr)));
-                    TracedError::trace(err)
+                    TracedError::from(ParseError::is_expr(bad_expr))
                 })?;
 
-            return Err(TracedError::trace(ParseError::IsStatement(Box::new(stmt))));
+            return Err(TracedError::trace(ParseError::IllegalStatement(Box::new(stmt))));
         }
         
         Ok(expr)
