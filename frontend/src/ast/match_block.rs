@@ -1,14 +1,17 @@
+use crate::ast::Annotation;
+use crate::ast::Expr;
+use crate::ast::Stmt;
+use crate::ast::TypeNamePattern;
+use crate::parse::Parse;
 use crate::parse::ParseError;
+use crate::parse::ParseResult;
+use crate::parse::TokenStream;
 use crate::token_tree::DelimitedGroup;
-use crate::{
-    ast::{Annotation, Expr, Stmt, TypeNamePattern},
-    parse::{Parse, ParseResult, TokenStream},
-    DelimiterPair
-    ,
-    Keyword,
-    Separator
-};
-use common::span::{Span, Spanned};
+use crate::DelimiterPair;
+use crate::Keyword;
+use crate::Separator;
+use common::span::Span;
+use common::span::Spanned;
 use common::TracedError;
 use derivative::Derivative;
 use std::fmt;
@@ -66,14 +69,10 @@ impl MatchExpr {
         };
 
         let else_branch = if expect_else {
-            Some(Expr::parse(tokens)?)
+            Some(Self::parse_else_item(tokens)?)
         } else {
             None
         };
-
-        if else_branch.is_some() {
-            tokens.match_one_maybe(Separator::Semicolon);
-        }
         
         Ok(else_branch)
     }
@@ -89,11 +88,9 @@ impl MatchStmt {
             block.tokens.match_one(Separator::Colon)?;
 
             match Stmt::parse(&mut block.tokens) {
-                Ok(branch_stmt) => branches.push(MatchBlockBranch {
-                    span: pattern.span().to(branch_stmt.span()),
-                    pattern,
-                    item: branch_stmt,
-                }),
+                Ok(branch_stmt) => {
+                    branches.push(MatchBlockBranch::new(pattern, branch_stmt))
+                },
 
                 // if the first branch is only valid as an expression, convert it into a match-expr
                 // branch and parse the rest of the branches as expressions too
@@ -101,11 +98,9 @@ impl MatchStmt {
                     let mut expr_branches = Vec::new();
                     for branch in branches {
                         match branch.item.to_expr() {
-                            Some(branch_expr) => expr_branches.push(MatchBlockBranch {
-                                span: branch.span,
-                                pattern: branch.pattern,
-                                item: branch_expr,
-                            }),
+                            Some(branch_expr) => {
+                                expr_branches.push(MatchBlockBranch::new(branch.pattern, branch_expr));
+                            },
 
                             // if any previous branch was not a valid expression, this match block
                             // cannot be a valid expression at all
@@ -115,28 +110,28 @@ impl MatchStmt {
                         }
                     }
 
-                    expr_branches.push(MatchBlockBranch {
-                        span: pattern.span().to(illegal.0.span()),
-                        pattern,
-                        item: *illegal.0,
-                    });
+                    expr_branches.push(MatchBlockBranch::new(pattern, *illegal.0));
 
                     let else_branch = match Self::match_end_of_branches(&mut block.tokens) {
                         MatchBranchNextItem::Branch => {
                             MatchExpr::parse_branches(&mut block.tokens, &mut expr_branches)?
                         }
                         MatchBranchNextItem::ElseBranch => {
-                            Some(Expr::parse(&mut block.tokens)?)
+                            Some(MatchExpr::parse_else_item(&mut block.tokens)?)
                         }
                         MatchBranchNextItem::End => None,
                     };
+                    
+                    block.tokens.finish()?;
 
-                    return Err(ParseError::is_expr(Expr::from(MatchExpr {
+                    let match_expr = MatchExpr {
                         cond_expr: block.cond_expr,
                         branches: expr_branches,
                         else_branch,
                         annotation: block.span,
-                    })).into());
+                    };
+
+                    return Err(ParseError::is_expr(Expr::from(match_expr)).into());
                 }
                 
                 Err(other) => {
@@ -152,14 +147,11 @@ impl MatchStmt {
         };
 
         let else_branch = if expect_else {
-            Some(Stmt::parse(&mut block.tokens)?)
+            Some(Self::parse_else_item(&mut block.tokens)?)
         } else {
             None
         };
 
-        if else_branch.is_some() {
-            block.tokens.match_one_maybe(Separator::Semicolon);
-        }
         block.tokens.finish()?;
 
         Ok(MatchBlock {
@@ -190,7 +182,7 @@ impl<B> MatchBlock<Span, B> {
         })
     }
     
-    fn match_end_of_branches(tokens: &mut TokenStream) -> MatchBranchNextItem {
+    pub(crate) fn match_end_of_branches(tokens: &mut TokenStream) -> MatchBranchNextItem {
         match tokens.match_one_maybe(Keyword::Else | Separator::Semicolon) {
             // semicolon separator
             Some(tt) if tt.is_separator(Separator::Semicolon) => {
@@ -217,7 +209,16 @@ impl<B> MatchBlock<Span, B> {
     }
 }
 
-enum MatchBranchNextItem {
+impl<B: Parse> MatchBlock<Span, B> {
+    pub(crate) fn parse_else_item(tokens: &mut TokenStream) -> ParseResult<B> {
+        let item = B::parse(tokens)?;
+        tokens.match_one_maybe(Separator::Semicolon);
+        
+        Ok(item)
+    }
+}
+
+pub(crate) enum MatchBranchNextItem {
     Branch,
     ElseBranch,
     End,
@@ -297,6 +298,21 @@ where
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     pub span: Span,
+}
+
+impl<B> MatchBlockBranch<Span, B>
+where
+    B: Spanned
+{
+    pub fn new(pattern: TypeNamePattern, item: B) -> Self {
+        let span = pattern.span().to(&item);
+        
+        MatchBlockBranch {
+            span,
+            item,
+            pattern,
+        }
+    }
 }
 
 impl<B> Parse for MatchBlockBranch<Span, B>
