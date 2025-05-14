@@ -3,10 +3,10 @@ mod test;
 
 use crate::ast;
 use crate::typ::ast::cast::implicit_conversion;
-use crate::typ::ast::{create_default_literal, Expr};
+use crate::typ::ast::{create_default_literal, Expr, StructDef};
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_type_args;
-use crate::typ::ArrayType;
+use crate::typ::{ArrayType, TypeParamContainer, TypeParamList};
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
@@ -200,7 +200,7 @@ fn find_ctor_ty(
     match type_expr.annotation() {
         Value::Type(generic_ty, _) => {
             match ty_args {
-                None => {
+                None if generic_ty.is_unspecialized_generic() => {
                     // infer the type args from the expected type of the expression
                     let spec_ty = generic_ty
                         .infer_specialized_from_hint(expect_ty)
@@ -216,6 +216,10 @@ fn find_ctor_ty(
 
                     Ok(spec_ty)
                 },
+
+                None  => {
+                    Ok(generic_ty.clone())
+                }
 
                 Some(args) => {
                     let spec_ty = generic_ty

@@ -7,7 +7,8 @@
 
 # bugs
 * parser: newlines/escape chars in string literals
-* signed i8 loop from -127 to 128 runs forever? 
+* signed i8 loop from -127 to 128 runs forever?
+* can't infer generic args from object ctors
 
 # improvements
 * go back to I prefix for interfaces

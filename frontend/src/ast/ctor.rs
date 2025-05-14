@@ -20,7 +20,7 @@ use std::fmt;
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct ObjectCtorMember<A: Annotation> {
+pub struct ObjectCtorMember<A: Annotation = Span> {
     pub ident: Ident,
     pub value: Expr<A>,
 
