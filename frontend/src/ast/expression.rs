@@ -341,7 +341,7 @@ impl Expr<Span> {
                     TracedError::from(ParseError::is_expr(bad_expr))
                 })?;
 
-            return Err(TracedError::trace(ParseError::IllegalStatement(Box::new(stmt))));
+            return Err(TracedError::trace(ParseError::StatementIsIllegal(Box::new(stmt))));
         }
         
         Ok(expr)

@@ -121,14 +121,32 @@ impl IfCond<Span, Stmt> {
         };
 
         let (else_branch, span) = match tokens.match_one_maybe(Keyword::Else) {
-            Some(_else_token) => {
+            Some(..) => {
                 let else_branch = match Stmt::parse(tokens) {
                     Ok(stmt) => stmt,
 
                     // if the `else` branch is only valid as an expression, then the `then` branch
                     // should have been one too
-                    Err(TracedError { err: ParseError::IsExpr(..), .. } ) => {
-                        return Err(ParseError::IllegalStatement(Box::new(then_branch)).into());
+                    Err(TracedError { err: ParseError::IsExpr(else_expr), .. } ) => {
+                        match then_branch.to_expr() {
+                            Some(then_expr) => {
+                                let span = if_token.span().to(else_expr.0.span());
+
+                                let if_expr = Expr::IfCond(Box::new(IfCond {
+                                    cond,
+                                    is_pattern,
+                                    then_branch: then_expr,
+                                    else_branch: Some(*else_expr.0),
+                                    annotation: span,
+                                }));
+
+                                return Err(ParseError::is_expr(if_expr).into());
+                            }
+                            
+                            None => {
+                                return Err(ParseError::StatementIsIllegal(Box::new(then_branch)).into());
+                            }
+                        }
                     },
 
                     Err(other) => return Err(other),

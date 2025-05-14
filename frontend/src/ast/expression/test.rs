@@ -33,7 +33,7 @@ pub fn parse_expr(src: &str) -> Expr<Span> {
 #[test]
 fn parse_assignment_then_call_in_order_as_stmt() {
     let assignment = match try_parse_expr("x := Y()") {
-        Err(TracedError { err: ParseError::IllegalStatement(stmt), .. }) => match *stmt {
+        Err(TracedError { err: ParseError::StatementIsIllegal(stmt), .. }) => match *stmt {
             Stmt::Assignment(assignment) => *assignment,
             other => panic!("expected assignment, got {}", other),
         }
@@ -54,7 +54,7 @@ fn parse_assignment_then_call_in_order_as_stmt() {
 #[test]
 fn parse_assignment_then_call_in_order_explicit() {
     let assignment = match try_parse_expr("x := (Y())") {
-        Err(TracedError { err: ParseError::IllegalStatement(stmt), .. }) => match *stmt {
+        Err(TracedError { err: ParseError::StatementIsIllegal(stmt), .. }) => match *stmt {
             Stmt::Assignment(assignment) => *assignment,
             other => panic!("expected assignment, got {}", other),
         }

@@ -338,7 +338,7 @@ impl Parse for Stmt<Span> {
                 let stmt = match Expr::parse(tokens) {
                     // statement is not actually a valid expression, but that's fine because we
                     // want a statement here anyway
-                    Err(TracedError { err: ParseError::IllegalStatement(stmt), .. }) => *stmt,
+                    Err(TracedError { err: ParseError::StatementIsIllegal(stmt), .. }) => *stmt,
                     
                     // statement is a valid expression, but we're expecting a statement here,
                     // so it must be convertible to one

@@ -43,8 +43,8 @@ pub enum ParseError {
     EmptyOperand { operator: Span, before: bool },
     UnexpectedOperator { operator: Span },
 
-    IllegalStatement(Box<Stmt<Span>>),
-    IllegalExpr(IllegalStatement<Span>),
+    StatementIsIllegal(Box<Stmt<Span>>),
+    ExprIsIllegal(IllegalStatement<Span>),
     IsExpr(IllegalStatement<Span>),
 
     UnterminatedStatement { span: Span },
@@ -78,16 +78,16 @@ impl ParseError {
     }
 
     pub fn illegal_expr(expr: impl Into<Box<Expr>>) -> Self {
-        Self::IllegalExpr(IllegalStatement(expr.into()))
+        Self::ExprIsIllegal(IllegalStatement(expr.into()))
     }
 
     pub fn is_stmt(stmt: impl Into<Box<Stmt>>) -> Self {
-        Self::IllegalStatement(stmt.into())
+        Self::StatementIsIllegal(stmt.into())
     }
     
     pub fn expr_is_illegal(self) -> Self {
         match self {
-            ParseError::IsExpr(expr) => ParseError::IllegalExpr(expr), 
+            ParseError::IsExpr(expr) => ParseError::ExprIsIllegal(expr), 
             other => other,
         }
     }
@@ -106,9 +106,9 @@ impl Spanned for ParseError {
             ParseError::UnexpectedEOF(_, tt) => tt.span(),
             ParseError::EmptyOperand { operator, .. } => operator.span(),
             ParseError::UnexpectedOperator { operator } => operator.span(),
-            ParseError::IllegalStatement(stmt) => stmt.span(),
+            ParseError::StatementIsIllegal(stmt) => stmt.span(),
             ParseError::IsExpr(IllegalStatement(expr)) => expr.annotation().span(),
-            ParseError::IllegalExpr(IllegalStatement(expr)) => expr.annotation().span(),
+            ParseError::ExprIsIllegal(IllegalStatement(expr)) => expr.annotation().span(),
             ParseError::DuplicateModifier { new, .. } => new.span(),
             ParseError::CtorWithTypeArgs { span } => span,
             ParseError::TypeConstraintAlreadySpecified(c) => c.span(),
@@ -139,9 +139,9 @@ impl fmt::Display for ParseError {
             ParseError::EmptyOperand { .. } => write!(f, "Empty operand"),
             ParseError::UnexpectedOperator { .. } => write!(f, "Unexpected operator"),
 
-            ParseError::IllegalStatement(..) => write!(f, "Statement is not legal here"),
+            ParseError::StatementIsIllegal(..) => write!(f, "Statement is not legal here"),
             
-            ParseError::IllegalExpr(invalid) => write!(f, "{}", invalid.title()),
+            ParseError::ExprIsIllegal(invalid) => write!(f, "{}", invalid.title()),
             ParseError::IsExpr(invalid) => write!(f, "{}", invalid.title()),
 
             ParseError::UnterminatedStatement { .. } => write!(f, "Unterminated stmt"),
@@ -191,8 +191,8 @@ impl DiagnosticOutput for ParseError {
 
             ParseError::UnexpectedOperator { .. } => Some("expected operand, found operator".to_string()),
             
-            ParseError::IllegalStatement(..) => None,
-            ParseError::IllegalExpr(..) => None,
+            ParseError::StatementIsIllegal(..) => None,
+            ParseError::ExprIsIllegal(..) => None,
 
             ParseError::IsExpr(invalid_stmt) => Some(invalid_stmt.to_string()),
 
