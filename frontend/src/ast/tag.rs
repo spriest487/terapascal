@@ -9,7 +9,7 @@ use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::token_tree::DelimitedGroup;
-use crate::DelimiterPair;
+use crate::{DelimiterPair, Separator};
 use crate::TokenStream;
 use common::span::Span;
 use common::span::Spanned;
@@ -71,7 +71,7 @@ impl Parse for Tag<Span> {
                 },
             });
 
-            if tag_tokens.look_ahead().next().is_none() {
+            if tag_tokens.match_one_maybe(Separator::Semicolon).is_none() {
                 break;
             }
         }

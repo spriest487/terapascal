@@ -71,7 +71,6 @@ pub enum ParseError {
     
     EmptyTypeDecl { span: Span },
     InvalidTagLocation { location: InvalidTagLocation, span: Span, tags_span: Span },
-    TagInitExprMustBeConst { span: Span },
 }
 
 impl ParseError {
@@ -148,7 +147,6 @@ impl Spanned for ParseError {
             ParseError::InvalidTypeParamName(span) => span,
             ParseError::InvalidSetRangeExpr { span } => span,
             ParseError::InvalidTagLocation { span, .. } => span,
-            ParseError::TagInitExprMustBeConst { span, .. } => span,
         }
     }
 }
@@ -191,7 +189,6 @@ impl fmt::Display for ParseError {
             
             ParseError::EmptyTypeDecl { .. } => write!(f, "Empty type declaration"),
             ParseError::InvalidTagLocation { .. } => write!(f, "Invalid tag location"),
-            ParseError::TagInitExprMustBeConst { .. } => write!(f, "Tag initialization expression must be a constant value"),
         }
     }
 }
@@ -293,10 +290,6 @@ impl DiagnosticOutput for ParseError {
                 };
 
                 Some(format!("{loc_name} must not have tags"))
-            }
-            
-            ParseError::TagInitExprMustBeConst { .. } => {
-                Some("value could not be evaluated as a constant".to_string())
             }
         };
 
