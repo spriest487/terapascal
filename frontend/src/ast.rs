@@ -21,6 +21,7 @@ mod type_name;
 mod ident;
 pub mod keyword;
 pub mod operators;
+pub mod tag;
 
 pub use block::*;
 pub use call::*;
