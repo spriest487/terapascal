@@ -10,9 +10,9 @@ use crate::ast::Literal;
 use crate::ast::MethodOwner;
 use crate::ast::SetDeclRange;
 use crate::ast::Visibility;
-use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::const_eval_integer;
 use crate::typ::ast::typecheck_expr;
+use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::InterfaceMethodDecl;
@@ -50,6 +50,7 @@ pub type AliasDecl = ast::AliasDecl<Value>;
 pub type EnumDecl = ast::EnumDecl<Value>;
 pub type EnumDeclItem = ast::EnumDeclItem<Value>;
 pub type SetDecl = ast::SetDecl<Value>;
+pub type Tag = ast::tag::Tag<Value>;
 
 pub const VARIANT_TAG_TYPE: Type = Type::Primitive(Primitive::Int32);
 pub const SET_DEFAULT_VALUE_TYPE: Type = Type::Primitive(Primitive::UInt8);
@@ -108,12 +109,43 @@ fn typecheck_base_types(
     Ok(base_tys)
 }
 
+// this takes a &mut Context, but it should never actually modify the context! 
+// the expressions parsed within should be typename paths and literals only
+pub fn typecheck_tags(src_tags: &[ast::tag::Tag], ctx: &mut Context) -> TypeResult<Vec<Tag>> {
+    let mut tags = Vec::new();
+
+    for tag in src_tags {
+        let mut items = Vec::new();
+        
+        for item in &tag.items {
+            assert_eq!(None, item.type_args);
+            assert!(item.type_expr.is_some());
+            for member in &item.args.members {
+                assert!(member.value.as_literal().is_some(), "the parser should only create tag constructors with constant member values");
+            }
+            
+            let item = typecheck_object_ctor(&item, item.span().clone(), &Type::Nothing, ctx)?;
+            items.push(item);
+        }
+        
+        tags.push(Tag {
+            span: tag.span.clone(),
+            items,
+        })
+    }
+    
+    Ok(tags)
+} 
+
 pub fn typecheck_struct_decl(
     name: Symbol,
     struct_def: &ast::StructDecl<Span>,
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<StructDef> {
+    assert!(struct_def.tags.is_empty() || !struct_def.forward);
+    let tags = typecheck_tags(&struct_def.tags, ctx)?;
+    
     let self_ty = Type::from_struct_type(name.clone(), struct_def.kind);
 
     let implements = typecheck_base_types(&struct_def.implements, &self_ty, ctx)?;
@@ -143,8 +175,9 @@ pub fn typecheck_struct_decl(
 
     Ok(StructDef {
         kind: struct_def.kind,
-        packed: struct_def.packed,
         name,
+        tags,
+        packed: struct_def.packed,
         span: struct_def.span.clone(),
         implements,
         fields,
@@ -309,6 +342,9 @@ pub fn typecheck_iface(
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<InterfaceDecl> {
+    assert!(iface.tags.is_empty() || !iface.forward);
+    let tags = typecheck_tags(&iface.tags, ctx)?;
+
     let iface_ty = Type::interface(name.clone());
 
     // declare Self type - type decls are always in their own scope so we don't need to push
@@ -345,6 +381,7 @@ pub fn typecheck_iface(
     
     let iface_decl = InterfaceDecl {
         name,
+        tags,
         supers,
         forward: iface.forward,
         span: iface.span.clone(),
@@ -360,6 +397,9 @@ pub fn typecheck_variant(
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<VariantDef> {
+    assert!(variant_def.tags.is_empty() || !variant_def.forward);
+    let tags = typecheck_tags(&variant_def.tags, ctx)?;
+
     if variant_def.cases.is_empty() {
         return Err(TypeError::EmptyVariantDecl(Box::new(variant_def.clone())));
     }
@@ -401,6 +441,7 @@ pub fn typecheck_variant(
 
     Ok(VariantDef {
         name: Rc::new(name),
+        tags,
         forward: variant_def.forward,
         cases,
         implements,
@@ -439,7 +480,7 @@ pub fn typecheck_enum_decl(
             Some(val_expr) => {
                 let val_expr =
                     typecheck_expr(&val_expr, &Type::Primitive(Primitive::NativeInt), ctx)?;
-                let item_ord_val = const_eval_integer(&val_expr, ctx)?.as_i128();
+                let item_ord_val = const_eval_integer(&val_expr)?.as_i128();
 
                 if let Some((prev_ident, prev_ord_val)) = &prev_item {
                     if item_ord_val <= *prev_ord_val {
@@ -497,8 +538,8 @@ impl SetDecl {
                 
                 to.annotation().expect_value(&val_ty)?;
                 
-                let from_num = get_set_range_expr_val(&from, range_span, ctx)?;
-                let to_num = get_set_range_expr_val(&to, range_span, ctx)?;
+                let from_num = get_set_range_expr_val(&from, range_span)?;
+                let to_num = get_set_range_expr_val(&to, range_span)?;
                 
                 if from_num.as_i128() > to_num.as_i128() {
                     return Err(TypeError::SetValuesMustBeSequential {
@@ -608,7 +649,7 @@ impl SetDecl {
         let mut min = None;
 
         for item in items {
-            let int_val = const_eval_integer(item, ctx)?.as_i128();
+            let int_val = const_eval_integer(item)?.as_i128();
 
             max = Some(max.map_or(int_val, |val| i128::max(val, int_val)));
             min = Some(min.map_or(int_val, |val| i128::min(val, int_val)));
@@ -698,8 +739,8 @@ fn get_set_type_range(range_ty: &Type, at: &Span, ctx: &Context) -> TypeResult<(
     }
 }
 
-fn get_set_range_expr_val(val: &Expr, at: &Span, ctx: &Context) -> TypeResult<IntConstant> {
-    let Some(val_lit) = val.const_eval(ctx) else {
+fn get_set_range_expr_val(val: &Expr, at: &Span) -> TypeResult<IntConstant> {
+    let Some(val_lit) = val.const_eval() else {
         return Err(TypeError::InvalidConstExpr { expr: Box::new(val.clone()) });
     };
     
