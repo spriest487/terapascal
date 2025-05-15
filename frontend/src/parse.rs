@@ -70,6 +70,8 @@ pub enum ParseError {
     MultiVarDeclHasInitExpr { span: Span },
     
     EmptyTypeDecl { span: Span },
+    InvalidTagLocation { location: InvalidTagLocation, span: Span, tags_span: Span },
+    TagInitExprMustBeConst { span: Span },
 }
 
 impl ParseError {
@@ -90,6 +92,26 @@ impl ParseError {
             ParseError::IsExpr(expr) => ParseError::ExprIsIllegal(expr), 
             other => other,
         }
+    }
+    
+    pub fn invalid_tag_loc(
+        location: InvalidTagLocation,
+        span: Span,
+        tags: &[impl Spanned]
+    ) -> Self {
+        ParseError::InvalidTagLocation {
+            location,
+            span,
+            tags_span: Span::range(tags).unwrap(),
+        }
+    }
+
+    pub fn forward_decl_tags(span: Span, tags: &[impl Spanned]) -> Self {
+        Self::invalid_tag_loc(InvalidTagLocation::ForwardDecl, span, tags)
+    }
+
+    pub fn alias_decl_tags(span: Span, tags: &[impl Spanned]) -> Self {
+        Self::invalid_tag_loc(InvalidTagLocation::AliasDecl, span, tags)
     }
 }
 
@@ -125,6 +147,8 @@ impl Spanned for ParseError {
             ParseError::InvalidForLoopInit(stmt) => stmt.span(),
             ParseError::InvalidTypeParamName(span) => span,
             ParseError::InvalidSetRangeExpr { span } => span,
+            ParseError::InvalidTagLocation { span, .. } => span,
+            ParseError::TagInitExprMustBeConst { span, .. } => span,
         }
     }
 }
@@ -164,7 +188,10 @@ impl fmt::Display for ParseError {
             ParseError::InvalidAssignmentExpr { .. } => write!(f, "Illegal assignment"),
             ParseError::EmptyConstOrVarDecl { .. } => write!(f, "Empty const or variable declaration"),
             ParseError::MultiVarDeclHasInitExpr { .. } => write!(f, "Multiple const or variable declaration has initialization expression"),
+            
             ParseError::EmptyTypeDecl { .. } => write!(f, "Empty type declaration"),
+            ParseError::InvalidTagLocation { .. } => write!(f, "Invalid tag location"),
+            ParseError::TagInitExprMustBeConst { .. } => write!(f, "Tag initialization expression must be a constant value"),
         }
     }
 }
@@ -230,7 +257,7 @@ impl DiagnosticOutput for ParseError {
             ParseError::InvalidTypeParamName(..) => None,
 
             ParseError::UnterminatedStatement { .. } => {
-                Some("stmt here is unterminated".to_string())
+                Some("statement here is unterminated".to_string())
             }
 
             ParseError::InvalidFunctionImplType(ty) => {
@@ -256,6 +283,21 @@ impl DiagnosticOutput for ParseError {
             ParseError::InvalidForLoopInit(stmt) => {
                 Some(format!("stmt `{}` cannot be used to initialize the counter variable of a for-loop", stmt))
             }
+            
+            ParseError::InvalidTagLocation { location, .. } => {
+                let loc_name = match location {
+                    InvalidTagLocation::ForwardDecl => "forward declaration",
+                    InvalidTagLocation::AliasDecl => "alias declaration",
+                    InvalidTagLocation::SetDecl => "set declaration",
+                    InvalidTagLocation::EnumDecl => "enum declaration",
+                };
+
+                Some(format!("{loc_name} must not have tags"))
+            }
+            
+            ParseError::TagInitExprMustBeConst { .. } => {
+                Some("value could not be evaluated as a constant".to_string())
+            }
         };
 
         Some(DiagnosticLabel {
@@ -266,14 +308,16 @@ impl DiagnosticOutput for ParseError {
 
     fn see_also(&self) -> Vec<DiagnosticMessage> {
         match self {
-            ParseError::DuplicateModifier { existing, .. } => vec![DiagnosticMessage {
-                title: "Duplicate modifier occurrence".to_string(),
-                label: Some(DiagnosticLabel {
-                    span: existing.span().clone(),
-                    text: Some(format!("`{}` appears here", existing.keyword())),
-                }),
-                notes: Vec::new(),
-            }],
+            ParseError::DuplicateModifier { existing, .. } => vec![
+                DiagnosticMessage::new("Duplicate modifier occurrence")
+                .with_label(DiagnosticLabel::new(existing.span().clone())
+                    .with_text(format!("`{}` appears here", existing.keyword())))
+            ],
+            
+            ParseError::InvalidTagLocation { tags_span, .. } => vec![
+                DiagnosticMessage::new("Tags declared here".to_string())
+                    .with_label(DiagnosticLabel::new(tags_span.clone()))
+            ],
 
             _ => Vec::new(),
         }
@@ -301,3 +345,11 @@ impl<T> TryParse for T where T : Parse + Match {
         }
     }
 }
+
+#[derive(Copy, Debug, Clone, Eq, PartialEq, Hash)]
+pub enum InvalidTagLocation {
+    ForwardDecl,
+    AliasDecl,
+    SetDecl,
+    EnumDecl,
+} 
