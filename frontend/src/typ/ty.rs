@@ -600,15 +600,24 @@ impl Type {
 
     pub fn self_equatable(&self) -> bool {
         match self {
-            Type::Nothing
-            | Type::Interface(..)
-            | Type::Class(..)
+            | Type::Nothing
             | Type::Record(..)
+            | Type::Variant(..)
             | Type::Function(..)
             | Type::GenericParam(..)
+            | Type::Array(..)
+            | Type::DynArray { .. }
             | Type::MethodSelf => false,
 
-            _ => true,
+            | Type::Weak(..)
+            | Type::Pointer(..)
+            | Type::Primitive(..)
+            | Type::Enum(..)
+            | Type::Set(..)
+            | Type::Nil
+            | Type::Class(..)
+            | Type::Any
+            | Type::Interface(..) => true,
         }
     }
 
