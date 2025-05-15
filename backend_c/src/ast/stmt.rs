@@ -7,7 +7,6 @@ use crate::ast::Unit;
 use crate::ast::Type;
 use ir_lang as ir;
 use std::fmt;
-use ir_lang::VirtualTypeID;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
@@ -72,10 +71,10 @@ fn write_global_typeinfo_decl_name_type(f: &mut fmt::Formatter, ty: &ir::Type) -
         ir::Type::RcPointer(id) | ir::Type::RcWeakPointer(id) => {
             write!(f, "VType_")?;
             match id {
-                VirtualTypeID::Any => write!(f, "Any"),
-                VirtualTypeID::Class(id) => write!(f, "Class_{id}"),
-                VirtualTypeID::Interface(id) => write!(f, "Interface_{id}"),
-                VirtualTypeID::Closure(id) => write!(f, "Closure_{id}"),
+                ir::VirtualTypeID::Any => write!(f, "Any"),
+                ir::VirtualTypeID::Class(id) => write!(f, "Class_{id}"),
+                ir::VirtualTypeID::Interface(id) => write!(f, "Interface_{id}"),
+                ir::VirtualTypeID::Closure(id) => write!(f, "Closure_{id}"),
             }
         },
 
@@ -579,12 +578,16 @@ impl<'a> Builder<'a> {
         let rc_ptr = actual_expr.cast(Type::Rc.ptr());
         let actual_class_ptr = rc_ptr.clone().arrow(FieldName::RcClass);
         
+        let is_null = rc_ptr.clone().not();
+
         // zombie refs don't count as any type
         let is_zombie = rc_ptr
             .arrow(FieldName::RcStrongCount)
             .not();
 
-        self.stmts.push(Statement::if_then_else(is_zombie, [
+        let is_dead = Expr::infix_op(is_null, InfixOp::Or, is_zombie);
+
+        self.stmts.push(Statement::if_then_else(is_dead, [
             Statement::Expr(Expr::translate_assign(out, Expr::LitBool(false), self.module)),
         ], [{
             let is = match class_id {

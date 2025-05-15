@@ -1581,6 +1581,10 @@ impl Interpreter {
             let msg = "argument a of ClassIs instruction must evaluate to a pointer";
             ExecError::illegal_state(msg)
         })?;
+        
+        if a_ptr.is_null() {
+            return self.store(out, DynValue::Bool(false));
+        }
 
         let a_val = match self.load_indirect(&a_ptr)? {
             DynValue::Structure(struct_val) => Ok(struct_val),
@@ -1593,8 +1597,7 @@ impl Interpreter {
         if let Some(rc) = &a_val.rc {
             // zombie references never count as castable any type
             if rc.strong_count == 0 {
-                self.store(out, DynValue::Bool(false))?;
-                return Ok(());
+                return self.store(out, DynValue::Bool(false));
             }
         }
 
