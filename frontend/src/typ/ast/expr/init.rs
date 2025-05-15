@@ -1,4 +1,4 @@
-use common::span::Spanned;
+use common::span::{Span, Spanned};
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::FunctionParamMod;
@@ -171,9 +171,10 @@ fn expect_args_initialized(
     assert_eq!(
         params.len(),
         args.len(),
-        "function call with wrong number of args shouldn't pass type checking. got:\n{}\nexpected:\n{}",
+        "function call with wrong number of args shouldn't pass type checking. got:\n{}\nexpected:\n{} @ {}",
         args.iter().map(Expr::to_string).collect::<Vec<_>>().join("; "),
         params.iter().map(|param| param.ty.to_string()).collect::<Vec<_>>().join("; "),
+        Span::range(args).map(|span| format!("{} {}-{}", span.file.display(), span.start, span.end)).unwrap_or_else(|| "<none>".to_string()),
     );
 
     for (arg, param) in args.iter().zip(params.iter()) {

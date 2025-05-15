@@ -1,11 +1,12 @@
 use crate::ast;
 use crate::ast::TypeList;
 use crate::ast::Visibility;
-use crate::typ::ast::{check_implicit_conversion, MethodDecl};
+use crate::typ::ast::check_implicit_conversion;
 use crate::typ::ast::specialize_call_args;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::MethodDecl;
 use crate::typ::Context;
 use crate::typ::InstanceMethod;
 use crate::typ::NameError;
@@ -194,6 +195,8 @@ pub fn resolve_overload(
                 }
             }
         }
+        
+        assert_eq!(args.len(), sig.params.len());
 
         return Ok(Overload {
             selected_sig: 0,
@@ -206,22 +209,33 @@ pub fn resolve_overload(
     // left-to-right, without a type hint, and look at the type of the resulting expr to eliminate
     // candidates. as soon as 1 candidate remains, process the rest of the arguments using that
     // sig. if 0 candidates remain after an arg is processed, the call is ambiguous
-    let mut actual_args = Vec::new();
     let mut valid_candidates: Vec<_> = (0..candidates.len()).collect();
-
     let mut param_index = 0;
+    
+    // if there are type arguments, eliminate any candidates without compatible type params
+    if let Some(arg_types) = type_args {
+        valid_candidates.retain(|i| {
+            candidate_sigs[*i].validate_generic_args(arg_types, ctx).is_ok()
+        });
+    } else {
+        valid_candidates.retain(|i| {
+            candidate_sigs[*i].type_params.is_none()
+        });
+    }
+    
+    // eprintln!("{} candidates remain after generic filter", valid_candidates.len());
+
+    let mut actual_args = Vec::new();
 
     // do the self-arg (which has a known type already) first
     if let Some(self_arg) = self_arg {
         actual_args.push(self_arg.clone());
+        let self_arg_ty = self_arg.annotation().ty();
 
         valid_candidates.retain(|i| {
             let sig = &candidate_sigs[*i];
-
-            let self_arg_ty = self_arg.annotation().ty();
-
             if sig.params.len() < 1 {
-                //                println!("discarding {} as candidate for {}, not enough params", sig, span);
+                // println!("discarding {} as candidate for {}, not enough params", sig, span);
                 false
             } else {
                 let self_param_ty = &sig.params[0].ty;
@@ -236,7 +250,6 @@ pub fn resolve_overload(
     // disqualify any sigs that don't match the argument count
     valid_candidates.retain(|index| {
         let sig = &candidate_sigs[*index];
-
         sig.params.len() == args.len() + self_arg.iter().len()
     });
 
@@ -250,6 +263,19 @@ pub fn resolve_overload(
         if valid_candidates.len() == 1 {
             let selected_sig = valid_candidates[0];
             // println!("selected {} as candidate for {}", candidates[selected_sig].sig(), span);
+            
+            let sig_params = &candidate_sigs[selected_sig].params;
+            while param_index < sig_params.len() {
+                let param_ty = &sig_params[param_index].ty;
+                let actual_arg = typecheck_expr(&args[arg_index], &param_ty, ctx)?;
+                
+                actual_args.push(actual_arg);
+                
+                arg_index += 1;
+                param_index += 1;
+            }
+
+            assert_eq!(actual_args.len(), sig_params.len());
 
             break Ok(Overload {
                 selected_sig,
@@ -278,8 +304,11 @@ pub fn resolve_overload(
             disqualify_inaccessible(candidates, &mut valid_candidates, ctx);
 
             if valid_candidates.len() == 1 {
+                let selected_sig = valid_candidates[0];
+                assert_eq!(actual_args.len(), candidate_sigs[selected_sig].params.len());
+                
                 break Ok(Overload {
-                    selected_sig: valid_candidates[0],
+                    selected_sig,
                     args: actual_args,
                     type_args: None,
                 });

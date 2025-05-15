@@ -13,7 +13,6 @@ use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::ObjectCtor;
-use crate::typ::typecheck_type;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
@@ -35,6 +34,7 @@ use crate::typ::TypedValue;
 use crate::typ::UfcsValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use crate::typ::typecheck_type;
 pub use args::*;
 use common::span::Span;
 use common::span::Spanned as _;
@@ -281,9 +281,18 @@ fn typecheck_func_call(
         },
 
         Value::UfcsFunction(ufcs_call) => {
+            let call_ty_args = match &func_call.type_args {
+                Some(call_ty_args) => {
+                    Some(typecheck_type_args(call_ty_args, ctx)?)
+                }
+
+                None => None,
+            };
+
             let typecheck_call = typecheck_ufcs_call(
-                &ufcs_call,
+                ufcs_call,
                 &func_call.args,
+                call_ty_args,
                 func_call.annotation.span(),
                 &func_call.args_span,
                 ctx,
@@ -426,6 +435,13 @@ fn typecheck_func_overload(
                     .with_self(self_ty),
             };
 
+            assert_eq!(
+                overload.args.len(), 
+                sig.params.len(), 
+                "in expression {}: resolved overload had wrong number of arguments", 
+                func_call
+            );
+
             if self_ty.get_current_access(ctx) < decl.access {
                 return Err(TypeError::TypeMemberInaccessible {
                     ty: self_ty.clone(),
@@ -443,7 +459,7 @@ fn typecheck_func_overload(
             ));
 
             // eprintln!("method call (overload) {} = ({}){}.{} -> {} ({})", func_call, iface_ty, self_ty, ident, index, sig);
-
+            
             let method_call = MethodCall {
                 iface_type: iface_ty.clone(),
                 self_type: self_ty.clone(),
@@ -670,6 +686,7 @@ fn typecheck_method_call(
 fn typecheck_ufcs_call(
     ufcs_call: &UfcsValue,
     rest_args: &[ast::Expr<Span>],
+    type_args: Option<TypeArgList>,
     span: &Span,
     args_span: &Span,
     ctx: &mut Context,
@@ -686,10 +703,12 @@ fn typecheck_ufcs_call(
         &ufcs_call.decl,
         &rest_args,
         Some(&ufcs_call.self_arg),
-        None, // ufcs call can't have explicit type args
+        type_args,
         &span,
         ctx,
     )?;
+    assert_eq!(specialized_call_args.actual_args.len(), rest_args.len() + 1);
+
     args::validate_args(
         &mut specialized_call_args.actual_args,
         &specialized_call_args.sig.params,
