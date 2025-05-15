@@ -367,7 +367,12 @@ pub enum TypeError {
     
     InvalidExplicitSpec {
         target: Value,
-    }
+    },
+
+    InvalidTagItem {
+        reason: InvalidTagReason,
+        span: Span
+    },
 }
 
 impl TypeError {
@@ -481,6 +486,7 @@ impl Spanned for TypeError {
             TypeError::InvalidDeclWithTypeParams { span, .. } => span,
             TypeError::EnumValuesMustBeAscending { span, .. } => span,
             TypeError::InvalidExplicitSpec { target, .. } => target.span(),
+            TypeError::InvalidTagItem { span, .. } => span,
         }
     }
 }
@@ -639,6 +645,8 @@ impl DiagnosticOutput for TypeError {
             TypeError::InvalidDeclWithTypeParams { .. } => "Invalid type declared with type params",
             TypeError::EnumValuesMustBeAscending { .. } => "Enumeration values must be ascending",
             TypeError::InvalidExplicitSpec { .. } => "Invalid explicit specialization",
+            
+            TypeError::InvalidTagItem { .. } => "Invalid tag type",
         })
     }
 
@@ -1274,6 +1282,12 @@ impl fmt::Display for TypeError {
             TypeError::InvalidExplicitSpec { target, .. } => {
                 write!(f, "{target} cannot be explicitly specialized with type arguments")
             }
+            
+            TypeError::InvalidTagItem { reason, .. } => {
+                match reason {
+                    InvalidTagReason::InvalidType(ty) =>  write!(f, "type {} is not valid for a tag item", ty),
+                }
+            }
         }
     }
 }
@@ -1338,4 +1352,9 @@ pub struct MismatchedMethodDecl {
 pub enum InvalidBaseTypeReason {
     NotInterface,
     Forward,
+}
+
+#[derive(Debug, Clone)]
+pub enum InvalidTagReason {
+    InvalidType(Type),
 }

@@ -17,6 +17,7 @@ use common::span::Span;
 use common::span::Spanned;
 use derivative::*;
 use std::fmt;
+use crate::token_tree::DelimitedGroup;
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
@@ -82,10 +83,7 @@ pub struct ObjectCtorArgs<A: Annotation = Span> {
 
 impl ObjectCtorArgs<Span> {
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
-        let args_group = match tokens.match_one(DelimiterPair::Bracket)? {
-            TokenTree::Delimited(group) => group,
-            _ => unreachable!(),
-        };
+        let args_group = DelimitedGroup::parse(tokens, DelimiterPair::Bracket)?;
 
         let open = args_group.open.clone();
         let close = args_group.close.clone();

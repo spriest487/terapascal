@@ -3,10 +3,11 @@ mod test;
 
 use crate::ast;
 use crate::typ::ast::cast::implicit_conversion;
+use crate::typ::ast::create_default_literal;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_type_args;
-use crate::typ::ast::create_default_literal;
 use crate::typ::ast::Expr;
+use crate::typ::ArrayType;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
@@ -20,8 +21,6 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::ValueKind;
-use crate::typ::ArrayType;
 use common::span::Span;
 use common::span::Spanned;
 use linked_hash_map::LinkedHashMap;
@@ -48,67 +47,85 @@ pub fn typecheck_object_ctor(
         ctx
     )?;
 
+    let args = typecheck_object_ctor_args(&ctor_ty, &ctor.annotation, &ctor.args, ctx)?;
+
+    Ok(ObjectCtor {
+        type_expr,
+        args,
+        type_args: ty_args,
+        annotation: Value::new_temp_val(ctor_ty, span),
+    })
+}
+
+pub fn typecheck_object_ctor_args(
+    ctor_ty: &Type,
+    ctor_span: &Span,
+    src: &ast::ObjectCtorArgs,
+    ctx: &mut Context
+) -> TypeResult<ObjectCtorArgs> {
     let mut expect_fields: LinkedHashMap<_, _> = ctor_ty
         .fields(ctx)
         .map_err(|err| TypeError::NameError {
             err,
-            span: span.clone(),
+            span: ctor_span.clone(),
         })?
         .into_iter()
         .map(|member| (member.ident, (member.ty, member.span, member.access)))
         .collect();
 
-    let mut fields: Vec<ObjectCtorMember> = Vec::new();
+    let mut members: Vec<ObjectCtorMember> = Vec::new();
 
-    for arg in &ctor.args.members {
+    for member in &src.members {
         // check for duplicate items for the same field
-        let find_prev = fields
+        let find_prev = members
             .iter()
-            .find(|a| a.ident == arg.ident);
+            .find(|a| a.ident == member.ident);
 
         if let Some(prev) = find_prev {
             return Err(TypeError::DuplicateNamedArg {
-                name: arg.ident.clone(),
-                span: arg.span().clone(),
+                name: member.ident.clone(),
+                span: member.span().clone(),
                 previous: prev.span().clone(),
             });
         }
 
-        let (member_ty, _member_span, member_access) = match expect_fields.remove(&arg.ident) {
+        let (member_ty, _member_span, member_access) = match expect_fields.remove(&member.ident) {
             Some(member) => member,
             None => {
                 // ctor has a named argument which doesn't exist in the type
                 let err = NameError::MemberNotFound {
-                    base: NameContainer::Type(ctor_ty),
-                    member: arg.ident.clone(),
+                    base: NameContainer::Type(ctor_ty.clone()),
+                    member: member.ident.clone(),
                 };
                 return Err(TypeError::NameError {
-                    span: arg.span().clone(),
+                    span: member.span().clone(),
                     err,
                 });
             },
         };
-        
+
         if ctor_ty.get_current_access(ctx) < member_access {
             return Err(TypeError::TypeMemberInaccessible {
-                span: arg.span.clone(),
+                span: member.span.clone(),
                 access: member_access,
-                ty: ctor_ty,
-                member: arg.ident.clone(),
+                ty: ctor_ty.clone(),
+                member: member.ident.clone(),
             });
         }
 
         let value = implicit_conversion(
-            typecheck_expr(&arg.value, &member_ty, ctx)?,
+            typecheck_expr(&member.value, &member_ty, ctx)?,
             &member_ty,
             ctx,
         )?;
 
-        fields.push(ObjectCtorMember {
-            ident: arg.ident.clone(),
+        let member = ObjectCtorMember {
+            ident: member.ident.clone(),
             value,
-            span: arg.span.clone(),
-        });
+            span: member.span.clone(),
+        };
+
+        members.push(member);
     }
 
     // any remaining members must have valid default values
@@ -119,10 +136,10 @@ pub fn typecheck_object_ctor(
             .map_err(|e| TypeError::from_name_err(e, member_span.clone()))?;
 
         if has_default {
-            fields.push(ObjectCtorMember {
+            members.push(ObjectCtorMember {
                 ident: member_ident,
                 span: member_span.clone(),
-                value: create_default_literal(member_ty, ctor.annotation.clone()),
+                value: create_default_literal(member_ty, ctor_span.clone()),
             });
         } else {
             missing_members.push(member_ident);
@@ -131,31 +148,18 @@ pub fn typecheck_object_ctor(
 
     if !missing_members.is_empty() {
         return Err(TypeError::CtorMissingMembers {
-            ctor_ty,
-            span: ctor.annotation.clone(),
+            ctor_ty: ctor_ty.clone(),
+            span: ctor_span.clone(),
             members: missing_members,
         });
     }
 
     let args = ObjectCtorArgs {
-        span: ctor.args.span.clone(),
-        members: fields,
+        span: src.span.clone(),
+        members,
     };
-
-    let annotation = TypedValue {
-        ty: ctor_ty,
-        value_kind: ValueKind::Temporary,
-        span,
-        decl: None,
-    }
-    .into();
-
-    Ok(ObjectCtor {
-        type_expr,
-        args,
-        type_args: ty_args,
-        annotation,
-    })
+    
+    Ok(args)
 }
 
 fn typecheck_object_ctor_type(

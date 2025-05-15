@@ -1,16 +1,15 @@
-use crate::ast::Annotation;
-use crate::ast::Expr;
 use crate::ast::IdentPath;
-use crate::ast::ObjectCtor;
+use crate::ast::IdentTypeName;
+use crate::ast::TypeName;
+use crate::ast::Annotation;
 use crate::ast::ObjectCtorArgs;
-use crate::ast::ObjectCtorMember;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::token_tree::DelimitedGroup;
-use crate::{DelimiterPair, Separator};
 use crate::TokenStream;
+use crate::{DelimiterPair, Separator};
 use common::span::Span;
 use common::span::Spanned;
 use derivative::Derivative;
@@ -18,7 +17,7 @@ use derivative::Derivative;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct Tag<A: Annotation = Span> {
-    pub items: Vec<ObjectCtor<A>>,
+    pub items: Vec<TagItem<A>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -51,25 +50,9 @@ impl Parse for Tag<Span> {
         let mut items = Vec::new();
 
         loop {
-            let tag_type_path = IdentPath::parse(&mut tag_tokens)?;
+            let item = TagItem::parse(&mut tag_tokens)?;
 
-            let ctor_group = DelimitedGroup::parse(&mut tag_tokens, DelimiterPair::Bracket)?;
-
-            let ctor_span = ctor_group.span.clone();
-            let mut ctor_tokens = ctor_group.to_inner_tokens();
-
-            let members = ObjectCtorMember::parse_seq(&mut ctor_tokens)?;
-            ctor_tokens.finish()?;
-
-            items.push(ObjectCtor {
-                annotation: tag_type_path.first().span.to(&ctor_span),
-                type_expr: Some(Expr::from(tag_type_path)),
-                type_args: None,
-                args: ObjectCtorArgs {
-                    span: ctor_span,
-                    members,
-                },
-            });
+            items.push(item);
 
             if tag_tokens.match_one_maybe(Separator::Semicolon).is_none() {
                 break;
@@ -79,5 +62,34 @@ impl Parse for Tag<Span> {
         tag_tokens.finish()?;
 
         Ok(Tag { items, span })
+    }
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
+pub struct TagItem<A: Annotation = Span> {
+    pub tag_type: A::Type,
+    pub args: ObjectCtorArgs<A>,
+
+    pub span: Span,
+}
+
+impl TagItem {
+    pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
+        let tag_type = IdentPath::parse(tokens)?;
+        
+        let args = ObjectCtorArgs::parse(tokens)?;
+        let span = tag_type.span().to(&args.span);
+
+        Ok(Self {
+            tag_type: TypeName::Ident(IdentTypeName {
+                type_args: None,
+                span: tag_type.path_span().clone(),
+                ident: tag_type,
+                indirection: 0,
+            }),
+            args,
+            span,
+        })
     }
 }

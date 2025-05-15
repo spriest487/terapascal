@@ -10,15 +10,13 @@ use crate::ast::Literal;
 use crate::ast::MethodOwner;
 use crate::ast::SetDeclRange;
 use crate::ast::Visibility;
-use crate::typ::ast::const_eval_integer;
+use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::typecheck_expr;
-use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::InterfaceMethodDecl;
+use crate::typ::ast::{const_eval_integer, typecheck_object_ctor_args};
 use crate::typ::set::SetType;
-use crate::typ::typecheck_type;
-use crate::typ::ConstValue;
 use crate::typ::Context;
 use crate::typ::Def;
 use crate::typ::FunctionSig;
@@ -34,12 +32,14 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::MAX_FLAGS_BITS;
+use crate::typ::{typecheck_type, InvalidTagReason};
+use crate::typ::{ConstValue, Specializable};
 use crate::IntConstant;
 use common::span::Span;
 use common::span::Spanned;
 use std::borrow::Cow;
+use std::mem;
 use std::rc::Rc;
-use crate::typ::ast::const_eval::ConstEval;
 
 pub type StructDef = ast::StructDecl<Value>;
 pub type StructMemberDecl = ast::StructMemberDecl<Value>;
@@ -51,7 +51,9 @@ pub type AliasDecl = ast::AliasDecl<Value>;
 pub type EnumDecl = ast::EnumDecl<Value>;
 pub type EnumDeclItem = ast::EnumDeclItem<Value>;
 pub type SetDecl = ast::SetDecl<Value>;
+
 pub type Tag = ast::tag::Tag<Value>;
+pub type TagItem = ast::tag::TagItem<Value>;
 
 pub const VARIANT_TAG_TYPE: Type = Type::Primitive(Primitive::Int32);
 pub const SET_DEFAULT_VALUE_TYPE: Type = Type::Primitive(Primitive::UInt8);
@@ -110,33 +112,85 @@ fn typecheck_base_types(
     Ok(base_tys)
 }
 
-// this takes a &mut Context, but it should never actually modify the context! 
-// the expressions parsed within should be typename paths and literals only
-pub fn typecheck_tags(src_tags: &[ast::tag::Tag], ctx: &mut Context) -> TypeResult<Vec<Tag>> {
-    let mut tags = Vec::new();
-
-    for tag in src_tags {
+impl Tag {
+    // this takes a &mut Context, but it should never actually modify the context! 
+    // the expressions parsed within should be typename paths and literals only
+    pub fn typecheck(src_tag: &ast::tag::Tag, ctx: &mut Context) -> TypeResult<Tag> {
         let mut items = Vec::new();
         
-        for item in &tag.items {
-            assert_eq!(None, item.type_args);
-            assert!(item.type_expr.is_some());
-            for member in &item.args.members {
-                assert!(member.value.as_literal().is_some(), "the parser should only create tag constructors with constant member values");
-            }
-            
-            let item = typecheck_object_ctor(&item, item.span().clone(), &Type::Nothing, ctx)?;
+        // use a disposable branch context to ensure invalid statements/expressions that aren't
+        // just const evals here don't affect the outside context
+        let mut ctx = ctx.clone();
+
+        for item in &src_tag.items {
+            let item = TagItem::typecheck(item, &mut ctx)?;
             items.push(item);
         }
-        
-        tags.push(Tag {
-            span: tag.span.clone(),
+
+        Ok(Tag {
+            span: src_tag.span.clone(),
             items,
         })
     }
-    
-    Ok(tags)
-} 
+
+    pub fn typecheck_tags(src_tags: &[ast::tag::Tag], ctx: &mut Context) -> TypeResult<Vec<Tag>> {
+        let mut tags = Vec::new();
+
+        for tag in src_tags {
+            tags.push(Tag::typecheck(tag, ctx)?)
+        }
+
+        Ok(tags)
+    }
+}
+
+impl TagItem {
+    pub fn typecheck(
+        tag_item: &ast::tag::TagItem,
+        ctx: &mut Context
+    ) -> TypeResult<Self> {
+        let tag_type = typecheck_type(&tag_item.tag_type, ctx)?;
+        let span = tag_item.span.clone();
+        
+        if tag_type.is_unspecialized_generic() {
+            return Err(TypeError::InvalidTagItem {
+                reason: InvalidTagReason::InvalidType(tag_type.clone()),
+                span,
+            });
+        }
+        
+        if !matches!(tag_type, Type::Class(..)) {
+            return Err(TypeError::InvalidTagItem {
+                reason: InvalidTagReason::InvalidType(tag_type.clone()),
+                span,
+            });
+        }
+        
+        let mut args = typecheck_object_ctor_args(&tag_type, &span, &tag_item.args, ctx)?;
+
+        // all values used to initialize a tag must be const
+        for member in args.members.iter_mut() {
+            let Some(const_val_expr) = member.value.const_eval(ctx) else {
+                return Err(TypeError::InvalidConstExpr {
+                    expr: Box::new(member.value.clone()),
+                });
+            };
+
+            let member_ty = member.value.annotation().ty().into_owned();
+            let member_span = member.value.span().clone();
+
+            let mut lit_expr = Expr::Literal(const_val_expr, Value::new_temp_val(member_ty, member_span));
+
+            mem::swap(&mut lit_expr, &mut member.value);
+        }
+        
+        Ok(Self {
+            tag_type,
+            span,
+            args,
+        })
+    }
+}
 
 pub fn typecheck_struct_decl(
     name: Symbol,
@@ -145,7 +199,7 @@ pub fn typecheck_struct_decl(
     ctx: &mut Context,
 ) -> TypeResult<StructDef> {
     assert!(struct_def.tags.is_empty() || !struct_def.forward);
-    let tags = typecheck_tags(&struct_def.tags, ctx)?;
+    let tags = Tag::typecheck_tags(&struct_def.tags, ctx)?;
     
     let self_ty = Type::from_struct_type(name.clone(), struct_def.kind);
 
@@ -344,7 +398,7 @@ pub fn typecheck_iface(
     ctx: &mut Context,
 ) -> TypeResult<InterfaceDecl> {
     assert!(iface.tags.is_empty() || !iface.forward);
-    let tags = typecheck_tags(&iface.tags, ctx)?;
+    let tags = Tag::typecheck_tags(&iface.tags, ctx)?;
 
     let iface_ty = Type::interface(name.clone());
 
@@ -399,7 +453,7 @@ pub fn typecheck_variant(
     ctx: &mut Context,
 ) -> TypeResult<VariantDef> {
     assert!(variant_def.tags.is_empty() || !variant_def.forward);
-    let tags = typecheck_tags(&variant_def.tags, ctx)?;
+    let tags = Tag::typecheck_tags(&variant_def.tags, ctx)?;
 
     if variant_def.cases.is_empty() {
         return Err(TypeError::EmptyVariantDecl(Box::new(variant_def.clone())));
