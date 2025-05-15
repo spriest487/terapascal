@@ -1,4 +1,3 @@
-use crate::ast::const_eval::ConstEval;
 use crate::ast::Annotation;
 use crate::ast::Expr;
 use crate::ast::IdentPath;
@@ -7,7 +6,6 @@ use crate::ast::ObjectCtorArgs;
 use crate::ast::ObjectCtorMember;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Parse;
-use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::token_tree::DelimitedGroup;
@@ -15,7 +13,6 @@ use crate::DelimiterPair;
 use crate::TokenStream;
 use common::span::Span;
 use common::span::Spanned;
-use common::TracedError;
 use derivative::Derivative;
 
 #[derive(Clone, Eq, Derivative)]
@@ -61,18 +58,8 @@ impl Parse for Tag<Span> {
             let ctor_span = ctor_group.span.clone();
             let mut ctor_tokens = ctor_group.to_inner_tokens();
 
-            let mut members = ObjectCtorMember::parse_seq(&mut ctor_tokens)?;
+            let members = ObjectCtorMember::parse_seq(&mut ctor_tokens)?;
             ctor_tokens.finish()?;
-            
-            // ensure all members are literals
-            for member in &mut members {
-                let const_value = member.value.const_eval()
-                    .ok_or_else(|| TracedError::from(ParseError::TagInitExprMustBeConst {
-                        span: member.value.span().clone()
-                    }))?;
-                
-                member.value = Expr::Literal(const_value, member.span.clone());
-            }
 
             items.push(ObjectCtor {
                 annotation: tag_type_path.first().span.to(&ctor_span),

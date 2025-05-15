@@ -39,6 +39,7 @@ use common::span::Span;
 use common::span::Spanned;
 use std::borrow::Cow;
 use std::rc::Rc;
+use crate::typ::ast::const_eval::ConstEval;
 
 pub type StructDef = ast::StructDecl<Value>;
 pub type StructMemberDecl = ast::StructMemberDecl<Value>;
@@ -480,7 +481,7 @@ pub fn typecheck_enum_decl(
             Some(val_expr) => {
                 let val_expr =
                     typecheck_expr(&val_expr, &Type::Primitive(Primitive::NativeInt), ctx)?;
-                let item_ord_val = const_eval_integer(&val_expr)?.as_i128();
+                let item_ord_val = const_eval_integer(&val_expr, ctx)?.as_i128();
 
                 if let Some((prev_ident, prev_ord_val)) = &prev_item {
                     if item_ord_val <= *prev_ord_val {
@@ -538,8 +539,8 @@ impl SetDecl {
                 
                 to.annotation().expect_value(&val_ty)?;
                 
-                let from_num = get_set_range_expr_val(&from, range_span)?;
-                let to_num = get_set_range_expr_val(&to, range_span)?;
+                let from_num = get_set_range_expr_val(&from, range_span, ctx)?;
+                let to_num = get_set_range_expr_val(&to, range_span, ctx)?;
                 
                 if from_num.as_i128() > to_num.as_i128() {
                     return Err(TypeError::SetValuesMustBeSequential {
@@ -649,7 +650,7 @@ impl SetDecl {
         let mut min = None;
 
         for item in items {
-            let int_val = const_eval_integer(item)?.as_i128();
+            let int_val = const_eval_integer(item, ctx)?.as_i128();
 
             max = Some(max.map_or(int_val, |val| i128::max(val, int_val)));
             min = Some(min.map_or(int_val, |val| i128::min(val, int_val)));
@@ -739,8 +740,8 @@ fn get_set_type_range(range_ty: &Type, at: &Span, ctx: &Context) -> TypeResult<(
     }
 }
 
-fn get_set_range_expr_val(val: &Expr, at: &Span) -> TypeResult<IntConstant> {
-    let Some(val_lit) = val.const_eval() else {
+fn get_set_range_expr_val(val: &Expr, at: &Span, ctx: &Context) -> TypeResult<IntConstant> {
+    let Some(val_lit) = val.const_eval(ctx) else {
         return Err(TypeError::InvalidConstExpr { expr: Box::new(val.clone()) });
     };
     

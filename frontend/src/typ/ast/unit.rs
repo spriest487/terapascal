@@ -1,11 +1,11 @@
 use crate::ast;
-use crate::ast::const_eval::ConstEval;
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionName;
 use crate::ast::IdentPath;
 use crate::ast::StructKind;
 use crate::ast::TypeAnnotation;
 use crate::ast::Visibility;
+use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::expr::expect_stmt_initialized;
 use crate::typ::ast::typecheck_alias;
 use crate::typ::ast::typecheck_enum_decl;

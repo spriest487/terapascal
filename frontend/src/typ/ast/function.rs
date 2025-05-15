@@ -4,7 +4,6 @@ mod decl_mod;
 
 pub use self::decl_mod::*;
 use crate::ast;
-use crate::ast::const_eval::ConstEval;
 use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
@@ -45,6 +44,7 @@ use std::fmt;
 use std::fmt::Formatter;
 use std::ops::Deref;
 use std::rc::Rc;
+use crate::typ::ast::const_eval::ConstEval;
 
 pub const SELF_PARAM_NAME: &str = "self";
 pub const SELF_TY_NAME: &str = "Self";
