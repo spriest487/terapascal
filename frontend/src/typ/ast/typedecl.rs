@@ -159,6 +159,15 @@ impl TagItem {
             });
         }
         
+        let sized= tag_type.is_sized(ctx)
+            .map_err(|e| TypeError::from_name_err(e, tag_item.span.clone()))?; 
+        if !sized {
+            return Err(TypeError::InvalidTagItem { 
+                reason: InvalidTagReason::UnsizedType(tag_type.clone()),
+                span,
+            })
+        }
+        
         if !matches!(tag_type, Type::Class(..)) {
             return Err(TypeError::InvalidTagItem {
                 reason: InvalidTagReason::InvalidType(tag_type.clone()),

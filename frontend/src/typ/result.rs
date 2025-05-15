@@ -1286,6 +1286,7 @@ impl fmt::Display for TypeError {
             TypeError::InvalidTagItem { reason, .. } => {
                 match reason {
                     InvalidTagReason::InvalidType(ty) =>  write!(f, "type {} is not valid for a tag item", ty),
+                    InvalidTagReason::UnsizedType(ty) =>  write!(f, "size of type {} is not known in this context", ty),
                 }
             }
         }
@@ -1357,4 +1358,5 @@ pub enum InvalidBaseTypeReason {
 #[derive(Debug, Clone)]
 pub enum InvalidTagReason {
     InvalidType(Type),
+    UnsizedType(Type),
 }
