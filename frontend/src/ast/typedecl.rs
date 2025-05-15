@@ -12,6 +12,7 @@ pub use self::iface_decl::*;
 pub use self::set_decl::*;
 pub use self::struct_decl::*;
 pub use self::variant_decl::*;
+use crate::ast::tag::Tag;
 use crate::ast::unit::AliasDecl;
 use crate::ast::Ident;
 use crate::ast::Keyword;
@@ -27,8 +28,8 @@ use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
-use crate::Separator;
 use crate::DelimiterPair;
+use crate::Separator;
 use common::span::Span;
 use common::span::Spanned;
 use common::TracedError;
@@ -108,6 +109,11 @@ impl<A: Annotation> TypeDeclItem<A> {
             TypeDeclItem::Set(set_decl) => &set_decl.name,
         }
     }
+
+    pub fn start_matcher() -> Matcher {
+        // ident or tag group
+        Matcher::AnyIdent | DelimiterPair::SquareBracket
+    }
 }
 
 impl ParseSeq for TypeDeclItem<Span> {
@@ -124,7 +130,7 @@ impl ParseSeq for TypeDeclItem<Span> {
             return false;
         }
 
-        tokens.match_one(Matcher::AnyIdent).is_some()
+        tokens.match_one(Self::start_matcher()).is_some()
     }
 }
 
@@ -211,6 +217,8 @@ impl TypeDeclName {
 
 impl Parse for TypeDeclItem<Span> {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
+        let _tags = Tag::parse_seq(tokens)?;
+
         let name = TypeDeclName::parse(tokens)?;
         tokens.match_one(Operator::Equals)?;
 

@@ -177,6 +177,29 @@ impl<A: Annotation> From<AnonymousFunctionDef<A>> for Expr<A> {
     }
 }
 
+impl From<IdentPath> for Expr<Span> {
+    fn from(value: IdentPath) -> Self {
+        let mut part = value.into_iter();
+        
+        let first_part = part.next().unwrap();
+        let first_span = first_part.span.clone();
+        let mut expr = Expr::Ident(first_part, first_span);
+        
+        while let Some(next_part) = part.next() {
+            let next_span = next_part.span.clone();
+
+            expr = Expr::from(BinOp {
+                annotation: expr.span().to(&next_span),
+                lhs: expr,
+                rhs: Expr::Ident(next_part, next_span),
+                op: Operator::Period,
+            });
+        }
+        
+        expr
+    }
+}
+
 impl<A: Annotation> Expr<A> {
     pub fn name(&self) -> &str {
         match self {
