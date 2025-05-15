@@ -220,7 +220,9 @@ impl FunctionDecl<Span> {
             span = span.to(last_mod.span());
         }
 
-        let where_clause_tt = tokens.look_ahead().match_one(Keyword::Where);
+        let mut ahead = tokens.look_ahead();
+        let where_clause_tt = ahead.match_one(Keyword::Where);
+
         let type_params = match (type_params_list, where_clause_tt) {
             (Some(type_params_list), Some(..)) => {
                 let mut where_clause = WhereClause::parse(tokens)?;
@@ -266,7 +268,7 @@ impl FunctionDecl<Span> {
             // the function has no type param list so it's an error to write a where clause here
             (None, Some(where_clause_tt)) => {
                 let expected = None;
-                let err = ParseError::UnexpectedToken(Box::new(where_clause_tt), expected);
+                let err = ParseError::UnexpectedToken(Box::new(where_clause_tt.clone()), expected);
 
                 return Err(TracedError::trace(err));
             },

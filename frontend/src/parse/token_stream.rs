@@ -89,36 +89,10 @@ impl TokenStream {
     /// consume it and return `None`. If the matcher does match the next token, consume it and
     /// return it as `Some`.
     pub fn match_one_maybe(&mut self, matcher: impl Into<Matcher>) -> Option<TokenTree> {
-        self.look_ahead().match_one(matcher).map(|tt| {
+        self.look_ahead().match_one(matcher).cloned().map(|tt| {
             self.advance(1);
             tt
         })
-    }
-
-    /// match an optional line terminator. a token on the next line will satisfy the
-    /// match but will not be consumed, and the end of the input will be treated as a
-    /// success
-    pub fn match_or_endl(&mut self, matcher: impl Into<Matcher>) -> ParseResult<()> {
-        let matcher = matcher.into();
-
-        match self.look_ahead().next() {
-            // EOF counts as an endl
-            None => Ok(()),
-
-            // endl - next token is on a new line
-            Some(ref token) if token.span().start.line != self.context.end.line => Ok(()),
-
-            // found separator token - next token is the one beyond that
-            Some(ref token) if matcher.is_match(token) => {
-                self.next();
-                Ok(())
-            }
-
-            Some(unexpected) => Err(TracedError::trace(ParseError::UnexpectedToken(
-                Box::new(unexpected),
-                Some(matcher),
-            ))),
-        }
     }
 
     pub fn match_sequence(
@@ -182,8 +156,8 @@ pub struct LookAheadTokenStream<'tokens> {
 }
 
 impl<'tokens> LookAheadTokenStream<'tokens> {
-    pub fn next(&mut self) -> Option<TokenTree> {
-        let next_token = self.tokens.tokens.get(self.tokens.position + self.offset)?.clone();
+    pub fn next(&mut self) -> Option<&TokenTree> {
+        let next_token = self.tokens.tokens.get(self.tokens.position + self.offset)?;
         self.offset += 1;
         Some(next_token)
     }
@@ -192,7 +166,7 @@ impl<'tokens> LookAheadTokenStream<'tokens> {
         self.tokens.tokens[self.tokens.position + self.offset].span()
     }
 
-    pub fn match_one(&mut self, matcher: impl Into<Matcher>) -> Option<TokenTree> {
+    pub fn match_one(&mut self, matcher: impl Into<Matcher>) -> Option<&TokenTree> {
         let matcher = matcher.into();
 
         self.next()
@@ -205,10 +179,12 @@ impl<'tokens> LookAheadTokenStream<'tokens> {
         let matcher = matcher.into();
         match self.next() {
             Some(ref tt) if matcher.is_match(&tt) => Ok(()),
+
             Some(unexpected) => Err(TracedError::trace(ParseError::UnexpectedToken(
-                Box::new(unexpected),
+                Box::new(unexpected.clone()),
                 Some(matcher),
             ))),
+
             None => Err(TracedError::trace(ParseError::UnexpectedEOF(
                 matcher,
                 self.context().clone(),
@@ -219,30 +195,31 @@ impl<'tokens> LookAheadTokenStream<'tokens> {
     pub fn match_sequence(
         &mut self,
         sequence: impl Into<SequenceMatcher>,
-    ) -> Option<Vec<TokenTree>> {
+    ) -> Option<&[TokenTree]> {
         let mut sequence = sequence.into().into_iter();
-        let mut matches = Vec::new();
+        
+        let start_offset = self.offset;
 
         loop {
             let seq_next_matcher = match sequence.next() {
                 Some(matcher) => matcher,
                 None => {
                     // reached end of sequence without incident
-                    break Some(matches);
+                    let start_pos = self.tokens.position + start_offset;
+                    let end_pos = self.tokens.position + self.offset;
+
+                    break Some(&self.tokens.tokens[start_pos..end_pos]);
                 }
             };
 
             match self.next() {
                 Some(peeked_token) => {
-                    if seq_next_matcher.is_match(&peeked_token) {
-                        matches.push(peeked_token);
-                    } else {
-                        // no match
+                    if !seq_next_matcher.is_match(&peeked_token) {
                         break None;
                     }
                 }
                 None => {
-                    // there are less tokens in the stream than in the sequence
+                    // there are fewer tokens in the stream than in the sequence
                     break None;
                 }
             };

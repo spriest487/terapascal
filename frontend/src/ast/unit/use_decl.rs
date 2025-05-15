@@ -48,10 +48,12 @@ impl UseDecl {
 
         let span = match items.last() {
             None => {
-                return Err(TracedError::trace(match tokens.look_ahead().next() {
+                let error = match tokens.look_ahead().next() {
                     None => ParseError::UnexpectedEOF(Matcher::AnyIdent, kw.span().clone()),
-                    Some(x) => ParseError::UnexpectedToken(Box::new(x), Some(Matcher::AnyIdent)),
-                }));
+                    Some(x) => ParseError::UnexpectedToken(Box::new(x.clone()), Some(Matcher::AnyIdent)),
+                };
+
+                return Err(TracedError::trace(error));
             },
 
             Some(last_item) => kw.span().to(last_item.span()),

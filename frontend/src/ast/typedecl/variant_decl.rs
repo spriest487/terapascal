@@ -143,9 +143,10 @@ impl VariantDecl<Span> {
 
                 let func_ahead = tokens
                     .look_ahead()
-                    .match_one(type_method_start());
+                    .match_one(type_method_start())
+                    .is_some();
 
-                if func_ahead.is_none() {
+                if !func_ahead {
                     break;
                 }
 

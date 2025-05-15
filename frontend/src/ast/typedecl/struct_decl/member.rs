@@ -110,16 +110,17 @@ pub fn parse_struct_members(
             access = new_access;
         }
         
-        let next_start = tokens.look_ahead().next();
+        let mut ahead = tokens.look_ahead();
+        let next_start = ahead.next();
         
         match next_start {
             Some(TokenTree::Keyword { kw: Keyword::End, .. }) => {
                 break;
             }
 
-            Some(tt) if !struct_member_start().is_match(&tt) => {
+            Some(tt) if !struct_member_start().is_match(tt) => {
                 let err = ParseError::UnexpectedToken(
-                    Box::new(tt),
+                    Box::new(tt.clone()),
                     Some(struct_member_start() | Keyword::End)
                 );
                 return Err(TracedError::trace(err));

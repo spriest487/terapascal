@@ -294,13 +294,15 @@ impl Parse for Stmt<Span> {
             },
 
             Some(tt) if tt.is_keyword(Keyword::Break) => {
+                let span = tt.span().clone();
                 tokens.advance(1);
-                Ok(Stmt::Break(tt.into_span()))
+                Ok(Stmt::Break(span))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Continue) => {
+                let span = tt.span().clone();
                 tokens.advance(1);
-                Ok(Stmt::Continue(tt.into_span()))
+                Ok(Stmt::Continue(span))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Exit) => {
@@ -357,7 +359,7 @@ impl Parse for Stmt<Span> {
 
             None => Err(TracedError::trace(match tokens.look_ahead().next() {
                 Some(unexpected) => {
-                    ParseError::UnexpectedToken(Box::new(unexpected), Some(stmt_start))
+                    ParseError::UnexpectedToken(Box::new(unexpected.clone()), Some(stmt_start))
                 },
                 None => ParseError::UnexpectedEOF(stmt_start, tokens.context().clone()),
             })),

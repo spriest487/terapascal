@@ -153,29 +153,33 @@ impl Parse for TypeName {
             Some(TokenTree::Ident(..)) => Self::parse_named_type(tokens, indirection, indirection_span.as_ref()),
 
             Some(array_kw) if array_kw.is_keyword(Keyword::Array) => {
+                let kw_span = array_kw.span().clone();
                 tokens.advance(1);
-                Self::parse_array_type(tokens, array_kw.span(), indirection, indirection_span)
+                Self::parse_array_type(tokens, &kw_span, indirection, indirection_span)
             },
 
             Some(fn_kw)
                 if fn_kw.is_keyword(Keyword::Function) || fn_kw.is_keyword(Keyword::Procedure) =>
             {
+                let kw_span = fn_kw.span().clone();
                 tokens.advance(1);
-                Self::parse_function_type(tokens, fn_kw.into_span(), indirection, indirection_span)
+                Self::parse_function_type(tokens, kw_span, indirection, indirection_span)
             },
             
             Some(weak_kw) if weak_kw.is_keyword(Keyword::Weak) => {
+                let kw_span = weak_kw.span().clone();
+                
                 tokens.advance(1);
                 let weak_ty = Self::parse(tokens)?;
                 
                 // a type can't be "weak weak"
                 if let Some(next_weak) = tokens.look_ahead().match_one(Keyword::Weak) {
                     let expected = Some(start_non_weak_matcher());
-                    let err = ParseError::UnexpectedToken(Box::new(next_weak), expected);
+                    let err = ParseError::UnexpectedToken(Box::new(next_weak.clone()), expected);
                     return Err(TracedError::trace(err))
                 }
 
-                let span = weak_kw.into_span().to(weak_ty.span());
+                let span = kw_span.to(weak_ty.span());
                 
                 Ok(TypeName::Weak(Box::new(weak_ty), span))
             }

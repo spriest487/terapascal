@@ -267,7 +267,7 @@ fn parse_unit_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<Un
 
         Some(unexpected_tt) => {
             let err = ParseError::UnexpectedToken(
-                Box::new(unexpected_tt),
+                Box::new(unexpected_tt.clone()),
                 Some(UnitDecl::start_matcher()),
             );
             return Err(TracedError::trace(err));

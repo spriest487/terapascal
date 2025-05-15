@@ -164,9 +164,10 @@ fn parse_block_stmts(
                 // always valid as statements regardless of type, so in some cases the block
                 // output can't be determined until typechecking
                 err @ ParseError::IsExpr(..) => {
+                    let mut ahead = tokens.look_ahead();
+                    
                     // if there's more statements after this, we can't use it as the output
-                    let stmt_after_tokens = tokens
-                        .look_ahead()
+                    let stmt_after_tokens = ahead
                         .match_sequence(Separator::Semicolon + Matcher::AnyToken);
 
                     if stmt_after_tokens.is_some() {

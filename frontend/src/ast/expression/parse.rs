@@ -226,7 +226,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
                         let expected = Matcher::ExprOperandStart;
                         return Err(TracedError::trace(match self.tokens.look_ahead().next() {
                             Some(unexpected) => {
-                                ParseError::UnexpectedToken(Box::new(unexpected), Some(expected))
+                                ParseError::UnexpectedToken(Box::new(unexpected.clone()), Some(expected))
                             },
                             None => {
                                 let after = self.tokens.context().clone();
@@ -250,6 +250,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
                 match group.delim {
                     // operand is a () group: must be a sub-expr or unnamed ctor
                     DelimiterPair::Bracket => {
+                        let group = group.clone();
                         self.parse_bracket_group(group)?;
                     },
 
@@ -447,7 +448,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
     fn parse_invocation(&mut self, type_args: Option<TypeArgList>) -> ParseResult<()> {
         let match_arg_list = Matcher::from(DelimiterPair::Bracket);
         
-        let mut inner_tokens = match self.tokens.look_ahead().next() {
+        let mut inner_tokens = match self.tokens.look_ahead().next().cloned() {
             Some(TokenTree::Delimited(group)) => {
                 group.to_inner_tokens()
             },
