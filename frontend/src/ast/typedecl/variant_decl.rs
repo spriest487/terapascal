@@ -1,4 +1,6 @@
-use crate::ast::{parse_implements_clause, type_method_start, MethodOwner};
+use crate::ast::parse_implements_clause;
+use crate::ast::tag::Tag;
+use crate::ast::type_method_start;
 use crate::ast::type_name::TypeName;
 use crate::ast::Access;
 use crate::ast::Annotation;
@@ -6,10 +8,12 @@ use crate::ast::FunctionDecl;
 use crate::ast::Ident;
 use crate::ast::Keyword;
 use crate::ast::MethodDecl;
+use crate::ast::MethodOwner;
 use crate::ast::TypeDeclName;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
+use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
@@ -26,6 +30,8 @@ use std::rc::Rc;
 pub struct VariantDecl<A: Annotation> {
     pub name: Rc<A::Name>,
     pub forward: bool,
+
+    pub tags: Vec<Tag<A>>,
     
     pub cases: Vec<VariantCase<A>>,
 
@@ -109,15 +115,21 @@ impl<A: Annotation> VariantDecl<A> {
 }
 
 impl VariantDecl<Span> {
-    pub fn parse(tokens: &mut TokenStream, name: TypeDeclName) -> ParseResult<Self> {
+    pub fn parse(tokens: &mut TokenStream, name: TypeDeclName, tags: Vec<Tag>) -> ParseResult<Self> {
         let kw = tokens.match_one(Keyword::Variant)?;
 
         // the last type in a section can never be forward, so every legal forward declaration
         // will end with a semicolon
         if tokens.look_ahead().match_one(Separator::Semicolon).is_some() {
+            if !tags.is_empty() {
+                return Err(ParseError::forward_decl_tags(name.span, &tags).into());
+            }
+            
             Ok(VariantDecl {
                 name: Rc::new(name),
                 forward: true,
+
+                tags: Vec::new(),
                 
                 cases: Vec::new(),
                 
@@ -165,6 +177,9 @@ impl VariantDecl<Span> {
 
             Ok(VariantDecl {
                 name: Rc::new(name),
+
+                tags,
+
                 forward: false,
                 cases,
                 span: kw.span().to(end_kw.span()),

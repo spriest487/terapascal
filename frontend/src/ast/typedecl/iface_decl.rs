@@ -17,6 +17,7 @@ use common::span::Spanned;
 use derivative::*;
 use std::fmt;
 use std::rc::Rc;
+use crate::ast::tag::Tag;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct InterfaceMethodDecl<A: Annotation> {
@@ -66,6 +67,8 @@ impl ParseSeq for InterfaceMethodDecl<Span> {
 #[derivative(Debug, PartialEq, Hash)]
 pub struct InterfaceDecl<A: Annotation> {
     pub name: A::Name,
+    pub tags: Vec<Tag<A>>,
+    
     pub methods: Vec<InterfaceMethodDecl<A>>,
 
     pub supers: Vec<A::Type>,
@@ -85,14 +88,24 @@ impl<A: Annotation> InterfaceDecl<A> {
 }
 
 impl InterfaceDecl<Span> {
-    pub fn parse(tokens: &mut TokenStream, name: TypeDeclName) -> ParseResult<Self> {
+    pub fn parse(
+        tokens: &mut TokenStream,
+        name: TypeDeclName,
+        tags: Vec<Tag>
+    ) -> ParseResult<Self> {
         let iface_kw = tokens.match_one(Keyword::Interface)?;
         
         // the last type in a section can never be forward, so every legal forward declaration
         // will end with a semicolon
         if tokens.look_ahead().match_one(Separator::Semicolon).is_some() {
+            if !tags.is_empty() {
+                return Err(ParseError::forward_decl_tags(name.span, &tags).into())
+            }
+
             Ok(InterfaceDecl {
                 name,
+                tags: Vec::new(),
+
                 supers: Vec::new(),
                 span: iface_kw.into_span(),
                 forward: true,
@@ -118,6 +131,7 @@ impl InterfaceDecl<Span> {
 
             Ok(InterfaceDecl {
                 name,
+                tags,
                 supers,
                 span: iface_kw.span().to(end.span()),
                 forward: false,

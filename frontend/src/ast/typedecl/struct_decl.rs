@@ -1,11 +1,13 @@
 mod member;
 
 use crate::ast::parse_implements_clause;
+use crate::ast::tag::Tag;
 use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::Ident;
 use crate::ast::MethodOwner;
 use crate::ast::TypeDeclName;
+use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::Keyword;
@@ -34,6 +36,8 @@ pub enum StructKind {
 pub struct StructDecl<A: Annotation = Span> {
     pub kind: StructKind,
     pub name: A::Name,
+
+    pub tags: Vec<Tag<A>>,
     
     pub packed: bool,
     
@@ -71,7 +75,7 @@ impl<A: Annotation> MethodOwner<A> for StructDecl<A> {
 } 
 
 impl StructDecl<Span> {
-    pub fn parse(tokens: &mut TokenStream, name: TypeDeclName) -> ParseResult<Self> {
+    pub fn parse(tokens: &mut TokenStream, name: TypeDeclName, tags: Vec<Tag>) -> ParseResult<Self> {
         let packed_kw = tokens.match_one_maybe(Keyword::Packed);
         let packed = packed_kw.is_some();
         
@@ -95,10 +99,16 @@ impl StructDecl<Span> {
         // the last type in a section can never be forward, so every legal forward declaration
         // will end with a semicolon
         if tokens.look_ahead().match_one(Separator::Semicolon).is_some() {
+            if !tags.is_empty() {
+                return Err(ParseError::forward_decl_tags(name.span, &tags).into());
+            }
+            
             Ok(StructDecl {
                 kind,
                 name,
                 packed,
+                tags: Vec::new(),
+
                 forward: true,
                 implements: Vec::new(),
                 
@@ -131,6 +141,7 @@ impl StructDecl<Span> {
                 kind,
                 name,
                 packed,
+                tags,
                 forward: false,
                 implements,
                 fields,

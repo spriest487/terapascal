@@ -161,13 +161,17 @@ impl ParseSeq for CollectionCtorElement<Span> {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Hash, Debug)]
+#[derive(Eq, Clone, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct ObjectCtor<A: Annotation = Span> {
     pub type_expr: Option<Expr<A>>,
     
     pub args: ObjectCtorArgs<A>,
     pub type_args: Option<TypeArgList<A>>,
 
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub annotation: A,
 }
 

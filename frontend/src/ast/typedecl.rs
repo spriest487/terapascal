@@ -14,14 +14,15 @@ pub use self::struct_decl::*;
 pub use self::variant_decl::*;
 use crate::ast::tag::Tag;
 use crate::ast::unit::AliasDecl;
+use crate::ast::Annotation;
+use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::Keyword;
 use crate::ast::Operator;
 use crate::ast::TypeList;
 use crate::ast::TypeName;
 use crate::ast::TypeParam;
-use crate::ast::Annotation;
-use crate::ast::FunctionDeclKind;
+use crate::parse::InvalidTagLocation;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -218,7 +219,7 @@ impl TypeDeclName {
 
 impl Parse for TypeDeclItem<Span> {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
-        let _tags = Tag::parse_seq(tokens)?;
+        let tags = Tag::parse_seq(tokens)?;
 
         let name = TypeDeclName::parse(tokens)?;
         tokens.match_one(Operator::Equals)?;
@@ -228,33 +229,57 @@ impl Parse for TypeDeclItem<Span> {
 
         match tokens.look_ahead().next() {
             Some(ref tt) if struct_kw_matcher.is_match(tt) => {
-                let composite_decl = StructDecl::parse(tokens, name)?;
-                Ok(TypeDeclItem::Struct(Rc::new(composite_decl)))
+                let struct_decl = StructDecl::parse(tokens, name, tags)?;
+                Ok(TypeDeclItem::Struct(Rc::new(struct_decl)))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Interface) => {
-                let iface_decl = InterfaceDecl::parse(tokens, name)?;
+                let iface_decl = InterfaceDecl::parse(tokens, name, tags)?;
                 Ok(TypeDeclItem::Interface(Rc::new(iface_decl)))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Variant) => {
-                let variant_decl = VariantDecl::parse(tokens, name)?;
+                let variant_decl = VariantDecl::parse(tokens, name, tags)?;
                 Ok(TypeDeclItem::Variant(Rc::new(variant_decl)))
             },
             
             Some(tt) if tt.is_delimited(DelimiterPair::Bracket) => {
+                if !tags.is_empty() {
+                    return Err(ParseError::invalid_tag_loc(
+                        InvalidTagLocation::EnumDecl,
+                        tt.span().clone(),
+                        &tags
+                    ).into());
+                }
+                
                 let enum_decl = EnumDecl::parse(name, tokens)?;
                 Ok(TypeDeclItem::Enum(Rc::new(enum_decl)))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Set) => {
+                if !tags.is_empty() {
+                    return Err(ParseError::invalid_tag_loc(
+                        InvalidTagLocation::SetDecl,
+                        tt.span().clone(),
+                        &tags
+                    ).into());
+                }
+                
                 let set_decl = SetDecl::parse(name, tokens)?;
                 Ok(TypeDeclItem::Set(Rc::new(set_decl)))
             }
 
             // if it isn't a type def keyword, then it must be the name of an existing type to
             // declare an alias
-            Some(..) => {
+            Some(tt) => {
+                if !tags.is_empty() {
+                    return Err(ParseError::invalid_tag_loc(
+                        InvalidTagLocation::AliasDecl,
+                        tt.span().clone(),
+                        &tags
+                    ).into());
+                }
+
                 let alias_decl = AliasDecl::parse(tokens, name)?;
                 Ok(TypeDeclItem::Alias(Rc::new(alias_decl)))
             },
