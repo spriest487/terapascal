@@ -101,6 +101,7 @@ pub fn specialize_struct_def<'a>(
 
     Ok(Rc::new(StructDef {
         name: specialized_name,
+        tags: generic_def.tags.clone(),
         packed: generic_def.packed,
         implements,
         fields,
@@ -158,6 +159,7 @@ pub fn specialize_variant_def(
 
     Ok(VariantDef {
         name: Rc::new(parameterized_name),
+        tags: variant.tags.clone(),
         span: variant.span().clone(),
         forward: variant.forward,
         cases,
@@ -205,6 +207,7 @@ pub fn specialize_iface_def<'a>(
 
     Ok(Rc::new(InterfaceDecl {
         name: specialized_name,
+        tags: generic_def.tags.clone(),
         supers,
         methods,
         span: generic_def.span.clone(),
