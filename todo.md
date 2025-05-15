@@ -11,7 +11,6 @@
 * can't infer generic args from object ctors
 
 # improvements
-* go back to I prefix for interfaces
 * undefined symbol checking can probably be moved to IR codegen rather than during typechecking 
 * type cache so we don't need to construct/pass around type objects all the time in the typechecker (This is really slow)
 * make IR function src spans optional?? some builtins don't have them

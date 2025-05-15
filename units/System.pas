@@ -87,7 +87,7 @@ type
         name: String;
         owner: TypeInfo;
 
-        impl: Pointer; 
+        impl: Pointer;
     public
         function Owner: TypeInfo;
         function Name: String;
@@ -98,11 +98,16 @@ type
     TypeInfo = class
         name: String;
         methods: array of MethodInfo;
+        
+        tags: array of Object;
     public
         function Name: String;
         function Methods: array of MethodInfo;
         
         function FindMethod(methodName: String): Option[MethodInfo];
+
+        function FindTag(tagClass: TypeInfo): Option[Object]; overload;
+        function FindTag[TTag]: Option[TTag]; overload;
         
         class function LoadedTypes: array of TypeInfo;
         class function Find(typeName: String): Option[TypeInfo]; 
@@ -220,6 +225,28 @@ begin
         else
             Option.None;
     end;
+end;
+
+function TypeInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
+begin
+    if self.tags is not array of Object then 
+        exit Option.None;
+    
+    for var tag in self.tags do
+    begin
+        if TypeInfo.Get(tag) = tagClass then
+            exit Option.Some(tag);
+    end;
+    
+    Option.None
+end;
+
+function TypeInfo.FindTag[TTag]: Option[TTag]; overload;
+begin
+    match self.FindTag(typeinfo(TTag)) of
+        Option.Some tagObj: tagObj.Downcast[TTag]()
+        else Option.None
+    end
 end;
 
 function ByteToStr(i: Byte): String;
