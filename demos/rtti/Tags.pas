@@ -25,4 +25,12 @@ initialization
     var myTag := tagInstance.Downcast[MyCustomTag]().Get;
 
     WriteLn(myTag.Greeting + ', world!');
+    
+    // var secondTags := myClass.FindTags[MySecondTag](); // TODO: generic error
+    
+    var secondTags := myClass.FindTags(typeinfo(MySecondTag));
+    for var secondTag in secondTags do 
+    begin
+        WriteLn('second tag with value: ' + secondTag.Downcast[MySecondTag]().Get.Value);
+    end;
 end.

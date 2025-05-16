@@ -108,7 +108,10 @@ type
 
         function FindTag(tagClass: TypeInfo): Option[Object]; overload;
         function FindTag[TTag]: Option[TTag]; overload;
-        
+
+        function FindTags(tagClass: TypeInfo): array of Object; overload;
+        function FindTags[TTag]: array of TTag; overload;
+                
         class function LoadedTypes: array of TypeInfo;
         class function Find(typeName: String): Option[TypeInfo]; 
         class function Get(object: Object): TypeInfo;
@@ -249,6 +252,58 @@ begin
         Option.Some tagObj: tagObj.Downcast[TTag]()
         else Option.None
     end
+end;
+
+function TypeInfo.FindTags(tagClass: TypeInfo): array of Object; overload;
+begin
+    var count := 0;
+    for var tag in self.tags do begin
+        if TypeInfo.Get(tag) = tagClass then count += 1;
+    end;
+    
+    var tags: array of Object := [];
+    
+    unsafe
+    begin
+        tags.SetLength(count, default(Object));
+    end;
+    
+    count := 0;
+    for var tag in self.tags do begin
+         if TypeInfo.Get(tag) = tagClass then
+         begin
+             tags[count] := tag;
+             count += 1;
+         end;
+    end;
+    
+    tags
+end;
+
+function TypeInfo.FindTags[TTag]: array of TTag; overload;
+begin
+    var count := 0;
+    for var tag in self.tags do begin
+        if tag is TTag then count += 1;
+    end;
+    
+    var tags: array of TTag := [];
+    
+    unsafe
+    begin
+        tags.SetLength(count, default(TTag));
+    end;
+    
+    count := 0;
+    for var tag in self.tags do begin
+         if tag is TTag tagInstance then
+         begin
+             tags[count] := tagInstance;
+             count += 1;
+         end;
+    end;
+    
+    tags
 end;
 
 function ByteToStr(i: Byte): String;
