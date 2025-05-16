@@ -38,7 +38,7 @@ static STRING_STRUCT* FuncName(DataType i) { \
     unsigned char* chars = Alloc(len); \
     memcpy(chars, buf, len); \
     \
-    STRING_STRUCT* str = (STRING_STRUCT*) RcAlloc(&STRING_CLASS); \
+    STRING_STRUCT* str = (STRING_STRUCT*) RcAlloc(&STRING_CLASS, false); \
     STRING_LEN(str) = len; \
     STRING_CHARS(str) = chars; \
     \
@@ -100,7 +100,7 @@ static void Free(void* mem) {
 
 // RC runtime functions
 
-static void* RcAlloc(struct Class* class) {
+static void* RcAlloc(struct Class* class, bool immortal) {
     if (!class) {
         abort();
     }
@@ -247,7 +247,7 @@ static STRING_STRUCT* System_ReadLn(void) {
     }
 
     size_t len = strlen(buf);
-    STRING_STRUCT* str = (STRING_STRUCT*) RcAlloc(&STRING_CLASS);
+    STRING_STRUCT* str = (STRING_STRUCT*) RcAlloc(&STRING_CLASS, false);
     STRING_LEN(str) = (int32_t) len;
     STRING_CHARS(str) = System_GetMem(len);
     memcpy(STRING_CHARS(str), buf, len);
@@ -280,7 +280,7 @@ static void* System_ArraySetLengthInternal(
 
     struct DynArrayClass* array_class = (struct DynArrayClass*) arr_rc->class;
 
-    void* new_arr = RcAlloc(arr_rc->class);
+    void* new_arr = RcAlloc(arr_rc->class, false);
     array_class->alloc(new_arr, new_len, arr_rc, default_val);
 
     return new_arr;

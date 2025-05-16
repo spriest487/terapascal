@@ -36,6 +36,9 @@ pub struct Unit {
 
     string_literals: HashMap<ir::StringID, StringLiteral>,
     static_closures: Vec<ir::StaticClosure>,
+    
+    tag_arrays: Vec<(ir::TagLocation, usize)>,
+    tag_array_class: ir::TypeDefID,
 
     opts: Options,
 
@@ -190,6 +193,15 @@ impl Unit {
             .runtime_types()
             .map(|(ty, rtti)| (ty.clone(), rtti.clone()))
             .collect();
+        
+        let tag_arrays = metadata
+            .tag_counts()
+            .map(|(loc, count)| (*loc, *count))
+            .collect();
+        
+        let tag_array_class = metadata
+            .find_dyn_array_struct(&ir::ANY_TYPE)
+            .expect("object array type must exist");
 
         let mut module = Unit {
             functions: Vec::new(),
@@ -214,6 +226,9 @@ impl Unit {
             typeinfos: type_infos,
             methodinfo_array_class,
             pointer_array_class,
+            
+            tag_arrays,
+            tag_array_class,
         };
 
         for (class_id, _class_def) in metadata.class_defs() {
@@ -489,7 +504,10 @@ impl Unit {
         let method_class_ptr = Expr::Global(GlobalName::ClassInstance(ir::METHODINFO_ID))
             .addr_of();
 
-        let call_array_rcalloc = Expr::Function(FunctionName::RcAlloc).call([method_array_class_ptr]);
+        let call_array_rcalloc = Expr::Function(FunctionName::RcAlloc).call([
+            method_array_class_ptr,
+            Expr::LitBool(true),
+        ]);
 
         let mut typeinfo_index = 0i128;
         
@@ -498,14 +516,6 @@ impl Unit {
             init_stmts.push(Statement::Expr(Expr::assign(
                 Expr::named_var(METHODS_ARRAY_NAME),
                 call_array_rcalloc.clone()
-            )));
-
-            // make the dynarray immortal
-            init_stmts.push(Statement::Expr(Expr::assign(
-                Expr::named_var(METHODS_ARRAY_NAME)
-                    .arrow(FieldName::Rc)
-                    .field(FieldName::RcStrongCount),
-                Expr::LitInt(-1),
             )));
 
             // allocate the array memory
@@ -548,18 +558,13 @@ impl Unit {
 
                 let method_ptr_expr = Expr::named_var(METHODINFO_NAME).deref();
 
-                // *methodinfo = RcAlloc(..method info class)
+                // *methodinfo = RcAlloc(..method info class, immortal: true)
                 init_stmts.push(Statement::Expr(Expr::assign(
                     method_ptr_expr.clone(),
-                    Expr::Function(FunctionName::RcAlloc).call([method_class_ptr.clone()]),
-                )));
-
-                // make it immortal
-                init_stmts.push(Statement::Expr(Expr::assign(
-                    method_ptr_expr.clone()
-                        .arrow(FieldName::Rc)
-                        .field(FieldName::RcStrongCount),
-                    Expr::LitInt(-1),
+                    Expr::Function(FunctionName::RcAlloc).call([
+                        method_class_ptr.clone(),
+                        Expr::LitBool(true),
+                    ]),
                 )));
 
                 let method = &typeinfo.methods[method_index];
@@ -635,9 +640,9 @@ impl fmt::Display for Unit {
         for def_name in &ordered_type_defs {
             if let Some(forward_decl) = self.type_defs[def_name].forward_decl() {
                 writeln!(f, "{};", forward_decl)?;
-                writeln!(f)?;
             }
         }
+        writeln!(f)?;
 
         for def_name in &ordered_type_defs {
             // special case for System.String: we expect it to already be defined in the prelude
@@ -701,15 +706,12 @@ impl fmt::Display for Unit {
             writeln!(f, "static struct {} {} = {{", string_name, lit_name)?;
 
             // rc state
-            writeln!(f, "  .{rc} = {{", rc = FieldName::Rc)?;
             writeln!(
-                f,
-                "    .{class_field} = &{class_name},",
-                class_field = FieldName::RcClass,
-                class_name = GlobalName::ClassInstance(ir::STRING_ID),
+                f, 
+                "  .{rc} = MAKE_RC({class_name}, -1, 0),", 
+                rc = FieldName::Rc,
+                class_name = GlobalName::ClassInstance(ir::STRING_ID)
             )?;
-            writeln!(f, "    .{strong_count} = -1,", strong_count = FieldName::RcStrongCount)?;
-            writeln!(f, "  }},")?;
 
             write!(f, "  .{} = {}", chars_field, lit)?;
             writeln!(f, ", ")?;
@@ -726,6 +728,40 @@ impl fmt::Display for Unit {
             writeln!(f, "{};", decl_string)?;
         }
         writeln!(f)?;
+        
+        for (tag_loc, tag_array_len) in &self.tag_arrays {
+            let static_array_name = GlobalName::StaticTagArray(*tag_loc);
+            
+            // write data array
+            let tag_ptr_ty = Type::Void.ptr();
+            let data_name = format!("{}_data", static_array_name);
+
+            if *tag_array_len > 0 {
+                let data_ty = tag_ptr_ty.sized_array(*tag_array_len);
+                writeln!(f, "static {};", data_ty.to_decl_string(&data_name))?;
+            }
+
+            // write object
+            let tag_array_struct_ty = Type::DefinedType(TypeDefName::Struct(self.tag_array_class));
+            let tag_array_object_ty = tag_array_struct_ty.clone().ptr();
+
+            let tag_array_decl_string = tag_array_object_ty.to_decl_string(&static_array_name);
+            writeln!(f, "static {} = &({}) {{", tag_array_decl_string, tag_array_struct_ty.typename())?;
+
+            write_immortal_rc_member(f, self.tag_array_class)?;
+            writeln!(f, ",")?;
+
+            writeln!(f, "  .{len} = {tag_array_len},", len = FieldName::ID(ir::DYNARRAY_LEN_FIELD))?;
+
+            write!(f, "  .{ptr} = ", ptr = FieldName::ID(ir::DYNARRAY_PTR_FIELD))?;
+            if *tag_array_len > 0 {
+                writeln!(f, "{data_name}")?;
+            } else {
+                writeln!(f, "NULL")?;
+            }
+            
+            writeln!(f, "}};")?;
+        }
         
         for global_var in &self.global_vars {
             writeln!(f, "static {};", global_var.ty.to_decl_string(&global_var.name))?;
@@ -752,4 +788,9 @@ struct ArraySig {
 pub struct GlobalVar {
     pub name: GlobalName,
     pub ty: Type,
+}
+
+fn write_immortal_rc_member(f: &mut fmt::Formatter, class_id: ir::TypeDefID) -> fmt::Result {
+    let class_name = GlobalName::ClassInstance(class_id);
+    write!(f, ".rc = MAKE_RC({}, -1, 0)", class_name)
 }

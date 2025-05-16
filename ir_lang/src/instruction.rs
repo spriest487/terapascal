@@ -122,6 +122,7 @@ pub enum Instruction {
     RcNew {
         out: Ref,
         type_id: TypeDefID,
+        immortal: bool,
     },
 
     Release {

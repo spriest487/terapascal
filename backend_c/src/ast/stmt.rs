@@ -428,9 +428,9 @@ impl<'a> Builder<'a> {
                 self.translate_call(out.as_ref(), function, args);
             },
 
-            ir::Instruction::RcNew { out, type_id: struct_id } => {
-                self.translate_rc_new(out, *struct_id);
-            },
+            ir::Instruction::RcNew { out, type_id, immortal } => {
+                self.translate_rc_new(out, *type_id, *immortal);
+            }
 
             ir::Instruction::Gt(ir::BinOpInstruction { out, a, b }) => {
                 let gt = Expr::translate_infix_op(a, InfixOp::Gt, b, self.module);
@@ -649,12 +649,15 @@ impl<'a> Builder<'a> {
         }));
     }
 
-    fn translate_rc_new(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID) {
+    fn translate_rc_new(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID, immortal: bool) {
         let ty_class_ptr = Expr::class_ptr(struct_id);
 
         let new_rc = Expr::Call {
             func: Box::new(Expr::Function(FunctionName::RcAlloc)),
-            args: vec![ty_class_ptr],
+            args: vec![
+                ty_class_ptr,
+                Expr::LitBool(immortal),
+            ],
         };
 
         self.stmts.push(Statement::Expr(Expr::translate_assign(

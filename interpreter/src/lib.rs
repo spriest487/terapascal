@@ -925,7 +925,9 @@ impl Interpreter {
             ir::Instruction::LocalBegin => self.exec_local_begin()?,
             ir::Instruction::LocalEnd => self.exec_local_end()?,
 
-            ir::Instruction::RcNew { out, type_id: struct_id } => self.exec_rc_new(out, *struct_id)?,
+            ir::Instruction::RcNew { out, type_id, immortal } => {
+                self.exec_rc_new(out, *type_id, *immortal)?
+            },
 
             ir::Instruction::Add(op) => self.exec_add(op)?,
 
@@ -1053,9 +1055,9 @@ impl Interpreter {
         Ok(())
     }
 
-    fn exec_rc_new(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID) -> ExecResult<()> {
+    fn exec_rc_new(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID, immortal: bool) -> ExecResult<()> {
         let struct_val = self.init_struct(struct_id)?;
-        let rc_ptr = self.rc_alloc(struct_val, false)?;
+        let rc_ptr = self.rc_alloc(struct_val, immortal)?;
 
         self.store(out, DynValue::Pointer(rc_ptr))?;
 

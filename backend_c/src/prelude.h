@@ -4,6 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+// forward decl of builtin types
+STRING_STRUCT;
+TYPEINFO_STRUCT;
+METHODINFO_STRUCT;
+POINTERARRAY_STRUCT;
+
 typedef void (*DestructorFunc)(void*);
 
 typedef void (*RcCleanupFunc)(void*);
@@ -39,11 +45,11 @@ struct Rc {
     int32_t weak_count;
 };
 
-// forward decl of builtin types
-STRING_STRUCT;
-TYPEINFO_STRUCT;
-METHODINFO_STRUCT;
-POINTERARRAY_STRUCT;
+#define MAKE_RC(className, strong, weak) { \
+    .class = (struct Class*) &className,\
+    .strong_count = strong,\
+    .weak_count = weak\
+}
 
 typedef void (*Invoker)(void** args, void* resultOut);
 
@@ -88,7 +94,7 @@ static void Free(void* mem);
 
 // RC runtime functions
 
-static void* RcAlloc(struct Class* class);
+static void* RcAlloc(struct Class* class, bool immortal);
 static void RcRetain(void* instance, bool weak);
 static void RcRelease(void* instance, bool weak);
 

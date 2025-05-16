@@ -89,10 +89,12 @@ fn build_tag_init(builder: &mut Builder, ty: &ir::Type) {
         // deref the field to get the array pointer, offset it to get the item pointer
         // tag_ptr := (tags_array_ptr_field_ptr^) + (i * sizeof(Any)
         builder.add(tag_ptr.clone(), tags_array_ptr_field_ptr.clone().to_deref(), ir::Value::LiteralI32(i as i32));
+        
+        let tag_instance = builder.local_temp(tag_class.clone());
+        builder.rc_new(tag_instance.clone(), tag_ty, true);
 
         // instantiate the tag class
-        let tag_instance = tag_ptr.clone().to_deref();
-        builder.rc_new(tag_instance.clone(), tag_ty);
+        builder.mov(tag_ptr.clone().to_deref(), tag_instance.clone());
 
         for arg in tag_item.args.members.iter() {
             let Some(field_id) = tag_struct_def.find_field(arg.ident.as_str()) else {

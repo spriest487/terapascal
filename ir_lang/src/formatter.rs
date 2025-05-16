@@ -253,10 +253,14 @@ pub trait InstructionFormatter {
                 self.format_val(test, f)
             }
 
-            Instruction::RcNew { out, type_id: struct_id } => {
+            Instruction::RcNew { out, type_id, immortal } => {
                 write!(f, "{:>width$} ", "rcnew", width = IX_WIDTH)?;
-                self.format_type(&Type::Struct(*struct_id), f)?;
-                write!(f, " at {}", out)
+                self.format_type(&Type::Struct(*type_id), f)?;
+                write!(f, " at {}", out)?;
+                if *immortal {
+                    write!(f, " (immortal)")?;
+                }
+                Ok(())
             }
 
             Instruction::Release { at, weak } => {

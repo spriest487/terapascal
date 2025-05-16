@@ -33,10 +33,7 @@ pub fn translate_object_ctor(ctor: &typ::ast::ObjectCtor, builder: &mut Builder)
 
     if object_ty.is_rc() {
         // allocate class struct at out pointer
-        builder.append(Instruction::RcNew {
-            out: out_val.clone(),
-            type_id: struct_id,
-        });
+        builder.rc_new(out_val.clone(), struct_id, false);
     }
 
     builder.scope(|builder| {
@@ -149,7 +146,7 @@ fn translate_dyn_array_ctor(
 
     // allocate the array object itself
     builder.scope(|builder| {
-        builder.rc_new(arr.clone(), struct_id);
+        builder.rc_new(arr.clone(), struct_id, false);
 
         // get pointer to the length
         let len_ref = builder.local_temp(Type::I32.ptr());

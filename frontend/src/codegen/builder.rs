@@ -197,10 +197,7 @@ impl<'m> Builder<'m> {
         let closure_ref = self.local_new(closure_ptr_ty.clone(), None);
 
         self.scope(|builder| {
-            builder.append(Instruction::RcNew {
-                out: closure_ref.clone(),
-                type_id: closure.closure_id,
-            });
+            builder.rc_new(closure_ref.clone(), closure.closure_id, false);
 
             // the closure pointer type (a virtual pointer to any closure of this function type)
             // and the closure structure pointer type are different - we need to use the closure
@@ -421,10 +418,11 @@ impl<'m> Builder<'m> {
         });
     }
     
-    pub fn rc_new(&mut self, out: impl Into<Ref>, type_id: TypeDefID) {
+    pub fn rc_new(&mut self, out: impl Into<Ref>, type_id: TypeDefID, immortal: bool) {
         self.append(Instruction::RcNew { 
             out: out.into(),
             type_id,
+            immortal,
         });
     }
 
