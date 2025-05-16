@@ -25,8 +25,9 @@ use crate::stack::StackTraceFrame;
 use ir_lang as ir;
 use ir_lang::InstructionFormatter as _;
 use ir_lang::EMPTY_STRING_ID;
-use std::collections::HashMap;
 use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::iter;
 use std::ops::BitAnd;
 use std::ops::BitOr;
 use std::ops::BitXor;
@@ -283,7 +284,7 @@ impl Interpreter {
                 let global=  self.globals
                     .get_mut(name)
                     .unwrap_or_else(|| panic!("global `{}` is not allocated", name));
-                
+
                 match global {
                     GlobalValue::Variable { value, .. } => {
                         let byte_count = self.marshaller.marshal(&val, value.as_mut())?;
@@ -292,6 +293,11 @@ impl Interpreter {
 
                     GlobalValue::Function(..) => {
                         let msg = "global function value cannot be assigned to";
+                        return Err(ExecError::illegal_state(msg))
+                    }
+                    
+                    GlobalValue::StaticTagArray(..) => {
+                        let msg = "global tag array value cannot be assigned to";
                         return Err(ExecError::illegal_state(msg))
                     }
                 }
@@ -333,6 +339,10 @@ impl Interpreter {
                 Some(GlobalValue::Variable { value, ty}) => {
                     let val = self.marshaller.unmarshal(value, ty)?;
                     Ok(val.value)
+                }
+
+                Some(GlobalValue::StaticTagArray(loc)) => {
+                    Ok(DynValue::from(loc.clone()))
                 }
 
                 None => {
@@ -1899,6 +1909,19 @@ impl Interpreter {
             });
         }
 
+        for (tag_loc, tag_count) in lib.metadata.tag_counts() {
+            let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
+            let elements = iter::repeat(nil_any)
+                .take(*tag_count)
+                .collect();
+
+            let empty_tag_array = self.create_dyn_array(&ir::ANY_TYPE, elements, true)?;
+
+            let array_ref = ir::GlobalRef::StaticTagArray(*tag_loc);
+            let array_value = GlobalValue::StaticTagArray(empty_tag_array);
+            self.globals.insert(array_ref, array_value);
+        }
+
         self.init_stdlib_globals()?;
 
         let init_stack_size = self
@@ -1907,10 +1930,21 @@ impl Interpreter {
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
         self.push_stack(Rc::new("<init>".to_string()), init_stack_size);
+        // self.execute(lib.init())?;
+        // self.pop_stack()?;
+        let e = self.execute(lib.init()).and_then(|_|
+        self.pop_stack());
+        
+        // let cell = self.load(&ir::Ref::from(ir::GlobalRef::StaticTagArray(ir::TagLocation::TypeDef(ir::TypeDefID(6)))).to_deref());
+        // eprintln!("{:#?}", cell);
+        // let arr = self.read_dynarray()
+        // eprintln!("{:#?}", cell.unwrap());
 
-        self.execute(lib.init())?;
-        self.pop_stack()?;
+        // let cell = self.load(&ir::Ref::from(ir::GlobalRef::StaticTypeInfo(Box::new(ir::Type::class_ptr(ir::TypeDefID(6))))).to_deref())?;
+        // let s = cell.as_struct(ir::TypeDefID(6)).unwrap();
 
+        // eprintln!("{:#?}", cell);
+        e?;
         Ok(())
     }
 
@@ -2097,6 +2131,7 @@ impl Interpreter {
         let mut typeinfo_struct = StructValue::new(ir::TYPEINFO_ID, [
             type_name_string,
             DynValue::Pointer(Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))),
+            DynValue::Pointer(Pointer::nil(ir::Type::Nothing)),
         ]);
         
         let typeinfo_ptr = self.rc_alloc(typeinfo_struct.clone(), true)?;
@@ -2196,6 +2231,7 @@ enum GlobalValue {
         ty: ir::Type,
     },
     Function(ir::FunctionID),
+    StaticTagArray(Pointer),
 }
 
 struct LabelLocation {

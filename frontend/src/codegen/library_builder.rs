@@ -1,3 +1,6 @@
+mod rtti;
+mod init;
+
 use crate::ast::Access;
 use crate::ast::FunctionParamMod;
 use crate::ast::IdentPath;
@@ -10,6 +13,8 @@ use crate::codegen::build_static_closure_impl;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::ir;
+use crate::codegen::library_builder::rtti::gen_release_func;
+use crate::codegen::library_builder::rtti::gen_retain_func;
 use crate::codegen::metadata::translate_closure_struct;
 use crate::codegen::metadata::translate_iface;
 use crate::codegen::metadata::translate_name;
@@ -48,6 +53,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use crate::codegen::library_builder::init::gen_init_func;
 
 #[derive(Debug)]
 pub struct LibraryBuilder {
@@ -62,6 +68,8 @@ pub struct LibraryBuilder {
     set_flags_type_info: BTreeMap<usize, SetFlagsType>,
 
     translated_funcs: HashMap<FunctionDefKey, FunctionInstance>,
+    
+    tags: HashMap<ir::TagLocation, Vec<typ::ast::TagItem>>,
 
     function_types_by_sig: HashMap<typ::FunctionSig, ir::TypeDefID>,
 
@@ -112,6 +120,8 @@ impl LibraryBuilder {
             type_cache,
             cached_types,
 
+            tags: HashMap::new(),
+
             set_flags_type_info: BTreeMap::new(),
             
             translated_funcs: HashMap::new(),
@@ -153,6 +163,7 @@ impl LibraryBuilder {
         self.populate_all_runtime_type_info();
 
         self.gen_static_closure_init();
+        self.gen_static_type_init();
 
         // builtin classes are added manually to the type cache but their methods (and therefore 
         // any destructors) are expected to be defined in code, so we need to find those in the
@@ -961,6 +972,8 @@ impl LibraryBuilder {
                 self.library.metadata.define_variant(id, variant_meta);
 
                 self.insert_type_dtor(id, src_ty, variant_def.as_ref());
+
+                self.add_tags(ir::TagLocation::TypeDef(id), &variant_def.tags);
                 
                 ty
             },
@@ -990,6 +1003,8 @@ impl LibraryBuilder {
 
                 self.insert_type_dtor(id, src_ty, def.as_ref());
 
+                self.add_tags(ir::TagLocation::TypeDef(id), &def.tags);
+
                 ty
             },
             
@@ -1013,6 +1028,8 @@ impl LibraryBuilder {
                 let iface_meta = translate_iface(&iface_def, generic_ctx, self);
                 let def_id = self.library.metadata.define_iface(iface_meta);
                 assert_eq!(def_id, id);
+
+                self.add_tags(ir::TagLocation::Interface(id), &iface_def.tags);
 
                 ty
             },
@@ -1124,104 +1141,11 @@ impl LibraryBuilder {
         }
 
         assert!(self.metadata().is_defined(ty), "gen_runtime_type: type {} ({:?}) is not defined yet", self.metadata().pretty_ty_name(ty), ty);
-        
-        // generate deep release/retain funcs for non-RC types, including the internal structures
-        // of RC types
-        let release_body = if !ty.is_rc() {
-            let mut release_builder = Builder::new(self);
-            release_builder.bind_param(ir::LocalID(0), ty.clone().ptr(), "target", true);
-            let target_ref = ir::Ref::Local(ir::LocalID(0)).to_deref();
-
-            let released_any = release_builder.visit_deep(target_ref, ty, |builder, el_ty, el_ref| {
-                builder.release(el_ref, el_ty)
-            });
-
-            let body = release_builder.finish();
-            if released_any && !body.is_empty() { 
-                Some(body) 
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let retain_body = if !ty.is_rc() {
-            let mut retain_builder = Builder::new(self);
-            retain_builder.bind_param(ir::LocalID(0), ty.clone().ptr(), "target", true);
-            let target_ref = ir::Ref::Local(ir::LocalID(0)).to_deref();
-            
-            let retained_any = retain_builder.visit_deep(target_ref, ty, |builder, el_ty, el_ref| {
-                builder.retain(el_ref, el_ty)
-            });
-
-            let body = retain_builder.finish();
-            if retained_any && !body.is_empty() {
-                Some(body)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // declare new func IDs then define them here        
-        let retain_func = if let Some(body) = retain_body {
-            let func_id = self.metadata_mut().insert_func(None);
-
-            let debug_name = if self.opts.debug {
-                Some(format!("generated RC retain func for {}", self.library.metadata.pretty_ty_name(ty)))
-            } else {
-                None
-            };
-
-            self.insert_func(
-                func_id,
-                ir::Function::Local(ir::FunctionDef {
-                    body,
-                    sig: ir::FunctionSig {
-                        return_ty: ir::Type::Nothing,
-                        param_tys: vec![ty.clone().ptr()],
-                    },
-                    debug_name,
-                }),
-            );
-
-            Some(func_id)
-        } else {
-            None
-        };
-        
-        let release_func = if let Some(body) = release_body {
-            let func_id = self.library.metadata.insert_func(None);
-
-            let debug_name = if self.opts.debug {
-                Some(format!("<generated RC release for {}>", self.library.metadata.pretty_ty_name(ty)))
-            } else {
-                None
-            };
-
-            self.insert_func(
-                func_id,
-                ir::Function::Local(ir::FunctionDef {
-                    body,
-                    sig: ir::FunctionSig {
-                        return_ty: ir::Type::Nothing,
-                        param_tys: vec![ty.clone().ptr()],
-                    },
-                    debug_name,
-                }),
-            );
-            
-            Some(func_id)
-        } else {
-            None
-        };
 
         // type names and methods will be added after codegen
         let mut rtti = ir::RuntimeType::new(None);
-        rtti.retain = retain_func;
-        rtti.release = release_func;
+        rtti.retain = gen_retain_func(self, ty);
+        rtti.release = gen_release_func(self, ty);
         
         self.library.metadata.insert_runtime_type(ty.clone(), rtti)
     }
@@ -1580,6 +1504,50 @@ impl LibraryBuilder {
         }
         static_closures_init.append(&mut self.library.init);
         self.library.init = static_closures_init;
+    }
+
+    fn gen_static_type_init(&mut self) {
+        let mut instructions = Vec::new();
+        
+        let translated_types: Vec<_> = self.type_cache.values().cloned().collect();
+
+        for ir_ty in &translated_types {
+            if let Some(init_func_id) = gen_init_func(self, ir_ty) {
+                let func_global = ir::GlobalRef::Function(init_func_id);
+
+                instructions.push(ir::Instruction::Call {
+                   args: Vec::new(),
+                    out: None,
+                    function: ir::Value::from(func_global),
+                });
+            }
+        }
+        
+        instructions.append(&mut self.library.init);
+        self.library.init = instructions;
+    }
+    
+    #[allow(unused)]
+    pub(crate) fn add_tag(&mut self, loc: ir::TagLocation, tag: typ::ast::TagItem) {
+        let loc_tags = self.tags.entry(loc).or_insert_with(Vec::new);
+        
+        loc_tags.push(tag);
+    }
+
+    pub(crate) fn add_tags(&mut self, loc: ir::TagLocation, tags: &[typ::ast::Tag]) {
+        let loc_tags = self.tags.entry(loc).or_insert_with(Vec::new);
+        
+        for tag in tags {
+            loc_tags.extend(tag.items.iter().cloned());
+        }
+
+        let new_tag_count = loc_tags.len();
+
+        self.metadata_mut().alloc_tag_array(loc, new_tag_count);
+    }
+
+    pub(crate) fn find_tags(&self, loc: &ir::TagLocation) -> &[typ::ast::TagItem] {
+        self.tags.get(loc).map(Vec::as_slice).unwrap_or(&[])
     }
 }
 

@@ -3,7 +3,8 @@ use crate::rtti::DynArrayRuntimeType;
 use crate::rtti::RuntimeType;
 use crate::ty::FieldID;
 use crate::ty::VirtualTypeID;
-use crate::FunctionID;
+use crate::ty_decl::TagLocation;
+use crate::FunctionDecl;
 use crate::FunctionSig;
 use crate::GlobalRef;
 use crate::InstructionFormatter;
@@ -26,7 +27,7 @@ use crate::TypeDef;
 use crate::TypeDefID;
 use crate::Value;
 use crate::VariantDef;
-use crate::FunctionDecl;
+use crate::FunctionID;
 use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 use serde::Serialize;
@@ -82,6 +83,7 @@ pub const TYPEINFO_VTYPE_ID: VirtualTypeID = VirtualTypeID::Class(TYPEINFO_ID);
 pub const TYPEINFO_TYPE: Type = Type::RcPointer(TYPEINFO_VTYPE_ID);
 pub const TYPEINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const TYPEINFO_METHODS_FIELD: FieldID = FieldID(1);
+pub const TYPEINFO_TAGS_FIELD: FieldID = FieldID(2);
 
 pub const METHODINFO_ID: TypeDefID = TypeDefID(3);
 pub const METHODINFO_VTYPE_ID: VirtualTypeID = VirtualTypeID::Class(METHODINFO_ID);
@@ -89,6 +91,8 @@ pub const METHODINFO_TYPE: Type = Type::RcPointer(METHODINFO_VTYPE_ID);
 pub const METHODINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const METHODINFO_OWNER_FIELD: FieldID = FieldID(1);
 pub const METHODINFO_IMPL_FIELD: FieldID = FieldID(2);
+
+pub const ANY_TYPE: Type = Type::RcPointer(VirtualTypeID::Any);
 
 pub const BUILTIN_TYPE_DEFS: [Type; 2] = [
     STRING_TYPE,
@@ -117,6 +121,8 @@ pub struct Metadata {
     dyn_array_runtime_types: HashMap<Type, DynArrayRuntimeType>,
     
     bounds_check_functions: HashMap<Type, FunctionID>,
+
+    tag_counts: HashMap<TagLocation, usize>,
 }
 
 impl Metadata {
@@ -223,6 +229,12 @@ impl Metadata {
         for (id, def) in &other.set_aliases {
             if !self.set_aliases.contains_key(&id) {
                 self.set_aliases.insert(*id, def.clone());
+            }
+        }
+        
+        for (loc, count) in &other.tag_counts {
+            if !self.tag_counts.contains_key(loc) {
+                self.tag_counts.insert(*loc, *count);
             }
         }
     }
@@ -952,9 +964,15 @@ impl Metadata {
             self.type_decls.insert(id, TypeDecl::Def(def));
         }
     }
+
+    pub fn alloc_tag_array(&mut self, loc: TagLocation, len: usize) {
+        self.tag_counts.insert(loc, len);
+    }
+    
+    pub fn tag_counts(&self) -> impl Iterator<Item=(&TagLocation, &usize)> {
+        self.tag_counts.iter()
+    }
 }
-
-
 
 impl InstructionFormatter for Metadata {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {

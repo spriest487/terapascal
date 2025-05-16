@@ -44,7 +44,6 @@ pub struct StaticClosure {
     pub func_ty_id: TypeDefID,
 }
 
-
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct FunctionSig {
     pub return_ty: Type,
@@ -120,6 +119,18 @@ pub enum Function {
 }
 
 impl Function {
+    pub fn new_local_def(
+        debug_name: Option<String>,
+        sig: FunctionSig,
+        body: Vec<Instruction>
+    ) -> Self {
+        Function::Local(FunctionDef {
+            debug_name,
+            sig,
+            body,
+        })
+    }
+    
     pub fn debug_name(&self) -> Option<&String> {
         match self {
             Function::External(ExternalFunctionRef { symbol, .. }) => Some(symbol),

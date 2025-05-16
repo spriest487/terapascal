@@ -1,4 +1,5 @@
-use crate::{FunctionID, Metadata};
+use crate::FunctionID;
+use crate::Metadata;
 use crate::StringID;
 use crate::Type;
 use serde::Deserialize;
@@ -20,7 +21,7 @@ impl RuntimeType {
             name,
             
             methods: Vec::new(),
-            
+
             release: None,
             retain: None,
         }

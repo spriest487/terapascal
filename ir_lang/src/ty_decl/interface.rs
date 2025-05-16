@@ -1,9 +1,10 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::FunctionID;
 use crate::MethodID;
 use crate::NamePath;
 use crate::Type;
+use serde::Deserialize;
+use serde::Serialize;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Method {

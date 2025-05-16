@@ -1,6 +1,7 @@
 mod r#struct;
 mod variant;
 mod interface;
+mod tags;
 
 use crate::FunctionSig;
 use crate::NamePath;
@@ -14,6 +15,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
 pub use variant::*;
+pub use tags::*;
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct TypeDefID(pub usize);

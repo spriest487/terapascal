@@ -7,14 +7,15 @@ use self::scope::*;
 use crate::ast as ast;
 use crate::ast::IdentPath;
 use crate::codegen::ir;
-use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::FunctionDefKey;
 use crate::codegen::library_builder::LibraryBuilder;
+use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::metadata::*;
 use crate::codegen::FunctionInstance;
 use crate::codegen::IROptions;
 use crate::codegen::SetFlagsType;
 use crate::typ as typ;
+use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use ast::Ident;
 use common::span::Span;
@@ -22,7 +23,6 @@ use ir_lang::*;
 use std::borrow::Cow;
 use std::fmt;
 use std::rc::Rc;
-use crate::typ::seq::TypeSequenceSupport;
 
 #[derive(Debug)]
 pub struct Builder<'m> {
@@ -45,10 +45,11 @@ impl<'m> Builder<'m> {
         let module_span = lib.module_span().clone();
 
         let mut instructions = Vec::new();
+        instructions.push(Instruction::LocalBegin);
+
         if lib.opts().debug {
             instructions.push(Instruction::DebugPush(module_span.clone()));
         }
-        instructions.push(Instruction::LocalBegin);
 
         Self {
             library: lib,
@@ -305,31 +306,73 @@ impl<'m> Builder<'m> {
     pub fn find_type_seq_support(&self, src_ty: &typ::Type) -> Option<TypeSequenceSupport> {
         self.library.find_type_seq_support(src_ty)
     }
+    
+    fn remove_empty_blocks(&mut self) {
+        let mut pc = 0;
+
+        // stack of instruction indices at which the current empty scope begins
+        let mut empty = vec![Some(pc)];
+
+        while pc < self.instructions.len() {
+            let block_empty = empty.last_mut().unwrap();
+
+            match &self.instructions[pc] {
+                Instruction::LocalBegin => {
+                    empty.push(Some(pc));
+                    pc += 1;
+                }
+
+                // end the scope
+                Instruction::LocalEnd => {
+                    if let Some(empty_start) = *block_empty {
+                        // it's still empty, remove all the empty statements
+                        let remove_count = (pc + 1) - empty_start;
+                        pc = empty_start;
+                        for _ in 0..remove_count {
+                            self.instructions.remove(pc);
+                        }
+
+                        empty.pop();
+                    } else {
+                        empty.pop();
+                        
+                        // containing scope is no longer empty
+                        *empty.last_mut().unwrap() = None;
+
+                        pc += 1;
+                    }
+                }
+                
+                Instruction::DebugPop
+                | Instruction::DebugPush(..)
+                | Instruction::Comment(..) => {
+                    pc += 1;
+                }
+                
+                _ => {
+                    *block_empty = None;
+                    pc += 1;
+                }
+            }
+        }
+    }
 
     pub fn finish(mut self) -> Vec<Instruction> {
+        if self.opts().debug {
+            self.append(Instruction::DebugPop);
+        }
+        
         while !self.scopes.is_empty() {
             self.end_scope();
         }
 
-        // cleanup: remove empty begin/end pairs, which we seem to create a lot of
-        let empty_blocks_at: Vec<_> = self
-            .instructions
-            .windows(2)
-            .enumerate()
-            .filter_map(|(pos, pair)| match (&pair[0], &pair[1]) {
-                (Instruction::LocalBegin, Instruction::LocalEnd) => Some(pos),
-                _ => None,
-            })
-            .rev()
-            .collect();
+        self.remove_empty_blocks();
 
-        for pos in empty_blocks_at {
-            self.instructions.remove(pos);
-            self.instructions.remove(pos);
-        }
-
-        if self.library.opts().debug {
-            self.append(Instruction::DebugPop);
+        if matches!(self.instructions.as_slice(), [
+            Instruction::DebugPush(..),
+            Instruction::DebugPop,
+        ]) {
+            self.instructions.pop();
         }
 
         self.instructions
@@ -1008,6 +1051,10 @@ impl<'m> Builder<'m> {
         let label = self.next_label;
         self.next_label = Label(self.next_label.0 + 1);
         label
+    }
+
+    pub fn find_tags(&self, loc: &ir::TagLocation) -> &[typ::ast::TagItem] {
+        self.library.find_tags(loc)
     }
 
     fn current_scope_mut(&mut self) -> &mut Scope {

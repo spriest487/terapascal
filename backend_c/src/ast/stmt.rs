@@ -7,6 +7,7 @@ use crate::ast::Unit;
 use crate::ast::Type;
 use ir_lang as ir;
 use std::fmt;
+use ir_lang::TagLocation;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
@@ -20,6 +21,8 @@ pub enum GlobalName {
     TypeInfoCount,
     StaticTypeInfo(Box<ir::Type>),
     
+    StaticTagArray(ir::TagLocation),
+    
     Variable(ir::VariableID),
 }
 
@@ -29,6 +32,13 @@ impl fmt::Display for GlobalName {
             GlobalName::ClassInstance(id) => write!(f, "Class_{}", id.0),
             GlobalName::StringLiteral(id) => write!(f, "String_{}", id.0),
             GlobalName::StaticClosure(id) => write!(f, "StaticClosure_{}", id.0),
+            GlobalName::StaticTagArray(loc) => {
+                write!(f, "StaticTagArray_")?;
+                match loc {
+                    TagLocation::TypeDef(id) => write!(f, "Type_{}", id.0),
+                    TagLocation::Interface(id) => write!(f, "Iface_{}", id.0),
+                }
+            }
             GlobalName::Variable(id) => write!(f, "Variable_{}", id.0),
 
             GlobalName::TypeInfoList => write!(f, "typeinfo_list"),

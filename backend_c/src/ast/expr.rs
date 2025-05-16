@@ -166,6 +166,10 @@ impl Expr {
                 let name = GlobalName::Variable(*id);
                 Expr::Global(name)
             }
+            ir::Ref::Global(ir::GlobalRef::StaticTagArray(id)) => {
+                let name = GlobalName::StaticTagArray(*id);
+                Expr::Global(name)
+            }
             ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(ty)) => {
                 let name = GlobalName::StaticTypeInfo(ty.clone());
                 Expr::Global(name).addr_of()

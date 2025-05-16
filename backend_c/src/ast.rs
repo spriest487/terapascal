@@ -676,6 +676,7 @@ impl fmt::Display for Unit {
             // so we'll initialize the rest before initialization in main()
             writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
             writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
+            writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
 
             writeln!(f, "}};")?;
         }

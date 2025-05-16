@@ -229,9 +229,11 @@ end;
 
 function TypeInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
 begin
-    if self.tags is not array of Object then 
+    if self.tags is not array of Object then
+    begin 
         exit Option.None;
-    
+    end;
+        
     for var tag in self.tags do
     begin
         if TypeInfo.Get(tag) = tagClass then

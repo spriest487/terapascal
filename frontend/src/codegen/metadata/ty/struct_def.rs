@@ -11,7 +11,7 @@ pub fn translate_struct_def(
     struct_def: &typ::ast::StructDef,
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
-) -> Struct {
+) -> Struct {    
     let name_path = translate_name(&struct_def.name, generic_ctx, lib);
 
     let mut fields = HashMap::new();
