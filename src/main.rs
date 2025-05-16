@@ -14,7 +14,9 @@ use common::read_source_file;
 use common::span::*;
 use common::BuildOptions;
 use frontend::ast;
-use frontend::ast::{IdentPath, Unit, UnitKind};
+use frontend::ast::IdentPath;
+use frontend::ast::Unit;
+use frontend::ast::UnitKind;
 use frontend::codegen::IROptions;
 use frontend::codegen_ir;
 use frontend::parse;
@@ -434,9 +436,13 @@ fn handle_output(output: CompileOutput, args: &Args) -> Result<(), CompileError>
                     // output C code
                     let c_unit = translate_c(&lib, args);
 
-                    print_output(args.output.as_ref(), |dst| {
+                    print_output(Some(output_arg), |dst| {
                         write!(dst, "{}", c_unit)
-                    })
+                    })?;
+
+                    try_clang_format(output_arg);
+                    
+                    Ok(())
                 } else if output_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
                     // the IR object is the output
                     let module_bytes = bincode::serialize(&lib)?;
@@ -446,7 +452,11 @@ fn handle_output(output: CompileOutput, args: &Args) -> Result<(), CompileError>
                     })
                 } else if output_ext.eq_ignore_ascii_case(env::consts::EXE_EXTENSION) {
                     clang_compile(&lib, args, output_arg.as_os_str())
-                        .map_err(|err| CompileError::ClangBuildFailed(err))
+                        .map_err(|err| CompileError::ClangBuildFailed(err))?;
+
+                    try_clang_format(output_arg);
+                    
+                    Ok(())
                 } else {
                     return Err(CompileError::UnknownOutputFormat(output_ext))
                 }
@@ -537,6 +547,26 @@ fn clang_compile(module: &ir::Library, args: &Args, out_path: &OsStr) -> io::Res
     }
     
     Ok(())
+}
+
+fn try_clang_format(path: &Path) {
+    let mut clang_cmd = Command::new("clang-format");
+    clang_cmd.arg("-i").arg(path);
+    
+    let result = clang_cmd
+        .spawn()
+        .and_then(|mut child| child.wait());
+    
+    match result {
+        Ok(exit_status) if exit_status.success() => {}
+
+        Ok(bad_status) => {
+            eprintln!("clang-format failed: status {bad_status}")
+        }
+        Err(err) => {
+            eprintln!("clang-format failed: {err}")
+        }
+    }
 }
 
 fn get_extension(path: &Path) -> String {

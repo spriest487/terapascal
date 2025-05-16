@@ -699,24 +699,9 @@ impl fmt::Display for Unit {
 
         let string_name = TypeDefName::Struct(ir::STRING_ID);
         for (str_id, lit) in &self.string_literals {
-            let chars_field = FieldName::ID(ir::STRING_CHARS_FIELD);
-            let len_field = FieldName::ID(ir::STRING_LEN_FIELD);
-
             let lit_name = GlobalName::StringLiteral(*str_id);
-            writeln!(f, "static struct {} {} = {{", string_name, lit_name)?;
-
-            // rc state
-            writeln!(
-                f, 
-                "  .{rc} = MAKE_RC({class_name}, -1, 0),", 
-                rc = FieldName::Rc,
-                class_name = GlobalName::ClassInstance(ir::STRING_ID)
-            )?;
-
-            write!(f, "  .{} = {}", chars_field, lit)?;
-            writeln!(f, ", ")?;
-            writeln!(f, "  .{} = {},", len_field, lit.as_str().len())?;
-            writeln!(f, "}};")?;
+            write!(f, "static struct {} {} = ", string_name, lit_name)?;
+            writeln!(f, "MAKE_STRING_LIT(\"{}\");", lit.as_str().escape_default())?;
         }
 
         for static_closure in &self.static_closures {

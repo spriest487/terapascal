@@ -162,6 +162,12 @@ PACKED_DECL(STRING_STRUCT {
     int32_t field_1;
 });
 
+#define MAKE_STRING_LIT(text) {\
+    .rc = MAKE_RC(STRING_CLASS, -1, 0),\
+    .field_0 = (unsigned char*) text,\
+    .field_1 = sizeof(text) / sizeof(text[0]),\
+}
+
 static void ModuleInit(void);
 
 static void* LoadSymbol(const char* src, const char* sym);
