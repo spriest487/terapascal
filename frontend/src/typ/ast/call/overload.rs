@@ -9,7 +9,7 @@ use crate::typ::ast::MethodDecl;
 use crate::typ::ast::check_implicit_conversion;
 use crate::typ::ast::infer_from_structural_ty_args;
 use crate::typ::ast::try_unwrap_inferred_args;
-use crate::typ::InstanceMethod;
+use crate::typ::{FunctionSig, InstanceMethod};
 use crate::typ::NameError;
 use crate::typ::Symbol;
 use crate::typ::Type;
@@ -156,59 +156,7 @@ pub fn resolve_overload(
 
     // no overload resolution needed, we can use the param type hint for all args
     if candidates.len() == 1 {
-        let specialized = specialize_call_args(
-            candidates[0].decl(),
-            args,
-            self_arg,
-            type_args.cloned(),
-            span,
-            ctx
-        )?;
-
-        let args = specialized.actual_args;
-        let sig= specialized.sig;
-
-        let actual_arg_tys: Vec<_> = args
-            .iter()
-            .map(|arg_expr| arg_expr.annotation().ty().into_owned())
-            .collect();
-
-        // if it's a direct interface method invocation (e.g. `IComparable.Compare(1, 2)`),
-        // we don't actually know at this point whether that implementation exists!
-        if self_arg.is_none() {
-            if let OverloadCandidate::Method {
-                iface_ty: iface_ty @ Type::Interface(..),
-                decl: method_decl,
-                ..
-            } = &candidates[0] {
-                let self_ty = sig.self_ty_from_args(&actual_arg_tys).ok_or_else(|| {
-                    TypeError::AmbiguousSelfType {
-                        iface: iface_ty.clone(),
-                        span: span.clone(),
-                        method: method_decl.func_decl.ident().clone(),
-                    }
-                })?;
-                
-                let is_impl = ctx
-                    .is_implementation(self_ty, iface_ty)
-                    .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
-
-                if !is_impl {
-                    return Err(TypeError::from_name_err(NameError::NoImplementationFound {
-                        owning_ty: iface_ty.clone(),
-                        impl_ty: self_ty.clone(),
-                    }, span.clone()))
-                }
-            }
-        }
-        
-        assert_eq!(args.len(), sig.params.len());
-
-        return Ok(Overload {
-            selected_sig: 0,
-            args,
-            type_args: specialized.type_args,
-        });
+        return resolve_overload_single_candidate(&candidates, args, type_args, self_arg, span, ctx);
     }
 
     // full overload resolution: while > 1 candidates remain, process an additional arg
@@ -267,65 +215,18 @@ pub fn resolve_overload(
         
         // did we find a best match? try to typecheck args as if this is the sig to be called
         if valid_candidates.len() == 1 {
-            let selected_sig = valid_candidates[0];
-            let selected_candidate = &candidates[selected_sig];
-            let candidate_sig = &candidate_sigs[selected_sig];
-            let sig_params = &candidate_sig.params;
-
-            // println!("selected {} as candidate for {}", candidates[selected_sig].sig(), span);
-            while param_index < sig_params.len() {
-                let param_ty = &sig_params[param_index].ty;
-                let actual_arg = typecheck_expr(&args[arg_index], &param_ty, ctx)?;
-                
-                actual_args.push(actual_arg);
-                
-                arg_index += 1;
-                param_index += 1;
-            }
-
-            assert_eq!(actual_args.len(), sig_params.len());
-
-            let candidate_ty_params = selected_candidate.decl().type_params.as_ref();
-            let type_args = match (candidate_ty_params, type_args) {
-                (Some(_), Some(explicit_ty_args)) => {
-                    Some(explicit_ty_args.clone())
-                }
-
-                (Some(ty_params), None) => {
-                    let mut inferred_ty_args = GenericContext::empty();
-
-                    for arg_index in 0..sig_params.len() {
-                        let param_ty = &sig_params[arg_index].ty;
-
-                        let actual_arg = &actual_args[arg_index];
-                        let actual_arg_ty = actual_arg.annotation().ty();
-                        
-                        infer_from_structural_ty_args(param_ty, &actual_arg_ty, &mut inferred_ty_args, span);
-                    };
-
-                    match try_unwrap_inferred_args(ty_params, inferred_ty_args, ctx, span) {
-                        Some(type_args) => Some(type_args),
-                        None => {
-                            return Err(TypeError::from_generic_err(GenericError::CannotInferArgs {
-                                target: GenericTarget::FunctionSig(candidate_sig.clone()),
-                                hint: GenericTypeHint::ArgTypes(actual_args
-                                    .iter()
-                                    .map(|a| a.annotation().ty().into_owned())
-                                    .collect()
-                                )
-                            }, span.clone()));
-                        }
-                    }
-                }
-                
-                (None, _) => None,  
-            };
-
-            break Ok(Overload {
-                selected_sig,
-                args: actual_args,
+            break resolve_overload_with_candidate(
+                &candidates,
+                valid_candidates[0],
+                &args,
                 type_args,
-            });
+                &candidate_sigs,
+                actual_args,
+                param_index,
+                arg_index,
+                span,
+                ctx
+            );
         }
 
         if valid_candidates.len() == 0 {
@@ -382,6 +283,141 @@ pub fn resolve_overload(
         param_index += 1;
         arg_index += 1;
     }
+}
+
+fn resolve_overload_with_candidate(
+    candidates: &[OverloadCandidate],
+    selected_sig: usize,
+    args: &[ast::Expr],
+    type_args: Option<&TypeArgList>,
+    candidate_sigs: &Vec<FunctionSig>,
+    mut actual_args: Vec<Expr>,
+    mut param_index: usize,
+    mut arg_index: usize,
+    span: &Span,
+    ctx: &mut Context
+) -> TypeResult<Overload> {
+    let selected_candidate = &candidates[selected_sig];
+    let candidate_sig = &candidate_sigs[selected_sig];
+    let sig_params = &candidate_sig.params;
+
+    // println!("selected {} as candidate for {}", candidates[selected_sig].sig(), span);
+    while param_index < sig_params.len() {
+        let param_ty = &sig_params[param_index].ty;
+        let actual_arg = typecheck_expr(&args[arg_index], &param_ty, ctx)?;
+
+        actual_args.push(actual_arg);
+
+        arg_index += 1;
+        param_index += 1;
+    }
+
+    assert_eq!(actual_args.len(), sig_params.len());
+
+    let candidate_ty_params = selected_candidate.decl().type_params.as_ref();
+    let type_args = match (candidate_ty_params, type_args) {
+        (Some(_), Some(explicit_ty_args)) => {
+            Some(explicit_ty_args.clone())
+        }
+
+        (Some(ty_params), None) => {
+            let mut inferred_ty_args = GenericContext::empty();
+
+            for arg_index in 0..sig_params.len() {
+                let param_ty = &sig_params[arg_index].ty;
+
+                let actual_arg = &actual_args[arg_index];
+                let actual_arg_ty = actual_arg.annotation().ty();
+
+                infer_from_structural_ty_args(param_ty, &actual_arg_ty, &mut inferred_ty_args, span);
+            };
+
+            match try_unwrap_inferred_args(ty_params, inferred_ty_args, ctx, span) {
+                Some(type_args) => Some(type_args),
+                None => {
+                    return Err(TypeError::from_generic_err(GenericError::CannotInferArgs {
+                        target: GenericTarget::FunctionSig(candidate_sig.clone()),
+                        hint: GenericTypeHint::ArgTypes(actual_args
+                            .iter()
+                            .map(|a| a.annotation().ty().into_owned())
+                            .collect()
+                        )
+                    }, span.clone()));
+                }
+            }
+        }
+
+        (None, _) => None,
+    };
+
+    Ok(Overload {
+        selected_sig,
+        args: actual_args,
+        type_args,
+    })
+}
+
+fn resolve_overload_single_candidate(
+    candidates: &[OverloadCandidate],
+    args: &[ast::Expr],
+    type_args: Option<&TypeArgList>,
+    self_arg: Option<&Expr>,
+    span: &Span,
+    ctx: &mut Context
+) -> TypeResult<Overload> {
+    let specialized = specialize_call_args(
+        candidates[0].decl(),
+        args,
+        self_arg,
+        type_args.cloned(),
+        span,
+        ctx
+    )?;
+
+    let args = specialized.actual_args;
+    let sig = specialized.sig;
+
+    let actual_arg_tys: Vec<_> = args
+        .iter()
+        .map(|arg_expr| arg_expr.annotation().ty().into_owned())
+        .collect();
+
+    // if it's a direct interface method invocation (e.g. `IComparable.Compare(1, 2)`),
+    // we don't actually know at this point whether that implementation exists!
+    if self_arg.is_none() {
+        if let OverloadCandidate::Method {
+            iface_ty: iface_ty @ Type::Interface(..),
+            decl: method_decl,
+            ..
+        } = &candidates[0] {
+            let self_ty = sig.self_ty_from_args(&actual_arg_tys).ok_or_else(|| {
+                TypeError::AmbiguousSelfType {
+                    iface: iface_ty.clone(),
+                    span: span.clone(),
+                    method: method_decl.func_decl.ident().clone(),
+                }
+            })?;
+
+            let is_impl = ctx
+                .is_implementation(self_ty, iface_ty)
+                .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
+
+            if !is_impl {
+                return Err(TypeError::from_name_err(NameError::NoImplementationFound {
+                    owning_ty: iface_ty.clone(),
+                    impl_ty: self_ty.clone(),
+                }, span.clone()))
+            }
+        }
+    }
+
+    assert_eq!(args.len(), sig.params.len());
+
+    return Ok(Overload {
+        selected_sig: 0,
+        args,
+        type_args: specialized.type_args,
+    });
 }
 
 fn disqualify_inaccessible(
