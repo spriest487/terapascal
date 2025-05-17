@@ -1,95 +1,18 @@
 use crate::ast;
 use crate::ast::Access;
-use crate::ast::IdentPath;
-use crate::parse::TokenStream;
-use crate::pp::Preprocessor;
 use crate::typ::ast::call::overload::resolve_overload;
 use crate::typ::ast::call::overload::OverloadCandidate;
+use crate::typ::ast::call::test::util::expr_from_str;
+use crate::typ::ast::call::test::util::{candidates_from_src, type_args_from_str};
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
 use crate::typ::test::try_module_from_srcs;
-use crate::typ::Context;
-use crate::typ::Module;
-use crate::typ::Symbol;
+use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::Value;
-use crate::TokenTree;
-use common::span::Span;
-use common::BuildOptions;
+use crate::typ::Primitive;
 
-fn expr_from_str(src: &str) -> ast::Expr<Span> {
-    let test_unit = Preprocessor::new("test", BuildOptions::default())
-        .preprocess(src)
-        .unwrap();
-    let tokens = TokenTree::tokenize(test_unit).unwrap();
-
-    let mut tokens = TokenStream::new(tokens, Span::zero("test"));
-
-    ast::Expr::parse(&mut tokens)
-        .and_then(|expr| {
-            tokens.finish()?;
-            Ok(expr)
-        })
-        .unwrap()
-}
-
-fn candidates_from_module(module: &Module, unit_name: &str) -> Vec<OverloadCandidate> {
-    let unit = module.units
-        .iter()
-        .find(|unit| unit.unit.ident.last().name.as_str() == unit_name)
-        .unwrap();
-
-    let candidates = unit.unit
-        .func_defs()
-        .map(|(visibility, func)| {
-            let sig = func.decl.sig();
-
-            match &func.decl.name.owning_ty {
-                Some(explicit_impl) => {
-                    let ident = func.decl.name.ident.clone();
-                    let (method_index, method) = explicit_impl
-                        .find_method(&ident, &sig, &unit.context)
-                        .unwrap()
-                        .expect("method defs in unit must have a corresponding decl in the type");
-
-                    OverloadCandidate::Method {
-                        index: method_index,
-                        self_ty: explicit_impl.clone(),
-                        iface_ty: explicit_impl.clone(),
-                        decl: method,
-                    }
-                },
-
-                None => {
-                    let decl_name = IdentPath::from(func.decl.name.ident.clone());
-
-                    OverloadCandidate::Function {
-                        decl_name: Symbol::from(decl_name),
-                        visibility,
-                        decl: func.decl.clone(),
-                    }
-                },
-            }
-        });
-
-    candidates.collect()
-}
-
-fn candidates_from_src(src: &'static str, unit_name: &str) -> (Vec<OverloadCandidate>, Context) {
-    let module = module_from_src(unit_name, src);
-
-    let candidates = candidates_from_module(&module, unit_name);
-
-    (candidates, module.units
-        .into_iter()
-        .filter_map(|unit| if unit.unit.ident.last().name.as_str() == unit_name {
-            Some(unit.context)
-        } else {
-            None
-        })
-        .next()
-        .unwrap())
-}
+mod util;
 
 #[test]
 fn resolves_overload_single() {
@@ -167,13 +90,15 @@ fn method_call_validates_too_many_args() {
             instance.M1(1, 2);
         end.
     ";
-    
+
     match try_module_from_src("method_call_validates_too_many_args", src) {
-        Err(TypeError::InvalidArgs { actual, expected, .. }) => {
+        Err(TypeError::InvalidArgs {
+            actual, expected, ..
+        }) => {
             assert_eq!(3, actual.len());
             assert_eq!(2, expected.len());
-        }
-        
+        },
+
         other => panic!("expected invalid args error, got: {:?}", other),
     }
 }
@@ -198,10 +123,12 @@ fn method_call_validates_too_few_args() {
     ";
 
     match try_module_from_src("method_call_validates_too_many_args", src) {
-        Err(TypeError::InvalidArgs { actual, expected, .. }) => {
+        Err(TypeError::InvalidArgs {
+            actual, expected, ..
+        }) => {
             assert_eq!(2, actual.len());
             assert_eq!(3, expected.len());
-        }
+        },
 
         other => panic!("expected invalid args error, got: {:?}", other),
     }
@@ -224,7 +151,7 @@ fn specializes_func_call_by_arg_ty() {
             A(arg);
         end.
     ";
-    
+
     let module = module_from_src("Test", src);
     let unit = module.units.iter().last().unwrap();
     let init = unit.unit.init.as_ref().unwrap();
@@ -233,20 +160,23 @@ fn specializes_func_call_by_arg_ty() {
         Some(ast::Call::Function(func_call)) => {
             assert_eq!("A", func_call.target.to_string());
             assert_eq!("Test.B", func_call.args[0].annotation().ty().to_string());
-            
+
             match func_call.target.annotation() {
                 Value::Function(func) => {
-                    assert_eq!("Test.B", func.name.type_args.as_ref().unwrap()[0].to_string());
-                    assert_eq!("Test.A[Test.B]",  func.name.to_string());
-                    
+                    assert_eq!(
+                        "Test.B",
+                        func.name.type_args.as_ref().unwrap()[0].to_string()
+                    );
+                    assert_eq!("Test.A[Test.B]", func.name.to_string());
+
                     // this should reference the *declared* sig, not the called one
                     assert_eq!("T", func.sig.params[0].ty.to_string());
-                }
+                },
 
                 other => panic!("expected function, got {:?}", other),
             }
-        }
-        
+        },
+
         other => panic!("expected call to A, got {:?}", other),
     }
 }
@@ -285,12 +215,15 @@ fn specializes_method_call_by_arg_ty() {
 
             assert_eq!("arg", method_call.args[1].to_string());
             assert_eq!("Test.B", method_call.args[1].annotation().ty().to_string());
-            
+
             assert_eq!("A", method_call.ident.to_string());
             assert_eq!("Test.C", method_call.iface_type.to_string());
-            
-            assert_eq!("Test.B", method_call.type_args.as_ref().unwrap().items[0].to_string());
-        }
+
+            assert_eq!(
+                "Test.B",
+                method_call.type_args.as_ref().unwrap().items[0].to_string()
+            );
+        },
 
         other => panic!("expected call to A, got {:?}", other),
     }
@@ -327,13 +260,19 @@ fn specializes_method_call_by_lambda_arg_ty() {
             assert_eq!("instance", method_call.args[0].to_string());
             assert_eq!("Test.C", method_call.args[0].annotation().ty().to_string());
 
-            assert_eq!("function: Test.B", method_call.args[1].annotation().ty().to_string());
+            assert_eq!(
+                "function: Test.B",
+                method_call.args[1].annotation().ty().to_string()
+            );
 
             assert_eq!("A", method_call.ident.to_string());
             assert_eq!("Test.C", method_call.iface_type.to_string());
 
-            assert_eq!("Test.B", method_call.type_args.as_ref().unwrap().items[0].to_string());
-        }
+            assert_eq!(
+                "Test.B",
+                method_call.type_args.as_ref().unwrap().items[0].to_string()
+            );
+        },
 
         other => panic!("expected call to A, got {:?}", other),
     }
@@ -370,13 +309,19 @@ fn specializes_method_call_by_dynarray_element_ty() {
             assert_eq!("instance", method_call.args[0].to_string());
             assert_eq!("Test.C", method_call.args[0].annotation().ty().to_string());
 
-            assert_eq!("array of Test.B", method_call.args[1].annotation().ty().to_string());
+            assert_eq!(
+                "array of Test.B",
+                method_call.args[1].annotation().ty().to_string()
+            );
 
             assert_eq!("A", method_call.ident.to_string());
             assert_eq!("Test.C", method_call.iface_type.to_string());
 
-            assert_eq!("Test.B", method_call.type_args.as_ref().unwrap().items[0].to_string());
-        }
+            assert_eq!(
+                "Test.B",
+                method_call.type_args.as_ref().unwrap().items[0].to_string()
+            );
+        },
 
         other => panic!("expected call to A, got {:?}", other),
     }
@@ -407,20 +352,26 @@ fn specializes_free_func_call_by_dynarray_element_ty() {
 
     match init.body[1].as_call() {
         Some(ast::Call::Function(func_call)) => {
-            assert_eq!("array of Test.B", func_call.args[0].annotation().ty().to_string());
+            assert_eq!(
+                "array of Test.B",
+                func_call.args[0].annotation().ty().to_string()
+            );
 
             assert_eq!("arr.A", func_call.target.to_string());
-            assert_eq!("Test.B", func_call.type_args.as_ref().unwrap().items[0].to_string());   
-            
+            assert_eq!(
+                "Test.B",
+                func_call.type_args.as_ref().unwrap().items[0].to_string()
+            );
+
             match func_call.target.annotation() {
                 Value::Function(target_func) => {
                     assert_eq!(target_func.name.to_string(), "Test.A[Test.B]")
-                }
+                },
                 other => {
                     panic!("expected function A, got: {}", other)
                 },
             }
-        }
+        },
 
         other => {
             panic!("expected call to A, got {:?}", other)
@@ -467,10 +418,7 @@ fn overload_with_accessible_method_is_ambiguous() {
         end
     ";
 
-    let result = try_module_from_srcs([
-        ("UnitA", a_src),
-        ("UnitB", b_src),
-    ]);
+    let result = try_module_from_srcs([("UnitA", a_src), ("UnitB", b_src)]);
 
     match result {
         Ok(..) => panic!("call to A should be ambiguous"),
@@ -479,8 +427,9 @@ fn overload_with_accessible_method_is_ambiguous() {
                 .iter()
                 .find(|candidate| match candidate {
                     OverloadCandidate::Method { iface_ty, decl, .. } => {
-                        iface_ty.to_string() == "UnitA.MyClass" && decl.func_decl.ident().as_str() == "A"
-                    }
+                        iface_ty.to_string() == "UnitA.MyClass"
+                            && decl.func_decl.ident().as_str() == "A"
+                    },
                     _ => false,
                 })
                 .expect("must have a candidate for the public method");
@@ -490,18 +439,18 @@ fn overload_with_accessible_method_is_ambiguous() {
                 .find(|candidate| match candidate {
                     OverloadCandidate::Function { decl_name, .. } => {
                         decl_name.to_string() == "UnitA.A"
-                    }
+                    },
                     _ => false,
                 })
                 .expect("must have a candidate for the free function");
-        }
-        
-        Err(other) => panic!("expected ambiguous function error, got: {}", other)
+        },
+
+        Err(other) => panic!("expected ambiguous function error, got: {}", other),
     }
 }
 
 /// if a method and a free function both match a call, but the method is inaccessible from the
-/// call's context, it should resolve to the function instead of being ambiguous 
+/// call's context, it should resolve to the function instead of being ambiguous
 #[test]
 fn overload_with_inaccessible_method_is_not_ambiguous() {
     let a_src = r"
@@ -540,16 +489,13 @@ fn overload_with_inaccessible_method_is_not_ambiguous() {
             i.A();
         end
     ";
-    
-    let result = try_module_from_srcs([
-        ("UnitA", a_src),
-        ("UnitB", b_src),
-    ]);
-    
+
+    let result = try_module_from_srcs([("UnitA", a_src), ("UnitB", b_src)]);
+
     result.expect("call to A should not be ambiguous");
 }
 
-/// if an inaccessible method and a function have the same name, but only the method matches, 
+/// if an inaccessible method and a function have the same name, but only the method matches,
 /// it should resolve the method and report an access error instead of being ambiguous
 #[test]
 fn overload_resolves_inaccessible_method_if_only_match() {
@@ -590,10 +536,7 @@ fn overload_resolves_inaccessible_method_if_only_match() {
         end
     ";
 
-    let result = try_module_from_srcs([
-        ("UnitA", a_src),
-        ("UnitB", b_src),
-    ]);
+    let result = try_module_from_srcs([("UnitA", a_src), ("UnitB", b_src)]);
 
     match result {
         Ok(..) => panic!("call to A should be inaccessible"),
@@ -601,8 +544,72 @@ fn overload_resolves_inaccessible_method_if_only_match() {
         Err(TypeError::TypeMemberInaccessible { member, access, .. }) => {
             assert_eq!("A", member.name.as_str());
             assert_eq!(Access::Private, access);
-        }
+        },
 
-        Err(other) => panic!("expected access error, got: {}", other)
+        Err(other) => panic!("expected access error, got: {}", other),
     }
+}
+
+static OVERLOAD_GENERIC_UNIT: &str = r"
+    implementation
+        
+    function X(a, b: Int32): Int32; overload;
+    begin
+        a
+    end;
+
+    function X[T](t: T): T; overload;
+    begin
+        t
+    end;
+    
+    end
+";
+
+#[test]
+fn resolving_overload_with_generic_discarded() {
+    let (candidates, mut ctx) = candidates_from_src(OVERLOAD_GENERIC_UNIT, "overload");
+    let span = ctx.module_span().clone();
+
+    let overload = match resolve_overload(
+        &candidates,
+        &[expr_from_str("100"), expr_from_str("200")],
+        None,
+        None,
+        &span,
+        &mut ctx,
+    ) {
+        Ok(result) => result,
+        Err(err) => panic!("{:#?}", err),
+    };
+
+    assert_eq!(overload.type_args, None);
+
+    let selected = &candidates[overload.selected_sig];
+    assert_eq!(selected.decl().return_ty, Type::Primitive(Primitive::Int32));
+    assert_eq!(selected.decl().params.len(), 2);
+    assert!(selected.decl().type_params.is_none());
+}
+
+#[test]
+fn resolving_overload_with_generic_selected() {
+    let (candidates, mut ctx) = candidates_from_src(OVERLOAD_GENERIC_UNIT, "overload");
+    let span = ctx.module_span().clone();
+
+    let overload = match resolve_overload(
+        &candidates,
+        &[expr_from_str("'Test'")],
+        Some(&type_args_from_str(&["String"], &mut ctx)),
+        None,
+        &span,
+        &mut ctx,
+    ) {
+        Ok(result) => result,
+        Err(err) => panic!("{:#?}", err),
+    };
+    
+    assert_eq!(
+        overload.type_args.unwrap().items[0].to_string(),
+        "System.String"
+    );
 }

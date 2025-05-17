@@ -1,15 +1,15 @@
 use crate::ast::Ident;
-use bigdecimal::{BigDecimal, FromPrimitive};
 use bigdecimal::ToPrimitive;
-use cast;
+use bigdecimal::BigDecimal;
+use bigdecimal::FromPrimitive;
+use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Write;
 use std::i32;
 use std::ops::Add;
-use std::ops::Sub;
-use std::cmp::Ordering;
 use std::ops::Div;
 use std::ops::Mul;
+use std::ops::Sub;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct IntConstant(i128);
@@ -39,15 +39,10 @@ impl IntConstant {
                 Some(IntConstant::from(val))
             }
 
+            // hex literals always produce unsigned values
             '$' => {
                 let val = u64::from_str_radix(&s[1..], 16).ok()?;
-
-                // hex literals always produce unsigned values
-                if let Ok(val) = cast::u32(val) {
-                    Some(IntConstant::from(val as u32))
-                } else {
-                    Some(IntConstant::from(val))
-                }
+                Some(IntConstant::from(val))
             }
 
             // negative numbers produce int32, or uint32 if they're too large

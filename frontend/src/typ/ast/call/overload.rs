@@ -1,13 +1,14 @@
 use crate::ast;
 use crate::ast::TypeList;
 use crate::ast::Visibility;
-use crate::typ::ast::check_implicit_conversion;
 use crate::typ::ast::specialize_call_args;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::MethodDecl;
-use crate::typ::Context;
+use crate::typ::ast::check_implicit_conversion;
+use crate::typ::ast::infer_from_structural_ty_args;
+use crate::typ::ast::try_unwrap_inferred_args;
 use crate::typ::InstanceMethod;
 use crate::typ::NameError;
 use crate::typ::Symbol;
@@ -15,6 +16,11 @@ use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
+use crate::typ::GenericError;
+use crate::typ::GenericContext;
+use crate::typ::Context;
+use crate::typ::GenericTarget;
+use crate::typ::GenericTypeHint;
 use common::span::Span;
 use common::span::Spanned;
 use std::fmt;
@@ -262,9 +268,11 @@ pub fn resolve_overload(
         // did we find a best match? try to typecheck args as if this is the sig to be called
         if valid_candidates.len() == 1 {
             let selected_sig = valid_candidates[0];
+            let selected_candidate = &candidates[selected_sig];
+            let candidate_sig = &candidate_sigs[selected_sig];
+            let sig_params = &candidate_sig.params;
+
             // println!("selected {} as candidate for {}", candidates[selected_sig].sig(), span);
-            
-            let sig_params = &candidate_sigs[selected_sig].params;
             while param_index < sig_params.len() {
                 let param_ty = &sig_params[param_index].ty;
                 let actual_arg = typecheck_expr(&args[arg_index], &param_ty, ctx)?;
@@ -277,11 +285,46 @@ pub fn resolve_overload(
 
             assert_eq!(actual_args.len(), sig_params.len());
 
+            let candidate_ty_params = selected_candidate.decl().type_params.as_ref();
+            let type_args = match (candidate_ty_params, type_args) {
+                (Some(_), Some(explicit_ty_args)) => {
+                    Some(explicit_ty_args.clone())
+                }
+
+                (Some(ty_params), None) => {
+                    let mut inferred_ty_args = GenericContext::empty();
+
+                    for arg_index in 0..sig_params.len() {
+                        let param_ty = &sig_params[arg_index].ty;
+
+                        let actual_arg = &actual_args[arg_index];
+                        let actual_arg_ty = actual_arg.annotation().ty();
+                        
+                        infer_from_structural_ty_args(param_ty, &actual_arg_ty, &mut inferred_ty_args, span);
+                    };
+
+                    match try_unwrap_inferred_args(ty_params, inferred_ty_args, ctx, span) {
+                        Some(type_args) => Some(type_args),
+                        None => {
+                            return Err(TypeError::from_generic_err(GenericError::CannotInferArgs {
+                                target: GenericTarget::FunctionSig(candidate_sig.clone()),
+                                hint: GenericTypeHint::ArgTypes(actual_args
+                                    .iter()
+                                    .map(|a| a.annotation().ty().into_owned())
+                                    .collect()
+                                )
+                            }, span.clone()));
+                        }
+                    }
+                }
+                
+                (None, _) => None,  
+            };
+
             break Ok(Overload {
                 selected_sig,
                 args: actual_args,
-                // TODO: can we resolve overloads for generic methods?
-                type_args: None, 
+                type_args,
             });
         }
 
