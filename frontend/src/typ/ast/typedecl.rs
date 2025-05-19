@@ -261,6 +261,8 @@ pub fn typecheck_methods(
 
     let mut methods: Vec<MethodDecl> = Vec::new();
     for method in decl_methods {
+        let tags = Tag::typecheck_tags(&method.tags, ctx)?;
+        
         let decl = typecheck_method(&method.func_decl, ctx)?;
         if decl.kind == FunctionDeclKind::Destructor {
             if !matches!(owning_type, Type::Class(..)) {
@@ -310,6 +312,7 @@ pub fn typecheck_methods(
         methods.push(MethodDecl {
             access: method.access,
             func_decl: Rc::new(decl),
+            tags,
         });
     }
 
@@ -420,6 +423,8 @@ pub fn typecheck_iface(
 
     let mut methods: Vec<InterfaceMethodDecl> = Vec::new();
     for method in &iface.methods {
+        let tags = Tag::typecheck_tags(&method.tags, ctx)?;
+        
         if let Some(existing) = methods
             .iter()
             .find(|other| other.decl.name.ident == method.decl.name.ident)
@@ -440,7 +445,10 @@ pub fn typecheck_iface(
 
         let method_decl = FunctionDecl::typecheck(&method.decl, false, ctx)?;
 
-        methods.push(ast::InterfaceMethodDecl { decl: Rc::new(method_decl) });
+        methods.push(ast::InterfaceMethodDecl { 
+            decl: Rc::new(method_decl),
+            tags,
+        });
     }
     
     let iface_decl = InterfaceDecl {

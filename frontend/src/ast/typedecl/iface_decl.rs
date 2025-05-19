@@ -1,11 +1,11 @@
-use crate::ast::{iface_method_start, parse_implements_clause};
+use crate::ast::tag::Tag;
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::TypeDeclName;
+use crate::ast::{iface_method_start, parse_implements_clause};
 use crate::parse::LookAheadTokenStream;
-use crate::parse::MatchOneOf;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
@@ -17,11 +17,11 @@ use common::span::Spanned;
 use derivative::*;
 use std::fmt;
 use std::rc::Rc;
-use crate::ast::tag::Tag;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct InterfaceMethodDecl<A: Annotation> {
     pub decl: Rc<FunctionDecl<A>>,
+    pub tags: Vec<Tag<A>>,
 }
 
 impl<A: Annotation> InterfaceMethodDecl<A> {
@@ -47,9 +47,14 @@ impl ParseSeq for InterfaceMethodDecl<Span> {
         if !prev.is_empty() {
             tokens.match_one(Separator::Semicolon)?;
         }
+        
+        let tags = Tag::parse_seq(tokens)?;
 
         let decl = FunctionDecl::parse(tokens, false)?;
-        Ok(InterfaceMethodDecl { decl: Rc::new(decl) })
+        Ok(InterfaceMethodDecl { 
+            decl: Rc::new(decl),
+            tags,
+        })
     }
 
     fn has_more(prev: &[Self], tokens: &mut LookAheadTokenStream) -> bool {
@@ -58,7 +63,7 @@ impl ParseSeq for InterfaceMethodDecl<Span> {
         }
 
         tokens
-            .match_one(Keyword::Function.or(Keyword::Procedure))
+            .match_one(iface_method_start())
             .is_some()
     }
 }

@@ -201,6 +201,7 @@ pub fn specialize_iface_def<'a>(
 
             Ok(InterfaceMethodDecl {
                 decl: Rc::new(specialized_decl),
+                tags: generic_method.tags.clone(),
             })
         })
         .collect::<GenericResult<_>>()?;
@@ -254,6 +255,7 @@ fn specialize_methods(
             Ok(MethodDecl {
                 access: generic_method.access,
                 func_decl: Rc::new(specialized_decl),
+                tags: generic_method.tags.clone(),
             })
         })
         .collect::<GenericResult<_>>()?;

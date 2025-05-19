@@ -137,11 +137,16 @@ impl ParseSeq for TypeDeclItem<Span> {
 }
 
 pub fn iface_method_start() -> Matcher {
-    Keyword::Function | Keyword::Procedure
+    Keyword::Function 
+        | Keyword::Procedure
+        | DelimiterPair::SquareBracket //tags
 }
 
 pub fn type_method_start() -> Matcher {
-    iface_method_start() | Keyword::Class | Keyword::Constructor | Keyword::Destructor
+    iface_method_start() 
+        | Keyword::Class 
+        | Keyword::Constructor 
+        | Keyword::Destructor 
 }
 
 /// the common part of a typedecl before the `=`, eg in `type X[Y] = class...`, `X<Y>` is the decl

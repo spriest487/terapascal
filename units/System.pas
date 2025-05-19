@@ -88,11 +88,19 @@ type
         owner: TypeInfo;
 
         impl: Pointer;
+        
+        tags: array of Object;
     public
         function Owner: TypeInfo;
         function Name: String;
 
         function Invoke(instance: Pointer; args: array of Pointer; resultPtr: Pointer);
+
+        function FindTag(tagClass: TypeInfo): Option[Object]; overload;
+        function FindTag[TTag]: Option[TTag]; overload;
+
+        function FindTags(tagClass: TypeInfo): array of Object; overload;
+        function FindTags[TTag]: array of TTag; overload;
     end;
     
     TypeInfo = class
@@ -230,80 +238,94 @@ begin
     end;
 end;
 
-function TypeInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
+function FindTagInArray[TTag](allTags: array of Object; tagClass: TypeInfo): Option[TTag]; overload;
 begin
-    if self.tags is not array of Object then
+    if allTags is not array of Object then
     begin 
         exit Option.None;
     end;
-        
-    for var tag in self.tags do
+
+    for var tag in allTags do
     begin
         if TypeInfo.Get(tag) = tagClass then
-            exit Option.Some(tag);
+            exit Option.Some(tag.Downcast[TTag]().Get);
     end;
     
     Option.None
 end;
 
+function TypeInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
+begin
+    FindTagInArray[Object](self.tags, tagClass);
+end;
+
 function TypeInfo.FindTag[TTag]: Option[TTag]; overload;
 begin
-    match self.FindTag(typeinfo(TTag)) of
-        Option.Some tagObj: tagObj.Downcast[TTag]()
-        else Option.None
-    end
+    FindTagInArray[TTag](self.tags, typeinfo(TTag));
+end;
+
+function MethodInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
+begin
+    FindTagInArray[Object](self.tags, tagClass);
+end;
+
+function MethodInfo.FindTag[TTag]: Option[TTag]; overload;
+begin
+    FindTagInArray[TTag](self.tags, typeinfo(TTag));
+end;
+
+function FindTagsInArray[TTag](allTags: array of Object; tagClass: TypeInfo): array of TTag;
+begin
+    if allTags is not array of Object then
+    begin 
+        exit [];
+    end;
+
+    var count := 0;
+    for var tag in allTags do begin
+        if TypeInfo.Get(tag) = tagClass then
+        begin
+            count += 1;
+        end;
+    end;
+
+    var tags: array of TTag := [];
+
+    unsafe begin
+        tags.SetLength(count, default(TTag));
+    end;
+
+    count := 0;
+    for var tag in allTags do 
+    begin
+         if TypeInfo.Get(tag) = tagClass then
+         begin
+             tags[count] := tag.Downcast[TTag]().Get;
+             count += 1;
+         end;
+    end;
+
+    tags
 end;
 
 function TypeInfo.FindTags(tagClass: TypeInfo): array of Object; overload;
 begin
-    var count := 0;
-    for var tag in self.tags do begin
-        if TypeInfo.Get(tag) = tagClass then count += 1;
-    end;
-    
-    var tags: array of Object := [];
-    
-    unsafe
-    begin
-        tags.SetLength(count, default(Object));
-    end;
-    
-    count := 0;
-    for var tag in self.tags do begin
-         if TypeInfo.Get(tag) = tagClass then
-         begin
-             tags[count] := tag;
-             count += 1;
-         end;
-    end;
-    
-    tags
+    FindTagsInArray[Object](self.tags, tagClass); 
 end;
 
 function TypeInfo.FindTags[TTag]: array of TTag; overload;
 begin
-    var count := 0;
-    for var tag in self.tags do begin
-        if tag is TTag then count += 1;
-    end;
-    
-    var tags: array of TTag := [];
-    
-    unsafe
-    begin
-        tags.SetLength(count, default(TTag));
-    end;
-    
-    count := 0;
-    for var tag in self.tags do begin
-         if tag is TTag tagInstance then
-         begin
-             tags[count] := tagInstance;
-             count += 1;
-         end;
-    end;
-    
-    tags
+    FindTagsInArray[TTag](self.tags, typeinfo(TTag));
+end;
+
+function MethodInfo.FindTags(tagClass: TypeInfo): array of Object; overload;
+begin
+    FindTagsInArray[Object](self.tags, tagClass); 
+end;
+
+function MethodInfo.FindTags[TTag]: array of TTag; overload;
+begin
+    FindTagsInArray[TTag](self.tags, typeinfo(TTag));
 end;
 
 function ByteToStr(i: Byte): String;

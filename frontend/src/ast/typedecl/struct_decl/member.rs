@@ -1,9 +1,16 @@
-use crate::ast::{type_method_start, Access, Annotation, FunctionName};
+use crate::ast::tag::Tag;
+use crate::ast::type_method_start;
+use crate::ast::Access;
+use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
+use crate::ast::FunctionName;
 use crate::ast::TypeName;
-use crate::parse::{Matcher, ParseError, TryParse};
+use crate::parse::Matcher;
 use crate::parse::Parse;
+use crate::parse::ParseError;
 use crate::parse::ParseResult;
+use crate::parse::ParseSeq;
+use crate::parse::TryParse;
 use crate::Ident;
 use crate::Keyword;
 use crate::Separator;
@@ -11,10 +18,10 @@ use crate::TokenStream;
 use crate::TokenTree;
 use common::span::Span;
 use common::span::Spanned;
+use common::TracedError;
 use derivative::Derivative;
 use std::fmt;
 use std::rc::Rc;
-use common::TracedError;
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub enum StructMemberDecl<A: Annotation = Span> {
@@ -180,11 +187,14 @@ fn parse_method_decl(
     access: Access,
     members: &mut Vec<StructMemberDecl>
 ) -> ParseResult<()> {
+    let tags = Tag::parse_seq(tokens)?;
+    
     // these get parsed one at a time
     let decl = FunctionDecl::parse(tokens, true)?;
     
     members.push(StructMemberDecl::MethodDecl(MethodDecl {
         func_decl: Rc::new(decl),
+        tags,
         access,
     }));
     
@@ -195,6 +205,8 @@ fn parse_method_decl(
 pub struct MethodDecl<A: Annotation = Span> {
     pub access: Access,
     pub func_decl: Rc<FunctionDecl<A>>,
+    
+    pub tags: Vec<Tag<A>>,
 }
 
 pub(crate) fn write_access_if_changed(

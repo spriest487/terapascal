@@ -41,7 +41,7 @@ impl ParseSeq for Tag<Span> {
     }
 }
 
-impl Parse for Tag<Span> {
+impl Parse for Tag<Span> {    
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let group = DelimitedGroup::parse(tokens, DelimiterPair::SquareBracket)?;
         let span = group.span.clone();

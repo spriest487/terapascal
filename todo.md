@@ -1,6 +1,7 @@
 # features
 * add a named type case to typ::Type for all the things that use full_path, full_name etc
-* attributes - replace `external` etc with these (eventually make them available at runtime but not now)
+* function/method tags 
+  * replace `external` etc with these
 * property syntax
 * numeric compiler error codes
 * compound assignment bitwise ops

@@ -315,9 +315,12 @@ fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Opt
     {
         None => return None,
         Some(index) => {
+            let iface_method = &displayable_iface.methods[index];
+
             let method_decl = MethodDecl {
-                func_decl: displayable_iface.methods[index].decl.clone(),
+                func_decl: iface_method.decl.clone(),
                 access: IFACE_METHOD_ACCESS,
+                tags: iface_method.tags.clone(),
             };
 
             (index, method_decl)
