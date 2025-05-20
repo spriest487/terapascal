@@ -23,7 +23,7 @@ use crate::stack::StackFrame;
 use crate::stack::StackTrace;
 use crate::stack::StackTraceFrame;
 use ir_lang as ir;
-use ir_lang::InstructionFormatter as _;
+use ir_lang::{InstructionFormatter as _};
 use ir_lang::EMPTY_STRING_ID;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -1859,11 +1859,26 @@ impl Interpreter {
             string_lit_values.insert(id, str_val);
         }
 
+        // allocate static arrays for runtime tag objects (must exist before RTTI init)
+        for (tag_loc, tag_count) in lib.metadata.tag_counts() {
+            let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
+            let elements = iter::repeat(nil_any)
+                .take(*tag_count)
+                .collect();
+
+            let empty_tag_array = self.create_dyn_array(&ir::ANY_TYPE, elements, true)?;
+
+            let array_ref = ir::GlobalRef::StaticTagArray(*tag_loc);
+            let array_value = GlobalValue::StaticTagArray(empty_tag_array);
+            self.globals.insert(array_ref, array_value);
+        }
+
+        // create runtime type info objects (TypeInfo and MethodInfo)
         for (ty, runtime_type) in lib.metadata.runtime_types() {
             let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Box::new(ty.clone()));
             self.typeinfo_refs.push(typeinfo_ref.clone());
 
-            let typeinfo_ptr = self.create_typeinfo(runtime_type, &string_lit_values)?;
+            let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
             let ptr_bytes = self.marshaller.marshal_to_vec(&typeinfo_ptr)?;
 
             self.globals.insert(typeinfo_ref.clone(), GlobalValue::Variable {
@@ -1909,19 +1924,6 @@ impl Interpreter {
                 ty: closure_ptr_ty,
                 value: default_val_bytes.into_boxed_slice(),
             });
-        }
-
-        for (tag_loc, tag_count) in lib.metadata.tag_counts() {
-            let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
-            let elements = iter::repeat(nil_any)
-                .take(*tag_count)
-                .collect();
-
-            let empty_tag_array = self.create_dyn_array(&ir::ANY_TYPE, elements, true)?;
-
-            let array_ref = ir::GlobalRef::StaticTagArray(*tag_loc);
-            let array_value = GlobalValue::StaticTagArray(empty_tag_array);
-            self.globals.insert(array_ref, array_value);
         }
 
         self.init_stdlib_globals()?;
@@ -2119,7 +2121,19 @@ impl Interpreter {
         Ok(elements)
     }
     
-    fn create_typeinfo(&mut self,
+    fn get_tags_array_ptr(&self, loc: ir::TagLocation) -> Option<Pointer> {
+        let tags_global = &ir::GlobalRef::StaticTagArray(loc);
+        
+        let Some(GlobalValue::StaticTagArray(ptr)) = self.globals.get(tags_global) else {
+            return None;
+        };
+
+        Some(ptr.clone())
+    }
+    
+    fn create_typeinfo(
+        &mut self,
+        ty: &ir::Type,
         rtti: &ir::RuntimeType,
         string_lit_values: &HashMap<ir::StringID, DynValue>
     ) -> ExecResult<DynValue> {
@@ -2128,12 +2142,30 @@ impl Interpreter {
             Some(name_id) => string_lit_values[name_id].clone(),
         };
         
+        let ty_tags_loc = match ty {
+            ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id)) => {
+                Some(ir::TagLocation::Interface(*iface_id))
+            },
+            
+            ir::Type::RcPointer(ir::VirtualTypeID::Class(id))
+            | ir::Type::Struct(id)
+            | ir::Type::Variant(id) => {
+                Some(ir::TagLocation::TypeDef(*id))
+            }
+
+            _ => None,
+        };
+
+        let ty_tags_array_ptr = ty_tags_loc
+            .and_then(|loc| self.get_tags_array_ptr(loc))
+            .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
+        
         // allocate and store the typeinfo before populating methods, so we can easily
         // get a real heap pointer to use for the "owner" field
         let mut typeinfo_struct = StructValue::new(ir::TYPEINFO_ID, [
             type_name_string,
             DynValue::Pointer(Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))),
-            DynValue::Pointer(Pointer::nil(ir::Type::Nothing)),
+            DynValue::Pointer(ty_tags_array_ptr),
         ]);
         
         let typeinfo_ptr = self.rc_alloc(typeinfo_struct.clone(), true)?;
@@ -2141,12 +2173,30 @@ impl Interpreter {
         // rc_alloc sets this on the copy it stores in memory, but we need to store it again later
         typeinfo_struct.rc = Some(RcState::immortal());
 
+        // the metadata object has more method info than is stored in the actual MethodInfos
+        let method_func_ids: Vec<_> = self.metadata
+            .get_runtime_methods(ty)
+            .map(|method| method.function)
+            .collect();
+        
+        // these should be the same method in the same order!
+        assert_eq!(method_func_ids.len(), rtti.methods.len());
+
         let mut method_info_ptrs = Vec::new();
-        for rtti_method in &rtti.methods {
+        for i in 0..method_func_ids.len() {
+            let rtti_method = &rtti.methods[i];
+            
+            let method_tags_loc = ir::TagLocation::Method(method_func_ids[i]);
+            let method_tags_array_ptr = self
+                .get_tags_array_ptr(method_tags_loc)
+                .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
+
             let name_val = string_lit_values[&rtti_method.name].clone();
             let method_info = StructValue::new(ir::METHODINFO_ID, [
-                name_val,
-                DynValue::Pointer(typeinfo_ptr.clone()),
+                name_val, // name
+                DynValue::Pointer(typeinfo_ptr.clone()), // type info (owner)
+                DynValue::Pointer(Pointer::nil(ir::Type::Nothing)), // impl (unused)
+                DynValue::Pointer(method_tags_array_ptr), // tags array
             ]);
             
             let method_info_ptr = self.rc_alloc(method_info, true)?;

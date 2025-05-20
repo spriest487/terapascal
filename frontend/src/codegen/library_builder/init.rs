@@ -27,7 +27,7 @@ pub fn gen_init_func(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<ir::Func
 }
 
 fn build_tag_init(builder: &mut Builder, ty: &ir::Type) {
-    let tag_loc = match ty {
+    let type_loc = match ty {
         | ir::Type::RcPointer(ir::VirtualTypeID::Class(id))
         | ir::Type::Struct(id)
         | ir::Type::Flags(id, _)
@@ -38,49 +38,59 @@ fn build_tag_init(builder: &mut Builder, ty: &ir::Type) {
         | _ => None,
     };
 
-    let Some(loc) = tag_loc else {
-        return;
-    };
-
-    // type of field that stores tags in TypeInfo class
+    // type of field that stores tags in TypeInfo/MethodInfo class (array of object)
     let any_dyn_array = builder.translate_dyn_array_struct(&typ::Type::Any);
     let any_dyn_array_ty = ir::Type::class_ptr(any_dyn_array);
 
-    let typeinfo_ty = ir::Type::class_ptr(ir::TYPEINFO_ID);
+    // type-level tags stored in TypeInfo
+    if let Some(type_loc) = type_loc {
+        let type_tags = builder.find_tags(&type_loc).to_vec();
 
-    let type_tags = builder.find_tags(&loc).to_vec();
-    if type_tags.is_empty() {
+        // global ref to this type's static tag array (allocated by the runtime)
+        let tags_array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(type_loc));
+
+        // create tags
+        gen_create_tags(builder, tags_array_ref, type_tags, &any_dyn_array_ty);
+    }
+
+    // method tags stored in MethodInfo
+    let runtime_method_ids: Vec<_> = builder
+        .get_runtime_methods(ty)
+        .map(|method_info| method_info.function)
+        .collect();
+
+    for method_id in runtime_method_ids {
+        let method_loc = ir::TagLocation::Method(method_id);
+        let method_tags = builder.find_tags(&method_loc).to_vec();
+
+        // global ref to this type's static tag array (allocated by the runtime)
+        let tags_array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(method_loc));
+        gen_create_tags(builder,tags_array_ref, method_tags, &any_dyn_array_ty);
+    }
+}
+
+fn gen_create_tags(builder: &mut Builder, tag_array: ir::Ref, tags: Vec<typ::ast::TagItem>, tag_array_ty: &ir::Type) {
+    if tags.is_empty() {
         return;
     }
 
-    let tags_array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(loc));
-
-    // get the `TypeInfo.tags` field
-    let typeinfo_tags_field_ptr = builder.local_temp(any_dyn_array_ty.clone().ptr());
-
-    let type_typeinfo_ref = ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(Box::new(ty.clone())));
-    builder.field(typeinfo_tags_field_ptr.clone(), type_typeinfo_ref, typeinfo_ty.clone(), ir::TYPEINFO_TAGS_FIELD);
-
-    // assign tag array to tags field
-    builder.mov(typeinfo_tags_field_ptr.clone().to_deref(), tags_array_ref.clone());
-
     // get the ptr field of the tags array (pointer to field of type Object^)
     let tags_array_ptr_field_ptr = builder.local_temp(ir::ANY_TYPE.ptr().ptr());
-    builder.field(tags_array_ptr_field_ptr.clone(), typeinfo_tags_field_ptr.to_deref(), any_dyn_array_ty, ir::DYNARRAY_PTR_FIELD);
+    builder.field(tags_array_ptr_field_ptr.clone(), tag_array, tag_array_ty.clone(), ir::DYNARRAY_PTR_FIELD);
 
     let tag_ptr = builder.local_temp(ir::ANY_TYPE.ptr());
 
-    for i in 0..type_tags.len() {
-        let tag_item = &type_tags[i];
+    for i in 0..tags.len() {
+        let tag_item = &tags[i];
 
         // should be safe, tags must be translated before their owning types
 
         let tag_ty = builder.translate_type(&tag_item.tag_type)
             .rc_resource_def_id()
             .expect("tags must be classes!");
-        
+
         let tag_class = ir::Type::class_ptr(tag_ty);
-        
+
         let tag_struct_def = builder
             .get_struct(tag_ty)
             .expect("tag class struct must exist")
@@ -89,7 +99,7 @@ fn build_tag_init(builder: &mut Builder, ty: &ir::Type) {
         // deref the field to get the array pointer, offset it to get the item pointer
         // tag_ptr := (tags_array_ptr_field_ptr^) + (i * sizeof(Any)
         builder.add(tag_ptr.clone(), tags_array_ptr_field_ptr.clone().to_deref(), ir::Value::LiteralI32(i as i32));
-        
+
         let tag_instance = builder.local_temp(tag_class.clone());
         builder.rc_new(tag_instance.clone(), tag_ty, true);
 

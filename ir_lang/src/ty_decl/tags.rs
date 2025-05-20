@@ -1,5 +1,5 @@
 use std::fmt;
-use crate::{FieldID, InterfaceID};
+use crate::{FieldID, FunctionID, InterfaceID};
 use crate::TypeDefID;
 use crate::Value;
 use serde::Deserialize;
@@ -23,6 +23,7 @@ pub struct TagArg {
 pub enum TagLocation {
     TypeDef(TypeDefID),
     Interface(InterfaceID),
+    Method(FunctionID),
 }
 
 impl fmt::Display for TagLocation {
@@ -31,6 +32,7 @@ impl fmt::Display for TagLocation {
         match self {
             TagLocation::TypeDef(id) => write!(f, "type {}", id.0)?,
             TagLocation::Interface(id) => write!(f, "interface {}", id.0)?,
+            TagLocation::Method(id) => write!(f, "method {}", id.0)?,
         }
         write!(f, ")")
     }

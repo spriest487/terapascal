@@ -594,6 +594,8 @@ impl LibraryBuilder {
         );
         self.library.functions.insert(id, ir::Function::Local(ir_func));
 
+        self.add_tags(ir::TagLocation::Method(id), &method_decl.tags);
+
         cached_func
     }
 

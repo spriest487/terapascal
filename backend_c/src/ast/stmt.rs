@@ -37,6 +37,7 @@ impl fmt::Display for GlobalName {
                 match loc {
                     TagLocation::TypeDef(id) => write!(f, "Type_{}", id.0),
                     TagLocation::Interface(id) => write!(f, "Iface_{}", id.0),
+                    TagLocation::Method(id) => write!(f, "Method_{}", id.0),
                 }
             }
             GlobalName::Variable(id) => write!(f, "Variable_{}", id.0),

@@ -5,6 +5,7 @@ use crate::ty::FieldID;
 use crate::ty::VirtualTypeID;
 use crate::ty_decl::TagLocation;
 use crate::FunctionDecl;
+use crate::FunctionID;
 use crate::FunctionSig;
 use crate::GlobalRef;
 use crate::InstructionFormatter;
@@ -15,6 +16,7 @@ use crate::InterfaceImpl;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Ref;
+use crate::RuntimeMethod;
 use crate::SetAliasDef;
 use crate::SetAliasID;
 use crate::StaticClosureID;
@@ -27,7 +29,6 @@ use crate::TypeDef;
 use crate::TypeDefID;
 use crate::Value;
 use crate::VariantDef;
-use crate::FunctionID;
 use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 use serde::Serialize;
@@ -373,7 +374,7 @@ impl Metadata {
     pub fn runtime_types(&self) -> impl Iterator<Item = (&Type, &Rc<RuntimeType>)> {
         self.runtime_types.iter()
     }
-    
+
     pub fn find_runtime_method(&self, type_name: &str, method_name: &str) -> Option<(&Type, &Rc<RuntimeType>, usize)> {
         let type_name_str = self.find_string_id(type_name)?;
         
@@ -388,6 +389,13 @@ impl Metadata {
             .position(|m| m.name == method_name_str)?;
         
         Some((ty, runtime_type, method_index))
+    }
+
+    pub fn get_runtime_methods(&self, ty: &Type) -> impl Iterator<Item=&RuntimeMethod> {
+        self.runtime_types
+            .get(ty)
+            .into_iter()
+            .flat_map(|src_ty| src_ty.methods.iter())
     }
 
     pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {

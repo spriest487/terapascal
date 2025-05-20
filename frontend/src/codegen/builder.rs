@@ -6,10 +6,9 @@ mod test;
 use self::scope::*;
 use crate::ast as ast;
 use crate::ast::IdentPath;
-use crate::codegen::ir;
+use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::FunctionDefKey;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::metadata::*;
 use crate::codegen::FunctionInstance;
 use crate::codegen::IROptions;
@@ -102,7 +101,7 @@ impl<'m> Builder<'m> {
         }
     }
 
-    pub fn translate_name(&mut self, name: &typ::Symbol) -> NamePath {
+    pub fn translate_name(&mut self, name: &Symbol) -> NamePath {
         translate_name(name, &self.generic_context, self.library)
     }
 
@@ -131,6 +130,10 @@ impl<'m> Builder<'m> {
         }
 
         self.library.translate_method_impl(self_ty, self_ty_method_index, call_ty_args)
+    }
+
+    pub fn get_runtime_methods(&self, ty: &Type) -> impl Iterator<Item=&RuntimeMethod> {
+        self.library.metadata().get_runtime_methods(ty)
     }
 
     pub fn translate_func(
@@ -1051,7 +1054,7 @@ impl<'m> Builder<'m> {
         label
     }
 
-    pub fn find_tags(&self, loc: &ir::TagLocation) -> &[typ::ast::TagItem] {
+    pub fn find_tags(&self, loc: &TagLocation) -> &[typ::ast::TagItem] {
         self.library.find_tags(loc)
     }
 
@@ -1291,7 +1294,7 @@ impl<'m> Builder<'m> {
         }
     }
     
-    fn call_release(&mut self, at: Ref, ty: &ir::Type) {
+    fn call_release(&mut self, at: Ref, ty: &Type) {
         let rc_funcs = self.library.gen_runtime_type(ty);
 
         if let Some(release) = rc_funcs.release {
