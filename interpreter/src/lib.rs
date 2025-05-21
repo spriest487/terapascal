@@ -1936,19 +1936,10 @@ impl Interpreter {
         self.push_stack(Rc::new("<init>".to_string()), init_stack_size);
         // self.execute(lib.init())?;
         // self.pop_stack()?;
-        let e = self.execute(lib.init()).and_then(|_|
-        self.pop_stack());
+        self.execute(lib.init())?;
+
+        self.pop_stack()?;
         
-        // let cell = self.load(&ir::Ref::from(ir::GlobalRef::StaticTagArray(ir::TagLocation::TypeDef(ir::TypeDefID(6)))).to_deref());
-        // eprintln!("{:#?}", cell);
-        // let arr = self.read_dynarray()
-        // eprintln!("{:#?}", cell.unwrap());
-
-        // let cell = self.load(&ir::Ref::from(ir::GlobalRef::StaticTypeInfo(Box::new(ir::Type::class_ptr(ir::TypeDefID(6))))).to_deref())?;
-        // let s = cell.as_struct(ir::TypeDefID(6)).unwrap();
-
-        // eprintln!("{:#?}", cell);
-        e?;
         Ok(())
     }
 
@@ -2183,12 +2174,12 @@ impl Interpreter {
         assert_eq!(method_func_ids.len(), rtti.methods.len());
 
         let mut method_info_ptrs = Vec::new();
-        for i in 0..method_func_ids.len() {
-            let rtti_method = &rtti.methods[i];
+        for method_index in 0..method_func_ids.len() {
+            let rtti_method = &rtti.methods[method_index];
             
-            let method_tags_loc = ir::TagLocation::Method(method_func_ids[i]);
-            let method_tags_array_ptr = self
-                .get_tags_array_ptr(method_tags_loc)
+            let method_tags_array_ptr = ty_tags_loc
+                .and_then(|loc| loc.method_loc(method_index))
+                .and_then(|loc| self.get_tags_array_ptr(loc))
                 .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
 
             let name_val = string_lit_values[&rtti_method.name].clone();

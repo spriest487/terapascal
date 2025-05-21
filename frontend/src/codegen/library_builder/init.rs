@@ -27,45 +27,34 @@ pub fn gen_init_func(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<ir::Func
 }
 
 fn build_tag_init(builder: &mut Builder, ty: &ir::Type) {
-    let type_loc = match ty {
-        | ir::Type::RcPointer(ir::VirtualTypeID::Class(id))
-        | ir::Type::Struct(id)
-        | ir::Type::Flags(id, _)
-        | ir::Type::Variant(id) => Some(ir::TagLocation::TypeDef(*id)),
-
-        | ir::Type::RcPointer(ir::VirtualTypeID::Interface(id)) => Some(ir::TagLocation::Interface(*id)),
-
-        | _ => None,
-    };
-
     // type of field that stores tags in TypeInfo/MethodInfo class (array of object)
     let any_dyn_array = builder.translate_dyn_array_struct(&typ::Type::Any);
     let any_dyn_array_ty = ir::Type::class_ptr(any_dyn_array);
 
     // type-level tags stored in TypeInfo
-    if let Some(type_loc) = type_loc {
-        let type_tags = builder.find_tags(&type_loc).to_vec();
+    if let Some(type_loc) = ty.tags_loc() {
+        let type_tags = builder.find_tags(type_loc).to_vec();
 
         // global ref to this type's static tag array (allocated by the runtime)
         let tags_array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(type_loc));
 
         // create tags
         gen_create_tags(builder, tags_array_ref, type_tags, &any_dyn_array_ty);
-    }
 
-    // method tags stored in MethodInfo
-    let runtime_method_ids: Vec<_> = builder
-        .get_runtime_methods(ty)
-        .map(|method_info| method_info.function)
-        .collect();
+        // method tags stored in MethodInfo
+        let method_count = builder.get_runtime_methods(ty).count();
+        
+        for method_index in 0..method_count {
+            let method_loc = type_loc
+                .method_loc(method_index)
+                .unwrap_or_else(|| panic!("loc for type {} must be a typedef", builder.pretty_ty_name(ty)));
 
-    for method_id in runtime_method_ids {
-        let method_loc = ir::TagLocation::Method(method_id);
-        let method_tags = builder.find_tags(&method_loc).to_vec();
+            let method_tags = builder.find_tags(method_loc).to_vec();
 
-        // global ref to this type's static tag array (allocated by the runtime)
-        let tags_array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(method_loc));
-        gen_create_tags(builder,tags_array_ref, method_tags, &any_dyn_array_ty);
+            // global ref to this type's static tag array (allocated by the runtime)
+            let tags_array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(method_loc));
+            gen_create_tags(builder,tags_array_ref, method_tags, &any_dyn_array_ty);
+        }
     }
 }
 

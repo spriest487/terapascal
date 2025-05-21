@@ -3,7 +3,7 @@ mod init;
 mod dyn_array;
 mod function;
 
-use crate::ast::Access;
+use crate::ast::Access::Published;
 use crate::ast::FunctionParamMod;
 use crate::ast::IdentPath;
 use crate::ast::MethodOwner;
@@ -34,7 +34,7 @@ use crate::codegen::FunctionInstance;
 use crate::codegen::IROptions;
 use crate::codegen::SetFlagsType;
 use crate::typ::ast::apply_func_decl_named_ty_args;
-use crate::typ::builtin_ident;
+use crate::typ::ast::FunctionDecl;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
 use crate::typ::builtin_typeinfo_name;
@@ -50,6 +50,7 @@ use crate::typ::TypeArgsResult;
 use crate::typ::TypeParamContainer;
 use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
+use crate::typ::builtin_ident;
 use crate::Ident;
 use common::span::Span;
 pub use function::*;
@@ -125,7 +126,7 @@ impl LibraryBuilder {
             cached_types,
 
             tags: HashMap::new(),
-
+            
             set_flags_type_info: BTreeMap::new(),
             
             translated_funcs: HashMap::new(),
@@ -467,7 +468,7 @@ impl LibraryBuilder {
         cached_func
     }
 
-    pub(crate) fn instantiate_method(
+    fn instantiate_method(
         &mut self,
         method_key: &MethodDeclKey,
         type_args: Option<&typ::TypeArgList>,
@@ -502,13 +503,14 @@ impl LibraryBuilder {
                 generic_ctx.push(type_params, type_args);
                 typ::Type::variant(sym.as_ref().clone().with_ty_args(None))
             }
-        
+
             // nothing to do if the type isn't parameterized
             _ => {
                 assert_eq!(
-                    TypeArgsResult::NotGeneric, 
-                    method_key.self_ty.type_args(), "expected non-generic self type for instantiation of {} method {} without type args", 
-                    method_key.self_ty, 
+                    TypeArgsResult::NotGeneric,
+                    method_key.self_ty.type_args(),
+                    "expected non-generic self type for instantiation of {} method {} without type args",
+                    method_key.self_ty,
                     method_key.method_index
                 );
 
@@ -594,13 +596,28 @@ impl LibraryBuilder {
         );
         self.library.functions.insert(id, ir::Function::Local(ir_func));
 
-        self.add_tags(ir::TagLocation::Method(id), &method_decl.tags);
+        if !method_decl.tags.is_empty() {
+            let ir_self_ty = self.translate_type(&decl_self_ty, &GenericContext::empty());
+            
+            let Some(tags_loc) = ir_self_ty
+                .tags_loc()
+                .and_then(|ty_tags_loc| ty_tags_loc.method_loc(method_key.method_index)) 
+            else {
+                panic!("produced tags for method {} with no valid tag location!", method_decl.func_decl.name)
+            };
+
+            self.add_tags(tags_loc, &method_decl.tags);
+        }
 
         cached_func
     }
 
     fn instantiate_virtual_method(&mut self, virtual_key: &VirtualMethodKey) -> FunctionInstance {
         let impl_method = &virtual_key.impl_method;
+
+        // virtual methods can't be generic
+        let generic_ctx = typ::GenericContext::empty();
+        let self_ty = self.translate_type(&impl_method.self_ty, &generic_ctx);
 
         // virtual calls can't have type args yet
         let type_args = None;
@@ -634,11 +651,6 @@ impl LibraryBuilder {
                 let iface_meta = builder.translate_iface(&src_iface_def);
                 self.library.metadata.define_iface(iface_meta)
             });
-        
-        // virtual methods can't be generic
-        let generic_ctx = typ::GenericContext::empty();
-
-        let self_ty = self.translate_type(&impl_method.self_ty, &generic_ctx);
 
         self.library.metadata.impl_method(iface_id, self_ty, method_name, impl_func.id);
 
@@ -952,7 +964,7 @@ impl LibraryBuilder {
     pub fn translate_type(
         &mut self,
         src_ty: &typ::Type,
-        generic_ctx: &typ::GenericContext,
+        generic_ctx: &GenericContext,
     ) -> ir::Type {
         let src_ty = generic_ctx.apply_to_type(src_ty.clone());
         if let Some(cached) = self.type_cache.get(&src_ty) {
@@ -1194,13 +1206,17 @@ impl LibraryBuilder {
             for (elem_ty, struct_id) in populate_dynarrays.drain(0..) {
                 gen_dyn_array_rc_boilerplate(self, &elem_ty, struct_id);
                 gen_dyn_array_funcs(self, &elem_ty, struct_id);
-                
+
                 done_dynarrays += 1;
             }
 
             for (src_ty, ty) in populate_types.drain(0..) {
                 if src_ty.as_class().is_ok() {
                     gen_class_runtime_type(self, &ty);
+                }
+                
+                if src_ty.as_iface().is_some() {
+                    gen_iface_virtual_method_info(self, &src_ty);
                 }
 
                 self.gen_iface_impls(&src_ty);
@@ -1227,36 +1243,20 @@ impl LibraryBuilder {
                     .unwrap();
 
                 for (method_index, method) in def.methods.iter().enumerate() {
-                    let method_name = method.func_decl.name.ident.as_str();
-                    let method_name_id = self.library.metadata.find_or_insert_string(method_name);
+                    if method.access >= Published && method.func_decl.type_params.is_none() {
+                        rtti.methods.push(self.create_runtime_method(&src_ty, method_index, false, &method.func_decl));
+                    }
+                }
+            }
+            
+            typ::Type::Interface(name) => {
+                let def = self.src_metadata
+                    .instantiate_iface_def(name.as_ref())
+                    .unwrap();
 
-                    let method_generic_ctx = GenericContext::empty();
-
-                    if method.access >= Access::Published && method.func_decl.type_params.is_none() {
-                        let params = method.func_decl.params
-                            .iter()
-                            .map(|param| {
-                                let mut param_ty = self.translate_type(&param.ty, &method_generic_ctx);
-                                if matches!(param.modifier, Some(FunctionParamMod::Var | FunctionParamMod::Out)) {
-                                    param_ty = param_ty.ptr();
-                                }
-
-                                param_ty
-                            })
-                            .collect();
-
-                        let method_key = MethodDeclKey {
-                            self_ty: src_ty.clone(),
-                            method_index,
-                        };
-                        let method_instance = self.instantiate_method(&method_key, None);
-
-                        rtti.methods.push(ir::RuntimeMethod {
-                            function: method_instance.id,
-                            name: method_name_id,
-                            params,
-                            result_ty: self.translate_type(&method.func_decl.return_ty, &method_generic_ctx),
-                        });
+                for (method_index, method) in def.methods.iter().enumerate() {
+                    if method.decl.type_params.is_none() {
+                        rtti.methods.push(self.create_runtime_method(&src_ty, method_index, true, &method.decl));
                     }
                 }
             }
@@ -1268,6 +1268,53 @@ impl LibraryBuilder {
 
         // replace the existing RTTI
         self.library.metadata.insert_runtime_type(ty, rtti);
+    }
+
+    fn create_runtime_method(&mut self,
+        src_ty: &typ::Type,
+        method_index: usize,
+        is_abstract: bool,
+        decl: &FunctionDecl,
+    ) -> ir::RuntimeMethod {
+        let method_name = decl.name.ident.as_str();
+        let method_name_id = self.library.metadata.find_or_insert_string(method_name);
+
+        let generic_ctx = GenericContext::empty();
+
+        let params = decl.params
+            .iter()
+            .map(|param| {
+                // in RTTI, "self" params for interfaces become untyped pointers
+                let mut param_ty = match &param.ty {
+                    typ::Type::MethodSelf => ir::Type::Nothing.ptr(),
+                    ty => self.translate_type(ty, &generic_ctx)
+                };
+
+                if matches!(param.modifier, Some(FunctionParamMod::Var | FunctionParamMod::Out)) {
+                    param_ty = param_ty.ptr();
+                }
+
+                param_ty
+            })
+            .collect();
+        
+        let function = if is_abstract {
+            None
+        } else {
+            let method_key = MethodDeclKey {
+                self_ty: src_ty.clone(),
+                method_index,
+            };
+            let method_instance = self.instantiate_method(&method_key, None);
+            Some(method_instance.id)
+        };
+
+        ir::RuntimeMethod {
+            function,
+            name: method_name_id,
+            params,
+            result_ty: self.translate_type(&decl.return_ty, &generic_ctx),
+        }
     }
 
     pub fn translate_dyn_array_struct(
@@ -1326,7 +1373,6 @@ impl LibraryBuilder {
         builder.append(ir::Instruction::Label(bounds_ok_label));
 
         let body = builder.finish();
-
 
         let debug_name = if self.opts.debug {
             let element_name = self.metadata().pretty_ty_name(element_ty);
@@ -1552,8 +1598,28 @@ impl LibraryBuilder {
         self.metadata_mut().alloc_tag_array(loc, new_tag_count);
     }
 
-    pub(crate) fn find_tags(&self, loc: &ir::TagLocation) -> &[typ::ast::TagItem] {
-        self.tags.get(loc).map(Vec::as_slice).unwrap_or(&[])
+    pub(crate) fn find_tags(&self, loc: ir::TagLocation) -> &[typ::ast::TagItem] {
+        self.tags.get(&loc).map(Vec::as_slice).unwrap_or(&[])
+    }
+}
+
+fn gen_iface_virtual_method_info(lib: &mut LibraryBuilder, iface_ty: &typ::Type) {
+    let iface_methods = iface_ty
+        .methods(&lib.src_metadata)
+        .unwrap();
+    let iface_id = lib.find_iface_decl(iface_ty.full_name().unwrap().as_ref()).unwrap();
+    
+    for method_index in 0..iface_methods.len() {
+        let method = &iface_methods[method_index];
+
+        if !method.tags.is_empty() {
+            let tags_loc = ir::TagLocation::InterfaceMethod {
+                iface_id,
+                method_index,
+            };
+
+            lib.add_tags(tags_loc, &method.tags);
+        }
     }
 }
 

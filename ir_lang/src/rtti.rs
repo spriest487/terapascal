@@ -1,7 +1,7 @@
-use crate::FunctionID;
 use crate::Metadata;
 use crate::StringID;
 use crate::Type;
+use crate::FunctionID;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -43,7 +43,8 @@ pub struct DynArrayRuntimeType {
 pub struct RuntimeMethod {
     pub name: StringID,
 
-    pub function: FunctionID,
+    // None for abstract methods
+    pub function: Option<FunctionID>,
 
     pub result_ty: Type,
     pub params: Vec<Type>,

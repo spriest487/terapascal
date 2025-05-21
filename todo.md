@@ -5,6 +5,7 @@
 * property syntax
 * numeric compiler error codes
 * compound assignment bitwise ops
+* IsAbstract property for TypeInfo/MethodInfo
 
 # bugs
 * parser: newlines/escape chars in string literals

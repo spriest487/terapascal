@@ -369,6 +369,10 @@ static bool System_IsNaN(float val) {
 
 static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, POINTERARRAY_STRUCT* args, void* outResult) {
     Invoker invoker = METHODINFO_INVOKER(method);
+    if (!invoker) {
+        fprintf(stderr, "InvokeMethod called for abstract method\n");
+        abort();
+    }
 
     if (instance) {
         int args_len = DYNARRAY_LEN(args);

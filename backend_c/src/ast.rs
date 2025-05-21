@@ -11,13 +11,13 @@ pub use self::ty_def::*;
 use crate::ast::string_lit::StringLiteral;
 use crate::ir;
 use crate::Options;
+use ir_lang::EMPTY_STRING_ID;
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use topological_sort::TopologicalSort;
-use ir_lang::EMPTY_STRING_ID;
 
 pub struct Unit {
     functions: Vec<FunctionDef>,
@@ -578,9 +578,14 @@ impl Unit {
                     type_info_expr.clone().addr_of(),
                 )));
 
+                let impl_ptr_expr = match method.function {
+                    Some(id) => Expr::Function(FunctionName::Invoker(id)).addr_of(),
+                    None => Expr::Null,
+                };
+
                 init_stmts.push(Statement::Expr(Expr::assign(
                     method_ptr_expr.clone().arrow(FieldName::ID(ir::METHODINFO_IMPL_FIELD)),
-                    Expr::Function(FunctionName::Invoker(method.function)).addr_of(),
+                    impl_ptr_expr,
                 )));
             }
 
@@ -681,7 +686,12 @@ impl fmt::Display for Unit {
             // so we'll initialize the rest before initialization in main()
             writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
             writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
-            writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
+            
+            writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
+            match ty.tags_loc() {
+                Some(loc) => write!(f, "{}", GlobalName::StaticTagArray(loc))?,
+                None => write!(f, "NULL,")?,
+            }
 
             writeln!(f, "}};")?;
         }

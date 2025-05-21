@@ -338,17 +338,25 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
         param_index += 1;
     }
 
-    let result_val = state.call(method.function, &call_arg_vals)?;
-    if !result_ptr_arg.is_null() {
-        let Some(result_val) = result_val else {
-            return Err(ExecError::illegal_state("result pointer was provided but function did not return a value"));
-        };
+    match method.function {
+        Some(func_id) => {
+            let result_val = state.call(func_id, &call_arg_vals)?;
+            if !result_ptr_arg.is_null() {
+                let Some(result_val) = result_val else {
+                    return Err(ExecError::illegal_state("result pointer was provided but function did not return a value"));
+                };
+
+                let result_ptr = result_ptr_arg.reinterpret(method.result_ty.clone());
+                state.store_indirect(&result_ptr, result_val)?;
+            }
+
+            Ok(())
+        }
         
-        let result_ptr = result_ptr_arg.reinterpret(method.result_ty.clone());
-        state.store_indirect(&result_ptr, result_val)?;
+        None => {
+            Err(ExecError::illegal_state("InvokeMethod called for abstract method"))
+        }
     }
-    
-    Ok(())
 }
 
 fn find_type_info(state: &mut Interpreter) -> ExecResult<()> {

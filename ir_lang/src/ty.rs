@@ -6,6 +6,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
 use std::rc::Rc;
+use crate::TagLocation;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Type {
@@ -143,6 +144,19 @@ impl Type {
             VirtualTypeID::Class(id)
             | VirtualTypeID::Closure(id) => Some(id),
             _ => None,
+        }
+    }
+    
+    pub fn tags_loc(&self) -> Option<TagLocation> {
+        match self {
+            | Type::RcPointer(VirtualTypeID::Class(id))
+            | Type::Struct(id)
+            | Type::Flags(id, _)
+            | Type::Variant(id) => Some(TagLocation::TypeDef(*id)),
+
+            | Type::RcPointer(VirtualTypeID::Interface(id)) => Some(TagLocation::Interface(*id)),
+
+            | _ => None,
         }
     }
 }
