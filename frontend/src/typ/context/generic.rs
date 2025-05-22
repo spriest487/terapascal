@@ -123,6 +123,8 @@ impl TypeParamContainer for GenericContext {
 
 impl fmt::Display for GenericContext {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut has_constraints = false;
+        
         write!(f, "[")?;
         
         for i in 0..self.items.len() {
@@ -131,13 +133,31 @@ impl fmt::Display for GenericContext {
             }
             
             write!(f, "{}", self.items[i].param.name)?;
-            if let Some(constraint) = &self.items[i].param.constraint {
-                write!(f, " is {}", constraint.is_ty)?;
-            }
+            has_constraints |= self.items[i].param.constraint.is_some();
             
             write!(f, " = {}", self.items[i].arg)?;
         }
         
-        write!(f, "]")
+        write!(f, "]")?;
+        
+        if has_constraints {
+            let mut constraint_count = 0;
+            write!(f, " where ")?;
+            for item in &self.items {
+                let Some(constraint) = &item.param.constraint else {
+                    continue;
+                };
+
+                if constraint_count > 0 {
+                    write!(f, ", ")?;
+                }
+                
+                write!(f, "{}", constraint)?;
+                
+                constraint_count += 1;
+            }
+        }
+        
+        Ok(())
     }
 }

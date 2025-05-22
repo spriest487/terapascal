@@ -23,7 +23,7 @@ implementation
 
 function SortedDictEntry.Compare(other: SortedDictEntry): Integer;
 begin
-    return self.key.Compare(other.key);
+    self.key.Compare(other.key)
 end;
 
 end.

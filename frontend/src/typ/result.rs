@@ -852,27 +852,14 @@ impl DiagnosticOutput for TypeError {
                 messages.extend(mismatched
                     .iter()
                     .flat_map(|i| {
+                        let decl_msg = format!("declared here as `{}`", i.expect_sig);
+                        let actual_msg = format!("mismatched implementation here as `{}`", i.actual_sig);
+
                         vec![
-                            DiagnosticMessage {
-                                title: format!(
-                                    "{} declared here ({})", 
-                                    i.iface_method_name, 
-                                    i.expect_sig
-                                ),
-                                label: Some(DiagnosticLabel {
-                                    text: None,
-                                    span: i.iface_method_name.span.clone(),
-                                }),
-                                notes: Vec::new(),
-                            },
-                            DiagnosticMessage {
-                              title: format!("mismatched implementation here {} ({})", i.impl_method_name, i.actual_sig),
-                                label: Some(DiagnosticLabel {
-                                    text: None,
-                                    span: i.impl_method_name.span.clone(),
-                                }),
-                                notes: Vec::new(),
-                            },
+                            DiagnosticMessage::new(decl_msg)
+                                .with_label(DiagnosticLabel::new(i.iface_method_name.span.clone())),
+                            DiagnosticMessage::new(actual_msg)
+                                .with_label(DiagnosticLabel::new(i.impl_method_name.span.clone())),
                         ]
                     }));
                     
