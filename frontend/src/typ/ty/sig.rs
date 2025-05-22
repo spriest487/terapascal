@@ -138,7 +138,7 @@ impl FunctionSig {
             .map(|p| FunctionSigParam::from_decl_param(p))
             .collect();
         
-        Self::new(return_ty, param_sigs, decl.type_params.clone())
+        Self::new(return_ty, param_sigs, decl.name.type_params.clone())
     }
 
     pub fn visit_types_ref<Visitor>(&self, visitor: Visitor)

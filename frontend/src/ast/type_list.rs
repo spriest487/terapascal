@@ -1,4 +1,4 @@
-use crate::ast::Annotation;
+use crate::ast::{Annotation, TypeName, TypeParam};
 use crate::parse::Match;
 use crate::parse::Parse;
 use crate::parse::ParseError;
@@ -209,6 +209,10 @@ impl TypeIdentList {
             
             None => Ok(None),
         }
+    }
+
+    pub fn to_unconstrained_params(self) -> TypeList<TypeParam<TypeName>> {
+        self.map(|name, _| TypeParam::new(name))
     }
     
     fn not_empty(self) -> ParseResult<Self> {

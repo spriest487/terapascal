@@ -190,6 +190,7 @@ pub fn builtin_comparable_iface() -> ast::InterfaceDecl {
 
     ast::InterfaceDecl {
         name: builtin_comparable_name(),
+        where_clause: None,
         tags: Vec::new(),
         supers: Vec::new(),
         methods: vec![
@@ -209,9 +210,11 @@ pub fn builtin_comparable_compare_method(owning_ty: Type, self_ty: Type) -> ast:
     ast::FunctionDecl {
         name: ast::TypedFunctionName::new_method(
             builtin_ident(COMPARABLE_COMPARE_NAME),
+            None,
             owning_ty.clone(),
             builtin_span.clone(),
         ),
+        where_clause: None,
         kind: FunctionDeclKind::Function,
         params: vec![
             ast::FunctionParam {
@@ -228,7 +231,6 @@ pub fn builtin_comparable_compare_method(owning_ty: Type, self_ty: Type) -> ast:
             }
         ],
         return_ty: Type::from(Primitive::Int32),
-        type_params: None,
         mods: Vec::new(),
         span: builtin_span.clone(),
     }
@@ -248,6 +250,7 @@ pub fn builtin_displayable_iface() -> ast::InterfaceDecl {
 
     ast::InterfaceDecl {
         name: builtin_displayable_name(),
+        where_clause: None,
         tags: Vec::new(),
         supers: Vec::new(),
         methods: vec![
@@ -267,9 +270,11 @@ pub fn builtin_displayable_display_method(owning_ty: Type, self_ty: Type) -> ast
     ast::FunctionDecl {
         name: ast::TypedFunctionName::new_method(
             builtin_ident(DISPLAYABLE_TOSTRING_METHOD),
+            None,
             owning_ty.clone(),
             builtin_span.clone(),
         ),
+        where_clause: None,
         kind: FunctionDeclKind::Function,
         params: vec![
             ast::FunctionParam {
@@ -283,7 +288,6 @@ pub fn builtin_displayable_display_method(owning_ty: Type, self_ty: Type) -> ast
             Ident::new(SYSTEM_UNIT_NAME, builtin_span.clone()),
             Ident::new(STRING_TYPE_NAME, builtin_span.clone()),
         ])),
-        type_params: None,
         mods: Vec::new(),
         span: builtin_span.clone(),
     }

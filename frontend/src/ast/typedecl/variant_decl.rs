@@ -1,6 +1,5 @@
-use crate::ast::parse_implements_clause;
 use crate::ast::tag::Tag;
-use crate::ast::type_method_start;
+use crate::ast::{type_method_start, WhereClause};
 use crate::ast::type_name::TypeName;
 use crate::ast::Access;
 use crate::ast::Annotation;
@@ -10,6 +9,7 @@ use crate::ast::Keyword;
 use crate::ast::MethodDecl;
 use crate::ast::MethodOwner;
 use crate::ast::TypeDeclName;
+use crate::ast::parse_implements_clause;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -29,6 +29,8 @@ use std::rc::Rc;
 #[derivative(Debug, PartialEq, Hash)]
 pub struct VariantDecl<A: Annotation> {
     pub name: Rc<A::Name>,
+    pub where_clause: Option<WhereClause<A::Type>>,
+    
     pub forward: bool,
 
     pub tags: Vec<Tag<A>>,
@@ -127,6 +129,8 @@ impl VariantDecl<Span> {
             
             Ok(VariantDecl {
                 name: Rc::new(name),
+                where_clause: None,
+                
                 forward: true,
 
                 tags: Vec::new(),
@@ -140,6 +144,8 @@ impl VariantDecl<Span> {
             })
         } else {
             let implements = parse_implements_clause(tokens)?;
+
+            let where_clause = WhereClause::try_parse(tokens)?;
 
             let cases = VariantCase::parse_seq(tokens)?;
             tokens.match_one_maybe(Separator::Semicolon);
@@ -180,6 +186,7 @@ impl VariantDecl<Span> {
 
             Ok(VariantDecl {
                 name: Rc::new(name),
+                where_clause,
 
                 tags,
 

@@ -106,7 +106,7 @@ fn find_ufcs_free_functions(ty: &Type, ctx: &Context) -> Vec<InstanceMethod> {
 
             if self_param.ty.can_specialize_to(ty, ctx) {
                 let func_name = Symbol::from(decl_path.clone())
-                    .with_ty_params(overload.decl().type_params.clone());
+                    .with_ty_params(overload.decl().name.type_params.clone());
 
                 methods.push(InstanceMethod::FreeFunction {
                     func_name,

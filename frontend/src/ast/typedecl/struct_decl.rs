@@ -1,15 +1,15 @@
 mod member;
 
-use crate::ast::parse_implements_clause;
 use crate::ast::tag::Tag;
 use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::Ident;
 use crate::ast::MethodOwner;
 use crate::ast::TypeDeclName;
-use crate::parse::ParseError;
+use crate::ast::{parse_implements_clause, WhereClause};
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
+use crate::parse::{ParseError, TryParse};
 use crate::Keyword;
 use crate::Separator;
 use common::span::Span;
@@ -36,6 +36,7 @@ pub enum StructKind {
 pub struct StructDecl<A: Annotation = Span> {
     pub kind: StructKind,
     pub name: A::Name,
+    pub where_clause: Option<WhereClause<A::Type>>,
 
     pub tags: Vec<Tag<A>>,
     
@@ -95,7 +96,7 @@ impl StructDecl<Span> {
             Some(tt) => tt.span().to(kw_token.span()),
             None => kw_token.into_span(),
         };
-
+        
         // the last type in a section can never be forward, so every legal forward declaration
         // will end with a semicolon
         if tokens.look_ahead().match_one(Separator::Semicolon).is_some() {
@@ -106,6 +107,7 @@ impl StructDecl<Span> {
             Ok(StructDecl {
                 kind,
                 name,
+                where_clause: None,
                 packed,
                 tags: Vec::new(),
 
@@ -118,6 +120,8 @@ impl StructDecl<Span> {
             })
         } else {
             let implements = parse_implements_clause(tokens)?;
+
+            let where_clause = WhereClause::try_parse(tokens)?;
             
             let default_access = match kind {
                 StructKind::Class => Access::Private,
@@ -140,6 +144,7 @@ impl StructDecl<Span> {
             Ok(StructDecl {
                 kind,
                 name,
+                where_clause,
                 packed,
                 tags,
                 forward: false,

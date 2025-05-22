@@ -180,7 +180,7 @@ pub fn specialize_call_args(
         None => decl.sig(),
     };
     
-    let ty_params = match &decl.type_params {
+    let ty_params = match &decl.name.type_params {
         None => {
             if let Some(explicit_ty_args) = explicit_ty_args {
                 return Err(TypeError::from_generic_err(

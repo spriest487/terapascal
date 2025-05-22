@@ -1,15 +1,15 @@
 use crate::ast::type_name::{IdentTypeName, TypeName};
-use crate::ast::IdentPath;
+use crate::ast::Ident;
 use crate::ast::Keyword;
 use crate::ast::TypeAnnotation;
-use crate::ast::Ident;
-use crate::parse::LookAheadTokenStream;
+use crate::ast::IdentPath;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
+use crate::parse::{LookAheadTokenStream, TryParse};
 use crate::Separator;
 use common::span::Span;
 use common::span::Spanned;
@@ -36,7 +36,7 @@ impl<T: TypeAnnotation> Spanned for TypeConstraint<T> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct WhereClause<T: TypeAnnotation> {
+pub struct WhereClause<T: TypeAnnotation = TypeName> {
     pub constraints: Vec<TypeConstraint<T>>,
     pub span: Span,
 }
@@ -51,6 +51,15 @@ impl<T: TypeAnnotation> fmt::Display for WhereClause<T> {
             write!(f, "{}", constraint)?;
         }
         Ok(())
+    }
+}
+
+impl TryParse for WhereClause<TypeName> {
+    fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
+        match tokens.look_ahead().match_one(Keyword::Where) {
+            None => Ok(None),
+            Some(..) => Self::parse(tokens).map(Some),
+        }
     }
 }
 

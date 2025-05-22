@@ -1054,7 +1054,7 @@ impl<'m> Builder<'m> {
         label
     }
 
-    pub fn find_tags(&self, loc: &TagLocation) -> &[typ::ast::TagItem] {
+    pub fn find_tags(&self, loc: TagLocation) -> &[typ::ast::TagItem] {
         self.library.find_tags(loc)
     }
 

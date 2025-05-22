@@ -7,7 +7,7 @@ use crate::ast::TypeAnnotation;
 use crate::ast::Visibility;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::expr::expect_stmt_initialized;
-use crate::typ::ast::typecheck_alias;
+use crate::typ::ast::{typecheck_alias, WhereClause};
 use crate::typ::ast::typecheck_enum_decl;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_func_def;
@@ -18,7 +18,7 @@ use crate::typ::ast::typecheck_variant;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::SetDecl;
-use crate::typ::typecheck_type;
+use crate::typ::{typecheck_type, GenericError};
 use crate::typ::Binding;
 use crate::typ::ConstValue;
 use crate::typ::Context;
@@ -46,6 +46,33 @@ pub type GlobalBindingItem = ast::UnitBindingItem<Value>;
 pub type TypeDecl = ast::TypeDecl<Value>;
 pub type TypeDeclItem = ast::TypeDeclItem<Value>;
 pub type InitBlock = ast::InitBlock<Value>;
+
+#[derive(Debug)]
+pub struct TypeDeclItemInfo {
+    pub name: Symbol,
+    pub where_clause: Option<WhereClause>,
+    pub visibility: Visibility,
+}
+
+impl TypeDeclItemInfo {
+    pub fn expect_not_generic(&self, kind: InvalidTypeParamsDeclKind, item_span: &Span) -> TypeResult<()> {
+        if self.name.type_params.is_some() {
+            return Err(TypeError::InvalidDeclWithTypeParams {
+                kind,
+                span: item_span.clone(),
+            });
+        }
+
+        if self.name.type_params.is_some() {
+            return Err(TypeError::from_generic_err(
+                GenericError::UnexpectedConstraintList,
+                item_span.clone())
+            );
+        }
+        
+        Ok(())
+    }
+}
 
 fn typecheck_unit_decl(
     decl: &ast::UnitDecl<Span>,
@@ -192,12 +219,29 @@ fn typecheck_type_decl_item(
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<TypeDeclItem> {
-    let full_name = Symbol::from_local_decl_name(&type_decl.name(), ctx)?;
+    let where_clause = match type_decl.constraint_clause() {
+        Some(clause) => Some(WhereClause::typecheck(clause, ctx)?),
+        None => None,
+    };
+
+    let full_name = Symbol::from_local_decl_name(
+        &type_decl.name(),
+        where_clause.as_ref(),
+        ctx
+    )?;
+    
+    let item_info = TypeDeclItemInfo {
+        name: full_name,
+        where_clause,
+        visibility,
+    };
 
     match type_decl {
         // except aliases, we can skip the rest of the type decl code for them
         ast::TypeDeclItem::Alias(alias_decl) => {
-            let alias = typecheck_alias(full_name, alias_decl, ctx)?;
+            item_info.expect_not_generic(InvalidTypeParamsDeclKind::Alias, &alias_decl.span)?;
+
+            let alias = typecheck_alias(item_info.name, alias_decl, ctx)?;
 
             ctx.declare_type(
                 alias.name.ident().clone(),
@@ -211,31 +255,33 @@ fn typecheck_type_decl_item(
 
         ast::TypeDeclItem::Struct(def) => match def.kind {
             StructKind::Class => {
-                let ty = Type::class(full_name.clone());
-                typecheck_type_decl_item_with_def(full_name, ty, type_decl, visibility, ctx)
+                let ty = Type::class(item_info.name.clone());
+                typecheck_type_decl_item_with_def(item_info, ty, type_decl, ctx)
             },
             StructKind::Record => {
-                let ty = Type::record(full_name.clone());
-                typecheck_type_decl_item_with_def(full_name, ty, type_decl, visibility, ctx)
+                let ty = Type::record(item_info.name.clone());
+                typecheck_type_decl_item_with_def(item_info, ty, type_decl, ctx)
             },
         }
 
         ast::TypeDeclItem::Interface(_) => {
-            let ty = Type::interface(full_name.clone());
-            typecheck_type_decl_item_with_def(full_name, ty, type_decl, visibility, ctx)
+            let ty = Type::interface(item_info.name.clone());
+            typecheck_type_decl_item_with_def(item_info, ty, type_decl, ctx)
         },
         ast::TypeDeclItem::Variant(_) => {
-            let ty = Type::variant(full_name.clone());
-            typecheck_type_decl_item_with_def(full_name, ty, type_decl, visibility, ctx)
+            let ty = Type::variant(item_info.name.clone());
+            typecheck_type_decl_item_with_def(item_info, ty, type_decl, ctx)
         },
-        ast::TypeDeclItem::Enum(_) => {
-            full_name.expect_no_type_params(InvalidTypeParamsDeclKind::Enum)?;
+        ast::TypeDeclItem::Enum(enum_decl) => {
+            item_info.expect_not_generic(InvalidTypeParamsDeclKind::Enum, &enum_decl.span)?;
             
-            let ty = Type::enumeration(full_name.full_path.clone());
-            typecheck_type_decl_item_with_def(full_name, ty, type_decl, visibility, ctx)
+            let ty = Type::enumeration(item_info.name.full_path.clone());
+            typecheck_type_decl_item_with_def(item_info, ty, type_decl, ctx)
         },
         ast::TypeDeclItem::Set(set_decl) => {
-            typecheck_set_decl_item(set_decl, full_name, visibility, ctx)
+            item_info.expect_not_generic(InvalidTypeParamsDeclKind::Set, &set_decl.span)?;
+
+            typecheck_set_decl_item(set_decl, item_info.name, visibility, ctx)
         }
     }
 }
@@ -255,10 +301,9 @@ fn typecheck_set_decl_item(
 
 // for all cases other than aliases and sets
 fn typecheck_type_decl_item_with_def(
-    full_name: Symbol,
+    info: TypeDeclItemInfo,
     ty: Type,
     type_decl: &ast::TypeDeclItem,
-    visibility: Visibility,
     ctx: &mut Context
 ) -> TypeResult<TypeDeclItem> {
     // type decls have an inner scope
@@ -266,11 +311,12 @@ fn typecheck_type_decl_item_with_def(
         ty,
     });
 
-    if let Some(ty_params) = &full_name.type_params {
+    if let Some(ty_params) = &info.name.type_params {
         ctx.declare_type_params(&ty_params)?;
     }
 
-    let type_decl = typecheck_type_decl_body(full_name, type_decl, visibility, ctx)?;
+    let visibility = info.visibility;
+    let type_decl = typecheck_type_decl_body(info, type_decl, ctx)?;
 
     ctx.pop_scope(ty_scope);
 
@@ -302,39 +348,38 @@ fn typecheck_type_decl_item_with_def(
 }
 
 fn typecheck_type_decl_body(
-    name: Symbol,
+    info: TypeDeclItemInfo,
     type_decl: &ast::TypeDeclItem<Span>,
-    visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<TypeDeclItem> {    
     let type_decl = match type_decl {
         ast::TypeDeclItem::Struct(class) => {
-            let class = typecheck_struct_decl(name, class, visibility, ctx)?;
+            let class = typecheck_struct_decl(info, class, ctx)?;
             ast::TypeDeclItem::Struct(Rc::new(class))
         },
 
         ast::TypeDeclItem::Interface(iface) => {
-            let iface = typecheck_iface(name, iface, visibility, ctx)?;
+            let iface = typecheck_iface(info, iface, ctx)?;
             ast::TypeDeclItem::Interface(Rc::new(iface))
         },
 
         ast::TypeDeclItem::Variant(variant) => {
-            let variant = typecheck_variant(name, variant, visibility, ctx)?;
+            let variant = typecheck_variant(info, variant, ctx)?;
             ast::TypeDeclItem::Variant(Rc::new(variant))
         },
 
         ast::TypeDeclItem::Alias(alias) => {
-            let alias = typecheck_alias(name, alias, ctx)?;
+            let alias = typecheck_alias(info.name, alias, ctx)?;
             ast::TypeDeclItem::Alias(Rc::new(alias))
         },
 
         ast::TypeDeclItem::Enum(enum_decl) => {
-            let enum_decl = typecheck_enum_decl(name, enum_decl, ctx)?;
+            let enum_decl = typecheck_enum_decl(info.name, enum_decl, ctx)?;
             ast::TypeDeclItem::Enum(Rc::new(enum_decl))
         }
 
         ast::TypeDeclItem::Set(set_decl) => {
-            let set_decl = SetDecl::typecheck(set_decl, name, ctx)?;
+            let set_decl = SetDecl::typecheck(set_decl, info.name, ctx)?;
             ast::TypeDeclItem::Set(Rc::new(set_decl))
         }
     };

@@ -14,14 +14,13 @@ pub use self::struct_decl::*;
 pub use self::variant_decl::*;
 use crate::ast::tag::Tag;
 use crate::ast::unit::AliasDecl;
-use crate::ast::Annotation;
+use crate::ast::{Annotation, WhereClause};
 use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::Keyword;
 use crate::ast::Operator;
 use crate::ast::TypeList;
 use crate::ast::TypeName;
-use crate::ast::TypeParam;
 use crate::parse::InvalidTagLocation;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
@@ -101,6 +100,22 @@ pub enum TypeDeclItem<A: Annotation = Span> {
 }
 
 impl<A: Annotation> TypeDeclItem<A> {
+    pub fn constraint_clause(&self) -> Option<&WhereClause<A::Type>> {
+        match self {
+            TypeDeclItem::Struct(def) => def.where_clause.as_ref(),
+            
+            // TODO
+            TypeDeclItem::Interface(_def) => None,
+            TypeDeclItem::Variant(_def) => None,
+            
+            TypeDeclItem::Alias(_)
+            | TypeDeclItem::Enum(_)
+            | TypeDeclItem::Set(_) => None,
+        }
+    }
+}
+
+impl<A: Annotation> TypeDeclItem<A> {
     pub fn name(&self) -> &A::Name {
         match self {
             TypeDeclItem::Struct(class) => &class.name,
@@ -157,7 +172,7 @@ pub fn type_method_start() -> Matcher {
 #[derivative(PartialEq, Debug, Hash)]
 pub struct TypeDeclName {
     pub ident: Ident,
-    pub type_params: Option<TypeList<TypeParam<TypeName>>>,
+    pub type_params: Option<TypeList<Ident>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]
@@ -196,18 +211,8 @@ impl From<Ident> for TypeDeclName {
 impl TypeDeclName {
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let ident = tokens.match_one(Matcher::AnyIdent)?.into_ident().unwrap();
-        
-        let type_params = TypeList::try_parse_type_params(tokens)?
-            .map(|list| {
-                list.map(|name, _pos| TypeParam {
-                    name,
-                    
-                    // in the context of a name on its own, type params are parsed without 
-                    // constraints, which we need to parse later and add to this decl if needed
-                    constraint: None,
-                })
-            });
-        
+
+        let type_params = TypeList::try_parse_type_params(tokens)?;
 
         let span = match &type_params {
             Some(type_param_list) => ident.span().to(type_param_list.span()),

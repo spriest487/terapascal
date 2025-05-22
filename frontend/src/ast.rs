@@ -59,6 +59,7 @@ pub trait TypeAnnotation : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + 
 
 pub trait FunctionName : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
     fn ident(&self) -> &Ident;
+    fn type_params_len(&self) -> usize;
 }
 
 pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {

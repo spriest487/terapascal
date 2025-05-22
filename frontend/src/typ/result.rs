@@ -510,6 +510,9 @@ impl DiagnosticOutput for TypeError {
                     GenericError::ArgsLenMismatch { .. } => "Wrong number of type arguments",
                     GenericError::ParamMismatch { .. } => "Parameter list mismatch",
                     GenericError::ConstraintNotSatisfied { .. } => "Type parameter constraint not satisfied by argument",
+                    GenericError::UnexpectedConstraintList => "Unexpected constraint list",
+                    GenericError::UnexpectedConstraint { .. } => "Unexpected constraint",
+                    GenericError::DuplicateConstraint { .. } => "Duplicate constraint",
                     GenericError::CannotInferArgs { .. } => "Cannot infer type arguments",
                     GenericError::IllegalUnspecialized { .. } => "Illegal use of unspecialized type",
                 }
@@ -1331,6 +1334,7 @@ impl fmt::Display for InvalidOverloadKind {
 pub enum InvalidTypeParamsDeclKind {
     Enum,
     Set,
+    Alias,
 }
 
 impl fmt::Display for InvalidTypeParamsDeclKind {
@@ -1338,6 +1342,7 @@ impl fmt::Display for InvalidTypeParamsDeclKind {
         match self {
             InvalidTypeParamsDeclKind::Enum => write!(f, "Enum"),
             InvalidTypeParamsDeclKind::Set => write!(f, "Set"),
+            InvalidTypeParamsDeclKind::Alias => write!(f, "Alias"),
         }
     }
 }

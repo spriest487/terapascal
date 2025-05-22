@@ -45,6 +45,7 @@ use std::fmt::Formatter;
 use std::ops::Deref;
 use std::rc::Rc;
 use crate::typ::ast::const_eval::ConstEval;
+use crate::typ::ast::where_clause::WhereClause;
 
 pub const SELF_PARAM_NAME: &str = "self";
 pub const SELF_TY_NAME: &str = "Self";
@@ -60,7 +61,9 @@ pub type FunctionLocalBinding = ast::FunctionLocalBinding<Value>;
 #[derivative(Debug, PartialEq, Hash)]
 pub struct TypedFunctionName {
     pub ident: Ident,
-    
+
+    pub type_params: Option<TypeParamList>,
+
     // if the function is a method, the type that implements this method.
     // either an interface type for interface method implementations, or the enclosing type
     // that is declaring its own method
@@ -73,17 +76,28 @@ pub struct TypedFunctionName {
 }
 
 impl TypedFunctionName {
-    pub fn new_method(ident: impl Into<Ident>, owning_ty: impl Into<Type>, span: impl Into<Span>) -> Self {
+    pub fn new_method(
+        ident: impl Into<Ident>,
+        type_params: Option<TypeParamList>,
+        owning_ty: impl Into<Type>,
+        span: impl Into<Span>
+    ) -> Self {
         Self {
             ident: ident.into(),
+            type_params,
             span: span.into(),
             owning_ty: Some(owning_ty.into()),
         }
     }
     
-    pub fn new_free_func(ident: impl Into<Ident>, span: impl Into<Span>) -> Self {
+    pub fn new_free_func(
+        ident: impl Into<Ident>,
+        type_params: Option<TypeParamList>,
+        span: impl Into<Span>
+    ) -> Self {
         Self {
             ident: ident.into(),
+            type_params,
             span: span.into(),
             owning_ty: None,
         }
@@ -98,6 +112,13 @@ impl FunctionName for TypedFunctionName {
     fn ident(&self) -> &Ident {
         &self.ident
     }
+
+    fn type_params_len(&self) -> usize {
+        self.type_params
+            .as_ref()
+            .map(|list| list.len())
+            .unwrap_or(0)
+    }
 }
 
 impl fmt::Display for TypedFunctionName {
@@ -105,7 +126,14 @@ impl fmt::Display for TypedFunctionName {
         if let Some(explicit_impl) = &self.owning_ty {
             write!(f, "{}.", explicit_impl)?;
         }
-        write!(f, "{}", self.ident)
+
+        write!(f, "{}", self.ident)?;
+
+        if let Some(ty_list) = &self.type_params {
+            write!(f, "{}", ty_list)?;
+        }
+        
+        Ok(())
     }
 }
 
@@ -159,13 +187,37 @@ impl FunctionDecl {
 
             let decl_mods = DeclMod::typecheck_mods(&decl, owning_ty.is_some(), ctx)?;
 
-            let type_params = match decl.type_params.as_ref() {
-                Some(decl_type_params) => {
-                    let type_params = typecheck_type_params(decl_type_params, ctx)?;
+            let (type_params, where_clause) = match (&decl.name.type_params, &decl.where_clause) {
+                (Some(decl_type_params), None) => {
+                    let unconstrained = decl_type_params.clone().to_unconstrained_params();
+                    let type_params = typecheck_type_params(&unconstrained, ctx)?;
+
                     ctx.declare_type_params(&type_params)?;
-                    Some(type_params)
+                    (Some(type_params), None)
                 },
-                None => None,
+
+                (Some(decl_type_params), Some(where_clause)) => {
+                    // TODO: need to typecheck these in a temp scope with the unconstrained params
+                    // so we can support things like where T: ISomething[T]?
+
+                    let where_clause = WhereClause::typecheck(where_clause, ctx)?;
+                    let type_params = where_clause
+                        .clone()
+                        .create_constrained_params(decl_type_params.clone())?;
+                    
+                    ctx.declare_type_params(&type_params)?;
+
+                    (Some(type_params), Some(where_clause))
+                }
+
+                (None, Some(unexpected_where)) => {
+                    let err = GenericError::UnexpectedConstraintList;
+                    return Err(TypeError::from_generic_err(err, unexpected_where.span.clone()));
+                }
+
+                (None, None) => {
+                    (None, None)
+                },
             };
 
             let return_ty = match decl.kind {
@@ -302,12 +354,13 @@ impl FunctionDecl {
             let decl = FunctionDecl {
                 name: TypedFunctionName {
                     ident: decl.name.ident.clone(),
+                    type_params: type_params.clone(),
                     owning_ty,
                     span: decl.name.span(),
                 },
                 kind: decl.kind,
                 params,
-                type_params: type_params.clone(),
+                where_clause,
                 return_ty,
                 span: decl.span.clone(),
                 mods: decl_mods,
@@ -557,7 +610,7 @@ pub fn typecheck_func_def(
 
     let body_env = FunctionBodyEnvironment {
         result_ty: return_ty,
-        ty_params: decl.type_params.clone(),
+        ty_params: decl.name.type_params.clone(),
         self_ty: decl.name.owning_ty.clone(),
     };
 
@@ -570,7 +623,7 @@ pub fn typecheck_func_def(
         }
     
         // declare decl's own type params within the body too
-        if let Some(decl_type_params) = decl.type_params.as_ref() {
+        if let Some(decl_type_params) = decl.name.type_params.as_ref() {
             ctx.declare_type_params(&decl_type_params)?;
         }
     
@@ -682,7 +735,7 @@ pub fn specialize_func_decl(
     args: &TypeArgList,
     ctx: &Context,
 ) -> GenericResult<FunctionDecl> {
-    let ty_params = match &decl.type_params {
+    let ty_params = match &decl.name.type_params {
         None => return Ok(decl.clone()),
         Some(list) => list,
     };
@@ -719,7 +772,7 @@ pub fn apply_func_decl_named_ty_args(
 }
 
 pub fn apply_func_decl_ty_args(decl: &FunctionDecl, args: &TypeArgList) -> FunctionDecl {
-    match decl.type_params.as_ref() {
+    match decl.name.type_params.as_ref() {
         None => decl.clone(),
 
         Some(ty_params) => {

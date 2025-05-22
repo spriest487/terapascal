@@ -314,7 +314,7 @@ fn resolve_overload_with_candidate(
 
     assert_eq!(actual_args.len(), sig_params.len());
 
-    let candidate_ty_params = selected_candidate.decl().type_params.as_ref();
+    let candidate_ty_params = selected_candidate.decl().name.type_params.as_ref();
     let type_args = match (candidate_ty_params, type_args) {
         (Some(_), Some(explicit_ty_args)) => {
             Some(explicit_ty_args.clone())

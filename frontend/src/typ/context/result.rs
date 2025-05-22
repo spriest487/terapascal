@@ -82,6 +82,13 @@ pub enum GenericError {
         expected: Option<TypeParamList>,
         actual: Option<TypeIdentList>,
     },
+    UnexpectedConstraintList,
+    UnexpectedConstraint {
+        constraint: Ident,
+    },
+    DuplicateConstraint {
+        constraint: Ident,
+    },
     ConstraintNotSatisfied {
         is_not_ty: Type,
         actual_ty: Option<Type>, // may be unknown/not yet resolved when processing generics
@@ -125,6 +132,18 @@ impl fmt::Display for GenericError {
 
                 Ok(())
             },
+
+            GenericError::UnexpectedConstraintList => {
+                write!(f, "constraint list is not expected here")
+            },
+
+            GenericError::UnexpectedConstraint { constraint, .. } => {
+                write!(f, "`{}` does not match an expected type parameter", constraint)
+            }
+
+            GenericError::DuplicateConstraint { constraint, .. } => {
+                write!(f, "type parameter {} already has a constraint", constraint)
+            }
 
             GenericError::ConstraintNotSatisfied {
                 is_not_ty,

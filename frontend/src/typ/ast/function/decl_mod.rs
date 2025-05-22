@@ -39,13 +39,12 @@ impl DeclMod {
                 ast::DeclMod::External { src, span } => {
                     check_incompatible_mod(&overload, Self::OVERLOAD_WORD, span, Self::EXTERNAL_WORD)?;
 
-                    if let Some(decl_type_params) = &decl.type_params {
-                        let ty_args_span = decl_type_params.items[0].name.span().to(decl_type_params
-                            .items
-                            .last()
-                            .unwrap()
-                            .name
-                            .span());
+                    if let Some(decl_type_params) = &decl.name.type_params {
+                        let ty_args_span = decl_type_params.items[0].span()
+                            .to(decl_type_params.items
+                                .last()
+                                .unwrap()
+                                .span());
                         return Err(TypeError::ExternalGenericFunction {
                             func: decl.name.ident.clone(),
                             extern_modifier: span.clone(),

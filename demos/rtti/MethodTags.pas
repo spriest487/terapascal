@@ -22,10 +22,9 @@ end;
 initialization
     var methodA := typeinfo(ClassWithMethods).FindMethod('A').Get;
     var aTag := methodA.FindTag[MyTag]().Get;
+    WriteLn(aTag.message);
 
     var methodB := typeinfo(InterfaceWithMethods).FindMethod('B').Get;
     var bTag := methodB.FindTag[MyTag]().Get;
-    
-    WriteLn(aTag.message);
     WriteLn(bTag.message);
 end

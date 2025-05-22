@@ -248,7 +248,7 @@ fn build_method_call(
         .with_self(&self_ty);
     
     let call_generic_ctx = if let Some(ty_args_list) = &ty_args {
-        let ty_params_list = method_decl.func_decl.type_params
+        let ty_params_list = method_decl.func_decl.name.type_params
             .as_ref()
             .expect("call with type args must have type params");
         

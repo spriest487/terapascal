@@ -2,6 +2,7 @@
 mod test;
 
 use crate::ast::type_name::TypeName;
+use crate::ast::Annotation;
 use crate::ast::BindingDeclKind;
 use crate::ast::Block;
 use crate::ast::DeclMod;
@@ -11,17 +12,15 @@ use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::TypeAnnotation;
 use crate::ast::TypeList;
-use crate::ast::TypeParam;
 use crate::ast::TypePath;
 use crate::ast::WhereClause;
-use crate::ast::Annotation;
-use crate::parse::MatchOneOf;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
+use crate::parse::{MatchOneOf, TryParse};
 use crate::token_tree::DelimitedGroup;
 use crate::DelimiterPair;
 use crate::Keyword;
@@ -126,7 +125,8 @@ impl<A: Annotation> Spanned for FunctionParam<A> {
 #[derivative(PartialEq, Hash, Debug)]
 pub struct FunctionDecl<A: Annotation = Span> {
     pub name: A::FunctionName,
-    
+    pub where_clause: Option<WhereClause<A::Type>>,
+
     pub kind: FunctionDeclKind,
 
     #[derivative(Debug = "ignore")]
@@ -135,7 +135,6 @@ pub struct FunctionDecl<A: Annotation = Span> {
     pub span: Span,
 
     pub params: Vec<FunctionParam<A>>,
-    pub type_params: Option<TypeList<TypeParam<A::Type>>>,
 
     pub return_ty: A::Type,
 
@@ -176,12 +175,8 @@ impl FunctionDecl<Span> {
             }
         };
         
-        let (ident, type_params_list) = Self::parse_name(tokens)?;
-
-        let mut span = match &type_params_list {
-            None => func_kw.span().to(&ident.span()),
-            Some(type_list) => func_kw.span().to(type_list.span()),
-        };
+        let name = Self::parse_name(tokens)?;
+        let mut span = name.span();
 
         let params = if let Some(params_tt) = tokens.match_one_maybe(DelimiterPair::Bracket) {
             let params_group = match params_tt {
@@ -219,91 +214,21 @@ impl FunctionDecl<Span> {
         if let Some(last_mod) = mods.last() {
             span = span.to(last_mod.span());
         }
-
-        let mut ahead = tokens.look_ahead();
-        let where_clause_tt = ahead.match_one(Keyword::Where);
-
-        let type_params = match (type_params_list, where_clause_tt) {
-            (Some(type_params_list), Some(..)) => {
-                let mut where_clause = WhereClause::parse(tokens)?;
-                span = span.to(where_clause.span());
-
-                // match parsed constraints in the where clause to type params in the param list by
-                // ident. if a param has no constraint with the same ident, it gets a None constraint instead
-                let mut type_params = Vec::new();
-                for type_param_ident in &type_params_list.items {
-                    let constraint_index = where_clause
-                        .constraints
-                        .iter()
-                        .position(|c| c.name == *type_param_ident);
-
-                    let constraint = match constraint_index {
-                        Some(i) => Some(where_clause.constraints.remove(i)),
-                        None => None,
-                    };
-
-                    type_params.push(TypeParam {
-                        name: type_param_ident.clone(),
-                        constraint,
-                    })
-                }
-
-                // any spare type constraints left over? they must not match a type param
-                if !where_clause.constraints.is_empty() {
-                    let first_bad = where_clause.constraints.remove(0);
-                    // just error on the first one
-                    let is_duplicate = type_params.iter().any(|p| p.name == first_bad.name);
-                    return Err(TracedError::trace(if is_duplicate {
-                        ParseError::TypeConstraintAlreadySpecified(first_bad)
-                    } else {
-                        ParseError::NoMatchingParamForTypeConstraint(first_bad)
-                    }));
-                }
-
-                assert_eq!(type_params.len(), type_params_list.len());
-
-                Some(TypeList::new(type_params, type_params_list.span().clone()))
-            },
-
-            // the function has no type param list so it's an error to write a where clause here
-            (None, Some(where_clause_tt)) => {
-                let expected = None;
-                let err = ParseError::UnexpectedToken(Box::new(where_clause_tt.clone()), expected);
-
-                return Err(TracedError::trace(err));
-            },
-
-            // the function has a type param list but no where clause, so the type
-            // constraints are None for every parameter
-            (Some(type_params), None) => {
-                let items: Vec<_> = type_params
-                    .items
-                    .iter()
-                    .map(|ident| TypeParam {
-                        name: ident.clone(),
-                        constraint: None,
-                    })
-                    .collect();
-
-                Some(TypeList::new(items, type_params.span().clone()))
-            },
-
-            // the function has neither a type param list or a where clause
-            (None, None) => None,
-        };
+        
+        let where_clause = WhereClause::try_parse(tokens)?;
 
         Ok(FunctionDecl {
-            name: ident,
+            name,
+            where_clause,
             kind,
             span,
             return_ty,
             params,
-            type_params,
             mods,
         })
     }
     
-    fn parse_name(tokens: &mut TokenStream) -> ParseResult<(QualifiedFunctionName, Option<TypeList<Ident>>)> {
+    fn parse_name(tokens: &mut TokenStream) -> ParseResult<QualifiedFunctionName> {
         let mut instance_ty_path = Vec::new();
         
         // the name always starts with at least one ident
@@ -313,12 +238,12 @@ impl FunctionDecl<Span> {
         
         // note this returns a list of type *idents*, because constraints (needed for TypeParams)
         // are parsed later
-        let mut type_params_list = None;
+        let mut type_params = None;
         
         loop {
             // nested types aren't supported, so if we get a type arg list, the next
             // tokens must be the method name and that's the end of the path
-            let match_next = if type_params_list.is_none() || instance_ty_params.is_none() {
+            let match_next = if type_params.is_none() || instance_ty_params.is_none() {
                 Operator::Period | DelimiterPair::SquareBracket
             } else {
                 Matcher::from(Operator::Period)
@@ -329,9 +254,9 @@ impl FunctionDecl<Span> {
                 Some(TokenTree::Operator { op: Operator::Period, .. }) => {
                     // if there's a period following the type list, it's actually the type params
                     // for the instance type of this method decl
-                    if type_params_list.is_some() {
+                    if type_params.is_some() {
                         assert!(instance_ty_params.is_none(), "matcher shouldn't allow this");
-                        instance_ty_params = type_params_list.take();
+                        instance_ty_params = type_params.take();
                     }
                     
                     instance_ty_path.push(Ident::parse(tokens)?);
@@ -351,7 +276,7 @@ impl FunctionDecl<Span> {
                     type_list_tokens.finish()?;
 
                     let type_list = TypeList::new(type_list_items, type_list_span);
-                    type_params_list = Some(type_list);
+                    type_params = Some(type_list);
                 },
                 
                 None => break,
@@ -382,9 +307,10 @@ impl FunctionDecl<Span> {
         let qualified_name = QualifiedFunctionName {
             ident: name_ident,
             owning_ty_qual: instance_ty,
+            type_params,
         }; 
 
-        Ok((qualified_name, type_params_list))
+        Ok(qualified_name)
     }
 
     pub fn parse_params(tokens: &mut TokenStream) -> ParseResult<Vec<FunctionParam<Span>>> {
@@ -465,10 +391,7 @@ impl<A: Annotation> FunctionDecl<A> {
     }
     
     pub fn type_params_len(&self) -> usize {
-        match &self.type_params {
-            Some(list) => list.len(),
-            None => 0,
-        }
+        self.name.type_params_len()
     } 
 }
 
@@ -488,9 +411,6 @@ impl<A: Annotation> fmt::Display for FunctionDecl<A> {
         })?;
 
         write!(f, "{}", self.name)?;
-        if let Some(ty_list) = &self.type_params {
-            write!(f, "{}", ty_list)?;
-        }
         
         if !self.params.is_empty() {
             write!(f, "(")?;
@@ -910,13 +830,17 @@ pub struct QualifiedFunctionName {
     pub owning_ty_qual: Option<Box<TypePath>>,
 
     pub ident: Ident,
+    
+    pub type_params: Option<TypeList<Ident>>,
 }
 
 impl QualifiedFunctionName {
     pub fn span(&self) -> Span {
-        match &self.owning_ty_qual {
-            Some(instance_ty) => instance_ty.span().to(self.ident.span()),
-            None => self.ident.span.clone(),
+        match (&self.owning_ty_qual, &self.type_params) {
+            (None, None) => self.ident.span.clone(),
+            (Some(instance_ty), None) => instance_ty.span().to(self.ident.span()),
+            (Some(instance_ty), Some(ty_params)) => instance_ty.span().to(ty_params.span()),
+            (None, Some(ty_params)) => self.ident.span.to(&ty_params.span), 
         }
     }
 }
@@ -925,6 +849,13 @@ impl FunctionName for QualifiedFunctionName {
     fn ident(&self) -> &Ident {
         &self.ident
     }
+
+    fn type_params_len(&self) -> usize {
+        self.type_params
+            .as_ref()
+            .map(|list| list.len())
+            .unwrap_or(0)
+    }
 }
 
 impl fmt::Display for QualifiedFunctionName {
@@ -932,6 +863,14 @@ impl fmt::Display for QualifiedFunctionName {
         if let Some(instance_ty) = &self.owning_ty_qual {
             write!(f, "{}.", instance_ty)?;
         }
-        write!(f, "{}", self.ident)
+        
+        write!(f, "{}", self.ident)?;
+
+
+        if let Some(ty_list) = &self.type_params {
+            write!(f, "{}", ty_list)?;
+        }
+        
+        Ok(())
     }
 }

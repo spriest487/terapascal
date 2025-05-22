@@ -205,7 +205,7 @@ fn typecheck_ident(
 
                 let func_path = decl_namespace.child(ident.clone());
                 let func_sym = Symbol::from(func_path)
-                    .with_ty_params(func_decl.type_params.clone());
+                    .with_ty_params(func_decl.name.type_params.clone());
 
                 let candidates = [OverloadCandidate::Function {
                     decl_name: func_sym.clone(),
@@ -362,7 +362,7 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
                 // to specialize the expr to add some
                 let func_path = parent_path.to_namespace().child((*key).clone());
                 let func_sym = Symbol::from(func_path)
-                    .with_ty_params(decl.type_params.clone());
+                    .with_ty_params(decl.name.type_params.clone());
 
                 FunctionValue::new(
                     func_sym,
@@ -375,7 +375,7 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
                     .iter()
                     .map(|overload| {
                         let func_sym = Symbol::from(func_path.clone())
-                            .with_ty_params(overload.decl().type_params.clone());
+                            .with_ty_params(overload.decl().name.type_params.clone());
 
                         OverloadCandidate::Function {
                             decl_name: func_sym,

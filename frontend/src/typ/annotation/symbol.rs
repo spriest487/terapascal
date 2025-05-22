@@ -1,15 +1,17 @@
 use crate::ast::IdentPath;
 use crate::ast::TypeDeclName;
-use crate::typ::{typecheck_type_params, InvalidTypeParamsDeclKind, TypeError};
+use crate::typ::typecheck_type_params;
 use crate::typ::validate_generic_constraints;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericResult;
 use crate::typ::GenericTarget;
+use crate::typ::InvalidTypeParamsDeclKind;
 use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeArgResolver;
+use crate::typ::TypeError;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
@@ -19,6 +21,7 @@ use common::span::Spanned;
 use std::borrow::Cow;
 use std::fmt;
 use std::rc::Rc;
+use crate::typ::ast::WhereClause;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct Symbol {
@@ -45,20 +48,46 @@ impl Symbol {
     
     /// Creates a symbol of the given decl, using the context's current local namespace 
     /// to create the fully qualified name
-    pub fn from_local_decl_name(decl_name: &TypeDeclName, ctx: &mut Context) -> TypeResult<Self> {
-        let type_params = match &decl_name.type_params {
-            Some(params) => {
-                let params = typecheck_type_params(params, ctx)?;
+    pub fn from_local_decl_name(
+        decl_name: &TypeDeclName,
+        constraint_clause: Option<&WhereClause>,
+        ctx: &mut Context
+    ) -> TypeResult<Self> {
+        let type_params = match (&decl_name.type_params, constraint_clause) {
+            (Some(param_name_list), None) => {
+                let param_list = param_name_list
+                    .clone()
+                    .to_unconstrained_params();
+                
+                let params = typecheck_type_params(&param_list, ctx)?;
                 Some(params)
             },
 
-            None => None,
+            (Some(param_name_list), Some(where_clause)) => {
+                let params = where_clause
+                    .clone()
+                    .create_constrained_params(param_name_list.clone())?;
+
+                Some(params)
+            }
+
+            (None, None) => {
+                None
+            }
+
+            (None, Some(unexpected_where)) => {
+                let err = GenericError::UnexpectedConstraintList;
+                return Err(TypeError::from_generic_err(err, unexpected_where.span.clone()));
+            }
         };
 
+        let full_path = ctx.qualify_name(decl_name.ident.clone());
+
         let sym = Symbol {
-            full_path: ctx.qualify_name(decl_name.ident.clone()),
-            type_args: None,
+            full_path,
             type_params,
+
+            type_args: None,
         };
         
         Ok(sym)

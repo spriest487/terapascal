@@ -9,13 +9,12 @@ use crate::ast::IdentPath;
 use crate::ast::Literal;
 use crate::ast::MethodOwner;
 use crate::ast::SetDeclRange;
-use crate::ast::Visibility;
 use crate::typ::ast::const_eval::ConstEval;
-use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::{const_eval_integer, typecheck_object_ctor_args};
+use crate::typ::ast::{typecheck_expr, TypeDeclItemInfo};
 use crate::typ::set::SetType;
 use crate::typ::Context;
 use crate::typ::Def;
@@ -202,15 +201,14 @@ impl TagItem {
 }
 
 pub fn typecheck_struct_decl(
-    name: Symbol,
+    info: TypeDeclItemInfo,
     struct_def: &ast::StructDecl<Span>,
-    visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<StructDef> {
     assert!(struct_def.tags.is_empty() || !struct_def.forward);
     let tags = Tag::typecheck_tags(&struct_def.tags, ctx)?;
     
-    let self_ty = Type::from_struct_type(name.clone(), struct_def.kind);
+    let self_ty = Type::from_struct_type(info.name.clone(), struct_def.kind);
 
     let implements = typecheck_base_types(&struct_def.implements, &self_ty, ctx)?;
     let implements_span = Span::range(&struct_def.implements)
@@ -219,7 +217,7 @@ pub fn typecheck_struct_decl(
     ctx.declare_type(
         struct_def.name.ident.clone(),
         self_ty.clone(),
-        visibility,
+        info.visibility,
         true,
     )?;
 
@@ -239,7 +237,8 @@ pub fn typecheck_struct_decl(
 
     Ok(StructDef {
         kind: struct_def.kind,
-        name,
+        name: info.name,
+        where_clause: info.where_clause,
         tags,
         packed: struct_def.packed,
         span: struct_def.span.clone(),
@@ -284,7 +283,7 @@ pub fn typecheck_methods(
             if decl.params.len() != 1 {
                 return Err(TypeError::DtorCannotHaveParams { span: decl.span.clone() })
             }
-            if !decl.type_params.is_none() {
+            if !decl.name.type_params.is_none() {
                 return Err(TypeError::DtorCannotHaveTypeParams { span: decl.span.clone() })
             }
         }
@@ -404,20 +403,19 @@ fn typecheck_field(
 }
 
 pub fn typecheck_iface(
-    name: Symbol,
+    info: TypeDeclItemInfo,
     iface: &ast::InterfaceDecl<Span>,
-    visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<InterfaceDecl> {
     assert!(iface.tags.is_empty() || !iface.forward);
     let tags = Tag::typecheck_tags(&iface.tags, ctx)?;
 
-    let iface_ty = Type::interface(name.clone());
+    let iface_ty = Type::interface(info.name.clone());
 
     // declare Self type - type decls are always in their own scope so we don't need to push
     // another one
     ctx.declare_self_ty(Type::MethodSelf, iface.name.span().clone())?;
-    ctx.declare_type(iface.name.ident.clone(), iface_ty.clone(), visibility, true)?;
+    ctx.declare_type(iface.name.ident.clone(), iface_ty.clone(), info.visibility, true)?;
     
     let supers = typecheck_base_types(&iface.supers, &iface_ty, ctx)?;
 
@@ -429,7 +427,7 @@ pub fn typecheck_iface(
             .iter()
             .find(|other| other.decl.name.ident == method.decl.name.ident)
         {
-            let method_path = name
+            let method_path = info.name
                 .full_path
                 .clone()
                 .child(method.decl.name.ident().clone());
@@ -452,7 +450,8 @@ pub fn typecheck_iface(
     }
     
     let iface_decl = InterfaceDecl {
-        name,
+        name: info.name,
+        where_clause: info.where_clause,
         tags,
         supers,
         forward: iface.forward,
@@ -464,9 +463,8 @@ pub fn typecheck_iface(
 }
 
 pub fn typecheck_variant(
-    name: Symbol,
+    info: TypeDeclItemInfo,
     variant_def: &ast::VariantDecl<Span>,
-    visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<VariantDef> {
     assert!(variant_def.tags.is_empty() || !variant_def.forward);
@@ -476,7 +474,7 @@ pub fn typecheck_variant(
         return Err(TypeError::EmptyVariantDecl(Box::new(variant_def.clone())));
     }
 
-    let variant_ty = Type::variant(name.clone());
+    let variant_ty = Type::variant(info.name.clone());
 
     let implements = typecheck_base_types(&variant_def.implements, &variant_ty, ctx)?;
     let implements_span = Span::range(&variant_def.implements)
@@ -485,7 +483,7 @@ pub fn typecheck_variant(
     ctx.declare_type(
         variant_def.name.ident.clone(),
         variant_ty.clone(),
-        visibility,
+        info.visibility,
         true
     )?;
 
@@ -512,7 +510,8 @@ pub fn typecheck_variant(
     )?;
 
     Ok(VariantDef {
-        name: Rc::new(name),
+        name: Rc::new(info.name),
+        where_clause: info.where_clause,
         tags,
         forward: variant_def.forward,
         cases,

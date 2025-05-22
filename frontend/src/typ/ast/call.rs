@@ -420,7 +420,7 @@ fn typecheck_func_overload(
             // index back, so we need to apply them here
             let sig = match &overload.type_args {
                 Some(args) => {
-                    let params = decl.func_decl.type_params
+                    let params = decl.func_decl.name.type_params
                         .as_ref()
                         .expect("overload resolved with type args must have type params");
                     

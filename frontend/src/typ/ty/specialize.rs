@@ -1,6 +1,6 @@
 use crate::ast;
 use crate::ast::IdentPath;
-use crate::typ::ast::apply_func_decl_named_ty_args;
+use crate::typ::ast::{apply_func_decl_named_ty_args, WhereClause};
 use crate::typ::ast::infer_from_structural_ty_args;
 use crate::typ::ast::try_unwrap_inferred_args;
 use crate::typ::ast::FunctionDecl;
@@ -8,8 +8,8 @@ use crate::typ::ast::InterfaceDecl;
 use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::StructDef;
-use crate::typ::ast::TypedFunctionName;
 use crate::typ::ast::VariantDef;
+use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::GenericContext;
 use crate::typ::GenericError;
@@ -22,7 +22,6 @@ use crate::typ::TypeArgList;
 use crate::typ::TypeArgResolver;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
-use crate::typ::Context;
 use common::span::Span;
 use common::span::Spanned;
 use std::borrow::Cow;
@@ -55,6 +54,14 @@ pub trait Specializable {
     fn apply_type_args(self, params: &impl TypeParamContainer, args: &impl TypeArgResolver) -> Self;
 }
 
+fn specialise_where_clause(generic_where: Option<&WhereClause>, generic_ctx: &GenericContext) -> Option<WhereClause> {
+    generic_where
+        .cloned()
+        .map(|where_clause| {
+            where_clause.apply_generics(&generic_ctx)
+        })
+}
+
 pub fn specialize_struct_def<'a>(
     generic_def: &Rc<StructDef>,
     ty_args: &TypeArgList,
@@ -64,13 +71,19 @@ pub fn specialize_struct_def<'a>(
         None => return Ok(generic_def.clone()),
         Some(param_list) => param_list,
     };
-
+    
     let specialized_name = generic_def.name.specialize(ty_args, ctx)?.into_owned();
 
-    let implements = specialize_implements_clause(
+    let inner_generic_ctx = GenericContext::new(&struct_ty_params, &ty_args);
+
+    let specialized_where = specialise_where_clause(
+        generic_def.where_clause.as_ref(),
+        &inner_generic_ctx
+    );
+    
+    let implements = apply_implements_ty_args(
         &generic_def.implements,
-        struct_ty_params,
-        ty_args
+        &inner_generic_ctx,
     );
 
     let fields: Vec<_> = generic_def
@@ -101,6 +114,7 @@ pub fn specialize_struct_def<'a>(
 
     Ok(Rc::new(StructDef {
         name: specialized_name,
+        where_clause: specialized_where,
         tags: generic_def.tags.clone(),
         packed: generic_def.packed,
         implements,
@@ -113,24 +127,30 @@ pub fn specialize_struct_def<'a>(
 }
 
 pub fn specialize_variant_def(
-    variant: &VariantDef,
+    generic_def: &VariantDef,
     args: &TypeArgList,
     ctx: &Context,
 ) -> GenericResult<VariantDef> {
-    let variant_ty_params = match &variant.name.type_params {
-        None => return Ok(variant.clone()),
+    let variant_ty_params = match &generic_def.name.type_params {
+        None => return Ok(generic_def.clone()),
         Some(param_list) => param_list,
     };
 
-    let parameterized_name = variant.name.specialize(args, ctx)?.into_owned();
+    let parameterized_name = generic_def.name.specialize(args, ctx)?.into_owned();
+
+    let inner_generic_ctx = GenericContext::new(&variant_ty_params, &args);
     
-    let implements = specialize_implements_clause(
-        &variant.implements,
-        variant_ty_params,
-        args
+    let implements = apply_implements_ty_args(
+        &generic_def.implements,
+        &inner_generic_ctx,
     );
 
-    let cases: Vec<_> = variant
+    let specialized_where = specialise_where_clause(
+        generic_def.where_clause.as_ref(),
+        &inner_generic_ctx
+    );
+
+    let cases: Vec<_> = generic_def
         .cases
         .iter()
         .map(|case| {
@@ -152,16 +172,17 @@ pub fn specialize_variant_def(
     let self_ty = Type::variant(parameterized_name.clone());
     let methods = specialize_methods(
         &self_ty,
-        &variant.methods,
+        &generic_def.methods,
         variant_ty_params,
         args
     )?;
 
     Ok(VariantDef {
         name: Rc::new(parameterized_name),
-        tags: variant.tags.clone(),
-        span: variant.span().clone(),
-        forward: variant.forward,
+        where_clause: specialized_where,
+        tags: generic_def.tags.clone(),
+        span: generic_def.span().clone(),
+        forward: generic_def.forward,
         cases,
         implements,
         methods,
@@ -179,11 +200,17 @@ pub fn specialize_iface_def<'a>(
     };
 
     let specialized_name = generic_def.name.specialize(ty_args, ctx)?.into_owned();
+
+    let inner_generic_ctx = GenericContext::new(&iface_ty_params, &ty_args);
     
-    let supers = specialize_implements_clause(
+    let specialized_where = specialise_where_clause(
+        generic_def.where_clause.as_ref(),
+        &inner_generic_ctx
+    );
+    
+    let supers = apply_implements_ty_args(
         &generic_def.supers,
-        iface_ty_params,
-        ty_args
+        &inner_generic_ctx,
     );
 
     let self_ty = Type::interface(specialized_name.clone());
@@ -208,6 +235,7 @@ pub fn specialize_iface_def<'a>(
 
     Ok(Rc::new(InterfaceDecl {
         name: specialized_name,
+        where_clause: specialized_where,
         tags: generic_def.tags.clone(),
         supers,
         methods,
@@ -216,17 +244,14 @@ pub fn specialize_iface_def<'a>(
     }))
 }
 
-fn specialize_implements_clause(
+fn apply_implements_ty_args(
     implements: &[Type],
-    params: &TypeParamList,
-    args: &TypeArgList
+    generic_ctx: &GenericContext,
 ) -> Vec<Type> {
     implements
         .iter()
         .map(|implements_ty| {
-            implements_ty
-                .clone()
-                .apply_type_args(params, args)
+            generic_ctx.apply_to_type(implements_ty.clone())
         })
         .collect()
 }
@@ -277,22 +302,18 @@ fn specialize_method_decl(
     );
 
     // specialize the owning type of all methods
-    method.name = TypedFunctionName {
-        ident: method.name.ident.clone(),
-        span: method.name.span.clone(),
-        owning_ty: match &method.name.owning_ty {
-            Some(ty) => {
-                assert_eq!(
-                    ty.full_path().map(Cow::into_owned).as_ref(),
-                    Some(owning_ty_generic_name),
-                    "owning type of a method must always be the type it's declared in"
-                );
+    method.name.owning_ty = match &method.name.owning_ty {
+        Some(ty) => {
+            assert_eq!(
+                ty.full_path().map(Cow::into_owned).as_ref(),
+                Some(owning_ty_generic_name),
+                "owning type of a method must always be the type it's declared in"
+            );
 
-                Some(self_ty)
-            },
-
-            None => None,
+            Some(self_ty)
         },
+
+        None => None,
     };
 
     Ok(method)

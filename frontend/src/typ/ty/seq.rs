@@ -121,7 +121,7 @@ where
     methods.retain(|(_index, m)| {
         let method_decl = &m.func_decl;
         
-        if method_decl.type_params.is_some() {
+        if method_decl.name.type_params.is_some() {
             return false;
         }
         

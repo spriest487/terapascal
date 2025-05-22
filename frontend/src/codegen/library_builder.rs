@@ -364,9 +364,7 @@ impl LibraryBuilder {
         
         let generic_ctx = match key.type_args.as_ref() {
             Some(type_args) => {
-                let type_params = func_def
-                    .decl
-                    .type_params
+                let type_params = func_def.decl.name.type_params
                     .as_ref()
                     .expect("instantiate_func_def: function referenced with type args must have type params");
 
@@ -543,8 +541,7 @@ impl LibraryBuilder {
         // type args when calling an interface method, so the only thing that would change the method
         // being generated here is the self-type, which we already specialized
         if let Some(ty_args) = type_args {
-            let decl_ty_params = generic_method_decl
-                .type_params
+            let decl_ty_params = generic_method_decl.name.type_params
                 .as_ref()
                 .expect("instantiate_method: method called with type args must have type params");
 
@@ -707,7 +704,7 @@ impl LibraryBuilder {
                 Some(match type_args {
                     None => global_name,
                     Some(type_args) => {
-                        let params_list = func_decl.type_params
+                        let params_list = func_decl.name.type_params
                             .as_ref()
                             .expect("function decl with type args must have type params");
                         let generic_ctx = typ::GenericContext::new(params_list, type_args);
@@ -1243,7 +1240,7 @@ impl LibraryBuilder {
                     .unwrap();
 
                 for (method_index, method) in def.methods.iter().enumerate() {
-                    if method.access >= Published && method.func_decl.type_params.is_none() {
+                    if method.access >= Published && method.func_decl.name.type_params.is_none() {
                         rtti.methods.push(self.create_runtime_method(&src_ty, method_index, false, &method.func_decl));
                     }
                 }
@@ -1255,7 +1252,7 @@ impl LibraryBuilder {
                     .unwrap();
 
                 for (method_index, method) in def.methods.iter().enumerate() {
-                    if method.decl.type_params.is_none() {
+                    if method.decl.name.type_params.is_none() {
                         rtti.methods.push(self.create_runtime_method(&src_ty, method_index, true, &method.decl));
                     }
                 }

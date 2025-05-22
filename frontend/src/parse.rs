@@ -62,8 +62,6 @@ pub enum ParseError {
     InvalidTypeParamName(Span),
     
     EmptyWhereClause(WhereClause<TypeName>),
-    TypeConstraintAlreadySpecified(TypeConstraint<TypeName>),
-    NoMatchingParamForTypeConstraint(TypeConstraint<TypeName>),
     
     InvalidFunctionImplType(TypeName),
     EmptyConstOrVarDecl { span: Span },
@@ -132,8 +130,6 @@ impl Spanned for ParseError {
             ParseError::ExprIsIllegal(IllegalStatement(expr)) => expr.annotation().span(),
             ParseError::DuplicateModifier { new, .. } => new.span(),
             ParseError::CtorWithTypeArgs { span } => span,
-            ParseError::TypeConstraintAlreadySpecified(c) => c.span(),
-            ParseError::NoMatchingParamForTypeConstraint(c) => c.span(),
             ParseError::EmptyTypeParamList(tl) => tl.span(),
             ParseError::EmptyTypeArgList(tl) => tl.span(),
             ParseError::EmptyWhereClause(c) => c.span(),
@@ -174,10 +170,8 @@ impl fmt::Display for ParseError {
 
             ParseError::InvalidSetRangeExpr { .. } => write!(f, "Invalid range expression for set declaration"),
             
-            ParseError::TypeConstraintAlreadySpecified(..) => write!(f, "Type constraint already specified"),
             ParseError::EmptyWhereClause(..) => write!(f, "Empty `where` clause"),
 
-            ParseError::NoMatchingParamForTypeConstraint(..) => write!(f, "No matching parameter for type constraint"),
             ParseError::EmptyTypeParamList { .. } => write!(f, "Empty type parameter list"),
             ParseError::EmptyTypeArgList { .. } => write!(f, "Empty type argument list"),
             ParseError::InvalidTypeParamName( .. ) => write!(f, "Invalid type parameter name"),
@@ -231,10 +225,6 @@ impl DiagnosticOutput for ParseError {
                 Some("Object constructor expr cannot explicitly specify type args".to_string())
             }
 
-            ParseError::TypeConstraintAlreadySpecified(c) => {
-                Some(format!("parameter `{}` has more than one type constraint", c.name))
-            }
-
             ParseError::EmptyTypeParamList { .. } => {
                 Some("type parameter list must contain one or more identifiers".to_string())
             }
@@ -247,10 +237,6 @@ impl DiagnosticOutput for ParseError {
                 Some("`where` clause must contain one or more type constraints in the form `Type is InterfaceName`".to_string())
             }
 
-            ParseError::NoMatchingParamForTypeConstraint(c) => {
-                Some(format!("type constraint was specified for parameter `{}` which does not exist", c.name))
-            }
-            
             ParseError::InvalidTypeParamName(..) => None,
 
             ParseError::UnterminatedStatement { .. } => {
