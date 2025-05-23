@@ -232,6 +232,7 @@ pub fn typecheck_struct_decl(
         &struct_def.methods,
         &implements,
         &implements_span,
+        info.name.span(),
         ctx
     )?;
 
@@ -254,8 +255,22 @@ pub fn typecheck_methods(
     decl_methods: &[ast::MethodDecl],
     implements: &[Type],
     implements_span: &Span,
+    name_span: &Span,
     ctx: &mut Context
 ) -> TypeResult<Vec<MethodDecl>> {
+    let mut owning_type = Cow::Borrowed(owning_type);
+    // methods impls are typechecked within the body of their enclosing type, so the type
+    // arguments exist as GenericParam types there
+    if let Some(owning_ty_params) = owning_type.type_params() {
+        let owning_ty_args = owning_ty_params.clone().into_type_args();
+        let inner_owning_ty = owning_type
+            .specialize(&owning_ty_args, ctx)
+            .map_err(|err| TypeError::from_generic_err(err, name_span.clone()))?
+            .into_owned();
+
+        owning_type = Cow::Owned(inner_owning_ty);
+    }
+    
     let mut dtor_span = None;
 
     let mut methods: Vec<MethodDecl> = Vec::new();
@@ -264,16 +279,16 @@ pub fn typecheck_methods(
         
         let decl = typecheck_method(&method.func_decl, ctx)?;
         if decl.kind == FunctionDeclKind::Destructor {
-            if !matches!(owning_type, Type::Class(..)) {
+            if !matches!(owning_type.as_ref(), Type::Class(..)) {
                 return Err(TypeError::InvalidDtorOwningType {
-                    ty: owning_type.clone(),
+                    ty: owning_type.into_owned(),
                     span: decl.span.clone(),
                 }) 
             }
             
             if let Some(prev_dtor) = dtor_span {
                 return Err(TypeError::TypeHasMultipleDtors {
-                    owning_type: owning_type.clone(),
+                    owning_type: owning_type.into_owned(),
                     new_dtor: decl.span.clone(),
                     prev_dtor,
                 })
@@ -297,7 +312,7 @@ pub fn typecheck_methods(
         if !existing.is_empty() {
             if let Some(invalid) = decl.check_new_overload(existing.clone()) {
                 return Err(TypeError::InvalidMethodOverload {
-                    owning_type: owning_type.clone(),
+                    owning_type: owning_type.into_owned(),
                     prev_decls: existing
                         .into_iter()
                         .map(|decl| decl.ident().clone())
@@ -332,7 +347,9 @@ pub fn typecheck_methods(
         let mut per_method_mismatches = Vec::new();
 
         'iface_method_loop: for iface_method in &iface_def.methods {
-            let expect_sig = iface_method.decl.sig().with_self(owning_type);
+            let expect_sig = iface_method.decl
+                .sig()
+                .with_self(owning_type.as_ref());
             
             for impl_method in methods.iter() {
                 if impl_method.func_decl.name.ident() != iface_method.ident() {
@@ -346,7 +363,9 @@ pub fn typecheck_methods(
                     // don't match
                     per_method_mismatches.clear();
                     continue 'iface_method_loop;
-                } else {                    
+                } else {
+                    eprintln!("here: actual = {:#?}\nvs\nexpect = {:#?}", actual_sig, expect_sig);
+                    
                     per_method_mismatches.push(MismatchedImplementation {
                         impl_method_name: impl_method.func_decl.name.clone(),
                         iface_method_name: iface_method.decl.name.clone(),
@@ -368,7 +387,7 @@ pub fn typecheck_methods(
 
         if !missing_methods.is_empty() || !mismatched_methods.is_empty() {
             return Err(TypeError::InvalidImplementation {
-                ty: owning_type.clone(),
+                ty: owning_type.into_owned(),
                 span: implements_span.clone(),
                 missing: missing_methods,
                 mismatched: mismatched_methods,
@@ -506,6 +525,7 @@ pub fn typecheck_variant(
         &variant_def.methods,
         &implements,
         &implements_span,
+        info.name.span(),
         ctx
     )?;
 

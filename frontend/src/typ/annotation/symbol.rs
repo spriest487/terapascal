@@ -66,7 +66,7 @@ impl Symbol {
             (Some(param_name_list), Some(where_clause)) => {
                 let params = where_clause
                     .clone()
-                    .create_constrained_params(param_name_list.clone())?;
+                    .typecheck_constrained_params(param_name_list.clone())?;
 
                 Some(params)
             }

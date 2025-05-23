@@ -325,7 +325,7 @@ impl FunctionDecl {
                 }
 
                 // method decl within a type
-                (_, Some(enclosing_ty)) => {
+                (owning_ty, Some(enclosing_ty)) => {
                     // it may be possible later to specify an explicit implemented interface within the
                     // body of another type, in which case this assertion would no longer be valid
                     assert_eq!(

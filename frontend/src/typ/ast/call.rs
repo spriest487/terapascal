@@ -213,10 +213,6 @@ fn typecheck_func_call(
     expect_ty: &Type,
     ctx: &mut Context
 ) -> TypeResult<Invocation> {
-    if func_call.target.to_string() == "LinkedList.Create" {
-        eprintln!("here")
-    };
-
     let target = typecheck_expr(&func_call.target, expect_ty, ctx)?;
     
     // if the call target is a no-args call itself and this is also a no-args call, we are just

@@ -64,6 +64,16 @@ impl TypeParamList {
                 .unwrap_or(Type::Any)
         })))
     }
+    
+    // create a version of this list with type arguments made from its own parameters.
+    // for example, a declared type "A[T]" has no type arguments (it's generic), but within its own
+    // body, its members refer to the specialized type "A with [generic param type T]", 
+    // where T can then be substituted for real types during monomorphization
+    pub fn with_own_generic_args(self) -> Self {
+        let params = self.clone();
+        let args = self.clone().into_type_args();
+        self.apply_type_args(&params, &args)
+    }
 }
 
 pub fn typecheck_type_params(

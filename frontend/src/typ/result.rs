@@ -789,38 +789,25 @@ impl DiagnosticOutput for TypeError {
                         .with_text("previously declared here")),
             ],
 
-            TypeError::IncompatibleDeclMod { first_span, first_keyword, .. } => vec![DiagnosticMessage {
-                title: "incompatible modifier".to_string(),
-                label: Some(DiagnosticLabel {
-                    text: Some(format!("`{first_keyword}` previously appeared here")),
-                    span: first_span.clone(),
-                }),
-                notes: Vec::new(),
-            }],
+            TypeError::IncompatibleDeclMod { first_span, first_keyword, .. } => vec![
+                DiagnosticMessage::new("incompatible modifier")
+                    .with_label(DiagnosticLabel::new(first_span.clone())
+                        .with_text(format!("`{first_keyword}` previously appeared here")))
+            ],
 
             TypeError::DuplicateNamedArg { name, previous, .. } 
             | TypeError::DuplicateParamName { name, previous, .. } => 
-                vec![DiagnosticMessage {
-                    title: format!("previous occurrence of `{}`", name),
-                    label: Some(DiagnosticLabel {
-                        text: None,
-                        span: previous.clone(),
-                    }),
-                    notes: Vec::new(),
-                }],
+                vec![
+                    DiagnosticMessage::new(format!("previous occurrence of `{}`", name))
+                    .with_label(DiagnosticLabel::new(previous.clone()))
+                ],
 
             TypeError::AmbiguousFunction { candidates, .. } => {
                 candidates
                     .iter()
                     .map(|c| {
-                        DiagnosticMessage {
-                            label: Some(DiagnosticLabel {
-                                span: c.span().clone(),
-                                text: None,
-                            }),
-                            title: format!("may refer to {}", c),
-                            notes: Vec::new(),
-                        }
+                        DiagnosticMessage::new(format!("may refer to {}", c))
+                            .with_label(DiagnosticLabel::new(c.span().clone()))
                     })
                     .collect()
             }
@@ -852,28 +839,24 @@ impl DiagnosticOutput for TypeError {
                 messages.extend(mismatched
                     .iter()
                     .flat_map(|i| {
-                        let decl_msg = format!("declared here as `{}`", i.expect_sig);
-                        let actual_msg = format!("mismatched implementation here as `{}`", i.actual_sig);
+                        let decl_msg = "declared here".to_string();
+                        let actual_msg = "mismatched implementation here".to_string();
 
                         vec![
                             DiagnosticMessage::new(decl_msg)
-                                .with_label(DiagnosticLabel::new(i.iface_method_name.span.clone())),
+                                .with_label(DiagnosticLabel::new(i.iface_method_name.span.clone()))
+                                .with_note(i.expect_sig.to_string()),
                             DiagnosticMessage::new(actual_msg)
-                                .with_label(DiagnosticLabel::new(i.impl_method_name.span.clone())),
+                                .with_label(DiagnosticLabel::new(i.impl_method_name.span.clone()))
+                                .with_note(i.actual_sig.to_string()),
                         ]
                     }));
                     
                 messages.extend(missing
                     .iter()
                     .map(|i| {
-                        DiagnosticMessage {
-                            title: format!("{} declared here", i.method_name),
-                            label: Some(DiagnosticLabel {
-                                text: None,
-                                span: i.method_name.span.clone(),
-                            }),
-                            notes: Vec::new(),
-                        }
+                        DiagnosticMessage::new(format!("{} declared here", i.method_name))
+                            .with_label(DiagnosticLabel::new(i.method_name.span.clone()))
                     }));
                 messages
                             

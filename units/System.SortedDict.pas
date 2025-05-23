@@ -11,7 +11,7 @@ type
         function Compare(other: SortedDictEntry[TKey, TVal]): Integer;
     end;
 
-    SortedDict[TKeyK, TVal] = class 
+    SortedDict[TKey, TVal] = class 
         where TKey is IComparable
 
         entries: array of SortedDictEntry[TKey, TVal];
@@ -21,7 +21,9 @@ type
 
 implementation
 
-function SortedDictEntry.Compare(other: SortedDictEntry): Integer;
+function 
+
+function SortedDictEntry[TKey, TVal].Compare(other: SortedDictEntry[TKey, TVal]): Integer;
 begin
     self.key.Compare(other.key)
 end;

@@ -748,7 +748,7 @@ impl Context {
     /// declare the type params of a function in the local scope
     pub fn declare_type_params(&mut self, names: &TypeParamList) -> TypeResult<()> {
         for param in names.items.iter() {
-            let is_iface = param
+            let is_ty = param
                 .constraint
                 .as_ref()
                 .map(|c| c.is_ty.clone())
@@ -758,7 +758,7 @@ impl Context {
                 param.name.clone(),
                 Type::GenericParam(Rc::new(TypeParamType {
                     name: param.name.clone(),
-                    is_ty: is_iface,
+                    is_ty,
                 })),
                 Visibility::Implementation,
                 false,

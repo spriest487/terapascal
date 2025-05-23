@@ -131,17 +131,17 @@ impl FunctionSig {
     }
 
     pub fn from_decl(decl: FunctionDecl) -> Self {
-        let return_ty = decl.return_ty
-            .clone();
+        let return_ty = decl.return_ty;
 
         let param_sigs = decl
             .params
-            .iter()
-            .cloned()
+            .into_iter()
             .map(|p| FunctionSigParam::from_decl_param(p))
             .collect();
         
-        Self::new(return_ty, param_sigs, decl.name.type_params.clone())
+        let sig = Self::new(return_ty, param_sigs, decl.name.type_params);
+
+        sig
     }
 
     pub fn visit_types_ref<Visitor>(&self, visitor: Visitor)

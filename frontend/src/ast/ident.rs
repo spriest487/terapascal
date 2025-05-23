@@ -9,12 +9,12 @@ use crate::Operator;
 use common::span::Span;
 use common::span::Spanned;
 use derivative::*;
-use std::{fmt, vec};
 use std::fmt::Write;
 use std::rc::Rc;
+use std::{fmt, vec};
 
 #[derive(Eq, Clone, Derivative)]
-#[derivative(PartialEq, Debug, Hash)]
+#[derivative(PartialEq, Hash)]
 pub struct Ident {
     pub name: Rc<String>,
 
@@ -72,6 +72,12 @@ impl Spanned for Ident {
 impl fmt::Display for Ident {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+impl fmt::Debug for Ident {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Ident({})", self.name)
     }
 }
 

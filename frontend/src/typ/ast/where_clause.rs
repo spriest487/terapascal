@@ -39,7 +39,7 @@ impl WhereClause {
         })
     }
 
-    pub fn create_constrained_params(
+    pub fn typecheck_constrained_params(
         self,
         param_names: ast::TypeList<Ident>,
     ) -> TypeResult<TypeParamList> {
