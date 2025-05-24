@@ -1,21 +1,21 @@
+use crate::ast;
+use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::ast::Expr;
-use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::Stmt;
 use crate::typ::Binding;
 use crate::typ::Context;
 use crate::typ::Environment;
 use crate::typ::Type;
-use crate::typ::Value;
-use crate::typ::TypePattern;
 use crate::typ::TypeError;
+use crate::typ::TypePattern;
 use crate::typ::TypeResult;
-use crate::typ::ValueKind;
 use crate::typ::TypedValue;
+use crate::typ::Value;
+use crate::typ::ValueKind;
 use common::span::Span;
 use common::span::Spanned;
-use crate::ast;
 
 pub type MatchBlock<B> = ast::MatchBlock<Value, B>;
 pub type MatchExpr = MatchBlock<Expr>;
@@ -160,7 +160,15 @@ pub fn typecheck_match_expr(
                 if branches.len() > 0 {
                     let result_ty = branches[0].item.annotation().ty();
                     let item_expr = typecheck_expr(item_expr, &result_ty, ctx)?;
-                    implicit_conversion(item_expr, &result_ty, ctx)
+                    
+                    // it's OK for a match expression to result in Nothing (it'll probably need
+                    // to be converted to a match statement afterward though to continue)
+                    if *result_ty != Type::Nothing {
+                        implicit_conversion(item_expr, &result_ty, ctx)
+                    } else {
+                        item_expr.annotation().expect_no_value()?;
+                        Ok(item_expr)
+                    }
                 } else {
                     typecheck_expr(item_expr, expect_ty, ctx)
                 }
