@@ -83,6 +83,24 @@ type
 
     TypeInfo = class;
 
+    FunctionInfo = class
+        name: String;
+        impl: Pointer;
+        
+        tags: array of Object;
+    public
+        function Name: String;
+        function Invoke(args: array of Pointer; resultPtr: Pointer);
+
+        class function LoadedFunctions: array of FunctionInfo;
+        
+        function FindTag(tagClass: TypeInfo): Option[Object]; overload;
+        function FindTag[TTag]: Option[TTag]; overload;
+
+        function FindTags(tagClass: TypeInfo): array of Object; overload;
+        function FindTags[TTag]: array of TTag; overload;
+    end;
+
     MethodInfo = class
         name: String;
         owner: TypeInfo;
@@ -147,8 +165,6 @@ function PointerToStr(value: Pointer): String; external 'rt';
 
 function StrToInt(s: String): Int32; external 'rt';
 
-function ArrayLengthInternal(arr: Pointer): Int32; external 'rt';
-
 function ByteToStr(i: Byte): String;
 function IntToStr(i: Integer): String;
 
@@ -166,10 +182,12 @@ function CompareStr(a, b: String): Integer;
 function Max[T](a, b: T): T where T is IComparable;
 function Min[T](a, b: T): T where T is IComparable;
 
-function ArraySetLengthInternal(arr: Object; len: Integer; defaultVal: Pointer): Object; external 'rt';
-
 function Length[T](arr: array of T): Integer;
 function SetLength[T](var arr: array of T; len: Integer; defaultVal: T);
+
+function CreateArray[T](item: T; length: Integer): array of T;
+function BinarySearch[T](arr: array of T; item: T): Integer
+    where T is IComparable;
 
 function RandomInteger(rangeStart, rangeEnd: Integer): Integer; external 'rt';
 function RandomSingle(rangeStart, rangeEnd: Single): Single; external 'rt';
@@ -205,26 +223,52 @@ function InvokeMethod(
     resultOut: Pointer;
 ); external 'rt';
 
+function InvokeFunction(
+    func: FunctionInfo;
+    args: array of Pointer;
+    resultOut: Pointer;
+); external 'rt';
+
+function ArrayLengthInternal(arr: Pointer): Int32; external 'rt';
+function ArraySetLengthInternal(arr: Object; len: Integer; defaultVal: Pointer): Object; external 'rt';
+
 function GetTypeInfoCount: Integer; external 'rt';
 function GetTypeInfoByIndex(typeIndex: Integer): TypeInfo; external 'rt';
 function FindTypeInfo(typeName: String): TypeInfo; external 'rt';
 function GetObjectTypeInfo(obj: Object): TypeInfo; external 'rt';
 
+function FindFunctionInfo(typeName: String): FunctionInfo; external 'rt';
+function GetFunctionInfoCount: Integer; external 'rt';
+function GetFunctionInfoByIndex(functionIndex: Integer): FunctionInfo; external 'rt';
+
+class function FunctionInfo.LoadedFunctions: array of FunctionInfo;
+begin
+    var count := GetFunctionInfoCount;
+
+    unsafe begin // nil object
+        var funcInfos := CreateArray[FunctionInfo](default, count);
+        
+        for var i := 0 to count - 1 do begin
+            funcInfos[i] := GetFunctionInfoByIndex(i);
+        end;  
+        
+        funcInfos; 
+    end;
+end;
+
 class function TypeInfo.LoadedTypes: array of TypeInfo;
 begin
     var count := GetTypeInfoCount;
-    var typeInfos: array of TypeInfo := [];
 
-    unsafe begin
-        var nilElement: TypeInfo := default;
-        typeInfos := Downcast[array of TypeInfo](ArraySetLengthInternal(typeInfos, count, @nilElement)).Get;
+    unsafe begin // nil object
+        var typeInfos := CreateArray[TypeInfo](default, count);
         
         for var i := 0 to count - 1 do begin
             typeInfos[i] := GetTypeInfoByIndex(i);
         end;  
+        
+        typeInfos; 
     end;
-    
-    typeInfos; 
 end;
 
 class function TypeInfo.Find(typeName: String): Option[TypeInfo];
@@ -248,10 +292,47 @@ begin
     for var tag in allTags do
     begin
         if TypeInfo.Get(tag) = tagClass then
-            exit Option.Some(tag.Downcast[TTag]().Get);
+        begin
+            var result := tag.Downcast[TTag]().Get;
+            exit Option.Some(result);
+        end;
     end;
     
     Option.None
+end;
+
+function FindTagsInArray[TTag](allTags: array of Object; tagClass: TypeInfo): array of TTag;
+begin
+    if allTags is not array of Object then
+    begin 
+        exit [];
+    end;
+
+    var count := 0;
+    for var tag in allTags do begin
+        if TypeInfo.Get(tag) = tagClass then
+        begin
+            count += 1;
+        end;
+    end;
+
+    var tags: array of TTag := [];
+
+    unsafe begin // nil tag
+        tags.SetLength(count, default(TTag));
+    end;
+
+    count := 0;
+    for var tag in allTags do 
+    begin
+         if TypeInfo.Get(tag) = tagClass then
+         begin
+             tags[count] := tag.Downcast[TTag]().Get;
+             count += 1;
+         end;
+    end;
+
+    tags
 end;
 
 function TypeInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
@@ -274,40 +355,6 @@ begin
     FindTagInArray[TTag](self.tags, typeinfo(TTag));
 end;
 
-function FindTagsInArray[TTag](allTags: array of Object; tagClass: TypeInfo): array of TTag;
-begin
-    if allTags is not array of Object then
-    begin 
-        exit [];
-    end;
-
-    var count := 0;
-    for var tag in allTags do begin
-        if TypeInfo.Get(tag) = tagClass then
-        begin
-            count += 1;
-        end;
-    end;
-
-    var tags: array of TTag := [];
-
-    unsafe begin
-        tags.SetLength(count, default(TTag));
-    end;
-
-    count := 0;
-    for var tag in allTags do 
-    begin
-         if TypeInfo.Get(tag) = tagClass then
-         begin
-             tags[count] := tag.Downcast[TTag]().Get;
-             count += 1;
-         end;
-    end;
-
-    tags
-end;
-
 function TypeInfo.FindTags(tagClass: TypeInfo): array of Object; overload;
 begin
     FindTagsInArray[Object](self.tags, tagClass); 
@@ -326,6 +373,44 @@ end;
 function MethodInfo.FindTags[TTag]: array of TTag; overload;
 begin
     FindTagsInArray[TTag](self.tags, typeinfo(TTag));
+end;
+
+function FunctionInfo.Name: String;
+begin
+    self.name
+end;
+
+function FunctionInfo.Invoke(args: array of Pointer; resultPtr: Pointer);
+begin
+    InvokeFunction(self, args, resultPtr);
+end;
+
+function FunctionInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
+begin
+    FindTagInArray[Object](self.tags, tagClass);
+end;
+
+function FunctionInfo.FindTag[TTag]: Option[TTag]; overload;
+begin
+    FindTagInArray[TTag](self.tags, typeinfo(TTag));
+end;
+
+function FunctionInfo.FindTags(tagClass: TypeInfo): array of Object; overload;
+begin
+    FindTagsInArray[Object](self.tags, tagClass); 
+end;
+
+function FunctionInfo.FindTags[TTag]: array of TTag; overload;
+begin
+    FindTagsInArray[TTag](self.tags, typeinfo(TTag));
+end;
+
+function CreateArray[T](item: T; length: Integer): array of T;
+begin
+    var arr: array of T := [];
+    arr.SetLength(length, item);
+    
+    arr
 end;
 
 function ByteToStr(i: Byte): String;
@@ -867,6 +952,33 @@ begin
         var newArr := ArraySetLengthInternal(arr, len, defaultValPtr);
         arr := Downcast[array of T](newArr).Get;
     end;
+end;
+
+function BinarySearch[T](values: array of T; item: T): Integer
+where
+    T is IComparable;
+begin
+    var n := values.Length;
+    if n = 0 then
+        exit ~0;
+
+    var l := 0;
+    var r := n - 1;
+    
+    while l <= r do
+    begin
+        var m := l + (r - l) div 2;
+        
+        var order := values[m].Compare(item);
+        if order < 0 then
+            l := m + 1
+        else if order > 0 then
+            r := m - 1
+        else
+            exit m;
+    end;
+    
+    ~l
 end;
 
 function Downcast[T](obj: Object): Option[T];

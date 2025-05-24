@@ -936,7 +936,11 @@ impl fmt::Display for TypeError {
             }
             
             TypeError::NotValueExpr { expected, actual, .. } => {
-                write!(f, "expected value of type `{}`, found `{}`", expected, actual)
+                if *expected == Type::Nothing {
+                    write!(f, "expected value, found `{}`", actual)
+                } else {
+                    write!(f, "expected value of type `{}`, found `{}`", expected, actual)
+                }
             }
 
             TypeError::InvalidBinOp { lhs, rhs, op, .. } => {

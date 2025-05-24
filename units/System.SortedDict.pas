@@ -40,39 +40,8 @@ type
         
         function Sequence: SortedDictSequence[TKey, TVal];
     end;
-    
-function BinarySearch[T](values: array of T; item: T): Integer
-    where T is IComparable;
 
 implementation
-
-function BinarySearch[T](values: array of T; item: T): Integer
-where
-    T is IComparable;
-begin
-    var n := values.Length;
-    if n = 0 then
-        exit ~0;
-
-    var l := 0;
-    var r := n - 1;
-    
-    while l <= r do
-    begin
-        var m := l + (r - l) div 2;
-        
-        var order := values[m].Compare(item);
-        if order < 0 then
-            l := m + 1
-        else if order > 0 then
-            r := m - 1
-        else
-            exit m;
-    end;
-    
-    ~l
-end;
-
 
 function SortedDictEntry[TKey, TVal].Compare(other: SortedDictEntry[TKey, TVal]): Integer;
 begin
