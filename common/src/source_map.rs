@@ -64,9 +64,9 @@ impl SourceMap {
         }
 
         if result.end.line == result.start.line {
-            result.end.col = result.start.col + (end.col - start.col);
+            result.end.col = result.start.col + (end.col.saturating_sub(start.col));
         }
-        result.end.line = result.start.line + (end.line - start.line);
+        result.end.line = result.start.line + (end.line.saturating_sub(start.line));
 
         result
     }
