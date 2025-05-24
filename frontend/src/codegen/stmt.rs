@@ -411,18 +411,22 @@ fn build_array_sequence_loop<ElementFn>(
         builder,
         |builder| {
             let skip_release_label = builder.alloc_label();
+            builder.scope(|builder| {
+                let first_iter = builder.eq_to_val(counter_ref.clone(), ir::Value::LiteralI32(0));
+                builder.jmpif(skip_release_label, first_iter);
+
+                builder.release(binding_ref.clone(), &binding_ty);    
+            });
             
-            let first_iter = builder.eq_to_val(counter_ref.clone(), ir::Value::LiteralI32(0));
-            builder.jmpif(skip_release_label, first_iter);
-            
-            builder.release(binding_ref.clone(), &binding_ty);
             builder.label(skip_release_label);
             
-            let element = element_fn(builder);
-            builder.cast(binding_ref.clone(), element, binding_ty.clone());
-            builder.retain(binding_ref, &binding_ty);
+            builder.scope(|builder| {
+                let element = element_fn(builder);
+                builder.cast(binding_ref.clone(), element, binding_ty.clone());
+                builder.retain(binding_ref, &binding_ty);
 
-            translate_stmt(body, builder);
+                translate_stmt(body, builder);    
+            });
         }
     );
 }
