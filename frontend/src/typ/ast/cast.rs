@@ -26,7 +26,7 @@ pub fn implicit_conversion(
     to: &Type,
     ctx: &Context,
 ) -> TypeResult<Expr> {
-    assert_ne!(Type::Nothing, *to, "bad usage of implicit_conversion: can't convert to nothing");
+    assert_ne!(Type::Nothing, *to, "bad usage of implicit_conversion: can't convert {} to nothing ({expr})", expr.annotation().ty());
 
     expr.annotation().expect_any_value()?;
 
