@@ -1,14 +1,17 @@
-use crate::typ::ast::{typecheck_expr, Expr};
-use crate::typ::ast::typecheck_stmt;
-use crate::typ::TypedValue;
-use crate::typ::TypeResult;
-use crate::typ::TypeError;
-use crate::typ::Value;
-use crate::typ::Type;
-use crate::typ::Context;
-use crate::typ::ValueKind;
-use common::span::{Span, Spanned};
 use crate::ast;
+use crate::typ::ast::implicit_conversion;
+use crate::typ::ast::typecheck_expr;
+use crate::typ::ast::typecheck_stmt;
+use crate::typ::ast::Expr;
+use crate::typ::Context;
+use crate::typ::Type;
+use crate::typ::TypeError;
+use crate::typ::TypeResult;
+use crate::typ::TypedValue;
+use crate::typ::Value;
+use crate::typ::ValueKind;
+use common::span::Span;
+use common::span::Spanned;
 
 pub type CaseBranch<Item> = ast::CaseBranch<Value, Item>;
 pub type CaseBlock<Item> = ast::CaseBlock<Value, Item>;
@@ -78,10 +81,10 @@ pub fn typecheck_case_expr(
     for branch in &case.branches {
         let case_values = typecheck_case_values(&cond_ty, branch, ctx)?;
 
-        let branch_expr = typecheck_expr(&branch.item, &expect_ty, ctx)?;
+        let mut branch_expr = typecheck_expr(&branch.item, &expect_ty, ctx)?;
 
         if let Some(branch_expr_ty) = &branch_expr_ty {
-            branch_expr.annotation().expect_value(branch_expr_ty)?;
+            branch_expr = implicit_conversion(branch_expr, branch_expr_ty, ctx)?;
         } else {
             branch_expr_ty = Some(branch_expr.annotation().ty().into_owned())
         }

@@ -437,6 +437,20 @@ impl Value {
         Ok(())
     }
     
+    pub fn expect_no_value(&self) -> TypeResult<()> {
+        let actual_ty = self.ty();
+
+        if *actual_ty != Type::Nothing {
+            return Err(TypeError::TypeMismatch {
+                span: self.span().clone(),
+                expected: Type::Nothing,
+                actual: actual_ty.into_owned(),
+            });
+        }
+        
+        Ok(())
+    }
+    
     pub fn as_const(&self) -> Option<&ConstValue> {
         match self {
             Value::Const(const_val) => Some(const_val.as_ref()),
