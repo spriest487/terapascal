@@ -1,3 +1,5 @@
+use notes for InvalidArgs display?
+
 # features
 * add a named type case to typ::Type for all the things that use full_path, full_name etc
 * function/method tags 
@@ -6,6 +8,7 @@
 * numeric compiler error codes
 * compound assignment bitwise ops
 * IsAbstract property for TypeInfo/MethodInfo
+* move RTTI stuff into its own unit??
 
 # bugs
 * parser: newlines/escape chars in string literals
