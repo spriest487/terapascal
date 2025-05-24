@@ -13,7 +13,8 @@ use std::rc::Rc;
 use common::source_map::SourceMap;
 use crate::ast::Ident;
 use crate::ast::keyword::Keyword;
-use crate::ast::operators::{CompoundAssignmentOperator, Operator};
+use crate::ast::operators::CompoundAssignmentOperator;
+use crate::ast::operators::Operator;
 
 pub fn lex(
     unit: PreprocessedUnit,
