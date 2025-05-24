@@ -937,7 +937,7 @@ pub fn typecheck_unary_op(
 
         Operator::BitNot => {
             let valid_ty = match operand.annotation().ty().as_ref() {
-                Type::Primitive(p) => p.is_integer() && !p.is_signed(),
+                Type::Primitive(p) => p.is_integer(),
                 Type::Set(..) => true,
                 _ => false,
             };

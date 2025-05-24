@@ -26,6 +26,28 @@ pub enum DynValue {
 }
 
 impl DynValue {
+    pub fn value_type_category(&self) -> &'static str {
+        match self {
+            DynValue::Bool(_) => "bool",
+            DynValue::I8(_) => "i8",
+            DynValue::U8(_) => "u8",
+            DynValue::I16(_) => "i16",
+            DynValue::U16(_) => "u16",
+            DynValue::I32(_) => "i32",
+            DynValue::U32(_) => "u32",
+            DynValue::I64(_) => "i64",
+            DynValue::U64(_) => "u64",
+            DynValue::ISize(_) => "isize",
+            DynValue::USize(_) => "usize",
+            DynValue::F32(_) => "f32",
+            DynValue::Function(_) => "function",
+            DynValue::Structure(_) => "structure",
+            DynValue::Variant(_) => "variant",
+            DynValue::Pointer(_) => "pointer",
+            DynValue::Array(_) => "array",
+        }
+    }
+    
     pub fn nil(ty: ir::Type) -> Self {
         DynValue::Pointer(Pointer::nil(ty))
     }

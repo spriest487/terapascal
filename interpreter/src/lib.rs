@@ -1470,6 +1470,35 @@ impl Interpreter {
         Ok(())
     }
 
+    fn store_bitwise_result(&mut self, out: &ir::Ref, arg_cell: &DynValue, result: u64) -> ExecResult<()> {
+        self.store(
+            out,
+            match arg_cell {
+                DynValue::Pointer(ptr ) => DynValue::Pointer(Pointer {
+                    ty: ptr.ty.clone(),
+                    addr: result as usize,
+                }),
+                
+                DynValue::I8(_) => DynValue::I8(result.cast_signed() as i8),
+                DynValue::I16(_) => DynValue::I16(result.cast_signed() as i16),
+                DynValue::I32(_) => DynValue::I32(result.cast_signed() as i32),
+                DynValue::ISize(_) => DynValue::ISize(result.cast_signed() as isize),
+                DynValue::I64(_) => DynValue::I64(result.cast_signed()),
+                
+                DynValue::U8(_) => DynValue::U8(result as u8),
+                DynValue::U16(_) => DynValue::U16(result as u16),
+                DynValue::U32(_) => DynValue::U32(result as u32),
+                DynValue::USize(_) => DynValue::USize(result as usize),
+                DynValue::U64(_) => DynValue::U64(result),
+                _ => {
+                    let msg = format!("unsupported type for bitwise operation result: {}", arg_cell.value_type_category());
+
+                    return Err(ExecError::illegal_state(msg));
+                },
+            },
+        )
+    }
+
     fn exec_bitwise<OpFn, ToInstructionFn>(
         &mut self,
         op: &ir::BinOpInstruction,
@@ -1494,16 +1523,7 @@ impl Interpreter {
             .ok_or_else(|| ExecError::IllegalInstruction(to_instruction(op.clone())))?;
 
         let result = op_fn(a_val, b_val);
-        self.store(
-            &op.out,
-            match a_cell {
-                DynValue::U8(_) => DynValue::U8(result as u8),
-                DynValue::U16(_) => DynValue::U16(result as u16),
-                DynValue::U32(_) => DynValue::U32(result as u32),
-                DynValue::USize(_) => DynValue::USize(result as usize),
-                _ => DynValue::U64(result),
-            },
-        )
+        self.store_bitwise_result(&op.out, &a_cell, result)
     }
 
     fn exec_bitwise_not(
@@ -1517,16 +1537,7 @@ impl Interpreter {
             .ok_or_else(|| ExecError::IllegalInstruction(ir::Instruction::BitNot(op.clone())))?;
 
         let result = !a_val;
-        self.store(
-            &op.out,
-            match a_cell {
-                DynValue::U8(_) => DynValue::U8(result as u8),
-                DynValue::U16(_) => DynValue::U16(result as u16),
-                DynValue::U32(_) => DynValue::U32(result as u32),
-                DynValue::USize(_) => DynValue::USize(result as usize),
-                _ => DynValue::U64(result),
-            },
-        )
+        self.store_bitwise_result(&op.out, &a_cell, result)
     }
 
     fn exec_call(
