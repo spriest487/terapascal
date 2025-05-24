@@ -382,44 +382,38 @@ impl Spanned for TokenizeError {
 impl DiagnosticOutput for TokenizeError {
     fn label(&self) -> Option<DiagnosticLabel> {
         match self {
-            TokenizeError::IllegalToken(_, span) => Some(DiagnosticLabel {
-                span: span.clone(),
-                text: None,
-            }),
+            TokenizeError::IllegalToken(_, span) => {
+                Some(DiagnosticLabel::new(span.clone()))
+            },
 
-            TokenizeError::IllegalChar(span) => Some(DiagnosticLabel {
-                span: span.clone(),
-                text: None,
-            }),
+            TokenizeError::IllegalChar(span) => {
+                Some(DiagnosticLabel::new(span.clone()))
+            },
 
             TokenizeError::UnmatchedDelimiter {
                 delim, to_match, ..
-            } => Some(DiagnosticLabel {
-                span: to_match.clone(),
-                text: {
-                    let (open, close) = delim.tokens();
-                    Some(format!(
+            } => {
+                let (open, close) = delim.tokens();
+                Some(DiagnosticLabel::new(to_match.clone())
+                    .with_text(format!(
                         "opening `{}` is not followed by a closing `{}`",
                         open, close
                     ))
-                },
-            }),
+                )
+            },
 
-            TokenizeError::UnexpectedCloseDelimited { delim, span } => Some(DiagnosticLabel {
-                span: span.clone(),
-                text: {
-                    let (open, close) = delim.tokens();
-                    Some(format!(
+            TokenizeError::UnexpectedCloseDelimited { delim, span } => {
+                let (open, close) = delim.tokens();
+                Some(DiagnosticLabel::new(span.clone())
+                    .with_text(format!(
                         "closing `{}` was not expected here (no opening `{}`)",
                         close, open
-                    ))
-                },
-            }),
+                    )))
+            },
 
-            TokenizeError::UnterminatedStringLiteral(span) => Some(DiagnosticLabel {
-                span: span.clone(),
-                text: None,
-            })
+            TokenizeError::UnterminatedStringLiteral(span) => {
+                Some(DiagnosticLabel::new(span.clone()))
+            },
         }
     }
 }
