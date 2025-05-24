@@ -12,6 +12,7 @@ use common::DiagnosticOutput;
 use common::path_relative_to_cwd;
 use common::DiagnosticLabel;
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::Path;
 
 type CodeMap = SimpleFiles<String, String>;
@@ -74,7 +75,7 @@ fn label_from_source_file<'a>(
 }
 
 pub fn report_err(err: &impl DiagnosticOutput, severity: Severity) -> Result<(), FileError> {
-    let out = termcolor::StandardStream::stderr(termcolor::ColorChoice::Auto);
+    let mut out = termcolor::StandardStream::stderr(termcolor::ColorChoice::Auto);
     let config = codespan_reporting::term::Config::default();
 
     let mut code_map = CodeMap::new();
@@ -98,9 +99,11 @@ pub fn report_err(err: &impl DiagnosticOutput, severity: Severity) -> Result<(),
         .collect::<Result<_, _>>()?;
 
     for diag in see_also_diags {
-        println!();
+        writeln!(out)?;
         codespan_reporting::term::emit(&mut out.lock(), &config, &code_map, &diag)?;
     }
+
+    out.flush()?;
 
     Ok(())
 }

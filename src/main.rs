@@ -45,6 +45,7 @@ use std::path::PathBuf;
 use std::process;
 use std::process::Command;
 use std::process::Stdio;
+use std::time::Duration;
 use structopt::StructOpt;
 use topological_sort::TopologicalSort;
 
@@ -602,6 +603,10 @@ fn main() {
             }
         }
 
+        // stop IDE from eating the final line??
+        _ = writeln!(io::stderr());
+        std::thread::sleep(Duration::from_millis(200));
+        
         process::exit(1)
     }
 }
