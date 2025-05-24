@@ -85,9 +85,10 @@ fn parses_qualified_iface_impl_decl() {
 fn parses_func_with_type_params() {
     let decl = parse_func_decl("function TestFunc[A]()");
 
-    assert_eq!("TestFunc", decl.name.to_string());
+    assert_eq!("TestFunc", decl.name.ident.to_string());
+    assert_eq!("TestFunc[A]", decl.name.to_string());
 
-    let decl_ty_params = decl.type_params.expect("expected type params to be parsed");
+    let decl_ty_params = decl.name.type_params.expect("expected type params to be parsed");
     assert_eq!(1, decl_ty_params.items.len());
     assert_eq!("A", decl_ty_params.items[0].name.to_string());
 }
@@ -112,7 +113,7 @@ fn parses_method_of_interface_with_type_args_with_type_params() {
 
     assert_eq!("TestFunc", decl.name.ident.to_string());
 
-    let decl_ty_params = decl.type_params.expect("expected type params to be found");
+    let decl_ty_params = decl.name.type_params.expect("expected type params to be found");
     assert_eq!(1, decl_ty_params.items.len());
     assert_eq!("C", decl_ty_params.items[0].name.to_string());
 }

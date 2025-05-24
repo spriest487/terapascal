@@ -1,7 +1,7 @@
 use crate::ast::FunctionDeclKind;
 use crate::ast::TypeConstraint;
 use crate::ast::TypeParam;
-use crate::typ::ast::specialize_func_decl;
+use crate::typ::ast::{specialize_func_decl, WhereClause};
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParam;
 use crate::typ::ast::TypedFunctionName;
@@ -69,6 +69,7 @@ fn make_decl(
     owning_ty: Option<Type>,
     name: &str,
     ty_params: impl IntoIterator<Item=TypeParam<Type>>,
+    where_clause: Option<WhereClause>,
     params: impl IntoIterator<Item=Type>,
     return_ty: Type
 ) -> FunctionDecl {
@@ -86,6 +87,7 @@ fn make_decl(
             ident: test_ident(name),
             owning_ty,
             span: test_span.clone(),
+            type_params: ty_params_list,
         },
         kind: FunctionDeclKind::Function,
         params: params
@@ -98,10 +100,10 @@ fn make_decl(
                 span: test_span.clone(),
             })
             .collect(),
-        type_params: ty_params_list,
         return_ty,
         mods: Vec::new(),
         span: test_span.clone(),
+        where_clause,
     }
 }
 
@@ -110,7 +112,7 @@ fn specialized_func_decl_has_specialized_return_ty() {
     let ty_params = [make_ty_param("T")];
     let return_ty = make_ty_param_ty(&ty_params, 0);
 
-    let decl = make_decl(None, "A", ty_params, [], return_ty);
+    let decl = make_decl(None, "A", ty_params, None, [], return_ty);
     let ctx = Context::root(test_span());
     
     let args = TypeArgList::new([Primitive::Int32.into()], test_span());
@@ -128,7 +130,7 @@ fn specialized_func_decl_has_specialized_param_tys() {
     let arg0_ty = make_ty_param_ty(&ty_params, 1);
     let arg1_ty = make_ty_param_ty(&ty_params, 0);
 
-    let decl = make_decl(None, "A", ty_params, [arg0_ty, arg1_ty], Type::Nothing);
+    let decl = make_decl(None, "A", ty_params, None, [arg0_ty, arg1_ty], Type::Nothing);
     let ctx = Context::root(test_span());
 
     let args = TypeArgList::new([
@@ -149,7 +151,7 @@ fn specialized_func_decl_checks_constraint() {
     
     let ty_params = [make_ty_param_of("T", displayable)];
 
-    let decl = make_decl(None, "A", ty_params, [], Type::Nothing);
+    let decl = make_decl(None, "A", ty_params, None, [], Type::Nothing);
     
     let ctx = Context::root(test_span());
     

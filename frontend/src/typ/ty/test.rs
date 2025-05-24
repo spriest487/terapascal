@@ -262,7 +262,7 @@ fn specialized_fn_has_right_sig() {
     let type_args = TypeArgList::new([INT32], span.clone());
 
     let a_int_sig = a_sig
-        .apply_type_args(a_func.decl.type_params.as_ref().unwrap(), &type_args);
+        .apply_type_args(a_func.decl.name.type_params.as_ref().unwrap(), &type_args);
 
     let expect_sig = FunctionSig {
         type_params: Some(ast::TypeList::new([FunctionSigTypeParam { is_ty: Type::Any }], span.clone())),
@@ -316,7 +316,7 @@ fn specialized_fn_with_specialized_params_has_right_params() {
     let (_, b_func) = module.unit.func_defs().next().unwrap();
     let b_sig = b_func.decl.sig();
 
-    let b_int_sig = b_sig.apply_type_args(b_func.decl.type_params.as_ref().unwrap(), &int_params);
+    let b_int_sig = b_sig.apply_type_args(b_func.decl.name.type_params.as_ref().unwrap(), &int_params);
 
     let expect_sig = FunctionSig {
         type_params: Some(ast::TypeList::new([FunctionSigTypeParam { is_ty: Type::Any }], span.clone())),
