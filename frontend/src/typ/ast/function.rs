@@ -203,7 +203,7 @@ impl FunctionDecl {
                     let where_clause = WhereClause::typecheck(where_clause, ctx)?;
                     let type_params = where_clause
                         .clone()
-                        .create_constrained_params(decl_type_params.clone())?;
+                        .typecheck_constrained_params(decl_type_params.clone())?;
                     
                     ctx.declare_type_params(&type_params)?;
 
