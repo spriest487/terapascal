@@ -16,7 +16,6 @@ use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
 use crate::typ::Specializable;
 use crate::typ::Type;
-use crate::typ::TypeArgResolver;
 use crate::typ::TypeArgsResult;
 use crate::typ::TypeError;
 use crate::typ::TypeParam;
@@ -128,33 +127,27 @@ pub fn infer_from_structural_ty_args(
     for (param_ty_arg, actual_ty_arg) in all_ty_args {
         match param_ty_arg {
             Type::GenericParam(param_generic) => {
-                if let Some(pos) = inferred_ty_args.find_position(param_generic.name.as_str()) {
-                    let inferred = inferred_ty_args.get(pos).unwrap();
-                    
-                    assert_eq!(
-                        inferred,
-                        actual_ty_arg,
-                        "previously inferred type for this position ({}) must be the same type as this inference ({})",
-                        pos,
-                        actual_ty_arg
-                    );
-                } else {
-                    let inferred_param = TypeParam {
-                        name: param_generic.name.clone(),
-                        constraint: match &param_generic.is_ty {
-                            Type::Any => None,
-
-                            is_ty => Some(TypeConstraint {
-                                name: param_generic.name.clone(),
-                                is_ty: is_ty.clone(),
-                                span: span.clone(),
-                            })
-                        },
-                    };
-
-                    inferred_ty_args.add(inferred_param, actual_ty_arg.clone());
+                // if we already inferred a type for this param, we don't care about the new type
+                // here - if it doesn't match, we want to get an InvalidArgs error later
+                if inferred_ty_args.find_position(param_generic.name.as_str()).is_some() {
+                    continue;
                 }
-            },
+                
+                let inferred_param = TypeParam {
+                    name: param_generic.name.clone(),
+                    constraint: match &param_generic.is_ty {
+                        Type::Any => None,
+
+                        is_ty => Some(TypeConstraint {
+                            name: param_generic.name.clone(),
+                            is_ty: is_ty.clone(),
+                            span: span.clone(),
+                        })
+                    },
+                };
+
+                inferred_ty_args.add(inferred_param, actual_ty_arg.clone());
+            }
 
             _ => infer_from_structural_ty_args(param_ty_arg, actual_ty_arg, inferred_ty_args, span),
         }
