@@ -127,8 +127,31 @@ unsafe begin
 end;
 
 function SortedDict[TKey, TVal].Remove(k: TKey): Option[TVal];
-begin
-    Option.None
+unsafe begin
+    var entry := SortedDictEntry with [TKey, TVal]
+    (
+        key: k; 
+        val: default(TVal);
+    );
+
+    var index := BinarySearch(self.entries, entry); 
+    if index >= 0 then 
+    begin
+        var removed := self.entries[index].val;
+        var currenLen := self.entries.Length;
+
+        for var i := index to currenLen - 2 do
+        begin
+            self.entries[i] := self.entries[i + 1];
+        end;
+        
+        self.entries.SetLength(currenLen - 1, default);
+        
+        Option.Some(removed)
+    end
+    else begin
+        Option.None
+    end
 end;
 
 function SortedDict[TKey, TVal].Sequence: SortedDictSequence[TKey, TVal];
