@@ -21,7 +21,7 @@ use crate::ast::Keyword;
 use crate::ast::Operator;
 use crate::ast::TypeList;
 use crate::ast::TypeName;
-use crate::parse::InvalidTagLocation;
+use crate::parse::{InvalidTagLocation, TryParse};
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -29,7 +29,7 @@ use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
-use crate::DelimiterPair;
+use crate::{DelimiterPair, TokenTree};
 use crate::Separator;
 use common::span::Span;
 use common::span::Spanned;
@@ -327,6 +327,80 @@ impl<A: Annotation> fmt::Display for TypeDeclItem<A> {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+struct TypeDeclStart {
+    keyword: TokenTree,
+
+    where_clause: Option<WhereClause>,
+    supers: Vec<TypeName>,
+    
+    forward: bool,
+    
+    span: Span,
+}
+
+impl TypeDeclStart {
+    pub fn parse(
+        tokens: &mut TokenStream,
+        kw_matcher: impl Into<Matcher>,
+        tags: &[Tag],
+        name_span: &Span,
+    ) -> ParseResult<Self> {
+        let kw_tt = tokens.match_one(kw_matcher)?;
+        let mut span = kw_tt.span().clone();
+        
+        // a forward decl can have a where clause before the semicolon
+        let where_clause = WhereClause::try_parse(tokens)?;
+        
+        if let Some(where_span) = where_clause.as_ref().map(|x|x.span()) {
+            span = span.to(where_span);
+        }
+        
+        let mut result = Self {
+            keyword: kw_tt,
+            where_clause,
+            forward: true,
+            supers: Vec::new(),
+            span,
+        };
+
+        // is this a forward decl?
+        match tokens.look_ahead().match_one(Separator::Semicolon) {
+            None => {
+                result.forward = false;
+
+                // for non-forward decls, the optional supers clause might appear before the
+                // where clause, in which case there may still be a where clause afterwards
+                if result.where_clause.is_none() {
+                    result.supers = parse_implements_clause(tokens)?;
+                    
+                    if !result.supers.is_empty() {
+                        let super_last_span = result.supers[result.supers.len() - 1].span();
+                        result.span = result.span.to(super_last_span);
+                    }
+                    
+                    if let Some(where_clause) = WhereClause::try_parse(tokens)? {
+                        result.span = result.span.to(where_clause.span());
+                        result.where_clause = Some(where_clause);
+                    }
+                }
+            }
+
+            Some(tt) => {
+                if !tags.is_empty() {
+                    // forward type decls can't have tags
+                    return Err(ParseError::forward_decl_tags(name_span.clone(), &tags).into())
+                }
+                
+                result.span = result.span.to(tt.span());
+            }
+        }
+        
+        Ok(result)
+    }    
+}
+
 
 pub fn parse_implements_clause(
     tokens: &mut TokenStream,

@@ -295,6 +295,18 @@ pub struct SequenceMatcher {
     sequence: Vec<Matcher>,
 }
 
+impl<Rhs> Add<Rhs> for SequenceMatcher
+where
+    Rhs: Into<Matcher>
+{
+    type Output = SequenceMatcher;
+
+    fn add(mut self, rhs: Rhs) -> Self::Output {
+        self.sequence.push(rhs.into());
+        self
+    }
+}
+
 impl IntoIterator for SequenceMatcher {
     type Item = Matcher;
     type IntoIter = <Vec<Matcher> as IntoIterator>::IntoIter;

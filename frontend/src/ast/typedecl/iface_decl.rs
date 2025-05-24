@@ -1,15 +1,17 @@
 use crate::ast::tag::Tag;
-use crate::ast::{Annotation, WhereClause};
+use crate::ast::typedecl::TypeDeclStart;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::TypeDeclName;
-use crate::ast::{iface_method_start, parse_implements_clause};
-use crate::parse::{LookAheadTokenStream, TryParse};
+use crate::ast::iface_method_start;
+use crate::ast::Annotation;
+use crate::ast::WhereClause;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
+use crate::parse::LookAheadTokenStream;
 use crate::Keyword;
 use crate::Separator;
 use common::span::Span;
@@ -100,32 +102,23 @@ impl InterfaceDecl<Span> {
         name: TypeDeclName,
         tags: Vec<Tag>
     ) -> ParseResult<Self> {
-        let iface_kw = tokens.match_one(Keyword::Interface)?;
-        
-        // the last type in a section can never be forward, so every legal forward declaration
-        // will end with a semicolon
-        if tokens.look_ahead().match_one(Separator::Semicolon).is_some() {
-            if !tags.is_empty() {
-                return Err(ParseError::forward_decl_tags(name.span, &tags).into())
-            }
+        let decl_start = TypeDeclStart::parse(tokens, Keyword::Interface, &tags, &name.span)?;
 
+        if decl_start.forward {
             Ok(InterfaceDecl {
                 name,
-                where_clause: None,
+                where_clause: decl_start.where_clause,
                 tags: Vec::new(),
 
-                supers: Vec::new(),
-                span: iface_kw.into_span(),
+                supers: decl_start.supers,
+                span: decl_start.span,
                 forward: true,
-                methods: Vec::new()
+                methods: Vec::new(),
             })
         } else {
-            let supers = parse_implements_clause(tokens)?;
-            let where_clause = WhereClause::try_parse(tokens)?;
-            
             let methods = InterfaceMethodDecl::parse_seq(tokens)?;
             tokens.match_one_maybe(Separator::Semicolon);
-            
+
             // no more methods found, must be "end" next, but if there's an invalid token, the error
             // should indicate that it could've been a method too
             let end = tokens
@@ -134,16 +127,16 @@ impl InterfaceDecl<Span> {
                     if let ParseError::UnexpectedToken(_, Some(expected)) = &mut err.err {
                         *expected |= iface_method_start()
                     }
-                    
+
                     err
                 })?;
 
             Ok(InterfaceDecl {
                 name,
-                where_clause,
+                where_clause: decl_start.where_clause,
                 tags,
-                supers,
-                span: iface_kw.span().to(end.span()),
+                supers: decl_start.supers,
+                span: decl_start.keyword.span().to(end.span()),
                 forward: false,
                 methods,
             })

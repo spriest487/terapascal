@@ -1,6 +1,7 @@
 use crate::ast::tag::Tag;
-use crate::ast::{type_method_start, WhereClause};
+use crate::ast::type_method_start;
 use crate::ast::type_name::TypeName;
+use crate::ast::typedecl::TypeDeclStart;
 use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
@@ -9,11 +10,10 @@ use crate::ast::Keyword;
 use crate::ast::MethodDecl;
 use crate::ast::MethodOwner;
 use crate::ast::TypeDeclName;
-use crate::ast::parse_implements_clause;
+use crate::ast::WhereClause;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
-use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
@@ -118,18 +118,12 @@ impl<A: Annotation> VariantDecl<A> {
 
 impl VariantDecl<Span> {
     pub fn parse(tokens: &mut TokenStream, name: TypeDeclName, tags: Vec<Tag>) -> ParseResult<Self> {
-        let kw = tokens.match_one(Keyword::Variant)?;
+        let decl_start = TypeDeclStart::parse(tokens, Keyword::Variant, &tags, &name.span)?;
 
-        // the last type in a section can never be forward, so every legal forward declaration
-        // will end with a semicolon
-        if tokens.look_ahead().match_one(Separator::Semicolon).is_some() {
-            if !tags.is_empty() {
-                return Err(ParseError::forward_decl_tags(name.span, &tags).into());
-            }
-            
+        if decl_start.forward {
             Ok(VariantDecl {
                 name: Rc::new(name),
-                where_clause: None,
+                where_clause: decl_start.where_clause,
                 
                 forward: true,
 
@@ -137,16 +131,12 @@ impl VariantDecl<Span> {
                 
                 cases: Vec::new(),
                 
-                implements: Vec::new(),
+                implements: decl_start.supers,
                 methods: Vec::new(),
                 
-                span: kw.into_span(),
+                span: decl_start.span,
             })
         } else {
-            let implements = parse_implements_clause(tokens)?;
-
-            let where_clause = WhereClause::try_parse(tokens)?;
-
             let cases = VariantCase::parse_seq(tokens)?;
             tokens.match_one_maybe(Separator::Semicolon);
             
@@ -186,15 +176,15 @@ impl VariantDecl<Span> {
 
             Ok(VariantDecl {
                 name: Rc::new(name),
-                where_clause,
+                where_clause: decl_start.where_clause,
 
                 tags,
 
                 forward: false,
                 cases,
-                span: kw.span().to(end_kw.span()),
+                span: decl_start.span.to(end_kw.span()),
 
-                implements,
+                implements: decl_start.supers,
                 methods,
             })
         }

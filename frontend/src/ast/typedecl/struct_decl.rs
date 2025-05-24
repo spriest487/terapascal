@@ -1,17 +1,17 @@
 mod member;
 
 use crate::ast::tag::Tag;
+use crate::ast::typedecl::TypeDeclStart;
 use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::Ident;
 use crate::ast::MethodOwner;
 use crate::ast::TypeDeclName;
-use crate::ast::{parse_implements_clause, WhereClause};
+use crate::ast::WhereClause;
+use crate::parse::Matcher;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
-use crate::parse::{ParseError, TryParse};
 use crate::Keyword;
-use crate::Separator;
 use common::span::Span;
 use common::span::Spanned;
 use derivative::*;
@@ -80,49 +80,43 @@ impl StructDecl<Span> {
         let packed_kw = tokens.match_one_maybe(Keyword::Packed);
         let packed = packed_kw.is_some();
         
-        let kw_token = if packed {
-            tokens.match_one(Keyword::Record)?
+        let match_kw = if packed {
+            Matcher::from(Keyword::Record)
         } else {
-            tokens.match_one(Keyword::Record | Keyword::Class)?
+            Keyword::Record | Keyword::Class
         };
 
-        let kind = match &kw_token {
+        let decl_start = TypeDeclStart::parse(tokens, match_kw, &tags, &name.span)?;
+
+        let kind = match &decl_start.keyword {
             tt if tt.is_keyword(Keyword::Class) => StructKind::Class,
             tt if tt.is_keyword(Keyword::Record) => StructKind::Record,
             _ => unreachable!(),
         };
 
         let span = match packed_kw {
-            Some(tt) => tt.span().to(kw_token.span()),
-            None => kw_token.into_span(),
+            Some(tt) => tt.span().to(&decl_start.span),
+            None => decl_start.span,
         };
         
         // the last type in a section can never be forward, so every legal forward declaration
         // will end with a semicolon
-        if tokens.look_ahead().match_one(Separator::Semicolon).is_some() {
-            if !tags.is_empty() {
-                return Err(ParseError::forward_decl_tags(name.span, &tags).into());
-            }
-            
+        if decl_start.forward {
             Ok(StructDecl {
                 kind,
                 name,
-                where_clause: None,
+                where_clause: decl_start.where_clause,
                 packed,
                 tags: Vec::new(),
 
                 forward: true,
-                implements: Vec::new(),
+                implements: decl_start.supers,
                 
                 methods: Vec::new(),
                 fields: Vec::new(),
                 span,
             })
         } else {
-            let implements = parse_implements_clause(tokens)?;
-
-            let where_clause = WhereClause::try_parse(tokens)?;
-            
             let default_access = match kind {
                 StructKind::Class => Access::Private,
                 StructKind::Record => Access::Public,
@@ -144,11 +138,11 @@ impl StructDecl<Span> {
             Ok(StructDecl {
                 kind,
                 name,
-                where_clause,
+                where_clause: decl_start.where_clause,
                 packed,
                 tags,
                 forward: false,
-                implements,
+                implements:decl_start.supers,
                 fields,
                 methods,
                 span: span.to(end_token.span()),

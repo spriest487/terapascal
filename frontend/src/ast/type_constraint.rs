@@ -1,25 +1,33 @@
-use crate::ast::type_name::{IdentTypeName, TypeName};
+use crate::ast::type_name::IdentTypeName;
+use crate::ast::type_name::TypeName;
 use crate::ast::Ident;
+use crate::ast::IdentPath;
 use crate::ast::Keyword;
 use crate::ast::TypeAnnotation;
-use crate::ast::IdentPath;
+use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
-use crate::parse::{LookAheadTokenStream, TryParse};
+use crate::parse::TryParse;
 use crate::Separator;
 use common::span::Span;
 use common::span::Spanned;
 use common::TracedError;
+use derivative::Derivative;
 use std::fmt;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct TypeConstraint<T: TypeAnnotation> {
     pub name: Ident,
     pub is_ty: T,
+    
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub span: Span,
 }
 
@@ -126,7 +134,7 @@ impl ParseSeq for WhereClauseItem {
             return false;
         }
 
-        tokens.match_one(Matcher::AnyIdent).is_some()
+        tokens.match_sequence(Matcher::AnyIdent + Keyword::Is).is_some()
     }
 }
 
