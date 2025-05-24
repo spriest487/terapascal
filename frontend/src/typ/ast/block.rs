@@ -94,6 +94,8 @@ pub fn typecheck_block(
             let mut out_expr = typecheck_expr(src_output_expr, expect_ty, ctx)?;
             if *expect_ty != Type::Nothing && !expect_ty.contains_unresolved_params(ctx) {
                 out_expr = implicit_conversion(out_expr, expect_ty, ctx)?;
+            } else {
+                out_expr.annotation().expect_any_value()?;
             }
 
             output = Some(out_expr);
