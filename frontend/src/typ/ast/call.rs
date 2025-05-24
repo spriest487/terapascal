@@ -262,7 +262,7 @@ fn typecheck_func_call(
                 }
 
                 _ => {
-                    return Err(TypeError::NotCallable(Box::new(target)))
+                    return Err(TypeError::NotCallable(Box::new(target.annotation().clone())))
                 },
             },
         },
@@ -315,7 +315,7 @@ fn typecheck_func_call(
                     .map(Box::new)
                     .map(Invocation::Ctor)?
             } else {
-                return Err(TypeError::NotCallable(Box::new(target)))
+                return Err(TypeError::NotCallable(Box::new(target.annotation().clone())))
             }
         },
 
@@ -333,8 +333,8 @@ fn typecheck_func_call(
             Invocation::Call(Box::new(ctor_call))
         }
 
-        _ => {
-            return Err(TypeError::NotCallable(Box::new(target)))
+        other => {
+            return Err(TypeError::NotCallable(Box::new(other.clone())))
         },
     };
 

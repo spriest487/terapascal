@@ -33,7 +33,7 @@ pub enum TypeError {
         err: NameError,
         span: Span
     },
-    NotCallable(Box<Expr>),
+    NotCallable(Box<Value>),
     InvalidArgs {
         expected: Vec<Type>,
         actual: Vec<Type>,
@@ -401,7 +401,7 @@ impl Spanned for TypeError {
     fn span(&self) -> &Span {
         match self {
             TypeError::NameError { span, .. } => span,
-            TypeError::NotCallable(expr) => expr.annotation().span(),
+            TypeError::NotCallable(val) => val.span(),
             TypeError::InvalidArgs { span, .. } => span,
             TypeError::InvalidCallInExpression(call) => call.annotation().span(),
             TypeError::InvalidIndexer { span, .. } => span,
@@ -662,6 +662,18 @@ impl DiagnosticOutput for TypeError {
         }
     }
 
+    fn notes(&self) -> Vec<String> {
+        match self {
+            TypeError::InvalidArgs { expected, actual, .. } => {
+                vec![
+                    format!("expected: {}", args_to_string(expected)),
+                    format!("actual: {}", args_to_string(actual)),
+                ]
+            }
+            _ => Vec::new(),
+        }
+    }
+
     fn see_also(&self) -> Vec<DiagnosticMessage> {
         match self {
             TypeError::NameError { err, .. } => match err {
@@ -871,30 +883,16 @@ impl DiagnosticOutput for TypeError {
     }
 }
 
-fn write_args<'a>(f: &mut fmt::Formatter, args: impl IntoIterator<Item = &'a Type>) -> fmt::Result {
-    for (i, arg) in args.into_iter().enumerate() {
-        if i > 0 {
-            write!(f, ", ")?;
-        }
-        write!(f, "{}", arg)?;
-    }
-    Ok(())
-}
-
 impl fmt::Display for TypeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TypeError::NameError { err, .. } => write!(f, "{}", err),
-            TypeError::NotCallable(expr) => {
-                write!(f, "{} `{}` of type `{}` is not a callable function", expr.name(), expr, expr.annotation().ty())
+            TypeError::NotCallable(val) => {
+                write!(f, "{} is not a callable function", val)
             }
 
-            TypeError::InvalidArgs { expected, actual, .. } => {
-                write!(f, "expected arguments (")?;
-                write_args(f, expected.iter())?;
-                write!(f, "), found (")?;
-                write_args(f, actual.iter())?;
-                write!(f, ")")
+            TypeError::InvalidArgs { .. } => {
+                write!(f, "argument list provided did not match the expected parameters")
             }
 
             TypeError::InvalidCallInExpression(call) => {
@@ -1334,4 +1332,11 @@ pub enum InvalidBaseTypeReason {
 pub enum InvalidTagReason {
     InvalidType(Type),
     UnsizedType(Type),
+}
+
+fn args_to_string(args: &[Type]) -> String {
+    args.iter()
+        .map(|arg| arg.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
