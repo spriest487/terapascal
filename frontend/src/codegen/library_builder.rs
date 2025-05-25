@@ -17,7 +17,7 @@ use crate::codegen::expr::expr_to_val;
 use crate::codegen::ir;
 use crate::codegen::library_builder::dyn_array::gen_dyn_array_funcs;
 use crate::codegen::library_builder::dyn_array::gen_dyn_array_rc_boilerplate;
-use crate::codegen::library_builder::init::gen_init_func;
+use crate::codegen::library_builder::init::gen_tags_init;
 use crate::codegen::library_builder::rtti::gen_release_func;
 use crate::codegen::library_builder::rtti::gen_retain_func;
 use crate::codegen::metadata::translate_closure_struct;
@@ -34,8 +34,9 @@ use crate::codegen::FunctionInstance;
 use crate::codegen::IROptions;
 use crate::codegen::SetFlagsType;
 use crate::typ::ast::apply_func_decl_named_ty_args;
-use crate::typ::ast::FunctionDecl;
-use crate::typ::{builtin_funcinfo_name, builtin_methodinfo_name};
+use crate::typ::builtin_funcinfo_name;
+use crate::typ::builtin_ident;
+use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::free_mem_sig;
@@ -50,7 +51,6 @@ use crate::typ::TypeArgsResult;
 use crate::typ::TypeParamContainer;
 use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::builtin_ident;
 use crate::Ident;
 use common::span::Span;
 pub use function::*;
@@ -381,7 +381,7 @@ impl LibraryBuilder {
         let sig = specialized_decl.sig();
         let ns = key.decl_key.namespace().into_owned();
 
-        let id = self.declare_func(&specialized_decl, ns, key.type_args.as_ref());
+        let id = self.declare_func(&specialized_decl, ns);
 
         // cache the function before translating the instantiation, because
         // it may recurse and instantiate itself in its own body
@@ -430,7 +430,7 @@ impl LibraryBuilder {
         let generic_ctx = typ::GenericContext::empty();
 
         let decl_namespace = key.decl_key.namespace().into_owned();
-        let id = self.declare_func(&extern_decl, decl_namespace, None);
+        let id = self.declare_func(&extern_decl, decl_namespace);
 
         let sig = extern_decl.sig();
         let return_ty = self.translate_type(&sig.return_ty, &generic_ctx);
@@ -564,7 +564,7 @@ impl LibraryBuilder {
             .expect("instantiate_method: methods should only be generated for named types")
             .into_owned();
 
-        let id = self.declare_func(&specialized_decl, ns, type_args);
+        let id = self.declare_func(&specialized_decl, ns);
 
         // cache the function before translating the instantiation, because
         // it may recurse and instantiate itself in its own body
@@ -691,35 +691,21 @@ impl LibraryBuilder {
         &mut self,
         func_decl: &typ::ast::FunctionDecl,
         namespace: IdentPath,
-        type_args: Option<&typ::TypeArgList>,
     ) -> ir::FunctionID {
-        let global_name = match &func_decl.name.owning_ty {
-            Some(..) => None,
-            
-            None => {
-                let ns: Vec<_> = namespace
-                    .iter()
-                    .map(|part| part.to_string())
-                    .collect();
-                let name = func_decl.name.to_string();
+        let has_global_name = func_decl.name.owning_ty.is_none()
+            && !func_decl.is_overload()
+            && func_decl.name.type_params.is_none();
 
-                let global_name = ir::NamePath::new(ns, name);
+        let global_name = if has_global_name {
+            let ns: Vec<_> = namespace
+                .iter()
+                .map(|part| part.to_string())
+                .collect();
+            let name = func_decl.name.ident.to_string();
 
-                Some(match type_args {
-                    None => global_name,
-                    Some(type_args) => {
-                        let params_list = func_decl.name.type_params
-                            .as_ref()
-                            .expect("function decl with type args must have type params");
-                        let generic_ctx = typ::GenericContext::new(params_list, type_args);
-
-                        let types = type_args.iter()
-                            .map(|ty| self.translate_type(ty, &generic_ctx));
-
-                        global_name.with_ty_args(types)
-                    },
-                })
-            },
+            Some(ir::NamePath::new(ns, name))
+        } else {
+            None
         };
 
         self.library.metadata.insert_func(global_name)
@@ -1275,7 +1261,7 @@ impl LibraryBuilder {
         src_ty: &typ::Type,
         method_index: usize,
         is_abstract: bool,
-        decl: &FunctionDecl,
+        decl: &typ::ast::FunctionDecl,
     ) -> ir::RuntimeMethod {
         let method_name = decl.name.ident.as_str();
         let method_name_id = self.library.metadata.find_or_insert_string(method_name);
@@ -1562,19 +1548,13 @@ impl LibraryBuilder {
     fn gen_static_type_init(&mut self) {
         let mut instructions = Vec::new();
 
-        let translated_types: Vec<_> = self.type_cache.values().cloned().collect();
-
-        for ir_ty in &translated_types {
-            if let Some(init_func_id) = gen_init_func(self, ir_ty) {
-                let func_global = ir::GlobalRef::Function(init_func_id);
-
-                instructions.push(ir::Instruction::Call {
-                    args: Vec::new(),
-                    out: None,
-                    function: ir::Value::from(func_global),
-                });
-            }
-        }
+        if let Some(tag_init_func) = gen_tags_init(self) {
+            instructions.push(ir::Instruction::Call {
+                args: Vec::new(),
+                out: None,
+                function: ir::Value::from(tag_init_func),
+            });
+        };
         
         instructions.append(&mut self.library.init);
         self.library.init = instructions;
@@ -1599,8 +1579,10 @@ impl LibraryBuilder {
         self.metadata_mut().alloc_tag_array(loc, new_tag_count);
     }
 
-    pub(crate) fn find_tags(&self, loc: ir::TagLocation) -> &[typ::ast::TagItem] {
-        self.tags.get(&loc).map(Vec::as_slice).unwrap_or(&[])
+    pub fn tags(&self) -> impl Iterator<Item=(ir::TagLocation, &[typ::ast::TagItem])> + use <'_> {
+        self.tags
+            .iter()
+            .map(|(loc, tags)| (*loc, tags.as_slice()))
     }
 }
 

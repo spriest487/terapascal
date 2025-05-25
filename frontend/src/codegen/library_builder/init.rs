@@ -3,65 +3,47 @@ use crate::codegen::expr::expr_to_val;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::typ as typ;
 use ir_lang as ir;
+use ir_lang::FunctionID;
 
-pub fn gen_init_func(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<ir::FunctionID> {
+pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<FunctionID> {
+    let locations: Vec<_> = lib
+        .tags()
+        .map(|(loc, tags)| (loc, tags.to_vec()))
+        .collect();
+    
     let mut builder = Builder::new(lib);
-    build_tag_init(&mut builder, ty);
 
-    let body = builder.finish();
-    if body.is_empty() {
-        return None;
-    }
-
-    let name = if lib.opts.debug {
-        Some(format!("<generated init func for {}>", lib.metadata().pretty_ty_name(ty)))
-    } else {
-        None
-    };
-
-    let sig = ir::FunctionSig::new([], ir::Type::Nothing);
-
-    let func = ir::Function::new_local_def(name, sig, body);
-
-    let func_id = lib.metadata_mut().insert_func(None);
-    lib.insert_func(func_id, func);
-
-    Some(func_id)
-}
-
-fn build_tag_init(builder: &mut Builder, ty: &ir::Type) {
     // type of field that stores tags in TypeInfo/MethodInfo class (array of object)
     let any_dyn_array = builder.translate_dyn_array_struct(&typ::Type::Any);
     let any_dyn_array_ty = ir::Type::class_ptr(any_dyn_array);
 
-    // type-level tags stored in TypeInfo
-    if let Some(type_loc) = ty.tags_loc() {
-        let type_tags = builder.find_tags(type_loc).to_vec();
-
-        // global ref to this type's static tag array (allocated by the runtime)
-        let tags_array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(type_loc));
-
-        // create tags
-        gen_create_tags(builder, tags_array_ref, type_tags, &any_dyn_array_ty);
-
-        // method tags stored in MethodInfo
-        let method_count = builder.get_runtime_methods(ty).count();
-        
-        for method_index in 0..method_count {
-            let method_loc = type_loc
-                .method_loc(method_index)
-                .unwrap_or_else(|| panic!("loc for type {} must be a typedef", builder.pretty_ty_name(ty)));
-
-            let method_tags = builder.find_tags(method_loc).to_vec();
-
-            // global ref to this type's static tag array (allocated by the runtime)
-            let tags_array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(method_loc));
-            gen_create_tags(builder,tags_array_ref, method_tags, &any_dyn_array_ty);
-        }
+    for (loc, tags) in locations {
+        let array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(loc));
+        gen_create_tags(&mut builder, array_ref, tags, &any_dyn_array_ty);
     }
+    
+    let body = builder.finish();
+    if body.is_empty() {
+        return None;
+    }
+    
+    let name = "<generated tag init function>".to_string();
+
+    let sig = ir::FunctionSig::new([], ir::Type::Nothing);
+    let func = ir::Function::new_local_def(Some(name), sig, body);
+
+    let func_id = lib.metadata_mut().insert_func(None);
+    lib.insert_func(func_id, func);
+    
+    Some(func_id)
 }
 
-fn gen_create_tags(builder: &mut Builder, tag_array: ir::Ref, tags: Vec<typ::ast::TagItem>, tag_array_ty: &ir::Type) {
+fn gen_create_tags(
+    builder: &mut Builder,
+    tag_array: ir::Ref,
+    tags: Vec<typ::ast::TagItem>,
+    tag_array_ty: &ir::Type
+) {
     if tags.is_empty() {
         return;
     }

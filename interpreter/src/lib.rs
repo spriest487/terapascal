@@ -20,12 +20,12 @@ use crate::heap::NativeHeap;
 use crate::marshal::Marshaller;
 use crate::result::ExecError;
 use crate::result::ExecResult;
+use crate::rtti_map::RttiMap;
 use crate::stack::StackFrame;
 use crate::stack::StackTrace;
 use crate::stack::StackTraceFrame;
 use ir_lang as ir;
-use ir_lang::{InstructionFormatter as _};
-use ir_lang::EMPTY_STRING_ID;
+use ir_lang::InstructionFormatter as _;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
@@ -33,7 +33,6 @@ use std::ops::BitAnd;
 use std::ops::BitOr;
 use std::ops::BitXor;
 use std::rc::Rc;
-use crate::rtti_map::RttiMap;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -1889,20 +1888,35 @@ impl Interpreter {
 
             self.globals.insert(typeinfo_ref.clone(), GlobalValue::Variable {
                 value: ptr_bytes.into_boxed_slice(),
-                ty: ir::Type::RcPointer(ir::TYPEINFO_VTYPE_ID),
+                ty: ir::TYPEINFO_TYPE,
             });
             
             let class_id = ty.rc_resource_def_id();
 
-            let runtime_name = match runtime_type.name {
-                Some(runtime_name_id) => {
-                    self.metadata.get_string(runtime_name_id).cloned()
-                }
-
-                None =>  None,
-            };
+            let runtime_name = runtime_type.name
+                .as_ref()
+                .and_then(|str_id| self.metadata.get_string(*str_id))
+                .cloned();
             
             self.typeinfo_map.add(class_id, runtime_name, typeinfo_ref);
+        }
+        
+        for (func_id, func_decl) in lib.metadata.functions() {
+            let runtime_name = func_decl.runtime_name
+                .as_ref()
+                .and_then(|str_id| self.metadata.get_string(*str_id))
+                .cloned();
+
+            let funcinfo_ptr = self.create_funcinfo(func_id, func_decl, &string_lit_values)?;
+            let ptr_bytes = self.marshaller.marshal_to_vec(&funcinfo_ptr)?;
+
+            let funcinfo_ref = ir::GlobalRef::StaticFuncInfo(func_id);
+            self.globals.insert(funcinfo_ref.clone(), GlobalValue::Variable {
+                value: ptr_bytes.into_boxed_slice(),
+                ty: ir::FUNCINFO_TYPE,
+            });
+            
+            self.funcinfo_map.add(Some(func_id), runtime_name, funcinfo_ref);
         }
 
         // declare global variables
@@ -2135,7 +2149,7 @@ impl Interpreter {
         string_lit_values: &HashMap<ir::StringID, DynValue>
     ) -> ExecResult<DynValue> {
         let type_name_string = match &rtti.name {
-            None => string_lit_values[&EMPTY_STRING_ID].clone(),
+            None => string_lit_values[&ir::EMPTY_STRING_ID].clone(),
             Some(name_id) => string_lit_values[name_id].clone(),
         };
         
@@ -2160,9 +2174,9 @@ impl Interpreter {
         // allocate and store the typeinfo before populating methods, so we can easily
         // get a real heap pointer to use for the "owner" field
         let mut typeinfo_struct = StructValue::new(ir::TYPEINFO_ID, [
-            type_name_string,
-            DynValue::Pointer(Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))),
-            DynValue::Pointer(ty_tags_array_ptr),
+            /* 0: name    */ type_name_string,
+            /* 1: methods */ DynValue::Pointer(Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))),
+            /* 2: tags    */ DynValue::Pointer(ty_tags_array_ptr),
         ]);
         
         let typeinfo_ptr = self.rc_alloc(typeinfo_struct.clone(), true)?;
@@ -2190,10 +2204,10 @@ impl Interpreter {
 
             let name_val = string_lit_values[&rtti_method.name].clone();
             let method_info = StructValue::new(ir::METHODINFO_ID, [
-                name_val, // name
-                DynValue::Pointer(typeinfo_ptr.clone()), // type info (owner)
-                DynValue::Pointer(Pointer::nil(ir::Type::Nothing)), // impl (unused)
-                DynValue::Pointer(method_tags_array_ptr), // tags array
+                /* 0: name  */ name_val,
+                /* 1: owner */ DynValue::Pointer(typeinfo_ptr.clone()),
+                /* 2: impl  */ DynValue::nil(ir::Type::Nothing), // unused
+                /* 3: tags  */ DynValue::Pointer(method_tags_array_ptr),
             ]);
             
             let method_info_ptr = self.rc_alloc(method_info, true)?;
@@ -2205,6 +2219,35 @@ impl Interpreter {
 
         // update the typeinfo instance in memory with the circular references set
         self.native_heap.store(&typeinfo_ptr, DynValue::from(typeinfo_struct))?;
+
+        Ok(DynValue::Pointer(typeinfo_ptr))
+    }
+
+    fn create_funcinfo(
+        &mut self,
+        func_id: ir::FunctionID,
+        decl: &ir::FunctionDecl,
+        string_lit_values: &HashMap<ir::StringID, DynValue>
+    ) -> ExecResult<DynValue> {
+        let func_name_string = match &decl.runtime_name {
+            None => string_lit_values[&ir::EMPTY_STRING_ID].clone(),
+            Some(name_id) => string_lit_values[name_id].clone(),
+        };
+        
+        let tags_loc = ir::TagLocation::Function(func_id);
+
+        let ty_tags_array_ptr = self
+            .get_tags_array_ptr(tags_loc)
+            .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
+
+        let mut funcinfo_struct = StructValue::new(ir::FUNCINFO_ID, [
+            /* 0: name */ func_name_string,
+            /* 1: impl */ DynValue::nil(ir::Type::Nothing),
+            /* 2: tags */ DynValue::Pointer(ty_tags_array_ptr),
+        ]);
+        funcinfo_struct.rc = Some(RcState::immortal());
+
+        let typeinfo_ptr = self.rc_alloc(funcinfo_struct.clone(), true)?;
 
         Ok(DynValue::Pointer(typeinfo_ptr))
     }

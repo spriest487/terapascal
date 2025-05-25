@@ -336,8 +336,17 @@ impl Metadata {
 
     pub fn insert_func(&mut self, global_name: Option<NamePath>) -> FunctionID {
         let id = self.next_function_id();
+        
+        let runtime_name = global_name
+            .as_ref()
+            .cloned()
+            .map(|name_path| {
+                let name = name_path.to_string();
+                
+                self.find_or_insert_string(&name)
+            });
 
-        let decl = FunctionDecl { global_name };
+        let decl = FunctionDecl { global_name, runtime_name };
         self.functions.insert(id, Rc::new(decl));
 
         id
@@ -404,6 +413,12 @@ impl Metadata {
             .get(ty)
             .into_iter()
             .flat_map(|src_ty| src_ty.methods.iter())
+    }
+
+    pub fn functions(&self) -> impl Iterator<Item=(FunctionID, &Rc<FunctionDecl>)> + use<'_> {
+        self.functions
+            .iter()
+            .map(|(id, decl)| (*id, decl))
     }
 
     pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {

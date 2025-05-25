@@ -15,5 +15,24 @@ begin
 end;
 
 begin
+    WriteLn('all named functions:');
+
+    var funcInfos := FunctionInfo.LoadedFunctions;
+    for var funcInfo in funcInfos do
+    begin
+        if funcInfo.Name.Length > 0 then
+            WriteLn(' * ' + funcInfo.Name);
+    end;
+
+    A();
+
     var funcInfo := FunctionInfo.Find('FunctionTags.A').Get;
+    var myTag1 := funcInfo.FindTag[MyTag1]().Get;
+    
+    WriteLn('Hello, ' + myTag1.name);
+    
+    for var myTag2 in funcInfo.FindTags(typeinfo(MyTag2)) do
+    begin
+        WriteLn('found a MyTag2');
+    end;
 end.

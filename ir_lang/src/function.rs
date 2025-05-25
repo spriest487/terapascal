@@ -1,4 +1,4 @@
-use crate::Instruction;
+use crate::{Instruction, StringID};
 use crate::InstructionFormatter;
 use crate::Label;
 use crate::LocalID;
@@ -100,6 +100,8 @@ pub struct ExternalFunctionRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionDecl {
+    pub runtime_name: Option<StringID>,
+    
     pub global_name: Option<NamePath>,
 }
 

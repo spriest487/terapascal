@@ -174,6 +174,10 @@ impl Expr {
                 let name = GlobalName::StaticTypeInfo(ty.clone());
                 Expr::Global(name).addr_of()
             }
+            ir::Ref::Global(ir::GlobalRef::StaticFuncInfo(id)) => {
+                let name = GlobalName::StaticFuncInfo(*id);
+                Expr::Global(name).addr_of()
+            }
         }
     }
     

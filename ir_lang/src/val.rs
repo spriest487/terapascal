@@ -190,6 +190,7 @@ pub enum GlobalRef {
     StringLiteral(StringID),
     StaticClosure(StaticClosureID),
     StaticTypeInfo(Rc<Type>),
+    StaticFuncInfo(FunctionID),
     Variable(VariableID),
     StaticTagArray(TagLocation),
 }
@@ -202,6 +203,7 @@ impl fmt::Display for GlobalRef {
             GlobalRef::StaticClosure(id) => write!(f, "{}", id),
             GlobalRef::Variable(id) => write!(f, "{}", id),
             GlobalRef::StaticTypeInfo(ty) => write!(f, "typeinfo({})", ty),
+            GlobalRef::StaticFuncInfo(id) => write!(f, "funcinfo({})", id),
             GlobalRef::StaticTagArray(id) => write!(f, "{}", id),
         }
     }

@@ -20,9 +20,10 @@ pub enum GlobalName {
     TypeInfoList,
     TypeInfoCount,
     StaticTypeInfo(Rc<ir::Type>),
-
+    
     FuncInfoList,
     FuncInfoCount,
+    StaticFuncInfo(ir::FunctionID),
     
     StaticTagArray(ir::TagLocation),
     
@@ -56,6 +57,8 @@ impl fmt::Display for GlobalName {
             GlobalName::StaticTypeInfo(ty) => {
                 write_global_typeinfo_decl_name(f, ty)
             }
+            
+            GlobalName::StaticFuncInfo(id) => write!(f, "FuncInfo_{}", id.0),
         }
     }
 }

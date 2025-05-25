@@ -132,10 +132,6 @@ impl<'m> Builder<'m> {
         self.library.translate_method_impl(self_ty, self_ty_method_index, call_ty_args)
     }
 
-    pub fn get_runtime_methods(&self, ty: &Type) -> impl Iterator<Item=&RuntimeMethod> {
-        self.library.metadata().get_runtime_methods(ty)
-    }
-
     pub fn translate_func(
         &mut self,
         func_name: &Symbol,
@@ -1052,10 +1048,6 @@ impl<'m> Builder<'m> {
         let label = self.next_label;
         self.next_label = Label(self.next_label.0 + 1);
         label
-    }
-
-    pub fn find_tags(&self, loc: TagLocation) -> &[typ::ast::TagItem] {
-        self.library.find_tags(loc)
     }
 
     fn current_scope_mut(&mut self) -> &mut Scope {
