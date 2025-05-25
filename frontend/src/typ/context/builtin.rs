@@ -206,7 +206,6 @@ pub fn builtin_comparable_iface() -> ast::InterfaceDecl {
         methods: vec![
             ast::InterfaceMethodDecl {
                 decl: Rc::new(builtin_comparable_compare_method(iface_ty, Type::MethodSelf)),
-                tags: Vec::new(),
             }
         ],
         forward: false,
@@ -224,6 +223,7 @@ pub fn builtin_comparable_compare_method(owning_ty: Type, self_ty: Type) -> ast:
             owning_ty.clone(),
             builtin_span.clone(),
         ),
+        tags: Vec::new(),
         where_clause: None,
         kind: FunctionDeclKind::Function,
         params: vec![
@@ -266,7 +266,6 @@ pub fn builtin_displayable_iface() -> ast::InterfaceDecl {
         methods: vec![
             ast::InterfaceMethodDecl {
                 decl: Rc::new(builtin_displayable_display_method(iface_ty, Type::MethodSelf)),
-                tags: Vec::new(),
             }
         ],
         forward: false,
@@ -284,6 +283,7 @@ pub fn builtin_displayable_display_method(owning_ty: Type, self_ty: Type) -> ast
             owning_ty.clone(),
             builtin_span.clone(),
         ),
+        tags: Vec::new(),
         where_clause: None,
         kind: FunctionDeclKind::Function,
         params: vec![
@@ -326,7 +326,6 @@ pub fn declare_builtin_ty(
             methods.insert(display_method.name.ident.clone(), ast::MethodDecl {
                 func_decl: display_method,
                 access: Access::Published,
-                tags: Vec::new(),
             });
         }
 
@@ -337,7 +336,6 @@ pub fn declare_builtin_ty(
             methods.insert(compare_method.name.ident.clone(), ast::MethodDecl {
                 func_decl: compare_method,
                 access: Access::Published,
-                tags: Vec::new(),
             });
         }
 

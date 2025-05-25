@@ -1,4 +1,4 @@
-use crate::FieldID;
+use crate::{FieldID, FunctionID};
 use crate::InterfaceID;
 use crate::TypeDefID;
 use crate::Value;
@@ -18,14 +18,13 @@ pub struct TagArg {
     pub value: Value,
 }
 
-
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum TagLocation {
     TypeDef(TypeDefID),
     Interface(InterfaceID),
     Method { type_id: TypeDefID, method_index: usize },
     InterfaceMethod { iface_id: InterfaceID, method_index: usize },
+    Function(FunctionID),
 }
 
 impl TagLocation {    
@@ -50,6 +49,7 @@ impl fmt::Display for TagLocation {
         match self {
             TagLocation::TypeDef(id) => write!(f, "type {}", id.0)?,
             TagLocation::Interface(id) => write!(f, "interface {}", id.0)?,
+            TagLocation::Function(id) => write!(f, "function {}", id.0)?,
             TagLocation::Method { type_id: self_ty, method_index} => write!(f, "type {}/method {}", self_ty.0, method_index)?,
             TagLocation::InterfaceMethod { iface_id, method_index} => write!(f, "iface {}/method {}", iface_id.0, method_index)?,
         }

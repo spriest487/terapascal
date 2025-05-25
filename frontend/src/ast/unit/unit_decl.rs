@@ -1,4 +1,6 @@
 use crate::ast::unit::parse_unit_decl;
+use crate::ast::unit::unit_binding_start_matcher;
+use crate::ast::unit::unit_func_start_matcher;
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionDef;
@@ -6,10 +8,10 @@ use crate::ast::TypeDecl;
 use crate::ast::UnitBinding;
 use crate::ast::UseDecl;
 use crate::parse::LookAheadTokenStream;
-use crate::parse::MatchOneOf;
 use crate::parse::Matcher;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
+use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Separator;
 use common::span::Span;
@@ -74,15 +76,10 @@ impl<A: Annotation> fmt::Display for UnitDecl<A> {
 
 impl UnitDecl<Span> {
     pub fn start_matcher() -> Matcher {
-        Keyword::Function
-            .or(Keyword::Procedure)
-            .or(Keyword::Constructor)
-            .or(Keyword::Destructor)
-            .or(Keyword::Class)
-            .or(Keyword::Uses)
-            .or(Keyword::Type)
-            .or(Keyword::Const)
-            .or(Keyword::Var)
+        Keyword::Uses
+            | Keyword::Type
+            | unit_func_start_matcher() | unit_binding_start_matcher()
+            | DelimiterPair::SquareBracket // tags group before function
     }
 
     pub fn parse_seq(part_kw: Keyword, tokens: &mut TokenStream) -> ParseResult<Vec<Self>> {

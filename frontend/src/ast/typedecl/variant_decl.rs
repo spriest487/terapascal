@@ -160,11 +160,10 @@ impl VariantDecl<Span> {
                 
                 let tags = Tag::parse_seq(tokens)?;
 
-                let method_decl= FunctionDecl::parse(tokens, true)?;
+                let method_decl= FunctionDecl::parse(tokens, true, tags)?;
                 methods.push(MethodDecl { 
                     func_decl: Rc::new(method_decl),
                     access,
-                    tags,
                 });
 
                 if tokens.match_one_maybe(Separator::Semicolon).is_none() {

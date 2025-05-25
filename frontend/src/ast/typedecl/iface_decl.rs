@@ -23,7 +23,6 @@ use std::rc::Rc;
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct InterfaceMethodDecl<A: Annotation> {
     pub decl: Rc<FunctionDecl<A>>,
-    pub tags: Vec<Tag<A>>,
 }
 
 impl<A: Annotation> InterfaceMethodDecl<A> {
@@ -49,13 +48,12 @@ impl ParseSeq for InterfaceMethodDecl<Span> {
         if !prev.is_empty() {
             tokens.match_one(Separator::Semicolon)?;
         }
-        
+
         let tags = Tag::parse_seq(tokens)?;
 
-        let decl = FunctionDecl::parse(tokens, false)?;
+        let decl = FunctionDecl::parse(tokens, false, tags)?;
         Ok(InterfaceMethodDecl { 
             decl: Rc::new(decl),
-            tags,
         })
     }
 

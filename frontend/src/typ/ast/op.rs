@@ -320,7 +320,6 @@ fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Opt
             let method_decl = MethodDecl {
                 func_decl: iface_method.decl.clone(),
                 access: IFACE_METHOD_ACCESS,
-                tags: iface_method.tags.clone(),
             };
 
             (index, method_decl)

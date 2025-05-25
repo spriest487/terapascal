@@ -792,7 +792,6 @@ impl Type {
                     .iter()
                     .map(|m| MethodDecl { 
                         func_decl: m.decl.clone(),
-                        tags: m.tags.clone(),
                         access: IFACE_METHOD_ACCESS,
                     })
                     .collect();
@@ -936,7 +935,6 @@ impl Type {
                 
                 Ok(MethodDecl {
                     func_decl: iface_method.decl.clone(),
-                    tags: iface_method.tags.clone(),
                     access: IFACE_METHOD_ACCESS,
                 })
             },

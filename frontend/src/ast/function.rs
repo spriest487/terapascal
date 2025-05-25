@@ -34,6 +34,7 @@ use derivative::*;
 use linked_hash_map::LinkedHashMap;
 use std::fmt;
 use std::rc::Rc;
+use crate::ast::tag::Tag;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum FunctionDeclKind {
@@ -127,6 +128,8 @@ pub struct FunctionDecl<A: Annotation = Span> {
     pub name: A::FunctionName,
     pub where_clause: Option<WhereClause<A::Type>>,
 
+    pub tags: Vec<Tag<A>>,
+
     pub kind: FunctionDeclKind,
 
     #[derivative(Debug = "ignore")]
@@ -142,7 +145,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
 }
 
 impl FunctionDecl<Span> {
-    pub fn parse(tokens: &mut TokenStream, allow_methods: bool) -> ParseResult<Self> {
+    pub fn parse(tokens: &mut TokenStream, allow_methods: bool, tags: Vec<Tag>) -> ParseResult<Self> {
         let mut kw_matcher = Keyword::Function | Keyword::Procedure;
         
         if allow_methods {
@@ -220,6 +223,7 @@ impl FunctionDecl<Span> {
         Ok(FunctionDecl {
             name,
             where_clause,
+            tags,
             kind,
             span,
             return_ty,

@@ -8,7 +8,7 @@ use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::TypeAnnotation;
-use crate::typ::ast::typecheck_block;
+use crate::typ::ast::{typecheck_block, Tag};
 use crate::typ::ast::typecheck_expr;
 use crate::typ::typecheck_type_path;
 use crate::typ::validate_generic_constraints;
@@ -139,6 +139,8 @@ impl fmt::Display for TypedFunctionName {
 
 impl FunctionDecl {
     pub fn typecheck(decl: &ast::FunctionDecl, is_def: bool, ctx: &mut Context) -> TypeResult<Self> {
+        let tags = Tag::typecheck_tags(&decl.tags, ctx)?;
+        
         let enclosing_ty = ctx.current_enclosing_ty().cloned();
 
         let owning_ty = match (&decl.name.owning_ty_qual, &enclosing_ty) {
@@ -358,6 +360,7 @@ impl FunctionDecl {
                     owning_ty,
                     span: decl.name.span(),
                 },
+                tags,
                 kind: decl.kind,
                 params,
                 where_clause,

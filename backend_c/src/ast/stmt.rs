@@ -41,6 +41,7 @@ impl fmt::Display for GlobalName {
                     ir::TagLocation::Interface(id) => write!(f, "Iface_{}", id.0),
                     ir::TagLocation::Method { type_id, method_index} => write!(f, "Method_{}_{}", type_id, method_index),
                     ir::TagLocation::InterfaceMethod { iface_id, method_index} => write!(f, "IfaceMethod_{}_{}", iface_id, method_index),
+                    ir::TagLocation::Function(id) => write!(f, "Function_{}", id.0),
                 }
             }
             GlobalName::Variable(id) => write!(f, "Variable_{}", id.0),

@@ -1719,7 +1719,6 @@ impl Context {
                             method: MethodDecl {
                                 func_decl: spec_method.decl,
                                 access: IFACE_METHOD_ACCESS,
-                                tags: spec_method.tags,
                             },
                             index: method_index,
                             iface_ty: Type::interface(spec_iface_sym),

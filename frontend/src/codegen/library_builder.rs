@@ -411,6 +411,9 @@ impl LibraryBuilder {
 
         self.library.functions.insert(id, ir::Function::Local(ir_func));
 
+        let tags_loc = ir::TagLocation::Function(id);
+        self.add_tags(tags_loc, &func_def.decl.tags);
+
         cached_func
     }
 
@@ -594,7 +597,7 @@ impl LibraryBuilder {
         );
         self.library.functions.insert(id, ir::Function::Local(ir_func));
 
-        if !method_decl.tags.is_empty() {
+        if !method_decl.func_decl.tags.is_empty() {
             let ir_self_ty = self.translate_type(&decl_self_ty, &GenericContext::empty());
             
             let Some(tags_loc) = ir_self_ty
@@ -604,7 +607,7 @@ impl LibraryBuilder {
                 panic!("produced tags for method {} with no valid tag location!", method_decl.func_decl.name)
             };
 
-            self.add_tags(tags_loc, &method_decl.tags);
+            self.add_tags(tags_loc, &method_decl.func_decl.tags);
         }
 
         cached_func
@@ -1610,13 +1613,13 @@ fn gen_iface_virtual_method_info(lib: &mut LibraryBuilder, iface_ty: &typ::Type)
     for method_index in 0..iface_methods.len() {
         let method = &iface_methods[method_index];
 
-        if !method.tags.is_empty() {
+        if !method.func_decl.tags.is_empty() {
             let tags_loc = ir::TagLocation::InterfaceMethod {
                 iface_id,
                 method_index,
             };
 
-            lib.add_tags(tags_loc, &method.tags);
+            lib.add_tags(tags_loc, &method.func_decl.tags);
         }
     }
 }

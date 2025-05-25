@@ -190,11 +190,10 @@ fn parse_method_decl(
     let tags = Tag::parse_seq(tokens)?;
     
     // these get parsed one at a time
-    let decl = FunctionDecl::parse(tokens, true)?;
+    let decl = FunctionDecl::parse(tokens, true, tags)?;
     
     members.push(StructMemberDecl::MethodDecl(MethodDecl {
         func_decl: Rc::new(decl),
-        tags,
         access,
     }));
     
@@ -205,8 +204,6 @@ fn parse_method_decl(
 pub struct MethodDecl<A: Annotation = Span> {
     pub access: Access,
     pub func_decl: Rc<FunctionDecl<A>>,
-    
-    pub tags: Vec<Tag<A>>,
 }
 
 pub(crate) fn write_access_if_changed(

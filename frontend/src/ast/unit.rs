@@ -26,7 +26,7 @@ use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::typ::builtin_span;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::Ident;
+use crate::{DelimiterPair, Ident};
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
@@ -35,6 +35,7 @@ use common::span::Span;
 use common::TracedError;
 use std::fmt;
 use std::rc::Rc;
+use crate::ast::tag::Tag;
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 pub enum UnitKind {
@@ -242,7 +243,12 @@ fn unit_binding_start_matcher() -> Matcher {
 }
 
 fn unit_func_start_matcher() -> Matcher {
-    Keyword::Function | Keyword::Class | Keyword::Procedure | Keyword::Constructor | Keyword::Destructor
+    Keyword::Function
+        | Keyword::Class
+        | Keyword::Procedure
+        | Keyword::Constructor
+        | Keyword::Destructor
+        | DelimiterPair::SquareBracket
 }
 
 fn parse_unit_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<UnitDecl<Span>> {
@@ -250,7 +256,7 @@ fn parse_unit_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<Un
 
     let decl = match tokens.look_ahead().match_one(decl_start) {
         Some(tt) if unit_func_start_matcher().is_match(&tt) => {
-            parse_unit_func_decl(part_kw, tokens)?
+            parse_unit_func_decl(tokens, part_kw)?
         },
 
         Some(tt) if tt.is_keyword(Keyword::Type) => UnitDecl::Type {
@@ -283,8 +289,9 @@ fn parse_unit_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<Un
     Ok(decl)
 }
 
-fn parse_unit_func_decl(part_kw: Keyword, tokens: &mut TokenStream) -> ParseResult<UnitDecl<Span>> {
-    let func_decl = Rc::new(FunctionDecl::parse(tokens, true)?);
+fn parse_unit_func_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<UnitDecl<Span>> {
+    let tags = Tag::parse_seq(tokens)?;
+    let func_decl = Rc::new(FunctionDecl::parse(tokens, true, tags)?);
 
     let body_ahead = if part_kw == Keyword::Interface {
         // interface funcs - never expect a body, unless the function is marked `inline`
