@@ -38,7 +38,7 @@ animal := Cat();
 animal.Speak; // "Meow!"
 ```
 
-## Runtime polymorphism
+## Compile-time polymorphism
 
 Interfaces can be used in combination with generic methods to constrain the types passed as type arguments
 to implementors of a particular interface.
