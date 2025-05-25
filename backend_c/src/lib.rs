@@ -1,6 +1,6 @@
 mod rtti;
 pub mod ast;
-pub use ir_lang as ir;
+pub use terapascal_ir as ir;
 
 pub use ast as c;
 

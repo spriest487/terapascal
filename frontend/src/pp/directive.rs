@@ -92,7 +92,7 @@ impl DirectiveParser {
         } else if let Some(mode_captures) = self.mode_pattern.captures(s) {
             let mode = match mode_captures[1].to_uppercase().as_str() {
                 "FPC" => LanguageMode::Fpc,
-                "UNCLE" => LanguageMode::Default,
+                "TERA" => LanguageMode::Default,
                 "DELPHI" => LanguageMode::Delphi,
                 unrecognized => {
                     eprintln!("unrecognized mode: {}", unrecognized);

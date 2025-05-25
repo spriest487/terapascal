@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 common = { path = "../common" }
-ir-lang = { path = "../ir_lang" }
+terapascal-ir = { path = "../ir" }
 bigdecimal = "0.4.5"
 cast = "0.3.0"
 derivative = "2.2.0"

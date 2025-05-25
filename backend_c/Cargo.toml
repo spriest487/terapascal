@@ -6,6 +6,6 @@ edition = "2021"
 
 [dependencies]
 common = { path = "../common" }
-ir-lang = { path = "../ir_lang" }
+terapascal-ir = { path = "../ir" }
 
 topological-sort = "0.2.2"

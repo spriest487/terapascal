@@ -59,7 +59,7 @@ impl SourceCollection {
             .cloned()
             .chain({
                 let mut unit_dirs = Vec::with_capacity(4);
-                if let Ok(units_var) = env::var("PASCAL2_UNITS") {
+                if let Ok(units_var) = env::var("TERAPASCAL_UNITS") {
                     unit_dirs.extend(units_var.split(";").map(PathBuf::from));
                 }
 

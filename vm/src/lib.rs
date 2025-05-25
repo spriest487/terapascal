@@ -24,8 +24,8 @@ use crate::rtti_map::RttiMap;
 use crate::stack::StackFrame;
 use crate::stack::StackTrace;
 use crate::stack::StackTraceFrame;
-use ir_lang as ir;
-use ir_lang::{InstructionFormatter as _};
+use terapascal_ir as ir;
+use ir::{InstructionFormatter as _};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
@@ -996,7 +996,7 @@ impl Interpreter {
             ir::Instruction::Element {
                 out,
                 a,
-                // not used because the interpreter doesn't need to know element type to
+                // not used because the vm doesn't need to know element type to
                 // calculate the pointer offset
                 element,
                 index,

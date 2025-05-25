@@ -1,18 +1,18 @@
 use crate::codegen::builder::Builder;
+use crate::codegen::expr;
+use crate::codegen::expr::translate_expr;
 use crate::codegen::syn;
 use crate::codegen::typ;
-use crate::codegen::expr;
 use crate::IntConstant;
 use bigdecimal::BigDecimal;
-use ir_lang::*;
 use syn::Operator;
-use crate::codegen::expr::translate_expr;
+use crate::ir;
 
 pub fn translate_bin_op(
     bin_op: &typ::ast::BinOp,
     out_ty: &typ::Type,
     builder: &mut Builder,
-) -> Ref {
+) -> ir::Ref {
     if bin_op.lhs.annotation().is_namespace() {
         // there's nothing to actually translate on the lhs, it's just for name resolution
         return expr::translate_expr(&bin_op.rhs, builder);
@@ -42,8 +42,8 @@ pub fn translate_bin_op(
             let of_ty = builder.translate_type(&bin_op.lhs.annotation().ty());
 
             let struct_id = match &of_ty {
-                Type::Struct(id) => *id,
-                Type::RcPointer(VirtualTypeID::Class(id)) => *id,
+                ir::Type::Struct(id) => *id,
+                ir::Type::RcPointer(ir::VirtualTypeID::Class(id)) => *id,
                 other => panic!(
                     "lhs ty_def of member binop must be a struct or class, was: {}",
                     other
@@ -270,14 +270,14 @@ pub fn translate_bin_op(
 
             // calc bit number
             let bit_num = builder.sub_to_val(item, min_lit, &value_type);
-            let bit_num_byte = builder.local_temp(Type::U8);
-            builder.cast(bit_num_byte.clone(), bit_num, Type::U8);
+            let bit_num_byte = builder.local_temp(ir::Type::U8);
+            builder.cast(bit_num_byte.clone(), bit_num, ir::Type::U8);
             
             builder.set_contains(out_val.clone(), set_val, bit_num_byte, set_type.as_ref());
             builder.jmp(break_label);
 
             builder.label(fail_label);
-            builder.mov(out_val.clone(), Value::LiteralBool(false));
+            builder.mov(out_val.clone(), ir::Value::LiteralBool(false));
 
             builder.label(break_label);
         }
@@ -298,10 +298,10 @@ pub fn translate_bin_op(
     }
 }
 
-fn set_bound_to_literal(value: IntConstant, value_type: &Type) -> Value {
+fn set_bound_to_literal(value: IntConstant, value_type: &ir::Type) -> ir::Value {
     let lit_val = BigDecimal::from(value.as_i128());
 
-    Value::from_literal_val(lit_val, &value_type)
+    ir::Value::from_literal_val(lit_val, &value_type)
         .unwrap_or_else(|| panic!(
             "couldn't create a literal value from set bound value {} of type {}",
             value,
@@ -313,7 +313,7 @@ pub fn translate_unary_op(
     unary_op: &typ::ast::UnaryOp,
     out_ty: &typ::Type,
     builder: &mut Builder,
-) -> Ref {
+) -> ir::Ref {
     let operand_ref = expr::translate_expr(&unary_op.operand, builder);
 
     match unary_op.op {
@@ -321,7 +321,7 @@ pub fn translate_unary_op(
             let out_ty = builder.translate_type(out_ty);
             let out_val = builder.local_new(out_ty.clone(), None);
 
-            builder.append(Instruction::AddrOf {
+            builder.append(ir::Instruction::AddrOf {
                 out: out_val.clone(),
                 a: operand_ref,
             });
@@ -339,17 +339,17 @@ pub fn translate_unary_op(
             let op_ty = unary_op.annotation.ty();
 
             let zero_val = match op_ty.as_ref() {
-                typ::Type::Primitive(typ::Primitive::Int8) => Value::LiteralI8(0),
-                typ::Type::Primitive(typ::Primitive::UInt8) => Value::LiteralU8(0),
-                typ::Type::Primitive(typ::Primitive::Int16) => Value::LiteralI16(0),
-                typ::Type::Primitive(typ::Primitive::UInt16) => Value::LiteralI16(0),
-                typ::Type::Primitive(typ::Primitive::Int32) => Value::LiteralI32(0),
-                typ::Type::Primitive(typ::Primitive::UInt32) => Value::LiteralU32(0),
-                typ::Type::Primitive(typ::Primitive::Int64) => Value::LiteralI64(0),
-                typ::Type::Primitive(typ::Primitive::UInt64) => Value::LiteralU64(0),
-                typ::Type::Primitive(typ::Primitive::NativeInt) => Value::LiteralISize(0),
-                typ::Type::Primitive(typ::Primitive::NativeUInt) => Value::LiteralUSize(0),
-                typ::Type::Primitive(typ::Primitive::Real32) => Value::LiteralF32(0.0),
+                typ::Type::Primitive(typ::Primitive::Int8) => ir::Value::LiteralI8(0),
+                typ::Type::Primitive(typ::Primitive::UInt8) => ir::Value::LiteralU8(0),
+                typ::Type::Primitive(typ::Primitive::Int16) => ir::Value::LiteralI16(0),
+                typ::Type::Primitive(typ::Primitive::UInt16) => ir::Value::LiteralI16(0),
+                typ::Type::Primitive(typ::Primitive::Int32) => ir::Value::LiteralI32(0),
+                typ::Type::Primitive(typ::Primitive::UInt32) => ir::Value::LiteralU32(0),
+                typ::Type::Primitive(typ::Primitive::Int64) => ir::Value::LiteralI64(0),
+                typ::Type::Primitive(typ::Primitive::UInt64) => ir::Value::LiteralU64(0),
+                typ::Type::Primitive(typ::Primitive::NativeInt) => ir::Value::LiteralISize(0),
+                typ::Type::Primitive(typ::Primitive::NativeUInt) => ir::Value::LiteralUSize(0),
+                typ::Type::Primitive(typ::Primitive::Real32) => ir::Value::LiteralF32(0.0),
                 _ => unimplemented!("IR for unary negation of {}", op_ty),
             };
 
@@ -368,7 +368,7 @@ pub fn translate_unary_op(
         },
 
         syn::Operator::Not => {
-            let out_val = builder.local_new(Type::Bool, None);
+            let out_val = builder.local_new(ir::Type::Bool, None);
 
             builder.not(out_val.clone(), operand_ref);
 

@@ -26,7 +26,6 @@ pub use ast::Ident;
 
 use crate::ast::IdentPath;
 use crate::ast::Unit;
-use crate::codegen::ir;
 use crate::codegen::IROptions;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
@@ -40,6 +39,7 @@ use common::BuildOptions;
 use common::TracedError;
 use std::path::PathBuf;
 use std::rc::Rc;
+use terapascal_ir as ir;
 
 pub fn preprocess(
     filename: impl Into<PathBuf>,

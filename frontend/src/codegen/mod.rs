@@ -9,15 +9,15 @@ mod set_flags;
 
 pub use self::function::*;
 pub use self::set_flags::*;
+use crate::ast as syn;
+use crate::ast::StructKind;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr::*;
-use crate::codegen::metadata::*;
 use crate::codegen::library_builder::LibraryBuilder;
+use crate::codegen::metadata::*;
 use crate::codegen::stmt::*;
-use crate::ast as syn;
+use crate::ir;
 use crate::typ as typ;
-pub use ir_lang as ir;
-use crate::ast::StructKind;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct IROptions {
@@ -25,7 +25,7 @@ pub struct IROptions {
     pub annotate_rc: bool,
 
     // insert source spans for statements and expressions for improved error messaging in the
-    // translation/interpreter stage
+    // translation/vm stage
     pub debug: bool,
 }
 

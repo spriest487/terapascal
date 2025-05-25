@@ -13,7 +13,7 @@ pub struct Args {
     /// Output file path.
     /// If the output file extension matches a backend, the output from that backend will be written
     /// to this path.
-    /// If no output path is provided the interpreter will be invoked.
+    /// If no output path is provided the vm will be invoked.
     #[structopt(name = "OUTPUT", short = "o", parse(from_os_str))]
     pub output: Option<PathBuf>,
 
@@ -36,15 +36,15 @@ pub struct Args {
     #[structopt(short = "p", long = "print-stage", parse(try_from_str = parse_compile_stage))]
     pub print_stage: Option<CompileStage>,
 
-    /// interpreter: log RC heap usage
+    /// vm: log RC heap usage
     #[structopt(long = "trace-heap")]
     pub trace_heap: bool,
 
-    /// interpreter: log RC retain/release operations
+    /// vm: log RC retain/release operations
     #[structopt(long = "trace-rc")]
     pub trace_rc: bool,
 
-    /// interpreter: log executed IR instructions
+    /// vm: log executed IR instructions
     #[structopt(long = "trace-ir")]
     pub trace_ir: bool,
 

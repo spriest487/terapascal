@@ -1,11 +1,11 @@
 [package]
-name = "interpreter"
+name = "terapascal-vm"
 version = "0.1.0"
 authors = ["spriest487 <spriest487@googlemail.com>"]
 edition = "2021"
 
 [dependencies]
-ir-lang = { path = "../ir_lang" }
+terapascal-ir = { path = "../ir" }
 common = { path = "../common" }
 libffi = "4.1.0"
 dlopen = "0.1.8"

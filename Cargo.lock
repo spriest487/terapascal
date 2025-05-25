@@ -99,7 +99,7 @@ name = "backend_c"
 version = "0.1.0"
 dependencies = [
  "common",
- "ir-lang",
+ "terapascal-ir",
  "topological-sort",
 ]
 
@@ -139,11 +139,22 @@ dependencies = [
 
 [[package]]
 name = "bincode"
-version = "1.3.3"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+checksum = "36eaf5d7b090263e8150820482d5d93cd964a81e4019913c972f4edcc6edb740"
 dependencies = [
+ "bincode_derive",
  "serde",
+ "unty",
+]
+
+[[package]]
+name = "bincode_derive"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf95709a440f45e986983918d0e8a1f30a9b1df04918fc828670606804ac3c09"
+dependencies = [
+ "virtue",
 ]
 
 [[package]]
@@ -253,19 +264,21 @@ dependencies = [
 
 [[package]]
 name = "codespan"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3362992a0d9f1dd7c3d0e89e0ab2bb540b7a95fea8cd798090e758fda2899b5e"
+checksum = "3e4b418d52c9206820a56fc1aa28db73d67e346ba8ba6aa90987e8d6becef7e4"
 dependencies = [
  "codespan-reporting",
+ "serde",
 ]
 
 [[package]]
 name = "codespan-reporting"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3538270d33cc669650c4b093848450d380def10c331d38c768e34cac80576e6e"
+checksum = "fe6d2e5af09e8c8ad56c969f2157a3d4238cebc7c55f0a517728c38f7b200f81"
 dependencies = [
+ "serde",
  "termcolor",
  "unicode-width",
 ]
@@ -412,9 +425,9 @@ dependencies = [
  "cast",
  "common",
  "derivative",
- "ir-lang",
  "linked-hash-map",
  "regex",
+ "terapascal-ir",
 ]
 
 [[package]]
@@ -620,33 +633,6 @@ checksum = "3acae9609540aa318d1bc588455225fb2085b9ed0c4f6bd0d9d5bcd86f1a0344"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
-]
-
-[[package]]
-name = "interpreter"
-version = "0.1.0"
-dependencies = [
- "cast",
- "common",
- "dlopen",
- "ir-lang",
- "libffi",
- "rand 0.9.1",
- "rouille",
- "serde",
- "smallvec",
-]
-
-[[package]]
-name = "ir-lang"
-version = "0.1.0"
-dependencies = [
- "bigdecimal",
- "common",
- "frontend",
- "linked-hash-map",
- "serde",
- "topological-sort",
 ]
 
 [[package]]
@@ -856,23 +842,6 @@ name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
-
-[[package]]
-name = "pascal2"
-version = "0.1.0"
-dependencies = [
- "backend_c",
- "bincode",
- "codespan",
- "codespan-reporting",
- "common",
- "frontend",
- "interpreter",
- "ir-lang",
- "linked-hash-map",
- "structopt",
- "topological-sort",
-]
 
 [[package]]
 name = "percent-encoding"
@@ -1278,6 +1247,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "terapascal"
+version = "0.2.0"
+dependencies = [
+ "backend_c",
+ "bincode",
+ "codespan",
+ "codespan-reporting",
+ "common",
+ "frontend",
+ "linked-hash-map",
+ "structopt",
+ "terapascal-ir",
+ "terapascal-vm",
+ "topological-sort",
+]
+
+[[package]]
+name = "terapascal-ir"
+version = "0.1.0"
+dependencies = [
+ "bigdecimal",
+ "common",
+ "frontend",
+ "linked-hash-map",
+ "serde",
+ "topological-sort",
+]
+
+[[package]]
+name = "terapascal-vm"
+version = "0.1.0"
+dependencies = [
+ "cast",
+ "common",
+ "dlopen",
+ "libffi",
+ "rand 0.9.1",
+ "rouille",
+ "serde",
+ "smallvec",
+ "terapascal-ir",
+]
+
+[[package]]
 name = "termcolor"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1404,6 +1417,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc72304796d0818e357ead4e000d19c9c174ab23dc11093ac919054d20a6a7fc"
 
 [[package]]
+name = "unty"
+version = "0.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d49784317cd0d1ee7ec5c716dd598ec5b4483ea832a2dced265471cc0f690ae"
+
+[[package]]
 name = "url"
 version = "2.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1431,6 +1450,12 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "virtue"
+version = "0.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "051eb1abcf10076295e815102942cc58f9d5e3b4560e46e53c21e8ff6f3af7b1"
 
 [[package]]
 name = "wasi"

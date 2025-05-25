@@ -26,9 +26,6 @@ use frontend::typ as ty;
 use frontend::typ::builtin_ident;
 use frontend::typ::SYSTEM_UNIT_NAME;
 use frontend::typecheck;
-use interpreter::Interpreter;
-use interpreter::InterpreterOpts;
-use ir_lang as ir;
 use linked_hash_map::LinkedHashMap;
 use pp::PreprocessedUnit;
 use std::collections::hash_map::Entry;
@@ -47,6 +44,9 @@ use std::process::Command;
 use std::process::Stdio;
 use std::time::Duration;
 use structopt::StructOpt;
+use terapascal_ir as ir;
+use terapascal_vm::Interpreter;
+use terapascal_vm::InterpreterOpts;
 use topological_sort::TopologicalSort;
 
 const IR_LIB_EXT: &str = "lib";
@@ -340,6 +340,10 @@ fn compile(args: &Args) -> Result<CompileOutput, CompileError> {
     Ok(CompileOutput::IR(module))
 }
 
+fn bincode_config() -> bincode::config::Configuration {
+    bincode::config::Configuration::default()
+}
+
 fn load_module_from_file(path: &Path) -> Result<ir::Library, CompileError> {
     let mut module_bytes = Vec::new();
 
@@ -353,14 +357,15 @@ fn load_module_from_file(path: &Path) -> Result<ir::Library, CompileError> {
                 path: path.to_path_buf(),
             }
         })?;
-
-    let module: ir::Library = bincode::deserialize(&module_bytes)
+    
+    let module: ir::Library = bincode::serde::decode_from_slice(&module_bytes, bincode_config())
         .map_err(|err| {
             CompileError::ReadSourceFileFailed {
                 msg: err.to_string(),
                 path: path.to_path_buf(),
             }
-        })?;
+        })
+        .map(|result| result.0)?;
 
     Ok(module)
 }
@@ -446,7 +451,7 @@ fn handle_output(output: CompileOutput, args: &Args) -> Result<(), CompileError>
                     Ok(())
                 } else if output_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
                     // the IR object is the output
-                    let module_bytes = bincode::serialize(&lib)?;
+                    let module_bytes = bincode::serde::encode_to_vec(&lib, bincode_config())?;
 
                     print_output(args.output.as_ref(), |dst| {
                         dst.write_all(&module_bytes)

@@ -18,7 +18,7 @@ use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use ast::Ident;
 use common::span::Span;
-use ir_lang::*;
+use crate::ir::*;
 use std::borrow::Cow;
 use std::fmt;
 use std::rc::Rc;

@@ -4,7 +4,7 @@ use crate::ExecError;
 use crate::ExecResult;
 use crate::Interpreter;
 use crate::Pointer;
-use ir_lang::*;
+use crate::ir::*;
 use rand::Rng;
 use std::env::consts::OS;
 use std::fmt;

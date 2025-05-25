@@ -2,7 +2,7 @@ use crate::ast::FuncAliasDef;
 use crate::ast::StructDef;
 use crate::ast::TypeDecl;
 use crate::ast::VariantDef;
-use ir_lang::*;
+use crate::ir;
 use std::fmt;
 
 #[derive(Clone, Eq, PartialEq, Hash)]
@@ -43,13 +43,13 @@ impl fmt::Display for TypeDef {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TypeDefName {
     // struct from class def ID
-    Struct(TypeDefID),
+    Struct(ir::TypeDefID),
 
     // struct from variant def ID
-    Variant(TypeDefID),
+    Variant(ir::TypeDefID),
 
     // alias for another type
-    Alias(TypeDefID),
+    Alias(ir::TypeDefID),
 
     // struct for a fixed-size array with a generated unique ID
     StaticArray(usize),

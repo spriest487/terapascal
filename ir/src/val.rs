@@ -43,6 +43,12 @@ impl From<LocalID> for Ref {
     }
 }
 
+impl From<FunctionID> for Ref {
+    fn from(id: FunctionID) -> Self {
+        Ref::Global(GlobalRef::Function(id))
+    }
+}
+
 impl fmt::Display for Ref {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

@@ -4,14 +4,14 @@ use crate::codegen::expr;
 use crate::codegen::syn;
 use crate::codegen::typ;
 use crate::typ::Specializable;
-use ir_lang::*;
+use crate::ir;
 
 fn translate_call_with_args(
     call_target: CallTarget,
     args: &[typ::ast::Expr],
     sig: &typ::FunctionSig,
     builder: &mut Builder,
-) -> Option<Ref> {
+) -> Option<ir::Ref> {
     let out_val = match &sig.return_ty {
         typ::Type::Nothing => None,
         return_ty => {
@@ -49,7 +49,7 @@ fn translate_call_with_args(
             arg_ref
         };
 
-        arg_vals.push(Value::from(arg_expr));
+        arg_vals.push(ir::Value::from(arg_expr));
     }
 
     match call_target {
@@ -75,19 +75,19 @@ fn translate_call_with_args(
 }
 
 enum CallTarget {
-    Function(Value),
-    InstanceMethod(Value),
+    Function(ir::Value),
+    InstanceMethod(ir::Value),
     Closure {
-        function: Value,
-        closure_ptr: Value,
+        function: ir::Value,
+        closure_ptr: ir::Value,
     },
     Virtual {
-        iface_id: InterfaceID,
-        iface_method_id: MethodID,
+        iface_id: ir::InterfaceID,
+        iface_method_id: ir::MethodID,
     },
 }
 
-pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<Ref> {
+pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Ref> {
     // eprintln!("build_call: {} @ {}", call, call.span());
 
     match call {
@@ -151,13 +151,13 @@ fn build_func_call(
     args: &[typ::ast::Expr],
     call_ty_args: Option<typ::TypeArgList>,
     builder: &mut Builder,
-) -> Option<Ref> {
+) -> Option<ir::Ref> {
     match target.annotation() {
         // calling a function directly
         typ::Value::Function(func) => {
             let func = builder.translate_func(&func.name, &func.sig, call_ty_args);
 
-            let func_val = Value::Ref(Ref::Global(GlobalRef::Function(func.id)));
+            let func_val = ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(func.id)));
 
             let call_target = CallTarget::Function(func_val);
 
@@ -166,7 +166,7 @@ fn build_func_call(
 
         typ::Value::UfcsFunction(func) => {
             let func_instance = builder.translate_func(&func.function_name, &func.sig, None);
-            let func_val = Value::Ref(Ref::Global(GlobalRef::Function(func_instance.id)));
+            let func_val = ir::Value::from(func_instance.id);
 
             let call_target = CallTarget::Function(func_val);
 
@@ -195,15 +195,15 @@ fn build_func_call(
             let func_ty_id = builder.translate_func_ty(&func_sig);
 
             // retrieve the actual function value
-            let func_field_ptr = builder.local_temp(Type::Function(func_ty_id).ptr());
+            let func_field_ptr = builder.local_temp(ir::Type::Function(func_ty_id).ptr());
 
             builder.scope(|builder| {
-                let closure_ptr_ty = Type::RcPointer(VirtualTypeID::Closure(func_ty_id));
+                let closure_ptr_ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(func_ty_id));
                 builder.field(
                     func_field_ptr.clone(),
                     target_expr_val.clone(),
                     closure_ptr_ty,
-                    CLOSURE_PTR_FIELD,
+                    ir::CLOSURE_PTR_FIELD,
                 );
             });
 
@@ -229,7 +229,7 @@ fn build_method_call(
     args: &[typ::ast::Expr],
     ty_args: Option<typ::TypeArgList>,
     builder: &mut Builder,
-) -> Option<Ref> {
+) -> Option<ir::Ref> {
     let iface_ty = builder.generic_context().apply_to_type(iface_ty);
     let self_ty = builder.generic_context().apply_to_type(self_ty);
 
@@ -262,14 +262,14 @@ fn build_method_call(
     let method_call_sig = call_generic_ctx.apply_to_sig(&method_decl_sig);
 
     let call_target = match builder.translate_type(&self_ty) {
-        Type::RcPointer(VirtualTypeID::Interface(iface_id)) => {
+        ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id)) => {
             if ty_args.is_some() {
                 unimplemented!("IR for virtual call with type args")
             }
 
             CallTarget::Virtual {
                 iface_id,
-                iface_method_id: MethodID(method_decl_index),
+                iface_method_id: ir::MethodID(method_decl_index),
             }
         },
 
@@ -282,7 +282,7 @@ fn build_method_call(
                 ty_args,
             );
             
-            let func_val = Ref::Global(GlobalRef::Function(func_instance.id));
+            let func_val = ir::Ref::from(func_instance.id);
 
             CallTarget::InstanceMethod(func_val.into())
         },
@@ -294,7 +294,7 @@ fn build_method_call(
 fn build_variant_ctor_call(
     variant_ctor: &typ::ast::VariantCtorCall,
     builder: &mut Builder,
-) -> Option<Ref> {
+) -> Option<ir::Ref> {
     let variant_ty = typ::Type::variant(variant_ctor.variant.clone())
         .apply_type_args(builder.generic_context(), builder.generic_context());
 
@@ -305,30 +305,21 @@ fn build_variant_ctor_call(
 
     builder.begin_scope();
 
-    let tag_ptr = builder.local_temp(Type::I32.ptr());
-    builder.append(Instruction::VariantTag {
-        out: tag_ptr.clone(),
-        a: out.clone(),
-        of_ty: out_ty.clone(),
-    });
+    let tag_ptr = builder.local_temp(ir::Type::I32.ptr());
+    builder.vartag(tag_ptr.clone(), out.clone(), out_ty.clone());
 
     let (_, case_index, _) = builder.translate_variant_case(variant_name, &variant_ctor.case);
 
     // todo: proper index type
-    builder.mov(tag_ptr.to_deref(), Value::LiteralI32(case_index as i32));
+    builder.mov(tag_ptr.to_deref(), ir::Value::LiteralI32(case_index as i32));
 
     if let Some(arg) = &variant_ctor.arg {
         let arg_val = expr::expr_to_val(arg, builder);
 
         let arg_ty = builder.translate_type(&arg.annotation().ty());
         let field_ptr = builder.local_temp(arg_ty.clone().ptr());
-        builder.append(Instruction::VariantData {
-            out: field_ptr.clone(),
-            a: out.clone(),
-            tag: case_index,
-            of_ty: out_ty.clone(),
-        });
-
+        
+        builder.vardata(field_ptr.clone(), out.clone(), out_ty.clone(), case_index);
         builder.mov(field_ptr.clone().to_deref(), arg_val);
         builder.retain(field_ptr.to_deref(), &arg_ty);
     }

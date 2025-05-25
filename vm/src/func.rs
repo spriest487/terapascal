@@ -80,7 +80,7 @@ impl Function {
         match self {
             Function::Builtin(def) => {
                 if state.opts().trace_ir {
-                    println!("calling {} (interpreter builtin)", def.debug_name);
+                    println!("calling {} (vm builtin)", def.debug_name);
                 }
                 (def.func)(state)?
             }

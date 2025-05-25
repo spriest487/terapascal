@@ -2,10 +2,9 @@ use crate::codegen::builder::Builder;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::typ as typ;
-use ir_lang as ir;
-use ir_lang::FunctionID;
+use crate::ir;
 
-pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<FunctionID> {
+pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
     let locations: Vec<_> = lib
         .tags()
         .map(|(loc, tags)| (loc, tags.to_vec()))

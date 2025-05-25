@@ -9,10 +9,10 @@ use frontend::parse::ParseError;
 use frontend::pp::error::PreprocessorError;
 use frontend::typ::TypeError;
 use frontend::TokenizeError;
-use interpreter::result::ExecError;
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
+use terapascal_vm::result::ExecError;
 
 #[derive(Debug)]
 pub enum CompileError {
@@ -82,8 +82,14 @@ impl From<ExecError> for CompileError {
     }
 }
 
-impl From<bincode::Error> for CompileError {
-    fn from(value: bincode::Error) -> Self {
+impl From<bincode::error::EncodeError> for CompileError {
+    fn from(value: bincode::error::EncodeError) -> Self {
+        CompileError::InternalError(value.to_string())
+    }
+}
+
+impl From<bincode::error::DecodeError> for CompileError {
+    fn from(value: bincode::error::DecodeError) -> Self {
         CompileError::InternalError(value.to_string())
     }
 }

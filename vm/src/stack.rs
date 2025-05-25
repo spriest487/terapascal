@@ -27,7 +27,7 @@ struct Block {
 
 #[derive(Debug)]
 struct StackAlloc {
-    // local vals are allocated on the fly as the interpreter passes LocalAlloc
+    // local vals are allocated on the fly as the vm passes LocalAlloc
     // instructions. we want to prevent IR code from alloc-ing two locals with the same
     // ID, but we might also legally run the same alloc instruction more than once if the
     // control flow takes us back over it.

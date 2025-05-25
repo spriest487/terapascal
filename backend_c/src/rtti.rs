@@ -1,8 +1,7 @@
-use ir_lang::FunctionID;
-use ir_lang::StringID;
+use crate::ir;
 
 #[derive(Debug, Clone)]
 pub struct RuntimeFuncInfo {
-    pub id: FunctionID,
-    pub name: StringID,
+    pub id: ir::FunctionID,
+    pub name: ir::StringID,
 }

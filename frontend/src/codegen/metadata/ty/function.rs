@@ -1,9 +1,8 @@
-use crate::codegen::ir;
+use crate::ir;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::syn;
 use crate::codegen::typ;
 use crate::codegen::FunctionInstance;
-use ir_lang::FunctionSig;
 use linked_hash_map::LinkedHashMap;
 use std::fmt;
 use syn::Ident;
@@ -86,7 +85,7 @@ pub fn translate_sig(
     sig: &typ::FunctionSig,
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
-) -> FunctionSig {
+) -> ir::FunctionSig {
     assert!(
         sig.type_params.is_none(),
         "cannot create type for a generic function pointer"
@@ -103,7 +102,7 @@ pub fn translate_sig(
         param_tys.push(ty);
     }
 
-    FunctionSig {
+    ir::FunctionSig {
         return_ty,
         param_tys,
     }

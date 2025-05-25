@@ -10,7 +10,6 @@ use crate::ast::Unit;
 use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt::Write;
-use ir_lang::LocalID;
 
 #[derive(Clone, Debug)]
 struct MethodImplFunc {
@@ -231,7 +230,7 @@ impl Class {
             body: vec![
                 // dtor((Self*) arg0);
                 Statement::Expr(Expr::Function(FunctionName::ID(dtor_func)).call([
-                    Expr::local_var(LocalID(0)).cast(self_ty.ptr())
+                    Expr::local_var(ir::LocalID(0)).cast(self_ty.ptr())
                 ])),
             ]
         };

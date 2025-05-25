@@ -6,7 +6,6 @@ use crate::ast::Type;
 use crate::ast::TypeDefName;
 use crate::ir;
 use std::fmt;
-use ir_lang::LocalID;
 use crate::c::VariableID;
 
 #[allow(unused)]
@@ -181,7 +180,7 @@ impl Expr {
         }
     }
     
-    pub fn local_var(id: LocalID) -> Self {
+    pub fn local_var(id: ir::LocalID) -> Self {
         Expr::Variable(VariableID::Local(id))
     }
     

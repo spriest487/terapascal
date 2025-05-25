@@ -2,16 +2,16 @@ use crate::ast::IdentPath;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::syn;
 use crate::codegen::typ;
-use ir_lang::*;
+use crate::ir;
 use typ::Specializable;
 
 pub trait NamePathExt {
     fn from_decl(name: typ::Symbol, metadata: &mut LibraryBuilder) -> Self;
-    fn from_ident_path(ident: &syn::IdentPath, type_args: Option<Vec<Type>>) -> Self;
+    fn from_ident_path(ident: &syn::IdentPath, type_args: Option<Vec<ir::Type>>) -> Self;
     fn from_parts<Iter: IntoIterator<Item = String>>(iter: Iter) -> Self;
 }
 
-impl NamePathExt for NamePath {
+impl NamePathExt for ir::NamePath {
     fn from_decl(name: typ::Symbol, builder: &mut LibraryBuilder) -> Self {
         let path_parts = name
             .full_path
@@ -32,22 +32,22 @@ impl NamePathExt for NamePath {
             None => None,
         };
 
-        NamePath {
+        ir::NamePath {
             path: path_parts.collect(),
             type_args,
         }
     }
 
-    fn from_ident_path(ident: &syn::IdentPath, type_args: Option<Vec<Type>>) -> Self {
+    fn from_ident_path(ident: &syn::IdentPath, type_args: Option<Vec<ir::Type>>) -> Self {
         let path = ident.iter()
             .map(|ident| ident.to_string())
             .collect();
 
-        NamePath { path, type_args }
+        ir::NamePath { path, type_args }
     }
 
     fn from_parts<Iter: IntoIterator<Item = String>>(iter: Iter) -> Self {
-        NamePath {
+        ir::NamePath {
             path: iter.into_iter().collect(),
             type_args: None,
         }
@@ -58,7 +58,7 @@ pub fn translate_name(
     name: &typ::Symbol,
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
-) -> NamePath {
+) -> ir::NamePath {
     let name = name.clone().apply_type_args(generic_ctx, generic_ctx);
 
     if name.is_unspecialized_generic() {
@@ -87,7 +87,7 @@ pub fn translate_name(
                 .collect()
         });
 
-    NamePath {
+    ir::NamePath {
         path,
         type_args,
     }

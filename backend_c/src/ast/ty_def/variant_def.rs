@@ -3,11 +3,10 @@ use crate::ast::Unit;
 use crate::ast::Type;
 use crate::ast::TypeDecl;
 use crate::ast::TypeDefName;
-use ir_lang::*;
+use crate::ir;
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
-use crate::ir;
 
 #[derive(Clone, Eq)]
 pub struct VariantCaseDef {
@@ -49,7 +48,7 @@ impl Hash for VariantDef {
 }
 
 impl VariantDef {
-    pub fn translate(id: TypeDefID, variant: &ir::VariantDef, module: &mut Unit) -> Self {
+    pub fn translate(id: ir::TypeDefID, variant: &ir::VariantDef, module: &mut Unit) -> Self {
         let cases = variant
             .cases
             .iter()

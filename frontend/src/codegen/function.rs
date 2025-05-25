@@ -7,7 +7,7 @@ use crate::codegen::translate_literal;
 use crate::codegen::typ;
 use crate::codegen::Builder;
 use crate::codegen::ClosureInstance;
-use ir_lang::*;
+use crate::ir::*;
 use std::iter;
 use std::rc::Rc;
 

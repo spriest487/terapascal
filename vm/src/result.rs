@@ -7,8 +7,8 @@ use crate::Pointer;
 use common::span::Span;
 use common::DiagnosticLabel;
 use common::DiagnosticOutput;
-use ir_lang::InstructionFormatter;
-use ir_lang::RawInstructionFormatter;
+use ir::InstructionFormatter;
+use ir::RawInstructionFormatter;
 use std::fmt;
 
 #[derive(Debug)]
@@ -91,7 +91,7 @@ impl ExecError {
                         write!(f, "Failed to load {}::{}", lib, symbol)
                     }
                     ExecError::IllegalDereference { .. } => write!(f, "Illegal dereference"),
-                    ExecError::IllegalState { .. } => write!(f, "Illegal interpreter state"),
+                    ExecError::IllegalState { .. } => write!(f, "Illegal vm state"),
                     ExecError::NativeHeapError(..) => write!(f, "Heap error"),
                     ExecError::ZeroLengthAllocation => write!(f, "Dynamic allocation with length 0"),
                     ExecError::IllegalInstruction(..) => write!(f, "Illegal instruction"),

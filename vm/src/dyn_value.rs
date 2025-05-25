@@ -1,8 +1,8 @@
+use crate::ir;
 use crate::ptr::Pointer;
 use cast::i128;
 use std::ops::Index;
 use std::ops::IndexMut;
-use ir_lang as ir;
 
 #[derive(Debug, Clone)]
 pub enum DynValue {

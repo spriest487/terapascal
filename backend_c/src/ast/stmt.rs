@@ -2,10 +2,11 @@ use crate::ast::expr::Expr;
 use crate::ast::expr::InfixOp;
 use crate::ast::expr::PrefixOp;
 use crate::ast::ty_def::FieldName;
-use crate::ast::{BuiltinName, FunctionName};
+use crate::ast::BuiltinName;
+use crate::ast::FunctionName;
 use crate::ast::Unit;
 use crate::ast::Type;
-use ir_lang as ir;
+use crate::ir;
 use std::fmt;
 use std::rc::Rc;
 

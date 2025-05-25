@@ -5,7 +5,7 @@ use crate::ast::Statement;
 use crate::ast::Type;
 use crate::ast::TypeDecl;
 use crate::ast::Unit;
-use ir_lang as ir;
+use terapascal_ir as ir;
 use std::fmt;
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
@@ -182,7 +182,7 @@ pub struct FunctionDecl {
 }
 
 impl FunctionDecl {
-    pub fn translate(id: ir::FunctionID, func: &ir_lang::FunctionDef, module: &mut Unit) -> Self {
+    pub fn translate(id: ir::FunctionID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
         let name = FunctionName::ID(id);
         let return_ty = Type::from_metadata(&func.sig.return_ty, module);
         let params = func
