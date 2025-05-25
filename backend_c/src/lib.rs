@@ -1,3 +1,4 @@
+mod rtti;
 pub mod ast;
 pub use ir_lang as ir;
 

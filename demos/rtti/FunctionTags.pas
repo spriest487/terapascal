@@ -21,7 +21,9 @@ begin
     for var funcInfo in funcInfos do
     begin
         if funcInfo.Name.Length > 0 then
+        begin
             WriteLn(' * ' + funcInfo.Name);
+        end;
     end;
 
     A();

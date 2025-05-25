@@ -10,8 +10,8 @@ pub use self::stmt::*;
 pub use self::ty_def::*;
 use crate::ast::string_lit::StringLiteral;
 use crate::ir;
+use crate::rtti::RuntimeFuncInfo;
 use crate::Options;
-use ir_lang::EMPTY_STRING_ID;
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
@@ -42,9 +42,11 @@ pub struct Unit {
 
     opts: Options,
 
-    typeinfos: HashMap<ir::Type, Rc<ir::RuntimeType>>,
+    type_infos: HashMap<ir::Type, Rc<ir::RuntimeType>>,
     methodinfo_array_class: ir::TypeDefID,
     pointer_array_class: ir::TypeDefID,
+    
+    runtime_funcinfos: Vec<RuntimeFuncInfo>,
 }
 
 impl Unit {
@@ -202,7 +204,18 @@ impl Unit {
             .runtime_types()
             .map(|(ty, rtti)| (ty.clone(), rtti.clone()))
             .collect();
-        
+
+        let func_infos = metadata
+            .functions()
+            .filter_map(|(id, decl)| {
+                let name = decl.runtime_name?;
+                Some(RuntimeFuncInfo {
+                    name,
+                    id,
+                })
+            })
+            .collect();
+
         let tag_arrays = metadata
             .tag_counts()
             .collect();
@@ -231,12 +244,15 @@ impl Unit {
 
             opts,
 
-            typeinfos: type_infos,
+            type_infos,
             methodinfo_array_class,
             pointer_array_class,
+
+            runtime_funcinfos: func_infos,
             
             tag_arrays,
             tag_array_class,
+            
         };
 
         for (class_id, _class_def) in metadata.class_defs() {
@@ -253,7 +269,7 @@ impl Unit {
     }
 
     pub fn pretty_type(&self, ir_ty: &ir::Type) -> Cow<str> {
-        match self.typeinfos.get(ir_ty).and_then(|typeinfo| typeinfo.name) {
+        match self.type_infos.get(ir_ty).and_then(|typeinfo| typeinfo.name) {
             Some(name_id) => {
                 let name = &self.string_literals[&name_id];
                 Cow::Borrowed(name.as_str())
@@ -465,15 +481,22 @@ impl Unit {
     
     fn gen_rtti_init(&self, init_stmts: &mut Vec<Statement>) {
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
-        let typeinfo_count = i32::try_from(self.typeinfos.len()).unwrap_or(i32::MAX);
+        let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
+        
+        let typeinfo_count = i32::try_from(self.type_infos.len()).unwrap_or(i32::MAX);
+        let funcinfo_count = i32::try_from(self.runtime_funcinfos.len()).unwrap_or(i32::MAX);
 
-        // allocate the global typeinfo list
-        init_stmts.push(Statement::Expr(Expr::assign(
+        // allocate the global typeinfo and funcinfo lists
+        init_stmts.push(Statement::assign(
             Expr::Global(GlobalName::TypeInfoCount),
             Expr::LitInt(typeinfo_count as i128),
-        )));
+        ));
+        init_stmts.push(Statement::assign(
+            Expr::Global(GlobalName::FuncInfoCount),
+            Expr::LitInt(funcinfo_count as i128),
+        ));
 
-        init_stmts.push(Statement::Expr(Expr::assign(
+        init_stmts.push(Statement::assign(
             Expr::Global(GlobalName::TypeInfoList),
             Expr::Function(FunctionName::GetMem)
                 .call([Expr::infix_op(
@@ -482,7 +505,17 @@ impl Unit {
                     Expr::SizeOf(typeinfo_ty.clone()),
                 )])
                 .cast(typeinfo_ty.ptr()),
-        )));
+        ));
+        init_stmts.push(Statement::assign(
+            Expr::Global(GlobalName::FuncInfoList),
+            Expr::Function(FunctionName::GetMem)
+                .call([Expr::infix_op(
+                    Expr::LitInt(funcinfo_count as i128),
+                    InfixOp::Mul,
+                    Expr::SizeOf(funcinfo_ty.clone()),
+                )])
+                .cast(funcinfo_ty.ptr()),
+        ));
         
         // initialize type info fields that can't be statically initialized
         const METHODS_ARRAY_NAME: &str = "methods_array";
@@ -519,14 +552,14 @@ impl Unit {
 
         let mut typeinfo_index = 0i128;
         
-        for (ty, typeinfo) in &self.typeinfos {
+        for (ty, typeinfo) in &self.type_infos {
             // allocate the method dynarray instance for this typeinfo 
             init_stmts.push(Statement::Expr(Expr::assign(
                 Expr::named_var(METHODS_ARRAY_NAME),
                 call_array_rcalloc.clone()
             )));
 
-            // allocate the array memory
+            // allocate the method array memory
             let array_realloc = Expr::Class(self.methodinfo_array_class)
                 .field(FieldName::DynArrayAlloc);
             init_stmts.push(Statement::Expr(array_realloc.call([
@@ -545,12 +578,6 @@ impl Unit {
             )));
 
             typeinfo_index += 1;
-
-            let type_name_string_id = typeinfo.name.unwrap_or(EMPTY_STRING_ID);
-            init_stmts.push(Statement::Expr(Expr::assign(
-                type_info_expr.clone().field(FieldName::ID(ir::TYPEINFO_NAME_FIELD)),
-                Expr::Global(GlobalName::StringLiteral(type_name_string_id)).addr_of(),
-            )));
 
             for method_index in 0..typeinfo.methods.len() {
                 // methodinfo = methods_array->ptr + method_index
@@ -621,6 +648,16 @@ impl Unit {
             init_stmts.push(Statement::Expr(Expr::assign(
                 type_info_expr.field(FieldName::ID(ir::TYPEINFO_METHODS_FIELD)),
                 Expr::named_var(METHODS_ARRAY_NAME),
+            )));
+        }
+        
+        for funcinfo_index in 0..self.runtime_funcinfos.len() {
+            let func_id = self.runtime_funcinfos[funcinfo_index].id; 
+            let func_info_expr = Expr::Global(GlobalName::StaticFuncInfo(func_id));
+            
+            init_stmts.push(Statement::Expr(Expr::assign(
+                Expr::Global(GlobalName::FuncInfoList).index(Expr::LitInt(funcinfo_index as i128)),
+                func_info_expr.clone().addr_of(),
             )));
         }
     }
@@ -709,6 +746,13 @@ impl fmt::Display for Unit {
             writeln!(f, "{}", class.to_decl_string())?;
         }
         
+        // declare string vars
+        let string_name = TypeDefName::Struct(ir::STRING_ID);
+        for str_id in self.string_literals.keys() {
+            let lit_name = GlobalName::StringLiteral(*str_id);
+            write!(f, "static struct {} {};", string_name, lit_name)?;
+        }
+        
         for (tag_loc, tag_array_len) in &self.tag_arrays {
             let static_array_name = GlobalName::StaticTagArray(*tag_loc);
 
@@ -723,10 +767,9 @@ impl fmt::Display for Unit {
 
             // write object
             let tag_array_struct_ty = Type::DefinedType(TypeDefName::Struct(self.tag_array_class));
-            let tag_array_object_ty = tag_array_struct_ty.clone().ptr();
 
-            let tag_array_decl_string = tag_array_object_ty.to_decl_string(&static_array_name);
-            writeln!(f, "static {} = &({}) {{", tag_array_decl_string, tag_array_struct_ty.typename())?;
+            let tag_array_decl_string = tag_array_struct_ty.to_decl_string(&static_array_name);
+            writeln!(f, "static {} = {{", tag_array_decl_string)?;
 
             write_immortal_rc_member(f, self.tag_array_class)?;
             writeln!(f, ",")?;
@@ -744,19 +787,22 @@ impl fmt::Display for Unit {
         }
 
         let typeinfo_struct_name = TypeDefName::Struct(ir::TYPEINFO_ID);
-        for (ty, _typeinfo) in &self.typeinfos {
+        let typeinfo_class = GlobalName::ClassInstance(ir::TYPEINFO_ID);
+
+        for (ty, typeinfo) in &self.type_infos {
             write!(f, "static struct {} ", typeinfo_struct_name)?;
             write_global_typeinfo_decl_name(f, ty)?;
             writeln!(f, " = {{")?;
 
-            writeln!(f, "  .{} = {{", FieldName::Rc)?;
-            writeln!(f, "    .{} = -1,", FieldName::RcStrongCount)?;
-            writeln!(f, "    .{} = 0,", FieldName::RcWeakCount)?;
-            writeln!(f, "  }},")?;
+            writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;
 
-            // class typeinfo is initialized before strings (the string class must exist first),
-            // so we'll initialize the rest before initialization in main()
-            writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
+            write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
+            match typeinfo.name.map(GlobalName::StringLiteral) {
+                Some(name) => writeln!(f, "&{},", name)?,
+                None => writeln!(f, "NULL,")?,
+            }
+
+            // initialized at runtime for now
             writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
             
             writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
@@ -772,10 +818,36 @@ impl fmt::Display for Unit {
                 });
             
             match tags_loc {
-                Some(loc) => write!(f, "{}", GlobalName::StaticTagArray(loc))?,
+                Some(loc) => write!(f, "&{}", GlobalName::StaticTagArray(loc))?,
                 None => write!(f, "NULL,")?,
             }
 
+            writeln!(f, "}};")?;
+        }
+
+        let funcinfo_class = GlobalName::ClassInstance(ir::FUNCINFO_ID);
+        let funcinfo_struct_name = TypeDefName::Struct(ir::FUNCINFO_ID);
+
+        for func in &self.runtime_funcinfos {
+            let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
+
+            writeln!(f, "static struct {} {} = {{", funcinfo_struct_name, funcinfo_name)?;
+            writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
+
+            let name_str = GlobalName::StringLiteral(func.name);
+
+            writeln!(f, "  .{} = &{},", FieldName::ID(ir::FUNCINFO_NAME_FIELD), name_str)?;
+            writeln!(f, "  .{} = NULL,", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
+
+            writeln!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_TAGS_FIELD))?;
+
+            let tags_loc = ir::TagLocation::Function(func.id);
+            if self.tag_arrays.get(&tags_loc).is_some() {
+                write!(f, "&{}", GlobalName::StaticTagArray(tags_loc))?;
+            } else {
+                write!(f, "NULL")?;
+            };
+            
             writeln!(f, "}};")?;
         }
 

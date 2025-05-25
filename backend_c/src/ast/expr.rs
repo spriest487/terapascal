@@ -168,7 +168,7 @@ impl Expr {
             }
             ir::Ref::Global(ir::GlobalRef::StaticTagArray(id)) => {
                 let name = GlobalName::StaticTagArray(*id);
-                Expr::Global(name)
+                Expr::Global(name).addr_of()
             }
             ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(ty)) => {
                 let name = GlobalName::StaticTypeInfo(ty.clone());
