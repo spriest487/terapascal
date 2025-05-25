@@ -174,7 +174,7 @@ PACKED_DECL(STRING_STRUCT {
 #define MAKE_STRING_LIT(text) {\
     .rc = MAKE_RC(STRING_CLASS, -1, 0),\
     .field_0 = (unsigned char*) text,\
-    .field_1 = sizeof(text) / sizeof(text[0]),\
+    .field_1 = sizeof(text) / sizeof(text[0]) - 1,\
 }
 
 static void ModuleInit(void);
