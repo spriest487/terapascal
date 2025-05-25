@@ -17,6 +17,16 @@ type
     MyClass = class
     end;
     
+    [MyCustomTag(Greeting: 'Hi')]
+    MyRecord = record
+    end;
+
+    [MyCustomTag(Greeting: 'Greetings')]
+    MyVariant = variant
+        One;
+        Two;
+    end;
+
 initialization
     var myClass := typeinfo(MyClass);
     var tagInstance := if myClass.FindTag(typeinfo(MyCustomTag)) is Option.Some t 
@@ -33,4 +43,10 @@ initialization
     begin
         WriteLn('second tag with value: ' + secondTag.Value);
     end;
+    
+    var myRecordTag := typeinfo(MyRecord).FindTag[MyCustomTag]().Get;
+    WriteLn(myRecordTag.Greeting +', world!');
+    
+    var myVariantTag := typeinfo(MyVariant).FindTag[MyCustomTag]().Get;
+    WriteLn(myVariantTag.Greeting +', world!');
 end.

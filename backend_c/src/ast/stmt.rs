@@ -7,6 +7,7 @@ use crate::ast::Unit;
 use crate::ast::Type;
 use ir_lang as ir;
 use std::fmt;
+use std::rc::Rc;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
@@ -18,7 +19,7 @@ pub enum GlobalName {
     
     TypeInfoList,
     TypeInfoCount,
-    StaticTypeInfo(Box<ir::Type>),
+    StaticTypeInfo(Rc<ir::Type>),
 
     FuncInfoList,
     FuncInfoCount,

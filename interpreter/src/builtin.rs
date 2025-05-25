@@ -359,10 +359,14 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
     }
 }
 
+fn invoke_func(_state: &mut Interpreter) -> ExecResult<()> {
+    unimplemented!()
+}
+
 fn find_type_info(state: &mut Interpreter) -> ExecResult<()> {
     let name_arg = state.read_string(&Ref::Local(LocalID(1)))?;
     
-    let result = match state.typeinfo_by_name.get(&name_arg).cloned() {
+    let result = match state.typeinfo_map.find_by_name(&name_arg).cloned() {
         Some(typeinfo_global) => {
             state.load(&Ref::Global(typeinfo_global))?
         }
@@ -378,7 +382,7 @@ fn find_type_info(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 fn get_type_info_count(state: &mut Interpreter) -> ExecResult<()> {
-    let count = i32::try_from(state.typeinfo_by_name.len())
+    let count = i32::try_from(state.typeinfo_map.items().len())
         .unwrap_or(i32::MAX);
 
     state.store(&RETURN_REF, DynValue::I32(count))
@@ -395,7 +399,7 @@ fn get_type_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
 
     let type_info_ref = usize::try_from(index)
         .ok()
-        .and_then(|i| state.typeinfo_refs.get(i).cloned())
+        .and_then(|i| state.typeinfo_map.items().get(i).cloned())
         .ok_or_else(|| ExecError::illegal_state(format!("illegal TypeInfo index: {index}")))?;
     
     let type_info_ptr = state.load(&Ref::Global(type_info_ref))?;
@@ -424,6 +428,51 @@ fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
     let type_info_ptr = state.load(&Ref::Global(type_info_ref))?;
     state.store(&RETURN_REF, type_info_ptr)?;
     
+    Ok(())
+}
+
+fn find_func_info(state: &mut Interpreter) -> ExecResult<()> {
+    let name_arg = state.read_string(&Ref::Local(LocalID(1)))?;
+
+    let result = match state.funcinfo_map.find_by_name(&name_arg).cloned() {
+        Some(funcinfo_global) => {
+            state.load(&Ref::Global(funcinfo_global))?
+        }
+
+        None => {
+            DynValue::nil(FUNCINFO_TYPE)
+        }
+    };
+
+    state.store(&RETURN_REF, result)?;
+
+    Ok(())
+}
+
+fn get_func_info_count(state: &mut Interpreter) -> ExecResult<()> {
+    let count = i32::try_from(state.funcinfo_map.items().len())
+        .unwrap_or(i32::MAX);
+
+    state.store(&RETURN_REF, DynValue::I32(count))
+}
+
+fn get_func_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
+    let index_param_local = Ref::Local(LocalID(1));
+
+    let index = state.load(&index_param_local)?
+        .as_i32()
+        .ok_or_else(|| {
+            ExecError::illegal_state("parameter to get_func_info_by_index must be i32")
+        })?;
+
+    let funcinfo_ref = usize::try_from(index)
+        .ok()
+        .and_then(|i| state.funcinfo_map.items().get(i).cloned())
+        .ok_or_else(|| ExecError::illegal_state(format!("illegal FunctionInfo index: {index}")))?;
+
+    let funcinfo_ptr = state.load(&Ref::Global(funcinfo_ref))?;
+    state.store(&RETURN_REF, funcinfo_ptr)?;
+
     Ok(())
 }
 
@@ -625,10 +674,21 @@ pub fn system_funcs(
             Type::class_ptr(array_of_ptr),
             Type::Nothing.ptr(),
         ]),
+        ("InvokeFunction", invoke_func, Type::Nothing, vec![
+            FUNCINFO_TYPE,
+            Type::class_ptr(array_of_ptr),
+            Type::Nothing.ptr(),
+        ]),
+        
         ("FindTypeInfo", find_type_info, TYPEINFO_TYPE, vec![Type::string_ptr()]),
         ("GetTypeInfoCount", get_type_info_count, Type::I32, vec![]),
         ("GetTypeInfoByIndex", get_type_info_by_index, TYPEINFO_TYPE, vec![Type::I32]),
         ("GetObjectTypeInfo", get_object_type_info, TYPEINFO_TYPE, vec![Type::any()]),
+        
+        ("FindFunctionInfo", find_func_info, FUNCINFO_TYPE, vec![Type::string_ptr()]),
+        ("GetFunctionInfoCount", get_func_info_count, Type::I32, vec![]),
+        ("GetFunctionInfoByIndex", get_func_info_by_index, FUNCINFO_TYPE, vec![Type::I32]),
+
         ("RandomInteger", random_integer, Type::I32, vec![
             Type::I32, Type::I32
         ]),

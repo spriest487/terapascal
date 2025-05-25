@@ -242,12 +242,16 @@ fn unit_binding_start_matcher() -> Matcher {
     Keyword::Const | Keyword::Var
 }
 
-fn unit_func_start_matcher() -> Matcher {
+pub(crate) fn func_decl_kw_matcher() -> Matcher {
     Keyword::Function
         | Keyword::Class
         | Keyword::Procedure
         | Keyword::Constructor
         | Keyword::Destructor
+}
+
+pub(crate) fn unit_func_decl_start_matcher() -> Matcher {
+    func_decl_kw_matcher()
         | DelimiterPair::SquareBracket
 }
 
@@ -255,7 +259,7 @@ fn parse_unit_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<Un
     let decl_start = UnitDecl::start_matcher();
 
     let decl = match tokens.look_ahead().match_one(decl_start) {
-        Some(tt) if unit_func_start_matcher().is_match(&tt) => {
+        Some(tt) if unit_func_decl_start_matcher().is_match(&tt) => {
             parse_unit_func_decl(tokens, part_kw)?
         },
 

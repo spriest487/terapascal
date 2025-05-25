@@ -12,6 +12,7 @@ use crate::typ::TypedValue;
 use crate::typ::STRING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
 use common::span::*;
+use std::rc::Rc;
 use syn::Ident;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
@@ -313,7 +314,7 @@ pub fn literal_to_val(
         
         syn::Literal::TypeInfo(ty) => {
             let ty = builder.translate_type(ty);
-            let type_info_ref = ir::GlobalRef::StaticTypeInfo(Box::new(ty));
+            let type_info_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty));
             
             ir::Value::from(type_info_ref)
         }

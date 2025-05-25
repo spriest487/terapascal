@@ -93,6 +93,7 @@ type
         function Invoke(args: array of Pointer; resultPtr: Pointer);
 
         class function LoadedFunctions: array of FunctionInfo;
+        class function Find(functionName: String): Option[FunctionInfo];
         
         function FindTag(tagClass: TypeInfo): Option[Object]; overload;
         function FindTag[TTag]: Option[TTag]; overload;
@@ -271,15 +272,22 @@ begin
     end;
 end;
 
+class function FunctionInfo.Find(funcName: String): Option[FunctionInfo];
+unsafe begin
+    var obj := FindFunctionInfo(funcName);
+    if obj <> nil then
+        Option.Some(obj)
+    else
+        Option.None;
+end;
+
 class function TypeInfo.Find(typeName: String): Option[TypeInfo];
-begin
-    unsafe begin
-        var obj := FindTypeInfo(typeName);
-        if obj <> nil then
-            Option.Some(obj)
-        else
-            Option.None;
-    end;
+unsafe begin
+    var obj := FindTypeInfo(typeName);
+    if obj <> nil then
+        Option.Some(obj)
+    else
+        Option.None;
 end;
 
 function FindTagInArray[TTag](allTags: array of Object; tagClass: TypeInfo): Option[TTag]; overload;

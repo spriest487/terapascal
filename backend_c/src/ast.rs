@@ -536,7 +536,7 @@ impl Unit {
                 Expr::named_var(METHODNULL_NAME).addr_of(),
             ])));
 
-            let type_info_expr = Expr::Global(GlobalName::StaticTypeInfo(Box::new(ty.clone())));
+            let type_info_expr = Expr::Global(GlobalName::StaticTypeInfo(Rc::new(ty.clone())));
 
             // typeinfo_list[typeinfo_index] = &typeinfo
             init_stmts.push(Statement::Expr(Expr::assign(

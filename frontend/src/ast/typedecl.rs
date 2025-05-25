@@ -14,14 +14,15 @@ pub use self::struct_decl::*;
 pub use self::variant_decl::*;
 use crate::ast::tag::Tag;
 use crate::ast::unit::AliasDecl;
-use crate::ast::{Annotation, WhereClause};
+use crate::ast::Annotation;
 use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::Keyword;
 use crate::ast::Operator;
 use crate::ast::TypeList;
 use crate::ast::TypeName;
-use crate::parse::{InvalidTagLocation, TryParse};
+use crate::ast::WhereClause;
+use crate::parse::InvalidTagLocation;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -29,8 +30,10 @@ use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
-use crate::{DelimiterPair, TokenTree};
+use crate::parse::TryParse;
+use crate::DelimiterPair;
 use crate::Separator;
+use crate::TokenTree;
 use common::span::Span;
 use common::span::Spanned;
 use common::TracedError;
@@ -147,7 +150,15 @@ impl ParseSeq for TypeDeclItem<Span> {
             return false;
         }
 
-        tokens.match_one(Self::start_matcher()).is_some()
+        // skip past tags, because a valid function decl following a type block could start with
+        // any number of these
+        loop {
+            match tokens.next() {
+                Some(tt) if tt.is_delimited(DelimiterPair::SquareBracket) => continue,
+                Some(TokenTree::Ident(..)) => break true,
+                _ => break false,
+            }
+        }
     }
 }
 

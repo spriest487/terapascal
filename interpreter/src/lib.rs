@@ -7,6 +7,7 @@ mod ptr;
 pub mod result;
 mod stack;
 mod diag;
+mod rtti_map;
 
 pub use self::dyn_value::*;
 pub use self::ptr::Pointer;
@@ -32,6 +33,7 @@ use std::ops::BitAnd;
 use std::ops::BitOr;
 use std::ops::BitXor;
 use std::rc::Rc;
+use crate::rtti_map::RttiMap;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -49,13 +51,9 @@ pub struct Interpreter {
     
     diag_worker: Option<DiagnosticWorker>,
     
-    // cache of type info by the names used to look them up from user code (TypeInfo.Find)
-    typeinfo_by_name: HashMap<String, ir::GlobalRef>,
-    
-    // cache of type info for declared types, used for finding type info via reflection
-    typeinfo_by_class_id: BTreeMap<ir::TypeDefID, ir::GlobalRef>,
-
-    typeinfo_refs: Vec<ir::GlobalRef>,
+    // cache of RTTI info by the names/IDs used to look them up from user code
+    typeinfo_map: RttiMap<ir::TypeDefID>,
+    funcinfo_map: RttiMap<ir::FunctionID>,
 }
 
 impl Interpreter {
@@ -86,11 +84,9 @@ impl Interpreter {
             functions: BTreeMap::new(),
             
             diag_worker,
-
-            typeinfo_by_name: HashMap::new(),
-            typeinfo_by_class_id: BTreeMap::new(),
-
-            typeinfo_refs: Vec::new(),
+            
+            typeinfo_map: RttiMap::new(),
+            funcinfo_map: RttiMap::new(),
         }
     }
 
@@ -589,7 +585,7 @@ impl Interpreter {
     }
     
     fn get_class_runtime_type_ref(&self, type_id: ir::TypeDefID) -> Option<ir::GlobalRef> {
-        self.typeinfo_by_class_id.get(&type_id).cloned()
+        self.typeinfo_map.find_by_key(type_id).cloned()
     }
 
     fn find_runtime_type(&self, resource_ty: &ir::Type) -> ExecResult<Rc<ir::RuntimeType>> {
@@ -1886,8 +1882,7 @@ impl Interpreter {
 
         // create runtime type info objects (TypeInfo and MethodInfo)
         for (ty, runtime_type) in lib.metadata.runtime_types() {
-            let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Box::new(ty.clone()));
-            self.typeinfo_refs.push(typeinfo_ref.clone());
+            let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
 
             let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
             let ptr_bytes = self.marshaller.marshal_to_vec(&typeinfo_ptr)?;
@@ -1896,18 +1891,18 @@ impl Interpreter {
                 value: ptr_bytes.into_boxed_slice(),
                 ty: ir::Type::RcPointer(ir::TYPEINFO_VTYPE_ID),
             });
+            
+            let class_id = ty.rc_resource_def_id();
 
-            if let Some(type_id) = ty.rc_resource_def_id() {
-                self.typeinfo_by_class_id.insert(type_id, typeinfo_ref.clone());
-            }
+            let runtime_name = match runtime_type.name {
+                Some(runtime_name_id) => {
+                    self.metadata.get_string(runtime_name_id).cloned()
+                }
 
-            if let Some(runtime_name_id) = runtime_type.name {
-                let Some(runtime_name) = self.metadata.get_string(runtime_name_id) else {
-                    continue;
-                };
-
-                self.typeinfo_by_name.insert(runtime_name.clone(), typeinfo_ref);
-            }
+                None =>  None,
+            };
+            
+            self.typeinfo_map.add(class_id, runtime_name, typeinfo_ref);
         }
 
         // declare global variables

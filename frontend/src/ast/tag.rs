@@ -77,9 +77,19 @@ pub struct TagItem<A: Annotation = Span> {
 impl TagItem {
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let tag_type = IdentPath::parse(tokens)?;
+        let mut span = tag_type.path_span();
         
-        let args = ObjectCtorArgs::parse(tokens)?;
-        let span = tag_type.span().to(&args.span);
+        let args = if tokens.look_ahead().match_one(DelimiterPair::Bracket).is_some() {
+            let args = ObjectCtorArgs::parse(tokens)?;
+            span = span.to(&args.span);
+            
+            args
+        } else {
+            ObjectCtorArgs {
+                span: span.clone(),
+                members: Vec::new(),
+            }
+        };
 
         Ok(Self {
             tag_type: TypeName::Ident(IdentTypeName {

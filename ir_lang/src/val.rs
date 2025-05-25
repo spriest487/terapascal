@@ -10,6 +10,7 @@ use bigdecimal::ToPrimitive;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Ref {
@@ -188,7 +189,7 @@ pub enum GlobalRef {
     Function(FunctionID),
     StringLiteral(StringID),
     StaticClosure(StaticClosureID),
-    StaticTypeInfo(Box<Type>),
+    StaticTypeInfo(Rc<Type>),
     Variable(VariableID),
     StaticTagArray(TagLocation),
 }

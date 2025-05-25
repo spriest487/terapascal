@@ -1,6 +1,6 @@
 use crate::ast::unit::parse_unit_decl;
 use crate::ast::unit::unit_binding_start_matcher;
-use crate::ast::unit::unit_func_start_matcher;
+use crate::ast::unit::unit_func_decl_start_matcher;
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionDef;
@@ -78,7 +78,7 @@ impl UnitDecl<Span> {
     pub fn start_matcher() -> Matcher {
         Keyword::Uses
             | Keyword::Type
-            | unit_func_start_matcher() | unit_binding_start_matcher()
+            | unit_func_decl_start_matcher() | unit_binding_start_matcher()
             | DelimiterPair::SquareBracket // tags group before function
     }
 
