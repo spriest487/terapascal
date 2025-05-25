@@ -39,7 +39,7 @@ impl Function {
         marshaller: &mut Marshaller,
         metadata: &ir::Metadata,
     ) -> MarshalResult<Self> {
-        let invoker = marshaller.build_invoker(&func_ref, metadata)?;
+        let invoker = marshaller.build_ffi_invoker(&func_ref, metadata)?;
 
         let func = Function::External(FfiFunction {
             debug_name: format!("{}::{}", func_ref.src, func_ref.symbol),

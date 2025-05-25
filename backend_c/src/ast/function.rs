@@ -25,25 +25,49 @@ pub enum FunctionName {
     DestructorInvoker(ir::TypeDefID),
     MethodWrapper(ir::InterfaceID, ir::MethodID, ir::TypeDefID),
 
-    // runtime functions
+    Builtin(BuiltinName),
+}
+
+impl fmt::Display for FunctionName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FunctionName::Main => write!(f, "main"),
+            FunctionName::Init => write!(f, "ModuleInit"),
+            FunctionName::LoadSymbol => write!(f, "LoadSymbol"),
+
+            FunctionName::ID(id) => write!(f, "Function_{}", id.0),
+            FunctionName::Invoker(id) => write!(f, "Invoker_{}", id.0),
+            FunctionName::DestructorInvoker(id) => write!(f, "Destructor_{}", id.0),
+
+            FunctionName::Method(iface, method) => write!(f, "Method_{}_{}", iface, method.0),
+            FunctionName::MethodWrapper(iface, method, self_ty) => {
+                write!(f, "Method_{}_{}_Wrapper_{}", iface, method.0, self_ty)
+            },
+
+            FunctionName::Builtin(name) => write!(f, "{}", name),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
+pub enum BuiltinName {
     RcAlloc,
     RcRetain,
     RcRelease,
     IsImpl,
     Raise,
     InvokeMethod,
-    
+
     FindTypeInfo,
     GetTypeInfoCount,
     GetTypeInfoByIndex,
     GetObjectTypeInfo,
-    
+
     FindFuncInfo,
     GetFuncInfoCount,
     GetFuncInfoByIndex,
     InvokeFunc,
 
-    // builtins
     Int8ToStr,
     ByteToStr,
     Int16ToStr,
@@ -66,10 +90,10 @@ pub enum FunctionName {
 
     ArrayLengthInternal,
     ArraySetLengthInternal,
-    
+
     RandomInteger,
     RandomSingle,
-    
+
     Pow,
     Sqrt,
     Sin,
@@ -78,85 +102,72 @@ pub enum FunctionName {
     ArcCos,
     Tan,
     ArcTan,
-    
+
     Infinity,
     IsInfinite,
     NaN,
     IsNaN,
 }
 
-impl fmt::Display for FunctionName {
+impl fmt::Display for BuiltinName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FunctionName::Main => write!(f, "main"),
-            FunctionName::Init => write!(f, "ModuleInit"),
-            FunctionName::LoadSymbol => write!(f, "LoadSymbol"),
+            BuiltinName::RcAlloc => write!(f, "RcAlloc"),
+            BuiltinName::RcRetain => write!(f, "RcRetain"),
+            BuiltinName::RcRelease => write!(f, "RcRelease"),
+            BuiltinName::IsImpl => write!(f, "IsImpl"),
+            BuiltinName::Raise => write!(f, "Raise"),
+            BuiltinName::InvokeMethod => write!(f, "InvokeMethod"),
+            BuiltinName::InvokeFunc => write!(f, "InvokeFunction"),
 
-            FunctionName::ID(id) => write!(f, "Function_{}", id.0),
-            FunctionName::Invoker(id) => write!(f, "Invoker_{}", id.0),
-            FunctionName::DestructorInvoker(id) => write!(f, "Destructor_{}", id.0),
+            BuiltinName::FindTypeInfo => write!(f, "System_FindTypeInfo"),
+            BuiltinName::GetTypeInfoCount => write!(f, "System_GetTypeInfoCount"),
+            BuiltinName::GetTypeInfoByIndex => write!(f, "System_GetTypeInfoByIndex"),
+            BuiltinName::GetObjectTypeInfo => write!(f, "System_GetObjectTypeInfo"),
 
-            FunctionName::Method(iface, method) => write!(f, "Method_{}_{}", iface, method.0),
-            FunctionName::MethodWrapper(iface, method, self_ty) => {
-                write!(f, "Method_{}_{}_Wrapper_{}", iface, method.0, self_ty)
-            },
+            BuiltinName::FindFuncInfo => write!(f, "System_FindFunctionInfo"),
+            BuiltinName::GetFuncInfoCount => write!(f, "System_GetFunctionInfoCount"),
+            BuiltinName::GetFuncInfoByIndex => write!(f, "System_GetFunctionInfoByIndex"),
 
-            FunctionName::RcAlloc => write!(f, "RcAlloc"),
-            FunctionName::RcRetain => write!(f, "RcRetain"),
-            FunctionName::RcRelease => write!(f, "RcRelease"),
-            FunctionName::IsImpl => write!(f, "IsImpl"),
-            FunctionName::Raise => write!(f, "Raise"),
-            FunctionName::InvokeMethod => write!(f, "InvokeMethod"),
-            FunctionName::InvokeFunc => write!(f, "InvokeFunction"),
+            BuiltinName::WriteLn => write!(f, "System_WriteLn"),
+            BuiltinName::Write => write!(f, "System_Write"),
+            BuiltinName::ReadLn => write!(f, "System_ReadLn"),
+            BuiltinName::StrToInt => write!(f, "System_StrToInt"),
+            BuiltinName::GetMem => write!(f, "System_GetMem"),
+            BuiltinName::FreeMem => write!(f, "System_FreeMem"),
 
-            FunctionName::FindTypeInfo => write!(f, "System_FindTypeInfo"),
-            FunctionName::GetTypeInfoCount => write!(f, "System_GetTypeInfoCount"),
-            FunctionName::GetTypeInfoByIndex => write!(f, "System_GetTypeInfoByIndex"),
-            FunctionName::GetObjectTypeInfo => write!(f, "System_GetObjectTypeInfo"),
+            BuiltinName::Int8ToStr => write!(f, "System_Int8ToStr"),
+            BuiltinName::ByteToStr => write!(f, "System_ByteToStr"),
+            BuiltinName::Int16ToStr => write!(f, "System_Int16ToStr"),
+            BuiltinName::UInt16ToStr => write!(f, "System_UInt16ToStr"),
+            BuiltinName::IntToStr => write!(f, "System_IntToStr"),
+            BuiltinName::UInt32ToStr => write!(f, "System_UInt32ToStr"),
+            BuiltinName::Int64ToStr => write!(f, "System_Int64ToStr"),
+            BuiltinName::UInt64ToStr => write!(f, "System_UInt64ToStr"),
+            BuiltinName::NativeIntToStr => write!(f, "System_NativeIntToStr"),
+            BuiltinName::NativeUIntToStr => write!(f, "System_NativeUIntToStr"),
+            BuiltinName::PointerToStr => write!(f, "System_PointerToStr"),
+            BuiltinName::RealToStr => write!(f, "System_RealToStr"),
 
-            FunctionName::FindFuncInfo => write!(f, "System_FindFunctionInfo"),
-            FunctionName::GetFuncInfoCount => write!(f, "System_GetFunctionInfoCount"),
-            FunctionName::GetFuncInfoByIndex => write!(f, "System_GetFunctionInfoByIndex"),
+            BuiltinName::ArrayLengthInternal => write!(f, "System_ArrayLengthInternal"),
+            BuiltinName::ArraySetLengthInternal => write!(f, "System_ArraySetLengthInternal"),
 
-            FunctionName::WriteLn => write!(f, "System_WriteLn"),
-            FunctionName::Write => write!(f, "System_Write"),
-            FunctionName::ReadLn => write!(f, "System_ReadLn"),
-            FunctionName::StrToInt => write!(f, "System_StrToInt"),
-            FunctionName::GetMem => write!(f, "System_GetMem"),
-            FunctionName::FreeMem => write!(f, "System_FreeMem"),
+            BuiltinName::RandomInteger => write!(f, "System_RandomInteger"),
+            BuiltinName::RandomSingle => write!(f, "System_RandomSingle"),
 
-            FunctionName::Int8ToStr => write!(f, "System_Int8ToStr"),
-            FunctionName::ByteToStr => write!(f, "System_ByteToStr"),
-            FunctionName::Int16ToStr => write!(f, "System_Int16ToStr"),
-            FunctionName::UInt16ToStr => write!(f, "System_UInt16ToStr"),
-            FunctionName::IntToStr => write!(f, "System_IntToStr"),
-            FunctionName::UInt32ToStr => write!(f, "System_UInt32ToStr"),
-            FunctionName::Int64ToStr => write!(f, "System_Int64ToStr"),
-            FunctionName::UInt64ToStr => write!(f, "System_UInt64ToStr"),
-            FunctionName::NativeIntToStr => write!(f, "System_NativeIntToStr"),
-            FunctionName::NativeUIntToStr => write!(f, "System_NativeUIntToStr"),
-            FunctionName::PointerToStr => write!(f, "System_PointerToStr"),
-            FunctionName::RealToStr => write!(f, "System_RealToStr"),
+            BuiltinName::Pow => write!(f, "System_Pow"),
+            BuiltinName::Sqrt => write!(f, "System_Sqrt"),
+            BuiltinName::Sin => write!(f, "System_Sin"),
+            BuiltinName::ArcSin => write!(f, "System_ArcSin"),
+            BuiltinName::Cos => write!(f, "System_Cos"),
+            BuiltinName::ArcCos => write!(f, "System_ArcCos"),
+            BuiltinName::Tan => write!(f, "System_Tan"),
+            BuiltinName::ArcTan => write!(f, "System_ArcTan"),
 
-            FunctionName::ArrayLengthInternal => write!(f, "System_ArrayLengthInternal"),
-            FunctionName::ArraySetLengthInternal => write!(f, "System_ArraySetLengthInternal"),
-            
-            FunctionName::RandomInteger => write!(f, "System_RandomInteger"),
-            FunctionName::RandomSingle => write!(f, "System_RandomSingle"),
-
-            FunctionName::Pow => write!(f, "System_Pow"),
-            FunctionName::Sqrt => write!(f, "System_Sqrt"),
-            FunctionName::Sin => write!(f, "System_Sin"),
-            FunctionName::ArcSin => write!(f, "System_ArcSin"),
-            FunctionName::Cos => write!(f, "System_Cos"),
-            FunctionName::ArcCos => write!(f, "System_ArcCos"),
-            FunctionName::Tan => write!(f, "System_Tan"),
-            FunctionName::ArcTan => write!(f, "System_ArcTan"),
-            
-            FunctionName::Infinity => write!(f, "System_Infinity"),
-            FunctionName::IsInfinite => write!(f, "System_IsInfinite"),
-            FunctionName::NaN => write!(f, "System_NaN"),
-            FunctionName::IsNaN => write!(f, "System_IsNaN"),
+            BuiltinName::Infinity => write!(f, "System_Infinity"),
+            BuiltinName::IsInfinite => write!(f, "System_IsInfinite"),
+            BuiltinName::NaN => write!(f, "System_NaN"),
+            BuiltinName::IsNaN => write!(f, "System_IsNaN"),
         }
     }
 }
@@ -257,17 +268,56 @@ impl FunctionDef {
     }
     
     pub fn invoker(id: ir::FunctionID, func_def: &ir::FunctionDef, module: &mut Unit) -> Self {
+        let param_tys: Vec<_> = func_def.sig.param_tys
+            .iter()
+            .map(|ir_ty| Type::from_metadata(ir_ty, module))
+            .collect();
+        
+        let return_ty = Type::from_metadata(&func_def.sig.return_ty, module);
+        
+        Self::new_invoker(
+            module,
+            FunctionName::Invoker(id),
+            FunctionName::ID(id),
+            &param_tys,
+            &return_ty
+        )
+    }
+
+    pub fn invoker_builtin(
+        name: BuiltinName,
+        func_id: ir::FunctionID,
+        param_tys: &[Type],
+        return_ty: &Type,
+        module: &mut Unit
+    ) -> Self {
+        Self::new_invoker(
+            module,
+            FunctionName::Invoker(func_id),
+            FunctionName::Builtin(name),
+            &param_tys,
+            &return_ty
+        )
+    }
+
+    fn new_invoker(
+        module: &mut Unit, 
+        invoker_name: FunctionName,
+        func_name: FunctionName,
+        param_tys: &[Type], 
+        return_ty: &Type
+    ) -> Self {
         let mut builder = Builder::new(module);
 
         let args_array = ir::LocalID(0);
         let result_ptr = ir::LocalID(1);
-        
+
         let mut arg_vars = Vec::new();
-        
-        for i in 0..func_def.sig.param_tys.len() {
-            let param_ty = builder.translate_type(&func_def.sig.param_tys[i]);
+
+        for i in 0..param_tys.len() {
+            let param_ty = &param_tys[i];
             let arg_var = VariableID::Named(Box::new(format!("arg{i}")));
- 
+
             builder.stmts.push(Statement::VariableDecl {
                 id: arg_var.clone(),
                 null_init: false,
@@ -278,35 +328,33 @@ impl FunctionDef {
             builder.assign(
                 Expr::Variable(arg_var.clone()),
                 Expr::infix_op(
-                    Expr::local_var(args_array), 
+                    Expr::local_var(args_array),
                     InfixOp::Add,
                     Expr::LitInt(i as i128),
-                ).deref().cast(param_ty.ptr()).deref(),
+                ).deref().cast(param_ty.clone().ptr()).deref(),
             );
-            
+
             arg_vars.push(Expr::Variable(arg_var));
         }
-        
-        let function = Expr::Function(FunctionName::ID(id));
 
-        if func_def.sig.return_ty == ir::Type::Nothing {
+        let function = Expr::Function(func_name);
+
+        if *return_ty == Type::Void {
             builder.stmts.push(Statement::Expr(function.call(arg_vars)));
         } else {
-            let result_ty = builder.translate_type(&func_def.sig.return_ty);
-            
             // *((TReturn*) resultPtr) = function(..); 
             let result_ptr_expr = Expr::local_var(result_ptr)
-                .cast(result_ty.ptr())
+                .cast(return_ty.clone().ptr())
                 .deref();
 
             builder.assign(result_ptr_expr, function.call(arg_vars));
         }
-        
+
         Self {
             body: builder.stmts,
             decl: FunctionDecl {
-                comment: Some(format!("reflection invoker for function {id}")),
-                name: FunctionName::Invoker(id),
+                comment: Some(format!("runtime invoker for function {func_name}")),
+                name: invoker_name,
                 params: vec![
                     Type::Void.ptr().ptr(), // args
                     Type::Void.ptr(), // result

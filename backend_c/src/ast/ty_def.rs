@@ -3,7 +3,10 @@ mod struct_def;
 mod type_def;
 mod variant_def;
 
-pub use self::{class_def::*, struct_def::*, type_def::*, variant_def::*};
+pub use self::class_def::*;
+pub use self::struct_def::*;
+pub use self::type_def::*;
+pub use self::variant_def::*;
 use crate::ast::Unit;
 use crate::ir;
 use std::fmt;

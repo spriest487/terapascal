@@ -2,7 +2,7 @@ use crate::ast::expr::Expr;
 use crate::ast::expr::InfixOp;
 use crate::ast::expr::PrefixOp;
 use crate::ast::ty_def::FieldName;
-use crate::ast::FunctionName;
+use crate::ast::{BuiltinName, FunctionName};
 use crate::ast::Unit;
 use crate::ast::Type;
 use ir_lang as ir;
@@ -515,8 +515,8 @@ impl<'a> Builder<'a> {
                 )))
             },
 
-            ir::Instruction::Retain { at, weak } => {                
-                let retain = Expr::Function(FunctionName::RcRetain);
+            ir::Instruction::Retain { at, weak } => {
+                let retain = Expr::Function(FunctionName::Builtin(BuiltinName::RcRetain));
 
                 let rc_ptr = Expr::translate_ref(at, self.module);
                 let call_retain = retain.call([rc_ptr, Expr::LitBool(*weak)]);
@@ -525,7 +525,7 @@ impl<'a> Builder<'a> {
             },
 
             ir::Instruction::Release { at, weak } => {
-                let release = Expr::Function(FunctionName::RcRelease);
+                let release = Expr::Function(FunctionName::Builtin(BuiltinName::RcRelease));
 
                 let rc_ptr = Expr::translate_ref(at, self.module);
                 let call_release = release.call([rc_ptr, Expr::LitBool(*weak)]);
@@ -562,7 +562,7 @@ impl<'a> Builder<'a> {
             },
 
             ir::Instruction::Raise { val } => {
-                let raise_func = Expr::Function(FunctionName::Raise);
+                let raise_func = Expr::Function(FunctionName::Builtin(BuiltinName::Raise));
                 let val_expr = Expr::translate_ref(val, self.module);
 
                 self.stmts.push(Statement::Expr(raise_func.call([val_expr])));
@@ -633,7 +633,7 @@ impl<'a> Builder<'a> {
                 },
 
                 ir::VirtualTypeID::Interface(iface_id) => {
-                    let is_impl_func = Expr::Function(FunctionName::IsImpl);
+                    let is_impl_func = Expr::Function(FunctionName::Builtin(BuiltinName::IsImpl));
 
                     Expr::call(
                         is_impl_func,
@@ -669,7 +669,7 @@ impl<'a> Builder<'a> {
         let ty_class_ptr = Expr::class_ptr(struct_id);
 
         let new_rc = Expr::Call {
-            func: Box::new(Expr::Function(FunctionName::RcAlloc)),
+            func: Box::new(Expr::Function(FunctionName::Builtin(BuiltinName::RcAlloc))),
             args: vec![
                 ty_class_ptr,
                 Expr::LitBool(immortal),

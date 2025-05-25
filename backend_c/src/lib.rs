@@ -9,6 +9,8 @@ pub struct Options {
     pub trace_heap: bool,
     pub trace_rc: bool,
     pub trace_ir: bool,
+    
+    pub debug: bool,
 }
 
 pub fn translate(lib: &ir::Library, opts: Options) -> c::Unit {

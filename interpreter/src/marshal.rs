@@ -377,7 +377,7 @@ impl Marshaller {
         Ok(repr_ffi_ty)
     }
 
-    pub fn build_invoker(
+    pub fn build_ffi_invoker(
         &mut self,
         func_ref: &ir::ExternalFunctionRef,
         metadata: &ir::Metadata,

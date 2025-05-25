@@ -22,7 +22,7 @@ use topological_sort::TopologicalSort;
 pub struct Unit {
     functions: Vec<FunctionDef>,
     ffi_funcs: Vec<FfiFunction>,
-    builtin_funcs: HashMap<ir::FunctionID, FunctionName>,
+    builtin_funcs: HashMap<ir::FunctionID, BuiltinName>,
 
     global_vars: Vec<GlobalVar>,
 
@@ -66,132 +66,137 @@ impl Unit {
         let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
 
         let system_funcs = &[
-            ("Int8ToStr", FunctionName::Int8ToStr, string_ty.clone(), vec![
+            ("Int8ToStr", BuiltinName::Int8ToStr, string_ty.clone(), vec![
                 Type::SChar
             ]),
-            ("UInt8ToStr", FunctionName::ByteToStr, string_ty.clone(), vec![
+            ("UInt8ToStr", BuiltinName::ByteToStr, string_ty.clone(), vec![
                 Type::UChar
             ]),
-            ("Int16ToStr", FunctionName::Int16ToStr, string_ty.clone(), vec![
+            ("Int16ToStr", BuiltinName::Int16ToStr, string_ty.clone(), vec![
                 Type::Int16
             ]),
-            ("UInt16ToStr", FunctionName::UInt16ToStr, string_ty.clone(), vec![
+            ("UInt16ToStr", BuiltinName::UInt16ToStr, string_ty.clone(), vec![
                 Type::UInt16
             ]),
-            ("Int32ToStr", FunctionName::IntToStr, string_ty.clone(), vec![
+            ("Int32ToStr", BuiltinName::IntToStr, string_ty.clone(), vec![
                 Type::Int32
             ]),
-            ("UInt32ToStr", FunctionName::UInt32ToStr, string_ty.clone(), vec![
+            ("UInt32ToStr", BuiltinName::UInt32ToStr, string_ty.clone(), vec![
                 Type::UInt32
             ]),
-            ("Int64ToStr", FunctionName::Int64ToStr, string_ty.clone(), vec![
+            ("Int64ToStr", BuiltinName::Int64ToStr, string_ty.clone(), vec![
                 Type::Int64
             ]),
-            ("UInt64ToStr", FunctionName::UInt64ToStr, string_ty.clone(), vec![
+            ("UInt64ToStr", BuiltinName::UInt64ToStr, string_ty.clone(), vec![
                 Type::UInt64
             ]),
-            ("NativeIntToStr", FunctionName::NativeIntToStr, string_ty.clone(), vec![
+            ("NativeIntToStr", BuiltinName::NativeIntToStr, string_ty.clone(), vec![
                 Type::PtrDiffType
             ]),
-            ("NativeUIntToStr", FunctionName::NativeUIntToStr, string_ty.clone(), vec![
+            ("NativeUIntToStr", BuiltinName::NativeUIntToStr, string_ty.clone(), vec![
                 Type::SizeType
             ]),
-            ("PointerToStr", FunctionName::PointerToStr, string_ty.clone(), vec![
+            ("PointerToStr", BuiltinName::PointerToStr, string_ty.clone(), vec![
                 Type::Void.ptr()
             ]),
-            ("RealToStr", FunctionName::RealToStr, string_ty.clone(), vec![
+            ("RealToStr", BuiltinName::RealToStr, string_ty.clone(), vec![
                 Type::Float.ptr()
             ]),
-            ("StrToInt", FunctionName::StrToInt, Type::Int32, vec![
+            ("StrToInt", BuiltinName::StrToInt, Type::Int32, vec![
                 string_ty.clone()
             ]),
-            ("GetMem", FunctionName::GetMem, Type::UChar.ptr(), vec![
+            ("GetMem", BuiltinName::GetMem, Type::UChar.ptr(), vec![
                 Type::Int32
             ]),
-            ("FreeMem", FunctionName::FreeMem, Type::Void, vec![
+            ("FreeMem", BuiltinName::FreeMem, Type::Void, vec![
                 Type::UChar.ptr()
             ]),
-            ("WriteLn", FunctionName::WriteLn, Type::Void, vec![
+            ("WriteLn", BuiltinName::WriteLn, Type::Void, vec![
                 string_ty.clone()
             ]),
-            ("Write", FunctionName::Write, Type::Void, vec![
+            ("Write", BuiltinName::Write, Type::Void, vec![
                 string_ty.clone()
             ]),
-            ("ReadLn", FunctionName::ReadLn, string_ty.clone(), vec![]),
-            ("ArrayLengthInternal", FunctionName::ArrayLengthInternal, Type::Int32, vec![
+            ("ReadLn", BuiltinName::ReadLn, string_ty.clone(), vec![]),
+            ("ArrayLengthInternal", BuiltinName::ArrayLengthInternal, Type::Int32, vec![
                 Type::Void.ptr()
             ]),
-            ("ArraySetLengthInternal", FunctionName::ArraySetLengthInternal, Type::Void.ptr(), vec![
+            ("ArraySetLengthInternal", BuiltinName::ArraySetLengthInternal, Type::Void.ptr(), vec![
                 Type::Void.ptr(), 
                 Type::Int32, 
                 Type::Void.ptr()
             ]),
-            ("FindTypeInfo", FunctionName::FindTypeInfo, typeinfo_ty.clone(), vec![string_ty.clone()]),
-            ("GetTypeInfoCount", FunctionName::GetTypeInfoCount, Type::Int32, vec![]),
-            ("GetTypeInfoByIndex", FunctionName::GetTypeInfoByIndex, typeinfo_ty.clone(), vec![Type::Int32]),
-            ("GetObjectTypeInfo", FunctionName::GetObjectTypeInfo, funcinfo_ty.clone(), vec![Type::Rc.ptr()]),
-            ("FindFunctionInfo", FunctionName::FindFuncInfo, funcinfo_ty.clone(), vec![string_ty.clone()]),
-            ("GetFunctionInfoCount", FunctionName::GetFuncInfoCount, Type::Int32, vec![]),
-            ("GetFunctionInfoByIndex", FunctionName::GetFuncInfoByIndex, funcinfo_ty.clone(), vec![Type::Int32]),
-            ("InvokeMethod", FunctionName::InvokeMethod, Type::Void, vec![
+            
+            ("FindTypeInfo", BuiltinName::FindTypeInfo, typeinfo_ty.clone(), vec![string_ty.clone()]),
+            ("GetTypeInfoCount", BuiltinName::GetTypeInfoCount, Type::Int32, vec![]),
+            ("GetTypeInfoByIndex", BuiltinName::GetTypeInfoByIndex, typeinfo_ty.clone(), vec![Type::Int32]),
+            ("GetObjectTypeInfo", BuiltinName::GetObjectTypeInfo, typeinfo_ty.clone(), vec![Type::Rc.ptr()]),
+            
+            ("FindFunctionInfo", BuiltinName::FindFuncInfo, funcinfo_ty.clone(), vec![string_ty.clone()]),
+            ("GetFunctionInfoCount", BuiltinName::GetFuncInfoCount, Type::Int32, vec![]),
+            ("GetFunctionInfoByIndex", BuiltinName::GetFuncInfoByIndex, funcinfo_ty.clone(), vec![Type::Int32]),
+            ("InvokeMethod", BuiltinName::InvokeMethod, Type::Void, vec![
                 Type::from_ir_struct(ir::METHODINFO_ID).ptr(),
                 Type::Void.ptr(),
                 Type::from_ir_struct(pointer_array_class).ptr(),
                 Type::Void.ptr(),
             ]),
-            ("InvokeFunction", FunctionName::InvokeFunc, Type::Void, vec![
+            ("InvokeFunction", BuiltinName::InvokeFunc, Type::Void, vec![
                 Type::from_ir_struct(ir::FUNCINFO_ID).ptr(),
                 Type::from_ir_struct(pointer_array_class).ptr(),
                 Type::Void.ptr(),
             ]),
-            ("RandomInteger", FunctionName::RandomInteger, Type::Int32, vec![
+            ("RandomInteger", BuiltinName::RandomInteger, Type::Int32, vec![
                 Type::Int32, 
                 Type::Int32]),
-            ("RandomSingle", FunctionName::RandomSingle, Type::Float, vec![
+            ("RandomSingle", BuiltinName::RandomSingle, Type::Float, vec![
                 Type::Float, 
                 Type::Float
             ]),
-            ("Pow", FunctionName::Pow, Type::Float, vec![
+            ("Pow", BuiltinName::Pow, Type::Float, vec![
                 Type::Float, Type::Float
             ]),
-            ("Sqrt", FunctionName::Sqrt, Type::Float, vec![
+            ("Sqrt", BuiltinName::Sqrt, Type::Float, vec![
                 Type::Float
             ]),
-            ("Sin", FunctionName::Sin, Type::Float, vec![
+            ("Sin", BuiltinName::Sin, Type::Float, vec![
                 Type::Float
             ]),
-            ("ArcSin", FunctionName::ArcSin, Type::Float, vec![
+            ("ArcSin", BuiltinName::ArcSin, Type::Float, vec![
                 Type::Float
             ]),
-            ("Cos", FunctionName::Cos, Type::Float, vec![
+            ("Cos", BuiltinName::Cos, Type::Float, vec![
                 Type::Float
             ]),
-            ("ArcCos", FunctionName::ArcCos, Type::Float, vec![
+            ("ArcCos", BuiltinName::ArcCos, Type::Float, vec![
                 Type::Float
             ]),
-            ("Tan", FunctionName::Tan, Type::Float, vec![
+            ("Tan", BuiltinName::Tan, Type::Float, vec![
                 Type::Float
             ]),
-            ("ArcTan", FunctionName::ArcTan, Type::Float, vec![
+            ("ArcTan", BuiltinName::ArcTan, Type::Float, vec![
                 Type::Float
             ]),
-            ("Infinity", FunctionName::Infinity, Type::Float, vec![]),
-            ("NaN", FunctionName::NaN, Type::Float, vec![]),
-            ("IsInfinite", FunctionName::IsInfinite, Type::Bool, vec![
+            ("Infinity", BuiltinName::Infinity, Type::Float, vec![]),
+            ("NaN", BuiltinName::NaN, Type::Float, vec![]),
+            ("IsInfinite", BuiltinName::IsInfinite, Type::Bool, vec![
                 Type::Float
             ]),
-            ("IsNaN", FunctionName::IsNaN, Type::Bool, vec![
+            ("IsNaN", BuiltinName::IsNaN, Type::Bool, vec![
                 Type::Float
             ]),
         ];
 
+        let mut builtin_func_ids = HashMap::with_capacity(system_funcs.len());
         let mut builtin_funcs = HashMap::new();
-        for (pas_name, c_name, _params, _return_ty) in system_funcs {
+
+        for (pas_name, c_name, _return_ty, _params) in system_funcs {
             let global_name = &ir::NamePath::new(vec!["System".to_string()], *pas_name);
 
             // if a function isn't used then it won't be included in the metadata
             if let Some(func_id) = metadata.find_function(global_name) {
                 builtin_funcs.insert(func_id, *c_name);
+                builtin_func_ids.insert(*c_name, func_id);
             }
         }
 
@@ -252,7 +257,6 @@ impl Unit {
             
             tag_arrays,
             tag_array_class,
-            
         };
 
         for (class_id, _class_def) in metadata.class_defs() {
@@ -263,6 +267,13 @@ impl Unit {
         for (iface_id, iface_def) in metadata.ifaces() {
             let iface = Interface::translate(iface_id, iface_def, &mut module);
             module.ifaces.push(iface);
+        }
+
+        for (_pas_name, c_name, return_ty, params) in system_funcs {
+            if let Some(id) = builtin_func_ids.get(c_name) {
+                let invoker = FunctionDef::invoker_builtin(*c_name, *id, params, return_ty, &mut module);
+                module.functions.push(invoker);
+            }
         }
 
         module
@@ -326,7 +337,7 @@ impl Unit {
 
     pub fn function_name(&self, id: ir::FunctionID) -> FunctionName {
         match self.builtin_funcs.get(&id) {
-            Some(builtin) => *builtin,
+            Some(builtin) => FunctionName::Builtin(*builtin),
             None => FunctionName::ID(id),
         }
     }
@@ -478,6 +489,11 @@ impl Unit {
 
         self.functions.push(init_func);
     }
+
+    fn get_string_lit(&self, id: ir::StringID) -> Option<&str> {
+        self.string_literals.get(&id)
+            .map(|s| s.0.as_str())
+    }
     
     fn gen_rtti_init(&self, init_stmts: &mut Vec<Statement>) {
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
@@ -498,7 +514,7 @@ impl Unit {
 
         init_stmts.push(Statement::assign(
             Expr::Global(GlobalName::TypeInfoList),
-            Expr::Function(FunctionName::GetMem)
+            Expr::Function(FunctionName::Builtin(BuiltinName::GetMem))
                 .call([Expr::infix_op(
                     Expr::LitInt(typeinfo_count as i128),
                     InfixOp::Mul,
@@ -508,7 +524,7 @@ impl Unit {
         ));
         init_stmts.push(Statement::assign(
             Expr::Global(GlobalName::FuncInfoList),
-            Expr::Function(FunctionName::GetMem)
+            Expr::Function(FunctionName::Builtin(BuiltinName::GetMem))
                 .call([Expr::infix_op(
                     Expr::LitInt(funcinfo_count as i128),
                     InfixOp::Mul,
@@ -545,7 +561,7 @@ impl Unit {
         let method_class_ptr = Expr::Global(GlobalName::ClassInstance(ir::METHODINFO_ID))
             .addr_of();
 
-        let call_array_rcalloc = Expr::Function(FunctionName::RcAlloc).call([
+        let call_array_rcalloc = Expr::Function(FunctionName::Builtin(BuiltinName::RcAlloc)).call([
             method_array_class_ptr,
             Expr::LitBool(true),
         ]);
@@ -596,7 +612,7 @@ impl Unit {
                 // *methodinfo = RcAlloc(..method info class, immortal: true)
                 init_stmts.push(Statement::Expr(Expr::assign(
                     method_ptr_expr.clone(),
-                    Expr::Function(FunctionName::RcAlloc).call([
+                    Expr::Function(FunctionName::Builtin(BuiltinName::RcAlloc)).call([
                         method_class_ptr.clone(),
                         Expr::LitBool(true),
                     ]),
@@ -790,6 +806,15 @@ impl fmt::Display for Unit {
         let typeinfo_class = GlobalName::ClassInstance(ir::TYPEINFO_ID);
 
         for (ty, typeinfo) in &self.type_infos {
+            if self.opts.debug {
+                let debug_name = typeinfo.name
+                    .and_then(|id| self.get_string_lit(id))
+                    .map(str::to_string)
+                    .unwrap_or_else(|| ty.to_string());
+
+                writeln!(f, "/** static TypeInfo of {} */", debug_name)?;
+            }
+
             write!(f, "static struct {} ", typeinfo_struct_name)?;
             write_global_typeinfo_decl_name(f, ty)?;
             writeln!(f, " = {{")?;
@@ -830,14 +855,22 @@ impl fmt::Display for Unit {
 
         for func in &self.runtime_funcinfos {
             let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
+            
+            if self.opts.debug {
+                let debug_name = self.get_string_lit(func.name)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| func.id.to_string());
+                writeln!(f, "/** static FunctionInfo of {} */", debug_name)?;
+            }
 
             writeln!(f, "static struct {} {} = {{", funcinfo_struct_name, funcinfo_name)?;
             writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
 
             let name_str = GlobalName::StringLiteral(func.name);
+            let invoker = FunctionName::Invoker(func.id);
 
             writeln!(f, "  .{} = &{},", FieldName::ID(ir::FUNCINFO_NAME_FIELD), name_str)?;
-            writeln!(f, "  .{} = NULL,", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
+            writeln!(f, "  .{} = &{invoker},", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
 
             writeln!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_TAGS_FIELD))?;
 

@@ -486,6 +486,7 @@ fn translate_c(module: &ir::Library, args: &Args) -> c::Unit {
         trace_heap: args.trace_heap,
         trace_rc: args.trace_rc,
         trace_ir: args.trace_ir,
+        debug: args.debug,
     };
 
     backend_c::translate(&module, c_opts)
