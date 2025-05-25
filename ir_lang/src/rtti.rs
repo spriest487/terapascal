@@ -42,6 +42,8 @@ pub struct DynArrayRuntimeType {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RuntimeMethod {
     pub name: StringID,
+    
+    pub instance_ty: Type,
 
     // None for abstract methods
     pub function: Option<FunctionID>,

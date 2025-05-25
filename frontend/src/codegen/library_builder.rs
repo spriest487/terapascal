@@ -1231,7 +1231,7 @@ impl LibraryBuilder {
 
                 for (method_index, method) in def.methods.iter().enumerate() {
                     if method.access >= Published && method.func_decl.name.type_params.is_none() {
-                        rtti.methods.push(self.create_runtime_method(&src_ty, method_index, false, &method.func_decl));
+                        rtti.methods.push(self.create_runtime_method(ty.clone(), &src_ty, method_index, false, &method.func_decl));
                     }
                 }
             }
@@ -1243,7 +1243,7 @@ impl LibraryBuilder {
 
                 for (method_index, method) in def.methods.iter().enumerate() {
                     if method.decl.name.type_params.is_none() {
-                        rtti.methods.push(self.create_runtime_method(&src_ty, method_index, true, &method.decl));
+                        rtti.methods.push(self.create_runtime_method(ty.clone(), &src_ty, method_index, true, &method.decl));
                     }
                 }
             }
@@ -1258,6 +1258,7 @@ impl LibraryBuilder {
     }
 
     fn create_runtime_method(&mut self,
+        instance_ty: ir::Type,
         src_ty: &typ::Type,
         method_index: usize,
         is_abstract: bool,
@@ -1298,6 +1299,7 @@ impl LibraryBuilder {
 
         ir::RuntimeMethod {
             function,
+            instance_ty,
             name: method_name_id,
             params,
             result_ty: self.translate_type(&decl.return_ty, &generic_ctx),

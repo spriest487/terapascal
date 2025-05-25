@@ -25,7 +25,7 @@ use crate::stack::StackFrame;
 use crate::stack::StackTrace;
 use crate::stack::StackTraceFrame;
 use ir_lang as ir;
-use ir_lang::InstructionFormatter as _;
+use ir_lang::{InstructionFormatter as _};
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
@@ -53,6 +53,10 @@ pub struct Interpreter {
     // cache of RTTI info by the names/IDs used to look them up from user code
     typeinfo_map: RttiMap<ir::TypeDefID>,
     funcinfo_map: RttiMap<ir::FunctionID>,
+    
+    // all methods with a corresponding MethodInfo object - the impl pointer of each
+    // MethodInfo is an index into this list
+    runtime_methods: Vec<ir::RuntimeMethod>,
 }
 
 impl Interpreter {
@@ -86,6 +90,8 @@ impl Interpreter {
             
             typeinfo_map: RttiMap::new(),
             funcinfo_map: RttiMap::new(),
+            
+            runtime_methods: Vec::new(),
         }
     }
 
@@ -2201,17 +2207,25 @@ impl Interpreter {
                 .and_then(|loc| loc.method_loc(method_index))
                 .and_then(|loc| self.get_tags_array_ptr(loc))
                 .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
+            
+            let global_method_index = self.runtime_methods.len();
+            let impl_ptr = Pointer {
+                addr: global_method_index,
+                ty: ir::Type::Nothing,
+            };
 
             let name_val = string_lit_values[&rtti_method.name].clone();
             let method_info = StructValue::new(ir::METHODINFO_ID, [
                 /* 0: name  */ name_val,
                 /* 1: owner */ DynValue::Pointer(typeinfo_ptr.clone()),
-                /* 2: impl  */ DynValue::nil(ir::Type::Nothing), // unused
+                /* 2: impl  */ DynValue::Pointer(impl_ptr),
                 /* 3: tags  */ DynValue::Pointer(method_tags_array_ptr),
             ]);
             
             let method_info_ptr = self.rc_alloc(method_info, true)?;
             method_info_ptrs.push(DynValue::Pointer(method_info_ptr));
+            
+            self.runtime_methods.push(rtti_method.clone());
         }
 
         let method_array = self.create_dyn_array(&ir::METHODINFO_TYPE, method_info_ptrs, true)?;
@@ -2239,10 +2253,15 @@ impl Interpreter {
         let ty_tags_array_ptr = self
             .get_tags_array_ptr(tags_loc)
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
+        
+        let impl_ptr = Pointer {
+            addr: func_id.0,
+            ty: ir::Type::Nothing,
+        };
 
         let mut funcinfo_struct = StructValue::new(ir::FUNCINFO_ID, [
             /* 0: name */ func_name_string,
-            /* 1: impl */ DynValue::nil(ir::Type::Nothing),
+            /* 1: impl */ DynValue::Pointer(impl_ptr),
             /* 2: tags */ DynValue::Pointer(ty_tags_array_ptr),
         ]);
         funcinfo_struct.rc = Some(RcState::immortal());
@@ -2250,6 +2269,70 @@ impl Interpreter {
         let typeinfo_ptr = self.rc_alloc(funcinfo_struct.clone(), true)?;
 
         Ok(DynValue::Pointer(typeinfo_ptr))
+    }
+
+    pub fn runtime_invoke(
+        &mut self,
+        func_id: ir::FunctionID,
+        instance_ptr: &Pointer,
+        instance_ty: &ir::Type,
+        instance_ty_name: &str,
+        arg_array_ptr: Pointer,
+        func_name: &str,
+        func_param_tys: &[ir::Type],
+        result_ty: &ir::Type,
+        result_ptr: &Pointer,
+    ) -> ExecResult<()> {
+        let mut call_arg_vals = Vec::new();
+
+        if !instance_ptr.is_null() {
+            let instance_val = self.load_indirect(
+                &instance_ptr.reinterpret(instance_ty.clone())
+            )?;
+
+            call_arg_vals.push(instance_val);
+        }
+
+        let arg_array = self.read_dynarray(&arg_array_ptr)?;
+        let total_arg_count = call_arg_vals.len() + arg_array.len();
+
+        if total_arg_count != func_param_tys.len() {
+            return Err(ExecError::illegal_state(format!(
+                "invoke arg array for {func_name} did not match expected size (got {}, expected {})",
+                total_arg_count,
+                func_param_tys.len(),
+                func_name = match instance_ty {
+                    ir::Type::Nothing => func_name.to_string(),
+                    _ => format!("{}.{}", instance_ty_name, func_name)
+                }
+            )));
+        }
+
+        let mut param_index = call_arg_vals.len();
+
+        for arg in arg_array {
+            let arg_ptr = arg
+                .as_pointer()
+                .ok_or_else(|| ExecError::illegal_state("invoke arg array may only contain pointers"))?
+                .reinterpret(func_param_tys[param_index].clone());
+
+            let arg_val = self.load_indirect(&arg_ptr)?;
+
+            call_arg_vals.push(arg_val);
+            param_index += 1;
+        }
+
+        let result_val = self.call(func_id, &call_arg_vals)?;
+        if !result_ptr.is_null() {
+            let Some(result_val) = result_val else {
+                return Err(ExecError::illegal_state("result pointer was provided but function did not return a value"));
+            };
+
+            let result_ptr = result_ptr.reinterpret(result_ty.clone());
+            self.store_indirect(&result_ptr, result_val)?;
+        }
+
+        Ok(())
     }
     
     fn update_diagnostics(&self) {

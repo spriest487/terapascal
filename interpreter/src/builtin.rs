@@ -267,100 +267,89 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
     let result_ptr_arg = load_pointer(state, &Ref::Local(LocalID(3)))?;
 
     let (method_info_val,_) = state.load_rc_struct_ptr(&method_ptr)?;
-    
-    let method_name_ptr = method_info_val[METHODINFO_NAME_FIELD]
+
+    let method_global_index = method_info_val[METHODINFO_IMPL_FIELD]
         .as_pointer()
-        .ok_or_else(|| {
-            let msg = format!("bad type: expected string pointer at field {METHODINFO_NAME_FIELD} of method info");
-            ExecError::illegal_state(msg)
-        })?;
+        .ok_or_else(|| ExecError::illegal_state("bad type: impl field of MethodInfo must be a pointer"))?
+        .addr;
 
-    // TODO: MethodInfo should be know its own method index/ID for overloading?
-    let method_name = state.read_string_indirect(method_name_ptr)?;
-
-    let type_info_ptr = method_info_val[METHODINFO_OWNER_FIELD]
-        .as_pointer()
-        .ok_or_else(|| {
-            let msg = format!("bad type: expected owner pointer at field {METHODINFO_OWNER_FIELD} of method info");
-            ExecError::illegal_state(msg)
-        })?;
-
-    let (type_info_val, _) = state.load_rc_struct_ptr(&type_info_ptr)?;
-    let type_name_ptr = type_info_val[TYPEINFO_NAME_FIELD]
-        .as_pointer()
-        .ok_or_else(|| {
-            let msg = format!("bad type: expected string pointer at field {TYPEINFO_NAME_FIELD} of type info");
-            ExecError::illegal_state(msg)
-        })?;
-
-    let type_name = state.read_string_indirect(type_name_ptr)?;
+    let runtime_method = state.runtime_methods
+        .get(method_global_index)
+        .ok_or_else(|| ExecError::illegal_state("InvokeMethod called for method with invalid impl pointer"))?
+        .clone();
     
-    let (ty, runtime_type, method_index) = state.metadata
-        .find_runtime_method(&type_name, &method_name)
-        .ok_or_else(|| {
-            let msg = format!("attempting to invoke method {}.{} which does not exist in metadata", type_name, method_name);
-            ExecError::illegal_state(msg)
-        })?;
-    
-    let method = runtime_type.methods[method_index].clone();
-
-    let mut call_arg_vals = Vec::new();
-    if !instance_ptr.is_null() { 
-        let instance_val = state.load_indirect(&instance_ptr.reinterpret(ty.clone()))?;
-        call_arg_vals.push(instance_val);
-    }
-    
-    let arg_array = state.read_dynarray(&arg_array_ptr)?;
-    let total_arg_count = call_arg_vals.len() + arg_array.len();
-
-    if total_arg_count != method.params.len() {
-        let msg = format!(
-            "method invoke arg array for {}.{} did not match expected size (got {}, expected {})",
-            type_name,
-            method_name,
-            total_arg_count,
-            method.params.len(),
-        );
-        return Err(ExecError::illegal_state(msg));
-    }
-    
-    let mut param_index = call_arg_vals.len();
-
-    for arg in arg_array {
-        let arg_ptr = arg
-            .as_pointer()
-            .ok_or_else(|| ExecError::illegal_state("method_invoke arg array may only contain pointers"))?
-            .reinterpret(method.params[param_index].clone());
-
-        let arg_val = state.load_indirect(&arg_ptr)?;
-        
-        call_arg_vals.push(arg_val);
-        param_index += 1;
-    }
-
-    match method.function {
+    match runtime_method.function {
         Some(func_id) => {
-            let result_val = state.call(func_id, &call_arg_vals)?;
-            if !result_ptr_arg.is_null() {
-                let Some(result_val) = result_val else {
-                    return Err(ExecError::illegal_state("result pointer was provided but function did not return a value"));
-                };
+            let type_info_ptr = method_info_val[METHODINFO_OWNER_FIELD]
+                .as_pointer()
+                .ok_or_else(|| {
+                    let msg = format!("bad type: expected owner pointer at field {METHODINFO_OWNER_FIELD} of method info");
+                    ExecError::illegal_state(msg)
+                })?;
 
-                let result_ptr = result_ptr_arg.reinterpret(method.result_ty.clone());
-                state.store_indirect(&result_ptr, result_val)?;
-            }
+            let (type_info_val, _) = state.load_rc_struct_ptr(&type_info_ptr)?;
+            let type_name_ptr = type_info_val[TYPEINFO_NAME_FIELD]
+                .as_pointer()
+                .ok_or_else(|| {
+                    let msg = format!("bad type: expected string pointer at field {TYPEINFO_NAME_FIELD} of type info");
+                    ExecError::illegal_state(msg)
+                })?;
 
-            Ok(())
+            let type_name = state.read_string_indirect(type_name_ptr)?;
+
+            let method_name_ptr = method_info_val[METHODINFO_NAME_FIELD]
+                .as_pointer()
+                .ok_or_else(|| {
+                    let msg = format!("bad type: expected string pointer at field {METHODINFO_NAME_FIELD} of method info");
+                    ExecError::illegal_state(msg)
+                })?;
+            let method_name = state.read_string_indirect(method_name_ptr)?;
+            
+            state.runtime_invoke(
+                func_id,
+                &instance_ptr,
+                &runtime_method.instance_ty,
+                &type_name,
+                arg_array_ptr,
+                &method_name,
+                &runtime_method.params,
+                &runtime_method.result_ty,
+                &result_ptr_arg,
+            )
         }
-        
+
         None => {
             Err(ExecError::illegal_state("InvokeMethod called for abstract method"))
         }
     }
 }
 
-fn invoke_func(_state: &mut Interpreter) -> ExecResult<()> {
-    unimplemented!()
+fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
+    let func_ptr = load_pointer(state, &Ref::Local(LocalID(0)))?;
+    let arg_array_ptr = load_pointer(state, &Ref::Local(LocalID(1)))?;
+    let result_ptr_arg = load_pointer(state, &Ref::Local(LocalID(2)))?;
+
+    let (func_info_val,_) = state.load_rc_struct_ptr(&func_ptr)?;
+    let impl_val = func_info_val[FUNCINFO_IMPL_FIELD]
+        .as_pointer()
+        .ok_or_else(|| ExecError::illegal_state("impl field must be a pointer"))?
+        .addr;
+
+    let func_id = FunctionID(impl_val);
+    let func = state.functions[&func_id].clone();
+    let func_name = func.name.as_ref();
+
+    state.runtime_invoke(
+        func_id,
+        &Pointer::nil(Type::Nothing),
+        &Type::Nothing,
+        "",
+        arg_array_ptr,
+        func_name,
+        func.func.param_tys(),
+        func.func.return_ty(),
+        &result_ptr_arg
+    )
 }
 
 fn find_type_info(state: &mut Interpreter) -> ExecResult<()> {
