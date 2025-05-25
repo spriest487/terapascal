@@ -527,6 +527,7 @@ fn clang_compile(module: &ir::Library, args: &Args, out_path: &OsStr) -> io::Res
     } else {
         // release: compile from stdin
         clang_cmd.arg("-")
+            .arg("-O2")
             .stdin(Stdio::piped());
 
         let mut clang = clang_cmd.spawn()?;

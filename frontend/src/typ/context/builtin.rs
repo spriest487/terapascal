@@ -42,6 +42,9 @@ pub const TYPEINFO_METHODS_METHOD: &str = "Methods";
 pub const METHOD_TYPE_NAME: &str = "MethodInfo";
 pub const METHOD_NAME_METHOD: &str = "Name";
 
+pub const FUNCINFO_TYPE_NAME: &str = "FunctionInfo";
+pub const FUNCINFO_NAME_METHOD: &str = "Name";
+
 pub const COMPARABLE_IFACE_NAME: &str = "IComparable";
 pub const COMPARABLE_COMPARE_NAME: &str = "Compare";
 
@@ -164,6 +167,13 @@ pub fn builtin_typeinfo_name() -> Symbol {
     Symbol::from(IdentPath::from_vec(vec![
         builtin_ident(SYSTEM_UNIT_NAME),
         builtin_ident(TYPEINFO_TYPE_NAME),
+    ]))
+}
+
+pub fn builtin_funcinfo_name() -> Symbol {
+    Symbol::from(IdentPath::from_vec(vec![
+        builtin_ident(SYSTEM_UNIT_NAME),
+        builtin_ident(FUNCINFO_TYPE_NAME),
     ]))
 }
 

@@ -13,8 +13,11 @@ pub fn gen_init_func(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<ir::Func
         return None;
     }
 
-    let name = lib.opts.debug
-        .then(|| format!("<generated init func for {}>", lib.metadata().pretty_ty_name(ty)));
+    let name = if lib.opts.debug {
+        Some(format!("<generated init func for {}>", lib.metadata().pretty_ty_name(ty)))
+    } else {
+        None
+    };
 
     let sig = ir::FunctionSig::new([], ir::Type::Nothing);
 

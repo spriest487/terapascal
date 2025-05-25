@@ -8,6 +8,7 @@
 STRING_STRUCT;
 TYPEINFO_STRUCT;
 METHODINFO_STRUCT;
+FUNCINFO_STRUCT;
 POINTERARRAY_STRUCT;
 
 typedef void (*DestructorFunc)(void*);
@@ -101,6 +102,7 @@ static void RcRelease(void* instance, bool weak);
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 
 static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, POINTERARRAY_STRUCT* args, void* outResult);
+static void InvokeFunction(FUNCINFO_STRUCT* func, POINTERARRAY_STRUCT* args, void* outResult);
 
 static TYPEINFO_STRUCT** typeinfo_list;
 static int32_t typeinfo_count;
@@ -109,6 +111,13 @@ static TYPEINFO_STRUCT* System_FindTypeInfo(STRING_STRUCT* type_name);
 static int System_GetTypeInfoCount(void);
 static TYPEINFO_STRUCT* System_GetTypeInfoByIndex(int type_index);
 static TYPEINFO_STRUCT* System_GetObjectTypeInfo(struct Rc* obj);
+
+static FUNCINFO_STRUCT** funcinfo_list;
+static int32_t funcinfo_count;
+
+static FUNCINFO_STRUCT* System_FindFunctionInfo(STRING_STRUCT* func_name);
+static int System_GetFunctionInfoCount(void);
+static FUNCINFO_STRUCT* System_GetFunctionInfoByIndex(int func_index);
 
 // implementations of System.pas builtins
 

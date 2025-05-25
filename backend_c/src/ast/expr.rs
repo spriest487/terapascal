@@ -233,11 +233,11 @@ impl Expr {
         }
     }
 
-    pub fn assign(lhs: Self, rhs: Self) -> Self {
+    pub fn assign(lhs: impl Into<Box<Self>>, rhs: impl Into<Box<Self>>) -> Self {
         Expr::InfixOp {
-            lhs: Box::new(lhs),
+            lhs: lhs.into(),
             op: InfixOp::Assign,
-            rhs: Box::new(rhs),
+            rhs: rhs.into(),
         }
     }
     

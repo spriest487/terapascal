@@ -46,6 +46,7 @@ pub fn gen_lib(module: &typ::Module, opts: IROptions) -> ir::Library {
     translate_builtin_class(&module, &mut lib, &typ::builtin_string_name(), ir::STRING_ID);
     translate_builtin_class(&module, &mut lib, &typ::builtin_typeinfo_name(), ir::TYPEINFO_ID);
     translate_builtin_class(&module, &mut lib, &typ::builtin_methodinfo_name(), ir::METHODINFO_ID);
+    translate_builtin_class(&module, &mut lib, &typ::builtin_funcinfo_name(), ir::FUNCINFO_ID);
 
     for unit in &module.units {
         lib.translate_unit(&unit.unit);

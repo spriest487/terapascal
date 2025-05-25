@@ -9,12 +9,26 @@
 #   include <dlfcn.h>
 #endif
 
+_Noreturn static void fatal(const char* msg, ...) {
+    va_list args;
+    va_start(args, msg);
+
+    vfprintf(stderr, msg, args);
+    fputs("\n", stderr);
+    fflush(stderr);
+    
+    va_end(args);
+    
+    abort();
+}
+
 _Noreturn static void Raise(STRING_STRUCT* msg_str) {
     if (msg_str && msg_str->rc.strong_count != 0) {
         int32_t msg_len = STRING_LEN(msg_str);
         char* msg_chars = (char*) STRING_CHARS(msg_str);
 
         fprintf(stderr, "Runtime error raised: %.*s\n", (int) msg_len, msg_chars);
+        fflush(stderr);
     }
     abort();
 }
@@ -22,6 +36,7 @@ _Noreturn static void Raise(STRING_STRUCT* msg_str) {
 static int32_t System_StrToInt(STRING_STRUCT* str) {
     if (!str || str->rc.strong_count == 0) {
         fprintf(stderr, "called StrToInt for an invalid string pointer\n");
+        fflush(stderr);
         abort();
     }
 
@@ -61,7 +76,7 @@ INT_TO_STR_IMPL(System_RealToStr,       float,          "f",    3 + FLT_MANT_DIG
 static void* Alloc(size_t len) {
     void* mem = calloc((size_t) len, 1);
     if (!mem) {
-        abort();
+        fatal("allocation failure");
     }
 
 #ifdef TRACE_HEAP
@@ -132,8 +147,7 @@ static void RcRetain(void* instance, bool weak) {
         rc->weak_count += 1;
     } else {
         if (rc->strong_count == 0) {
-            fprintf(stderr, "resurrecting with 0 strong refs pointer @ 0x%p (+ %d weak refs remain)\n", instance, rc->weak_count);
-            abort();
+            fatal("resurrecting with 0 strong refs pointer @ 0x%p (+ %d weak refs remain)", instance, rc->weak_count);
         }
     
         rc->strong_count += 1;
@@ -164,8 +178,7 @@ static void RcRelease(void* instance, bool weak) {
    
     if (weak) {
         if (rc->weak_count == 0) {
-            fprintf(stderr, "releasing with 0 weak refs remaining @ 0x%p\n", instance);
-            abort();
+            fatal("releasing with 0 weak refs remaining @ 0x%p", instance);
         }
 
 #if TRACE_RC
@@ -175,8 +188,7 @@ static void RcRelease(void* instance, bool weak) {
         rc->weak_count -= 1;
     } else {
         if (rc->strong_count == 0) {
-            fprintf(stderr, "releasing with 0 strong refs remaining @ 0x%p\n", instance);
-            abort();
+            fatal("releasing with 0 strong refs remaining @ 0x%p", instance);
         }
 
 #if TRACE_RC
@@ -199,6 +211,7 @@ static void RcRelease(void* instance, bool weak) {
 
             if (rc->strong_count != 1) {
                 fprintf(stderr, "destructor for %s modified the reference count of the destroyed instance\n", TYPEINFO_NAME_CHARS(rc->class->typeinfo));
+                fflush(stderr);
                 abort();
             }
         }
@@ -222,8 +235,7 @@ static void System_FreeMem(unsigned char* mem) {
 
 static void System_Write(STRING_STRUCT* str) {
     if (!str || str->rc.strong_count == 0) {
-        fprintf(stderr, "called Write for an invalid string pointer\n");
-        abort();
+        fatal("called Write for an invalid string pointer");
     }
 
     int len = (int) STRING_LEN(str);
@@ -241,9 +253,7 @@ static void System_WriteLn(STRING_STRUCT* str) {
 static STRING_STRUCT* System_ReadLn(void) {
     char buf[64];
     if (!fgets(buf, 64, stdin)) {
-        fputs("ReadLn i/o failure\n", stderr);
-        fflush(stderr);
-        abort();
+        fatal("ReadLn i/o failure");
     }
 
     size_t len = strlen(buf);
@@ -258,8 +268,7 @@ static STRING_STRUCT* System_ReadLn(void) {
 static int32_t System_ArrayLengthInternal(void* arr) {
     struct Rc* arr_rc = (struct Rc*) arr;
     if (!arr_rc || arr_rc->strong_count == 0) {
-        fprintf(stderr, "called Length for an invalid array pointer\n");
-        abort();
+        fatal("called Length for an invalid array pointer");
     }
 
     struct DynArrayClass* array_class = (struct DynArrayClass*) arr_rc->class;
@@ -274,8 +283,7 @@ static void* System_ArraySetLengthInternal(
 ) {
     struct Rc* arr_rc = (struct Rc*) arr;
     if (!arr_rc || arr_rc->strong_count == 0) {
-        fprintf(stderr, "called SetLength for an invalid array pointer\n");
-        abort();
+        fatal("called SetLength for an invalid array pointer");
     }
 
     struct DynArrayClass* array_class = (struct DynArrayClass*) arr_rc->class;
@@ -301,8 +309,7 @@ static void* LoadSymbol(const char* src, const char* sym) {
 #endif
 
     if (!sym_ptr) {
-        fprintf(stderr, "failed to load symbol: %s::%s\n", src, sym);
-        abort();
+        fatal("failed to load symbol: %s::%s", src, sym);
     }
 
     return sym_ptr;
@@ -370,8 +377,7 @@ static bool System_IsNaN(float val) {
 static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, POINTERARRAY_STRUCT* args, void* outResult) {
     Invoker invoker = METHODINFO_INVOKER(method);
     if (!invoker) {
-        fprintf(stderr, "InvokeMethod called for abstract method\n");
-        abort();
+        fatal("InvokeMethod called for abstract method");
     }
 
     if (instance) {
@@ -430,4 +436,51 @@ static TYPEINFO_STRUCT* System_GetTypeInfoByIndex(int32_t type_index) {
 
 static TYPEINFO_STRUCT* System_GetObjectTypeInfo(struct Rc* object) {
     return object->class->typeinfo;
+}
+
+static FUNCINFO_STRUCT* System_FindFunctionInfo(STRING_STRUCT* func_name) {
+    if (STRING_LEN(func_name) == 0) {
+        return NULL;
+    }
+
+    const char* func_name_cstr = (const char*) STRING_CHARS(func_name);
+
+    for (int i = 0; i < funcinfo_count; i += 1) {
+        FUNCINFO_STRUCT* item = funcinfo_list[i];
+        
+        if (!FUNCINFO_NAME(item)
+            || STRING_LEN(FUNCINFO_NAME(item)) == 0) {
+            continue;
+        }
+        
+        const char* item_name_cstr = (const char*) STRING_CHARS(FUNCINFO_NAME(item));
+
+        size_t cmp_len = (size_t)(min(STRING_LEN(func_name), STRING_LEN(FUNCINFO_NAME(item))));
+        if (strncmp(func_name_cstr, item_name_cstr, cmp_len) == 0) {
+            return item;
+        }
+    }
+    
+    return NULL;
+}
+
+static int32_t System_GetFunctionInfoCount(void) {
+    return funcinfo_count;
+}
+
+static FUNCINFO_STRUCT* System_GetFunctionInfoByIndex(int32_t func_index) {
+    if (func_index < 0 || func_index >= funcinfo_count) {
+        return NULL;
+    }
+    
+    return funcinfo_list[func_index];
+}
+
+static void InvokeFunction(FUNCINFO_STRUCT* func, POINTERARRAY_STRUCT* args, void* outResult) {
+    Invoker invoker = FUNCINFO_INVOKER(func);
+    if (!invoker) {
+        fatal("InvokeFunction called for non-invokable func");
+    }
+
+    invoker(DYNARRAY_PTR(args), outResult);
 }

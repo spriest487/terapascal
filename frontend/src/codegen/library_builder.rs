@@ -35,7 +35,7 @@ use crate::codegen::IROptions;
 use crate::codegen::SetFlagsType;
 use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::ast::FunctionDecl;
-use crate::typ::builtin_methodinfo_name;
+use crate::typ::{builtin_funcinfo_name, builtin_methodinfo_name};
 use crate::typ::builtin_string_name;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::free_mem_sig;
@@ -89,10 +89,11 @@ pub struct LibraryBuilder {
 }
 
 thread_local! {
-    pub static BUILTIN_CLASS_NAMES: [(typ::Symbol, ir::TypeDefID); 3] = [
+    pub static BUILTIN_CLASS_NAMES: [(typ::Symbol, ir::TypeDefID); 4] = [
         (builtin_string_name(), ir::STRING_ID),
         (builtin_typeinfo_name(), ir::TYPEINFO_ID),
         (builtin_methodinfo_name(), ir::METHODINFO_ID),
+        (builtin_funcinfo_name(), ir::FUNCINFO_ID),
     ];
 }
 
@@ -1557,7 +1558,7 @@ impl LibraryBuilder {
 
     fn gen_static_type_init(&mut self) {
         let mut instructions = Vec::new();
-        
+
         let translated_types: Vec<_> = self.type_cache.values().cloned().collect();
 
         for ir_ty in &translated_types {
@@ -1565,7 +1566,7 @@ impl LibraryBuilder {
                 let func_global = ir::GlobalRef::Function(init_func_id);
 
                 instructions.push(ir::Instruction::Call {
-                   args: Vec::new(),
+                    args: Vec::new(),
                     out: None,
                     function: ir::Value::from(func_global),
                 });

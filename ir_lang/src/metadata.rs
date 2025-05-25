@@ -92,6 +92,14 @@ pub const METHODINFO_TYPE: Type = Type::RcPointer(METHODINFO_VTYPE_ID);
 pub const METHODINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const METHODINFO_OWNER_FIELD: FieldID = FieldID(1);
 pub const METHODINFO_IMPL_FIELD: FieldID = FieldID(2);
+pub const METHODINFO_TAGS_FIELD: FieldID = FieldID(3);
+
+pub const FUNCINFO_ID: TypeDefID = TypeDefID(4);
+pub const FUNCINFO_VTYPE_ID: VirtualTypeID = VirtualTypeID::Class(FUNCINFO_ID);
+pub const FUNCINFO_TYPE: Type = Type::RcPointer(FUNCINFO_VTYPE_ID);
+pub const FUNCINFO_NAME_FIELD: FieldID = FieldID(0);
+pub const FUNCINFO_IMPL_FIELD: FieldID = FieldID(1);
+pub const FUNCINFO_TAGS_FIELD: FieldID = FieldID(2);
 
 pub const ANY_TYPE: Type = Type::RcPointer(VirtualTypeID::Any);
 
@@ -977,8 +985,10 @@ impl Metadata {
         self.tag_counts.insert(loc, len);
     }
     
-    pub fn tag_counts(&self) -> impl Iterator<Item=(&TagLocation, &usize)> {
-        self.tag_counts.iter()
+    pub fn tag_counts(&self) -> impl Iterator<Item=(TagLocation, usize)> + use<'_> {
+        self.tag_counts
+            .iter()
+            .map(|(loc, count)| (*loc, *count))
     }
 }
 

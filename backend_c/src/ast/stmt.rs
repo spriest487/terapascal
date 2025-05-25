@@ -19,6 +19,9 @@ pub enum GlobalName {
     TypeInfoList,
     TypeInfoCount,
     StaticTypeInfo(Box<ir::Type>),
+
+    FuncInfoList,
+    FuncInfoCount,
     
     StaticTagArray(ir::TagLocation),
     
@@ -44,6 +47,9 @@ impl fmt::Display for GlobalName {
 
             GlobalName::TypeInfoList => write!(f, "typeinfo_list"),
             GlobalName::TypeInfoCount => write!(f, "typeinfo_count"),
+
+            GlobalName::FuncInfoList => write!(f, "funcinfo_list"),
+            GlobalName::FuncInfoCount => write!(f, "funcinfo_count"),
 
             GlobalName::StaticTypeInfo(ty) => {
                 write_global_typeinfo_decl_name(f, ty)
@@ -167,6 +173,10 @@ impl Statement {
             then_branch: then_branch.into_iter().collect(),
             else_branch: else_branch.into_iter().collect(),
         }
+    }
+    
+    pub fn assign(lhs: impl Into<Expr>, rhs: impl Into<Expr>) -> Self {
+        Statement::Expr(Expr::assign(lhs.into(), rhs.into()))
     }
 }
 

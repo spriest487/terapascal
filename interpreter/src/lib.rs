@@ -1874,12 +1874,12 @@ impl Interpreter {
         for (tag_loc, tag_count) in lib.metadata.tag_counts() {
             let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
             let elements = iter::repeat(nil_any)
-                .take(*tag_count)
+                .take(tag_count)
                 .collect();
 
             let empty_tag_array = self.create_dyn_array(&ir::ANY_TYPE, elements, true)?;
 
-            let array_ref = ir::GlobalRef::StaticTagArray(*tag_loc);
+            let array_ref = ir::GlobalRef::StaticTagArray(tag_loc);
             let array_value = GlobalValue::StaticTagArray(empty_tag_array);
             self.globals.insert(array_ref, array_value);
         }

@@ -37,7 +37,7 @@ pub struct Unit {
     string_literals: HashMap<ir::StringID, StringLiteral>,
     static_closures: Vec<ir::StaticClosure>,
     
-    tag_arrays: Vec<(ir::TagLocation, usize)>,
+    tag_arrays: HashMap<ir::TagLocation, usize>,
     tag_array_class: ir::TypeDefID,
 
     opts: Options,
@@ -61,6 +61,7 @@ impl Unit {
             .expect("raw pointer array type must exist");
 
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
+        let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
 
         let system_funcs = &[
             ("Int8ToStr", FunctionName::Int8ToStr, string_ty.clone(), vec![
@@ -126,10 +127,18 @@ impl Unit {
             ("FindTypeInfo", FunctionName::FindTypeInfo, typeinfo_ty.clone(), vec![string_ty.clone()]),
             ("GetTypeInfoCount", FunctionName::GetTypeInfoCount, Type::Int32, vec![]),
             ("GetTypeInfoByIndex", FunctionName::GetTypeInfoByIndex, typeinfo_ty.clone(), vec![Type::Int32]),
-            ("GetObjectTypeInfo", FunctionName::GetObjectTypeInfo, typeinfo_ty.clone(), vec![Type::Rc.ptr()]),
-            ("InvokeMethod", FunctionName::InvokeMethod, Type::Int32, vec![
+            ("GetObjectTypeInfo", FunctionName::GetObjectTypeInfo, funcinfo_ty.clone(), vec![Type::Rc.ptr()]),
+            ("FindFunctionInfo", FunctionName::FindFuncInfo, funcinfo_ty.clone(), vec![string_ty.clone()]),
+            ("GetFunctionInfoCount", FunctionName::GetFuncInfoCount, Type::Int32, vec![]),
+            ("GetFunctionInfoByIndex", FunctionName::GetFuncInfoByIndex, funcinfo_ty.clone(), vec![Type::Int32]),
+            ("InvokeMethod", FunctionName::InvokeMethod, Type::Void, vec![
                 Type::from_ir_struct(ir::METHODINFO_ID).ptr(),
                 Type::Void.ptr(),
+                Type::from_ir_struct(pointer_array_class).ptr(),
+                Type::Void.ptr(),
+            ]),
+            ("InvokeFunction", FunctionName::InvokeFunc, Type::Void, vec![
+                Type::from_ir_struct(ir::FUNCINFO_ID).ptr(),
                 Type::from_ir_struct(pointer_array_class).ptr(),
                 Type::Void.ptr(),
             ]),
@@ -196,9 +205,8 @@ impl Unit {
         
         let tag_arrays = metadata
             .tag_counts()
-            .map(|(loc, count)| (*loc, *count))
             .collect();
-        
+
         let tag_array_class = metadata
             .find_dyn_array_struct(&ir::ANY_TYPE)
             .expect("object array type must exist");
@@ -587,6 +595,26 @@ impl Unit {
                     method_ptr_expr.clone().arrow(FieldName::ID(ir::METHODINFO_IMPL_FIELD)),
                     impl_ptr_expr,
                 )));
+
+                let tag_loc = ty
+                    .tags_loc()
+                    .and_then(|loc| {
+                        let method_loc = loc.method_loc(method_index)?;
+                        let tag_count = *self.tag_arrays.get(&method_loc)?;
+                        if tag_count > 0 {
+                            Some(method_loc)
+                        } else {
+                            None
+                        }
+                    });
+
+                init_stmts.push(Statement::assign(
+                    method_ptr_expr.clone().arrow(FieldName::ID(ir::METHODINFO_TAGS_FIELD)),
+                    match tag_loc {
+                        Some(loc) => Expr::Global(GlobalName::StaticTagArray(loc)),
+                        None => Expr::Null,
+                    },
+                ));
             }
 
             // typeinfo.methods = methods_array
@@ -619,7 +647,12 @@ impl fmt::Display for Unit {
 
         writeln!(f, "#define METHODINFO_STRUCT struct {}", TypeDefName::Struct(ir::METHODINFO_ID))?;
         writeln!(f, "#define METHODINFO_INVOKER(method) ((Invoker) method->{})", FieldName::ID(ir::METHODINFO_IMPL_FIELD))?;
-        
+
+        writeln!(f, "#define FUNCINFO_STRUCT struct {}", TypeDefName::Struct(ir::FUNCINFO_ID))?;
+        writeln!(f, "#define FUNCINFO_NAME(typeinfo) (typeinfo->{})", FieldName::ID(ir::FUNCINFO_NAME_FIELD))?;
+        writeln!(f, "#define FUNCINFO_NAME_CHARS(typeinfo) STRING_CHARS(FUNCINFO_NAME(typeinfo))")?;
+        writeln!(f, "#define FUNCINFO_INVOKER(func) ((Invoker) func->{})", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
+
         writeln!(f, "#define POINTERARRAY_STRUCT struct {}", TypeDefName::Struct(self.pointer_array_class))?;
         
         writeln!(f, "#define DYNARRAY_PTR(arr) (arr->{})", FieldName::ID(ir::DYNARRAY_PTR_FIELD))?;
@@ -670,6 +703,45 @@ impl fmt::Display for Unit {
             writeln!(f, "{};", ffi_func.func_ptr_decl())?;
             writeln!(f)?;
         }
+        
+        // declare class vars - we need these before they're defined for the tag arrays
+        for class in &self.classes {
+            writeln!(f, "{}", class.to_decl_string())?;
+        }
+        
+        for (tag_loc, tag_array_len) in &self.tag_arrays {
+            let static_array_name = GlobalName::StaticTagArray(*tag_loc);
+
+            // write data array
+            let tag_ptr_ty = Type::Void.ptr();
+            let data_name = format!("{}_data", static_array_name);
+
+            if *tag_array_len > 0 {
+                let data_ty = tag_ptr_ty.sized_array(*tag_array_len);
+                writeln!(f, "static {};", data_ty.to_decl_string(&data_name))?;
+            }
+
+            // write object
+            let tag_array_struct_ty = Type::DefinedType(TypeDefName::Struct(self.tag_array_class));
+            let tag_array_object_ty = tag_array_struct_ty.clone().ptr();
+
+            let tag_array_decl_string = tag_array_object_ty.to_decl_string(&static_array_name);
+            writeln!(f, "static {} = &({}) {{", tag_array_decl_string, tag_array_struct_ty.typename())?;
+
+            write_immortal_rc_member(f, self.tag_array_class)?;
+            writeln!(f, ",")?;
+
+            writeln!(f, "  .{len} = {tag_array_len},", len = FieldName::ID(ir::DYNARRAY_LEN_FIELD))?;
+
+            write!(f, "  .{ptr} = ", ptr = FieldName::ID(ir::DYNARRAY_PTR_FIELD))?;
+            if *tag_array_len > 0 {
+                writeln!(f, "{data_name}")?;
+            } else {
+                writeln!(f, "NULL")?;
+            }
+
+            writeln!(f, "}};")?;
+        }
 
         let typeinfo_struct_name = TypeDefName::Struct(ir::TYPEINFO_ID);
         for (ty, _typeinfo) in &self.typeinfos {
@@ -688,7 +760,18 @@ impl fmt::Display for Unit {
             writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
             
             writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
-            match ty.tags_loc() {
+
+            let tags_loc = ty
+                .tags_loc()
+                .and_then(|loc| {
+                    if *self.tag_arrays.get(&loc)? > 0 {
+                        Some(loc)
+                    } else {
+                        None
+                    }
+                });
+            
+            match tags_loc {
                 Some(loc) => write!(f, "{}", GlobalName::StaticTagArray(loc))?,
                 None => write!(f, "NULL,")?,
             }
@@ -723,40 +806,6 @@ impl fmt::Display for Unit {
             writeln!(f, "{};", decl_string)?;
         }
         writeln!(f)?;
-        
-        for (tag_loc, tag_array_len) in &self.tag_arrays {
-            let static_array_name = GlobalName::StaticTagArray(*tag_loc);
-            
-            // write data array
-            let tag_ptr_ty = Type::Void.ptr();
-            let data_name = format!("{}_data", static_array_name);
-
-            if *tag_array_len > 0 {
-                let data_ty = tag_ptr_ty.sized_array(*tag_array_len);
-                writeln!(f, "static {};", data_ty.to_decl_string(&data_name))?;
-            }
-
-            // write object
-            let tag_array_struct_ty = Type::DefinedType(TypeDefName::Struct(self.tag_array_class));
-            let tag_array_object_ty = tag_array_struct_ty.clone().ptr();
-
-            let tag_array_decl_string = tag_array_object_ty.to_decl_string(&static_array_name);
-            writeln!(f, "static {} = &({}) {{", tag_array_decl_string, tag_array_struct_ty.typename())?;
-
-            write_immortal_rc_member(f, self.tag_array_class)?;
-            writeln!(f, ",")?;
-
-            writeln!(f, "  .{len} = {tag_array_len},", len = FieldName::ID(ir::DYNARRAY_LEN_FIELD))?;
-
-            write!(f, "  .{ptr} = ", ptr = FieldName::ID(ir::DYNARRAY_PTR_FIELD))?;
-            if *tag_array_len > 0 {
-                writeln!(f, "{data_name}")?;
-            } else {
-                writeln!(f, "NULL")?;
-            }
-            
-            writeln!(f, "}};")?;
-        }
         
         for global_var in &self.global_vars {
             writeln!(f, "static {};", global_var.ty.to_decl_string(&global_var.name))?;

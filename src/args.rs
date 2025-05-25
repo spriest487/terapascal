@@ -10,7 +10,7 @@ pub struct Args {
     #[structopt(name = "FILE", parse(from_os_str))]
     pub file: PathBuf,
 
-    /// output file
+    /// Output file path.
     /// If the output file extension matches a backend, the output from that backend will be written
     /// to this path.
     /// If no output path is provided the interpreter will be invoked.

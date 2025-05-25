@@ -32,10 +32,16 @@ pub enum FunctionName {
     IsImpl,
     Raise,
     InvokeMethod,
+    
     FindTypeInfo,
     GetTypeInfoCount,
     GetTypeInfoByIndex,
     GetObjectTypeInfo,
+    
+    FindFuncInfo,
+    GetFuncInfoCount,
+    GetFuncInfoByIndex,
+    InvokeFunc,
 
     // builtins
     Int8ToStr,
@@ -101,11 +107,16 @@ impl fmt::Display for FunctionName {
             FunctionName::IsImpl => write!(f, "IsImpl"),
             FunctionName::Raise => write!(f, "Raise"),
             FunctionName::InvokeMethod => write!(f, "InvokeMethod"),
+            FunctionName::InvokeFunc => write!(f, "InvokeFunction"),
 
             FunctionName::FindTypeInfo => write!(f, "System_FindTypeInfo"),
             FunctionName::GetTypeInfoCount => write!(f, "System_GetTypeInfoCount"),
             FunctionName::GetTypeInfoByIndex => write!(f, "System_GetTypeInfoByIndex"),
             FunctionName::GetObjectTypeInfo => write!(f, "System_GetObjectTypeInfo"),
+
+            FunctionName::FindFuncInfo => write!(f, "System_FindFunctionInfo"),
+            FunctionName::GetFuncInfoCount => write!(f, "System_GetFunctionInfoCount"),
+            FunctionName::GetFuncInfoByIndex => write!(f, "System_GetFunctionInfoByIndex"),
 
             FunctionName::WriteLn => write!(f, "System_WriteLn"),
             FunctionName::Write => write!(f, "System_Write"),
