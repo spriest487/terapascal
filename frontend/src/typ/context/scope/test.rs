@@ -8,7 +8,7 @@ use crate::typ::ScopeMemberRef;
 use crate::typ::ScopeStack;
 use crate::typ::Type;
 use crate::typ::ScopeID;
-use common::span::Span;
+use terapascal_common::span::Span;
 use crate::ast::Visibility;
 use crate::ast::Ident;
 use crate::ast::IdentPath;

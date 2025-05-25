@@ -21,12 +21,12 @@ use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
 use crate::TokenTree;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use derivative::Derivative;
 use std::fmt;
 use std::hash::Hash;
-use common::TracedError;
+use terapascal_common::TracedError;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]

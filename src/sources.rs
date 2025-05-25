@@ -1,7 +1,7 @@
 use crate::Args;
 use crate::CompileError;
-use common::span::*;
-use frontend::ast::IdentPath;
+use terapascal_common::span::*;
+use terapascal_frontend::ast::IdentPath;
 use std::collections::LinkedList;
 use std::env;
 use std::path::Path;

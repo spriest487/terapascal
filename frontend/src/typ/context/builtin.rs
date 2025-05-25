@@ -15,7 +15,7 @@ use crate::typ::Type;
 use crate::typ::TypeResult;
 use crate::{typ, Ident};
 use crate::IntConstant;
-use common::span::*;
+use terapascal_common::span::*;
 use linked_hash_map::LinkedHashMap;
 use std::path::PathBuf;
 use std::rc::Rc;

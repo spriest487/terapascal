@@ -1,4 +1,4 @@
-use common::span::{Location, Span};
+use terapascal_common::span::{Location, Span};
 use serde::Serialize;
 use std::fmt::Formatter;
 use std::{fmt, slice};

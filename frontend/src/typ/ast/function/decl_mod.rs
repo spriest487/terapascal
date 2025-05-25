@@ -6,8 +6,8 @@ use crate::typ::Context;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub type DeclMod = ast::DeclMod<Value>;
 

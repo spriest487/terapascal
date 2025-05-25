@@ -5,10 +5,10 @@ authors = ["spriest487 <spriest487@googlemail.com>"]
 edition = "2024"
 
 [dependencies]
-common = { path = "common" }
-frontend = { path = "frontend" }
+terapascal-common = { path = "common" }
+terapascal-frontend = { path = "frontend" }
 terapascal-vm = { path = "vm" }
-backend_c = { path = "backend_c" }
+terapascal-backend-c = { path = "backend_c" }
 terapascal-ir = { path = "ir" }
 
 linked-hash-map = "0.5.6"

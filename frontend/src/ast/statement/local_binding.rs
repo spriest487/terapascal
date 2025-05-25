@@ -9,7 +9,7 @@ use crate::parse::TokenStream;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
-use common::span::{Span, Spanned};
+use terapascal_common::span::{Span, Spanned};
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

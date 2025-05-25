@@ -6,11 +6,11 @@ use crate::typ::ModuleUnit;
 use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeResult;
-use common::read_source_file;
+use terapascal_common::read_source_file;
 use std::collections::HashMap;
 use std::iter;
 use std::path::PathBuf;
-use common::span::Spanned;
+use terapascal_common::span::Spanned;
 
 const INT32: Type = Type::Primitive(Primitive::Int32);
 const BOOL: Type = Type::Primitive(Primitive::Boolean);

@@ -46,8 +46,8 @@ use crate::typ::DISPLAYABLE_TOSTRING_METHOD;
 use crate::typ::STRING_CONCAT_FUNC_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
 use crate::IntConstant;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use std::rc::Rc;
 
 pub type BinOp = ast::BinOp<Value>;

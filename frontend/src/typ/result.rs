@@ -19,11 +19,11 @@ use crate::typ::ValueKind;
 use crate::typ::MAX_FLAGS_BITS;
 use crate::typ::FunctionSig;
 use crate::IntConstant;
-use common::span::*;
-use common::Backtrace;
-use common::DiagnosticLabel;
-use common::DiagnosticMessage;
-use common::DiagnosticOutput;
+use terapascal_common::span::*;
+use terapascal_common::Backtrace;
+use terapascal_common::DiagnosticLabel;
+use terapascal_common::DiagnosticMessage;
+use terapascal_common::DiagnosticOutput;
 use std::fmt;
 use std::path::PathBuf;
 

@@ -1,4 +1,4 @@
-use common::{
+use terapascal_common::{
     span::{Span, Spanned},
     DiagnosticLabel, DiagnosticOutput,
 };

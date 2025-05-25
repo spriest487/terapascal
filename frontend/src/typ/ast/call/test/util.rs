@@ -13,8 +13,8 @@ use crate::typ::Symbol;
 use crate::typ::TypeArgList;
 use crate::TokenStream;
 use crate::TokenTree;
-use common::span::Span;
-use common::BuildOptions;
+use terapascal_common::span::Span;
+use terapascal_common::BuildOptions;
 
 pub fn expr_from_str(src: &str) -> ast::Expr<Span> {
     let test_unit = Preprocessor::new("test", BuildOptions::default()).preprocess(src).unwrap();

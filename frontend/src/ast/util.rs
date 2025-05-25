@@ -6,10 +6,10 @@ use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::pp::Preprocessor;
 use crate::TokenTree;
-use common::span::Span;
-use common::BuildOptions;
-use common::DiagnosticLabel;
-use common::DiagnosticOutput;
+use terapascal_common::span::Span;
+use terapascal_common::BuildOptions;
+use terapascal_common::DiagnosticLabel;
+use terapascal_common::DiagnosticOutput;
 
 pub fn try_tokens_from_string(unit_name: &str, src: &str) -> Result<TokenStream, String> {
     let pp = Preprocessor::new(format!("{}.pas", unit_name), BuildOptions::default());

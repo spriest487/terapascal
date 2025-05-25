@@ -95,15 +95,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
-name = "backend_c"
-version = "0.1.0"
-dependencies = [
- "common",
- "terapascal-ir",
- "topological-sort",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -284,15 +275,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "common"
-version = "0.1.0"
-dependencies = [
- "backtrace",
- "encoding_rs",
- "serde",
-]
-
-[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -415,19 +397,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13624c2627564efccf4934284bdd98cbaa14e79b0b5a141218e507b3a823456"
 dependencies = [
  "percent-encoding",
-]
-
-[[package]]
-name = "frontend"
-version = "0.1.0"
-dependencies = [
- "bigdecimal",
- "cast",
- "common",
- "derivative",
- "linked-hash-map",
- "regex",
- "terapascal-ir",
 ]
 
 [[package]]
@@ -1250,17 +1219,48 @@ dependencies = [
 name = "terapascal"
 version = "0.2.0"
 dependencies = [
- "backend_c",
  "bincode",
  "codespan",
  "codespan-reporting",
- "common",
- "frontend",
  "linked-hash-map",
  "structopt",
+ "terapascal-backend-c",
+ "terapascal-common",
+ "terapascal-frontend",
  "terapascal-ir",
  "terapascal-vm",
  "topological-sort",
+]
+
+[[package]]
+name = "terapascal-backend-c"
+version = "0.1.0"
+dependencies = [
+ "terapascal-common",
+ "terapascal-ir",
+ "topological-sort",
+]
+
+[[package]]
+name = "terapascal-common"
+version = "0.1.0"
+dependencies = [
+ "backtrace",
+ "encoding_rs",
+ "serde",
+]
+
+[[package]]
+name = "terapascal-frontend"
+version = "0.1.0"
+dependencies = [
+ "bigdecimal",
+ "cast",
+ "derivative",
+ "linked-hash-map",
+ "regex",
+ "terapascal-common",
+ "terapascal-ir",
 ]
 
 [[package]]
@@ -1268,10 +1268,10 @@ name = "terapascal-ir"
 version = "0.1.0"
 dependencies = [
  "bigdecimal",
- "common",
- "frontend",
  "linked-hash-map",
  "serde",
+ "terapascal-common",
+ "terapascal-frontend",
  "topological-sort",
 ]
 
@@ -1280,13 +1280,13 @@ name = "terapascal-vm"
 version = "0.1.0"
 dependencies = [
  "cast",
- "common",
  "dlopen",
  "libffi",
  "rand 0.9.1",
  "rouille",
  "serde",
  "smallvec",
+ "terapascal-common",
  "terapascal-ir",
 ]
 

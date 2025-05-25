@@ -4,10 +4,10 @@ use crate::ast::Stmt;
 use crate::parse::*;
 use crate::token_tree::*;
 use crate::Keyword;
-use common::span::*;
+use terapascal_common::span::*;
 use derivative::Derivative;
 use std::fmt;
-use common::TracedError;
+use terapascal_common::TracedError;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]

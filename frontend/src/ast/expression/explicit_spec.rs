@@ -1,8 +1,8 @@
 use crate::ast::Annotation;
 use crate::ast::Expr;
 use crate::ast::TypeList;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use derivative::Derivative;
 use std::fmt;
 

@@ -17,7 +17,7 @@ use crate::typ as typ;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use ast::Ident;
-use common::span::Span;
+use terapascal_common::span::Span;
 use crate::ir::*;
 use std::borrow::Cow;
 use std::fmt;

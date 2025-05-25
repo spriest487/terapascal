@@ -5,7 +5,7 @@ use crate::typ::{FunctionSig, TypeParamList};
 use crate::typ::ScopeMemberKind;
 use crate::typ::Type;
 use crate::typ::Value;
-use common::span::*;
+use terapascal_common::span::*;
 use std::fmt;
 use std::fmt::Debug;
 

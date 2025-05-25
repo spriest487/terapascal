@@ -2,7 +2,7 @@ use std::{
     path::PathBuf,
 };
 use structopt::*;
-use common::LanguageMode;
+use terapascal_common::LanguageMode;
 
 #[derive(StructOpt, Debug)]
 pub struct Args {

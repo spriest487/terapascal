@@ -10,7 +10,7 @@ use crate::typ::Binding;
 use crate::typ::DeclConflict;
 use crate::typ::FunctionSig;
 use crate::typ::Type;
-use common::span::Span;
+use terapascal_common::span::Span;
 use std::fmt;
 use std::rc::Rc;
 

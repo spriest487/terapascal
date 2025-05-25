@@ -1,5 +1,5 @@
 use crate::ast::{Annotation, Expr};
-use common::span::{Span, Spanned};
+use terapascal_common::span::{Span, Spanned};
 use std::fmt;
 use crate::ast::operators::CompoundAssignmentOperator;
 

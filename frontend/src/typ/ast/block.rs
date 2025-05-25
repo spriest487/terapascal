@@ -12,7 +12,7 @@ use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::TypedValue;
 use crate::typ::ValueKind;
-use common::span::{Span, Spanned};
+use terapascal_common::span::{Span, Spanned};
 
 pub type Block = ast::Block<Value>;
 

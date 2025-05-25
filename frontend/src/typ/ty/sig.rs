@@ -17,8 +17,8 @@ use crate::typ::TypeParam;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::Value;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use std::fmt;
 use std::rc::Rc;
 

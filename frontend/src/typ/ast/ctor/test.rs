@@ -1,4 +1,4 @@
-use common::span::Spanned;
+use terapascal_common::span::Spanned;
 use crate::ast::Access;
 use crate::typ::test::try_module_from_srcs;
 use crate::typ::TypeError;

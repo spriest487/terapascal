@@ -1,5 +1,5 @@
 use std::fmt;
-use common::span::{Span, Spanned};
+use terapascal_common::span::{Span, Spanned};
 use crate::{
     Keyword,
     ast::{Annotation, Expr},

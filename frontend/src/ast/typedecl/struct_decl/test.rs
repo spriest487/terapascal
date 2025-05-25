@@ -6,8 +6,8 @@ use crate::ast::TypeAnnotation;
 use crate::ast::TypeDeclItem;
 use crate::parse::ParseError;
 use crate::Separator;
-use common::span::Span;
-use common::TracedError;
+use terapascal_common::span::Span;
+use terapascal_common::TracedError;
 
 /// empty class and record types should be allowed - only the typechecker should enforce
 /// non-empty records 

@@ -10,8 +10,8 @@ use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub type CaseBranch<Item> = ast::CaseBranch<Value, Item>;
 pub type CaseBlock<Item> = ast::CaseBlock<Value, Item>;

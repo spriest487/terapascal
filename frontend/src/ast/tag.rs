@@ -10,8 +10,8 @@ use crate::parse::ParseSeq;
 use crate::token_tree::DelimitedGroup;
 use crate::TokenStream;
 use crate::{DelimiterPair, Separator};
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use derivative::Derivative;
 
 #[derive(Clone, Eq, Derivative)]

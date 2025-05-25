@@ -31,8 +31,8 @@ use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::TypedValue;
 use crate::typ::ValueKind;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub type VarBinding = ast::LocalBinding<Value>;
 pub type Stmt = ast::Stmt<Value>;

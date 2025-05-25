@@ -49,7 +49,7 @@ use crate::typ::TypeError;
 use crate::typ::TypeParamList;
 use crate::typ::TypeParamType;
 use crate::typ::TypeResult;
-use common::span::*;
+use terapascal_common::span::*;
 use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;

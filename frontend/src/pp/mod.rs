@@ -4,12 +4,12 @@ mod directive;
 use crate::pp::directive::Directive;
 use crate::pp::directive::DirectiveParser;
 use crate::pp::error::PreprocessorError;
-use common::read_source_file;
-use common::source_map::SourceMap;
-use common::source_map::SourceMapBuilder;
-use common::source_map::SourceMapEntry;
-use common::span::*;
-use common::BuildOptions;
+use terapascal_common::read_source_file;
+use terapascal_common::source_map::SourceMap;
+use terapascal_common::source_map::SourceMapBuilder;
+use terapascal_common::source_map::SourceMapEntry;
+use terapascal_common::span::*;
+use terapascal_common::BuildOptions;
 use std::path::PathBuf;
 use std::rc::Rc;
 

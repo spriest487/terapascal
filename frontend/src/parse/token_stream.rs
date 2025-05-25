@@ -1,4 +1,4 @@
-use common::{span::*, TracedError};
+use terapascal_common::{span::*, TracedError};
 
 use crate::{parse::*, token_tree::*};
 

@@ -15,8 +15,8 @@ use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::VariantCaseValue;
 use crate::Ident;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use std::rc::Rc;
 
 #[derive(Debug, Clone)]

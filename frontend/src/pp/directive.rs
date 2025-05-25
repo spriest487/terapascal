@@ -1,5 +1,5 @@
 use regex::Regex;
-use common::LanguageMode;
+use terapascal_common::LanguageMode;
 
 pub enum Directive {
     Define(String),

@@ -1,7 +1,7 @@
 use crate::ast::{Expr, ObjectCtor};
 use crate::TokenStream;
-use common::span::Span;
-use common::BuildOptions;
+use terapascal_common::span::Span;
+use terapascal_common::BuildOptions;
 
 fn expr_from_src(src: &str) -> Expr {
     let opts = BuildOptions::default();

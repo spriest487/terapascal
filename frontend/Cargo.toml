@@ -1,11 +1,11 @@
 [package]
-name = "frontend"
+name = "terapascal-frontend"
 version = "0.1.0"
 authors = ["spriest487 <spriest487@googlemail.com>"]
 edition = "2021"
 
 [dependencies]
-common = { path = "../common" }
+terapascal-common = { path = "../common" }
 terapascal-ir = { path = "../ir" }
 bigdecimal = "0.4.5"
 cast = "0.3.0"

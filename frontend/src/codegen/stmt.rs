@@ -16,7 +16,7 @@ use crate::codegen::Builder;
 use crate::typ::system_option_type_of;
 use crate::typ::OPTION_NONE_CASE;
 use crate::typ::OPTION_SOME_CASE;
-use common::span::Spanned;
+use terapascal_common::span::Spanned;
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
     builder.push_debug_context(stmt.annotation().span().clone());

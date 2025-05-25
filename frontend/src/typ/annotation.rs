@@ -17,7 +17,7 @@ use crate::typ::ty::*;
 use crate::typ::Context;
 use crate::typ::ValueKind;
 use crate::IntConstant;
-use common::span::*;
+use terapascal_common::span::*;
 use derivative::*;
 use std::borrow::Cow;
 use std::fmt;

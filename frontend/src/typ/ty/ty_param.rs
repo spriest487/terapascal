@@ -9,7 +9,7 @@ use crate::typ::Type;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::typecheck_type;
-use common::span::Spanned;
+use terapascal_common::span::Spanned;
 use std::fmt;
 use std::rc::Rc;
 

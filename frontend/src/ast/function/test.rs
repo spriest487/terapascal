@@ -1,7 +1,7 @@
 use super::*;
 use crate::ast::IdentPath;
 use crate::pp::Preprocessor;
-use common::BuildOptions;
+use terapascal_common::BuildOptions;
 
 fn try_parse_func_decl(src: &str) -> ParseResult<FunctionDecl> {
     let test_unit = Preprocessor::new("test", BuildOptions::default())

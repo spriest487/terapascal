@@ -21,8 +21,8 @@ use crate::typ::GenericContext;
 use crate::typ::Context;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use std::fmt;
 use std::rc::Rc;
 

@@ -23,7 +23,7 @@ use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
 use crate::typ::ValueKind;
-use common::span::Span;
+use terapascal_common::span::Span;
 
 pub struct SpecializedCallArgs {
     pub sig: FunctionSig,

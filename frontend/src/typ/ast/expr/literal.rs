@@ -15,7 +15,7 @@ use crate::typ::ValueKind;
 use crate::typ::STRING_CHAR_TYPE;
 use crate::IntConstant;
 use crate::RealConstant;
-use common::span::Span;
+use terapascal_common::span::Span;
 use std::rc::Rc;
 
 pub type Literal = ast::Literal<Type>;

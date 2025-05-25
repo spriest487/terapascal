@@ -1,4 +1,4 @@
-use common::span::{Span, Spanned};
+use terapascal_common::span::{Span, Spanned};
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::FunctionParamMod;

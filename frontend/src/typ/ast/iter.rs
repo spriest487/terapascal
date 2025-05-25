@@ -14,8 +14,8 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::ValueKind;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub type ForLoop = ast::ForLoop<Value>;
 pub type WhileLoop = ast::WhileLoop<Value>;

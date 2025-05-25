@@ -8,7 +8,7 @@ use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use common::span::Spanned;
+use terapascal_common::span::Spanned;
 use std::fmt;
 use std::rc::Rc;
 

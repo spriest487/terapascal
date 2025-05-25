@@ -12,9 +12,9 @@ use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::Operator;
 use crate::Position;
-use common::span::Span;
-use common::span::Spanned;
-use common::TracedError;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+use terapascal_common::TracedError;
 use std::cmp::Ordering;
 use crate::ast::expression::explicit_spec::ExplicitSpecExpr;
 

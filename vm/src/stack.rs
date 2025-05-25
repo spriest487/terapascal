@@ -7,7 +7,7 @@ use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::DynValue;
 use crate::Pointer;
-use common::span::Span;
+use terapascal_common::span::Span;
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fmt;

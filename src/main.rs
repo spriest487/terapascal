@@ -7,25 +7,7 @@ use crate::args::*;
 use crate::compile_error::*;
 use crate::reporting::report_err;
 use crate::sources::*;
-use backend_c as backend_c;
-use backend_c::c;
 use codespan_reporting::diagnostic::Severity;
-use common::read_source_file;
-use common::span::*;
-use common::BuildOptions;
-use frontend::ast;
-use frontend::ast::IdentPath;
-use frontend::ast::Unit;
-use frontend::ast::UnitKind;
-use frontend::codegen::IROptions;
-use frontend::codegen_ir;
-use frontend::parse;
-use frontend::pp as pp;
-use frontend::tokenize;
-use frontend::typ as ty;
-use frontend::typ::builtin_ident;
-use frontend::typ::SYSTEM_UNIT_NAME;
-use frontend::typecheck;
 use linked_hash_map::LinkedHashMap;
 use pp::PreprocessedUnit;
 use std::collections::hash_map::Entry;
@@ -44,6 +26,24 @@ use std::process::Command;
 use std::process::Stdio;
 use std::time::Duration;
 use structopt::StructOpt;
+use terapascal_backend_c as backend_c;
+use terapascal_backend_c::c;
+use terapascal_common::read_source_file;
+use terapascal_common::span::*;
+use terapascal_common::BuildOptions;
+use terapascal_frontend::ast;
+use terapascal_frontend::ast::IdentPath;
+use terapascal_frontend::ast::Unit;
+use terapascal_frontend::ast::UnitKind;
+use terapascal_frontend::codegen::IROptions;
+use terapascal_frontend::codegen_ir;
+use terapascal_frontend::parse;
+use terapascal_frontend::pp as pp;
+use terapascal_frontend::tokenize;
+use terapascal_frontend::typ as ty;
+use terapascal_frontend::typ::builtin_ident;
+use terapascal_frontend::typ::SYSTEM_UNIT_NAME;
+use terapascal_frontend::typecheck;
 use terapascal_ir as ir;
 use terapascal_vm::Interpreter;
 use terapascal_vm::InterpreterOpts;
@@ -67,7 +67,7 @@ fn preprocess(filename: &PathBuf, opts: BuildOptions) -> Result<PreprocessedUnit
             }
         })?;
     
-    let preprocessed = frontend::preprocess(filename, &src, opts)?;
+    let preprocessed = terapascal_frontend::preprocess(filename, &src, opts)?;
     Ok(preprocessed)
 }
 

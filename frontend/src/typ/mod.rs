@@ -13,7 +13,7 @@ pub use self::context::*;
 pub use self::result::*;
 pub use self::ty::*;
 use ast::typecheck_unit;
-use common::span::*;
+use terapascal_common::span::*;
 use crate::ast as syn;
 
 #[derive(Debug, Clone)]

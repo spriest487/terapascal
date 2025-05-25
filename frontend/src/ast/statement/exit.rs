@@ -4,7 +4,7 @@ use crate::{
     parse::{ParseResult, TokenStream},
     Keyword,
 };
-use common::span::{Span, Spanned};
+use terapascal_common::span::{Span, Spanned};
 use crate::parse::Matcher;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

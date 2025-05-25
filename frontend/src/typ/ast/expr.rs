@@ -38,7 +38,7 @@ use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::Context;
 use crate::IntConstant;
-use common::span::*;
+use terapascal_common::span::*;
 pub use init::*;
 pub use literal::*;
 

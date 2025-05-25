@@ -11,9 +11,9 @@ use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::Keyword;
-use common::span::Span;
-use common::span::Spanned;
-use common::TracedError;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+use terapascal_common::TracedError;
 use derivative::Derivative;
 use std::fmt;
 

@@ -11,7 +11,7 @@ use crate::codegen::Builder;
 use crate::typ::TypedValue;
 use crate::typ::STRING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
-use common::span::*;
+use terapascal_common::span::*;
 use std::rc::Rc;
 use syn::Ident;
 

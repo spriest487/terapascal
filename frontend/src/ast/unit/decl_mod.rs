@@ -10,9 +10,9 @@ use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::Separator;
 use derivative::*;
-use common::span::Span;
-use common::span::Spanned;
-use common::TracedError;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+use terapascal_common::TracedError;
 use std::fmt;
 
 #[derive(Eq, Clone, Derivative)]

@@ -1,4 +1,4 @@
-use common::span::Spanned;
+use terapascal_common::span::Spanned;
 use crate::ast;
 use crate::typ::ast::InterfaceDecl;
 use crate::typ::test::module_from_src;

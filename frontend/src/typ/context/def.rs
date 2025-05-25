@@ -9,8 +9,8 @@ use crate::typ::ast::StructDef;
 use crate::typ::ast::VariantDef;
 use crate::typ::Decl;
 use crate::typ::FunctionSig;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use std::rc::Rc;
 
 #[derive(Clone, Debug, Eq, PartialEq)]

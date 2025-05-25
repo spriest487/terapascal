@@ -10,8 +10,8 @@ use crate::Ident;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use derivative::Derivative;
 use std::fmt;
 

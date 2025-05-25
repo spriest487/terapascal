@@ -4,7 +4,7 @@ use crate::{
     parse::TokenStream,
 };
 use derivative::Derivative;
-use common::span::{Span, Spanned};
+use terapascal_common::span::{Span, Spanned};
 use std::fmt;
 use crate::ast::type_name::TypeName;
 

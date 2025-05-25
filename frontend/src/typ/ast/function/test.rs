@@ -20,8 +20,8 @@ use crate::typ::TypeParamList;
 use crate::typ::TypeParamType;
 use crate::typ::TypeResult;
 use crate::Ident;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use std::rc::Rc;
 
 fn test_span() -> Span {

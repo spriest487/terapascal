@@ -6,11 +6,11 @@ pub use self::token_stream::*;
 use crate::ast::TypeName;
 use crate::ast::*;
 use crate::token_tree::*;
-use common::span::*;
-use common::DiagnosticLabel;
-use common::DiagnosticMessage;
-use common::DiagnosticOutput;
-use common::TracedError;
+use terapascal_common::span::*;
+use terapascal_common::DiagnosticLabel;
+use terapascal_common::DiagnosticMessage;
+use terapascal_common::DiagnosticOutput;
+use terapascal_common::TracedError;
 use std::fmt;
 
 #[derive(Debug)]

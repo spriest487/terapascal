@@ -24,8 +24,8 @@ use crate::ast::TypeList;
 use crate::parse::*;
 use crate::token_tree::*;
 use crate::Keyword;
-use common::span::*;
-use common::TracedError;
+use terapascal_common::span::*;
+use terapascal_common::TracedError;
 use std::fmt;
 
 fn parse_identifier(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {

@@ -6,8 +6,8 @@ use crate::typ::Value;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::ValueKind;
-use common::span::Span;
-use common::span::Spanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use crate::ast;
 
 pub type Raise = ast::Raise<Value>;
