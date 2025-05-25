@@ -6,6 +6,7 @@ use std::collections::LinkedList;
 use std::env;
 use std::path::Path;
 use std::path::PathBuf;
+use terapascal_common::SRC_FILE_DEFAULT_EXT;
 
 fn find_in_path(filename: &PathBuf, dir: &Path) -> Option<PathBuf> {
     if !dir.exists() || !dir.is_dir() {
@@ -107,7 +108,7 @@ impl SourceCollection {
     }
 
     pub fn add_used_unit(&mut self, base_unit_path: &PathBuf, used_unit: &IdentPath) -> Result<PathBuf, CompileError> {
-        let unit_filename = PathBuf::from(used_unit.to_string() + ".pas");
+        let unit_filename = PathBuf::from(used_unit.to_string() + "." + SRC_FILE_DEFAULT_EXT);
 
         self.add_used_unit_in_file(base_unit_path, used_unit, &unit_filename)
     }

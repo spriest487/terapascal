@@ -22,6 +22,7 @@ use std::process::ExitStatus;
 use std::process::Output;
 use std::process::Stdio;
 use std::time::SystemTime;
+use terapascal_common::SRC_FILE_DEFAULT_EXT;
 
 #[derive(Clone)]
 pub struct TestCase {
@@ -39,7 +40,7 @@ impl TestCase {
             let path = entry.path();
 
             match path.extension() {
-                Some(ext) if ext.eq_ignore_ascii_case("pas") => {
+                Some(ext) if ext.eq_ignore_ascii_case(SRC_FILE_DEFAULT_EXT) => {
                     let script = TestScript::find_for_path(&path)
                         .unwrap_or_else(|err| {
                             eprintln!("failed to read test script: {err}");

@@ -89,6 +89,7 @@ fn make_decl(
             span: test_span.clone(),
             type_params: ty_params_list,
         },
+        tags: Vec::new(),
         kind: FunctionDeclKind::Function,
         params: params
             .into_iter()

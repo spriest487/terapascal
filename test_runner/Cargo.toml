@@ -9,3 +9,4 @@ chrono = "0.4.38"
 serde_json = "1.0.127"
 serde = { version = "1.0.209", features = ["derive"] }
 regex = { version = "1.10.6", features = [] }
+terapascal-common = { path = "../common" }

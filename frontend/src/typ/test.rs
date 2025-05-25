@@ -31,7 +31,7 @@ where
 
     // always include the system unit from the configure unit path
     let unit_path = PathBuf::from(env!("TERAPASCAL_UNITS"));
-    let system_src = read_source_file(&unit_path.join("System.pas")).unwrap();
+    let system_src = read_source_file(&unit_path.join("System.tpas")).unwrap();
 
     let unit_srcs = iter::once(("System", system_src)).chain(
         unit_srcs

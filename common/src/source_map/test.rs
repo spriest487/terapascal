@@ -34,8 +34,8 @@ fn build_with_mappings(
 
 #[test]
 fn finds_single_entry() {
-    let map = build_with_mappings("test_src.pas", [
-        TestMapping { start: (2, 2), end: (2, 4), src_file: "test_src.pas", src_start: (0, 3), src_end: (0, 5)}
+    let map = build_with_mappings("test_src.tpas", [
+        TestMapping { start: (2, 2), end: (2, 4), src_file: "test_src.tpas", src_start: (0, 3), src_end: (0, 5)}
     ]);
 
     // look up the exact span, should have the exact mapped src location
@@ -44,17 +44,17 @@ fn finds_single_entry() {
         Location { line: 2, col: 4 },
     );
 
-    assert_eq!(PathBuf::from("test_src.pas"), *span.file);
+    assert_eq!(PathBuf::from("test_src.tpas"), *span.file);
     assert_eq!(Location::new(0, 3), span.start);
     assert_eq!(Location::new(0, 5), span.end);
 }
 
 #[test]
 fn finds_nearest_entry() {
-    let map = build_with_mappings("test_src.pas", [
-        TestMapping { start: (0, 0), end: (0, 10), src_file: "test_src.pas", src_start: (0, 0), src_end: (0, 10) },
-        TestMapping { start: (1, 0), end: (2, 2), src_file: "test_src.pas", src_start: (0, 10), src_end: (0, 15) },
-        TestMapping { start: (2, 1), end: (2, 4), src_file: "test_src.pas", src_start: (0, 16), src_end: (0, 20) },
+    let map = build_with_mappings("test_src.tpas", [
+        TestMapping { start: (0, 0), end: (0, 10), src_file: "test_src.tpas", src_start: (0, 0), src_end: (0, 10) },
+        TestMapping { start: (1, 0), end: (2, 2), src_file: "test_src.tpas", src_start: (0, 10), src_end: (0, 15) },
+        TestMapping { start: (2, 1), end: (2, 4), src_file: "test_src.tpas", src_start: (0, 16), src_end: (0, 20) },
     ]);
 
     // looks up a 3-character span that starts in the middle of the second mapping
@@ -64,7 +64,7 @@ fn finds_nearest_entry() {
     );
 
     // expect a src span of the same length offset by the same amount within the second mapping
-    assert_eq!(PathBuf::from("test_src.pas"), *span.file);
+    assert_eq!(PathBuf::from("test_src.tpas"), *span.file);
     assert_eq!(Location::new(0, 11), span.start);
     assert_eq!(Location::new(0, 13), span.end);
 }

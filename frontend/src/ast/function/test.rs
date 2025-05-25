@@ -10,7 +10,7 @@ fn try_parse_func_decl(src: &str) -> ParseResult<FunctionDecl> {
     let tokens = TokenTree::tokenize(test_unit).unwrap();
     let mut token_stream = TokenStream::new(tokens, Span::zero("test"));
 
-    let decl = FunctionDecl::parse(&mut token_stream, false)?;
+    let decl = FunctionDecl::parse(&mut token_stream, false, Vec::new())?;
     token_stream.finish()?;
 
     Ok(decl)

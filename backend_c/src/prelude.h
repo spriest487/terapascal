@@ -119,7 +119,7 @@ static FUNCINFO_STRUCT* System_FindFunctionInfo(STRING_STRUCT* func_name);
 static int System_GetFunctionInfoCount(void);
 static FUNCINFO_STRUCT* System_GetFunctionInfoByIndex(int func_index);
 
-// implementations of System.pas builtins
+// implementations of System unit builtins
 
 static int32_t System_StrToInt(STRING_STRUCT* str);
 

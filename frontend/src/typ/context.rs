@@ -1135,7 +1135,7 @@ impl Context {
                         // if there's a matching existing decl, and a def already exists for this
                         // key, throw an error unless it's a valid redecl
                         if let Some(existing) = self.find_def(&full_name, &def_key) {
-                            // allow the redeclaration of certain builtin types in System.pas,
+                            // allow the redeclaration of certain builtin types in the System unit,
                             // as long as the new definition matches the builtin one exactly
                             if !value.is_valid_builtin_redecl() || *existing != def {
                                 // dbg!(existing);

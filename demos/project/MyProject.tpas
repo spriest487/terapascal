@@ -1,7 +1,7 @@
 program MyProject;
 
 uses
-    Unit1 in 'subdir/Unit1.pas',
+    Unit1 in 'subdir/Unit1.tpas',
     Unit2;
     
 begin

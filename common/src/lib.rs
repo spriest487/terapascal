@@ -3,17 +3,22 @@ pub mod span;
 
 use crate::span::*;
 pub use backtrace::Backtrace;
-use encoding_rs::{Encoding, UTF_8};
-use std::{
-    cmp::Ordering,
-    collections::{hash_map::HashMap, HashSet},
-    env, fmt,
-    fs::File,
-    io,
-    io::Read,
-    ops::Deref,
-    path::{Path, PathBuf},
-};
+use encoding_rs::Encoding;
+use encoding_rs::UTF_8;
+use std::cmp::Ordering;
+use std::collections::hash_map::HashMap;
+use std::collections::HashSet;
+use std::env;
+use std::fmt;
+use std::fs::File;
+use std::io;
+use std::io::Read;
+use std::ops::Deref;
+use std::path::Path;
+use std::path::PathBuf;
+
+pub const IR_LIB_EXT: &str = "lib";
+pub const SRC_FILE_DEFAULT_EXT: &str = "tpas";
 
 pub trait DiagnosticOutput: fmt::Display {
     fn title(&self) -> String {

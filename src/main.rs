@@ -31,6 +31,8 @@ use terapascal_backend_c::c;
 use terapascal_common::read_source_file;
 use terapascal_common::span::*;
 use terapascal_common::BuildOptions;
+use terapascal_common::IR_LIB_EXT;
+use terapascal_common::SRC_FILE_DEFAULT_EXT;
 use terapascal_frontend::ast;
 use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::Unit;
@@ -48,8 +50,6 @@ use terapascal_ir as ir;
 use terapascal_vm::Interpreter;
 use terapascal_vm::InterpreterOpts;
 use topological_sort::TopologicalSort;
-
-const IR_LIB_EXT: &str = "lib";
 
 enum CompileOutput {
     Preprocess(Vec<PreprocessedUnit>),
@@ -110,7 +110,9 @@ fn compile(args: &Args) -> Result<CompileOutput, CompileError> {
 
     // add builtin units
     for auto_ref_unit in auto_ref_units.into_iter() {
-        let unit_filename = PathBuf::from(auto_ref_unit.to_string()).with_extension("pas");
+        let unit_filename = PathBuf::from(auto_ref_unit.to_string())
+            .with_extension(SRC_FILE_DEFAULT_EXT);
+
         let unit_path = sources
             .add(&unit_filename, None)?
             .canonicalize()?;

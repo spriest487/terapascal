@@ -96,7 +96,7 @@ impl Decl {
         Some(DeclConflict::Name)
     }
 
-    // builtin types are OK to redeclare in System.pas
+    // builtin types are OK to redeclare in the System unit
     pub fn is_valid_builtin_redecl(&self) -> bool {
         match self {
             Decl::Type { ty: Type::Interface(iface), .. } => {

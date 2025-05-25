@@ -10,9 +10,10 @@ use terapascal_common::span::Span;
 use terapascal_common::BuildOptions;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::SRC_FILE_DEFAULT_EXT;
 
 pub fn try_tokens_from_string(unit_name: &str, src: &str) -> Result<TokenStream, String> {
-    let pp = Preprocessor::new(format!("{}.pas", unit_name), BuildOptions::default());
+    let pp = Preprocessor::new(format!("{}.{}", unit_name, SRC_FILE_DEFAULT_EXT), BuildOptions::default());
     let pp_unit = pp.preprocess(src)
         .map_err(|err| err.to_string())?;
 

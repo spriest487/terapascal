@@ -1,12 +1,12 @@
 use crate::codegen::gen_lib;
 use crate::codegen::IROptions;
 use crate::typ;
-use ir_lang::dep_sort::find_deps;
-use ir_lang::dep_sort::sort_defs;
-use ir_lang::Metadata;
-use ir_lang::NamePath;
-use ir_lang::TypeDef;
-use ir_lang::TypeDefID;
+use crate::ir::dep_sort::find_deps;
+use crate::ir::dep_sort::sort_defs;
+use crate::ir::Metadata;
+use crate::ir::NamePath;
+use crate::ir::TypeDef;
+use crate::ir::TypeDefID;
 use std::collections::HashMap;
 
 fn defs_from_src(src: &str) -> (HashMap<TypeDefID, TypeDef>, Metadata) {
