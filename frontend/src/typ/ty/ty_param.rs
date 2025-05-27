@@ -1,6 +1,7 @@
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::TypeConstraint;
+use crate::typ::typecheck_type;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericResult;
@@ -8,10 +9,9 @@ use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeResult;
 use crate::typ::Value;
-use crate::typ::typecheck_type;
-use terapascal_common::span::Spanned;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Spanned;
 
 pub type TypeParam = ast::TypeParam<Type>;
 
@@ -56,7 +56,7 @@ impl TypeParamList {
     }
     
     pub fn into_type_args(self) -> TypeArgList {
-        self.map(|item, _pos| Type::GenericParam(Rc::new(TypeParamType {
+        self.map(|item, _pos| Type::GenericParam(Arc::new(TypeParamType {
             name: item.name,
             is_ty: item
                 .constraint

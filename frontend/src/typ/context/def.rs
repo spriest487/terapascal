@@ -1,27 +1,27 @@
-use std::fmt;
-use std::fmt::Formatter;
 use crate::ast::Ident;
-use crate::typ::ast::{EnumDecl, SetDecl};
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;
 use crate::typ::ast::InterfaceDecl;
 use crate::typ::ast::StructDef;
 use crate::typ::ast::VariantDef;
+use crate::typ::ast::{EnumDecl, SetDecl};
 use crate::typ::Decl;
 use crate::typ::FunctionSig;
+use std::fmt;
+use std::fmt::Formatter;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::rc::Rc;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Def {
-    External(Rc<FunctionDecl>),
-    Function(Rc<FunctionDef>),
-    Struct(Rc<StructDef>),
-    Interface(Rc<InterfaceDecl>),
-    Variant(Rc<VariantDef>),
-    Enum(Rc<EnumDecl>),
-    Set(Rc<SetDecl>),
+    External(Arc<FunctionDecl>),
+    Function(Arc<FunctionDef>),
+    Struct(Arc<StructDef>),
+    Interface(Arc<InterfaceDecl>),
+    Variant(Arc<VariantDef>),
+    Enum(Arc<EnumDecl>),
+    Set(Arc<SetDecl>),
 }
 
 impl Def {
@@ -55,7 +55,7 @@ impl Spanned for Def {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum DefKey {
     Unique,
-    Sig(Rc<FunctionSig>),
+    Sig(Arc<FunctionSig>),
 }
 
 impl fmt::Display for DefKey {
@@ -89,5 +89,5 @@ impl DefDeclMatch {
 // #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 // pub struct FunctionDefKey {
 //     name: IdentPath,
-//     sig: Rc<FunctionSig>,
+//     sig: Arc<FunctionSig>,
 // }

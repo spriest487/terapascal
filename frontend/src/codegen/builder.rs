@@ -13,15 +13,15 @@ use crate::codegen::metadata::*;
 use crate::codegen::FunctionInstance;
 use crate::codegen::IROptions;
 use crate::codegen::SetFlagsType;
+use crate::ir::*;
 use crate::typ as typ;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use ast::Ident;
-use terapascal_common::span::Span;
-use crate::ir::*;
 use std::borrow::Cow;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
 
 #[derive(Debug)]
 pub struct Builder<'m> {
@@ -135,7 +135,7 @@ impl<'m> Builder<'m> {
     pub fn translate_func(
         &mut self,
         func_name: &Symbol,
-        func_sig: &Rc<typ::FunctionSig>,
+        func_sig: &Arc<typ::FunctionSig>,
         mut call_ty_args: Option<typ::TypeArgList>,
     ) -> FunctionInstance {
         if let Some(args_list) = &mut call_ty_args {

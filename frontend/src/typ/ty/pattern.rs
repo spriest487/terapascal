@@ -1,5 +1,3 @@
-use std::fmt;
-use std::rc::Rc;
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
@@ -15,18 +13,20 @@ use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::NameResult;
 use crate::typ::Symbol;
+use std::fmt;
+use std::sync::Arc;
 use terapascal_common::span::*;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum TypePattern {
     VariantCase {
-        variant: Rc<Symbol>,
+        variant: Arc<Symbol>,
         case: Ident,
         data_binding: Option<Ident>,
         span: Span,
     },
     NegatedVariantCase {
-        variant: Rc<Symbol>,
+        variant: Arc<Symbol>,
         case: Ident,
         span: Span,
     },
@@ -135,7 +135,7 @@ impl TypePattern {
         span: &Span,
         expect_ty: &Type,
         ctx: &mut Context,
-    ) -> TypeResult<Rc<Symbol>> {
+    ) -> TypeResult<Arc<Symbol>> {
         match expect_ty {
             expect_var @ Type::Variant(..) => {
                 let variant_def = ctx.find_variant_def(variant)

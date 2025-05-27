@@ -1,6 +1,5 @@
 use crate::ast;
 use crate::ast::IdentPath;
-use crate::typ::ast::{apply_func_decl_named_ty_args, WhereClause};
 use crate::typ::ast::infer_from_structural_ty_args;
 use crate::typ::ast::try_unwrap_inferred_args;
 use crate::typ::ast::FunctionDecl;
@@ -9,6 +8,7 @@ use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::StructDef;
 use crate::typ::ast::VariantDef;
+use crate::typ::ast::{apply_func_decl_named_ty_args, WhereClause};
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::GenericContext;
@@ -22,10 +22,10 @@ use crate::typ::TypeArgList;
 use crate::typ::TypeArgResolver;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
+use std::borrow::Cow;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::borrow::Cow;
-use std::rc::Rc;
 
 pub trait Specializable {
     type GenericID: PartialEq + Clone;
@@ -63,10 +63,10 @@ fn specialise_where_clause(generic_where: Option<&WhereClause>, generic_ctx: &Ge
 }
 
 pub fn specialize_struct_def<'a>(
-    generic_def: &Rc<StructDef>,
+    generic_def: &Arc<StructDef>,
     ty_args: &TypeArgList,
     ctx: &Context,
-) -> GenericResult<Rc<StructDef>> {
+) -> GenericResult<Arc<StructDef>> {
     let struct_ty_params = match &generic_def.name.type_params {
         None => return Ok(generic_def.clone()),
         Some(param_list) => param_list,
@@ -112,7 +112,7 @@ pub fn specialize_struct_def<'a>(
         ty_args
     )?;
 
-    Ok(Rc::new(StructDef {
+    Ok(Arc::new(StructDef {
         name: specialized_name,
         where_clause: specialized_where,
         tags: generic_def.tags.clone(),
@@ -178,7 +178,7 @@ pub fn specialize_variant_def(
     )?;
 
     Ok(VariantDef {
-        name: Rc::new(parameterized_name),
+        name: Arc::new(parameterized_name),
         where_clause: specialized_where,
         tags: generic_def.tags.clone(),
         span: generic_def.span().clone(),
@@ -190,10 +190,10 @@ pub fn specialize_variant_def(
 }
 
 pub fn specialize_iface_def<'a>(
-    generic_def: &Rc<InterfaceDecl>,
+    generic_def: &Arc<InterfaceDecl>,
     ty_args: &TypeArgList,
     ctx: &Context,
-) -> GenericResult<Rc<InterfaceDecl>> {
+) -> GenericResult<Arc<InterfaceDecl>> {
     let iface_ty_params = match &generic_def.name.type_params {
         None => return Ok(generic_def.clone()),
         Some(param_list) => param_list,
@@ -227,12 +227,12 @@ pub fn specialize_iface_def<'a>(
             )?;
 
             Ok(InterfaceMethodDecl {
-                decl: Rc::new(specialized_decl),
+                decl: Arc::new(specialized_decl),
             })
         })
         .collect::<GenericResult<_>>()?;
 
-    Ok(Rc::new(InterfaceDecl {
+    Ok(Arc::new(InterfaceDecl {
         name: specialized_name,
         where_clause: specialized_where,
         tags: generic_def.tags.clone(),
@@ -278,7 +278,7 @@ fn specialize_methods(
 
             Ok(MethodDecl {
                 access: generic_method.access,
-                func_decl: Rc::new(specialized_decl),
+                func_decl: Arc::new(specialized_decl),
             })
         })
         .collect::<GenericResult<_>>()?;

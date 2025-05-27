@@ -4,9 +4,11 @@ mod explicit_spec;
 #[cfg(test)]
 pub(crate) mod test;
 
+use crate::ast::expression::explicit_spec::ExplicitSpecExpr;
 use crate::ast::expression::parse::CompoundExpressionParser;
 use crate::ast::ident::*;
 use crate::ast::match_block::MatchExpr;
+use crate::ast::Annotation;
 use crate::ast::AnonymousFunctionDef;
 use crate::ast::BinOp;
 use crate::ast::Block;
@@ -21,23 +23,21 @@ use crate::ast::Raise;
 use crate::ast::Stmt;
 use crate::ast::TypeAnnotation;
 use crate::ast::UnaryOp;
-use crate::ast::Annotation;
 use crate::consts::*;
 use crate::parse::*;
 use crate::Operator;
-use terapascal_common::span::*;
-use terapascal_common::TracedError;
 use derivative::Derivative;
 use std::fmt;
-use std::rc::Rc;
-use crate::ast::expression::explicit_spec::ExplicitSpecExpr;
+use std::sync::Arc;
+use terapascal_common::span::*;
+use terapascal_common::TracedError;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Literal<T: TypeAnnotation> {
     Nil,
     Integer(IntConstant),
     Real(RealConstant),
-    String(Rc<String>),
+    String(Arc<String>),
     Boolean(bool),
     SizeOf(Box<T>),
     DefaultValue(Box<T>),

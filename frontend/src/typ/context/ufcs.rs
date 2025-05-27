@@ -5,14 +5,14 @@ use crate::ast::Ident;
 use crate::ast::Visibility;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::MethodDecl;
+use crate::typ::Context;
 use crate::typ::Decl;
 use crate::typ::NameResult;
 use crate::typ::Symbol;
 use crate::typ::Type;
-use crate::typ::Context;
 use std::fmt;
 use std::fmt::Formatter;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstanceMethod {
@@ -21,7 +21,7 @@ pub enum InstanceMethod {
         func_name: Symbol,
         visibility: Visibility,
         
-        decl: Rc<FunctionDecl>,
+        decl: Arc<FunctionDecl>,
     },
     Method {
         self_ty: Type,

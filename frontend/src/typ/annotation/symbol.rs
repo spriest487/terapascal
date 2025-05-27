@@ -1,5 +1,6 @@
 use crate::ast::IdentPath;
 use crate::ast::TypeDeclName;
+use crate::typ::ast::WhereClause;
 use crate::typ::typecheck_type_params;
 use crate::typ::validate_generic_constraints;
 use crate::typ::Context;
@@ -16,12 +17,11 @@ use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
 use crate::Ident;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use std::borrow::Cow;
 use std::fmt;
-use std::rc::Rc;
-use crate::typ::ast::WhereClause;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct Symbol {
@@ -98,7 +98,7 @@ impl Symbol {
             Ok(())
         } else {
             Err(GenericError::IllegalUnspecialized {
-                ty: Type::Class(Rc::new(self.clone())),
+                ty: Type::Class(Arc::new(self.clone())),
             })
         }
     }

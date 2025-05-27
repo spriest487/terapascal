@@ -34,14 +34,14 @@ use crate::parse::TryParse;
 use crate::DelimiterPair;
 use crate::Separator;
 use crate::TokenTree;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
-use terapascal_common::TracedError;
 use derivative::*;
 use std::fmt;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+use terapascal_common::TracedError;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Debug, Hash)]
@@ -94,12 +94,12 @@ impl<A: Annotation> fmt::Display for TypeDecl<A> {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum TypeDeclItem<A: Annotation = Span> {
-    Struct(Rc<StructDecl<A>>),
-    Interface(Rc<InterfaceDecl<A>>),
-    Variant(Rc<VariantDecl<A>>),
-    Alias(Rc<AliasDecl<A>>),
-    Enum(Rc<EnumDecl<A>>),
-    Set(Rc<SetDecl<A>>),
+    Struct(Arc<StructDecl<A>>),
+    Interface(Arc<InterfaceDecl<A>>),
+    Variant(Arc<VariantDecl<A>>),
+    Alias(Arc<AliasDecl<A>>),
+    Enum(Arc<EnumDecl<A>>),
+    Set(Arc<SetDecl<A>>),
 }
 
 impl<A: Annotation> TypeDeclItem<A> {
@@ -251,17 +251,17 @@ impl Parse for TypeDeclItem<Span> {
         match tokens.look_ahead().next() {
             Some(ref tt) if struct_kw_matcher.is_match(tt) => {
                 let struct_decl = StructDecl::parse(tokens, name, tags)?;
-                Ok(TypeDeclItem::Struct(Rc::new(struct_decl)))
+                Ok(TypeDeclItem::Struct(Arc::new(struct_decl)))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Interface) => {
                 let iface_decl = InterfaceDecl::parse(tokens, name, tags)?;
-                Ok(TypeDeclItem::Interface(Rc::new(iface_decl)))
+                Ok(TypeDeclItem::Interface(Arc::new(iface_decl)))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Variant) => {
                 let variant_decl = VariantDecl::parse(tokens, name, tags)?;
-                Ok(TypeDeclItem::Variant(Rc::new(variant_decl)))
+                Ok(TypeDeclItem::Variant(Arc::new(variant_decl)))
             },
             
             Some(tt) if tt.is_delimited(DelimiterPair::Bracket) => {
@@ -274,7 +274,7 @@ impl Parse for TypeDeclItem<Span> {
                 }
                 
                 let enum_decl = EnumDecl::parse(name, tokens)?;
-                Ok(TypeDeclItem::Enum(Rc::new(enum_decl)))
+                Ok(TypeDeclItem::Enum(Arc::new(enum_decl)))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Set) => {
@@ -287,7 +287,7 @@ impl Parse for TypeDeclItem<Span> {
                 }
                 
                 let set_decl = SetDecl::parse(name, tokens)?;
-                Ok(TypeDeclItem::Set(Rc::new(set_decl)))
+                Ok(TypeDeclItem::Set(Arc::new(set_decl)))
             }
 
             // if it isn't a type def keyword, then it must be the name of an existing type to
@@ -302,7 +302,7 @@ impl Parse for TypeDeclItem<Span> {
                 }
 
                 let alias_decl = AliasDecl::parse(tokens, name)?;
-                Ok(TypeDeclItem::Alias(Rc::new(alias_decl)))
+                Ok(TypeDeclItem::Alias(Arc::new(alias_decl)))
             },
 
             None => Err(TracedError::trace(ParseError::UnexpectedEOF(

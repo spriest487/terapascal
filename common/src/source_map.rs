@@ -1,15 +1,18 @@
 #[cfg(test)]
 mod test;
 
-use std::{path::PathBuf, rc::Rc, vec};
-use crate::{Location, Span};
+use crate::Location;
+use crate::Span;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::vec;
 
 pub struct SourceMapBuilder {
     source_map: SourceMap,
 }
 
 impl SourceMapBuilder {
-    pub fn new(src_filename: Rc<PathBuf>) -> Self {
+    pub fn new(src_filename: impl Into<Arc<PathBuf>>) -> Self {
         Self {
             source_map: SourceMap {
                 entries: vec![
@@ -17,7 +20,7 @@ impl SourceMapBuilder {
                         start: Location::zero(),
                         end: Location::zero(),
                         src: Span {
-                            file: src_filename,
+                            file: src_filename.into(),
                             start: Location::zero(),
                             end: Location::zero(),
                         }

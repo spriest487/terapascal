@@ -1,13 +1,13 @@
 use crate::ast::IdentPath;
 use crate::typ;
 use std::borrow::Cow;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum FunctionDeclKey {
     Function {
         name: IdentPath,
-        sig: Rc<typ::FunctionSig>,
+        sig: Arc<typ::FunctionSig>,
     },
     Method(MethodDeclKey),
     VirtualMethod(VirtualMethodKey),

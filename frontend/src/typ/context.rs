@@ -18,7 +18,6 @@ pub use self::result::*;
 pub use self::scope::*;
 pub use self::ufcs::InstanceMethod;
 pub use self::value_kind::*;
-use crate::ast as syn;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Path;
@@ -49,11 +48,11 @@ use crate::typ::TypeError;
 use crate::typ::TypeParamList;
 use crate::typ::TypeParamType;
 use crate::typ::TypeResult;
-use terapascal_common::span::*;
 use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Binding {
@@ -76,7 +75,7 @@ pub enum InstanceMember {
     UFCSCall {
         func_name: Symbol,
         visibility: Visibility,
-        decl: Rc<FunctionDecl>,
+        decl: Arc<FunctionDecl>,
     },
     Overloaded {
         candidates: Vec<OverloadCandidate>,
@@ -126,12 +125,12 @@ impl TypeMember {
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 struct MethodKey {
     pub name: Ident,
-    pub sig: Rc<FunctionSig>,
+    pub sig: Arc<FunctionSig>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 struct MethodCollection {
-    methods: HashMap<MethodKey, Option<Rc<FunctionDef>>>,
+    methods: HashMap<MethodKey, Option<Arc<FunctionDef>>>,
 }
 
 impl MethodCollection {
@@ -190,7 +189,7 @@ impl Context {
                 ];
 
                 for builtin_iface in builtin_ifaces {
-                    ctx.declare_iface(Rc::new(builtin_iface), Visibility::Interface)
+                    ctx.declare_iface(Arc::new(builtin_iface), Visibility::Interface)
                         .expect("builtin interface decl must not fail");
                 }
 
@@ -620,7 +619,7 @@ impl Context {
 
     pub fn declare_iface(
         &mut self,
-        iface: Rc<InterfaceDecl>,
+        iface: Arc<InterfaceDecl>,
         visibility: Visibility,
     ) -> TypeResult<()> {
         let name = iface.name.ident().clone();
@@ -644,7 +643,7 @@ impl Context {
 
     pub fn declare_variant(
         &mut self,
-        variant: Rc<VariantDef>,
+        variant: Arc<VariantDef>,
         visibility: Visibility,
     ) -> TypeResult<()> {
         let name = variant.name.ident().clone();
@@ -668,14 +667,14 @@ impl Context {
 
     pub fn declare_struct(
         &mut self,
-        struct_def: Rc<StructDef>,
+        struct_def: Arc<StructDef>,
         visibility: Visibility,
     ) -> TypeResult<()> {
         let name = struct_def.name.ident().clone();
 
         let class_ty = match struct_def.kind {
-            syn::StructKind::Class => Type::class(struct_def.name.clone()),
-            syn::StructKind::Record => Type::record(struct_def.name.clone()),
+            StructKind::Class => Type::class(struct_def.name.clone()),
+            StructKind::Record => Type::record(struct_def.name.clone()),
         };
 
         self.declare_type(
@@ -701,7 +700,7 @@ impl Context {
 
     pub fn declare_enum(
         &mut self,
-        enum_decl: Rc<EnumDecl>,
+        enum_decl: Arc<EnumDecl>,
         visibility: Visibility,
     ) -> TypeResult<()> {
         let name = enum_decl.name.ident().clone();
@@ -736,7 +735,7 @@ impl Context {
     }
     
     pub fn declare_set(&mut self,
-        set_decl: &Rc<SetDecl>,
+        set_decl: &Arc<SetDecl>,
         visibility: Visibility
     ) -> TypeResult<()> {
         let set_type = set_decl.to_set_type(self)?;
@@ -756,7 +755,7 @@ impl Context {
 
             self.declare_type(
                 param.name.clone(),
-                Type::GenericParam(Rc::new(TypeParamType {
+                Type::GenericParam(Arc::new(TypeParamType {
                     name: param.name.clone(),
                     is_ty,
                 })),
@@ -810,7 +809,7 @@ impl Context {
     pub fn declare_function(
         &mut self,
         name: Ident,
-        func_decl: Rc<FunctionDecl>,
+        func_decl: Arc<FunctionDecl>,
         visibility: Visibility,
     ) -> TypeResult<()> {
         let current_scope = self.scopes.current_mut();
@@ -858,7 +857,7 @@ impl Context {
         };
 
         if func_decl.external_src().is_some() {
-            let sig_key = DefKey::Sig(Rc::new(func_decl.sig()));
+            let sig_key = DefKey::Sig(Arc::new(func_decl.sig()));
             let def = Def::External(func_decl);
 
             self.define(name, sig_key, def, |_| DefDeclMatch::Match, |_, _| unreachable!())?;
@@ -924,7 +923,7 @@ impl Context {
         }
     }
 
-    fn insert_method_def(&mut self, ty: Type, def: Rc<FunctionDef>) -> NameResult<()> {
+    fn insert_method_def(&mut self, ty: Type, def: Arc<FunctionDef>) -> NameResult<()> {
         let method = &def.decl.name.ident;
 
         match ty {
@@ -987,7 +986,7 @@ impl Context {
     }
     
     fn insert_struct_method_def(&mut self,
-        def: Rc<FunctionDef>,
+        def: Arc<FunctionDef>,
         struct_name: &Symbol,
         struct_kind: StructKind
     ) -> NameResult<()> {
@@ -1007,7 +1006,7 @@ impl Context {
         self.insert_method_def_entry(struct_ty, def)
     }
 
-    fn insert_method_def_entry(&mut self, ty: Type, def: Rc<FunctionDef>) -> NameResult<()> {
+    fn insert_method_def_entry(&mut self, ty: Type, def: Arc<FunctionDef>) -> NameResult<()> {
         let methods = self
             .method_defs
             .entry(ty.clone())
@@ -1015,7 +1014,7 @@ impl Context {
 
         let key = MethodKey {
             name: def.decl.ident().clone(),
-            sig: Rc::new(def.decl.sig()),
+            sig: Arc::new(def.decl.sig()),
         };
 
         match methods.methods.entry(key) {
@@ -1038,7 +1037,7 @@ impl Context {
         }
     }
 
-    pub fn define_method(&mut self, ty: Type, method_def: Rc<FunctionDef>) -> TypeResult<()> {
+    pub fn define_method(&mut self, ty: Type, method_def: Arc<FunctionDef>) -> TypeResult<()> {
         let span = method_def.decl.span().clone();
         self.insert_method_def(ty, method_def)
             .map_err(|err| TypeError::from_name_err(err, span))?;
@@ -1046,7 +1045,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn find_method(&self, ty: &Type, method: &Ident, sig: &Rc<FunctionSig>) -> Option<&FunctionDef> {
+    pub fn find_method(&self, ty: &Type, method: &Ident, sig: &Arc<FunctionSig>) -> Option<&FunctionDef> {
         let method_defs = self.method_defs.get(ty)?;
         
         let key = MethodKey {
@@ -1199,8 +1198,8 @@ impl Context {
         Ok(())
     }
 
-    pub fn define_function(&mut self, name: Ident, def: Rc<FunctionDef>) -> TypeResult<()> {
-        let sig = Rc::new(def.decl.sig());
+    pub fn define_function(&mut self, name: Ident, def: Arc<FunctionDef>) -> TypeResult<()> {
+        let sig = Arc::new(def.decl.sig());
         let kind = def.decl.kind;
 
         // defining a function - only the sig needs to match, the visibility of the definition doesn't matter
@@ -1311,11 +1310,11 @@ impl Context {
         self.find_def(name, &DefKey::Unique)
     }
 
-    pub fn find_func_def(&self, name: &IdentPath, sig: Rc<FunctionSig>) -> Option<&Def> {
+    pub fn find_func_def(&self, name: &IdentPath, sig: Arc<FunctionSig>) -> Option<&Def> {
         self.find_def(name, &DefKey::Sig(sig))
     }
 
-    pub fn find_struct_def(&self, name: &IdentPath, kind: StructKind) -> NameResult<&Rc<StructDef>> {
+    pub fn find_struct_def(&self, name: &IdentPath, kind: StructKind) -> NameResult<&Arc<StructDef>> {
         match self.find_type_def(name) {
             Some(Def::Struct(struct_def)) if struct_def.kind == kind => {
                 Ok(struct_def)
@@ -1334,7 +1333,7 @@ impl Context {
         }
     }
 
-    pub fn instantiate_struct_def(&self, name: &Symbol, kind: StructKind) -> NameResult<Rc<StructDef>> {
+    pub fn instantiate_struct_def(&self, name: &Symbol, kind: StructKind) -> NameResult<Arc<StructDef>> {
         name.expect_not_unspecialized()?;
 
         let generic_def = self.find_struct_def(&name.full_path, kind)?;
@@ -1347,7 +1346,7 @@ impl Context {
         Ok(specialized_def)
     }
 
-    pub fn find_variant_def(&self, name: &IdentPath) -> NameResult<&Rc<VariantDef>> {
+    pub fn find_variant_def(&self, name: &IdentPath) -> NameResult<&Arc<VariantDef>> {
         match self.find_type_def(name) {
             Some(Def::Variant(variant_def)) => Ok(variant_def),
 
@@ -1359,7 +1358,7 @@ impl Context {
         }
     }
 
-    pub fn instantiate_variant_def(&self, name: &Symbol) -> NameResult<Rc<VariantDef>> {
+    pub fn instantiate_variant_def(&self, name: &Symbol) -> NameResult<Arc<VariantDef>> {
         name.expect_not_unspecialized()?;
 
         let base_def = self.find_variant_def(&name.full_path)?;
@@ -1371,7 +1370,7 @@ impl Context {
         };
 
         let instance_def = specialize_variant_def(base_def.as_ref(), type_args, self)?;
-        Ok(Rc::new(instance_def))
+        Ok(instance_def.into())
     }
 
     pub fn find_iface(&self, name: &IdentPath) -> NameResult<IdentPath> {
@@ -1407,7 +1406,7 @@ impl Context {
         }
     }
 
-    pub fn find_iface_def(&self, name: &IdentPath) -> NameResult<&Rc<InterfaceDecl>> {
+    pub fn find_iface_def(&self, name: &IdentPath) -> NameResult<&Arc<InterfaceDecl>> {
         match self.find_type_def(name) {
             Some(Def::Interface(iface_def)) => Ok(iface_def),
 
@@ -1419,7 +1418,7 @@ impl Context {
         }
     }
     
-    pub fn instantiate_iface_def(&self, name: &Symbol) -> NameResult<Rc<InterfaceDecl>> {
+    pub fn instantiate_iface_def(&self, name: &Symbol) -> NameResult<Arc<InterfaceDecl>> {
         name.expect_not_unspecialized()?;
 
         let generic_def = self.find_iface_def(&name.full_path)?;
@@ -1432,7 +1431,7 @@ impl Context {
         Ok(specialized_def)
     }
     
-    pub fn find_set(&self, name: &IdentPath) -> NameResult<&Rc<SetDecl>> {
+    pub fn find_set(&self, name: &IdentPath) -> NameResult<&Arc<SetDecl>> {
         match self.find_type_def(name) {
             Some(Def::Set(set_decl)) => {
                 Ok(set_decl)
@@ -1924,7 +1923,7 @@ impl Context {
         for method in ty_methods {
             let def_key = MethodKey {
                 name: method.func_decl.ident().clone(),
-                sig: Rc::new(method.func_decl.sig()),
+                sig: Arc::new(method.func_decl.sig()),
             };
             
             // don't need to check the sigs again, they wouldn't be added

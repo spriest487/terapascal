@@ -59,6 +59,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct LibraryBuilder {
@@ -319,7 +320,7 @@ impl LibraryBuilder {
         set_flags_type
     }
 
-    fn instantiate_system_func(&mut self, name: &str, sig: Rc<typ::FunctionSig>) -> ir::FunctionID {
+    fn instantiate_system_func(&mut self, name: &str, sig: Arc<typ::FunctionSig>) -> ir::FunctionID {
         let ident_path = IdentPath::new(builtin_ident(name), [
             builtin_ident(SYSTEM_UNIT_NAME),
         ]);
@@ -338,7 +339,7 @@ impl LibraryBuilder {
         match self.get_mem_func {
             Some(id) => id,
             None => {
-                let id = self.instantiate_system_func("GetMem", Rc::new(get_mem_sig()));
+                let id = self.instantiate_system_func("GetMem", Arc::new(get_mem_sig()));
                 self.get_mem_func = Some(id);
                 id
             }
@@ -349,7 +350,7 @@ impl LibraryBuilder {
         match self.free_mem_func {
             Some(id) => id,
             None => {
-                let id = self.instantiate_system_func("FreeMem", Rc::new(free_mem_sig()));
+                let id = self.instantiate_system_func("FreeMem", Arc::new(free_mem_sig()));
                 self.free_mem_func = Some(id);
                 id
             }
@@ -387,7 +388,7 @@ impl LibraryBuilder {
         // it may recurse and instantiate itself in its own body
         let cached_func = FunctionInstance {
             id,
-            sig: Rc::new(sig),
+            sig: Arc::new(sig),
         };
 
         self.translated_funcs.insert(key, cached_func.clone());
@@ -448,7 +449,7 @@ impl LibraryBuilder {
 
         let cached_func = FunctionInstance {
             id,
-            sig: Rc::new(sig),
+            sig: Arc::new(sig),
         };
 
         let extern_src = extern_decl
@@ -526,7 +527,7 @@ impl LibraryBuilder {
                 panic!("instantiate_method: failed to get method metadata for {} method {}: {}", decl_self_ty, method_key.method_index, e)
             });
         
-        let method_sig = Rc::new(method_decl.func_decl.sig());
+        let method_sig = Arc::new(method_decl.func_decl.sig());
 
         let generic_method_def = self
             .src_metadata
@@ -570,7 +571,7 @@ impl LibraryBuilder {
         // it may recurse and instantiate itself in its own body
         let cached_func = FunctionInstance {
             id,
-            sig: Rc::new(specialized_decl.sig()),
+            sig: Arc::new(specialized_decl.sig()),
         };
 
         let key = FunctionDefKey {
@@ -714,7 +715,7 @@ impl LibraryBuilder {
     pub fn translate_func(
         &mut self,
         func_name: IdentPath,
-        func_sig: Rc<typ::FunctionSig>,
+        func_sig: Arc<typ::FunctionSig>,
         type_args: Option<typ::TypeArgList>,
     ) -> FunctionInstance {
         let mut key = FunctionDefKey {

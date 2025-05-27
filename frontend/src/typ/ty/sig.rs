@@ -6,9 +6,9 @@ use crate::typ::ast::FunctionCall;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParam;
 use crate::typ::ast::MethodCallNoArgs;
-use crate::typ::GenericResult;
-use crate::typ::GenericError;
 use crate::typ::Context;
+use crate::typ::GenericError;
+use crate::typ::GenericResult;
 use crate::typ::GenericTarget;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
@@ -17,10 +17,10 @@ use crate::typ::TypeParam;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::Value;
+use std::fmt;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::fmt;
-use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct FunctionSigParam {
@@ -179,7 +179,7 @@ impl FunctionSig {
         }
     }
 
-    pub fn of_anonymous_func(func: &AnonymousFunctionDef) -> Rc<Self> {
+    pub fn of_anonymous_func(func: &AnonymousFunctionDef) -> Arc<Self> {
         func.annotation
             .ty()
             .as_func()

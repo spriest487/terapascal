@@ -7,6 +7,7 @@ pub mod token_tree;
 pub mod typ;
 pub mod pp;
 pub mod codegen;
+pub mod error;
 
 pub use self::consts::EnumConstant;
 pub use self::consts::IntConstant;
@@ -33,12 +34,12 @@ use crate::pp::error::PreprocessorError;
 use crate::pp::PreprocessedUnit;
 use crate::typ::Module;
 use crate::typ::TypeResult;
+use std::path::PathBuf;
+use std::sync::Arc;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::BuildOptions;
 use terapascal_common::TracedError;
-use std::path::PathBuf;
-use std::rc::Rc;
 use terapascal_ir as ir;
 
 pub fn preprocess(
@@ -59,7 +60,7 @@ pub fn parse(
     tokens: impl IntoIterator<Item=TokenTree>
 ) -> ParseResult<Unit<Span>> {
     let file_span = Span {
-        file: Rc::new(filename.into()),
+        file: Arc::new(filename.into()),
         start: Location::zero(),
         end: Location::zero()
     };

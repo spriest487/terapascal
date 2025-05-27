@@ -14,15 +14,15 @@ use crate::parse::ParseResult;
 use crate::parse::SequenceMatcher;
 pub use crate::parse::TokenStream;
 use crate::pp::PreprocessedUnit;
-use terapascal_common::span::*;
-use terapascal_common::DiagnosticLabel;
-use terapascal_common::DiagnosticOutput;
-use terapascal_common::TracedError;
 use std::fmt;
 use std::fmt::Write as _;
 use std::ops::Add;
 use std::ops::BitOr;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::*;
+use terapascal_common::DiagnosticLabel;
+use terapascal_common::DiagnosticOutput;
+use terapascal_common::TracedError;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 pub enum DelimiterPair {
@@ -171,7 +171,7 @@ pub enum TokenTree {
     Ident(Ident),
     IntNumber { value: IntConstant, span: Span },
     RealNumber { value: RealConstant, span: Span },
-    String { value: Rc<String>, span: Span },
+    String { value: Arc<String>, span: Span },
     Keyword { kw: Keyword, span: Span },
     Operator { op: Operator, span: Span },
     Separator { sep: Separator, span: Span },

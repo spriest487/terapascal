@@ -9,6 +9,7 @@ pub use self::const_decl::*;
 pub use self::decl_mod::*;
 pub use self::unit_decl::*;
 pub use self::use_decl::*;
+use crate::ast::tag::Tag;
 use crate::ast::Block;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionDef;
@@ -26,16 +27,15 @@ use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::typ::builtin_span;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::{DelimiterPair, Ident};
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
 use crate::TokenTree;
+use crate::{DelimiterPair, Ident};
+use std::fmt;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::TracedError;
-use std::fmt;
-use std::rc::Rc;
-use crate::ast::tag::Tag;
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 pub enum UnitKind {
@@ -84,7 +84,7 @@ impl<A: Annotation> Unit<A> {
             )
     }
 
-    pub fn func_decls(&self) -> impl Iterator<Item = (Visibility, &Rc<FunctionDecl<A>>)> {
+    pub fn func_decls(&self) -> impl Iterator<Item = (Visibility, &Arc<FunctionDecl<A>>)> {
         self.all_decls().filter_map(|(vis, decl)| match decl {
             UnitDecl::FunctionDecl { decl: func, .. } => Some((vis, func)),
             UnitDecl::FunctionDef { def: func_def, .. } => Some((vis, &func_def.decl)),
@@ -92,7 +92,7 @@ impl<A: Annotation> Unit<A> {
         })
     }
 
-    pub fn func_defs(&self) -> impl Iterator<Item = (Visibility, &Rc<FunctionDef<A>>)> {
+    pub fn func_defs(&self) -> impl Iterator<Item = (Visibility, &Arc<FunctionDef<A>>)> {
         self.all_decls().filter_map(|(vis, decl)| match decl {
             UnitDecl::FunctionDef { def: func_def, .. } => Some((vis, func_def)),
             _ => None,
@@ -295,7 +295,7 @@ fn parse_unit_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<Un
 
 fn parse_unit_func_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<UnitDecl<Span>> {
     let tags = Tag::parse_seq(tokens)?;
-    let func_decl = Rc::new(FunctionDecl::parse(tokens, true, tags)?);
+    let func_decl = Arc::new(FunctionDecl::parse(tokens, true, tags)?);
 
     let body_ahead = if part_kw == Keyword::Interface {
         // interface funcs - never expect a body, unless the function is marked `inline`
@@ -317,7 +317,7 @@ fn parse_unit_func_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResu
 
         let def = FunctionDef::parse_body_of_decl(func_decl, tokens)?;
 
-        Ok(UnitDecl::FunctionDef { def: Rc::new(def) })
+        Ok(UnitDecl::FunctionDef { def: Arc::new(def) })
     } else {
         Ok(UnitDecl::FunctionDecl { decl: func_decl })
     }

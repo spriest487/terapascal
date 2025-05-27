@@ -14,11 +14,10 @@ use crate::parse::TokenStream;
 use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Separator;
+use std::fmt;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::fmt;
-use std::fmt::Formatter;
-use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, Hash, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Visibility {
@@ -27,7 +26,7 @@ pub enum Visibility {
 }
 
 impl fmt::Display for Visibility {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", match self {
             Visibility::Implementation => Keyword::Implementation,
             Visibility::Interface => Keyword::Interface,
@@ -37,8 +36,8 @@ impl fmt::Display for Visibility {
 
 #[derive(Clone, Debug)]
 pub enum UnitDecl<A: Annotation> {
-    FunctionDecl { decl: Rc<FunctionDecl<A>> },
-    FunctionDef { def: Rc<FunctionDef<A>> },
+    FunctionDecl { decl: Arc<FunctionDecl<A>> },
+    FunctionDef { def: Arc<FunctionDef<A>> },
     Type { decl: TypeDecl<A> },
     Uses { decl: UseDecl },
     Binding { decl: UnitBinding<A> },

@@ -16,12 +16,12 @@ use crate::Keyword;
 use crate::Separator;
 use crate::TokenStream;
 use crate::TokenTree;
+use derivative::Derivative;
+use std::fmt;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use derivative::Derivative;
-use std::fmt;
-use std::rc::Rc;
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub enum StructMemberDecl<A: Annotation = Span> {
@@ -193,7 +193,7 @@ fn parse_method_decl(
     let decl = FunctionDecl::parse(tokens, true, tags)?;
     
     members.push(StructMemberDecl::MethodDecl(MethodDecl {
-        func_decl: Rc::new(decl),
+        func_decl: Arc::new(decl),
         access,
     }));
     
@@ -203,7 +203,7 @@ fn parse_method_decl(
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct MethodDecl<A: Annotation = Span> {
     pub access: Access,
-    pub func_decl: Rc<FunctionDecl<A>>,
+    pub func_decl: Arc<FunctionDecl<A>>,
 }
 
 pub(crate) fn write_access_if_changed(

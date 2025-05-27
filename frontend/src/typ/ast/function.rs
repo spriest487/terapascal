@@ -8,8 +8,10 @@ use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::TypeAnnotation;
-use crate::typ::ast::{typecheck_block, Tag};
+use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::typecheck_expr;
+use crate::typ::ast::where_clause::WhereClause;
+use crate::typ::ast::{typecheck_block, Tag};
 use crate::typ::typecheck_type_path;
 use crate::typ::validate_generic_constraints;
 use crate::typ::Binding;
@@ -36,16 +38,14 @@ use crate::typ::Value;
 use crate::typ::ValueKind;
 use crate::typ::{typecheck_type, NameContainer, NameError};
 use crate::typ::{typecheck_type_params, MismatchedMethodDecl};
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use derivative::Derivative;
 use linked_hash_map::LinkedHashMap;
 use std::fmt;
 use std::fmt::Formatter;
 use std::ops::Deref;
-use std::rc::Rc;
-use crate::typ::ast::const_eval::ConstEval;
-use crate::typ::ast::where_clause::WhereClause;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub const SELF_PARAM_NAME: &str = "self";
 pub const SELF_TY_NAME: &str = "Self";
@@ -607,7 +607,7 @@ pub fn typecheck_func_def(
         decl = apply_func_decl_named_ty_args(decl, outer_ty_params, &outer_ty_args);
     }
     
-    let decl = Rc::new(decl);
+    let decl = Arc::new(decl);
 
     let return_ty = decl.return_ty.clone();
 
@@ -889,7 +889,7 @@ pub fn typecheck_func_expr(
         assert_eq!(None, body.output);
     }
 
-    let sig = Rc::new(FunctionSig {
+    let sig = Arc::new(FunctionSig {
         return_ty: return_ty.clone(),
         params: sig_params,
         type_params: None,

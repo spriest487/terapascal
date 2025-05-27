@@ -1,7 +1,6 @@
-use crate::ast::{Call, MethodOwner};
 use crate::ast::VariantCtorCall;
+use crate::ast::{Call, MethodOwner};
 use crate::typ::ast::{Expr, OverloadCandidate};
-use crate::typ::{Context, OverloadValue, Value};
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
@@ -14,10 +13,11 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::VariantCaseValue;
+use crate::typ::{Context, OverloadValue, Value};
 use crate::Ident;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub enum VariantTypeMemberValue {
@@ -40,7 +40,7 @@ pub fn typecheck_variant_type_member(
 
     if case_exists {
         let ctor_annotation = VariantCaseValue {
-            variant_name: Rc::new(variant_name.clone()),
+            variant_name: Arc::new(variant_name.clone()),
             case: member_ident.clone(),
             span: member_ident.span().clone(),
         };
@@ -50,7 +50,7 @@ pub fn typecheck_variant_type_member(
             Ok(VariantTypeMemberValue::Ctor(case_ctor))
         } else {
             // reference to the case itself
-            Ok(VariantTypeMemberValue::Case(Value::VariantCase(Rc::new(ctor_annotation))))
+            Ok(VariantTypeMemberValue::Case(Value::VariantCase(Arc::new(ctor_annotation))))
         }
     } else {
         // must be referencing a method
@@ -84,7 +84,7 @@ pub fn typecheck_variant_type_member(
         }
         
         let known_sig = if method_candidates.len() == 1 {
-            Some(Rc::new(method_candidates[0].decl().sig()))
+            Some(Arc::new(method_candidates[0].decl().sig()))
         } else {
             None
         };
@@ -127,7 +127,7 @@ pub fn try_expr_into_noargs_variant_ctor(
             }
 
             Some(name) => {
-                variant_name = Rc::new(name);
+                variant_name = Arc::new(name);
             }
         }
     }

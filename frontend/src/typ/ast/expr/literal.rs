@@ -1,7 +1,6 @@
 use crate::ast;
 use crate::ast::TypeAnnotation;
 use crate::typ::ast::Expr;
-use crate::typ::{builtin_typeinfo_name, string_to_char_lit};
 use crate::typ::string_type;
 use crate::typ::typecheck_type;
 use crate::typ::Context;
@@ -9,14 +8,15 @@ use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use crate::typ::Value;
 use crate::typ::TypedValue;
+use crate::typ::Value;
 use crate::typ::ValueKind;
 use crate::typ::STRING_CHAR_TYPE;
+use crate::typ::{builtin_typeinfo_name, string_to_char_lit};
 use crate::IntConstant;
 use crate::RealConstant;
+use std::sync::Arc;
 use terapascal_common::span::Span;
-use std::rc::Rc;
 
 pub type Literal = ast::Literal<Type>;
 
@@ -126,7 +126,7 @@ impl Literal {
         match (self, b) {
             (Literal::String(a), Literal::String(b)) => {
                 let s = (*a).clone() + b.as_str();
-                Some(Literal::String(Rc::new(s)))
+                Some(Literal::String(s.into()))
             }
             (Literal::Real(a), Literal::Real(b)) => {
                 Some(Literal::Real(a + b))
@@ -324,7 +324,7 @@ pub fn typecheck_literal(
                 decl: None,
             };
 
-            Ok(ast::Expr::Literal(Literal::Nil, annotation.into()))
+            Ok(Expr::Literal(Literal::Nil, annotation.into()))
         }
 
         ast::Literal::SizeOf(size_of_ty) => {
@@ -370,11 +370,11 @@ pub fn typecheck_literal(
 
             Ok(create_default_literal(ty, span.clone()))
         }
-        
+
         ast::Literal::TypeInfo(typename) => {
             let ty = typecheck_type(typename, ctx)?; 
             
-            let typeinfo_type = Type::Class(Rc::new(builtin_typeinfo_name()));
+            let typeinfo_type = Type::Class(Arc::new(builtin_typeinfo_name()));
             let val = TypedValue::temp(typeinfo_type, span.clone());
             
             Ok(Expr::Literal(Literal::TypeInfo(Box::new(ty)), Value::from(val)))

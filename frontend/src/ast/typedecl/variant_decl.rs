@@ -19,16 +19,16 @@ use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::parse::TryParse;
 use crate::Separator;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use derivative::*;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct VariantDecl<A: Annotation> {
-    pub name: Rc<A::Name>,
+    pub name: Arc<A::Name>,
     pub where_clause: Option<WhereClause<A::Type>>,
     
     pub forward: bool,
@@ -122,7 +122,7 @@ impl VariantDecl<Span> {
 
         if decl_start.forward {
             Ok(VariantDecl {
-                name: Rc::new(name),
+                name: Arc::new(name),
                 where_clause: decl_start.where_clause,
                 
                 forward: true,
@@ -162,7 +162,7 @@ impl VariantDecl<Span> {
 
                 let method_decl= FunctionDecl::parse(tokens, true, tags)?;
                 methods.push(MethodDecl { 
-                    func_decl: Rc::new(method_decl),
+                    func_decl: method_decl.into(),
                     access,
                 });
 
@@ -174,7 +174,7 @@ impl VariantDecl<Span> {
             let end_kw = tokens.match_one(Keyword::End)?;
 
             Ok(VariantDecl {
-                name: Rc::new(name),
+                name: Arc::new(name),
                 where_clause: decl_start.where_clause,
 
                 tags,

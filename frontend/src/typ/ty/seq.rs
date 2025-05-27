@@ -1,13 +1,13 @@
 use crate::ast::{Access, FunctionDeclKind};
 use crate::typ::ast::FunctionDecl;
-use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::MethodDecl;
-use crate::typ::NameError;
-use crate::typ::Context;
+use crate::typ::ast::OverloadCandidate;
 use crate::typ::is_system_option_name;
+use crate::typ::Context;
+use crate::typ::NameError;
 use crate::typ::Type;
-use std::rc::Rc;
 use crate::Ident;
+use std::sync::Arc;
 
 pub const SEQUENCE_METHOD_NAME: &str = "Sequence";
 pub const SEQUENCE_NEXT_METHOD_NAME: &str = "Next";
@@ -27,10 +27,10 @@ pub struct TypeSequenceSupport {
     pub sequence_type: Type,
 
     pub sequence_method_index: usize,
-    pub sequence_method_decl: Rc<FunctionDecl>,
+    pub sequence_method_decl: Arc<FunctionDecl>,
 
     pub item_next_method_index: usize,
-    pub item_next_method_decl: Rc<FunctionDecl>,
+    pub item_next_method_decl: Arc<FunctionDecl>,
 }
 
 impl From<NameError> for TypeSequenceError {

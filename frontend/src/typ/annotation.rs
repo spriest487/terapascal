@@ -17,11 +17,11 @@ use crate::typ::ty::*;
 use crate::typ::Context;
 use crate::typ::ValueKind;
 use crate::IntConstant;
-use terapascal_common::span::*;
 use derivative::*;
 use std::borrow::Cow;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::*;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
@@ -32,14 +32,14 @@ pub struct VariantCaseValue {
     pub span: Span,
 
     // variant ctors don't know the type args of their variant, it must be inferred from context
-    pub variant_name: Rc<Symbol>,
+    pub variant_name: Arc<Symbol>,
 
     pub case: Ident,
 }
 
 impl From<VariantCaseValue> for Value {
     fn from(a: VariantCaseValue) -> Self {
-        Value::VariantCase(Rc::new(a))
+        Value::VariantCase(Arc::new(a))
     }
 }
 
@@ -52,7 +52,7 @@ pub struct OverloadValue {
     pub span: Span,
 
     pub candidates: Vec<OverloadCandidate>,
-    pub sig: Option<Rc<FunctionSig>>,
+    pub sig: Option<Arc<FunctionSig>>,
 
     pub self_arg: Option<Box<Expr>>,
 }
@@ -66,7 +66,7 @@ impl OverloadValue {
         method: MethodDecl,
         span: Span
     ) -> Self {
-        let sig = Rc::new(method.func_decl.sig());
+        let sig = Arc::new(method.func_decl.sig());
 
         Self {
             span,
@@ -87,7 +87,7 @@ impl OverloadValue {
         span: Span,
     ) -> Self {
         let sig = if candidates.len() == 1 {
-            Some(Rc::new(candidates[0].decl().sig()))
+            Some(Arc::new(candidates[0].decl().sig()))
         } else {
             // undecided
             None
@@ -111,7 +111,7 @@ impl OverloadValue {
 
 impl From<OverloadValue> for Value {
     fn from(a: OverloadValue) -> Self {
-        Value::Overload(Rc::new(a))
+        Value::Overload(Arc::new(a))
     }
 }
 
@@ -150,7 +150,7 @@ impl MethodValue {
     }
 
     pub fn func_ty(&self) -> Type {
-        Type::Function(Rc::new(self.decl.func_decl.sig()))
+        Type::Function(Arc::new(self.decl.func_decl.sig()))
     }
 
     pub fn should_call_noargs_in_expr(&self, expect_ty: &Type, self_arg: &Type) -> bool {
@@ -160,7 +160,7 @@ impl MethodValue {
 
 impl From<MethodValue> for Value {
     fn from(a: MethodValue) -> Self {
-        Value::Method(Rc::new(a))
+        Value::Method(Arc::new(a))
     }
 }
 
@@ -170,8 +170,8 @@ pub struct FunctionValue {
     pub name: Symbol,
     pub visibility: Visibility,
 
-    pub decl: Rc<FunctionDecl>,
-    pub sig: Rc<FunctionSig>,
+    pub decl: Arc<FunctionDecl>,
+    pub sig: Arc<FunctionSig>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -180,11 +180,11 @@ pub struct FunctionValue {
 }
 
 impl FunctionValue {
-    pub fn new(name: Symbol, visibility: Visibility, decl: Rc<FunctionDecl>, span: Span) -> Self {
+    pub fn new(name: Symbol, visibility: Visibility, decl: Arc<FunctionDecl>, span: Span) -> Self {
         Self {
             name,
             visibility,
-            sig: Rc::new(decl.sig()),
+            sig: Arc::new(decl.sig()),
             decl,
             span,
         }
@@ -213,7 +213,7 @@ impl FunctionValue {
 
 impl From<FunctionValue> for Value {
     fn from(a: FunctionValue) -> Self {
-        Value::Function(Rc::new(a))
+        Value::Function(Arc::new(a))
     }
 }
 
@@ -279,7 +279,7 @@ impl TypedValue {
 
 impl From<TypedValue> for Value {
     fn from(a: TypedValue) -> Self {
-        Value::Typed(Rc::new(a))
+        Value::Typed(Arc::new(a))
     }
 }
 
@@ -299,7 +299,7 @@ pub struct ConstValue {
 
 impl From<ConstValue> for Value {
     fn from(a: ConstValue) -> Self {
-        Value::Const(Rc::new(a))
+        Value::Const(Arc::new(a))
     }
 }
 
@@ -311,8 +311,8 @@ pub struct UfcsValue {
     
     pub self_arg: Box<Expr>,
     
-    pub decl: Rc<FunctionDecl>,
-    pub sig: Rc<FunctionSig>,
+    pub decl: Arc<FunctionDecl>,
+    pub sig: Arc<FunctionSig>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]
@@ -325,13 +325,13 @@ impl UfcsValue {
         function_name: Symbol,
         visibility: Visibility,
         self_arg: Expr,
-        decl: Rc<FunctionDecl>,
+        decl: Arc<FunctionDecl>,
         span: Span
     ) -> Self {
         Self {
             self_arg: Box::new(self_arg),
             function_name,
-            sig: Rc::new(decl.sig()),
+            sig: Arc::new(decl.sig()),
             decl,
             visibility,
             span,
@@ -351,7 +351,7 @@ impl UfcsValue {
 
 impl From<UfcsValue> for Value {
     fn from(a: UfcsValue) -> Self {
-        Value::UfcsFunction(Rc::new(a))
+        Value::UfcsFunction(Arc::new(a))
     }
 }
 
@@ -364,13 +364,13 @@ pub enum Value {
         #[derivative(Hash = "ignore")]
         Span
     ),
-    Typed(Rc<TypedValue>),
+    Typed(Arc<TypedValue>),
 
-    Function(Rc<FunctionValue>),
-    UfcsFunction(Rc<UfcsValue>),
+    Function(Arc<FunctionValue>),
+    UfcsFunction(Arc<UfcsValue>),
 
     // direct method reference e.g. `Interface.Method`
-    Method(Rc<MethodValue>),
+    Method(Arc<MethodValue>),
     Type(
         Type,
         #[derivative(Debug = "ignore")]
@@ -385,13 +385,13 @@ pub enum Value {
         #[derivative(Hash = "ignore")]
         Span
     ),
-    VariantCase(Rc<VariantCaseValue>),
+    VariantCase(Arc<VariantCaseValue>),
 
     // as-yet unresolved function that may refer to 1+ functions (interface methods, ufcs functions,
     // or free functions)
-    Overload(Rc<OverloadValue>),
+    Overload(Arc<OverloadValue>),
 
-    Const(Rc<ConstValue>),
+    Const(Arc<ConstValue>),
 }
 
 impl Value {

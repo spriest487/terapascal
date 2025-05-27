@@ -14,11 +14,11 @@ use crate::token_tree::DelimitedGroup;
 use crate::DelimiterPair;
 use crate::Separator;
 use crate::TokenTree;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use derivative::*;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
@@ -192,7 +192,7 @@ impl<A: Annotation> Spanned for MethodCallNoArgs<A> {
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct VariantCtorCall<A: Annotation> {
-    pub variant: Rc<A::Name>,
+    pub variant: Arc<A::Name>,
     pub case: Ident,
 
     pub arg: Option<Expr<A>>,

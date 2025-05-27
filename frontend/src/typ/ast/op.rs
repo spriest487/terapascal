@@ -46,9 +46,9 @@ use crate::typ::DISPLAYABLE_TOSTRING_METHOD;
 use crate::typ::STRING_CONCAT_FUNC_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
 use crate::IntConstant;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::rc::Rc;
 
 pub type BinOp = ast::BinOp<Value>;
 
@@ -326,7 +326,7 @@ fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Opt
         }
     };
 
-    let to_string_sig = Rc::new(to_string_method.func_decl.sig());
+    let to_string_sig = Arc::new(to_string_method.func_decl.sig());
 
     // make a call
     let displayable_call = Call::Method(MethodCall {
@@ -368,12 +368,12 @@ fn desugar_string_concat(
     // if LHS and RHS are both string literals, we can concat them ahead of time
     match (&lhs, &rhs) {
         (
-            ast::Expr::Literal(ast::Literal::String(a), _),
-            ast::Expr::Literal(ast::Literal::String(b), _),
-        ) => Ok(ast::Expr::Literal(
-            ast::Literal::String(Rc::new((**a).clone() + b.as_str())),
-            annotation,
-        )),
+            Expr::Literal(ast::Literal::String(a), _),
+            Expr::Literal(ast::Literal::String(b), _),
+        ) => {
+            let result = (**a).clone() + b.as_str();
+            Ok(Expr::Literal(ast::Literal::String(result.into()), annotation))
+        },
 
         _ => {
             let system_path = IdentPath::from(Ident::new(SYSTEM_UNIT_NAME, span.clone()));

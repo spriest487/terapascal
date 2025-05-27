@@ -6,17 +6,18 @@ use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::Operator;
+use derivative::*;
+use std::fmt;
+use std::fmt::Write;
+use std::sync::Arc;
+use std::vec;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use derivative::*;
-use std::fmt::Write;
-use std::rc::Rc;
-use std::{fmt, vec};
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(PartialEq, Hash)]
 pub struct Ident {
-    pub name: Rc<String>,
+    pub name: Arc<String>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -39,7 +40,7 @@ impl PartialEq<str> for Ident {
 impl Ident {
     pub fn new(text: &str, span: impl Into<Span>) -> Self {
         Self {
-            name: Rc::new(text.to_string()),
+            name: Arc::new(text.to_string()),
             span: span.into(),
         }
     }

@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod test;
 
+use crate::ast::tag::Tag;
 use crate::ast::type_name::TypeName;
 use crate::ast::Annotation;
 use crate::ast::BindingDeclKind;
@@ -27,14 +28,13 @@ use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
 use crate::TokenTree;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
-use terapascal_common::TracedError;
 use derivative::*;
 use linked_hash_map::LinkedHashMap;
 use std::fmt;
-use std::rc::Rc;
-use crate::ast::tag::Tag;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+use terapascal_common::TracedError;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum FunctionDeclKind {
@@ -479,7 +479,7 @@ const LOCAL_INIT_DECL_OPERATOR: Operator = Operator::Equals;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Hash, PartialEq, Debug)]
 pub struct FunctionDef<A: Annotation = Span> {
-    pub decl: Rc<FunctionDecl<A>>,
+    pub decl: Arc<FunctionDecl<A>>,
 
     pub locals: Vec<FunctionLocalBinding<A>>,
 
@@ -493,7 +493,7 @@ pub struct FunctionDef<A: Annotation = Span> {
 
 impl FunctionDef<Span> {
     pub fn parse_body_of_decl(
-        decl: Rc<FunctionDecl<Span>>,
+        decl: Arc<FunctionDecl<Span>>,
         tokens: &mut TokenStream
     ) -> ParseResult<Self> {
         let body_start_matcher = Self::match_body_start();

@@ -238,6 +238,23 @@ impl Operator {
         }
     }
 
+    pub fn is_keyword(self) -> bool {
+        match self {
+            Operator::IDiv
+            | Operator::Mod
+            | Operator::As
+            | Operator::And
+            | Operator::Not
+            | Operator::Or
+            | Operator::With
+            | Operator::In
+            | Operator::Shl
+            | Operator::Shr => true,
+
+            _ => false,
+        }
+    }
+
     pub fn is_valid_in_pos(self, in_pos: Position) -> bool {
         PRECEDENCE
             .iter()

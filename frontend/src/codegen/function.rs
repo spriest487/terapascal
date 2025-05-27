@@ -9,12 +9,12 @@ use crate::codegen::Builder;
 use crate::codegen::ClosureInstance;
 use crate::ir::*;
 use std::iter;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct FunctionInstance {
     pub id: FunctionID,
-    pub sig: Rc<typ::FunctionSig>,
+    pub sig: Arc<typ::FunctionSig>,
 }
 
 fn create_function_body_builder<'m>(

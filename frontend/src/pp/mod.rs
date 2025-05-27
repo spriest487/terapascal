@@ -4,14 +4,14 @@ mod directive;
 use crate::pp::directive::Directive;
 use crate::pp::directive::DirectiveParser;
 use crate::pp::error::PreprocessorError;
+use std::path::PathBuf;
+use std::sync::Arc;
 use terapascal_common::read_source_file;
 use terapascal_common::source_map::SourceMap;
 use terapascal_common::source_map::SourceMapBuilder;
 use terapascal_common::source_map::SourceMapEntry;
 use terapascal_common::span::*;
 use terapascal_common::BuildOptions;
-use std::path::PathBuf;
-use std::rc::Rc;
 
 #[derive(Debug)]
 struct SymbolCondition {
@@ -24,7 +24,7 @@ pub struct Preprocessor {
 
     condition_stack: Vec<SymbolCondition>,
 
-    filename: Rc<PathBuf>,
+    filename: Arc<PathBuf>,
 
     output_lines: Vec<String>,
     comment_block: Option<CommentBlock>,
@@ -51,7 +51,7 @@ struct CommentBlock {
 
 #[derive(Clone, Debug)]
 pub struct PreprocessedUnit {
-    pub filename: Rc<PathBuf>,
+    pub filename: Arc<PathBuf>,
     pub source: String,
 
     pub opts: BuildOptions,
@@ -63,7 +63,7 @@ pub struct PreprocessedUnit {
 
 impl Preprocessor {
     pub fn new(filename: impl Into<PathBuf>, opts: BuildOptions) -> Self {
-        let filename = Rc::new(filename.into());
+        let filename = Arc::new(filename.into());
         Preprocessor {
             filename: filename.clone(),
 

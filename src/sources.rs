@@ -1,5 +1,5 @@
 use crate::Args;
-use crate::CompileError;
+use crate::RunError;
 use terapascal_common::span::*;
 use terapascal_frontend::ast::IdentPath;
 use std::collections::LinkedList;
@@ -7,6 +7,7 @@ use std::env;
 use std::path::Path;
 use std::path::PathBuf;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
+use terapascal_frontend::error::BuildError;
 
 fn find_in_path(filename: &PathBuf, dir: &Path) -> Option<PathBuf> {
     if !dir.exists() || !dir.is_dir() {
@@ -54,7 +55,7 @@ pub struct SourceCollection {
 impl SourceCollection {
     pub fn new<'a>(
         args: &Args
-    ) -> Result<Self, CompileError> {
+    ) -> Result<Self, RunError> {
         let source_dirs = args.search_dirs.iter()
             .filter(|dir| dir.exists())
             .cloned()
@@ -87,7 +88,7 @@ impl SourceCollection {
         &self.source_dirs
     }
 
-    pub fn add(&mut self, unit_filename: &PathBuf, span: Option<Span>) -> Result<PathBuf, CompileError> {
+    pub fn add(&mut self, unit_filename: &PathBuf, span: Option<Span>) -> Result<PathBuf, RunError> {
         match find_in_paths(unit_filename, &self.source_dirs) {
             Some(path) => {
                 if !self.source_list.contains(&path) {
@@ -102,12 +103,12 @@ impl SourceCollection {
             }
 
             None => {
-                Err(CompileError::FileNotFound(unit_filename.clone(), span))
+                Err(RunError::from(BuildError::FileNotFound(unit_filename.clone(), span)))
             },
         }
     }
 
-    pub fn add_used_unit(&mut self, base_unit_path: &PathBuf, used_unit: &IdentPath) -> Result<PathBuf, CompileError> {
+    pub fn add_used_unit(&mut self, base_unit_path: &PathBuf, used_unit: &IdentPath) -> Result<PathBuf, RunError> {
         let unit_filename = PathBuf::from(used_unit.to_string() + "." + SRC_FILE_DEFAULT_EXT);
 
         self.add_used_unit_in_file(base_unit_path, used_unit, &unit_filename)
@@ -117,7 +118,7 @@ impl SourceCollection {
         unit_dir: &PathBuf,
         used_unit: &IdentPath,
         filename: &PathBuf,
-    ) -> Result<PathBuf, CompileError> {
+    ) -> Result<PathBuf, RunError> {
         if let Some(unit_dir) = unit_dir.parent() {
             if let Some(used_path) = find_in_path(filename, unit_dir) {
                 if self.verbose {

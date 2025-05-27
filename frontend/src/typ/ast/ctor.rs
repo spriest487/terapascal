@@ -21,11 +21,11 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use linked_hash_map::LinkedHashMap;
 use std::iter;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub type ObjectCtor = ast::ObjectCtor<Value>;
 pub type ObjectCtorMember = ast::ObjectCtorMember<Value>;
@@ -270,7 +270,7 @@ pub fn typecheck_collection_ctor(
         Type::DynArray { .. } => {
             let (elements, element_ty) = array_ctor_elements(expect_ty, ctor, ctx)?;
             let array_ty = Type::DynArray {
-                element: Rc::new(element_ty),
+                element: Arc::new(element_ty),
             };
 
             (array_ty, elements)

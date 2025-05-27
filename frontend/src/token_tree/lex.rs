@@ -1,20 +1,20 @@
+use crate::ast::keyword::Keyword;
+use crate::ast::operators::CompoundAssignmentOperator;
+use crate::ast::operators::Operator;
+use crate::ast::Ident;
 use crate::consts::IntConstant;
 use crate::consts::RealConstant;
+use crate::pp::PreprocessedUnit;
 use crate::token_tree::DelimitedGroup;
 use crate::token_tree::DelimiterPair;
 use crate::token_tree::Separator;
 use crate::token_tree::TokenTree;
 use crate::token_tree::TokenizeError;
 use crate::token_tree::TokenizeResult;
+use std::sync::Arc;
+use terapascal_common::source_map::SourceMap;
 use terapascal_common::span::*;
 use terapascal_common::TracedError;
-use crate::pp::PreprocessedUnit;
-use std::rc::Rc;
-use terapascal_common::source_map::SourceMap;
-use crate::ast::Ident;
-use crate::ast::keyword::Keyword;
-use crate::ast::operators::CompoundAssignmentOperator;
-use crate::ast::operators::Operator;
 
 pub fn lex(
     unit: PreprocessedUnit,
@@ -317,7 +317,7 @@ impl Lexer {
         let span = self.src_span_from(start_loc);
 
         let str_token = TokenTree::String {
-            value: Rc::new(contents),
+            value: Arc::new(contents),
             span,
         };
 

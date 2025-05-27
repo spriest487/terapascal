@@ -28,7 +28,7 @@ use std::time::Duration;
 use structopt::StructOpt;
 use terapascal_backend_c as backend_c;
 use terapascal_backend_c::c;
-use terapascal_common::read_source_file;
+use terapascal_common::{read_source_file, DiagnosticOutput};
 use terapascal_common::span::*;
 use terapascal_common::BuildOptions;
 use terapascal_common::IR_LIB_EXT;
@@ -50,6 +50,7 @@ use terapascal_ir as ir;
 use terapascal_vm::Interpreter;
 use terapascal_vm::InterpreterOpts;
 use topological_sort::TopologicalSort;
+use terapascal_frontend::error::BuildError;
 
 enum CompileOutput {
     Preprocess(Vec<PreprocessedUnit>),
@@ -58,10 +59,10 @@ enum CompileOutput {
     IR(ir::Library),
 }
 
-fn preprocess(filename: &PathBuf, opts: BuildOptions) -> Result<PreprocessedUnit, CompileError> {
+fn preprocess(filename: &PathBuf, opts: BuildOptions) -> Result<PreprocessedUnit, RunError> {
     let src = read_source_file(filename)
         .map_err(|err| {
-            CompileError::ReadSourceFileFailed {
+            BuildError::ReadSourceFileFailed {
                 path: filename.to_path_buf(),
                 msg: err.to_string(),
             }
@@ -71,10 +72,10 @@ fn preprocess(filename: &PathBuf, opts: BuildOptions) -> Result<PreprocessedUnit
     Ok(preprocessed)
 }
 
-fn compile(args: &Args) -> Result<CompileOutput, CompileError> {
+fn compile(args: &Args) -> Result<CompileOutput, RunError> {
     if args.output.is_some() && args.print_stage.is_some() {
         let msg = "output file and print stage arguments are mutually exclusive".to_string();
-        return Err(CompileError::InvalidArguments(msg));
+        return Err(RunError::InvalidArguments(msg));
     }
     
     let mut opts = BuildOptions::default();
@@ -163,18 +164,18 @@ fn compile(args: &Args) -> Result<CompileOutput, CompileError> {
 
         let canon_filename = unit_filename
             .canonicalize()
-            .map_err(|e| CompileError::ReadSourceFileFailed {
+            .map_err(|e| BuildError::ReadSourceFileFailed {
                 msg: e.to_string(),
                 path: unit_filename.clone(),
             })?;
 
         let unit = match parsed_files.get(&canon_filename) {
             Some(unit) => {
-                return Err(CompileError::DuplicateUnit {
+                return Err(RunError::from(BuildError::DuplicateUnit {
                     unit_ident: unit.ident.clone(),
                     new_path: unit_filename.clone(),
                     existing_path: unit_filename.clone(),
-                });
+                }));
             },
 
             None => {
@@ -216,11 +217,11 @@ fn compile(args: &Args) -> Result<CompileOutput, CompileError> {
             },
 
             (Some(prev_ident), true) => {
-                return Err(CompileError::UnexpectedMainUnit {
+                return Err(RunError::from(BuildError::UnexpectedMainUnit {
                     existing_ident: prev_ident,
                     unit_path: canon_filename,
                     unit_kind: unit.kind,
-                })
+                }))
             },
 
             (existing @ Some(..), false) => {
@@ -259,20 +260,20 @@ fn compile(args: &Args) -> Result<CompileOutput, CompileError> {
 
                     add_unit_path(&used_unit.ident, &used_unit_path, &mut unit_paths)?;
                 } else {
-                    return Err(CompileError::UnitNotLoaded {
+                    return Err(RunError::from(BuildError::UnitNotLoaded {
                         unit_name: used_unit.ident.clone(),
-                    });
+                    }));
                 }
             }
 
             // check for cycles
             dep_sort.add_dependency(used_unit.ident.clone(), unit_ident.clone());
             if dep_sort.peek().is_none() {
-                return Err(CompileError::CircularDependency {
+                return Err(RunError::from(BuildError::CircularDependency {
                     unit_ident,
                     used_unit: used_unit.ident,
                     span: used_unit.span.clone(),
-                });
+                }));
             }
         }
     }
@@ -281,7 +282,7 @@ fn compile(args: &Args) -> Result<CompileOutput, CompileError> {
         unit_ident: &IdentPath,
         path: &PathBuf,
         unit_paths: &mut HashMap<IdentPath, PathBuf>
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), RunError> {
         let canon_path = path.canonicalize()?;
 
         match unit_paths.entry(unit_ident.clone()) {
@@ -290,11 +291,11 @@ fn compile(args: &Args) -> Result<CompileOutput, CompileError> {
                 // already be in the filename map because we insert the builtin units ahead
                 // of time
                 if *occupied_ident_filename.get() != canon_path {
-                    Err(CompileError::DuplicateUnit {
+                    Err(RunError::from(BuildError::DuplicateUnit {
                         unit_ident: occupied_ident_filename.key().clone(),
                         new_path: path.clone(),
                         existing_path: occupied_ident_filename.get().to_path_buf(),
-                    })
+                    }))
                 } else {
                     Ok(())
                 }
@@ -346,7 +347,7 @@ fn bincode_config() -> bincode::config::Configuration {
     bincode::config::Configuration::default()
 }
 
-fn load_module_from_file(path: &Path) -> Result<ir::Library, CompileError> {
+fn load_module_from_file(path: &Path) -> Result<ir::Library, RunError> {
     let mut module_bytes = Vec::new();
 
     File::open(&path)
@@ -354,7 +355,7 @@ fn load_module_from_file(path: &Path) -> Result<ir::Library, CompileError> {
             file.read_to_end(&mut module_bytes)
         })
         .map_err(|err| {
-            CompileError::ReadSourceFileFailed {
+            BuildError::ReadSourceFileFailed {
                 msg: err.to_string(),
                 path: path.to_path_buf(),
             }
@@ -362,7 +363,7 @@ fn load_module_from_file(path: &Path) -> Result<ir::Library, CompileError> {
     
     let module: ir::Library = bincode::serde::decode_from_slice(&module_bytes, bincode_config())
         .map_err(|err| {
-            CompileError::ReadSourceFileFailed {
+            BuildError::ReadSourceFileFailed {
                 msg: err.to_string(),
                 path: path.to_path_buf(),
             }
@@ -372,7 +373,7 @@ fn load_module_from_file(path: &Path) -> Result<ir::Library, CompileError> {
     Ok(module)
 }
 
-fn print_output<F>(out_path: Option<&PathBuf>, f: F) -> Result<(), CompileError>
+fn print_output<F>(out_path: Option<&PathBuf>, f: F) -> Result<(), RunError>
 where
     F: FnOnce(&mut dyn io::Write) -> io::Result<()>,
 {
@@ -402,10 +403,10 @@ where
         },
     };
 
-    io_result.map_err(|io_err| CompileError::OutputFailed(out_span, io_err))
+    io_result.map_err(|io_err| RunError::OutputFailed(out_span, io_err))
 }
 
-fn handle_output(output: CompileOutput, args: &Args) -> Result<(), CompileError> {
+fn handle_output(output: CompileOutput, args: &Args) -> Result<(), RunError> {
     match output {
         CompileOutput::Preprocess(units) => print_output(args.output.as_ref(), |dst| {
             for pp_unit in units {
@@ -460,13 +461,13 @@ fn handle_output(output: CompileOutput, args: &Args) -> Result<(), CompileError>
                     })
                 } else if output_ext.eq_ignore_ascii_case(env::consts::EXE_EXTENSION) {
                     clang_compile(&lib, args, output_arg.as_os_str())
-                        .map_err(|err| CompileError::ClangBuildFailed(err))?;
+                        .map_err(|err| RunError::ClangBuildFailed(err))?;
 
                     try_clang_format(output_arg);
                     
                     Ok(())
                 } else {
-                    return Err(CompileError::UnknownOutputFormat(output_ext))
+                    return Err(RunError::UnknownOutputFormat(output_ext))
                 }
             } else {
                 // execute the IR immediately
@@ -599,16 +600,8 @@ fn main() {
         }
 
         if print_bt {
-            match err {
-                CompileError::TokenizeError(err) => {
-                    println!("{:?}", err.bt);
-                },
-
-                CompileError::ParseError(err) => {
-                    println!("{:?}", err.bt);
-                },
-
-                _ => {},
+            if let Some(bt) = err.backtrace() {
+                println!("{:?}", bt);
             }
         }
 

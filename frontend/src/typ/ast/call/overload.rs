@@ -1,30 +1,30 @@
 use crate::ast;
 use crate::ast::TypeList;
 use crate::ast::Visibility;
+use crate::typ::ast::check_implicit_conversion;
+use crate::typ::ast::infer_from_structural_ty_args;
 use crate::typ::ast::specialize_call_args;
+use crate::typ::ast::try_unwrap_inferred_args;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::MethodDecl;
-use crate::typ::ast::check_implicit_conversion;
-use crate::typ::ast::infer_from_structural_ty_args;
-use crate::typ::ast::try_unwrap_inferred_args;
-use crate::typ::{FunctionSig, InstanceMethod};
+use crate::typ::Context;
+use crate::typ::GenericContext;
+use crate::typ::GenericError;
+use crate::typ::GenericTarget;
+use crate::typ::GenericTypeHint;
 use crate::typ::NameError;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use crate::typ::GenericError;
-use crate::typ::GenericContext;
-use crate::typ::Context;
-use crate::typ::GenericTarget;
-use crate::typ::GenericTypeHint;
+use crate::typ::{FunctionSig, InstanceMethod};
+use std::fmt;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::fmt;
-use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Overload {
@@ -43,7 +43,7 @@ impl Overload {
 pub enum OverloadCandidate {
     Function {
         decl_name: Symbol,
-        decl: Rc<FunctionDecl>,
+        decl: Arc<FunctionDecl>,
         visibility: Visibility,
     },
     Method {
@@ -78,7 +78,7 @@ impl OverloadCandidate {
         }
     }
 
-    pub fn decl(&self) -> &Rc<FunctionDecl> {
+    pub fn decl(&self) -> &Arc<FunctionDecl> {
         match self {
             OverloadCandidate::Function { decl, .. } => decl,
             OverloadCandidate::Method { decl, .. } => &decl.func_decl,

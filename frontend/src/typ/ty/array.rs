@@ -8,10 +8,9 @@ use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use terapascal_common::span::Spanned;
 use std::fmt;
-use std::rc::Rc;
-
+use std::sync::Arc;
+use terapascal_common::span::Spanned;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ArrayType {
@@ -52,7 +51,7 @@ pub fn typecheck_array_type(element: &Box<TypeName>, dim: &Option<Box<Expr>>, ct
         },
 
         None => Ok(Type::DynArray {
-            element: Rc::new(element_ty),
+            element: Arc::new(element_ty),
         }),
     }
 }

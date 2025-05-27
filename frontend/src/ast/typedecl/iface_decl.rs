@@ -1,28 +1,28 @@
+use crate::ast::iface_method_start;
 use crate::ast::tag::Tag;
 use crate::ast::typedecl::TypeDeclStart;
+use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::TypeDeclName;
-use crate::ast::iface_method_start;
-use crate::ast::Annotation;
 use crate::ast::WhereClause;
+use crate::parse::LookAheadTokenStream;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
-use crate::parse::LookAheadTokenStream;
 use crate::Keyword;
 use crate::Separator;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use derivative::*;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct InterfaceMethodDecl<A: Annotation> {
-    pub decl: Rc<FunctionDecl<A>>,
+    pub decl: Arc<FunctionDecl<A>>,
 }
 
 impl<A: Annotation> InterfaceMethodDecl<A> {
@@ -53,7 +53,7 @@ impl ParseSeq for InterfaceMethodDecl<Span> {
 
         let decl = FunctionDecl::parse(tokens, false, tags)?;
         Ok(InterfaceMethodDecl { 
-            decl: Rc::new(decl),
+            decl: decl.into(),
         })
     }
 

@@ -4,7 +4,7 @@ use serde::Serialize;
 use std::cmp::Ordering;
 use std::fmt;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Location {
@@ -48,7 +48,7 @@ impl PartialOrd for Location {
 
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Span {
-    pub file: Rc<PathBuf>,
+    pub file: Arc<PathBuf>,
     pub start: Location,
     pub end: Location,
 }
@@ -56,7 +56,7 @@ pub struct Span {
 impl Span {
     pub fn new(file: impl Into<PathBuf>, start: Location, end: Location) -> Self {
         Self {
-            file: Rc::new(file.into()),
+            file: Arc::new(file.into()),
             start,
             end,
         }
@@ -64,7 +64,7 @@ impl Span {
 
     pub fn zero(file: impl Into<PathBuf>) -> Self {
         Self {
-            file: Rc::new(file.into()),
+            file: Arc::new(file.into()),
             start: Location { line: 0, col: 0 },
             end: Location { line: 0, col: 0 },
         }

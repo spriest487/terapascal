@@ -31,7 +31,6 @@ use crate::ast::IFACE_METHOD_ACCESS;
 use crate::typ::ast::FieldDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::SELF_TY_NAME;
-use crate::typ::{builtin_span, InvalidTypeParamsDeclKind};
 use crate::typ::builtin_unit_path;
 use crate::typ::Context;
 use crate::typ::Def;
@@ -47,34 +46,36 @@ use crate::typ::ANY_TYPE_NAME;
 use crate::typ::NIL_NAME;
 use crate::typ::NOTHING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
+use crate::typ::builtin_span;
+use crate::typ::InvalidTypeParamsDeclKind;
 use crate::Keyword;
 use crate::Operator;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Type {
     Nothing,
     Nil,
     Primitive(Primitive),
-    Pointer(Rc<Type>),
-    Function(Rc<FunctionSig>),
-    Record(Rc<Symbol>),
-    Class(Rc<Symbol>),
-    Interface(Rc<Symbol>),
-    Variant(Rc<Symbol>),
-    Array(Rc<ArrayType>),
-    DynArray { element: Rc<Type> },
+    Pointer(Arc<Type>),
+    Function(Arc<FunctionSig>),
+    Record(Arc<Symbol>),
+    Class(Arc<Symbol>),
+    Interface(Arc<Symbol>),
+    Variant(Arc<Symbol>),
+    Array(Arc<ArrayType>),
+    DynArray { element: Arc<Type> },
     MethodSelf,
-    GenericParam(Rc<TypeParamType>),
-    Weak(Rc<Type>),
+    GenericParam(Arc<TypeParamType>),
+    Weak(Arc<Type>),
     Any,
-    Enum(Rc<IdentPath>),
-    Set(Rc<SetType>),
+    Enum(Arc<IdentPath>),
+    Set(Arc<SetType>),
 }
 
 impl From<Primitive> for Type {
@@ -85,33 +86,33 @@ impl From<Primitive> for Type {
 
 impl From<ArrayType> for Type {
     fn from(array_ty: ArrayType) -> Self {
-        Type::Array(Rc::new(array_ty))
+        Type::Array(Arc::new(array_ty))
     }
 }
 
 impl Type {
     pub fn record(sym: impl Into<Symbol>) -> Self {
-        Type::Record(Rc::new(sym.into()))
+        Type::Record(Arc::new(sym.into()))
     }
 
     pub fn class(sym: impl Into<Symbol>) -> Self {
-        Type::Class(Rc::new(sym.into()))
+        Type::Class(Arc::new(sym.into()))
     }
 
-    pub fn variant(sym: impl Into<Rc<Symbol>>) -> Self {
+    pub fn variant(sym: impl Into<Arc<Symbol>>) -> Self {
         Type::Variant(sym.into())
     }
 
     pub fn enumeration(sym: impl Into<IdentPath>) -> Self {
-        Type::Enum(Rc::new(sym.into()))
+        Type::Enum(Arc::new(sym.into()))
     }
 
-    pub fn set(set: impl Into<Rc<SetType>>) -> Self {
+    pub fn set(set: impl Into<Arc<SetType>>) -> Self {
         Type::Set(set.into())
     }
     
     pub fn interface(name: impl Into<Symbol>) -> Self {
-        Type::Interface(Rc::new(name.into()))
+        Type::Interface(Arc::new(name.into()))
     }
     
     pub fn generic_param(name: Ident) -> Type {
@@ -120,18 +121,18 @@ impl Type {
             is_ty: Type::Any,
         };
         
-        Type::GenericParam(Rc::new(ty_param_ty))
+        Type::GenericParam(Arc::new(ty_param_ty))
     }
 
     pub fn array(self, dim: usize) -> Self {
-        Type::Array(Rc::new(ArrayType {
+        Type::Array(Arc::new(ArrayType {
             element_ty: self,
             dim,
         }))
     }
 
     pub fn dyn_array(self) -> Self {
-        Type::DynArray { element: Rc::new(self) }
+        Type::DynArray { element: Arc::new(self) }
     }
 
     pub fn generic_constrained_param(name: Ident, is_iface: Type) -> Type {
@@ -140,11 +141,11 @@ impl Type {
             is_ty: is_iface,
         };
 
-        Type::GenericParam(Rc::new(ty_param_ty))
+        Type::GenericParam(Arc::new(ty_param_ty))
     }
     
     pub fn from_struct_type(sym: impl Into<Symbol>, kind: StructKind) -> Self {
-        let sym = Rc::new(sym.into());
+        let sym = Arc::new(sym.into());
         
         match kind {
             StructKind::Class => Type::Class(sym),
@@ -295,11 +296,11 @@ impl Type {
         match type_decl {
             ast::TypeDeclItem::Struct(class)
             if class.kind == StructKind::Record => {
-                Ok(Type::Record(Rc::new(class.name.clone())))
+                Ok(Type::Record(Arc::new(class.name.clone())))
             },
 
             ast::TypeDeclItem::Struct(class) => {
-                Ok(Type::Class(Rc::new(class.name.clone())))
+                Ok(Type::Class(Arc::new(class.name.clone())))
             },
 
             ast::TypeDeclItem::Variant(variant) => {
@@ -591,7 +592,7 @@ impl Type {
     }
 
     pub fn ptr(self) -> Self {
-        Type::Pointer(Rc::new(self))
+        Type::Pointer(Arc::new(self))
     }
 
     pub fn indirect_by(self, indirection: usize) -> Self {
@@ -1129,14 +1130,14 @@ impl Type {
         }
     }
     
-    pub fn as_set(&self) -> Option<&Rc<SetType>> {
+    pub fn as_set(&self) -> Option<&Arc<SetType>> {
         match self {
             Type::Set(set_type) => Some(set_type),
             _ => None,
         }
     }
 
-    pub fn as_func(&self) -> Result<&Rc<FunctionSig>, &Self> {
+    pub fn as_func(&self) -> Result<&Arc<FunctionSig>, &Self> {
         match self {
             Type::Function(sig) => Ok(sig),
             other => Err(other),
@@ -1169,28 +1170,28 @@ impl Type {
         let specialized = match self {
             Type::Record(sym) => {
                 let sym = sym.specialize(args, ctx)?;
-                let record_ty = Type::Record(Rc::new(sym.into_owned()));
+                let record_ty = Type::Record(Arc::new(sym.into_owned()));
 
                 Cow::Owned(record_ty)
             },
 
             Type::Class(sym) => {
                 let sym = sym.specialize(args, ctx)?;
-                let class_ty = Type::Class(Rc::new(sym.into_owned()));
+                let class_ty = Type::Class(Arc::new(sym.into_owned()));
 
                 Cow::Owned(class_ty)
             },
 
             Type::Variant(variant) => {
                 let sym = variant.specialize(args, ctx)?;
-                let variant_ty = Type::Variant(Rc::new(sym.into_owned()));
+                let variant_ty = Type::Variant(Arc::new(sym.into_owned()));
 
                 Cow::Owned(variant_ty)
             },
             
             Type::Interface(iface) => {
                 let sym = iface.specialize(args, ctx)?;
-                let iface_ty = Type::Interface(Rc::new(sym.into_owned()));
+                let iface_ty = Type::Interface(Arc::new(sym.into_owned()));
 
                 Cow::Owned(iface_ty)
             }
@@ -1213,7 +1214,7 @@ impl Type {
     {
         self.visit_types_mut(|ty| {
             if let Type::GenericParam(type_param) = ty {
-                *type_param = Rc::new(visitor((**type_param).clone()));
+                *type_param = Arc::new(visitor((**type_param).clone()));
             }
         });
 
@@ -1280,7 +1281,7 @@ impl Type {
             | Type::Variant(sym) => {
                 let mut new_sym = (**sym).clone();
                 new_sym.visit_types_mut(visitor);
-                *sym = Rc::new(new_sym)
+                *sym = Arc::new(new_sym)
             },
 
             // todo: update this for generic interfaces decls
@@ -1290,7 +1291,7 @@ impl Type {
                 let mut element_ty = array_ty.element_ty.clone();
                 element_ty.visit_types_mut(visitor);
 
-                *array_ty = Rc::new(ArrayType {
+                *array_ty = Arc::new(ArrayType {
                     element_ty,
                     dim: array_ty.dim,
                 });
@@ -1300,31 +1301,31 @@ impl Type {
                 let mut new_element = (**element).clone();
                 new_element.visit_types_mut(visitor);
 
-                *element = Rc::new(new_element);
+                *element = Arc::new(new_element);
             },
 
             Type::Function(sig) => {
                 let mut new_sig = (**sig).clone();
                 new_sig.visit_types_mut(visitor);
-                *sig = Rc::new(new_sig);
+                *sig = Arc::new(new_sig);
             },
 
             Type::Pointer(deref) => {
                 let mut new_deref = (**deref).clone();
                 new_deref.visit_types_mut(visitor);
-                *deref = Rc::new(new_deref);
+                *deref = Arc::new(new_deref);
             }
 
             Type::Weak(weak_ty) => {
                 let mut new_deref = (**weak_ty).clone();
                 new_deref.visit_types_mut(visitor);
-                *weak_ty = Rc::new(new_deref);
+                *weak_ty = Arc::new(new_deref);
             }
             
             Type::GenericParam(param_ty) => {
                 let mut new_param_ty = (**param_ty).clone();
                 new_param_ty.is_ty.visit_types_mut(visitor);
-                *param_ty = Rc::new(new_param_ty);
+                *param_ty = Arc::new(new_param_ty);
             }
             
             Type::Nothing
@@ -1511,7 +1512,7 @@ pub fn typecheck_type(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<Type>
             }
 
             let sig = FunctionSig::new(return_ty, params, None);
-            let mut ty = Type::Function(Rc::new(sig));
+            let mut ty = Type::Function(Arc::new(sig));
             for _ in 0..func_ty_name.indirection {
                 ty = ty.ptr();
             }
@@ -1528,7 +1529,7 @@ pub fn typecheck_type(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<Type>
                 });
             }
             
-            Ok(Type::Weak(Rc::new(weak_type)))
+            Ok(Type::Weak(Arc::new(weak_type)))
         },
 
         ast::TypeName::Unspecified(_) => unreachable!("trying to resolve unknown type"),

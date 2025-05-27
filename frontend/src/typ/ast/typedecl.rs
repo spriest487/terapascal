@@ -34,11 +34,11 @@ use crate::typ::MAX_FLAGS_BITS;
 use crate::typ::{typecheck_type, InvalidTagReason};
 use crate::typ::{ConstValue, Specializable};
 use crate::IntConstant;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use std::borrow::Cow;
 use std::mem;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub type StructDef = ast::StructDecl<Value>;
 pub type StructMemberDecl = ast::StructMemberDecl<Value>;
@@ -323,7 +323,7 @@ pub fn typecheck_methods(
 
         methods.push(MethodDecl {
             access: method.access,
-            func_decl: Rc::new(decl),
+            func_decl: Arc::new(decl),
         });
     }
 
@@ -458,7 +458,7 @@ pub fn typecheck_iface(
         let method_decl = FunctionDecl::typecheck(&method.decl, false, ctx)?;
 
         methods.push(ast::InterfaceMethodDecl { 
-            decl: Rc::new(method_decl),
+            decl: Arc::new(method_decl),
         });
     }
     
@@ -524,7 +524,7 @@ pub fn typecheck_variant(
     )?;
 
     Ok(VariantDef {
-        name: Rc::new(info.name),
+        name: info.name.into(),
         where_clause: info.where_clause,
         tags,
         forward: variant_def.forward,

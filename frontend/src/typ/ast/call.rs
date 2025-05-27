@@ -13,6 +13,7 @@ use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::ObjectCtor;
+use crate::typ::typecheck_type;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
@@ -34,14 +35,13 @@ use crate::typ::TypedValue;
 use crate::typ::UfcsValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
-use crate::typ::typecheck_type;
 pub use args::*;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned as _;
 pub use overload::*;
 use std::borrow::Cow;
 use std::iter;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned as _;
 
 pub type MethodCall = ast::MethodCall<Value>;
 pub type FunctionCall = ast::FunctionCall<Value>;
@@ -447,7 +447,7 @@ fn typecheck_func_overload(
                 })
             }
 
-            let sig = Rc::new(sig.with_self(&self_ty));
+            let sig = Arc::new(sig.with_self(&self_ty));
 
             let return_annotation = Value::from(TypedValue::temp(
                 sig.return_ty.clone(),
@@ -515,7 +515,7 @@ pub fn overload_to_no_args_call(
             let specialized = specialize_func_decl(decl, type_args, ctx)
                 .map_err(|e| TypeError::from_generic_err(e, span.clone()))?;
 
-            Rc::new(specialized)
+            Arc::new(specialized)
         }
 
         None => decl.clone(),
@@ -672,7 +672,7 @@ fn typecheck_method_call(
         iface_method_index: method.index,
 
         args_span: func_call.args_span.clone(),
-        func_type: Type::Function(Rc::new(sig)),
+        func_type: Type::Function(Arc::new(sig)),
         ident: method.decl.func_decl.ident().clone(),
         type_args: None,
         args: typechecked_args,
@@ -750,7 +750,7 @@ fn typecheck_func_value_call(
     target: Expr,
     func_call: &ast::FunctionCall<Span>,
     self_arg: Option<&Expr>,
-    sig: &Rc<FunctionSig>,
+    sig: &Arc<FunctionSig>,
     ctx: &mut Context,
 ) -> TypeResult<Call> {
     let mut call_args = Vec::with_capacity(func_call.args.len());
@@ -794,7 +794,7 @@ fn typecheck_free_func_call(
     mut target: Expr,
     func_call: &ast::FunctionCall<Span>,
     self_arg: Option<&Expr>,
-    decl: &Rc<FunctionDecl>,
+    decl: &Arc<FunctionDecl>,
     ctx: &mut Context,
 ) -> TypeResult<Call> {    
     let span = func_call.span().clone();
@@ -842,7 +842,7 @@ fn typecheck_free_func_call(
                 func_type.span.clone(),
             );
 
-            *func_type = Rc::new(specialized_func_type);
+            *func_type = Arc::new(specialized_func_type);
         }
     } else {
         assert!(

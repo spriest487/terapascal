@@ -3,7 +3,8 @@ use crate::ast::FunctionDeclKind;
 use crate::ast::IdentPath;
 use crate::ast::Path;
 use crate::ast::Visibility;
-use crate::typ::{ast, TypeParam, TypeParamList};
+use crate::typ;
+use crate::typ::ast;
 use crate::typ::ast::SELF_PARAM_NAME;
 use crate::typ::Context;
 use crate::typ::Environment;
@@ -12,17 +13,19 @@ use crate::typ::FunctionSigParam;
 use crate::typ::Primitive;
 use crate::typ::Symbol;
 use crate::typ::Type;
+use crate::typ::TypeParam;
+use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
-use crate::{typ, Ident};
+use crate::Ident;
 use crate::IntConstant;
-use terapascal_common::span::*;
 use linked_hash_map::LinkedHashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::*;
 
 thread_local! {
     pub static BUILTIN_SPAN: Span = Span {
-        file: Rc::new(PathBuf::from(BUILTIN_FILENAME)),
+        file: Arc::new(PathBuf::from(BUILTIN_FILENAME)),
         start: Location::zero(),
         end: Location::zero(),
     };
@@ -205,7 +208,7 @@ pub fn builtin_comparable_iface() -> ast::InterfaceDecl {
         supers: Vec::new(),
         methods: vec![
             ast::InterfaceMethodDecl {
-                decl: Rc::new(builtin_comparable_compare_method(iface_ty, Type::MethodSelf)),
+                decl: Arc::new(builtin_comparable_compare_method(iface_ty, Type::MethodSelf)),
             }
         ],
         forward: false,
@@ -265,7 +268,7 @@ pub fn builtin_displayable_iface() -> ast::InterfaceDecl {
         supers: Vec::new(),
         methods: vec![
             ast::InterfaceMethodDecl {
-                decl: Rc::new(builtin_displayable_display_method(iface_ty, Type::MethodSelf)),
+                decl: Arc::new(builtin_displayable_display_method(iface_ty, Type::MethodSelf)),
             }
         ],
         forward: false,
@@ -320,7 +323,7 @@ pub fn declare_builtin_ty(
         let mut methods = LinkedHashMap::new();
         
         if displayable {
-            let display_method = Rc::new(builtin_displayable_display_method(ty.clone(), ty.clone()));
+            let display_method = Arc::new(builtin_displayable_display_method(ty.clone(), ty.clone()));
             ctx.declare_function(display_method.name.ident.clone(), display_method.clone(), Visibility::Interface)?;
 
             methods.insert(display_method.name.ident.clone(), ast::MethodDecl {
@@ -330,7 +333,7 @@ pub fn declare_builtin_ty(
         }
 
         if comparable {
-            let compare_method = Rc::new(builtin_comparable_compare_method(ty.clone(), ty.clone()));
+            let compare_method = Arc::new(builtin_comparable_compare_method(ty.clone(), ty.clone()));
             ctx.declare_function(compare_method.name.ident.clone(), compare_method.clone(), Visibility::Interface)?;
             
             methods.insert(compare_method.name.ident.clone(), ast::MethodDecl {

@@ -37,9 +37,9 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::rc::Rc;
 
 pub type Unit = ast::Unit<Value>;
 pub type UnitDecl = ast::UnitDecl<Value>;
@@ -153,10 +153,10 @@ fn typecheck_unit_func_def(
     // free functions may not already have a declaration in scope if they weren't forward
     // declared, do that now
     if func_decl.name.owning_ty.is_none() && !ctx.is_function_declared(&func_decl) {
-        ctx.declare_function(func_name.ident().clone(), Rc::new(func_decl.clone()), visibility)?;
+        ctx.declare_function(func_name.ident().clone(), Arc::new(func_decl.clone()), visibility)?;
     }
 
-    let func_def = Rc::new(typecheck_func_def(func_decl.clone(), func_def, ctx)?);
+    let func_def = Arc::new(typecheck_func_def(func_decl.clone(), func_def, ctx)?);
     match &func_decl.name.owning_ty {
         Some(ty) => {
             ctx.define_method(ty.clone(), func_def.clone())?;
@@ -176,7 +176,7 @@ fn typecheck_unit_func_decl(
     ctx: &mut Context,
 ) -> TypeResult<UnitDecl> {
     let name = func_decl.name.clone();
-    let func_decl = Rc::new(FunctionDecl::typecheck(func_decl, false, ctx)?);
+    let func_decl = Arc::new(FunctionDecl::typecheck(func_decl, false, ctx)?);
 
     assert!(
         func_decl.name.owning_ty.is_none(),
@@ -252,7 +252,7 @@ fn typecheck_type_decl_item(
                 false
             )?;
 
-            Ok(TypeDeclItem::Alias(Rc::new(alias)))
+            Ok(TypeDeclItem::Alias(Arc::new(alias)))
         }
 
         ast::TypeDeclItem::Struct(def) => match def.kind {
@@ -294,7 +294,7 @@ fn typecheck_set_decl_item(
     visibility: Visibility,
     ctx: &mut Context
 ) -> TypeResult<TypeDeclItem> {
-    let set_decl = Rc::new(SetDecl::typecheck(set_decl, full_name, ctx)?);
+    let set_decl = Arc::new(SetDecl::typecheck(set_decl, full_name, ctx)?);
     
     ctx.declare_set(&set_decl, visibility)?;
 
@@ -357,32 +357,32 @@ fn typecheck_type_decl_body(
     let type_decl = match type_decl {
         ast::TypeDeclItem::Struct(class) => {
             let class = typecheck_struct_decl(info, class, ctx)?;
-            ast::TypeDeclItem::Struct(Rc::new(class))
+            ast::TypeDeclItem::Struct(Arc::new(class))
         },
 
         ast::TypeDeclItem::Interface(iface) => {
             let iface = typecheck_iface(info, iface, ctx)?;
-            ast::TypeDeclItem::Interface(Rc::new(iface))
+            ast::TypeDeclItem::Interface(Arc::new(iface))
         },
 
         ast::TypeDeclItem::Variant(variant) => {
             let variant = typecheck_variant(info, variant, ctx)?;
-            ast::TypeDeclItem::Variant(Rc::new(variant))
+            ast::TypeDeclItem::Variant(Arc::new(variant))
         },
 
         ast::TypeDeclItem::Alias(alias) => {
             let alias = typecheck_alias(info.name, alias, ctx)?;
-            ast::TypeDeclItem::Alias(Rc::new(alias))
+            ast::TypeDeclItem::Alias(Arc::new(alias))
         },
 
         ast::TypeDeclItem::Enum(enum_decl) => {
             let enum_decl = typecheck_enum_decl(info.name, enum_decl, ctx)?;
-            ast::TypeDeclItem::Enum(Rc::new(enum_decl))
+            ast::TypeDeclItem::Enum(Arc::new(enum_decl))
         }
 
         ast::TypeDeclItem::Set(set_decl) => {
             let set_decl = SetDecl::typecheck(set_decl, info.name, ctx)?;
-            ast::TypeDeclItem::Set(Rc::new(set_decl))
+            ast::TypeDeclItem::Set(Arc::new(set_decl))
         }
     };
 

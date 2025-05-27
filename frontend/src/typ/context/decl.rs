@@ -10,9 +10,9 @@ use crate::typ::Binding;
 use crate::typ::DeclConflict;
 use crate::typ::FunctionSig;
 use crate::typ::Type;
-use terapascal_common::span::Span;
 use std::fmt;
-use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_common::span::Span;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Decl {
@@ -145,18 +145,18 @@ impl fmt::Display for Decl {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeclFunctionOverload {
-    decl: Rc<FunctionDecl>,
+    decl: Arc<FunctionDecl>,
     
     // cached sig since we access this a lot
-    sig: Rc<FunctionSig>,
+    sig: Arc<FunctionSig>,
     
     visibility: Visibility,
 }
 
 impl DeclFunctionOverload {
-    pub fn new(decl: impl Into<Rc<FunctionDecl>>, visibility: Visibility) -> Self {
+    pub fn new(decl: impl Into<Arc<FunctionDecl>>, visibility: Visibility) -> Self {
         let decl = decl.into();
-        let sig = Rc::new(decl.sig());
+        let sig = Arc::new(decl.sig());
         
         Self {
             decl,
@@ -165,11 +165,11 @@ impl DeclFunctionOverload {
         }
     }
     
-    pub fn sig(&self) -> &Rc<FunctionSig> {
+    pub fn sig(&self) -> &Arc<FunctionSig> {
         &self.sig
     }
     
-    pub fn decl(&self) -> &Rc<FunctionDecl> {
+    pub fn decl(&self) -> &Arc<FunctionDecl> {
         &self.decl
     }
     
