@@ -1,7 +1,9 @@
+use crate::semantic_tokens::semantic_legend;
+use crate::semantic_tokens::to_semantic_tokens;
 use dashmap::DashMap;
 use std::path::PathBuf;
-use terapascal_common::span::Span;
 use terapascal_common::BuildOptions;
+use terapascal_frontend::ast;
 use terapascal_frontend::error::BuildError;
 use terapascal_frontend::error::BuildResult;
 use terapascal_frontend::parse;
@@ -10,18 +12,19 @@ use terapascal_frontend::preprocess;
 use terapascal_frontend::tokenize;
 use terapascal_frontend::typ;
 use terapascal_frontend::TokenTree;
-use terapascal_frontend::{ast, DelimiterPair};
 use tower_lsp::jsonrpc::Result as RpcResult;
+use tower_lsp::lsp_types::DidChangeTextDocumentParams;
+use tower_lsp::lsp_types::DidChangeWorkspaceFoldersParams;
 use tower_lsp::lsp_types::DidCloseTextDocumentParams;
 use tower_lsp::lsp_types::DidOpenTextDocumentParams;
 use tower_lsp::lsp_types::DidSaveTextDocumentParams;
 use tower_lsp::lsp_types::DocumentFilter;
+use tower_lsp::lsp_types::DocumentHighlight;
+use tower_lsp::lsp_types::DocumentHighlightParams;
 use tower_lsp::lsp_types::InitializeParams;
 use tower_lsp::lsp_types::InitializeResult;
 use tower_lsp::lsp_types::InitializedParams;
 use tower_lsp::lsp_types::OneOf;
-use tower_lsp::lsp_types::SemanticToken;
-use tower_lsp::lsp_types::SemanticTokenType;
 use tower_lsp::lsp_types::SemanticTokens;
 use tower_lsp::lsp_types::SemanticTokensFullOptions;
 use tower_lsp::lsp_types::SemanticTokensLegend;
@@ -36,96 +39,13 @@ use tower_lsp::lsp_types::TextDocumentSyncCapability;
 use tower_lsp::lsp_types::TextDocumentSyncKind;
 use tower_lsp::lsp_types::Url;
 use tower_lsp::lsp_types::WorkDoneProgressOptions;
-use tower_lsp::lsp_types::{DidChangeTextDocumentParams, DocumentHighlight, DocumentHighlightParams};
+use tower_lsp::lsp_types::WorkspaceFoldersServerCapabilities;
+use tower_lsp::lsp_types::WorkspaceServerCapabilities;
 use tower_lsp::LanguageServer;
 use tower_lsp::LspService;
 use tower_lsp::Server;
 
-fn make_semantic_token(span: &Span, token_type: u32, cur_line: &mut u32, cur_col: &mut u32) -> SemanticToken {
-    let line = span.start.line as u32;
-    let delta_line = line.saturating_sub(*cur_line);
-    if line != *cur_line {
-        *cur_line = line;
-        *cur_col = 0;
-    }
-
-    let col = span.start.col as u32;
-    let delta_col = col.saturating_sub(*cur_col);
-    *cur_col = col;
-    
-    SemanticToken {
-        delta_line,
-        delta_start: delta_col,
-        length: span.end.col.saturating_sub(span.start.col) as u32 + 1,
-        token_type,
-        token_modifiers_bitset: 0,
-    }
-}
-
-fn to_semantic_tokens(tt: &TokenTree, line: &mut u32, col: &mut u32, result: &mut Vec<SemanticToken>) {
-    if result.is_empty() {
-        let span = tt.span();
-        *line = span.start.line as u32;
-        *col = span.start.col as u32;
-    }
-    
-    match tt {
-        TokenTree::IntNumber { span, .. } | TokenTree::RealNumber { span, .. } => {
-            result.push(make_semantic_token(span, SEMANTIC_NUMBER, line, col));
-        }
-        TokenTree::String { span, .. } => {
-            result.push(make_semantic_token(span, SEMANTIC_STRING, line, col));
-        }
-
-        TokenTree::Operator { op, span } if op.is_keyword() => {
-            result.push(make_semantic_token(span, SEMANTIC_OPERATOR, line, col));
-        }
-
-        TokenTree::Separator { span, .. }
-        | TokenTree::Operator { span, .. } => {
-            result.push(make_semantic_token(span, SEMANTIC_OPERATOR, line, col));
-        }
-
-        TokenTree::Keyword { span, .. } => {
-            result.push(make_semantic_token(span, SEMANTIC_KEYWORD, line, col));
-        }
-
-        TokenTree::Delimited(group) => {
-            let delim_type = match group.delim {
-                DelimiterPair::BeginEnd
-                | DelimiterPair::CaseEnd
-                | DelimiterPair::MatchEnd => SEMANTIC_KEYWORD,
-                
-                DelimiterPair::Bracket
-                | DelimiterPair::SquareBracket => SEMANTIC_OPERATOR,
-            };
-            
-            result.push(make_semantic_token(&group.open, delim_type, line, col));
-            
-            for inner in &group.inner {
-                to_semantic_tokens(inner, line, col, result);
-            }
-            
-            result.push(make_semantic_token(&group.close, delim_type, line, col));
-        }
-        
-        _ => {}
-    }
-}
-
-fn semantic_legend() -> Vec<SemanticTokenType> {
-    vec![
-        SemanticTokenType::KEYWORD,
-        SemanticTokenType::NUMBER,
-        SemanticTokenType::STRING,
-        SemanticTokenType::OPERATOR,
-    ]
-}
-
-const SEMANTIC_KEYWORD: u32 = 0;
-const SEMANTIC_NUMBER: u32 = 1;
-const SEMANTIC_STRING: u32 = 2;
-const SEMANTIC_OPERATOR: u32 = 3;
+mod semantic_tokens;
 
 struct TerapascalServer {
     documents: DashMap<Url, String>,
@@ -158,8 +78,16 @@ impl LanguageServer for TerapascalServer {
             },
             static_registration_options: StaticRegistrationOptions::default(),
         };
-        
+
         let text_document_sync = TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL);
+
+        let workspace_folders = WorkspaceServerCapabilities {
+            workspace_folders: Some(WorkspaceFoldersServerCapabilities {
+                supported: Some(true),
+                change_notifications: None,
+            }),
+            file_operations: None,
+        };
 
         Ok(InitializeResult {
             server_info: None,
@@ -168,6 +96,7 @@ impl LanguageServer for TerapascalServer {
                 document_highlight_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(semantic_token_reg_opts.into()),
                 definition_provider: Some(OneOf::Left(false)),
+                workspace: Some(workspace_folders),
                 ..ServerCapabilities::default()
             },
         })
@@ -196,14 +125,13 @@ impl LanguageServer for TerapascalServer {
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         eprintln!("did_change: {}", params.text_document.uri);
 
-        let text = params.content_changes
-            .into_iter()
-            .next()
-            .unwrap()
-            .text;
-        
+        let text = params.content_changes.into_iter().next().unwrap().text;
+
         let Some(mut doc) = self.documents.get_mut(&params.text_document.uri) else {
-            eprintln!("did_change: no document previously loaded at {}", params.text_document.uri);
+            eprintln!(
+                "did_change: no document previously loaded at {}",
+                params.text_document.uri
+            );
             return;
         };
 
@@ -216,7 +144,7 @@ impl LanguageServer for TerapascalServer {
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         eprintln!("did_close: {}", params.text_document.uri);
-        
+
         self.typechecked_units.remove(&params.text_document.uri);
         self.parsed_units.remove(&params.text_document.uri);
         self.tokenized_units.remove(&params.text_document.uri);
@@ -224,7 +152,10 @@ impl LanguageServer for TerapascalServer {
         self.documents.remove(&params.text_document.uri);
     }
 
-    async fn document_highlight(&self, _params: DocumentHighlightParams) -> RpcResult<Option<Vec<DocumentHighlight>>> {
+    async fn document_highlight(
+        &self,
+        _params: DocumentHighlightParams,
+    ) -> RpcResult<Option<Vec<DocumentHighlight>>> {
         Ok(None)
     }
 
@@ -253,6 +184,22 @@ impl LanguageServer for TerapascalServer {
             result_id: None,
         })))
     }
+
+    async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
+        for added in params.event.added {
+            eprintln!(
+                "did_change_workspace_folders: added {} ({})",
+                added.name, added.uri
+            )
+        }
+
+        for removed in params.event.removed {
+            eprintln!(
+                "did_change_workspace_folders: removed {} ({})",
+                removed.name, removed.uri
+            )
+        }
+    }
 }
 
 impl TerapascalServer {
@@ -266,7 +213,8 @@ impl TerapascalServer {
                 return Err(BuildError::ReadSourceFileFailed {
                     path: PathBuf::from(uri.to_string()),
                     msg: "document was not found in the cache".to_string(),
-                }.into());
+                }
+                .into());
             };
 
             let opts = BuildOptions::default();
@@ -274,7 +222,8 @@ impl TerapascalServer {
                 return Err(BuildError::ReadSourceFileFailed {
                     path: PathBuf::from(uri.to_string()),
                     msg: "invalid file path".to_string(),
-                }.into());
+                }
+                .into());
             };
 
             preprocess(file_path, document_text.as_str(), opts)?
