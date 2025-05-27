@@ -415,13 +415,11 @@ impl Lexer {
         self.location.col += consume;
 
         let (_, close_token) = delim.tokens();
+        
+        let close_col = self.location.col.saturating_sub(close_token.len());
         let close_span = self.src_span_from(Location {
             line: start_loc.line,
-            col: if start_loc.col < close_token.len() {
-                0
-            } else {
-                start_loc.col - close_token.len()
-            },
+            col: close_col,
         });
 
         match self.delim_stack.pop() {

@@ -1,12 +1,11 @@
+use crate::ast;
+use crate::typ;
 use crate::typ::ast::Call;
 use crate::typ::ast::FunctionCall;
 use crate::typ::ast::Stmt;
 use crate::typ::ast::StructDef;
 use crate::typ::context::*;
 use crate::typ::ty::*;
-use crate::ast;
-use crate::typ;
-use std::rc::Rc;
 use crate::typ::ModuleUnit;
 
 const INT32: Type = Type::Primitive(Primitive::Int32);
@@ -17,8 +16,9 @@ fn module_from_src(unit_name: &'static str, src: &'static str) -> ModuleUnit {
     module.units.pop().unwrap()
 }
 
-fn main_unit_structs(module: &typ::ModuleUnit) -> Vec<Rc<StructDef>> {
-    module.unit.type_decls()
+fn main_unit_structs(module: &typ::ModuleUnit) -> Vec<Arc<StructDef>> {
+    module.unit
+        .type_decls()
         .flat_map(|(_vis, decl)| decl.items.iter())
         .map(|t| match t {
             ast::TypeDeclItem::Struct(c) => c.clone(),

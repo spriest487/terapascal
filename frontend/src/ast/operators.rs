@@ -1,6 +1,9 @@
-use crate::parse::{Matchable, Matcher, SequenceMatcher};
+use crate::parse::Matchable;
+use crate::parse::Matcher;
+use crate::parse::SequenceMatcher;
 use std::fmt;
-use std::ops::{Add, BitOr};
+use std::ops::Add;
+use std::ops::BitOr;
 
 #[derive(Eq, PartialEq, Clone, Debug, Copy, Hash)]
 pub enum Operator {

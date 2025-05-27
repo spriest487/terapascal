@@ -1,10 +1,10 @@
 use crate::ast::FunctionDeclKind;
 use crate::ast::TypeConstraint;
 use crate::ast::TypeParam;
-use crate::typ::ast::{specialize_func_decl, WhereClause};
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParam;
 use crate::typ::ast::TypedFunctionName;
+use crate::typ::ast::{specialize_func_decl, WhereClause};
 use crate::typ::builtin_displayable_name;
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
@@ -20,9 +20,9 @@ use crate::typ::TypeParamList;
 use crate::typ::TypeParamType;
 use crate::typ::TypeResult;
 use crate::Ident;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::rc::Rc;
 
 fn test_span() -> Span {
     Span::zero("test")
@@ -55,7 +55,7 @@ fn make_ty_param_of(name: &str, constraint: Type) -> TypeParam<Type> {
 fn make_ty_param_ty(param_list: &[TypeParam<Type>], pos: usize) -> Type {
     let param = &param_list[pos];
 
-    Type::GenericParam(Rc::new(TypeParamType {
+    Type::GenericParam(Arc::new(TypeParamType {
         name: param.name.clone(),
         is_ty: param
             .constraint

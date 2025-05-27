@@ -1,14 +1,14 @@
+use crate::pp::Preprocessor;
 use crate::token_tree::DelimitedGroup;
-use crate::DelimiterPair;
 use crate::IntConstant;
 use crate::Keyword;
 use crate::TokenTree;
+use crate::DelimiterPair;
+use std::path::PathBuf;
+use std::sync::Arc;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::BuildOptions;
-use std::path::PathBuf;
-use std::rc::Rc;
-use crate::pp::Preprocessor;
 
 fn tokenize(s: &str, case_sensitive: bool) -> Vec<TokenTree> {
     let mut opts = BuildOptions::default();
@@ -132,7 +132,7 @@ fn tokenizes_mixed_delim() {
 
 fn test_span(from: (usize, usize), to: (usize, usize)) -> Span {
     Span {
-        file: Rc::new(PathBuf::from("test")),
+        file: Arc::new(PathBuf::from("test")),
         start: Location {
             line: from.0,
             col: from.1,
@@ -168,4 +168,38 @@ end",
 
         _ => panic!("expectefd begin/end delim group, got {:?}", result[0]),
     }
+}
+
+#[test]
+fn bracket_delim_group_has_expected_span() {
+    let result = tokenize("123 (abc 123) 123", true);
+    
+    assert_eq!(3, result.len());
+    let group = result[1].clone().into_delimited_group().unwrap();
+    
+    assert_eq!(group.span.start, group.open.start);
+    assert_eq!(group.span.end, group.close.end);
+    
+    assert_eq!(group.open.start.col, 4);
+    assert_eq!(group.open.end.col, 4);
+
+    assert_eq!(group.close.start.col,  12);
+    assert_eq!(group.close.end.col, 12);
+}
+
+#[test]
+fn keyword_delim_group_has_expected_span() {
+    let result = tokenize("a begin abc 123 end b", true);
+
+    assert_eq!(3, result.len());
+    let group = result[1].clone().into_delimited_group().unwrap();
+
+    assert_eq!(group.span.start, group.open.start);
+    assert_eq!(group.span.end, group.close.end);
+
+    assert_eq!(group.open.start.col, 2);
+    assert_eq!(group.open.end.col, 6);
+
+    assert_eq!(group.close.start.col,  16);
+    assert_eq!(group.close.end.col, 18);
 }
