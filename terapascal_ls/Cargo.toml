@@ -1,0 +1,11 @@
+[package]
+name = "terapascal-ls"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tower-lsp = "0.20.0"
+tokio = { version = "1.45.1", features = ["rt", "rt-multi-thread", "macros", "io-std"] }
+terapascal-frontend = { path = "../frontend" }
+terapascal-common = { path = "../common" }
+dashmap = "6.1.0"

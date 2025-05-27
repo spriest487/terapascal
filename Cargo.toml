@@ -23,5 +23,6 @@ members = [
     "common",
     "frontend",
     "ir", 
+    "terapascal_ls", 
     "test_runner",
 ]
