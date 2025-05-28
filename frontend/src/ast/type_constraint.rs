@@ -43,9 +43,14 @@ impl<T: TypeAnnotation> Spanned for TypeConstraint<T> {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct WhereClause<T: TypeAnnotation = TypeName> {
     pub constraints: Vec<TypeConstraint<T>>,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub span: Span,
 }
 
