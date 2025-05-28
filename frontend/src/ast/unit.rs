@@ -182,7 +182,10 @@ impl Unit<Span> {
 
             let main_block = Block::parse(tokens)?;
 
-            let end_span = match_unit_end(tokens)?;
+            let end_span = match tokens.match_one_maybe(Operator::Period) {
+                Some(tt) => tt.into_span(),
+                None => main_block.end.clone(),
+            };
 
             init = Some(InitBlock {
                 keyword_span: main_block.begin.clone(),
