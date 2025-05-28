@@ -693,14 +693,21 @@ impl DiagnosticOutput for TypeError {
                     }]
                 }
 
-                NameError::AlreadyDefined { ident, existing } => vec![DiagnosticMessage {
-                    title: format!("`{}` previously defined here", ident),
-                    label: Some(DiagnosticLabel {
-                        text: None,
-                        span: existing.span().clone(),
-                    }),
-                    notes: Vec::new(),
-                }],
+                NameError::AlreadyDefined { ident, existing } => {
+                    // zero-length sources are builtins
+                    if existing.start == existing.end {
+                        return Vec::new()
+                    }
+                    
+                    vec![DiagnosticMessage {
+                        title: format!("`{}` previously defined here", ident),
+                        label: Some(DiagnosticLabel {
+                            text: None,
+                            span: existing.span().clone(),
+                        }),
+                        notes: Vec::new(),
+                    }]
+                },
 
                 NameError::AlreadyImplemented {
                     owning_ty: iface,
