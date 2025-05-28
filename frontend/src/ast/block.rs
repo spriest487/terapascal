@@ -11,7 +11,7 @@ use terapascal_common::TracedError;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct Block<A: Annotation> {
+pub struct Block<A: Annotation = Span> {
     pub stmts: Vec<Stmt<A>>,
 
     #[derivative(Hash = "ignore")]

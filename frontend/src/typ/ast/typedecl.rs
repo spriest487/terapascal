@@ -57,6 +57,8 @@ pub type TagItem = ast::tag::TagItem<Value>;
 pub const VARIANT_TAG_TYPE: Type = Type::Primitive(Primitive::Int32);
 pub const SET_DEFAULT_VALUE_TYPE: Type = Type::Primitive(Primitive::UInt8);
 
+const ENUM_ORD_TYPE: Type = Type::Primitive(Primitive::NativeInt);
+
 impl VariantDef {
     pub fn find_method<'a>(&'a self, name: &'a Ident, sig: &FunctionSig) -> Option<&'a MethodDecl> {
         self.find_methods(name)
@@ -187,7 +189,7 @@ impl TagItem {
             let member_ty = member.value.annotation().ty().into_owned();
             let member_span = member.value.span().clone();
 
-            let mut lit_expr = Expr::Literal(const_val_expr, Value::new_temp_val(member_ty, member_span));
+            let mut lit_expr = Expr::literal(const_val_expr, Value::new_temp_val(member_ty, member_span));
 
             mem::swap(&mut lit_expr, &mut member.value);
         }
@@ -556,41 +558,53 @@ pub fn typecheck_enum_decl(
 ) -> TypeResult<EnumDecl> {
     name.expect_no_type_params(InvalidTypeParamsDeclKind::Enum)?;
     assert!(name.type_args.is_none());
-
-    let mut prev_item: Option<(Ident, i128)> = None;
+    
+    let enum_ty = Type::Enum(Arc::new(name.full_path.clone()));
+    
+    let mut prev_item: Option<(Ident, IntConstant)> = None;
 
     let mut items = Vec::with_capacity(enum_decl.items.len());
     for item in &enum_decl.items {
-        let ord_val = match &item.value {
+        let (ord_val, ord_expr) = match &item.value {
             Some(val_expr) => {
-                let val_expr =
-                    typecheck_expr(&val_expr, &Type::Primitive(Primitive::NativeInt), ctx)?;
-                let item_ord_val = const_eval_integer(&val_expr, ctx)?.as_i128();
+                let val_expr = typecheck_expr(&val_expr, &ENUM_ORD_TYPE, ctx)?;
+                let ord_expr = const_eval_integer(&val_expr, ctx)?;
 
                 if let Some((prev_ident, prev_ord_val)) = &prev_item {
-                    if item_ord_val <= *prev_ord_val {
+                    if ord_expr.value.as_i128() <= prev_ord_val.as_i128() {
                         return Err(TypeError::EnumValuesMustBeAscending {
                             span: item.span().clone(),
                             prev_ident: prev_ident.clone(),
-                            prev_val: *prev_ord_val,
+                            prev_val: prev_ord_val.as_i128(),
                             next_ident: item.ident.clone(),
-                            next_val: item_ord_val,
+                            next_val: ord_expr.value.as_i128(),
                         });
                     }
                 }
 
-                item_ord_val
+                (ord_expr.value, Some(ord_expr))
             },
 
-            None => prev_item
-                .map(|(_prev_ident, prev_ord_val)| prev_ord_val + 1)
-                .unwrap_or(0),
+            None => {
+                let ord = prev_item
+                    .map(|(_prev_ident, prev_ord_val)| prev_ord_val.as_i128() + 1)
+                    .unwrap_or(0);
+
+                (IntConstant::from(ord), None)
+            },
         };
+        
+        let item_decl = name.full_path.clone().child(item.ident.clone());
 
         let item = EnumDeclItem {
             ident: item.ident.clone(),
-            span: item.span.clone(),
-            value: Some(IntConstant::from(ord_val)),
+            annotation: Value::from(ConstValue {
+                value: Literal::Integer(ord_val),
+                span: item.span().clone(),
+                decl: Some(item_decl),
+                ty: enum_ty.clone(),
+            }),
+            value: ord_expr,
         };
 
         prev_item = Some((item.ident.clone(), ord_val));
@@ -657,8 +671,8 @@ impl SetDecl {
                 };
                 
                 SetDeclRange::Range {
-                    from: Expr::Literal(Literal::Integer(from_num), Value::from(from_val)),
-                    to: Expr::Literal(Literal::Integer(to_num), Value::from(to_val)),
+                    from: Expr::literal(Literal::Integer(from_num), Value::from(from_val)),
+                    to: Expr::literal(Literal::Integer(to_num), Value::from(to_val)),
                     span: range_span.clone(),
                 }
             }
@@ -734,7 +748,7 @@ impl SetDecl {
         let mut min = None;
 
         for item in items {
-            let int_val = const_eval_integer(item, ctx)?.as_i128();
+            let int_val = const_eval_integer(item, ctx)?.value.as_i128();
 
             max = Some(max.map_or(int_val, |val| i128::max(val, int_val)));
             min = Some(min.map_or(int_val, |val| i128::min(val, int_val)));
@@ -796,7 +810,7 @@ fn get_set_type_range(range_ty: &Type, at: &Span, ctx: &Context) -> TypeResult<(
             let mut min = None;
             let mut max = None;
             for item in &enum_decl.items {
-                let item_val = item.value.as_ref().unwrap().as_i128();
+                let item_val = item.value.as_ref().unwrap().value.as_i128();
                 min = Some(min.map_or(item_val, |val| i128::min(item_val, val)));
                 max = Some(max.map_or(item_val, |val| i128::max(item_val, val)));
             }

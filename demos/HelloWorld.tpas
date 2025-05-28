@@ -1,3 +1,8 @@
+unit HelloWorld;
+
+interface
+implementation
+
 initialization
     var world := 'world!';
     System.WriteLn('Hello, ' + world);

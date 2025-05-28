@@ -56,11 +56,15 @@ impl fmt::Display for UnitKind {
 
 #[derive(Clone, Debug)]
 pub struct Unit<A: Annotation = Span> {
+    pub unit_kw: Option<Span>,
     pub kind: UnitKind,
 
     pub ident: IdentPath,
 
+    pub iface_kw: Option<Span>,
     pub iface_decls: Vec<UnitDecl<A>>,
+    
+    pub impl_kw: Option<Span>,
     pub impl_decls: Vec<UnitDecl<A>>,
 
     pub init: Option<InitBlock<A>>,
@@ -70,6 +74,8 @@ pub struct Unit<A: Annotation = Span> {
 pub struct InitBlock<A: Annotation = Span> {
     pub keyword_span: Span,
     pub body: Vec<Stmt<A>>,
+    
+    pub end_span: Span,
 }
 
 impl<A: Annotation> Unit<A> {
@@ -132,8 +138,8 @@ impl Unit<Span> {
     pub fn parse(tokens: &mut TokenStream, file_ident: IdentPath) -> ParseResult<Self> {
         let unit_kind_kw_match = Keyword::Unit | Keyword::Program | Keyword::Library;
 
-        let (unit_kind, ident) = match tokens.match_one_maybe(unit_kind_kw_match.clone()) {
-            Some(TokenTree::Keyword { kw, .. }) => {
+        let (unit_kw, unit_kind, ident) = match tokens.match_one_maybe(unit_kind_kw_match.clone()) {
+            Some(TokenTree::Keyword { kw, span }) => {
                 let ident = IdentPath::parse(tokens)?;
                 tokens.match_one(Separator::Semicolon)?;
                 
@@ -147,14 +153,19 @@ impl Unit<Span> {
                     Keyword::Library => UnitKind::Library,
                     _ => UnitKind::Unit,
                 };
-                (kind, ident)
+
+                (Some(span), kind, ident)
             },
 
-            _ => (UnitKind::Unit, file_ident),
+            _ => (None, UnitKind::Unit, file_ident),
         };
-
+        
+        let mut iface_kw = None;
         let mut iface_decls = Vec::new();
+        
+        let mut impl_kw = None;
         let mut impl_decls = Vec::new();
+
         let mut init = None;
 
         if unit_kind == UnitKind::Program {
@@ -171,24 +182,41 @@ impl Unit<Span> {
 
             let main_block = Block::parse(tokens)?;
 
+            let end_span = match_unit_end(tokens)?;
+
             init = Some(InitBlock {
                 keyword_span: main_block.begin.clone(),
                 body: vec![Stmt::Block(Box::new(main_block))],
+                end_span
             });
         } else {
-            let has_interface = parse_decls_section(Keyword::Interface, &mut iface_decls, tokens)?;
-            
-            let has_implementation =
-                parse_decls_section(Keyword::Implementation, &mut impl_decls, tokens)?;
+            let has_interface = parse_decls_section(
+                Keyword::Interface,
+                &mut iface_kw,
+                &mut iface_decls,
+                tokens
+            )?;
+
+            let has_implementation = parse_decls_section(
+                Keyword::Implementation,
+                &mut impl_kw,
+                &mut impl_decls,
+                tokens,
+            )?;
 
             let init_kw = tokens.match_one_maybe(Keyword::Initialization);
             if let Some(init_kw) = &init_kw {
                 let init_body = parse_init_section(tokens)?;
+
+                let end_span = match_unit_end(tokens)?;
                 
                 init = Some(InitBlock {
                     keyword_span: init_kw.span().clone(),
                     body: init_body,
+                    end_span,
                 })
+            } else {
+                match_unit_end(tokens)?;
             }
 
             if !(has_interface || has_implementation || init_kw.is_some()) {
@@ -198,34 +226,50 @@ impl Unit<Span> {
                     | Keyword::Implementation
                     | Keyword::Initialization)?;
             }
-
-            tokens.match_one(Keyword::End)?;
+            
+            
         }
-
-        // allow the traditional period after the final end
-        tokens.match_one_maybe(Operator::Period);
         
         // add auto refs
         add_auto_ref_paths(&ident, &mut iface_decls);
 
         Ok(Unit {
+            unit_kw,
             kind: unit_kind,
             ident,
             init,
+            iface_kw,
             iface_decls,
+            impl_kw,
             impl_decls,
         })
     }
 }
 
+fn match_unit_end(tokens: &mut TokenStream) -> ParseResult<Span> {
+    let span = tokens
+        .match_one(Keyword::End)?
+        .into_span();
+
+    // allow the traditional period after the final end, but don't require it
+    if let Some(period) = tokens.match_one_maybe(Operator::Period) {
+        Ok(span.to(period.span()))
+    } else {
+        Ok(span)
+    }
+}
+
 fn parse_decls_section(
     keyword: Keyword,
+    out_kw: &mut Option<Span>,
     out_decls: &mut Vec<UnitDecl<Span>>,
     tokens: &mut TokenStream,
 ) -> ParseResult<bool> {
-    if !tokens.match_one_maybe(keyword).is_some() {
-        return Ok(false);
-    }
+    let Some(kw_tt) = tokens.match_one_maybe(keyword) else {
+        return Ok(false)
+    };
+    
+    *out_kw = Some(kw_tt.into_span());
 
     let decls = UnitDecl::parse_seq(keyword, tokens)?;
 

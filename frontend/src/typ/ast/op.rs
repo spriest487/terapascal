@@ -368,11 +368,11 @@ fn desugar_string_concat(
     // if LHS and RHS are both string literals, we can concat them ahead of time
     match (&lhs, &rhs) {
         (
-            Expr::Literal(ast::Literal::String(a), _),
-            Expr::Literal(ast::Literal::String(b), _),
+            Expr::Literal(ast::LiteralItem { literal: ast::Literal::String(a), .. }),
+            Expr::Literal(ast::LiteralItem { literal: ast::Literal::String(b), .. }),
         ) => {
             let result = (**a).clone() + b.as_str();
-            Ok(Expr::Literal(ast::Literal::String(result.into()), annotation))
+            Ok(Expr::literal(ast::Literal::String(result.into()), annotation))
         },
 
         _ => {
@@ -1127,9 +1127,9 @@ fn check_array_bound_static(base: &Expr, index: &Expr, ctx: &mut Context) -> Typ
         base.annotation().ty().as_ref(),
         const_eval_integer(index, ctx),
     ) {
-        (Type::Array(array_ty), Ok(index_const)) if out_of_range(array_ty.dim, index_const) => {
+        (Type::Array(array_ty), Ok(index_const)) if out_of_range(array_ty.dim, index_const.value) => {
             Err(TypeError::IndexOutOfBounds {
-                index: index_const,
+                index: index_const.value,
                 base_ty: Box::new(base.annotation().ty().into_owned()),
                 span: index.span().clone(),
             })

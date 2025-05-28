@@ -25,7 +25,7 @@ use crate::typ::ast::typecheck_raise;
 use crate::typ::ast::typecheck_unary_op;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::OverloadCandidate;
-use crate::typ::Decl;
+use crate::typ::{Decl, EvaluatedConstExpr};
 use crate::typ::FunctionValue;
 use crate::typ::NameError;
 use crate::typ::OverloadValue;
@@ -44,9 +44,16 @@ pub use literal::*;
 
 pub type Expr = ast::Expr<Value>;
 
-pub fn const_eval_string(expr: &Expr, ctx: &Context) -> TypeResult<String> {
+pub fn const_eval_string(expr: &Expr, ctx: &Context) -> TypeResult<EvaluatedConstExpr<String>> {
     match expr.const_eval(ctx) {
-        Some(Literal::String(src_str)) => Ok((*src_str).clone()),
+        Some(Literal::String(src_str)) => {
+            let evaluated = EvaluatedConstExpr {
+                value: (*src_str).clone(),
+                expr: Box::new(expr.clone()),
+            };
+
+            Ok(evaluated)
+        },
 
         _ => Err(TypeError::InvalidConstExpr {
             expr: Box::new(expr.clone()),
@@ -54,9 +61,16 @@ pub fn const_eval_string(expr: &Expr, ctx: &Context) -> TypeResult<String> {
     }
 }
 
-pub fn const_eval_integer(expr: &Expr, ctx: &Context) -> TypeResult<IntConstant> {
+pub fn const_eval_integer(expr: &Expr, ctx: &Context) -> TypeResult<EvaluatedConstExpr<IntConstant>> {
     match expr.const_eval(ctx) {
-        Some(Literal::Integer(int_const)) => Ok(int_const),
+        Some(Literal::Integer(int_const)) => {
+            let evaluated = EvaluatedConstExpr {
+                value: int_const,
+                expr: Box::new(expr.clone()),
+            };
+
+            Ok(evaluated)
+        },
 
         _ => Err(TypeError::InvalidConstExpr {
             expr: Box::new(expr.clone()),
@@ -70,7 +84,7 @@ pub fn typecheck_expr(
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
     match expr_node {
-        ast::Expr::Literal(lit, span) => literal::typecheck_literal(lit, expect_ty, span, ctx),
+        ast::Expr::Literal(lit) => literal::typecheck_literal(&lit.literal, expect_ty, &lit.annotation, ctx),
 
         ast::Expr::Ident(ident, span) => typecheck_ident(ident, expect_ty, span, ctx),
 
@@ -262,7 +276,7 @@ fn typecheck_ident(
             value: Decl::GlobalConst { val, .. } | Decl::LocalConst { val, .. }, .. } => {
             let value = member_annotation(&decl, span.clone(), ctx);
 
-            Ok(Expr::Literal(val.clone(), value))
+            Ok(Expr::literal(val.clone(), value))
         },
 
         _ => {

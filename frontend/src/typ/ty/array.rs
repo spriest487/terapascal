@@ -39,7 +39,7 @@ pub fn typecheck_array_type(element: &Box<TypeName>, dim: &Option<Box<Expr>>, ct
                 typecheck_expr(dim_expr, &Type::Primitive(Primitive::Int32), ctx)?;
             let dim_val = const_eval_integer(&dim_expr, ctx)?;
 
-            let dim = dim_val
+            let dim = dim_val.value
                 .as_usize()
                 .ok_or_else(|| TypeError::TypeMismatch {
                     span: dim_expr.span().clone(),

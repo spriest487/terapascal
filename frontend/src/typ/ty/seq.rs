@@ -55,7 +55,7 @@ impl TypeSequenceSupport {
             TypeSequenceError::AmbiguousSequenceMethod,
         )?;
 
-        let sequence_ty = &seq_method.func_decl.return_ty;
+        let sequence_ty = &seq_method.func_decl.result_ty;
         let (next_index, next_decl, item_ty) = Self::find_sequence_next_method(sequence_ty, ctx)?;
 
         Ok(TypeSequenceSupport {
@@ -81,7 +81,7 @@ impl TypeSequenceSupport {
             TypeSequenceError::AmbiguousNextMethod,
         )?;
 
-        match &next_method.func_decl.return_ty {
+        match &next_method.func_decl.result_ty {
             Type::Variant(sym) if is_system_option_name(sym) => {
                 let Some(item_ty) = sym.type_args
                     .as_ref()

@@ -1,8 +1,9 @@
+use crate::semantic_tokens::SemanticTokenBuilder;
 use crate::semantic_tokens::semantic_legend;
-use crate::semantic_tokens::to_semantic_tokens;
 use dashmap::DashMap;
 use std::path::PathBuf;
 use terapascal_common::BuildOptions;
+use terapascal_frontend::TokenTree;
 use terapascal_frontend::ast;
 use terapascal_frontend::error::BuildError;
 use terapascal_frontend::error::BuildResult;
@@ -11,7 +12,9 @@ use terapascal_frontend::pp::PreprocessedUnit;
 use terapascal_frontend::preprocess;
 use terapascal_frontend::tokenize;
 use terapascal_frontend::typ;
-use terapascal_frontend::TokenTree;
+use tower_lsp::LanguageServer;
+use tower_lsp::LspService;
+use tower_lsp::Server;
 use tower_lsp::jsonrpc::Result as RpcResult;
 use tower_lsp::lsp_types::DidChangeTextDocumentParams;
 use tower_lsp::lsp_types::DidChangeWorkspaceFoldersParams;
@@ -41,9 +44,6 @@ use tower_lsp::lsp_types::Url;
 use tower_lsp::lsp_types::WorkDoneProgressOptions;
 use tower_lsp::lsp_types::WorkspaceFoldersServerCapabilities;
 use tower_lsp::lsp_types::WorkspaceServerCapabilities;
-use tower_lsp::LanguageServer;
-use tower_lsp::LspService;
-use tower_lsp::Server;
 
 mod semantic_tokens;
 
@@ -127,15 +127,21 @@ impl LanguageServer for TerapascalServer {
 
         let text = params.content_changes.into_iter().next().unwrap().text;
 
-        let Some(mut doc) = self.documents.get_mut(&params.text_document.uri) else {
-            eprintln!(
-                "did_change: no document previously loaded at {}",
-                params.text_document.uri
-            );
-            return;
-        };
+        {
+            let Some(mut doc) = self.documents.get_mut(&params.text_document.uri) else {
+                eprintln!(
+                    "did_change: no document previously loaded at {}",
+                    params.text_document.uri
+                );
+                return;
+            };
 
-        *doc = text;
+            *doc = text;
+        }
+
+        if let Err(build_err) = self.update_document(params.text_document.uri) {
+            eprintln!("did_change: {build_err}")
+        }
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
@@ -167,17 +173,21 @@ impl LanguageServer for TerapascalServer {
 
         eprintln!("semantic_tokens_full: uri = {uri}");
 
-        let mut data = Vec::new();
-        let mut line = 0;
-        let mut col = 0;
+        let mut builder = SemanticTokenBuilder::new(0, 0);
 
-        if let Some(tokens) = self.tokenized_units.get(uri) {
-            for tt in tokens.value() {
-                to_semantic_tokens(tt, &mut line, &mut col, &mut data);
-            }
-        } else {
-            eprintln!("document_color: {} was not opened", uri);
-        };
+        {
+            if let Some(unit) = self.parsed_units.get(uri) {
+                builder.add_unit(unit.value());
+            } else if let Some(tokens) = self.tokenized_units.get(uri) {
+                for tt in tokens.value() {
+                    builder.add_token_tree(tt);
+                }
+            } else {
+                eprintln!("document_color: {} was not opened", uri);
+            };
+        }
+        
+        let data = builder.finish();
 
         Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
             data,
@@ -205,6 +215,7 @@ impl LanguageServer for TerapascalServer {
 impl TerapascalServer {
     fn update_document(&self, uri: Url) -> BuildResult<()> {
         self.pp_units.remove(&uri);
+        self.tokenized_units.remove(&uri);
         self.parsed_units.remove(&uri);
         self.typechecked_units.remove(&uri);
 

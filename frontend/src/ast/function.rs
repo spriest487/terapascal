@@ -98,7 +98,14 @@ impl fmt::Display for FunctionParamMod {
 #[derivative(Debug, PartialEq, Hash)]
 pub struct FunctionParam<A: Annotation = Span> {
     pub ident: Ident,
+    
     pub ty: A::Type,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub ty_span: Option<Span>,
+    
     pub modifier: Option<FunctionParamMod>,
 
     #[derivative(Debug = "ignore")]
@@ -125,6 +132,8 @@ impl<A: Annotation> Spanned for FunctionParam<A> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]
 pub struct FunctionDecl<A: Annotation = Span> {
+    pub kw_span: Span,
+    
     pub name: A::FunctionName,
     pub where_clause: Option<WhereClause<A::Type>>,
 
@@ -139,7 +148,12 @@ pub struct FunctionDecl<A: Annotation = Span> {
 
     pub params: Vec<FunctionParam<A>>,
 
-    pub return_ty: A::Type,
+    pub result_ty: A::Type,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub result_ty_span: Option<Span>,
 
     pub mods: Vec<DeclMod<A>>,
 }
@@ -147,7 +161,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
 impl FunctionDecl<Span> {
     pub fn parse(tokens: &mut TokenStream, allow_methods: bool, tags: Vec<Tag>) -> ParseResult<Self> {
         let mut kw_matcher = Keyword::Function | Keyword::Procedure;
-        
+
         if allow_methods {
             kw_matcher = kw_matcher
                 | Keyword::Class
@@ -157,7 +171,7 @@ impl FunctionDecl<Span> {
 
         let func_kw = tokens.match_one(kw_matcher)?;
         
-        let (kind, expect_return) = if func_kw.is_keyword(Keyword::Class) {
+        let (kw_span, kind, expect_result_ty) = if func_kw.is_keyword(Keyword::Class) {
             let class_func_kw = tokens.match_one(Keyword::Function | Keyword::Procedure)?;
 
             let kind = FunctionDeclKind::ClassMethod;
@@ -167,15 +181,17 @@ impl FunctionDecl<Span> {
                 _ => unreachable!(),
             };
 
-            (kind, expect_return)
+            (func_kw.span().to(class_func_kw.span()), kind, expect_return)
         } else {
-            match func_kw.as_keyword() {
+            let (kind, expect_return) = match func_kw.as_keyword() {
                 Some(Keyword::Function) => (FunctionDeclKind::Function, true),
                 Some(Keyword::Procedure) => (FunctionDeclKind::Function, false),
                 Some(Keyword::Constructor) => (FunctionDeclKind::Constructor, false),
                 Some(Keyword::Destructor) => (FunctionDeclKind::Destructor, false),
                 _ => unreachable!(),
-            }
+            };
+
+            (func_kw.into_span(), kind, expect_return)
         };
         
         let name = Self::parse_name(tokens)?;
@@ -198,19 +214,20 @@ impl FunctionDecl<Span> {
             Vec::new()
         };
 
-        let return_ty = if expect_return {
+        let (return_ty, return_ty_span) = if expect_result_ty {
             match tokens.match_one_maybe(Separator::Colon) {
                 Some(_) => {
                     // look for a return type
                     let ty = TypeName::parse(tokens)?;
-                    span = span.to(ty.span());
-                    ty
+                    let ty_span = ty.span().clone(); 
+                    span = span.to(&ty_span);
+                    (ty, Some(ty_span))
                 },
 
-                None => TypeName::Unspecified(func_kw.into_span()),
+                None => (TypeName::Unspecified(kw_span.clone()), None),
             }
         } else {
-            TypeName::Unspecified(func_kw.into_span())
+            (TypeName::Unspecified(kw_span.clone()), None)
         };
 
         let mods = DeclMod::parse_seq(tokens)?;
@@ -221,12 +238,14 @@ impl FunctionDecl<Span> {
         let where_clause = WhereClause::try_parse(tokens)?;
 
         Ok(FunctionDecl {
+            kw_span,
             name,
             where_clause,
             tags,
             kind,
             span,
-            return_ty,
+            result_ty: return_ty,
+            result_ty_span: return_ty_span,
             params,
             mods,
         })
@@ -295,15 +314,16 @@ impl FunctionDecl<Span> {
             None
         } else {
             let type_name = IdentPath::from_vec(instance_ty_path);
+            let name_span = type_name.path_span();
+            let type_span = match &instance_ty_params {
+                Some(param_list) => name_span.to(param_list),
+                None => name_span.clone(),
+            };
 
             Some(Box::new(TypePath {
-                span: match &instance_ty_params {
-                    Some(ty_list) => type_name
-                        .path_span()
-                        .to(ty_list.span()),
-                    None => type_name.path_span(),
-                },
+                span: type_span,
                 name: type_name,
+                name_span,
                 type_params: instance_ty_params,
             }))
         };
@@ -354,11 +374,23 @@ impl FunctionDecl<Span> {
             tokens.match_one(Separator::Colon)?;
             let ty = TypeName::parse(tokens)?;
 
-            for ident in idents {
+
+            // TODO: the AST should preserve the groups as written
+            // right now type spans need to be optional because we only want to include the same
+            // span once per group of identifiers when producing semantic tokens, but this makes
+            // this code more complicated than it needs to be
+            for i in 0..idents.len() {
+                let ty_span = if i == idents.len() - 1 {
+                    Some(ty.span().clone())
+                } else {
+                    None
+                };
+
                 params.push(FunctionParam {
-                    span: ident.span.clone(),
+                    span: idents[i].span.clone(),
                     ty: ty.clone(),
-                    ident,
+                    ty_span,
+                    ident: idents[i].clone(),
                     modifier,
                 })
             }
@@ -428,10 +460,10 @@ impl<A: Annotation> fmt::Display for FunctionDecl<A> {
             write!(f, ")")?;
         }
 
-        if self.return_ty.is_known() 
+        if self.result_ty.is_known() 
             && matches!(self.kind, FunctionDeclKind::Function | FunctionDeclKind::ClassMethod) 
         {
-            write!(f, ": {}", self.return_ty)?;
+            write!(f, ": {}", self.result_ty)?;
         }
         Ok(())
     }
@@ -447,7 +479,7 @@ pub struct FunctionLocalBinding<A = Span>
     pub ident: Ident,
     pub ty: A::Type,
 
-    pub initial_val: Option<A::ConstExpr>,
+    pub initial_val: Option<A::ConstValue>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -738,15 +770,19 @@ impl Parse for AnonymousFunctionDef<Span> {
                     .to_inner_tokens();
                 
                 while let Some(TokenTree::Ident(ident)) = params_tokens.match_one_maybe(Matcher::AnyIdent) {                    
-                    let ty = if params_tokens.match_one_maybe(Separator::Colon).is_some() {
-                        TypeName::parse(&mut params_tokens)?
+                    let (ty, ty_span) = if params_tokens.match_one_maybe(Separator::Colon).is_some() {
+                        let ty = TypeName::parse(&mut params_tokens)?;
+                        let ty_span = ty.span().clone();
+                        (ty, Some(ty_span))
                     } else {
-                        TypeName::Unspecified(ident.span.clone())
+                        let ty = TypeName::Unspecified(ident.span.clone());
+                        (ty, None)
                     };
 
                     params.push(FunctionParam {
                         span: ident.span().clone(),
                         ty,
+                        ty_span,
                         modifier: None,
                         ident,
                     });
@@ -834,7 +870,7 @@ pub struct QualifiedFunctionName {
     pub owning_ty_qual: Option<Box<TypePath>>,
 
     pub ident: Ident,
-    
+
     pub type_params: Option<TypeList<Ident>>,
 }
 
@@ -854,11 +890,37 @@ impl FunctionName for QualifiedFunctionName {
         &self.ident
     }
 
+    fn owning_type_name_span(&self) -> Option<&Span> {
+        self.owning_ty_qual
+            .as_ref()
+            .map(|qual| &qual.name_span)
+    }
+
+    fn owning_type_params_len(&self) -> usize {
+        self.owning_ty_qual
+            .as_ref()
+            .and_then(|qual| qual.type_params.as_ref())
+            .map(|params| params.len())
+            .unwrap_or(0)
+    }
+
+    fn owning_type_param_span(&self, index: usize) -> &Span {
+        let owning_ty_params = &self.owning_ty_qual.as_ref().unwrap().type_params;
+        &owning_ty_params.as_ref().unwrap().items[index].span
+    }
+
     fn type_params_len(&self) -> usize {
         self.type_params
             .as_ref()
             .map(|list| list.len())
             .unwrap_or(0)
+    }
+
+    fn type_param_span(&self, index: usize) -> &Span {
+        &self.type_params
+            .as_ref()
+            .unwrap()
+            .items[index].span
     }
 }
 

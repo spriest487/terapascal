@@ -1,5 +1,6 @@
 use crate::ast;
 use crate::ast::IdentPath;
+use crate::typ::ast::{apply_func_decl_named_ty_args, MethodOwningTypeName};
 use crate::typ::ast::infer_from_structural_ty_args;
 use crate::typ::ast::try_unwrap_inferred_args;
 use crate::typ::ast::FunctionDecl;
@@ -8,7 +9,7 @@ use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::StructDef;
 use crate::typ::ast::VariantDef;
-use crate::typ::ast::{apply_func_decl_named_ty_args, WhereClause};
+use crate::typ::ast::WhereClause;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::GenericContext;
@@ -300,15 +301,18 @@ fn specialize_method_decl(
     );
 
     // specialize the owning type of all methods
-    method.name.owning_ty = match &method.name.owning_ty {
-        Some(ty) => {
+    method.name.owning_ty_name = match &method.name.owning_ty_name {
+        Some(ty_name) => {
             assert_eq!(
-                ty.full_path().map(Cow::into_owned).as_ref(),
+                ty_name.ty.full_path().map(Cow::into_owned).as_ref(),
                 Some(owning_ty_generic_name),
                 "owning type of a method must always be the type it's declared in"
             );
 
-            Some(self_ty)
+            Some(MethodOwningTypeName {
+                ty: self_ty,
+                ..ty_name.clone()
+            })
         },
 
         None => None,

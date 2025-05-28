@@ -81,12 +81,12 @@ pub struct EnumDeclItem<A: Annotation> {
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]
     #[derivative(PartialEq = "ignore")]
-    pub span: Span,
+    pub annotation: A,
 }
 
 impl<A: Annotation> Spanned for EnumDeclItem<A> {
     fn span(&self) -> &Span {
-        &self.span
+        self.annotation.span()
     }
 }
 
@@ -117,7 +117,7 @@ impl Parse for EnumDeclItem<Span> {
         let item = EnumDeclItem {
             ident,
             value,
-            span,
+            annotation: span,
         };
         Ok(item)
     }

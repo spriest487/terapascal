@@ -35,7 +35,7 @@ impl fmt::Display for Visibility {
 }
 
 #[derive(Clone, Debug)]
-pub enum UnitDecl<A: Annotation> {
+pub enum UnitDecl<A: Annotation = Span> {
     FunctionDecl { decl: Arc<FunctionDecl<A>> },
     FunctionDef { def: Arc<FunctionDef<A>> },
     Type { decl: TypeDecl<A> },

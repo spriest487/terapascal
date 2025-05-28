@@ -52,6 +52,7 @@ pub use type_name::*;
 pub use type_name_pattern::*;
 pub use typedecl::*;
 pub use unit::*;
+use crate::IntConstant;
 
 pub trait TypeAnnotation : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
     fn is_known(&self) -> bool;
@@ -59,7 +60,23 @@ pub trait TypeAnnotation : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + 
 
 pub trait FunctionName : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
     fn ident(&self) -> &Ident;
+    
+    fn owning_type_name_span(&self) -> Option<&Span>;
+    fn owning_type_params_len(&self) -> usize;
+    fn owning_type_param_span(&self, index: usize) -> &Span;
+
     fn type_params_len(&self) -> usize;
+    fn type_param_span(&self, index: usize) -> &Span;
+}
+
+pub trait ConstExprValue<A: Annotation, Val> : Spanned + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
+    fn as_expr(&self) -> &Expr<A>; 
+}
+
+impl<T> ConstExprValue<Span, T> for Box<Expr<Span>> {
+    fn as_expr(&self) -> &Expr<Span> {
+        self.as_ref()
+    }
 }
 
 pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
@@ -68,10 +85,10 @@ pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
     type Pattern: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
     type FunctionName: FunctionName + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
 
-    type ConstStringExpr: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
-    type ConstIntegerExpr: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
+    type ConstStringExpr: ConstExprValue<Self, String>;
+    type ConstIntegerExpr: ConstExprValue<Self, IntConstant>;
 
-    type ConstExpr: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
+    type ConstValue: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
 }
 
 impl Annotation for Span {
@@ -82,6 +99,5 @@ impl Annotation for Span {
 
     type ConstStringExpr = Box<Expr<Span>>;
     type ConstIntegerExpr = Box<Expr<Span>>;
-    type ConstExpr = Box<Expr<Span>>;
+    type ConstValue = Box<Expr<Span>>;
 }
-

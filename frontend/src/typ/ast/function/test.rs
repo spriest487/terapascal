@@ -85,7 +85,7 @@ fn make_decl(
     FunctionDecl {
         name: TypedFunctionName{
             ident: test_ident(name),
-            owning_ty,
+            owning_ty_name: owning_ty,
             span: test_span.clone(),
             type_params: ty_params_list,
         },
@@ -101,7 +101,7 @@ fn make_decl(
                 span: test_span.clone(),
             })
             .collect(),
-        return_ty,
+        result_ty: return_ty,
         mods: Vec::new(),
         span: test_span.clone(),
         where_clause,
@@ -121,7 +121,7 @@ fn specialized_func_decl_has_specialized_return_ty() {
     let specialized = specialize_func_decl(&decl, &args, &ctx)
         .unwrap();
     
-    assert_eq!(Type::Primitive(Primitive::Int32), specialized.return_ty);
+    assert_eq!(Type::Primitive(Primitive::Int32), specialized.result_ty);
 }
 
 #[test]

@@ -47,10 +47,10 @@ impl TypeParamList {
                         is_ty: constraint.is_ty.apply_type_args(params, args),
                         ..constraint
                     });
-
+                
                 TypeParam {
-                    name: ty_param.name,
                     constraint,
+                    ..ty_param
                 }
             })
     }
@@ -97,6 +97,7 @@ pub fn typecheck_type_params(
 
         items.push(ast::TypeParam {
             name: ty_param.name.clone(),
+            span: ty_param.span.clone(),
             constraint,
         });
     }

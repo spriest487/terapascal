@@ -724,10 +724,10 @@ impl Context {
                 .expect("enum ord values must exist after typechecking");
             self.declare_global_const(
                 item.ident.clone(),
-                Literal::Integer(*ord_val),
+                Literal::Integer(ord_val.value),
                 enum_ty.clone(),
                 visibility,
-                item.span.clone(),
+                item.span().clone(),
             )?;
         }
 

@@ -27,7 +27,7 @@ impl ConstEval for Literal {
 impl ConstEval for Expr {
     fn const_eval(&self, ctx: &Context) -> Option<Literal> {
         match self {
-            Expr::Literal(lit, ..) => Some(lit.clone()),
+            Expr::Literal(lit) => Some(lit.literal.clone()),
             Expr::BinOp(bin_op) => bin_op.const_eval(ctx),
             Expr::UnaryOp(op) => op.const_eval(ctx),
             Expr::IfCond(cond) => cond.const_eval(ctx),

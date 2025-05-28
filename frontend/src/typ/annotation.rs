@@ -2,10 +2,10 @@ mod symbol;
 
 pub use symbol::*;
 
-use crate::ast::Annotation;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Visibility;
+use crate::ast::{Annotation, ConstExprValue};
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::Literal;
@@ -20,6 +20,7 @@ use crate::IntConstant;
 use derivative::*;
 use std::borrow::Cow;
 use std::fmt;
+use std::hash::Hash;
 use std::sync::Arc;
 use terapascal_common::span::*;
 
@@ -357,6 +358,34 @@ impl From<UfcsValue> for Value {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
+pub struct EvaluatedConstExpr<Val> {
+    pub expr: Box<Expr>,
+    pub value: Val,
+}
+
+impl<T> fmt::Display for EvaluatedConstExpr<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.expr)
+    }
+}
+
+impl<T> Spanned for EvaluatedConstExpr<T> {
+    fn span(&self) -> &Span {
+        self.expr.span()
+    }
+}
+
+impl<T> ConstExprValue<Value, T> for EvaluatedConstExpr<T> 
+where
+    T: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash
+{
+    fn as_expr(&self) -> &crate::ast::Expr<Value> {
+        &self.expr
+    }
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, Hash, PartialEq)]
 pub enum Value {
     Untyped(
         #[derivative(Debug = "ignore")]
@@ -596,8 +625,8 @@ impl Annotation for Value {
     type Name = Symbol;
     type Pattern = TypePattern;
     type FunctionName = TypedFunctionName;
-    
-    type ConstStringExpr = String;
-    type ConstIntegerExpr = IntConstant;
-    type ConstExpr = Literal;
+
+    type ConstStringExpr = EvaluatedConstExpr<String>;
+    type ConstIntegerExpr = EvaluatedConstExpr<IntConstant>;
+    type ConstValue = Literal;
 }

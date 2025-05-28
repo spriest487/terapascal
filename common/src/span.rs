@@ -125,3 +125,9 @@ impl Spanned for Span {
         self
     }
 }
+
+impl<T> Spanned for Box<T> where T: Spanned {
+    fn span(&self) -> &Span {
+        self.as_ref().span()
+    }
+}

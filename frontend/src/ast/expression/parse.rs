@@ -44,7 +44,7 @@ fn parse_literal_string(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
     match tokens.match_one(Matcher::AnyLiteralString)? {
         TokenTree::String { value, span } => {
             let str_lit = Literal::String(value);
-            Ok(Expr::Literal(str_lit, span))
+            Ok(Expr::literal(str_lit, span))
         },
         _ => unreachable!(),
     }
@@ -54,7 +54,7 @@ fn parse_literal_integer(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
     match tokens.match_one(Matcher::AnyLiteralInteger)? {
         TokenTree::IntNumber { value, span } => {
             let int_lit = Literal::Integer(value);
-            Ok(Expr::Literal(int_lit, span))
+            Ok(Expr::literal(int_lit, span))
         },
         _ => unreachable!(),
     }
@@ -64,7 +64,7 @@ fn parse_literal_real(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
     match tokens.match_one(Matcher::AnyLiteralReal)? {
         TokenTree::RealNumber { value, span } => {
             let real_lit = Literal::Real(value);
-            Ok(Expr::Literal(real_lit, span))
+            Ok(Expr::literal(real_lit, span))
         },
 
         _ => unreachable!(),
@@ -74,7 +74,7 @@ fn parse_literal_real(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
 fn parse_literal_bool(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
     let kw = tokens.match_one(Keyword::True.or(Keyword::False))?;
     let val = kw.is_keyword(Keyword::True);
-    let expr = Expr::Literal(Literal::Boolean(val), kw.span().clone());
+    let expr = Expr::literal(Literal::Boolean(val), kw.span().clone());
     Ok(expr)
 }
 
@@ -91,7 +91,7 @@ fn parse_size_of(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
 
     let span = kw.span().to(close_bracket.span());
 
-    Ok(Expr::Literal(Literal::SizeOf(Box::new(ty)), span))
+    Ok(Expr::literal(Literal::SizeOf(Box::new(ty)), span))
 }
 
 fn parse_default(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
@@ -116,7 +116,7 @@ fn parse_default(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
         }
     };
 
-    Ok(Expr::Literal(Literal::DefaultValue(Box::new(ty)), span))
+    Ok(Expr::literal(Literal::DefaultValue(Box::new(ty)), span))
 }
 
 fn parse_type_info_expr(tokens: &mut TokenStream) -> ParseResult<Expr> {
@@ -131,7 +131,7 @@ fn parse_type_info_expr(tokens: &mut TokenStream) -> ParseResult<Expr> {
     let typename = TypeName::parse(&mut typename_tokens)?;
     typename_tokens.finish()?;
 
-    Ok(Expr::Literal(Literal::TypeInfo(Box::new(typename)), span))
+    Ok(Expr::literal(Literal::TypeInfo(Box::new(typename)), span))
 }
 
 pub fn parse_case_expr(tokens: &mut TokenStream) -> ParseResult<Expr> {
@@ -314,7 +314,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
 
             Some(tt) if tt.is_keyword(Keyword::Nil) => {
                 let nil_token = self.tokens.next().unwrap();
-                self.push_operand(Expr::Literal(Literal::Nil, nil_token.span().clone()));
+                self.push_operand(Expr::literal(Literal::Nil, nil_token.span().clone()));
             },
 
             Some(tt) if tt.is_keyword(Keyword::SizeOf) => {

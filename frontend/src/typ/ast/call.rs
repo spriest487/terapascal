@@ -374,7 +374,7 @@ fn typecheck_func_overload(
             }
             
             let return_annotation = Value::from(TypedValue::temp(
-                decl.return_ty.clone(), 
+                decl.result_ty.clone(), 
                 overloaded.span.clone()
             ));
             
@@ -523,7 +523,7 @@ pub fn overload_to_no_args_call(
 
     let call = match &candidates[overload.selected_sig] {
         OverloadCandidate::Function { decl_name, visibility, .. } => {
-            let return_value = TypedValue::temp(call_decl.return_ty.clone(), span.clone());
+            let return_value = TypedValue::temp(call_decl.result_ty.clone(), span.clone());
 
             *target.annotation_mut() = Value::from(FunctionValue::new(
                 decl_name.clone(),
@@ -541,7 +541,7 @@ pub fn overload_to_no_args_call(
         }
 
         OverloadCandidate::Method { self_ty, index, decl, .. } => {
-            let return_value = TypedValue::temp(call_decl.return_ty.clone(), span.clone());
+            let return_value = TypedValue::temp(call_decl.result_ty.clone(), span.clone());
 
             *target.annotation_mut() = Value::from(MethodValue {
                 self_ty: self_ty.clone(),

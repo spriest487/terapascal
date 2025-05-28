@@ -138,15 +138,28 @@ impl ParseSeq for WhereClauseItem {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Hash, PartialEq, Debug)]
 pub struct TypeParam<T: TypeAnnotation> {
     pub name: Ident,
     pub constraint: Option<TypeConstraint<T>>,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub span: Span,
+}
+
+impl<T: TypeAnnotation> Spanned for TypeParam<T> {
+    fn span(&self) -> &Span {
+        &self.span
+    }
 }
 
 impl<T: TypeAnnotation> TypeParam<T> {
     pub fn new(name: Ident) -> Self {
         Self {
+            span: name.span.clone(),
             name,
             constraint: None,
         }
@@ -154,6 +167,7 @@ impl<T: TypeAnnotation> TypeParam<T> {
     
     pub fn with_constraint(name: Ident, constraint: TypeConstraint<T>) -> Self {
         Self {
+            span: name.span.to(constraint.span()),
             name,
             constraint: Some(constraint),
         }

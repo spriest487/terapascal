@@ -9,9 +9,12 @@ use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::TypeAnnotation;
 use crate::typ::ast::const_eval::ConstEval;
+use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::where_clause::WhereClause;
-use crate::typ::ast::{typecheck_block, Tag};
+use crate::typ::ast::Tag;
+use crate::typ::typecheck_type;
+use crate::typ::typecheck_type_params;
 use crate::typ::typecheck_type_path;
 use crate::typ::validate_generic_constraints;
 use crate::typ::Binding;
@@ -25,6 +28,9 @@ use crate::typ::GenericError;
 use crate::typ::GenericResult;
 use crate::typ::GenericTarget;
 use crate::typ::InvalidOverloadKind;
+use crate::typ::MismatchedMethodDecl;
+use crate::typ::NameContainer;
+use crate::typ::NameError;
 use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
@@ -36,12 +42,9 @@ use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
-use crate::typ::{typecheck_type, NameContainer, NameError};
-use crate::typ::{typecheck_type_params, MismatchedMethodDecl};
 use derivative::Derivative;
 use linked_hash_map::LinkedHashMap;
 use std::fmt;
-use std::fmt::Formatter;
 use std::ops::Deref;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -59,6 +62,49 @@ pub type FunctionLocalBinding = ast::FunctionLocalBinding<Value>;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
+pub struct MethodOwningTypeName {
+    pub ty: Type,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub ty_name_span: Span,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub ty_param_spans: Vec<Span>,
+}
+
+impl MethodOwningTypeName {
+    pub fn new<Param: Spanned>(
+        ty: impl Into<Type>,
+        src_name: &ast::IdentPath,
+        src_params: Option<&ast::TypeList<Param>>
+    ) -> Self {
+        Self {
+            ty: ty.into(),
+            ty_name_span: src_name.path_span(),
+            ty_param_spans: src_params
+                .as_ref()
+                .map(|list| list.items
+                    .iter()
+                    .map(|param| param.span().clone())
+                    .collect()
+                )
+                .unwrap_or_else(Vec::new),
+        }
+    }
+}
+
+impl fmt::Display for MethodOwningTypeName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.ty)
+    }
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct TypedFunctionName {
     pub ident: Ident,
 
@@ -67,7 +113,7 @@ pub struct TypedFunctionName {
     // if the function is a method, the type that implements this method.
     // either an interface type for interface method implementations, or the enclosing type
     // that is declaring its own method
-    pub owning_ty: Option<Type>,
+    pub owning_ty_name: Option<MethodOwningTypeName>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]
@@ -80,13 +126,27 @@ impl TypedFunctionName {
         ident: impl Into<Ident>,
         type_params: Option<TypeParamList>,
         owning_ty: impl Into<Type>,
+        owning_ty_span: Span,
+        owning_ty_params: Option<&TypeParamList>,
         span: impl Into<Span>
     ) -> Self {
+        let owning_ty_name = MethodOwningTypeName {
+            ty: owning_ty.into(),
+            ty_name_span: owning_ty_span,
+            ty_param_spans: owning_ty_params
+                .as_ref()
+                .map(|param_list| param_list.items
+                    .iter()
+                    .map(|param| param.name.span.clone())
+                    .collect())
+                .unwrap_or_else(Vec::new),
+        };
+        
         Self {
             ident: ident.into(),
             type_params,
             span: span.into(),
-            owning_ty: Some(owning_ty.into()),
+            owning_ty_name: Some(owning_ty_name),
         }
     }
     
@@ -99,12 +159,18 @@ impl TypedFunctionName {
             ident: ident.into(),
             type_params,
             span: span.into(),
-            owning_ty: None,
+            owning_ty_name: None,
         }
     }
-    
+
     pub fn owning_type_params(&self) -> Option<&TypeParamList> {
-        self.owning_ty.as_ref()?.type_params()
+        self.owning_ty_name.as_ref()?.ty.type_params()
+    }
+    
+    pub fn owning_type(&self) -> Option<&Type> {
+        self.owning_ty_name
+            .as_ref()
+            .map(|name| &name.ty)
     }
 }
 
@@ -113,17 +179,39 @@ impl FunctionName for TypedFunctionName {
         &self.ident
     }
 
+    fn owning_type_name_span(&self) -> Option<&Span> {
+        self.owning_ty_name
+            .as_ref()
+            .map(|name| &name.ty_name_span)
+    }
+
+    fn owning_type_params_len(&self) -> usize {
+        self.owning_ty_name
+            .as_ref()
+            .map(|name| name.ty_param_spans.len())
+            .unwrap_or(0)
+    }
+
+    fn owning_type_param_span(&self, index: usize) -> &Span {
+        &self.owning_ty_name.as_ref().unwrap().ty_param_spans[index]
+    }
+
     fn type_params_len(&self) -> usize {
         self.type_params
             .as_ref()
             .map(|list| list.len())
             .unwrap_or(0)
     }
+
+    fn type_param_span(&self, index: usize) -> &Span {
+        let params = self.type_params.as_ref().unwrap();
+        params.items[index].name.span()
+    }
 }
 
 impl fmt::Display for TypedFunctionName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if let Some(explicit_impl) = &self.owning_ty {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(explicit_impl) = &self.owning_ty_name {
             write!(f, "{}.", explicit_impl)?;
         }
 
@@ -142,20 +230,14 @@ impl FunctionDecl {
         let tags = Tag::typecheck_tags(&decl.tags, ctx)?;
         
         let enclosing_ty = ctx.current_enclosing_ty().cloned();
-
-        let owning_ty = match (&decl.name.owning_ty_qual, &enclosing_ty) {
-            (Some(owning_ty_name), None) => {
-                Some(typecheck_type_path(owning_ty_name, ctx)?)
-            },
-
+        
+        let (owning_ty_name, owning_ty) = match (&decl.name.owning_ty_qual, &enclosing_ty) {
             (Some(type_qual), Some(..)) => {
                 return Err(TypeError::InvalidMethodOwningType {
                     method_ident: decl.name.ident.clone(),
                     span: type_qual.span().clone()
                 });
             }
-
-            (None, Some(enclosing_ty)) => Some(enclosing_ty.clone()),
 
             (None, None) if is_def && decl.kind.must_be_method() => {
                 return Err(TypeError::MethodDeclMissingType {
@@ -165,7 +247,20 @@ impl FunctionDecl {
                 })
             }
 
-            _ => None,
+            (Some(owning_ty_name), None) => {
+                let ty = typecheck_type_path(owning_ty_name, ctx)?;
+                let ty_name = MethodOwningTypeName::new(
+                    ty.clone(),
+                    &owning_ty_name.name,
+                    owning_ty_name.type_params.as_ref()
+                );
+
+                (Some(ty_name), Some(ty))
+            },
+
+            (None, Some(enclosing_ty)) => (None, Some(enclosing_ty.clone())),
+
+            _ => (None, None),
         };
 
         let env = Environment::FunctionDecl {
@@ -223,7 +318,7 @@ impl FunctionDecl {
             };
 
             let return_ty = match decl.kind {
-                FunctionDeclKind::Function | FunctionDeclKind::ClassMethod =>  match &decl.return_ty {
+                FunctionDeclKind::Function | FunctionDeclKind::ClassMethod =>  match &decl.result_ty {
                     ast::TypeName::Unspecified(..) => Type::Nothing,
                     ty_name => typecheck_type(ty_name, ctx)?,
                 },
@@ -234,7 +329,7 @@ impl FunctionDecl {
 
                 FunctionDeclKind::Constructor => {
                     assert!(
-                        !decl.return_ty.is_known(),
+                        !decl.result_ty.is_known(),
                         "parser must not produce constructors with explicit return types"
                     );
 
@@ -352,19 +447,21 @@ impl FunctionDecl {
                     params = typecheck_params(decl, self_param_ty, ctx)?;
                 }
             };
-            
+
             let decl = FunctionDecl {
+                kw_span: decl.kw_span.clone(),
                 name: TypedFunctionName {
                     ident: decl.name.ident.clone(),
                     type_params: type_params.clone(),
-                    owning_ty,
+                    owning_ty_name,
                     span: decl.name.span(),
                 },
                 tags,
                 kind: decl.kind,
                 params,
                 where_clause,
-                return_ty,
+                result_ty: return_ty,
+                result_ty_span: decl.result_ty_span.clone(),
                 span: decl.span.clone(),
                 mods: decl_mods,
             };
@@ -427,7 +524,7 @@ fn specialize_self_ty(self_ty: Type, at: &Span, ctx: &Context) -> TypeResult<Typ
 
 impl FunctionDecl {
     pub fn is_implementation_of(&self, iface_ty: &Type, ctx: &Context) -> TypeResult<bool> {
-        let owning_ty = match &self.name.owning_ty {
+        let owning_ty = match self.name.owning_type() {
             // not a method/can't be an implementation
             None | Some(Type::Interface(..)) => return Ok(false),
             
@@ -468,6 +565,7 @@ fn typecheck_params(
 
         params.push(FunctionParam {
             ty: self_ty,
+            ty_span: None,
             ident: Ident::new(SELF_PARAM_NAME, self_span.clone()),
             modifier: None,
             span: self_span,
@@ -494,6 +592,7 @@ fn typecheck_params(
             ident: param.ident.clone(),
             span: param.span.clone(),
             ty,
+            ty_span: param.ty_span.clone(),
         };
         params.push(param);
     }
@@ -593,8 +692,8 @@ pub fn typecheck_func_def(
     // used to specialize the types in the decl
     let owning_ty = decl
         .name
-        .owning_ty
-        .clone();
+        .owning_type()
+        .cloned();
 
     if let Some(outer_ty_params) = owning_ty
         .as_ref()
@@ -609,17 +708,17 @@ pub fn typecheck_func_def(
     
     let decl = Arc::new(decl);
 
-    let return_ty = decl.return_ty.clone();
+    let return_ty = decl.result_ty.clone();
 
     let body_env = FunctionBodyEnvironment {
         result_ty: return_ty,
         ty_params: decl.name.type_params.clone(),
-        self_ty: decl.name.owning_ty.clone(),
+        self_ty: decl.name.owning_type().cloned(),
     };
 
     ctx.scope(body_env, |ctx| {
         // declare type parameters from the owning type, if this is a method
-        if let Some(owning_ty) = &decl.name.owning_ty {
+        if let Some(owning_ty) = decl.name.owning_type() {
             if let Some(enclosing_ty_params) = owning_ty.type_params() {
                 ctx.declare_type_params(enclosing_ty_params)?;
             }
@@ -634,7 +733,7 @@ pub fn typecheck_func_def(
 
         let locals = declare_locals_in_body(&def, ctx)?;
     
-        let body = typecheck_block(&def.body, &decl.return_ty, ctx)?;
+        let body = typecheck_block(&def.body, &decl.result_ty, ctx)?;
 
         Ok(FunctionDef {
             decl,
@@ -799,7 +898,7 @@ where
         f(&mut param.ty)?;
     }
 
-    f(&mut decl.return_ty)?;
+    f(&mut decl.result_ty)?;
     
     Ok(())
 }
@@ -838,6 +937,7 @@ pub fn typecheck_func_expr(
             ident: param.ident.clone(),
             span: param.span.clone(),
             ty,
+            ty_span: param.ty_span.clone(),
         });
     }
 

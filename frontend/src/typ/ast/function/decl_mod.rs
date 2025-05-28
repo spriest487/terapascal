@@ -36,7 +36,7 @@ impl DeclMod {
             }
             
             let result = match decl_mod {
-                ast::DeclMod::External { src, span } => {
+                ast::DeclMod::External { src, span, kw_span } => {
                     check_incompatible_mod(&overload, Self::OVERLOAD_WORD, span, Self::EXTERNAL_WORD)?;
 
                     if let Some(decl_type_params) = &decl.name.type_params {
@@ -61,6 +61,7 @@ impl DeclMod {
 
                     let extern_mod = DeclMod::External {
                         src: src_str,
+                        kw_span: kw_span.clone(),
                         span: span.clone(),
                     };
 
@@ -69,7 +70,7 @@ impl DeclMod {
                     }
 
                     extern_mod
-                },
+                }
 
                 ast::DeclMod::Inline(span) => {
                     let inline_mod = DeclMod::Inline(span.clone());

@@ -152,12 +152,12 @@ fn typecheck_unit_func_def(
     
     // free functions may not already have a declaration in scope if they weren't forward
     // declared, do that now
-    if func_decl.name.owning_ty.is_none() && !ctx.is_function_declared(&func_decl) {
+    if func_decl.name.owning_ty_name.is_none() && !ctx.is_function_declared(&func_decl) {
         ctx.declare_function(func_name.ident().clone(), Arc::new(func_decl.clone()), visibility)?;
     }
 
     let func_def = Arc::new(typecheck_func_def(func_decl.clone(), func_def, ctx)?);
-    match &func_decl.name.owning_ty {
+    match func_decl.name.owning_type() {
         Some(ty) => {
             ctx.define_method(ty.clone(), func_def.clone())?;
         }
@@ -179,7 +179,7 @@ fn typecheck_unit_func_decl(
     let func_decl = Arc::new(FunctionDecl::typecheck(func_decl, false, ctx)?);
 
     assert!(
-        func_decl.name.owning_ty.is_none(),
+        func_decl.name.owning_ty_name.is_none(),
         "not yet implemented: can't forward-declare method impls"
     );
 
@@ -460,7 +460,7 @@ fn typecheck_global_binding_item(
                 ty: ty.clone(),
             };
 
-            let val = Expr::Literal(const_val_literal.clone(), annotation.into());
+            let val = Expr::literal(const_val_literal.clone(), annotation.into());
             (ty, Some(Box::new(val)))
         }
 
@@ -556,10 +556,13 @@ pub fn typecheck_unit(unit: &ast::Unit<Span>, ctx: &mut Context) -> TypeResult<M
         let unit_ctx = ctx.clone();
 
         let unit = Unit {
+            unit_kw: unit.unit_kw.clone(),
             kind: unit.kind,
             ident: unit.ident.clone(),
             init,
+            iface_kw: unit.iface_kw.clone(),
             iface_decls,
+            impl_kw: unit.impl_kw.clone(),
             impl_decls,
         };
 
@@ -588,6 +591,7 @@ fn typecheck_init_block(init_block: &ast::InitBlock, ctx: &mut Context) -> TypeR
         Ok(InitBlock {
             body,
             keyword_span: init_block.keyword_span.clone(),
+            end_span: init_block.end_span.clone(),
         })
     })?;
 

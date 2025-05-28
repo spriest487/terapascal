@@ -24,6 +24,11 @@ pub enum DeclMod<A: Annotation = Span> {
         #[derivative(Hash = "ignore")]
         #[derivative(Debug = "ignore")]
         #[derivative(PartialEq = "ignore")]
+        kw_span: Span,
+
+        #[derivative(Hash = "ignore")]
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
         span: Span,
     },
 
@@ -70,6 +75,22 @@ impl<A: Annotation> DeclMod<A> {
             DeclMod::Overload(..) => Self::OVERLOAD_WORD,
         }
     }
+
+    pub fn keyword_span(&self) -> &Span {
+        match self {
+            DeclMod::External { kw_span: span, .. } => span,
+            DeclMod::Forward(span) => span,
+            DeclMod::Inline(span) => span,
+            DeclMod::Overload(span) => span,
+        }
+    }
+    
+    pub fn arg(&self) -> Option<&A::ConstStringExpr> {
+        match self {
+            DeclMod::External { src, .. } => Some(src),
+            _ => None,
+        }
+    }
 }
 
 impl ParseSeq for DeclMod<Span> {
@@ -82,7 +103,8 @@ impl ParseSeq for DeclMod<Span> {
             Self::EXTERNAL_WORD => {
                 let src = Expr::parse(tokens)?;
                 DeclMod::External {
-                    span: word_token.span().to(src.span()),
+                    kw_span: src.span().clone(),
+                    span: word_token.span.to(src.span()),
                     src: Box::new(src),
                 }
             },

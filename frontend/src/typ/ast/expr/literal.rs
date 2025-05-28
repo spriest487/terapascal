@@ -260,7 +260,7 @@ pub fn typecheck_literal(
             if *expect_ty == char_ty {
                 if let Some(char_lit) = string_to_char_lit(s.as_str()) {
                     let val = TypedValue::temp(char_ty, span.clone());
-                    return Ok(Expr::Literal(char_lit, Value::from(val)));
+                    return Ok(Expr::literal(char_lit, Value::from(val)));
                 }
             }
 
@@ -273,7 +273,7 @@ pub fn typecheck_literal(
             }
                 .into();
 
-            Ok(Expr::Literal(Literal::String(s.clone()), annotation))
+            Ok(Expr::literal(Literal::String(s.clone()), annotation))
         }
 
         ast::Literal::Boolean(b) => {
@@ -285,7 +285,7 @@ pub fn typecheck_literal(
             }
                 .into();
 
-            Ok(Expr::Literal(Literal::Boolean(*b), annotation))
+            Ok(Expr::literal(Literal::Boolean(*b), annotation))
         }
 
         ast::Literal::Integer(i) => typecheck_literal_int(i, expect_ty, span.clone()),
@@ -305,7 +305,7 @@ pub fn typecheck_literal(
             }
                 .into();
 
-            Ok(ast::Expr::Literal(
+            Ok(ast::Expr::literal(
                 ast::Literal::Real(x.clone()),
                 annotation,
             ))
@@ -324,7 +324,7 @@ pub fn typecheck_literal(
                 decl: None,
             };
 
-            Ok(Expr::Literal(Literal::Nil, annotation.into()))
+            Ok(Expr::literal(Literal::Nil, annotation.into()))
         }
 
         ast::Literal::SizeOf(size_of_ty) => {
@@ -336,7 +336,7 @@ pub fn typecheck_literal(
                 value_kind: ValueKind::Temporary,
             };
 
-            Ok(Expr::Literal(
+            Ok(Expr::literal(
                 Literal::SizeOf(Box::new(ty)),
                 annotation.into(),
             ))
@@ -346,7 +346,7 @@ pub fn typecheck_literal(
             let ty = if !default_of_ty.is_known() {
                 if *expect_ty == Type::Nothing {
                     return Err(TypeError::UnableToInferType {
-                        expr: Box::new(ast::Expr::Literal(lit.clone(), span.clone())),
+                        expr: Box::new(ast::Expr::literal(lit.clone(), span.clone())),
                     });
                 } else {
                     expect_ty.clone()
@@ -377,7 +377,7 @@ pub fn typecheck_literal(
             let typeinfo_type = Type::Class(Arc::new(builtin_typeinfo_name()));
             let val = TypedValue::temp(typeinfo_type, span.clone());
             
-            Ok(Expr::Literal(Literal::TypeInfo(Box::new(ty)), Value::from(val)))
+            Ok(Expr::literal(Literal::TypeInfo(Box::new(ty)), Value::from(val)))
         }
     }
 }
@@ -390,7 +390,7 @@ pub fn create_default_literal(ty: Type, span: Span) -> Expr {
         value_kind: ValueKind::Temporary,
     };
 
-    Expr::Literal(
+    Expr::literal(
         Literal::DefaultValue(Box::new(ty)),
         annotation.into(),
     )
@@ -447,7 +447,7 @@ fn typecheck_literal_int(i: &IntConstant, expect_ty: &Type, span: Span) -> TypeR
     }
         .into();
 
-    Ok(ast::Expr::Literal(ast::Literal::Integer(*i), annotation))
+    Ok(ast::Expr::literal(ast::Literal::Integer(*i), annotation))
 }
 
 fn try_map_primitive_int<F, T>(i: &IntConstant, primitive_ty: Primitive, f: F) -> Type

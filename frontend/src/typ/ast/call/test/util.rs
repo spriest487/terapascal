@@ -51,7 +51,7 @@ pub fn candidates_from_module(module: &Module, unit_name: &str) -> Vec<OverloadC
     let candidates = unit.unit.func_defs().map(|(visibility, func)| {
         let sig = func.decl.sig();
 
-        match &func.decl.name.owning_ty {
+        match &func.decl.name.owning_ty_name {
             Some(explicit_impl) => {
                 let ident = func.decl.name.ident.clone();
                 let (method_index, method) = explicit_impl

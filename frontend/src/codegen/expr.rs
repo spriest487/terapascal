@@ -17,7 +17,10 @@ use syn::Ident;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
     match expr {
-        syn::Expr::Literal(lit, typed) => literal_to_val(lit, typed.ty().as_ref(), builder),
+        syn::Expr::Literal(lit) => {
+            literal_to_val(&lit.literal, lit.annotation.ty().as_ref(), builder)
+        },
+
         _ => ir::Value::Ref(translate_expr(expr, builder)),
     }
 }
@@ -27,8 +30,8 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
     builder.push_debug_context(expr.annotation().span().clone());
 
     let result_ref = match expr {
-        syn::Expr::Literal(lit, annotation) => {
-            translate_literal(lit, &annotation.ty(), builder)
+        syn::Expr::Literal(lit) => {
+            translate_literal(&lit.literal, &lit.annotation.ty(), builder)
         },
 
         syn::Expr::BinOp(bin_op) => {

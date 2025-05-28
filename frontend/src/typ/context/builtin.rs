@@ -220,10 +220,13 @@ pub fn builtin_comparable_compare_method(owning_ty: Type, self_ty: Type) -> ast:
     let builtin_span = builtin_span();
 
     ast::FunctionDecl {
+        kw_span: builtin_span.clone(),
         name: ast::TypedFunctionName::new_method(
             builtin_ident(COMPARABLE_COMPARE_NAME),
             None,
             owning_ty.clone(),
+            builtin_span.clone(),
+            None,
             builtin_span.clone(),
         ),
         tags: Vec::new(),
@@ -233,17 +236,20 @@ pub fn builtin_comparable_compare_method(owning_ty: Type, self_ty: Type) -> ast:
             ast::FunctionParam {
                 ident: builtin_ident(SELF_PARAM_NAME),
                 ty: self_ty.clone(),
+                ty_span: None,
                 modifier: None,
                 span: builtin_span.clone(),
             },
             ast::FunctionParam {
                 ident: builtin_ident("other"),
                 ty: self_ty.clone(),
+                ty_span: None,
                 modifier: None,
                 span: builtin_span.clone(),
             }
         ],
-        return_ty: Type::from(Primitive::Int32),
+        result_ty: Type::from(Primitive::Int32),
+        result_ty_span: None,
         mods: Vec::new(),
         span: builtin_span.clone(),
     }
@@ -280,10 +286,13 @@ pub fn builtin_displayable_display_method(owning_ty: Type, self_ty: Type) -> ast
     let builtin_span = builtin_span();
 
     ast::FunctionDecl {
+        kw_span: builtin_span.clone(),
         name: ast::TypedFunctionName::new_method(
             builtin_ident(DISPLAYABLE_TOSTRING_METHOD),
             None,
             owning_ty.clone(),
+            builtin_span.clone(),
+            None,
             builtin_span.clone(),
         ),
         tags: Vec::new(),
@@ -293,14 +302,16 @@ pub fn builtin_displayable_display_method(owning_ty: Type, self_ty: Type) -> ast
             ast::FunctionParam {
                 ident: builtin_ident(SELF_PARAM_NAME),
                 ty: self_ty,
+                ty_span: None,
                 modifier: None,
                 span: builtin_span.clone(),
             }
         ],
-        return_ty: Type::class(IdentPath::from_vec(vec![
+        result_ty: Type::class(IdentPath::from_vec(vec![
             Ident::new(SYSTEM_UNIT_NAME, builtin_span.clone()),
             Ident::new(STRING_TYPE_NAME, builtin_span.clone()),
         ])),
+        result_ty_span: None,
         mods: Vec::new(),
         span: builtin_span.clone(),
     }

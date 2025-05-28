@@ -45,7 +45,7 @@ fn self_ty_is_valid_in_interface() {
     let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");    
     let method_a = &my_iface_decl.methods[0];
     assert_eq!("Self", method_a.decl.params[1].ty.to_string());
-    assert_eq!("Self", method_a.decl.return_ty.to_string());
+    assert_eq!("Self", method_a.decl.result_ty.to_string());
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn self_ty_is_valid_in_interface_sig_with_arrays() {
     let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");
     let method_a = &my_iface_decl.methods[0];
     assert_eq!("array of Self", method_a.decl.params[1].ty.to_string());
-    assert_eq!("array[2] of Self", method_a.decl.return_ty.to_string());
+    assert_eq!("array[2] of Self", method_a.decl.result_ty.to_string());
 }
 
 #[test]
@@ -86,7 +86,7 @@ fn self_ty_is_valid_in_interface_sig_with_generics() {
     let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");
     let method_a = &my_iface_decl.methods[0];
     assert_eq!("test.MyGeneric[Self]", method_a.decl.params[1].ty.to_string());
-    assert_eq!("test.MyGeneric[Self]", method_a.decl.return_ty.to_string());
+    assert_eq!("test.MyGeneric[Self]", method_a.decl.result_ty.to_string());
 }
 
 fn expect_self_not_found_err(result: TypeResult<Module>) {

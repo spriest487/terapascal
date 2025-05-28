@@ -23,6 +23,11 @@ pub struct TypePath {
     // or another TypePath
     pub name: IdentPath,
 
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub name_span: Span,
+
     pub type_params: Option<TypeList<Ident>>,
 
     #[derivative(Debug = "ignore")]
@@ -35,16 +40,19 @@ impl Parse for TypePath {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let path = IdentPath::parse(tokens)?;
 
-        let mut span = path.path_span();
+        let path_span = path.path_span();
         
         let type_params = TypeList::try_parse(tokens)?;
         
-        if let Some(type_params) = &type_params {
-            span = span.to(type_params.span());
-        }
+        let span = if let Some(type_params) = &type_params {
+            path_span.to(type_params.span())
+        } else {
+            path_span.clone()
+        };
 
         Ok(TypePath {
             name: path,
+            name_span: path_span,
             type_params,
             span,
         })

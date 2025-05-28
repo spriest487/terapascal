@@ -131,7 +131,7 @@ impl FunctionSig {
     }
 
     pub fn from_decl(decl: FunctionDecl) -> Self {
-        let return_ty = decl.return_ty;
+        let return_ty = decl.result_ty;
 
         let param_sigs = decl
             .params

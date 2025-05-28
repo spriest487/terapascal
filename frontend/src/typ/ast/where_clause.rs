@@ -79,6 +79,7 @@ impl WhereClause {
             constrained_params.push(TypeParam {
                 name: type_param_ident.clone(),
                 constraint,
+                span: type_param_ident.span.clone(),
             });
         }
 

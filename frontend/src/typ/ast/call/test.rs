@@ -586,7 +586,7 @@ fn resolving_overload_with_generic_discarded() {
     assert_eq!(overload.type_args, None);
 
     let selected = &candidates[overload.selected_sig];
-    assert_eq!(selected.decl().return_ty, Type::Primitive(Primitive::Int32));
+    assert_eq!(selected.decl().result_ty, Type::Primitive(Primitive::Int32));
     assert_eq!(selected.decl().params.len(), 2);
     assert!(selected.decl().name.type_params.is_none());
 }

@@ -9,6 +9,7 @@ use crate::ast::expression::parse::CompoundExpressionParser;
 use crate::ast::ident::*;
 use crate::ast::match_block::MatchExpr;
 use crate::ast::Annotation;
+use crate::ast::TypeName;
 use crate::ast::AnonymousFunctionDef;
 use crate::ast::BinOp;
 use crate::ast::Block;
@@ -33,7 +34,7 @@ use terapascal_common::span::*;
 use terapascal_common::TracedError;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum Literal<T: TypeAnnotation> {
+pub enum Literal<T: TypeAnnotation = TypeName> {
     Nil,
     Integer(IntConstant),
     Real(RealConstant),
@@ -42,6 +43,17 @@ pub enum Literal<T: TypeAnnotation> {
     SizeOf(Box<T>),
     DefaultValue(Box<T>),
     TypeInfo(Box<T>),
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
+pub struct LiteralItem<A: Annotation = Span> {
+    pub literal: Literal<A::Type>,
+    
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub annotation: A,
 }
 
 impl<T: TypeAnnotation> fmt::Display for Literal<T> {
@@ -64,13 +76,7 @@ impl<T: TypeAnnotation> fmt::Display for Literal<T> {
 pub enum Expr<A: Annotation = Span> {
     BinOp(Box<BinOp<A>>),
     UnaryOp(Box<UnaryOp<A>>),
-    Literal(
-        Literal<A::Type>,
-        #[derivative(Hash = "ignore")]
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        A
-    ),
+    Literal(LiteralItem<A>),
     Ident(
         Ident,
         #[derivative(Hash = "ignore")]
@@ -205,7 +211,7 @@ impl<A: Annotation> Expr<A> {
         match self {
             Expr::BinOp(_) => "binary operator",
             Expr::UnaryOp(_) => "unary operator",
-            Expr::Literal(_, _) => "literal",
+            Expr::Literal(_) => "literal",
             Expr::Ident(_, _) => "identifier",
             Expr::Call(call) => call.name(),
             Expr::ObjectCtor(_) => "object constructor",
@@ -226,7 +232,7 @@ impl<A: Annotation> Expr<A> {
         match self {
             Expr::BinOp(bin_op) => &bin_op.annotation,
             Expr::UnaryOp(unary_op) => &unary_op.annotation,
-            Expr::Literal(_, annotation) => annotation,
+            Expr::Literal(lit) => &lit.annotation,
             Expr::Ident(_, annotation) => annotation,
             Expr::Call(call) => &call.annotation(),
             Expr::IfCond(cond) => &cond.annotation,
@@ -247,7 +253,7 @@ impl<A: Annotation> Expr<A> {
         match self {
             Expr::BinOp(bin_op) => &mut bin_op.annotation,
             Expr::UnaryOp(unary_op) => &mut unary_op.annotation,
-            Expr::Literal(_, annotation) => annotation,
+            Expr::Literal(lit) => &mut lit.annotation,
             Expr::Ident(_, annotation) => annotation,
             Expr::Call(call) => call.annotation_mut(),
             Expr::IfCond(cond) => &mut cond.annotation,
@@ -308,7 +314,7 @@ impl<A: Annotation> Expr<A> {
 
     pub fn as_literal(&self) -> Option<&Literal<A::Type>> {
         match self {
-            Expr::Literal(lit, _) => Some(lit),
+            Expr::Literal(lit) => Some(&lit.literal),
             _ => None,
         }
     }
@@ -330,6 +336,10 @@ impl<A: Annotation> Expr<A> {
             
             _ => None,
         }
+    }
+    
+    pub fn literal(literal: Literal<A::Type>, annotation: A) -> Self {
+        Self::Literal(LiteralItem { literal, annotation })
     }
 }
 
@@ -375,7 +385,7 @@ impl<A: Annotation> fmt::Display for Expr<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Expr::Ident(ident, _) => write!(f, "{}", ident),
-            Expr::Literal(lit, _) => write!(f, "{}", lit),
+            Expr::Literal(item) => write!(f, "{}", item.literal),
             Expr::BinOp(op) => write!(f, "{}", op),
             Expr::Call(call) => write!(f, "{}", call),
             Expr::ObjectCtor(ctor) => write!(f, "{}", ctor),

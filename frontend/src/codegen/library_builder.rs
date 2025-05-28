@@ -33,7 +33,7 @@ use crate::codegen::FunctionInstance;
 use crate::codegen::IROptions;
 use crate::codegen::SetFlagsType;
 use crate::ir;
-use crate::typ::ast::apply_func_decl_named_ty_args;
+use crate::typ::ast::{apply_func_decl_named_ty_args, MethodOwningTypeName};
 use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
@@ -403,7 +403,7 @@ impl LibraryBuilder {
             self,
             generic_ctx,
             &specialized_decl.params,
-            &specialized_decl.return_ty,
+            &specialized_decl.result_ty,
             &func_def.locals,
             &func_def.body,
             false,
@@ -553,17 +553,24 @@ impl LibraryBuilder {
             generic_ctx.push(decl_ty_params, ty_args);
         };
 
-        let mut specialized_decl = apply_func_decl_named_ty_args(
-            generic_method_decl.clone(),
-            &generic_ctx,
-            &generic_ctx);
-        specialized_decl.name.owning_ty = Some(method_key.self_ty.clone());
-
         let ns = method_key
             .self_ty
             .full_path()
             .expect("instantiate_method: methods should only be generated for named types")
             .into_owned();
+
+        let mut specialized_decl = apply_func_decl_named_ty_args(
+            generic_method_decl.clone(),
+            &generic_ctx,
+            &generic_ctx);
+
+        // TODO hack? review this
+        // does this only happen for decls that already have an owning type name we can modify?
+        specialized_decl.name.owning_ty_name = Some(MethodOwningTypeName::new(
+            method_key.self_ty.clone(),
+            &ns,
+            method_key.self_ty.type_params(),
+        ));
 
         let id = self.declare_func(&specialized_decl, ns);
 
@@ -590,7 +597,7 @@ impl LibraryBuilder {
             self,
             generic_ctx,
             &generic_method_def.decl.params,
-            &generic_method_def.decl.return_ty,
+            &generic_method_def.decl.result_ty,
             &generic_method_def.locals,
             &generic_method_def.body,
             true,
@@ -693,7 +700,7 @@ impl LibraryBuilder {
         func_decl: &typ::ast::FunctionDecl,
         namespace: IdentPath,
     ) -> ir::FunctionID {
-        let has_global_name = func_decl.name.owning_ty.is_none()
+        let has_global_name = func_decl.name.owning_ty_name.is_none()
             && !func_decl.is_overload()
             && func_decl.name.type_params.is_none();
 
@@ -1303,7 +1310,7 @@ impl LibraryBuilder {
             instance_ty,
             name: method_name_id,
             params,
-            result_ty: self.translate_type(&decl.return_ty, &generic_ctx),
+            result_ty: self.translate_type(&decl.result_ty, &generic_ctx),
         }
     }
 
