@@ -246,8 +246,8 @@ impl Type {
                 let def = ctx.instantiate_variant_def(&variant_name)?;
                 let mut result = true;
                 for case in &def.cases {
-                    if let Some(data_ty) = &case.data_ty {
-                        if !data_ty.has_default(ctx)? {
+                    if let Some(data) = &case.data {
+                        if !data.ty.has_default(ctx)? {
                             result = false;
                             break;
                         }

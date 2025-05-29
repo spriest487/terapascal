@@ -141,7 +141,7 @@ pub fn try_expr_into_noargs_variant_ctor(
         None => return Ok(None),
 
         Some(case) => {
-            if case.data_ty.is_some() {
+            if case.data.is_some() {
                 return Ok(None);
             }
         }

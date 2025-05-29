@@ -19,6 +19,8 @@ pub fn semantic_legend() -> Vec<SemanticTokenType> {
         SemanticTokenType::TYPE_PARAMETER,
         SemanticTokenType::PARAMETER,
         SemanticTokenType::VARIABLE,
+        SemanticTokenType::ENUM,
+        SemanticTokenType::ENUM_MEMBER,
     ]
 }
 
@@ -32,6 +34,8 @@ const SEMANTIC_TYPE: u32 = 6;
 const SEMANTIC_TYPE_PARAMETER: u32 = 7;
 const SEMANTIC_PARAMETER: u32 = 8;
 const SEMANTIC_VARIABLE: u32 = 9;
+const SEMANTIC_ENUM: u32 = 10;
+const SEMANTIC_ENUM_MEMBER: u32 = 11;
 
 pub struct SemanticTokenBuilder {
     cur_line: u32,
@@ -190,7 +194,17 @@ impl SemanticTokenBuilder {
                     }
                 }
                 TypeDeclItem::Interface(_) => {}
-                TypeDeclItem::Variant(_) => {}
+
+                TypeDeclItem::Variant(variant_decl) => {
+                    self.add(&variant_decl.kw_span, SEMANTIC_KEYWORD);
+                    for case in &variant_decl.cases {
+                        self.add(&case.ident.span, SEMANTIC_ENUM_MEMBER);
+                        
+                        if let Some(data) = &case.data {
+                            self.add(&data.span, SEMANTIC_TYPE);
+                        }
+                    }
+                }
 
                 TypeDeclItem::Alias(aliased) => {
                     self.add(&aliased.ty_span, SEMANTIC_TYPE);

@@ -57,9 +57,9 @@ impl StructLayout {
                     let mut max_data_align = 1;
 
                     for case in &variant_def.cases {
-                        if let Some(data_ty) = &case.data_ty {
-                            max_data_align =
-                                usize::max(max_data_align, self.align_of(data_ty, ctx)?);
+                        if let Some(data) = &case.data {
+                            let data_align = self.align_of(&data.ty, ctx)?;
+                            max_data_align = usize::max(max_data_align, data_align);
                         }
                     }
 
@@ -115,9 +115,9 @@ impl StructLayout {
                 let mut max_data_size = 0;
                 let mut max_data_align = 1;
                 for case in &variant_def.cases {
-                    if let Some(data_ty) = &case.data_ty {
-                        max_data_size = usize::max(max_data_size, self.size_of(data_ty, ctx)?);
-                        max_data_align = usize::max(max_data_align, self.align_of(data_ty, ctx)?);
+                    if let Some(data) = &case.data {
+                        max_data_size = usize::max(max_data_size, self.size_of(&data.ty, ctx)?);
+                        max_data_align = usize::max(max_data_align, self.align_of(&data.ty, ctx)?);
                     }
                 }
 

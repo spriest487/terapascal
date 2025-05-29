@@ -15,10 +15,10 @@ pub fn translate_variant_def(
 
     let mut cases = Vec::new();
     for case in &variant_def.cases {
-        let (case_ty, case_rc) = match case.data_ty.as_ref() {
-            Some(data_ty) => {
-                let case_ty = lib.translate_type(data_ty, generic_ctx);
-                (Some(case_ty), data_ty.is_strong_rc_reference())
+        let (case_ty, case_rc) = match case.data.as_ref() {
+            Some(data) => {
+                let case_ty = lib.translate_type(&data.ty, generic_ctx);
+                (Some(case_ty), data.ty.is_strong_rc_reference())
             },
             None => (None, false),
         };

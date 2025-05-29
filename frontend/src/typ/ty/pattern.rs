@@ -265,7 +265,7 @@ impl TypePattern {
                 let variant_def = ctx.instantiate_variant_def(variant)?;
                 let case_ty = variant_def.cases.iter()
                     .find_map(|c| if c.ident == *case {
-                        c.data_ty.clone()
+                        c.data.as_ref().map(|data| data.ty.clone())
                     } else {
                         None
                     })

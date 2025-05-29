@@ -156,16 +156,18 @@ pub fn specialize_variant_def(
         .cases
         .iter()
         .map(|case| {
-            let data_ty = match &case.data_ty {
+            let data = match &case.data {
                 None => None,
-                Some(ty) => {
-                    let ty = ty.clone().apply_type_args(variant_ty_params, args);
-                    Some(ty)
+                Some(data) => {
+                    Some(ast::VariantCaseData {
+                        ty: data.ty.clone().apply_type_args(variant_ty_params, args),
+                        span: data.span.clone(),
+                    })
                 },
             };
 
             Ok(ast::VariantCase {
-                data_ty,
+                data,
                 ..case.clone()
             })
         })
@@ -180,6 +182,7 @@ pub fn specialize_variant_def(
     )?;
 
     Ok(VariantDef {
+        kw_span: generic_def.kw_span.clone(),
         name: Arc::new(parameterized_name),
         where_clause: specialized_where,
         tags: generic_def.tags.clone(),

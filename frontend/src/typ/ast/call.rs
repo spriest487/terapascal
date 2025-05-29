@@ -926,7 +926,7 @@ fn typecheck_variant_ctor_call(
         },
     };
 
-    let arg = match &variant_def.cases[case_index].data_ty {
+    let arg = match &variant_def.cases[case_index].data {
         None => {
             if !args.is_empty() {
                 let bad_args: Vec<_> = args
@@ -947,10 +947,10 @@ fn typecheck_variant_ctor_call(
             None
         },
 
-        Some(data_ty) => {
+        Some(data) => {
             let args: Vec<Expr> = args
                 .iter()
-                .map(|arg| typecheck_expr(arg, data_ty, ctx))
+                .map(|arg| typecheck_expr(arg, &data.ty, ctx))
                 .collect::<TypeResult<_>>()?;
 
             if args.len() != 1 {
@@ -966,9 +966,9 @@ fn typecheck_variant_ctor_call(
                 });
             }
             
-            let data_val = implicit_conversion(args.into_iter().next().unwrap(), data_ty, ctx)?;
+            let data_val = implicit_conversion(args.into_iter().next().unwrap(), &data.ty, ctx)?;
             Some(data_val)
-        },
+        }
     };
 
     let case = variant_def.cases[case_index].ident.clone();

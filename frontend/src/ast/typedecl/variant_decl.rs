@@ -28,6 +28,8 @@ use terapascal_common::span::Spanned;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct VariantDecl<A: Annotation> {
+    pub kw_span: Span,
+    
     pub name: Arc<A::DeclName>,
     pub where_clause: Option<WhereClause<A::Type>>,
     
@@ -55,9 +57,16 @@ impl<A: Annotation> MethodOwner<A> for VariantDecl<A> {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
+pub struct VariantCaseData<T> {
+    pub ty: T,
+    pub span: Span,
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct VariantCase<A: Annotation> {
     pub ident: Ident,
-    pub data_ty: Option<A::Type>,
+    pub data: Option<VariantCaseData<A::Type>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -81,14 +90,17 @@ impl ParseSeq for VariantCase<Span> {
                 VariantCase {
                     span,
                     ident,
-                    data_ty: Some(ty),
+                    data: Some(VariantCaseData {
+                        span: ty.span().clone(),
+                        ty
+                    }),
                 }
             },
 
             None => VariantCase {
                 span: ident.span.clone(),
                 ident,
-                data_ty: None,
+                data: None,
             },
         };
 
@@ -120,8 +132,12 @@ impl VariantDecl<Span> {
     pub fn parse(tokens: &mut TokenStream, name: DeclIdent, tags: Vec<Tag>) -> ParseResult<Self> {
         let decl_start = TypeDeclStart::parse(tokens, Keyword::Variant, &tags, &name.span)?;
 
+        let kw_span = decl_start.keyword.into_span();
+
         if decl_start.forward {
             Ok(VariantDecl {
+                kw_span,
+
                 name: Arc::new(name),
                 where_clause: decl_start.where_clause,
                 
@@ -174,6 +190,8 @@ impl VariantDecl<Span> {
             let end_kw = tokens.match_one(Keyword::End)?;
 
             Ok(VariantDecl {
+                kw_span,
+
                 name: Arc::new(name),
                 where_clause: decl_start.where_clause,
 
@@ -195,8 +213,8 @@ impl<A: Annotation> fmt::Display for VariantDecl<A> {
         writeln!(f, "variant {}", self.name)?;
         for case in &self.cases {
             write!(f, "  {}", case.ident)?;
-            if let Some(data_ty) = &case.data_ty {
-                write!(f, ": {}", data_ty)?;
+            if let Some(data) = &case.data {
+                write!(f, ": {}", data.ty)?;
             }
             writeln!(f, ";")?;
         }

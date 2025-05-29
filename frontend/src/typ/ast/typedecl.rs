@@ -505,15 +505,21 @@ pub fn typecheck_variant(
 
     let mut cases = Vec::with_capacity(variant_def.cases.len());
     for case in &variant_def.cases {
-        let data_ty = match &case.data_ty {
-            Some(data_ty) => Some(typecheck_type(data_ty, ctx)?),
+        let data = match &case.data {
+            Some(data) => {
+                Some(ast::VariantCaseData {
+                    ty: typecheck_type(&data.ty, ctx)?,
+                    span: data.span.clone(),
+                })
+            }
+
             None => None,
         };
 
         cases.push(ast::VariantCase {
             ident: case.ident.clone(),
             span: case.span.clone(),
-            data_ty,
+            data,
         });
     }
     
@@ -527,6 +533,7 @@ pub fn typecheck_variant(
     )?;
 
     Ok(VariantDef {
+        kw_span: variant_def.kw_span.clone(),
         name: info.name.into(),
         where_clause: info.where_clause,
         tags,
