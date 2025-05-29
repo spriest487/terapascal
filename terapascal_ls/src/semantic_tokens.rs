@@ -123,7 +123,7 @@ impl SemanticTokenBuilder {
         }
     }
 
-    pub fn add_unit(&mut self, unit: &ast::Unit) {
+    pub fn add_unit<A: Annotation>(&mut self, unit: &ast::Unit<A>) {
         if let Some(unit_kw) = &unit.unit_kw {
             self.add(unit_kw, SEMANTIC_KEYWORD);
         }
@@ -157,7 +157,7 @@ impl SemanticTokenBuilder {
         }
     }
 
-    fn add_unit_decl(&mut self, decl: &ast::UnitDecl) {
+    fn add_unit_decl<A: Annotation>(&mut self, decl: &ast::UnitDecl<A>) {
         match decl {
             ast::UnitDecl::FunctionDecl { decl } => self.add_func_decl(decl),
             ast::UnitDecl::FunctionDef { def } => self.add_func_def(def),
@@ -315,7 +315,7 @@ impl SemanticTokenBuilder {
         }
     }
 
-    fn add_func_def(&mut self, def: &ast::FunctionDef) {
+    fn add_func_def<A: Annotation>(&mut self, def: &ast::FunctionDef<A>) {
         self.add_func_decl(&def.decl);
 
         self.add_block(&def.body);
