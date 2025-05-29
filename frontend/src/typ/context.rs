@@ -1570,15 +1570,15 @@ impl Context {
         of_ty: &'ty Type,
         member: &Ident,
     ) -> NameResult<InstanceMember> {
-        let data_member = of_ty.find_data_member(member, self)?;
+        let field_decl = of_ty.find_field_decl(member, self)?;
 
         let methods = ufcs::find_instance_methods_of(of_ty, self)?;
         let matching_methods: Vec<_> = methods.iter().filter(|m| *m.ident() == *member).collect();
 
-        match (data_member, matching_methods.len()) {
-            (Some(field), 0) => Ok(InstanceMember::Field {
-                ty: field.ty,
-                access: field.access,
+        match (field_decl, matching_methods.len()) {
+            (Some(decl), 0) => Ok(InstanceMember::Field {
+                ty: decl.ty,
+                access: decl.access,
             }),
 
             // unambiguous method
@@ -1620,12 +1620,12 @@ impl Context {
             },
 
             // there's a data member AND 1+ methods
-            (Some(data_member), _) => Err(NameError::Ambiguous {
+            (Some(..), _) => Err(NameError::Ambiguous {
                 ident: member.clone(),
                 options: ambig_paths(
                     ambig_matching_methods(&matching_methods)
                         .into_iter()
-                        .chain(vec![(of_ty.clone(), data_member.ident)]),
+                        .chain(vec![(of_ty.clone(), member.clone())]),
                 ),
             }),
         }

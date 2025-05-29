@@ -176,19 +176,21 @@ impl StructLayout {
         for field in def.fields() {
             let member_size = self.size_of(&field.ty, ctx)?;
             let member_align = self.align_of(&field.ty, ctx)?;
-
             max_align = usize::max(max_align, member_align);
 
-            let pad_before = Self::padding(offset, member_align);
-            for _ in 0..pad_before {
-                members.push(StructLayoutMember::PaddingByte);
-            }
-            members.push(StructLayoutMember::Data {
-                member: field,
-                size: member_size,
-            });
+            for i in 0..field.idents.len() {
+                let pad_before = Self::padding(offset, member_align);
+                for _ in 0..pad_before {
+                    members.push(StructLayoutMember::PaddingByte);
+                }
+                members.push(StructLayoutMember::Data {
+                    field_decl: field,
+                    decl_index: i,
+                    size: member_size,
+                });
 
-            offset += pad_before + member_size;
+                offset += pad_before + member_size;
+            }
         }
 
         // class instance structs don't need end padding because they can never appear
@@ -218,7 +220,9 @@ impl StructLayout {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum StructLayoutMember<'a> {
     Data {
-        member: &'a FieldDecl<Value>,
+        field_decl: &'a FieldDecl<Value>,
+        /// within the field decl item (which might declare multiple fields), the index of this data
+        decl_index: usize,
         size: usize,
     },
     PaddingByte,

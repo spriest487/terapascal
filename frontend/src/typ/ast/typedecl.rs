@@ -439,13 +439,14 @@ fn typecheck_field(
 ) -> TypeResult<FieldDecl> {
     let ty = typecheck_type(&field.ty, ctx)?.clone();
 
-    ty.expect_sized(ctx, &field.span)?;
+    ty.expect_sized(ctx, &field.ty_span)?;
 
     let field = FieldDecl {
         ty,
-        span: field.span.clone(),
-        ident: field.ident.clone(),
+        ty_span: field.ty_span.clone(),
+        idents: field.idents.clone(),
         access: field.access,
+        span: field.span.clone(),
     };
     
     Ok(field)

@@ -83,8 +83,10 @@ impl<A: Annotation> StructDecl<A> {
             })
     }
 
-    pub fn find_field(&self, by_ident: &Ident) -> Option<&FieldDecl<A>> {
-        self.fields().find(|field| field.ident == *by_ident)
+    pub fn find_field_decl(&self, by_ident: &Ident) -> Option<&FieldDecl<A>> {
+        self.fields().find(|field| {
+            field.idents.contains(by_ident)
+        })
     }
 }
 
@@ -233,6 +235,10 @@ impl<A: Annotation> MemberDeclSection<A> for StructDeclSection<A> {
     fn add_method(&mut self, method: MethodDecl<A>) -> bool {
         self.members.push(TypeMemberDecl::Method(method));
         true
+    }
+
+    fn access_kw_span(&self) -> Option<&Span> {
+        self.access_kw_span.as_ref()
     }
 
     fn members<'a>(&'a self) -> impl Iterator<Item=TypeMemberDeclRef<'a, A>>

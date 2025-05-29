@@ -63,14 +63,14 @@ pub fn semicolon_separator_is_valid() {
 
         end
     ");
-    
+
     let class_def = get_single_struct_def(&unit);
     assert_eq!(0, class_def.methods().count());
     assert_eq!(1, class_def.fields().count());
-    
-    let field = class_def.fields().nth(0).unwrap();
-    assert_eq!("i",field.ident.name.as_str());
-    assert_eq!("Int32", field.ty.to_string());
+
+    let field_decl = class_def.fields().nth(0).unwrap();
+    assert_eq!("i", field_decl.idents[0].name.as_str());
+    assert_eq!("Int32", field_decl.ty.to_string());
 }
 
 #[test]
@@ -88,7 +88,7 @@ pub fn semicolon_separator_is_optional() {
     let class_def = get_single_struct_def(&unit);
     assert_eq!(0, class_def.methods().count());
     assert_eq!(1, class_def.fields().count());
-    assert_eq!("i", class_def.fields().nth(0).unwrap().ident.name.as_str());
+    assert_eq!("i", class_def.fields().nth(0).unwrap().idents[0].name.as_str());
     assert_eq!("Int32", &class_def.fields().nth(0).unwrap().ty.to_string());
 }
 
@@ -119,6 +119,7 @@ pub fn multi_field_def_is_valid() {
         
         type MyClass = class
             a, b: Int32;
+            c: Int32;
         end;
 
         end
@@ -127,9 +128,17 @@ pub fn multi_field_def_is_valid() {
     let class_def = get_single_struct_def(&unit);
     assert_eq!(0, class_def.methods().count());
     assert_eq!(2, class_def.fields().count());
-    assert_eq!(&class_def.fields().nth(0).unwrap().ident, "a");
+
+    assert_eq!(2, class_def.fields().nth(0).unwrap().idents.len());
+    
+    assert_eq!(&class_def.fields().nth(0).unwrap().idents[0], "a");
     assert_eq!(&class_def.fields().nth(0).unwrap().ty.to_string(), "Int32");
-    assert_eq!(&class_def.fields().nth(1).unwrap().ident, "b");
+    assert_eq!(&class_def.fields().nth(0).unwrap().idents[1], "b");
+    assert_eq!(&class_def.fields().nth(0).unwrap().ty.to_string(), "Int32");
+    
+    assert_eq!(1, class_def.fields().nth(1).unwrap().idents.len());
+
+    assert_eq!(&class_def.fields().nth(1).unwrap().idents[0], "c");
     assert_eq!(&class_def.fields().nth(1).unwrap().ty.to_string(), "Int32");
 }
 

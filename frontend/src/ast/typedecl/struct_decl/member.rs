@@ -2,7 +2,6 @@ use crate::ast::tag::Tag;
 use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
-use crate::ast::FunctionName;
 use crate::ast::TypeName;
 use crate::ast::{type_method_start, StructDeclSection};
 use crate::parse::Matcher;
@@ -44,15 +43,6 @@ impl<A: Annotation> TypeMemberDecl<A> {
     }
 }
 
-impl<A: Annotation> TypeMemberDecl<A> {
-    pub fn ident(&self) -> &Ident {
-        match self {
-            TypeMemberDecl::Field(field) => &field.ident,
-            TypeMemberDecl::Method(method) => method.func_decl.name.ident(),
-        }
-    } 
-}
-
 impl<A: Annotation> From<FieldDecl<A>> for TypeMemberDecl<A> {
     fn from(value: FieldDecl<A>) -> Self {
         TypeMemberDecl::Field(value)
@@ -83,9 +73,15 @@ pub enum TypeMemberDeclRef<'a, A: Annotation = Span> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct FieldDecl<A: Annotation = Span> {
-    pub ident: Ident,
+    pub idents: Vec<Ident>,
+
     pub ty: A::Type,
-    
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub ty_span: Span,
+
     pub access: Access,
 
     #[derivative(Debug = "ignore")]
@@ -102,7 +98,14 @@ impl<A:Annotation> Spanned for FieldDecl<A> {
 
 impl<A: Annotation> fmt::Display for FieldDecl<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: {}", self.ident, self.ty)
+        for i in 0..self.idents.len() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", self.idents[i])?;
+        }
+
+        write!(f, ": {}", self.ty)
     }
 }
 
@@ -153,12 +156,16 @@ pub fn parse_struct_sections(
                 return Err(TracedError::trace(err));
             }
             
-            Some(TokenTree::Ident(..)) => parse_field(tokens, current_access, &mut members)?,
+            Some(TokenTree::Ident(..)) => {
+                let field = parse_field(tokens, current_access)?;
+                members.push(TypeMemberDecl::Field(field));
+            },
 
             Some(method_start_tt) => {
                 assert!(type_method_start().is_match(&method_start_tt));
 
-                parse_method_decl(tokens, current_access, &mut members)?
+                let method = parse_method_decl(tokens, current_access)?;
+                members.push(TypeMemberDecl::Method(method));
             },
 
             None => break,
@@ -180,52 +187,43 @@ pub fn parse_struct_sections(
     Ok(sections)
 }
 
-fn parse_field(
-    tokens: &mut TokenStream,
-    access: Access,
-    members: &mut Vec<TypeMemberDecl>
-) -> ParseResult<()> {
-    let ident = Ident::parse(tokens)?;
-    let mut idents = vec![ident];
+fn parse_field(tokens: &mut TokenStream, access: Access) -> ParseResult<FieldDecl> {
+    let first_ident = Ident::parse(tokens)?;
 
+    let mut rest_idents = Vec::new();
     while tokens.match_one_maybe(Separator::Comma).is_some() {
         let ident = Ident::parse(tokens)?;
-        idents.push(ident);
+        rest_idents.push(ident);
     }
 
     tokens.match_one(Separator::Colon)?;
     let ty = TypeName::parse(tokens)?;
-
-    for ident in idents {
-        let field = FieldDecl {
-            access,
-            span: ident.span().to(&ty),
-            ty: ty.clone(),
-            ident,
-        };
-
-        members.push(TypeMemberDecl::Field(field));
-    }
     
-    Ok(())
+    let span = first_ident.span.to(ty.span());
+
+    rest_idents.insert(0, first_ident);
+    
+    Ok(FieldDecl {
+        idents: rest_idents,
+        access,
+        span,
+        ty_span: ty.span().clone(),
+        ty,
+    })
 }
 
 fn parse_method_decl(
     tokens: &mut TokenStream,
-    access: Access,
-    members: &mut Vec<TypeMemberDecl>
-) -> ParseResult<()> {
+    access: Access) -> ParseResult<MethodDecl> {
     let tags = Tag::parse_seq(tokens)?;
     
     // these get parsed one at a time
     let decl = FunctionDecl::parse(tokens, true, tags)?;
     
-    members.push(TypeMemberDecl::Method(MethodDecl {
+    Ok(MethodDecl {
         func_decl: Arc::new(decl),
         access,
-    }));
-    
-    Ok(())
+    })
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -243,6 +241,8 @@ pub trait MemberDeclSection<A: Annotation = Span> {
     
     fn add_field(&mut self, field: FieldDecl<A>) -> bool;
     fn add_method(&mut self, method: MethodDecl<A>) -> bool;
+
+    fn access_kw_span(&self) -> Option<&Span>;
 
     fn members<'a>(&'a self) -> impl Iterator<Item=TypeMemberDeclRef<'a, A>> where A: 'a;
     
@@ -287,7 +287,6 @@ impl<A: Annotation> MemberDeclSection<A> for MethodDeclSection<A> {
         }
     }
 
-
     fn access(&self) -> Access {
         self.access
     }
@@ -299,6 +298,10 @@ impl<A: Annotation> MemberDeclSection<A> for MethodDeclSection<A> {
     fn add_method(&mut self, method: MethodDecl<A>) -> bool {
         self.methods.push(method);
         true
+    }
+
+    fn access_kw_span(&self) -> Option<&Span> {
+        self.access_kw_span.as_ref()
     }
 
     fn members<'a>(&'a self) -> impl Iterator<Item=TypeMemberDeclRef<'a, A>>

@@ -1,9 +1,17 @@
-use terapascal_common::span::{Span, Spanned};
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+use terapascal_frontend::ast;
+use terapascal_frontend::ast::FunctionName;
+use terapascal_frontend::ast::Annotation;
+use terapascal_frontend::ast::ConstExprValue;
+use terapascal_frontend::ast::DeclName;
+use terapascal_frontend::ast::MemberDeclSection;
+use terapascal_frontend::ast::StructDecl;
+use terapascal_frontend::ast::TypeDeclItem;
+use terapascal_frontend::ast::TypeMemberDeclRef;
+use terapascal_frontend::ast::VariantDecl;
 use terapascal_frontend::DelimiterPair;
 use terapascal_frontend::TokenTree;
-use terapascal_frontend::ast;
-use terapascal_frontend::ast::{Annotation, ConstExprValue, DeclName, TypeDeclItem};
-use terapascal_frontend::ast::FunctionName;
 use tower_lsp::lsp_types::SemanticToken;
 use tower_lsp::lsp_types::SemanticTokenType;
 
@@ -21,8 +29,10 @@ pub fn semantic_legend() -> Vec<SemanticTokenType> {
         SemanticTokenType::VARIABLE,
         SemanticTokenType::ENUM,
         SemanticTokenType::ENUM_MEMBER,
+        SemanticTokenType::PROPERTY,
     ]
 }
+
 
 const SEMANTIC_KEYWORD: u32 = 0;
 const SEMANTIC_NUMBER: u32 = 1;
@@ -36,6 +46,7 @@ const SEMANTIC_PARAMETER: u32 = 8;
 const SEMANTIC_VARIABLE: u32 = 9;
 const SEMANTIC_ENUM: u32 = 10;
 const SEMANTIC_ENUM_MEMBER: u32 = 11;
+const SEMANTIC_PROPERTY: u32 = 12;
 
 pub struct SemanticTokenBuilder {
     cur_line: u32,
@@ -88,28 +99,28 @@ impl SemanticTokenBuilder {
         match tt {
             TokenTree::IntNumber { span, .. } | TokenTree::RealNumber { span, .. } => {
                 self.add(span, SEMANTIC_NUMBER);
-            },
+            }
             TokenTree::String { span, .. } => {
                 self.add(span, SEMANTIC_STRING);
-            },
+            }
 
             TokenTree::Operator { op, span } if op.is_keyword() => {
                 self.add(span, SEMANTIC_OPERATOR);
-            },
+            }
 
             TokenTree::Separator { span, .. } | TokenTree::Operator { span, .. } => {
                 self.add(span, SEMANTIC_OPERATOR);
-            },
+            }
 
             TokenTree::Keyword { span, .. } => {
                 self.add(span, SEMANTIC_KEYWORD);
-            },
+            }
 
             TokenTree::Delimited(group) => {
                 let delim_type = match group.delim {
                     DelimiterPair::BeginEnd | DelimiterPair::CaseEnd | DelimiterPair::MatchEnd => {
                         SEMANTIC_KEYWORD
-                    },
+                    }
 
                     DelimiterPair::Bracket | DelimiterPair::SquareBracket => SEMANTIC_OPERATOR,
                 };
@@ -121,9 +132,9 @@ impl SemanticTokenBuilder {
                 }
 
                 self.add(&group.close, delim_type);
-            },
+            }
 
-            _ => {},
+            _ => {}
         }
     }
 
@@ -167,11 +178,11 @@ impl SemanticTokenBuilder {
             ast::UnitDecl::FunctionDef { def } => self.add_func_def(def),
 
             ast::UnitDecl::Type { decl } => self.add_type_decl(decl),
-            ast::UnitDecl::Uses { .. } => {},
+            ast::UnitDecl::Uses { .. } => {}
             ast::UnitDecl::Binding { decl } => self.add_unit_binding(decl),
         }
     }
-    
+
     fn add_type_decl<A: Annotation>(&mut self, type_decl: &ast::TypeDecl<A>) {
         self.add(&type_decl.kw_span, SEMANTIC_KEYWORD);
 
@@ -184,26 +195,15 @@ impl SemanticTokenBuilder {
                     self.add(param_span, SEMANTIC_TYPE_PARAMETER);
                 }
             }
-            
+
             match item {
                 TypeDeclItem::Struct(struct_decl) => {
-                    self.add(&struct_decl.kw_span, SEMANTIC_KEYWORD);
-                    
-                    for method in struct_decl.methods() {
-                        self.add_func_decl(&method.func_decl);
-                    }
+                    self.add_struct_decl(struct_decl);
                 }
                 TypeDeclItem::Interface(_) => {}
 
                 TypeDeclItem::Variant(variant_decl) => {
-                    self.add(&variant_decl.kw_span, SEMANTIC_KEYWORD);
-                    for case in &variant_decl.cases {
-                        self.add(&case.ident.span, SEMANTIC_ENUM_MEMBER);
-                        
-                        if let Some(data) = &case.data {
-                            self.add(&data.span, SEMANTIC_TYPE);
-                        }
-                    }
+                    self.add_variant_decl(variant_decl);
                 }
 
                 TypeDeclItem::Alias(aliased) => {
@@ -215,7 +215,51 @@ impl SemanticTokenBuilder {
             }
         }
     }
-    
+
+    fn add_struct_decl<A: Annotation>(&mut self, struct_decl: &StructDecl<A>) {
+        self.add(&struct_decl.kw_span, SEMANTIC_KEYWORD);
+
+        for section in &struct_decl.sections {
+            self.add_type_decl_section(section);
+        }
+    }
+
+    fn add_variant_decl<A: Annotation>(&mut self, variant_decl: &VariantDecl<A>) {
+        self.add(&variant_decl.kw_span, SEMANTIC_KEYWORD);
+        for case in &variant_decl.cases {
+            self.add(&case.ident.span, SEMANTIC_ENUM_MEMBER);
+
+            if let Some(data) = &case.data {
+                self.add(&data.span, SEMANTIC_TYPE);
+            }
+        }
+
+        for section in &variant_decl.sections {
+            self.add_type_decl_section(section);
+        }
+    }
+
+    fn add_type_decl_section<A: Annotation>(&mut self, section: &impl MemberDeclSection<A>) {
+        if let Some(kw_span) = &section.access_kw_span() {
+            self.add(kw_span, SEMANTIC_KEYWORD);
+        }
+
+        for member in section.members() {
+            match member {
+                TypeMemberDeclRef::Field(field) => {
+                    for ident in &field.idents {
+                        self.add(ident.span(), SEMANTIC_PROPERTY);
+                    }
+                    self.add(&field.ty_span, SEMANTIC_TYPE);
+                }
+            
+                TypeMemberDeclRef::Method(decl) => {
+                    self.add_func_decl(&decl.func_decl);
+                }
+            }
+        }
+    }
+
     fn add_unit_binding<A: Annotation>(&mut self, binding: &ast::UnitBinding<A>) {
         self.add(&binding.kw_span, SEMANTIC_KEYWORD);
 
@@ -237,42 +281,42 @@ impl SemanticTokenBuilder {
 
     fn add_stmt<A: Annotation>(&mut self, stmt: &ast::Stmt<A>) {
         match stmt {
-            ast::Stmt::Ident(_, _) => {},
-            ast::Stmt::LocalBinding(_) => {},
-            ast::Stmt::Call(_) => {},
-            ast::Stmt::Exit(_) => {},
+            ast::Stmt::Ident(_, _) => {}
+            ast::Stmt::LocalBinding(_) => {}
+            ast::Stmt::Call(_) => {}
+            ast::Stmt::Exit(_) => {}
             ast::Stmt::Block(block) => self.add_block(block),
-            ast::Stmt::ForLoop(_) => {},
-            ast::Stmt::WhileLoop(_) => {},
-            ast::Stmt::Assignment(_) => {},
-            ast::Stmt::CompoundAssignment(_) => {},
-            ast::Stmt::If(_) => {},
-            ast::Stmt::Break(_) => {},
-            ast::Stmt::Continue(_) => {},
-            ast::Stmt::Raise(_) => {},
-            ast::Stmt::Case(_) => {},
-            ast::Stmt::Match(_match_stmt) => {},
+            ast::Stmt::ForLoop(_) => {}
+            ast::Stmt::WhileLoop(_) => {}
+            ast::Stmt::Assignment(_) => {}
+            ast::Stmt::CompoundAssignment(_) => {}
+            ast::Stmt::If(_) => {}
+            ast::Stmt::Break(_) => {}
+            ast::Stmt::Continue(_) => {}
+            ast::Stmt::Raise(_) => {}
+            ast::Stmt::Case(_) => {}
+            ast::Stmt::Match(_match_stmt) => {}
         }
     }
 
     fn add_expr<A: Annotation>(&mut self, expr: &ast::Expr<A>) {
         match expr {
-            ast::Expr::BinOp(_) => {},
-            ast::Expr::UnaryOp(_) => {},
-            ast::Expr::Literal(_) => {},
-            ast::Expr::Ident(_, _) => {},
-            ast::Expr::Call(_) => {},
-            ast::Expr::ObjectCtor(_) => {},
-            ast::Expr::CollectionCtor(_) => {},
-            ast::Expr::IfCond(_) => {},
+            ast::Expr::BinOp(_) => {}
+            ast::Expr::UnaryOp(_) => {}
+            ast::Expr::Literal(_) => {}
+            ast::Expr::Ident(_, _) => {}
+            ast::Expr::Call(_) => {}
+            ast::Expr::ObjectCtor(_) => {}
+            ast::Expr::CollectionCtor(_) => {}
+            ast::Expr::IfCond(_) => {}
             ast::Expr::Block(block) => self.add_block(block),
-            ast::Expr::Raise(_) => {},
-            ast::Expr::Exit(_) => {},
-            ast::Expr::Case(_) => {},
-            ast::Expr::Match(_) => {},
-            ast::Expr::Cast(_) => {},
-            ast::Expr::AnonymousFunction(_) => {},
-            ast::Expr::ExplicitSpec(_) => {},
+            ast::Expr::Raise(_) => {}
+            ast::Expr::Exit(_) => {}
+            ast::Expr::Case(_) => {}
+            ast::Expr::Match(_) => {}
+            ast::Expr::Cast(_) => {}
+            ast::Expr::AnonymousFunction(_) => {}
+            ast::Expr::ExplicitSpec(_) => {}
         }
     }
 

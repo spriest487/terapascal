@@ -63,14 +63,18 @@ pub fn typecheck_object_ctor_args(
     src: &ast::ObjectCtorArgs,
     ctx: &mut Context
 ) -> TypeResult<ObjectCtorArgs> {
-    let mut expect_fields: LinkedHashMap<_, _> = ctor_ty
+    let ty_fields = ctor_ty
         .fields(ctx)
         .map_err(|err| TypeError::NameError {
             err,
             span: ctor_span.clone(),
-        })?
+        })?;
+
+    let mut expect_fields: LinkedHashMap<_, _> = ty_fields
         .into_iter()
-        .map(|member| (member.ident, (member.ty, member.span, member.access)))
+        .flat_map(|member| member.idents
+            .into_iter()
+            .map(move |ident| (ident, (member.ty.clone(), member.span.clone(), member.access))))
         .collect();
 
     let mut members: Vec<ObjectCtorMember> = Vec::new();

@@ -340,13 +340,13 @@ impl Type {
         }
     }
 
-    pub fn find_data_member(&self, member: &Ident, ctx: &Context) -> NameResult<Option<FieldDecl>> {
+    pub fn find_field_decl(&self, member: &Ident, ctx: &Context) -> NameResult<Option<FieldDecl>> {
         match self {
             Type::Class(class_name) | Type::Record(class_name) => {
                 let struct_kind = self.struct_kind().unwrap();
                 let def = ctx.instantiate_struct_def(class_name, struct_kind)?;
 
-                Ok(def.find_field(member).cloned())
+                Ok(def.find_field_decl(member).cloned())
             },
 
             _ => Ok(None),

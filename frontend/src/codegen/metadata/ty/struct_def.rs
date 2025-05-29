@@ -19,7 +19,7 @@ pub fn translate_struct_def(
     let mut next_id = ir::FieldID(0);
     for member in lib.aligned_struct_members(struct_def) {
         match member {
-            StructLayoutMember::Data { member, .. } => {
+            StructLayoutMember::Data { field_decl: member, decl_index, .. } => {
                 if pad_run > 0 {
                     fields.insert(next_id, ir::StructFieldDef {
                         name: None,
@@ -30,7 +30,7 @@ pub fn translate_struct_def(
                     next_id.0 += 1;
                 }
 
-                let name = member.ident.to_string();
+                let name = member.idents[decl_index].to_string();
                 let ty = lib.translate_type(&member.ty, generic_ctx);
                 let rc = member.ty.is_strong_rc_reference();
                 fields.insert(next_id, ir::StructFieldDef { name: Some(name), ty, rc });
