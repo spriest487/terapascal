@@ -189,7 +189,7 @@ impl SemanticTokenBuilder {
                 TypeDeclItem::Struct(struct_decl) => {
                     self.add(&struct_decl.kw_span, SEMANTIC_KEYWORD);
                     
-                    for method in &struct_decl.methods {
+                    for method in struct_decl.methods() {
                         self.add_func_decl(&method.func_decl);
                     }
                 }

@@ -1770,7 +1770,11 @@ impl Context {
                             .instantiate_struct_def(&spec_struct_name, struct_kind)
                             .map_err(|e| TypeError::from_name_err(e, span.clone()))?;
 
-                        let spec_method = spec_def.methods[method_index].clone();
+                        let spec_method = spec_def
+                            .methods()
+                            .nth(method_index)
+                            .unwrap()
+                            .clone();
 
                         method_group.push(MethodGroupMember {
                             method: spec_method,
@@ -1791,8 +1795,7 @@ impl Context {
                     .map_err(|e| TypeError::from_name_err(e, span.clone()))?;
 
                 let methods: Vec<_> = variant_def
-                    .methods
-                    .iter()
+                    .methods()
                     .enumerate()
                     .filter(|(_, method)| {
                         method.func_decl.ident() == member_ident
@@ -1820,7 +1823,7 @@ impl Context {
                             .instantiate_variant_def(&spec_variant_name)
                             .map_err(|e| TypeError::from_name_err(e, span.clone()))?;
 
-                        let spec_method = spec_def.methods[method_index].clone();
+                        let spec_method = spec_def.methods().nth(method_index).unwrap().clone();
 
                         method_group.push(MethodGroupMember {
                             method: spec_method,

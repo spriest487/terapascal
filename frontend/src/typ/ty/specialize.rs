@@ -1,6 +1,6 @@
 use crate::ast;
-use crate::typ::ast::apply_func_decl_named_ty_args;
-use crate::typ::ast::infer_from_structural_ty_args;
+use crate::ast::TypeMemberDecl;
+use crate::typ::ast::{infer_from_structural_ty_args, MethodDeclSection};
 use crate::typ::ast::try_unwrap_inferred_args;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDeclContext;
@@ -10,7 +10,7 @@ use crate::typ::ast::MethodDecl;
 use crate::typ::ast::StructDef;
 use crate::typ::ast::VariantDef;
 use crate::typ::ast::WhereClause;
-use crate::typ::Context;
+use crate::typ::ast::{apply_func_decl_named_ty_args, FieldDecl, StructDeclSection};
 use crate::typ::FunctionSig;
 use crate::typ::GenericContext;
 use crate::typ::GenericError;
@@ -23,6 +23,7 @@ use crate::typ::TypeArgList;
 use crate::typ::TypeArgResolver;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
+use crate::typ::Context;
 use std::borrow::Cow;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -87,31 +88,53 @@ pub fn specialize_struct_def<'a>(
         &inner_generic_ctx,
     );
 
-    let fields: Vec<_> = generic_def
-        .fields()
-        .map(|generic_field| {
-            let ty = generic_field.ty
-                .clone()
-                .apply_type_args(struct_ty_params, ty_args);
-
-            Ok(ast::FieldDecl {
-                ty,
-                ..generic_field.clone()
-            })
-        })
-        .collect::<GenericResult<_>>()?;
-    
     let self_ty = Type::from_struct_type(
         specialized_name.clone(),
         generic_def.kind
     );
     
-    let methods = specialize_methods(
-        &self_ty,
-        &generic_def.methods,
-        &struct_ty_params,
-        ty_args
-    )?;
+    let mut sections = Vec::with_capacity(generic_def.sections.len());
+
+    for generic_section in &generic_def.sections {
+        let mut section = StructDeclSection {
+            access: generic_section.access,
+            access_kw_span: generic_section.access_kw_span.clone(),
+            members: Vec::with_capacity(generic_section.members.len()),
+        };
+
+        for generic_member in &generic_section.members {
+            let member = match generic_member {
+                TypeMemberDecl::Field(generic_field) => {
+                    let ty = generic_field.ty
+                        .clone()
+                        .apply_type_args(struct_ty_params, ty_args);
+                    
+                    TypeMemberDecl::Field(FieldDecl {
+                        ty,
+                        ..generic_field.clone()
+                    })
+                }
+
+                TypeMemberDecl::Method(generic_method) => {
+                    let specialized_decl = specialize_method_decl(
+                        self_ty.clone(),
+                        &generic_method.func_decl,
+                        struct_ty_params,
+                        ty_args,
+                    );
+
+                    TypeMemberDecl::Method(MethodDecl {
+                        access: generic_method.access,
+                        func_decl: Arc::new(specialized_decl),
+                    })
+                }
+            };
+
+            section.members.push(member);
+        }
+        
+        sections.push(section);
+    }
 
     Ok(Arc::new(StructDef {
         kw_span: generic_def.kw_span.clone(),
@@ -120,12 +143,40 @@ pub fn specialize_struct_def<'a>(
         tags: generic_def.tags.clone(),
         packed: generic_def.packed,
         implements,
-        fields,
-        methods,
+        sections,
         span: generic_def.span.clone(),
         kind: generic_def.kind,
         forward: generic_def.forward,
     }))
+}
+
+fn specialize_method_section(
+    generic_section: &MethodDeclSection,
+    self_ty: &Type,
+    ty_params: &TypeParamList,
+    ty_args: &TypeArgList
+) -> MethodDeclSection {
+    let mut section = MethodDeclSection {
+        access: generic_section.access,
+        access_kw_span: generic_section.access_kw_span.clone(),
+        methods: Vec::with_capacity(generic_section.methods.len()),
+    };
+    
+    for generic_method in &generic_section.methods {
+        let specialized_decl = specialize_method_decl(
+            self_ty.clone(),
+            &generic_method.func_decl,
+            ty_params,
+            ty_args,
+        );
+
+        section.methods.push(MethodDecl {
+            access: generic_method.access,
+            func_decl: Arc::new(specialized_decl),
+        });
+    }
+    
+    section
 }
 
 pub fn specialize_variant_def(
@@ -172,14 +223,15 @@ pub fn specialize_variant_def(
             })
         })
         .collect::<GenericResult<_>>()?;
-    
+
     let self_ty = Type::variant(parameterized_name.clone());
-    let methods = specialize_methods(
-        &self_ty,
-        &generic_def.methods,
-        variant_ty_params,
-        args
-    )?;
+    
+    let sections = generic_def.sections
+        .iter()
+        .map(|section| {
+            specialize_method_section(section, &self_ty, variant_ty_params, args)
+        })
+        .collect();
 
     Ok(VariantDef {
         kw_span: generic_def.kw_span.clone(),
@@ -190,7 +242,7 @@ pub fn specialize_variant_def(
         forward: generic_def.forward,
         cases,
         implements,
-        methods,
+        sections,
     })
 }
 
@@ -228,13 +280,13 @@ pub fn specialize_iface_def<'a>(
                 &generic_method.decl,
                 iface_ty_params,
                 ty_args,
-            )?;
+            );
 
-            Ok(InterfaceMethodDecl {
+            InterfaceMethodDecl {
                 decl: Arc::new(specialized_decl),
-            })
+            }
         })
-        .collect::<GenericResult<_>>()?;
+        .collect();
 
     Ok(Arc::new(InterfaceDecl {
         name: specialized_name,
@@ -259,38 +311,12 @@ fn apply_implements_ty_args(
         .collect()
 }
 
-fn specialize_methods(
-    self_ty: &Type,
-    generic_methods: &[MethodDecl],
-    ty_params: &TypeParamList,
-    ty_args: &TypeArgList,
-) -> GenericResult<Vec<MethodDecl>> {
-    let methods = generic_methods
-        .iter()
-        .map(|generic_method| {
-            let specialized_decl = specialize_method_decl(
-                self_ty.clone(),
-                &generic_method.func_decl,
-                ty_params,
-                ty_args,
-            )?;
-
-            Ok(MethodDecl {
-                access: generic_method.access,
-                func_decl: Arc::new(specialized_decl),
-            })
-        })
-        .collect::<GenericResult<_>>()?;
-
-    Ok(methods)
-}
-
 pub fn specialize_method_decl(
     self_ty: Type,
     generic_method: &FunctionDecl,
     struct_ty_params: &TypeParamList,
     ty_args: &TypeArgList
-) -> GenericResult<FunctionDecl> {
+) -> FunctionDecl {
     let mut method = apply_func_decl_named_ty_args(
         generic_method.clone(),
         struct_ty_params,
@@ -302,7 +328,7 @@ pub fn specialize_method_decl(
         enclosing_type: self_ty,
     };
 
-    Ok(method)
+    method
 }
 
 /// if the symbol isn't already specialized, try to infer it by matching the return type of

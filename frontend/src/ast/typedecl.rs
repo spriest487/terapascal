@@ -459,7 +459,8 @@ pub fn parse_implements_clause(
 }
 
 pub trait MethodOwner<A: Annotation> {
-    fn methods(&self) -> &[MethodDecl<A>];
+    fn methods<'a>(&'a self) -> impl Iterator<Item=&'a MethodDecl<A>>
+    where A: 'a;
 
     fn find_methods<'a>(
         &'a self, 
@@ -469,14 +470,12 @@ pub trait MethodOwner<A: Annotation> {
         A: 'a 
     {
         self.methods()
-            .iter()
             .enumerate()
             .filter(move |(_, m)| m.func_decl.ident() == ident)
     }
 
     fn find_dtor_index(&self) -> Option<usize> {
         self.methods()
-            .iter()
             .position(|m| m.func_decl.kind == FunctionDeclKind::Destructor)
     }
 }

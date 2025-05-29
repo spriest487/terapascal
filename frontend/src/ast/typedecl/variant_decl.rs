@@ -1,23 +1,22 @@
 use crate::ast::tag::Tag;
-use crate::ast::type_method_start;
 use crate::ast::type_name::TypeName;
 use crate::ast::typedecl::TypeDeclStart;
 use crate::ast::Access;
 use crate::ast::Annotation;
+use crate::ast::DeclIdent;
 use crate::ast::FunctionDecl;
 use crate::ast::Ident;
 use crate::ast::Keyword;
 use crate::ast::MethodDecl;
 use crate::ast::MethodOwner;
-use crate::ast::DeclIdent;
 use crate::ast::WhereClause;
+use crate::ast::{type_method_start, MethodDeclSection};
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
-use crate::parse::TryParse;
 use crate::Separator;
 use derivative::*;
 use std::fmt;
@@ -41,7 +40,7 @@ pub struct VariantDecl<A: Annotation> {
 
     pub implements: Vec<A::Type>,
     
-    pub methods: Vec<MethodDecl<A>>,
+    pub sections: Vec<MethodDeclSection<A>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -50,8 +49,11 @@ pub struct VariantDecl<A: Annotation> {
 }
 
 impl<A: Annotation> MethodOwner<A> for VariantDecl<A> {
-    fn methods(&self) -> &[MethodDecl<A>] {
-        self.methods.as_slice()
+    fn methods<'a>(&'a self) -> impl Iterator<Item=&'a MethodDecl<A>>
+    where A: 'a
+    {
+        self.sections.iter()
+            .flat_map(|section| section.methods.iter())
     }
 }
 
@@ -148,44 +150,18 @@ impl VariantDecl<Span> {
                 cases: Vec::new(),
                 
                 implements: decl_start.supers,
-                methods: Vec::new(),
+                sections: Vec::new(),
                 
                 span: decl_start.span,
             })
         } else {
             let cases = VariantCase::parse_seq(tokens)?;
-            tokens.match_one_maybe(Separator::Semicolon);
-            
-            let mut access = Access::Public;
-            
-            let mut methods = Vec::new();
 
-            loop {
-                if let Some(new_access) = Access::try_parse(tokens)? {
-                    access = new_access;
-                }
-
-                let func_ahead = tokens
-                    .look_ahead()
-                    .match_one(type_method_start())
-                    .is_some();
-
-                if !func_ahead {
-                    break;
-                }
-                
-                let tags = Tag::parse_seq(tokens)?;
-
-                let method_decl= FunctionDecl::parse(tokens, true, tags)?;
-                methods.push(MethodDecl { 
-                    func_decl: method_decl.into(),
-                    access,
-                });
-
-                if tokens.match_one_maybe(Separator::Semicolon).is_none() {
-                    break;
-                }
-            }
+            let sections = if tokens.match_one_maybe(Separator::Semicolon).is_some() {
+                parse_method_sections(tokens, Access::Public)?
+            } else {
+                Vec::new()
+            };
 
             let end_kw = tokens.match_one(Keyword::End)?;
 
@@ -202,10 +178,67 @@ impl VariantDecl<Span> {
                 span: decl_start.span.to(end_kw.span()),
 
                 implements: decl_start.supers,
-                methods,
+                sections,
             })
         }
     }
+}
+
+fn parse_method_sections(tokens: &mut TokenStream, default_access: Access) -> ParseResult<Vec<MethodDeclSection>> {
+    let mut sections = Vec::new();
+    
+    let mut current_access = default_access;
+    let mut current_access_kw = None;
+
+    let mut methods = Vec::new();
+    loop {
+        if let Some((new_access, new_access_span)) = Access::try_parse(tokens)? {
+            if current_access_kw.is_some() || !methods.is_empty() {
+                let mut section_methods = Vec::with_capacity(methods.len());
+                section_methods.append(&mut methods);
+                
+                sections.push(MethodDeclSection {
+                    access: current_access,
+                    access_kw_span: current_access_kw,
+                    methods: section_methods,
+                });
+            }
+
+            current_access = new_access;
+            current_access_kw = Some(new_access_span);
+        }
+
+        let func_ahead = tokens
+            .look_ahead()
+            .match_one(type_method_start())
+            .is_some();
+
+        if !func_ahead {
+            break;
+        }
+
+        let tags = Tag::parse_seq(tokens)?;
+
+        let method_decl= FunctionDecl::parse(tokens, true, tags)?;
+        methods.push(MethodDecl {
+            func_decl: method_decl.into(),
+            access: current_access,
+        });
+
+        if tokens.match_one_maybe(Separator::Semicolon).is_none() {
+            break;
+        }
+    }
+
+    if current_access_kw.is_some() || !methods.is_empty() {
+        sections.push(MethodDeclSection {
+            access: current_access,
+            access_kw_span: current_access_kw,
+            methods,
+        });
+    }
+    
+    Ok(sections)
 }
 
 impl<A: Annotation> fmt::Display for VariantDecl<A> {

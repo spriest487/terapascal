@@ -37,7 +37,7 @@ pub fn empty_struct_is_valid() {
     for item in &type_decls.items {
         match item { 
             TypeDeclItem::Struct(struct_def) => {
-                assert_eq!(0, struct_def.fields.len());    
+                assert_eq!(0, struct_def.fields().count());
             }
             
             other => panic!("expected a struct def, found: {}", other),

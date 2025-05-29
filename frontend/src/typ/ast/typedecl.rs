@@ -3,36 +3,42 @@ mod test;
 
 use crate::ast;
 use crate::ast::FunctionDeclKind;
-use crate::ast::FunctionName;
+use crate::ast::MemberDeclSection;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Literal;
 use crate::ast::MethodOwner;
 use crate::ast::SetDeclRange;
+use crate::ast::FunctionName;
+use crate::ast::TypeMemberDeclRef;
 use crate::typ::ast::const_eval::ConstEval;
+use crate::typ::ast::const_eval_integer;
+use crate::typ::ast::typecheck_expr;
+use crate::typ::ast::typecheck_object_ctor_args;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::InterfaceMethodDecl;
-use crate::typ::ast::{const_eval_integer, typecheck_object_ctor_args};
-use crate::typ::ast::{typecheck_expr, TypeDeclItemInfo};
+use crate::typ::ast::TypeDeclItemInfo;
 use crate::typ::set::SetType;
+use crate::typ::typecheck_type;
+use crate::typ::ConstValue;
 use crate::typ::Context;
 use crate::typ::Def;
 use crate::typ::FunctionSig;
 use crate::typ::InvalidBaseTypeReason;
+use crate::typ::InvalidTagReason;
 use crate::typ::InvalidTypeParamsDeclKind;
 use crate::typ::MismatchedImplementation;
 use crate::typ::MissingImplementation;
 use crate::typ::NameError;
 use crate::typ::Primitive;
+use crate::typ::Specializable;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::MAX_FLAGS_BITS;
-use crate::typ::{typecheck_type, InvalidTagReason};
-use crate::typ::{ConstValue, Specializable};
 use crate::IntConstant;
 use std::borrow::Cow;
 use std::mem;
@@ -41,7 +47,9 @@ use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
 pub type StructDef = ast::StructDecl<Value>;
-pub type StructMemberDecl = ast::StructMemberDecl<Value>;
+pub type StructMemberDecl = ast::TypeMemberDecl<Value>;
+pub type StructDeclSection = ast::StructDeclSection<Value>;
+pub type MethodDeclSection = ast::MethodDeclSection<Value>;
 pub type FieldDecl = ast::FieldDecl<Value>;
 pub type MethodDecl = ast::MethodDecl<Value>;
 pub type InterfaceDecl = ast::InterfaceDecl<Value>;
@@ -222,16 +230,10 @@ pub fn typecheck_struct_decl(
         info.visibility,
         true,
     )?;
-
-    let mut fields = Vec::new();
-    for src_field in &struct_def.fields {
-        let field = typecheck_field(src_field, ctx)?;
-        fields.push(field);
-    }
     
-    let methods = typecheck_methods(
+    let sections = typecheck_members(
         &self_ty,
-        &struct_def.methods,
+        &struct_def.sections,
         &implements,
         &implements_span,
         info.name.span(),
@@ -247,20 +249,22 @@ pub fn typecheck_struct_decl(
         packed: struct_def.packed,
         span: struct_def.span.clone(),
         implements,
-        fields,
-        methods,
+        sections,
         forward: struct_def.forward,
     })
 }
 
-pub fn typecheck_methods(
+pub fn typecheck_members<Section>(
     owning_type: &Type,
-    decl_methods: &[ast::MethodDecl],
+    sources: &[Section::Source],
     implements: &[Type],
     implements_span: &Span,
     name_span: &Span,
-    ctx: &mut Context
-) -> TypeResult<Vec<MethodDecl>> {
+    ctx: &mut Context,
+) -> TypeResult<Vec<Section>>
+where
+    Section: ast::MemberDeclSection<Value>,
+{
     let mut owning_type = Cow::Borrowed(owning_type);
     // methods impls are typechecked within the body of their enclosing type, so the type
     // arguments exist as GenericParam types there
@@ -276,58 +280,80 @@ pub fn typecheck_methods(
     
     let mut dtor_span = None;
 
-    let mut methods: Vec<MethodDecl> = Vec::new();
-    for method in decl_methods {
-        let decl = typecheck_method(&method.func_decl, ctx)?;
-        if decl.kind == FunctionDeclKind::Destructor {
-            if !matches!(owning_type.as_ref(), Type::Class(..)) {
-                return Err(TypeError::InvalidDtorOwningType {
-                    ty: owning_type.into_owned(),
-                    span: decl.span.clone(),
-                }) 
-            }
-            
-            if let Some(prev_dtor) = dtor_span {
-                return Err(TypeError::TypeHasMultipleDtors {
-                    owning_type: owning_type.into_owned(),
-                    new_dtor: decl.span.clone(),
-                    prev_dtor,
-                })
-            }
-            dtor_span = Some(decl.span.clone());
-            
-            if decl.params.len() != 1 {
-                return Err(TypeError::DtorCannotHaveParams { span: decl.span.clone() })
-            }
-            if !decl.name.type_params.is_none() {
-                return Err(TypeError::DtorCannotHaveTypeParams { span: decl.span.clone() })
+    let mut sections: Vec<Section> = Vec::new();
+    
+    for src_section in sources {
+        let mut section = Section::clone_empty(src_section);
+
+        for member in src_section.members() {
+            match member {
+                TypeMemberDeclRef::Field(field) => {
+                    let field = typecheck_field(field, ctx)?;
+                    if !section.add_field(field) {
+                        panic!("section type is incompatible with fields (parser should not produce this)");
+                    }
+                }
+
+                TypeMemberDeclRef::Method(method) => {
+                    let func_decl = typecheck_method(&method.func_decl, ctx)?;
+                    if func_decl.kind == FunctionDeclKind::Destructor {
+                        if !matches!(owning_type.as_ref(), Type::Class(..)) {
+                            return Err(TypeError::InvalidDtorOwningType {
+                                ty: owning_type.into_owned(),
+                                span: func_decl.span.clone(),
+                            })
+                        }
+
+                        if let Some(prev_dtor) = dtor_span {
+                            return Err(TypeError::TypeHasMultipleDtors {
+                                owning_type: owning_type.into_owned(),
+                                new_dtor: func_decl.span.clone(),
+                                prev_dtor,
+                            })
+                        }
+                        dtor_span = Some(func_decl.span.clone());
+
+                        if func_decl.params.len() != 1 {
+                            return Err(TypeError::DtorCannotHaveParams { span: func_decl.span.clone() })
+                        }
+                        if !func_decl.name.type_params.is_none() {
+                            return Err(TypeError::DtorCannotHaveTypeParams { span: func_decl.span.clone() })
+                        }
+                    }
+
+                    let existing: Vec<_> = sections
+                        .iter()
+                        .flat_map(|section| section.methods())
+                        .filter(|m| m.func_decl.ident() == func_decl.ident())
+                        .map(|m| m.func_decl.clone())
+                        .collect();
+
+                    if !existing.is_empty() {
+                        if let Some(invalid) = func_decl.check_new_overload(existing.clone()) {
+                            return Err(TypeError::InvalidMethodOverload {
+                                owning_type: owning_type.into_owned(),
+                                prev_decls: existing
+                                    .into_iter()
+                                    .map(|decl| decl.ident().clone())
+                                    .collect(),
+                                kind: invalid,
+                                method: func_decl.name.ident().clone(),
+                            });
+                        }
+                    }
+                    let method_decl = MethodDecl {
+                        access: method.access,
+                        func_decl: Arc::new(func_decl),
+                    }; 
+
+                    if !section.add_method(method_decl) {
+                        panic!("section type is incompatible with methods (parser should not produce this)");
+                    }
+                }
             }
         }
-
-        let existing: Vec<_> = methods
-            .iter()
-            .filter(|m| m.func_decl.ident() == decl.ident())
-            .map(|m| m.func_decl.clone())
-            .collect();
-
-        if !existing.is_empty() {
-            if let Some(invalid) = decl.check_new_overload(existing.clone()) {
-                return Err(TypeError::InvalidMethodOverload {
-                    owning_type: owning_type.into_owned(),
-                    prev_decls: existing
-                        .into_iter()
-                        .map(|decl| decl.ident().clone())
-                        .collect(),
-                    kind: invalid,
-                    method: decl.name.ident().clone(),
-                });
-            }
-        }
-
-        methods.push(MethodDecl {
-            access: method.access,
-            func_decl: Arc::new(decl),
-        });
+        
+        sections.push(section);
     }
 
     for iface_ty in implements.iter() {
@@ -351,7 +377,11 @@ pub fn typecheck_methods(
                 .sig()
                 .with_self(owning_type.as_ref());
             
-            for impl_method in methods.iter() {
+            let all_methods = sections
+                .iter()
+                .flat_map(|section| section.methods());
+            
+            for impl_method in all_methods {
                 if impl_method.func_decl.name.ident() != iface_method.ident() {
                     continue;
                 }
@@ -395,7 +425,7 @@ pub fn typecheck_methods(
         }
     }
     
-    Ok(methods)
+    Ok(sections)
 }
 
 fn typecheck_method(decl: &ast::FunctionDecl, ctx: &mut Context) -> TypeResult<FunctionDecl> {
@@ -523,9 +553,9 @@ pub fn typecheck_variant(
         });
     }
     
-    let methods = typecheck_methods(
+    let sections = typecheck_members(
         &variant_ty,
-        &variant_def.methods,
+        &variant_def.sections,
         &implements,
         &implements_span,
         info.name.span(),
@@ -540,7 +570,7 @@ pub fn typecheck_variant(
         forward: variant_def.forward,
         cases,
         implements,
-        methods,
+        sections,
         span: variant_def.span().clone(),
     })
 }

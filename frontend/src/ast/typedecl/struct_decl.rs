@@ -4,19 +4,19 @@ use crate::ast::tag::Tag;
 use crate::ast::typedecl::TypeDeclStart;
 use crate::ast::Access;
 use crate::ast::Annotation;
+use crate::ast::DeclIdent;
 use crate::ast::Ident;
 use crate::ast::MethodOwner;
-use crate::ast::DeclIdent;
 use crate::ast::WhereClause;
 use crate::parse::Matcher;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::Keyword;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use derivative::*;
 pub use member::*;
 use std::fmt;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[cfg(test)]
 mod test;
@@ -50,8 +50,7 @@ pub struct StructDecl<A: Annotation = Span> {
     
     pub forward: bool,
 
-    pub fields: Vec<FieldDecl<A>>,
-    pub methods: Vec<MethodDecl<A>>,
+    pub sections: Vec<StructDeclSection<A>>,
     
     pub implements: Vec<A::Type>,
 
@@ -62,24 +61,40 @@ pub struct StructDecl<A: Annotation = Span> {
 }
 
 impl<A: Annotation> StructDecl<A> {    
-    pub fn find_field(&self, by_ident: &Ident) -> Option<&FieldDecl<A>> {
-        self.fields.iter().find(|field| field.ident == *by_ident)
+    pub fn members(&self) -> impl Iterator<Item=&TypeMemberDecl<A>> {
+        self.sections
+            .iter()
+            .flat_map(|section| section.members.iter())
     }
     
     pub fn fields(&self) -> impl Iterator<Item=&FieldDecl<A>> {
-        self.fields.iter()
+        self.members()
+            .filter_map(|member| match member {
+                TypeMemberDecl::Field(field) => Some(field),
+                TypeMemberDecl::Method(..) => None,
+            })
     }
 
     pub fn methods(&self) -> impl Iterator<Item=&MethodDecl<A>> {
-        self.methods.iter()
+        self.members()
+            .filter_map(|member| match member {
+                TypeMemberDecl::Method(method) => Some(method),
+                TypeMemberDecl::Field(..) => None,
+            })
+    }
+
+    pub fn find_field(&self, by_ident: &Ident) -> Option<&FieldDecl<A>> {
+        self.fields().find(|field| field.ident == *by_ident)
     }
 }
 
 impl<A: Annotation> MethodOwner<A> for StructDecl<A> {
-    fn methods(&self) -> &[MethodDecl<A>] {
-        self.methods.as_slice()
+    fn methods<'a>(&'a self) -> impl Iterator<Item=&'a MethodDecl<A>>
+    where A: 'a
+    {
+        StructDecl::methods(self)
     }
-} 
+}
 
 impl StructDecl<Span> {
     pub fn parse(tokens: &mut TokenStream, name: DeclIdent, tags: Vec<Tag>) -> ParseResult<Self> {
@@ -121,8 +136,7 @@ impl StructDecl<Span> {
                 forward: true,
                 implements: decl_start.supers,
                 
-                methods: Vec::new(),
-                fields: Vec::new(),
+                sections: Vec::new(),
                 span,
             })
         } else {
@@ -131,16 +145,7 @@ impl StructDecl<Span> {
                 StructKind::Record => Access::Public,
             };
 
-            let members = parse_struct_members(tokens, default_access)?;
-            
-            let mut methods = Vec::new();
-            let mut fields = Vec::new();
-            for member in members {
-                match member {
-                    StructMemberDecl::Field(field) => fields.push(field),
-                    StructMemberDecl::MethodDecl(method) => methods.push(method),
-                }
-            }
+            let sections = parse_struct_sections(tokens, default_access)?;
 
             let end_token = tokens.match_one(Keyword::End)?;
 
@@ -152,9 +157,8 @@ impl StructDecl<Span> {
                 packed,
                 tags,
                 forward: false,
-                implements:decl_start.supers,
-                fields,
-                methods,
+                implements: decl_start.supers,
+                sections,
                 span: span.to(end_token.span()),
             })
         }
@@ -179,18 +183,66 @@ impl<A: Annotation> fmt::Display for StructDecl<A> {
         };
         writeln!(f, "{}", kind)?;
         
-        let mut access = Access::Public;
-        
-        for field in &self.fields {
-            write_access_if_changed(f, &mut access, field.access)?;
-            writeln!(f, "  {};", field)?
-        }
-
-        for method in &self.methods {
-            write_access_if_changed(f, &mut access, method.access)?;
-            writeln!(f, "  {};", method.func_decl)?
+        for section in &self.sections {
+            writeln!(f, "{}", section.access)?;
+            for member in &section.members {
+                match member {
+                    TypeMemberDecl::Field(field) => writeln!(f, "  {};", field)?,
+                    TypeMemberDecl::Method(method) => writeln!(f, "  {};", method.func_decl)?,
+                }
+            }
         }
 
         write!(f, "end")
     }
 }
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
+pub struct StructDeclSection<A: Annotation = Span> {
+    pub access: Access,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub access_kw_span: Option<Span>,
+    
+    pub members: Vec<TypeMemberDecl<A>>,
+}
+
+impl<A: Annotation> MemberDeclSection<A> for StructDeclSection<A> {
+    type Source = StructDeclSection;
+
+    fn clone_empty(other: &Self::Source) -> Self {
+        Self {
+            access: other.access,
+            access_kw_span: other.access_kw_span.clone(),
+            members: Vec::with_capacity(other.members.len()),
+        }
+    }
+
+    fn access(&self) -> Access {
+        self.access
+    }
+
+    fn add_field(&mut self, field: FieldDecl<A>) -> bool {
+        self.members.push(TypeMemberDecl::Field(field));
+        true
+    }
+
+    fn add_method(&mut self, method: MethodDecl<A>) -> bool {
+        self.members.push(TypeMemberDecl::Method(method));
+        true
+    }
+
+    fn members<'a>(&'a self) -> impl Iterator<Item=TypeMemberDeclRef<'a, A>>
+    where A: 'a
+    {
+        self.members
+            .iter()
+            .map(|member| match member {
+                TypeMemberDecl::Field(field) => TypeMemberDeclRef::Field(field),
+                TypeMemberDecl::Method(method) => TypeMemberDeclRef::Method(method),
+            })
+    }
+} 

@@ -20,7 +20,7 @@ pub use self::sig::*;
 pub use self::specialize::*;
 pub use self::ty_param::*;
 use crate::ast;
-use crate::ast::Access;
+use crate::ast::{Access, MethodOwner};
 use crate::ast::ArrayTypeName;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
@@ -823,7 +823,7 @@ impl Type {
                     ctx.instantiate_variant_def(&name)?
                 };
                 
-                Ok(variant_def.methods.clone())
+                Ok(variant_def.methods().cloned().collect())
             }
 
             Type::Primitive(primitive) => {
@@ -893,7 +893,7 @@ impl Type {
                     ctx.instantiate_struct_def(&type_name, struct_kind)?
                 };
 
-                Ok(find_in_method_decls(name, sig, struct_def.methods.iter()))
+                Ok(find_in_method_decls(name, sig, struct_def.methods()))
             }
 
             Type::Variant(type_name) => {
@@ -903,7 +903,7 @@ impl Type {
                     ctx.instantiate_variant_def(&type_name)?
                 };
 
-                Ok(find_in_method_decls(name, sig, variant_def.methods.iter()))
+                Ok(find_in_method_decls(name, sig, variant_def.methods()))
             }
 
             Type::Primitive(primitive) => {
@@ -948,7 +948,7 @@ impl Type {
                     ctx.instantiate_struct_def(&name, struct_kind)?
                 };
 
-                let method = struct_def.methods.get(method_index);
+                let method = struct_def.methods().nth(method_index);
                 Ok(method.cloned().expect("invalid method index"))
             }
 
@@ -959,7 +959,7 @@ impl Type {
                     ctx.instantiate_variant_def(&name)?
                 };
 
-                let method = variant_def.methods.get(method_index);
+                let method = variant_def.methods().nth(method_index);
                 Ok(method.cloned().expect("invalid method index"))
             }
 

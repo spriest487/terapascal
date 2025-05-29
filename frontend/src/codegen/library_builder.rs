@@ -1237,7 +1237,7 @@ impl LibraryBuilder {
                     .instantiate_struct_def(name.as_ref(), src_ty.struct_kind().unwrap())
                     .unwrap();
 
-                for (method_index, method) in def.methods.iter().enumerate() {
+                for (method_index, method) in def.methods().enumerate() {
                     if method.access >= Published && method.func_decl.name.type_params.is_none() {
                         rtti.methods.push(self.create_runtime_method(ty.clone(), &src_ty, method_index, false, &method.func_decl));
                     }
