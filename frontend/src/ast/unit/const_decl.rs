@@ -22,6 +22,11 @@ use std::fmt;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]
 pub struct UnitBinding<A: Annotation> {
+    #[derivative(Debug = "ignore")]
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub kw_span: Span,
+    
     pub kind: BindingDeclKind,
 
     pub items: Vec<UnitBindingItem<A>>,
@@ -63,32 +68,49 @@ impl Parse for UnitBinding<Span> {
                 idents.push(next_ident);
             }
 
-            let ty = match tokens.match_one_maybe(Separator::Colon) {
-                Some(..) => TypeName::parse(tokens)?,
-                None => TypeName::Unspecified(idents_span),
+            let (ty, ty_span) = match tokens.match_one_maybe(Separator::Colon) {
+                Some(..) => {
+                    let ty = TypeName::parse(tokens)?;
+                    let ty_span = ty.span().clone();
+                    (ty, Some(ty_span))
+                },
+                None => {
+                    let ty = TypeName::Unspecified(idents_span);
+                    (ty, None)
+                },
             };
 
-            let val = if tokens.match_one_maybe(Operator::Equals).is_some() {
-                let val = Expr::parse(tokens)?;
-                Some(Box::new(val))
-            } else {
-                None
+            let init = match tokens.match_one_maybe(Operator::Equals) {
+                Some(eq_tt) => {
+                    let val = Expr::parse(tokens)?;
+                    
+                    Some(UnitBindingItemInitializer {
+                        expr: Box::new(val),
+                        eq_span: eq_tt.into_span(),
+                    })
+                }
+                
+                None => None,
             };
 
-            if let (Some(val_expr), 2..) = (&val, idents.len()) { 
-                return Err(TracedError::trace(ParseError::MultiVarDeclHasInitExpr {
-                    span: idents[0].span().to(val_expr.span()),
-                }));
+            if idents.len() > 1 {
+                if let Some(item_val) = &init {
+                    return Err(TracedError::trace(ParseError::MultiVarDeclHasInitExpr {
+                        span: idents[0].span().to(item_val.expr.span()),
+                    }));
+                }
             }
             
-            for ident in idents {
-                items.push(UnitBindingItem {
-                    ty: ty.clone(),
-                    val: val.clone(),
-                    span: ident.span.clone(),
-                    ident,
-                })
-            }
+            let span = Span::range(&idents)
+                .expect("there will be at least one ident");
+
+            items.push(UnitBindingItem {
+                ty_span,
+                ty,
+                init,
+                span,
+                idents,
+            });
 
             let match_more = Separator::Semicolon + Matcher::AnyIdent;
             if tokens.look_ahead().match_sequence(match_more).is_none() {
@@ -107,6 +129,7 @@ impl Parse for UnitBinding<Span> {
         let span = kw_token.span().to(last_item.span());
 
         Ok(UnitBinding {
+            kw_span: kw_token.into_span(),
             kind,
             span,
             items,
@@ -130,11 +153,28 @@ impl<A: Annotation> fmt::Display for UnitBinding<A> {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]
-pub struct UnitBindingItem<A: Annotation> {
-    pub ident: Ident,
+pub struct UnitBindingItemInitializer<A: Annotation = Span> {
+    #[derivative(Debug = "ignore")]
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub eq_span: Span,
+
+    pub expr: Box<Expr<A>>,
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(PartialEq, Hash, Debug)]
+pub struct UnitBindingItem<A: Annotation = Span> {
+    pub idents: Vec<Ident>,
+    
     pub ty: A::Type,
 
-    pub val: Option<Box<Expr<A>>>,
+    #[derivative(Debug = "ignore")]
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub ty_span: Option<Span>,
+
+    pub init: Option<UnitBindingItemInitializer<A>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]
@@ -150,13 +190,19 @@ impl<A: Annotation> Spanned for UnitBindingItem<A> {
 
 impl<A: Annotation> fmt::Display for UnitBindingItem<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.ident)?;
+        for i in 0..self.idents.len() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", self.idents[i])?;
+        }
+        
         if self.ty.is_known() {
             write!(f, ": {}", self.ty)?;
         }
 
-        if let Some(val) = &self.val {
-            write!(f, " = {}", val)?;
+        if let Some(init) = &self.init {
+            write!(f, " = {}", init.expr)?;
         }
 
         Ok(())

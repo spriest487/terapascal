@@ -187,8 +187,9 @@ pub enum TypeError {
         span: Span,
     },
     UninitGlobalBinding {
-        ident: Ident,
+        binding_names: Vec<Ident>,
         ty: Type,
+        span: Span,
     },
     UninitBindingWithNoType {
         binding: Box<ast::LocalBinding<Span>>,
@@ -197,7 +198,7 @@ pub enum TypeError {
         span: Span,
     },
     BindingWithNoType {
-        binding_name: Ident,
+        binding_names: Vec<Ident>,
         span: Span,
     },
     NotInitialized {
@@ -440,7 +441,7 @@ impl Spanned for TypeError {
             TypeError::UnableToInferType { expr } => expr.annotation().span(),
             TypeError::UnableToInferFunctionExprType { func } => func.span(),
             TypeError::UnableToInferSpecialization { span, .. } => span,
-            TypeError::UninitGlobalBinding { ident, .. } => ident.span(),
+            TypeError::UninitGlobalBinding { span, .. } => span,
             TypeError::UninitBindingWithNoType { binding } => binding.annotation.span(),
             TypeError::BindingWithNoType { span, .. } => span,
             TypeError::NotInitialized { usage, .. } => usage.span(),
@@ -1051,16 +1052,40 @@ impl fmt::Display for TypeError {
                 write!(f, "unable to infer specialization of the generic type `{}` from expected type `{}`", generic_ty, hint_ty)
             }
 
-            TypeError::UninitGlobalBinding { ident, ty } => {
-                write!(f, "global variable `{}` of type `{}` does not have a default value and must be initialized", ident, ty)
+            TypeError::UninitGlobalBinding { binding_names, ty, .. } => {
+                if binding_names.len() == 1 {
+                    write!(f, "this binding `{}` of type `{}` requires an initializer", binding_names[0], ty)
+                } else {
+                    write!(f, "these bindings of the type `{}` require an initializer: ", ty)?;
+                    for i in 0..binding_names.len() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", binding_names[i])?;
+                    }
+
+                    Ok(())
+                }
             }
 
             TypeError::UninitBindingWithNoType { binding } => {
                 write!(f, "the type of `{}` cannot be inferred because it has no initial value", binding.name)
             }
 
-            TypeError::BindingWithNoType { binding_name, .. } => {
-                write!(f, "the type of value bound to `{}` cannot be Nothing", binding_name)
+            TypeError::BindingWithNoType { binding_names, .. } => {
+                if binding_names.len() == 1 {
+                    write!(f, "the declaration of binding `{}` must have a type", binding_names[0])
+                } else {
+                    write!(f, "the declaration of these bindings is missing a type: ")?;
+                    for i in 0..binding_names.len() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", binding_names[i])?;
+                    }
+                        
+                    Ok(())
+                }
             }
 
             TypeError::NotInitialized { ident, .. } => {

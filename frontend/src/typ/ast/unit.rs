@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::ast::BindingDeclKind;
+use crate::ast::{BindingDeclKind, UnitBindingItemInitializer};
 use crate::ast::FunctionName;
 use crate::ast::IdentPath;
 use crate::ast::StructKind;
@@ -399,6 +399,7 @@ fn typecheck_global_binding(
     }
 
     Ok(GlobalBinding {
+        kw_span: binding.kw_span.clone(),
         kind: binding.kind,
         items,
         span: binding.span.clone(),
@@ -415,35 +416,46 @@ fn typecheck_global_binding_item(
 
     let (ty, val) = match kind {
         BindingDeclKind::Const => {
-            let (ty, const_val_expr) = match (&item.ty, &item.val) {
+            let (ty, mut const_val_init) = match (&item.ty, &item.init) {
                 (_, None) => {
                     return Err(TypeError::ConstDeclWithNoValue { span });
                 }
 
-                (unknown_ty, Some(val)) if !unknown_ty.is_known() => {
+                (unknown_ty, Some(init)) if !unknown_ty.is_known() => {
                     // infer from provided value expr
-                    let init_expr = typecheck_expr(val, &Type::Nothing, ctx)?;
+                    let init_expr = typecheck_expr(&init.expr, &Type::Nothing, ctx)?;
                     let ty = init_expr.annotation().ty().into_owned();
-                    (ty, init_expr)
+                    
+                    (ty, UnitBindingItemInitializer {
+                        expr: Box::new(init_expr),
+                        eq_span: init.eq_span.clone(),
+                    })
                 }
 
-                (explicit_ty, Some(val)) => {
+                (explicit_ty, Some(init)) => {
                     // use explicitly provided type
                     let ty = typecheck_type(explicit_ty, ctx)?;
-                    let const_val_expr = typecheck_expr(val, &ty, ctx)?;
-                    (ty, const_val_expr)
+                    let const_val_expr = typecheck_expr(&init.expr, &ty, ctx)?;
+
+                    (ty, UnitBindingItemInitializer {
+                        expr: Box::new(const_val_expr),
+                        eq_span: init.eq_span.clone(),
+                    })
                 }
             };
 
-            let const_val_literal = match const_val_expr.const_eval(ctx) {
+            let const_val_literal = match const_val_init.expr.const_eval(ctx) {
                 Some(const_val) => Ok(const_val),
                 None => Err(TypeError::InvalidConstExpr {
-                    expr: Box::new(const_val_expr),
+                    expr: const_val_init.expr,
                 }),
             }?;
+            
+            assert_eq!(1, item.idents.len(), "parser should not produce multi-item const bindings");
+            let const_ident = item.idents[0].clone();
 
             ctx.declare_global_const(
-                item.ident.clone(),
+                const_ident.clone(),
                 const_val_literal.clone(),
                 ty.clone(),
                 visibility,
@@ -453,35 +465,44 @@ fn typecheck_global_binding_item(
             let annotation = ConstValue {
                 value: const_val_literal.clone(),
                 span: span.clone(),
-                decl: Some(ctx.namespace().child(item.ident.clone())),
+                decl: Some(ctx.namespace().child(const_ident)),
                 ty: ty.clone(),
             };
 
-            let val = Expr::literal(const_val_literal.clone(), annotation.into());
-            (ty, Some(Box::new(val)))
+            const_val_init.expr = Box::new(Expr::literal(const_val_literal.clone(), annotation.into()));
+            (ty, Some(const_val_init))
         }
 
         BindingDeclKind::Var => {
-            let (ty, val) = match (&item.ty, &item.val) {
+            let (ty, val) = match (&item.ty, &item.init) {
                 (unknown_ty, None) if !unknown_ty.is_known() => {
                     return Err(TypeError::BindingWithNoType {
-                        binding_name: item.ident.clone(),
+                        binding_names: item.idents.clone(),
                         span: item.span.clone(),
                     })
                 },
 
-                (unknown_ty, Some(val_expr)) if !unknown_ty.is_known() => {
-                    let val_expr = typecheck_expr(&val_expr, &Type::Nothing, ctx)?;
+                (unknown_ty, Some(init)) if !unknown_ty.is_known() => {
+                    let val_expr = typecheck_expr(&init.expr, &Type::Nothing, ctx)?;
                     let actual_ty = val_expr.annotation().ty().into_owned();
 
-                    (actual_ty, Some(Box::new(val_expr)))
+                    let init = UnitBindingItemInitializer {
+                        expr: Box::new(val_expr),
+                        eq_span: init.eq_span.clone(),
+                    };
+                    (actual_ty, Some(init))
                 }
 
-                (explicit_ty, Some(val_expr)) => {
+                (explicit_ty, Some(init)) => {
                     let explicit_ty = typecheck_type(explicit_ty, ctx)?;
-                    let val_expr = typecheck_expr(&val_expr, &explicit_ty, ctx)?;
+                    let val_expr = typecheck_expr(&init.expr, &explicit_ty, ctx)?;
 
-                    (explicit_ty, Some(Box::new(val_expr)))
+                    let init = UnitBindingItemInitializer {
+                        expr: Box::new(val_expr),
+                        eq_span: init.eq_span.clone(),
+                    };
+
+                    (explicit_ty, Some(init))
                 },
 
                 (explicit_ty, None) => {
@@ -498,17 +519,20 @@ fn typecheck_global_binding_item(
 
                 if !has_default {
                     return Err(TypeError::UninitGlobalBinding {
-                        ident: item.ident.clone(),
+                        binding_names: item.idents.clone(),
+                        span: item.span.clone(),
                         ty,
                     });
                 }
             }
             
-            ctx.declare_global_var(item.ident.clone(), Binding {
-                ty: ty.clone(),
-                def: Some(item.ident.clone()),
-                kind: ValueKind::Mutable,
-            }, visibility)?;
+            for ident in &item.idents {
+                ctx.declare_global_var(ident.clone(), Binding {
+                    ty: ty.clone(),
+                    def: Some(ident.clone()),
+                    kind: ValueKind::Mutable,
+                }, visibility)?;
+            }
 
             (ty, val)
         }
@@ -516,15 +540,16 @@ fn typecheck_global_binding_item(
 
     if ty == Type::Nothing {
         return Err(TypeError::BindingWithNoType {
-            binding_name: item.ident.clone(),
+            binding_names: item.idents.clone(),
             span,
         });
     }
 
     Ok(GlobalBindingItem {
         ty,
-        ident: item.ident.clone(),
-        val,
+        ty_span: item.ty_span.clone(),
+        idents: item.idents.clone(),
+        init: val,
         span,
     })
 }

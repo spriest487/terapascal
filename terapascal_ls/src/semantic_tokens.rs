@@ -18,6 +18,7 @@ pub fn semantic_legend() -> Vec<SemanticTokenType> {
         SemanticTokenType::TYPE,
         SemanticTokenType::TYPE_PARAMETER,
         SemanticTokenType::PARAMETER,
+        SemanticTokenType::VARIABLE,
     ]
 }
 
@@ -30,6 +31,7 @@ const SEMANTIC_FUNCTION: u32 = 5;
 const SEMANTIC_TYPE: u32 = 6;
 const SEMANTIC_TYPE_PARAMETER: u32 = 7;
 const SEMANTIC_PARAMETER: u32 = 8;
+const SEMANTIC_VARIABLE: u32 = 9;
 
 pub struct SemanticTokenBuilder {
     cur_line: u32,
@@ -162,7 +164,23 @@ impl SemanticTokenBuilder {
 
             ast::UnitDecl::Type { .. } => {},
             ast::UnitDecl::Uses { .. } => {},
-            ast::UnitDecl::Binding { .. } => {},
+            ast::UnitDecl::Binding { decl } => {
+                self.add(&decl.kw_span, SEMANTIC_KEYWORD);
+                for item in &decl.items {
+                    for ident in &item.idents {
+                        self.add(&ident.span, SEMANTIC_VARIABLE);
+                    }
+
+                    if let Some(span) = &item.ty_span {
+                        self.add(span, SEMANTIC_TYPE);
+                    }
+                    
+                    if let Some(init) = &item.init {
+                        self.add(&init.eq_span, SEMANTIC_OPERATOR);
+                        self.add_expr(&init.expr);
+                    }
+                }
+            },
         }
     }
 

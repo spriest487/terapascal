@@ -203,19 +203,22 @@ impl LibraryBuilder {
             let id = ir::VariableID(self.next_variable_id);
             self.next_variable_id += 1;
 
-            let var_name = unit.ident.clone().child(var.ident.clone());
             let var_ty = self.translate_type(&var.ty, &GenericContext::empty());
 
-            self.variables_by_name.insert(var_name, id);
-            self.library.variables.insert(id, var_ty);
-            if let Some(val_expr) = &var.val {
-                let mut var_init_builder = Builder::new(self);
+            for ident in &var.idents {
+                let var_name = unit.ident.clone().child(ident.clone());
 
-                let expr = expr_to_val(val_expr, &mut var_init_builder);
-                var_init_builder.mov(ir::GlobalRef::Variable(id), expr);
+                self.variables_by_name.insert(var_name, id);
+                self.library.variables.insert(id, var_ty.clone());
+                if let Some(var_init) = &var.init {
+                    let mut var_init_builder = Builder::new(self);
 
-                let init_body = &mut var_init_builder.finish();
-                self.library.init.append(init_body);
+                    let expr = expr_to_val(&var_init.expr, &mut var_init_builder);
+                    var_init_builder.mov(ir::GlobalRef::Variable(id), expr);
+
+                    let init_body = &mut var_init_builder.finish();
+                    self.library.init.append(init_body);
+                }
             }
         }
         

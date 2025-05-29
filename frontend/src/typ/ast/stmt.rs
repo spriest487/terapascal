@@ -98,7 +98,7 @@ pub fn typecheck_local_binding(
 
     if binding_ty == Type::Nothing {
         return Err(TypeError::BindingWithNoType {
-            binding_name: binding.name.clone(),
+            binding_names: vec![binding.name.clone()],
             span: binding.span().clone(),
         });
     }
