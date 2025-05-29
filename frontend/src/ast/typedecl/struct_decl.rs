@@ -6,7 +6,7 @@ use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::Ident;
 use crate::ast::MethodOwner;
-use crate::ast::TypeDeclName;
+use crate::ast::DeclIdent;
 use crate::ast::WhereClause;
 use crate::parse::Matcher;
 use crate::parse::ParseResult;
@@ -35,7 +35,13 @@ pub enum StructKind {
 #[derivative(Debug, PartialEq, Hash)]
 pub struct StructDecl<A: Annotation = Span> {
     pub kind: StructKind,
-    pub name: A::Name,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub kw_span: Span,
+
+    pub name: A::DeclName,
     pub where_clause: Option<WhereClause<A::Type>>,
 
     pub tags: Vec<Tag<A>>,
@@ -76,7 +82,7 @@ impl<A: Annotation> MethodOwner<A> for StructDecl<A> {
 } 
 
 impl StructDecl<Span> {
-    pub fn parse(tokens: &mut TokenStream, name: TypeDeclName, tags: Vec<Tag>) -> ParseResult<Self> {
+    pub fn parse(tokens: &mut TokenStream, name: DeclIdent, tags: Vec<Tag>) -> ParseResult<Self> {
         let packed_kw = tokens.match_one_maybe(Keyword::Packed);
         let packed = packed_kw.is_some();
         
@@ -93,6 +99,8 @@ impl StructDecl<Span> {
             tt if tt.is_keyword(Keyword::Record) => StructKind::Record,
             _ => unreachable!(),
         };
+        
+        let kw_span = decl_start.keyword.into_span();
 
         let span = match packed_kw {
             Some(tt) => tt.span().to(&decl_start.span),
@@ -103,6 +111,7 @@ impl StructDecl<Span> {
         // will end with a semicolon
         if decl_start.forward {
             Ok(StructDecl {
+                kw_span,
                 kind,
                 name,
                 where_clause: decl_start.where_clause,
@@ -136,6 +145,7 @@ impl StructDecl<Span> {
             let end_token = tokens.match_one(Keyword::End)?;
 
             Ok(StructDecl {
+                kw_span,
                 kind,
                 name,
                 where_clause: decl_start.where_clause,

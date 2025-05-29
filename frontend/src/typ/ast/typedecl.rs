@@ -239,6 +239,7 @@ pub fn typecheck_struct_decl(
     )?;
 
     Ok(StructDef {
+        kw_span: struct_def.kw_span.clone(),
         kind: struct_def.kind,
         name: info.name,
         where_clause: info.where_clause,
@@ -546,6 +547,7 @@ pub fn typecheck_alias(
 
     Ok(AliasDecl {
         name,
+        ty_span: alias.ty_span.clone(),
         ty: Box::new(ty),
         span: alias.span.clone(),
     })

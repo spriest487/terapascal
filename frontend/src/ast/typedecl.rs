@@ -14,7 +14,6 @@ pub use self::struct_decl::*;
 pub use self::variant_decl::*;
 use crate::ast::tag::Tag;
 use crate::ast::unit::AliasDecl;
-use crate::ast::Annotation;
 use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::Keyword;
@@ -22,6 +21,7 @@ use crate::ast::Operator;
 use crate::ast::TypeList;
 use crate::ast::TypeName;
 use crate::ast::WhereClause;
+use crate::ast::{Annotation, DeclName};
 use crate::parse::InvalidTagLocation;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
@@ -46,6 +46,11 @@ use terapascal_common::TracedError;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Debug, Hash)]
 pub struct TypeDecl<A: Annotation = Span> {
+    #[derivative(Debug = "ignore")]
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub kw_span: Span,
+    
     pub items: Vec<TypeDeclItem<A>>,
 
     #[derivative(Debug = "ignore")]
@@ -66,9 +71,14 @@ impl Parse for TypeDecl<Span> {
             })
         })?;
 
-        let span = kw_tt.span().to(last_item.span());
+        let kw_span = kw_tt.into_span();
+        let span = kw_span.to(last_item.span());
 
-        Ok(TypeDecl { span, items })
+        Ok(TypeDecl {
+            kw_span,
+            items,
+            span, 
+        })
     }
 }
 
@@ -119,7 +129,7 @@ impl<A: Annotation> TypeDeclItem<A> {
 }
 
 impl<A: Annotation> TypeDeclItem<A> {
-    pub fn name(&self) -> &A::Name {
+    pub fn name(&self) -> &A::DeclName {
         match self {
             TypeDeclItem::Struct(class) => &class.name,
             TypeDeclItem::Interface(iface) => &iface.name,
@@ -181,7 +191,7 @@ pub fn type_method_start() -> Matcher {
 /// name is a single unqualified ident + maybe a type parameter list
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Debug, Hash)]
-pub struct TypeDeclName {
+pub struct DeclIdent {
     pub ident: Ident,
     pub type_params: Option<TypeList<Ident>>,
 
@@ -191,7 +201,7 @@ pub struct TypeDeclName {
     pub span: Span,
 }
 
-impl fmt::Display for TypeDeclName {
+impl fmt::Display for DeclIdent {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.ident)?;
 
@@ -203,15 +213,30 @@ impl fmt::Display for TypeDeclName {
     }
 }
 
-impl Spanned for TypeDeclName {
+impl DeclName for DeclIdent {
+    fn ident(&self) -> &Ident {
+        &self.ident
+    }
+
+    fn type_params_len(&self) -> usize {
+        self.type_params.as_ref().map(|list| list.len()).unwrap_or(0)
+    }
+
+    fn type_param_name_span(&self, index: usize) -> Option<&Span> {
+        let param = self.type_params.as_ref()?.items.get(index)?;
+        Some(&param.span)
+    }
+}
+
+impl Spanned for DeclIdent {
     fn span(&self) -> &Span {
         &self.span
     }
 }
 
-impl From<Ident> for TypeDeclName {
+impl From<Ident> for DeclIdent {
     fn from(ident: Ident) -> Self {
-        TypeDeclName {
+        DeclIdent {
             span: ident.span().clone(),
             ident,
             type_params: None,
@@ -219,7 +244,7 @@ impl From<Ident> for TypeDeclName {
     }
 }
 
-impl TypeDeclName {
+impl DeclIdent {
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let ident = tokens.match_one(Matcher::AnyIdent)?.into_ident().unwrap();
 
@@ -242,7 +267,7 @@ impl Parse for TypeDeclItem<Span> {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let tags = Tag::parse_seq(tokens)?;
 
-        let name = TypeDeclName::parse(tokens)?;
+        let name = DeclIdent::parse(tokens)?;
         tokens.match_one(Operator::Equals)?;
 
         let struct_kw_matcher = Keyword::Packed | Keyword::Class | Keyword::Record;

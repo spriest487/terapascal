@@ -1,7 +1,7 @@
 use crate::ast::Annotation;
 use crate::ast::Expr;
 use crate::ast::Ident;
-use crate::ast::TypeDeclName;
+use crate::ast::DeclIdent;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
@@ -16,7 +16,7 @@ use std::fmt;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Debug, Hash)]
 pub struct EnumDecl<A: Annotation> {
-    pub name: A::Name,
+    pub name: A::DeclName,
 
     pub items: Vec<EnumDeclItem<A>>,
 
@@ -48,7 +48,7 @@ impl<A: Annotation> fmt::Display for EnumDecl<A> {
 }
 
 impl EnumDecl<Span> {
-    pub fn parse(name: TypeDeclName, tokens: &mut TokenStream) -> ParseResult<Self> {
+    pub fn parse(name: DeclIdent, tokens: &mut TokenStream) -> ParseResult<Self> {
         let group = tokens
             .match_one(DelimiterPair::Bracket)?
             .into_delimited_group()

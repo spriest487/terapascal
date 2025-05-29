@@ -114,6 +114,7 @@ pub fn specialize_struct_def<'a>(
     )?;
 
     Ok(Arc::new(StructDef {
+        kw_span: generic_def.kw_span.clone(),
         name: specialized_name,
         where_clause: specialized_where,
         tags: generic_def.tags.clone(),

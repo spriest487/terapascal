@@ -5,7 +5,7 @@ use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
-use crate::ast::TypeDeclName;
+use crate::ast::DeclIdent;
 use crate::ast::WhereClause;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::ParseError;
@@ -71,7 +71,7 @@ impl ParseSeq for InterfaceMethodDecl<Span> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct InterfaceDecl<A: Annotation> {
-    pub name: A::Name,
+    pub name: A::DeclName,
     pub where_clause: Option<WhereClause<A::Type>>,
 
     pub tags: Vec<Tag<A>>,
@@ -97,7 +97,7 @@ impl<A: Annotation> InterfaceDecl<A> {
 impl InterfaceDecl<Span> {
     pub fn parse(
         tokens: &mut TokenStream,
-        name: TypeDeclName,
+        name: DeclIdent,
         tags: Vec<Tag>
     ) -> ParseResult<Self> {
         let decl_start = TypeDeclStart::parse(tokens, Keyword::Interface, &tags, &name.span)?;

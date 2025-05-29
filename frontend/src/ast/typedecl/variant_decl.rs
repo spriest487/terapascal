@@ -9,7 +9,7 @@ use crate::ast::Ident;
 use crate::ast::Keyword;
 use crate::ast::MethodDecl;
 use crate::ast::MethodOwner;
-use crate::ast::TypeDeclName;
+use crate::ast::DeclIdent;
 use crate::ast::WhereClause;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
@@ -28,7 +28,7 @@ use terapascal_common::span::Spanned;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct VariantDecl<A: Annotation> {
-    pub name: Arc<A::Name>,
+    pub name: Arc<A::DeclName>,
     pub where_clause: Option<WhereClause<A::Type>>,
     
     pub forward: bool,
@@ -117,7 +117,7 @@ impl<A: Annotation> VariantDecl<A> {
 }
 
 impl VariantDecl<Span> {
-    pub fn parse(tokens: &mut TokenStream, name: TypeDeclName, tags: Vec<Tag>) -> ParseResult<Self> {
+    pub fn parse(tokens: &mut TokenStream, name: DeclIdent, tags: Vec<Tag>) -> ParseResult<Self> {
         let decl_start = TypeDeclStart::parse(tokens, Keyword::Variant, &tags, &name.span)?;
 
         if decl_start.forward {

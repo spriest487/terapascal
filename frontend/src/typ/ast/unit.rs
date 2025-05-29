@@ -208,6 +208,7 @@ fn typecheck_type_decl(
     }
 
     Ok(TypeDecl {
+        kw_span: type_decl.kw_span.clone(),
         items,
         span: type_decl.span.clone(),
     })

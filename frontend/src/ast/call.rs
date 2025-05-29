@@ -192,7 +192,7 @@ impl<A: Annotation> Spanned for MethodCallNoArgs<A> {
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct VariantCtorCall<A: Annotation> {
-    pub variant: Arc<A::Name>,
+    pub variant: Arc<A::DeclName>,
     pub case: Ident,
 
     pub arg: Option<Expr<A>>,

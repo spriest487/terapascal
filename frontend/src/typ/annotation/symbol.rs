@@ -1,5 +1,5 @@
-use crate::ast::IdentPath;
-use crate::ast::TypeDeclName;
+use crate::ast::{DeclName, IdentPath};
+use crate::ast::DeclIdent;
 use crate::typ::ast::WhereClause;
 use crate::typ::typecheck_type_params;
 use crate::typ::validate_generic_constraints;
@@ -49,7 +49,7 @@ impl Symbol {
     /// Creates a symbol of the given decl, using the context's current local namespace 
     /// to create the fully qualified name
     pub fn from_local_decl_name(
-        decl_name: &TypeDeclName,
+        decl_name: &DeclIdent,
         constraint_clause: Option<&WhereClause>,
         ctx: &mut Context
     ) -> TypeResult<Self> {
@@ -209,6 +209,22 @@ impl From<IdentPath> for Symbol {
             type_args: None,
             type_params: None,
         }
+    }
+}
+
+impl DeclName for Symbol {
+    fn ident(&self) -> &Ident {
+        self.full_path.last()
+    }
+    
+    fn type_params_len(&self) -> usize {
+        self.type_params.as_ref().map(|list| list.len()).unwrap_or(0)
+    }
+
+    fn type_param_name_span(&self, index: usize) -> Option<&Span> {
+        let param = self.type_params.as_ref()?.items.get(index)?;
+        
+        Some(&param.name.span)
     }
 }
 

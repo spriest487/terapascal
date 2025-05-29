@@ -1,7 +1,7 @@
 use crate::ast::Annotation;
 use crate::ast::Expr;
 use crate::ast::IdentTypeName;
-use crate::ast::TypeDeclName;
+use crate::ast::DeclIdent;
 use crate::ast::TypeName;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
@@ -17,7 +17,7 @@ use std::fmt;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct SetDecl<A: Annotation = Span> {
-    pub name: A::Name,
+    pub name: A::DeclName,
     
     pub range: Box<SetDeclRange<A>>,
 
@@ -28,7 +28,7 @@ pub struct SetDecl<A: Annotation = Span> {
 }
 
 impl SetDecl<Span> {
-    pub fn parse(name: TypeDeclName, tokens: &mut TokenStream) -> ParseResult<Self> {
+    pub fn parse(name: DeclIdent, tokens: &mut TokenStream) -> ParseResult<Self> {
         let set_kw = tokens.match_one(Keyword::Set)?;
         tokens.match_one(Keyword::Of)?;
 

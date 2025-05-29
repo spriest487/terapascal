@@ -79,9 +79,15 @@ impl<T> ConstExprValue<Span, T> for Box<Expr<Span>> {
     }
 }
 
+pub trait DeclName : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
+    fn ident(&self) -> &Ident;
+    fn type_params_len(&self) -> usize;
+    fn type_param_name_span(&self, index: usize) -> Option<&Span>;
+}
+
 pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
     type Type: TypeAnnotation + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
-    type Name: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
+    type DeclName: DeclName;
     type Pattern: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
     type FunctionName: FunctionName + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
 
@@ -93,7 +99,7 @@ pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
 
 impl Annotation for Span {
     type Type = TypeName;
-    type Name = TypeDeclName;
+    type DeclName = DeclIdent;
     type Pattern = TypeNamePattern;
     type FunctionName = QualifiedFunctionName;
 

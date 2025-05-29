@@ -1,8 +1,8 @@
-use terapascal_common::span::Span;
+use terapascal_common::span::{Span, Spanned};
 use terapascal_frontend::DelimiterPair;
 use terapascal_frontend::TokenTree;
 use terapascal_frontend::ast;
-use terapascal_frontend::ast::{Annotation, ConstExprValue};
+use terapascal_frontend::ast::{Annotation, ConstExprValue, DeclName, TypeDeclItem};
 use terapascal_frontend::ast::FunctionName;
 use tower_lsp::lsp_types::SemanticToken;
 use tower_lsp::lsp_types::SemanticTokenType;
@@ -162,25 +162,62 @@ impl SemanticTokenBuilder {
             ast::UnitDecl::FunctionDecl { decl } => self.add_func_decl(decl),
             ast::UnitDecl::FunctionDef { def } => self.add_func_def(def),
 
-            ast::UnitDecl::Type { .. } => {},
+            ast::UnitDecl::Type { decl } => self.add_type_decl(decl),
             ast::UnitDecl::Uses { .. } => {},
-            ast::UnitDecl::Binding { decl } => {
-                self.add(&decl.kw_span, SEMANTIC_KEYWORD);
-                for item in &decl.items {
-                    for ident in &item.idents {
-                        self.add(&ident.span, SEMANTIC_VARIABLE);
-                    }
+            ast::UnitDecl::Binding { decl } => self.add_unit_binding(decl),
+        }
+    }
+    
+    fn add_type_decl<A: Annotation>(&mut self, type_decl: &ast::TypeDecl<A>) {
+        self.add(&type_decl.kw_span, SEMANTIC_KEYWORD);
 
-                    if let Some(span) = &item.ty_span {
-                        self.add(span, SEMANTIC_TYPE);
-                    }
+        for item in &type_decl.items {
+            let item_name = item.name();
+            self.add(item_name.ident().span(), SEMANTIC_TYPE);
+
+            for i in 0..item_name.type_params_len() {
+                if let Some(param_span) = item_name.type_param_name_span(i) {
+                    self.add(param_span, SEMANTIC_TYPE_PARAMETER);
+                }
+            }
+            
+            match item {
+                TypeDeclItem::Struct(struct_decl) => {
+                    self.add(&struct_decl.kw_span, SEMANTIC_KEYWORD);
                     
-                    if let Some(init) = &item.init {
-                        self.add(&init.eq_span, SEMANTIC_OPERATOR);
-                        self.add_expr(&init.expr);
+                    for method in &struct_decl.methods {
+                        self.add_func_decl(&method.func_decl);
                     }
                 }
-            },
+                TypeDeclItem::Interface(_) => {}
+                TypeDeclItem::Variant(_) => {}
+
+                TypeDeclItem::Alias(aliased) => {
+                    self.add(&aliased.ty_span, SEMANTIC_TYPE);
+                }
+
+                TypeDeclItem::Enum(_) => {}
+                TypeDeclItem::Set(_) => {}
+            }
+        }
+    }
+    
+    fn add_unit_binding<A: Annotation>(&mut self, binding: &ast::UnitBinding<A>) {
+        self.add(&binding.kw_span, SEMANTIC_KEYWORD);
+
+        for item in &binding.items {
+            for ident in &item.idents {
+                self.add(&ident.span, SEMANTIC_VARIABLE);
+            }
+
+            if let Some(span) = &item.ty_span {
+                self.add(span, SEMANTIC_TYPE);
+            }
+
+            if let Some(init) = &item.init {
+                self.add(&init.eq_span, SEMANTIC_OPERATOR);
+                self.add_expr(&init.expr);
+            }
         }
     }
 
