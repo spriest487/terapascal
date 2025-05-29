@@ -1,7 +1,6 @@
-use std::path::PathBuf;
 use crate::source_map::*;
 use crate::{Location, Span};
-use std::rc::Rc;
+use std::path::PathBuf;
 
 struct TestMapping {
     start: (usize, usize),
@@ -15,7 +14,7 @@ fn build_with_mappings(
     filename: &'static str,
     entries: impl IntoIterator<Item=TestMapping>
 ) -> SourceMap {
-    let mut builder = SourceMapBuilder::new(Rc::new(filename.into()));
+    let mut builder = SourceMapBuilder::new(Arc::new(filename.into()));
 
     for mapping in entries {
         builder.add(

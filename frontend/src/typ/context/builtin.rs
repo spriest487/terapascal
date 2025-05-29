@@ -216,17 +216,15 @@ pub fn builtin_comparable_iface() -> ast::InterfaceDecl {
     }
 }
 
-pub fn builtin_comparable_compare_method(owning_ty: Type, self_ty: Type) -> ast::FunctionDecl {
+pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type) -> ast::FunctionDecl {
     let builtin_span = builtin_span();
 
     ast::FunctionDecl {
         kw_span: builtin_span.clone(),
-        name: ast::TypedFunctionName::new_method(
+        name: ast::FunctionName::new_method_decl(
             builtin_ident(COMPARABLE_COMPARE_NAME),
             None,
-            owning_ty.clone(),
-            builtin_span.clone(),
-            None,
+            declaring_ty,
             builtin_span.clone(),
         ),
         tags: Vec::new(),
@@ -235,14 +233,14 @@ pub fn builtin_comparable_compare_method(owning_ty: Type, self_ty: Type) -> ast:
         params: vec![
             ast::FunctionParam {
                 ident: builtin_ident(SELF_PARAM_NAME),
-                ty: self_ty.clone(),
+                ty: self_param_ty.clone(),
                 ty_span: None,
                 modifier: None,
                 span: builtin_span.clone(),
             },
             ast::FunctionParam {
                 ident: builtin_ident("other"),
-                ty: self_ty.clone(),
+                ty: self_param_ty.clone(),
                 ty_span: None,
                 modifier: None,
                 span: builtin_span.clone(),
@@ -282,17 +280,15 @@ pub fn builtin_displayable_iface() -> ast::InterfaceDecl {
     }
 }
 
-pub fn builtin_displayable_display_method(owning_ty: Type, self_ty: Type) -> ast::FunctionDecl {
+pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Type) -> ast::FunctionDecl {
     let builtin_span = builtin_span();
 
     ast::FunctionDecl {
         kw_span: builtin_span.clone(),
-        name: ast::TypedFunctionName::new_method(
+        name: ast::FunctionName::new_method_decl(
             builtin_ident(DISPLAYABLE_TOSTRING_METHOD),
             None,
-            owning_ty.clone(),
-            builtin_span.clone(),
-            None,
+            declaring_ty,
             builtin_span.clone(),
         ),
         tags: Vec::new(),
@@ -301,7 +297,7 @@ pub fn builtin_displayable_display_method(owning_ty: Type, self_ty: Type) -> ast
         params: vec![
             ast::FunctionParam {
                 ident: builtin_ident(SELF_PARAM_NAME),
-                ty: self_ty,
+                ty: self_param_ty,
                 ty_span: None,
                 modifier: None,
                 span: builtin_span.clone(),

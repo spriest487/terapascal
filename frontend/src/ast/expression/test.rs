@@ -134,7 +134,7 @@ fn member_indexer_parse_order() {
             }
 
             match index {
-                Expr::Literal(Literal::Integer(int_const), ..) => {
+                Expr::Literal(LiteralItem { literal: Literal::Integer(int_const), .. }) => {
                     assert_eq!(1, int_const.as_i32().unwrap());
                 }
                 invalid => panic!("expected indexer index expr, got {:#?}", invalid),

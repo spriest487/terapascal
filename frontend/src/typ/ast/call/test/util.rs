@@ -4,7 +4,7 @@ use crate::ast::IdentPath;
 use crate::ast::TypeName;
 use crate::parse::Parse;
 use crate::pp::Preprocessor;
-use crate::typ::ast::OverloadCandidate;
+use crate::typ::ast::{FunctionDeclContext, OverloadCandidate};
 use crate::typ::test::module_from_src;
 use crate::typ::typecheck_type;
 use crate::typ::Context;
@@ -48,34 +48,38 @@ pub fn candidates_from_module(module: &Module, unit_name: &str) -> Vec<OverloadC
     let unit =
         module.units.iter().find(|unit| unit.unit.ident.last().name.as_str() == unit_name).unwrap();
 
-    let candidates = unit.unit.func_defs().map(|(visibility, func)| {
+    let candidates = unit.unit
+        .func_defs()
+        .filter_map(|(visibility, func)| {
         let sig = func.decl.sig();
 
-        match &func.decl.name.owning_ty_name {
-            Some(explicit_impl) => {
+        match &func.decl.name.context {
+            FunctionDeclContext::MethodDef { declaring_type, .. } => {
                 let ident = func.decl.name.ident.clone();
-                let (method_index, method) = explicit_impl
+                let (method_index, method) = declaring_type
                     .find_method(&ident, &sig, &unit.context)
                     .unwrap()
                     .expect("method defs in unit must have a corresponding decl in the type");
 
-                OverloadCandidate::Method {
+                Some(OverloadCandidate::Method {
                     index: method_index,
-                    self_ty: explicit_impl.clone(),
-                    iface_ty: explicit_impl.clone(),
+                    self_ty: declaring_type.clone(),
+                    iface_ty: declaring_type.clone(),
                     decl: method,
-                }
+                })
             },
 
-            None => {
+            FunctionDeclContext::FreeFunction => {
                 let decl_name = IdentPath::from(func.decl.name.ident.clone());
 
-                OverloadCandidate::Function {
+                Some(OverloadCandidate::Function {
                     decl_name: Symbol::from(decl_name),
                     visibility,
                     decl: func.decl.clone(),
-                }
+                })
             },
+            
+            FunctionDeclContext::MethodDecl { .. } => None,
         }
     });
 

@@ -1,9 +1,9 @@
 use crate::ast;
-use crate::ast::IdentPath;
-use crate::typ::ast::{apply_func_decl_named_ty_args, MethodOwningTypeName};
+use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::ast::infer_from_structural_ty_args;
 use crate::typ::ast::try_unwrap_inferred_args;
 use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::FunctionDeclContext;
 use crate::typ::ast::InterfaceDecl;
 use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::MethodDecl;
@@ -220,7 +220,6 @@ pub fn specialize_iface_def<'a>(
         .iter()
         .map(|generic_method| {
             let specialized_decl = specialize_method_decl(
-                &generic_def.name.full_path,
                 self_ty.clone(),
                 &generic_method.decl,
                 iface_ty_params,
@@ -262,15 +261,10 @@ fn specialize_methods(
     ty_params: &TypeParamList,
     ty_args: &TypeArgList,
 ) -> GenericResult<Vec<MethodDecl>> {
-    let self_ty_name = self_ty
-        .full_path()
-        .expect("must be a named type");
-
     let methods = generic_methods
         .iter()
         .map(|generic_method| {
             let specialized_decl = specialize_method_decl(
-                self_ty_name.as_ref(),
                 self_ty.clone(),
                 &generic_method.func_decl,
                 ty_params,
@@ -287,8 +281,7 @@ fn specialize_methods(
     Ok(methods)
 }
 
-fn specialize_method_decl(
-    owning_ty_generic_name: &IdentPath,
+pub fn specialize_method_decl(
     self_ty: Type,
     generic_method: &FunctionDecl,
     struct_ty_params: &TypeParamList,
@@ -301,21 +294,8 @@ fn specialize_method_decl(
     );
 
     // specialize the owning type of all methods
-    method.name.owning_ty_name = match &method.name.owning_ty_name {
-        Some(ty_name) => {
-            assert_eq!(
-                ty_name.ty.full_path().map(Cow::into_owned).as_ref(),
-                Some(owning_ty_generic_name),
-                "owning type of a method must always be the type it's declared in"
-            );
-
-            Some(MethodOwningTypeName {
-                ty: self_ty,
-                ..ty_name.clone()
-            })
-        },
-
-        None => None,
+    method.name.context = FunctionDeclContext::MethodDecl { 
+        enclosing_type: self_ty,
     };
 
     Ok(method)

@@ -5,12 +5,11 @@ use crate::ast::Operator;
 use crate::ast::{Access, FunctionDeclKind};
 use crate::parse::IllegalStatement;
 use crate::typ::annotation::Value;
-use crate::typ::ast::Call;
+use crate::typ::ast::{Call, FunctionName};
 use crate::typ::ast::DeclMod;
 use crate::typ::ast::Expr;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::Stmt;
-use crate::typ::ast::TypedFunctionName;
 use crate::typ::ast::VariantDef;
 use crate::typ::context::NameError;
 use crate::typ::GenericError;
@@ -1277,16 +1276,16 @@ impl fmt::Display for TypeError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MissingImplementation {
-    pub method_name: TypedFunctionName,
+    pub method_name: FunctionName,
     pub sig: FunctionSig,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MismatchedImplementation {
-    pub iface_method_name: TypedFunctionName,
+    pub iface_method_name: FunctionName,
     pub expect_sig: FunctionSig,
 
-    pub impl_method_name: TypedFunctionName,
+    pub impl_method_name: FunctionName,
     pub actual_sig: FunctionSig,
 }
 

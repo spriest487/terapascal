@@ -87,7 +87,7 @@ impl MarshalError {
             },
             MarshalError::ExternSymbolLoadFailed { lib, symbol, msg } => write!(
                 f,
-                "external symbol {}::{} failed to load ({})",
+                "external symbol {}!{} failed to load ({})",
                 lib, symbol, msg
             ),
             MarshalError::VariantTagOutOfRange { variant_id, tag } => write!(

@@ -11,7 +11,6 @@ use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::Literal;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::OverloadCandidate;
-use crate::typ::ast::TypedFunctionName;
 use crate::typ::result::*;
 use crate::typ::ty::*;
 use crate::typ::Context;
@@ -624,7 +623,7 @@ impl Annotation for Value {
     type Type = Type;
     type Name = Symbol;
     type Pattern = TypePattern;
-    type FunctionName = TypedFunctionName;
+    type FunctionName = crate::typ::ast::FunctionName;
 
     type ConstStringExpr = EvaluatedConstExpr<String>;
     type ConstIntegerExpr = EvaluatedConstExpr<IntConstant>;

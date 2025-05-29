@@ -719,12 +719,14 @@ impl Context {
 
         for item in &enum_decl.items {
             let ord_val = item
-                .value
-                .as_ref()
+                .annotation
+                .as_const()
+                .and_then(|const_val| const_val.clone().value.try_into_int())
                 .expect("enum ord values must exist after typechecking");
+
             self.declare_global_const(
                 item.ident.clone(),
-                Literal::Integer(ord_val.value),
+                Literal::Integer(ord_val),
                 enum_ty.clone(),
                 visibility,
                 item.span().clone(),
@@ -1137,8 +1139,8 @@ impl Context {
                             // allow the redeclaration of certain builtin types in the System unit,
                             // as long as the new definition matches the builtin one exactly
                             if !value.is_valid_builtin_redecl() || *existing != def {
-                                // dbg!(existing);
-                                // dbg!(&def);
+                                dbg!(existing);
+                                dbg!(&def);
 
                                 let err = NameError::AlreadyDefined {
                                     ident: full_name,

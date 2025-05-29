@@ -45,6 +45,7 @@ fn make_iface_ty<const N: usize>(name: IdentPath, ty_param_names: [&str; N]) -> 
     
     TypePath {
         name,
+        name_span: span.clone(),
         type_params,
         span,
     }

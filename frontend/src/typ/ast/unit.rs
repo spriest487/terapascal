@@ -7,7 +7,7 @@ use crate::ast::TypeAnnotation;
 use crate::ast::Visibility;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::expr::expect_stmt_initialized;
-use crate::typ::ast::typecheck_alias;
+use crate::typ::ast::{typecheck_alias, FunctionDeclContext};
 use crate::typ::ast::typecheck_enum_decl;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_func_def;
@@ -152,12 +152,12 @@ fn typecheck_unit_func_def(
     
     // free functions may not already have a declaration in scope if they weren't forward
     // declared, do that now
-    if func_decl.name.owning_ty_name.is_none() && !ctx.is_function_declared(&func_decl) {
+    if func_decl.name.context == FunctionDeclContext::FreeFunction && !ctx.is_function_declared(&func_decl) {
         ctx.declare_function(func_name.ident().clone(), Arc::new(func_decl.clone()), visibility)?;
     }
 
     let func_def = Arc::new(typecheck_func_def(func_decl.clone(), func_def, ctx)?);
-    match func_decl.name.owning_type() {
+    match func_decl.method_declaring_type() {
         Some(ty) => {
             ctx.define_method(ty.clone(), func_def.clone())?;
         }
@@ -178,10 +178,7 @@ fn typecheck_unit_func_decl(
     let name = func_decl.name.clone();
     let func_decl = Arc::new(FunctionDecl::typecheck(func_decl, false, ctx)?);
 
-    assert!(
-        func_decl.name.owning_ty_name.is_none(),
-        "not yet implemented: can't forward-declare method impls"
-    );
+    assert_eq!(func_decl.name.context, FunctionDeclContext::FreeFunction, "not yet implemented: can't forward-declare methods");
 
     ctx.declare_function(name.ident().clone(), func_decl.clone(), visibility)?;
 

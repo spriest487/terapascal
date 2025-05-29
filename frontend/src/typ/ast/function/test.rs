@@ -1,11 +1,11 @@
 use crate::ast::FunctionDeclKind;
 use crate::ast::TypeConstraint;
 use crate::ast::TypeParam;
+use crate::typ::ast::{specialize_func_decl, FunctionDeclContext, FunctionName};
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParam;
-use crate::typ::ast::TypedFunctionName;
-use crate::typ::ast::{specialize_func_decl, WhereClause};
-use crate::typ::builtin_displayable_name;
+use crate::typ::ast::WhereClause;
+use crate::typ::{builtin_displayable_name, builtin_span};
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
 use crate::typ::test::try_module_from_srcs;
@@ -36,6 +36,7 @@ fn make_ty_param(name: &str) -> TypeParam<Type> {
     TypeParam {
         name: test_ident(name),
         constraint: None,
+        span: builtin_span(),
     }
 }
 
@@ -46,9 +47,10 @@ fn make_ty_param_of(name: &str, constraint: Type) -> TypeParam<Type> {
         name: name.clone(),
         constraint: Some(TypeConstraint {
             span: name.span.clone(),
-            name: name,
+            name,
             is_ty: constraint,
         }),
+        span: builtin_span(),
     }
 }
 
@@ -83,9 +85,13 @@ fn make_decl(
     };
 
     FunctionDecl {
-        name: TypedFunctionName{
+        kw_span: test_span.clone(),
+        name: FunctionName {
             ident: test_ident(name),
-            owning_ty_name: owning_ty,
+            context: match owning_ty {
+                None => FunctionDeclContext::FreeFunction,
+                Some(ty) => FunctionDeclContext::method_decl(ty),
+            },
             span: test_span.clone(),
             type_params: ty_params_list,
         },
@@ -97,11 +103,13 @@ fn make_decl(
             .map(|(pos, ty)| FunctionParam {
                 ident: test_ident(&format!("arg{}", pos)),
                 ty,
+                ty_span: None,
                 modifier: None,
                 span: test_span.clone(),
             })
             .collect(),
         result_ty: return_ty,
+        result_ty_span: None,
         mods: Vec::new(),
         span: test_span.clone(),
         where_clause,

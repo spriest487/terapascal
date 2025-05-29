@@ -132,6 +132,9 @@ impl<A: Annotation> Spanned for FunctionParam<A> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]
 pub struct FunctionDecl<A: Annotation = Span> {
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub kw_span: Span,
     
     pub name: A::FunctionName,

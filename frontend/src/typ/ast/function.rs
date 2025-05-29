@@ -5,7 +5,6 @@ mod decl_mod;
 pub use self::decl_mod::*;
 use crate::ast;
 use crate::ast::FunctionDeclKind;
-use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::TypeAnnotation;
 use crate::typ::ast::const_eval::ConstEval;
@@ -62,28 +61,38 @@ pub type FunctionLocalBinding = ast::FunctionLocalBinding<Value>;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct MethodOwningTypeName {
-    pub ty: Type,
+pub enum FunctionDeclContext {
+    FreeFunction,
+    MethodDecl {
+        enclosing_type: Type,
+    },
+    MethodDef {
+        declaring_type: Type,
 
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    #[derivative(Hash = "ignore")]
-    pub ty_name_span: Span,
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        ty_name_span: Span,
 
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    #[derivative(Hash = "ignore")]
-    pub ty_param_spans: Vec<Span>,
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        ty_param_spans: Vec<Span>,
+    },
 }
 
-impl MethodOwningTypeName {
-    pub fn new<Param: Spanned>(
+impl FunctionDeclContext {
+    pub fn method_decl(enclosing_type: Type) -> Self {
+        FunctionDeclContext::MethodDecl { enclosing_type }
+    }
+    
+    pub fn method_def<Param: Spanned>(
         ty: impl Into<Type>,
         src_name: &ast::IdentPath,
-        src_params: Option<&ast::TypeList<Param>>
+        src_params: Option<&ast::TypeList<Param>>,
     ) -> Self {
-        Self {
-            ty: ty.into(),
+        FunctionDeclContext::MethodDef {
+            declaring_type: ty.into(),
             ty_name_span: src_name.path_span(),
             ty_param_spans: src_params
                 .as_ref()
@@ -95,25 +104,23 @@ impl MethodOwningTypeName {
                 .unwrap_or_else(Vec::new),
         }
     }
-}
 
-impl fmt::Display for MethodOwningTypeName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.ty)
+    pub fn method_declaring_type(&self) -> Option<&Type> {
+        match self {
+            FunctionDeclContext::MethodDef { declaring_type, ..  } => Some(declaring_type),
+            FunctionDeclContext::MethodDecl { enclosing_type, ..  } => Some(enclosing_type),
+            _ => None,
+        }
     }
 }
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct TypedFunctionName {
+pub struct FunctionName {
     pub ident: Ident,
-
     pub type_params: Option<TypeParamList>,
-
-    // if the function is a method, the type that implements this method.
-    // either an interface type for interface method implementations, or the enclosing type
-    // that is declaring its own method
-    pub owning_ty_name: Option<MethodOwningTypeName>,
+    
+    pub context: FunctionDeclContext,
 
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]
@@ -121,32 +128,20 @@ pub struct TypedFunctionName {
     pub span: Span,
 }
 
-impl TypedFunctionName {
-    pub fn new_method(
+impl FunctionName {
+    pub fn new_method_decl(
         ident: impl Into<Ident>,
         type_params: Option<TypeParamList>,
-        owning_ty: impl Into<Type>,
-        owning_ty_span: Span,
-        owning_ty_params: Option<&TypeParamList>,
+        enclosing_type: Type,
         span: impl Into<Span>
     ) -> Self {
-        let owning_ty_name = MethodOwningTypeName {
-            ty: owning_ty.into(),
-            ty_name_span: owning_ty_span,
-            ty_param_spans: owning_ty_params
-                .as_ref()
-                .map(|param_list| param_list.items
-                    .iter()
-                    .map(|param| param.name.span.clone())
-                    .collect())
-                .unwrap_or_else(Vec::new),
-        };
-        
         Self {
             ident: ident.into(),
             type_params,
             span: span.into(),
-            owning_ty_name: Some(owning_ty_name),
+            context: FunctionDeclContext::MethodDecl {
+                enclosing_type,
+            },
         }
     }
     
@@ -159,41 +154,35 @@ impl TypedFunctionName {
             ident: ident.into(),
             type_params,
             span: span.into(),
-            owning_ty_name: None,
+            context: FunctionDeclContext::FreeFunction,
         }
-    }
-
-    pub fn owning_type_params(&self) -> Option<&TypeParamList> {
-        self.owning_ty_name.as_ref()?.ty.type_params()
-    }
-    
-    pub fn owning_type(&self) -> Option<&Type> {
-        self.owning_ty_name
-            .as_ref()
-            .map(|name| &name.ty)
     }
 }
 
-impl FunctionName for TypedFunctionName {    
+impl ast::FunctionName for FunctionName {    
     fn ident(&self) -> &Ident {
         &self.ident
     }
 
     fn owning_type_name_span(&self) -> Option<&Span> {
-        self.owning_ty_name
-            .as_ref()
-            .map(|name| &name.ty_name_span)
+        match &self.context {
+            FunctionDeclContext::MethodDef { ty_name_span, ..  } => Some(ty_name_span),
+            _ => None,
+        }
     }
 
     fn owning_type_params_len(&self) -> usize {
-        self.owning_ty_name
-            .as_ref()
-            .map(|name| name.ty_param_spans.len())
-            .unwrap_or(0)
+        match &self.context {
+            FunctionDeclContext::MethodDef { ty_param_spans, ..  } => ty_param_spans.len(),
+            _ => 0,
+        }
     }
 
     fn owning_type_param_span(&self, index: usize) -> &Span {
-        &self.owning_ty_name.as_ref().unwrap().ty_param_spans[index]
+        match &self.context {
+            FunctionDeclContext::MethodDef { ty_param_spans, ..  } => &ty_param_spans[index],
+            _ => panic!("function name `{}` does not have type params", self),
+        }
     }
 
     fn type_params_len(&self) -> usize {
@@ -209,10 +198,10 @@ impl FunctionName for TypedFunctionName {
     }
 }
 
-impl fmt::Display for TypedFunctionName {
+impl fmt::Display for FunctionName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(explicit_impl) = &self.owning_ty_name {
-            write!(f, "{}.", explicit_impl)?;
+        if let FunctionDeclContext::MethodDef { declaring_type: self_ty, .. } = &self.context {
+            write!(f, "{}.", self_ty)?;
         }
 
         write!(f, "{}", self.ident)?;
@@ -231,7 +220,7 @@ impl FunctionDecl {
         
         let enclosing_ty = ctx.current_enclosing_ty().cloned();
         
-        let (owning_ty_name, owning_ty) = match (&decl.name.owning_ty_qual, &enclosing_ty) {
+        let decl_context = match (&decl.name.owning_ty_qual, &enclosing_ty) {
             (Some(type_qual), Some(..)) => {
                 return Err(TypeError::InvalidMethodOwningType {
                     method_ident: decl.name.ident.clone(),
@@ -249,22 +238,28 @@ impl FunctionDecl {
 
             (Some(owning_ty_name), None) => {
                 let ty = typecheck_type_path(owning_ty_name, ctx)?;
-                let ty_name = MethodOwningTypeName::new(
+                
+                FunctionDeclContext::method_def(
                     ty.clone(),
                     &owning_ty_name.name,
                     owning_ty_name.type_params.as_ref()
-                );
-
-                (Some(ty_name), Some(ty))
+                )
             },
 
-            (None, Some(enclosing_ty)) => (None, Some(enclosing_ty.clone())),
+            (None, Some(enclosing_ty)) => {
+                FunctionDeclContext::MethodDecl {
+                    enclosing_type: enclosing_ty.clone(),
+                }
+            },
 
-            _ => (None, None),
+            _ => FunctionDeclContext::FreeFunction,
         };
 
+        let is_method = decl_context.method_declaring_type().is_some();
+
         let env = Environment::FunctionDecl {
-            owning_ty_params: owning_ty
+            owning_ty_params: decl_context
+                .method_declaring_type()
                 .as_ref()
                 .and_then(|ty| ty.type_params().cloned()),
         };
@@ -274,15 +269,13 @@ impl FunctionDecl {
             // e.g. for method `MyClass[T].A()`, `T` is declared here for the function scope
             // if this decl is inside an enclosing type, they should already be declared in the body
             // scope of the type, and can't be redeclared
-            if enclosing_ty.is_none() {
-                if let Some(owning_ty) = &owning_ty {
-                    if let Some(params) = owning_ty.type_params() {
-                        ctx.declare_type_params(params)?;
-                    }
+            if let FunctionDeclContext::MethodDef { declaring_type, .. } = &decl_context {
+                if let Some(params) = declaring_type.type_params() {
+                    ctx.declare_type_params(params)?;
                 }
             }
 
-            let decl_mods = DeclMod::typecheck_mods(&decl, owning_ty.is_some(), ctx)?;
+            let decl_mods = DeclMod::typecheck_mods(&decl, is_method, ctx)?;
 
             let (type_params, where_clause) = match (&decl.name.type_params, &decl.where_clause) {
                 (Some(decl_type_params), None) => {
@@ -333,8 +326,8 @@ impl FunctionDecl {
                         "parser must not produce constructors with explicit return types"
                     );
 
-                    let ctor_owning_ty = owning_ty
-                        .as_ref()
+                    let ctor_owning_ty = decl_context
+                        .method_declaring_type()
                         .expect("owning type must not be null for constructors");
 
                     // the return type of methods in generic types has to be specialized 
@@ -358,14 +351,13 @@ impl FunctionDecl {
 
             let params: Vec<FunctionParam>;
 
-            match (&owning_ty, &enclosing_ty) {
-                // free function with no owning type
-                (None, None) => {
+            match &decl_context {
+                FunctionDeclContext::FreeFunction => {
                     params = typecheck_params(decl, None, ctx)?;
                 },
 
                 // method definition
-                (Some(explicit_owning_ty), None) => {
+                FunctionDeclContext::MethodDef { declaring_type, .. } => {
                     let explicit_ty_span = decl
                         .name
                         .owning_ty_qual
@@ -377,7 +369,7 @@ impl FunctionDecl {
                     // as the actual type itself, parameterized by its own type params.
                     let self_arg_ty = if !decl.kind.is_static_method() {
                         Some(specialize_self_ty(
-                            explicit_owning_ty.clone(),
+                            declaring_type.clone(),
                             explicit_ty_span,
                             ctx
                         )?)
@@ -396,12 +388,12 @@ impl FunctionDecl {
                         param_sigs,
                         type_params.clone());
 
-                    match &explicit_owning_ty {
+                    match &declaring_type {
                         // can't define interface methods
                         Type::Interface(..) => {
                             return Err(TypeError::AbstractMethodDefinition {
                                 span: decl.span.clone(),
-                                owning_ty: explicit_owning_ty.clone(),
+                                owning_ty: declaring_type.clone(),
                                 method: decl.name.ident.clone(),
                             });
                         }
@@ -409,7 +401,7 @@ impl FunctionDecl {
                         // method definition
                         _ => {
                             validate_method_def_matches_decl(
-                                &explicit_owning_ty,
+                                &declaring_type,
                                 &explicit_ty_span,
                                 &decl.name.ident,
                                 &method_sig,
@@ -421,25 +413,16 @@ impl FunctionDecl {
                     }
                 }
 
-                // method decl within a type
-                (owning_ty, Some(enclosing_ty)) => {
-                    // it may be possible later to specify an explicit implemented interface within the
-                    // body of another type, in which case this assertion would no longer be valid
-                    assert_eq!(
-                        owning_ty.as_ref(),
-                        Some(enclosing_ty),
-                        "if an enclosing type is found, the owning type should always be the enclosing type"
-                    );
-
+                FunctionDeclContext::MethodDecl { enclosing_type } => {
                     // if the owning type is an interface, this is an interface method definition,
                     // and the type of `self` is the generic `Self` (to stand in for implementing
                     // types in static interfaces). if it's NOT an interface, it must be a concrete
                     // type, in which case the type of self is just that type parameterized by itself
-                    let self_param_ty = if let Type::Interface(..) = &enclosing_ty {
+                    let self_param_ty = if let Type::Interface(..) = enclosing_type {
                         Some(Type::MethodSelf)
                     } else if !decl.kind.is_static_method() {
                         let at = decl.name.ident.span();
-                        Some(specialize_self_ty(enclosing_ty.clone(), at, ctx)?)
+                        Some(specialize_self_ty(enclosing_type.clone(), at, ctx)?)
                     } else {
                         None
                     };
@@ -450,10 +433,10 @@ impl FunctionDecl {
 
             let decl = FunctionDecl {
                 kw_span: decl.kw_span.clone(),
-                name: TypedFunctionName {
+                name: FunctionName {
                     ident: decl.name.ident.clone(),
                     type_params: type_params.clone(),
-                    owning_ty_name,
+                    context: decl_context,
                     span: decl.name.span(),
                 },
                 tags,
@@ -498,6 +481,12 @@ impl FunctionDecl {
         None
     }
     
+    /// If this is a method, the type that declared this method. This is always the concrete type,
+    /// not the interface the method was declared in, even if the method is virtual.
+    pub fn method_declaring_type(&self) -> Option<&Type> {
+        self.name.context.method_declaring_type()
+    }
+    
     pub fn sig(&self) -> FunctionSig {
         FunctionSig::from_decl(self.clone())
     }
@@ -524,7 +513,7 @@ fn specialize_self_ty(self_ty: Type, at: &Span, ctx: &Context) -> TypeResult<Typ
 
 impl FunctionDecl {
     pub fn is_implementation_of(&self, iface_ty: &Type, ctx: &Context) -> TypeResult<bool> {
-        let owning_ty = match self.name.owning_type() {
+        let owning_ty = match self.method_declaring_type() {
             // not a method/can't be an implementation
             None | Some(Type::Interface(..)) => return Ok(false),
             
@@ -691,8 +680,8 @@ pub fn typecheck_func_def(
     // in the body of a method definition, the type parameters of the enclosing type are
     // used to specialize the types in the decl
     let owning_ty = decl
-        .name
-        .owning_type()
+        .name.context
+        .method_declaring_type()
         .cloned();
 
     if let Some(outer_ty_params) = owning_ty
@@ -713,12 +702,12 @@ pub fn typecheck_func_def(
     let body_env = FunctionBodyEnvironment {
         result_ty: return_ty,
         ty_params: decl.name.type_params.clone(),
-        self_ty: decl.name.owning_type().cloned(),
+        self_ty: decl.method_declaring_type().cloned(),
     };
 
     ctx.scope(body_env, |ctx| {
         // declare type parameters from the owning type, if this is a method
-        if let Some(owning_ty) = decl.name.owning_type() {
+        if let Some(owning_ty) = decl.method_declaring_type() {
             if let Some(enclosing_ty_params) = owning_ty.type_params() {
                 ctx.declare_type_params(enclosing_ty_params)?;
             }

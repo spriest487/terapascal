@@ -33,8 +33,7 @@ use crate::codegen::FunctionInstance;
 use crate::codegen::IROptions;
 use crate::codegen::SetFlagsType;
 use crate::ir;
-use crate::typ::ast::{apply_func_decl_named_ty_args, MethodOwningTypeName};
-use crate::typ::builtin_funcinfo_name;
+use crate::typ::ast::{apply_func_decl_named_ty_args, FunctionDeclContext};
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
@@ -51,8 +50,8 @@ use crate::typ::TypeArgsResult;
 use crate::typ::TypeParamContainer;
 use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
+use crate::typ::builtin_funcinfo_name;
 use crate::Ident;
-use terapascal_common::span::Span;
 pub use function::*;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
@@ -60,6 +59,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
+use terapascal_common::span::Span;
 
 #[derive(Debug)]
 pub struct LibraryBuilder {
@@ -459,8 +459,8 @@ impl LibraryBuilder {
         self.library.functions.insert(
             id,
             ir::Function::External(ir::ExternalFunctionRef {
-                src: extern_src.to_string(),
-                symbol: extern_decl.name.to_string(),
+                src: extern_src.value.clone(),
+                symbol: (*extern_decl.name.ident.name).clone(),
 
                 sig: ir::FunctionSig { return_ty, param_tys },
             }),
@@ -559,18 +559,15 @@ impl LibraryBuilder {
             .expect("instantiate_method: methods should only be generated for named types")
             .into_owned();
 
+        // TODO: refactor - this is a duplicate of specialize_method_decl
         let mut specialized_decl = apply_func_decl_named_ty_args(
             generic_method_decl.clone(),
             &generic_ctx,
             &generic_ctx);
 
-        // TODO hack? review this
-        // does this only happen for decls that already have an owning type name we can modify?
-        specialized_decl.name.owning_ty_name = Some(MethodOwningTypeName::new(
-            method_key.self_ty.clone(),
-            &ns,
-            method_key.self_ty.type_params(),
-        ));
+        specialized_decl.name.context = FunctionDeclContext::MethodDecl {
+            enclosing_type: method_key.self_ty.clone(), 
+        };
 
         let id = self.declare_func(&specialized_decl, ns);
 
@@ -700,7 +697,7 @@ impl LibraryBuilder {
         func_decl: &typ::ast::FunctionDecl,
         namespace: IdentPath,
     ) -> ir::FunctionID {
-        let has_global_name = func_decl.name.owning_ty_name.is_none()
+        let has_global_name = func_decl.name.context == FunctionDeclContext::FreeFunction
             && !func_decl.is_overload()
             && func_decl.name.type_params.is_none();
 

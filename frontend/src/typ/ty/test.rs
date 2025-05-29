@@ -116,7 +116,7 @@ fn specialized_class_has_correct_non_generic_method_types() {
 
     let methods: Vec<_> = generic_def.methods().collect();
     assert_eq!("test.A[T]", methods[0].func_decl.params[0].ty.to_string());
-    assert_eq!("test.A[T]", methods[0].func_decl.name.owning_ty_name.as_ref().unwrap().to_string());
+    assert_eq!("test.A[T]", methods[0].func_decl.method_declaring_type().unwrap().to_string());
     assert_eq!(BYTE, methods[0].func_decl.params[1].ty);
     assert_eq!(BYTE, methods[0].func_decl.result_ty);
 
@@ -127,7 +127,7 @@ fn specialized_class_has_correct_non_generic_method_types() {
     assert_eq!(INT32, specialized_def.name.type_args.as_ref().unwrap().items[0]);
     
     let methods: Vec<_> = specialized_def.methods().collect();
-    assert_eq!("test.A[System.Int32]", methods[0].func_decl.name.owning_ty_name.as_ref().unwrap().to_string());
+    assert_eq!("test.A[System.Int32]", methods[0].func_decl.method_declaring_type().unwrap().to_string());
     assert_eq!("test.A[System.Int32]", methods[0].func_decl.params[0].ty.to_string());
     assert_eq!(BYTE, methods[0].func_decl.params[1].ty);
     assert_eq!(BYTE, methods[0].func_decl.result_ty);
