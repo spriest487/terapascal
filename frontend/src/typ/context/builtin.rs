@@ -205,7 +205,7 @@ pub fn builtin_comparable_iface() -> ast::InterfaceDecl {
         name: builtin_comparable_name(),
         where_clause: None,
         tags: Vec::new(),
-        supers: Vec::new(),
+        supers: None,
         methods: vec![
             ast::InterfaceMethodDecl {
                 decl: Arc::new(builtin_comparable_compare_method(iface_ty, Type::MethodSelf)),
@@ -272,7 +272,7 @@ pub fn builtin_displayable_iface() -> ast::InterfaceDecl {
         name: builtin_displayable_name(),
         where_clause: None,
         tags: Vec::new(),
-        supers: Vec::new(),
+        supers: None,
         methods: vec![
             ast::InterfaceMethodDecl {
                 decl: Arc::new(builtin_displayable_display_method(iface_ty, Type::MethodSelf)),

@@ -1,4 +1,4 @@
-use crate::ast::iface_method_start;
+use crate::ast::{iface_method_start, SupersClause};
 use crate::ast::tag::Tag;
 use crate::ast::typedecl::TypeDeclStart;
 use crate::ast::Annotation;
@@ -78,7 +78,7 @@ pub struct InterfaceDecl<A: Annotation = Span> {
     
     pub methods: Vec<InterfaceMethodDecl<A>>,
 
-    pub supers: Vec<A::Type>,
+    pub supers: Option<SupersClause<A>>,
     
     pub forward: bool,
 
@@ -101,6 +101,13 @@ pub struct InterfaceDecl<A: Annotation = Span> {
 impl<A: Annotation> InterfaceDecl<A> {
     pub fn get_method(&self, method: &Ident) -> Option<&InterfaceMethodDecl<A>> {
         self.methods.iter().find(|m| *m.ident() == *method)
+    }
+    
+    pub fn super_types(&self) -> &[A::TypeName] {
+        match &self.supers {
+            Some(supers) => &supers.types,
+            None => &[],
+        }
     }
 }
 

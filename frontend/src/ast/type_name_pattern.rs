@@ -1,43 +1,82 @@
 use crate::ast::type_name::IdentTypeName;
 use crate::ast::type_name::TypeName;
-use crate::parse::Matcher;
+use crate::ast::{Annotation, IdentPath};
+use crate::ast::Operator;
+use crate::ast::{Ident, Pattern, PatternSemanticElement};
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
-use crate::ast::Operator;
-use crate::TokenTree;
+use crate::parse::Matcher;
+use crate::{Keyword, TokenTree};
+use derivative::Derivative;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::fmt;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub enum TypeNamePatternKind {
     Is,
-    IsWithBinding(Ident),
-    IsNot,
+    IsWithBinding {
+        binding: Ident,
+    },
+    IsNot {
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        not_kw_span: Span,
+    },
 }
 
 impl TypeNamePatternKind {
     pub fn binding(&self) -> Option<&Ident> {
         match self {
-            TypeNamePatternKind::IsWithBinding(binding) => Some(binding),
+            TypeNamePatternKind::IsWithBinding { binding: name, .. } => Some(name),
             _ => None,
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+impl TypeNamePatternKind {
+    fn semantic_elements<A: Annotation>(&self,
+        elements: &mut Vec<PatternSemanticElement<A>>,
+        pattern_element: PatternSemanticElement<A>,
+    ) {
+        match self {
+            TypeNamePatternKind::Is => { 
+                elements.push(pattern_element);
+            }
+            TypeNamePatternKind::IsWithBinding { binding } => {
+                elements.push(pattern_element);
+                elements.push(PatternSemanticElement::Binding(binding.span.clone()));
+            }
+            TypeNamePatternKind::IsNot { not_kw_span } => {
+                elements.push(PatternSemanticElement::Keyword(not_kw_span.clone()));
+                elements.push(pattern_element);
+            }
+        }
+    }
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub enum TypeNamePattern {
     TypeName {
         name: IdentPath,
         kind: TypeNamePatternKind,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
     ExactType {
         name: TypeName,
         kind: TypeNamePatternKind,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
 }
@@ -47,6 +86,17 @@ impl TypeNamePattern {
         match self {
             TypeNamePattern::ExactType { kind, .. } => kind,
             TypeNamePattern::TypeName { kind, .. } => kind,
+        }
+    }
+    
+    pub fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
+        match tokens.look_ahead().match_one(Keyword::Is) {
+            Some(..) => {
+                let pattern = TypeNamePattern::parse(tokens)?;
+                Ok(Some(pattern))
+            },
+
+            None => Ok(None),
         }
     }
 
@@ -67,6 +117,7 @@ impl TypeNamePattern {
                     None
                 }
             },
+
             _ => None,
         };
 
@@ -78,19 +129,34 @@ impl TypeNamePattern {
             None
         };
 
-        let span = match (&not_kw, &binding) {
-            (Some(not_kw), None) => not_kw.span().to(name.span()),
-            (None, Some(binding)) => name.span().to(binding.span()),
-            _ => name.span().clone(),
-        };
+        let (kind, span) = match (binding, not_kw) {
+            (Some(binding), None) => {
+                let span = name.span().to(binding.span());
+                let kind = TypeNamePatternKind::IsWithBinding {
+                    binding, 
+                };
 
-        let kind = match binding {
-            Some(binding) => {
-                assert!(not_kw.is_none());
-                TypeNamePatternKind::IsWithBinding(binding)
+                (kind, span)
             },
-            None if not_kw.is_some() => TypeNamePatternKind::IsNot,
-            None => TypeNamePatternKind::Is,
+
+            (None, Some(not_kw)) => {
+                let span = not_kw.span().to(name.span());
+                let kind = TypeNamePatternKind::IsNot {
+                    not_kw_span: not_kw.into_span(),
+                };
+
+                (kind, span)
+            },
+
+            (None, None) => {
+                let span = name.span().clone();
+                let kind = TypeNamePatternKind::Is;
+                (kind, span)
+            },
+
+            (Some(..), Some(..)) => {
+                unreachable!()
+            },
         };
 
         match pattern_path {
@@ -100,7 +166,11 @@ impl TypeNamePattern {
                 kind,
             }),
 
-            None => Ok(TypeNamePattern::ExactType { name, span, kind }),
+            None => Ok(TypeNamePattern::ExactType { 
+                name, 
+                span, 
+                kind 
+            }),
         }
     }
 }
@@ -109,27 +179,47 @@ impl fmt::Display for TypeNamePattern {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TypeNamePattern::TypeName { name, kind, .. } => {
-                if let TypeNamePatternKind::IsNot = kind {
+                if let TypeNamePatternKind::IsNot { .. } = kind {
                     write!(f, "not ")?;
                 }
                 write!(f, "{}", name)?;
-                if let TypeNamePatternKind::IsWithBinding(binding) = kind {
+                if let TypeNamePatternKind::IsWithBinding { binding, .. } = kind {
                     write!(f, " {}", binding)?;
                 }
                 Ok(())
             },
 
             TypeNamePattern::ExactType { name, kind, .. } => {
-                if let TypeNamePatternKind::IsNot = kind {
+                if let TypeNamePatternKind::IsNot { .. } = kind {
                     write!(f, "not ")?;
                 }
                 write!(f, "{}", name)?;
-                if let TypeNamePatternKind::IsWithBinding(binding) = kind {
+                if let TypeNamePatternKind::IsWithBinding { binding, .. } = kind {
                     write!(f, " {}", binding)?;
                 }
                 Ok(())
             },
         }
+    }
+}
+
+impl Pattern for TypeNamePattern {
+    type Annotation = Span;
+
+    fn semantic_elements(&self) -> Vec<PatternSemanticElement<Self::Annotation>> {
+        let mut elements = Vec::new();
+
+        match self {
+            TypeNamePattern::TypeName { name, kind, .. } => {
+                kind.semantic_elements(&mut elements, PatternSemanticElement::Path(name.path_span()));
+            }
+
+            TypeNamePattern::ExactType { name, kind, .. } => {
+                kind.semantic_elements(&mut elements, PatternSemanticElement::Type(name.clone()));
+            }
+        }
+        
+        elements
     }
 }
 

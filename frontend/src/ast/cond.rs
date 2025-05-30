@@ -30,6 +30,11 @@ where
 
     pub cond: Expr<A>,
 
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub is_kw: Option<Span>,
+
     pub is_pattern: Option<A::Pattern>,
 
     #[derivative(Hash = "ignore")]
@@ -50,19 +55,23 @@ where
     pub annotation: A,
 }
 
+fn try_parse_is_pattern(tokens: &mut TokenStream) -> ParseResult<(Option<Span>, Option<TypeNamePattern>)> {
+    match tokens.match_one_maybe(Keyword::Is) {
+        Some(tt) => {
+            let pattern = TypeNamePattern::parse(tokens)?;
+            Ok((Some(tt.into_span()), Some(pattern)))
+        },
+
+        None => Ok((None, None)),
+    }
+}
+
 impl IfCond<Span, Expr> {
     pub fn parse_expr(tokens: &mut TokenStream) -> ParseResult<Self> {
         let if_token = tokens.match_one(Keyword::If)?;
         let cond = Expr::parse(tokens)?;
 
-        let is_pattern = match tokens.match_one_maybe(Keyword::Is) {
-            Some(_is_kw) => {
-                let pattern = TypeNamePattern::parse(tokens)?;
-                Some(pattern)
-            },
-
-            None => None,
-        };
+        let (is_kw, is_pattern) = try_parse_is_pattern(tokens)?;
 
         let then_tt = tokens.match_one(Keyword::Then)?;
         let then_branch = Expr::parse(tokens)?;
@@ -71,6 +80,8 @@ impl IfCond<Span, Expr> {
         Ok(IfCond {
             if_kw_span: if_token.into_span(),
             cond,
+            
+            is_kw,
             is_pattern,
             
             then_kw_span: then_tt.into_span(),
@@ -108,14 +119,7 @@ impl IfCond<Span, Stmt> {
         let if_token = tokens.match_one(Keyword::If)?;
         let cond = Expr::parse(tokens)?;
 
-        let is_pattern = match tokens.match_one_maybe(Keyword::Is) {
-            Some(_is_kw) => {
-                let pattern = TypeNamePattern::parse(tokens)?;
-                Some(pattern)
-            },
-
-            None => None,
-        };
+        let (is_kw, is_pattern) = try_parse_is_pattern(tokens)?;
 
         let then_tt = tokens.match_one(Keyword::Then)?;
 
@@ -129,6 +133,7 @@ impl IfCond<Span, Stmt> {
                 let invalid_expr = Expr::IfCond(Box::new(IfCond {
                     if_kw_span: if_token.into_span(),
                     cond,
+                    is_kw,
                     is_pattern,
                     then_kw_span: then_tt.into_span(),
                     then_branch: *then_expr,
@@ -158,6 +163,7 @@ impl IfCond<Span, Stmt> {
                                 let if_expr = Expr::IfCond(Box::new(IfCond {
                                     if_kw_span: if_token.into_span(),
                                     cond,
+                                    is_kw,
                                     is_pattern,
                                     then_kw_span: then_tt.into_span(),
                                     then_branch: then_expr,
@@ -193,6 +199,7 @@ impl IfCond<Span, Stmt> {
         Ok(IfCond {
             if_kw_span: if_token.into_span(),
             cond,
+            is_kw,
             is_pattern,
             then_kw_span: then_tt.into_span(),
             then_branch,
@@ -247,6 +254,7 @@ impl IfCond<Span, Stmt<Span>> {
             if_kw_span: self.if_kw_span.clone(),
             cond: self.cond.clone(),
             annotation: self.annotation.clone(),
+            is_kw: self.is_kw.clone(),
             is_pattern: self.is_pattern.clone(),
             then_kw_span: self.then_kw_span.clone(),
             then_branch,

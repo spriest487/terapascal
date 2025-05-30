@@ -15,15 +15,36 @@ use terapascal_common::span::Spanned;
 use derivative::Derivative;
 use std::fmt;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub enum ForLoopCounterInit<A: Annotation> {
+    // `var name: Type := init` 
     Binding {
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        binding_kw_span: Span,
+        
         name: Ident,
-        ty: A::Type,
+        ty: A::TypeName,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        assign_op_span: Span,
+
         init: Expr<A>,
     },
+    
+    // `counter := value`
     Assignment {
         counter: Box<Expr<A>>,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        assign_op_span: Span,
+
         value: Box<Expr<A>>,
     },
 }
@@ -40,23 +61,42 @@ impl<A: Annotation> fmt::Display for ForLoopCounterInit<A> {
                 write!(f, " := {}", init)
             },
 
-            ForLoopCounterInit::Assignment { counter, value } => {
+            ForLoopCounterInit::Assignment { counter, value, .. } => {
                 write!(f, "{} := {}", counter, value)
             },
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct ForLoopCounterRange<A: Annotation = Span> {
     pub to_expr: Expr<A>,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub to_kw_span: Span,
+
     pub init: ForLoopCounterInit<A>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+// var binding_name: binding_ty in src_expr
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct ForLoopSequenceRange<A: Annotation = Span> {
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub binding_kw_span: Span,
+    
     pub binding_name: Ident,
-    pub binding_ty: A::Type,
+    pub binding_ty: A::TypeName,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub in_kw_span: Span,
     
     pub src_expr: Expr<A>,
 }
@@ -70,7 +110,17 @@ pub enum ForLoopRange<A: Annotation = Span> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct ForLoop<A: Annotation> {
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub for_kw_span: Span,
+
     pub range: ForLoopRange<A>,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub do_kw_span: Span,
 
     pub body: Box<Stmt<A>>,
 
@@ -84,16 +134,16 @@ impl<A: Annotation> fmt::Display for ForLoop<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "for")?;
         match &self.range {
-            ForLoopRange::UpTo(ForLoopCounterRange { init, to_expr }) => {
+            ForLoopRange::UpTo(ForLoopCounterRange { init, to_expr, .. }) => {
                 write!(f, " {} to {}", init, to_expr)?;
             }
 
-            ForLoopRange::InSequence(ForLoopSequenceRange { binding_name, binding_ty, src_expr: seq_expr }) => {
+            ForLoopRange::InSequence(ForLoopSequenceRange { binding_name, binding_ty, src_expr, .. }) => {
                 write!(f, " {}", binding_name)?;
                 if binding_ty.is_known() {
                     write!(f, ": {}", binding_ty)?;
                 }
-                write!(f, " in {}", seq_expr)?;
+                write!(f, " in {}", src_expr)?;
             }
         }
         write!(f, " do {}", self.body)
@@ -111,7 +161,7 @@ impl ForLoop<Span> {
         let for_kw = tokens.match_one(Keyword::For)?;
         
         let range = match tokens.match_one_maybe(Keyword::Var) {
-            Some(_var_kw) => {
+            Some(var_kw) => {
                 let binding_name = Ident::parse(tokens)?;
 
                 let binding_ty = match tokens.match_one_maybe(Separator::Colon) {
@@ -119,29 +169,35 @@ impl ForLoop<Span> {
                     None => TypeName::Unspecified(binding_name.span.clone()),
                 };
 
-                if tokens.match_one_maybe(Operator::In).is_some() {
+                if let Some(in_tt) = tokens.match_one_maybe(Operator::In) {
                     let seq_expr = Expr::parse(tokens)?;
                     
                     ForLoopRange::InSequence(ForLoopSequenceRange {
+                        binding_kw_span: var_kw.into_span(),
                         binding_name,
                         binding_ty,
+                        in_kw_span: in_tt.into_span(),
                         src_expr: seq_expr,
                     })
                 } else {
                     // assignment to initialize counter
-                    tokens.match_one(Operator::Assignment)?;
+                    let assign_tt = tokens.match_one(Operator::Assignment)?;
                     let init_expr = Expr::parse(tokens)?;
                     
                     // counter high value
-                    tokens.match_one(Keyword::To)?;
+                    let to_tt = tokens.match_one(Keyword::To)?;
                     let up_to_expr = Expr::parse(tokens)?;
                     
                     ForLoopRange::UpTo(ForLoopCounterRange {
                         to_expr: up_to_expr,
+                        to_kw_span: to_tt.into_span(),
+
                         init: ForLoopCounterInit::Binding {
+                            binding_kw_span: var_kw.into_span(),
                             name: binding_name,
                             ty: binding_ty,
                             init: init_expr,
+                            assign_op_span: assign_tt.into_span(),
                         },
                     })
                 }
@@ -152,38 +208,54 @@ impl ForLoop<Span> {
                 let counter_span = counter_ident.span.clone();
                 let counter_expr = Expr::Ident(counter_ident, counter_span);
 
-                tokens.match_one(Operator::Assignment)?;
+                let assign_tt = tokens.match_one(Operator::Assignment)?;
                 let init_expr = Expr::parse(tokens)?;
 
                 // counter high value
-                tokens.match_one(Keyword::To)?;
+                let to_tt = tokens.match_one(Keyword::To)?;
                 let up_to_expr = Expr::parse(tokens)?;
 
                 ForLoopRange::UpTo(ForLoopCounterRange {
                     to_expr: up_to_expr,
+                    to_kw_span: to_tt.into_span(),
+
                     init: ForLoopCounterInit::Assignment {
                         counter: Box::new(counter_expr),
                         value: Box::new(init_expr),
+                        assign_op_span: assign_tt.into_span(),
                     },
                 })
             }
         };
 
-        tokens.match_one(Keyword::Do)?;
+        let do_tt = tokens.match_one(Keyword::Do)?;
         let body = Stmt::parse(tokens)?;
 
         let span = for_kw.span().to(body.annotation().span());
 
         Ok(Self {
+            for_kw_span: for_kw.into_span(),
             range,
             body: Box::new(body),
             annotation: span,
+            do_kw_span: do_tt.into_span(),
         })
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct WhileLoop<A: Annotation> {
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub while_kw_span: Span,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub do_kw_span: Span,
+    
     pub condition: Expr<A>,
     pub body: Box<Stmt<A>>,
 
@@ -208,16 +280,18 @@ impl WhileLoop<Span> {
 
         let condition = Expr::parse(tokens)?;
 
-        let _do = tokens.match_one(Keyword::Do)?;
+        let do_tt = tokens.match_one(Keyword::Do)?;
 
         let body = Stmt::parse(tokens)?;
 
         let span = kw.span().to(body.annotation().span());
 
         Ok(WhileLoop {
+            while_kw_span: kw.into_span(),
             condition,
             body: Box::new(body),
             annotation: span,
+            do_kw_span: do_tt.into_span(),
         })
     }
 }

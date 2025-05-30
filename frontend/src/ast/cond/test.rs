@@ -52,7 +52,7 @@ fn parses_with_is_pattern_and_binding() {
     match cond.is_pattern.as_ref().unwrap() {
         TypeNamePattern::ExactType {
             name,
-            kind: TypeNamePatternKind::IsWithBinding(binding),
+            kind: TypeNamePatternKind::IsWithBinding { binding },
             ..
         } => {
             assert_eq!(name.to_string(), "String");

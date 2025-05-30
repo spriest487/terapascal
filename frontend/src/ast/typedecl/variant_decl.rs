@@ -1,7 +1,7 @@
 use crate::ast::tag::Tag;
 use crate::ast::type_name::TypeName;
 use crate::ast::typedecl::TypeDeclStart;
-use crate::ast::Access;
+use crate::ast::{Access, SupersClause};
 use crate::ast::Annotation;
 use crate::ast::DeclIdent;
 use crate::ast::FunctionDecl;
@@ -41,7 +41,7 @@ pub struct VariantDecl<A: Annotation> {
     
     pub cases: Vec<VariantCase<A>>,
 
-    pub implements: Vec<A::Type>,
+    pub implements: Option<SupersClause<A>>,
     
     pub sections: Vec<MethodDeclSection<A>>,
 
@@ -130,11 +130,16 @@ impl<A: Annotation> VariantDecl<A> {
     pub fn case_position(&self, case_ident: &Ident) -> Option<usize> {
         self.cases.iter().position(|c| c.ident == *case_ident)
     }
-}
-
-impl<A: Annotation> VariantDecl<A> {
+    
     pub fn find_case(&self, case: &Ident) -> Option<&VariantCase<A>> {
         self.cases.iter().find(|c| c.ident == *case)
+    }
+
+    pub fn implements_types(&self) -> &[A::TypeName] {
+        match &self.implements {
+            Some(implements) => &implements.types,
+            None => &[],
+        }
     }
 }
 

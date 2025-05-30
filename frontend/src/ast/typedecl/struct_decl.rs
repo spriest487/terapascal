@@ -2,7 +2,7 @@ mod member;
 
 use crate::ast::tag::Tag;
 use crate::ast::typedecl::TypeDeclStart;
-use crate::ast::Access;
+use crate::ast::{Access, SupersClause};
 use crate::ast::Annotation;
 use crate::ast::DeclIdent;
 use crate::ast::Ident;
@@ -52,7 +52,7 @@ pub struct StructDecl<A: Annotation = Span> {
 
     pub sections: Vec<StructDeclSection<A>>,
     
-    pub implements: Vec<A::Type>,
+    pub implements: Option<SupersClause<A>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -92,6 +92,13 @@ impl<A: Annotation> StructDecl<A> {
         self.fields().find(|field| {
             field.idents.contains(by_ident)
         })
+    }
+
+    pub fn implements_types(&self) -> &[A::TypeName] {
+        match &self.implements {
+            Some(implements) => &implements.types,
+            None => &[],
+        }
     }
 }
 

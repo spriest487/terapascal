@@ -4,6 +4,7 @@ mod struct_decl;
 mod variant_decl;
 mod set_decl;
 mod access;
+mod supers_clause;
 
 pub use self::access::Access;
 pub use self::access::IFACE_METHOD_ACCESS;
@@ -12,6 +13,7 @@ pub use self::iface_decl::*;
 pub use self::set_decl::*;
 pub use self::struct_decl::*;
 pub use self::variant_decl::*;
+pub use self::supers_clause::*;
 use crate::ast::tag::Tag;
 use crate::ast::unit::AliasDecl;
 use crate::ast::FunctionDeclKind;
@@ -381,8 +383,8 @@ struct TypeDeclStart {
     keyword: TokenTree,
 
     where_clause: Option<WhereClause>,
-    supers: Vec<TypeName>,
-    
+    supers: Option<SupersClause>,
+
     forward: bool,
     
     span: Span,
@@ -409,7 +411,7 @@ impl TypeDeclStart {
             keyword: kw_tt,
             where_clause,
             forward: true,
-            supers: Vec::new(),
+            supers: None,
             span,
         };
 
@@ -421,10 +423,10 @@ impl TypeDeclStart {
                 // for non-forward decls, the optional supers clause might appear before the
                 // where clause, in which case there may still be a where clause afterwards
                 if result.where_clause.is_none() {
-                    result.supers = parse_implements_clause(tokens)?;
+                    result.supers = SupersClause::parse(tokens)?;
                     
-                    if !result.supers.is_empty() {
-                        let super_last_span = result.supers[result.supers.len() - 1].span();
+                    if let Some(supers) = &result.supers {
+                        let super_last_span = supers.types[supers.types.len() - 1].span();
                         result.span = result.span.to(super_last_span);
                     }
                     

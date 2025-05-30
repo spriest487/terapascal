@@ -70,6 +70,7 @@ pub fn typecheck_compound_assignment(
         rhs,
         annotation: Value::Untyped(assignment.annotation.clone()),
         op: assignment.op,
+        op_span: assignment.op_span.clone(),
     })
 }
 

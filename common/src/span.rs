@@ -203,3 +203,13 @@ impl<T> Spanned for Box<T> where T: Spanned {
         self.as_ref().span()
     }
 }
+
+pub trait MaybeSpanned {
+    fn get_span(&self) -> Option<&Span>;
+}
+
+impl<T: Spanned> MaybeSpanned for T {
+    fn get_span(&self) -> Option<&Span> {
+        Some(self.span())
+    }
+}

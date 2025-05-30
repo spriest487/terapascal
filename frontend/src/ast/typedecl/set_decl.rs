@@ -39,6 +39,7 @@ impl SetDecl<Span> {
                     from: bin_op.lhs,
                     to: bin_op.rhs,
                     span: bin_op.annotation,
+                    range_op_span: bin_op.op_span,
                 }
             },
 
@@ -100,11 +101,20 @@ impl<A: Annotation> fmt::Display for SetDecl<A> {
 pub enum SetDeclRange<A: Annotation = Span> {
     Type {
         ty: A::Type,
+        
+        #[derivative(Debug = "ignore")]
+        #[derivative(Hash = "ignore")]
+        #[derivative(PartialEq = "ignore")]
         span: Span
     },
     Range {
         from: Expr<A>,
         to: Expr<A>,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(Hash = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        range_op_span: Span,
 
         #[derivative(Debug = "ignore")]
         #[derivative(Hash = "ignore")]

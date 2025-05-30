@@ -4,14 +4,15 @@ mod function_name;
 pub use self::function_name::FunctionTypeName;
 pub use self::function_name::FunctionTypeNameParam;
 pub use self::ty_path::TypePath;
-use crate::ast::{Expr, TypeArgList};
 use crate::ast::IdentPath;
 use crate::ast::TypeAnnotation;
 use crate::ast::TypeList;
-use crate::parse::{LookAheadTokenStream, ParseError};
+use crate::ast::{Expr, TypeArgList};
+use crate::parse::LookAheadTokenStream;
 use crate::parse::Match;
 use crate::parse::Matcher;
 use crate::parse::Parse;
+use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
@@ -21,11 +22,10 @@ use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
 use crate::TokenTree;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use derivative::Derivative;
 use std::fmt;
-use std::hash::Hash;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 
 #[derive(Clone, Eq, Derivative)]
@@ -103,15 +103,27 @@ impl fmt::Display for ArrayTypeName {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Eq, Clone, Derivative)]
+#[derivative(PartialEq, Hash, Debug)]
 pub enum TypeName {
     /// type is unknown or unnamed at parse time
-    Unspecified(Span),
+    Unspecified(
+        #[derivative(Debug = "ignore")]
+        #[derivative(Hash = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        Span
+    ),
 
     Ident(IdentTypeName),
     Array(ArrayTypeName),
     
-    Weak(Box<TypeName>, Span),
+    Weak(
+        Box<TypeName>,
+        #[derivative(Debug = "ignore")]
+        #[derivative(Hash = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        Span
+    ),
 
     Function(FunctionTypeName),
 }

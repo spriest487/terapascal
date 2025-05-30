@@ -1007,19 +1007,19 @@ impl Type {
     }
     
     fn implemented_ifaces_rec(
-        base_tys: &[Type],
+        base_tys: &[TypeName],
         all_ifaces: &mut HashSet<Type>,
         ctx: &Context
     ) -> NameResult<()> {
         for base_ty in base_tys {
-            let Type::Interface(iface_name) = base_ty else {
+            let Type::Interface(iface_name) = base_ty.ty() else {
                panic!("all base types must be interfaces")
             };
 
             let iface_def = ctx.instantiate_iface_def(iface_name)?;
-            Self::implemented_ifaces_rec(&iface_def.supers, all_ifaces, ctx)?;
+            Self::implemented_ifaces_rec(iface_def.super_types(), all_ifaces, ctx)?;
 
-            all_ifaces.insert(base_ty.clone());
+            all_ifaces.insert(base_ty.ty().clone());
         }
         
         Ok(())
@@ -1042,7 +1042,7 @@ impl Type {
                 let def = ctx.instantiate_struct_def(name, struct_kind)?;
                 
                 let mut implements = HashSet::new();
-                Self::implemented_ifaces_rec(&def.implements, &mut implements, ctx)?;
+                Self::implemented_ifaces_rec(def.implements_types(), &mut implements, ctx)?;
                 
                 Ok(implements)
             }
@@ -1051,7 +1051,7 @@ impl Type {
                 let def = ctx.instantiate_variant_def(name)?;
                 
                 let mut implements = HashSet::new();
-                Self::implemented_ifaces_rec(&def.implements, &mut implements, ctx)?;
+                Self::implemented_ifaces_rec(def.implements_types(), &mut implements, ctx)?;
 
                 Ok(implements)
             }

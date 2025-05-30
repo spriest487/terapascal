@@ -38,12 +38,23 @@ impl<A: Annotation> fmt::Display for Assignment<A> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Eq, Clone, Derivative)]
+#[derivative(PartialEq, Hash, Debug)]
 pub struct CompoundAssignment<A: Annotation> {
     pub lhs: Expr<A>,
     pub rhs: Expr<A>,
-    pub annotation: A,
+    
     pub op: CompoundAssignmentOperator,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub op_span: Span,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub annotation: A,
 }
 
 impl<A: Annotation> Spanned for CompoundAssignment<A>

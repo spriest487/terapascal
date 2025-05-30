@@ -1,6 +1,6 @@
 use crate::ast;
 use crate::ast::TypeMemberDecl;
-use crate::typ::ast::{infer_from_structural_ty_args, MethodDeclSection};
+use crate::typ::ast::{infer_from_structural_ty_args, MethodDeclSection, SupersClause};
 use crate::typ::ast::try_unwrap_inferred_args;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDeclContext;
@@ -81,11 +81,11 @@ pub fn specialize_struct_def<'a>(
         generic_def.where_clause.as_ref(),
         &inner_generic_ctx
     );
-    
-    let implements = apply_implements_ty_args(
-        &generic_def.implements,
-        &inner_generic_ctx,
-    );
+
+    let implements = match &generic_def.implements {
+        Some(implements) => Some(apply_implements_ty_args(implements, &inner_generic_ctx)),
+        None => None,
+    };
 
     let self_ty = Type::from_struct_type(
         specialized_name.clone(),
@@ -192,11 +192,11 @@ pub fn specialize_variant_def(
     let parameterized_name = generic_def.name.specialize(args, ctx)?.into_owned();
 
     let inner_generic_ctx = GenericContext::new(&variant_ty_params, &args);
-    
-    let implements = apply_implements_ty_args(
-        &generic_def.implements,
-        &inner_generic_ctx,
-    );
+
+    let implements = match &generic_def.implements {
+        Some(implements) => Some(apply_implements_ty_args(implements, &inner_generic_ctx)),
+        None => None,
+    };
 
     let specialized_where = specialise_where_clause(
         generic_def.where_clause.as_ref(),
@@ -266,10 +266,10 @@ pub fn specialize_iface_def<'a>(
         &inner_generic_ctx
     );
     
-    let supers = apply_implements_ty_args(
-        &generic_def.supers,
-        &inner_generic_ctx,
-    );
+    let supers = match &generic_def.supers {
+        Some(supers) => Some(apply_implements_ty_args(supers, &inner_generic_ctx)),
+        None => None,
+    };
 
     let self_ty = Type::interface(specialized_name.clone());
 
@@ -303,15 +303,21 @@ pub fn specialize_iface_def<'a>(
 }
 
 fn apply_implements_ty_args(
-    implements: &[Type],
+    implements: &SupersClause,
     generic_ctx: &GenericContext,
-) -> Vec<Type> {
-    implements
+) -> SupersClause {
+    let types = implements.types
         .iter()
         .map(|implements_ty| {
-            generic_ctx.apply_to_type(implements_ty.clone())
+            implements_ty.clone().map(|ty| generic_ctx.apply_to_type(ty))
         })
-        .collect()
+        .collect();
+    
+    SupersClause {
+        types,
+        span: implements.span.clone(),
+        kw_span: implements.kw_span.clone(),
+    }
 }
 
 pub fn specialize_method_decl(

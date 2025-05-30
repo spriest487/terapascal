@@ -23,6 +23,7 @@ pub mod keyword;
 pub mod operators;
 pub mod tag;
 
+use crate::IntConstant;
 pub use block::*;
 pub use call::*;
 pub use case::CaseBlock;
@@ -30,8 +31,6 @@ pub use case::CaseBranch;
 pub use case::CaseExpr;
 pub use case::CaseStmt;
 pub use cast::Cast;
-use terapascal_common::span::{MaybeSpanned, Span};
-use terapascal_common::span::Spanned;
 pub use cond::*;
 pub use ctor::*;
 pub use expression::*;
@@ -46,13 +45,14 @@ pub use raise::*;
 pub use statement::*;
 use std::fmt;
 use std::hash::Hash;
+use terapascal_common::span::Spanned;
+use terapascal_common::span::{MaybeSpanned, Span};
 pub use type_constraint::*;
 pub use type_list::*;
 pub use type_name::*;
 pub use type_name_pattern::*;
 pub use typedecl::*;
 pub use unit::*;
-use crate::IntConstant;
 
 pub trait TypeAnnotation : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
     fn is_known(&self) -> bool;
@@ -79,18 +79,38 @@ impl<T> ConstExprValue<Span, T> for Box<Expr<Span>> {
     }
 }
 
-pub trait DeclName : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
+pub trait DeclName: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
     fn ident(&self) -> &Ident;
     fn type_params_len(&self) -> usize;
     fn type_param_name_span(&self, index: usize) -> Option<&Span>;
 }
 
+pub enum PatternSemanticElement<A> where A: Annotation {
+    Keyword(Span),
+    Binding(Span),
+    Type(A::TypeName),
+    VariantCase(Span),
+    
+    // could be either a type or an enum, not enough info (parsed AST only)
+    Path(Span),
+}
+
+pub trait Pattern: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
+    type Annotation: Annotation;
+
+    // TODO this could be more nicely represented as a shared AST node type
+    fn semantic_elements(&self) -> Vec<PatternSemanticElement<Self::Annotation>>;
+}
+
 pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
-    type Type: TypeAnnotation + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
-    type TypeName: TypeAnnotation + MaybeSpanned + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
+    type Type: TypeAnnotation;
+    type TypeName: TypeAnnotation + MaybeSpanned;
+    
     type DeclName: DeclName;
-    type Pattern: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
-    type FunctionName: FunctionName + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
+    
+    type Pattern: Pattern<Annotation = Self>; 
+
+    type FunctionName: FunctionName;
 
     type ConstStringExpr: ConstExprValue<Self, String>;
     type ConstIntegerExpr: ConstExprValue<Self, IntConstant>;
@@ -101,8 +121,10 @@ pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
 impl Annotation for Span {
     type Type = TypeName;
     type TypeName = TypeName;
+    
     type DeclName = DeclIdent;
     type Pattern = TypeNamePattern;
+    
     type FunctionName = QualifiedFunctionName;
 
     type ConstStringExpr = Box<Expr<Span>>;

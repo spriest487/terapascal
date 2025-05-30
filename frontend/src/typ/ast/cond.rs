@@ -121,6 +121,7 @@ pub fn typecheck_if_cond_stmt(
     Ok(IfCond {
         if_kw_span: if_cond.if_kw_span.clone(),
         cond,
+        is_kw: if_cond.is_kw.clone(),
         is_pattern,
         then_kw_span: if_cond.then_kw_span.clone(),
         then_branch,
@@ -187,6 +188,7 @@ pub fn typecheck_if_cond_expr(
     Ok(IfCond {
         if_kw_span: if_cond.if_kw_span.clone(),
         cond,
+        is_kw: if_cond.is_kw.clone(),
         is_pattern,
         then_kw_span: if_cond.then_kw_span.clone(),
         then_branch,

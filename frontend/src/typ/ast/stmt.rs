@@ -20,7 +20,6 @@ use crate::typ::ast::typecheck_match_stmt;
 use crate::typ::ast::typecheck_raise;
 use crate::typ::ast::typecheck_while_loop;
 use crate::typ::ast::Expr;
-use crate::typ::typecheck_type;
 use crate::typ::Binding;
 use crate::typ::Context;
 use crate::typ::GenericError;
@@ -28,9 +27,10 @@ use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use crate::typ::Value;
 use crate::typ::TypedValue;
+use crate::typ::Value;
 use crate::typ::ValueKind;
+use crate::typ::{typecheck_typename, TypeName};
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -53,24 +53,24 @@ pub fn typecheck_local_binding(
             Some(val) => {
                 let val = typecheck_expr(val, &Type::Nothing, ctx)?;
                 let val_ty = val.annotation().ty().into_owned();
-                (Some(val), val_ty)
+                (Some(val), TypeName::inferred(val_ty))
             },
         },
 
         val_ty => {
-            let explicit_ty = typecheck_type(val_ty, ctx)?;
-            if explicit_ty.is_unspecialized_generic() {
+            let explicit_ty = typecheck_typename(val_ty, ctx)?;
+            if explicit_ty.ty().is_unspecialized_generic() {
                 return Err(TypeError::from_generic_err(
-                    GenericError::IllegalUnspecialized { ty: explicit_ty },
+                    GenericError::IllegalUnspecialized { ty: explicit_ty.ty().clone() },
                     binding.span().clone(),
                 ));
             }
 
             let val = match &binding.val {
                 Some(val) => {
-                    let val = typecheck_expr(val, &explicit_ty, ctx)?;
+                    let val = typecheck_expr(val, explicit_ty.ty(), ctx)?;
 
-                    let val = implicit_conversion(val, &explicit_ty, ctx)
+                    let val = implicit_conversion(val, explicit_ty.ty(), ctx)
                         .map_err(|err| match err {
                             TypeError::TypeMismatch {
                                 expected,
@@ -96,7 +96,7 @@ pub fn typecheck_local_binding(
         },
     };
 
-    if binding_ty == Type::Nothing {
+    if *binding_ty == Type::Nothing {
         return Err(TypeError::BindingWithNoType {
             binding_names: vec![binding.name.clone()],
             span: binding.span().clone(),
@@ -105,7 +105,7 @@ pub fn typecheck_local_binding(
 
     if binding_ty.is_unspecialized_generic() {
         return Err(TypeError::from_generic_err(
-            GenericError::IllegalUnspecialized { ty: binding_ty },
+            GenericError::IllegalUnspecialized { ty: binding_ty.ty().clone() },
             binding.span().clone(),
         ));
     }
@@ -118,7 +118,7 @@ pub fn typecheck_local_binding(
             Some(..) => ValueKind::Mutable,
             None => ValueKind::Uninitialized,
         },
-        ty: binding_ty.clone(),
+        ty: binding_ty.ty().clone(),
         def: Some(name.clone()),
     };
 

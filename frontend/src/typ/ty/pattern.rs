@@ -2,41 +2,84 @@ use crate::ast;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::IdentTypeName;
+use crate::ast::PatternSemanticElement;
 use crate::typ::context;
 use crate::typ::result::*;
-use crate::typ::ty::typecheck_type;
 use crate::typ::ty::Specializable;
 use crate::typ::ty::Type;
-use crate::typ::Context;
 use crate::typ::Decl;
 use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::NameResult;
 use crate::typ::Symbol;
+use crate::typ::TypeName;
+use crate::typ::Value;
+use crate::typ::typecheck_typename;
+use crate::typ::Context;
+use derivative::Derivative;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::*;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub enum TypePattern {
     VariantCase {
         variant: Arc<Symbol>,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        variant_name_span: Span,
+
         case: Ident,
         data_binding: Option<Ident>,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
     NegatedVariantCase {
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        not_kw: Span,
+
         variant: Arc<Symbol>,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        variant_name_span: Span,
+
         case: Ident,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
     Type {
-        ty: Type,
+        ty: TypeName,
         binding: Option<Ident>,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
     NegatedType {
-        ty: Type,
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        not_kw: Span,
+
+        ty: TypeName,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
 }
@@ -49,6 +92,49 @@ impl Spanned for TypePattern {
             TypePattern::Type { span, .. } => span,
             TypePattern::NegatedType { span, .. } => span,
         }
+    }
+}
+
+impl ast::Pattern for TypePattern {
+    type Annotation = Value;
+
+    fn semantic_elements(&self) -> Vec<PatternSemanticElement<Self::Annotation>> {
+        let mut elements = Vec::new();
+
+        match self {
+            TypePattern::Type { ty, binding, .. } => {
+                elements.push(PatternSemanticElement::Type(ty.clone()));
+                
+                if let Some(binding) = binding {
+                    elements.push(PatternSemanticElement::Binding(binding.span.clone()));
+                }
+            }
+
+            TypePattern::NegatedType { not_kw, ty, .. } => {
+                elements.push(PatternSemanticElement::Keyword(not_kw.clone()));
+                elements.push(PatternSemanticElement::Type(ty.clone()));
+            }
+
+            TypePattern::VariantCase { variant_name_span, variant, case, data_binding, .. } => {
+                let variant_ty_name = TypeName::named(Type::Variant(variant.clone()), variant_name_span.clone());
+                elements.push(PatternSemanticElement::Type(variant_ty_name));
+                elements.push(PatternSemanticElement::VariantCase(case.span.clone()));
+
+                if let Some(binding) = data_binding {
+                    elements.push(PatternSemanticElement::Binding(binding.span.clone()));
+                }
+            }
+
+            TypePattern::NegatedVariantCase { not_kw, variant_name_span, variant, case, .. } => {
+                elements.push(PatternSemanticElement::Keyword(not_kw.clone()));
+
+                let variant_ty_name = TypeName::named(Type::Variant(variant.clone()), variant_name_span.clone());
+                elements.push(PatternSemanticElement::Type(variant_ty_name));
+                elements.push(PatternSemanticElement::VariantCase(case.span.clone()));
+            }
+        }
+
+        elements
     }
 }
 
@@ -106,25 +192,35 @@ impl TypePattern {
         span: &Span,
         expect_ty: &Type,
         ctx: &mut Context,
-    ) -> TypeResult<Type> {
+    ) -> TypeResult<TypeName> {
         let raw_ty = match name {
             ast::TypeName::Ident(IdentTypeName { ident, .. }) => {
                 let (_ident_path, ty) = ctx.find_type(ident)
                     .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
 
-                ty.clone()
+                TypeName::named(ty.clone(), ident.path_span())
             },
-            _ => typecheck_type(name, ctx)?,
+            _ => {
+                typecheck_typename(name, ctx)?
+            },
         };
 
         let matchable_ty = if raw_ty.is_matchable() {
-            raw_ty.infer_specialized_from_hint(expect_ty).cloned()
+            raw_ty
+                .infer_specialized_from_hint(expect_ty)
+                .cloned()
+                .map(|ty| {
+                    match raw_ty.get_span() {
+                        Some(span) => TypeName::named(ty, span.clone()),
+                        None => TypeName::inferred(ty),
+                    }
+                })
         } else {
             None
         };
 
         matchable_ty.ok_or_else(|| TypeError::NotMatchable {
-            ty: raw_ty.clone(),
+            ty: raw_ty.ty().clone(),
             span: span.clone(),
         })
     }
@@ -187,16 +283,29 @@ impl TypePattern {
                 let span = span.clone();
 
                 match Self::find_variant_case(name, ctx)? {
-                    Some((variant, case)) => {
-                        let variant = Self::find_pattern_variant(&variant, &span, expect_ty, ctx)?;
+                    Some((variant_name, case)) => {
+                        let variant_name_span = variant_name.path_span();
+                        let variant = Self::find_pattern_variant(&variant_name, &span, expect_ty, ctx)?;
 
                         match kind {
-                            ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding(..) => {
+                            ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding { .. } => {
                                 let data_binding = kind.binding().cloned();
-                                Ok(TypePattern::VariantCase { variant, case, data_binding, span, })
+                                Ok(TypePattern::VariantCase {
+                                    variant,
+                                    variant_name_span,
+                                    case, 
+                                    data_binding, 
+                                    span,
+                                })
                             }
-                            ast::TypeNamePatternKind::IsNot => {
-                                Ok(TypePattern::NegatedVariantCase { variant, case, span, })
+                            ast::TypeNamePatternKind::IsNot { not_kw_span } => {
+                                Ok(TypePattern::NegatedVariantCase { 
+                                    not_kw: not_kw_span.clone(),
+                                    variant,
+                                    variant_name_span,
+                                    case, 
+                                    span, 
+                                })
                             }
                         }
                     }
@@ -212,12 +321,20 @@ impl TypePattern {
                         let ty = Self::find_pattern_ty(&ty_name, pattern.span(), expect_ty, ctx)?;
 
                         match kind {
-                            ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding(..) => {
+                            ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding { .. } => {
                                 let binding = kind.binding().cloned();
-                                Ok(TypePattern::Type { ty, binding, span, })
+                                Ok(TypePattern::Type { 
+                                    ty, 
+                                    binding, 
+                                    span, 
+                                })
                             }
-                            ast::TypeNamePatternKind::IsNot => {
-                                Ok(TypePattern::NegatedType { ty, span, })
+                            ast::TypeNamePatternKind::IsNot { not_kw_span } => {
+                                Ok(TypePattern::NegatedType {
+                                    not_kw: not_kw_span.clone(),
+                                    ty, 
+                                    span, 
+                                })
                             }
                         }
                     }
@@ -230,12 +347,20 @@ impl TypePattern {
                 let ty = Self::find_pattern_ty(name, &span, expect_ty, ctx)?;
 
                 match kind {
-                    ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding(..) => {
+                    ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding{ .. } => {
                         let binding = kind.binding().cloned();
-                        Ok(TypePattern::Type { ty, binding, span, })
+                        Ok(TypePattern::Type { 
+                            ty, 
+                            binding,
+                            span,
+                        })
                     }
-                    ast::TypeNamePatternKind::IsNot => {
-                        Ok(TypePattern::NegatedType { ty, span, })
+                    ast::TypeNamePatternKind::IsNot { not_kw_span } => {
+                        Ok(TypePattern::NegatedType { 
+                            not_kw: not_kw_span.clone(),
+                            ty, 
+                            span, 
+                        })
                     }
                 }
             }
@@ -251,7 +376,7 @@ impl TypePattern {
             } => {
                 let binding = PatternBinding {
                     ident: ident.clone(),
-                    ty: ty.clone(),
+                    ty: ty.ty().clone(),
                 };
                 Ok(vec![binding])
             }

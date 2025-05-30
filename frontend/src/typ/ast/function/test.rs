@@ -1,11 +1,10 @@
 use crate::ast::FunctionDeclKind;
 use crate::ast::TypeConstraint;
-use crate::ast::TypeParam;
 use crate::typ::ast::{specialize_func_decl, FunctionDeclContext, FunctionName};
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParam;
 use crate::typ::ast::WhereClause;
-use crate::typ::{builtin_displayable_name, builtin_span};
+use crate::typ::{builtin_displayable_name, builtin_span, TypeParam};
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
 use crate::typ::test::try_module_from_srcs;
@@ -32,7 +31,7 @@ fn test_ident(name: &str) -> Ident {
     Ident::new(name, test_span())
 }
 
-fn make_ty_param(name: &str) -> TypeParam<Type> {
+fn make_ty_param(name: &str) -> TypeParam {
     TypeParam {
         name: test_ident(name),
         constraint: None,
@@ -40,7 +39,7 @@ fn make_ty_param(name: &str) -> TypeParam<Type> {
     }
 }
 
-fn make_ty_param_of(name: &str, constraint: Type) -> TypeParam<Type> {
+fn make_ty_param_of(name: &str, constraint: Type) -> TypeParam {
     let name = test_ident(name);
     
     TypeParam {
@@ -49,12 +48,14 @@ fn make_ty_param_of(name: &str, constraint: Type) -> TypeParam<Type> {
             span: name.span.clone(),
             name,
             is_ty: constraint,
+            is_ty_span: None,
+            is_kw_span: None,
         }),
         span: builtin_span(),
     }
 }
 
-fn make_ty_param_ty(param_list: &[TypeParam<Type>], pos: usize) -> Type {
+fn make_ty_param_ty(param_list: &[TypeParam], pos: usize) -> Type {
     let param = &param_list[pos];
 
     Type::GenericParam(Arc::new(TypeParamType {
@@ -70,7 +71,7 @@ fn make_ty_param_ty(param_list: &[TypeParam<Type>], pos: usize) -> Type {
 fn make_decl(
     owning_ty: Option<Type>,
     name: &str,
-    ty_params: impl IntoIterator<Item=TypeParam<Type>>,
+    ty_params: impl IntoIterator<Item=TypeParam>,
     where_clause: Option<WhereClause>,
     params: impl IntoIterator<Item=Type>,
     return_ty: Type

@@ -1,20 +1,23 @@
+use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_frontend::{ast, Operator};
-use terapascal_frontend::ast::{Annotation, UnaryPosition};
-use terapascal_frontend::ast::ConstExprValue;
+use terapascal_frontend::DelimiterPair;
+use terapascal_frontend::Operator;
+use terapascal_frontend::TokenTree;
+use terapascal_frontend::ast;
+pub use terapascal_frontend::ast::Annotation;
+use terapascal_frontend::ast::{ConstExprValue, Pattern, PatternSemanticElement};
 use terapascal_frontend::ast::DeclName;
 use terapascal_frontend::ast::FunctionName;
 use terapascal_frontend::ast::InterfaceDecl;
 use terapascal_frontend::ast::Literal;
 use terapascal_frontend::ast::MemberDeclSection;
+use terapascal_frontend::ast::SetDeclRange;
 use terapascal_frontend::ast::StructDecl;
-use terapascal_frontend::ast::TypeAnnotation;
 use terapascal_frontend::ast::TypeDeclItem;
 use terapascal_frontend::ast::TypeMemberDeclRef;
+use terapascal_frontend::ast::UnaryPosition;
 use terapascal_frontend::ast::VariantDecl;
-use terapascal_frontend::DelimiterPair;
-use terapascal_frontend::TokenTree;
 use tower_lsp::lsp_types::SemanticToken;
 use tower_lsp::lsp_types::SemanticTokenType;
 
@@ -192,7 +195,11 @@ impl SemanticTokenBuilder {
             self.add_tags(item.tags());
 
             let item_name = item.name();
-            self.add(item_name.ident().span(), SEMANTIC_TYPE);
+            self.add(item_name.ident().span(), match item {
+                TypeDeclItem::Enum(..) => SEMANTIC_ENUM,
+                TypeDeclItem::Set(..) => SEMANTIC_NUMBER,
+                _ => SEMANTIC_TYPE,
+            });
 
             for i in 0..item_name.type_params_len() {
                 if let Some(param_span) = item_name.type_param_name_span(i) {
@@ -214,14 +221,18 @@ impl SemanticTokenBuilder {
                     self.add(&aliased.ty_span, SEMANTIC_TYPE);
                 },
 
-                TypeDeclItem::Enum(_) => {},
-                TypeDeclItem::Set(_) => {},
+                TypeDeclItem::Enum(enum_decl) => self.add_enum_decl(enum_decl),
+                TypeDeclItem::Set(set_decl) => self.add_set_decl(set_decl),
             }
         }
     }
 
     fn add_struct_decl<A: Annotation>(&mut self, struct_decl: &StructDecl<A>) {
         self.add(&struct_decl.kw_span, SEMANTIC_KEYWORD);
+        
+        if let Some(supers) = &struct_decl.implements {
+            self.add_supers_clause(supers);
+        }
 
         if let Some(clause) = &struct_decl.where_clause {
             self.add_where_clause(clause);
@@ -238,6 +249,10 @@ impl SemanticTokenBuilder {
 
     fn add_variant_decl<A: Annotation>(&mut self, variant_decl: &VariantDecl<A>) {
         self.add(&variant_decl.kw_span, SEMANTIC_KEYWORD);
+
+        if let Some(supers) = &variant_decl.implements {
+            self.add_supers_clause(supers);
+        }
 
         if let Some(clause) = &variant_decl.where_clause {
             self.add_where_clause(clause);
@@ -262,6 +277,10 @@ impl SemanticTokenBuilder {
 
     fn add_iface_decl<A: Annotation>(&mut self, iface_decl: &InterfaceDecl<A>) {
         self.add(&iface_decl.kw_span, SEMANTIC_KEYWORD);
+        
+        if let Some(supers) = &iface_decl.supers {
+            self.add_supers_clause(supers);
+        }
 
         if let Some(clause) = &iface_decl.where_clause {
             self.add_where_clause(clause);
@@ -273,6 +292,33 @@ impl SemanticTokenBuilder {
 
         if let Some(span) = &iface_decl.end_kw_span {
             self.add(span, SEMANTIC_KEYWORD);
+        }
+    }
+
+    fn add_enum_decl<A: Annotation>(&mut self, enum_decl: &ast::EnumDecl<A>) {
+        for item in &enum_decl.items {
+            self.add(&item.ident.span, SEMANTIC_ENUM_MEMBER);
+            if let Some(val) = &item.value {
+                self.add(val.span(), SEMANTIC_NUMBER);
+            }
+        }
+    }
+
+    fn add_set_decl<A: Annotation>(&mut self, set_decl: &ast::SetDecl<A>) {
+        match set_decl.range.as_ref() {
+            SetDeclRange::Type { span, .. } => {
+                self.add(span, SEMANTIC_TYPE);
+            },
+            SetDeclRange::Range {
+                from,
+                to,
+                range_op_span,
+                ..
+            } => {
+                self.add_expr(from);
+                self.add(range_op_span, SEMANTIC_OPERATOR);
+                self.add_expr(to);
+            },
         }
     }
 
@@ -297,11 +343,29 @@ impl SemanticTokenBuilder {
         }
     }
 
-    fn add_where_clause<T: TypeAnnotation>(&mut self, clause: &ast::WhereClause<T>) {
+    fn add_where_clause<A: Annotation>(&mut self, clause: &ast::WhereClause<A>) {
         self.add(&clause.where_kw_span, SEMANTIC_KEYWORD);
-        
+
         for constraint in &clause.constraints {
             self.add(&constraint.name.span, SEMANTIC_TYPE_PARAMETER);
+
+            if let Some(span) = &constraint.is_kw_span {
+                self.add(span, SEMANTIC_KEYWORD);
+            }
+
+            if let Some(span) = &constraint.is_ty_span {
+                self.add(span, SEMANTIC_TYPE);
+            }
+        }
+    }
+
+    fn add_supers_clause<A: Annotation>(&mut self, clause: &ast::SupersClause<A>) {
+        self.add(&clause.kw_span, SEMANTIC_KEYWORD);
+        
+        for ty in &clause.types {
+            if let Some(span) = ty.get_span() {
+                self.add(span, SEMANTIC_TYPE);
+            }
         }
     }
 
@@ -327,14 +391,14 @@ impl SemanticTokenBuilder {
     fn add_stmt<A: Annotation>(&mut self, stmt: &ast::Stmt<A>) {
         match stmt {
             ast::Stmt::Ident(_, _) => {},
-            ast::Stmt::LocalBinding(_) => {},
+            ast::Stmt::LocalBinding(binding) => self.add_local_binding(binding),
             ast::Stmt::Call(_) => {},
             ast::Stmt::Exit(exit) => self.add_exit(exit),
             ast::Stmt::Block(block) => self.add_block(block),
-            ast::Stmt::ForLoop(_) => {},
-            ast::Stmt::WhileLoop(_) => {},
+            ast::Stmt::ForLoop(for_loop) => self.add_for(for_loop),
+            ast::Stmt::WhileLoop(while_loop) => self.add_while(while_loop),
             ast::Stmt::Assignment(assignment) => self.add_assignment(assignment),
-            ast::Stmt::CompoundAssignment(_) => {},
+            ast::Stmt::CompoundAssignment(assignment) => self.add_compound_assignment(assignment),
             ast::Stmt::If(if_cond) => self.add_if_cond(if_cond, Self::add_stmt),
             ast::Stmt::Break(_) => {},
             ast::Stmt::Continue(_) => {},
@@ -350,8 +414,21 @@ impl SemanticTokenBuilder {
         self.add_expr(&assignment.rhs);
     }
 
+    fn add_compound_assignment<A: Annotation>(&mut self, assignment: &ast::CompoundAssignment<A>) {
+        self.add_expr(&assignment.lhs);
+        self.add(&assignment.op_span, SEMANTIC_OPERATOR);
+        self.add_expr(&assignment.rhs);
+    }
+
     fn add_local_binding<A: Annotation>(&mut self, binding: &ast::LocalBinding<A>) {
         self.add(&binding.kw_span, SEMANTIC_KEYWORD);
+        
+        self.add(&binding.name.span, SEMANTIC_VARIABLE);
+
+        if let Some(span) = binding.ty.get_span() {
+            self.add(span, SEMANTIC_TYPE);
+        }
+        
         if let Some(span) = &binding.assign_op_span {
             self.add(span, SEMANTIC_OPERATOR);
         }
@@ -361,22 +438,108 @@ impl SemanticTokenBuilder {
         }
     }
 
-    fn add_if_cond<A: Annotation, B, BranchFn>(&mut self, if_cond: &ast::IfCond<A, B>, add_branch: BranchFn) 
-        where BranchFn: Fn(&mut Self, &B)
+    fn add_if_cond<A: Annotation, B, BranchFn>(
+        &mut self,
+        if_cond: &ast::IfCond<A, B>,
+        add_branch: BranchFn,
+    ) where
+        BranchFn: Fn(&mut Self, &B),
     {
         self.add(&if_cond.if_kw_span, SEMANTIC_KEYWORD);
         self.add_expr(&if_cond.cond);
-
-        self.add(&if_cond.then_kw_span, SEMANTIC_KEYWORD);
-        add_branch(self, &if_cond.then_branch);
         
-        if let Some(span) = &if_cond.else_kw_span {
+        if let Some(span) = &if_cond.is_kw {
             self.add(span, SEMANTIC_KEYWORD);
         }
         
+        if let Some(pattern) = &if_cond.is_pattern {
+            self.add_pattern::<A>(pattern);
+        }
+
+        self.add(&if_cond.then_kw_span, SEMANTIC_KEYWORD);
+        add_branch(self, &if_cond.then_branch);
+
+        if let Some(span) = &if_cond.else_kw_span {
+            self.add(span, SEMANTIC_KEYWORD);
+        }
+
         if let Some(else_branch) = &if_cond.else_branch {
             add_branch(self, else_branch);
         }
+    }
+
+    fn add_pattern<A: Annotation>(&mut self, pattern: &A::Pattern) {
+        for element in pattern.semantic_elements() {
+            match element {
+                PatternSemanticElement::Keyword(span) => self.add(&span, SEMANTIC_KEYWORD),
+                PatternSemanticElement::Binding(span) => self.add(&span, SEMANTIC_VARIABLE),
+                PatternSemanticElement::Type(ty) => {
+                    if let Some(span) = ty.get_span() {
+                        self.add(span, SEMANTIC_TYPE)
+                    }
+                },
+                PatternSemanticElement::VariantCase(span) => self.add(&span, SEMANTIC_ENUM_MEMBER),
+                PatternSemanticElement::Path(span) => self.add(&span, SEMANTIC_TYPE),
+            }
+        }
+    }
+    
+    fn add_for<A: Annotation>(&mut self, for_loop: &ast::ForLoop<A>) {
+        self.add(&for_loop.for_kw_span, SEMANTIC_KEYWORD);
+
+        match &for_loop.range {
+            ast::ForLoopRange::UpTo(range) => {
+                match &range.init {
+                    ast::ForLoopCounterInit::Binding {
+                        binding_kw_span,
+                        name: _,
+                        ty,
+                        assign_op_span,
+                        init,
+                    } => {
+                        self.add(binding_kw_span, SEMANTIC_KEYWORD);
+                        if let Some(span) = ty.get_span() {
+                            self.add(span, SEMANTIC_TYPE);
+                        }
+                        self.add(assign_op_span, SEMANTIC_OPERATOR);
+                        self.add_expr(init);
+                    },
+
+                    ast::ForLoopCounterInit::Assignment {
+                        counter,
+                        assign_op_span,
+                        value,
+                    } => {
+                        self.add_expr(counter);
+                        self.add(assign_op_span, SEMANTIC_OPERATOR);
+                        self.add_expr(value);
+                    },
+                }
+                
+                self.add(&range.to_kw_span, SEMANTIC_KEYWORD);
+                self.add_expr(&range.to_expr);
+            },
+
+            ast::ForLoopRange::InSequence(range) => {
+                self.add(&range.binding_kw_span, SEMANTIC_KEYWORD);
+                self.add(&range.binding_name.span, SEMANTIC_VARIABLE);
+                if let Some(span) = range.binding_ty.get_span() {
+                    self.add(span, SEMANTIC_TYPE);
+                }
+                self.add(&range.in_kw_span, SEMANTIC_KEYWORD);
+                self.add_expr(&range.src_expr);
+            },
+        }
+
+        self.add(&for_loop.do_kw_span, SEMANTIC_KEYWORD);
+        self.add_stmt(&for_loop.body);
+    }
+
+    fn add_while<A: Annotation>(&mut self, while_loop: &ast::WhileLoop<A>) {
+        self.add(&while_loop.while_kw_span, SEMANTIC_KEYWORD);
+        self.add_expr(&while_loop.condition);
+        self.add(&while_loop.do_kw_span, SEMANTIC_KEYWORD);
+        self.add_stmt(&while_loop.body);
     }
 
     fn add_expr<A: Annotation>(&mut self, expr: &ast::Expr<A>) {
@@ -402,28 +565,41 @@ impl SemanticTokenBuilder {
 
     fn add_bin_op<A: Annotation>(&mut self, bin_op: &ast::BinOp<A>) {
         self.add_expr(&bin_op.lhs);
+        
+        let op_semantic = if bin_op.op.is_keyword() {
+            SEMANTIC_KEYWORD  
+        } else {
+            SEMANTIC_OPERATOR
+        };
 
         if bin_op.op == Operator::Index {
             let (left_span, right_span) = &bin_op.op_span.split(&bin_op.rhs);
 
-            self.add(&left_span, SEMANTIC_OPERATOR);
+            self.add(&left_span, op_semantic);
             self.add_expr(&bin_op.rhs);
-            self.add(&right_span, SEMANTIC_OPERATOR);
+            self.add(&right_span, op_semantic);
         } else {
-            self.add(&bin_op.op_span, SEMANTIC_OPERATOR);
+            self.add(&bin_op.op_span, op_semantic);
+            self.add_expr(&bin_op.rhs);
         }
     }
 
     fn add_unary_op<A: Annotation>(&mut self, unary_op: &ast::UnaryOp<A>) {
+        let op_semantic = if unary_op.op.is_keyword() {
+            SEMANTIC_KEYWORD
+        } else {
+            SEMANTIC_OPERATOR
+        };
+
         match unary_op.pos {
             UnaryPosition::Prefix => {
-                self.add(&unary_op.op_span, SEMANTIC_OPERATOR);
+                self.add(&unary_op.op_span, op_semantic);
                 self.add_expr(&unary_op.operand);
-            }
+            },
             UnaryPosition::Postfix => {
-                self.add(&unary_op.op_span, SEMANTIC_OPERATOR);
+                self.add(&unary_op.op_span, op_semantic);
                 self.add_expr(&unary_op.operand);
-            }
+            },
         }
     }
 
@@ -513,7 +689,7 @@ impl SemanticTokenBuilder {
         if let Some(result_ty_span) = &decl.result_ty_span {
             self.add(&result_ty_span, SEMANTIC_TYPE);
         }
-        
+
         if let Some(clause) = &decl.where_clause {
             self.add_where_clause(clause);
         }
@@ -534,7 +710,7 @@ impl SemanticTokenBuilder {
 
     fn add_object_ctor<A: Annotation>(&mut self, ctor: &ast::ObjectCtor<A>) {
         if let Some(expr) = &ctor.type_expr {
-            self.add_expr(expr);
+            self.add(expr.span(), SEMANTIC_TYPE);
         }
 
         if let Some(_type_args) = &ctor.type_args {

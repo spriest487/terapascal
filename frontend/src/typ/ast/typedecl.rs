@@ -3,13 +3,13 @@ mod test;
 
 use crate::ast;
 use crate::ast::FunctionDeclKind;
-use crate::ast::MemberDeclSection;
+use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Literal;
+use crate::ast::MemberDeclSection;
 use crate::ast::MethodOwner;
 use crate::ast::SetDeclRange;
-use crate::ast::FunctionName;
 use crate::ast::TypeMemberDeclRef;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::const_eval_integer;
@@ -20,8 +20,7 @@ use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::TypeDeclItemInfo;
 use crate::typ::set::SetType;
-use crate::typ::typecheck_type;
-use crate::typ::ConstValue;
+use crate::typ::{ConstValue, TypeName};
 use crate::typ::Context;
 use crate::typ::Def;
 use crate::typ::FunctionSig;
@@ -39,6 +38,7 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::MAX_FLAGS_BITS;
+use crate::typ::{typecheck_type, typecheck_typename};
 use crate::IntConstant;
 use std::borrow::Cow;
 use std::mem;
@@ -58,6 +58,7 @@ pub type AliasDecl = ast::AliasDecl<Value>;
 pub type EnumDecl = ast::EnumDecl<Value>;
 pub type EnumDeclItem = ast::EnumDeclItem<Value>;
 pub type SetDecl = ast::SetDecl<Value>;
+pub type SupersClause = ast::SupersClause<Value>;
 
 pub type Tag = ast::tag::Tag<Value>;
 pub type TagItem = ast::tag::TagItem<Value>;
@@ -80,45 +81,49 @@ impl VariantDef {
     }
 }
 
-// "of" type list (implements clause for a concrete type or supers clause for an interface)
-fn typecheck_base_types(
-    base_types: &[ast::TypeName],
-    self_ty: &Type,
-    ctx: &mut Context
-) -> TypeResult<Vec<Type>> {
-    let mut base_tys = Vec::new();
+impl SupersClause {
+    pub fn typecheck(
+        src: &ast::SupersClause<Span>,
+        self_ty: &Type,
+        ctx: &mut Context
+    ) -> TypeResult<Self> {
+        let mut types: Vec<TypeName> = Vec::new();
 
-    for base_ty_name in base_types {
-        let implements_ty = typecheck_type(base_ty_name, ctx)?;
+        for base_ty_name in &src.types {
+            let implements_ty = typecheck_typename(base_ty_name, ctx)?;
 
-        match implements_ty {
-            Type::Interface(iface_name) => {
-                let iface_def = ctx.find_iface_def(&iface_name.full_path)
-                    .map_err(|err| TypeError::from_name_err(err, base_ty_name.span().clone()))?;
-                let iface_ty = Type::Interface(iface_name);
-                
-                if iface_def.forward {
-                    return Err(TypeError::InvalidBaseType {
-                        ty: self_ty.clone(),
-                        invalid_base_ty: iface_ty,
-                        reason: InvalidBaseTypeReason::Forward,
-                        span: base_ty_name.span().clone(),
-                    })
-                }
-                
-                base_tys.push(iface_ty)
-            },
+            match implements_ty.ty() {
+                Type::Interface(iface_name) => {
+                    let iface_def = ctx.find_iface_def(&iface_name.full_path)
+                        .map_err(|err| TypeError::from_name_err(err, base_ty_name.span().clone()))?;
 
-            invalid_base_ty => return Err(TypeError::InvalidBaseType {
-                ty: self_ty.clone(),
-                invalid_base_ty,
-                reason: InvalidBaseTypeReason::NotInterface,
-                span: base_ty_name.span().clone(),
-            }),
+                    if iface_def.forward {
+                        return Err(TypeError::InvalidBaseType {
+                            ty: self_ty.clone(),
+                            invalid_base_ty: implements_ty.into(),
+                            reason: InvalidBaseTypeReason::Forward,
+                            span: base_ty_name.span().clone(),
+                        })
+                    }
+
+                    types.push(implements_ty)
+                },
+
+                _ => return Err(TypeError::InvalidBaseType {
+                    ty: self_ty.clone(),
+                    invalid_base_ty: implements_ty.into(),
+                    reason: InvalidBaseTypeReason::NotInterface,
+                    span: base_ty_name.span().clone(),
+                }),
+            }
         }
+
+        Ok(SupersClause {
+            types,
+            kw_span: src.kw_span.clone(),
+            span: src.span.clone(),
+        })
     }
-    
-    Ok(base_tys)
 }
 
 impl Tag {
@@ -220,9 +225,10 @@ pub fn typecheck_struct_decl(
     
     let self_ty = Type::from_struct_type(info.name.clone(), struct_def.kind);
 
-    let implements = typecheck_base_types(&struct_def.implements, &self_ty, ctx)?;
-    let implements_span = Span::range(&struct_def.implements)
-        .unwrap_or_else(|| struct_def.name.span.clone());
+    let implements = match &struct_def.implements {
+        Some(implements) => Some(SupersClause::typecheck(implements, &self_ty, ctx)?),
+        None => None
+    };
 
     ctx.declare_type(
         struct_def.name.ident.clone(),
@@ -234,8 +240,7 @@ pub fn typecheck_struct_decl(
     let sections = typecheck_members(
         &self_ty,
         &struct_def.sections,
-        &implements,
-        &implements_span,
+        implements.as_ref(),
         info.name.span(),
         ctx
     )?;
@@ -258,8 +263,7 @@ pub fn typecheck_struct_decl(
 pub fn typecheck_members<Section>(
     owning_type: &Type,
     sources: &[Section::Source],
-    implements: &[Type],
-    implements_span: &Span,
+    implements: Option<&SupersClause>,
     name_span: &Span,
     ctx: &mut Context,
 ) -> TypeResult<Vec<Section>>
@@ -357,72 +361,74 @@ where
         sections.push(section);
     }
 
-    for iface_ty in implements.iter() {
-        let Type::Interface(iface_name) = &iface_ty else {
-           unreachable!("already checked that only valid types are accepted")
-        };
+    if let Some(implements) = implements {
+        for iface_ty in &implements.types {
+            let Type::Interface(iface_name) = iface_ty.ty() else {
+                unreachable!("already checked that only valid types are accepted")
+            };
 
-        let iface_def = ctx
-            .instantiate_iface_def(iface_name)
-            .map_err(|e| {
-                TypeError::from_name_err(e, iface_name.span().clone())
-            })?;
+            let iface_def = ctx
+                .instantiate_iface_def(iface_name)
+                .map_err(|e| {
+                    TypeError::from_name_err(e, iface_name.span().clone())
+                })?;
 
-        let mut missing_methods = Vec::new();
-        let mut mismatched_methods = Vec::new();
-        
-        let mut per_method_mismatches = Vec::new();
+            let mut missing_methods = Vec::new();
+            let mut mismatched_methods = Vec::new();
 
-        'iface_method_loop: for iface_method in &iface_def.methods {
-            let expect_sig = iface_method.decl
-                .sig()
-                .with_self(owning_type.as_ref());
-            
-            let all_methods = sections
-                .iter()
-                .flat_map(|section| section.methods());
-            
-            for impl_method in all_methods {
-                if impl_method.func_decl.name.ident() != iface_method.ident() {
-                    continue;
+            let mut per_method_mismatches = Vec::new();
+
+            'iface_method_loop: for iface_method in &iface_def.methods {
+                let expect_sig = iface_method.decl
+                    .sig()
+                    .with_self(owning_type.as_ref());
+
+                let all_methods = sections
+                    .iter()
+                    .flat_map(|section| section.methods());
+
+                for impl_method in all_methods {
+                    if impl_method.func_decl.name.ident() != iface_method.ident() {
+                        continue;
+                    }
+
+                    let actual_sig = impl_method.func_decl.sig();
+
+                    if actual_sig == expect_sig {
+                        // if we have an exact match, we don't care about other methods that
+                        // don't match
+                        per_method_mismatches.clear();
+                        continue 'iface_method_loop;
+                    } else {
+                        eprintln!("here: actual = {:#?}\nvs\nexpect = {:#?}", actual_sig, expect_sig);
+
+                        per_method_mismatches.push(MismatchedImplementation {
+                            impl_method_name: impl_method.func_decl.name.clone(),
+                            iface_method_name: iface_method.decl.name.clone(),
+                            expect_sig: expect_sig.clone(),
+                            actual_sig,
+                        });
+                    }
                 }
 
-                let actual_sig = impl_method.func_decl.sig();
-
-                if actual_sig == expect_sig {
-                    // if we have an exact match, we don't care about other methods that
-                    // don't match
-                    per_method_mismatches.clear();
-                    continue 'iface_method_loop;
-                } else {
-                    eprintln!("here: actual = {:#?}\nvs\nexpect = {:#?}", actual_sig, expect_sig);
-                    
-                    per_method_mismatches.push(MismatchedImplementation {
-                        impl_method_name: impl_method.func_decl.name.clone(),
-                        iface_method_name: iface_method.decl.name.clone(),
-                        expect_sig: expect_sig.clone(),
-                        actual_sig,
+                if per_method_mismatches.is_empty() {
+                    missing_methods.push(MissingImplementation {
+                        method_name: iface_method.decl.name.clone(),
+                        sig: expect_sig,
                     });
+                } else {
+                    mismatched_methods.append(&mut per_method_mismatches);
                 }
             }
 
-            if per_method_mismatches.is_empty() {
-                missing_methods.push(MissingImplementation {
-                    method_name: iface_method.decl.name.clone(),
-                    sig: expect_sig,
+            if !missing_methods.is_empty() || !mismatched_methods.is_empty() {
+                return Err(TypeError::InvalidImplementation {
+                    ty: owning_type.into_owned(),
+                    span: implements.span.clone(),
+                    missing: missing_methods,
+                    mismatched: mismatched_methods,
                 });
-            } else {
-                mismatched_methods.append(&mut per_method_mismatches);
             }
-        }
-
-        if !missing_methods.is_empty() || !mismatched_methods.is_empty() {
-            return Err(TypeError::InvalidImplementation {
-                ty: owning_type.into_owned(),
-                span: implements_span.clone(),
-                missing: missing_methods,
-                mismatched: mismatched_methods,
-            });
         }
     }
     
@@ -467,8 +473,11 @@ pub fn typecheck_iface(
     // another one
     ctx.declare_self_ty(Type::MethodSelf, iface.name.span().clone())?;
     ctx.declare_type(iface.name.ident.clone(), iface_ty.clone(), info.visibility, true)?;
-    
-    let supers = typecheck_base_types(&iface.supers, &iface_ty, ctx)?;
+
+    let supers = match &iface.supers {
+        Some(supers) => Some(SupersClause::typecheck(supers, &iface_ty, ctx)?),
+        None => None
+    };
 
     let mut methods: Vec<InterfaceMethodDecl> = Vec::new();
     for method in &iface.methods {
@@ -526,9 +535,10 @@ pub fn typecheck_variant(
 
     let variant_ty = Type::variant(info.name.clone());
 
-    let implements = typecheck_base_types(&variant_def.implements, &variant_ty, ctx)?;
-    let implements_span = Span::range(&variant_def.implements)
-        .unwrap_or_else(|| variant_def.name.span.clone());
+    let implements = match &variant_def.implements {
+        Some(implements) => Some(SupersClause::typecheck(implements, &variant_ty, ctx)?),
+        None => None
+    };
 
     ctx.declare_type(
         variant_def.name.ident.clone(),
@@ -560,8 +570,7 @@ pub fn typecheck_variant(
     let sections = typecheck_members(
         &variant_ty,
         &variant_def.sections,
-        &implements,
-        &implements_span,
+        implements.as_ref(),
         info.name.span(),
         ctx
     )?;
@@ -674,7 +683,7 @@ impl SetDecl {
         assert!(name.type_args.is_none());
 
         let range = match set_decl.range.as_ref() {
-            SetDeclRange::Range { from, to, span: range_span } => {
+            SetDeclRange::Range { from, to, span: range_span, range_op_span } => {
                 let from = typecheck_expr(from, &Type::Primitive(Primitive::UInt8), ctx)?;
                 let val_ty = from.annotation().ty().into_owned();
                 let to = typecheck_expr(to, &val_ty, ctx)?;
@@ -718,6 +727,7 @@ impl SetDecl {
                     from: Expr::literal(Literal::Integer(from_num), Value::from(from_val)),
                     to: Expr::literal(Literal::Integer(to_num), Value::from(to_val)),
                     span: range_span.clone(),
+                    range_op_span: range_op_span.clone(),
                 }
             }
             

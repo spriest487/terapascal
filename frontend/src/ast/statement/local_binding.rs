@@ -9,7 +9,8 @@ use crate::parse::TokenStream;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
-use terapascal_common::span::{Span, Spanned};
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use std::fmt;
 use derivative::Derivative;
 
@@ -17,7 +18,7 @@ use derivative::Derivative;
 #[derivative(Debug, PartialEq, Hash)]
 pub struct LocalBinding<A: Annotation> {
     pub name: Ident,
-    pub ty: A::Type,
+    pub ty: A::TypeName,
     pub val: Option<Expr<A>>,
 
     #[derivative(Hash = "ignore")]

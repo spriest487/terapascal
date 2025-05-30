@@ -121,7 +121,7 @@ fn build_for_loop_up_to(
 ) {
     builder.scope(|builder| {
         let (counter_val, counter_init_val, counter_ty) = match &range.init {
-            syn::ForLoopCounterInit::Assignment { counter, value } => {
+            syn::ForLoopCounterInit::Assignment { counter, value, .. } => {
                 let counter_ty = builder.translate_type(counter.annotation().ty().as_ref());
 
                 let counter_ref = translate_expr(counter, builder);
@@ -130,9 +130,9 @@ fn build_for_loop_up_to(
                 (counter_ref, init_val, counter_ty)
             }
 
-            syn::ForLoopCounterInit::Binding { name, init, ty } => {
+            syn::ForLoopCounterInit::Binding { name, init, ty, .. } => {
                 let counter_binding_name = name.to_string();
-                let counter_ty = builder.translate_type(&ty);
+                let counter_ty = builder.translate_type(ty.ty());
 
                 let counter_val = builder.local_new(counter_ty.clone(), Some(counter_binding_name));
                 let init_val = expr_to_val(&init, builder);
@@ -223,7 +223,7 @@ fn build_for_loop_sequence(
     builder.scope(|builder| {
         let src_ref = translate_expr(&range.src_expr, builder);
 
-        let binding_ty = builder.translate_type(&range.binding_ty);
+        let binding_ty = builder.translate_type(range.binding_ty.ty());
         let binding_name = range.binding_name.to_string();
         let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
 
