@@ -27,6 +27,9 @@ use terapascal_common::span::Spanned;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct VariantDecl<A: Annotation> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub kw_span: Span,
     
     pub name: Arc<A::DeclName>,
@@ -42,10 +45,15 @@ pub struct VariantDecl<A: Annotation> {
     
     pub sections: Vec<MethodDeclSection<A>>,
 
+    #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
-    #[derivative(Hash = "ignore")]
     pub span: Span,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub end_kw_span: Option<Span>,
 }
 
 impl<A: Annotation> MethodOwner<A> for VariantDecl<A> {
@@ -138,7 +146,7 @@ impl VariantDecl<Span> {
 
         if decl_start.forward {
             Ok(VariantDecl {
-                kw_span,
+                kw_span: kw_span.into(),
 
                 name: Arc::new(name),
                 where_clause: decl_start.where_clause,
@@ -152,7 +160,9 @@ impl VariantDecl<Span> {
                 implements: decl_start.supers,
                 sections: Vec::new(),
                 
-                span: decl_start.span,
+                span: decl_start.span.into(),
+                
+                end_kw_span: None,
             })
         } else {
             let cases = VariantCase::parse_seq(tokens)?;
@@ -166,7 +176,7 @@ impl VariantDecl<Span> {
             let end_kw = tokens.match_one(Keyword::End)?;
 
             Ok(VariantDecl {
-                kw_span,
+                kw_span: kw_span.into(),
 
                 name: Arc::new(name),
                 where_clause: decl_start.where_clause,
@@ -175,10 +185,12 @@ impl VariantDecl<Span> {
 
                 forward: false,
                 cases,
-                span: decl_start.span.to(end_kw.span()),
+                span: decl_start.span.to(end_kw.span()).into(),
 
                 implements: decl_start.supers,
                 sections,
+                
+                end_kw_span: Some(end_kw.into_span().into()),
             })
         }
     }

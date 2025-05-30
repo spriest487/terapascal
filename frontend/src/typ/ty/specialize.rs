@@ -27,7 +27,6 @@ use crate::typ::Context;
 use std::borrow::Cow;
 use std::sync::Arc;
 use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 
 pub trait Specializable {
     type GenericID: PartialEq + Clone;
@@ -147,6 +146,7 @@ pub fn specialize_struct_def<'a>(
         span: generic_def.span.clone(),
         kind: generic_def.kind,
         forward: generic_def.forward,
+        end_kw_span: generic_def.end_kw_span.clone(),
     }))
 }
 
@@ -238,11 +238,12 @@ pub fn specialize_variant_def(
         name: Arc::new(parameterized_name),
         where_clause: specialized_where,
         tags: generic_def.tags.clone(),
-        span: generic_def.span().clone(),
+        span: generic_def.span.clone(),
         forward: generic_def.forward,
         cases,
         implements,
         sections,
+        end_kw_span: generic_def.end_kw_span.clone(),
     })
 }
 
@@ -294,8 +295,10 @@ pub fn specialize_iface_def<'a>(
         tags: generic_def.tags.clone(),
         supers,
         methods,
-        span: generic_def.span.clone(),
         forward: generic_def.forward,
+        span: generic_def.span.clone(),
+        kw_span: generic_def.kw_span.clone(),
+        end_kw_span: generic_def.end_kw_span.clone(),
     }))
 }
 

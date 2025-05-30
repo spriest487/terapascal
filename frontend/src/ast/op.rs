@@ -1,14 +1,31 @@
-use std::fmt;
+use crate::ast::Annotation;
+use crate::ast::Expr;
+use crate::Operator;
+use crate::Position;
 use derivative::Derivative;
-use terapascal_common::span::{Span, Spanned};
-use crate::ast::{Annotation, Expr};
-use crate::{Operator, Position};
+use std::fmt;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+
+#[derive(Copy, Clone, Eq, Debug, PartialEq, Hash)]
+pub enum UnaryPosition {
+    Prefix,
+    Postfix,
+}
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct UnaryOp<A: Annotation> {
     pub op: Operator,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub op_span: Span,
+
     pub operand: Expr<A>,
+
+    pub pos: UnaryPosition,
 
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
@@ -42,7 +59,14 @@ impl<A: Annotation> Spanned for UnaryOp<A> {
 #[derivative(Debug, PartialEq, Hash)]
 pub struct BinOp<A: Annotation> {
     pub lhs: Expr<A>,
+    
     pub op: Operator,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub op_span: Span,
+    
     pub rhs: Expr<A>,
 
     #[derivative(Hash = "ignore")]

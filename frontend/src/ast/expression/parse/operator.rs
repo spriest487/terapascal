@@ -1,6 +1,6 @@
 use crate::ast::expression::parse::CompoundExpressionPart;
 use crate::ast::type_name::TypeName;
-use crate::ast::{ArgList, ObjectCtor, ObjectCtorArgs};
+use crate::ast::{ArgList, ObjectCtor, ObjectCtorArgs, UnaryPosition};
 use crate::ast::BinOp;
 use crate::ast::Call;
 use crate::ast::Cast;
@@ -167,6 +167,7 @@ pub(super) fn resolve_ops_by_precedence(
                 let bin_op = BinOp {
                     lhs: lhs_operand,
                     op: op_token.op,
+                    op_span: op_token.span.into(),
                     rhs: rhs_operand,
                     annotation: span.clone(),
                 };
@@ -181,7 +182,7 @@ pub(super) fn resolve_ops_by_precedence(
 
                 if after_op.is_empty() {
                     return Err(TracedError::trace(ParseError::EmptyOperand {
-                        operator: op_token.span.clone(),
+                        operator: op_token.span,
                         before: false,
                     }));
                 }
@@ -192,8 +193,10 @@ pub(super) fn resolve_ops_by_precedence(
                     let span = op_token.span.to(rhs.annotation().span());
                     let unary_op = UnaryOp {
                         op: op_token.op,
+                        op_span: op_token.span.into(),
                         operand: rhs,
-                        annotation: span.clone(),
+                        pos: UnaryPosition::Prefix,
+                        annotation: span.clone().into(),
                     };
                     Expr::from(unary_op)
                 };
@@ -214,7 +217,9 @@ pub(super) fn resolve_ops_by_precedence(
 
                     Expr::from(UnaryOp {
                         op: op_token.op,
-                        annotation: span,
+                        op_span: op_token.span.clone().into(),
+                        annotation: span.into(),
+                        pos: UnaryPosition::Postfix,
                         operand,
                     })
                 })

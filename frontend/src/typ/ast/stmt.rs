@@ -34,14 +34,14 @@ use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
-pub type VarBinding = ast::LocalBinding<Value>;
+pub type LocalBinding = ast::LocalBinding<Value>;
 pub type Stmt = ast::Stmt<Value>;
 pub type Exit = ast::Exit<Value>;
 
 pub fn typecheck_local_binding(
     binding: &ast::LocalBinding<Span>,
     ctx: &mut Context,
-) -> TypeResult<VarBinding> {
+) -> TypeResult<LocalBinding> {
     let (val, binding_ty) = match &binding.ty {
         ast::TypeName::Unspecified(_) => match &binding.val {
             None => {
@@ -113,7 +113,7 @@ pub fn typecheck_local_binding(
     let name = binding.name.clone();
     let span = binding.annotation.span().clone();
 
-    let binding = Binding {
+    let var_binding = Binding {
         kind: match &val {
             Some(..) => ValueKind::Mutable,
             None => ValueKind::Uninitialized,
@@ -122,14 +122,16 @@ pub fn typecheck_local_binding(
         def: Some(name.clone()),
     };
 
-    ctx.declare_local_var(name.clone(), binding)?;
+    ctx.declare_local_var(name.clone(), var_binding)?;
 
     let annotation = Value::Untyped(span);
 
-    let local_binding = VarBinding {
+    let local_binding = LocalBinding {
         name,
         ty: binding_ty,
         val,
+        kw_span: binding.kw_span.clone(),
+        assign_op_span: binding.assign_op_span.clone(),
         annotation,
     };
 
@@ -273,9 +275,11 @@ pub fn typecheck_exit(
     };
 
     let exit = match exit {
-        ast::Exit::WithoutValue(span) => Exit::WithoutValue(make_annotation(span).into()),
+        ast::Exit::WithoutValue(span) => {
+            Exit::WithoutValue(make_annotation(span).into())
+        },
 
-        ast::Exit::WithValue(value, span) => {
+        ast::Exit::WithValue { value_expr, annotation, exit_kw } => {
             let mut ret_ty = ctx
                 .current_func_return_ty()
                 .ok_or_else(|| TypeError::NoFunctionContext {
@@ -283,7 +287,7 @@ pub fn typecheck_exit(
                 })?
                 .clone();
 
-            let value = typecheck_expr(value, &ret_ty, ctx)?;
+            let value = typecheck_expr(value_expr, &ret_ty, ctx)?;
             let val_ty = value.annotation().ty();
 
             if ctx.set_inferred_result_ty(val_ty.as_ref()) {
@@ -296,9 +300,13 @@ pub fn typecheck_exit(
                 });
             }
             
-            let value = implicit_conversion(value, &ret_ty, ctx)?;
+            let value_expr = implicit_conversion(value, &ret_ty, ctx)?;
 
-            Exit::WithValue(value, make_annotation(span).into())
+            Exit::WithValue {
+                value_expr,
+                annotation: make_annotation(annotation).into(),
+                exit_kw: exit_kw.clone(),
+            }
         },
     };
 

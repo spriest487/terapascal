@@ -1484,6 +1484,7 @@ name = "terapascal-common"
 version = "0.1.0"
 dependencies = [
  "backtrace",
+ "derivative",
  "encoding_rs",
  "serde",
 ]

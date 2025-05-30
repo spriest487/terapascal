@@ -58,6 +58,11 @@ pub struct StructDecl<A: Annotation = Span> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
     pub span: Span,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub end_kw_span: Option<Span>,
 }
 
 impl<A: Annotation> StructDecl<A> {    
@@ -140,6 +145,7 @@ impl StructDecl<Span> {
                 
                 sections: Vec::new(),
                 span,
+                end_kw_span: None,
             })
         } else {
             let default_access = match kind {
@@ -162,6 +168,8 @@ impl StructDecl<Span> {
                 implements: decl_start.supers,
                 sections,
                 span: span.to(end_token.span()),
+                
+                end_kw_span: Some(end_token.into_span()),
             })
         }
     }

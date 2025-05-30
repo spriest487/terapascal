@@ -11,7 +11,7 @@ use crate::typ::ast::CaseStmt;
 use crate::typ::ast::CaseExpr;
 use crate::typ::ast::Call;
 use crate::typ::ast::Block;
-use crate::typ::ast::VarBinding;
+use crate::typ::ast::LocalBinding;
 use crate::typ::Context;
 use crate::typ::FunctionSigParam;
 use crate::typ::Type;
@@ -62,7 +62,7 @@ pub fn expect_stmt_initialized(stmt: &Stmt, ctx: &Context) -> TypeResult<()> {
 
         ast::Stmt::Exit(exit) => match exit.as_ref() {
             ast::Exit::WithoutValue(_) => Ok(()),
-            ast::Exit::WithValue(exit_val, ..) => expect_expr_initialized(exit_val, ctx),
+            ast::Exit::WithValue { value_expr, .. } => expect_expr_initialized(value_expr, ctx),
         },
 
         ast::Stmt::Assignment(assignment) => expect_expr_initialized(&assignment.rhs, ctx),
@@ -142,7 +142,7 @@ pub fn expect_expr_initialized(expr: &Expr, ctx: &Context) -> TypeResult<()> {
         ast::Expr::Match(match_expr) => expect_match_expr_initialized(&match_expr, ctx),
 
         ast::Expr::Exit(exit) => match exit.as_ref() {
-            ast::Exit::WithValue(exit_val, _) => expect_expr_initialized(exit_val, ctx),
+            ast::Exit::WithValue { value_expr, .. } => expect_expr_initialized(value_expr, ctx),
             ast::Exit::WithoutValue(_) => Ok(()),
         },
 
@@ -156,7 +156,7 @@ pub fn expect_expr_initialized(expr: &Expr, ctx: &Context) -> TypeResult<()> {
     Ok(())
 }
 
-fn expect_binding_initialized(binding: &VarBinding, ctx: &Context) -> TypeResult<()> {
+fn expect_binding_initialized(binding: &LocalBinding, ctx: &Context) -> TypeResult<()> {
     if let Some(init_val) = &binding.val {
         expect_expr_initialized(init_val, ctx)?;
     }

@@ -23,11 +23,25 @@ pub struct IfCond<A, B>
 where
     A: Annotation,
 {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub if_kw_span: Span,
+
     pub cond: Expr<A>,
 
     pub is_pattern: Option<A::Pattern>,
 
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub then_kw_span: Span,
     pub then_branch: B,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub else_kw_span: Option<Span>,
     pub else_branch: Option<B>,
 
     #[derivative(Hash = "ignore")]
@@ -50,15 +64,21 @@ impl IfCond<Span, Expr> {
             None => None,
         };
 
-        tokens.match_one(Keyword::Then)?;
+        let then_tt = tokens.match_one(Keyword::Then)?;
         let then_branch = Expr::parse(tokens)?;
-        let (else_branch, span) = Self::parse_else_branch(tokens, if_token.span(), &then_branch)?;
+        let (else_span, else_branch, span) = Self::parse_else_branch(tokens, if_token.span(), &then_branch)?;
 
         Ok(IfCond {
+            if_kw_span: if_token.into_span(),
             cond,
             is_pattern,
+            
+            then_kw_span: then_tt.into_span(),
             then_branch,
+            
+            else_kw_span: else_span,
             else_branch,
+            
             annotation: span,
         })
     }
@@ -67,19 +87,19 @@ impl IfCond<Span, Expr> {
         tokens: &mut TokenStream,
         kw_span: &Span,
         then_branch: &Expr
-    ) -> ParseResult<(Option<Expr>, Span)> {
-        let (else_branch, span) = match tokens.match_one_maybe(Keyword::Else) {
-            Some(_else_token) => {
+    ) -> ParseResult<(Option<Span>, Option<Expr>, Span)> {
+        let (else_span, else_branch, span) = match tokens.match_one_maybe(Keyword::Else) {
+            Some(else_token) => {
                 let else_branch = Expr::parse(tokens)?;
                 let span = kw_span.to(else_branch.span());
 
-                (Some(else_branch), span)
+                (Some(else_token.into_span()), Some(else_branch), span)
             },
 
-            None => (None, kw_span.to(then_branch.span())),
+            None => (None, None, kw_span.to(then_branch.span())),
         };
         
-        Ok((else_branch, span))
+        Ok((else_span, else_branch, span))
     }
 }
 
@@ -97,7 +117,7 @@ impl IfCond<Span, Stmt> {
             None => None,
         };
 
-        tokens.match_one(Keyword::Then)?;
+        let then_tt = tokens.match_one(Keyword::Then)?;
 
         let then_branch = match Stmt::parse(tokens) {
             Ok(stmt) => stmt,
@@ -105,12 +125,15 @@ impl IfCond<Span, Stmt> {
             Err(TracedError { err: ParseError::IsExpr(IllegalStatement(then_expr)), .. } ) => {
                 // if the `then` branch is only valid as an expression, parse the else branch
                 // as one too and return the whole thing as an invalid expression
-                let (else_expr, span) = IfCond::parse_else_branch(tokens, &if_token.span(), &then_expr)?;
+                let (else_span, else_expr, span) = IfCond::parse_else_branch(tokens, &if_token.span(), &then_expr)?;
                 let invalid_expr = Expr::IfCond(Box::new(IfCond {
+                    if_kw_span: if_token.into_span(),
                     cond,
                     is_pattern,
+                    then_kw_span: then_tt.into_span(),
                     then_branch: *then_expr,
                     else_branch: else_expr,
+                    else_kw_span: else_span,
                     annotation: span,
                 }));
                 
@@ -120,8 +143,8 @@ impl IfCond<Span, Stmt> {
             Err(other) => return Err(other),
         };
 
-        let (else_branch, span) = match tokens.match_one_maybe(Keyword::Else) {
-            Some(..) => {
+        let (else_span, else_branch, span) = match tokens.match_one_maybe(Keyword::Else) {
+            Some(else_tt) => {
                 let else_branch = match Stmt::parse(tokens) {
                     Ok(stmt) => stmt,
 
@@ -133,9 +156,12 @@ impl IfCond<Span, Stmt> {
                                 let span = if_token.span().to(else_expr.0.span());
 
                                 let if_expr = Expr::IfCond(Box::new(IfCond {
+                                    if_kw_span: if_token.into_span(),
                                     cond,
                                     is_pattern,
+                                    then_kw_span: then_tt.into_span(),
                                     then_branch: then_expr,
+                                    else_kw_span: Some(else_tt.into_span()),
                                     else_branch: Some(*else_expr.0),
                                     annotation: span,
                                 }));
@@ -152,21 +178,25 @@ impl IfCond<Span, Stmt> {
                     Err(other) => return Err(other),
                 };
 
+                let else_span = else_tt.into_span();
                 let span = if_token.span().to(else_branch.span());
 
-                (Some(else_branch), span)
-            },
+                (Some(else_span), Some(else_branch), span)
+            }
 
             None => {
                 let span = if_token.span().to(then_branch.span());
-                (None, span)
+                (None, None, span)
             },
         };
 
         Ok(IfCond {
+            if_kw_span: if_token.into_span(),
             cond,
             is_pattern,
+            then_kw_span: then_tt.into_span(),
             then_branch,
+            else_kw_span: else_span,
             else_branch,
             annotation: span,
         })
@@ -214,10 +244,13 @@ impl IfCond<Span, Stmt<Span>> {
         };
 
         Some(IfCond {
+            if_kw_span: self.if_kw_span.clone(),
             cond: self.cond.clone(),
             annotation: self.annotation.clone(),
             is_pattern: self.is_pattern.clone(),
+            then_kw_span: self.then_kw_span.clone(),
             then_branch,
+            else_kw_span: self.else_kw_span.clone(),
             else_branch,
         })
     }

@@ -78,6 +78,78 @@ impl Span {
         }
     }
     
+    pub fn until(&self, next: &impl Spanned) -> Self {
+        let next = next.span();
+
+        if next.file == self.file {
+            let file = self.file.clone();
+            let start = Location::new(self.end.line, self.end.col + 1);
+
+            let end = if self.end.line == next.start.line && self.end.col < next.start.col {
+                Location::new(self.end.line, next.start.col - 1)
+            } else {
+                Location::new(next.start.line, next.start.col.saturating_sub(1))
+            };
+
+            return Span {
+                start,
+                end,
+                file,
+            }
+        }
+        
+        Span {
+            start: self.end,
+            end: self.end,
+            file: self.file.clone(),
+        }
+    }
+    
+    pub fn split(&self, inner: &impl Spanned) -> (Self, Self) {
+        let inner = inner.span();
+
+        if self.file != inner.file {
+            return (self.clone(), inner.clone());
+        }
+        
+        let start = self.start;
+        if inner.start <= start {
+            return (inner.clone(), self.clone());
+        }
+        
+        let end = self.end;
+        if inner.end >= end {
+            return (self.clone(), inner.clone());
+        }
+        
+        let left = Span {
+            start,
+            end: if inner.start.col > 0 {
+                Location {
+                    line: inner.start.line,
+                    col: inner.start.col - 1,
+                }
+            } else {
+                Location {
+                    line: inner.start.line - 1,
+                    col: usize::MAX,
+                }
+            },
+            file: self.file.clone(),
+        };
+
+        let right = Span {
+            start: Location {
+                line: inner.end.line,
+                col: inner.end.col + 1,
+            },
+            end,
+            file: self.file.clone(),
+        };
+
+        (left, right)
+    }
+    
     pub fn range(spans: &[impl Spanned]) -> Option<Self> {
         match spans {
             [] => None,

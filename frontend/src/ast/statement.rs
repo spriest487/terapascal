@@ -63,10 +63,7 @@ impl<A: Annotation> Stmt<A> {
             Stmt::Ident(_ident, annotation) => annotation,
             Stmt::LocalBinding(binding) => &binding.annotation,
             Stmt::Call(call) => &call.annotation(),
-            Stmt::Exit(exit) => match exit.as_ref() {
-                Exit::WithValue(_expr, annotation) => annotation,
-                Exit::WithoutValue(a) => a,
-            },
+            Stmt::Exit(exit) => exit.annotation(),
             Stmt::Block(block) => &block.annotation,
             Stmt::ForLoop(for_loop) => &for_loop.annotation,
             Stmt::WhileLoop(while_loop) => &while_loop.annotation,
@@ -179,6 +176,7 @@ impl Stmt<Span> {
                     let assignment = Assignment {
                         lhs: bin_op.lhs,
                         rhs: bin_op.rhs,
+                        op_span: bin_op.op_span.clone(),
                         annotation: bin_op.annotation,
                     };
                     Ok(assignment.into())
@@ -234,9 +232,12 @@ impl Stmt<Span> {
                 };
 
                 Ok(Stmt::If(Box::new(IfCond {
+                    if_kw_span: if_cond.if_kw_span,
                     cond: if_cond.cond,
                     is_pattern: if_cond.is_pattern,
+                    then_kw_span: if_cond.then_kw_span,
                     then_branch: then_stmt,
+                    else_kw_span: if_cond.else_kw_span,
                     else_branch: else_stmt,
                     annotation: if_cond.annotation,
                 })))

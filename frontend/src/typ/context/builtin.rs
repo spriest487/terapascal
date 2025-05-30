@@ -212,7 +212,10 @@ pub fn builtin_comparable_iface() -> ast::InterfaceDecl {
             }
         ],
         forward: false,
-        span: builtin_span.clone(),
+
+        kw_span: builtin_span.clone().into(),
+        span: builtin_span.clone().into(),
+        end_kw_span: None,
     }
 }
 
@@ -276,7 +279,10 @@ pub fn builtin_displayable_iface() -> ast::InterfaceDecl {
             }
         ],
         forward: false,
-        span: builtin_span.clone(),
+        
+        kw_span: builtin_span.clone().into(), 
+        span: builtin_span.clone().into(),
+        end_kw_span: None,
     }
 }
 

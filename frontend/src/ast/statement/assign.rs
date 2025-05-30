@@ -1,13 +1,26 @@
-use crate::ast::{Annotation, Expr};
-use terapascal_common::span::{Span, Spanned};
-use std::fmt;
 use crate::ast::operators::CompoundAssignmentOperator;
+use crate::ast::Annotation;
+use crate::ast::Expr;
+use derivative::Derivative;
+use std::fmt;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct Assignment<A: Annotation> {
     pub lhs: Expr<A>,
     pub rhs: Expr<A>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub annotation: A,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub op_span: Span,
 }
 
 impl<A: Annotation> Spanned for Assignment<A>

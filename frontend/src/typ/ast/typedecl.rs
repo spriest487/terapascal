@@ -251,6 +251,7 @@ pub fn typecheck_struct_decl(
         implements,
         sections,
         forward: struct_def.forward,
+        end_kw_span: struct_def.end_kw_span.clone(),
     })
 }
 
@@ -502,8 +503,10 @@ pub fn typecheck_iface(
         tags,
         supers,
         forward: iface.forward,
-        span: iface.span.clone(),
         methods,
+        kw_span: iface.kw_span.clone(),
+        span: iface.span.clone(),
+        end_kw_span: iface.end_kw_span.clone(),
     };
     
     Ok(iface_decl)
@@ -572,7 +575,8 @@ pub fn typecheck_variant(
         cases,
         implements,
         sections,
-        span: variant_def.span().clone(),
+        span: variant_def.span.clone(),
+        end_kw_span: variant_def.end_kw_span.clone()
     })
 }
 

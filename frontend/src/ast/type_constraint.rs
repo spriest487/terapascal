@@ -23,6 +23,7 @@ use std::fmt;
 #[derivative(Debug, PartialEq, Hash)]
 pub struct TypeConstraint<T: TypeAnnotation> {
     pub name: Ident,
+
     pub is_ty: T,
     
     #[derivative(Debug = "ignore")]
@@ -46,6 +47,11 @@ impl<T: TypeAnnotation> Spanned for TypeConstraint<T> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct WhereClause<T: TypeAnnotation = TypeName> {
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub where_kw_span: Span,
+    
     pub constraints: Vec<TypeConstraint<T>>,
 
     #[derivative(Debug = "ignore")]
@@ -97,7 +103,11 @@ impl WhereClause<TypeName> {
                 span.to(constraint.span())
             });
 
-        let clause = Self { constraints, span };
+        let clause = Self {
+            where_kw_span: where_kw.into_span(),
+            constraints,
+            span
+        };
 
         if clause.constraints.is_empty() {
             Err(TracedError::trace(ParseError::EmptyWhereClause(clause)))

@@ -8,3 +8,4 @@ edition = "2021"
 backtrace = "0.3.73"
 encoding_rs = "0.8.34"
 serde = { version = "1.0.210", features = ["derive", "rc"] }
+derivative = "2.2.0"

@@ -70,7 +70,7 @@ impl ParseSeq for InterfaceMethodDecl<Span> {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct InterfaceDecl<A: Annotation> {
+pub struct InterfaceDecl<A: Annotation = Span> {
     pub name: A::DeclName,
     pub where_clause: Option<WhereClause<A::Type>>,
 
@@ -82,9 +82,19 @@ pub struct InterfaceDecl<A: Annotation> {
     
     pub forward: bool,
 
+    #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
+    pub kw_span: Span,
+
     #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub end_kw_span: Option<Span>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub span: Span,
 }
 
@@ -104,14 +114,16 @@ impl InterfaceDecl<Span> {
 
         if decl_start.forward {
             Ok(InterfaceDecl {
+                kw_span: decl_start.keyword.into_span().into(),
                 name,
                 where_clause: decl_start.where_clause,
                 tags: Vec::new(),
 
                 supers: decl_start.supers,
-                span: decl_start.span,
+                span: decl_start.span.into(),
                 forward: true,
                 methods: Vec::new(),
+                end_kw_span: None,
             })
         } else {
             let methods = InterfaceMethodDecl::parse_seq(tokens)?;
@@ -134,9 +146,11 @@ impl InterfaceDecl<Span> {
                 where_clause: decl_start.where_clause,
                 tags,
                 supers: decl_start.supers,
-                span: decl_start.keyword.span().to(end.span()),
                 forward: false,
                 methods,
+                span: decl_start.keyword.span().to(end.span()).into(),
+                kw_span: decl_start.keyword.into_span().into(),
+                end_kw_span: Some(end.into_span().into()),
             })
         }
     }

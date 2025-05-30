@@ -34,6 +34,7 @@ impl WhereClause {
         }
 
         Ok(Self {
+            where_kw_span: src.where_kw_span.clone(),
             constraints,
             span: src.span.clone(),
         })

@@ -511,9 +511,9 @@ pub fn translate_block(block: &typ::ast::Block, out_ref: ir::Ref, builder: &mut 
 }
 
 pub fn translate_exit(exit: &typ::ast::Exit, builder: &mut Builder) {
-    if let syn::Exit::WithValue(val, _) = exit {
-        let value_ty = builder.translate_type(&val.annotation().ty());
-        let value_val = translate_expr(val, builder);
+    if let syn::Exit::WithValue { value_expr, .. } = exit {
+        let value_ty = builder.translate_type(&value_expr.annotation().ty());
+        let value_val = translate_expr(value_expr, builder);
 
         // we can assume this function has a return register, otherwise an exit stmt
         // wouldn't pass typechecking

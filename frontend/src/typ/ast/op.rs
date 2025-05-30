@@ -66,27 +66,27 @@ pub fn typecheck_bin_op(
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
-    let span = bin_op.annotation.clone();
+    let span = &bin_op.annotation;
 
     match &bin_op.op {
-        Operator::Period => typecheck_member_of(&bin_op.lhs, &bin_op.rhs, span, expect_ty, ctx),
+        Operator::Period => typecheck_member_of(bin_op, expect_ty, ctx),
 
-        Operator::Index => typecheck_indexer(&bin_op.lhs, &bin_op.rhs, &span, ctx),
+        Operator::Index => typecheck_indexer(bin_op, ctx),
         
-        Operator::In => typecheck_in_set_operator(&bin_op.lhs, &bin_op.rhs, &span, ctx),
+        Operator::In => typecheck_in_set_operator(bin_op, ctx),
 
         Operator::And | Operator::Or => {
-            let bin_op = typecheck_logical_op(bin_op, span, ctx)?;
+            let bin_op = typecheck_logical_op(bin_op, span.clone(), ctx)?;
             Ok(Expr::from(bin_op))
         },
 
         Operator::Equals | Operator::NotEquals => {
-            let bin_op = typecheck_equality(bin_op, span, ctx)?;
+            let bin_op = typecheck_equality(bin_op, span.clone(), ctx)?;
             Ok(Expr::from(bin_op))
         },
 
         Operator::Gt | Operator::Gte | Operator::Lt | Operator::Lte => {
-            let bin_op = typecheck_comparison(bin_op, span, ctx)?;
+            let bin_op = typecheck_comparison(bin_op, span.clone(), ctx)?;
             Ok(Expr::from(bin_op))
         },
 
@@ -138,12 +138,13 @@ pub fn typecheck_bin_op(
 
             let annotation = match result_ty.as_ref() {
                 Type::Nothing => Value::Untyped(span.clone()),
-                _ => Value::from(TypedValue::temp(result_ty.into_owned(), span)),
+                _ => Value::from(TypedValue::temp(result_ty.into_owned(), span.clone())),
             };
 
             Ok(Expr::from(ast::BinOp {
                 lhs,
                 op: bin_op.op,
+                op_span: bin_op.op_span.clone(),
                 rhs,
                 annotation,
             }))
@@ -176,6 +177,7 @@ fn typecheck_logical_op(
         lhs,
         rhs,
         op: bin_op.op,
+        op_span: bin_op.op_span.clone(),
         annotation,
     })
 }
@@ -207,6 +209,7 @@ fn typecheck_equality(
         lhs,
         rhs,
         op: bin_op.op,
+        op_span: bin_op.op_span.clone(),
         annotation,
     })
 }
@@ -238,6 +241,7 @@ fn typecheck_comparison(
         lhs,
         rhs,
         op: bin_op.op,
+        op_span: bin_op.op_span.clone(),
         annotation,
     })
 }
@@ -280,6 +284,7 @@ fn typecheck_bitwise_op(
         lhs,
         rhs,
         op: bin_op.op,
+        op_span: bin_op.op_span.clone(),
     })
 }
 
@@ -409,15 +414,14 @@ fn desugar_string_concat(
 }
 
 fn typecheck_member_of(
-    lhs: &ast::Expr<Span>,
-    rhs: &ast::Expr<Span>,
-    span: Span,
+    bin_op: &ast::BinOp<Span>,
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
-    let lhs = typecheck_expr(lhs, &Type::Nothing, ctx)?;
+    let span = &bin_op.annotation;
+    let lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
 
-    match rhs {
+    match &bin_op.rhs {
         // x.y
         ast::Expr::Ident(member_ident, _) => {
             let member_ident = member_ident.clone();
@@ -467,7 +471,7 @@ fn typecheck_member_of(
                                 base: NameContainer::for_annotated(lhs.annotation()),
                             };
 
-                            return Err(TypeError::from_name_err(err, span));
+                            return Err(TypeError::from_name_err(err, span.clone()));
                         },
                     }
                 },
@@ -478,16 +482,17 @@ fn typecheck_member_of(
                         base: NameContainer::for_annotated(lhs.annotation()),
                     };
 
-                    return Err(TypeError::from_name_err(err, span));
+                    return Err(TypeError::from_name_err(err, span.clone()));
                 },
             };
 
             let rhs_value = Value::Untyped(member_ident.span.clone());
             let rhs = Expr::Ident(member_ident, rhs_value);
-
+            
             let member_op = BinOp {
                 lhs,
                 op: Operator::Period,
+                op_span: bin_op.op_span.clone().into(),
                 rhs,
                 annotation,
             };
@@ -632,12 +637,12 @@ fn typecheck_member_of(
         // },
 
         _ => {
-            let rhs = typecheck_expr(rhs, &Type::Nothing, ctx)?;
+            let rhs = typecheck_expr(&bin_op.rhs, &Type::Nothing, ctx)?;
 
             Err(TypeError::InvalidBinOp {
                 lhs: lhs.annotation().ty().into_owned(),
                 rhs: rhs.annotation().ty().into_owned(),
-                span,
+                span: bin_op.annotation.clone(),
                 op: Operator::Period,
             })
         },
@@ -963,24 +968,29 @@ pub fn typecheck_unary_op(
 
     Ok(UnaryOp {
         operand,
+        pos: unary_op.pos,
         op: unary_op.op,
-        annotation: Value::from(annotation),
+        op_span: unary_op.op_span.clone(),
+        annotation: Value::from(annotation).into(),
     })
 }
 
 pub fn typecheck_indexer(
-    base: &ast::Expr<Span>,
-    index: &ast::Expr<Span>,
-    span: &Span,
+    bin_op: &ast::BinOp<Span>,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
+    let span = &bin_op.annotation;
+
+    let base = &bin_op.lhs;
+    let index = &bin_op.rhs;
+
     // todo: other index types
     let index_ty = Type::Primitive(Primitive::Int32);
-    let index = typecheck_expr(&index, &index_ty, ctx)?;
+    let index = typecheck_expr(index, &index_ty, ctx)?;
 
     index.annotation().expect_value(&index_ty)?;
 
-    let base = typecheck_expr(&base, &Type::Nothing, ctx)?;
+    let base = typecheck_expr(base, &Type::Nothing, ctx)?;
 
     check_array_bound_static(&base, &index, ctx)?;
 
@@ -1021,14 +1031,13 @@ pub fn typecheck_indexer(
         lhs: base,
         rhs: index,
         op: Operator::Index,
+        op_span: bin_op.op_span.clone(),
         annotation,
     }))
 }
 
 pub fn typecheck_in_set_operator(
-    lhs: &ast::Expr<Span>,
-    rhs: &ast::Expr<Span>,
-    span: &Span,
+    bin_op: &ast::BinOp<Span>,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
     // type inference can work both ways here:
@@ -1037,9 +1046,9 @@ pub fn typecheck_in_set_operator(
     // check the item expr first and use its type to hint that a set is expected.
     // in any other case, check the set expr first since it must refer to a known set type,
     // which can be used to infer the item expr type if needed
-    let (item_expr, set_expr) = match rhs {
+    let (item_expr, set_expr) = match &bin_op.rhs {
         ast::Expr::CollectionCtor(ctor) => {
-            let item_expr = typecheck_expr(lhs, &Type::Nothing, ctx)?;
+            let item_expr = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
             
             item_expr.annotation().expect_any_value()?;
             let item_type = item_expr.annotation().ty().into_owned();
@@ -1052,7 +1061,7 @@ pub fn typecheck_in_set_operator(
                 .collect();
 
             let set_type = SetDecl::items_to_set_type(None, &item_exprs, &ctor.annotation, ctx)?;
-            let set_expr = typecheck_expr(rhs, &Type::set(set_type), ctx)?;
+            let set_expr = typecheck_expr(&bin_op.rhs, &Type::set(set_type), ctx)?;
 
             match set_expr.annotation().ty().as_ref() {
                 Type::Set(set_type) => {
@@ -1060,7 +1069,7 @@ pub fn typecheck_in_set_operator(
                         return Err(TypeError::InvalidBinOp {
                             lhs: item_expr.annotation().ty().into_owned(),
                             rhs: set_expr.annotation().ty().into_owned(),
-                            span: span.clone(),
+                            span: bin_op.annotation.clone(),
                             op: Operator::In,
                         })
                     }
@@ -1070,7 +1079,7 @@ pub fn typecheck_in_set_operator(
                     return Err(TypeError::InvalidBinOp {
                         lhs: item_expr.annotation().ty().into_owned(),
                         rhs: invalid.clone(),
-                        span: span.clone(),
+                        span: bin_op.annotation.clone(),
                         op: Operator::In,
                     })
                 }
@@ -1080,7 +1089,7 @@ pub fn typecheck_in_set_operator(
         }
         
         _ => {
-            let set_expr = typecheck_expr(rhs, &Type::Nothing, ctx)?;
+            let set_expr = typecheck_expr(&bin_op.rhs, &Type::Nothing, ctx)?;
             let set_expr_type = set_expr.annotation().ty();
 
             let item_expect_ty = match set_expr_type.as_ref() {
@@ -1089,29 +1098,30 @@ pub fn typecheck_in_set_operator(
                 }
 
                 invalid => {
-                    let invalid_lhs = typecheck_expr(lhs, &Type::Nothing, ctx)?;
+                    let invalid_lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
                     return Err(TypeError::InvalidBinOp {
                         lhs: invalid_lhs.annotation().ty().into_owned(),
                         rhs: invalid.clone(),
-                        span: span.clone(),
+                        span: bin_op.annotation.clone(),
                         op: Operator::In,
                     })
                 }
             };
 
-            let item_expr = typecheck_expr(lhs, item_expect_ty, ctx)?;
+            let item_expr = typecheck_expr(&bin_op.lhs, item_expect_ty, ctx)?;
             item_expr.annotation().expect_value(&item_expect_ty)?;
 
             (item_expr, set_expr)
         }
     };
     
-    let value = TypedValue::temp(Type::Primitive(Primitive::Boolean), span.clone());
+    let value = TypedValue::temp(Type::Primitive(Primitive::Boolean), bin_op.annotation.clone());
     
     let bin_op = BinOp {
         lhs: item_expr,
         rhs: set_expr,
         op: Operator::In,
+        op_span: bin_op.op_span.clone(),
         annotation: Value::from(value),
     };
     

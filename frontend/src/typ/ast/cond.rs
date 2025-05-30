@@ -119,9 +119,12 @@ pub fn typecheck_if_cond_stmt(
     let annotation = Value::Untyped(if_cond.span().clone());
 
     Ok(IfCond {
+        if_kw_span: if_cond.if_kw_span.clone(),
         cond,
         is_pattern,
+        then_kw_span: if_cond.then_kw_span.clone(),
         then_branch,
+        else_kw_span: if_cond.else_kw_span.clone(),
         else_branch,
         annotation,
     })
@@ -182,9 +185,12 @@ pub fn typecheck_if_cond_expr(
     };
 
     Ok(IfCond {
+        if_kw_span: if_cond.if_kw_span.clone(),
         cond,
         is_pattern,
+        then_kw_span: if_cond.then_kw_span.clone(),
         then_branch,
+        else_kw_span: if_cond.else_kw_span.clone(),
         else_branch,
         annotation,
     })

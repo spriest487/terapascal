@@ -140,6 +140,18 @@ impl<A: Annotation> TypeDeclItem<A> {
         }
     }
 
+    pub fn tags(&self) -> &[Tag<A>] {
+        match self {
+            TypeDeclItem::Struct(class) => &class.tags,
+            TypeDeclItem::Interface(iface) => &iface.tags,
+            TypeDeclItem::Variant(variant) => &variant.tags,
+            
+            TypeDeclItem::Alias(..)
+            | TypeDeclItem::Enum(..)
+            | TypeDeclItem::Set(..) => &[],
+        }
+    }
+
     pub fn start_matcher() -> Matcher {
         // ident or tag group
         Matcher::AnyIdent | DelimiterPair::SquareBracket

@@ -189,7 +189,11 @@ impl From<IdentPath> for Expr<Span> {
         
         let first_part = part.next().unwrap();
         let first_span = first_part.span.clone();
+        
+        let mut prev_span = first_span.clone();
+        
         let mut expr = Expr::Ident(first_part, first_span);
+        
         
         while let Some(next_part) = part.next() {
             let next_span = next_part.span.clone();
@@ -197,9 +201,12 @@ impl From<IdentPath> for Expr<Span> {
             expr = Expr::from(BinOp {
                 annotation: expr.span().to(&next_span),
                 lhs: expr,
-                rhs: Expr::Ident(next_part, next_span),
+                rhs: Expr::Ident(next_part, next_span.clone()),
                 op: Operator::Period,
+                op_span: prev_span.until(&next_span).into(),
             });
+
+            prev_span = next_span;
         }
         
         expr

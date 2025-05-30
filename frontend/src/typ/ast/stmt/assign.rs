@@ -29,6 +29,7 @@ pub fn typecheck_assignment(
     Ok(Assignment {
         lhs,
         rhs,
+        op_span: assignment.op_span.clone(),
         annotation: Value::Untyped(assignment.annotation.clone()),
     })
 }

@@ -87,7 +87,7 @@ pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
     builder.pop_debug_context()
 }
 
-fn build_binding(binding: &typ::ast::VarBinding, builder: &mut Builder) {
+fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut Builder) {
     let bound_ty = builder.translate_type(&binding.ty);
 
     let binding_ref = builder.local_new(bound_ty.clone(), Some(binding.name.to_string()));

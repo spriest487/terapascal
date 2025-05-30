@@ -11,12 +11,28 @@ use crate::Operator;
 use crate::Separator;
 use terapascal_common::span::{Span, Spanned};
 use std::fmt;
+use derivative::Derivative;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct LocalBinding<A: Annotation> {
     pub name: Ident,
     pub ty: A::Type,
     pub val: Option<Expr<A>>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub kw_span: Span,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub assign_op_span: Option<Span>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub annotation: A,
 }
 
@@ -30,21 +46,35 @@ impl LocalBinding<Span> {
             None => TypeName::Unspecified(name.span().clone()),
         };
 
-        let (val, span) = match tokens.match_one_maybe(Operator::Assignment) {
-            Some(_) => {
+        let binding = match tokens.match_one_maybe(Operator::Assignment) {
+            Some(tt) => {
+                let op_span = tt.into_span();
                 let val = Expr::parse(tokens)?;
                 let span = var_kw_tt.span().to(val.annotation());
-                (Some(val), span)
+
+                LocalBinding {
+                    val: Some(val),
+                    annotation: span,
+                    kw_span: var_kw_tt.into_span(),
+                    assign_op_span: Some(op_span),
+                    name,
+                    ty,
+                }
             }
-            None => (None, var_kw_tt.span().to(ty.span())),
+            
+            None => {
+                LocalBinding {
+                    val: None,
+                    annotation: var_kw_tt.span().to(ty.span()),
+                    kw_span: var_kw_tt.into_span(),
+                    assign_op_span: None,
+                    name,
+                    ty,
+                }
+            },
         };
 
-        Ok(LocalBinding {
-            name,
-            ty,
-            val,
-            annotation: span,
-        })
+        Ok(binding)
     }
 }
 
