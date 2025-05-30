@@ -1,4 +1,5 @@
-use crate::ast::{Annotation, TypeName, TypeParam};
+use crate::ast::Annotation;
+use crate::ast::TypeParam;
 use crate::parse::Match;
 use crate::parse::Parse;
 use crate::parse::ParseError;
@@ -9,13 +10,13 @@ use crate::DelimiterPair;
 use crate::Ident;
 use crate::Separator;
 use crate::TokenTree;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
-use terapascal_common::TracedError;
 use derivative::Derivative;
 use std::fmt;
 use std::ops::Index;
 use std::ops::IndexMut;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+use terapascal_common::TracedError;
 
 /// Delimited list of types used for declaring and using generics
 /// e.g. the part in square brackets of the following:
@@ -211,7 +212,7 @@ impl TypeIdentList {
         }
     }
 
-    pub fn to_unconstrained_params(self) -> TypeList<TypeParam<TypeName>> {
+    pub fn to_unconstrained_params(self) -> TypeList<TypeParam> {
         self.map(|name, _| TypeParam::new(name))
     }
     

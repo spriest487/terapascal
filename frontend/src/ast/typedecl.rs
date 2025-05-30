@@ -113,7 +113,7 @@ pub enum TypeDeclItem<A: Annotation = Span> {
 }
 
 impl<A: Annotation> TypeDeclItem<A> {
-    pub fn constraint_clause(&self) -> Option<&WhereClause<A::Type>> {
+    pub fn constraint_clause(&self) -> Option<&WhereClause<A>> {
         match self {
             TypeDeclItem::Struct(def) => def.where_clause.as_ref(),
             

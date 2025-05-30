@@ -30,7 +30,7 @@ pub use case::CaseBranch;
 pub use case::CaseExpr;
 pub use case::CaseStmt;
 pub use cast::Cast;
-use terapascal_common::span::Span;
+use terapascal_common::span::{MaybeSpanned, Span};
 use terapascal_common::span::Spanned;
 pub use cond::*;
 pub use ctor::*;
@@ -87,6 +87,7 @@ pub trait DeclName : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
 
 pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
     type Type: TypeAnnotation + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
+    type TypeName: TypeAnnotation + MaybeSpanned + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
     type DeclName: DeclName;
     type Pattern: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
     type FunctionName: FunctionName + fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
@@ -99,6 +100,7 @@ pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
 
 impl Annotation for Span {
     type Type = TypeName;
+    type TypeName = TypeName;
     type DeclName = DeclIdent;
     type Pattern = TypeNamePattern;
     type FunctionName = QualifiedFunctionName;

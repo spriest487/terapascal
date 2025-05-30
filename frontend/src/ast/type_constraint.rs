@@ -1,9 +1,8 @@
 use crate::ast::type_name::IdentTypeName;
 use crate::ast::type_name::TypeName;
-use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Keyword;
-use crate::ast::TypeAnnotation;
+use crate::ast::{Annotation, Ident};
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -13,18 +12,27 @@ use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::parse::TryParse;
 use crate::Separator;
+use derivative::Derivative;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use derivative::Derivative;
-use std::fmt;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct TypeConstraint<T: TypeAnnotation> {
+pub struct TypeConstraint<A: Annotation = Span> {
     pub name: Ident,
 
-    pub is_ty: T,
+    pub is_ty: A::Type,
+    
+    // TODO: make the AST type constraints and the ones used by the type system separate types
+    // this can't use A::TypeName right now because inferred params don't have source info
+    pub is_ty_span: Option<Span>,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub is_kw_span: Option<Span>,
     
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -32,13 +40,13 @@ pub struct TypeConstraint<T: TypeAnnotation> {
     pub span: Span,
 }
 
-impl<T: TypeAnnotation> fmt::Display for TypeConstraint<T> {
+impl<A: Annotation> fmt::Display for TypeConstraint<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} is {}", self.name, self.is_ty)
     }
 }
 
-impl<T: TypeAnnotation> Spanned for TypeConstraint<T> {
+impl<A: Annotation> Spanned for TypeConstraint<A> {
     fn span(&self) -> &Span {
         &self.span
     }
@@ -46,13 +54,13 @@ impl<T: TypeAnnotation> Spanned for TypeConstraint<T> {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct WhereClause<T: TypeAnnotation = TypeName> {
+pub struct WhereClause<A: Annotation = Span> {
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
     pub where_kw_span: Span,
     
-    pub constraints: Vec<TypeConstraint<T>>,
+    pub constraints: Vec<TypeConstraint<A>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -60,7 +68,7 @@ pub struct WhereClause<T: TypeAnnotation = TypeName> {
     pub span: Span,
 }
 
-impl<T: TypeAnnotation> fmt::Display for WhereClause<T> {
+impl<A: Annotation> fmt::Display for WhereClause<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "where ")?;
         for (i, constraint) in self.constraints.iter().enumerate() {
@@ -73,7 +81,7 @@ impl<T: TypeAnnotation> fmt::Display for WhereClause<T> {
     }
 }
 
-impl TryParse for WhereClause<TypeName> {
+impl TryParse for WhereClause<Span> {
     fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
         match tokens.look_ahead().match_one(Keyword::Where) {
             None => Ok(None),
@@ -82,13 +90,13 @@ impl TryParse for WhereClause<TypeName> {
     }
 }
 
-impl<T: TypeAnnotation> Spanned for WhereClause<T> {
+impl<A: Annotation> Spanned for WhereClause<A> {
     fn span(&self) -> &Span {
         &self.span
     }
 }
 
-impl WhereClause<TypeName> {
+impl WhereClause<Span> {
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let where_kw = tokens.match_one(Keyword::Where)?;
 
@@ -117,7 +125,7 @@ impl WhereClause<TypeName> {
     }
 }
 
-struct WhereClauseItem(TypeConstraint<TypeName>);
+struct WhereClauseItem(TypeConstraint<Span>);
 
 impl ParseSeq for WhereClauseItem {
     fn parse_group(prev: &[Self], tokens: &mut TokenStream) -> ParseResult<Self> {
@@ -126,7 +134,7 @@ impl ParseSeq for WhereClauseItem {
         }
 
         let param_ident = Ident::parse(tokens)?;
-        tokens.match_one(Keyword::Is)?;
+        let is_kw_tt = tokens.match_one(Keyword::Is)?;
 
         let is_ty_path = IdentPath::parse(tokens)?;
 
@@ -140,7 +148,9 @@ impl ParseSeq for WhereClauseItem {
         Ok(WhereClauseItem(TypeConstraint {
             span: param_ident.span().to(is_ty.span()),
             name: param_ident,
+            is_ty_span:  Some(is_ty.span().clone()),
             is_ty,
+            is_kw_span: Some(is_kw_tt.into_span()),
         }))
     }
 
@@ -155,9 +165,9 @@ impl ParseSeq for WhereClauseItem {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Hash, PartialEq, Debug)]
-pub struct TypeParam<T: TypeAnnotation> {
+pub struct TypeParam<A: Annotation = Span> {
     pub name: Ident,
-    pub constraint: Option<TypeConstraint<T>>,
+    pub constraint: Option<TypeConstraint<A>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -165,13 +175,13 @@ pub struct TypeParam<T: TypeAnnotation> {
     pub span: Span,
 }
 
-impl<T: TypeAnnotation> Spanned for TypeParam<T> {
+impl<A: Annotation> Spanned for TypeParam<A> {
     fn span(&self) -> &Span {
         &self.span
     }
 }
 
-impl<T: TypeAnnotation> TypeParam<T> {
+impl<A: Annotation> TypeParam<A> {
     pub fn new(name: Ident) -> Self {
         Self {
             span: name.span.clone(),
@@ -180,7 +190,7 @@ impl<T: TypeAnnotation> TypeParam<T> {
         }
     }
     
-    pub fn with_constraint(name: Ident, constraint: TypeConstraint<T>) -> Self {
+    pub fn with_constraint(name: Ident, constraint: TypeConstraint<A>) -> Self {
         Self {
             span: name.span.to(constraint.span()),
             name,
@@ -189,7 +199,7 @@ impl<T: TypeAnnotation> TypeParam<T> {
     }
 }
 
-impl<T: TypeAnnotation> fmt::Display for TypeParam<T> {
+impl<A: Annotation> fmt::Display for TypeParam<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)?;
         if let Some(constraint) = &self.constraint {

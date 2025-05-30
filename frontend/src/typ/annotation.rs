@@ -621,6 +621,7 @@ impl Spanned for Value {
 
 impl Annotation for Value {
     type Type = Type;
+    type TypeName = TypeName;
     type DeclName = Symbol;
     type Pattern = TypePattern;
     type FunctionName = crate::typ::ast::FunctionName;

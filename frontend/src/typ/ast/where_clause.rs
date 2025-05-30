@@ -1,19 +1,19 @@
 use crate::ast;
 use crate::ast::TypeAnnotation;
-use crate::typ::GenericError;
-use crate::typ::typecheck_type;
-use crate::typ::TypeError;
-use crate::typ::TypeParam;
 use crate::typ::Context;
 use crate::typ::GenericContext;
 use crate::typ::Type;
+use crate::typ::TypeError;
+use crate::typ::TypeParam;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
+use crate::typ::typecheck_type;
+use crate::typ::{GenericError, Value};
 use crate::Ident;
 use std::mem;
 
-pub type WhereClause = ast::WhereClause<Type>;
-pub type TypeConstraint = ast::TypeConstraint<Type>;
+pub type WhereClause = ast::WhereClause<Value>;
+pub type TypeConstraint = ast::TypeConstraint<Value>;
 
 impl WhereClause {
     pub fn typecheck(src: &ast::WhereClause, ctx: &mut Context) -> TypeResult<Self> {
@@ -26,7 +26,10 @@ impl WhereClause {
             };
 
             constraints.push(TypeConstraint {
+                is_kw_span: constraint.is_kw_span.clone(),
+                
                 is_ty,
+                is_ty_span: constraint.is_ty_span.clone(),
 
                 name: constraint.name.clone(),
                 span: constraint.span.clone(),

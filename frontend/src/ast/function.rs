@@ -138,7 +138,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
     pub kw_span: Span,
     
     pub name: A::FunctionName,
-    pub where_clause: Option<WhereClause<A::Type>>,
+    pub where_clause: Option<WhereClause<A>>,
 
     pub tags: Vec<Tag<A>>,
 

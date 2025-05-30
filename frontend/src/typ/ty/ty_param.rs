@@ -1,7 +1,6 @@
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::TypeConstraint;
-use crate::typ::typecheck_type;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericResult;
@@ -9,11 +8,12 @@ use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeResult;
 use crate::typ::Value;
+use crate::typ::typecheck_type;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Spanned;
 
-pub type TypeParam = ast::TypeParam<Type>;
+pub type TypeParam = ast::TypeParam<Value>;
 
 impl TypeParam {
     pub fn into_generic_param_ty(self) -> Type {
@@ -77,7 +77,7 @@ impl TypeParamList {
 }
 
 pub fn typecheck_type_params(
-    type_params: &ast::TypeList<ast::TypeParam<ast::TypeName>>,
+    type_params: &ast::TypeList<ast::TypeParam>,
     ctx: &mut Context,
 ) -> TypeResult<TypeParamList> {
     let mut items = Vec::new();
@@ -86,9 +86,12 @@ pub fn typecheck_type_params(
         let constraint = match &ty_param.constraint {
             Some(constraint) => {
                 let is_ty = typecheck_type(&constraint.is_ty, ctx)?;
+                
                 Some(ast::TypeConstraint {
+                    is_kw_span: constraint.is_kw_span.clone(),
                     name: ty_param.name.clone(),
                     span: constraint.span.clone(),
+                    is_ty_span: Some(constraint.is_ty.span().clone()),
                     is_ty,
                 })
             }

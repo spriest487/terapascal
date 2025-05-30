@@ -139,7 +139,9 @@ pub fn infer_from_structural_ty_args(
                     is_ty => {
                         Some(TypeConstraint {
                             name: param_generic.name.clone(),
+                            is_kw_span: None,
                             is_ty: is_ty.clone(),
+                            is_ty_span: None,
                             span: span.clone(),
                         })
                     }

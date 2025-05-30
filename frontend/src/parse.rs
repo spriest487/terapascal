@@ -14,7 +14,7 @@ use terapascal_common::TracedError;
 use std::fmt;
 
 #[derive(Debug)]
-pub struct IllegalStatement<A: Annotation>(pub Box<Expr<A>>);
+pub struct IllegalStatement<A: Annotation = Span>(pub Box<Expr<A>>);
 
 impl<A: Annotation> fmt::Display for IllegalStatement<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -43,14 +43,14 @@ pub enum ParseError {
     EmptyOperand { operator: Span, before: bool },
     UnexpectedOperator { operator: Span },
 
-    StatementIsIllegal(Box<Stmt<Span>>),
-    ExprIsIllegal(IllegalStatement<Span>),
-    IsExpr(IllegalStatement<Span>),
+    StatementIsIllegal(Box<Stmt>),
+    ExprIsIllegal(IllegalStatement),
+    IsExpr(IllegalStatement),
 
     UnterminatedStatement { span: Span },
     InvalidForLoopInit(Stmt<Span>),
     
-    DuplicateModifier { new: DeclMod<Span>, existing: DeclMod<Span> },
+    DuplicateModifier { new: DeclMod, existing: DeclMod },
     
     CtorWithTypeArgs { span: Span },
     InvalidAssignmentExpr { span: Span },
@@ -61,7 +61,7 @@ pub enum ParseError {
     EmptyTypeArgList(TypeArgList),
     InvalidTypeParamName(Span),
     
-    EmptyWhereClause(WhereClause<TypeName>),
+    EmptyWhereClause(WhereClause),
     
     InvalidFunctionImplType(TypeName),
     EmptyConstOrVarDecl { span: Span },

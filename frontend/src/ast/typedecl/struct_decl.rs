@@ -42,7 +42,7 @@ pub struct StructDecl<A: Annotation = Span> {
     pub kw_span: Span,
 
     pub name: A::DeclName,
-    pub where_clause: Option<WhereClause<A::Type>>,
+    pub where_clause: Option<WhereClause<A>>,
 
     pub tags: Vec<Tag<A>>,
     

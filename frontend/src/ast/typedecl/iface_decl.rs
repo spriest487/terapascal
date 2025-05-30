@@ -72,7 +72,7 @@ impl ParseSeq for InterfaceMethodDecl<Span> {
 #[derivative(Debug, PartialEq, Hash)]
 pub struct InterfaceDecl<A: Annotation = Span> {
     pub name: A::DeclName,
-    pub where_clause: Option<WhereClause<A::Type>>,
+    pub where_clause: Option<WhereClause<A>>,
 
     pub tags: Vec<Tag<A>>,
     

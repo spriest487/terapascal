@@ -20,23 +20,25 @@ pub use self::sig::*;
 pub use self::specialize::*;
 pub use self::ty_param::*;
 use crate::ast;
-use crate::ast::{Access, MethodOwner};
-use crate::ast::ArrayTypeName;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::IdentTypeName;
 use crate::ast::StructKind;
 use crate::ast::TypeAnnotation;
 use crate::ast::IFACE_METHOD_ACCESS;
+use crate::ast::{Access, MethodOwner};
+use crate::ast::ArrayTypeName;
 use crate::typ::ast::FieldDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::SELF_TY_NAME;
+use crate::typ::builtin_span;
 use crate::typ::builtin_unit_path;
 use crate::typ::Context;
 use crate::typ::Def;
 use crate::typ::GenericError;
 use crate::typ::GenericResult;
 use crate::typ::GenericTarget;
+use crate::typ::InvalidTypeParamsDeclKind;
 use crate::typ::NameResult;
 use crate::typ::Symbol;
 use crate::typ::TypeError;
@@ -46,15 +48,15 @@ use crate::typ::ANY_TYPE_NAME;
 use crate::typ::NIL_NAME;
 use crate::typ::NOTHING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::builtin_span;
-use crate::typ::InvalidTypeParamsDeclKind;
 use crate::Keyword;
 use crate::Operator;
+use derivative::Derivative;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt;
+use std::ops::Deref;
 use std::sync::Arc;
-use terapascal_common::span::Span;
+use terapascal_common::span::{MaybeSpanned, Span};
 use terapascal_common::span::Spanned;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
@@ -135,10 +137,10 @@ impl Type {
         Type::DynArray { element: Arc::new(self) }
     }
 
-    pub fn generic_constrained_param(name: Ident, is_iface: Type) -> Type {
+    pub fn generic_constrained_param(name: Ident, is_iface: impl Into<Type>) -> Type {
         let ty_param_ty = TypeParamType {
             name,
-            is_ty: is_iface,
+            is_ty: is_iface.into(),
         };
 
         Type::GenericParam(Arc::new(ty_param_ty))
@@ -1442,8 +1444,11 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
     Ok(ty)
 }
 
-
 pub fn typecheck_type(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<Type> {
+    Ok(typecheck_typename(ty, ctx)?.into())
+}
+
+pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<TypeName> {
     match ty {
         ast::TypeName::Ident(IdentTypeName {
             ident,
@@ -1488,11 +1493,13 @@ pub fn typecheck_type(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<Type>
                 },
             };
 
-            Ok(ty.indirect_by(*indirection))
+            Ok(TypeName::named(ty.indirect_by(*indirection), span.clone()))
         },
 
-        ast::TypeName::Array(ArrayTypeName { element, dim, .. }) => {
-            typecheck_array_type(element, dim, ctx)
+        ast::TypeName::Array(ArrayTypeName { element, dim, span, indirection }) => {
+            let typename = typecheck_array_type(element, dim, span, ctx)?;
+            
+            Ok(typename.map(|ty| ty.indirect_by(*indirection)))
         },
 
         ast::TypeName::Function(func_ty_name) => {
@@ -1512,16 +1519,18 @@ pub fn typecheck_type(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<Type>
             }
 
             let sig = FunctionSig::new(return_ty, params, None);
+
             let mut ty = Type::Function(Arc::new(sig));
             for _ in 0..func_ty_name.indirection {
                 ty = ty.ptr();
             }
 
-            Ok(ty)
-        },
-        
-        ast::TypeName::Weak(weak_type, ..) => {
+            Ok(TypeName::named(ty, func_ty_name.span.clone()))
+        }
+
+        ast::TypeName::Weak(weak_type, span) => {
             let weak_type = typecheck_type(weak_type, ctx)?;
+
             if !weak_type.is_strong_rc_reference() {
                 return Err(TypeError::InvalidWeakType {
                     ty: weak_type,
@@ -1529,7 +1538,7 @@ pub fn typecheck_type(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<Type>
                 });
             }
             
-            Ok(Type::Weak(Arc::new(weak_type)))
+            Ok(TypeName::named(Type::Weak(Arc::new(weak_type)), span.clone()))
         },
 
         ast::TypeName::Unspecified(_) => unreachable!("trying to resolve unknown type"),
@@ -1611,4 +1620,87 @@ pub fn string_type(ctx: &mut Context) -> TypeResult<Type> {
     });
 
     typecheck_type(&str_class_name, ctx)
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
+pub enum TypeName {
+    Named {
+        ty: Type,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        span: Span,
+    },
+    Inferred(Type),
+}
+
+impl TypeName {
+    pub fn named(ty: impl Into<Type>, span: impl Into<Span>) -> Self {
+        Self::Named {
+            ty: ty.into(),
+            span: span.into(),
+        }
+    }
+
+    pub fn inferred(ty: impl Into<Type>) -> Self {
+        Self::Inferred(ty.into())
+    }
+    
+    pub fn is_inferred(&self) -> bool {
+        matches!(self, TypeName::Inferred(..))
+    }
+    
+    pub fn ty(&self) -> &Type {
+        match self {
+            TypeName::Named { ty, .. } => ty,
+            TypeName::Inferred(ty) => ty,
+        }
+    }
+    
+    pub fn map(self, f: impl Fn(Type) -> Type) -> Self {
+        match self {
+            TypeName::Named { ty, span } => TypeName::Named { ty: f(ty), span },
+            TypeName::Inferred(ty) => TypeName::Inferred(f(ty)),
+        }
+    }
+}
+
+impl fmt::Display for TypeName {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.ty().fmt(f)
+    }
+}
+
+impl MaybeSpanned for TypeName {
+    fn get_span(&self) -> Option<&Span> {
+        match self {
+            TypeName::Named { span, .. } => Some(span),
+            TypeName::Inferred(..) => None,
+        }
+    }
+}
+
+impl TypeAnnotation for TypeName {
+    fn is_known(&self) -> bool {
+        self.ty().is_known()
+    }
+}
+
+impl From<TypeName> for Type {
+    fn from(value: TypeName) -> Self {
+        match value {
+            TypeName::Named { ty, .. } => ty,
+            TypeName::Inferred(ty) => ty,
+        }
+    }
+}
+
+impl Deref for TypeName {
+    type Target = Type;
+
+    fn deref(&self) -> &Self::Target {
+        self.ty()
+    }
 }

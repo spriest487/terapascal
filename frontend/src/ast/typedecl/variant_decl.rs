@@ -33,7 +33,7 @@ pub struct VariantDecl<A: Annotation> {
     pub kw_span: Span,
     
     pub name: Arc<A::DeclName>,
-    pub where_clause: Option<WhereClause<A::Type>>,
+    pub where_clause: Option<WhereClause<A>>,
     
     pub forward: bool,
 
