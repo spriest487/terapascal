@@ -390,7 +390,7 @@ impl SemanticTokenBuilder {
 
     fn add_stmt<A: Annotation>(&mut self, stmt: &ast::Stmt<A>) {
         match stmt {
-            ast::Stmt::Ident(_, _) => {},
+            ast::Stmt::Ident(_, value) => self.add_value(value),
             ast::Stmt::LocalBinding(binding) => self.add_local_binding(binding),
             ast::Stmt::Call(_) => {},
             ast::Stmt::Exit(exit) => self.add_exit(exit),
@@ -400,8 +400,7 @@ impl SemanticTokenBuilder {
             ast::Stmt::Assignment(assignment) => self.add_assignment(assignment),
             ast::Stmt::CompoundAssignment(assignment) => self.add_compound_assignment(assignment),
             ast::Stmt::If(if_cond) => self.add_if_cond(if_cond, Self::add_stmt),
-            ast::Stmt::Break(_) => {},
-            ast::Stmt::Continue(_) => {},
+            ast::Stmt::Break(a) | ast::Stmt::Continue(a) => self.add(a.span(), SEMANTIC_KEYWORD),
             ast::Stmt::Raise(raise) => self.add_raise(raise),
             ast::Stmt::Case(_) => {},
             ast::Stmt::Match(_match_stmt) => {},
@@ -547,7 +546,7 @@ impl SemanticTokenBuilder {
             ast::Expr::BinOp(op) => self.add_bin_op(op),
             ast::Expr::UnaryOp(op) => self.add_unary_op(op),
             ast::Expr::Literal(item) => self.add_literal(item),
-            ast::Expr::Ident(_, _) => {},
+            ast::Expr::Ident(_, value) => self.add_value(value),
             ast::Expr::Call(_) => {},
             ast::Expr::ObjectCtor(ctor) => self.add_object_ctor(ctor),
             ast::Expr::CollectionCtor(_) => {},
@@ -561,6 +560,10 @@ impl SemanticTokenBuilder {
             ast::Expr::AnonymousFunction(_) => {},
             ast::Expr::ExplicitSpec(_) => {},
         }
+    }
+    
+    fn add_value<A: Annotation>(&mut self, _value: &A) {
+        
     }
 
     fn add_bin_op<A: Annotation>(&mut self, bin_op: &ast::BinOp<A>) {
