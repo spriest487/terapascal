@@ -33,6 +33,7 @@ pub fn typecheck_raise(
 
     Ok(Raise {
         value: Box::new(value),
+        kw_span: raise.kw_span.clone(),
         annotation,
     })
 }

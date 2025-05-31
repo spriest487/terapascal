@@ -15,47 +15,41 @@ use crate::token_tree::DelimitedGroup;
 use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Separator;
+use derivative::Derivative;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use std::fmt;
-use std::hash::Hash;
-use std::hash::Hasher;
 
 pub type CaseStmt<A = Span> = CaseBlock<A, Stmt<A>>;
 pub type CaseExpr<A = Span> = CaseBlock<A, Expr<A>>;
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(PartialEq, Hash, Debug)]
 pub struct CaseBlock<A: Annotation, B> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub kw_span: Span,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub of_span: Span,
+    
     pub cond_expr: Box<Expr<A>>,
     pub branches: Vec<CaseBranch<A, B>>,
     pub else_branch: Option<Box<B>>,
 
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub end_span: Span,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub annotation: A,
-}
-
-impl<A, B> PartialEq for CaseBlock<A, B>
-where
-    A: Annotation,
-    B: PartialEq
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.branches == other.branches
-            && self.cond_expr == other.cond_expr
-            && self.else_branch == other.else_branch
-    }
-}
-
-impl<A, B> Hash for CaseBlock<A, B>
-where
-    A: Annotation,
-    B: Hash
-{
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.branches.hash(state);
-        self.cond_expr.hash(state);
-        self.else_branch.hash(state);
-    }
 }
 
 impl<A, B> Spanned for CaseBlock<A, B>
@@ -94,12 +88,7 @@ impl CaseExpr {
         let mut branches = Vec::new();
         let else_branch = Self::parse_branches(&mut group.tokens, &mut branches)?;
 
-        Ok(CaseBlock {
-            cond_expr: Box::new(group.cond_expr),
-            annotation: group.span,
-            branches,
-            else_branch: else_branch.map(Box::new),
-        })
+        group.finish_block(branches, else_branch)
     }
 
     fn parse_branches(
@@ -178,14 +167,7 @@ impl CaseStmt {
                             MatchBranchNextItem::End => None,
                         };
 
-                        group.tokens.finish()?;
-
-                        let match_expr = CaseExpr {
-                            cond_expr: Box::new(group.cond_expr),
-                            branches: expr_branches,
-                            else_branch: else_branch.map(Box::new),
-                            annotation: group.span,
-                        };
+                        let match_expr = group.finish_block(expr_branches, else_branch)?;
 
                         return Err(ParseError::is_expr(Expr::from(match_expr)).into());
                     }
@@ -212,42 +194,21 @@ impl CaseStmt {
             None
         };
 
-        Ok(CaseBlock {
-            cond_expr: Box::new(group.cond_expr),
-            annotation: group.span,
-            branches,
-            else_branch: else_branch.map(Box::new),
-        })
+        group.finish_block(branches, else_branch)
     }
 }
 
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(PartialEq, Hash, Debug)]
 pub struct CaseBranch<A: Annotation, Item> {
     pub case_values: Vec<Expr<A>>,
     pub item: Box<Item>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub span: Span,
-}
-
-impl<A, Item> PartialEq for CaseBranch<A, Item>
-where
-    A: Annotation,
-    Item: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.case_values == other.case_values && self.item == other.item
-    }
-}
-
-impl<A, Item> Hash for CaseBranch<A, Item>
-where
-    A: Annotation,
-    Item: Hash,
-{
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.case_values.hash(state);
-        self.item.hash(state);
-    }
 }
 
 impl<A, Item> Spanned for CaseBranch<A, Item>
@@ -338,36 +299,66 @@ impl CaseStmt<Span> {
         }
 
         Some(CaseExpr {
+            kw_span: self.kw_span.clone(),
+            of_span: self.of_span.clone(),
             cond_expr: self.cond_expr.clone(),
             branches,
             else_branch: Some(Box::new(else_branch)),
             annotation: self.annotation.clone(),
+            end_span: self.end_span.clone(),
         })
     }
 }
 
 struct CaseBlockGroup {
+    kw_span: Span,
+    of_span: Span,
     cond_expr: Expr,
     tokens: TokenStream,
+    end_span: Span,
     span: Span,
+}
+
+impl CaseBlockGroup {
+    pub fn finish_block<B>(self,
+        branches: Vec<CaseBranch<Span, B>>,
+        else_branch: Option<B>
+    ) -> ParseResult<CaseBlock<Span, B>> {
+        self.tokens.finish()?;
+
+        Ok(CaseBlock {
+            end_span: self.end_span,
+            kw_span: self.kw_span,
+            of_span: self.of_span,
+            cond_expr: Box::new(self.cond_expr),
+            annotation: self.span,
+            branches,
+            else_branch: else_branch.map(Box::new),
+        })
+    }
 }
 
 impl Parse for CaseBlockGroup {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let group = DelimitedGroup::parse(tokens, DelimiterPair::CaseEnd)?;
 
+        let kw_span = group.open.clone();
+        let end_span = group.close.clone();
         let span = group.span.clone();
 
         let mut group_tokens = group.to_inner_tokens();
 
         let cond_expr = Expr::parse(&mut group_tokens)?;
         
-        group_tokens.match_one(Keyword::Of)?;
+        let of_span = group_tokens.match_one(Keyword::Of)?.into_span();
         
         Ok(CaseBlockGroup {
+            kw_span,
+            of_span,
             cond_expr,
             span,
             tokens: group_tokens,
+            end_span,
         })
     }
 }

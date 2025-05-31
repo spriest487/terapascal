@@ -131,10 +131,13 @@ pub fn typecheck_match_stmt(
         let annotation = Value::Untyped(match_stmt.span().clone());
 
         Ok(MatchStmt {
+            kw_span: match_stmt.kw_span.clone(),
+            of_span: match_stmt.of_span.clone(),
             cond_expr,
             annotation,
             branches,
             else_branch,
+            end_span: match_stmt.end_span.clone(),
         })
     })
 }
@@ -235,10 +238,13 @@ pub fn typecheck_match_expr(
         }.into();
 
         Ok(MatchExpr {
+            kw_span: match_expr.kw_span.clone(),
+            of_span: match_expr.of_span.clone(),
             cond_expr,
             annotation,
             branches,
             else_branch,
+            end_span: match_expr.end_span.clone(),
         })
     })
 }

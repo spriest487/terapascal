@@ -1,4 +1,5 @@
 use std::fmt;
+use derivative::Derivative;
 use terapascal_common::span::{Span, Spanned};
 use crate::{
     Keyword,
@@ -6,9 +7,19 @@ use crate::{
     parse::{ParseResult, TokenStream}
 };
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(PartialEq, Hash, Debug)]
 pub struct Raise<A: Annotation> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub kw_span: Span,
+    
     pub value: Box<Expr<A>>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub annotation: A,
 }
 
@@ -31,6 +42,7 @@ impl Raise<Span> {
 
         Ok(Self {
             annotation: raise_kw.span().to(value.span()),
+            kw_span: raise_kw.into_span(),
             value: Box::new(value),
         })
     }

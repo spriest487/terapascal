@@ -22,10 +22,25 @@ pub struct MatchBlock<A, B>
 where
     A: Annotation
 {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub kw_span: Span,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub of_span: Span,
+    
     pub cond_expr: Expr<A>,
 
     pub branches: Vec<MatchBlockBranch<A, B>>,
     pub else_branch: Option<B>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub end_span: Span,
 
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
@@ -38,19 +53,12 @@ pub type MatchStmt<A = Span> = MatchBlock<A, Stmt<A>>;
 
 impl MatchExpr {
     pub fn parse_expr(tokens: &mut TokenStream) -> ParseResult<Self> {
-        let mut block = Self::parse_block_group(tokens)?;
+        let mut group = Self::parse_block_group(tokens)?;
         
         let mut branches = Vec::new();
-        let else_branch = Self::parse_branches(&mut block.tokens, &mut branches)?;
+        let else_branch = Self::parse_branches(&mut group.tokens, &mut branches)?;
 
-        block.tokens.finish()?;
-
-        Ok(MatchBlock {
-            cond_expr: block.cond_expr,
-            branches,
-            else_branch,
-            annotation: block.span,
-        })
+        group.finish_block(branches, else_branch)
     }
     
     fn parse_branches(
@@ -84,17 +92,17 @@ impl MatchExpr {
 
 impl MatchStmt {
     pub fn parse_stmt(tokens: &mut TokenStream) -> ParseResult<Self> {
-        let mut block = Self::parse_block_group(tokens)?;
+        let mut group = Self::parse_block_group(tokens)?;
 
         let mut branches = Vec::new();
         let expect_else = if tokens.match_one_maybe(Keyword::Else).is_some() {
             true
         } else {
             loop {
-                let pattern = TypeNamePattern::parse(&mut block.tokens)?;
-                block.tokens.match_one(Separator::Colon)?;
+                let pattern = TypeNamePattern::parse(&mut group.tokens)?;
+                group.tokens.match_one(Separator::Colon)?;
 
-                match Stmt::parse(&mut block.tokens) {
+                match Stmt::parse(&mut group.tokens) {
                     Ok(branch_stmt) => {
                         branches.push(MatchBlockBranch::new(pattern, branch_stmt))
                     },
@@ -119,24 +127,17 @@ impl MatchStmt {
 
                         expr_branches.push(MatchBlockBranch::new(pattern, *illegal.0));
 
-                        let else_branch = match Self::match_end_of_branches(&mut block.tokens) {
+                        let else_branch = match Self::match_end_of_branches(&mut group.tokens) {
                             MatchBranchNextItem::Branch => {
-                                MatchExpr::parse_branches(&mut block.tokens, &mut expr_branches)?
+                                MatchExpr::parse_branches(&mut group.tokens, &mut expr_branches)?
                             }
                             MatchBranchNextItem::ElseBranch => {
-                                Some(MatchExpr::parse_else_item(&mut block.tokens)?)
+                                Some(MatchExpr::parse_else_item(&mut group.tokens)?)
                             }
                             MatchBranchNextItem::End => None,
                         };
 
-                        block.tokens.finish()?;
-
-                        let match_expr = MatchExpr {
-                            cond_expr: block.cond_expr,
-                            branches: expr_branches,
-                            else_branch,
-                            annotation: block.span,
-                        };
+                        let match_expr = group.finish_block(expr_branches, else_branch)?;
 
                         return Err(ParseError::is_expr(Expr::from(match_expr)).into());
                     }
@@ -146,7 +147,7 @@ impl MatchStmt {
                     }
                 };
 
-                match Self::match_end_of_branches(&mut block.tokens) {
+                match Self::match_end_of_branches(&mut group.tokens) {
                     MatchBranchNextItem::Branch => continue,
                     MatchBranchNextItem::ElseBranch => break true,
                     MatchBranchNextItem::End => break false,
@@ -155,24 +156,17 @@ impl MatchStmt {
         };
 
         let else_branch = if expect_else {
-            Some(Self::parse_else_item(&mut block.tokens)?)
+            Some(Self::parse_else_item(&mut group.tokens)?)
         } else {
             None
         };
-
-        block.tokens.finish()?;
-
-        Ok(MatchBlock {
-            cond_expr: block.cond_expr,
-            branches,
-            else_branch,
-            annotation: block.span,
-        })
+        
+        group.finish_block(branches, else_branch)
     }
 }
 
 impl<B> MatchBlock<Span, B> {
-    fn parse_block_group(tokens: &mut TokenStream) -> ParseResult<MatchBlockGroupItem> {
+    fn parse_block_group(tokens: &mut TokenStream) -> ParseResult<MatchBlockGroup> {
         let block_group = DelimitedGroup::parse(tokens, DelimiterPair::MatchEnd)?;
 
         let kw_span = block_group.open.clone();
@@ -181,12 +175,15 @@ impl<B> MatchBlock<Span, B> {
         let mut inner_tokens = block_group.to_inner_tokens();
 
         let cond_expr = Expr::parse(&mut inner_tokens)?;
-        inner_tokens.match_one(Keyword::Of)?;
+        let of_span = inner_tokens.match_one(Keyword::Of)?.into_span();
         
-        Ok(MatchBlockGroupItem {
+        Ok(MatchBlockGroup {
             cond_expr,
             tokens: inner_tokens,
             span: kw_span.to(&end_span),
+            kw_span,
+            of_span,
+            end_span,
         })
     }
     
@@ -270,10 +267,13 @@ impl MatchStmt<Span> {
         };
 
         Some(MatchExpr {
+            kw_span: self.kw_span.clone(),
+            of_span: self.of_span.clone(),
             cond_expr: self.cond_expr.clone(),
             else_branch,
             branches,
             annotation: self.annotation.clone(),
+            end_span: self.end_span.clone(),
         })
     }
 }
@@ -287,10 +287,32 @@ where
     }
 }
 
-struct MatchBlockGroupItem {
+struct MatchBlockGroup {
+    kw_span: Span,
+    of_span: Span,
     tokens: TokenStream,
     span: Span,
     cond_expr: Expr,
+    end_span: Span,
+}
+
+impl MatchBlockGroup {
+    pub fn finish_block<B>(self,
+        branches: Vec<MatchBlockBranch<Span, B>>,
+        else_branch: Option<B>
+    ) -> ParseResult<MatchBlock<Span, B>> {
+        self.tokens.finish()?;
+        
+        Ok(MatchBlock {
+            kw_span: self.kw_span,
+            end_span: self.end_span,
+            of_span: self.of_span,
+            cond_expr: self.cond_expr,
+            annotation: self.span,
+            branches,
+            else_branch,
+        })
+    } 
 }
 
 #[derive(Clone, Eq, Derivative)]

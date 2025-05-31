@@ -50,10 +50,13 @@ pub fn typecheck_case_stmt(
     let annotation = Value::Untyped(case.span().clone());
 
     Ok(CaseStmt {
+        kw_span: case.kw_span.clone(),
+        of_span: case.of_span.clone(),
         cond_expr: Box::new(cond_expr),
         branches,
         else_branch: else_branch.map(Box::new),
         annotation,
+        end_span: case.end_span.clone(),
     })
 }
 
@@ -121,10 +124,13 @@ pub fn typecheck_case_expr(
     .into();
 
     Ok(CaseExpr {
+        kw_span: case.kw_span.clone(),
+        of_span: case.of_span.clone(),
         cond_expr: Box::new(cond_expr),
         branches,
         else_branch: Some(Box::new(else_expr)),
         annotation,
+        end_span: case.end_span.clone(),
     })
 }
 

@@ -402,8 +402,8 @@ impl SemanticTokenBuilder {
             ast::Stmt::If(if_cond) => self.add_if_cond(if_cond, Self::add_stmt),
             ast::Stmt::Break(a) | ast::Stmt::Continue(a) => self.add(a.span(), SEMANTIC_KEYWORD),
             ast::Stmt::Raise(raise) => self.add_raise(raise),
-            ast::Stmt::Case(_) => {},
-            ast::Stmt::Match(_match_stmt) => {},
+            ast::Stmt::Case(block) => self.add_case_block(block, Self::add_stmt),
+            ast::Stmt::Match(block) => self.add_match_block(block, Self::add_stmt),
         }
     }
 
@@ -465,6 +465,54 @@ impl SemanticTokenBuilder {
         if let Some(else_branch) = &if_cond.else_branch {
             add_branch(self, else_branch);
         }
+    }
+
+    fn add_case_block<A: Annotation, B, BranchFn>(
+        &mut self,
+        block: &ast::CaseBlock<A, B>,
+        add_branch: BranchFn,
+    ) where
+        BranchFn: Fn(&mut Self, &B),
+    {
+        self.add(&block.kw_span, SEMANTIC_KEYWORD);
+        self.add_expr(&block.cond_expr);
+        self.add(&block.of_span, SEMANTIC_KEYWORD);
+        
+        for branch in &block.branches {
+            for val in &branch.case_values {
+                self.add_expr(val);
+            }
+            add_branch(self, &branch.item);
+        }
+        
+        if let Some(branch) = &block.else_branch {
+            add_branch(self, branch);
+        }
+        
+        self.add(&block.end_span, SEMANTIC_KEYWORD);
+    }
+
+    fn add_match_block<A: Annotation, B, BranchFn>(
+        &mut self,
+        block: &ast::MatchBlock<A, B>,
+        add_branch: BranchFn,
+    ) where
+        BranchFn: Fn(&mut Self, &B),
+    {
+        self.add(&block.kw_span, SEMANTIC_KEYWORD);
+        self.add_expr(&block.cond_expr);
+        self.add(&block.of_span, SEMANTIC_KEYWORD);
+
+        for branch in &block.branches {
+            self.add_pattern::<A>(&branch.pattern);
+            add_branch(self, &branch.item);
+        }
+
+        if let Some(branch) = &block.else_branch {
+            add_branch(self, branch);
+        }
+
+        self.add(&block.end_span, SEMANTIC_KEYWORD);
     }
 
     fn add_pattern<A: Annotation>(&mut self, pattern: &A::Pattern) {
@@ -554,8 +602,8 @@ impl SemanticTokenBuilder {
             ast::Expr::Block(block) => self.add_block(block),
             ast::Expr::Raise(raise) => self.add_raise(raise),
             ast::Expr::Exit(exit) => self.add_exit(exit),
-            ast::Expr::Case(_) => {},
-            ast::Expr::Match(_) => {},
+            ast::Expr::Case(block) => self.add_case_block(block, Self::add_expr),
+            ast::Expr::Match(block) => self.add_match_block(block, Self::add_expr),
             ast::Expr::Cast(_) => {},
             ast::Expr::AnonymousFunction(_) => {},
             ast::Expr::ExplicitSpec(_) => {},
@@ -600,8 +648,8 @@ impl SemanticTokenBuilder {
                 self.add_expr(&unary_op.operand);
             },
             UnaryPosition::Postfix => {
-                self.add(&unary_op.op_span, op_semantic);
                 self.add_expr(&unary_op.operand);
+                self.add(&unary_op.op_span, op_semantic);
             },
         }
     }
@@ -621,6 +669,7 @@ impl SemanticTokenBuilder {
     }
 
     fn add_raise<A: Annotation>(&mut self, raise: &ast::Raise<A>) {
+        self.add(&raise.kw_span, SEMANTIC_KEYWORD);
         self.add_expr(&raise.value);
     }
 
@@ -629,10 +678,10 @@ impl SemanticTokenBuilder {
             ast::Exit::WithoutValue(a) => self.add(a.span(), SEMANTIC_KEYWORD),
             ast::Exit::WithValue {
                 value_expr,
-                annotation,
+                exit_kw,
                 ..
             } => {
-                self.add(annotation.span(), SEMANTIC_KEYWORD);
+                self.add(exit_kw, SEMANTIC_KEYWORD);
                 self.add_expr(value_expr);
             },
         }
