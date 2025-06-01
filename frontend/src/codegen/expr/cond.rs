@@ -72,7 +72,7 @@ where
             builder.label(else_label.unwrap());
 
             builder.begin_scope();
-            branch_translate(&else_branch, out_val.as_ref(), &out_ty, builder);
+            branch_translate(&else_branch.item, out_val.as_ref(), &out_ty, builder);
             builder.end_scope();
         }
 

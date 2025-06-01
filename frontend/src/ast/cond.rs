@@ -19,6 +19,34 @@ use std::fmt;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
+pub struct ElseBranch<B> {
+    pub item: Box<B>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub else_kw_span: Span,
+}
+
+impl<B: Parse> ElseBranch<B> {
+    fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
+        match tokens.match_one_maybe(Keyword::Else) {
+            Some(else_token) => {
+                let branch = B::parse(tokens)?;
+
+                Ok(Some(ElseBranch {
+                    else_kw_span: else_token.into_span(),
+                    item: Box::new(branch),
+                }))
+            },
+
+            None => Ok(None),
+        }
+    }
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct IfCond<A, B>
 where
     A: Annotation,
@@ -43,11 +71,7 @@ where
     pub then_kw_span: Span,
     pub then_branch: B,
 
-    #[derivative(Hash = "ignore")]
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub else_kw_span: Option<Span>,
-    pub else_branch: Option<B>,
+    pub else_branch: Option<ElseBranch<B>>,
 
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
@@ -75,7 +99,11 @@ impl IfCond<Span, Expr> {
 
         let then_tt = tokens.match_one(Keyword::Then)?;
         let then_branch = Expr::parse(tokens)?;
-        let (else_span, else_branch, span) = Self::parse_else_branch(tokens, if_token.span(), &then_branch)?;
+        
+        let (span, else_branch) = match ElseBranch::<Expr>::try_parse(tokens)? {
+            Some(else_branch) => (if_token.span().to(else_branch.item.span()), Some(else_branch)),
+            None => (if_token.span().to(then_branch.span()), None),
+        };
 
         Ok(IfCond {
             if_kw_span: if_token.into_span(),
@@ -87,30 +115,10 @@ impl IfCond<Span, Expr> {
             then_kw_span: then_tt.into_span(),
             then_branch,
             
-            else_kw_span: else_span,
             else_branch,
             
             annotation: span,
         })
-    }
-    
-    fn parse_else_branch(
-        tokens: &mut TokenStream,
-        kw_span: &Span,
-        then_branch: &Expr
-    ) -> ParseResult<(Option<Span>, Option<Expr>, Span)> {
-        let (else_span, else_branch, span) = match tokens.match_one_maybe(Keyword::Else) {
-            Some(else_token) => {
-                let else_branch = Expr::parse(tokens)?;
-                let span = kw_span.to(else_branch.span());
-
-                (Some(else_token.into_span()), Some(else_branch), span)
-            },
-
-            None => (None, None, kw_span.to(then_branch.span())),
-        };
-        
-        Ok((else_span, else_branch, span))
     }
 }
 
@@ -129,7 +137,11 @@ impl IfCond<Span, Stmt> {
             Err(TracedError { err: ParseError::IsExpr(IllegalStatement(then_expr)), .. } ) => {
                 // if the `then` branch is only valid as an expression, parse the else branch
                 // as one too and return the whole thing as an invalid expression
-                let (else_span, else_expr, span) = IfCond::parse_else_branch(tokens, &if_token.span(), &then_expr)?;
+                let (span, else_branch) = match ElseBranch::<Expr>::try_parse(tokens)? {
+                    Some(else_branch) => (if_token.span().to(else_branch.item.span()), Some(else_branch)),
+                    None => (if_token.span().to(then_expr.span()), None),
+                };
+                
                 let invalid_expr = Expr::IfCond(Box::new(IfCond {
                     if_kw_span: if_token.into_span(),
                     cond,
@@ -137,8 +149,7 @@ impl IfCond<Span, Stmt> {
                     is_pattern,
                     then_kw_span: then_tt.into_span(),
                     then_branch: *then_expr,
-                    else_branch: else_expr,
-                    else_kw_span: else_span,
+                    else_branch,
                     annotation: span,
                 }));
                 
@@ -148,52 +159,49 @@ impl IfCond<Span, Stmt> {
             Err(other) => return Err(other),
         };
 
-        let (else_span, else_branch, span) = match tokens.match_one_maybe(Keyword::Else) {
-            Some(else_tt) => {
-                let else_branch = match Stmt::parse(tokens) {
-                    Ok(stmt) => stmt,
-
-                    // if the `else` branch is only valid as an expression, then the `then` branch
-                    // should have been one too
-                    Err(TracedError { err: ParseError::IsExpr(else_expr), .. } ) => {
-                        match then_branch.to_expr() {
-                            Some(then_expr) => {
-                                let span = if_token.span().to(else_expr.0.span());
-
-                                let if_expr = Expr::IfCond(Box::new(IfCond {
-                                    if_kw_span: if_token.into_span(),
-                                    cond,
-                                    is_kw,
-                                    is_pattern,
-                                    then_kw_span: then_tt.into_span(),
-                                    then_branch: then_expr,
-                                    else_kw_span: Some(else_tt.into_span()),
-                                    else_branch: Some(*else_expr.0),
-                                    annotation: span,
-                                }));
-
-                                return Err(ParseError::is_expr(if_expr).into());
-                            }
-                            
-                            None => {
-                                return Err(ParseError::StatementIsIllegal(Box::new(then_branch)).into());
-                            }
-                        }
-                    },
-
-                    Err(other) => return Err(other),
-                };
-
-                let else_span = else_tt.into_span();
-                let span = if_token.span().to(else_branch.span());
-
-                (Some(else_span), Some(else_branch), span)
+        // hack: we need this tt if parsing fails with an invalid stmt
+        let else_tt = tokens.look_ahead().match_one(Keyword::Else).cloned();
+        
+        let (span, else_branch) = match ElseBranch::<Stmt>::try_parse(tokens) {
+            Ok(Some(else_branch)) => {
+                (if_token.span().to(else_branch.item.span()), Some(else_branch))
             }
 
-            None => {
-                let span = if_token.span().to(then_branch.span());
-                (None, None, span)
+            Ok(None) => {
+                (if_token.span().to(then_branch.span()), None)
             },
+
+            // if the `else` branch is only valid as an expression, then the `then` branch
+            // should have been one too
+            Err(TracedError { err: ParseError::IsExpr(else_expr), .. } ) => {
+                match then_branch.to_expr() {
+                    Some(then_expr) => {
+                        let span = if_token.span().to(else_expr.0.span());
+
+                        let if_expr = Expr::IfCond(Box::new(IfCond {
+                            if_kw_span: if_token.into_span(),
+                            cond,
+                            is_kw,
+                            is_pattern,
+                            then_kw_span: then_tt.into_span(),
+                            then_branch: then_expr,
+                            else_branch: Some(ElseBranch {
+                                item: else_expr.0,
+                                else_kw_span: else_tt.unwrap().into_span(),
+                            }),
+                            annotation: span,
+                        }));
+
+                        return Err(ParseError::is_expr(if_expr).into());
+                    }
+
+                    None => {
+                        return Err(ParseError::StatementIsIllegal(Box::new(then_branch)).into());
+                    }
+                }
+            },
+            
+            Err(err) => return Err(err),
         };
 
         Ok(IfCond {
@@ -203,7 +211,6 @@ impl IfCond<Span, Stmt> {
             is_pattern,
             then_kw_span: then_tt.into_span(),
             then_branch,
-            else_kw_span: else_span,
             else_branch,
             annotation: span,
         })
@@ -225,7 +232,7 @@ where
         write!(f, " then {}", self.then_branch)?;
 
         if let Some(else_branch) = &self.else_branch {
-            write!(f, " else {}", else_branch)
+            write!(f, " else {}", else_branch.item)
         } else {
             Ok(())
         }
@@ -246,7 +253,10 @@ impl IfCond<Span, Stmt<Span>> {
     pub fn to_expr(&self) -> Option<IfCond<Span, Expr<Span>>> {
         let then_branch = self.then_branch.to_expr()?;
         let else_branch = match &self.else_branch {
-            Some(else_stmt) => Some(else_stmt.to_expr()?),
+            Some(else_branch) => Some(ElseBranch {
+                else_kw_span: else_branch.else_kw_span.clone(),
+                item: Box::new(else_branch.item.to_expr()?),
+            }),
             None => None,
         };
 
@@ -258,7 +268,6 @@ impl IfCond<Span, Stmt<Span>> {
             is_pattern: self.is_pattern.clone(),
             then_kw_span: self.then_kw_span.clone(),
             then_branch,
-            else_kw_span: self.else_kw_span.clone(),
             else_branch,
         })
     }

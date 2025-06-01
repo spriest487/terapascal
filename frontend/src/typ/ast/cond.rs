@@ -17,6 +17,7 @@ use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use std::borrow::Cow;
+use crate::ast::ElseBranch;
 
 pub type IfCond<B> = ast::IfCond<Value, B>;
 pub type IfCondExpression = ast::IfCond<Value, Expr>;
@@ -102,13 +103,16 @@ pub fn typecheck_if_cond_stmt(
 
     let then_branch = typecheck_stmt(&if_cond.then_branch, expect_ty, &mut then_ctx)?;
     let else_branch = match &if_cond.else_branch {
-        Some(else_expr) => {
+        Some(branch) => {
             let mut else_ctx = ctx.clone();
-            let else_stmt = typecheck_stmt(else_expr, &Type::Nothing, &mut else_ctx)?;
+            let else_stmt = typecheck_stmt(&branch.item, &Type::Nothing, &mut else_ctx)?;
 
             ctx.consolidate_branches(&[then_ctx, else_ctx]);
-            Some(else_stmt)
-        },
+            Some(ElseBranch {
+                item: Box::new(else_stmt),
+                else_kw_span: branch.else_kw_span.clone(),
+            })
+        }
 
         None => {
             ctx.consolidate_branches(&[then_ctx]);
@@ -125,7 +129,6 @@ pub fn typecheck_if_cond_stmt(
         is_pattern,
         then_kw_span: if_cond.then_kw_span.clone(),
         then_branch,
-        else_kw_span: if_cond.else_kw_span.clone(),
         else_branch,
         annotation,
     })
@@ -144,13 +147,17 @@ pub fn typecheck_if_cond_expr(
 
     let then_branch = typecheck_expr(&if_cond.then_branch, expect_ty, &mut then_ctx)?;
     let else_branch = match &if_cond.else_branch {
-        Some(else_expr) => {
+        Some(branch) => {
             let mut else_ctx = ctx.clone();
             let then_ty = then_branch.annotation().ty();
 
-            let else_expr = typecheck_expr(else_expr, &then_ty, &mut else_ctx)?;
+            let else_expr = typecheck_expr(&branch.item, &then_ty, &mut else_ctx)?;
+
             let else_expr = match then_ty.as_ref() {
-                Type::Nothing => else_expr,
+                Type::Nothing => {
+                    else_expr
+                },
+
                 then_ty => {
                     then_branch.annotation().expect_value(&Type::Nothing)?;
                     else_expr.annotation().expect_value(&Type::Nothing)?;
@@ -160,8 +167,12 @@ pub fn typecheck_if_cond_expr(
             };
 
             ctx.consolidate_branches(&[then_ctx, else_ctx]);
-            Some(else_expr)
-        },
+
+            Some(ElseBranch {
+                item: Box::new(else_expr),
+                else_kw_span: branch.else_kw_span.clone(),
+            })
+        }
 
         None => {
             ctx.consolidate_branches(&[then_ctx]);
@@ -192,7 +203,6 @@ pub fn typecheck_if_cond_expr(
         is_pattern,
         then_kw_span: if_cond.then_kw_span.clone(),
         then_branch,
-        else_kw_span: if_cond.else_kw_span.clone(),
         else_branch,
         annotation,
     })

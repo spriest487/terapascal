@@ -240,7 +240,7 @@ fn expect_if_expr_initialized(if_stmt: &IfCond<Expr>, ctx: &Context) -> TypeResu
     expect_expr_initialized(&if_stmt.cond, ctx)?;
     expect_expr_initialized(&if_stmt.then_branch, ctx)?;
     if let Some(else_branch) = &if_stmt.else_branch {
-        expect_expr_initialized(else_branch, ctx)?;
+        expect_expr_initialized(&else_branch.item, ctx)?;
     }
     Ok(())
 }
@@ -249,7 +249,7 @@ fn expect_if_stmt_initialized(if_stmt: &IfCond<Stmt>, ctx: &Context) -> TypeResu
     expect_expr_initialized(&if_stmt.cond, ctx)?;
     expect_stmt_initialized(&if_stmt.then_branch, ctx)?;
     if let Some(else_branch) = &if_stmt.else_branch {
-        expect_stmt_initialized(else_branch, ctx)?;
+        expect_stmt_initialized(&else_branch.item, ctx)?;
     }
     Ok(())
 }

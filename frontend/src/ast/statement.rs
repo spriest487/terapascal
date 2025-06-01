@@ -11,7 +11,7 @@ pub use self::exit::Exit;
 pub use self::local_binding::LocalBinding;
 use crate::ast::case::CaseBlock;
 use crate::ast::case::CaseStmt;
-use crate::ast::Annotation;
+use crate::ast::{Annotation, ElseBranch};
 use crate::ast::Block;
 use crate::ast::Call;
 use crate::ast::Expr;
@@ -223,12 +223,25 @@ impl Stmt<Span> {
 
             Expr::IfCond(if_cond) => {
                 let then_as_expr = Self::try_from_expr(if_cond.then_branch);
+
                 let else_as_expr = match if_cond.else_branch {
-                    Some(expr) => Self::try_from_expr(expr).map(Some),
-                    None => Ok(None)
+                    Some(else_branch) => {
+                        Self::try_from_expr(*else_branch.item)
+                            .map(|expr| {
+                                ElseBranch {
+                                    item: Box::new(expr),
+                                    else_kw_span: else_branch.else_kw_span.clone(),
+                                }
+                            })
+                            .map(Some)
+                    },
+
+                    None => {
+                        Ok(None)
+                    }
                 };
                 
-                let (Ok(then_stmt), Ok(else_stmt)) = (then_as_expr, else_as_expr) else {
+                let (Ok(then_stmt), Ok(else_branch)) = (then_as_expr, else_as_expr) else {
                     return Err(expr);
                 };
 
@@ -239,8 +252,7 @@ impl Stmt<Span> {
                     is_pattern: if_cond.is_pattern,
                     then_kw_span: if_cond.then_kw_span,
                     then_branch: then_stmt,
-                    else_kw_span: if_cond.else_kw_span,
-                    else_branch: else_stmt,
+                    else_branch,
                     annotation: if_cond.annotation,
                 })))
             },

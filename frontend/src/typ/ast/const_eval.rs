@@ -104,7 +104,7 @@ impl ConstEval for IfCond<Expr> {
         };
 
         let then_val = self.then_branch.const_eval(ctx)?;
-        let else_val = else_branch.const_eval(ctx)?;
+        let else_val = else_branch.item.const_eval(ctx)?;
 
         Some(if cond_val {
             then_val

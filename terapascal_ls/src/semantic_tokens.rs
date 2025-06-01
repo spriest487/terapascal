@@ -437,7 +437,7 @@ impl SemanticTokenBuilder {
         }
     }
 
-    fn add_if_cond<A: Annotation, B, BranchFn>(
+    fn add_if_cond<A: Annotation, B: Spanned, BranchFn>(
         &mut self,
         if_cond: &ast::IfCond<A, B>,
         add_branch: BranchFn,
@@ -458,12 +458,12 @@ impl SemanticTokenBuilder {
         self.add(&if_cond.then_kw_span, SEMANTIC_KEYWORD);
         add_branch(self, &if_cond.then_branch);
 
-        if let Some(span) = &if_cond.else_kw_span {
-            self.add(span, SEMANTIC_KEYWORD);
+        if let Some(branch) = &if_cond.else_branch {
+            self.add(branch.item.span(), SEMANTIC_KEYWORD);
         }
 
         if let Some(else_branch) = &if_cond.else_branch {
-            add_branch(self, else_branch);
+            add_branch(self, &else_branch.item);
         }
     }
 
