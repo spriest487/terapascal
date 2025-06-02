@@ -126,13 +126,14 @@ impl Symbol {
         let type_args = if let Some(existing_args) = &self.type_args {
             existing_args
                 .clone()
-                .map(|arg, _pos| arg.apply_type_args(type_params, args))
+                .map(|arg, _pos| arg
+                    .map(|ty| ty.apply_type_args(type_params, args)))
         } else {
             let mut resolved_args = Vec::with_capacity(type_params.len());
 
             for i in 0..type_params.len() {
-                let arg = args.get(i).unwrap();
-                resolved_args.push(arg.clone());
+                let arg_ty = args.items[i].clone();
+                resolved_args.push(arg_ty);
             }
             TypeArgList::new(resolved_args, self.span().clone())
         };

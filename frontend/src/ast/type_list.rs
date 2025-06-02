@@ -143,7 +143,7 @@ where
     }
 }
 
-pub type TypeArgList<A = Span> = TypeList<<A as Annotation>::Type>;
+pub type TypeArgList<A = Span> = TypeList<<A as Annotation>::TypeName>;
 
 impl TypeArgList {
     pub(crate) fn parse_type_args(tokens: &mut TokenStream) -> ParseResult<Self> {

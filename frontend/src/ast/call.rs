@@ -29,16 +29,23 @@ pub struct MethodCall<A: Annotation> {
     // for static calls, the self type should be Nothing
     pub self_type: A::Type,
     
+    // if the method is invoked via its qualified name, e.g. MyType.MyMethod(itself), the span
+    // of the type name part
+    pub self_type_qual_span: Option<Span>,
+
     // index of the method in the interface type's method list
     pub iface_method_index: usize,
 
     pub func_type: A::Type,
 
-    pub ident: Ident,
+    pub method_name: Ident,
 
     pub args: Vec<Expr<A>>,
-    pub type_args: Option<TypeList<A::Type>>,
+    pub type_args: Option<TypeList<A::TypeName>>,
 
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub annotation: A,
 
     #[derivative(Debug = "ignore")]
@@ -55,7 +62,7 @@ impl<A: Annotation> Spanned for MethodCall<A> {
 
 impl<A: Annotation> fmt::Display for MethodCall<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}.{}(", self.iface_type, self.ident)?;
+        write!(f, "{}.{}(", self.iface_type, self.method_name)?;
         for (i, arg) in self.args.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
@@ -140,8 +147,11 @@ pub struct FunctionCallNoArgs<A: Annotation> {
     // for free functions called via method syntax, the implicit self argument
     pub self_arg: Option<Expr<A>>,
     
-    pub type_args: Option<TypeList<A::Type>>,
+    pub type_args: Option<TypeList<A::TypeName>>,
 
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub annotation: A,
 }
 
@@ -161,9 +171,12 @@ impl<A: Annotation> Spanned for FunctionCallNoArgs<A> {
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Hash, Debug, PartialEq)]
 pub struct MethodCallNoArgs<A: Annotation> {
+    // with no arg list, there must be a target expression (the self arg)
     pub target: Expr<A>,
+ 
+    pub method_name: Ident,
 
-    pub type_args: Option<TypeList<A::Type>>,
+    pub type_args: Option<TypeList<A::TypeName>>,
 
     // for virtual calls, the owning type is the interface and the self type is the implementor
     // here the self-type is the type of the argument expression - if there is none, it must be
@@ -174,6 +187,9 @@ pub struct MethodCallNoArgs<A: Annotation> {
     // e.g. the `a` in the call `a.B`
     pub self_arg: Option<Expr<A>>,
 
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub annotation: A,
 }
 
@@ -189,13 +205,22 @@ impl<A: Annotation> Spanned for MethodCallNoArgs<A> {
     }
 }
 
-
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(PartialEq, Hash, Debug)]
 pub struct VariantCtorCall<A: Annotation> {
     pub variant: Arc<A::DeclName>,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub variant_name_span: Span,
     pub case: Ident,
 
     pub arg: Option<Expr<A>>,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
     pub annotation: A,
 }
 
@@ -307,6 +332,43 @@ impl<A: Annotation> Call<A> {
         match self {
             Call::Function(func_call) => Some(func_call),
             _ => None,
+        }
+    }
+    
+    pub fn type_qualification_span(&self) -> Option<&Span> {
+        match self {
+            Call::Method(call) => call.self_type_qual_span.as_ref(),
+            Call::VariantCtor(call) => Some(&call.variant_name_span),
+            _ => None,
+        }
+    }
+    
+    pub fn target_expr(&self) -> Option<&Expr<A>> {
+        match self {
+            Call::FunctionNoArgs(call) => Some(&call.target),
+            Call::MethodNoArgs(call) => Some(&call.target),
+            Call::Function(call) => Some(&call.target),
+            Call::Method(..) => None,
+            Call::VariantCtor(..) => None,
+        }
+    }
+    
+    pub fn method_name_span(&self) -> Option<&Span> {
+        match self {
+            Call::MethodNoArgs(call) => Some(&call.method_name.span),
+            Call::Method(call) => Some(&call.method_name.span),
+            Call::VariantCtor(call) => Some(&call.case.span),
+            _ => None,
+        }
+    }
+    
+    pub fn type_args(&self) -> Option<&TypeList<A::TypeName>> {
+        match self {
+            Call::FunctionNoArgs(call) => call.type_args.as_ref(),
+            Call::MethodNoArgs(call) => call.type_args.as_ref(),
+            Call::Function(call) => call.type_args.as_ref(),
+            Call::Method(call) => call.type_args.as_ref(),
+            Call::VariantCtor(..) => None,
         }
     }
 }

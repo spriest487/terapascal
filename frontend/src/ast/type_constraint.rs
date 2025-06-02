@@ -23,7 +23,7 @@ use terapascal_common::TracedError;
 pub struct TypeConstraint<A: Annotation = Span> {
     pub name: Ident,
 
-    pub is_ty: A::Type,
+    pub is_ty: A::TypeName,
     
     // TODO: make the AST type constraints and the ones used by the type system separate types
     // this can't use A::TypeName right now because inferred params don't have source info

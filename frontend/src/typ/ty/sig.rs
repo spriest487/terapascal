@@ -5,7 +5,6 @@ use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionCall;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParam;
-use crate::typ::ast::MethodCallNoArgs;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericResult;
@@ -72,7 +71,7 @@ impl FunctionSigTypeParam {
         FunctionSigTypeParam {
             is_ty: param.constraint
                 .as_ref()
-                .map(|constraint| &constraint.is_ty)
+                .map(|constraint| constraint.is_ty.ty())
                 .cloned()
                 .unwrap_or(Type::Any)
         }
@@ -111,7 +110,7 @@ impl FunctionSig {
                         let is_ty = decl_param
                             .constraint
                             .as_ref()
-                            .map(|c| c.is_ty.clone())
+                            .map(|c| c.is_ty.ty().clone())
                             .unwrap_or(Type::Any);
 
                         FunctionSigTypeParam { is_ty }
@@ -221,7 +220,7 @@ impl FunctionSig {
             if !ty_arg.match_constraint(constraint_ty, ctx) {
                 return Err(GenericError::ConstraintNotSatisfied {
                     is_not_ty: constraint_ty.clone(),
-                    actual_ty: Some(ty_arg.clone()),
+                    actual_ty: Some(ty_arg.ty().clone()),
                 });
             }
         }
@@ -424,27 +423,6 @@ impl FunctionSig {
             annotation: func_val_annotation,
             args: args.into_iter().collect(),
             args_span,
-            target,
-            type_args,
-        }
-    }
-
-    pub fn new_no_args_method_call(&self,
-        target: Expr,
-        owning_type: Type,
-        self_arg: Option<Expr>,
-        type_args: Option<TypeArgList>,
-    ) -> MethodCallNoArgs {
-        let span = target.span().clone();
-        let func_val_annotation = match &self.return_ty {
-            Type::Nothing => Value::Untyped(span),
-            return_ty => Value::new_temp_val(return_ty.clone(), span),
-        };
-        
-        MethodCallNoArgs {
-            annotation: func_val_annotation,
-            self_arg,
-            owning_type,
             target,
             type_args,
         }

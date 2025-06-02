@@ -8,8 +8,8 @@ use crate::typ::context::*;
 use crate::typ::ty::*;
 use crate::typ::ModuleUnit;
 
-const INT32: Type = Type::Primitive(Primitive::Int32);
-const BYTE: Type = Type::Primitive(Primitive::UInt8);
+const INT32: TypeName = TypeName::Inferred(Type::Primitive(Primitive::Int32));
+const BYTE: TypeName = TypeName::Inferred(Type::Primitive(Primitive::UInt8));
 
 fn module_from_src(unit_name: &'static str, src: &'static str) -> ModuleUnit {
     let mut module = typ::test::module_from_src(unit_name, src);
@@ -47,14 +47,14 @@ fn specialize_class_has_correct_field_types() {
 
     let span = Span::zero("test");
 
-    let type_args = TypeArgList::new(vec![INT32.clone()], span.clone());
+    let type_args = TypeArgList::new(vec![INT32], span.clone());
     let result = specialize_struct_def(&tys[0], &type_args, &module.context).unwrap();
 
     assert!(result.name.type_args.is_some());
     let actual_type_args = result.name.type_args.as_ref().unwrap();
 
     assert_eq!(1, actual_type_args.len());
-    assert_eq!(INT32, actual_type_args.items[0]);
+    assert_eq!(INT32, *actual_type_args.items[0].ty());
 
     assert_eq!(INT32, result.fields().nth(0).unwrap().ty);
     assert_eq!(BYTE, result.fields().nth(1).unwrap().ty);
@@ -77,15 +77,19 @@ fn specialize_class_has_multi_correct_field_types() {
     
     let span = Span::zero("test");
 
-    let type_args = TypeArgList::new(vec![INT32.clone(), BYTE.clone()], span.clone());
+    let type_args = TypeArgList::new(vec![
+        INT32, 
+        BYTE,
+    ], span.clone());
+
     let result = specialize_struct_def(&tys[0], &type_args, &module.context).unwrap();
 
     assert!(result.name.type_args.is_some());
     let actual_type_args = result.name.type_args.as_ref().unwrap();
 
     assert_eq!(2, actual_type_args.len());
-    assert_eq!(INT32, actual_type_args.items[0]);
-    assert_eq!(BYTE, actual_type_args.items[1]);
+    assert_eq!(INT32, *actual_type_args.items[0].ty());
+    assert_eq!(BYTE, *actual_type_args.items[1].ty());
 
     assert_eq!(INT32, result.fields().nth(0).unwrap().ty);
     assert_eq!(BYTE, result.fields().nth(1).unwrap().ty);
@@ -120,11 +124,11 @@ fn specialized_class_has_correct_non_generic_method_types() {
     assert_eq!(BYTE, methods[0].func_decl.params[1].ty);
     assert_eq!(BYTE, methods[0].func_decl.result_ty);
 
-    let type_args = TypeArgList::new(vec![INT32.clone()], builtin_span());
+    let type_args = TypeArgList::new(vec![INT32], builtin_span());
     let specialized_def = specialize_struct_def(&tys[0], &type_args, &module.context).unwrap();
 
     assert_eq!(1, specialized_def.name.type_args.as_ref().unwrap().len());
-    assert_eq!(INT32, specialized_def.name.type_args.as_ref().unwrap().items[0]);
+    assert_eq!(INT32, *specialized_def.name.type_args.as_ref().unwrap().items[0]);
     
     let methods: Vec<_> = specialized_def.methods().collect();
     assert_eq!("test.A[System.Int32]", methods[0].func_decl.method_declaring_type().unwrap().to_string());
@@ -162,7 +166,7 @@ fn specialized_class_has_correct_method_types_using_class_ty_params() {
     assert_eq!("T", methods[0].func_decl.params[1].ty.to_string());
     assert_eq!("T", methods[0].func_decl.result_ty.to_string());
 
-    let type_args = TypeArgList::new(vec![INT32.clone()], builtin_span());
+    let type_args = TypeArgList::new(vec![INT32], builtin_span());
     let specialized_def = specialize_struct_def(&tys[0], &type_args, &module.context).unwrap();
 
     let methods: Vec<_> = specialized_def.methods().collect();
@@ -191,7 +195,7 @@ fn specialized_class_has_correct_method_types_with_method_ty_params() {
 
     let tys = main_unit_structs(&module);
 
-    let type_args = TypeArgList::new(vec![INT32.clone()], builtin_span());
+    let type_args = TypeArgList::new(vec![INT32], builtin_span());
     let specialized_def = specialize_struct_def(&tys[0], &type_args, &module.context).unwrap();
 
     let self_ty = Type::class(specialized_def.name.clone());
@@ -266,9 +270,9 @@ fn specialized_fn_has_right_sig() {
 
     let expect_sig = FunctionSig {
         type_params: Some(ast::TypeList::new([FunctionSigTypeParam { is_ty: Type::Any }], span.clone())),
-        return_ty: INT32.clone(),
+        return_ty: INT32.into(),
         params: vec![FunctionSigParam {
-            ty: INT32.clone(),
+            ty: INT32.into(),
             modifier: None,
         }],
     };
@@ -297,7 +301,7 @@ fn specialized_fn_with_specialized_params_has_right_params() {
         ",
     );
 
-    let int_params = TypeArgList::new([INT32.clone()], span.clone());
+    let int_params = TypeArgList::new([INT32], span.clone());
 
     let a_class = module
         .unit

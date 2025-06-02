@@ -1,14 +1,15 @@
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::TypeConstraint;
+use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericResult;
 use crate::typ::Specializable;
 use crate::typ::Type;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::Value;
-use crate::typ::typecheck_type;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Spanned;
@@ -16,15 +17,17 @@ use terapascal_common::span::Spanned;
 pub type TypeParam = ast::TypeParam<Value>;
 
 impl TypeParam {
-    pub fn into_generic_param_ty(self) -> Type {
-        match self.constraint {
+    pub fn into_generic_param_ty(self) -> TypeName {
+        let ty=  match self.constraint {
             Some(constraint) => {
                 Type::generic_constrained_param(self.name, constraint.is_ty)
             },
             None => {
                 Type::generic_param(self.name)
             },
-        }
+        };
+        
+        TypeName::named(ty, self.span)
     }
 }
 
@@ -32,7 +35,8 @@ pub type TypeArgList = ast::TypeArgList<Value>;
 
 impl TypeArgList {
     pub fn apply_type_args(self, params: &impl TypeParamContainer, args: &impl TypeArgResolver) -> Self {
-        self.map(|arg, _pos | arg.apply_type_args(params, args))
+        self.map(|arg, _pos | arg
+            .map(|ty| ty.apply_type_args(params, args)))
     }
 }
 
@@ -56,13 +60,17 @@ impl TypeParamList {
     }
     
     pub fn into_type_args(self) -> TypeArgList {
-        self.map(|item, _pos| Type::GenericParam(Arc::new(TypeParamType {
-            name: item.name,
-            is_ty: item
-                .constraint
-                .map(|constraint| constraint.is_ty)
-                .unwrap_or(Type::Any)
-        })))
+        self.map(|item, _pos| {
+            let ty = Type::GenericParam(Arc::new(TypeParamListItem {
+                name: item.name,
+                is_ty: item
+                    .constraint
+                    .map(|constraint| constraint.is_ty)
+                    .unwrap_or(TypeName::inferred(Type::Any))
+            }));
+
+            TypeName::named(ty, item.span)
+        })
     }
     
     // create a version of this list with type arguments made from its own parameters.
@@ -85,7 +93,7 @@ pub fn typecheck_type_params(
     for ty_param in &type_params.items {
         let constraint = match &ty_param.constraint {
             Some(constraint) => {
-                let is_ty = typecheck_type(&constraint.is_ty, ctx)?;
+                let is_ty = typecheck_typename(&constraint.is_ty, ctx)?;
                 
                 Some(ast::TypeConstraint {
                     is_kw_span: constraint.is_kw_span.clone(),
@@ -114,8 +122,8 @@ pub fn validate_generic_constraints(args: &TypeArgList, params: &TypeParamList, 
             let ty_arg = &args.items[pos];
             if !ty_arg.match_constraint(&constraint_ty.is_ty, ctx) {
                 return Err(GenericError::ConstraintNotSatisfied {
-                    is_not_ty: constraint_ty.is_ty.clone(),
-                    actual_ty: Some(ty_arg.clone()),
+                    is_not_ty: constraint_ty.is_ty.clone().into(),
+                    actual_ty: Some(ty_arg.clone().into()),
                 });
             }
         }
@@ -125,12 +133,12 @@ pub fn validate_generic_constraints(args: &TypeArgList, params: &TypeParamList, 
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct TypeParamType {
+pub struct TypeParamListItem {
     pub name: Ident,
-    pub is_ty: Type,
+    pub is_ty: TypeName,
 }
 
-impl fmt::Display for TypeParamType {
+impl fmt::Display for TypeParamListItem {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
     }
@@ -151,7 +159,7 @@ pub trait TypeArgResolver {
 
 impl TypeArgResolver for TypeArgList {
     fn get(&self, pos: usize) -> Option<&Type> {
-        self.items.get(pos)
+        self.items.get(pos).map(|typename| typename.ty())
     }
 
     fn len(&self) -> usize {

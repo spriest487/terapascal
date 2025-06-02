@@ -121,7 +121,7 @@ pub struct MethodValue {
     /// the type via which this method is being referred to. we don't distinguish here between
     /// an interface method (implemented on a type other than the self type) and a direct method
     /// call (known to be implemented on the self type used here)
-    pub self_ty: Type,
+    pub self_ty: TypeName,
     pub index: usize,
     
     // members below this point are just cached for convenience, all of these can be
@@ -140,7 +140,7 @@ pub struct MethodValue {
 }
 
 impl MethodValue {
-    pub fn new(self_ty: Type, index: usize, decl: MethodDecl, span: Span) -> Self {
+    pub fn new(self_ty: TypeName, index: usize, decl: MethodDecl, span: Span) -> Self {
         Self {
             self_ty,
             index,

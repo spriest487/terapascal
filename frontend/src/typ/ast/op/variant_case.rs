@@ -151,7 +151,8 @@ pub fn try_expr_into_noargs_variant_ctor(
 
     let ctor_call = VariantCtorCall {
         case: case_annotation.case.clone(),
-        variant: variant_name.clone(),
+        variant_name_span: variant_name.span().clone(),
+        variant: variant_name,
         arg: None,
         annotation: TypedValue::temp(variant_ty, span.clone()).into(),
     };

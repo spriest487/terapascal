@@ -109,12 +109,12 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
                 }
                 
                 None => {
-                    self_ty = method_val.self_ty.clone();
+                    self_ty = method_val.self_ty.ty().clone();
                 }
             }
 
             build_method_call(
-                method_val.self_ty.clone(),
+                method_val.self_ty.ty().clone(),
                 self_ty,
                 method_val.index,
                 &args,

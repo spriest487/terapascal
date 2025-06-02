@@ -4,7 +4,7 @@ use crate::ast::IdentPath;
 use crate::ast::Path;
 use crate::ast::Visibility;
 use crate::typ;
-use crate::typ::ast;
+use crate::typ::{ast, TypeName};
 use crate::typ::ast::SELF_PARAM_NAME;
 use crate::typ::Context;
 use crate::typ::Environment;
@@ -143,7 +143,7 @@ pub fn system_option_type() -> Symbol {
 
 pub fn system_option_type_of(item_type: Type) -> Symbol {
     system_option_type().with_ty_args(Some(typ::TypeArgList::new(
-        [item_type], 
+        [TypeName::inferred(item_type)], 
         builtin_span(),
     )))
 }

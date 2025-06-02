@@ -23,7 +23,7 @@ use crate::typ::ast::MethodCall;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::SetDecl;
-use crate::typ::builtin_displayable_name;
+use crate::typ::{builtin_displayable_name, TypeName};
 use crate::typ::string_type;
 use crate::typ::Context;
 use crate::typ::FunctionValue;
@@ -337,14 +337,15 @@ fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Opt
     let displayable_call = Call::Method(MethodCall {
         iface_type: displayable_ty.clone(),
         self_type: src_ty.into_owned(),
+        self_type_qual_span: None,
         iface_method_index: to_string_index,
-        ident: to_string_ident.clone(),
+        method_name: to_string_ident.clone(),
         args: vec![expr.clone()],
         type_args: None,
         args_span: span.clone(),
         func_type: Type::Function(to_string_sig.clone()),
         annotation: MethodValue::new(
-            displayable_ty,
+            TypeName::inferred(displayable_ty),
             to_string_index,
             to_string_method,
             span.clone()
@@ -443,8 +444,8 @@ fn typecheck_member_of(
 
                 // x is a non-variant typename - we are accessing a member of that type
                 // e.g. calling an interface method by its type-qualified name
-                Value::Type(ty, _) => {
-                    typecheck_type_member(ty, &member_ident, expect_ty, span.clone(), ctx)?
+                Value::Type(ty, span) => {
+                    typecheck_type_member(ty, span, &member_ident, expect_ty, span.clone(), ctx)?
                 },
 
                 // x is a value - we are accessing a member of that value
@@ -548,8 +549,8 @@ fn typecheck_member_of(
                     let no_args_call = if method.should_call_noargs_in_expr(expect_ty, lhs_ty.as_ref()) {
                         let overload_candidate = &[
                             OverloadCandidate::Method {
-                                iface_ty: method.self_ty.clone(),
-                                self_ty: method.self_ty.clone(),
+                                iface_ty: method.self_ty.ty().clone(),
+                                self_ty: method.self_ty.ty().clone(),
                                 index: method.index,
 
                                 decl: method.decl.clone(),
@@ -595,46 +596,6 @@ fn typecheck_member_of(
                 _ => Ok(Expr::from(member_op)),
             }
         },
-
-        // a.B(x: x)
-        // ast::Expr::ObjectCtor(ctor) => {
-        //     match lhs.annotation() {
-        //         // a must be a namespace qualifier before the constructed object name
-        //         Value::Namespace(ns_path, ..) => {
-        //             let ctor_type_name = ctor.type_expr
-        //                 .as_ref()
-        //                 .and_then(|ty| ty.as_ident())
-        //                 .ok_or_else(|| {
-        //                     Err(TypeError::InvalidBinOp {
-        //                         lhs: lhs.annotation().ty().into_owned(),
-        //                         rhs: rhs.annotation().ty().into_owned(),
-        //                         span,
-        //                         op: Operator::Period,
-        //                     })
-        //                 });
-        // 
-        //             let qualified_ident = ns_path
-        //                 .clone()
-        //                 .child(ctor_type_name.clone());
-        //             let new_
-        // 
-        //             let qualified_ctor = ast::ObjectCtor {
-        //                 ident: Some(qualified_ident),
-        //                 ..(**ctor).clone()
-        //             };
-        // 
-        //             let span = lhs.annotation().span().to(qualified_ctor.annotation.span());
-        // 
-        //             let ctor = typecheck_object_ctor(&qualified_ctor, span, expect_ty, ctx)?;
-        //             Ok(Expr::from(ctor))
-        //         },
-        // 
-        //         _ => Err(TypeError::InvalidCtorType {
-        //             ty: lhs.annotation().ty().into_owned(),
-        //             span,
-        //         }),
-        //     }
-        // },
 
         _ => {
             let rhs = typecheck_expr(&bin_op.rhs, &Type::Nothing, ctx)?;
@@ -686,6 +647,7 @@ fn op_to_no_args_call(
 
 fn typecheck_type_member(
     ty: &Type,
+    ty_span: &Span,
     member_ident: &Ident,
     expect_return_ty: &Type,
     span: Span,
@@ -716,7 +678,8 @@ fn typecheck_type_member(
             }
 
             // this is a reference to the method itself, args list to follow presumably
-            MethodValue::new(candidate.iface_ty, candidate.index, candidate.method, span).into()
+            let iface_ty = TypeName::named(candidate.iface_ty, ty_span.clone());
+            MethodValue::new(iface_ty, candidate.index, candidate.method, span).into()
         },
         
         TypeMember::MethodGroup(group) => {

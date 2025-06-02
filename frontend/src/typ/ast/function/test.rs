@@ -4,7 +4,7 @@ use crate::typ::ast::{specialize_func_decl, FunctionDeclContext, FunctionName};
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParam;
 use crate::typ::ast::WhereClause;
-use crate::typ::{builtin_displayable_name, builtin_span, TypeParam};
+use crate::typ::{builtin_displayable_name, builtin_span, TypeName, TypeParam};
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
 use crate::typ::test::try_module_from_srcs;
@@ -16,7 +16,7 @@ use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
 use crate::typ::TypeParamList;
-use crate::typ::TypeParamType;
+use crate::typ::TypeParamListItem;
 use crate::typ::TypeResult;
 use crate::Ident;
 use std::sync::Arc;
@@ -47,7 +47,7 @@ fn make_ty_param_of(name: &str, constraint: Type) -> TypeParam {
         constraint: Some(TypeConstraint {
             span: name.span.clone(),
             name,
-            is_ty: constraint,
+            is_ty: TypeName::inferred(constraint),
             is_ty_span: None,
             is_kw_span: None,
         }),
@@ -58,13 +58,13 @@ fn make_ty_param_of(name: &str, constraint: Type) -> TypeParam {
 fn make_ty_param_ty(param_list: &[TypeParam], pos: usize) -> Type {
     let param = &param_list[pos];
 
-    Type::GenericParam(Arc::new(TypeParamType {
+    Type::GenericParam(Arc::new(TypeParamListItem {
         name: param.name.clone(),
         is_ty: param
             .constraint
             .as_ref()
             .map(|constraint| constraint.is_ty.clone())
-            .unwrap_or(Type::Any),
+            .unwrap_or(TypeName::inferred(Type::Any)),
     }))
 }
 
@@ -125,7 +125,7 @@ fn specialized_func_decl_has_specialized_return_ty() {
     let decl = make_decl(None, "A", ty_params, None, [], return_ty);
     let ctx = Context::root(test_span());
     
-    let args = TypeArgList::new([Primitive::Int32.into()], test_span());
+    let args = TypeArgList::new([TypeName::inferred(Primitive::Int32)], test_span());
 
     let specialized = specialize_func_decl(&decl, &args, &ctx)
         .unwrap();
@@ -144,8 +144,8 @@ fn specialized_func_decl_has_specialized_param_tys() {
     let ctx = Context::root(test_span());
 
     let args = TypeArgList::new([
-        Primitive::Int32.into(),
-        Primitive::Boolean.into(),
+        TypeName::inferred(Primitive::Int32),
+        TypeName::inferred(Primitive::Boolean),
     ], test_span());
 
     let specialized = specialize_func_decl(&decl, &args, &ctx)
@@ -166,7 +166,7 @@ fn specialized_func_decl_checks_constraint() {
     let ctx = Context::root(test_span());
     
     // Any should implement no interfaces
-    let args = TypeArgList::new([Type::Any], test_span());
+    let args = TypeArgList::new([TypeName::inferred(Type::Any)], test_span());
 
     match specialize_func_decl(&decl, &args, &ctx) {
         Err(GenericError::ConstraintNotSatisfied { .. }) => { 

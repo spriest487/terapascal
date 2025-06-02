@@ -1,14 +1,16 @@
 use crate::ast;
 use crate::ast::TypeAnnotation;
+use crate::typ::typecheck_typename;
 use crate::typ::Context;
+use crate::typ::TypeName;
 use crate::typ::GenericContext;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
-use crate::typ::typecheck_type;
-use crate::typ::{GenericError, Value};
+use crate::typ::GenericError;
+use crate::typ::Value;
 use crate::Ident;
 use std::mem;
 
@@ -20,9 +22,9 @@ impl WhereClause {
         let mut constraints = Vec::new();
         for constraint in &src.constraints {
             let is_ty = if constraint.is_ty.is_known() {
-                typecheck_type(&constraint.is_ty, ctx)?
+                typecheck_typename(&constraint.is_ty, ctx)?
             } else {
-                Type::Any
+                TypeName::inferred(Type::Any)
             };
 
             constraints.push(TypeConstraint {
@@ -111,10 +113,10 @@ impl WhereClause {
 
     pub fn apply_generics(mut self, generic_ctx: &GenericContext) -> Self {
         for constraint in &mut self.constraints {
-            let mut is_ty = Type::Nothing;
+            let mut is_ty = TypeName::inferred(Type::Nothing);
             mem::swap(&mut is_ty, &mut constraint.is_ty);
 
-            constraint.is_ty = generic_ctx.apply_to_type(is_ty);
+            constraint.is_ty = generic_ctx.apply_to_typename(is_ty);
         }
 
         self

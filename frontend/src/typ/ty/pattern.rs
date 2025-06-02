@@ -207,7 +207,7 @@ impl TypePattern {
 
         let matchable_ty = if raw_ty.is_matchable() {
             raw_ty
-                .infer_specialized_from_hint(expect_ty)
+                .infer_specialized_from_hint(&TypeName::inferred(expect_ty.clone()))
                 .cloned()
                 .map(|ty| {
                     match raw_ty.get_span() {

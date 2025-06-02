@@ -92,7 +92,7 @@ impl TypeSequenceSupport {
                 
                 
                 let item_ty = item_ty.clone();
-                Ok((next_method_index, next_method, item_ty))
+                Ok((next_method_index, next_method, item_ty.into()))
             }
             
             // incompatible

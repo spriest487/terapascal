@@ -36,7 +36,7 @@ use crate::typ::ast::SetDecl;
 use crate::typ::ast::StructDef;
 use crate::typ::ast::VariantDef;
 use crate::typ::ast::SELF_TY_NAME;
-use crate::typ::specialize_by_return_ty;
+use crate::typ::{specialize_by_return_ty, TypeName};
 use crate::typ::specialize_iface_def;
 use crate::typ::specialize_struct_def;
 use crate::typ::specialize_variant_def;
@@ -46,7 +46,7 @@ use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeParamList;
-use crate::typ::TypeParamType;
+use crate::typ::TypeParamListItem;
 use crate::typ::TypeResult;
 use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::Entry;
@@ -753,11 +753,11 @@ impl Context {
                 .constraint
                 .as_ref()
                 .map(|c| c.is_ty.clone())
-                .unwrap_or(Type::Any);
+                .unwrap_or(TypeName::inferred(Type::Any));
 
             self.declare_type(
                 param.name.clone(),
-                Type::GenericParam(Arc::new(TypeParamType {
+                Type::GenericParam(Arc::new(TypeParamListItem {
                     name: param.name.clone(),
                     is_ty,
                 })),
@@ -1476,7 +1476,7 @@ impl Context {
         }
 
         match self_ty {
-            Type::GenericParam(param_ty) => match &param_ty.is_ty {
+            Type::GenericParam(param_ty) => match param_ty.is_ty.ty() {
                 Type::Any => Ok(false),
 
                 as_iface => Ok(as_iface == iface_ty),

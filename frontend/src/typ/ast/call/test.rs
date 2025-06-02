@@ -216,7 +216,7 @@ fn specializes_method_call_by_arg_ty() {
             assert_eq!("arg", method_call.args[1].to_string());
             assert_eq!("Test.B", method_call.args[1].annotation().ty().to_string());
 
-            assert_eq!("A", method_call.ident.to_string());
+            assert_eq!("A", method_call.method_name.to_string());
             assert_eq!("Test.C", method_call.iface_type.to_string());
 
             assert_eq!(
@@ -265,7 +265,7 @@ fn specializes_method_call_by_lambda_arg_ty() {
                 method_call.args[1].annotation().ty().to_string()
             );
 
-            assert_eq!("A", method_call.ident.to_string());
+            assert_eq!("A", method_call.method_name.to_string());
             assert_eq!("Test.C", method_call.iface_type.to_string());
 
             assert_eq!(
@@ -314,7 +314,7 @@ fn specializes_method_call_by_dynarray_element_ty() {
                 method_call.args[1].annotation().ty().to_string()
             );
 
-            assert_eq!("A", method_call.ident.to_string());
+            assert_eq!("A", method_call.method_name.to_string());
             assert_eq!("Test.C", method_call.iface_type.to_string());
 
             assert_eq!(

@@ -54,7 +54,8 @@ use derivative::Derivative;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt;
-use std::ops::Deref;
+use std::hash::{Hash, Hasher};
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use terapascal_common::span::{MaybeSpanned, Span};
 use terapascal_common::span::Spanned;
@@ -73,7 +74,7 @@ pub enum Type {
     Array(Arc<ArrayType>),
     DynArray { element: Arc<Type> },
     MethodSelf,
-    GenericParam(Arc<TypeParamType>),
+    GenericParam(Arc<TypeParamListItem>),
     Weak(Arc<Type>),
     Any,
     Enum(Arc<IdentPath>),
@@ -118,9 +119,9 @@ impl Type {
     }
     
     pub fn generic_param(name: Ident) -> Type {
-        let ty_param_ty = TypeParamType {
+        let ty_param_ty = TypeParamListItem {
             name,
-            is_ty: Type::Any,
+            is_ty: TypeName::inferred(Type::Any),
         };
         
         Type::GenericParam(Arc::new(ty_param_ty))
@@ -137,8 +138,8 @@ impl Type {
         Type::DynArray { element: Arc::new(self) }
     }
 
-    pub fn generic_constrained_param(name: Ident, is_iface: impl Into<Type>) -> Type {
-        let ty_param_ty = TypeParamType {
+    pub fn generic_constrained_param(name: Ident, is_iface: impl Into<TypeName>) -> Type {
+        let ty_param_ty = TypeParamListItem {
             name,
             is_ty: is_iface.into(),
         };
@@ -1027,7 +1028,7 @@ impl Type {
 
     pub fn implemented_ifaces(&self, ctx: &Context) -> NameResult<HashSet<Type>> {
         match self {
-            Type::GenericParam(param_ty) => match &param_ty.is_ty {
+            Type::GenericParam(param_ty) => match param_ty.is_ty.ty() {
                 Type::Any => Ok(HashSet::new()),
 
                 is_iface => Ok(HashSet::from([is_iface.clone()])),
@@ -1212,7 +1213,7 @@ impl Type {
 
     pub fn visit_generics<Visitor>(mut self, visitor: Visitor) -> Self
     where
-        Visitor: Fn(TypeParamType) -> TypeParamType + Copy
+        Visitor: Fn(TypeParamListItem) -> TypeParamListItem + Copy
     {
         self.visit_types_mut(|ty| {
             if let Type::GenericParam(type_param) = ty {
@@ -1469,7 +1470,7 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
                 Some(type_args) => {
                     let mut checked_type_arg_items = Vec::new();
                     for arg in &type_args.items {
-                        let arg_ty = typecheck_type(arg, ctx)?;
+                        let arg_ty = typecheck_typename(arg, ctx)?;
                         checked_type_arg_items.push(arg_ty);
                     }
 
@@ -1590,6 +1591,22 @@ impl Specializable for Type {
     }
 }
 
+impl Specializable for TypeName {
+    type GenericID = <Type as Specializable>::GenericID;
+
+    fn is_unspecialized_generic(&self) -> bool {
+        self.ty().is_unspecialized_generic()
+    }
+
+    fn name(&self) -> Cow<Self::GenericID> {
+        self.ty().name()
+    }
+
+    fn apply_type_args(self, params: &impl TypeParamContainer, args: &impl TypeArgResolver) -> Self {
+        self.map(|ty| ty.apply_type_args(params, args))
+    }
+}
+
 fn find_in_method_decls<'it, MethodsIter>(
     name: &Ident,
     sig: &FunctionSig,
@@ -1623,17 +1640,27 @@ pub fn string_type(ctx: &mut Context) -> TypeResult<Type> {
 }
 
 #[derive(Clone, Eq, Derivative)]
-#[derivative(Debug, PartialEq, Hash)]
+#[derivative(Debug)]
 pub enum TypeName {
     Named {
         ty: Type,
 
         #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
         span: Span,
     },
     Inferred(Type),
+}
+
+impl Hash for TypeName {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.ty().hash(state);
+    }
+}
+
+impl PartialEq for TypeName {
+    fn eq(&self, other: &Self) -> bool {
+        self.ty().eq(other.ty())
+    }
 }
 
 impl TypeName {
@@ -1653,6 +1680,13 @@ impl TypeName {
     }
     
     pub fn ty(&self) -> &Type {
+        match self {
+            TypeName::Named { ty, .. } => ty,
+            TypeName::Inferred(ty) => ty,
+        }
+    }
+
+    pub fn ty_mut(&mut self) -> &mut Type {
         match self {
             TypeName::Named { ty, .. } => ty,
             TypeName::Inferred(ty) => ty,
@@ -1702,5 +1736,17 @@ impl Deref for TypeName {
 
     fn deref(&self) -> &Self::Target {
         self.ty()
+    }
+}
+
+impl DerefMut for TypeName {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.ty_mut()
+    }
+}
+
+impl PartialEq<Type> for TypeName {
+    fn eq(&self, other: &Type) -> bool {
+        self.ty().eq(other)
     }
 }

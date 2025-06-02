@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::ast::FunctionParamMod;
+use crate::ast::{FunctionParamMod};
 use crate::ast::TypeConstraint;
 use crate::ast::TypeList;
 use crate::typ::ast::call;
@@ -7,7 +7,7 @@ use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
-use crate::typ::Context;
+use crate::typ::{Context, TypeArgList, TypeName};
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::GenericContext;
@@ -27,7 +27,7 @@ use terapascal_common::span::Span;
 
 pub struct SpecializedCallArgs {
     pub sig: FunctionSig,
-    pub type_args: Option<TypeList<Type>>,
+    pub type_args: Option<TypeArgList>,
     pub actual_args: Vec<Expr>,
 }
 
@@ -96,11 +96,15 @@ pub fn infer_from_structural_ty_args(
         (Type::Function(param_sig), Type::Function(actual_sig)) => {
             let mut param_tys = Vec::new();
             param_tys.push(param_sig.return_ty.clone());
-            param_tys.extend(param_sig.params.iter().map(|p| p.ty.clone()));
+            param_tys.extend(param_sig.params
+                .iter()
+                .map(|p| p.ty.clone()));
 
             let mut arg_tys = Vec::new();
             arg_tys.push(actual_sig.return_ty.clone());
-            arg_tys.extend(actual_sig.params.iter().map(|p| p.ty.clone()));
+            arg_tys.extend(actual_sig.params
+                .iter()
+                .map(|p| p.ty.clone()));
 
             (param_tys, arg_tys)
         }
@@ -112,11 +116,17 @@ pub fn infer_from_structural_ty_args(
             }
 
             let param_ty_args = match param_ty.type_args() {
-                TypeArgsResult::Specialized(_, args) => args.items.clone(),
+                TypeArgsResult::Specialized(_, args) => args
+                    .clone()
+                    .map(|arg, _| arg.into())
+                    .items,
                 _ => return,
             };
             let actual_ty_args = match actual_ty.type_args() {
-                TypeArgsResult::Specialized(_, args) => args.items.clone(),
+                TypeArgsResult::Specialized(_, args) => args
+                    .clone()
+                    .map(|arg, _| arg.into())
+                    .items,
                 _ => return,
             };
             (param_ty_args, actual_ty_args)
@@ -133,18 +143,16 @@ pub fn infer_from_structural_ty_args(
                     continue;
                 }
                 
-                let constraint = match &param_generic.is_ty {
-                    Type::Any => None,
-
-                    is_ty => {
-                        Some(TypeConstraint {
-                            name: param_generic.name.clone(),
-                            is_kw_span: None,
-                            is_ty: is_ty.clone(),
-                            is_ty_span: None,
-                            span: span.clone(),
-                        })
-                    }
+                let constraint = if param_generic.is_ty == Type::Any {
+                    None
+                } else {
+                    Some(TypeConstraint {
+                        name: param_generic.name.clone(),
+                        is_kw_span: None,
+                        is_ty: param_generic.is_ty.clone(),
+                        is_ty_span: None,
+                        span: span.clone(),
+                    })
                 };
                 
                 let inferred_param = TypeParam {
@@ -171,7 +179,7 @@ pub fn specialize_call_args(
     decl: &FunctionDecl,
     args: &[ast::Expr<Span>],
     self_arg: Option<&Expr>,
-    explicit_ty_args: Option<TypeList<Type>>,
+    explicit_ty_args: Option<TypeArgList>,
     span: &Span,
     ctx: &mut Context,
 ) -> TypeResult<SpecializedCallArgs> {
@@ -315,7 +323,7 @@ pub fn try_unwrap_inferred_args(
     inferred_args: GenericContext,
     ctx: &Context,
     span: &Span,
-) -> Option<TypeList<Type>> {
+) -> Option<TypeArgList> {
     if !validate_inferred_args(type_params, &inferred_args, ctx) {
         return None;
     }
@@ -323,7 +331,7 @@ pub fn try_unwrap_inferred_args(
     let items: Vec<_> = inferred_args
         .into_items()
         .into_iter()
-        .map(|resolved| resolved.arg)
+        .map(|resolved| TypeName::inferred(resolved.arg))
         .collect();
 
     Some(TypeList::new(items, span.clone()))

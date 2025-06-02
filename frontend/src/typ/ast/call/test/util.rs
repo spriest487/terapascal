@@ -4,9 +4,10 @@ use crate::ast::IdentPath;
 use crate::ast::TypeName;
 use crate::parse::Parse;
 use crate::pp::Preprocessor;
-use crate::typ::ast::{FunctionDeclContext, OverloadCandidate};
+use crate::typ::ast::FunctionDeclContext;
+use crate::typ::ast::OverloadCandidate;
 use crate::typ::test::module_from_src;
-use crate::typ::typecheck_type;
+use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::Module;
 use crate::typ::Symbol;
@@ -37,7 +38,7 @@ pub fn type_args_from_str(args: &[&str], ctx: &mut Context) -> TypeArgList {
             let mut tokens = tokens_from_string("type_args_from_str", arg_str);
             let type_name = TypeName::parse(&mut tokens).unwrap();
 
-            typecheck_type(&type_name, ctx).unwrap()
+            typecheck_typename(&type_name, ctx).unwrap()
         })
         .collect();
 

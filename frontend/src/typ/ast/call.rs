@@ -13,8 +13,7 @@ use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::ObjectCtor;
-use crate::typ::typecheck_type;
-use crate::typ::Context;
+use crate::typ::typecheck_typename;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::FunctionValue;
@@ -35,13 +34,14 @@ use crate::typ::TypedValue;
 use crate::typ::UfcsValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use crate::typ::{Context, TypeName};
 pub use args::*;
 pub use overload::*;
 use std::borrow::Cow;
 use std::iter;
 use std::sync::Arc;
-use terapascal_common::span::Span;
 use terapascal_common::span::Spanned as _;
+use terapascal_common::span::{MaybeSpanned, Span};
 
 pub type MethodCall = ast::MethodCall<Value>;
 pub type FunctionCall = ast::FunctionCall<Value>;
@@ -174,7 +174,7 @@ pub fn typecheck_type_args(
     let items: Vec<_> = type_args
         .items
         .iter()
-        .map(|arg_ty| typecheck_type(arg_ty, ctx))
+        .map(|arg_ty| typecheck_typename(arg_ty, ctx))
         .collect::<TypeResult<_>>()?;
 
     Ok(TypeArgList::new(items, type_args.span().clone()))
@@ -322,6 +322,7 @@ fn typecheck_func_call(
         Value::VariantCase(variant, ..) => {
             let ctor_call = typecheck_variant_ctor_call(
                 &variant.variant_name,
+                &variant.span,
                 &variant.case,
                 &func_call.args,
                 func_call.span().clone(),
@@ -459,9 +460,10 @@ fn typecheck_func_overload(
             let method_call = MethodCall {
                 iface_type: iface_ty.clone(),
                 self_type: self_ty.clone(),
+                self_type_qual_span: None,
                 iface_method_index: *index,
                 annotation: return_annotation,
-                ident: decl.func_decl.ident().clone(),
+                method_name: decl.func_decl.ident().clone(),
                 args: overload.args,
                 type_args: overload.type_args,
                 func_type: Type::Function(sig.clone()),
@@ -544,7 +546,7 @@ pub fn overload_to_no_args_call(
             let return_value = TypedValue::temp(call_decl.result_ty.clone(), span.clone());
 
             *target.annotation_mut() = Value::from(MethodValue {
-                self_ty: self_ty.clone(),
+                self_ty: TypeName::inferred(self_ty.clone()),
                 index: *index,
                 decl: decl.clone(),
                 span: target.span().clone(),
@@ -553,6 +555,7 @@ pub fn overload_to_no_args_call(
             Call::MethodNoArgs(MethodCallNoArgs {
                 target: Expr::from(target),
                 self_arg,
+                method_name: decl.func_decl.name.ident.clone(),
                 type_args: overload.type_args,
                 annotation: return_value.into(),
                 owning_type: self_ty.clone(),
@@ -579,7 +582,7 @@ fn typecheck_method_call(
 ) -> TypeResult<Call> {
     if method.self_ty.get_current_access(ctx) < method.decl.access {
         return Err(TypeError::TypeMemberInaccessible {
-            ty: method.self_ty.clone(),
+            ty: method.self_ty.ty().clone(),
             access: method.decl.access,
             member: method.decl.func_decl.ident().clone(),
             span: func_call.span().clone(),
@@ -627,14 +630,14 @@ fn typecheck_method_call(
         }
     };
     
-    if let Type::Interface(..) = method.self_ty {
+    if let Type::Interface(..) = method.self_ty.ty() {
         let is_impl = ctx
             .is_implementation(self_type.as_ref(), &method.self_ty)
             .map_err(|err| TypeError::from_name_err(err, func_call.span().clone()))?;
 
         if !is_impl {
             return Err(TypeError::from_name_err(NameError::NoImplementationFound {
-                owning_ty: method.self_ty.clone(),
+                owning_ty: method.self_ty.ty().clone(),
                 impl_ty: self_type.into_owned(),
             }, func_call.span().clone()));
         }
@@ -642,7 +645,7 @@ fn typecheck_method_call(
         if method.self_ty != *self_type {
             return Err(TypeError::TypeMismatch {
                 span: func_call.span().clone(),
-                expected: method.self_ty.clone(),
+                expected: method.self_ty.ty().clone(),
                 actual: self_type.into_owned(),
             });
         }
@@ -668,12 +671,13 @@ fn typecheck_method_call(
         }
         .into(),
         self_type: self_type.into_owned(),
-        iface_type: method.self_ty.clone(),
+        self_type_qual_span: method.self_ty.get_span().cloned(),
+        iface_type: method.self_ty.ty().clone(),
         iface_method_index: method.index,
 
         args_span: func_call.args_span.clone(),
         func_type: Type::Function(Arc::new(sig)),
-        ident: method.decl.func_decl.ident().clone(),
+        method_name: method.decl.func_decl.ident().clone(),
         type_args: None,
         args: typechecked_args,
     }))
@@ -862,6 +866,7 @@ fn typecheck_free_func_call(
 
 fn typecheck_variant_ctor_call(
     variant: &Symbol,
+    variant_name_span: &Span,
     case: &Ident,
     args: &[ast::Expr<Span>],
     span: Span,
@@ -983,6 +988,7 @@ fn typecheck_variant_ctor_call(
 
     Ok(ast::Call::VariantCtor(ast::VariantCtorCall {
         variant: variant_def.name.clone(),
+        variant_name_span: variant_name_span.clone(),
         annotation,
         arg,
         case,

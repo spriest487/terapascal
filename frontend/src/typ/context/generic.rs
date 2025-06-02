@@ -1,5 +1,5 @@
 use crate::typ;
-use crate::typ::FunctionSig;
+use crate::typ::{FunctionSig, TypeName};
 use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
@@ -7,8 +7,8 @@ use crate::typ::TypeArgResolver;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
-use std::fmt::Formatter;
 use std::fmt;
+use std::fmt::Formatter;
 
 #[derive(Debug, Clone)]
 pub struct GenericContext {
@@ -28,7 +28,7 @@ impl GenericContext {
         let mut ctx = GenericContext::empty();
         
         for (param, arg) in params.iter().zip(args.iter()) {
-            ctx.add(param.clone(), arg.clone());
+            ctx.add(param.clone(), arg.ty().clone());
         }
         
         ctx
@@ -42,7 +42,7 @@ impl GenericContext {
 
         let mut child = self.clone();
         for (param, arg) in params.items.into_iter().zip(args.items.into_iter()) {
-            child.add(param.clone(), arg.clone());
+            child.add(param.clone(), arg.ty().clone());
         }
         
         child
@@ -68,6 +68,10 @@ impl GenericContext {
     }
     
     pub fn apply_to_type(&self, ty: Type) -> Type {
+        ty.apply_type_args(self, self)
+    }
+
+    pub fn apply_to_typename(&self, ty: TypeName) -> TypeName {
         ty.apply_type_args(self, self)
     }
 

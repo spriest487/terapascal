@@ -1,23 +1,24 @@
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_frontend::DelimiterPair;
-use terapascal_frontend::Operator;
-use terapascal_frontend::TokenTree;
 use terapascal_frontend::ast;
 pub use terapascal_frontend::ast::Annotation;
-use terapascal_frontend::ast::{ConstExprValue, Pattern, PatternSemanticElement};
+use terapascal_frontend::ast::ConstExprValue;
 use terapascal_frontend::ast::DeclName;
 use terapascal_frontend::ast::FunctionName;
 use terapascal_frontend::ast::InterfaceDecl;
-use terapascal_frontend::ast::Literal;
 use terapascal_frontend::ast::MemberDeclSection;
+use terapascal_frontend::ast::Pattern;
+use terapascal_frontend::ast::PatternSemanticElement;
 use terapascal_frontend::ast::SetDeclRange;
 use terapascal_frontend::ast::StructDecl;
 use terapascal_frontend::ast::TypeDeclItem;
 use terapascal_frontend::ast::TypeMemberDeclRef;
 use terapascal_frontend::ast::UnaryPosition;
 use terapascal_frontend::ast::VariantDecl;
+use terapascal_frontend::DelimiterPair;
+use terapascal_frontend::Operator;
+use terapascal_frontend::TokenTree;
 use tower_lsp::lsp_types::SemanticToken;
 use tower_lsp::lsp_types::SemanticTokenType;
 
@@ -36,6 +37,7 @@ pub fn semantic_legend() -> Vec<SemanticTokenType> {
         SemanticTokenType::ENUM,
         SemanticTokenType::ENUM_MEMBER,
         SemanticTokenType::PROPERTY,
+        SemanticTokenType::METHOD,
     ]
 }
 
@@ -52,6 +54,7 @@ const SEMANTIC_VARIABLE: u32 = 9;
 const SEMANTIC_ENUM: u32 = 10;
 const SEMANTIC_ENUM_MEMBER: u32 = 11;
 const SEMANTIC_PROPERTY: u32 = 12;
+const SEMANTIC_METHOD: u32 = 13;
 
 pub struct SemanticTokenBuilder {
     cur_line: u32,
@@ -179,8 +182,8 @@ impl SemanticTokenBuilder {
 
     fn add_unit_decl<A: Annotation>(&mut self, decl: &ast::UnitDecl<A>) {
         match decl {
-            ast::UnitDecl::FunctionDecl { decl } => self.add_func_decl(decl),
-            ast::UnitDecl::FunctionDef { def } => self.add_func_def(def),
+            ast::UnitDecl::FunctionDecl { decl } => self.add_func_decl(decl, SEMANTIC_FUNCTION),
+            ast::UnitDecl::FunctionDef { def } => self.add_func_def(def, SEMANTIC_FUNCTION),
 
             ast::UnitDecl::Type { decl } => self.add_type_decl(decl),
             ast::UnitDecl::Uses { .. } => {},
@@ -287,7 +290,7 @@ impl SemanticTokenBuilder {
         }
 
         for method in &iface_decl.methods {
-            self.add_func_decl(&method.decl);
+            self.add_func_decl(&method.decl, SEMANTIC_METHOD);
         }
 
         if let Some(span) = &iface_decl.end_kw_span {
@@ -337,7 +340,7 @@ impl SemanticTokenBuilder {
                 },
 
                 TypeMemberDeclRef::Method(decl) => {
-                    self.add_func_decl(&decl.func_decl);
+                    self.add_func_decl(&decl.func_decl, SEMANTIC_METHOD);
                 },
             }
         }
@@ -392,7 +395,7 @@ impl SemanticTokenBuilder {
         match stmt {
             ast::Stmt::Ident(_, value) => self.add_value(value),
             ast::Stmt::LocalBinding(binding) => self.add_local_binding(binding),
-            ast::Stmt::Call(_) => {},
+            ast::Stmt::Call(call) => self.add_call(call),
             ast::Stmt::Exit(exit) => self.add_exit(exit),
             ast::Stmt::Block(block) => self.add_block(block),
             ast::Stmt::ForLoop(for_loop) => self.add_for(for_loop),
@@ -587,6 +590,36 @@ impl SemanticTokenBuilder {
         self.add(&while_loop.do_kw_span, SEMANTIC_KEYWORD);
         self.add_stmt(&while_loop.body);
     }
+    
+    fn add_call<A: Annotation>(&mut self, call: &ast::Call<A>) {
+        if let Some(target_expr) = call.target_expr() {
+            self.add_expr(target_expr);
+        } else {
+            if let Some(span) = call.type_qualification_span() {
+                self.add(span, SEMANTIC_TYPE);
+            }
+
+            if let Some(span) = call.method_name_span() {
+                self.add(span, SEMANTIC_METHOD);
+            }
+        }
+        
+        if let Some(args) = call.type_args() {
+            self.add_type_arg_list::<A>(args);
+        }
+        
+        for arg in call.args() {
+            self.add_expr(arg);
+        }
+    }
+    
+    fn add_type_arg_list<A: Annotation>(&mut self, args: &ast::TypeArgList<A>) {
+        for arg in &args.items {
+            if let Some(span) = arg.get_span() {
+                self.add(span, SEMANTIC_TYPE);
+            }
+        }
+    }
 
     fn add_expr<A: Annotation>(&mut self, expr: &ast::Expr<A>) {
         match expr {
@@ -594,7 +627,7 @@ impl SemanticTokenBuilder {
             ast::Expr::UnaryOp(op) => self.add_unary_op(op),
             ast::Expr::Literal(item) => self.add_literal(item),
             ast::Expr::Ident(_, value) => self.add_value(value),
-            ast::Expr::Call(_) => {},
+            ast::Expr::Call(call) => self.add_call(call),
             ast::Expr::ObjectCtor(ctor) => self.add_object_ctor(ctor),
             ast::Expr::CollectionCtor(_) => {},
             ast::Expr::IfCond(if_cond) => self.add_if_cond(if_cond, Self::add_expr),
@@ -657,13 +690,13 @@ impl SemanticTokenBuilder {
         let span = item.annotation.span();
 
         match item.literal {
-            Literal::Nil => self.add(span, SEMANTIC_KEYWORD),
-            Literal::Integer(..) | Literal::Real(_) => self.add(span, SEMANTIC_NUMBER),
-            Literal::String(..) => self.add(span, SEMANTIC_STRING),
-            Literal::Boolean(..) => self.add(span, SEMANTIC_KEYWORD),
-            Literal::SizeOf(..) => self.add(span, SEMANTIC_KEYWORD),
-            Literal::DefaultValue(..) => self.add(span, SEMANTIC_KEYWORD), // TODO type is separate
-            Literal::TypeInfo(..) => self.add(span, SEMANTIC_TYPE),
+            ast::Literal::Nil => self.add(span, SEMANTIC_KEYWORD),
+            ast::Literal::Integer(..) | ast::Literal::Real(_) => self.add(span, SEMANTIC_NUMBER),
+            ast::Literal::String(..) => self.add(span, SEMANTIC_STRING),
+            ast::Literal::Boolean(..) => self.add(span, SEMANTIC_KEYWORD),
+            ast::Literal::SizeOf(..) => self.add(span, SEMANTIC_KEYWORD),
+            ast::Literal::DefaultValue(..) => self.add(span, SEMANTIC_KEYWORD), // TODO type is separate
+            ast::Literal::TypeInfo(..) => self.add(span, SEMANTIC_TYPE),
         }
     }
 
@@ -711,7 +744,7 @@ impl SemanticTokenBuilder {
         }
     }
 
-    fn add_func_decl<A: Annotation>(&mut self, decl: &ast::FunctionDecl<A>) {
+    fn add_func_decl<A: Annotation>(&mut self, decl: &ast::FunctionDecl<A>, name_type: u32) {
         self.add_tags(&decl.tags);
 
         self.add(&decl.kw_span, SEMANTIC_KEYWORD);
@@ -724,7 +757,7 @@ impl SemanticTokenBuilder {
             self.add(decl.name.owning_type_param_span(i), SEMANTIC_TYPE_PARAMETER);
         }
 
-        self.add(&decl.name.ident().span, SEMANTIC_FUNCTION);
+        self.add(&decl.name.ident().span, name_type);
 
         for i in 0..decl.name.type_params_len() {
             self.add(decl.name.type_param_span(i), SEMANTIC_TYPE_PARAMETER);
@@ -753,8 +786,8 @@ impl SemanticTokenBuilder {
         }
     }
 
-    fn add_func_def<A: Annotation>(&mut self, def: &ast::FunctionDef<A>) {
-        self.add_func_decl(&def.decl);
+    fn add_func_def<A: Annotation>(&mut self, def: &ast::FunctionDef<A>, name_type: u32) {
+        self.add_func_decl(&def.decl, name_type);
 
         self.add_block(&def.body);
     }
@@ -764,8 +797,8 @@ impl SemanticTokenBuilder {
             self.add(expr.span(), SEMANTIC_TYPE);
         }
 
-        if let Some(_type_args) = &ctor.type_args {
-            // TODO
+        if let Some(args) = &ctor.type_args {
+            self.add_type_arg_list::<A>(args);
         }
 
         self.add_object_ctor_args(&ctor.args);

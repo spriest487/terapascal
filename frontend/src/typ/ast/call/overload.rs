@@ -1,5 +1,4 @@
 use crate::ast;
-use crate::ast::TypeList;
 use crate::ast::Visibility;
 use crate::typ::ast::check_implicit_conversion;
 use crate::typ::ast::infer_from_structural_ty_args;
@@ -9,7 +8,6 @@ use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::MethodDecl;
-use crate::typ::Context;
 use crate::typ::GenericContext;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
@@ -20,7 +18,9 @@ use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use crate::typ::{FunctionSig, InstanceMethod};
+use crate::typ::Context;
+use crate::typ::FunctionSig;
+use crate::typ::InstanceMethod;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -30,7 +30,7 @@ use terapascal_common::span::Spanned;
 pub struct Overload {
     pub selected_sig: usize,
     pub args: Vec<Expr>,
-    pub type_args: Option<TypeList<Type>>,
+    pub type_args: Option<TypeArgList>,
 }
 
 impl Overload {
