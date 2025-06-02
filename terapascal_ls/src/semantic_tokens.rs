@@ -178,6 +178,10 @@ impl SemanticTokenBuilder {
 
             self.add(&init_block.end_span, SEMANTIC_KEYWORD);
         }
+        
+        if let Some(span) = &unit.end_kw {
+            self.add(span, SEMANTIC_KEYWORD);
+        }
     }
 
     fn add_unit_decl<A: Annotation>(&mut self, decl: &ast::UnitDecl<A>) {

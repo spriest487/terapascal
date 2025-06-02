@@ -587,6 +587,7 @@ pub fn typecheck_unit(unit: &ast::Unit<Span>, ctx: &mut Context) -> TypeResult<M
             iface_decls,
             impl_kw: unit.impl_kw.clone(),
             impl_decls,
+            end_kw: unit.end_kw.clone(),
         };
 
         Ok(ModuleUnit {

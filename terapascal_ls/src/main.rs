@@ -3,7 +3,7 @@ use crate::semantic_tokens::semantic_legend;
 use dashmap::DashMap;
 use std::path::PathBuf;
 use terapascal_common::BuildOptions;
-use terapascal_frontend::TokenTree;
+use terapascal_frontend::{typecheck, TokenTree};
 use terapascal_frontend::ast;
 use terapascal_frontend::error::BuildError;
 use terapascal_frontend::error::BuildResult;
@@ -53,7 +53,7 @@ struct TerapascalServer {
     pp_units: DashMap<Url, PreprocessedUnit>,
     tokenized_units: DashMap<Url, Vec<TokenTree>>,
     parsed_units: DashMap<Url, ast::Unit>,
-    typechecked_units: DashMap<Url, typ::ast::Unit>,
+    typechecked_modules: DashMap<Url, typ::Module>,
 }
 
 #[tower_lsp::async_trait]
@@ -151,7 +151,7 @@ impl LanguageServer for TerapascalServer {
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         eprintln!("did_close: {}", params.text_document.uri);
 
-        self.typechecked_units.remove(&params.text_document.uri);
+        self.typechecked_modules.remove(&params.text_document.uri);
         self.parsed_units.remove(&params.text_document.uri);
         self.tokenized_units.remove(&params.text_document.uri);
         self.pp_units.remove(&params.text_document.uri);
@@ -217,7 +217,7 @@ impl TerapascalServer {
         self.pp_units.remove(&uri);
         self.tokenized_units.remove(&uri);
         self.parsed_units.remove(&uri);
-        self.typechecked_units.remove(&uri);
+        self.typechecked_modules.remove(&uri);
 
         let pp_unit = {
             let Some(document_text) = self.documents.get(&uri) else {
@@ -252,8 +252,13 @@ impl TerapascalServer {
 
         let unit = parse(filename, tokens)?;
 
-        self.parsed_units.insert(uri.clone(), unit);
+        self.parsed_units.insert(uri.clone(), unit.clone());
         eprintln!("parsed {}", uri);
+
+        let module = typecheck(&[unit], false)?;
+        eprintln!("typechecked {}", uri);
+
+        self.typechecked_modules.insert(uri, module);
 
         Ok(())
     }
@@ -269,7 +274,7 @@ async fn main() {
         pp_units: DashMap::new(),
         tokenized_units: DashMap::new(),
         parsed_units: DashMap::new(),
-        typechecked_units: DashMap::new(),
+        typechecked_modules: DashMap::new(),
     })
     .finish();
 

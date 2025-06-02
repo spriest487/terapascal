@@ -34,7 +34,7 @@ use crate::TokenTree;
 use crate::{DelimiterPair, Ident};
 use std::fmt;
 use std::sync::Arc;
-use terapascal_common::span::Span;
+use terapascal_common::span::{Span, Spanned};
 use terapascal_common::TracedError;
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
@@ -68,6 +68,8 @@ pub struct Unit<A: Annotation = Span> {
     pub impl_decls: Vec<UnitDecl<A>>,
 
     pub init: Option<InitBlock<A>>,
+    
+    pub end_kw: Option<Span>,
 }
 
 #[derive(Clone, Debug)]
@@ -166,7 +168,8 @@ impl Unit<Span> {
         let mut impl_kw = None;
         let mut impl_decls = Vec::new();
 
-        let mut init = None;
+        let init;
+        let end_span;
 
         if unit_kind == UnitKind::Program {
             let decls = UnitDecl::parse_seq(Keyword::Implementation, tokens)?;
@@ -182,15 +185,15 @@ impl Unit<Span> {
 
             let main_block = Block::parse(tokens)?;
 
-            let end_span = match tokens.match_one_maybe(Operator::Period) {
-                Some(tt) => tt.into_span(),
+            end_span = match tokens.match_one_maybe(Operator::Period) {
+                Some(tt) => main_block.end.span().to(tt.span()),
                 None => main_block.end.clone(),
             };
 
             init = Some(InitBlock {
                 keyword_span: main_block.begin.clone(),
                 body: vec![Stmt::Block(Box::new(main_block))],
-                end_span
+                end_span: end_span.clone(),
             });
         } else {
             let has_interface = parse_decls_section(
@@ -211,15 +214,16 @@ impl Unit<Span> {
             if let Some(init_kw) = &init_kw {
                 let init_body = parse_init_section(tokens)?;
 
-                let end_span = match_unit_end(tokens)?;
+                end_span = match_unit_end(tokens)?;
                 
                 init = Some(InitBlock {
                     keyword_span: init_kw.span().clone(),
                     body: init_body,
-                    end_span,
-                })
+                    end_span: end_span.clone(),
+                });
             } else {
-                match_unit_end(tokens)?;
+                end_span = match_unit_end(tokens)?;
+                init = None;
             }
 
             if !(has_interface || has_implementation || init_kw.is_some()) {
@@ -228,9 +232,8 @@ impl Unit<Span> {
                     | Keyword::Interface
                     | Keyword::Implementation
                     | Keyword::Initialization)?;
+                unreachable!()
             }
-            
-            
         }
         
         // add auto refs
@@ -245,6 +248,7 @@ impl Unit<Span> {
             iface_decls,
             impl_kw,
             impl_decls,
+            end_kw: Some(end_span),
         })
     }
 }
