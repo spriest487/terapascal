@@ -1,4 +1,5 @@
 use crate::ast::Annotation;
+use crate::ast::ElseBranch;
 use crate::ast::Expr;
 use crate::ast::Stmt;
 use crate::ast::TypeNamePattern;
@@ -10,11 +11,11 @@ use crate::token_tree::DelimitedGroup;
 use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Separator;
+use derivative::Derivative;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use derivative::Derivative;
-use std::fmt;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
@@ -35,7 +36,7 @@ where
     pub cond_expr: Expr<A>,
 
     pub branches: Vec<MatchBlockBranch<A, B>>,
-    pub else_branch: Option<B>,
+    pub else_branch: Option<ElseBranch<B>>,
 
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
@@ -64,8 +65,8 @@ impl MatchExpr {
     fn parse_branches(
         tokens: &mut TokenStream,
         branches: &mut Vec<MatchBlockBranch<Span, Expr>>
-    ) -> ParseResult<Option<Expr>> {
-        let expect_else = if tokens.match_one_maybe(Keyword::Else).is_some() { 
+    ) -> ParseResult<Option<ElseBranch<Expr>>> {
+        let expect_else = if tokens.look_ahead().match_one(Keyword::Else).is_some() { 
             true 
         } else {
             loop {
@@ -95,7 +96,7 @@ impl MatchStmt {
         let mut group = Self::parse_block_group(tokens)?;
 
         let mut branches = Vec::new();
-        let expect_else = if tokens.match_one_maybe(Keyword::Else).is_some() {
+        let expect_else = if tokens.look_ahead().match_one(Keyword::Else).is_some() {
             true
         } else {
             loop {
@@ -188,20 +189,24 @@ impl<B> MatchBlock<Span, B> {
     }
     
     pub(crate) fn match_end_of_branches(tokens: &mut TokenStream) -> MatchBranchNextItem {
-        match tokens.match_one_maybe(Keyword::Else | Separator::Semicolon) {
+        match tokens.look_ahead().match_one(Keyword::Else | Separator::Semicolon) {
             // semicolon separator
             Some(tt) if tt.is_separator(Separator::Semicolon) => {
-                if tokens.match_one_maybe(Keyword::Else).is_some() {
-                    MatchBranchNextItem::ElseBranch
-                } else if tokens.look_ahead().next().is_none() {
-                    MatchBranchNextItem::End
-                } else {
-                    MatchBranchNextItem::Branch
+                tokens.advance(1);
+
+                match tokens.look_ahead().next() {
+                    Some(tt) if tt.is_keyword(Keyword::Else) => {
+                        MatchBranchNextItem::ElseBranch
+                    },
+                    
+                    None => MatchBranchNextItem::End,
+                    
+                    _ =>  MatchBranchNextItem::Branch,
                 }
             }
 
             // else without a separating semicolon
-            Some(tt) if tt.is_keyword(Keyword::Else) => { 
+            Some(tt) if tt.is_keyword(Keyword::Else) => {
                 MatchBranchNextItem::ElseBranch
             }
             
@@ -215,11 +220,11 @@ impl<B> MatchBlock<Span, B> {
 }
 
 impl<B: Parse> MatchBlock<Span, B> {
-    pub(crate) fn parse_else_item(tokens: &mut TokenStream) -> ParseResult<B> {
-        let item = B::parse(tokens)?;
+    pub(crate) fn parse_else_item(tokens: &mut TokenStream) -> ParseResult<ElseBranch<B>> {
+        let branch = ElseBranch::parse(tokens)?;
         tokens.match_one_maybe(Separator::Semicolon);
         
-        Ok(item)
+        Ok(branch)
     }
 }
 
@@ -242,7 +247,7 @@ where
         }
 
         if let Some(else_branch) = &self.else_branch {
-            writeln!(f, "\telse {};", else_branch)?;
+            writeln!(f, "\telse {};", else_branch.item)?;
         }
 
         write!(f, "end")
@@ -262,7 +267,9 @@ impl MatchStmt<Span> {
         }
 
         let else_branch = match self.else_branch.as_ref() {
-            Some(else_stmt) => Some(else_stmt.to_expr()?),
+            Some(branch) => {
+                Some(ElseBranch::new(branch.else_kw_span.clone(), branch.item.to_expr()?))
+            },
             None => None,
         };
 
@@ -299,7 +306,7 @@ struct MatchBlockGroup {
 impl MatchBlockGroup {
     pub fn finish_block<B>(self,
         branches: Vec<MatchBlockBranch<Span, B>>,
-        else_branch: Option<B>
+        else_branch: Option<ElseBranch<B>>
     ) -> ParseResult<MatchBlock<Span, B>> {
         self.tokens.finish()?;
         

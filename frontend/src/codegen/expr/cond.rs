@@ -148,7 +148,7 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Buil
             builder.scope(|builder| {
                 builder.label(else_label.unwrap());
 
-                let else_val = expr::expr_to_val(else_branch, builder);
+                let else_val = expr::expr_to_val(&else_branch.item, builder);
                 builder.mov(out_ref.clone(), else_val);
                 builder.retain(out_ref.clone(), &out_ty);
             });

@@ -12,6 +12,7 @@ use crate::typ::Value;
 use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::ast::ElseBranch;
 
 pub type CaseBranch<Item> = ast::CaseBranch<Value, Item>;
 pub type CaseBlock<Item> = ast::CaseBlock<Value, Item>;
@@ -40,8 +41,8 @@ pub fn typecheck_case_stmt(
 
     let else_branch = match &case.else_branch {
         Some(else_branch) => {
-            let else_stmt = typecheck_stmt(else_branch, &expect_ty, ctx)?;
-            Some(else_stmt)
+            let else_stmt = typecheck_stmt(&else_branch.item, &expect_ty, ctx)?;
+            Some(ElseBranch::new(else_branch.else_kw_span.clone(), else_stmt))
         },
 
         None => None,
@@ -54,7 +55,7 @@ pub fn typecheck_case_stmt(
         of_span: case.of_span.clone(),
         cond_expr: Box::new(cond_expr),
         branches,
-        else_branch: else_branch.map(Box::new),
+        else_branch,
         annotation,
         end_span: case.end_span.clone(),
     })
@@ -107,8 +108,11 @@ pub fn typecheck_case_expr(
         Some(branch_expr_ty) => branch_expr_ty,
     };
 
-    let else_expr = match &case.else_branch {
-        Some(else_branch) => typecheck_expr(else_branch, &result_ty, ctx)?,
+    let else_branch = match &case.else_branch {
+        Some(branch) => {
+            let expr = typecheck_expr(&branch.item, &result_ty, ctx)?;
+            ElseBranch::new(branch.else_kw_span.clone(), expr)
+        }
 
         _ => {
             return Err(TypeError::InvalidCaseExprBlock { span });
@@ -128,7 +132,7 @@ pub fn typecheck_case_expr(
         of_span: case.of_span.clone(),
         cond_expr: Box::new(cond_expr),
         branches,
-        else_branch: Some(Box::new(else_expr)),
+        else_branch: Some(else_branch),
         annotation,
         end_span: case.end_span.clone(),
     })

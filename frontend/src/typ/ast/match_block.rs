@@ -16,6 +16,7 @@ use crate::typ::Value;
 use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::ast::ElseBranch;
 
 pub type MatchBlock<B> = ast::MatchBlock<Value, B>;
 pub type MatchExpr = MatchBlock<Expr>;
@@ -121,9 +122,9 @@ pub fn typecheck_match_stmt(
         )?;
 
         let else_branch = match &match_stmt.else_branch {
-            Some(else_stmt) => {
-                let else_stmt = typecheck_stmt(else_stmt, expect_ty, block_ctx)?;
-                Some(else_stmt)
+            Some(branch) => {
+                let else_stmt = typecheck_stmt(&branch.item, expect_ty, block_ctx)?;
+                Some(ElseBranch::new(branch.else_kw_span.clone(), else_stmt))
             },
             None => None,
         };
@@ -181,9 +182,9 @@ pub fn typecheck_match_expr(
         let result_ty = branches[0].item.annotation().ty().into_owned();
 
         let else_branch = match &match_expr.else_branch {
-            Some(else_stmt) => {
-                let else_stmt = typecheck_expr(else_stmt, expect_ty, block_ctx)?;
-                Some(else_stmt)
+            Some(branch) => {
+                let else_stmt = typecheck_expr(&branch.item, expect_ty, block_ctx)?;
+                Some(ElseBranch::new(branch.else_kw_span.clone(), else_stmt))
             },
             None => None,
         };

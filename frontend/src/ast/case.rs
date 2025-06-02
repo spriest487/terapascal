@@ -2,6 +2,7 @@
 mod test;
 
 use crate::ast::Annotation;
+use crate::ast::ElseBranch;
 use crate::ast::Expr;
 use crate::ast::MatchBranchNextItem;
 use crate::ast::MatchExpr;
@@ -39,7 +40,7 @@ pub struct CaseBlock<A: Annotation, B> {
     
     pub cond_expr: Box<Expr<A>>,
     pub branches: Vec<CaseBranch<A, B>>,
-    pub else_branch: Option<Box<B>>,
+    pub else_branch: Option<ElseBranch<B>>,
 
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
@@ -74,7 +75,7 @@ where
         }
 
         if let Some(else_branch) = &self.else_branch {
-            writeln!(f, "else {}", else_branch)?;
+            writeln!(f, "else {}", else_branch.item)?;
         }
 
         writeln!(f, "end")
@@ -94,8 +95,8 @@ impl CaseExpr {
     fn parse_branches(
         tokens: &mut TokenStream,
         branches: &mut Vec<CaseBranch<Span, Expr>>
-    ) -> ParseResult<Option<Expr>> {
-        let expect_else = if tokens.match_one_maybe(Keyword::Else).is_some() {
+    ) -> ParseResult<Option<ElseBranch<Expr>>> {
+        let expect_else = if tokens.look_ahead().match_one(Keyword::Else).is_some() {
             true
         } else {
             loop {
@@ -126,7 +127,7 @@ impl CaseStmt {
 
         let mut branches = Vec::new();
 
-        let expect_else = if group.tokens.match_one_maybe(Keyword::Else).is_some() { 
+        let expect_else = if group.tokens.look_ahead().match_one(Keyword::Else).is_some() { 
             true 
         } else {
             loop {
@@ -186,10 +187,10 @@ impl CaseStmt {
         };
 
         let else_branch = if expect_else {
-            let else_item = Stmt::parse(&mut group.tokens)?;
+            let else_branch = ElseBranch::parse(&mut group.tokens)?;
             group.tokens.match_one_maybe(Separator::Semicolon);
 
-            Some(else_item)
+            Some(else_branch)
         } else {
             None
         };
@@ -286,7 +287,8 @@ where
 impl CaseStmt<Span> {
     pub fn to_expr(&self) -> Option<CaseExpr<Span>> {
         // must have an else branch that is a valid expr
-        let else_branch = self.else_branch.as_ref()?.clone().to_expr()?;
+        let else_branch = self.else_branch.as_ref()?;
+        let else_expr = else_branch.item.to_expr()?;
 
         let mut branches = Vec::with_capacity(self.branches.len());
         for branch in &self.branches {
@@ -303,7 +305,7 @@ impl CaseStmt<Span> {
             of_span: self.of_span.clone(),
             cond_expr: self.cond_expr.clone(),
             branches,
-            else_branch: Some(Box::new(else_branch)),
+            else_branch: Some(ElseBranch::new(else_branch.else_kw_span.clone(), else_expr)),
             annotation: self.annotation.clone(),
             end_span: self.end_span.clone(),
         })
@@ -322,7 +324,7 @@ struct CaseBlockGroup {
 impl CaseBlockGroup {
     pub fn finish_block<B>(self,
         branches: Vec<CaseBranch<Span, B>>,
-        else_branch: Option<B>
+        else_branch: Option<ElseBranch<B>>
     ) -> ParseResult<CaseBlock<Span, B>> {
         self.tokens.finish()?;
 
@@ -333,7 +335,7 @@ impl CaseBlockGroup {
             cond_expr: Box::new(self.cond_expr),
             annotation: self.span,
             branches,
-            else_branch: else_branch.map(Box::new),
+            else_branch,
         })
     }
 }

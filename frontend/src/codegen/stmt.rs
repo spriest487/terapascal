@@ -592,7 +592,7 @@ pub fn build_case_block<Item, ItemFn>(
             builder.label(else_label);
 
             builder.scope(|builder| {
-                translate_item(&else_item, builder);
+                translate_item(&else_item.item, builder);
             });
 
             builder.jmp(break_label);
@@ -650,7 +650,7 @@ fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut Builder)
             builder.scope(|builder| {
                 builder.label(else_label.unwrap());
 
-                translate_stmt(else_branch, builder);
+                translate_stmt(&else_branch.item, builder);
             });
         }
 

@@ -275,7 +275,7 @@ fn expect_case_stmt_initialized(case: &CaseStmt, ctx: &Context) -> TypeResult<()
     }
 
     if let Some(else_branch) = &case.else_branch {
-        expect_stmt_initialized(else_branch, ctx)?;
+        expect_stmt_initialized(&else_branch.item, ctx)?;
     }
 
     Ok(())
@@ -292,7 +292,7 @@ fn expect_case_expr_initialized(case: &CaseExpr, ctx: &Context) -> TypeResult<()
     }
 
     if let Some(else_branch) = &case.else_branch {
-        expect_expr_initialized(else_branch, ctx)?;
+        expect_expr_initialized(&else_branch.item, ctx)?;
     }
 
     Ok(())
@@ -306,7 +306,7 @@ fn expect_match_expr_initialized(match_expr: &MatchExpr, ctx: &Context) -> TypeR
     }
 
     if let Some(else_branch) = &match_expr.else_branch {
-        expect_expr_initialized(else_branch, ctx)?;
+        expect_expr_initialized(&else_branch.item, ctx)?;
     }
 
     Ok(())
@@ -320,7 +320,7 @@ fn expect_match_stmt_initialized(match_stmt: &MatchStmt, ctx: &Context) -> TypeR
     }
 
     if let Some(else_branch) = &match_stmt.else_branch {
-        expect_stmt_initialized(else_branch, ctx)?;
+        expect_stmt_initialized(&else_branch.item, ctx)?;
     }
 
     Ok(())

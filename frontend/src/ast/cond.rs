@@ -28,8 +28,27 @@ pub struct ElseBranch<B> {
     pub else_kw_span: Span,
 }
 
+impl<B> ElseBranch<B> {
+    pub fn new(else_kw_span: Span, item: impl Into<Box<B>>) -> Self {
+        Self {
+            else_kw_span,
+            item: item.into(),
+        }
+    } 
+}
+
 impl<B: Parse> ElseBranch<B> {
-    fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
+    pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
+        let else_token = tokens.match_one(Keyword::Else)?;
+        let branch = B::parse(tokens)?;
+
+        Ok(ElseBranch {
+            else_kw_span: else_token.into_span(),
+            item: Box::new(branch),
+        })
+    }
+    
+    pub fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
         match tokens.match_one_maybe(Keyword::Else) {
             Some(else_token) => {
                 let branch = B::parse(tokens)?;

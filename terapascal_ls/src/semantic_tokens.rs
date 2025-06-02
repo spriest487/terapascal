@@ -459,11 +459,8 @@ impl SemanticTokenBuilder {
         add_branch(self, &if_cond.then_branch);
 
         if let Some(branch) = &if_cond.else_branch {
-            self.add(branch.item.span(), SEMANTIC_KEYWORD);
-        }
-
-        if let Some(else_branch) = &if_cond.else_branch {
-            add_branch(self, &else_branch.item);
+            self.add(&branch.else_kw_span, SEMANTIC_KEYWORD);
+            add_branch(self, &branch.item);
         }
     }
 
@@ -486,7 +483,8 @@ impl SemanticTokenBuilder {
         }
         
         if let Some(branch) = &block.else_branch {
-            add_branch(self, branch);
+            self.add(&branch.else_kw_span, SEMANTIC_KEYWORD);
+            add_branch(self, &branch.item);
         }
         
         self.add(&block.end_span, SEMANTIC_KEYWORD);
@@ -509,7 +507,8 @@ impl SemanticTokenBuilder {
         }
 
         if let Some(branch) = &block.else_branch {
-            add_branch(self, branch);
+            self.add(&branch.else_kw_span, SEMANTIC_KEYWORD);
+            add_branch(self, &branch.item);
         }
 
         self.add(&block.end_span, SEMANTIC_KEYWORD);
