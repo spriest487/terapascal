@@ -10,16 +10,17 @@ terapascal-frontend = { path = "frontend" }
 terapascal-vm = { path = "vm" }
 terapascal-backend-c = { path = "backend_c" }
 terapascal-ir = { path = "ir" }
+terapascal-build = { path = "build" }
 
 linked-hash-map = "0.5.6"
-structopt = "0.3.25"
 codespan = "0.12.0"
-codespan-reporting = "0.12.0"
 topological-sort = "0.2.2"
 bincode = { version = "2.0.1", features = ["serde"] }
+structopt = "0.3.25"
+codespan-reporting = "0.12.0"
 
 [workspace]
-members = [
+members = [ "build",
     "common",
     "frontend",
     "ir", 

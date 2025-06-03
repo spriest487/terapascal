@@ -1,5 +1,5 @@
 use crate::codegen::gen_lib;
-use crate::codegen::IROptions;
+use crate::codegen::CodegenOpts;
 use crate::typ;
 use crate::ir::dep_sort::find_deps;
 use crate::ir::dep_sort::sort_defs;
@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 fn defs_from_src(src: &str) -> (HashMap<TypeDefID, TypeDef>, Metadata) {
     let module = typ::test::module_from_src("test", src);
-    let ir = gen_lib(&module, IROptions::default());
+    let ir = gen_lib(&module, CodegenOpts::default());
 
     let defs = ir.metadata().type_defs()
         .map(|(id, def)| (id, def.clone()))

@@ -1,10 +1,10 @@
 use crate::ast::{Expr, ObjectCtor};
 use crate::TokenStream;
 use terapascal_common::span::Span;
-use terapascal_common::BuildOptions;
+use terapascal_common::CompileOpts;
 
 fn expr_from_src(src: &str) -> Expr {
-    let opts = BuildOptions::default();
+    let opts = CompileOpts::default();
     let unit = crate::preprocess("test", src, opts).unwrap();
     let tokens = crate::tokenize(unit).unwrap();
     let span = Span::zero("test");

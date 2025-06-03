@@ -2,6 +2,7 @@ use std::{
     path::PathBuf,
 };
 use structopt::*;
+use terapascal_build::BuildStage;
 use terapascal_common::LanguageMode;
 
 #[derive(StructOpt, Debug)]
@@ -25,16 +26,16 @@ pub struct Args {
 
     /// additional units to compile
     #[structopt(long = "units", short = "u")]
-    pub units: Vec<String>,
+    pub units: Vec<PathBuf>,
 
     /// source dir for unit source files
     #[structopt(long = "search-dir", short = "s", parse(from_os_str))]
     pub search_dirs: Vec<PathBuf>,
 
-    /// if set, run compilation to a given stage and print the output as human-readable
+    /// if set, run compilation to a given stage and print the intermediate output to stdout
     /// text instead of creating an output file
-    #[structopt(short = "p", long = "print-stage", parse(try_from_str = parse_compile_stage))]
-    pub print_stage: Option<CompileStage>,
+    #[structopt(short = "p", long = "print-stage", parse(try_from_str = parse_build_stage_arg))]
+    pub print_stage: Option<BuildStage>,
 
     /// vm: log RC heap usage
     #[structopt(long = "trace-heap")]
@@ -65,20 +66,12 @@ pub struct Args {
     pub diag_port: u16,
 }
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
-pub enum CompileStage {
-    Preprocess,
-    Parse,
-    Typecheck,
-    EmitIR,
-}
-
-fn parse_compile_stage(s: &str) -> Result<CompileStage, String> {
+fn parse_build_stage_arg(s: &str) -> Result<BuildStage, String> {
     match s {
-        "ir" | "codegen-ir" => Ok(CompileStage::EmitIR),
-        "p" | "parse" => Ok(CompileStage::Parse),
-        "t" | "typecheck" => Ok(CompileStage::Typecheck),
-        "pp" | "preprocess" => Ok(CompileStage::Preprocess),
+        "ir" | "codegen-ir" => Ok(BuildStage::Codegen),
+        "p" | "parse" => Ok(BuildStage::Parse),
+        "t" | "typecheck" => Ok(BuildStage::Typecheck),
+        "pp" | "preprocess" => Ok(BuildStage::Preprocess),
         _ => Err(format!("invalid output kind: {}", s)),
     }
 }

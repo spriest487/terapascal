@@ -1,11 +1,5 @@
-use crate::ast::IdentPath;
-use crate::ast::UnitKind;
-use crate::parse::ParseError;
-use crate::pp::error::PreprocessorError;
-use crate::typ::TypeError;
-use crate::TokenizeError;
-use std::fmt;
 use std::path::PathBuf;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::Backtrace;
@@ -13,6 +7,12 @@ use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::TracedError;
+use terapascal_frontend::ast::IdentPath;
+use terapascal_frontend::ast::UnitKind;
+use terapascal_frontend::parse::ParseError;
+use terapascal_frontend::pp::error::PreprocessorError;
+use terapascal_frontend::typ::TypeError;
+use terapascal_frontend::TokenizeError;
 
 #[derive(Debug)]
 pub enum BuildError {

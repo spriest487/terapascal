@@ -74,7 +74,7 @@ fn label_from_source_file<'a>(
     Ok(label)
 }
 
-pub fn report_err(err: &impl DiagnosticOutput, severity: Severity) -> Result<(), FileError> {
+pub fn report_err(err: &dyn DiagnosticOutput, severity: Severity) -> Result<(), FileError> {
     let mut out = termcolor::StandardStream::stderr(termcolor::ColorChoice::Auto);
     let config = codespan_reporting::term::Config::default();
 

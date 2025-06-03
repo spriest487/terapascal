@@ -20,7 +20,7 @@ use crate::ir;
 use crate::typ as typ;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct IROptions {
+pub struct CodegenOpts {
     // insert IR comments indicating RC release/retain operations
     pub annotate_rc: bool,
 
@@ -29,7 +29,7 @@ pub struct IROptions {
     pub debug: bool,
 }
 
-impl Default for IROptions {
+impl Default for CodegenOpts {
     fn default() -> Self {
         Self {
             annotate_rc: false,
@@ -39,7 +39,7 @@ impl Default for IROptions {
     }
 }
 
-pub fn gen_lib(module: &typ::Module, opts: IROptions) -> ir::Library {
+pub fn gen_lib(module: &typ::Module, opts: CodegenOpts) -> ir::Library {
     let metadata = ir::Metadata::new();
     let mut lib = LibraryBuilder::new((*module.root_ctx).clone(), metadata, opts);
 

@@ -15,10 +15,10 @@ use crate::typ::TypeArgList;
 use crate::TokenStream;
 use crate::TokenTree;
 use terapascal_common::span::Span;
-use terapascal_common::BuildOptions;
+use terapascal_common::CompileOpts;
 
 pub fn expr_from_str(src: &str) -> ast::Expr<Span> {
-    let test_unit = Preprocessor::new("test", BuildOptions::default()).preprocess(src).unwrap();
+    let test_unit = Preprocessor::new("test", CompileOpts::default()).preprocess(src).unwrap();
     let tokens = TokenTree::tokenize(test_unit).unwrap();
 
     let mut tokens = TokenStream::new(tokens, Span::zero("test"));

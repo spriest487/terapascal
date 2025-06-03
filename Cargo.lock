@@ -1463,6 +1463,7 @@ dependencies = [
  "linked-hash-map",
  "structopt",
  "terapascal-backend-c",
+ "terapascal-build",
  "terapascal-common",
  "terapascal-frontend",
  "terapascal-ir",
@@ -1475,6 +1476,20 @@ name = "terapascal-backend-c"
 version = "0.1.0"
 dependencies = [
  "terapascal-common",
+ "terapascal-ir",
+ "topological-sort",
+]
+
+[[package]]
+name = "terapascal-build"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "codespan",
+ "linked-hash-map",
+ "terapascal-backend-c",
+ "terapascal-common",
+ "terapascal-frontend",
  "terapascal-ir",
  "topological-sort",
 ]
@@ -1519,6 +1534,7 @@ name = "terapascal-ls"
 version = "0.1.0"
 dependencies = [
  "dashmap 6.1.0",
+ "terapascal-build",
  "terapascal-common",
  "terapascal-frontend",
  "tokio",

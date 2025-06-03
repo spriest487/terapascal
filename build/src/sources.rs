@@ -1,13 +1,11 @@
-use crate::Args;
-use crate::RunError;
-use terapascal_common::span::*;
-use terapascal_frontend::ast::IdentPath;
+use crate::error::BuildError;
 use std::collections::LinkedList;
 use std::env;
 use std::path::Path;
 use std::path::PathBuf;
+use terapascal_common::span::*;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
-use terapascal_frontend::error::BuildError;
+use terapascal_frontend::ast::IdentPath;
 
 fn find_in_path(filename: &PathBuf, dir: &Path) -> Option<PathBuf> {
     if !dir.exists() || !dir.is_dir() {
@@ -53,10 +51,9 @@ pub struct SourceCollection {
 }
 
 impl SourceCollection {
-    pub fn new<'a>(
-        args: &Args
-    ) -> Result<Self, RunError> {
-        let source_dirs = args.search_dirs.iter()
+    pub fn new<'a>(search_dirs: &[PathBuf], verbose: bool) -> Result<Self, BuildError> {
+        let source_dirs = search_dirs
+            .iter()
             .filter(|dir| dir.exists())
             .cloned()
             .chain({
@@ -69,13 +66,14 @@ impl SourceCollection {
                     unit_dirs.push(cwd);
                 }
 
-                unit_dirs.into_iter()
+                unit_dirs
+                    .into_iter()
                     .filter(|dir| dir.exists())
             })
             .collect();
 
         let sources = Self {
-            verbose: args.verbose,
+            verbose,
 
             source_dirs,
             source_list: LinkedList::new(),
@@ -88,7 +86,7 @@ impl SourceCollection {
         &self.source_dirs
     }
 
-    pub fn add(&mut self, unit_filename: &PathBuf, span: Option<Span>) -> Result<PathBuf, RunError> {
+    pub fn add(&mut self, unit_filename: &PathBuf, span: Option<Span>) -> Result<PathBuf, BuildError> {
         match find_in_paths(unit_filename, &self.source_dirs) {
             Some(path) => {
                 if !self.source_list.contains(&path) {
@@ -103,12 +101,12 @@ impl SourceCollection {
             }
 
             None => {
-                Err(RunError::from(BuildError::FileNotFound(unit_filename.clone(), span)))
+                Err(BuildError::FileNotFound(unit_filename.clone(), span))
             },
         }
     }
 
-    pub fn add_used_unit(&mut self, base_unit_path: &PathBuf, used_unit: &IdentPath) -> Result<PathBuf, RunError> {
+    pub fn add_used_unit(&mut self, base_unit_path: &PathBuf, used_unit: &IdentPath) -> Result<PathBuf, BuildError> {
         let unit_filename = PathBuf::from(used_unit.to_string() + "." + SRC_FILE_DEFAULT_EXT);
 
         self.add_used_unit_in_file(base_unit_path, used_unit, &unit_filename)
@@ -118,7 +116,7 @@ impl SourceCollection {
         unit_dir: &PathBuf,
         used_unit: &IdentPath,
         filename: &PathBuf,
-    ) -> Result<PathBuf, RunError> {
+    ) -> Result<PathBuf, BuildError> {
         if let Some(unit_dir) = unit_dir.parent() {
             if let Some(used_path) = find_in_path(filename, unit_dir) {
                 if self.verbose {

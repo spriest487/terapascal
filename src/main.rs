@@ -1,17 +1,11 @@
 mod args;
 mod compile_error;
 mod reporting;
-mod sources;
 
 use crate::args::*;
 use crate::compile_error::*;
 use crate::reporting::report_err;
-use crate::sources::*;
 use codespan_reporting::diagnostic::Severity;
-use linked_hash_map::LinkedHashMap;
-use pp::PreprocessedUnit;
-use std::collections::hash_map::Entry;
-use std::collections::hash_map::HashMap;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
@@ -28,326 +22,70 @@ use std::time::Duration;
 use structopt::StructOpt;
 use terapascal_backend_c as backend_c;
 use terapascal_backend_c::c;
-use terapascal_common::{read_source_file, DiagnosticOutput};
+use terapascal_build::bincode_config;
+use terapascal_build::build;
+use terapascal_build::error::BuildError;
+use terapascal_build::BuildArtifact;
+use terapascal_build::BuildInput;
+use terapascal_build::BuildOutput;
+use terapascal_build::BuildStage;
 use terapascal_common::span::*;
-use terapascal_common::BuildOptions;
+use terapascal_common::CompileOpts;
+use terapascal_common::DiagnosticOutput;
 use terapascal_common::IR_LIB_EXT;
-use terapascal_common::SRC_FILE_DEFAULT_EXT;
-use terapascal_frontend::ast;
-use terapascal_frontend::ast::IdentPath;
-use terapascal_frontend::ast::Unit;
-use terapascal_frontend::ast::UnitKind;
-use terapascal_frontend::codegen::IROptions;
-use terapascal_frontend::codegen_ir;
-use terapascal_frontend::parse;
-use terapascal_frontend::pp as pp;
-use terapascal_frontend::tokenize;
-use terapascal_frontend::typ as ty;
-use terapascal_frontend::typ::builtin_ident;
-use terapascal_frontend::typ::SYSTEM_UNIT_NAME;
-use terapascal_frontend::typecheck;
+use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
 use terapascal_vm::Interpreter;
 use terapascal_vm::InterpreterOpts;
-use topological_sort::TopologicalSort;
-use terapascal_frontend::error::BuildError;
 
-enum CompileOutput {
-    Preprocess(Vec<PreprocessedUnit>),
-    Parse(Vec<Unit>),
-    Typecheck(ty::Module),
-    IR(ir::Library),
-}
-
-fn preprocess(filename: &PathBuf, opts: BuildOptions) -> Result<PreprocessedUnit, RunError> {
-    let src = read_source_file(filename)
-        .map_err(|err| {
-            BuildError::ReadSourceFileFailed {
-                path: filename.to_path_buf(),
-                msg: err.to_string(),
-            }
-        })?;
-    
-    let preprocessed = terapascal_frontend::preprocess(filename, &src, opts)?;
-    Ok(preprocessed)
-}
-
-fn compile(args: &Args) -> Result<CompileOutput, RunError> {
+fn compile(args: &Args) -> Result<(), RunError> {
     if args.output.is_some() && args.print_stage.is_some() {
         let msg = "output file and print stage arguments are mutually exclusive".to_string();
         return Err(RunError::InvalidArguments(msg));
     }
-    
-    let mut opts = BuildOptions::default();
-    opts.verbose = args.verbose;
-    opts.lang_mode = args.lang_mode;
 
-    for define_sym in &args.define_syms {
-        opts.define(define_sym.clone());
-    }
+    let mut compile_opts = CompileOpts::default();
+    compile_opts.verbose = args.verbose;
+    compile_opts.lang_mode = args.lang_mode;
 
-    let source_ext = get_extension(&args.file);
-    if source_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
-        let module = load_module_from_file(&args.file)?;
-        return Ok(CompileOutput::IR(module));
-    }
-
-    let mut auto_ref_units = Vec::new();
-
-    // map of canonical paths by unit names. each unit must have exactly one source path, to ensure
-    // we don't try to load two units with the same name at different locations 
-    let mut unit_paths: HashMap<IdentPath, PathBuf> = HashMap::new();
-
-    // auto-add system units if we're going beyond parsing
-    let will_typecheck = args.print_stage
-        .map(|print_stage| print_stage >= CompileStage::Typecheck)
-        .unwrap_or(true);
-
-    if will_typecheck {
-        auto_ref_units.push(IdentPath::new(builtin_ident(SYSTEM_UNIT_NAME), []));
-    }
-
-    let mut sources = SourceCollection::new(args)?;
-
-    // add builtin units
-    for auto_ref_unit in auto_ref_units.into_iter() {
-        let unit_filename = PathBuf::from(auto_ref_unit.to_string())
-            .with_extension(SRC_FILE_DEFAULT_EXT);
-
-        let unit_path = sources
-            .add(&unit_filename, None)?
-            .canonicalize()?;
-
-        unit_paths.insert(auto_ref_unit, unit_path);
-    }
-
-    // add extra referenced units
-    for unit_arg in args.units.iter() {
-        let unit_filename = PathBuf::from(unit_arg.clone());
-        sources.add(&unit_filename, None)?;
-    }
-
-    // add main source unit
-    sources.add(&args.file, None)?;
-
-    if opts.verbose {
-        println!("Unit source directories:");
-        for path in sources.source_dirs() {
-            println!("\t{}", path.display());
-        }
-    }
-
-    // if we just want preprocessor output, no unit refs need to be looked up, just process and
-    // print the units provided on the cli
-    if let Some(CompileStage::Preprocess) = args.print_stage {
-        let mut pp_units = Vec::new();
-        while let Some(source_path) = sources.next() {
-            let pp_unit = preprocess(&source_path, opts.clone())?;
-            pp_units.push(pp_unit);
-        }
-        return Ok(CompileOutput::Preprocess(pp_units));
-    }
-    
-    // files parsed in the order specified, either by the project unit or on the command line
-    let mut parsed_files: LinkedHashMap<PathBuf, Unit> = LinkedHashMap::new();
-
-    // not actually used for sorting, just an easy way to detect circular deps
-    let mut dep_sort = TopologicalSort::<IdentPath>::new();
-
-    let mut main_ident = None;
-
-    loop {
-        let unit_filename = match sources.next() {
-            None => break,
-            Some(f) => f,
-        };
-
-        let canon_filename = unit_filename
-            .canonicalize()
-            .map_err(|e| BuildError::ReadSourceFileFailed {
-                msg: e.to_string(),
-                path: unit_filename.clone(),
-            })?;
-
-        let unit = match parsed_files.get(&canon_filename) {
-            Some(unit) => {
-                return Err(RunError::from(BuildError::DuplicateUnit {
-                    unit_ident: unit.ident.clone(),
-                    new_path: unit_filename.clone(),
-                    existing_path: unit_filename.clone(),
-                }));
-            },
-
-            None => {
-                if args.verbose {
-                    eprintln!("parsing unit @ `{}`", unit_filename.display());
-                }
-                
-                let pp_unit = preprocess(&canon_filename, opts.clone())?;
-
-                for warning in &pp_unit.warnings {
-                    if report_err(warning, Severity::Warning).is_err() {
-                        eprintln!("warning: {}", warning);
-                    }
-                }
-
-                let tokens = tokenize(pp_unit)?;
-                let parsed_unit = parse(canon_filename.clone(), tokens)?;
-
-                add_unit_path(&parsed_unit.ident, &unit_filename, &mut unit_paths)?;
-
-                dep_sort.insert(parsed_unit.ident.clone());
-
-                parsed_files.insert(canon_filename.clone(), parsed_unit);
-                &parsed_files[&canon_filename]
-            }
-        };
-
-        let unit_ident = unit.ident.clone();
-        
-        let is_main_unit = matches!(unit.kind, UnitKind::Program | UnitKind::Library);
-
-        main_ident = match (main_ident, is_main_unit) {
-            (None, true) => {
-                Some(Some(unit.ident.clone()))
-            },
-
-            (None, false) => {
-                Some(None)
-            },
-
-            (Some(prev_ident), true) => {
-                return Err(RunError::from(BuildError::UnexpectedMainUnit {
-                    existing_ident: prev_ident,
-                    unit_path: canon_filename,
-                    unit_kind: unit.kind,
-                }))
-            },
-
-            (existing @ Some(..), false) => {
-                existing
-            }
-        };
-
-        let uses_units: Vec<_> = unit
-            .all_decls()
-            .filter_map(|(_vis, decl)| match decl {
-                ast::UnitDecl::Uses { decl } => Some(decl.clone()),
-                _ => None,
-            })
-            .flat_map(|uses| uses.units)
-            .collect();
-
-        for used_unit in uses_units {
-            // project units can load other units. without a project unit, each unit to be included
-            // in compilation must be included in the units compiler arg
-            if !unit_paths.contains_key(&used_unit.ident) {
-                if is_main_unit {
-                    if args.verbose {
-                        println!("unit {} used from {}", used_unit, unit_ident);
-                    }
-
-                    let used_unit_path = match used_unit.path {
-                        Some(path) => {
-                            let filename = PathBuf::from(path);
-                            sources.add_used_unit_in_file(&canon_filename, &used_unit.ident, &filename)?
-                        }
-
-                        None => {
-                            sources.add_used_unit(&canon_filename, &used_unit.ident)?
-                        }
-                    };
-
-                    add_unit_path(&used_unit.ident, &used_unit_path, &mut unit_paths)?;
-                } else {
-                    return Err(RunError::from(BuildError::UnitNotLoaded {
-                        unit_name: used_unit.ident.clone(),
-                    }));
-                }
-            }
-
-            // check for cycles
-            dep_sort.add_dependency(used_unit.ident.clone(), unit_ident.clone());
-            if dep_sort.peek().is_none() {
-                return Err(RunError::from(BuildError::CircularDependency {
-                    unit_ident,
-                    used_unit: used_unit.ident,
-                    span: used_unit.span.clone(),
-                }));
-            }
-        }
-    }
-    
-    fn add_unit_path(
-        unit_ident: &IdentPath,
-        path: &PathBuf,
-        unit_paths: &mut HashMap<IdentPath, PathBuf>
-    ) -> Result<(), RunError> {
-        let canon_path = path.canonicalize()?;
-
-        match unit_paths.entry(unit_ident.clone()) {
-            Entry::Occupied(occupied_ident_filename) => {
-                // the same unit can't be loaded from two separate filenames. it might
-                // already be in the filename map because we insert the builtin units ahead
-                // of time
-                if *occupied_ident_filename.get() != canon_path {
-                    Err(RunError::from(BuildError::DuplicateUnit {
-                        unit_ident: occupied_ident_filename.key().clone(),
-                        new_path: path.clone(),
-                        existing_path: occupied_ident_filename.get().to_path_buf(),
-                    }))
-                } else {
-                    Ok(())
-                }
-            },
-
-            Entry::Vacant(vacant_ident_filename) => {
-                vacant_ident_filename.insert(canon_path.clone());
-                
-                Ok(())
-            }
-        }
-    }
-
-    let mut compile_units: Vec<_> = parsed_files
-        .into_iter()
-        .map(|(_path, unit)| unit)
-        .collect();
-    
-    if let Some(CompileStage::Parse) = args.print_stage {
-        return Ok(CompileOutput::Parse(compile_units));
-    }
-
-    if args.verbose {
-        println!("Compilation units:");
-        for unit in &compile_units {
-            println!("\t{}", unit.ident);
-        }
-    }
-
-    // reverse the compilation order for typechecking, modules should be processed after all their
-    // dependencies
-    compile_units.reverse();
-    let typed_module = typecheck(&compile_units, args.verbose)?;
-
-    if let Some(CompileStage::Typecheck) = args.print_stage {
-        return Ok(CompileOutput::Typecheck(typed_module));
-    }
-
-    let ir_opts = IROptions {
+    let codegen_opts = CodegenOpts {
         annotate_rc: args.trace_rc,
         debug: args.debug,
     };
 
-    let module = codegen_ir(&typed_module, ir_opts);
-    Ok(CompileOutput::IR(module))
+    for define_sym in &args.define_syms {
+        compile_opts.define(define_sym.clone());
+    }
+
+    let source_ext = get_extension(&args.file);
+    if source_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
+        let module = load_lib(&args.file)?;
+        
+        return handle_output(BuildOutput {
+            artifact: BuildArtifact::Library(module),
+            warnings: Vec::new(),
+        }, args);
+    }
+    
+    let mut units = args.units.clone();
+
+    // add main source unit
+    units.push(args.file.clone());
+    
+    let input = BuildInput {
+        compile_opts,
+        codegen_opts,
+        search_dirs: args.search_dirs.clone(),
+        output_stage: args.print_stage.unwrap_or(BuildStage::Codegen),
+        units,
+    };
+    
+    let output = build(input)?;
+    
+    handle_output(output, args)
 }
 
-fn bincode_config() -> bincode::config::Configuration {
-    bincode::config::Configuration::default()
-}
-
-fn load_module_from_file(path: &Path) -> Result<ir::Library, RunError> {
+fn load_lib(path: &Path) -> Result<ir::Library, RunError> {
     let mut module_bytes = Vec::new();
 
     File::open(&path)
@@ -360,7 +98,7 @@ fn load_module_from_file(path: &Path) -> Result<ir::Library, RunError> {
                 path: path.to_path_buf(),
             }
         })?;
-    
+
     let module: ir::Library = bincode::serde::decode_from_slice(&module_bytes, bincode_config())
         .map_err(|err| {
             BuildError::ReadSourceFileFailed {
@@ -406,16 +144,22 @@ where
     io_result.map_err(|io_err| RunError::OutputFailed(out_span, io_err))
 }
 
-fn handle_output(output: CompileOutput, args: &Args) -> Result<(), RunError> {
-    match output {
-        CompileOutput::Preprocess(units) => print_output(args.output.as_ref(), |dst| {
+fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
+    for warning in &output.warnings {
+        if report_err(warning.as_ref(), Severity::Warning).is_err() {
+            eprintln!("warning: {}", warning);
+        }
+    }
+    
+    match output.artifact {
+        BuildArtifact::PreprocessedText(units) => print_output(args.output.as_ref(), |dst| {
             for pp_unit in units {
                 write!(dst, "{}", pp_unit.source)?;
             }
             Ok(())
         }),
 
-        CompileOutput::Parse(units) => print_output(args.output.as_ref(), |dst| {
+        BuildArtifact::ParsedUnit(units) => print_output(args.output.as_ref(), |dst| {
             for unit in units {
                 write!(dst, "{}", unit)?;
             }
@@ -423,7 +167,7 @@ fn handle_output(output: CompileOutput, args: &Args) -> Result<(), RunError> {
             Ok(())
         }),
 
-        CompileOutput::Typecheck(module) => print_output(args.output.as_ref(), |dst| {
+        BuildArtifact::TypedModule(module) => print_output(args.output.as_ref(), |dst| {
             for unit in &module.units {
                 write!(dst, "{}", unit.unit)?;
             }
@@ -431,8 +175,8 @@ fn handle_output(output: CompileOutput, args: &Args) -> Result<(), RunError> {
             Ok(())
         }),
 
-        CompileOutput::IR(lib) => {
-            if let Some(CompileStage::EmitIR) = args.print_stage {
+        BuildArtifact::Library(lib) => {
+            if let Some(BuildStage::Codegen) = args.print_stage {
                 return print_output(args.output.as_ref(), |dst| write!(dst, "{}", lib));
             }
             
@@ -591,9 +335,7 @@ fn main() {
 
     let print_bt = args.backtrace;
 
-    if let Err(err) = compile(&args)
-        .and_then(|output| handle_output(output, &args)) 
-    {
+    if let Err(err) = compile(&args) {
         if let Err(output_err) = report_err(&err, Severity::Error) {
             eprintln!("error: {}", err);
             eprintln!("error reporting output: {}", output_err);

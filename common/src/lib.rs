@@ -184,7 +184,7 @@ impl<T> Deref for TracedError<T> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct BuildOptions {
+pub struct CompileOpts {
     pub case_sensitive: bool,
     pub lang_mode: LanguageMode,
 
@@ -194,9 +194,9 @@ pub struct BuildOptions {
     switches: HashMap<String, bool>,
 }
 
-impl Default for BuildOptions {
+impl Default for CompileOpts {
     fn default() -> Self {
-        BuildOptions {
+        CompileOpts {
             verbose: false,
             case_sensitive: true,
             lang_mode: LanguageMode::Default,
@@ -206,7 +206,7 @@ impl Default for BuildOptions {
     }
 }
 
-impl BuildOptions {
+impl CompileOpts {
     pub fn defined(&self, pp_symbol: &str) -> bool {
         self.pp_symbols.contains(pp_symbol)
     }

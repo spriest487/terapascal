@@ -2,11 +2,10 @@ use crate::semantic_tokens::SemanticTokenBuilder;
 use crate::semantic_tokens::semantic_legend;
 use dashmap::DashMap;
 use std::path::PathBuf;
-use terapascal_common::BuildOptions;
-use terapascal_frontend::{typecheck, TokenTree};
+use terapascal_common::CompileOpts;
+use terapascal_frontend::typecheck;
+use terapascal_frontend::TokenTree;
 use terapascal_frontend::ast;
-use terapascal_frontend::error::BuildError;
-use terapascal_frontend::error::BuildResult;
 use terapascal_frontend::parse;
 use terapascal_frontend::pp::PreprocessedUnit;
 use terapascal_frontend::preprocess;
@@ -44,6 +43,7 @@ use tower_lsp::lsp_types::Url;
 use tower_lsp::lsp_types::WorkDoneProgressOptions;
 use tower_lsp::lsp_types::WorkspaceFoldersServerCapabilities;
 use tower_lsp::lsp_types::WorkspaceServerCapabilities;
+use terapascal_build::error::{BuildError, BuildResult};
 
 mod semantic_tokens;
 
@@ -228,7 +228,7 @@ impl TerapascalServer {
                 .into());
             };
 
-            let opts = BuildOptions::default();
+            let opts = CompileOpts::default();
             let Ok(file_path) = uri.to_file_path() else {
                 return Err(BuildError::ReadSourceFileFailed {
                     path: PathBuf::from(uri.to_string()),

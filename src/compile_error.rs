@@ -1,11 +1,11 @@
 use std::fmt;
 use std::io;
+use terapascal_build::error::BuildError;
 use terapascal_common::span::Span;
 use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::TracedError;
-use terapascal_frontend::error::BuildError;
 use terapascal_frontend::parse::ParseError;
 use terapascal_frontend::pp::error::PreprocessorError;
 use terapascal_frontend::typ::TypeError;

@@ -11,7 +11,7 @@ use terapascal_common::source_map::SourceMap;
 use terapascal_common::source_map::SourceMapBuilder;
 use terapascal_common::source_map::SourceMapEntry;
 use terapascal_common::span::*;
-use terapascal_common::BuildOptions;
+use terapascal_common::CompileOpts;
 
 #[derive(Debug)]
 struct SymbolCondition {
@@ -32,7 +32,7 @@ pub struct Preprocessor {
     current_src_line: usize,
     last_char: char,
 
-    opts: BuildOptions,
+    opts: CompileOpts,
 
     source_map: SourceMapBuilder,
 
@@ -54,7 +54,7 @@ pub struct PreprocessedUnit {
     pub filename: Arc<PathBuf>,
     pub source: String,
 
-    pub opts: BuildOptions,
+    pub opts: CompileOpts,
 
     pub source_map: SourceMap,
 
@@ -62,7 +62,7 @@ pub struct PreprocessedUnit {
 }
 
 impl Preprocessor {
-    pub fn new(filename: impl Into<PathBuf>, opts: BuildOptions) -> Self {
+    pub fn new(filename: impl Into<PathBuf>, opts: CompileOpts) -> Self {
         let filename = Arc::new(filename.into());
         Preprocessor {
             filename: filename.clone(),

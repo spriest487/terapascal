@@ -11,7 +11,7 @@ use crate::codegen::library_builder::FunctionDefKey;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::*;
 use crate::codegen::FunctionInstance;
-use crate::codegen::IROptions;
+use crate::codegen::CodegenOpts;
 use crate::codegen::SetFlagsType;
 use crate::ir::*;
 use crate::typ as typ;
@@ -65,7 +65,7 @@ impl<'m> Builder<'m> {
         }
     }
 
-    pub fn opts(&self) -> &IROptions {
+    pub fn opts(&self) -> &CodegenOpts {
         &self.library.opts()
     }
     

@@ -8,10 +8,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
-use terapascal_common::BuildOptions;
+use terapascal_common::CompileOpts;
 
 fn tokenize(s: &str, case_sensitive: bool) -> Vec<TokenTree> {
-    let mut opts = BuildOptions::default();
+    let mut opts = CompileOpts::default();
     opts.case_sensitive = case_sensitive;
 
     let test_unit = Preprocessor::new("test", opts)

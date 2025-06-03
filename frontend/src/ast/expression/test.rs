@@ -4,11 +4,11 @@ use crate::ast::type_name::TypeName;
 use crate::pp::Preprocessor;
 use crate::token_tree::TokenTree;
 use crate::Operator;
-use terapascal_common::BuildOptions;
+use terapascal_common::CompileOpts;
 use terapascal_common::TracedError;
 
 fn tokenize(src: &str) -> TokenStream {
-    let test_unit = Preprocessor::new("test", BuildOptions::default())
+    let test_unit = Preprocessor::new("test", CompileOpts::default())
         .preprocess(src)
         .unwrap();
     let tokens = TokenTree::tokenize(test_unit).unwrap();

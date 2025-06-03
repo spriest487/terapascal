@@ -30,7 +30,7 @@ use crate::codegen::metadata::NamePathExt;
 use crate::codegen::stmt::translate_stmt;
 use crate::codegen::typ;
 use crate::codegen::FunctionInstance;
-use crate::codegen::IROptions;
+use crate::codegen::CodegenOpts;
 use crate::codegen::SetFlagsType;
 use crate::ir;
 use crate::typ::ast::{apply_func_decl_named_ty_args, FunctionDeclContext};
@@ -65,7 +65,7 @@ use terapascal_common::span::Span;
 pub struct LibraryBuilder {
     src_metadata: typ::Context,
     
-    opts: IROptions,
+    opts: CodegenOpts,
     
     type_cache: LinkedHashMap<typ::Type, ir::Type>,
     cached_types: LinkedHashMap<ir::Type, typ::Type>,
@@ -99,7 +99,7 @@ thread_local! {
 }
 
 impl LibraryBuilder {
-    pub fn new(src_metadata: typ::Context, mut metadata: ir::Metadata, opts: IROptions) -> Self {
+    pub fn new(src_metadata: typ::Context, mut metadata: ir::Metadata, opts: CodegenOpts) -> Self {
         let builtin_classes = BUILTIN_CLASS_NAMES.with(|names| names.to_vec());
 
         for (_, builtin_class_id) in &builtin_classes {
@@ -186,7 +186,7 @@ impl LibraryBuilder {
         self.library
     }
     
-    pub fn opts(&self) -> &IROptions {
+    pub fn opts(&self) -> &CodegenOpts {
         &self.opts
     }
 

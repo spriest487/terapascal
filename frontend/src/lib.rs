@@ -7,7 +7,6 @@ pub mod token_tree;
 pub mod typ;
 pub mod pp;
 pub mod codegen;
-pub mod error;
 
 pub use self::consts::EnumConstant;
 pub use self::consts::IntConstant;
@@ -27,7 +26,7 @@ pub use ast::Ident;
 
 use crate::ast::IdentPath;
 use crate::ast::Unit;
-use crate::codegen::IROptions;
+use crate::codegen::CodegenOpts;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::pp::error::PreprocessorError;
@@ -38,14 +37,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
-use terapascal_common::BuildOptions;
+use terapascal_common::CompileOpts;
 use terapascal_common::TracedError;
 use terapascal_ir as ir;
 
 pub fn preprocess(
     filename: impl Into<PathBuf>,
     src: &str,
-    opts: BuildOptions
+    opts: CompileOpts
 ) -> Result<PreprocessedUnit, PreprocessorError> {
     let pp = pp::Preprocessor::new(filename, opts);
     pp.preprocess(&src)
@@ -92,6 +91,6 @@ pub fn typecheck(units: &[Unit<Span>], verbose: bool) -> TypeResult<Module> {
     Module::typecheck(units, verbose)
 }
 
-pub fn codegen_ir(module: &Module, opts: IROptions) -> ir::Library {
+pub fn codegen_ir(module: &Module, opts: CodegenOpts) -> ir::Library {
     codegen::gen_lib(module, opts)
 }
