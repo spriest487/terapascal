@@ -1,5 +1,6 @@
 pub mod source_map;
 pub mod span;
+pub mod build_log;
 
 use crate::span::*;
 pub use backtrace::Backtrace;
@@ -125,6 +126,26 @@ impl Ord for DiagnosticMessage {
 impl PartialOrd for DiagnosticMessage {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl fmt::Display for DiagnosticMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.title)?;
+        if let Some(label) = &self.label {
+            writeln!(f)?;
+            write!(f, "{}", label.span)?;
+            if let Some(text) = &label.text {
+                write!(f, ": {}", text)?;
+            }
+        }
+        
+        for note in &self.notes {
+            writeln!(f)?;
+            write!(f, " - {}", note)?;
+        }
+        
+        Ok(())
     }
 }
 

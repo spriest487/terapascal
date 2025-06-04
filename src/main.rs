@@ -22,13 +22,14 @@ use std::time::Duration;
 use structopt::StructOpt;
 use terapascal_backend_c as backend_c;
 use terapascal_backend_c::c;
-use terapascal_build::bincode_config;
 use terapascal_build::build;
 use terapascal_build::error::BuildError;
 use terapascal_build::BuildArtifact;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildOutput;
 use terapascal_build::BuildStage;
+use terapascal_build::bincode_config;
+use terapascal_common::build_log::{BuildLog, BuildLogEntry};
 use terapascal_common::span::*;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticOutput;
@@ -59,11 +60,16 @@ fn compile(args: &Args) -> Result<(), RunError> {
 
     let source_ext = get_extension(&args.file);
     if source_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
+        let mut log = BuildLog::new();
+        if compile_opts.verbose {
+            log.trace(format!("loading existing module: {}", args.file.display()));
+        }
+
         let module = load_lib(&args.file)?;
         
         return handle_output(BuildOutput {
             artifact: BuildArtifact::Library(module),
-            warnings: Vec::new(),
+            log,
         }, args);
     }
     
@@ -145,22 +151,32 @@ where
 }
 
 fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
-    for warning in &output.warnings {
-        if report_err(warning.as_ref(), Severity::Warning).is_err() {
-            eprintln!("warning: {}", warning);
+    for log_entry in &output.log.entries {
+        match log_entry {
+            BuildLogEntry::Trace(trace) => {
+                println!("{}", trace);
+            }
+
+            BuildLogEntry::Warn(warning) => {
+                if report_err(warning.as_ref(), Severity::Warning).is_err() {
+                    eprintln!("warning: {}", warning.main());
+                }
+            }
         }
     }
     
     match output.artifact {
         BuildArtifact::PreprocessedText(units) => print_output(args.output.as_ref(), |dst| {
             for pp_unit in units {
+                writeln!(dst, "{}:", pp_unit.filename.display())?;
                 write!(dst, "{}", pp_unit.source)?;
             }
             Ok(())
         }),
 
-        BuildArtifact::ParsedUnit(units) => print_output(args.output.as_ref(), |dst| {
-            for unit in units {
+        BuildArtifact::ParsedUnits(parse_output) => print_output(args.output.as_ref(), |dst| {
+            for (path, unit) in parse_output.units {
+                writeln!(dst, "{}:", path.display())?;
                 write!(dst, "{}", unit)?;
             }
 
@@ -169,6 +185,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
 
         BuildArtifact::TypedModule(module) => print_output(args.output.as_ref(), |dst| {
             for unit in &module.units {
+                writeln!(dst, "{}:", unit.path.display())?;
                 write!(dst, "{}", unit.unit)?;
             }
 

@@ -1,3 +1,5 @@
+use terapascal_common::DiagnosticOutput;
+use terapascal_common::span::Span;
 use crate::ast;
 use crate::ast::Access;
 use crate::typ::ast::call::overload::resolve_overload;
@@ -99,7 +101,9 @@ fn method_call_validates_too_many_args() {
             assert_eq!(2, expected.len());
         },
 
-        other => panic!("expected invalid args error, got: {:?}", other),
+        Ok(..) => panic!("expected invalid args error but succeeded"),
+
+        Err(other) => panic!("expected invalid args error, got: {}", other.main()),
     }
 }
 
@@ -129,8 +133,10 @@ fn method_call_validates_too_few_args() {
             assert_eq!(2, actual.len());
             assert_eq!(3, expected.len());
         },
+        
+        Ok(..) => panic!("expected invalid args error but succeeded"),
 
-        other => panic!("expected invalid args error, got: {:?}", other),
+        Err(other) => panic!("expected invalid args error, got: {}", other.main()),
     }
 }
 
@@ -153,8 +159,7 @@ fn specializes_func_call_by_arg_ty() {
     ";
 
     let module = module_from_src("Test", src);
-    let unit = module.units.iter().last().unwrap();
-    let init = unit.unit.init.as_ref().unwrap();
+    let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].as_call() {
         Some(ast::Call::Function(func_call)) => {
@@ -173,11 +178,11 @@ fn specializes_func_call_by_arg_ty() {
                     assert_eq!("T", func.sig.params[0].ty.to_string());
                 },
 
-                other => panic!("expected function, got {:?}", other),
+                other => panic!("expected function, got {:#?}", other),
             }
         },
 
-        other => panic!("expected call to A, got {:?}", other),
+        other => panic!("expected call to A, got {:#?}", other),
     }
 }
 
@@ -205,8 +210,7 @@ fn specializes_method_call_by_arg_ty() {
     ";
 
     let module = module_from_src("Test", src);
-    let unit = module.units.iter().last().unwrap();
-    let init = unit.unit.init.as_ref().unwrap();
+    let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[2].as_call() {
         Some(ast::Call::Method(method_call)) => {
@@ -252,8 +256,7 @@ fn specializes_method_call_by_lambda_arg_ty() {
     ";
 
     let module = module_from_src("Test", src);
-    let unit = module.units.iter().last().unwrap();
-    let init = unit.unit.init.as_ref().unwrap();
+    let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].as_call() {
         Some(ast::Call::Method(method_call)) => {
@@ -301,8 +304,7 @@ fn specializes_method_call_by_dynarray_element_ty() {
     ";
 
     let module = module_from_src("Test", src);
-    let unit = module.units.iter().last().unwrap();
-    let init = unit.unit.init.as_ref().unwrap();
+    let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].as_call() {
         Some(ast::Call::Method(method_call)) => {
@@ -347,8 +349,7 @@ fn specializes_free_func_call_by_dynarray_element_ty() {
     ";
 
     let module = module_from_src("Test", src);
-    let unit = module.units.iter().last().unwrap();
-    let init = unit.unit.init.as_ref().unwrap();
+    let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].as_call() {
         Some(ast::Call::Function(func_call)) => {
@@ -569,7 +570,7 @@ static OVERLOAD_GENERIC_UNIT: &str = r"
 #[test]
 fn resolving_overload_with_generic_discarded() {
     let (candidates, mut ctx) = candidates_from_src(OVERLOAD_GENERIC_UNIT, "overload");
-    let span = ctx.module_span().clone();
+    let span = Span::zero("overload");
 
     let overload = match resolve_overload(
         &candidates,
@@ -594,7 +595,7 @@ fn resolving_overload_with_generic_discarded() {
 #[test]
 fn resolving_overload_with_generic_selected() {
     let (candidates, mut ctx) = candidates_from_src(OVERLOAD_GENERIC_UNIT, "overload");
-    let span = ctx.module_span().clone();
+    let span = Span::zero("overload");
 
     let overload = match resolve_overload(
         &candidates,

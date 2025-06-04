@@ -41,9 +41,6 @@ export async function activate(ctx: vscode.ExtensionContext) {
 			scheme: "file",
 			language: "terapascal",
 		}],
-		synchronize: {
-			fileEvents: vscode.workspace.createFileSystemWatcher("**/.clientrc"),
-		},
 		outputChannel: output,
 	}
 

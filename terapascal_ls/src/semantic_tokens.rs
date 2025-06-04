@@ -16,9 +16,7 @@ use terapascal_frontend::ast::TypeDeclItem;
 use terapascal_frontend::ast::TypeMemberDeclRef;
 use terapascal_frontend::ast::UnaryPosition;
 use terapascal_frontend::ast::VariantDecl;
-use terapascal_frontend::DelimiterPair;
 use terapascal_frontend::Operator;
-use terapascal_frontend::TokenTree;
 use tower_lsp::lsp_types::SemanticToken;
 use tower_lsp::lsp_types::SemanticTokenType;
 
@@ -101,49 +99,6 @@ impl SemanticTokenBuilder {
             token_type,
             token_modifiers_bitset: 0,
         });
-    }
-
-    pub fn add_token_tree(&mut self, tt: &TokenTree) {
-        match tt {
-            TokenTree::IntNumber { span, .. } | TokenTree::RealNumber { span, .. } => {
-                self.add(span, SEMANTIC_NUMBER);
-            },
-            TokenTree::String { span, .. } => {
-                self.add(span, SEMANTIC_STRING);
-            },
-
-            TokenTree::Operator { op, span } if op.is_keyword() => {
-                self.add(span, SEMANTIC_OPERATOR);
-            },
-
-            TokenTree::Separator { span, .. } | TokenTree::Operator { span, .. } => {
-                self.add(span, SEMANTIC_OPERATOR);
-            },
-
-            TokenTree::Keyword { span, .. } => {
-                self.add(span, SEMANTIC_KEYWORD);
-            },
-
-            TokenTree::Delimited(group) => {
-                let delim_type = match group.delim {
-                    DelimiterPair::BeginEnd | DelimiterPair::CaseEnd | DelimiterPair::MatchEnd => {
-                        SEMANTIC_KEYWORD
-                    },
-
-                    DelimiterPair::Bracket | DelimiterPair::SquareBracket => SEMANTIC_OPERATOR,
-                };
-
-                self.add(&group.open, delim_type);
-
-                for inner in &group.inner {
-                    self.add_token_tree(inner);
-                }
-
-                self.add(&group.close, delim_type);
-            },
-
-            _ => {},
-        }
     }
 
     pub fn add_unit<A: Annotation>(&mut self, unit: &ast::Unit<A>) {

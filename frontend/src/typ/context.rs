@@ -143,9 +143,6 @@ impl MethodCollection {
 
 #[derive(Clone, Debug)]
 pub struct Context {
-    // span for the whole module, should be position 0 of the primary source file
-    module_span: Span,
-
     next_scope_id: ScopeID,
     scopes: ScopeStack,
 
@@ -163,10 +160,8 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn root(module_span: Span) -> Self {
+    pub fn root() -> Self {
         let mut root_ctx = Self {
-            module_span: module_span.clone(),
-
             scopes: ScopeStack::new(Scope::new(ScopeID(0), Environment::Global)),
             next_scope_id: ScopeID(1),
 
@@ -223,10 +218,6 @@ impl Context {
             .push(Type::interface(builtin_comparable_name().full_path));
 
         root_ctx
-    }
-
-    pub fn module_span(&self) -> &Span {
-        &self.module_span
     }
 
     pub fn push_scope(&mut self, env: impl Into<Environment>) -> ScopeID {

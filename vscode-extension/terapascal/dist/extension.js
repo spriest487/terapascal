@@ -18020,9 +18020,6 @@ async function activate(ctx) {
       scheme: "file",
       language: "terapascal"
     }],
-    synchronize: {
-      fileEvents: vscode.workspace.createFileSystemWatcher("**/.clientrc")
-    },
     outputChannel: output
   };
   client = new import_node.LanguageClient(CLIENT_ID, CLIENT_DESC, serverOpts, clientOpts);

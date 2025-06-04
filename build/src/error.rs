@@ -77,35 +77,34 @@ impl DiagnosticOutput for BuildError {
             Self::TypecheckError(err) => err.main(),
             Self::PreprocessorError(err) => err.main(),
 
-            Self::FileNotFound(path, span) => DiagnosticMessage {
-                title: format!("file not found: {}", path.display()),
-                label: span.as_ref().map(|span| DiagnosticLabel {
-                    text: None,
-                    span: span.clone(),
-                }),
-                notes: Vec::new(),
+            Self::FileNotFound(path, span) => {
+                let title = format!("file not found: {}", path.display());
+                let message = DiagnosticMessage::new(title);
+
+                match span {
+                    Some(span) => message.with_label(DiagnosticLabel::new(span.clone())),
+                    None => message,
+                }
             },
-            Self::ReadSourceFileFailed { path, .. } => DiagnosticMessage {
-                title: format!("failed to read source file {}", path.to_string_lossy()),
-                label: None,
-                notes: Vec::new(),
+
+            Self::ReadSourceFileFailed { path, .. } => {
+                let title = format!("failed to read source file {}", path.display());
+                DiagnosticMessage::new(title)
             },
-            Self::DuplicateUnit {
-                unit_ident,
-                new_path,
-                existing_path,
-            } => DiagnosticMessage::new(format!(
-                "`{}` @ {} was already loaded from {}",
-                unit_ident,
-                new_path.display(),
-                existing_path.display()
-            ))
-            .with_label(DiagnosticLabel::new(unit_ident.span().clone())),
-            Self::UnexpectedMainUnit {
-                unit_path,
-                unit_kind,
-                existing_ident,
-            } => {
+
+            Self::DuplicateUnit { unit_ident, new_path, existing_path } => {
+                let title = format!(
+                    "`{}` @ {} was already loaded from {}",
+                    unit_ident,
+                    new_path.display(),
+                    existing_path.display()
+                );
+
+                DiagnosticMessage::new(title)
+                    .with_label(DiagnosticLabel::new(unit_ident.span().clone()))
+            }
+
+            Self::UnexpectedMainUnit { unit_path, unit_kind, existing_ident } => {
                 if let Some(ident) = existing_ident {
                     DiagnosticMessage::new(format!(
                         "encountered {} unit @ `{}` but main unit `{}` was already loaded",
@@ -120,27 +119,25 @@ impl DiagnosticOutput for BuildError {
                         unit_path.display()
                     ))
                 }
-            },
-            Self::CircularDependency {
-                unit_ident,
-                used_unit,
-                span,
-            } => DiagnosticMessage {
-                title: format!(
+            }
+
+            Self::CircularDependency { unit_ident, used_unit, span } => {
+                let title = format!(
                     "unit `{}` used from `{}` creates a circular reference",
                     used_unit, unit_ident
-                ),
-                label: Some(DiagnosticLabel {
-                    text: Some("unit used here".to_string()),
-                    span: span.clone(),
-                }),
-                notes: Vec::new(),
+                );
+
+                DiagnosticMessage::new(title)
+                    .with_label(DiagnosticLabel::new(span.clone())
+                        .with_text("unit used here".to_string()))
+            }
+
+            Self::UnitNotLoaded { unit_name } => {
+                let title = "used units must be referenced by the main unit or on the command line";
+                DiagnosticMessage::new(title)
+                    .with_label(DiagnosticLabel::new(unit_name.path_span().clone()))
+                    .with_note(format!("unit `{}` is not loaded", unit_name))
             },
-            Self::UnitNotLoaded { unit_name } => DiagnosticMessage::new(
-                "used units must be referenced by the main unit or on the command line",
-            )
-            .with_label(DiagnosticLabel::new(unit_name.path_span().clone()))
-            .with_note(format!("unit `{}` is not loaded", unit_name)),
         }
     }
 

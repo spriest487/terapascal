@@ -41,14 +41,8 @@ pub struct Builder<'m> {
 
 impl<'m> Builder<'m> {
     pub fn new(lib: &'m mut LibraryBuilder) -> Self {
-        let module_span = lib.module_span().clone();
-
         let mut instructions = Vec::new();
         instructions.push(Instruction::LocalBegin);
-
-        if lib.opts().debug {
-            instructions.push(Instruction::DebugPush(module_span.clone()));
-        }
 
         Self {
             library: lib,
@@ -353,11 +347,7 @@ impl<'m> Builder<'m> {
         }
     }
 
-    pub fn finish(mut self) -> Vec<Instruction> {
-        if self.opts().debug {
-            self.append(Instruction::DebugPop);
-        }
-        
+    pub fn finish(mut self) -> Vec<Instruction> {        
         while !self.scopes.is_empty() {
             self.end_scope();
         }

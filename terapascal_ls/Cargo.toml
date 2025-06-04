@@ -10,3 +10,4 @@ terapascal-frontend = { path = "../frontend" }
 terapascal-common = { path = "../common" }
 terapascal-build = { path = "../build" }
 dashmap = "6.1.0"
+linked-hash-map = "0.5.6"

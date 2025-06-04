@@ -12,8 +12,8 @@ const INT32: TypeName = TypeName::Inferred(Type::Primitive(Primitive::Int32));
 const BYTE: TypeName = TypeName::Inferred(Type::Primitive(Primitive::UInt8));
 
 fn module_from_src(unit_name: &'static str, src: &'static str) -> ModuleUnit {
-    let mut module = typ::test::module_from_src(unit_name, src);
-    module.units.pop().unwrap()
+    let module = typ::test::module_from_src(unit_name, src);
+    module.units.into_iter().next().unwrap()
 }
 
 fn main_unit_structs(module: &typ::ModuleUnit) -> Vec<Arc<StructDef>> {

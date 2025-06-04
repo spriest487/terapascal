@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use crate::ast;
 use crate::ast::{BindingDeclKind, UnitBindingItemInitializer};
 use crate::ast::FunctionName;
@@ -555,7 +556,7 @@ fn typecheck_global_binding_item(
     })
 }
 
-pub fn typecheck_unit(unit: &ast::Unit<Span>, ctx: &mut Context) -> TypeResult<ModuleUnit> {
+pub fn typecheck_unit(unit_path: &PathBuf, unit: &ast::Unit, ctx: &mut Context) -> TypeResult<ModuleUnit> {
     ctx.unit_scope(unit.ident.clone(), |ctx| {
         let iface_decls = typecheck_section(&unit.iface_decls, Visibility::Interface, ctx)?;
         let impl_decls = typecheck_section(&unit.impl_decls, Visibility::Implementation, ctx)?;
@@ -592,6 +593,7 @@ pub fn typecheck_unit(unit: &ast::Unit<Span>, ctx: &mut Context) -> TypeResult<M
 
         Ok(ModuleUnit {
             context: unit_ctx,
+            path: unit_path.clone(),
             unit,
         })
     })

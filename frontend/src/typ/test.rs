@@ -10,6 +10,7 @@ use terapascal_common::read_source_file;
 use std::collections::HashMap;
 use std::iter;
 use std::path::PathBuf;
+use terapascal_common::build_log::BuildLog;
 use terapascal_common::span::Spanned;
 
 const INT32: Type = Type::Primitive(Primitive::Int32);
@@ -42,10 +43,13 @@ where
     for (unit_name, src) in unit_srcs {
         let unit = ast::util::unit_from_string(unit_name, &src);
 
-        units.push(unit);
+        units.push((PathBuf::from(unit_name), unit));
     }
+    
+    units.reverse();
 
-    Module::typecheck(&units, false)
+    let mut log = BuildLog::new();
+    Module::typecheck(units.iter().map(|(p, u)| (p, u)), false, &mut log)
 }
 
 pub fn module_from_srcs<'a, UnitSources>(unit_srcs: UnitSources) -> Module
@@ -62,9 +66,9 @@ pub fn unit_from_src(unit_name: &'static str, src: &'static str) -> ModuleUnit {
 }
 
 pub fn try_unit_from_src(unit_name: &'static str, src: &'static str) -> TypeResult<ModuleUnit> {
-    let mut module = try_module_from_src(unit_name, src)?;
+    let module = try_module_from_src(unit_name, src)?;
 
-    Ok(module.units.pop().unwrap())
+    Ok(module.units.into_iter().next().unwrap())
 }
 
 pub fn units_from_src<UnitSources>(unit_srcs: UnitSources) -> HashMap<String, ModuleUnit>

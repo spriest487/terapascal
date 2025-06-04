@@ -12,12 +12,15 @@ pub use self::annotation::*;
 pub use self::context::*;
 pub use self::result::*;
 pub use self::ty::*;
+use crate::ast::Unit;
 use ast::typecheck_unit;
-use terapascal_common::span::*;
-use crate::ast as syn;
+use std::path::PathBuf;
+use terapascal_common::build_log::BuildLog;
 
 #[derive(Debug, Clone)]
 pub struct ModuleUnit {
+    pub path: PathBuf,
+    
     pub unit: ast::Unit,
     pub context: Context,
 }
@@ -29,7 +32,7 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn typecheck(units: &[syn::Unit<Span>], verbose: bool) -> TypeResult<Self> {
+    pub fn typecheck<'a>(units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>, verbose: bool, log: &mut BuildLog) -> TypeResult<Self> {
         // eprintln!("function sig size: {}", std::mem::size_of::<sig::FunctionSig>());
         // eprintln!("type size: {}", std::mem::size_of::<Type>());
         // eprintln!("type annotation size: {}", std::mem::size_of::<TypeAnnotation>());
@@ -40,21 +43,28 @@ impl Module {
         // eprintln!("ident path size: {}", std::mem::size_of::<IdentPath>());
         // eprintln!("span size: {}", std::mem::size_of::<Span>());
 
-        let module_span = Span::zero(units[0].ident.span().file.as_ref().clone());
+        let mut root_ctx = Context::root();
+        let mut module_units = Vec::new();
 
-        let mut root_ctx = Context::root(module_span);
-        let mut typed_units = Vec::new();
-
-        for unit in units {
+        // typecheck in reverse order - the parsing order starts with the root unit, but we
+        // need to typecheck dependencies first
+        for (unit_path, unit) in units.into_iter().rev() {
             if verbose {
-                eprintln!("Typechecking {} {}", unit.kind, unit.ident)
+                log.trace(format!("Typechecking {} {}", unit.kind, unit.ident));
             }
-            typed_units.push(typecheck_unit(&unit, &mut root_ctx)?);
+
+            module_units.push(typecheck_unit(unit_path, unit, &mut root_ctx)?);
         }
+        
+        module_units.reverse();
 
         Ok(Module {
-            units: typed_units,
+            units: module_units,
             root_ctx: Box::new(root_ctx),
         })
+    }
+    
+    pub fn main_unit(&self) -> &ModuleUnit {
+        &self.units[0]
     }
 }

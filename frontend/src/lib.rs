@@ -35,6 +35,7 @@ use crate::typ::Module;
 use crate::typ::TypeResult;
 use std::path::PathBuf;
 use std::sync::Arc;
+use terapascal_common::build_log::BuildLog;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::CompileOpts;
@@ -87,8 +88,12 @@ pub fn parse(
     Ok(parsed_unit)
 }
 
-pub fn typecheck(units: &[Unit<Span>], verbose: bool) -> TypeResult<Module> {
-    Module::typecheck(units, verbose)
+pub fn typecheck<'a>(
+    units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>,
+    verbose: bool,
+    log: &mut BuildLog
+) -> TypeResult<Module> {
+    Module::typecheck(units, verbose, log)
 }
 
 pub fn codegen_ir(module: &Module, opts: CodegenOpts) -> ir::Library {

@@ -1534,6 +1534,7 @@ name = "terapascal-ls"
 version = "0.1.0"
 dependencies = [
  "dashmap 6.1.0",
+ "linked-hash-map",
  "terapascal-build",
  "terapascal-common",
  "terapascal-frontend",

@@ -1,0 +1,145 @@
+use crate::semantic_tokens::SemanticTokenBuilder;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use terapascal_build::error::BuildError;
+use terapascal_build::parse_units;
+use terapascal_build::BuildInput;
+use terapascal_build::BuildStage;
+use terapascal_build::ParseOutput;
+use terapascal_common::build_log::BuildLog;
+use terapascal_common::span::Spanned;
+use terapascal_common::CompileOpts;
+use terapascal_frontend::codegen::CodegenOpts;
+use terapascal_frontend::typ;
+use terapascal_frontend::typecheck;
+use tower_lsp::lsp_types::SemanticToken;
+
+pub struct ProjectCollection {
+    projects: HashMap<PathBuf, Project>,
+    document_projects: HashMap<PathBuf, PathBuf>,
+}
+
+impl ProjectCollection {
+    pub fn get_document_project(&self, document_path: &PathBuf) -> Option<&Project> {
+        self.projects.get(self.document_projects.get(document_path)?)
+    }
+
+    pub fn remove_project(&mut self, project_path: &PathBuf) {
+        self.projects.remove(project_path);
+        self.document_projects.retain(|_doc_path, doc_proj_path| doc_proj_path != project_path);
+    }
+    
+    pub fn update_document(&mut self, doc_path: &PathBuf) {
+        let project_path = self.document_projects.get(doc_path).cloned();
+
+        if let Some(project_path) = project_path {
+            let project = self.projects.get_mut(&project_path).unwrap();
+            project.build();
+        } else {
+            // load the current unit as a project
+            // todo: should be able to search for/specify the root project file
+            let mut project = Project::new(doc_path.clone());
+            project.build();
+
+            self.projects.insert(doc_path.clone(), project);
+        }
+    }
+}
+
+pub struct Project {
+    main_file: PathBuf,
+
+    pub semantic_tokens: HashMap<PathBuf, Vec<SemanticToken>>,
+
+    parsed_units: Option<ParseOutput>,
+    module: Option<typ::Module>,
+}
+
+impl Project {
+    fn new(main_file: PathBuf) -> Self {
+        Project {
+            main_file,
+
+            semantic_tokens: HashMap::new(),
+
+            module: None,
+            parsed_units: None,
+        }
+    }
+
+    fn build(&mut self) {
+        self.parsed_units = None;
+        self.module = None;
+
+        self.semantic_tokens.clear();
+        
+        let mut opts = CompileOpts::default();
+        opts.verbose = true;
+
+        // todo: make search dirs and compiler options configurable
+        let input = BuildInput {
+            units: vec![self.main_file.clone()],
+            compile_opts: opts,
+            codegen_opts: CodegenOpts::default(),
+            output_stage: BuildStage::Codegen,
+            search_dirs: Vec::new(),
+        };
+
+        let mut log = BuildLog::new();
+
+        let result = match parse_units(&input, &mut log) {
+            Ok(parsed_output) => {
+                match typecheck(parsed_output.units.iter(), input.compile_opts.verbose, &mut log) {
+                    Ok(module) => {
+                        for unit in &module.units {
+                            let mut token_builder = SemanticTokenBuilder::new(0, 0);
+                            token_builder.add_unit(&unit.unit);
+
+                            let tokens = token_builder.finish();
+                            self.semantic_tokens.insert(unit.path.clone(), tokens);
+                        }
+
+                        self.module = Some(module);
+                    },
+
+                    Err(err) => {
+                        eprintln!("Project::build: {err} ({})", err.span());
+
+                        for (unit_path, unit) in &parsed_output.units {
+                            let mut token_builder = SemanticTokenBuilder::new(0, 0);
+                            token_builder.add_unit(unit);
+
+                            let tokens = token_builder.finish();
+                            self.semantic_tokens.insert(unit_path.clone(), tokens);
+                        }
+                    },
+                }
+
+                self.parsed_units = Some(parsed_output);
+            },
+
+            Err(BuildError::ParseError(parse_err)) => {
+                eprintln!("Project::build: {} ({})", parse_err.err, parse_err.span());
+            },
+
+            Err(err) => {
+                eprintln!("Project::build: {err}");
+            },
+        };
+        
+        for log_entry in log.entries {
+            eprintln!("Project::build: {}", log_entry);
+        }
+        
+        result
+    }
+}
+
+impl ProjectCollection {
+    pub fn new() -> Self {
+        ProjectCollection {
+            projects: HashMap::new(),
+            document_projects: HashMap::new(),
+        }
+    }
+}

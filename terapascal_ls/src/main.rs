@@ -1,19 +1,12 @@
-use crate::semantic_tokens::SemanticTokenBuilder;
+mod semantic_tokens;
+mod project;
+
 use crate::semantic_tokens::semantic_legend;
 use dashmap::DashMap;
 use std::path::PathBuf;
-use terapascal_common::CompileOpts;
-use terapascal_frontend::typecheck;
-use terapascal_frontend::TokenTree;
-use terapascal_frontend::ast;
-use terapascal_frontend::parse;
-use terapascal_frontend::pp::PreprocessedUnit;
-use terapascal_frontend::preprocess;
-use terapascal_frontend::tokenize;
-use terapascal_frontend::typ;
-use tower_lsp::LanguageServer;
-use tower_lsp::LspService;
-use tower_lsp::Server;
+use terapascal_build::error::BuildError;
+use terapascal_build::error::BuildResult;
+use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result as RpcResult;
 use tower_lsp::lsp_types::DidChangeTextDocumentParams;
 use tower_lsp::lsp_types::DidChangeWorkspaceFoldersParams;
@@ -43,17 +36,15 @@ use tower_lsp::lsp_types::Url;
 use tower_lsp::lsp_types::WorkDoneProgressOptions;
 use tower_lsp::lsp_types::WorkspaceFoldersServerCapabilities;
 use tower_lsp::lsp_types::WorkspaceServerCapabilities;
-use terapascal_build::error::{BuildError, BuildResult};
-
-mod semantic_tokens;
+use tower_lsp::LanguageServer;
+use tower_lsp::LspService;
+use tower_lsp::Server;
+use crate::project::ProjectCollection;
 
 struct TerapascalServer {
     documents: DashMap<Url, String>,
 
-    pp_units: DashMap<Url, PreprocessedUnit>,
-    tokenized_units: DashMap<Url, Vec<TokenTree>>,
-    parsed_units: DashMap<Url, ast::Unit>,
-    typechecked_modules: DashMap<Url, typ::Module>,
+    projects: RwLock<ProjectCollection>,
 }
 
 #[tower_lsp::async_trait]
@@ -117,7 +108,7 @@ impl LanguageServer for TerapascalServer {
 
         self.documents.insert(params.text_document.uri, params.text_document.text);
 
-        if let Err(err) = self.update_document(uri) {
+        if let Err(err) = self.update_document(uri).await {
             eprintln!("{}", err)
         }
     }
@@ -139,7 +130,7 @@ impl LanguageServer for TerapascalServer {
             *doc = text;
         }
 
-        if let Err(build_err) = self.update_document(params.text_document.uri) {
+        if let Err(build_err) = self.update_document(params.text_document.uri).await {
             eprintln!("did_change: {build_err}")
         }
     }
@@ -151,11 +142,13 @@ impl LanguageServer for TerapascalServer {
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         eprintln!("did_close: {}", params.text_document.uri);
 
-        self.typechecked_modules.remove(&params.text_document.uri);
-        self.parsed_units.remove(&params.text_document.uri);
-        self.tokenized_units.remove(&params.text_document.uri);
-        self.pp_units.remove(&params.text_document.uri);
-        self.documents.remove(&params.text_document.uri);
+        let uri = params.text_document.uri;
+        self.documents.remove(&uri);
+        
+        if let Ok(file_path) = url_to_path(&uri) {
+            let mut projects = self.projects.write().await;
+            projects.remove_project(&file_path);
+        }
     }
 
     async fn document_highlight(
@@ -169,30 +162,36 @@ impl LanguageServer for TerapascalServer {
         &self,
         params: SemanticTokensParams,
     ) -> RpcResult<Option<SemanticTokensResult>> {
-        let uri = &params.text_document.uri;
 
-        eprintln!("semantic_tokens_full: uri = {uri}");
+        eprintln!("semantic_tokens_full: {}", params.text_document.uri);
 
-        let mut builder = SemanticTokenBuilder::new(0, 0);
+        let doc_path = match url_to_path(&params.text_document.uri) {
+            Ok(path) => path,
+            Err(err) => {
+                eprintln!("semantic_tokens_full: {}", err);
+                return Ok(None);
+            }
+        };
 
-        {
-            if let Some(unit) = self.parsed_units.get(uri) {
-                builder.add_unit(unit.value());
-            } else if let Some(tokens) = self.tokenized_units.get(uri) {
-                for tt in tokens.value() {
-                    builder.add_token_tree(tt);
-                }
-            } else {
-                eprintln!("document_color: {} was not opened", uri);
-            };
+        let projects = self.projects.read().await;
+
+        let Some(project) = projects.get_document_project(&doc_path) else {
+            eprintln!("semantic_tokens_full: workspace project not found for path {}", doc_path.display());
+            return Ok(None);
+        };
+
+        match project.semantic_tokens.get(&doc_path) {
+            Some(tokens) => {
+                Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+                    data: tokens.clone(),
+                    result_id: None,
+                })))
+            }
+            
+            None => {
+                Ok(None)
+            }
         }
-        
-        let data = builder.finish();
-
-        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-            data,
-            result_id: None,
-        })))
     }
 
     async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
@@ -213,52 +212,11 @@ impl LanguageServer for TerapascalServer {
 }
 
 impl TerapascalServer {
-    fn update_document(&self, uri: Url) -> BuildResult<()> {
-        self.pp_units.remove(&uri);
-        self.tokenized_units.remove(&uri);
-        self.parsed_units.remove(&uri);
-        self.typechecked_modules.remove(&uri);
+    async fn update_document(&self, uri: Url) -> BuildResult<()> {
+        let doc_path = url_to_path(&uri)?;
 
-        let pp_unit = {
-            let Some(document_text) = self.documents.get(&uri) else {
-                return Err(BuildError::ReadSourceFileFailed {
-                    path: PathBuf::from(uri.to_string()),
-                    msg: "document was not found in the cache".to_string(),
-                }
-                .into());
-            };
-
-            let opts = CompileOpts::default();
-            let Ok(file_path) = uri.to_file_path() else {
-                return Err(BuildError::ReadSourceFileFailed {
-                    path: PathBuf::from(uri.to_string()),
-                    msg: "invalid file path".to_string(),
-                }
-                .into());
-            };
-
-            preprocess(file_path, document_text.as_str(), opts)?
-        };
-
-        let filename = pp_unit.filename.as_ref().clone();
-
-        self.pp_units.insert(uri.clone(), pp_unit.clone());
-        eprintln!("preprocessed {}", uri);
-
-        let tokens = tokenize(pp_unit)?;
-
-        self.tokenized_units.insert(uri.clone(), tokens.clone());
-        eprintln!("tokenized {}", uri);
-
-        let unit = parse(filename, tokens)?;
-
-        self.parsed_units.insert(uri.clone(), unit.clone());
-        eprintln!("parsed {}", uri);
-
-        let module = typecheck(&[unit], false)?;
-        eprintln!("typechecked {}", uri);
-
-        self.typechecked_modules.insert(uri, module);
+        let mut projects = self.projects.write().await;
+        projects.update_document(&doc_path);
 
         Ok(())
     }
@@ -271,12 +229,29 @@ async fn main() {
 
     let (service, socket) = LspService::build(|_client| TerapascalServer {
         documents: DashMap::new(),
-        pp_units: DashMap::new(),
-        tokenized_units: DashMap::new(),
-        parsed_units: DashMap::new(),
-        typechecked_modules: DashMap::new(),
+        projects: RwLock::new(ProjectCollection::new()),
     })
     .finish();
 
     Server::new(stdin, stdout, socket).serve(service).await;
+}
+
+fn url_to_path(url: &Url) -> BuildResult<PathBuf> {
+    let Ok(file_path) = url.to_file_path() else {
+        return Err(BuildError::ReadSourceFileFailed {
+            path: PathBuf::from(url.to_string()),
+            msg: "invalid file path".to_string(),
+        })
+    };
+
+    match file_path.canonicalize() {
+        Ok(path) => Ok(path),
+
+        Err(err) => {
+            Err(BuildError::ReadSourceFileFailed {
+                path: file_path,
+                msg: err.to_string(),
+            })
+        }
+    }
 }

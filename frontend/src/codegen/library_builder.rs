@@ -29,11 +29,13 @@ use crate::codegen::metadata::ClosureInstance;
 use crate::codegen::metadata::NamePathExt;
 use crate::codegen::stmt::translate_stmt;
 use crate::codegen::typ;
-use crate::codegen::FunctionInstance;
 use crate::codegen::CodegenOpts;
+use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
 use crate::ir;
-use crate::typ::ast::{apply_func_decl_named_ty_args, FunctionDeclContext};
+use crate::typ::ast::apply_func_decl_named_ty_args;
+use crate::typ::ast::FunctionDeclContext;
+use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
@@ -50,7 +52,6 @@ use crate::typ::TypeArgsResult;
 use crate::typ::TypeParamContainer;
 use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::builtin_funcinfo_name;
 use crate::Ident;
 pub use function::*;
 use linked_hash_map::LinkedHashMap;
@@ -59,7 +60,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
-use terapascal_common::span::Span;
 
 #[derive(Debug)]
 pub struct LibraryBuilder {
@@ -144,10 +144,6 @@ impl LibraryBuilder {
         };
 
         builder
-    }
-
-    pub fn module_span(&self) -> &Span {
-        self.src_metadata.module_span()
     }
 
     pub fn finish(mut self) -> ir::Library {
