@@ -429,14 +429,14 @@ fn dump_output_buffers(stdout: &[u8], stderr: &[u8]) {
     let stdout = String::from_utf8_lossy(stdout);
     if stdout.len() > 0 {
         for line in stdout.lines() {
-            println!("  << {}", line.trim());
+            println!("  << {}", line.trim_end());
         }
     }
 
     let stderr = String::from_utf8_lossy(stderr);
     if stderr.len() > 0 {
         for line in stderr.lines() {
-            println!("  !! {}", line.trim());
+            println!("  !! {}", line.trim_end());
         }
     }
 }
