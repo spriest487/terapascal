@@ -15,9 +15,9 @@ impl fmt::Display for BuildLogEntry {
 
             BuildLogEntry::Warn(warning) => {
                 write!(f, "{}", warning.main())?;
-                for note in warning.notes() {
+                for see_also in warning.see_also() {
                     writeln!(f)?;
-                    write!(f, "{}", note)?;
+                    write!(f, "{}", see_also)?;
                 }
             }
         }
