@@ -189,6 +189,7 @@ impl LanguageServer for TerapascalServer {
             }
             
             None => {
+                eprintln!("semantic_tokens_full: no tokens loaded for {}", doc_path.display());
                 Ok(None)
             }
         }

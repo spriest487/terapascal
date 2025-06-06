@@ -8,7 +8,7 @@ use terapascal_build::BuildStage;
 use terapascal_build::ParseOutput;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::span::Spanned;
-use terapascal_common::CompileOpts;
+use terapascal_common::{CompileOpts, DiagnosticOutput};
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
 use terapascal_frontend::typecheck;
@@ -23,10 +23,28 @@ impl ProjectCollection {
     pub fn get_document_project(&self, document_path: &PathBuf) -> Option<&Project> {
         self.projects.get(self.document_projects.get(document_path)?)
     }
+    
+    fn remove_project_units(&mut self, project_path: &PathBuf) {
+        self.document_projects.retain(|_doc_path, doc_proj_path| doc_proj_path != project_path);   
+    }
+    
+    fn add_project_units(&mut self,
+        project_path: &PathBuf,
+        unit_paths: impl IntoIterator<Item=PathBuf>
+    ) {
+        eprintln!("add_project_units: units in project {}:", project_path.display());
+
+        for unit_path in unit_paths.into_iter() {
+            eprintln!(" - {}", unit_path.display());
+            self.document_projects.insert(unit_path, project_path.clone());
+        }
+    }
 
     pub fn remove_project(&mut self, project_path: &PathBuf) {
         self.projects.remove(project_path);
-        self.document_projects.retain(|_doc_path, doc_proj_path| doc_proj_path != project_path);
+        self.remove_project_units(project_path);
+        
+        eprintln!("remove_project: {}", project_path.display());
     }
     
     pub fn update_document(&mut self, doc_path: &PathBuf) {
@@ -35,12 +53,19 @@ impl ProjectCollection {
         if let Some(project_path) = project_path {
             let project = self.projects.get_mut(&project_path).unwrap();
             project.build();
+
+            let unit_paths = project.unit_paths();
+            self.remove_project_units(&project_path);
+            self.add_project_units(&project_path, unit_paths);
         } else {
+            eprintln!("update_document: creating project {}", doc_path.display());
+
             // load the current unit as a project
             // todo: should be able to search for/specify the root project file
             let mut project = Project::new(doc_path.clone());
             project.build();
 
+            self.add_project_units(&doc_path, project.unit_paths());
             self.projects.insert(doc_path.clone(), project);
         }
     }
@@ -51,7 +76,7 @@ pub struct Project {
 
     pub semantic_tokens: HashMap<PathBuf, Vec<SemanticToken>>,
 
-    parsed_units: Option<ParseOutput>,
+    parse_output: Option<ParseOutput>,
     module: Option<typ::Module>,
 }
 
@@ -63,12 +88,12 @@ impl Project {
             semantic_tokens: HashMap::new(),
 
             module: None,
-            parsed_units: None,
+            parse_output: None,
         }
     }
 
     fn build(&mut self) {
-        self.parsed_units = None;
+        self.parse_output = None;
         self.module = None;
 
         self.semantic_tokens.clear();
@@ -103,7 +128,7 @@ impl Project {
                     },
 
                     Err(err) => {
-                        eprintln!("Project::build: {err} ({})", err.span());
+                        eprintln!("build: {} ({})", err.main(), err.span());
 
                         for (unit_path, unit) in &parsed_output.units {
                             let mut token_builder = SemanticTokenBuilder::new(0, 0);
@@ -115,15 +140,15 @@ impl Project {
                     },
                 }
 
-                self.parsed_units = Some(parsed_output);
+                self.parse_output = Some(parsed_output);
             },
 
             Err(BuildError::ParseError(parse_err)) => {
-                eprintln!("Project::build: {} ({})", parse_err.err, parse_err.span());
+                eprintln!("Project::build: {} ({})", parse_err.err.main(), parse_err.span());
             },
 
             Err(err) => {
-                eprintln!("Project::build: {err}");
+                eprintln!("Project::build: {}", err.main());
             },
         };
         
@@ -132,6 +157,20 @@ impl Project {
         }
         
         result
+    }
+    
+    fn unit_paths(&self) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+        
+        if let Some(parse_output) = &self.parse_output {
+            for (unit_path, _) in &parse_output.units {
+                paths.push(unit_path.clone());
+            }
+        } else {
+            paths.push(self.main_file.clone());
+        }
+
+        paths
     }
 }
 
