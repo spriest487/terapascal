@@ -9,24 +9,10 @@ use terapascal_common::SRC_FILE_DEFAULT_EXT;
 use terapascal_frontend::ast::IdentPath;
 
 fn find_in_path(filename: &PathBuf, dir: &Path) -> Option<PathBuf> {
-    if !dir.exists() || !dir.is_dir() {
-        return None;
-    }
-
     let file_path = dir.join(filename);
 
     if file_path.exists() {
-        // try to canonicalize the filename (not the rest of the path)
-        let file_path_with_canon_name = file_path
-            .canonicalize()
-            .ok()
-            .and_then(|canon_path| {
-                let canon_filename = canon_path.file_name()?;
-                Some(file_path.with_file_name(canon_filename))
-            })
-            .unwrap_or(file_path);
-
-        Some(file_path_with_canon_name)
+        file_path.canonicalize().ok()
     } else {
         None
     }
