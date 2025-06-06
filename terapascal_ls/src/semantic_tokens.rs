@@ -74,8 +74,14 @@ impl SemanticTokenBuilder {
         self.result
     }
 
-    fn token_delta(&mut self, span: &Span) -> (u32, u32) {
+    fn token_delta(&mut self, span: &Span) -> Option<(u32, u32)> {
+        let prev_line = self.cur_line;
         let line = span.start.line as u32;
+        if line < prev_line {
+            eprintln!("invalid line in span {} (expected >= {})", span, prev_line);
+            return None;
+        }
+        
         let delta_line = line.saturating_sub(self.cur_line);
         if line != self.cur_line {
             self.cur_line = line;
@@ -83,14 +89,21 @@ impl SemanticTokenBuilder {
         }
 
         let col = span.start.col as u32;
+        if line == prev_line && col < self.cur_col {
+            eprintln!("invalid col in span {} (expected >= {})", span, self.cur_col);
+            return None;
+        }
+        
         let delta_col = col.saturating_sub(self.cur_col);
         self.cur_col = col;
 
-        (delta_line, delta_col)
+        Some((delta_line, delta_col))
     }
 
     fn add(&mut self, span: &Span, token_type: u32) {
-        let (delta_line, delta_col) = self.token_delta(span);
+        let Some((delta_line, delta_col)) = self.token_delta(span) else {
+            return;
+        };
 
         self.result.push(SemanticToken {
             delta_line,

@@ -144,16 +144,16 @@ impl Project {
             },
 
             Err(BuildError::ParseError(parse_err)) => {
-                eprintln!("Project::build: {} ({})", parse_err.err.main(), parse_err.span());
+                eprintln!("build: {} ({})", parse_err.err.main(), parse_err.span());
             },
 
             Err(err) => {
-                eprintln!("Project::build: {}", err.main());
+                eprintln!("build: {}", err.main());
             },
         };
         
         for log_entry in log.entries {
-            eprintln!("Project::build: {}", log_entry);
+            eprintln!("build: {}", log_entry);
         }
         
         result
