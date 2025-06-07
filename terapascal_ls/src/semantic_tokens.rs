@@ -360,18 +360,18 @@ where
         self.add(&binding.kw_span, SEMANTIC_KEYWORD);
 
         for item in &binding.items {
-            // for ident in &item.idents {
-            //     self.add(&ident.span, SEMANTIC_VARIABLE);
-            // }
-            // 
-            // if let Some(span) = &item.ty_span {
-            //     self.add(span, SEMANTIC_TYPE);
-            // }
-            // 
-            // if let Some(init) = &item.init {
-            //     self.add(&init.eq_span, SEMANTIC_OPERATOR);
-            //     self.add_expr(&init.expr);
-            // }
+            for ident in &item.idents {
+                self.add(&ident.span, SEMANTIC_VARIABLE);
+            }
+            
+            if let Some(span) = &item.ty_span {
+                self.add(span, SEMANTIC_TYPE);
+            }
+            
+            if let Some(init) = &item.init {
+                self.add(&init.eq_span, SEMANTIC_OPERATOR);
+                self.add_expr(&init.expr);
+            }
         }
     }
 

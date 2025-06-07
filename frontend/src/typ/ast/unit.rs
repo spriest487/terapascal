@@ -414,13 +414,13 @@ fn typecheck_global_binding_item(
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<GlobalBindingItem> {
-    let span = item.span().clone();
+    let decl_span = item.span().clone();
 
     let (ty, val) = match kind {
         BindingDeclKind::Const => {
             let (ty, mut const_val_init) = match (&item.ty, &item.init) {
                 (_, None) => {
-                    return Err(TypeError::ConstDeclWithNoValue { span });
+                    return Err(TypeError::ConstDeclWithNoValue { span: decl_span });
                 }
 
                 (unknown_ty, Some(init)) if !unknown_ty.is_known() => {
@@ -445,6 +445,8 @@ fn typecheck_global_binding_item(
                     })
                 }
             };
+            
+            let val_span = const_val_init.expr.span().clone();
 
             let const_val_literal = match const_val_init.expr.const_eval(ctx) {
                 Some(const_val) => Ok(const_val),
@@ -461,12 +463,12 @@ fn typecheck_global_binding_item(
                 const_val_literal.clone(),
                 ty.clone(),
                 visibility,
-                span.clone(),
+                const_ident.span.clone(),
             )?;
 
             let annotation = ConstValue {
                 value: const_val_literal.clone(),
-                span: span.clone(),
+                span: val_span,
                 decl: Some(ctx.namespace().child(const_ident)),
                 ty: ty.clone(),
             };
@@ -543,7 +545,7 @@ fn typecheck_global_binding_item(
     if ty == Type::Nothing {
         return Err(TypeError::BindingWithNoType {
             binding_names: item.idents.clone(),
-            span,
+            span: decl_span,
         });
     }
 
@@ -552,7 +554,7 @@ fn typecheck_global_binding_item(
         ty_span: item.ty_span.clone(),
         idents: item.idents.clone(),
         init: val,
-        span,
+        span: decl_span,
     })
 }
 
