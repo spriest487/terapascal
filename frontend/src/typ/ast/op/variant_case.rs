@@ -1,23 +1,26 @@
+use crate::ast::Call;
+use crate::ast::MethodOwner;
 use crate::ast::VariantCtorCall;
-use crate::ast::{Call, MethodOwner};
-use crate::typ::ast::{Expr, OverloadCandidate};
+use crate::typ::ast::Expr;
+use crate::typ::ast::OverloadCandidate;
+use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
 use crate::typ::NameContainer;
 use crate::typ::NameError;
+use crate::typ::OverloadValue;
 use crate::typ::Specializable;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
+use crate::typ::Value;
 use crate::typ::VariantCaseValue;
-use crate::typ::{Context, OverloadValue, Value};
 use crate::Ident;
 use std::sync::Arc;
 use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 
 #[derive(Debug, Clone)]
 pub enum VariantTypeMemberValue {
@@ -29,28 +32,31 @@ pub enum VariantTypeMemberValue {
 pub fn typecheck_variant_type_member(
     variant_name: &Symbol,
     member_ident: &Ident,
-    span: &Span,
+    variant_name_span: &Span,
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<VariantTypeMemberValue> {
+    let span = variant_name_span.to(member_ident);
+    
     let variant_def = ctx.find_variant_def(&variant_name.full_path)
         .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
 
     let case_exists = variant_def.find_case(member_ident).is_some();
 
     if case_exists {
-        let ctor_annotation = VariantCaseValue {
+        let case_val = VariantCaseValue {
             variant_name: Arc::new(variant_name.clone()),
+            variant_name_span: variant_name_span.clone(),
             case: member_ident.clone(),
-            span: member_ident.span().clone(),
+            span,
         };
 
-        if let Some(case_ctor) = try_expr_into_noargs_variant_ctor(&ctor_annotation, expect_ty, span, ctx)? {
+        if let Some(case_ctor) = try_expr_into_noargs_variant_ctor(&case_val, expect_ty, ctx)? {
             // in this context, this becomes a case constructor
             Ok(VariantTypeMemberValue::Ctor(case_ctor))
         } else {
             // reference to the case itself
-            Ok(VariantTypeMemberValue::Case(Value::VariantCase(Arc::new(ctor_annotation))))
+            Ok(VariantTypeMemberValue::Case(Value::VariantCase(Arc::new(case_val))))
         }
     } else {
         // must be referencing a method
@@ -82,7 +88,7 @@ pub fn typecheck_variant_type_member(
                 span.clone(),
             ));
         }
-        
+
         let known_sig = if method_candidates.len() == 1 {
             Some(Arc::new(method_candidates[0].decl().sig()))
         } else {
@@ -99,12 +105,11 @@ pub fn typecheck_variant_type_member(
 }
 
 pub fn try_expr_into_noargs_variant_ctor(
-    case_annotation: &VariantCaseValue,
+    case_val: &VariantCaseValue,
     expect_ty: &Type,
-    span: &Span,
     ctx: &Context
 ) -> TypeResult<Option<Expr>> {
-    let mut variant_name = case_annotation.variant_name.clone();
+    let mut variant_name = case_val.variant_name.clone();
 
     // if the variant is generic, we have to be able to infer the type from the usage
     if variant_name.is_unspecialized_generic() {
@@ -123,7 +128,7 @@ pub fn try_expr_into_noargs_variant_ctor(
                     hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
                 };
 
-                return Err(TypeError::from_generic_err(infer_err, span.clone()));
+                return Err(TypeError::from_generic_err(infer_err, case_val.span.clone()));
             }
 
             Some(name) => {
@@ -135,9 +140,9 @@ pub fn try_expr_into_noargs_variant_ctor(
     // we don't need to specialize the def, we only need to check if the case has a data arg
     let variant_def = ctx
         .find_variant_def(&variant_name.full_path)
-        .map_err(|e| TypeError::from_name_err(e, span.clone()))?;
+        .map_err(|e| TypeError::from_name_err(e, case_val.span.clone()))?;
 
-    match variant_def.find_case(&case_annotation.case) {
+    match variant_def.find_case(&case_val.case) {
         None => return Ok(None),
 
         Some(case) => {
@@ -150,11 +155,11 @@ pub fn try_expr_into_noargs_variant_ctor(
     let variant_ty = Type::Variant(variant_name.clone());
 
     let ctor_call = VariantCtorCall {
-        case: case_annotation.case.clone(),
-        variant_name_span: variant_name.span().clone(),
+        case: case_val.case.clone(),
+        variant_name_span: case_val.variant_name_span.clone(),
         variant: variant_name,
         arg: None,
-        annotation: TypedValue::temp(variant_ty, span.clone()).into(),
+        annotation: TypedValue::temp(variant_ty, case_val.span.clone()).into(),
     };
 
     let call_expr = Expr::Call(Box::new(Call::VariantCtor(ctor_call)));

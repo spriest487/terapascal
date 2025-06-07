@@ -13,7 +13,8 @@ use crate::typ::ast::collection_ctor_elements;
 use crate::typ::ast::const_eval_integer;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::member_annotation;
-use crate::typ::ast::op::variant_case::{typecheck_variant_type_member, VariantTypeMemberValue};
+use crate::typ::ast::op::variant_case::typecheck_variant_type_member;
+use crate::typ::ast::op::variant_case::VariantTypeMemberValue;
 use crate::typ::ast::overload_to_no_args_call;
 use crate::typ::ast::try_resolve_overload;
 use crate::typ::ast::typecheck_expr;
@@ -429,8 +430,8 @@ fn typecheck_member_of(
 
             let annotation = match lhs.annotation() {
                 // x is the name of a variant type - we are constructing that variant
-                Value::Type(Type::Variant(variant_name), ..) => {
-                    match typecheck_variant_type_member(variant_name, &member_ident, &span, expect_ty, ctx)? {
+                Value::Type(Type::Variant(variant_name), variant_name_span) => {
+                    match typecheck_variant_type_member(variant_name, &member_ident, variant_name_span, expect_ty, ctx)? {
                         VariantTypeMemberValue::Case(value) 
                         | VariantTypeMemberValue::Method(value) => {
                             value

@@ -3,8 +3,7 @@ mod test;
 mod overload;
 mod args;
 
-use crate::ast;
-use crate::ast::Ident;
+use crate::{ast, Ident};
 use crate::ast::Visibility;
 use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::specialize_func_decl;
@@ -13,7 +12,6 @@ use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::ObjectCtor;
-use crate::typ::typecheck_typename;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::FunctionValue;
@@ -25,7 +23,6 @@ use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::OverloadValue;
 use crate::typ::Specializable;
-use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
@@ -34,6 +31,7 @@ use crate::typ::TypedValue;
 use crate::typ::UfcsValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use crate::typ::{typecheck_typename, VariantCaseValue};
 use crate::typ::{Context, TypeName};
 pub use args::*;
 pub use overload::*;
@@ -319,11 +317,9 @@ fn typecheck_func_call(
             }
         },
 
-        Value::VariantCase(variant, ..) => {
+        Value::VariantCase(case_val, ..) => {
             let ctor_call = typecheck_variant_ctor_call(
-                &variant.variant_name,
-                &variant.span,
-                &variant.case,
+                case_val,
                 &func_call.args,
                 func_call.span().clone(),
                 expect_ty,
@@ -865,18 +861,16 @@ fn typecheck_free_func_call(
 }
 
 fn typecheck_variant_ctor_call(
-    variant: &Symbol,
-    variant_name_span: &Span,
-    case: &Ident,
+    case_val: &VariantCaseValue,
     args: &[ast::Expr<Span>],
     span: Span,
     expect_ty: &Type,
     type_args: Option<&ast::TypeArgList<Span>>,
     ctx: &mut Context,
 ) -> TypeResult<Call> {
-    if !ctx.is_visible(&variant.full_path) {
+    if !ctx.is_visible(&case_val.variant_name.full_path) {
         return Err(TypeError::NameNotVisible {
-            name: variant.full_path.clone(),
+            name: case_val.variant_name.full_path.clone(),
             span: span.clone(),
         });
     }
@@ -885,7 +879,7 @@ fn typecheck_variant_ctor_call(
         Some(type_name_list) => {
             let type_list = typecheck_type_args(type_name_list, ctx)?;
 
-            variant.specialize(&type_list, ctx)
+            case_val.variant_name.specialize(&type_list, ctx)
                 .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
                 .into_owned()
         },
@@ -894,11 +888,11 @@ fn typecheck_variant_ctor_call(
             // infer the specialized generic type if the written one is generic and the hint is a specialized
             // version of that same generic variant
             match expect_ty {
-                Type::Variant(expect_variant) if expect_variant.full_path == variant.full_path => {
+                Type::Variant(expect_variant) if expect_variant.full_path == case_val.variant_name.full_path => {
                     (**expect_variant).clone()
                 },
 
-                _ => variant.clone(),
+                _ => (*case_val.variant_name).clone(),
             }
         }
     };
@@ -917,13 +911,13 @@ fn typecheck_variant_ctor_call(
         .instantiate_variant_def(&variant_sym)
         .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
 
-    let case_index = match variant_def.case_position(case) {
+    let case_index = match variant_def.case_position(&case_val.case) {
         Some(index) => index,
 
         None => {
             return Err(TypeError::from_name_err(
                 NameError::MemberNotFound {
-                    member: case.clone(),
+                    member: case_val.case.clone(),
                     base: NameContainer::Type(Type::variant(variant_sym.clone())),
                 },
                 span,
@@ -976,8 +970,6 @@ fn typecheck_variant_ctor_call(
         }
     };
 
-    let case = variant_def.cases[case_index].ident.clone();
-
     let annotation = TypedValue {
         decl: None,
         span,
@@ -988,10 +980,10 @@ fn typecheck_variant_ctor_call(
 
     Ok(ast::Call::VariantCtor(ast::VariantCtorCall {
         variant: variant_def.name.clone(),
-        variant_name_span: variant_name_span.clone(),
+        variant_name_span: case_val.variant_name_span.clone(),
         annotation,
         arg,
-        case,
+        case: case_val.case.clone(),
     }))
 }
 

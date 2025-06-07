@@ -8,7 +8,8 @@ use crate::ast::Visibility;
 pub use crate::typ::ast::call::typecheck_call;
 pub use crate::typ::ast::call::Invocation;
 use crate::typ::ast::cast::typecheck_cast_expr;
-use crate::typ::ast::{check_overload_visibility, typecheck_type_args};
+use crate::typ::ast::check_overload_visibility;
+use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::overload_to_no_args_call;
 use crate::typ::ast::try_resolve_overload;
@@ -84,7 +85,7 @@ pub fn typecheck_expr(
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
     match expr_node {
-        ast::Expr::Literal(lit) => literal::typecheck_literal(&lit.literal, expect_ty, &lit.annotation, ctx),
+        ast::Expr::Literal(lit) => typecheck_literal(&lit.literal, expect_ty, &lit.annotation, ctx),
 
         ast::Expr::Ident(ident, span) => typecheck_ident(ident, expect_ty, span, ctx),
 
@@ -168,7 +169,7 @@ pub fn typecheck_expr(
                     *base_expr.annotation_mut() = Value::Type(spec_ty, span.clone());
                     Ok(base_expr)
                 }
-                
+
                 other=> Err(TypeError::InvalidExplicitSpec {
                     target: other.clone(),
                 }),
@@ -183,17 +184,13 @@ fn typecheck_ident(
     span: &Span,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
-    let decl = match ctx.find_name(ident) {
-        Some(decl) => decl,
-        None => {
-            let not_found_ident = ident.clone().into();
-            return Err(TypeError::NameError {
-                err: NameError::NotFound {
-                    ident: not_found_ident,
-                },
-                span: span.clone(),
-            });
-        },
+    let Some(decl) = ctx.find_name(ident) else {
+        return Err(TypeError::from_name_err(
+            NameError::NotFound {
+                ident: ident.clone().into(),
+            }, 
+            span.clone())
+        );
     };
 
     match &decl {
