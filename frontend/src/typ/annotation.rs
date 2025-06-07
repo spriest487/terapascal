@@ -34,6 +34,13 @@ pub struct VariantCaseValue {
     // variant ctors don't know the type args of their variant, it must be inferred from context
     pub variant_name: Arc<Symbol>,
 
+    // a subrange of `span`, of the reference to the variant type name. `variant_name`'s span
+    // will be the type declaration's span, not the reference to it at this value's location
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub variant_name_span: Span,
+
     pub case: Ident,
 }
 

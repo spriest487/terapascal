@@ -3,7 +3,6 @@ mod test;
 mod overload;
 mod args;
 
-use crate::{ast, Ident};
 use crate::ast::Visibility;
 use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::specialize_func_decl;
@@ -33,6 +32,7 @@ use crate::typ::Value;
 use crate::typ::ValueKind;
 use crate::typ::{typecheck_typename, VariantCaseValue};
 use crate::typ::{Context, TypeName};
+use crate::ast;
 pub use args::*;
 pub use overload::*;
 use std::borrow::Cow;

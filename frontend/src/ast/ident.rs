@@ -48,6 +48,13 @@ impl Ident {
     pub fn as_str(&self) -> &str {
         self.name.as_str()
     }
+    
+    pub fn with_span(self, span: Span) -> Self {
+        Self {
+            name: self.name.clone(),
+            span,
+        }
+    }
 }
 
 impl Parse for Ident {
