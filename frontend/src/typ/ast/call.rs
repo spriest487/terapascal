@@ -447,7 +447,7 @@ fn typecheck_func_overload(
             let sig = Arc::new(sig.with_self(&self_ty));
 
             let return_annotation = Value::from(TypedValue::temp(
-                sig.return_ty.clone(),
+                sig.result_ty.clone(),
                 overloaded.span.clone(),
             ));
 
@@ -660,7 +660,7 @@ fn typecheck_method_call(
     
     Ok(Call::Method(MethodCall {
         annotation: TypedValue {
-            ty: sig.return_ty.clone(),
+            ty: sig.result_ty.clone(),
             span: func_call.span().clone(),
             value_kind: ValueKind::Temporary,
             decl: None,
@@ -727,7 +727,7 @@ fn typecheck_ufcs_call(
     let target = ast::Expr::Ident(ufcs_call.function_name.ident().clone(), func_annotation.into());
 
     let annotation = TypedValue {
-        ty: specialized_call_args.sig.return_ty.clone(),
+        ty: specialized_call_args.sig.result_ty.clone(),
         span: span.clone(),
         decl: None,
         value_kind: ValueKind::Temporary,
@@ -776,7 +776,7 @@ fn typecheck_func_value_call(
     )?;
 
     let span = func_call.span().clone();
-    let annotation = match &sig.return_ty {
+    let annotation = match &sig.result_ty {
         Type::Nothing => Value::Untyped(span.clone()),
         return_ty => Value::from(TypedValue::temp(return_ty.clone(), span.clone()))
     };
@@ -820,7 +820,7 @@ fn typecheck_free_func_call(
         ctx,
     )?;
 
-    let return_ty = specialized_call_args.sig.return_ty.clone();
+    let return_ty = specialized_call_args.sig.result_ty.clone();
 
     let annotation = match return_ty {
         Type::Nothing => Value::Untyped(span.clone()),

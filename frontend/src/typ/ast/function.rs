@@ -933,7 +933,7 @@ pub fn typecheck_func_expr(
     // if the return type isn't explicitly specified, we might be able to infer it to aid
     // in typechecking the body if we have an expected function signature
     let known_return_ty = match &src_def.return_ty {
-        ast::TypeName::Unspecified(..) => expect_sig.map(|sig| sig.return_ty.clone()),
+        ast::TypeName::Unspecified(..) => expect_sig.map(|sig| sig.result_ty.clone()),
         src_return_ty => Some(typecheck_type(src_return_ty, ctx)?),
     };
 
@@ -979,7 +979,7 @@ pub fn typecheck_func_expr(
     }
 
     let sig = Arc::new(FunctionSig {
-        return_ty: return_ty.clone(),
+        result_ty: return_ty.clone(),
         params: sig_params,
         type_params: None,
     });

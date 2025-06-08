@@ -95,13 +95,13 @@ pub fn infer_from_structural_ty_args(
 
         (Type::Function(param_sig), Type::Function(actual_sig)) => {
             let mut param_tys = Vec::new();
-            param_tys.push(param_sig.return_ty.clone());
+            param_tys.push(param_sig.result_ty.clone());
             param_tys.extend(param_sig.params
                 .iter()
                 .map(|p| p.ty.clone()));
 
             let mut arg_tys = Vec::new();
-            arg_tys.push(actual_sig.return_ty.clone());
+            arg_tys.push(actual_sig.result_ty.clone());
             arg_tys.extend(actual_sig.params
                 .iter()
                 .map(|p| p.ty.clone()));

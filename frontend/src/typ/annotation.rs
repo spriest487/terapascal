@@ -1,4 +1,5 @@
 mod symbol;
+mod invoke;
 
 pub use symbol::*;
 
@@ -6,6 +7,7 @@ use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Visibility;
 use crate::ast::{Annotation, ConstExprValue};
+pub use crate::typ::annotation::invoke::InvocationValue;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::Literal;
@@ -403,6 +405,8 @@ pub enum Value {
 
     Function(Arc<FunctionValue>),
     UfcsFunction(Arc<UfcsValue>),
+    
+    Invocation(Arc<InvocationValue>),
 
     // direct method reference e.g. `Interface.Method`
     Method(Arc<MethodValue>),
@@ -440,6 +444,7 @@ impl Value {
             Value::Typed(val) => (val.ty.clone(), &val.span),
             Value::Const(const_val) => (const_val.ty.clone(), &const_val.span),
             Value::Function(func) => (func.func_ty(), &func.span),
+            Value::Invocation(val) => (val.result_type().clone(), val.target_span()),
 
             Value::Overload(..)
             | Value::UfcsFunction(..)
@@ -514,6 +519,8 @@ impl Value {
             Value::UfcsFunction(call) => Cow::Owned(call.func_ty()),
             Value::Method(method) => Cow::Owned(method.func_ty()),
             Value::Overload(overload) => Cow::Owned(overload.func_ty()),
+            
+            Value::Invocation(invocation) => Cow::Borrowed(invocation.result_type()),
 
             Value::Const(const_val) => Cow::Borrowed(&const_val.ty),
             Value::Typed(val) => Cow::Borrowed(&val.ty),
@@ -527,6 +534,8 @@ impl Value {
             Value::Method(..) => None, // TODO
             Value::UfcsFunction { .. } => None, // TODO
             Value::Overload { .. } => None, // TODO
+            
+            Value::Invocation(..) => None,
 
             Value::Typed(val) => val.decl.as_ref().map(Cow::Borrowed),
             Value::Untyped(..) => None,
@@ -551,6 +560,7 @@ impl Value {
         match self {
             Value::Typed(val) => Some(val.value_kind),
             Value::Const { .. } => Some(ValueKind::Immutable),
+            Value::Invocation(..) => Some(ValueKind::Temporary),
             _ => None,
         }
     }
@@ -578,6 +588,9 @@ impl fmt::Display for Value {
             Value::UfcsFunction(func) => { 
                 write!(f, "function {}", func.function_name) 
             },
+            Value::Invocation(invoked) => {
+                write!(f, "invocation of {invoked}")
+            }
             Value::Method(method) => { 
                 write!(f, "method {}.{}", method.self_ty, method.decl.func_decl.ident()) 
             },
@@ -618,6 +631,8 @@ impl Spanned for Value {
             Value::Const(const_val) => &const_val.span,
             Value::Function(func) => &func.span,
             Value::UfcsFunction(call) => &call.span,
+            
+            Value::Invocation(invocation) => invocation.target_span(),
 
             Value::Untyped(span)
             | Value::Type(_, span)

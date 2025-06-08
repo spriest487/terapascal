@@ -8,6 +8,8 @@ use crate::codegen::syn;
 use crate::codegen::translate_stmt;
 use crate::codegen::typ;
 use crate::codegen::Builder;
+use crate::typ::InvocationValue;
+use crate::typ::Type;
 use crate::typ::TypedValue;
 use crate::typ::STRING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
@@ -42,7 +44,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
             op::translate_unary_op(unary_op, &unary_op.annotation.ty(), builder)
         },
 
-        syn::Expr::Ident(ident, annotation) => translate_ident(ident, annotation, builder),
+        syn::Expr::Ident(ident, annotation) => translate_ident_expr(ident, annotation, builder),
 
         syn::Expr::Call(call) => {
             // eprintln!("translating call @ {}", call.span());
@@ -422,7 +424,7 @@ fn gen_fill_byte(at: ir::Ref, at_ty: ir::Type, count: ir::Value, byte_val: ir::V
     builder.label(break_label);
 }
 
-fn translate_ident(ident: &Ident, annotation: &typ::Value, builder: &mut Builder) -> ir::Ref {
+fn translate_ident_expr(ident: &Ident, annotation: &typ::Value, builder: &mut Builder) -> ir::Ref {
     match annotation {
         typ::Value::Function(func) => {
             let func = builder.translate_func(&func.name, &func.sig, None);
@@ -431,6 +433,48 @@ fn translate_ident(ident: &Ident, annotation: &typ::Value, builder: &mut Builder
             // closure for that function
             builder.build_function_closure(&func)
         },
+        
+        // standalone no-args invocation a function
+        typ::Value::Invocation(invocation) => {
+            let func = match invocation.as_ref() {
+                InvocationValue::Function { function, type_args } => {
+                    builder.translate_func(
+                        &function.name, 
+                        &function.sig, 
+                        type_args.clone()
+                    )
+                }
+    
+                InvocationValue::Method { method, type_args } => {
+                    builder.translate_method(
+                        method.self_ty.ty().clone(), 
+                        method.index, 
+                        type_args.clone()
+                    )
+                }
+
+                InvocationValue::VirtualMethod { method, iface_ty, iface_method_index } => {
+                    builder.translate_virtual_method(
+                        iface_ty.clone(),
+                        *iface_method_index,
+                        method.self_ty.ty().clone(),
+                        method.index,
+                    )
+                }
+            };
+
+            let func_val = ir::Ref::Global(ir::GlobalRef::Function(func.id));
+            let result = if func.sig.result_ty == Type::Nothing {
+                None
+            } else {
+                let result_ty = builder.translate_type(&func.sig.result_ty);
+                Some(builder.local_new(result_ty, None))
+            };
+
+            builder.call(func_val, [], result.clone());
+
+            result.unwrap_or(ir::Ref::Discard)
+        }
 
         typ::Value::Typed(val) => {
             let val_ref = find_local_ref(ident, builder)

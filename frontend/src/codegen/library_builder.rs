@@ -433,7 +433,7 @@ impl LibraryBuilder {
         let id = self.declare_func(&extern_decl, decl_namespace);
 
         let sig = extern_decl.sig();
-        let return_ty = self.translate_type(&sig.return_ty, &generic_ctx);
+        let return_ty = self.translate_type(&sig.result_ty, &generic_ctx);
 
         let param_tys = sig.params
             .iter()
@@ -672,7 +672,7 @@ impl LibraryBuilder {
     // statically reference a method and get a function ID. interface methods are all translated
     // at the end of compilation for a module anyway, but for methods that are referenced statically
     // this call reserves us a function ID
-    pub fn translate_method_impl(
+    pub fn translate_method(
         &mut self,
         self_ty: typ::Type, 
         self_ty_method_index: usize,
@@ -688,6 +688,32 @@ impl LibraryBuilder {
         };
 
         // methods must always be present so make sure they're immediately instantiated
+        self.instantiate_func(&mut key)
+    }
+    
+    pub fn translate_virtual_method(
+        &mut self,
+        iface_ty: typ::Type,
+        iface_method_index: usize,
+        self_ty: typ::Type,
+        self_ty_method_index: usize,
+    ) -> FunctionInstance {
+        let impl_method = MethodDeclKey {
+            method_index: self_ty_method_index,
+            self_ty,
+        };
+        
+        let mut key = FunctionDefKey {
+            decl_key: FunctionDeclKey::VirtualMethod(VirtualMethodKey {
+                iface_ty,
+                iface_method_index,
+                impl_method,
+            }),
+            
+            // TODO if generic virtual methods are ever supported 
+            type_args: None,
+        };
+        
         self.instantiate_func(&mut key)
     }
 

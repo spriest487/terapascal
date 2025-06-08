@@ -4,10 +4,10 @@ mod test;
 mod variant_case;
 
 use crate::ast;
-use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Operator;
 use crate::ast::IFACE_METHOD_ACCESS;
+use crate::ast::{Ident, Literal};
 use crate::typ::ast::check_overload_visibility;
 use crate::typ::ast::collection_ctor_elements;
 use crate::typ::ast::const_eval_integer;
@@ -18,16 +18,10 @@ use crate::typ::ast::op::variant_case::VariantTypeMemberValue;
 use crate::typ::ast::overload_to_no_args_call;
 use crate::typ::ast::try_resolve_overload;
 use crate::typ::ast::typecheck_expr;
-use crate::typ::ast::Call;
 use crate::typ::ast::Expr;
-use crate::typ::ast::MethodCall;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::SetDecl;
-use crate::typ::{builtin_displayable_name, TypeName};
-use crate::typ::string_type;
-use crate::typ::Context;
-use crate::typ::FunctionValue;
 use crate::typ::InstanceMember;
 use crate::typ::MethodValue;
 use crate::typ::NameContainer;
@@ -46,6 +40,9 @@ use crate::typ::ValueKind;
 use crate::typ::DISPLAYABLE_TOSTRING_METHOD;
 use crate::typ::STRING_CONCAT_FUNC_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
+use crate::typ::{builtin_displayable_name, builtin_string_name, TypeName};
+use crate::typ::{ConstValue, FunctionValue};
+use crate::typ::{Context, InvocationValue};
 use crate::IntConstant;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -104,51 +101,59 @@ pub fn typecheck_bin_op(
             let mut lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
             let mut rhs = typecheck_expr(&bin_op.rhs, &lhs.annotation().ty(), ctx)?;
 
-            // string concat sugar isn't available if the String class isn't loaded
-            if let Ok(string_ty) = string_type(ctx) {
-                let mut lhs_string = *lhs.annotation().ty() == string_ty;
-                let mut rhs_string = *rhs.annotation().ty() == string_ty;
+            // if both operands are strings, this will actually call System.StringConcat
+            let string_ty = Type::class(builtin_string_name());
 
-                if lhs_string && !rhs_string {
-                    if let Some(rhs_to_string) = desugar_displayable_to_string(&rhs, &span, ctx) {
-                        rhs = rhs_to_string;
-                        rhs_string = true;
-                    }
-                } else if !lhs_string && lhs_string {
-                    if let Some(lhs_to_string) = desugar_displayable_to_string(&lhs, &span, ctx) {
-                        lhs = lhs_to_string;
-                        lhs_string = true;
-                    }
+            let mut lhs_string = *lhs.annotation().ty() == string_ty;
+            let mut rhs_string = *rhs.annotation().ty() == string_ty;
+
+            // if one operand is a string, and the other can be converted using ToString, do that
+            if lhs_string && !rhs_string {
+                if let Some(rhs_to_string) = desugar_to_string(&rhs, &span, ctx) {
+                    rhs = rhs_to_string;
+                    rhs_string = true;
                 }
-
-                let is_string_concat = bin_op.op == Operator::Add && lhs_string && rhs_string;
-
-                if is_string_concat {
-                    return desugar_string_concat(lhs, rhs, &string_ty, ctx);
+            } else if !lhs_string && lhs_string {
+                if let Some(lhs_to_string) = desugar_to_string(&lhs, &span, ctx) {
+                    lhs = lhs_to_string;
+                    lhs_string = true;
                 }
             }
+
+            let is_string_concat = bin_op.op == Operator::Add && lhs_string && rhs_string;
 
             // check valid ops etc, result type etc
             let lhs_ty = lhs.annotation().ty();
 
-            let result_ty = lhs_ty
-                .arithmetic_op_result(bin_op.op, rhs.annotation().ty().as_ref())
-                .ok_or_else(|| {
-                    invalid_bin_op(&bin_op, &lhs, &rhs)
-                })?;
-
-            let annotation = match result_ty.as_ref() {
-                Type::Nothing => Value::Untyped(span.clone()),
-                _ => Value::from(TypedValue::temp(result_ty.into_owned(), span.clone())),
+            let result_ty = if is_string_concat {
+                string_ty.clone()
+            } else {
+                lhs_ty
+                    .arithmetic_op_result(bin_op.op, rhs.annotation().ty().as_ref())
+                    .ok_or_else(|| {
+                        invalid_bin_op(&bin_op, &lhs, &rhs)
+                    })?
+                    .into_owned()
             };
 
-            Ok(Expr::from(ast::BinOp {
+            let annotation = match result_ty {
+                Type::Nothing => Value::Untyped(span.clone()),
+                ty => Value::new_temp_val(ty, span.clone()),
+            };
+
+            let bin_op = ast::BinOp {
                 lhs,
                 op: bin_op.op,
                 op_span: bin_op.op_span.clone(),
                 rhs,
                 annotation,
-            }))
+            };
+            
+            if is_string_concat {
+                desugar_string_concat(bin_op, &string_ty, ctx)
+            } else {
+                Ok(Expr::from(bin_op))
+            }
         },
     }
 }
@@ -292,7 +297,7 @@ fn typecheck_bitwise_op(
 // turn value `x` that implements the displayable (IToString) interface into a call to 
 // the `ToString(x)` method of that interface, when `x` is evaluated in a context where 
 // a string is expected e.g. string concat
-fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
+fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
     let src_ty = expr.annotation().ty();
 
     let to_string_ident = Ident::new(DISPLAYABLE_TOSTRING_METHOD, span.clone());
@@ -300,6 +305,7 @@ fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Opt
     let displayable_path = builtin_displayable_name().full_path;
 
     let displayable_ty = Type::interface(builtin_displayable_name().full_path);
+
     let is_impl = ctx
         .is_implementation(src_ty.as_ref(), &displayable_ty)
         .ok()
@@ -314,7 +320,7 @@ fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Opt
         Err(..) => return None,
     };
 
-    let (to_string_index, to_string_method) = match displayable_iface
+    let (iface_to_string_index, iface_to_string_method) = match displayable_iface
         .methods
         .iter()
         .position(|m| *m.decl.ident() == to_string_ident) 
@@ -332,54 +338,57 @@ fn desugar_displayable_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Opt
         }
     };
 
-    let to_string_sig = Arc::new(to_string_method.func_decl.sig());
+    let impl_sig = iface_to_string_method.func_decl.sig().with_self(src_ty.as_ref());
 
-    // make a call
-    let displayable_call = Call::Method(MethodCall {
-        iface_type: displayable_ty.clone(),
-        self_type: src_ty.into_owned(),
-        self_type_qual_span: None,
-        iface_method_index: to_string_index,
-        method_name: to_string_ident.clone(),
-        args: vec![expr.clone()],
-        type_args: None,
-        args_span: span.clone(),
-        func_type: Type::Function(to_string_sig.clone()),
-        annotation: MethodValue::new(
-            TypeName::inferred(displayable_ty),
-            to_string_index,
-            to_string_method,
-            span.clone()
-        ).into(),
-    });
+    let (impl_method_index, impl_method_decl) = src_ty
+        .find_method(&to_string_ident, &impl_sig, ctx)
+        .ok()
+        .flatten()?;
+    
+    let impl_method_val = MethodValue::new(
+        TypeName::inferred(src_ty.into_owned()),
+        impl_method_index,
+        impl_method_decl,
+        span.clone()
+    );
 
-    Some(Expr::from(displayable_call))
+    let mut expr = expr.clone();
+    
+    let invocation = InvocationValue::virtual_method(
+        impl_method_val,
+        displayable_ty,
+        iface_to_string_index,
+    );
+
+    *expr.annotation_mut() = Value::from(invocation);
+
+    Some(expr)
 }
 
 // desugar a binary + operation on two strings into a call to System.StringConcat
 fn desugar_string_concat(
-    lhs: Expr,
-    rhs: Expr,
+    mut bin_op: BinOp,
     string_ty: &Type,
     ctx: &Context,
 ) -> TypeResult<Expr> {
-    let span = lhs.annotation().span().to(rhs.annotation().span());
-    let annotation = TypedValue {
-        ty: string_ty.clone(),
-        span: span.clone(),
-        value_kind: ValueKind::Temporary,
-        decl: None,
-    }
-    .into();
+    let span = bin_op.lhs.span().to(bin_op.rhs.span());
 
     // if LHS and RHS are both string literals, we can concat them ahead of time
-    match (&lhs, &rhs) {
+    bin_op.annotation = match (bin_op.lhs.annotation(), bin_op.rhs.annotation()) {
         (
-            Expr::Literal(ast::LiteralItem { literal: ast::Literal::String(a), .. }),
-            Expr::Literal(ast::LiteralItem { literal: ast::Literal::String(b), .. }),
-        ) => {
-            let result = (**a).clone() + b.as_str();
-            Ok(Expr::literal(ast::Literal::String(result.into()), annotation))
+            Value::Const(lhs_const),
+            Value::Const(rhs_const),
+        ) if lhs_const.value.as_string().is_some() && rhs_const.value.as_string().is_some() => {
+            let lhs_string = lhs_const.value.as_string().unwrap();
+            let rhs_string = rhs_const.value.as_string().unwrap();
+
+            let concat_val = lhs_string.as_ref().clone() + rhs_string.as_ref();
+            Value::from(ConstValue {
+                value: Literal::String(Arc::new(concat_val)),
+                decl: None,
+                span,
+                ty: string_ty.clone(),
+            })
         },
 
         _ => {
@@ -393,26 +402,21 @@ fn desugar_string_concat(
 
             let concat_sym = Symbol::from(concat_path.clone());
 
-            let concat_typed = FunctionValue::new(
+            
+            let concat_func_val = FunctionValue::new(
                 concat_sym.clone(),
                 concat_decls[0].visiblity(),
                 concat_decls[0].decl().clone(),
                 span.clone(),
             );
+            
+            let invocation = InvocationValue::function(concat_func_val, None);
 
-            let concat_func = ast::Expr::Ident(concat_path.last().clone(), concat_typed.into());
-
-            let concat_call = ast::Call::Function(ast::FunctionCall {
-                annotation: annotation.clone(),
-                args: vec![lhs, rhs],
-                type_args: None,
-                target: concat_func,
-                args_span: span.clone(),
-            });
-
-            Ok(ast::Expr::from(concat_call))
+            Value::from(invocation)
         },
-    }
+    };
+    
+    Ok(Expr::from(bin_op))
 }
 
 fn typecheck_member_of(

@@ -270,7 +270,7 @@ fn specialized_fn_has_right_sig() {
 
     let expect_sig = FunctionSig {
         type_params: Some(ast::TypeList::new([FunctionSigTypeParam { is_ty: Type::Any }], span.clone())),
-        return_ty: INT32.into(),
+        result_ty: INT32.into(),
         params: vec![FunctionSigParam {
             ty: INT32.into(),
             modifier: None,
@@ -324,7 +324,7 @@ fn specialized_fn_with_specialized_params_has_right_params() {
 
     let expect_sig = FunctionSig {
         type_params: Some(ast::TypeList::new([FunctionSigTypeParam { is_ty: Type::Any }], span.clone())),
-        return_ty: a_int.clone(),
+        result_ty: a_int.clone(),
         params: vec![FunctionSigParam {
             ty: a_int,
             modifier: None,
@@ -477,7 +477,7 @@ fn can_infer_func_ty_from_lambda_with_generic_return() {
                 .cloned()
                 .expect("expected f to have a function type");
             
-            assert_eq!("Test.MyBox[System.Int32]", f_type.return_ty.to_string());
+            assert_eq!("Test.MyBox[System.Int32]", f_type.result_ty.to_string());
         }
         
         other => panic!("expected binding, got: {}", other),
@@ -591,10 +591,10 @@ fn apply_ty_args_to_sig_with_array_of_param_ty_produces_correct_ty() {
     assert_eq!("Box[array of T]", class_result.to_string());
     
     let sig = FunctionSig {
-        return_ty: class,  
+        result_ty: class,  
         type_params: None,
         params: vec![],
     };
     let sig_result = generic_ctx.apply_to_sig(&sig);    
-    assert_eq!("Box[array of T]", sig_result.return_ty.to_string());
+    assert_eq!("Box[array of T]", sig_result.result_ty.to_string());
 }

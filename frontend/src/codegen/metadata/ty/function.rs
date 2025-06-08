@@ -91,7 +91,7 @@ pub fn translate_sig(
         "cannot create type for a generic function pointer"
     );
 
-    let return_ty = lib.translate_type(&sig.return_ty, generic_ctx);
+    let return_ty = lib.translate_type(&sig.result_ty, generic_ctx);
     let mut param_tys = Vec::new();
     for param in &sig.params {
         let mut ty = lib.translate_type(&param.ty, generic_ctx);

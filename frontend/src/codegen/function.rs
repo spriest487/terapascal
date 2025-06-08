@@ -110,7 +110,7 @@ pub fn build_func_static_closure_def(
 
     let mut body_builder = create_function_body_builder(library, generic_ctx, debug_name.clone());
 
-    let return_ty = bind_function_return(&target_func.sig.return_ty, &mut body_builder);
+    let return_ty = bind_function_return(&target_func.sig.result_ty, &mut body_builder);
 
     let closure_ptr_local_id = body_builder.bind_closure_ptr();
 

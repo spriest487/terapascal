@@ -82,7 +82,7 @@ pub type FunctionSigTypeParamList = ast::TypeList<FunctionSigTypeParam>;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct FunctionSig {
-    pub return_ty: Type,
+    pub result_ty: Type,
     pub params: Vec<FunctionSigParam>,
     pub type_params: Option<ast::TypeList<FunctionSigTypeParam>>,
 }
@@ -123,7 +123,7 @@ impl FunctionSig {
         };
 
         Self {
-            return_ty,
+            result_ty: return_ty,
             params,
             type_params,
         }
@@ -147,7 +147,7 @@ impl FunctionSig {
     where
         Visitor: Copy + Fn(&Type) 
     {
-        self.return_ty.visit_types(visitor);
+        self.result_ty.visit_types(visitor);
 
         for param in &self.params {
             param.ty.visit_types(visitor);
@@ -165,7 +165,7 @@ impl FunctionSig {
     where
         Visitor: Copy + Fn(&mut Type)
     {
-        self.return_ty.visit_types_mut(visitor);
+        self.result_ty.visit_types_mut(visitor);
 
         for param in &mut self.params {
             param.ty.visit_types_mut(visitor);
@@ -187,7 +187,7 @@ impl FunctionSig {
     }
 
     pub fn contains_generic_params(&self, ctx: &Context) -> bool {
-        if self.return_ty.contains_unresolved_params(ctx) {
+        if self.result_ty.contains_unresolved_params(ctx) {
             return true;
         }
         
@@ -279,13 +279,13 @@ impl FunctionSig {
             }
         }
 
-        if self.return_ty != other.return_ty {
-            if self.return_ty != Type::MethodSelf {
+        if self.result_ty != other.result_ty {
+            if self.result_ty != Type::MethodSelf {
                 return false
             }
             
             if let Some(prev_inferred) = inferred_self {
-                if prev_inferred != other.return_ty {
+                if prev_inferred != other.result_ty {
                     return false;
                 }
             }
@@ -329,8 +329,8 @@ impl FunctionSig {
             return None;
         }
 
-        let self_type = if self.return_ty == Type::MethodSelf {
-            &impl_func.return_ty
+        let self_type = if self.result_ty == Type::MethodSelf {
+            &impl_func.result_ty
         } else {
             self.params
                 .iter()
@@ -414,7 +414,7 @@ impl FunctionSig {
         args_span: Span,
         type_args: Option<TypeArgList>,
     ) -> FunctionCall {
-        let func_val_annotation = match &self.return_ty {
+        let func_val_annotation = match &self.result_ty {
             Type::Nothing => Value::Untyped(span),
             return_ty => Value::new_temp_val(return_ty.clone(), span),
         };
@@ -463,8 +463,8 @@ impl fmt::Display for FunctionSig {
             write!(f, ")")?;
         }
         
-        if self.return_ty != Type::Nothing {
-            write!(f, ": {}", self.return_ty)?;
+        if self.result_ty != Type::Nothing {
+            write!(f, ": {}", self.result_ty)?;
         }
 
         if let Some(type_params) = &self.type_params {

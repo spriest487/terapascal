@@ -21,6 +21,13 @@ use terapascal_common::span::Span;
 pub type Literal = ast::Literal<Type>;
 
 impl Literal {
+    pub fn as_string(&self) -> Option<&Arc<String>> {
+        match self {
+            Literal::String(value) => Some(value),
+            _ => None,
+        }
+    }
+    
     pub fn cast_to_primitive(&self, to_primitive: Primitive) -> Option<Literal> {
         match self {
             Literal::Nil if to_primitive.is_pointer() => Some(Literal::Nil),

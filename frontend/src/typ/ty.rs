@@ -477,7 +477,7 @@ impl Type {
             }
 
             (Type::Function(sig), Type::Function(other_sig)) => {
-                if !sig.return_ty.can_specialize_to(&other_sig.return_ty, ctx)
+                if !sig.result_ty.can_specialize_to(&other_sig.result_ty, ctx)
                     || sig.params.len() == other_sig.params.len() {
                     return false;
                 }
@@ -1560,7 +1560,7 @@ impl Specializable for Type {
             Type::DynArray { element } => element.is_unspecialized_generic(),
 
             Type::Function(sig) => {
-                sig.return_ty.is_unspecialized_generic()
+                sig.result_ty.is_unspecialized_generic()
                     || sig.params.iter().any(|p| p.ty.is_unspecialized_generic())
             },
 

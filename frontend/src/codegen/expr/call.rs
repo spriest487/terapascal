@@ -1,10 +1,10 @@
-use std::borrow::Cow;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr;
 use crate::codegen::syn;
 use crate::codegen::typ;
 use crate::typ::Specializable;
 use crate::ir;
+use std::borrow::Cow;
 
 fn translate_call_with_args(
     call_target: CallTarget,
@@ -12,7 +12,7 @@ fn translate_call_with_args(
     sig: &typ::FunctionSig,
     builder: &mut Builder,
 ) -> Option<ir::Ref> {
-    let out_val = match &sig.return_ty {
+    let out_val = match &sig.result_ty {
         typ::Type::Nothing => None,
         return_ty => {
             let out_ty = builder.translate_type(return_ty);
@@ -177,49 +177,63 @@ fn build_func_call(
             translate_call_with_args(call_target, &args_with_self_arg, &func_instance.sig, builder)
         },
 
-        // invoking a closure value that refers to a function
+        // invoking a closure value that refers to a function invocation
         typ::Value::Typed(val) => {
-            // it's impossible to invoke a closure with type args, so the typechecker should
-            // ensure this never happens
-            assert!(
-                call_ty_args.is_none(),
-                "closure invocation cannot include type args"
-            );
-
-            // expr that evaluates to a closure pointer
-            let target_expr_val = expr::translate_expr(target, builder);
-            let func_sig = val
-                .ty
-                .as_func()
-                .expect("target value of invocation must have function type");
-            let func_ty_id = builder.translate_func_ty(&func_sig);
-
-            // retrieve the actual function value
-            let func_field_ptr = builder.local_temp(ir::Type::Function(func_ty_id).ptr());
-
-            builder.scope(|builder| {
-                let closure_ptr_ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(func_ty_id));
-                builder.field(
-                    func_field_ptr.clone(),
-                    target_expr_val.clone(),
-                    closure_ptr_ty,
-                    ir::CLOSURE_PTR_FIELD,
-                );
-            });
-
-            let call_target = CallTarget::Closure {
-                function: func_field_ptr.to_deref().into(),
-                closure_ptr: target_expr_val.clone().into(),
-            };
-
-            translate_call_with_args(call_target, args, &func_sig, builder)
+            build_func_val_invocation(target, &val.ty, args, call_ty_args, builder)
         },
+
+        // invoking a closure returned by a function
+        typ::Value::Invocation(invocation) => {
+            build_func_val_invocation(target, invocation.result_type(), args, call_ty_args, builder)
+        }
 
         unexpected => panic!(
             "type of function call expr must be a function or callable value got: {:#?}",
             unexpected
         ),
     }
+}
+
+fn build_func_val_invocation(
+    func_expr: &typ::ast::Expr,
+    func_ty: &typ::Type,
+    args: &[typ::ast::Expr],
+    call_ty_args: Option<typ::TypeArgList>,
+    builder: &mut Builder,
+) -> Option<ir::Ref> {
+    // it's impossible to invoke a closure with type args, so the typechecker should
+    // ensure this never happens
+    assert!(
+        call_ty_args.is_none(),
+        "closure invocation cannot include type args"
+    );
+
+    // expr that evaluates to a closure pointer
+    let target_expr_val = expr::translate_expr(func_expr, builder);
+    let func_sig = func_ty
+        .as_func()
+        .expect("target value of invocation must have function type");
+    let func_ty_id = builder.translate_func_ty(&func_sig);
+
+    // retrieve the actual function value
+    let func_field_ptr = builder.local_temp(ir::Type::Function(func_ty_id).ptr());
+
+    builder.scope(|builder| {
+        let closure_ptr_ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(func_ty_id));
+        builder.field(
+            func_field_ptr.clone(),
+            target_expr_val.clone(),
+            closure_ptr_ty,
+            ir::CLOSURE_PTR_FIELD,
+        );
+    });
+
+    let call_target = CallTarget::Closure {
+        function: func_field_ptr.to_deref().into(),
+        closure_ptr: target_expr_val.clone().into(),
+    };
+
+    translate_call_with_args(call_target, args, &func_sig, builder)
 }
 
 fn build_method_call(

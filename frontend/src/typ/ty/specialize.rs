@@ -356,7 +356,7 @@ pub fn specialize_by_return_ty<'a>(
     let ty_params = name.type_params.as_ref().unwrap();
 
     let mut inferred_ty_args = GenericContext::empty();
-    infer_from_structural_ty_args(&generic_sig.return_ty, expect_return_ty, &mut inferred_ty_args, span);
+    infer_from_structural_ty_args(&generic_sig.result_ty, expect_return_ty, &mut inferred_ty_args, span);
     
     let ty_args = try_unwrap_inferred_args(&ty_params, inferred_ty_args, ctx, span)
         .ok_or_else(|| {

@@ -123,7 +123,17 @@ impl<'m> Builder<'m> {
                 .apply_type_args(&self.generic_context, &self.generic_context);
         }
 
-        self.library.translate_method_impl(self_ty, self_ty_method_index, call_ty_args)
+        self.library.translate_method(self_ty, self_ty_method_index, call_ty_args)
+    }
+
+    pub fn translate_virtual_method(
+        &mut self,
+        iface_ty: typ::Type,
+        iface_method_index: usize,
+        self_ty: typ::Type,
+        self_ty_method_index: usize,
+    ) -> FunctionInstance {
+        self.library.translate_virtual_method(iface_ty, iface_method_index, self_ty, self_ty_method_index)
     }
 
     pub fn translate_func(

@@ -72,7 +72,7 @@ pub const BUILTIN_FILENAME: &str = "<builtin>";
 
 pub fn get_mem_sig() -> FunctionSig {
     FunctionSig {
-        return_ty: Type::Primitive(Primitive::UInt8).ptr(),
+        result_ty: Type::Primitive(Primitive::UInt8).ptr(),
         params: vec![FunctionSigParam {
             ty: Type::Primitive(Primitive::Int32),
             modifier: None,
@@ -83,7 +83,7 @@ pub fn get_mem_sig() -> FunctionSig {
 
 pub fn free_mem_sig() -> FunctionSig {
     FunctionSig {
-        return_ty: Type::Nothing,
+        result_ty: Type::Nothing,
         params: vec![FunctionSigParam {
             ty: Type::Primitive(Primitive::UInt8).ptr(),
             modifier: None,
