@@ -7,6 +7,7 @@ use derivative::Derivative;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
+use crate::typ::ast::Expr;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
@@ -14,13 +15,18 @@ pub enum InvocationValue {
     Function {
         function: Arc<FunctionValue>,
         type_args: Option<TypeArgList>,
+
+        args: Vec<Expr>,
     },
     Method {
         method: Arc<MethodValue>,
         type_args: Option<TypeArgList>,
+        args: Vec<Expr>,
     },
     VirtualMethod {
         method: Arc<MethodValue>,
+
+        args: Vec<Expr>,
 
         iface_ty: Type,
         iface_method_index: usize,
@@ -43,20 +49,35 @@ impl InvocationValue {
             InvocationValue::VirtualMethod { method, .. } => &method.span,
         }
     }
+    
+    pub fn args(&self) -> &[Expr] {
+        match self {
+            InvocationValue::Function { args, .. } => args,
+            InvocationValue::Method { args, .. } => args,
+            InvocationValue::VirtualMethod { args, .. } => args,
+        }
+    }
 
     pub fn function(
         function: impl Into<Arc<FunctionValue>>,
+        args: impl IntoIterator<Item=Expr>,
         type_args: Option<TypeArgList>,
     ) -> Self {
         InvocationValue::Function {
             function: function.into(),
+            args: args.into_iter().collect(),
             type_args,
         }
     }
 
-    pub fn method(method: impl Into<Arc<MethodValue>>, type_args: Option<TypeArgList>) -> Self {
+    pub fn method(
+        method: impl Into<Arc<MethodValue>>,
+        args: impl IntoIterator<Item=Expr>,
+        type_args: Option<TypeArgList>
+    ) -> Self {
         InvocationValue::Method {
             method: method.into(),
+            args: args.into_iter().collect(),
             type_args,
         }
     }
@@ -65,9 +86,11 @@ impl InvocationValue {
         method: impl Into<Arc<MethodValue>>,
         iface_ty: impl Into<Type>,
         iface_method_index: usize,
+        args: impl IntoIterator<Item=Expr>,
     ) -> Self {
         InvocationValue::VirtualMethod {
             method: method.into(),
+            args: args.into_iter().collect(),
             iface_ty: iface_ty.into(),
             iface_method_index,
         }

@@ -2,9 +2,45 @@ use crate::codegen::builder::Builder;
 use crate::codegen::expr;
 use crate::codegen::syn;
 use crate::codegen::typ;
-use crate::typ::Specializable;
 use crate::ir;
+use crate::typ::InvocationValue;
+use crate::typ::Specializable;
+use crate::typ::Type;
 use std::borrow::Cow;
+
+fn translate_args(
+    args: &[typ::ast::Expr],
+    sig: &typ::FunctionSig,
+    is_instance_method: bool,
+    builder: &mut Builder,
+) -> Vec<ir::Value> {
+    let mut arg_vals = Vec::with_capacity(args.len());
+    
+    for (arg_index, (arg, param)) in args.iter().zip(sig.params.iter()).enumerate() {
+        let arg_ref = expr::translate_expr(arg, builder);
+
+        // for value types (any non RC), the self parameter of an instance method is invisibly
+        // turned into a pointer to the type, so we need to pass it by its address here
+        let is_value_type_method_self_arg = arg_index == 0
+            && is_instance_method
+            && !sig.params[0].ty.is_strong_rc_reference();
+
+        let arg_expr = if is_value_type_method_self_arg || param.is_by_ref() {
+            let arg_ty = builder.translate_type(&arg.annotation().ty());
+
+            let arg_ptr = builder.local_temp(arg_ty.ptr());
+            builder.addr_of(arg_ptr.clone(), arg_ref);
+
+            arg_ptr
+        } else {
+            arg_ref
+        };
+
+        arg_vals.push(ir::Value::from(arg_expr));
+    }
+    
+    arg_vals
+}
 
 fn translate_call_with_args(
     call_target: CallTarget,
@@ -23,33 +59,12 @@ fn translate_call_with_args(
 
     builder.begin_scope();
 
-    let mut arg_vals = Vec::new();
+    let is_instance_method = matches!(call_target, CallTarget::InstanceMethod(..));
+
+    let mut arg_vals = translate_args(args, sig, is_instance_method, builder);
 
     if let CallTarget::Closure { closure_ptr, .. } = &call_target {
-        arg_vals.push(closure_ptr.clone());
-    }
-
-    for (arg_index, (arg, param)) in args.iter().zip(sig.params.iter()).enumerate() {
-        let arg_ref = expr::translate_expr(arg, builder);
-
-        // for value types (any non RC), the self parameter of an instance method is invisibly
-        // turned into a pointer to the type, so we need to pass it by its address here
-        let is_value_type_method_self_arg = arg_index == 0 
-            && matches!(call_target, CallTarget::InstanceMethod(..))
-            && !sig.params[0].ty.is_strong_rc_reference();
-
-        let arg_expr = if is_value_type_method_self_arg || param.is_by_ref() {
-            let arg_ty = builder.translate_type(&arg.annotation().ty());
-
-            let arg_ptr = builder.local_temp(arg_ty.ptr());
-            builder.addr_of(arg_ptr.clone(), arg_ref);
-
-            arg_ptr
-        } else {
-            arg_ref
-        };
-
-        arg_vals.push(ir::Value::from(arg_expr));
+        arg_vals.insert(0, closure_ptr.clone());
     }
 
     match call_target {
@@ -340,4 +355,63 @@ fn build_variant_ctor_call(
 
     builder.end_scope();
     Some(out)
+}
+
+pub fn translate_invocation(invocation: &InvocationValue, builder: &mut Builder) -> ir::Ref {
+    let (func, is_instance_method) = match invocation {
+        InvocationValue::Function { function, type_args, .. } => {
+            let func = builder.translate_func(
+                &function.name,
+                &function.sig,
+                type_args.clone()
+            );
+
+            (func, false)
+        }
+
+        InvocationValue::Method { method, type_args, .. } => {
+            let func = builder.translate_method(
+                method.self_ty.ty().clone(),
+                method.index,
+                type_args.clone()
+            );
+                
+            (func, true)
+        }
+
+        InvocationValue::VirtualMethod { method, iface_ty, iface_method_index, .. } => {
+            assert!(method.self_ty.is_strong_rc_reference(), "virtual call self type must be a class or interface pointer");
+
+            let func = builder.translate_virtual_method(
+                iface_ty.clone(),
+                *iface_method_index,
+                method.self_ty.ty().clone(),
+                method.index,
+            );
+
+            (func, true)
+        }
+    };
+
+    let result = if func.sig.result_ty == Type::Nothing {
+        None
+    } else {
+        let result_ty = builder.translate_type(&func.sig.result_ty);
+        Some(builder.local_new(result_ty, None))
+    };
+
+    builder.scope(|builder| {
+        let arg_values = translate_args(
+            invocation.args(),
+            &func.sig,
+            is_instance_method,
+            builder
+        );
+
+        let func_val = ir::Ref::Global(ir::GlobalRef::Function(func.id));
+
+        builder.call(func_val, arg_values, result.clone());
+    });
+
+    result.unwrap_or(ir::Ref::Discard)
 }

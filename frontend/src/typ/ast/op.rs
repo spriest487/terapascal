@@ -6,7 +6,6 @@ mod variant_case;
 use crate::ast;
 use crate::ast::IdentPath;
 use crate::ast::Operator;
-use crate::ast::IFACE_METHOD_ACCESS;
 use crate::ast::{Ident, Literal};
 use crate::typ::ast::check_overload_visibility;
 use crate::typ::ast::collection_ctor_elements;
@@ -19,10 +18,17 @@ use crate::typ::ast::overload_to_no_args_call;
 use crate::typ::ast::try_resolve_overload;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
-use crate::typ::ast::MethodDecl;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::SetDecl;
+use crate::typ::builtin_displayable_name;
+use crate::typ::builtin_string_name;
+use crate::typ::ConstValue;
+use crate::typ::Context;
+use crate::typ::FunctionSig;
+use crate::typ::FunctionSigParam;
+use crate::typ::FunctionValue;
 use crate::typ::InstanceMember;
+use crate::typ::InvocationValue;
 use crate::typ::MethodValue;
 use crate::typ::NameContainer;
 use crate::typ::NameError;
@@ -32,6 +38,7 @@ use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeMember;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::UfcsValue;
@@ -40,9 +47,6 @@ use crate::typ::ValueKind;
 use crate::typ::DISPLAYABLE_TOSTRING_METHOD;
 use crate::typ::STRING_CONCAT_FUNC_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::{builtin_displayable_name, builtin_string_name, TypeName};
-use crate::typ::{ConstValue, FunctionValue};
-use crate::typ::{Context, InvocationValue};
 use crate::IntConstant;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -302,8 +306,6 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
 
     let to_string_ident = Ident::new(DISPLAYABLE_TOSTRING_METHOD, span.clone());
 
-    let displayable_path = builtin_displayable_name().full_path;
-
     let displayable_ty = Type::interface(builtin_displayable_name().full_path);
 
     let is_impl = ctx
@@ -314,37 +316,21 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
     if !is_impl {
         return None;
     }
-
-    let displayable_iface = match ctx.find_iface_def(&displayable_path) {
-        Ok(iface_def) => iface_def,
-        Err(..) => return None,
+    
+    let impl_sig = FunctionSig {
+        result_ty: Type::class(builtin_string_name()),
+        type_params: None,
+        params: vec![FunctionSigParam {
+            ty: src_ty.clone().into_owned(),
+            modifier: None,
+        }], 
     };
-
-    let (iface_to_string_index, iface_to_string_method) = match displayable_iface
-        .methods
-        .iter()
-        .position(|m| *m.decl.ident() == to_string_ident) 
-    {
-        None => return None,
-        Some(index) => {
-            let iface_method = &displayable_iface.methods[index];
-
-            let method_decl = MethodDecl {
-                func_decl: iface_method.decl.clone(),
-                access: IFACE_METHOD_ACCESS,
-            };
-
-            (index, method_decl)
-        }
-    };
-
-    let impl_sig = iface_to_string_method.func_decl.sig().with_self(src_ty.as_ref());
 
     let (impl_method_index, impl_method_decl) = src_ty
         .find_method(&to_string_ident, &impl_sig, ctx)
         .ok()
         .flatten()?;
-    
+
     let impl_method_val = MethodValue::new(
         TypeName::inferred(src_ty.into_owned()),
         impl_method_index,
@@ -354,11 +340,7 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
 
     let mut expr = expr.clone();
     
-    let invocation = InvocationValue::virtual_method(
-        impl_method_val,
-        displayable_ty,
-        iface_to_string_index,
-    );
+    let invocation = InvocationValue::method(impl_method_val, [expr.clone()], None);
 
     *expr.annotation_mut() = Value::from(invocation);
 
@@ -410,7 +392,9 @@ fn desugar_string_concat(
                 span.clone(),
             );
             
-            let invocation = InvocationValue::function(concat_func_val, None);
+            let concat_args = [bin_op.lhs.clone(), bin_op.rhs.clone()];
+
+            let invocation = InvocationValue::function(concat_func_val, concat_args, None);
 
             Value::from(invocation)
         },

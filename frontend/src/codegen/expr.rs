@@ -3,25 +3,24 @@ pub mod op;
 pub mod ctor;
 pub mod cond;
 
+use crate::codegen::expr::call::translate_invocation;
 use crate::codegen::ir;
 use crate::codegen::syn;
 use crate::codegen::translate_stmt;
 use crate::codegen::typ;
 use crate::codegen::Builder;
-use crate::typ::InvocationValue;
-use crate::typ::Type;
 use crate::typ::TypedValue;
 use crate::typ::STRING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
-use terapascal_common::span::*;
 use std::rc::Rc;
 use syn::Ident;
+use terapascal_common::span::*;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
-    match expr {
-        syn::Expr::Literal(lit) => {
-            literal_to_val(&lit.literal, lit.annotation.ty().as_ref(), builder)
-        },
+    match expr.annotation() {
+        typ::Value::Const(const_val) => {
+            literal_to_val(&const_val.value, &const_val.ty, builder)
+        }
 
         _ => ir::Value::Ref(translate_expr(expr, builder)),
     }
@@ -31,58 +30,83 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
     builder.comment(&expr);
     builder.push_debug_context(expr.annotation().span().clone());
 
-    let result_ref = match expr {
-        syn::Expr::Literal(lit) => {
-            translate_literal(&lit.literal, &lit.annotation.ty(), builder)
-        },
+    let result_ref = match expr.annotation() {
+        typ::Value::Const(const_val) => {
+            translate_literal(&const_val.value, &const_val.ty, builder)
+        }
 
-        syn::Expr::BinOp(bin_op) => {
-            op::translate_bin_op(bin_op, &bin_op.annotation.ty(), builder)
-        },
-
-        syn::Expr::UnaryOp(unary_op) => {
-            op::translate_unary_op(unary_op, &unary_op.annotation.ty(), builder)
-        },
-
-        syn::Expr::Ident(ident, annotation) => translate_ident_expr(ident, annotation, builder),
-
-        syn::Expr::Call(call) => {
-            // eprintln!("translating call @ {}", call.span());
-            call::build_call(call, builder).expect("call used in expr must have a return value")
-        },
-
-        syn::Expr::ObjectCtor(ctor) => ctor::translate_object_ctor(ctor, builder),
-
-        syn::Expr::CollectionCtor(ctor) => ctor::translate_collection_ctor(ctor, builder),
-
-        syn::Expr::IfCond(if_cond) => translate_if_cond_expr(if_cond, builder)
-            .expect("conditional used in expr must have a type"),
-
-        syn::Expr::Block(block) => {
-            let out_ty = match &block.output {
-                Some(output_expr) => builder.translate_type(&output_expr.annotation().ty()),
-                None => panic!("block used in expr must have a type"),
-            };
-            let out_ref = builder.local_new(out_ty, None);
-            translate_block(block, out_ref.clone(), builder);
-
-            out_ref
-        },
-
-        syn::Expr::Raise(raise) => translate_raise(raise, builder),
-        syn::Expr::Exit(exit) => {
-            translate_exit(exit, builder);
-            ir::Ref::Discard
-        },
-
-        syn::Expr::Case(case) => cond::translate_case_expr(case, builder),
-        syn::Expr::Match(match_expr) => cond::translate_match_expr(match_expr, builder),
-
-        syn::Expr::Cast(cast) => translate_cast_expr(cast, builder),
-
-        syn::Expr::AnonymousFunction(def) => builder.build_closure_expr(def),
+        typ::Value::Invocation(invocation) => {
+            translate_invocation(invocation, builder)
+        }
         
-        syn::Expr::ExplicitSpec(..) => unreachable!(),
+        typ::Value::Typed(..) => {
+            match expr {
+                syn::Expr::Literal(lit) => {
+                    translate_literal(&lit.literal, &lit.annotation.ty(), builder)
+                },
+
+                syn::Expr::BinOp(bin_op) => {
+                    op::translate_bin_op(bin_op, &bin_op.annotation.ty(), builder)
+                },
+
+                syn::Expr::UnaryOp(unary_op) => {
+                    op::translate_unary_op(unary_op, &unary_op.annotation.ty(), builder)
+                },
+
+                syn::Expr::Ident(ident, annotation) => translate_ident_expr(ident, annotation, builder),
+
+                syn::Expr::Call(call) => {
+                    // eprintln!("translating call @ {}", call.span());
+                    call::build_call(call, builder).expect("call used in expr must have a return value")
+                },
+
+                syn::Expr::ObjectCtor(ctor) => ctor::translate_object_ctor(ctor, builder),
+
+                syn::Expr::CollectionCtor(ctor) => ctor::translate_collection_ctor(ctor, builder),
+
+                syn::Expr::IfCond(if_cond) => translate_if_cond_expr(if_cond, builder)
+                    .expect("conditional used in expr must have a type"),
+
+                syn::Expr::Block(block) => {
+                    let out_ty = match &block.output {
+                        Some(output_expr) => builder.translate_type(&output_expr.annotation().ty()),
+                        None => panic!("block used in expr must have a type"),
+                    };
+                    let out_ref = builder.local_new(out_ty, None);
+                    translate_block(block, out_ref.clone(), builder);
+
+                    out_ref
+                },
+
+                syn::Expr::Raise(raise) => translate_raise(raise, builder),
+                syn::Expr::Exit(exit) => {
+                    translate_exit(exit, builder);
+                    ir::Ref::Discard
+                },
+
+                syn::Expr::Case(case) => cond::translate_case_expr(case, builder),
+                syn::Expr::Match(match_expr) => cond::translate_match_expr(match_expr, builder),
+
+                syn::Expr::Cast(cast) => translate_cast_expr(cast, builder),
+
+                syn::Expr::AnonymousFunction(def) => builder.build_closure_expr(def),
+
+                syn::Expr::ExplicitSpec(..) => unreachable!(),
+            }
+        }
+        
+        // todo function pointers
+        typ::Value::Function(_)
+        | typ::Value::UfcsFunction(_)
+        | typ::Value::Method(_)
+
+        | typ::Value::Untyped(_)
+        | typ::Value::Type(_, _)
+        | typ::Value::Namespace(_, _)
+        | typ::Value::VariantCase(_)
+        | typ::Value::Overload(_) => {
+            panic!("untranslatable value for expression {}: {}", expr, expr.annotation());
+        }
     };
 
     builder.pop_debug_context();
@@ -436,44 +460,7 @@ fn translate_ident_expr(ident: &Ident, annotation: &typ::Value, builder: &mut Bu
         
         // standalone no-args invocation a function
         typ::Value::Invocation(invocation) => {
-            let func = match invocation.as_ref() {
-                InvocationValue::Function { function, type_args } => {
-                    builder.translate_func(
-                        &function.name, 
-                        &function.sig, 
-                        type_args.clone()
-                    )
-                }
-    
-                InvocationValue::Method { method, type_args } => {
-                    builder.translate_method(
-                        method.self_ty.ty().clone(), 
-                        method.index, 
-                        type_args.clone()
-                    )
-                }
-
-                InvocationValue::VirtualMethod { method, iface_ty, iface_method_index } => {
-                    builder.translate_virtual_method(
-                        iface_ty.clone(),
-                        *iface_method_index,
-                        method.self_ty.ty().clone(),
-                        method.index,
-                    )
-                }
-            };
-
-            let func_val = ir::Ref::Global(ir::GlobalRef::Function(func.id));
-            let result = if func.sig.result_ty == Type::Nothing {
-                None
-            } else {
-                let result_ty = builder.translate_type(&func.sig.result_ty);
-                Some(builder.local_new(result_ty, None))
-            };
-
-            builder.call(func_val, [], result.clone());
-
-            result.unwrap_or(ir::Ref::Discard)
+            translate_invocation(invocation, builder)
         }
 
         typ::Value::Typed(val) => {
