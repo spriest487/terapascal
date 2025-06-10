@@ -422,7 +422,7 @@ impl FunctionSig {
         FunctionCall {
             annotation: func_val_annotation,
             args: args.into_iter().collect(),
-            args_span,
+            args_span: Some(args_span),
             target,
             type_args,
         }

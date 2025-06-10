@@ -3,20 +3,21 @@ mod test;
 mod overload;
 mod args;
 
+use crate::ast;
 use crate::ast::Visibility;
 use crate::typ::ast::cast::implicit_conversion;
-use crate::typ::ast::specialize_func_decl;
 use crate::typ::ast::typecheck_expr;
-use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
-use crate::typ::ast::ObjectCtor;
+use crate::typ::typecheck_typename;
+use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::FunctionValue;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
+use crate::typ::InvocationValue;
 use crate::typ::MethodValue;
 use crate::typ::NameContainer;
 use crate::typ::NameError;
@@ -25,21 +26,18 @@ use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
-use crate::typ::TypedValue;
 use crate::typ::UfcsValue;
 use crate::typ::Value;
-use crate::typ::ValueKind;
-use crate::typ::{typecheck_typename, VariantCaseValue};
-use crate::typ::{Context, TypeName};
-use crate::ast;
+use crate::typ::VariantCaseValue;
 pub use args::*;
 pub use overload::*;
 use std::borrow::Cow;
 use std::iter;
 use std::sync::Arc;
+use terapascal_common::span::Span;
 use terapascal_common::span::Spanned as _;
-use terapascal_common::span::{MaybeSpanned, Span};
 
 pub type MethodCall = ast::MethodCall<Value>;
 pub type FunctionCall = ast::FunctionCall<Value>;
@@ -55,13 +53,6 @@ impl MethodCallNoArgs {
             other => panic!("method call target can only be a method, got: {other}"),
         }
     }
-}
-
-// it's possible that during typechecking we discover what was parsed as a call with zero args
-// is actually the ctor for a class with no fields
-pub enum Invocation {
-    Call(Box<Call>),
-    Ctor(Box<ObjectCtor>),
 }
 
 fn invalid_args(
@@ -160,7 +151,7 @@ fn build_args_for_params(
         }
     }
     
-    args::validate_args(&mut checked_args, &params, span, ctx)?;
+    validate_args(&mut checked_args, &params, span, ctx)?;
 
     Ok(checked_args)
 }
@@ -182,98 +173,56 @@ pub fn typecheck_call(
     call: &ast::Call<Span>,
     expect_ty: &Type,
     ctx: &mut Context,
-) -> TypeResult<Invocation> {
-    match call {
+) -> TypeResult<Call> {
+    let func_call = match call {
         ast::Call::Function(func_call) => {
-            typecheck_func_call(&func_call, expect_ty, ctx)
+            typecheck_func_call(&func_call, expect_ty, ctx)?
         },
-
-        ast::Call::FunctionNoArgs(no_args_call) => {
-            // this will be determined from the target expression
-            assert!(no_args_call.self_arg.is_none(), "parser should not provide a self-arg");
-            
-            let as_func_call = ast::FunctionCall {
-                target: no_args_call.target.clone(),
-                type_args: no_args_call.type_args.clone(),
-                args: no_args_call.self_arg.iter().cloned().collect(),
-                annotation: no_args_call.annotation.clone(),
-                args_span: no_args_call.target.span().clone(),
-            };
-            
-            typecheck_func_call(&as_func_call, expect_ty, ctx)
-        }
-        other => unreachable!("parsing should not produce this call expression: {:?}", other),
-    }
+    };
+    
+    Ok(Call::Function(func_call))
 }
 
 fn typecheck_func_call(
     func_call: &ast::FunctionCall,
     expect_ty: &Type,
     ctx: &mut Context
-) -> TypeResult<Invocation> {
+) -> TypeResult<FunctionCall> {
     let target = typecheck_expr(&func_call.target, expect_ty, ctx)?;
-    
-    // if the call target is a no-args call itself and this is also a no-args call, we are just
-    // applying an empty argument list to the same call, so just unwrap it here
-    // e.g. if we call `procedure X;` with `X()`, `X` is already a valid call on its own
-    // there are edge cases here like functions that return callable types themselves, but
-    // they can be disambiguated by various means in the code
-    let (target, self_arg) = if func_call.args.len() == 0 {
-        match target {
-            Expr::Call(call) => match *call {
-                Call::FunctionNoArgs(noargs_func_call) => {
-                    (noargs_func_call.target, noargs_func_call.self_arg)
-                }
-                Call::MethodNoArgs(noargs_method_call) => {
-                    (noargs_method_call.target, noargs_method_call.self_arg)
-                }
-                other_call => {
-                    (Expr::from(other_call), None)
-                },
-            },
 
-            other => {
-                (other, None)
-            }
+    let invocation = match target.annotation() {
+        // when making a function call with an empty args list, and the target is a
+        // call to a no-args function, this "inner" call replaces the outer call entirely
+        // since the extra arg list is redundant
+        Value::Invocation(invocation) 
+        if invocation.args().is_empty() && func_call.args.is_empty() => {
+            invocation.clone()
         }
-    } else {
-        (target, None)
-    };
 
-    let expr = match target.annotation() {
-        Value::Typed(val) => match &val.ty {
+        // value with function type (eg lambda, reference to function)
+        Value::Typed(..) | Value::Invocation(..) => match target.annotation().ty().as_ref() {
             Type::Function(sig) => {
                 let sig = sig.clone();
 
-                typecheck_func_value_call(target, &func_call, self_arg.as_ref(), &sig, ctx)
-                    .map(Box::new)
-                    .map(Invocation::Call)?
+                typecheck_func_value_invocation(target.clone(), &func_call, None, &sig, ctx)
+                    .map(Arc::new)?
             },
 
-            _ => match target {
-                // when making a function call with an empty args list, and the target is a
-                // call to a no-args function, this "inner" call replaces the outer call entirely
-                // since the extra arg list is redundant
-                Expr::Call(inner_call)
-                if func_call.args.len() == 0 && inner_call.args().len() == 0 => {
-                    Invocation::Call(inner_call)
-                }
-
-                _ => {
-                    return Err(TypeError::NotCallable(Box::new(target.annotation().clone())))
-                },
+            _ => {
+                return Err(TypeError::NotCallable(Box::new(target.annotation().clone())))
             },
         },
 
+        // direct reference to function
         Value::Function(func) => {
             func.check_visible(func_call.span(), ctx)?;
             let decl = func.decl.clone();
-            
-            typecheck_free_func_call(target, &func_call, self_arg.as_ref(), &decl, ctx)
-                .map(Box::new)
-                .map(Invocation::Call)?
+
+            typecheck_function_invocation(&func_call, func, None, &decl, ctx)
+                .map(Arc::new)?
         },
 
+        // reference to non-method function via UFCS syntax
         Value::UfcsFunction(ufcs_call) => {
             let call_ty_args = match &func_call.type_args {
                 Some(call_ty_args) => {
@@ -283,42 +232,55 @@ fn typecheck_func_call(
                 None => None,
             };
 
-            let typecheck_call = typecheck_ufcs_call(
+            let typecheck_call = typecheck_ufcs_invocation(
                 ufcs_call,
                 &func_call.args,
                 call_ty_args,
                 func_call.annotation.span(),
-                &func_call.args_span,
+                func_call.args_span.as_ref(),
                 ctx,
             );
 
-            typecheck_call.map(Box::new).map(Invocation::Call)?
+            typecheck_call.map(Arc::new)?
         },
 
+        // reference to an overloaded name that could resolve to a method, function or ufcs function
         Value::Overload(overloaded) => {
-            typecheck_func_overload(ctx, func_call, &target, &overloaded)
-                .map(Box::new)
-                .map(Invocation::Call)?
+            typecheck_func_overload_call(ctx, func_call, &target, &overloaded)
+                .map(Arc::new)?
         },
 
+        // direct reference to a single method
         Value::Method(method) => {
-            typecheck_method_call(method, func_call, self_arg, ctx)
-                .map(Box::new)
-                .map(Invocation::Call)?
+            typecheck_method_call(method, func_call, Some((*method.self_arg).clone()), ctx)
+                .map(Arc::new)?
         }
 
-        Value::Type(..) => {
-            if let Some(ctor) = func_call.clone().try_into_empty_object_ctor() {
-                typecheck_object_ctor(&ctor, ctor.span().clone(), expect_ty, ctx)
-                    .map(Box::new)
-                    .map(Invocation::Ctor)?
-            } else {
+        // object constructor invocation without args is indistinguishable from a call expression
+        Value::Type(target_type, span) => {
+            let Some(ctor) = func_call.clone().try_into_empty_object_ctor() else {
                 return Err(TypeError::NotCallable(Box::new(target.annotation().clone())))
-            }
-        },
+            };
+            
+            let type_args = match ctor.type_args {
+                Some(list) => Some(typecheck_type_args(&list, ctx)?),
+                None => None,
+            };
+            
+            assert_eq!(0, ctor.args.members.len());
+            
+            let object_type = TypeName::named(target_type.clone(), span.clone());
+            
+            Arc::new(InvocationValue::ObjectCtor {
+                span: ctor.annotation.clone(),
+                type_args,
+                args: Vec::new(),
+                object_type, 
+            })
+        }
 
         Value::VariantCase(case_val, ..) => {
-            let ctor_call = typecheck_variant_ctor_call(
+            let ctor_invocation = typecheck_variant_ctor_invocation(
                 case_val,
                 &func_call.args,
                 func_call.span().clone(),
@@ -326,8 +288,8 @@ fn typecheck_func_call(
                 func_call.type_args.as_ref(),
                 ctx,
             )?;
-
-            Invocation::Call(Box::new(ctor_call))
+            
+            Arc::new(ctor_invocation)
         }
 
         other => {
@@ -335,15 +297,21 @@ fn typecheck_func_call(
         },
     };
 
-    Ok(expr)
+    Ok(FunctionCall {
+        target,
+        type_args: invocation.type_args().cloned(),
+        args: invocation.args().to_vec(),
+        args_span: invocation.args_span().cloned(),
+        annotation: Value::Invocation(invocation),
+    })
 }
 
-fn typecheck_func_overload(
+fn typecheck_func_overload_call(
     ctx: &mut Context,
     func_call: &ast::FunctionCall<Span>,
     target: &Expr,
     overloaded: &OverloadValue,
-) -> TypeResult<Call> {
+) -> TypeResult<InvocationValue> {
     let type_args = match &func_call.type_args {
         Some(args) => Some(typecheck_type_args(args, ctx)?),
         None => None,
@@ -358,9 +326,7 @@ fn typecheck_func_overload(
         ctx,
     )?;
 
-    let args_span = func_call.args_span.clone();
-
-    let call = match &overloaded.candidates[overload.selected_sig] {
+    match &overloaded.candidates[overload.selected_sig] {
         OverloadCandidate::Function { decl_name, decl, visibility } => {
             if *visibility < Visibility::Interface 
                 && !ctx.is_current_namespace_child(&decl_name.full_path) {
@@ -369,42 +335,23 @@ fn typecheck_func_overload(
                     span: func_call.span().clone(),
                 });
             }
-            
-            let return_annotation = Value::from(TypedValue::temp(
-                decl.result_ty.clone(), 
-                overloaded.span.clone()
-            ));
-            
-            // the original target expr must have overload type, but we now know the function type
-            // of the expression and should update it accordingly
-            let mut target = target.clone();
-            match target.annotation_mut() {
-                annotation @ Value::Overload(..) => {
-                    *annotation = Value::from(FunctionValue::new(
-                        decl_name.clone(),
-                        *visibility,
-                        decl.clone(),
-                        annotation.span().clone(),
-                    ))
-                },
 
-                _ => panic!("typecheck_func_overload: target expr must be annotated as an overload"),
-            }
-
-            let func_call = FunctionCall {
-                annotation: return_annotation,
+            Ok(InvocationValue::Function {
+                span: func_call.span().clone(),
+                args_span: func_call.args_span.clone(),
+                type_args: overload.type_args,
                 args: overload.args,
-                type_args: overload.type_args.clone(),
-                target: target.clone(),
-                args_span,
-            };
-
-            ast::Call::Function(func_call)
+                function: Arc::new(FunctionValue::new(
+                    decl_name.clone(),
+                    *visibility,
+                    decl.clone(),
+                    target.span().clone(),
+                )),
+            })
         },
 
         OverloadCandidate::Method {
             self_ty,
-            iface_ty,
             decl,
             index,
             ..
@@ -444,33 +391,39 @@ fn typecheck_func_overload(
                 })
             }
 
-            let sig = Arc::new(sig.with_self(&self_ty));
-
-            let return_annotation = Value::from(TypedValue::temp(
-                sig.result_ty.clone(),
-                overloaded.span.clone(),
-            ));
-
             // eprintln!("method call (overload) {} = ({}){}.{} -> {} ({})", func_call, iface_ty, self_ty, ident, index, sig);
             
-            let method_call = MethodCall {
-                iface_type: iface_ty.clone(),
-                self_type: self_ty.clone(),
-                self_type_qual_span: None,
-                iface_method_index: *index,
-                annotation: return_annotation,
-                method_name: decl.func_decl.ident().clone(),
-                args: overload.args,
-                type_args: overload.type_args,
-                func_type: Type::Function(sig.clone()),
-                args_span,
-            };
+            let mut args = overload.args.into_iter();
+            let self_arg = args
+                .next()
+                .expect("method must have at least one arg");
 
-            ast::Call::Method(method_call)
+            let method = Arc::new(MethodValue {
+                span: func_call.span().clone(),
+                self_arg: Box::new(self_arg),
+                self_ty: TypeName::inferred(self_ty.clone()),
+                decl: decl.clone(),
+                index: *index,
+            });
+            
+            if self_ty.as_iface().is_some() {
+                Ok(InvocationValue::VirtualMethod {
+                    method,
+                    args: args.collect(),
+                    span: func_call.span().clone(),
+                    args_span: func_call.args_span.clone(),
+                })
+            } else {
+                Ok(InvocationValue::Method {
+                    method,
+                    type_args,
+                    args: args.collect(),
+                    span: func_call.span().clone(),
+                    args_span: func_call.args_span.clone(),
+                })    
+            }
         },
-    };
-
-    Ok(call)
+    }
 }
 
 pub fn check_overload_visibility(
@@ -494,73 +447,73 @@ pub fn check_overload_visibility(
         OverloadCandidate::Method { .. } => Ok(())
     }
 }
-
-pub fn overload_to_no_args_call(
-    candidates: &[OverloadCandidate],
-    overload: Overload,
-    mut target: Expr,
-    self_arg: Option<Expr>,
-    span: &Span,
-    ctx: &Context,
-) -> TypeResult<Expr> {
-    assert_eq!(self_arg.iter().len(), overload.args.len());
-    
-    let decl = candidates[overload.selected_sig].decl();
-    assert_eq!(decl.type_params_len(), overload.type_args_len());
-
-    let call_decl = match &overload.type_args {
-        Some(type_args) => {
-            let specialized = specialize_func_decl(decl, type_args, ctx)
-                .map_err(|e| TypeError::from_generic_err(e, span.clone()))?;
-
-            Arc::new(specialized)
-        }
-
-        None => decl.clone(),
-    };
-
-    let call = match &candidates[overload.selected_sig] {
-        OverloadCandidate::Function { decl_name, visibility, .. } => {
-            let return_value = TypedValue::temp(call_decl.result_ty.clone(), span.clone());
-
-            *target.annotation_mut() = Value::from(FunctionValue::new(
-                decl_name.clone(),
-                *visibility,
-                decl.clone(),
-                target.span().clone(),
-            ));
-
-            Call::FunctionNoArgs(FunctionCallNoArgs {
-                target: Expr::from(target),
-                self_arg,
-                type_args: overload.type_args,
-                annotation: Value::from(return_value),
-            })
-        }
-
-        OverloadCandidate::Method { self_ty, index, decl, .. } => {
-            let return_value = TypedValue::temp(call_decl.result_ty.clone(), span.clone());
-
-            *target.annotation_mut() = Value::from(MethodValue {
-                self_ty: TypeName::inferred(self_ty.clone()),
-                index: *index,
-                decl: decl.clone(),
-                span: target.span().clone(),
-            });
-
-            Call::MethodNoArgs(MethodCallNoArgs {
-                target: Expr::from(target),
-                self_arg,
-                method_name: decl.func_decl.name.ident.clone(),
-                type_args: overload.type_args,
-                annotation: return_value.into(),
-                owning_type: self_ty.clone(),
-            })
-        }
-    };
-
-    Ok(Expr::Call(Box::new(call)))
-}
+// 
+// pub fn overload_to_no_args_call(
+//     candidates: &[OverloadCandidate],
+//     overload: Overload,
+//     mut target: Expr,
+//     self_arg: Option<Expr>,
+//     span: &Span,
+//     ctx: &Context,
+// ) -> TypeResult<Expr> {
+//     assert_eq!(self_arg.iter().len(), overload.args.len());
+//     
+//     let decl = candidates[overload.selected_sig].decl();
+//     assert_eq!(decl.type_params_len(), overload.type_args_len());
+// 
+//     let call_decl = match &overload.type_args {
+//         Some(type_args) => {
+//             let specialized = specialize_func_decl(decl, type_args, ctx)
+//                 .map_err(|e| TypeError::from_generic_err(e, span.clone()))?;
+// 
+//             Arc::new(specialized)
+//         }
+// 
+//         None => decl.clone(),
+//     };
+// 
+//     let call = match &candidates[overload.selected_sig] {
+//         OverloadCandidate::Function { decl_name, visibility, .. } => {
+//             let return_value = TypedValue::temp(call_decl.result_ty.clone(), span.clone());
+// 
+//             *target.annotation_mut() = Value::from(FunctionValue::new(
+//                 decl_name.clone(),
+//                 *visibility,
+//                 decl.clone(),
+//                 target.span().clone(),
+//             ));
+// 
+//             Call::FunctionNoArgs(FunctionCallNoArgs {
+//                 target: Expr::from(target),
+//                 self_arg,
+//                 type_args: overload.type_args,
+//                 annotation: Value::from(return_value),
+//             })
+//         }
+// 
+//         OverloadCandidate::Method { self_ty, index, decl, .. } => {
+//             let return_value = TypedValue::temp(call_decl.result_ty.clone(), span.clone());
+// 
+//             *target.annotation_mut() = Value::from(MethodValue {
+//                 self_ty: TypeName::inferred(self_ty.clone()),
+//                 index: *index,
+//                 decl: decl.clone(),
+//                 span: target.span().clone(),
+//             });
+// 
+//             Call::MethodNoArgs(MethodCallNoArgs {
+//                 target: Expr::from(target),
+//                 self_arg,
+//                 method_name: decl.func_decl.name.ident.clone(),
+//                 type_args: overload.type_args,
+//                 annotation: return_value.into(),
+//                 owning_type: self_ty.clone(),
+//             })
+//         }
+//     };
+// 
+//     Ok(Expr::Call(Box::new(call)))
+// }
 
 /// * `iface_method` - Method to be called
 /// * `func_call` - Source node of this call
@@ -571,18 +524,18 @@ pub fn overload_to_no_args_call(
 ///     call expression, so needs to be provided separately
 /// * `ctx` - current typechecking context
 fn typecheck_method_call(
-    method: &MethodValue,
+    method: &Arc<MethodValue>,
     func_call: &ast::FunctionCall<Span>,
     with_self_arg: Option<Expr>,
     ctx: &mut Context,
-) -> TypeResult<Call> {
+) -> TypeResult<InvocationValue> {
     if method.self_ty.get_current_access(ctx) < method.decl.access {
         return Err(TypeError::TypeMemberInaccessible {
             ty: method.self_ty.ty().clone(),
             access: method.decl.access,
             member: method.decl.func_decl.ident().clone(),
             span: func_call.span().clone(),
-        })
+        });
     }
 
     // not yet supported
@@ -599,7 +552,9 @@ fn typecheck_method_call(
 
     // branch the context to check the self-arg, because we're about to re-check it in a second
     let self_type = match &with_self_arg {
-        Some(self_arg) => self_arg.annotation().ty(),
+        Some(self_arg) => {
+            self_arg.annotation().ty()
+        },
 
         None => {
             let mut ctx = ctx.clone();
@@ -625,8 +580,17 @@ fn typecheck_method_call(
             }
         }
     };
+
+    let sig = method.decl.func_decl.sig().with_self(&self_type);
+
+    let typechecked_args = build_args_for_params(
+        &sig.params,
+        &func_call.args,
+        with_self_arg.as_ref(),
+        func_call.span(), ctx
+    )?;
     
-    if let Type::Interface(..) = method.self_ty.ty() {
+    let is_virtual = if let Type::Interface(..) = method.self_ty.ty() {
         let is_impl = ctx
             .is_implementation(self_type.as_ref(), &method.self_ty)
             .map_err(|err| TypeError::from_name_err(err, func_call.span().clone()))?;
@@ -637,6 +601,8 @@ fn typecheck_method_call(
                 impl_ty: self_type.into_owned(),
             }, func_call.span().clone()));
         }
+        
+        matches!(self_type.as_ref(), Type::Interface(..) | Type::Any)
     } else if let Some(..) = &with_self_arg {
         if method.self_ty != *self_type {
             return Err(TypeError::TypeMismatch {
@@ -645,48 +611,40 @@ fn typecheck_method_call(
                 actual: self_type.into_owned(),
             });
         }
-    }
-
-    let sig = method.decl.func_decl.sig().with_self(&self_type);
-
-    let typechecked_args = build_args_for_params(
-        &sig.params, 
-        &func_call.args, 
-        with_self_arg.as_ref(), 
-        func_call.span(), ctx
-    )?;
+        
+        false
+    } else {
+        false
+    };
     
-    // eprintln!("method call {} = ({}){}.{} -> {}", func_call, method.self_ty, self_type, method.name, method.index);
-    
-    Ok(Call::Method(MethodCall {
-        annotation: TypedValue {
-            ty: sig.result_ty.clone(),
+    let invocation = if is_virtual {
+        InvocationValue::VirtualMethod {
+            method: method.clone(),
+            args: typechecked_args,
+            args_span: func_call.args_span.clone(),
             span: func_call.span().clone(),
-            value_kind: ValueKind::Temporary,
-            decl: None,
         }
-        .into(),
-        self_type: self_type.into_owned(),
-        self_type_qual_span: method.self_ty.get_span().cloned(),
-        iface_type: method.self_ty.ty().clone(),
-        iface_method_index: method.index,
-
-        args_span: func_call.args_span.clone(),
-        func_type: Type::Function(Arc::new(sig)),
-        method_name: method.decl.func_decl.ident().clone(),
-        type_args: None,
-        args: typechecked_args,
-    }))
+    } else {
+        InvocationValue::Method {
+            method: method.clone(),
+            type_args: None,
+            args: typechecked_args,
+            args_span: func_call.args_span.clone(),
+            span: func_call.span().clone(),
+        }
+    };
+    
+    Ok(invocation)
 }
 
-fn typecheck_ufcs_call(
+fn typecheck_ufcs_invocation(
     ufcs_call: &UfcsValue,
     rest_args: &[ast::Expr<Span>],
     type_args: Option<TypeArgList>,
     span: &Span,
-    args_span: &Span,
+    args_span: Option<&Span>,
     ctx: &mut Context,
-) -> TypeResult<Call> {
+) -> TypeResult<InvocationValue> {
     if ufcs_call.visibility < Visibility::Interface
         && !ctx.is_current_namespace_child(&ufcs_call.function_name.full_path) {
         return Err(TypeError::NameNotVisible {
@@ -705,7 +663,7 @@ fn typecheck_ufcs_call(
     )?;
     assert_eq!(specialized_call_args.actual_args.len(), rest_args.len() + 1);
 
-    args::validate_args(
+    validate_args(
         &mut specialized_call_args.actual_args,
         &specialized_call_args.sig.params,
         span,
@@ -716,49 +674,36 @@ fn typecheck_ufcs_call(
         .clone()
         .with_ty_args(specialized_call_args.type_args.clone());
 
-    let func_annotation = FunctionValue::new(
-        func_sym,
-        ufcs_call.visibility,
-        ufcs_call.decl.clone(),
-        span.clone(),
-    );
-
-    // todo: this should construct a fully qualified path expr instead
-    let target = ast::Expr::Ident(ufcs_call.function_name.ident().clone(), func_annotation.into());
-
-    let annotation = TypedValue {
-        ty: specialized_call_args.sig.result_ty.clone(),
-        span: span.clone(),
-        decl: None,
-        value_kind: ValueKind::Temporary,
-    }
-    .into();
-
-    Ok(ast::Call::Function(FunctionCall {
+    Ok(InvocationValue::Function {
+        function: Arc::new(FunctionValue::new(
+            func_sym,
+            ufcs_call.visibility,
+            ufcs_call.decl.clone(),
+            span.clone(),
+        )),
         args: specialized_call_args.actual_args,
-        args_span: args_span.clone(),
-        annotation,
+        args_span: args_span.cloned(),
         type_args: specialized_call_args.type_args,
-        target,
-    }))
+        span: span.clone(),
+    })
 }
 
-// functions called via function values (lambdas, references to functions) must have a fixed
+// invocations of function values (lambdas, references to free functions) must have a fixed
 // signature that was already resolved when the reference was created, so we expect to know
 // all parameter types exactly and have no type arguments
-fn typecheck_func_value_call(
+fn typecheck_func_value_invocation(
     target: Expr,
     func_call: &ast::FunctionCall<Span>,
     self_arg: Option<&Expr>,
     sig: &Arc<FunctionSig>,
     ctx: &mut Context,
-) -> TypeResult<Call> {
+) -> TypeResult<InvocationValue> {
     let mut call_args = Vec::with_capacity(func_call.args.len());
     let expect_arg_tys = sig.params
-            .iter()
-            .map(|p| &p.ty)
-            .chain(iter::repeat(&Type::Nothing));
-    
+        .iter()
+        .map(|p| &p.ty)
+        .chain(iter::repeat(&Type::Nothing));
+
     if let Some(self_arg) = self_arg {
         call_args.push(self_arg.clone());
     }
@@ -775,28 +720,21 @@ fn typecheck_func_value_call(
         ctx,
     )?;
 
-    let span = func_call.span().clone();
-    let annotation = match &sig.result_ty {
-        Type::Nothing => Value::Untyped(span.clone()),
-        return_ty => Value::from(TypedValue::temp(return_ty.clone(), span.clone()))
-    };
-
-    Ok(ast::Call::Function(FunctionCall {
-        target,
+    Ok(InvocationValue::FunctionValue {
+        value: target,
         args: call_args,
-        type_args: None,
         args_span: func_call.args_span.clone(),
-        annotation,
-    }))
+        sig: sig.clone(),
+    })
 }
 
-fn typecheck_free_func_call(
-    mut target: Expr,
+fn typecheck_function_invocation(
     func_call: &ast::FunctionCall<Span>,
+    func_val: &FunctionValue,
     self_arg: Option<&Expr>,
     decl: &Arc<FunctionDecl>,
     ctx: &mut Context,
-) -> TypeResult<Call> {    
+) -> TypeResult<InvocationValue> {
     let span = func_call.span().clone();
 
     let type_args = match func_call.type_args.as_ref() {
@@ -820,54 +758,44 @@ fn typecheck_free_func_call(
         ctx,
     )?;
 
-    let return_ty = specialized_call_args.sig.result_ty.clone();
+    func_val.check_visible(func_call.span(), ctx)?;
 
-    let annotation = match return_ty {
-        Type::Nothing => Value::Untyped(span.clone()),
-        return_ty => Value::from(TypedValue::temp(return_ty, span.clone()))
-    };
+    let func_val = if let Some(ty_args) = &specialized_call_args.type_args {
+        let call_name = func_val.name.specialize(ty_args, ctx)
+            .map_err(|e| TypeError::from_generic_err(e, span.clone()))?
+            .into_owned();
 
-    if let Value::Function(func_type) = target.annotation_mut() {
-        func_type.check_visible(func_call.span(), ctx)?;
+        let specialized_func_type = FunctionValue::new(
+            call_name,
+            func_val.visibility,
+            func_val.decl.clone(),
+            func_val.span.clone(),
+        );
 
-        if let Some(ty_args) = &specialized_call_args.type_args {
-            let call_name = func_type.name.specialize(ty_args, ctx)
-                .map_err(|e| TypeError::from_generic_err(e, span.clone()))?
-                .into_owned();
-
-            let specialized_func_type = FunctionValue::new(
-                call_name,
-                func_type.visibility,
-                func_type.decl.clone(),
-                func_type.span.clone(),
-            );
-
-            *func_type = Arc::new(specialized_func_type);
-        }
+        Arc::new(specialized_func_type)
     } else {
-        assert!(
-            specialized_call_args.type_args.is_none(),
-            "typecheck_func_call: calls to function values can't have type args"
-        )
-    }
-
-    Ok(ast::Call::Function(FunctionCall {
-        annotation,
+        Arc::new(func_val.clone())
+    };
+    
+    eprintln!("{func_call} -> {}", func_val.sig);
+    
+    Ok(InvocationValue::Function {
         args: specialized_call_args.actual_args,
-        type_args: specialized_call_args.type_args,
-        target,
         args_span: func_call.args_span.clone(),
-    }))
+        type_args: specialized_call_args.type_args,
+        function: func_val,
+        span: func_call.span().clone(),
+    })
 }
 
-fn typecheck_variant_ctor_call(
+fn typecheck_variant_ctor_invocation(
     case_val: &VariantCaseValue,
     args: &[ast::Expr<Span>],
     span: Span,
     expect_ty: &Type,
     type_args: Option<&ast::TypeArgList<Span>>,
     ctx: &mut Context,
-) -> TypeResult<Call> {
+) -> TypeResult<InvocationValue> {
     if !ctx.is_visible(&case_val.variant_name.full_path) {
         return Err(TypeError::NameNotVisible {
             name: case_val.variant_name.full_path.clone(),
@@ -969,21 +897,35 @@ fn typecheck_variant_ctor_call(
             Some(data_val)
         }
     };
-
-    let annotation = TypedValue {
-        decl: None,
-        span,
-        ty: Type::Variant(variant_sym.clone().into()),
-        value_kind: ValueKind::Temporary,
-    }
-    .into();
-
-    Ok(ast::Call::VariantCtor(ast::VariantCtorCall {
-        variant: variant_def.name.clone(),
-        variant_name_span: case_val.variant_name_span.clone(),
-        annotation,
-        arg,
+    
+    Ok(InvocationValue::VariantCtor {
+        variant_type: TypeName::named(Type::variant(variant_sym), case_val.variant_name_span.clone()),
         case: case_val.case.clone(),
-    }))
+        arg,
+        span: case_val.span.clone(),
+    })
 }
 
+pub fn evaluate_no_args_function_call(func: &Arc<FunctionValue>) -> TypeResult<InvocationValue> {
+    if func.sig.params.len() > 0 {
+        return Err(TypeError::invalid_args_with_sig(&func.sig, [], func.span.clone()));
+    }
+    
+    if func.sig.type_params.is_some() {
+        return Err(TypeError::from_generic_err(GenericError::ArgsLenMismatch {
+            actual: 0,
+            expected: func.sig.type_params_len(),
+            target: GenericTarget::FunctionSig((*func.sig).clone()),
+        }, func.span.clone()));
+    }
+    
+    let invocation = InvocationValue::Function {
+        span: func.span.clone(),
+        function: func.clone(),
+        type_args: None,
+        args: Vec::new(),
+        args_span: None,
+    };
+    
+    Ok(invocation)
+}

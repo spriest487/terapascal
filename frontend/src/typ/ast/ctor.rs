@@ -7,8 +7,7 @@ use crate::typ::ast::create_default_literal;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::Expr;
-use crate::typ::ArrayType;
-use crate::typ::Context;
+use crate::typ::{Context, InvocationValue};
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
@@ -21,6 +20,7 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
+use crate::typ::{ArrayType, TypeName};
 use linked_hash_map::LinkedHashMap;
 use std::iter;
 use std::sync::Arc;
@@ -39,7 +39,7 @@ pub fn typecheck_object_ctor(
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<ObjectCtor> {
-    let (ctor_ty, type_expr, ty_args) = typecheck_object_ctor_type(
+    let (ctor_ty, type_expr, type_args) = typecheck_object_ctor_type(
         ctor.type_expr.as_ref(),
         ctor.type_args.as_ref(),
         expect_ty,
@@ -49,11 +49,21 @@ pub fn typecheck_object_ctor(
 
     let args = typecheck_object_ctor_args(&ctor_ty, &ctor.annotation, &ctor.args, ctx)?;
 
+    let invocation = Value::from(InvocationValue::ObjectCtor {
+        span: span.clone(),
+        object_type: ctor_ty.clone(),
+        type_args: type_args.clone(),
+        args: args.members
+            .iter()
+            .map(|arg| arg.value.clone())
+            .collect(),
+    });
+
     Ok(ObjectCtor {
         type_expr,
         args,
-        type_args: ty_args,
-        annotation: Value::new_temp_val(ctor_ty, span),
+        type_args,
+        annotation: invocation,
     })
 }
 
@@ -172,7 +182,7 @@ fn typecheck_object_ctor_type(
     expect_ty: &Type,
     ctor_span: &Span,
     ctx: &mut Context
-) -> TypeResult<(Type, Option<Expr>, Option<TypeArgList>)> {
+) -> TypeResult<(TypeName, Option<Expr>, Option<TypeArgList>)> {
     let ty_args = match type_args {
         Some(list) => Some(typecheck_type_args(list, ctx)?),
         None => None,
@@ -184,16 +194,17 @@ fn typecheck_object_ctor_type(
     };
 
     let ctor_ty = find_ctor_ty(expect_ty, ty_args.as_ref(), type_expr.as_ref(), ctor_span, ctx)?;
-    let ctor_ty_name = ctor_ty
-        .full_name()
-        .ok_or_else(|| TypeError::InvalidCtorType {
-            ty: ctor_ty.clone(),
+
+    let Some(ctor_ty_name) = ctor_ty.full_name() else {
+        return Err(TypeError::InvalidCtorType {
+            ty: ctor_ty.into(),
             span: ctor_span.clone(),
-        })?;
+        });
+    };
 
     if ctor_ty.is_unspecialized_generic() {
         let err = GenericError::CannotInferArgs {
-            target: GenericTarget::Type(ctor_ty),
+            target: GenericTarget::Type(ctor_ty.into()),
             hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
         };
 
@@ -219,18 +230,19 @@ fn find_ctor_ty(
     type_expr: Option<&Expr>,
     span: &Span,
     ctx: &mut Context
-) -> TypeResult<Type>  {
+) -> TypeResult<TypeName>  {
     let Some(type_expr) = type_expr else {
-        return Ok(expect_ty.clone());
+        return Ok(TypeName::Inferred(expect_ty.clone()));
     };
-    
+
+    // the target expression of a call evaluated as a constructor must name a Type
     let Value::Type(generic_ty, _) = type_expr.annotation() else {
         return Err(TypeError::InvalidCtorType {
             ty: type_expr.annotation().ty().into_owned(),
             span: span.clone(),
         });
     };
-    
+
     match ty_args {
         None if generic_ty.is_unspecialized_generic() => {
             // infer the type args from the expected type of the expression
@@ -246,11 +258,11 @@ fn find_ctor_ty(
                 })?
                 .clone();
 
-            Ok(spec_ty)
+            Ok(TypeName::named(spec_ty, type_expr.span().clone()))
         },
 
         None  => {
-            Ok(generic_ty.clone())
+            Ok(TypeName::named(generic_ty.clone(), type_expr.span().clone()))
         }
 
         Some(args) => {
@@ -259,7 +271,7 @@ fn find_ctor_ty(
                 .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
                 .into_owned();
 
-            Ok(spec_ty)
+            Ok(TypeName::named(spec_ty, type_expr.span().clone()))
         },
     }
 }

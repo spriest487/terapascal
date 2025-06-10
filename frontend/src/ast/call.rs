@@ -86,7 +86,7 @@ pub struct FunctionCall<A: Annotation = Span> {
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]
     #[derivative(PartialEq = "ignore")]
-    pub args_span: Span,
+    pub args_span: Option<Span>,
 }
 
 impl<A: Annotation> fmt::Display for FunctionCall<A> {
@@ -116,12 +116,17 @@ impl FunctionCall {
         if !self.args.is_empty() {
             return None;
         }
+        
+        // there must be a literal arg group in this call, because the () is required for a ctor 
+        let Some(args_span) = self.args_span else {
+            return None;
+        };
 
         let ctor = ObjectCtor {
             type_expr: Some(self.target),
-            
+
             args: ast::ObjectCtorArgs {
-                span: self.args_span,
+                span: args_span,
                 members: Vec::new(),
             },
             type_args: self.type_args,
@@ -242,31 +247,14 @@ impl<A: Annotation> Spanned for VariantCtorCall<A> {
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum Call<A: Annotation> {
-    // call to a function (method or standalone) without an argument list
-    // this needs to be a distinct kind of function because if it appears as the target of a function
-    // call, we turn it into a function call with arguments (rather than attempting to call the result value)
-    FunctionNoArgs(FunctionCallNoArgs<A>),
-
-    MethodNoArgs(MethodCallNoArgs<A>),
-
     // call to a standalone function
     Function(FunctionCall<A>),
-
-    // call to an interface method function
-    Method(MethodCall<A>),
-
-    // call to a variant constructor
-    VariantCtor(VariantCtorCall<A>),
 }
 
 impl<A: Annotation> fmt::Display for Call<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Call::Function(call) => write!(f, "{}", call),
-            Call::FunctionNoArgs(call) => write!(f, "{}", call),
-            Call::Method(call) => write!(f, "{}", call),
-            Call::MethodNoArgs(call) => write!(f, "{}", call),
-            Call::VariantCtor(call) => write!(f, "{}", call),
         }
     }
 }
@@ -274,11 +262,7 @@ impl<A: Annotation> fmt::Display for Call<A> {
 impl<A: Annotation> Spanned for Call<A> {
     fn span(&self) -> &Span {
         match self {
-            Call::FunctionNoArgs(call) => call.span(),
             Call::Function(call) => call.span(),
-            Call::Method(call) => call.span(),
-            Call::MethodNoArgs(call) => call.span(),
-            Call::VariantCtor(call) => call.span(),
         }
     }
 }
@@ -286,89 +270,61 @@ impl<A: Annotation> Spanned for Call<A> {
 impl<A: Annotation> Call<A> {
     pub fn name(&self) -> &str {
         match self {
-            Call::Function(_) | Call::FunctionNoArgs(_) => "function call",
-            Call::Method(_) | Call::MethodNoArgs(_) => "method call",
-            Call::VariantCtor(_) => "variant constructor",
+            Call::Function(_) => "function call",
         }
     }
     
     pub fn annotation(&self) -> &A {
         match self {
-            Call::FunctionNoArgs(call) => &call.annotation,
             Call::Function(call) => &call.annotation,
-            Call::Method(call) => &call.annotation,
-            Call::MethodNoArgs(call) => &call.annotation,
-            Call::VariantCtor(call) => &call.annotation,
         }
     }
 
     pub fn annotation_mut(&mut self) -> &mut A {
         match self {
-            Call::FunctionNoArgs(call) => &mut call.annotation,
             Call::Function(call) => &mut call.annotation,
-            Call::Method(call) => &mut call.annotation,
-            Call::MethodNoArgs(call) => &mut call.annotation,
-            Call::VariantCtor(call) => &mut call.annotation,
         }
     }
     
     pub fn args(&self) -> &[Expr<A>] {
         match self {
-            Call::MethodNoArgs(_) | Call::FunctionNoArgs(_) => &[],
             Call::Function(func_call) => &func_call.args,
-            Call::Method(method_call) => &method_call.args,
-            Call::VariantCtor(ctor) => ctor.arg.as_slice(),
         }
     }
     
     pub fn as_func_call(&self) -> Option<&FunctionCall<A>> {
         match self {
             Call::Function(func_call) => Some(func_call),
-            _ => None,
         }
     }
     
     pub fn try_into_func_call(self) -> Option<FunctionCall<A>> {
         match self {
             Call::Function(func_call) => Some(func_call),
-            _ => None,
         }
     }
     
     pub fn type_qualification_span(&self) -> Option<&Span> {
         match self {
-            Call::Method(call) => call.self_type_qual_span.as_ref(),
-            Call::VariantCtor(call) => Some(&call.variant_name_span),
             _ => None,
         }
     }
     
     pub fn target_expr(&self) -> Option<&Expr<A>> {
         match self {
-            Call::FunctionNoArgs(call) => Some(&call.target),
-            Call::MethodNoArgs(call) => Some(&call.target),
             Call::Function(call) => Some(&call.target),
-            Call::Method(..) => None,
-            Call::VariantCtor(..) => None,
         }
     }
     
     pub fn method_name_span(&self) -> Option<&Span> {
         match self {
-            Call::MethodNoArgs(call) => Some(&call.method_name.span),
-            Call::Method(call) => Some(&call.method_name.span),
-            Call::VariantCtor(call) => Some(&call.case.span),
             _ => None,
         }
     }
     
     pub fn type_args(&self) -> Option<&TypeList<A::TypeName>> {
         match self {
-            Call::FunctionNoArgs(call) => call.type_args.as_ref(),
-            Call::MethodNoArgs(call) => call.type_args.as_ref(),
             Call::Function(call) => call.type_args.as_ref(),
-            Call::Method(call) => call.type_args.as_ref(),
-            Call::VariantCtor(..) => None,
         }
     }
 }

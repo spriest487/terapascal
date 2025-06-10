@@ -483,6 +483,7 @@ fn typecheck_global_binding_item(
                     return Err(TypeError::BindingWithNoType {
                         binding_names: item.idents.clone(),
                         span: item.span.clone(),
+                        value: None,
                     })
                 },
 
@@ -546,6 +547,7 @@ fn typecheck_global_binding_item(
         return Err(TypeError::BindingWithNoType {
             binding_names: item.idents.clone(),
             span: decl_span,
+            value: val.map(|init| init.expr.annotation().clone()),
         });
     }
 

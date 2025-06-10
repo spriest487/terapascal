@@ -1,12 +1,11 @@
-use crate::ast::Call;
 use crate::ast::MethodOwner;
-use crate::ast::VariantCtorCall;
 use crate::typ::ast::Expr;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
+use crate::typ::InvocationValue;
 use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::OverloadValue;
@@ -14,8 +13,8 @@ use crate::typ::Specializable;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
-use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::VariantCaseValue;
 use crate::Ident;
@@ -33,7 +32,6 @@ pub fn typecheck_variant_type_member(
     variant_name: &Symbol,
     member_ident: &Ident,
     variant_name_span: &Span,
-    expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<VariantTypeMemberValue> {
     let span = variant_name_span.to(member_ident);
@@ -51,13 +49,7 @@ pub fn typecheck_variant_type_member(
             span,
         };
 
-        if let Some(case_ctor) = try_expr_into_noargs_variant_ctor(&case_val, expect_ty, ctx)? {
-            // in this context, this becomes a case constructor
-            Ok(VariantTypeMemberValue::Ctor(case_ctor))
-        } else {
-            // reference to the case itself
-            Ok(VariantTypeMemberValue::Case(Value::VariantCase(Arc::new(case_val))))
-        }
+        Ok(VariantTypeMemberValue::Case(Value::VariantCase(Arc::new(case_val))))
     } else {
         // must be referencing a method
         // we need the full specialized type in this case
@@ -108,7 +100,7 @@ pub fn try_expr_into_noargs_variant_ctor(
     case_val: &VariantCaseValue,
     expect_ty: &Type,
     ctx: &Context
-) -> TypeResult<Option<Expr>> {
+) -> TypeResult<Option<InvocationValue>> {
     let mut variant_name = case_val.variant_name.clone();
 
     // if the variant is generic, we have to be able to infer the type from the usage
@@ -153,16 +145,16 @@ pub fn try_expr_into_noargs_variant_ctor(
     };
 
     let variant_ty = Type::Variant(variant_name.clone());
-
-    let ctor_call = VariantCtorCall {
+    
+    let invoke_variant_ctor = InvocationValue::VariantCtor {
+        variant_type: TypeName::Named {
+            ty: variant_ty,
+            span: case_val.variant_name_span.clone(),
+        },
+        span: case_val.span.clone(),
         case: case_val.case.clone(),
-        variant_name_span: case_val.variant_name_span.clone(),
-        variant: variant_name,
         arg: None,
-        annotation: TypedValue::temp(variant_ty, case_val.span.clone()).into(),
     };
-
-    let call_expr = Expr::Call(Box::new(Call::VariantCtor(ctor_call)));
-
-    Ok(Some(call_expr))
+    
+    Ok(Some(invoke_variant_ctor))
 }

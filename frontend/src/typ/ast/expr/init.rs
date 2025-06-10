@@ -12,7 +12,7 @@ use crate::typ::ast::CaseExpr;
 use crate::typ::ast::Call;
 use crate::typ::ast::Block;
 use crate::typ::ast::LocalBinding;
-use crate::typ::Context;
+use crate::typ::{Context, InvocationValue};
 use crate::typ::FunctionSigParam;
 use crate::typ::Type;
 use crate::typ::TypeError;
@@ -188,49 +188,13 @@ fn expect_args_initialized(
 
 fn expect_call_initialized(call: &Call, ctx: &Context) -> TypeResult<()> {
     match call {
-        ast::Call::FunctionNoArgs(call) => {
+        Call::Function(call) => {
             expect_expr_initialized(&call.target, ctx)?;
-        }
-
-        ast::Call::MethodNoArgs(call) => {
-            expect_expr_initialized(&call.target, ctx)?;
-            if let Some(self_arg) = &call.self_arg {
-                expect_expr_initialized(self_arg, ctx)?;
+            
+            for arg in &call.args {
+                expect_expr_initialized(arg, ctx)?;
             }
         }
-
-        ast::Call::Function(func_call) => {
-            expect_expr_initialized(&func_call.target, ctx)?;
-
-            let target_ty = func_call.target.annotation().ty();
-
-            let params = match target_ty.as_ref() {
-                Type::Function(sig) => &sig.params,
-                _ => panic!(
-                    "function call with wrong target type shouldn't pass type checking (was: {:#?})",
-                    func_call.target.annotation().ty()
-                ),
-            };
-            expect_args_initialized(params, &func_call.args, ctx)?;
-        },
-
-        ast::Call::Method(method_call) => {
-            let params = match &method_call.func_type {
-                Type::Function(sig) => &sig.params,
-                _ => panic!(
-                    "function call with wrong target type shouldn't pass type checking (was: {:#?})",
-                    method_call.func_type,
-                ),
-            };
-
-            expect_args_initialized(params, &method_call.args, ctx)?;
-        },
-
-        ast::Call::VariantCtor(ctor_call) => {
-            if let Some(arg_expr) = &ctor_call.arg {
-                expect_expr_initialized(&arg_expr, ctx)?;
-            }
-        },
     }
 
     Ok(())

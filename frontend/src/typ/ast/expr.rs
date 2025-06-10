@@ -4,16 +4,10 @@ mod literal;
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
-use crate::ast::Visibility;
 pub use crate::typ::ast::call::typecheck_call;
-pub use crate::typ::ast::call::Invocation;
 use crate::typ::ast::cast::typecheck_cast_expr;
-use crate::typ::ast::check_overload_visibility;
-use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::const_eval::ConstEval;
-use crate::typ::ast::overload_to_no_args_call;
-use crate::typ::ast::try_resolve_overload;
-use crate::typ::ast::typecheck_bin_op;
+use crate::typ::ast::{infer_from_structural_ty_args, try_unwrap_inferred_args, typecheck_bin_op};
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_case_expr;
 use crate::typ::ast::typecheck_collection_ctor;
@@ -23,10 +17,13 @@ use crate::typ::ast::typecheck_if_cond_expr;
 use crate::typ::ast::typecheck_match_expr;
 use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::typecheck_raise;
+use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::typecheck_unary_op;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::OverloadCandidate;
-use crate::typ::{Decl, EvaluatedConstExpr};
+use crate::typ::{Context, GenericContext, GenericError, GenericTarget, GenericTypeHint, InvocationValue};
+use crate::typ::Decl;
+use crate::typ::EvaluatedConstExpr;
 use crate::typ::FunctionValue;
 use crate::typ::NameError;
 use crate::typ::OverloadValue;
@@ -37,13 +34,86 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::Context;
 use crate::IntConstant;
-use terapascal_common::span::*;
 pub use init::*;
 pub use literal::*;
+use terapascal_common::span::*;
 
 pub type Expr = ast::Expr<Value>;
+
+impl Expr {
+    // where a typed value is expected, convert an expression that might refer to some non-value 
+    // entity like a type or function into a value, or fail if it can't be converted. references
+    // to functions without call operators will be treated as invocations with zero arguments here
+    // and checked against the function signature accordingly
+    pub fn evaluate(mut self, expect_ty: &Type, ctx: &Context) -> TypeResult<Self> {
+        match self.annotation() {
+            Value::Untyped(..) 
+            | Value::Type(_, _)
+            | Value::Namespace(_, _) => {
+                Err(TypeError::NotValueExpr {
+                    expected: expect_ty.clone(),
+                    actual: self.annotation().clone(),
+                })
+            }
+
+            Value::Invocation(_)
+            | Value::Typed(_)
+            | Value::Const(_) => Ok(self),
+            
+            // references to functions become no-args invocations when evaluated
+            Value::Function(func) => {
+                if func.sig.params.len() != 0 {
+                    return Err(TypeError::invalid_args_with_sig(&func.sig, [], func.span.clone()));
+                }
+
+                let type_args = match &func.decl.name.type_params {
+                    Some(params) => {
+                        let mut inferred_ty_args = GenericContext::empty();
+                        infer_from_structural_ty_args(&func.sig.result_ty, expect_ty, &mut inferred_ty_args, &func.span);
+
+                        let args = try_unwrap_inferred_args(&params, inferred_ty_args, ctx, &func.span)
+                            .ok_or_else(|| {
+                                let err = GenericError::CannotInferArgs {
+                                    target: GenericTarget::FunctionSig((*func.sig).clone()),
+                                    hint: GenericTypeHint::ExpectedReturnType(expect_ty.clone()),
+                                };
+                                TypeError::from_generic_err(err, func.span.clone())
+                            })?;
+                        
+                        Some(args)
+                    }
+                    
+                    None => None,
+                };
+                
+                let invocation = InvocationValue::Function {
+                    function: func.clone(),
+                    span: func.span.clone(),
+                    args_span: None,
+                    args: Vec::new(),
+                    type_args,
+                };
+
+                *self.annotation_mut() = Value::from(invocation);
+                Ok(self)
+            }
+
+            Value::UfcsFunction(_) => {
+                unimplemented!()
+            }
+            Value::Method(_) => {
+                unimplemented!()
+            }
+            Value::VariantCase(_) => {
+                unimplemented!()
+            }
+            Value::Overload(_) => {
+                unimplemented!()
+            }
+        }
+    }
+}
 
 pub fn const_eval_string(expr: &Expr, ctx: &Context) -> TypeResult<EvaluatedConstExpr<String>> {
     match expr.const_eval(ctx) {
@@ -87,7 +157,7 @@ pub fn typecheck_expr(
     match expr_node {
         ast::Expr::Literal(lit) => typecheck_literal(&lit.literal, expect_ty, &lit.annotation, ctx),
 
-        ast::Expr::Ident(ident, span) => typecheck_ident(ident, expect_ty, span, ctx),
+        ast::Expr::Ident(ident, span) => typecheck_ident(ident, span, ctx),
 
         ast::Expr::BinOp(bin_op) => typecheck_bin_op(bin_op, expect_ty, ctx),
 
@@ -97,11 +167,8 @@ pub fn typecheck_expr(
         },
 
         ast::Expr::Call(call) => {
-            let expr = match typecheck_call(call, expect_ty, ctx)? {
-                Invocation::Call(call) => ast::Expr::from(*call),
-                Invocation::Ctor(ctor) => ast::Expr::from(*ctor),
-            };
-            Ok(expr)
+            let call = typecheck_call(call, expect_ty, ctx)?;
+            Ok(Expr::from(call))
         },
 
         ast::Expr::ObjectCtor(ctor) => {
@@ -180,7 +247,6 @@ pub fn typecheck_expr(
 
 fn typecheck_ident(
     ident: &Ident,
-    expect_ty: &Type,
     span: &Span,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
@@ -194,83 +260,14 @@ fn typecheck_ident(
     };
 
     match &decl {
-        ScopeMemberRef::Decl {
-            value: Decl::Function { overloads, .. },
-            parent_path,
-            ..
-        } => {
+        ScopeMemberRef::Decl { value: Decl::Function { .. }, .. } => {
             let decl_annotation = member_annotation(&decl, span.clone(), ctx);
-            let decl_namespace = parent_path.to_namespace();
-
-            // an ident referencing a function with no parameters is interpreted as a call to
-            // that function, but we wrap it in the NoArgs type so it can be unwrapped if this
-            // expression appears in an actual call node
-            let can_call_noargs = overloads.len() == 1
-                && should_call_noargs_in_expr(overloads[0].decl(), expect_ty, &Type::Nothing)
-                && (overloads[0].visiblity() >= Visibility::Interface 
-                    || ctx.is_current_namespace(&decl_namespace));
-            
-            let call_expr = if can_call_noargs {
-                let func_decl = overloads[0].decl().clone();
-                let func_vis = overloads[0].visiblity();
-
-                let func_path = decl_namespace.child(ident.clone());
-                let func_sym = Symbol::from(func_path)
-                    .with_ty_params(func_decl.name.type_params.clone());
-
-                let candidates = [OverloadCandidate::Function {
-                    decl_name: func_sym.clone(),
-                    decl: func_decl.clone(),
-                    visibility: func_vis,
-                }];
-
-                let overload_result = try_resolve_overload(
-                    &candidates,
-                    &[],
-                    None,
-                    None,
-                    span,
-                    ctx
-                );
-
-                match overload_result {
-                    Some(overload) => {
-                        check_overload_visibility(&overload, &candidates, span, ctx)?;
-                        
-                        let func_annotation = FunctionValue::new(
-                            func_sym,
-                            func_vis,
-                            func_decl,
-                            span.clone(),
-                        );
-                        
-                        let func_expr = Expr::Ident(ident.clone(), func_annotation.into());
-                        
-                        let call = overload_to_no_args_call(
-                            &candidates,
-                            overload,
-                            func_expr,
-                            None,
-                            span,
-                            ctx
-                        )?;
-                        Some(call)
-                    },
-
-                    None => None,
-                }
-            } else {
-                None
-            };
-            
-            match call_expr {
-                Some(expr) => Ok(expr),
-                None => member_ident_expr(decl_annotation, ident, ctx)
-            }
+            member_ident_expr(decl_annotation, ident, ctx)
         },
 
         ScopeMemberRef::Decl {
-            value: Decl::GlobalConst { val, .. } | Decl::LocalConst { val, .. }, .. } => {
+            value: Decl::GlobalConst { val, .. } | Decl::LocalConst { val, .. }, ..
+        } => {
             let value = member_annotation(&decl, span.clone(), ctx);
 
             Ok(Expr::literal(val.clone(), value))

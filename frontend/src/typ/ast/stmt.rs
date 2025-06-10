@@ -8,10 +8,8 @@ use crate::ast::Operator;
 use crate::parse::IllegalStatement;
 use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::expr::typecheck_call;
-use crate::typ::ast::expr::Invocation;
 use crate::typ::ast::stmt::assign::typecheck_assignment;
 use crate::typ::ast::stmt::assign::typecheck_compound_assignment;
-use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_case_stmt;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_for_loop;
@@ -20,17 +18,19 @@ use crate::typ::ast::typecheck_match_stmt;
 use crate::typ::ast::typecheck_raise;
 use crate::typ::ast::typecheck_while_loop;
 use crate::typ::ast::Expr;
+use crate::typ::ast::{evaluate_no_args_function_call, typecheck_block};
+use crate::typ::typecheck_typename;
 use crate::typ::Binding;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
-use crate::typ::{typecheck_typename, TypeName};
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -51,7 +51,9 @@ pub fn typecheck_local_binding(
             },
 
             Some(val) => {
-                let val = typecheck_expr(val, &Type::Nothing, ctx)?;
+                let val = typecheck_expr(val, &Type::Nothing, ctx)?
+                    .evaluate(&Type::Nothing, ctx)?;
+
                 let val_ty = val.annotation().ty().into_owned();
                 (Some(val), TypeName::inferred(val_ty))
             },
@@ -87,6 +89,8 @@ pub fn typecheck_local_binding(
                             err => err,
                         })?;
 
+                    let val = val.evaluate(explicit_ty.ty(), ctx)?;
+                    
                     Some(val)
                 },
                 None => None,
@@ -100,6 +104,7 @@ pub fn typecheck_local_binding(
         return Err(TypeError::BindingWithNoType {
             binding_names: vec![binding.name.clone()],
             span: binding.span().clone(),
+            value: val.map(|expr| expr.annotation().clone())
         });
     }
 
@@ -153,13 +158,33 @@ pub fn typecheck_stmt(
             typecheck_local_binding(binding, ctx).map(|s| ast::Stmt::LocalBinding(Box::new(s)))
         },
 
-        ast::Stmt::Call(call) => match typecheck_call(call, expect_ty, ctx)? {
-            Invocation::Call(call) => Ok(ast::Stmt::Call(call)),
-            Invocation::Ctor(ctor) => {
-                let ctor_expr = Expr::from(*ctor);
-                let invalid_stmt = IllegalStatement::from(ctor_expr);
-                Err(TypeError::InvalidStatement(invalid_stmt))
-            },
+        ast::Stmt::Call(call) => {
+            let mut call = typecheck_call(call, expect_ty, ctx)?;
+            
+            // only a function invocation (and not a ctor invocation) is valid a statement
+            // if it's a function reference with no args to make it evaluate to a call immediately,
+            // evaluate it into a call now
+            match call.annotation() {
+                Value::Invocation(..) => {
+                    // any invocation is valid as a statement
+                    Ok(Stmt::Call(Box::new(call)))
+                }
+
+                Value::Function(function) => {
+                    let invocation = evaluate_no_args_function_call(function)?;
+                    *call.annotation_mut() = Value::from(invocation);
+                    Ok(Stmt::Call(Box::new(call)))
+                }
+
+                // Value::UfcsFunction(_) => {}
+                // Value::Method(_) => {}
+                // Value::Overload(_) => {}
+                
+                _ => {
+                    let call_expr = Expr::from(call);
+                    Err(TypeError::InvalidStatement(IllegalStatement::from(call_expr)))
+                }
+            }
         },
 
         ast::Stmt::Block(block) => {

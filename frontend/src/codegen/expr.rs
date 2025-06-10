@@ -37,6 +37,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
 
         typ::Value::Invocation(invocation) => {
             translate_invocation(invocation, builder)
+                .expect("invocation used as an expression must have a value")
         }
         
         typ::Value::Typed(..) => {
@@ -461,6 +462,7 @@ fn translate_ident_expr(ident: &Ident, annotation: &typ::Value, builder: &mut Bu
         // standalone no-args invocation a function
         typ::Value::Invocation(invocation) => {
             translate_invocation(invocation, builder)
+                .expect("invocation used as an expression must have a result type")
         }
 
         typ::Value::Typed(val) => {

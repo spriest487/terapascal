@@ -95,7 +95,7 @@ pub(super) fn resolve_ops_by_precedence(
 
             let op_expr = Expr::from(Call::Function(FunctionCall {
                 annotation: span.clone(),
-                args_span: args.list_span(),
+                args_span: Some(args.list_span()),
                 args: args.args,
                 target,
                 type_args,

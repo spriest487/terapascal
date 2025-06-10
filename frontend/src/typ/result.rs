@@ -200,6 +200,7 @@ pub enum TypeError {
     BindingWithNoType {
         binding_names: Vec<Ident>,
         span: Span,
+        value: Option<Value>,
     },
     NotInitialized {
         ident: Ident,
@@ -392,6 +393,17 @@ impl TypeError {
     
     pub fn name_not_found(name: impl Into<IdentPath>, span: impl Into<Span>) -> Self {
         TypeError::from_name_err(NameError::NotFound { ident: name.into() }, span.into())
+    }
+    
+    pub fn invalid_args_with_sig(sig: &FunctionSig, actual: impl IntoIterator<Item=Type>, span: Span) -> Self {
+        TypeError::InvalidArgs { 
+            expected: sig.params
+                .iter()
+                .map(|p| p.ty.clone())
+                .collect(),
+            actual: actual.into_iter().collect(),
+            span,
+        }
     }
 }
 
@@ -668,6 +680,11 @@ impl DiagnosticOutput for TypeError {
                 vec![
                     format!("expected: {}", args_to_string(expected)),
                     format!("actual: {}", args_to_string(actual)),
+                ]
+            }
+            TypeError::BindingWithNoType { value: Some(value), .. } => {
+                vec![ 
+                    format!("was: {value}")
                 ]
             }
             _ => Vec::new(),

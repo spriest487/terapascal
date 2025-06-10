@@ -11,17 +11,16 @@ pub use self::exit::Exit;
 pub use self::local_binding::LocalBinding;
 use crate::ast::case::CaseBlock;
 use crate::ast::case::CaseStmt;
-use crate::ast::{Annotation, ElseBranch};
 use crate::ast::Block;
 use crate::ast::Call;
 use crate::ast::Expr;
 use crate::ast::ForLoop;
-use crate::ast::FunctionCallNoArgs;
 use crate::ast::Ident;
 use crate::ast::IfCond;
 use crate::ast::MatchStmt;
 use crate::ast::Raise;
 use crate::ast::WhileLoop;
+use crate::ast::{Annotation, ElseBranch, FunctionCall};
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -33,10 +32,10 @@ use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Stmt<A: Annotation = Span> {
@@ -99,25 +98,10 @@ impl Stmt<Span> {
             Stmt::Ident(ident, span) => Some(Expr::Ident(ident.clone(), span.clone())),
 
             Stmt::Call(call) => {
-                // the parser can produce 2 types of function calls stmts: those that we explicitly
-                // can tell are function calls (usually because they have an argument list), and
-                // those expressions that we guess have to be no-args method calls because
-                // they aren't valid statements otherwise
                 match call.as_ref() {
                     call_func @ Call::Function(..) => {
                         Some(Expr::Call(Box::new(call_func.clone())))
                     }
-                    
-                    // as an expression, this could be interpreted as something other than a 
-                    // method, so extract the target (should be the original bin op)
-                    Call::FunctionNoArgs(no_args_call) => {
-                        assert!(no_args_call.type_args.is_none());
-                        assert!(no_args_call.self_arg.is_none());
-
-                        Some(no_args_call.target.clone())
-                    }
-                    
-                    other => panic!("parser should not produce this call: {:?}", other)
                 }
             },
 
@@ -197,22 +181,17 @@ impl Stmt<Span> {
                 // `a` is the target and `b` is the ident of a method or UFCS callable function
                 // of the value of expression `a`
                 Operator::Period => {
-                    match &bin_op.rhs {
-                        Expr::Ident(..) => {
-                            let span = bin_op.annotation.clone();
-
-                            let call = FunctionCallNoArgs {
-                                target: Expr::BinOp(bin_op),
-                                annotation: span,
-                                self_arg: None,
-                                type_args: None,
-                            };
-                            
-                            Ok(Stmt::Call(Box::new(Call::FunctionNoArgs(call))))
-                        }
-                        
-                        _ => Err(Expr::BinOp(bin_op))
-                    }
+                    // whether or not this is a valid call will be up to the typechecker, but this
+                    // is the only form in which this bin op could be a valid statement
+                    let call = Call::Function(FunctionCall {
+                        type_args: None,
+                        annotation: bin_op.span().clone(),
+                        target: Expr::BinOp(bin_op),
+                        args: Vec::new(),
+                        args_span: None,
+                    });
+                    
+                    Ok(Stmt::Call(Box::new(call)))
                 }
 
                 _ => {

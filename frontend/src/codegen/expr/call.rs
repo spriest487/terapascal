@@ -1,11 +1,10 @@
 use crate::codegen::builder::Builder;
 use crate::codegen::expr;
-use crate::codegen::syn;
 use crate::codegen::typ;
 use crate::ir;
-use crate::typ::InvocationValue;
 use crate::typ::Specializable;
 use crate::typ::Type;
+use crate::typ::{InvocationValue, Value};
 use std::borrow::Cow;
 
 fn translate_args(
@@ -104,60 +103,37 @@ enum CallTarget {
 
 pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Ref> {
     // eprintln!("build_call: {} @ {}", call, call.span());
+    
+    let Value::Invocation(invocation) = call.annotation() else {
+        panic!("bad value for call expression `{}`: {}", call, call.annotation());
+    };
+    
+    match invocation.as_ref() {
+        InvocationValue::Function { function, args, type_args, .. } => {
+            let func = builder.translate_func(&function.name, &function.sig, type_args.clone());
 
-    match call {
-        syn::Call::FunctionNoArgs(func_call) => {
-            let args: Vec<_> = func_call.self_arg.iter().cloned().collect();
+            let func_val = ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(func.id)));
 
-            build_func_call(&func_call.target, &args, func_call.type_args.clone(), builder)
-        },
+            let call_target = CallTarget::Function(func_val);
 
-        syn::Call::MethodNoArgs(method_call) => {
-            let method_val = method_call.method();
-            let mut args = Vec::new();
-            let self_ty;
+            translate_call_with_args(call_target, args, &func.sig, builder)
+        }
 
-            match &method_call.self_arg {
-                Some(self_arg) => {
-                    self_ty = self_arg.annotation().ty().into_owned();
-                    args.push(self_arg.clone());
-                }
-                
-                None => {
-                    self_ty = method_val.self_ty.ty().clone();
-                }
-            }
-
-            build_method_call(
-                method_val.self_ty.ty().clone(),
-                self_ty,
-                method_val.index,
-                &args,
-                method_call.type_args.clone(),
-                builder,
-            )
-        },
-
-        syn::Call::Function(func_call) => build_func_call(
-            &func_call.target,
-            &func_call.args,
-            func_call.type_args.clone(),
-            builder,
-        ),
-
-        syn::Call::Method(method_call) => {
+        InvocationValue::Method { method, args, type_args, ..  } => {
             // eprintln!("build_method_call: {} ({}){} = {}", method_call, method_call.iface_type, method_call.self_type, method_call.iface_method_index);
             build_method_call(
-                method_call.iface_type.clone(),
-                method_call.self_type.clone(),
-                method_call.iface_method_index,
-                &method_call.args,
-                method_call.type_args.clone(),
+                method.self_ty.ty().clone(),
+                method.self_ty.ty().clone(),
+                method.index,
+                args,
+                type_args.clone(),
                 builder,
             )
-        },
-
-        syn::Call::VariantCtor(variant_ctor) => build_variant_ctor_call(variant_ctor, builder),
+        }
+        InvocationValue::VirtualMethod { .. } => unimplemented!(),
+        InvocationValue::ObjectCtor { .. } => unimplemented!(),
+        InvocationValue::VariantCtor { .. } => unimplemented!(),
+        InvocationValue::FunctionValue { .. } => unimplemented!(),
     }
 }
 
@@ -169,14 +145,8 @@ fn build_func_call(
 ) -> Option<ir::Ref> {
     match target.annotation() {
         // calling a function directly
-        typ::Value::Function(func) => {
-            let func = builder.translate_func(&func.name, &func.sig, call_ty_args);
-
-            let func_val = ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(func.id)));
-
-            let call_target = CallTarget::Function(func_val);
-
-            translate_call_with_args(call_target, args, &func.sig, builder)
+        typ::Value::Function(_func) => {
+            unreachable!()
         },
 
         typ::Value::UfcsFunction(func) => {
@@ -357,7 +327,7 @@ fn build_variant_ctor_call(
     Some(out)
 }
 
-pub fn translate_invocation(invocation: &InvocationValue, builder: &mut Builder) -> ir::Ref {
+pub fn translate_invocation(invocation: &InvocationValue, builder: &mut Builder) -> Option<ir::Ref> {
     let (func, is_instance_method) = match invocation {
         InvocationValue::Function { function, type_args, .. } => {
             let func = builder.translate_func(
@@ -379,18 +349,13 @@ pub fn translate_invocation(invocation: &InvocationValue, builder: &mut Builder)
             (func, true)
         }
 
-        InvocationValue::VirtualMethod { method, iface_ty, iface_method_index, .. } => {
+        InvocationValue::VirtualMethod { method, .. } => {
             assert!(method.self_ty.is_strong_rc_reference(), "virtual call self type must be a class or interface pointer");
 
-            let func = builder.translate_virtual_method(
-                iface_ty.clone(),
-                *iface_method_index,
-                method.self_ty.ty().clone(),
-                method.index,
-            );
-
-            (func, true)
+            unimplemented!()
         }
+        
+        _ => unimplemented!()
     };
 
     let result = if func.sig.result_ty == Type::Nothing {
@@ -413,5 +378,5 @@ pub fn translate_invocation(invocation: &InvocationValue, builder: &mut Builder)
         builder.call(func_val, arg_values, result.clone());
     });
 
-    result.unwrap_or(ir::Ref::Discard)
+    result
 }

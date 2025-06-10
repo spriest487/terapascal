@@ -133,6 +133,8 @@ pub struct MethodValue {
     pub self_ty: TypeName,
     pub index: usize,
     
+    pub self_arg: Box<Expr>,
+    
     // members below this point are just cached for convenience, all of these can be
     // fetched from the type by the index
 
@@ -149,9 +151,10 @@ pub struct MethodValue {
 }
 
 impl MethodValue {
-    pub fn new(self_ty: TypeName, index: usize, decl: MethodDecl, span: Span) -> Self {
+    pub fn new(self_ty: TypeName, self_arg: impl Into<Box<Expr>>, index: usize, decl: MethodDecl, span: Span) -> Self {
         Self {
             self_ty,
+            self_arg: self_arg.into(),
             index,
             span,
             decl,
@@ -440,13 +443,13 @@ impl Value {
     
     pub fn expect_value(&self, expect_ty: &Type) -> TypeResult<()> {
         let (actual_ty, span) = match self {
-            Value::Method(method) => (method.func_ty(), &method.span),
             Value::Typed(val) => (val.ty.clone(), &val.span),
             Value::Const(const_val) => (const_val.ty.clone(), &const_val.span),
-            Value::Function(func) => (func.func_ty(), &func.span),
-            Value::Invocation(val) => (val.result_type().clone(), val.target_span()),
+            Value::Invocation(val) => (val.result_type().clone(), val.span()),
 
-            Value::Overload(..)
+            Value::Method(..)
+            | Value::Function(..)
+            | Value::Overload(..)
             | Value::UfcsFunction(..)
             | Value::Untyped(..)
             | Value::Namespace(..)
@@ -512,13 +515,13 @@ impl Value {
         match self {
             Value::Namespace(_, _)
             | Value::Untyped(_)
+            | Value::Function(_)
+            | Value::UfcsFunction(_)
+            | Value::Method(_)
+            | Value::Overload(_)
             | Value::Type(_, _)
             | Value::VariantCase(..) => Cow::Owned(Type::Nothing),
 
-            Value::Function(func) => Cow::Owned(func.func_ty()),
-            Value::UfcsFunction(call) => Cow::Owned(call.func_ty()),
-            Value::Method(method) => Cow::Owned(method.func_ty()),
-            Value::Overload(overload) => Cow::Owned(overload.func_ty()),
             
             Value::Invocation(invocation) => Cow::Borrowed(invocation.result_type()),
 
@@ -632,7 +635,7 @@ impl Spanned for Value {
             Value::Function(func) => &func.span,
             Value::UfcsFunction(call) => &call.span,
             
-            Value::Invocation(invocation) => invocation.target_span(),
+            Value::Invocation(invocation) => invocation.span(),
 
             Value::Untyped(span)
             | Value::Type(_, span)

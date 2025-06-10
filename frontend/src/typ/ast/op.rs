@@ -7,15 +7,12 @@ use crate::ast;
 use crate::ast::IdentPath;
 use crate::ast::Operator;
 use crate::ast::{Ident, Literal};
-use crate::typ::ast::check_overload_visibility;
 use crate::typ::ast::collection_ctor_elements;
 use crate::typ::ast::const_eval_integer;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::member_annotation;
 use crate::typ::ast::op::variant_case::typecheck_variant_type_member;
 use crate::typ::ast::op::variant_case::VariantTypeMemberValue;
-use crate::typ::ast::overload_to_no_args_call;
-use crate::typ::ast::try_resolve_overload;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::ast::OverloadCandidate;
@@ -333,6 +330,7 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
 
     let impl_method_val = MethodValue::new(
         TypeName::inferred(src_ty.into_owned()),
+        expr.clone(),
         impl_method_index,
         impl_method_decl,
         span.clone()
@@ -340,7 +338,16 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
 
     let mut expr = expr.clone();
     
-    let invocation = InvocationValue::method(impl_method_val, [expr.clone()], None);
+    let args = vec![expr.clone()];
+    let span = expr.span().clone();
+
+    let invocation = InvocationValue::Method { 
+        method: Arc::new(impl_method_val),
+        args,
+        type_args: None,
+        span,
+        args_span: None,
+    };
 
     *expr.annotation_mut() = Value::from(invocation);
 
@@ -392,9 +399,16 @@ fn desugar_string_concat(
                 span.clone(),
             );
             
-            let concat_args = [bin_op.lhs.clone(), bin_op.rhs.clone()];
+            let concat_args = vec![bin_op.lhs.clone(), bin_op.rhs.clone()];
+            let concat_span = bin_op.span().clone();
 
-            let invocation = InvocationValue::function(concat_func_val, concat_args, None);
+            let invocation = InvocationValue::Function {
+                function: Arc::new(concat_func_val),
+                args: concat_args,
+                args_span: None,
+                type_args: None,
+                span: concat_span,
+            };
 
             Value::from(invocation)
         },
@@ -419,7 +433,7 @@ fn typecheck_member_of(
             let annotation = match lhs.annotation() {
                 // x is the name of a variant type - we are constructing that variant
                 Value::Type(Type::Variant(variant_name), variant_name_span) => {
-                    match typecheck_variant_type_member(variant_name, &member_ident, variant_name_span, expect_ty, ctx)? {
+                    match typecheck_variant_type_member(variant_name, &member_ident, variant_name_span, ctx)? {
                         VariantTypeMemberValue::Case(value) 
                         | VariantTypeMemberValue::Method(value) => {
                             value
@@ -433,8 +447,8 @@ fn typecheck_member_of(
 
                 // x is a non-variant typename - we are accessing a member of that type
                 // e.g. calling an interface method by its type-qualified name
-                Value::Type(ty, span) => {
-                    typecheck_type_member(ty, span, &member_ident, expect_ty, span.clone(), ctx)?
+                Value::Type(_ty, span) => {
+                    typecheck_type_member(&lhs, span, &member_ident, expect_ty, span.clone(), ctx)?
                 },
 
                 // x is a value - we are accessing a member of that value
@@ -486,104 +500,8 @@ fn typecheck_member_of(
                 rhs,
                 annotation,
             };
-            
-            let lhs_ty = member_op.lhs.annotation().ty();
 
-            // member operations that reference function values with no params automatically turn into a
-            // no-args call to that function, except in contexts where we expect a matching function value
-            match &member_op.annotation {
-                Value::Function(func_val) => {
-                    let no_args_call = if !func_val.should_call_noargs_in_expr(expect_ty) {
-                        None 
-                    } else {
-                        let overload_candidate = &[
-                            OverloadCandidate::Function {
-                                decl: func_val.decl.clone(),
-                                decl_name: func_val.name.clone(),
-                                visibility: func_val.visibility,
-                            }
-                        ];
-
-                        op_to_no_args_call(overload_candidate, &member_op, &span, ctx)?
-                    };
-                    
-                    match no_args_call {
-                        Some(call_expr) => Ok(call_expr),
-                        None => Ok(Expr::from(member_op)),
-                    }
-                }
-
-                Value::UfcsFunction(ufcs_val) => {
-                    let no_args_call = if !ufcs_val.should_call_noargs_in_expr(expect_ty) {
-                        None
-                    } else {
-                        let overload_candidate = &[
-                            OverloadCandidate::Function {
-                                decl: ufcs_val.decl.clone(),
-                                decl_name: ufcs_val.function_name.clone(),
-                                visibility: ufcs_val.visibility,
-                            }
-                        ];
-
-                        op_to_no_args_call(overload_candidate, &member_op, &span, ctx)?
-                    };
-
-                    match no_args_call {
-                        Some(call_expr) => Ok(call_expr),
-                        None => Ok(Expr::from(member_op)),
-                    }
-                }
-
-                Value::Method(method) => {
-                    let no_args_call = if method.should_call_noargs_in_expr(expect_ty, lhs_ty.as_ref()) {
-                        let overload_candidate = &[
-                            OverloadCandidate::Method {
-                                iface_ty: method.self_ty.ty().clone(),
-                                self_ty: method.self_ty.ty().clone(),
-                                index: method.index,
-
-                                decl: method.decl.clone(),
-                            }
-                        ];
-                        
-                        op_to_no_args_call(overload_candidate, &member_op, &span, ctx)?
-                    } else {
-                        None
-                    };
-
-                    match no_args_call {
-                        Some(call_expr) => Ok(call_expr),
-                        None => Ok(Expr::from(member_op)),
-                    }
-                }
-
-                Value::Overload(overloaded) => {
-                    // if any of the possible overloads can be called with no args, assume this expression
-                    // is a no-args call - if arguments are applied later we'll re-resolve the overload
-                    let self_arg = overloaded.self_arg
-                        .as_ref()
-                        .map(|arg_box| arg_box.as_ref());
-
-                    match try_resolve_overload(&overloaded.candidates, &[], None, self_arg, &span, ctx) {
-                        Some(overload) => {
-                            check_overload_visibility(&overload, &overloaded.candidates, &span, ctx)?;
-
-                            overload_to_no_args_call(
-                                &overloaded.candidates,
-                                overload,
-                                Expr::from(member_op.clone()),
-                                self_arg.cloned(),
-                                &span,
-                                ctx,
-                            )
-                        }
-
-                        None => Ok(Expr::from(member_op)),
-                    }
-                }
-
-                _ => Ok(Expr::from(member_op)),
-            }
+            Ok(Expr::from(member_op))
         },
 
         _ => {
@@ -599,57 +517,29 @@ fn typecheck_member_of(
     }
 }
 
-fn op_to_no_args_call(
-    candidates: &[OverloadCandidate],
-    target: &BinOp,
-    span: &Span,
-    ctx: &mut Context
-) -> TypeResult<Option<Expr>> {
-    // if the LHS is an untyped item (eg the type part of a class method call),
-    // don't pass it as a self-arg
-    let self_arg = match target.lhs.annotation().ty().as_ref() {
-        Type::Nothing => None,
-        _ => Some(target.lhs.clone()),
-    };
-
-    let overload_result = try_resolve_overload(
-        candidates,
-        &[],
-        None,
-        self_arg.as_ref(),
-        span,
-        ctx
-    );
-    
-    let overload = match overload_result {
-        Some(overload) => overload,
-        None => return Ok(None),
-    };
-
-    check_overload_visibility(&overload, candidates, span, ctx)?;
-    
-    let target = Expr::from(target.clone());
-    let call = overload_to_no_args_call(candidates, overload, target, self_arg, span, ctx)?;
-    
-    Ok(Some(call))
-}
-
 fn typecheck_type_member(
-    ty: &Type,
+    self_arg: &Expr,
     ty_span: &Span,
     member_ident: &Ident,
     expect_return_ty: &Type,
     span: Span,
     ctx: &mut Context,
 ) -> TypeResult<Value> {
-    let type_member = ctx
-        .find_type_member(ty, member_ident, expect_return_ty, &span, ctx)?;
+    let ty = self_arg.annotation().ty();
+
+    let type_member = ctx.find_type_member(
+        ty.as_ref(),
+        member_ident,
+        expect_return_ty,
+        &span,
+        ctx
+    )?;
     
     let member_access = type_member.access(); 
     if ty.get_current_access(ctx) < member_access {
         return Err(TypeError::TypeMemberInaccessible {
             member: member_ident.clone(),
-            ty: ty.clone(),
+            ty: ty.into_owned(),
             access: member_access,
             span,
         });
@@ -668,7 +558,7 @@ fn typecheck_type_member(
 
             // this is a reference to the method itself, args list to follow presumably
             let iface_ty = TypeName::named(candidate.iface_ty, ty_span.clone());
-            MethodValue::new(iface_ty, candidate.index, candidate.method, span).into()
+            MethodValue::new(iface_ty, self_arg.clone(), candidate.index, candidate.method, span).into()
         },
         
         TypeMember::MethodGroup(group) => {
