@@ -7,15 +7,14 @@ use crate::typ::context;
 use crate::typ::result::*;
 use crate::typ::ty::Specializable;
 use crate::typ::ty::Type;
+use crate::typ::typecheck_typename;
+use crate::typ::Context;
 use crate::typ::Decl;
-use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::NameResult;
 use crate::typ::Symbol;
 use crate::typ::TypeName;
 use crate::typ::Value;
-use crate::typ::typecheck_typename;
-use crate::typ::Context;
 use derivative::Derivative;
 use std::fmt;
 use std::sync::Arc;
@@ -168,10 +167,8 @@ impl TypePattern {
                     let err_span = path.first().span.to(&case_ident.span);
                     let variant_ty = Type::variant(variant_def.name.clone());
 
-                    return Err(TypeError::from_name_err(NameError::MemberNotFound {
-                        base: NameContainer::Type(variant_ty),
-                        member: case_ident.clone(),
-                    }, err_span));
+                    let err = NameError::type_member_not_found(variant_ty, case_ident.clone());
+                    return Err(TypeError::from_name_err(err, err_span));
                 }
 
                 Ok(Some((

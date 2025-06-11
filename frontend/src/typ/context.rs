@@ -926,10 +926,7 @@ impl Context {
                 // check the method exists
                 let generic_def = self.instantiate_iface_def(&iface_name)?;
                 if generic_def.get_method(&def.decl.name.ident).is_none() {
-                    return Err(NameError::MemberNotFound {
-                        base: NameContainer::Type(iface_ty),
-                        member: method.clone(),
-                    });
+                    return Err(NameError::type_member_not_found(iface_ty, method.clone()));
                 }
 
                 self.insert_method_def_entry(iface_ty, def)
@@ -950,9 +947,8 @@ impl Context {
                 variant_def
                     .find_methods(&method)
                     .find(|(_, m)| m.func_decl.sig() == def.decl.sig())
-                    .ok_or_else(|| NameError::MemberNotFound {
-                        base: NameContainer::Type(variant_ty.clone()),
-                        member: method.clone(),
+                    .ok_or_else(|| {
+                        NameError::type_member_not_found(variant_ty.clone(), method.clone())
                     })?;
 
                 self.insert_method_def_entry(variant_ty, def)
@@ -964,10 +960,7 @@ impl Context {
 
                 ty_methods
                     .get(method)
-                    .ok_or_else(|| NameError::MemberNotFound {
-                        base: NameContainer::Type(Type::Primitive(primitive)),
-                        member: method.clone(),
-                    })?;
+                    .ok_or_else(|| NameError::type_member_not_found(primitive, method.clone()))?;
 
                 self.insert_method_def_entry(primitive_ty, def)
             },
@@ -991,10 +984,7 @@ impl Context {
         struct_def
             .find_methods(&method)
             .find(|(_, m)| m.func_decl.sig() == def.decl.sig())
-            .ok_or_else(|| NameError::MemberNotFound {
-                base: NameContainer::Type(struct_ty.clone()),
-                member: method.clone(),
-            })?;
+            .ok_or_else(|| NameError::type_member_not_found(struct_ty.clone(), method.clone()))?;
 
         self.insert_method_def_entry(struct_ty, def)
     }
@@ -1595,10 +1585,7 @@ impl Context {
             },
 
             // no data member, no methods
-            (None, 0) => Err(NameError::MemberNotFound {
-                member: member.clone(),
-                base: NameContainer::Type(of_ty.clone()),
-            }),
+            (None, 0) => Err(NameError::type_member_not_found(of_ty.clone(), member.clone())),
 
             // no data member, multiple methods - we can use overloading to determine which
             (None, _) => {
@@ -1834,10 +1821,7 @@ impl Context {
 
         result.ok_or_else(|| {
             TypeError::from_name_err(
-                NameError::MemberNotFound {
-                    member: member_ident.clone(),
-                    base: NameContainer::Type(ty.clone()),
-                },
+                NameError::type_member_not_found(ty.clone(), member_ident.clone()),
                 span.clone(),
             )
         })

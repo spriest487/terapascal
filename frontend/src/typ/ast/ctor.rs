@@ -7,20 +7,20 @@ use crate::typ::ast::create_default_literal;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::Expr;
-use crate::typ::{Context, InvocationValue};
+use crate::typ::ArrayType;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
-use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::{ArrayType, TypeName};
+use crate::typ::{Context, InvocationValue};
 use linked_hash_map::LinkedHashMap;
 use std::iter;
 use std::sync::Arc;
@@ -107,14 +107,10 @@ pub fn typecheck_object_ctor_args(
             Some(member) => member,
             None => {
                 // ctor has a named argument which doesn't exist in the type
-                let err = NameError::MemberNotFound {
-                    base: NameContainer::Type(ctor_ty.clone()),
-                    member: member.ident.clone(),
-                };
-                return Err(TypeError::NameError {
-                    span: member.span().clone(),
-                    err,
-                });
+                return Err(TypeError::from_name_err(
+                    NameError::type_member_not_found(ctor_ty.clone(), member.ident.clone()),
+                    member.span().clone(),
+                ));
             },
         };
 

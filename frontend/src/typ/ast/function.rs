@@ -28,7 +28,6 @@ use crate::typ::GenericResult;
 use crate::typ::GenericTarget;
 use crate::typ::InvalidOverloadKind;
 use crate::typ::MismatchedMethodDecl;
-use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::Specializable;
 use crate::typ::Type;
@@ -638,10 +637,10 @@ fn validate_method_def_matches_decl(
         })?;
     
     if decl_method.is_empty() {
-        return Err(TypeError::from_name_err(NameError::MemberNotFound {
-            base: NameContainer::Type(owning_ty.clone()),
-            member: method_ident.clone(),
-        }, def_span.clone()));
+        return Err(TypeError::from_name_err(
+            NameError::type_member_not_found(owning_ty.clone(), method_ident.clone()), 
+            def_span.clone()
+        ));
     }
     
     let matches = decl_method

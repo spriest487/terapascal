@@ -27,7 +27,6 @@ use crate::typ::FunctionValue;
 use crate::typ::InstanceMember;
 use crate::typ::InvocationValue;
 use crate::typ::MethodValue;
-use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::OverloadValue;
 use crate::typ::Primitive;
@@ -466,10 +465,7 @@ fn typecheck_member_of(
                     match ctx.find_path(&full_path) {
                         Some(member) => member_annotation(&member, span.clone(), ctx),
                         None => {
-                            let err = NameError::MemberNotFound {
-                                member: member_ident,
-                                base: NameContainer::for_annotated(lhs.annotation()),
-                            };
+                            let err = NameError::value_member_not_found(lhs.annotation(), member_ident);
 
                             return Err(TypeError::from_name_err(err, span.clone()));
                         },
@@ -477,11 +473,7 @@ fn typecheck_member_of(
                 },
 
                 _ => {
-                    let err = NameError::MemberNotFound {
-                        member: member_ident,
-                        base: NameContainer::for_annotated(lhs.annotation()),
-                    };
-
+                    let err = NameError::value_member_not_found(lhs.annotation(), member_ident);
                     return Err(TypeError::from_name_err(err, span.clone()));
                 },
             };

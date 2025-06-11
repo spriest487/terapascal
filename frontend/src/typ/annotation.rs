@@ -3,21 +3,34 @@ mod invoke;
 
 pub use symbol::*;
 
+use crate::ast;
+use crate::ast::Annotation;
+use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Visibility;
-use crate::ast::{Annotation, ConstExprValue};
 pub use crate::typ::annotation::invoke::InvocationValue;
+use crate::typ::ast::implicit_conversion;
+use crate::typ::ast::infer_type_args;
+use crate::typ::ast::specialize_func_decl;
+use crate::typ::ast::typecheck_expr;
+use crate::typ::ast::typecheck_type_args;
+use crate::typ::ast::validate_args;
+use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::Literal;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::OverloadCandidate;
-use crate::typ::ast::{implicit_conversion, infer_type_args, specialize_func_decl, typecheck_expr, typecheck_type_args, validate_args, Expr};
 use crate::typ::result::*;
 use crate::typ::ty::*;
+use crate::typ::Context;
+use crate::typ::GenericError;
+use crate::typ::GenericTarget;
+use crate::typ::GenericTypeHint;
+use crate::typ::NameContainer;
+use crate::typ::NameError;
 use crate::typ::ValueKind;
-use crate::typ::{Context, GenericError, GenericTarget, GenericTypeHint, NameContainer, NameError};
-use crate::{ast, IntConstant};
+use crate::IntConstant;
 use derivative::*;
 use std::borrow::Cow;
 use std::fmt;
@@ -131,27 +144,30 @@ impl VariantCaseValue {
                 span: span.clone(),
             });
         }
-        
+
         let variant_sym = match (type_args, &self.variant_name.type_params) {
             (Some(type_args), ..) => self.variant_name
                 .specialize(type_args, ctx)
                 .map_err(|err| TypeError::from_generic_err(err, span.clone()))?,
 
-            (None, Some(params)) => {
-                let variant_ty = Type::variant(self.variant_name.clone());
+            (None, Some(..)) => {
+                let inferred_name = match expect_ty {
+                    Type::Variant(expect_name) => {
+                        self.variant_name.infer_specialized_from_hint(expect_name).cloned()
+                    }
 
-                let type_args = infer_type_args(&variant_ty, expect_ty, params, span, ctx)
+                    _ => None,
+                };
+
+                inferred_name
+                    .map(Cow::Owned)
                     .ok_or_else(|| {
                         let err = GenericError::CannotInferArgs {
                             target: GenericTarget::Name(self.variant_name.full_path.clone()),
                             hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
                         };
                         TypeError::from_generic_err(err, span.clone())
-                    })?;
-
-                self.variant_name
-                    .specialize(&type_args, ctx)
-                    .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
+                    })?
             }
 
             (None, None) => {

@@ -5,7 +5,6 @@ use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
 use crate::typ::InvocationValue;
-use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::OverloadValue;
 use crate::typ::Specializable;
@@ -71,10 +70,7 @@ pub fn typecheck_variant_type_member(
         
         if method_candidates.is_empty() {
             return Err(TypeError::from_name_err(
-                NameError::MemberNotFound {
-                    base: NameContainer::Type(Type::variant(variant_name.clone())),
-                    member: member_ident.clone(),
-                },
+                NameError::type_member_not_found(variant_ty, member_ident.clone()),
                 span.clone(),
             ));
         }

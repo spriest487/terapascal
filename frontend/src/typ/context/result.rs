@@ -157,7 +157,6 @@ impl fmt::Display for GenericError {
 
             GenericError::ConstraintNotSatisfied {
                 is_not_ty,
-                actual_ty: None,
                 ..
             } => write!(
                 f,
@@ -227,7 +226,7 @@ pub enum NameContainer {
 }
 
 impl NameContainer {
-    pub fn for_annotated(a: &Value) -> Self {
+    pub fn from_value(a: &Value) -> Self {
         match a {
             Value::Namespace(ns, ..) => NameContainer::Namespace(ns.clone()),
             _ => NameContainer::Type(a.ty().into_owned()),
@@ -293,6 +292,28 @@ pub enum NameError {
 impl NameError {
     pub fn not_found(name: impl Into<IdentPath>) -> Self {
         NameError::NotFound { ident: name.into() }
+    }
+
+    pub fn value_member_not_found(base: &Value, ident: impl Into<Ident>) -> Self {
+        let base = NameContainer::from_value(base); 
+        NameError::MemberNotFound {
+            base,
+            member: ident.into(),
+        }
+    }
+    
+    pub fn namespace_member_not_found(namespace: impl Into<IdentPath>, ident: impl Into<Ident>) -> Self {
+        NameError::MemberNotFound {
+            base: NameContainer::Namespace(namespace.into()),
+            member: ident.into(),
+        }
+    }
+
+    pub fn type_member_not_found(ty: impl Into<Type>, ident: impl Into<Ident>) -> Self {
+        NameError::MemberNotFound {
+            base: NameContainer::Type(ty.into()),
+            member: ident.into(),
+        }
     }
 }
 
