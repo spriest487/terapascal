@@ -229,6 +229,7 @@ impl NameContainer {
     pub fn from_value(a: &Value) -> Self {
         match a {
             Value::Namespace(ns, ..) => NameContainer::Namespace(ns.clone()),
+            Value::Type(ty, ..) => NameContainer::Type(ty.clone()),
             _ => NameContainer::Type(a.ty().into_owned()),
         }
     }

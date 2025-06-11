@@ -422,7 +422,12 @@ fn typecheck_member_of(
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
     let span = &bin_op.annotation;
-    let lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
+
+    let mut lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
+
+    if matches!(lhs.annotation(), Value::Typed(..)) {
+        lhs = lhs.evaluate(expect_ty, ctx)?;
+    }
 
     match &bin_op.rhs {
         // x.y
@@ -457,6 +462,17 @@ fn typecheck_member_of(
                         ctx,
                     )?
                 },
+                
+                Value::Invocation(invocation) => {
+                    typecheck_member_value(
+                        &lhs,
+                        invocation.result_type(),
+                        ValueKind::Temporary,
+                        &member_ident,
+                        span.clone(),
+                        ctx,
+                    )?
+                }
 
                 Value::Namespace(path, _) => {
                     let mut full_path = path.clone();
@@ -473,6 +489,7 @@ fn typecheck_member_of(
                 },
 
                 _ => {
+                    eprintln!("{}: {:#?}", lhs, lhs.annotation());
                     let err = NameError::value_member_not_found(lhs.annotation(), member_ident);
                     return Err(TypeError::from_name_err(err, span.clone()));
                 },
