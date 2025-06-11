@@ -405,6 +405,19 @@ impl TypeError {
             span,
         }
     }
+    
+    pub fn invalid_variant_ctor_args(expected: Option<Type>, actual: &[Expr], span: Span) -> Self {
+        TypeError::InvalidArgs {
+            expected: expected
+                .map(|ty| vec![ty])
+                .unwrap_or_else(Vec::new),
+            actual: actual
+                .iter()
+                .map(|expr| expr.annotation().ty().into_owned())
+                .collect(),
+            span: span.clone(),
+        }
+    }
 }
 
 pub type TypeResult<T> = Result<T, TypeError>;

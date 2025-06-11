@@ -1,24 +1,23 @@
-use terapascal_common::span::{Span, Spanned};
 use crate::ast;
-use crate::ast::Ident;
 use crate::ast::FunctionParamMod;
-use crate::typ::ast::Stmt;
-use crate::typ::ast::MatchStmt;
-use crate::typ::ast::MatchExpr;
-use crate::typ::ast::IfCond;
-use crate::typ::ast::Expr;
-use crate::typ::ast::CaseStmt;
-use crate::typ::ast::CaseExpr;
-use crate::typ::ast::Call;
+use crate::ast::Ident;
 use crate::typ::ast::Block;
+use crate::typ::ast::Call;
+use crate::typ::ast::CaseExpr;
+use crate::typ::ast::CaseStmt;
+use crate::typ::ast::Expr;
+use crate::typ::ast::IfCond;
 use crate::typ::ast::LocalBinding;
-use crate::typ::{Context, InvocationValue};
-use crate::typ::FunctionSigParam;
-use crate::typ::Type;
+use crate::typ::ast::MatchExpr;
+use crate::typ::ast::MatchStmt;
+use crate::typ::ast::Stmt;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use crate::typ::{Context, InvocationValue};
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub fn expect_stmt_initialized(stmt: &Stmt, ctx: &Context) -> TypeResult<()> {
     match stmt {
@@ -163,36 +162,46 @@ fn expect_binding_initialized(binding: &LocalBinding, ctx: &Context) -> TypeResu
     Ok(())
 }
 
-fn expect_args_initialized(
-    params: &[FunctionSigParam],
-    args: &[Expr],
-    ctx: &Context,
-) -> TypeResult<()> {
-    assert_eq!(
-        params.len(),
-        args.len(),
-        "function call with wrong number of args shouldn't pass type checking. got:\n{}\nexpected:\n{} @ {}",
-        args.iter().map(Expr::to_string).collect::<Vec<_>>().join("; "),
-        params.iter().map(|param| param.ty.to_string()).collect::<Vec<_>>().join("; "),
-        Span::range(args).map(|span| format!("{} {}-{}", span.file.display(), span.start, span.end)).unwrap_or_else(|| "<none>".to_string()),
-    );
-
-    for (arg, param) in args.iter().zip(params.iter()) {
-        if param.modifier != Some(FunctionParamMod::Out) {
-            expect_expr_initialized(arg, ctx)?;
-        }
-    }
-
-    Ok(())
-}
-
 fn expect_call_initialized(call: &Call, ctx: &Context) -> TypeResult<()> {
     match call {
         Call::Function(call) => {
             expect_expr_initialized(&call.target, ctx)?;
             
-            for arg in &call.args {
-                expect_expr_initialized(arg, ctx)?;
+            // if calling a function or method, we need to skip any out params
+            let sig = match &call.annotation {
+                Value::Invocation(invocation) => match invocation.as_ref() {
+                    InvocationValue::Function { function, .. } => Some((*function.sig).clone()),
+                    InvocationValue::FunctionValue { sig, .. } => Some((**sig).clone()),
+                    InvocationValue::Method { method, .. }
+                    | InvocationValue::VirtualMethod { method, .. } => Some(method.decl.func_decl.sig()),
+                    
+                    InvocationValue::ObjectCtor { .. }
+                    | InvocationValue::VariantCtor { .. } => None,
+                }
+
+                _ => None,
+            };
+            
+            
+            if let Some(sig) = sig {
+                assert_eq!(
+                    sig.params.len(),
+                    call.args.len(),
+                    "function call with wrong number of args shouldn't pass type checking. got:\n{}\nexpected:\n{} @ {}",
+                    call.args.iter().map(Expr::to_string).collect::<Vec<_>>().join("; "),
+                    sig.params.iter().map(|param| param.ty.to_string()).collect::<Vec<_>>().join("; "),
+                    Span::range(&call.args).map(|span| format!("{} {}-{}", span.file.display(), span.start, span.end)).unwrap_or_else(|| "<none>".to_string()),
+                );
+
+                for (arg, param) in call.args.iter().zip(sig.params.iter()) {
+                    if param.modifier != Some(FunctionParamMod::Out) {
+                        expect_expr_initialized(arg, ctx)?;
+                    }
+                }
+            } else {
+                for arg in &call.args {
+                    expect_expr_initialized(arg, ctx)?;
+                }
             }
         }
     }

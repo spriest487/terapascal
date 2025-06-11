@@ -312,7 +312,9 @@ pub fn typecheck_exit(
                 })?
                 .clone();
 
-            let value = typecheck_expr(value_expr, &ret_ty, ctx)?;
+            let value = typecheck_expr(value_expr, &ret_ty, ctx)?
+                .evaluate(&ret_ty, ctx)?;
+
             let val_ty = value.annotation().ty();
 
             if ctx.set_inferred_result_ty(val_ty.as_ref()) {

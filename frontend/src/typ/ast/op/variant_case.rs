@@ -1,5 +1,4 @@
 use crate::ast::MethodOwner;
-use crate::typ::ast::Expr;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::Context;
 use crate::typ::GenericError;
@@ -25,7 +24,6 @@ use terapascal_common::span::Span;
 pub enum VariantTypeMemberValue {
     Case(Value),
     Method(Value),
-    Ctor(Expr),
 }
 
 pub fn typecheck_variant_type_member(

@@ -438,10 +438,6 @@ fn typecheck_member_of(
                         | VariantTypeMemberValue::Method(value) => {
                             value
                         },
-
-                        VariantTypeMemberValue::Ctor(ctor_expr) => {
-                            return Ok(ctor_expr)
-                        }
                     }
                 },
 

@@ -6,9 +6,9 @@ mod args;
 use crate::ast;
 use crate::ast::Visibility;
 use crate::typ::ast::cast::implicit_conversion;
+use crate::typ::ast::specialize_func_decl;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
-use crate::typ::ast::FunctionDecl;
 use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
@@ -16,13 +16,10 @@ use crate::typ::FunctionSigParam;
 use crate::typ::FunctionValue;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
-use crate::typ::GenericTypeHint;
 use crate::typ::InvocationValue;
 use crate::typ::MethodValue;
-use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::OverloadValue;
-use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
@@ -30,7 +27,6 @@ use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::UfcsValue;
 use crate::typ::Value;
-use crate::typ::VariantCaseValue;
 pub use args::*;
 pub use overload::*;
 use std::borrow::Cow;
@@ -216,10 +212,8 @@ fn typecheck_func_call(
         // direct reference to function
         Value::Function(func) => {
             func.check_visible(func_call.span(), ctx)?;
-            let decl = func.decl.clone();
 
-            typecheck_function_invocation(&func_call, func, None, &decl, ctx)
-                .map(Arc::new)?
+            typecheck_function_call_invocation(&func_call, func, None, expect_ty, ctx).map(Arc::new)?
         },
 
         // reference to non-method function via UFCS syntax
@@ -280,12 +274,11 @@ fn typecheck_func_call(
         }
 
         Value::VariantCase(case_val, ..) => {
-            let ctor_invocation = typecheck_variant_ctor_invocation(
-                case_val,
+            let ctor_invocation = case_val.typecheck_invocation(
                 &func_call.args,
-                func_call.span().clone(),
-                expect_ty,
                 func_call.type_args.as_ref(),
+                expect_ty,
+                func_call.span(),
                 ctx,
             )?;
             
@@ -728,11 +721,11 @@ fn typecheck_func_value_invocation(
     })
 }
 
-fn typecheck_function_invocation(
+pub(crate) fn typecheck_function_call_invocation(
     func_call: &ast::FunctionCall<Span>,
     func_val: &FunctionValue,
     self_arg: Option<&Expr>,
-    decl: &Arc<FunctionDecl>,
+    expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<InvocationValue> {
     let span = func_call.span().clone();
@@ -742,168 +735,47 @@ fn typecheck_function_invocation(
         None => None,
     };
 
-    let mut specialized_call_args = specialize_call_args(
-        &decl,
+    let specialized_call_args = specialize_call_args(
+        &func_val.decl,
         &func_call.args,
         self_arg,
         type_args,
         &span,
         ctx
     )?;
-
-    validate_args(
-        &mut specialized_call_args.actual_args,
-        &specialized_call_args.sig.params,
-        func_call.span(),
-        ctx,
-    )?;
-
-    func_val.check_visible(func_call.span(), ctx)?;
-
-    let func_val = if let Some(ty_args) = &specialized_call_args.type_args {
-        let call_name = func_val.name.specialize(ty_args, ctx)
-            .map_err(|e| TypeError::from_generic_err(e, span.clone()))?
-            .into_owned();
-
-        let specialized_func_type = FunctionValue::new(
-            call_name,
-            func_val.visibility,
-            func_val.decl.clone(),
-            func_val.span.clone(),
-        );
-
-        Arc::new(specialized_func_type)
-    } else {
-        Arc::new(func_val.clone())
-    };
     
-    eprintln!("{func_call} -> {}", func_val.sig);
-    
-    Ok(InvocationValue::Function {
-        args: specialized_call_args.actual_args,
-        args_span: func_call.args_span.clone(),
-        type_args: specialized_call_args.type_args,
-        function: func_val,
-        span: func_call.span().clone(),
-    })
-}
+    let spec_func = match &specialized_call_args.type_args {
+        Some(actual_type_args) => {
+            let spec_decl = specialize_func_decl(&func_val.decl, actual_type_args, ctx)
+                .map(Arc::new)
+                .map_err(|err| TypeError::from_generic_err(err, span.clone()))?;
 
-fn typecheck_variant_ctor_invocation(
-    case_val: &VariantCaseValue,
-    args: &[ast::Expr<Span>],
-    span: Span,
-    expect_ty: &Type,
-    type_args: Option<&ast::TypeArgList<Span>>,
-    ctx: &mut Context,
-) -> TypeResult<InvocationValue> {
-    if !ctx.is_visible(&case_val.variant_name.full_path) {
-        return Err(TypeError::NameNotVisible {
-            name: case_val.variant_name.full_path.clone(),
-            span: span.clone(),
-        });
-    }
-    
-    let variant_sym = match type_args {
-        Some(type_name_list) => {
-            let type_list = typecheck_type_args(type_name_list, ctx)?;
+            let spec_name = func_val.name
+                .clone()
+                .with_ty_args(Some(actual_type_args.clone()));
 
-            case_val.variant_name.specialize(&type_list, ctx)
-                .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
-                .into_owned()
-        },
-        
-        None => {
-            // infer the specialized generic type if the written one is generic and the hint is a specialized
-            // version of that same generic variant
-            match expect_ty {
-                Type::Variant(expect_variant) if expect_variant.full_path == case_val.variant_name.full_path => {
-                    (**expect_variant).clone()
-                },
-
-                _ => (*case_val.variant_name).clone(),
+            FunctionValue {
+                decl: spec_decl,
+                span: func_val.span.clone(),
+                sig: Arc::new(specialized_call_args.sig.clone()),
+                name: spec_name,
+                visibility: func_val.visibility,
             }
-        }
-    };
-
-    if variant_sym.is_unspecialized_generic() {
-        return Err(TypeError::from_generic_err(
-            GenericError::CannotInferArgs {
-                target: GenericTarget::Name(variant_sym.full_path.clone()),
-                hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
-            },
-            span,
-        ));
-    }
-
-    let variant_def = ctx
-        .instantiate_variant_def(&variant_sym)
-        .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
-
-    let case_index = match variant_def.case_position(&case_val.case) {
-        Some(index) => index,
-
-        None => {
-            return Err(TypeError::from_name_err(
-                NameError::MemberNotFound {
-                    member: case_val.case.clone(),
-                    base: NameContainer::Type(Type::variant(variant_sym.clone())),
-                },
-                span,
-            ));
-        },
-    };
-
-    let arg = match &variant_def.cases[case_index].data {
-        None => {
-            if !args.is_empty() {
-                let bad_args: Vec<_> = args
-                    .iter()
-                    .map(|arg| {
-                        typecheck_expr(arg, &Type::Nothing, ctx)
-                            .map(|arg| arg.annotation().ty().into_owned())
-                    })
-                    .collect::<TypeResult<_>>()?;
-
-                return Err(TypeError::InvalidArgs {
-                    expected: Vec::new(),
-                    actual: bad_args,
-                    span,
-                });
-            }
-
-            None
         },
 
-        Some(data) => {
-            let args: Vec<Expr> = args
-                .iter()
-                .map(|arg| typecheck_expr(arg, &data.ty, ctx))
-                .collect::<TypeResult<_>>()?;
-
-            if args.len() != 1 {
-                let bad_args: Vec<_> = args
-                    .into_iter()
-                    .map(|arg| arg.annotation().ty().into_owned())
-                    .collect();
-
-                return Err(TypeError::InvalidArgs {
-                    expected: Vec::new(),
-                    actual: bad_args,
-                    span,
-                });
-            }
-            
-            let data_val = implicit_conversion(args.into_iter().next().unwrap(), &data.ty, ctx)?;
-            Some(data_val)
-        }
+        None => func_val.clone(),
     };
-    
-    Ok(InvocationValue::VariantCtor {
-        variant_type: TypeName::named(Type::variant(variant_sym), case_val.variant_name_span.clone()),
-        case: case_val.case.clone(),
-        arg,
-        span: case_val.span.clone(),
-    })
+
+    // eprintln!("{}: {:?}", func_call, specialized_call_args.type_args);
+
+    spec_func.create_invocation(
+        &specialized_call_args.actual_args,
+        func_call.args_span.as_ref(),
+        specialized_call_args.type_args.as_ref(),
+        expect_ty,
+        &span,
+        ctx
+    )
 }
 
 pub fn evaluate_no_args_function_call(func: &Arc<FunctionValue>) -> TypeResult<InvocationValue> {

@@ -7,7 +7,7 @@ use crate::ast::IdentPath;
 pub use crate::typ::ast::call::typecheck_call;
 use crate::typ::ast::cast::typecheck_cast_expr;
 use crate::typ::ast::const_eval::ConstEval;
-use crate::typ::ast::{infer_from_structural_ty_args, try_unwrap_inferred_args, typecheck_bin_op};
+use crate::typ::ast::typecheck_bin_op;
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_case_expr;
 use crate::typ::ast::typecheck_collection_ctor;
@@ -19,9 +19,8 @@ use crate::typ::ast::typecheck_object_ctor;
 use crate::typ::ast::typecheck_raise;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::typecheck_unary_op;
-use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::OverloadCandidate;
-use crate::typ::{Context, GenericContext, GenericError, GenericTarget, GenericTypeHint, InvocationValue};
+use crate::typ::Context;
 use crate::typ::Decl;
 use crate::typ::EvaluatedConstExpr;
 use crate::typ::FunctionValue;
@@ -46,57 +45,27 @@ impl Expr {
     // entity like a type or function into a value, or fail if it can't be converted. references
     // to functions without call operators will be treated as invocations with zero arguments here
     // and checked against the function signature accordingly
-    pub fn evaluate(mut self, expect_ty: &Type, ctx: &Context) -> TypeResult<Self> {
+    pub fn evaluate(mut self, expect_ty: &Type, ctx: &mut Context) -> TypeResult<Self> {
         match self.annotation() {
+            // can't be evaluated
             Value::Untyped(..) 
             | Value::Type(_, _)
             | Value::Namespace(_, _) => {
-                Err(TypeError::NotValueExpr {
+                return Err(TypeError::NotValueExpr {
                     expected: expect_ty.clone(),
                     actual: self.annotation().clone(),
-                })
+                });
             }
 
+            // already a value
             Value::Invocation(_)
             | Value::Typed(_)
-            | Value::Const(_) => Ok(self),
+            | Value::Const(_) => {},
             
             // references to functions become no-args invocations when evaluated
             Value::Function(func) => {
-                if func.sig.params.len() != 0 {
-                    return Err(TypeError::invalid_args_with_sig(&func.sig, [], func.span.clone()));
-                }
-
-                let type_args = match &func.decl.name.type_params {
-                    Some(params) => {
-                        let mut inferred_ty_args = GenericContext::empty();
-                        infer_from_structural_ty_args(&func.sig.result_ty, expect_ty, &mut inferred_ty_args, &func.span);
-
-                        let args = try_unwrap_inferred_args(&params, inferred_ty_args, ctx, &func.span)
-                            .ok_or_else(|| {
-                                let err = GenericError::CannotInferArgs {
-                                    target: GenericTarget::FunctionSig((*func.sig).clone()),
-                                    hint: GenericTypeHint::ExpectedReturnType(expect_ty.clone()),
-                                };
-                                TypeError::from_generic_err(err, func.span.clone())
-                            })?;
-                        
-                        Some(args)
-                    }
-                    
-                    None => None,
-                };
-                
-                let invocation = InvocationValue::Function {
-                    function: func.clone(),
-                    span: func.span.clone(),
-                    args_span: None,
-                    args: Vec::new(),
-                    type_args,
-                };
-
+                let invocation = func.create_invocation(&[], None, None, expect_ty, &func.span, ctx)?;
                 *self.annotation_mut() = Value::from(invocation);
-                Ok(self)
             }
 
             Value::UfcsFunction(_) => {
@@ -105,13 +74,23 @@ impl Expr {
             Value::Method(_) => {
                 unimplemented!()
             }
-            Value::VariantCase(_) => {
-                unimplemented!()
+            Value::VariantCase(case_val) => {
+                let invocation = case_val.create_ctor_invocation(
+                    &[],
+                    None,
+                    expect_ty,
+                    &case_val.span,
+                    ctx
+                )?;
+    
+                *self.annotation_mut() = Value::from(invocation);
             }
             Value::Overload(_) => {
                 unimplemented!()
             }
         }
+        
+        Ok(self)
     }
 }
 
@@ -308,10 +287,6 @@ fn add_ident_closure_capture(value: &Value, ctx: &mut Context) {
             ctx.add_closure_capture(decl_name.last(), value.ty().as_ref());
         }
     }
-}
-
-fn should_call_noargs_in_expr(decl: &FunctionDecl, expect_ty: &Type, self_arg_ty: &Type) -> bool {
-    decl.sig().should_call_noargs_in_expr(expect_ty, self_arg_ty)
 }
 
 pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> Value {

@@ -1,13 +1,12 @@
 use crate::ast;
-use crate::ast::{FunctionParamMod};
 use crate::ast::TypeConstraint;
 use crate::ast::TypeList;
+use crate::ast::FunctionParamMod;
 use crate::typ::ast::call;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
-use crate::typ::{Context, TypeArgList, TypeName};
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::GenericContext;
@@ -23,6 +22,9 @@ use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
 use crate::typ::ValueKind;
+use crate::typ::Context;
+use crate::typ::TypeArgList;
+use crate::typ::TypeName;
 use terapascal_common::span::Span;
 
 pub struct SpecializedCallArgs {
@@ -129,6 +131,9 @@ pub fn infer_from_structural_ty_args(
                     .items,
                 _ => return,
             };
+
+            eprintln!("{} vs {}", param_ty, actual_ty);
+            
             (param_ty_args, actual_ty_args)
         },
     };
@@ -169,6 +174,21 @@ pub fn infer_from_structural_ty_args(
     }
 }
 
+pub fn infer_type_args(
+    generic_type: &Type, 
+    hint_type: &Type, 
+    type_params: &TypeParamList,
+    span: &Span,
+    ctx: &Context,
+) -> Option<TypeArgList> {
+    let mut inferred_ty_args = GenericContext::empty();
+    infer_from_structural_ty_args(&generic_type, hint_type, &mut inferred_ty_args, span);
+
+    let args = try_unwrap_inferred_args(type_params, inferred_ty_args, ctx, span)?;
+
+    Some(args)
+}
+
 /// for a function decl, figure out the actual arg types and values from the provided
 /// expressions. evaluate arguments left-to-right until we either resolve a signature that
 /// matches the args, or conclude that the args don't match the call and return an error.
@@ -187,7 +207,7 @@ pub fn specialize_call_args(
         Some(expr) => decl.sig().with_self(expr.annotation().ty().as_ref()),
         None => decl.sig(),
     };
-    
+
     let ty_params = match &decl.name.type_params {
         None => {
             if let Some(explicit_ty_args) = explicit_ty_args {
@@ -230,7 +250,7 @@ pub fn specialize_call_args(
             actual_args,
             type_args: Some(explicit_ty_args),
         })
-    } else {
+    } else {        
         // we haven't checked arg length matches yet because we haven't typechecked args
         let self_arg_len = if self_arg.is_some() { 1 } else { 0 };
         if args.len() + self_arg_len != decl.params.len() {

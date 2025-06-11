@@ -8,16 +8,16 @@ use crate::ast::IdentPath;
 use crate::ast::Visibility;
 use crate::ast::{Annotation, ConstExprValue};
 pub use crate::typ::annotation::invoke::InvocationValue;
-use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::Literal;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::OverloadCandidate;
+use crate::typ::ast::{implicit_conversion, infer_type_args, specialize_func_decl, typecheck_expr, typecheck_type_args, validate_args, Expr};
 use crate::typ::result::*;
 use crate::typ::ty::*;
-use crate::typ::Context;
 use crate::typ::ValueKind;
-use crate::IntConstant;
+use crate::typ::{Context, GenericError, GenericTarget, GenericTypeHint, NameContainer, NameError};
+use crate::{ast, IntConstant};
 use derivative::*;
 use std::borrow::Cow;
 use std::fmt;
@@ -44,6 +44,171 @@ pub struct VariantCaseValue {
     pub variant_name_span: Span,
 
     pub case: Ident,
+}
+
+impl VariantCaseValue {    
+    pub fn typecheck_invocation(
+        &self,
+        args: &[ast::Expr],
+        type_args: Option<&ast::TypeArgList<Span>>,
+        expect_ty: &Type,
+        span: &Span,
+        ctx: &mut Context
+    ) -> TypeResult<InvocationValue> {
+        let variant_sym = match type_args {
+            Some(type_name_list) => {
+                let type_list = typecheck_type_args(type_name_list, ctx)?;
+
+                self.variant_name
+                    .specialize(&type_list, ctx)
+                    .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
+                    .into_owned()
+            },
+
+            None => {
+                // infer the specialized generic type if the written one is generic and the hint is a specialized
+                // version of that same generic variant
+                match expect_ty {
+                    Type::Variant(expect_variant) if expect_variant.full_path == self.variant_name.full_path => {
+                        (**expect_variant).clone()
+                    },
+
+                    _ => (*self.variant_name).clone(),
+                }
+            }
+        };
+
+        if variant_sym.is_unspecialized_generic() {
+            return Err(TypeError::from_generic_err(
+                GenericError::CannotInferArgs {
+                    target: GenericTarget::Name(variant_sym.full_path.clone()),
+                    hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
+                },
+                span.clone(),
+            ));
+        }
+        
+        let variant_def = ctx
+            .instantiate_variant_def(&variant_sym)
+            .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
+        
+        let case_data = variant_def
+            .case_position(&self.case)
+            .and_then(|case_index| variant_def.cases[case_index].data.as_ref());
+        
+        let mut arg_exprs = Vec::new();
+        for i in 0..args.len() {
+            let expect_ty = match (i, case_data) {
+                (0, Some(data)) => &data.ty,
+                _ => &Type::Nothing,
+            };
+            
+            let arg = typecheck_expr(&args[i], expect_ty, ctx)?;
+            arg_exprs.push(arg);
+        }
+        
+        self.create_ctor_invocation(
+            &arg_exprs,
+            variant_sym.type_args.as_ref(),
+            expect_ty,
+            span,
+            ctx
+        )
+    } 
+    
+    pub fn create_ctor_invocation(
+        &self,
+        args: &[Expr],
+        type_args: Option<&TypeArgList>,
+        expect_ty: &Type,
+        span: &Span,
+        ctx: &mut Context,
+    ) -> TypeResult<InvocationValue> {
+        // validate visibility
+        if !ctx.is_visible(&self.variant_name.full_path) {
+            return Err(TypeError::NameNotVisible {
+                name: self.variant_name.full_path.clone(),
+                span: span.clone(),
+            });
+        }
+        
+        let variant_sym = match (type_args, &self.variant_name.type_params) {
+            (Some(type_args), ..) => self.variant_name
+                .specialize(type_args, ctx)
+                .map_err(|err| TypeError::from_generic_err(err, span.clone()))?,
+
+            (None, Some(params)) => {
+                let variant_ty = Type::variant(self.variant_name.clone());
+
+                let type_args = infer_type_args(&variant_ty, expect_ty, params, span, ctx)
+                    .ok_or_else(|| {
+                        let err = GenericError::CannotInferArgs {
+                            target: GenericTarget::Name(self.variant_name.full_path.clone()),
+                            hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
+                        };
+                        TypeError::from_generic_err(err, span.clone())
+                    })?;
+
+                self.variant_name
+                    .specialize(&type_args, ctx)
+                    .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
+            }
+
+            (None, None) => {
+                Cow::Borrowed(self.variant_name.as_ref())
+            }
+        };
+
+        let variant_def = ctx
+            .instantiate_variant_def(&variant_sym)
+            .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
+
+        // validate case name exists
+        let case_index = match variant_def.case_position(&self.case) {
+            Some(index) => index,
+
+            None => {
+                return Err(TypeError::from_name_err(
+                    NameError::MemberNotFound {
+                        member: self.case.clone(),
+                        base: NameContainer::Type(Type::variant(variant_sym.into_owned())),
+                    },
+                    span.clone(),
+                ));
+            },
+        };
+        
+        // validate arg count matches (0 or 1)
+        let arg = match &variant_def.cases[case_index].data {
+            None => {
+                if !args.is_empty() {
+                    return Err(TypeError::invalid_variant_ctor_args(None, args, span.clone()));
+                }
+
+                None
+            },
+
+            Some(data) => {
+                if args.len() != 1 {
+                    return Err(TypeError::invalid_variant_ctor_args(Some(data.ty.clone()), args, span.clone()));
+                }
+                
+                let arg = args.iter().cloned().next().unwrap();
+                let data_val = implicit_conversion(arg, &data.ty, ctx)?;
+                Some(data_val)
+            }
+        };
+
+        Ok(InvocationValue::VariantCtor {
+            variant_type: TypeName::named(
+                Type::variant(variant_sym.into_owned()),
+                self.variant_name_span.clone()
+            ),
+            case: self.case.clone(),
+            arg,
+            span: self.span.clone(),
+        })
+    }
 }
 
 impl From<VariantCaseValue> for Value {
@@ -220,6 +385,84 @@ impl FunctionValue {
         }
         
         Ok(())
+    }
+
+    pub fn create_invocation(
+        &self,
+        args: &[Expr],
+        args_span: Option<&Span>,
+        type_args: Option<&TypeArgList>,
+        expect_ty: &Type,
+        span: &Span,
+        ctx: &mut Context,
+    ) -> TypeResult<InvocationValue> {
+        let type_args = match (&self.decl.name.type_params, type_args) {
+            (Some(params), None) => {
+                let args = infer_type_args(&self.sig.result_ty, expect_ty, params, &self.span, ctx)
+                    .ok_or_else(|| {
+                        let err = GenericError::CannotInferArgs {
+                            target: GenericTarget::FunctionSig((*self.sig).clone()),
+                            hint: GenericTypeHint::ExpectedReturnType(expect_ty.clone()),
+                        };
+                        TypeError::from_generic_err(err, self.span.clone())
+                    })?;
+
+                Some(Cow::Owned(args))
+            }
+
+            (Some(..), Some(args)) => Some(Cow::Borrowed(args)),
+
+            (None, Some(args)) => {
+                let err = GenericError::ArgsLenMismatch {
+                    target: GenericTarget::FunctionSig((*self.sig).clone()),
+                    expected: 0,
+                    actual: args.items.len(),
+                };
+                return Err(TypeError::from_generic_err(err, self.span.clone()))
+            }
+
+            (None, None) => None,
+        };
+        
+        let mut args = args.to_vec();
+        validate_args(
+            &mut args,
+            &self.sig.params,
+            &span,
+            ctx,
+        )?;
+
+        self.check_visible(&span, ctx)?;
+
+        let func_val = if let Some(ty_args) = type_args.as_ref() {
+            let call_name = self.name.specialize(ty_args, ctx)
+                .map_err(|e| TypeError::from_generic_err(e, span.clone()))?
+                .into_owned();
+
+            let spec_decl = specialize_func_decl(&self.decl, ty_args, ctx)
+                .map_err(|err| TypeError::from_generic_err(err, span.clone()))?;
+
+            let specialized_func_type = FunctionValue::new(
+                call_name,
+                self.visibility,
+                Arc::new(spec_decl),
+                self.span.clone(),
+            );
+
+            Arc::new(specialized_func_type)
+        } else {
+            Arc::new(self.clone())
+        };
+
+        // eprintln!("{func_call} -> {}", func_val.sig);
+
+        Ok(InvocationValue::Function {
+            args,
+            args_span: args_span.cloned(),
+            type_args: type_args.map(Cow::into_owned),
+            function: func_val,
+            span: span.clone(),
+        })
     }
 }
 
