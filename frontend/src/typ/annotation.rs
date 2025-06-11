@@ -314,7 +314,8 @@ pub struct MethodValue {
     pub self_ty: TypeName,
     pub index: usize,
     
-    pub self_arg: Box<Expr>,
+    /// None for class methods 
+    pub self_arg: Option<Box<Expr>>,
     
     // members below this point are just cached for convenience, all of these can be
     // fetched from the type by the index
@@ -332,10 +333,10 @@ pub struct MethodValue {
 }
 
 impl MethodValue {
-    pub fn new(self_ty: TypeName, self_arg: impl Into<Box<Expr>>, index: usize, decl: MethodDecl, span: Span) -> Self {
+    pub fn new(self_ty: TypeName, self_arg: Option<Expr>, index: usize, decl: MethodDecl, span: Span) -> Self {
         Self {
             self_ty,
-            self_arg: self_arg.into(),
+            self_arg: self_arg.map(|arg| Box::new(arg)),
             index,
             span,
             decl,

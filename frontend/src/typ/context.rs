@@ -1701,7 +1701,7 @@ impl Context {
         if methods.is_empty() {
             return Ok(None);
         }
-        
+
         let mut method_group = Vec::new();
 
         for (method_index, generic_method) in methods {

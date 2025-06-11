@@ -246,7 +246,7 @@ fn typecheck_func_call(
 
         // direct reference to a single method
         Value::Method(method) => {
-            typecheck_method_call(method, func_call, Some((*method.self_arg).clone()), ctx)
+            typecheck_method_call(method, func_call, method.self_arg.as_ref().map(Box::as_ref), ctx)
                 .map(Arc::new)?
         }
 
@@ -393,7 +393,7 @@ fn typecheck_func_overload_call(
 
             let method = Arc::new(MethodValue {
                 span: func_call.span().clone(),
-                self_arg: Box::new(self_arg),
+                self_arg: Some(Box::new(self_arg)),
                 self_ty: TypeName::inferred(self_ty.clone()),
                 decl: decl.clone(),
                 index: *index,
@@ -519,7 +519,7 @@ pub fn check_overload_visibility(
 fn typecheck_method_call(
     method: &Arc<MethodValue>,
     func_call: &ast::FunctionCall<Span>,
-    with_self_arg: Option<Expr>,
+    with_self_arg: Option<&Expr>,
     ctx: &mut Context,
 ) -> TypeResult<InvocationValue> {
     if method.self_ty.get_current_access(ctx) < method.decl.access {
@@ -579,7 +579,7 @@ fn typecheck_method_call(
     let typechecked_args = build_args_for_params(
         &sig.params,
         &func_call.args,
-        with_self_arg.as_ref(),
+        with_self_arg,
         func_call.span(), ctx
     )?;
     
