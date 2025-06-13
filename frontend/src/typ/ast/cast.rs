@@ -98,11 +98,7 @@ pub fn check_implicit_conversion(
             span: span.clone(),
         }),
 
-        Conversion::Illegal => Err(TypeError::TypeMismatch {
-            expected: to.clone(),
-            actual: from.clone(),
-            span: span.clone(),
-        }),
+        Conversion::Illegal => Err(TypeError::type_mismatch(to.clone(), from.clone(), span.clone())),
     }
 }
 

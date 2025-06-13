@@ -23,12 +23,9 @@ use crate::typ::ConstValue;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
-use crate::typ::FunctionValue;
 use crate::typ::InstanceMember;
 use crate::typ::InvocationValue;
-use crate::typ::MethodValue;
 use crate::typ::NameError;
-use crate::typ::OverloadValue;
 use crate::typ::Primitive;
 use crate::typ::Symbol;
 use crate::typ::Type;
@@ -47,6 +44,9 @@ use crate::IntConstant;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::typ::function::FunctionValue;
+use crate::typ::method::MethodValue;
+use crate::typ::overload::OverloadValue;
 
 pub type BinOp = ast::BinOp<Value>;
 

@@ -37,6 +37,29 @@ impl Overload {
     pub fn type_args_len(&self) -> usize {
         self.type_args.as_ref().map(|list| list.len()).unwrap_or(0)
     }
+    
+    pub fn func_sig(&self, self_ty: &Type, candidates: &[OverloadCandidate]) -> FunctionSig {
+        let selected = &candidates[self.selected_sig];
+        let decl = selected.decl();
+
+        // we resolved the overload using the local type args earlier, but we only get an
+        // index back, so we need to apply them here
+        match &self.type_args {
+            Some(args) => {
+                let params = decl.name.type_params
+                    .as_ref()
+                    .expect("overload resolved with type args must have type params");
+
+                decl.sig()
+                    .with_self(self_ty)
+                    .apply_type_args(params, args)
+            },
+
+            None => decl
+                .sig()
+                .with_self(self_ty),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]

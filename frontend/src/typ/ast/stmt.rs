@@ -53,6 +53,8 @@ pub fn typecheck_local_binding(
             Some(val) => {
                 let val = typecheck_expr(val, &Type::Nothing, ctx)?
                     .evaluate(&Type::Nothing, ctx)?;
+                
+                eprintln!("{} := {} ({})", binding.name, val, val.annotation());
 
                 let val_ty = val.annotation().ty().into_owned();
                 (Some(val), TypeName::inferred(val_ty))

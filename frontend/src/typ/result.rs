@@ -418,6 +418,14 @@ impl TypeError {
             span: span.clone(),
         }
     }
+    
+    pub fn type_mismatch(expected: impl Into<Type>, actual: impl Into<Type>, span: Span) -> Self {
+        TypeError::TypeMismatch {
+            expected: expected.into(),
+            actual: actual.into(),
+            span,
+        }
+    }
 }
 
 pub type TypeResult<T> = Result<T, TypeError>;

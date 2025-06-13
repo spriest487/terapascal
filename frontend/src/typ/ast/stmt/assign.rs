@@ -58,11 +58,9 @@ pub fn typecheck_compound_assignment(
     // compound assignment operator naturally has to return the type of the lhs, since it's
     // being assigned back to the same location
     if *result_ty != *lhs_ty {
-        return Err(TypeError::TypeMismatch {
-            actual: result_ty.into_owned(),
-            expected: lhs_ty.into_owned(),
-            span: assignment.span().clone(),
-        });
+        let actual = result_ty.into_owned();
+        let expected = lhs_ty.into_owned();
+        return Err(TypeError::type_mismatch(expected, actual, assignment.span().clone()));
     }
 
     Ok(CompoundAssignment {

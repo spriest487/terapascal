@@ -9,17 +9,17 @@ use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::specialize_func_decl;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
+use crate::typ::function::FunctionValue;
+use crate::typ::method::MethodValue;
+use crate::typ::overload::OverloadValue;
 use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
-use crate::typ::FunctionValue;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::InvocationValue;
-use crate::typ::MethodValue;
 use crate::typ::NameError;
-use crate::typ::OverloadValue;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
@@ -240,7 +240,7 @@ fn typecheck_func_call(
 
         // reference to an overloaded name that could resolve to a method, function or ufcs function
         Value::Overload(overloaded) => {
-            typecheck_func_overload_call(ctx, func_call, &target, &overloaded)
+            typecheck_func_overload_call(&overloaded, func_call, &target, expect_ty, ctx)
                 .map(Arc::new)?
         },
 
@@ -300,10 +300,11 @@ fn typecheck_func_call(
 }
 
 fn typecheck_func_overload_call(
-    ctx: &mut Context,
+    overloaded: &OverloadValue,
     func_call: &ast::FunctionCall<Span>,
     target: &Expr,
-    overloaded: &OverloadValue,
+    expect_ty: &Type,
+    ctx: &mut Context,
 ) -> TypeResult<InvocationValue> {
     let type_args = match &func_call.type_args {
         Some(args) => Some(typecheck_type_args(args, ctx)?),
@@ -321,26 +322,21 @@ fn typecheck_func_overload_call(
 
     match &overloaded.candidates[overload.selected_sig] {
         OverloadCandidate::Function { decl_name, decl, visibility } => {
-            if *visibility < Visibility::Interface 
-                && !ctx.is_current_namespace_child(&decl_name.full_path) {
-                return Err(TypeError::NameNotVisible {
-                    name: decl_name.full_path.clone(),
-                    span: func_call.span().clone(),
-                });
-            }
-
-            Ok(InvocationValue::Function {
-                span: func_call.span().clone(),
-                args_span: func_call.args_span.clone(),
-                type_args: overload.type_args,
-                args: overload.args,
-                function: Arc::new(FunctionValue::new(
-                    decl_name.clone(),
-                    *visibility,
-                    decl.clone(),
-                    target.span().clone(),
-                )),
-            })
+            let func_val = FunctionValue::new(
+                decl_name.clone(),
+                *visibility,
+                decl.clone(),
+                target.span().clone(),
+            );
+            
+            func_val.create_invocation(
+                &overload.args, 
+                func_call.args_span.as_ref(),
+                overload.type_args.as_ref(),
+                expect_ty,
+                func_call.span(),
+                ctx
+            )
         },
 
         OverloadCandidate::Method {
@@ -349,24 +345,7 @@ fn typecheck_func_overload_call(
             index,
             ..
         } => {
-            // we resolved the overload using the local type args earlier, but we only get an
-            // index back, so we need to apply them here
-            let sig = match &overload.type_args {
-                Some(args) => {
-                    let params = decl.func_decl.name.type_params
-                        .as_ref()
-                        .expect("overload resolved with type args must have type params");
-                    
-                    decl.func_decl
-                        .sig()
-                        .with_self(self_ty)
-                        .apply_type_args(params, args)
-                },
-
-                None => decl.func_decl
-                    .sig()
-                    .with_self(self_ty),
-            };
+            let sig = overload.func_sig(self_ty, &overloaded.candidates);
 
             assert_eq!(
                 overload.args.len(), 
@@ -397,6 +376,7 @@ fn typecheck_func_overload_call(
                 self_ty: TypeName::inferred(self_ty.clone()),
                 decl: decl.clone(),
                 index: *index,
+                sig: Arc::new(sig),
             });
             
             if self_ty.as_iface().is_some() {
@@ -598,11 +578,11 @@ fn typecheck_method_call(
         matches!(self_type.as_ref(), Type::Interface(..) | Type::Any)
     } else if let Some(..) = &with_self_arg {
         if method.self_ty != *self_type {
-            return Err(TypeError::TypeMismatch {
-                span: func_call.span().clone(),
-                expected: method.self_ty.ty().clone(),
-                actual: self_type.into_owned(),
-            });
+            return Err(TypeError::type_mismatch(
+                method.self_ty.ty().clone(), 
+                self_type.into_owned(), 
+                func_call.span().clone()
+            ));
         }
         
         false

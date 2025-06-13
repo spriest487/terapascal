@@ -1,12 +1,12 @@
 use crate::ast::MethodOwner;
 use crate::typ::ast::OverloadCandidate;
+use crate::typ::overload::OverloadValue;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
 use crate::typ::InvocationValue;
 use crate::typ::NameError;
-use crate::typ::OverloadValue;
 use crate::typ::Specializable;
 use crate::typ::Symbol;
 use crate::typ::Type;

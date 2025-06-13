@@ -1,6 +1,7 @@
 use crate::typ::ast::Expr;
-use crate::typ::{FunctionSig, FunctionValue};
-use crate::typ::MethodValue;
+use crate::typ::function::FunctionValue;
+use crate::typ::method::MethodValue;
+use crate::typ::FunctionSig;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeName;
@@ -10,8 +11,9 @@ use derivative::Derivative;
 use std::fmt;
 use std::slice;
 use std::sync::Arc;
-use terapascal_common::span::{MaybeSpanned, Spanned};
+use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
@@ -22,7 +24,7 @@ pub enum InvocationValue {
 
         args: Vec<Expr>,
         args_span: Option<Span>,
-        
+
         span: Span,
     },
     Method {
@@ -31,7 +33,7 @@ pub enum InvocationValue {
 
         args: Vec<Expr>,
         args_span: Option<Span>,
-        
+
         span: Span,
     },
     VirtualMethod {
@@ -44,7 +46,7 @@ pub enum InvocationValue {
     },
     ObjectCtor {
         object_type: TypeName,
-        
+
         args: Vec<Expr>,
         type_args: Option<TypeArgList>,
 
@@ -63,7 +65,7 @@ pub enum InvocationValue {
 
         args: Vec<Expr>,
         args_span: Option<Span>,
-        
+
         sig: Arc<FunctionSig>,
     },
 }
@@ -71,9 +73,9 @@ pub enum InvocationValue {
 impl InvocationValue {
     pub fn result_type(&self) -> &Type {
         match self {
-            InvocationValue::Function { function, .. } => &function.decl.result_ty,
-            InvocationValue::Method { method, .. } => &method.decl.func_decl.result_ty,
-            InvocationValue::VirtualMethod { method, .. } => &method.decl.func_decl.result_ty,
+            InvocationValue::Function { function, .. } => &function.sig.result_ty,
+            InvocationValue::Method { method, .. } => &method.sig.result_ty,
+            InvocationValue::VirtualMethod { method, .. } => &method.sig.result_ty,
             InvocationValue::ObjectCtor { object_type, .. } => object_type.ty(),
             InvocationValue::VariantCtor { variant_type, .. } => variant_type.ty(),
             InvocationValue::FunctionValue { sig, .. } => &sig.result_ty,
@@ -104,7 +106,7 @@ impl InvocationValue {
             InvocationValue::FunctionValue { args, .. } => args,
         }
     }
-    
+
     pub fn args_span(&self) -> Option<&Span> {
         match self {
             InvocationValue::Function { args_span, .. } => args_span.as_ref(),
@@ -115,7 +117,7 @@ impl InvocationValue {
             InvocationValue::FunctionValue { args_span, .. } => args_span.as_ref(),
         }
     }
-    
+
     pub fn type_args(&self) -> Option<&TypeArgList> {
         match self {
             InvocationValue::Function { type_args, .. }
@@ -175,14 +177,11 @@ impl fmt::Display for InvocationValue {
                     method.self_ty, method.decl.func_decl.name.ident
                 )
             },
-            InvocationValue::VirtualMethod {
-                method, ..
-            } => {
+            InvocationValue::VirtualMethod { method, .. } => {
                 write!(
                     f,
                     "virtual invocation of method {}.{}",
-                    method.self_ty,
-                    method.decl.func_decl.name.ident 
+                    method.self_ty, method.decl.func_decl.name.ident
                 )
             },
             InvocationValue::ObjectCtor { object_type, .. } => {
@@ -193,7 +192,7 @@ impl fmt::Display for InvocationValue {
             },
             InvocationValue::FunctionValue { .. } => {
                 write!(f, "function value invocation")
-            }
+            },
         }
     }
 }

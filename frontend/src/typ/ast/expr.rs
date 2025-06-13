@@ -23,9 +23,7 @@ use crate::typ::ast::OverloadCandidate;
 use crate::typ::Context;
 use crate::typ::Decl;
 use crate::typ::EvaluatedConstExpr;
-use crate::typ::FunctionValue;
 use crate::typ::NameError;
-use crate::typ::OverloadValue;
 use crate::typ::ScopeMemberRef;
 use crate::typ::Symbol;
 use crate::typ::Type;
@@ -37,6 +35,8 @@ use crate::IntConstant;
 pub use init::*;
 pub use literal::*;
 use terapascal_common::span::*;
+use crate::typ::function::FunctionValue;
+use crate::typ::overload::OverloadValue;
 
 pub type Expr = ast::Expr<Value>;
 
@@ -86,8 +86,9 @@ impl Expr {
                 *self.annotation_mut() = Value::from(invocation);
             }
     
-            Value::Overload(_) => {
-                unimplemented!()
+            Value::Overload(overload_val) => {
+                let invocation = overload_val.create_invocation(&[], None, None, &overload_val.span, ctx)?;
+                *self.annotation_mut() = Value::from(invocation);
             }
         }
         
