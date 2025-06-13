@@ -1,11 +1,10 @@
 use crate::ir;
+use crate::ast;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::syn;
 use crate::codegen::typ;
 use crate::codegen::FunctionInstance;
 use linked_hash_map::LinkedHashMap;
 use std::fmt;
-use syn::Ident;
 
 #[derive(Debug, Clone)]
 pub struct ClosureInstance {
@@ -37,7 +36,7 @@ impl fmt::Display for ClosureInstance {
 
 pub fn translate_closure_struct(
     identity: ir::ClosureIdentity,
-    captures: &LinkedHashMap<Ident, typ::Type>,
+    captures: &LinkedHashMap<ast::Ident, typ::Type>,
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::TypeDefID {

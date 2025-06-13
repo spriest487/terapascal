@@ -50,15 +50,10 @@ impl Expr {
             // can't be evaluated
             Value::Untyped(..) 
             | Value::Type(_, _)
-            | Value::Namespace(_, _) => {
-                return Err(TypeError::NotValueExpr {
-                    expected: expect_ty.clone(),
-                    actual: self.annotation().clone(),
-                });
-            }
-
+            | Value::Namespace(_, _)
+            
             // already a value
-            Value::Invocation(_)
+            | Value::Invocation(_)
             | Value::Typed(_)
             | Value::Const(_) => {},
             
@@ -68,10 +63,10 @@ impl Expr {
                 *self.annotation_mut() = Value::from(invocation);
             }
 
-            Value::UfcsFunction(_) => {
+            Value::UfcsFunction(_ufcs) => {
                 unimplemented!()
             }
-            Value::Method(_) => {
+            Value::Method(_method) => {
                 unimplemented!()
             }
             Value::VariantCase(case_val) => {

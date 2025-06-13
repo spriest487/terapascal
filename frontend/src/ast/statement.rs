@@ -4,15 +4,19 @@ mod test;
 mod assign;
 mod exit;
 mod local_binding;
+mod member;
 
+pub use self::member::MemberStmt;
 pub use self::assign::Assignment;
 pub use self::assign::CompoundAssignment;
 pub use self::exit::Exit;
 pub use self::local_binding::LocalBinding;
 use crate::ast::case::CaseBlock;
 use crate::ast::case::CaseStmt;
+use crate::ast::Annotation;
 use crate::ast::Block;
 use crate::ast::Call;
+use crate::ast::ElseBranch;
 use crate::ast::Expr;
 use crate::ast::ForLoop;
 use crate::ast::Ident;
@@ -20,7 +24,6 @@ use crate::ast::IfCond;
 use crate::ast::MatchStmt;
 use crate::ast::Raise;
 use crate::ast::WhileLoop;
-use crate::ast::{Annotation, ElseBranch, FunctionCall};
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -32,14 +35,23 @@ use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
+use derivative::Derivative;
 use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub enum Stmt<A: Annotation = Span> {
-    Ident(Ident, A),
+    Ident(
+        Ident,
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        #[derivative(Debug = "ignore")]
+        A
+    ),
+    Member(MemberStmt<A>),
     LocalBinding(Box<LocalBinding<A>>),
     Call(Box<Call<A>>),
     Exit(Box<Exit<A>>),
@@ -49,8 +61,18 @@ pub enum Stmt<A: Annotation = Span> {
     Assignment(Box<Assignment<A>>),
     CompoundAssignment(Box<CompoundAssignment<A>>),
     If(Box<IfCond<A, Stmt<A>>>),
-    Break(A),
-    Continue(A),
+    Break(
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        #[derivative(Debug = "ignore")]
+        A
+    ),
+    Continue(
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
+        #[derivative(Debug = "ignore")]
+        A
+    ),
     Raise(Box<Raise<A>>),
     Case(Box<CaseStmt<A>>),
     Match(Box<MatchStmt<A>>),
@@ -60,6 +82,7 @@ impl<A: Annotation> Stmt<A> {
     pub fn annotation(&self) -> &A {
         match self {
             Stmt::Ident(_ident, annotation) => annotation,
+            Stmt::Member(member) => &member.annotation,
             Stmt::LocalBinding(binding) => &binding.annotation,
             Stmt::Call(call) => &call.annotation(),
             Stmt::Exit(exit) => exit.annotation(),
@@ -177,21 +200,17 @@ impl Stmt<Span> {
                     Ok(assignment.into())
                 },
                 
-                // binary operations of the form `a.b` can be read as no-args method calls where
-                // `a` is the target and `b` is the ident of a method or UFCS callable function
-                // of the value of expression `a`
-                Operator::Period => {
-                    // whether or not this is a valid call will be up to the typechecker, but this
-                    // is the only form in which this bin op could be a valid statement
-                    let call = Call::Function(FunctionCall {
-                        type_args: None,
+                // we can convert binary ops to statements that might be a no-args method call
+                // or UFCS call when typechecked (`a.A` where `A` is a method or function), but
+                // it might equally be a member expression
+                Operator::Period if bin_op.rhs.as_ident().is_some() => {
+                    let member = MemberStmt {
                         annotation: bin_op.span().clone(),
-                        target: Expr::BinOp(bin_op),
-                        args: Vec::new(),
-                        args_span: None,
-                    });
+                        base: Box::new(bin_op.lhs),
+                        name: bin_op.rhs.into_ident().unwrap(),
+                    };
                     
-                    Ok(Stmt::Call(Box::new(call)))
+                    Ok(Stmt::Member(member))
                 }
 
                 _ => {
@@ -383,6 +402,7 @@ impl<A: Annotation> fmt::Display for Stmt<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Stmt::Ident(ident, ..) => write!(f, "{}", ident),
+            Stmt::Member(member) => write!(f, "{}", member),
             Stmt::LocalBinding(binding) => write!(f, "{}", binding),
             Stmt::Call(call) => write!(f, "{}", call),
             Stmt::Exit(exit) => write!(f, "{}", exit),

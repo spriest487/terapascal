@@ -7,7 +7,7 @@ use crate::ast;
 use crate::ast::IdentPath;
 use crate::ast::Operator;
 use crate::ast::{Ident, Literal};
-use crate::typ::ast::collection_ctor_elements;
+use crate::typ::ast::{collection_ctor_elements, evaluate_expr};
 use crate::typ::ast::const_eval_integer;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::member_annotation;
@@ -67,7 +67,7 @@ pub fn typecheck_bin_op(
     let span = &bin_op.annotation;
 
     match &bin_op.op {
-        Operator::Period => typecheck_member_of(bin_op, expect_ty, ctx),
+        Operator::Period => typecheck_member_op(bin_op, expect_ty, ctx),
 
         Operator::Index => typecheck_indexer(bin_op, ctx),
         
@@ -417,87 +417,22 @@ fn desugar_string_concat(
     Ok(Expr::from(bin_op))
 }
 
-fn typecheck_member_of(
+fn typecheck_member_op(
     bin_op: &ast::BinOp<Span>,
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
     let span = &bin_op.annotation;
 
-    let mut lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
-
-    if matches!(lhs.annotation(), Value::Typed(..)) {
-        lhs = lhs.evaluate(expect_ty, ctx)?;
-    }
+    let lhs = evaluate_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
 
     match &bin_op.rhs {
         // x.y
         ast::Expr::Ident(member_ident, _) => {
-            let member_ident = member_ident.clone();
-
-            let annotation = match lhs.annotation() {
-                // x is the name of a variant type - we are constructing that variant
-                Value::Type(Type::Variant(variant_name), variant_name_span) => {
-                    match typecheck_variant_type_member(variant_name, &member_ident, variant_name_span, ctx)? {
-                        VariantTypeMemberValue::Case(value) 
-                        | VariantTypeMemberValue::Method(value) => {
-                            value
-                        },
-                    }
-                },
-
-                // x is a non-variant typename - we are accessing a member of that type
-                // e.g. calling an interface method by its type-qualified name
-                Value::Type(ty, span) => {
-                    typecheck_type_member(ty, span, &member_ident, expect_ty, span.clone(), ctx)?
-                },
-
-                // x is a value - we are accessing a member of that value
-                Value::Typed(base_val) => {
-                    typecheck_member_value(
-                        &lhs,
-                        &base_val.ty,
-                        base_val.value_kind,
-                        &member_ident,
-                        span.clone(),
-                        ctx,
-                    )?
-                },
-                
-                Value::Invocation(invocation) => {
-                    typecheck_member_value(
-                        &lhs,
-                        invocation.result_type(),
-                        ValueKind::Temporary,
-                        &member_ident,
-                        span.clone(),
-                        ctx,
-                    )?
-                }
-
-                Value::Namespace(path, _) => {
-                    let mut full_path = path.clone();
-                    full_path.push(member_ident.clone());
-
-                    match ctx.find_path(&full_path) {
-                        Some(member) => member_annotation(&member, span.clone(), ctx),
-                        None => {
-                            let err = NameError::value_member_not_found(lhs.annotation(), member_ident);
-
-                            return Err(TypeError::from_name_err(err, span.clone()));
-                        },
-                    }
-                },
-
-                _ => {
-                    eprintln!("{}: {:#?}", lhs, lhs.annotation());
-                    let err = NameError::value_member_not_found(lhs.annotation(), member_ident);
-                    return Err(TypeError::from_name_err(err, span.clone()));
-                },
-            };
+            let annotation = member_value(&lhs, member_ident, span, expect_ty, ctx)?;
 
             let rhs_value = Value::Untyped(member_ident.span.clone());
-            let rhs = Expr::Ident(member_ident, rhs_value);
+            let rhs = Expr::Ident(member_ident.clone(), rhs_value);
             
             let member_op = BinOp {
                 lhs,
@@ -586,7 +521,86 @@ fn typecheck_type_member(
     Ok(annotation)
 }
 
-pub fn typecheck_member_value(
+pub fn member_value(
+    base_expr: &Expr,
+    member_ident: &Ident,
+    span: &Span,
+    expect_ty: &Type,
+    ctx: &mut Context,
+) -> TypeResult<Value> {
+    match base_expr.annotation() {
+        // x is the name of a variant type - we are constructing that variant
+        Value::Type(Type::Variant(variant_name), variant_name_span) => {
+            match typecheck_variant_type_member(variant_name, member_ident, variant_name_span, ctx)? {
+                VariantTypeMemberValue::Case(value)
+                | VariantTypeMemberValue::Method(value) => {
+                    Ok(value)
+                },
+            }
+        },
+
+        // x is a non-variant typename - we are accessing a member of that type
+        // e.g. calling an interface method by its type-qualified name
+        Value::Type(ty, span) => {
+            typecheck_type_member(ty, span, &member_ident, expect_ty, span.clone(), ctx)
+        },
+
+        // x is a value - we are accessing a member of that value
+        Value::Typed(base_val) => {
+            typecheck_member_value(
+                &base_expr,
+                &base_val.ty,
+                base_val.value_kind,
+                &member_ident,
+                span.clone(),
+                ctx,
+            )
+        },
+
+        Value::Invocation(invocation) => {
+            typecheck_member_value(
+                &base_expr,
+                invocation.result_type(),
+                ValueKind::Temporary,
+                &member_ident,
+                span.clone(),
+                ctx,
+            )
+        }
+
+        Value::Namespace(path, _) => {
+            let mut full_path = path.clone();
+            full_path.push(member_ident.clone());
+
+            match ctx.find_path(&full_path) {
+                Some(member) => {
+                    let value = member_annotation(&member, span.clone(), ctx);
+
+                    Ok(value)
+                },
+                None => {
+                    let err = NameError::value_member_not_found(
+                        base_expr.annotation(),
+                        member_ident.clone(),
+                    );
+
+                    Err(TypeError::from_name_err(err, span.clone()))
+                },
+            }
+        },
+
+        _ => {
+            // eprintln!("{}: {:#?}", base_expr, base_expr.annotation());
+            let err = NameError::value_member_not_found(
+                base_expr.annotation(),
+                member_ident.clone(),
+            );
+            Err(TypeError::from_name_err(err, span.clone()))
+        },
+    }
+}
+
+fn typecheck_member_value(
     lhs: &Expr,
     base_ty: &Type,
     value_kind: ValueKind,

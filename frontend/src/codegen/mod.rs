@@ -9,7 +9,6 @@ mod set_flags;
 
 pub use self::function::*;
 pub use self::set_flags::*;
-use crate::ast as syn;
 use crate::ast::StructKind;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr::*;

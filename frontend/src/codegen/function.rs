@@ -1,7 +1,6 @@
 use crate::ast;
 use crate::codegen::builder::jmp_exists;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::syn::FunctionParamMod;
 use crate::codegen::translate_block;
 use crate::codegen::translate_literal;
 use crate::codegen::typ;
@@ -93,7 +92,7 @@ pub fn build_func_static_closure_def(
         .enumerate()
         .map(|(index, sig_param)| {
             FunctionParam {
-                by_ref: matches!(sig_param.modifier, Some(FunctionParamMod::Var | FunctionParamMod::Out)),
+                by_ref: matches!(sig_param.modifier, Some(ast::FunctionParamMod::Var | ast::FunctionParamMod::Out)),
                 ty: library.translate_type(&sig_param.ty, &generic_ctx),
                 name: format!("P{index}"),
             }
@@ -256,7 +255,7 @@ struct FunctionParam {
 impl FunctionParam {
     fn from_ast(param: &typ::ast::FunctionParam, builder: &mut Builder) -> Self {
         let (param_ty, by_ref) = match &param.modifier {
-            Some(FunctionParamMod::Var) | Some(FunctionParamMod::Out) => {
+            Some(ast::FunctionParamMod::Var) | Some(ast::FunctionParamMod::Out) => {
                 (builder.translate_type(&param.ty).ptr(), true)
             },
 

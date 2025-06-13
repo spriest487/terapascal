@@ -1,10 +1,8 @@
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::syn;
 use crate::codegen::translate_name;
 use crate::codegen::typ;
-use crate::ir;
+use crate::{ast, ir};
 use std::collections::HashMap;
-use syn::StructKind;
 use typ::layout::StructLayoutMember;
 
 pub fn translate_struct_def(
@@ -49,8 +47,8 @@ pub fn translate_struct_def(
     }
 
     let identity = match struct_def.kind {
-        StructKind::Class => ir::StructIdentity::Class(name_path),
-        StructKind::Record => ir::StructIdentity::Record(name_path),
+        ast::StructKind::Class => ir::StructIdentity::Class(name_path),
+        ast::StructKind::Record => ir::StructIdentity::Record(name_path),
     };
 
     ir::Struct::new(identity).with_fields(fields)

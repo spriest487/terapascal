@@ -1,12 +1,11 @@
 use crate::ast;
-use crate::ast::ForLoopRange;
 use crate::codegen::builder::jmp_exists;
 use crate::codegen::expr::call;
+use crate::codegen::expr::call::translate_invocation;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::expr::translate_raise;
 use crate::codegen::ir;
 use crate::codegen::pattern::translate_pattern_match;
-use crate::codegen::syn;
 use crate::codegen::translate_block;
 use crate::codegen::translate_exit;
 use crate::codegen::translate_expr;
@@ -23,63 +22,67 @@ pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
     builder.comment(stmt);
     
     match stmt {
-        syn::Stmt::Ident(..) => {
-            unreachable!("should be turned into no-args calls during typechecking")
+        ast::Stmt::Ident(..) | ast::Stmt::Member(..) => {
+            let typ::Value::Invocation(invocation) = stmt.annotation() else {
+                unreachable!("this statement should only pass typechecking as an invocation");
+            };
+            
+            translate_invocation(invocation, builder);
         }
 
-        syn::Stmt::LocalBinding(binding) => {
+        ast::Stmt::LocalBinding(binding) => {
             build_binding(binding, builder);
         },
 
-        syn::Stmt::Call(call) => {
+        ast::Stmt::Call(call) => {
             call::build_call(call, builder);
         },
 
-        syn::Stmt::Block(block) => {
+        ast::Stmt::Block(block) => {
             translate_block(block, ir::Ref::Discard, builder);
         },
 
-        syn::Stmt::Exit(exit) => {
+        ast::Stmt::Exit(exit) => {
             translate_exit(exit, builder);
         },
 
-        syn::Stmt::ForLoop(for_loop) => {
+        ast::Stmt::ForLoop(for_loop) => {
             build_for_loop(for_loop, builder);
         },
 
-        syn::Stmt::WhileLoop(while_loop) => {
+        ast::Stmt::WhileLoop(while_loop) => {
             translate_while_loop(while_loop, builder);
         },
 
-        syn::Stmt::Assignment(assignment) => {
+        ast::Stmt::Assignment(assignment) => {
             translate_assignment(assignment, builder);
         },
 
-        syn::Stmt::CompoundAssignment(assignment) => {
+        ast::Stmt::CompoundAssignment(assignment) => {
             translate_compound_assignment(assignment, builder);
         },
 
-        syn::Stmt::If(if_stmt) => {
+        ast::Stmt::If(if_stmt) => {
             translate_if_cond_stmt(if_stmt, builder);
         },
 
-        syn::Stmt::Raise(raise) => {
+        ast::Stmt::Raise(raise) => {
             translate_raise(raise, builder);
         },
 
-        syn::Stmt::Break(_) => {
+        ast::Stmt::Break(_) => {
             builder.break_loop();
         },
 
-        syn::Stmt::Continue(_) => {
+        ast::Stmt::Continue(_) => {
             builder.continue_loop();
         },
 
-        syn::Stmt::Case(case) => {
+        ast::Stmt::Case(case) => {
             translate_case_stmt(case, builder);
         },
 
-        syn::Stmt::Match(match_stmt) => {
+        ast::Stmt::Match(match_stmt) => {
             translate_match_stmt(match_stmt, builder);
         },
     }
@@ -104,11 +107,11 @@ fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut Builder) {
 
 pub fn build_for_loop(for_loop: &typ::ast::ForLoop, builder: &mut Builder) {
     match &for_loop.range {
-        ForLoopRange::UpTo(range) => {
+        ast::ForLoopRange::UpTo(range) => {
             build_for_loop_up_to(range, &for_loop.body, builder);
         }
 
-        ForLoopRange::InSequence(range) => {
+        ast::ForLoopRange::InSequence(range) => {
             build_for_loop_sequence(range, &for_loop.body, builder);
         }
     }
@@ -121,7 +124,7 @@ fn build_for_loop_up_to(
 ) {
     builder.scope(|builder| {
         let (counter_val, counter_init_val, counter_ty) = match &range.init {
-            syn::ForLoopCounterInit::Assignment { counter, value, .. } => {
+            ast::ForLoopCounterInit::Assignment { counter, value, .. } => {
                 let counter_ty = builder.translate_type(counter.annotation().ty().as_ref());
 
                 let counter_ref = translate_expr(counter, builder);
@@ -130,7 +133,7 @@ fn build_for_loop_up_to(
                 (counter_ref, init_val, counter_ty)
             }
 
-            syn::ForLoopCounterInit::Binding { name, init, ty, .. } => {
+            ast::ForLoopCounterInit::Binding { name, init, ty, .. } => {
                 let counter_binding_name = name.to_string();
                 let counter_ty = builder.translate_type(ty.ty());
 
@@ -509,16 +512,16 @@ pub fn translate_compound_assignment(
 
         let op_result = builder.local_temp(lhs_ty.clone());
         match assignment.op {
-            syn::CompoundAssignmentOperator::AddAssign => {
+            ast::CompoundAssignmentOperator::AddAssign => {
                 builder.add(op_result.clone(), lhs.clone(), rhs.clone())
             },
-            syn::CompoundAssignmentOperator::SubAssign => {
+            ast::CompoundAssignmentOperator::SubAssign => {
                 builder.sub(op_result.clone(), lhs.clone(), rhs.clone())
             }
-            syn::CompoundAssignmentOperator::MulAssign => {
+            ast::CompoundAssignmentOperator::MulAssign => {
                 builder.mul(op_result.clone(), lhs.clone(), rhs.clone())
             }
-            syn::CompoundAssignmentOperator::FDivAssign => {
+            ast::CompoundAssignmentOperator::FDivAssign => {
                 builder.fdiv(op_result.clone(), lhs.clone(), rhs.clone())
             }
         };

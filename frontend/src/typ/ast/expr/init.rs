@@ -22,6 +22,10 @@ use terapascal_common::span::Spanned;
 pub fn expect_stmt_initialized(stmt: &Stmt, ctx: &Context) -> TypeResult<()> {
     match stmt {
         ast::Stmt::Ident(ident, annotation) => expect_ident_initialized(ident, annotation, ctx),
+        
+        ast::Stmt::Member(member) => {
+            expect_expr_initialized(&member.base, ctx)
+        }
 
         ast::Stmt::Call(call) => expect_call_initialized(call, ctx),
 

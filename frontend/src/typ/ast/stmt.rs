@@ -7,9 +7,12 @@ use crate::ast::Ident;
 use crate::ast::Operator;
 use crate::parse::IllegalStatement;
 use crate::typ::ast::cast::implicit_conversion;
+use crate::typ::ast::{evaluate_expr, member_value};
+use crate::typ::ast::evaluate_no_args_function_call;
 use crate::typ::ast::expr::typecheck_call;
 use crate::typ::ast::stmt::assign::typecheck_assignment;
 use crate::typ::ast::stmt::assign::typecheck_compound_assignment;
+use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_case_stmt;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_for_loop;
@@ -18,7 +21,6 @@ use crate::typ::ast::typecheck_match_stmt;
 use crate::typ::ast::typecheck_raise;
 use crate::typ::ast::typecheck_while_loop;
 use crate::typ::ast::Expr;
-use crate::typ::ast::{evaluate_no_args_function_call, typecheck_block};
 use crate::typ::typecheck_typename;
 use crate::typ::Binding;
 use crate::typ::Context;
@@ -37,6 +39,7 @@ use terapascal_common::span::Spanned;
 pub type LocalBinding = ast::LocalBinding<Value>;
 pub type Stmt = ast::Stmt<Value>;
 pub type Exit = ast::Exit<Value>;
+pub type MemberStmt = ast::MemberStmt<Value>;
 
 pub fn typecheck_local_binding(
     binding: &ast::LocalBinding<Span>,
@@ -51,8 +54,7 @@ pub fn typecheck_local_binding(
             },
 
             Some(val) => {
-                let val = typecheck_expr(val, &Type::Nothing, ctx)?
-                    .evaluate(&Type::Nothing, ctx)?;
+                let val = evaluate_expr(val, &Type::Nothing, ctx)?;
 
                 let val_ty = val.annotation().ty().into_owned();
                 (Some(val), TypeName::inferred(val_ty))
@@ -70,7 +72,7 @@ pub fn typecheck_local_binding(
 
             let val = match &binding.val {
                 Some(val) => {
-                    let val = typecheck_expr(val, explicit_ty.ty(), ctx)?;
+                    let val = evaluate_expr(val, explicit_ty.ty(), ctx)?;
 
                     let val = implicit_conversion(val, explicit_ty.ty(), ctx)
                         .map_err(|err| match err {
@@ -88,8 +90,6 @@ pub fn typecheck_local_binding(
 
                             err => err,
                         })?;
-
-                    let val = val.evaluate(explicit_ty.ty(), ctx)?;
                     
                     Some(val)
                 },
@@ -152,6 +152,24 @@ pub fn typecheck_stmt(
         ast::Stmt::Ident(ident, span) => {
             // a statement consisting of a single ident MUST be a call to a function without args
             typecheck_ident_stmt(ident, span, ctx)
+        }
+        
+        ast::Stmt::Member(member) => {
+            let base = evaluate_expr(&member.base, expect_ty, ctx)?;
+
+            let value = member_value(
+                &base,
+                &member.name,
+                &member.annotation,
+                expect_ty,
+                ctx
+            )?;
+            
+            Ok(Stmt::Member(MemberStmt {
+                annotation: value,
+                base: Box::new(base),
+                name: member.name.clone(),
+            }))
         }
 
         ast::Stmt::LocalBinding(binding) => {

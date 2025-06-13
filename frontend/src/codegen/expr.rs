@@ -3,9 +3,9 @@ pub mod op;
 pub mod ctor;
 pub mod cond;
 
+use crate::ast;
 use crate::codegen::expr::call::translate_invocation;
 use crate::codegen::ir;
-use crate::codegen::syn;
 use crate::codegen::translate_stmt;
 use crate::codegen::typ;
 use crate::codegen::Builder;
@@ -13,7 +13,6 @@ use crate::typ::TypedValue;
 use crate::typ::STRING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
 use std::rc::Rc;
-use syn::Ident;
 use terapascal_common::span::*;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
@@ -42,33 +41,33 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
         
         typ::Value::Typed(..) => {
             match expr {
-                syn::Expr::Literal(lit) => {
+                ast::Expr::Literal(lit) => {
                     translate_literal(&lit.literal, &lit.annotation.ty(), builder)
                 },
 
-                syn::Expr::BinOp(bin_op) => {
+                ast::Expr::BinOp(bin_op) => {
                     op::translate_bin_op(bin_op, &bin_op.annotation.ty(), builder)
                 },
 
-                syn::Expr::UnaryOp(unary_op) => {
+                ast::Expr::UnaryOp(unary_op) => {
                     op::translate_unary_op(unary_op, &unary_op.annotation.ty(), builder)
                 },
 
-                syn::Expr::Ident(ident, annotation) => translate_ident_expr(ident, annotation, builder),
+                ast::Expr::Ident(ident, annotation) => translate_ident_expr(ident, annotation, builder),
 
-                syn::Expr::Call(call) => {
+                ast::Expr::Call(call) => {
                     // eprintln!("translating call @ {}", call.span());
                     call::build_call(call, builder).expect("call used in expr must have a return value")
                 },
 
-                syn::Expr::ObjectCtor(ctor) => ctor::translate_object_ctor(ctor, builder),
+                ast::Expr::ObjectCtor(ctor) => ctor::translate_object_ctor(ctor, builder),
 
-                syn::Expr::CollectionCtor(ctor) => ctor::translate_collection_ctor(ctor, builder),
+                ast::Expr::CollectionCtor(ctor) => ctor::translate_collection_ctor(ctor, builder),
 
-                syn::Expr::IfCond(if_cond) => translate_if_cond_expr(if_cond, builder)
+                ast::Expr::IfCond(if_cond) => translate_if_cond_expr(if_cond, builder)
                     .expect("conditional used in expr must have a type"),
 
-                syn::Expr::Block(block) => {
+                ast::Expr::Block(block) => {
                     let out_ty = match &block.output {
                         Some(output_expr) => builder.translate_type(&output_expr.annotation().ty()),
                         None => panic!("block used in expr must have a type"),
@@ -79,20 +78,20 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
                     out_ref
                 },
 
-                syn::Expr::Raise(raise) => translate_raise(raise, builder),
-                syn::Expr::Exit(exit) => {
+                ast::Expr::Raise(raise) => translate_raise(raise, builder),
+                ast::Expr::Exit(exit) => {
                     translate_exit(exit, builder);
                     ir::Ref::Discard
                 },
 
-                syn::Expr::Case(case) => cond::translate_case_expr(case, builder),
-                syn::Expr::Match(match_expr) => cond::translate_match_expr(match_expr, builder),
+                ast::Expr::Case(case) => cond::translate_case_expr(case, builder),
+                ast::Expr::Match(match_expr) => cond::translate_match_expr(match_expr, builder),
 
-                syn::Expr::Cast(cast) => translate_cast_expr(cast, builder),
+                ast::Expr::Cast(cast) => translate_cast_expr(cast, builder),
 
-                syn::Expr::AnonymousFunction(def) => builder.build_closure_expr(def),
+                ast::Expr::AnonymousFunction(def) => builder.build_closure_expr(def),
 
-                syn::Expr::ExplicitSpec(..) => unreachable!(),
+                ast::Expr::ExplicitSpec(..) => unreachable!(),
             }
         }
         
@@ -234,16 +233,16 @@ fn is_string_class(class: &typ::Symbol) -> bool {
 }
 
 pub fn literal_to_val(
-    lit: &syn::Literal<typ::Type>,
+    lit: &ast::Literal<typ::Type>,
     ty: &typ::Type,
     builder: &mut Builder,
 ) -> ir::Value {
     match lit {
-        syn::Literal::Nil => ir::Value::LiteralNull,
+        ast::Literal::Nil => ir::Value::LiteralNull,
 
-        syn::Literal::Boolean(b) => ir::Value::LiteralBool(*b),
+        ast::Literal::Boolean(b) => ir::Value::LiteralBool(*b),
 
-        syn::Literal::Integer(i) => match ty {
+        ast::Literal::Integer(i) => match ty {
             typ::Type::Primitive(typ::Primitive::Int8) => {
                 let val = i
                     .as_i8()
@@ -320,7 +319,7 @@ pub fn literal_to_val(
             _ => panic!("bad type for integer literal: {}", ty),
         },
 
-        syn::Literal::Real(r) => match ty {
+        ast::Literal::Real(r) => match ty {
             typ::Type::Primitive(typ::Primitive::Real32) => {
                 let val = r
                     .as_f32()
@@ -330,7 +329,7 @@ pub fn literal_to_val(
             _ => panic!("bad type for real literal: {}", ty),
         },
 
-        syn::Literal::String(s) => {
+        ast::Literal::String(s) => {
             match ty {
                 typ::Type::Class(class) if is_string_class(class) => {
                     let lit_id = builder.find_or_insert_string(s);
@@ -342,19 +341,19 @@ pub fn literal_to_val(
             }
         },
         
-        syn::Literal::TypeInfo(ty) => {
+        ast::Literal::TypeInfo(ty) => {
             let ty = builder.translate_type(ty);
             let type_info_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty));
             
             ir::Value::from(type_info_ref)
         }
 
-        syn::Literal::SizeOf(ty) => {
+        ast::Literal::SizeOf(ty) => {
             let ty = builder.translate_type(ty);
             ir::Value::SizeOf(ty)
         },
 
-        syn::Literal::DefaultValue(ty) => {
+        ast::Literal::DefaultValue(ty) => {
             let ir_ty = builder.translate_type(ty);
             match ir_ty {
                 ir::Type::Pointer(_)
@@ -395,7 +394,7 @@ pub fn literal_to_val(
 }
 
 pub fn translate_literal(
-    lit: &syn::Literal<typ::Type>,
+    lit: &ast::Literal<typ::Type>,
     ty: &typ::Type,
     builder: &mut Builder,
 ) -> ir::Ref {
@@ -449,7 +448,7 @@ fn gen_fill_byte(at: ir::Ref, at_ty: ir::Type, count: ir::Value, byte_val: ir::V
     builder.label(break_label);
 }
 
-fn translate_ident_expr(ident: &Ident, annotation: &typ::Value, builder: &mut Builder) -> ir::Ref {
+fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &mut Builder) -> ir::Ref {
     match annotation {
         typ::Value::Function(func) => {
             let func = builder.translate_func(&func.name, &func.sig, None);
@@ -500,7 +499,7 @@ fn translate_ident_expr(ident: &Ident, annotation: &typ::Value, builder: &mut Bu
     }
 }
 
-fn find_local_ref(ident: &Ident, builder: &Builder) -> Option<ir::Ref> {
+fn find_local_ref(ident: &ast::Ident, builder: &Builder) -> Option<ir::Ref> {
     let local = builder.find_local(ident.name.as_str())?;
     
     let value_ref = ir::Ref::Local(local.id());
@@ -544,7 +543,7 @@ pub fn translate_block(block: &typ::ast::Block, out_ref: ir::Ref, builder: &mut 
 }
 
 pub fn translate_exit(exit: &typ::ast::Exit, builder: &mut Builder) {
-    if let syn::Exit::WithValue { value_expr, .. } = exit {
+    if let ast::Exit::WithValue { value_expr, .. } = exit {
         let value_ty = builder.translate_type(&value_expr.annotation().ty());
         let value_val = translate_expr(value_expr, builder);
 
