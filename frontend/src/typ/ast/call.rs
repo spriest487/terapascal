@@ -322,10 +322,13 @@ fn typecheck_func_overload_call(
 
     match &overloaded.candidates[overload.selected_sig] {
         OverloadCandidate::Function { decl_name, decl, visibility } => {
+            let sig = overload.func_sig(&Type::Nothing, &overloaded.candidates);
+
             let func_val = FunctionValue::new(
                 decl_name.clone(),
                 *visibility,
                 decl.clone(),
+                sig,
                 target.span().clone(),
             );
             
@@ -611,25 +614,25 @@ fn typecheck_method_call(
 }
 
 fn typecheck_ufcs_invocation(
-    ufcs_call: &UfcsValue,
+    ufcs: &UfcsValue,
     rest_args: &[ast::Expr<Span>],
     type_args: Option<TypeArgList>,
     span: &Span,
     args_span: Option<&Span>,
     ctx: &mut Context,
 ) -> TypeResult<InvocationValue> {
-    if ufcs_call.visibility < Visibility::Interface
-        && !ctx.is_current_namespace_child(&ufcs_call.function_name.full_path) {
+    if ufcs.visibility < Visibility::Interface
+        && !ctx.is_current_namespace_child(&ufcs.function_name.full_path) {
         return Err(TypeError::NameNotVisible {
-            name: ufcs_call.function_name.full_path.clone(),
+            name: ufcs.function_name.full_path.clone(),
             span: span.clone(),
         });
     }
 
-    let mut specialized_call_args = args::specialize_call_args(
-        &ufcs_call.decl,
+    let mut specialized_call_args = specialize_call_args(
+        &ufcs.decl,
         &rest_args,
-        Some(&ufcs_call.self_arg),
+        Some(&ufcs.self_arg),
         type_args,
         &span,
         ctx,
@@ -643,17 +646,18 @@ fn typecheck_ufcs_invocation(
         ctx,
     )?;
     
-    let func_sym = ufcs_call.function_name
-        .clone()
-        .with_ty_args(specialized_call_args.type_args.clone());
+    let func_val = FunctionValue {
+        name: ufcs.function_name
+            .clone()
+            .with_ty_args(specialized_call_args.type_args.clone()),
+        span: span.clone(),
+        sig: Arc::new(specialized_call_args.sig),
+        decl: ufcs.decl.clone(),
+        visibility: ufcs.visibility,
+    };
 
     Ok(InvocationValue::Function {
-        function: Arc::new(FunctionValue::new(
-            func_sym,
-            ufcs_call.visibility,
-            ufcs_call.decl.clone(),
-            span.clone(),
-        )),
+        function: Arc::new(func_val),
         args: specialized_call_args.actual_args,
         args_span: args_span.cloned(),
         type_args: specialized_call_args.type_args,

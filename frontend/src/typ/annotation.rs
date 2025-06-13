@@ -589,7 +589,7 @@ impl fmt::Display for Value {
                 write!(f, "function {}", func.name)
             },
             Value::UfcsFunction(func) => {
-                write!(f, "function {}", func.function_name)
+                write!(f, "function (UFCS) {}", func.function_name)
             },
             Value::Invocation(invoked) => {
                 write!(f, "{invoked}")

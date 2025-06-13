@@ -40,12 +40,18 @@ pub struct FunctionValue {
 }
 
 impl FunctionValue {
-    pub fn new(name: Symbol, visibility: Visibility, decl: Arc<FunctionDecl>, span: Span) -> Self {
+    pub fn new(
+        name: Symbol,
+        visibility: Visibility,
+        decl: impl Into<Arc<FunctionDecl>>,
+        sig: impl Into<Arc<FunctionSig>>,
+        span: Span
+    ) -> Self {
         Self {
             name,
             visibility,
-            sig: Arc::new(decl.sig()),
-            decl,
+            sig: sig.into(),
+            decl: decl.into(),
             span,
         }
     }
@@ -120,13 +126,17 @@ impl FunctionValue {
                 .map_err(|e| TypeError::from_generic_err(e, span.clone()))?
                 .into_owned();
 
-            let spec_decl = specialize_func_decl(&self.decl, ty_args, ctx)
-                .map_err(|err| TypeError::from_generic_err(err, span.clone()))?;
+            // let spec_decl = specialize_func_decl(&self.decl, ty_args, ctx)
+            //     .map_err(|err| TypeError::from_generic_err(err, span.clone()))?;
+            let sig = specialize_func_decl(&self.decl, ty_args, ctx)
+                .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
+                .sig();
 
             let specialized_func_type = FunctionValue::new(
                 call_name,
                 self.visibility,
-                Arc::new(spec_decl),
+                self.decl.clone(),
+                sig,
                 self.span.clone(),
             );
 

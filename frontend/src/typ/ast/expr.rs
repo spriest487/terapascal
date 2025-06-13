@@ -130,6 +130,14 @@ pub fn const_eval_integer(expr: &Expr, ctx: &Context) -> TypeResult<EvaluatedCon
     }
 }
 
+pub fn evaluate_expr(
+    expr_node: &ast::Expr<Span>,
+    expect_ty: &Type,
+    ctx: &mut Context
+) -> TypeResult<Expr> {
+    typecheck_expr(expr_node, expect_ty, ctx)?.evaluate(expect_ty, ctx)
+}
+
 pub fn typecheck_expr(
     expr_node: &ast::Expr<Span>,
     expect_ty: &Type,
@@ -348,15 +356,18 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
                 let func_path = parent_path.to_namespace().child((*key).clone());
                 let func_sym = Symbol::from(func_path)
                     .with_ty_params(decl.name.type_params.clone());
+                
+                let sig = decl.sig();
 
-                FunctionValue::new(
+                Value::from(FunctionValue::new(
                     func_sym,
                     *visibility,
                     decl.clone(),
+                    sig,
                     span,
-                ).into()
+                ))
             } else {
-                let candidates = overloads
+                let candidates: Vec<_> = overloads
                     .iter()
                     .map(|overload| {
                         let func_sym = Symbol::from(func_path.clone())
@@ -369,13 +380,13 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
                         }
                     })
                     .collect();
-
-                OverloadValue {
+                
+                Value::from(OverloadValue {
                     span,
                     candidates,
                     self_arg: None,
                     sig: None,
-                }.into()
+                })
             }
         },
 

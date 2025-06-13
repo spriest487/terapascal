@@ -1,15 +1,15 @@
+use crate::ast;
 use crate::typ::ast::cast::implicit_conversion;
-use crate::typ::ast::typecheck_expr;
+use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::Expr;
 use crate::typ::Context;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
+use crate::Operator;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use crate::ast;
-use crate::Operator;
 
 pub type Assignment = ast::Assignment<Value>;
 pub type CompoundAssignment = ast::CompoundAssignment<Value>;
@@ -77,7 +77,7 @@ fn typecheck_operands(
     src_rhs: &ast::Expr<Span>,
     ctx: &mut Context,
 ) -> TypeResult<(Expr, Expr)> {
-    let lhs = typecheck_expr(&src_lhs, &Type::Nothing, ctx)?;
+    let lhs = evaluate_expr(&src_lhs, &Type::Nothing, ctx)?;
 
     // lhs must evaluate to a mutable typed value
     match lhs.annotation() {
@@ -99,7 +99,8 @@ fn typecheck_operands(
 
     let lhs_ty = lhs.annotation().ty();
 
-    let rhs = typecheck_expr(&src_rhs, &lhs_ty, ctx)?;
+    let rhs = evaluate_expr(&src_rhs, &lhs_ty, ctx)?;
+
     let rhs = implicit_conversion(rhs, &lhs_ty, ctx)
         .map_err(|err| match err {
             TypeError::TypeMismatch {

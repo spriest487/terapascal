@@ -388,13 +388,14 @@ fn desugar_string_concat(
             
             assert_eq!(1, concat_decls.len());
 
+            let concat_decl = &concat_decls[0];
             let concat_sym = Symbol::from(concat_path.clone());
 
-            
             let concat_func_val = FunctionValue::new(
                 concat_sym.clone(),
-                concat_decls[0].visiblity(),
-                concat_decls[0].decl().clone(),
+                concat_decl.visiblity(),
+                concat_decl.decl().clone(),
+                concat_decl.sig().clone(),
                 span.clone(),
             );
             
@@ -565,7 +566,7 @@ fn typecheck_type_member(
         },
         
         TypeMember::MethodGroup(group) => {
-            let candidates = group
+            let candidates: Vec<_> = group
                 .into_iter()
                 .map(|method_group_item| {
                     OverloadCandidate::Method { 
@@ -628,21 +629,21 @@ pub fn typecheck_member_value(
 
         InstanceMember::UFCSCall { func_name, decl, visibility } => {
             // to be resolved later, presumably in a subsequent call
-            UfcsValue::new(
+            Value::from(UfcsValue::new(
                 func_name,
                 visibility,
                 lhs.clone(),
                 decl.clone(),
                 span.clone(),
-            ).into()
+            ))
         },
 
         InstanceMember::Overloaded { candidates } => {
-            OverloadValue::new(
+            Value::from(OverloadValue::new(
                 candidates,
                 Some(Box::new(lhs.clone())),
                 span.clone(),
-            ).into()
+            ))
         }
 
         InstanceMember::Field { ty: member_ty, access: field_access } => {
@@ -662,13 +663,12 @@ pub fn typecheck_member_value(
                 _ => value_kind,
             };
 
-            TypedValue {
+            Value::from(TypedValue {
                 ty: member_ty.clone(),
                 span: span.clone(),
                 value_kind,
                 decl: None,
-            }
-            .into()
+            })
         },
     };
 
