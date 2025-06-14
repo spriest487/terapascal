@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::typ::ast::implicit_conversion;
+use crate::typ::ast::{evaluate_expr, implicit_conversion};
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::ast::Expr;
@@ -145,13 +145,14 @@ pub fn typecheck_if_cond_expr(
 
     let mut then_ctx = create_then_branch_ctx(is_pattern.as_ref(), ctx)?;
 
-    let then_branch = typecheck_expr(&if_cond.then_branch, expect_ty, &mut then_ctx)?;
+    let then_branch = evaluate_expr(&if_cond.then_branch, expect_ty, &mut then_ctx)?;
+
     let else_branch = match &if_cond.else_branch {
         Some(branch) => {
             let mut else_ctx = ctx.clone();
             let then_ty = then_branch.annotation().ty();
 
-            let else_expr = typecheck_expr(&branch.item, &then_ty, &mut else_ctx)?;
+            let else_expr = evaluate_expr(&branch.item, &then_ty, &mut else_ctx)?;
 
             let else_expr = match then_ty.as_ref() {
                 Type::Nothing => {

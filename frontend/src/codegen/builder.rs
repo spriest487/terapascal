@@ -5,19 +5,17 @@ mod test;
 
 use self::scope::*;
 use crate::ast as ast;
-use crate::ast::IdentPath;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::FunctionDefKey;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::*;
-use crate::codegen::FunctionInstance;
 use crate::codegen::CodegenOpts;
+use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
 use crate::ir::*;
 use crate::typ as typ;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
-use ast::Ident;
 use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;
@@ -75,7 +73,7 @@ impl<'m> Builder<'m> {
     pub fn translate_variant_case<'ty>(
         &'ty mut self,
         variant: &typ::Symbol,
-        case: &Ident,
+        case: &str,
     ) -> (TypeDefID, usize, Option<&'ty Type>) {
         let name_path = self.translate_name(variant);
 
@@ -87,7 +85,7 @@ impl<'m> Builder<'m> {
         let case_index = variant_struct
             .cases
             .iter()
-            .position(|c| c.name == *case.name);
+            .position(|c| c.name.as_str() == case);
 
         match case_index {
             Some(index) => (id, index, variant_struct.cases[index].ty.as_ref()),
@@ -1080,7 +1078,7 @@ impl<'m> Builder<'m> {
             .find_map(|scope| scope.local_by_name(name))
     }
     
-    pub fn find_global_var(&self, name_path: &IdentPath) -> Option<VariableID> {
+    pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {
         self.library.find_global_var(name_path)
     }
 

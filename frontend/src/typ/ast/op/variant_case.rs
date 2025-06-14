@@ -2,16 +2,10 @@ use crate::ast::MethodOwner;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::overload::OverloadValue;
 use crate::typ::Context;
-use crate::typ::GenericError;
-use crate::typ::GenericTarget;
-use crate::typ::GenericTypeHint;
-use crate::typ::InvocationValue;
 use crate::typ::NameError;
-use crate::typ::Specializable;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
-use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::VariantCaseValue;
@@ -88,67 +82,4 @@ pub fn typecheck_variant_type_member(
             sig: known_sig,
         })))
     }
-}
-
-pub fn try_expr_into_noargs_variant_ctor(
-    case_val: &VariantCaseValue,
-    expect_ty: &Type,
-    ctx: &Context
-) -> TypeResult<Option<InvocationValue>> {
-    let mut variant_name = case_val.variant_name.clone();
-
-    // if the variant is generic, we have to be able to infer the type from the usage
-    if variant_name.is_unspecialized_generic() {
-        let inferred_name = match expect_ty {
-            Type::Variant(expect_name) => {
-                variant_name.infer_specialized_from_hint(expect_name).cloned()
-            }
-
-            _ => None,
-        };
-
-        match inferred_name {
-            None => {
-                let infer_err = GenericError::CannotInferArgs {
-                    target: GenericTarget::Name(variant_name.full_path.clone()),
-                    hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
-                };
-
-                return Err(TypeError::from_generic_err(infer_err, case_val.span.clone()));
-            }
-
-            Some(name) => {
-                variant_name = Arc::new(name);
-            }
-        }
-    }
-
-    // we don't need to specialize the def, we only need to check if the case has a data arg
-    let variant_def = ctx
-        .find_variant_def(&variant_name.full_path)
-        .map_err(|e| TypeError::from_name_err(e, case_val.span.clone()))?;
-
-    match variant_def.find_case(&case_val.case) {
-        None => return Ok(None),
-
-        Some(case) => {
-            if case.data.is_some() {
-                return Ok(None);
-            }
-        }
-    };
-
-    let variant_ty = Type::Variant(variant_name.clone());
-    
-    let invoke_variant_ctor = InvocationValue::VariantCtor {
-        variant_type: TypeName::Named {
-            ty: variant_ty,
-            span: case_val.variant_name_span.clone(),
-        },
-        span: case_val.span.clone(),
-        case: case_val.case.clone(),
-        arg: None,
-    };
-    
-    Ok(Some(invoke_variant_ctor))
 }

@@ -1,18 +1,19 @@
 use crate::ast;
 use crate::typ::ast::cast::implicit_conversion;
+use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::expr::expect_expr_initialized;
 use crate::typ::ast::expr::expect_stmt_initialized;
-use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::Context;
 use crate::typ::Environment;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use crate::typ::Value;
 use crate::typ::TypedValue;
+use crate::typ::Value;
 use crate::typ::ValueKind;
-use terapascal_common::span::{Span, Spanned};
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub type Block = ast::Block<Value>;
 
@@ -40,9 +41,11 @@ pub fn typecheck_block(
                 // the final stmt here into an expr
                 match stmt.to_expr() {
                     Some(src_output_stmt_expr) => {
-                        let mut output_stmt_expr = typecheck_expr(&src_output_stmt_expr, expect_ty, ctx)?;
+                        let mut output_stmt_expr =
+                            evaluate_expr(&src_output_stmt_expr, expect_ty, ctx)?;
                         if *expect_ty != Type::Nothing {
-                            output_stmt_expr = implicit_conversion(output_stmt_expr, expect_ty, ctx)?;
+                            output_stmt_expr =
+                                implicit_conversion(output_stmt_expr, expect_ty, ctx)?;
                         }
 
                         output = Some(output_stmt_expr);
@@ -77,8 +80,8 @@ pub fn typecheck_block(
                 Err(TypeError::InvalidStatement(invalid)) if allow_output_expr => {
                     let expr = *invalid.0;
                     output = Some(expr);
-                }
-                
+                },
+
                 Err(err) => return Err(err),
             }
         }
@@ -91,7 +94,7 @@ pub fn typecheck_block(
             // we should not have tried to interpret any statements as output expressions
             assert_eq!(None, output);
 
-            let mut out_expr = typecheck_expr(src_output_expr, expect_ty, ctx)?;
+            let mut out_expr = evaluate_expr(src_output_expr, expect_ty, ctx)?;
             if *expect_ty != Type::Nothing && !expect_ty.contains_unresolved_params(ctx) {
                 out_expr = implicit_conversion(out_expr, expect_ty, ctx)?;
             } else {
@@ -118,7 +121,7 @@ pub fn typecheck_block(
                         span,
                         decl: None,
                     }
-                        .into()
+                    .into()
                 }
             },
             None => Value::Untyped(span),
@@ -136,13 +139,10 @@ pub fn typecheck_block(
         };
 
         assert_eq!(*block.annotation.ty(), {
-            let out_ty = block
-                .output
-                .as_ref()
-                .map(|o| o.annotation().ty().into_owned());
+            let out_ty = block.output.as_ref().map(|o| o.annotation().ty().into_owned());
             out_ty.unwrap_or(Type::Nothing)
         });
-        
+
         Ok(block)
     })
 }

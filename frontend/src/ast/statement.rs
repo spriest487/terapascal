@@ -6,14 +6,13 @@ mod exit;
 mod local_binding;
 mod member;
 
-pub use self::member::MemberStmt;
 pub use self::assign::Assignment;
 pub use self::assign::CompoundAssignment;
 pub use self::exit::Exit;
 pub use self::local_binding::LocalBinding;
+pub use self::member::MemberStmt;
 use crate::ast::case::CaseBlock;
 use crate::ast::case::CaseStmt;
-use crate::ast::Annotation;
 use crate::ast::Block;
 use crate::ast::Call;
 use crate::ast::ElseBranch;
@@ -24,6 +23,7 @@ use crate::ast::IfCond;
 use crate::ast::MatchStmt;
 use crate::ast::Raise;
 use crate::ast::WhileLoop;
+use crate::ast::Annotation;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -119,7 +119,11 @@ impl Stmt<Span> {
     pub fn to_expr(&self) -> Option<Expr<Span>> {
         match self {
             Stmt::Ident(ident, span) => Some(Expr::Ident(ident.clone(), span.clone())),
-
+            
+            Stmt::Member(member_val) => {
+                Some(Expr::from(member_val.clone().into_bin_op()))
+            }
+            
             Stmt::Call(call) => {
                 match call.as_ref() {
                     call_func @ Call::Function(..) => {
@@ -208,6 +212,7 @@ impl Stmt<Span> {
                         annotation: bin_op.span().clone(),
                         base: Box::new(bin_op.lhs),
                         name: bin_op.rhs.into_ident().unwrap(),
+                        op_span: bin_op.op_span,
                     };
                     
                     Ok(Stmt::Member(member))

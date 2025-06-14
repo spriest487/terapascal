@@ -1004,7 +1004,7 @@ impl fmt::Display for TypeError {
             }
 
             TypeError::BlockOutputIsNotExpression { stmt, expected_expr_ty } => {
-                write!(f, "expected expr of type `{}` but found stmt `{}`", expected_expr_ty, stmt)
+                write!(f, "expected expression of type `{}` but found stmt `{}`", expected_expr_ty, stmt)
             }
 
             TypeError::InvalidBlockOutput(expr) => {

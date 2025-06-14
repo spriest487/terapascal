@@ -155,21 +155,7 @@ pub fn typecheck_stmt(
         }
         
         ast::Stmt::Member(member) => {
-            let base = evaluate_expr(&member.base, expect_ty, ctx)?;
-
-            let value = member_value(
-                &base,
-                &member.name,
-                &member.annotation,
-                expect_ty,
-                ctx
-            )?;
-            
-            Ok(Stmt::Member(MemberStmt {
-                annotation: value,
-                base: Box::new(base),
-                name: member.name.clone(),
-            }))
+            typecheck_member_stmt(member, expect_ty, ctx)?
         }
 
         ast::Stmt::LocalBinding(binding) => {
@@ -264,6 +250,25 @@ pub fn typecheck_stmt(
             Ok(ast::Stmt::Match(Box::new(match_stmt)))
         },
     }
+}
+
+fn typecheck_member_stmt(member: &ast::MemberStmt, expect_ty: &Type, ctx: &mut Context) -> Result<Result<Stmt, TypeError>, TypeError> {
+    let base = evaluate_expr(&member.base, expect_ty, ctx)?;
+
+    let value = member_value(
+        &base,
+        &member.name,
+        &member.annotation,
+        expect_ty,
+        ctx
+    )?;
+
+    Ok(Ok(Stmt::Member(MemberStmt {
+        annotation: value,
+        base: Box::new(base),
+        name: member.name.clone(),
+        op_span: member.op_span.clone(),
+    })))
 }
 
 fn typecheck_ident_stmt(ident: &Ident, span: &Span, ctx: &mut Context) -> TypeResult<Stmt> {

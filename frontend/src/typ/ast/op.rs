@@ -98,8 +98,8 @@ pub fn typecheck_bin_op(
         }
 
         _ => {
-            let mut lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
-            let mut rhs = typecheck_expr(&bin_op.rhs, &lhs.annotation().ty(), ctx)?;
+            let mut lhs = evaluate_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
+            let mut rhs = evaluate_expr(&bin_op.rhs, &lhs.annotation().ty(), ctx)?;
 
             // if both operands are strings, this will actually call System.StringConcat
             let string_ty = Type::class(builtin_string_name());
@@ -165,10 +165,10 @@ fn typecheck_logical_op(
 ) -> TypeResult<BinOp> {
     let bool_ty = Type::Primitive(Primitive::Boolean);
 
-    let lhs = typecheck_expr(&bin_op.lhs, &bool_ty, ctx)?;
+    let lhs = evaluate_expr(&bin_op.lhs, &bool_ty, ctx)?;
     lhs.annotation().expect_value(&bool_ty)?;
 
-    let rhs = typecheck_expr(&bin_op.rhs, &bool_ty, ctx)?;
+    let rhs = evaluate_expr(&bin_op.rhs, &bool_ty, ctx)?;
     rhs.annotation().expect_value(&bool_ty)?;
 
     let annotation = TypedValue {
@@ -193,10 +193,10 @@ fn typecheck_equality(
     span: Span,
     ctx: &mut Context,
 ) -> TypeResult<BinOp> {
-    let lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
+    let lhs = evaluate_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
     lhs.annotation().expect_any_value()?;
 
-    let rhs = typecheck_expr(&bin_op.rhs, &lhs.annotation().ty(), ctx)?;
+    let rhs = evaluate_expr(&bin_op.rhs, &lhs.annotation().ty(), ctx)?;
     rhs.annotation().expect_any_value()?;
 
     if !lhs.annotation().ty().equatable(&rhs.annotation().ty(), ctx.allow_unsafe()) {
@@ -225,10 +225,10 @@ fn typecheck_comparison(
     span: Span,
     ctx: &mut Context,
 ) -> TypeResult<BinOp> {
-    let lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
+    let lhs = evaluate_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
     lhs.annotation().expect_any_value()?;
     
-    let rhs = typecheck_expr(&bin_op.rhs, &lhs.annotation().ty(), ctx)?;
+    let rhs = evaluate_expr(&bin_op.rhs, &lhs.annotation().ty(), ctx)?;
     rhs.annotation().expect_value(&lhs.annotation().ty())?;
 
     if !lhs.annotation().ty().self_orderable() {
@@ -263,7 +263,7 @@ fn typecheck_bitwise_op(
         _ => expect_ty, 
     };
 
-    let lhs = typecheck_expr(&bin_op.lhs, expect_ty, ctx)?;
+    let lhs = evaluate_expr(&bin_op.lhs, expect_ty, ctx)?;
     lhs.annotation().expect_any_value()?;
     
     let lhs_ty = lhs.annotation().ty();
@@ -271,7 +271,7 @@ fn typecheck_bitwise_op(
     // for bitwise operations to make sense the lhs and rhs must be the exact same type so insert a
     // conversion here as necessary
     let rhs = implicit_conversion(
-        typecheck_expr(&bin_op.rhs, lhs_ty.as_ref(), ctx)?,
+        evaluate_expr(&bin_op.rhs, lhs_ty.as_ref(), ctx)?,
         lhs_ty.as_ref(),
         ctx,
     )?;

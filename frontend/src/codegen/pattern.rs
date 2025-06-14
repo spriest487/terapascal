@@ -92,8 +92,9 @@ pub fn translate_pattern_match(
             let variant = (**variant).clone()
                 .apply_type_args(builder.generic_context(), builder.generic_context());
 
-            let (struct_id, case_index, case_ty) =
-                builder.translate_variant_case(&variant, case);
+            let (struct_id, case_index, case_ty) = builder
+                .translate_variant_case(&variant, &case.name);
+
             let variant_ty = ir::Type::Variant(struct_id);
 
             let bindings = match data_binding {
@@ -133,7 +134,7 @@ pub fn translate_pattern_match(
 
         TypePattern::NegatedVariantCase { variant, case, .. } => {
             let (struct_id, case_index, _case_ty) =
-                builder.translate_variant_case(variant, case);
+                builder.translate_variant_case(variant, &case.name);
 
             let variant_ty = ir::Type::Variant(struct_id);
             let is = translate_is_variant(target_val.clone(), variant_ty, case_index, builder);

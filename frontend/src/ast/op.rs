@@ -57,7 +57,7 @@ impl<A: Annotation> Spanned for UnaryOp<A> {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct BinOp<A: Annotation> {
+pub struct BinOp<A: Annotation = Span> {
     pub lhs: Expr<A>,
     
     pub op: Operator,
