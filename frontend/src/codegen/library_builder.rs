@@ -268,8 +268,12 @@ impl LibraryBuilder {
                     Some(typ::Def::External(extern_decl)) => {
                         self.instantiate_func_external(&extern_decl, key.clone())
                     },
+                    
+                    Some(other) => {
+                        panic!("wrong kind of source def for function: {}", other.ident())
+                    }
 
-                    _ => panic!("missing source def for function {}", name),
+                    None => panic!("missing source def for function {}", name),
                 }
             },
 
