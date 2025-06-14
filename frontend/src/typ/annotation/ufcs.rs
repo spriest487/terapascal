@@ -71,11 +71,11 @@ impl UfcsValue {
             &self.span,
             ctx
         )?;
-        
+
         let func_value = FunctionValue {
             name: self.function_name.clone(),
             span: self.span.clone(),
-            sig: self.sig.clone(),
+            sig: Arc::new(args.sig.clone()),
             decl: self.decl.clone(),
             visibility: self.visibility.clone(),
         };

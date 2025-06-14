@@ -420,9 +420,15 @@ impl TypeError {
     }
     
     pub fn type_mismatch(expected: impl Into<Type>, actual: impl Into<Type>, span: Span) -> Self {
+        let expected = expected.into();
+        let actual = actual.into();
+        
+        // eprintln!("expect: {:#?}", expected);
+        // eprintln!("actual: {:#?}", actual);
+
         TypeError::TypeMismatch {
-            expected: expected.into(),
-            actual: actual.into(),
+            expected,
+            actual,
             span,
         }
     }

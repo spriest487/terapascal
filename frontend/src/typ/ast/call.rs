@@ -5,8 +5,8 @@ mod args;
 
 use crate::ast;
 use crate::ast::Visibility;
+use crate::typ::annotation::UfcsValue;
 use crate::typ::ast::cast::implicit_conversion;
-use crate::typ::ast::specialize_func_decl;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::function::FunctionValue;
@@ -25,7 +25,6 @@ use crate::typ::TypeArgList;
 use crate::typ::TypeError;
 use crate::typ::TypeName;
 use crate::typ::TypeResult;
-use crate::typ::annotation::UfcsValue;
 use crate::typ::Value;
 pub use args::*;
 pub use overload::*;
