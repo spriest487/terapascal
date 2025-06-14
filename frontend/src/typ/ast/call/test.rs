@@ -9,7 +9,7 @@ use crate::typ::ast::call::test::util::{candidates_from_src, type_args_from_str}
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
 use crate::typ::test::try_module_from_srcs;
-use crate::typ::Type;
+use crate::typ::{InvocationValue, Type};
 use crate::typ::TypeError;
 use crate::typ::Value;
 use crate::typ::Primitive;
@@ -213,19 +213,26 @@ fn specializes_method_call_by_arg_ty() {
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[2].as_call() {
-        Some(ast::Call::Method(method_call)) => {
-            assert_eq!("instance", method_call.args[0].to_string());
-            assert_eq!("Test.C", method_call.args[0].annotation().ty().to_string());
+        Some(ast::Call::Function(call)) => {
+            assert_eq!("instance", call.args[0].to_string());
+            assert_eq!("Test.C", call.args[0].annotation().ty().to_string());
 
-            assert_eq!("arg", method_call.args[1].to_string());
-            assert_eq!("Test.B", method_call.args[1].annotation().ty().to_string());
+            assert_eq!("arg", call.args[1].to_string());
+            assert_eq!("Test.B", call.args[1].annotation().ty().to_string());
 
-            assert_eq!("A", method_call.method_name.to_string());
-            assert_eq!("Test.C", method_call.iface_type.to_string());
+            assert_eq!("A", call.target.to_string());
+            
+            match call.annotation.as_invocation() {
+                Some(InvocationValue::Method { method, .. }) => {
+                    assert_eq!("Test.C", method.self_ty.to_string());
+                }
+                
+                _ => panic!("expected method invocation"),
+            }
 
             assert_eq!(
                 "Test.B",
-                method_call.type_args.as_ref().unwrap().items[0].to_string()
+                call.type_args.as_ref().unwrap().items[0].to_string()
             );
         },
 
@@ -259,23 +266,30 @@ fn specializes_method_call_by_lambda_arg_ty() {
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].as_call() {
-        Some(ast::Call::Method(method_call)) => {
-            assert_eq!("instance", method_call.args[0].to_string());
-            assert_eq!("Test.C", method_call.args[0].annotation().ty().to_string());
+        Some(ast::Call::Function(call)) => {
+            assert_eq!("instance", call.args[0].to_string());
+            assert_eq!("Test.C", call.args[0].annotation().ty().to_string());
 
             assert_eq!(
                 "function: Test.B",
-                method_call.args[1].annotation().ty().to_string()
+                call.args[1].annotation().ty().to_string()
             );
 
-            assert_eq!("A", method_call.method_name.to_string());
-            assert_eq!("Test.C", method_call.iface_type.to_string());
+
+            match call.annotation.as_invocation() {
+                Some(InvocationValue::Method { method, .. }) => {
+                    assert_eq!("A", method.decl.func_decl.name.ident.name.as_str());
+                    assert_eq!("Test.C", method.self_ty.to_string());
+                }
+
+                _ => panic!("expected method invocation"),
+            }
 
             assert_eq!(
                 "Test.B",
-                method_call.type_args.as_ref().unwrap().items[0].to_string()
+                call.type_args.as_ref().unwrap().items[0].to_string()
             );
-        },
+        }
 
         other => panic!("expected call to A, got {:?}", other),
     }
@@ -307,23 +321,29 @@ fn specializes_method_call_by_dynarray_element_ty() {
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].as_call() {
-        Some(ast::Call::Method(method_call)) => {
-            assert_eq!("instance", method_call.args[0].to_string());
-            assert_eq!("Test.C", method_call.args[0].annotation().ty().to_string());
+        Some(ast::Call::Function(call)) => {
+            assert_eq!("instance", call.args[0].to_string());
+            assert_eq!("Test.C", call.args[0].annotation().ty().to_string());
 
             assert_eq!(
                 "array of Test.B",
-                method_call.args[1].annotation().ty().to_string()
+                call.args[1].annotation().ty().to_string()
             );
 
-            assert_eq!("A", method_call.method_name.to_string());
-            assert_eq!("Test.C", method_call.iface_type.to_string());
+            match call.annotation.as_invocation() {
+                Some(InvocationValue::Method { method, .. }) => {
+                    assert_eq!("A", method.decl.func_decl.name.ident.name.as_str());
+                    assert_eq!("Test.C", method.self_ty.to_string());
+                }
+
+                _ => panic!("expected method invocation"),
+            }
 
             assert_eq!(
                 "Test.B",
-                method_call.type_args.as_ref().unwrap().items[0].to_string()
+                call.type_args.as_ref().unwrap().items[0].to_string()
             );
-        },
+        }
 
         other => panic!("expected call to A, got {:?}", other),
     }

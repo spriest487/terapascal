@@ -454,6 +454,13 @@ impl Value {
         Ok(())
     }
 
+    pub fn as_invocation(&self) -> Option<&InvocationValue> {
+        match self {
+            Value::Invocation(invocation) => Some(invocation.as_ref()),
+            _ => None,
+        }
+    }
+
     pub fn as_const(&self) -> Option<&ConstValue> {
         match self {
             Value::Const(const_val) => Some(const_val.as_ref()),

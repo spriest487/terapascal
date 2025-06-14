@@ -1,12 +1,12 @@
 use crate::ast;
+use crate::ast::FunctionParamMod;
 use crate::ast::TypeConstraint;
 use crate::ast::TypeList;
-use crate::ast::FunctionParamMod;
-use crate::typ::ast::call;
 use crate::typ::ast::implicit_conversion;
-use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::{call, evaluate_expr};
+use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::GenericContext;
@@ -15,16 +15,15 @@ use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
 use crate::typ::Specializable;
 use crate::typ::Type;
+use crate::typ::TypeArgList;
 use crate::typ::TypeArgsResult;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
 use crate::typ::ValueKind;
-use crate::typ::Context;
-use crate::typ::TypeArgList;
-use crate::typ::TypeName;
 use terapascal_common::span::Span;
 
 pub struct SpecializedCallArgs {
@@ -288,7 +287,7 @@ pub fn specialize_call_args(
             let actual_arg = specialize_arg(
                 param_ty,
                 &mut inferred_ty_args,
-                |expect_ty, ctx| typecheck_expr(arg, expect_ty, ctx),
+                |expect_ty, ctx| evaluate_expr(arg, expect_ty, ctx),
                 span,
                 ctx,
             )?;

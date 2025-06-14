@@ -110,7 +110,6 @@ fn parse_invocation_with_type_args() {
                     }
                 }
             },
-            invalid => panic!("expected function call, got {:#?}", invalid)
         },
         invalid => panic!("expected call, got {:#?}", invalid)
     }

@@ -1,9 +1,10 @@
 use crate::ast::Visibility;
-use crate::typ::ast::infer_type_args;
+use crate::typ::annotation::invoke::InvocationValue;
 use crate::typ::ast::specialize_func_decl;
 use crate::typ::ast::validate_args;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::infer_type_args;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::GenericError;
@@ -19,7 +20,6 @@ use derivative::Derivative;
 use std::borrow::Cow;
 use std::sync::Arc;
 use terapascal_common::span::Span;
-use crate::typ::annotation::invoke::InvocationValue;
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Hash, Debug, PartialEq)]
@@ -86,6 +86,13 @@ impl FunctionValue {
         span: &Span,
         ctx: &mut Context,
     ) -> TypeResult<InvocationValue> {
+        self.check_visible(span, ctx)?;
+        
+        // eprintln!("creating invocation of {}", self.name);
+        // if let Some(args) = type_args {
+        //     eprintln!("\t type args: {}", args);
+        // }
+        
         let type_args = match (&self.decl.name.type_params, type_args) {
             (Some(params), None) => {
                 let args = infer_type_args(&self.sig.result_ty, expect_ty, params, &self.span, ctx)
@@ -116,8 +123,6 @@ impl FunctionValue {
 
         let mut args = args.to_vec();
         validate_args(&mut args, &self.sig.params, &span, ctx)?;
-
-        self.check_visible(&span, ctx)?;
 
         let func_val = if let Some(ty_args) = type_args.as_ref() {
             let call_name = self

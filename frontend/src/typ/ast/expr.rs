@@ -7,7 +7,7 @@ use crate::ast::IdentPath;
 pub use crate::typ::ast::call::typecheck_call;
 use crate::typ::ast::cast::typecheck_cast_expr;
 use crate::typ::ast::const_eval::ConstEval;
-use crate::typ::ast::typecheck_bin_op;
+use crate::typ::ast::{specialize_call_args, typecheck_bin_op};
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_case_expr;
 use crate::typ::ast::typecheck_collection_ctor;
@@ -59,12 +59,28 @@ impl Expr {
             
             // references to functions become no-args invocations when evaluated
             Value::Function(func) => {
-                let invocation = func.create_invocation(&[], None, None, expect_ty, &func.span, ctx)?;
+                let args = specialize_call_args(
+                    &func.decl,
+                    &[],
+                    None,
+                    None,
+                    &func.span,
+                    ctx
+                )?;
+                
+                let invocation = func.create_invocation(
+                    &args.actual_args,
+                    None,
+                    args.type_args.as_ref(),
+                    expect_ty,
+                    &func.span,
+                    ctx
+                )?;
                 *self.annotation_mut() = Value::from(invocation);
             }
 
             Value::UfcsFunction(ufcs) => {
-                let invocation = ufcs.create_invocation(&[], None, None, expect_ty, &ufcs.span, ctx)?;
+                let invocation = ufcs.create_zero_args_invocation(expect_ty, &ufcs.span, ctx)?;
                 *self.annotation_mut() = Value::from(invocation);
             }
 

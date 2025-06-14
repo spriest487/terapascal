@@ -1,17 +1,16 @@
 use crate::ast::Visibility;
-use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::{specialize_call_args, Expr};
+use crate::typ::function::FunctionValue;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::InvocationValue;
 use crate::typ::Symbol;
 use crate::typ::Type;
-use crate::typ::TypeArgList;
 use crate::typ::TypeResult;
 use derivative::Derivative;
 use std::sync::Arc;
 use terapascal_common::span::Span;
-use crate::typ::function::FunctionValue;
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Hash, Debug, PartialEq)]
@@ -58,15 +57,21 @@ impl UfcsValue {
         self.decl.sig().should_call_noargs_in_expr(expect_ty, self_arg_ty.as_ref())
     }
 
-    pub fn create_invocation(
+    pub fn create_zero_args_invocation(
         &self,
-        args: &[Expr],
-        args_span: Option<&Span>,
-        type_args: Option<&TypeArgList>,
         expect_ty: &Type,
         span: &Span,
         ctx: &mut Context,
     ) -> TypeResult<InvocationValue> {
+        let args = specialize_call_args(
+            &self.decl,
+            &[],
+            Some(self.self_arg.as_ref()),
+            None,
+            &self.span,
+            ctx
+        )?;
+        
         let func_value = FunctionValue {
             name: self.function_name.clone(),
             span: self.span.clone(),
@@ -75,9 +80,6 @@ impl UfcsValue {
             visibility: self.visibility.clone(),
         };
 
-        let mut args = args.to_vec();
-        args.insert(0, (*self.self_arg).clone());
-
-        func_value.create_invocation(&args, args_span, type_args, expect_ty, span, ctx)
+        func_value.create_invocation(&args.actual_args, None, args.type_args.as_ref(), expect_ty, span, ctx)
     }
 }

@@ -5,8 +5,6 @@ use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_frontend::ast;
 pub use terapascal_frontend::ast::Annotation;
-use terapascal_frontend::ast::ConstExprValue;
-use terapascal_frontend::ast::DeclName;
 use terapascal_frontend::ast::FunctionName;
 use terapascal_frontend::ast::InterfaceDecl;
 use terapascal_frontend::ast::MemberDeclSection;
@@ -18,6 +16,7 @@ use terapascal_frontend::ast::TypeDeclItem;
 use terapascal_frontend::ast::TypeMemberDeclRef;
 use terapascal_frontend::ast::UnaryPosition;
 use terapascal_frontend::ast::VariantDecl;
+use terapascal_frontend::ast::{ConstExprValue, DeclName};
 use terapascal_frontend::Operator;
 use tower_lsp::lsp_types::SemanticToken;
 use tower_lsp::lsp_types::SemanticTokenType;
@@ -377,7 +376,8 @@ where
 
     fn add_stmt(&mut self, stmt: &ast::Stmt<A>) {
         match stmt {
-            ast::Stmt::Ident(_, value) => self.add_value(value),
+            ast::Stmt::Ident(_, value) => self.add_value(value, value.span()),
+            ast::Stmt::Member(member) => self.add_member_stmt(member),
             ast::Stmt::LocalBinding(binding) => self.add_local_binding(binding),
             ast::Stmt::Call(call) => self.add_call(call),
             ast::Stmt::Exit(exit) => self.add_exit(exit),
@@ -392,6 +392,11 @@ where
             ast::Stmt::Case(block) => self.add_case_block(block, Self::add_stmt),
             ast::Stmt::Match(block) => self.add_match_block(block, Self::add_stmt),
         }
+    }
+    
+    fn add_member_stmt(&mut self, member_stmt: &ast::MemberStmt<A>) {
+        self.add_expr(&member_stmt.base); 
+        self.add_value(&member_stmt.annotation, &member_stmt.name.span);
     }
 
     fn add_assignment(&mut self, assignment: &ast::Assignment<A>) {
@@ -610,7 +615,7 @@ where
             ast::Expr::BinOp(op) => self.add_bin_op(op),
             ast::Expr::UnaryOp(op) => self.add_unary_op(op),
             ast::Expr::Literal(item) => self.add_literal(item),
-            ast::Expr::Ident(_, value) => self.add_value(value),
+            ast::Expr::Ident(_, value) => self.add_value(value, value.span()),
             ast::Expr::Call(call) => self.add_call(call),
             ast::Expr::ObjectCtor(ctor) => self.add_object_ctor(ctor),
             ast::Expr::CollectionCtor(_) => {},
@@ -626,7 +631,7 @@ where
         }
     }
     
-    fn add_value(&mut self, _value: &A) {
+    fn add_value(&mut self, _value: &A, _display_span: &Span) {
         
     }
 

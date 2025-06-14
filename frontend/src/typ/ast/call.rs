@@ -187,14 +187,6 @@ fn typecheck_func_call(
     let target = typecheck_expr(&func_call.target, expect_ty, ctx)?;
 
     let invocation = match target.annotation() {
-        // when making a function call with an empty args list, and the target is a
-        // call to a no-args function, this "inner" call replaces the outer call entirely
-        // since the extra arg list is redundant
-        Value::Invocation(invocation)
-        if invocation.args().count() == 0 && func_call.args.is_empty() => {
-            invocation.clone()
-        }
-
         // value with function type (eg lambda, reference to function)
         Value::Typed(..) | Value::Invocation(..) => match target.annotation().ty().as_ref() {
             Type::Function(sig) => {
@@ -211,9 +203,31 @@ fn typecheck_func_call(
 
         // direct reference to function
         Value::Function(func) => {
-            func.check_visible(func_call.span(), ctx)?;
+            let span = func_call.span().clone();
 
-            typecheck_function_call_invocation(&func_call, func, None, expect_ty, ctx).map(Arc::new)?
+            let type_args = match func_call.type_args.as_ref() {
+                Some(call_type_args) => Some(typecheck_type_args(call_type_args, ctx)?),
+                None => None,
+            };
+
+            let specialized_call_args = specialize_call_args(
+                &func.decl,
+                &func_call.args,
+                None,
+                type_args,
+                &span,
+                ctx
+            )?;
+            
+            let mut func_val = (**func).clone();
+            func_val.sig = Arc::new(specialized_call_args.sig);
+
+            let args = &specialized_call_args.actual_args;
+            let args_span = func_call.args_span.as_ref();
+            let type_args = specialized_call_args.type_args.as_ref();
+
+            func_val.create_invocation(args, args_span, type_args, expect_ty, &span, ctx)
+                .map(Arc::new)?
         },
 
         // reference to non-method function via UFCS syntax
@@ -702,63 +716,6 @@ fn typecheck_func_value_invocation(
         args_span: func_call.args_span.clone(),
         sig: sig.clone(),
     })
-}
-
-pub(crate) fn typecheck_function_call_invocation(
-    func_call: &ast::FunctionCall<Span>,
-    func_val: &FunctionValue,
-    self_arg: Option<&Expr>,
-    expect_ty: &Type,
-    ctx: &mut Context,
-) -> TypeResult<InvocationValue> {
-    let span = func_call.span().clone();
-
-    let type_args = match func_call.type_args.as_ref() {
-        Some(call_type_args) => Some(typecheck_type_args(call_type_args, ctx)?),
-        None => None,
-    };
-
-    let specialized_call_args = specialize_call_args(
-        &func_val.decl,
-        &func_call.args,
-        self_arg,
-        type_args,
-        &span,
-        ctx
-    )?;
-    
-    let spec_func = match &specialized_call_args.type_args {
-        Some(actual_type_args) => {
-            let spec_decl = specialize_func_decl(&func_val.decl, actual_type_args, ctx)
-                .map(Arc::new)
-                .map_err(|err| TypeError::from_generic_err(err, span.clone()))?;
-
-            let spec_name = func_val.name
-                .clone()
-                .with_ty_args(Some(actual_type_args.clone()));
-
-            FunctionValue {
-                decl: spec_decl,
-                span: func_val.span.clone(),
-                sig: Arc::new(specialized_call_args.sig.clone()),
-                name: spec_name,
-                visibility: func_val.visibility,
-            }
-        },
-
-        None => func_val.clone(),
-    };
-
-    // eprintln!("{}: {:?}", func_call, specialized_call_args.type_args);
-
-    spec_func.create_invocation(
-        &specialized_call_args.actual_args,
-        func_call.args_span.as_ref(),
-        specialized_call_args.type_args.as_ref(),
-        expect_ty,
-        &span,
-        ctx
-    )
 }
 
 pub fn evaluate_no_args_function_call(func: &Arc<FunctionValue>) -> TypeResult<InvocationValue> {

@@ -15,7 +15,7 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::ValueKind;
-use crate::typ::{Context, InvocationValue};
+use crate::typ::Context;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -175,7 +175,10 @@ fn expect_call_initialized(call: &Call, ctx: &Context) -> TypeResult<()> {
                 panic!("value of call node `{}` is not an invocation (was: {})", call, call.annotation);
             };
             
-            let args = invocation.args();
+            let args: Vec<_> = invocation
+                .args()
+                .cloned()
+                .collect();
 
             // if calling a function or method with a full signature, we need to use that to 
             // properly ignore out params. ctor calls don't have out params so we can just
@@ -183,20 +186,20 @@ fn expect_call_initialized(call: &Call, ctx: &Context) -> TypeResult<()> {
             if let Some(sig) = invocation.sig() {
                 assert_eq!(
                     sig.params.len(),
-                    call.args.len(),
+                    args.len(),
                     "function call with wrong number of args shouldn't pass type checking. got:\n{}\nexpected:\n{} @ {}",
-                    call.args.iter().map(Expr::to_string).collect::<Vec<_>>().join("; "),
+                    args.iter().map(Expr::to_string).collect::<Vec<_>>().join("; "),
                     sig.params.iter().map(|param| param.ty.to_string()).collect::<Vec<_>>().join("; "),
                     Span::range(&call.args).map(|span| format!("{} {}-{}", span.file.display(), span.start, span.end)).unwrap_or_else(|| "<none>".to_string()),
                 );
 
-                for (arg, param) in call.args.iter().zip(sig.params.iter()) {
+                for (arg, param) in args.iter().zip(sig.params.iter()) {
                     if param.modifier != Some(FunctionParamMod::Out) {
                         expect_expr_initialized(arg, ctx)?;
                     }
                 }
             } else {
-                for arg in &call.args {
+                for arg in &args {
                     expect_expr_initialized(arg, ctx)?;
                 }
             }
