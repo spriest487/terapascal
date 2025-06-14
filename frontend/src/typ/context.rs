@@ -1286,7 +1286,9 @@ impl Context {
     }
 
     pub fn find_def(&self, name: &IdentPath, def_key: &DefKey) -> Option<&Def> {
-        self.defs.get(name).and_then(|overloads| overloads.get(def_key))
+        let candidates = self.defs.get(name)?; 
+        
+        candidates.get(def_key)
     }
 
     pub fn find_type_def(&self, name: &IdentPath) -> Option<&Def> {
