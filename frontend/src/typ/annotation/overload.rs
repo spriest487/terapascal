@@ -98,6 +98,8 @@ impl OverloadValue {
                     sig: Arc::new(sig),
                     span: self.span.clone(),
                 };
+                
+                // eprintln!("overloaded invocation of `{}` with {} args (self arg? {})", decl, resolved.args.len(), self.self_arg.is_some());
 
                 Ok(InvocationValue::Function {
                     function: Arc::new(func_val),

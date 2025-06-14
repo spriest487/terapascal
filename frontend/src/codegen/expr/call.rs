@@ -390,8 +390,11 @@ pub fn translate_invocation(
             ..
         } => {
             let func = builder.translate_func(&function.name, &function.sig, type_args.clone());
+            let args: Vec<_> = invocation.args()
+                .cloned()
+                .collect();
 
-            build_func_invocation(invocation.args(), func, false, builder)
+            build_func_invocation(&args, func, false, builder)
         },
 
         InvocationValue::Method {
@@ -403,7 +406,11 @@ pub fn translate_invocation(
                 type_args.clone(),
             );
 
-            build_func_invocation(invocation.args(), func, true, builder)
+            let args: Vec<_> = invocation.args()
+                .cloned()
+                .collect();
+
+            build_func_invocation(&args, func, true, builder)
         },
 
         InvocationValue::VirtualMethod { method, .. } => {

@@ -171,23 +171,16 @@ fn expect_call_initialized(call: &Call, ctx: &Context) -> TypeResult<()> {
         Call::Function(call) => {
             expect_expr_initialized(&call.target, ctx)?;
             
-            // if calling a function or method, we need to skip any out params
-            let sig = match &call.annotation {
-                Value::Invocation(invocation) => match invocation.as_ref() {
-                    InvocationValue::Function { function, .. } => Some((*function.sig).clone()),
-                    InvocationValue::FunctionValue { sig, .. } => Some((**sig).clone()),
-                    InvocationValue::Method { method, .. }
-                    | InvocationValue::VirtualMethod { method, .. } => Some(method.decl.func_decl.sig()),
-                    
-                    InvocationValue::ObjectCtor { .. }
-                    | InvocationValue::VariantCtor { .. } => None,
-                }
-
-                _ => None,
+            let Value::Invocation(invocation) = &call.annotation else {
+                panic!("value of call node `{}` is not an invocation (was: {})", call, call.annotation);
             };
             
-            
-            if let Some(sig) = sig {
+            let args = invocation.args();
+
+            // if calling a function or method with a full signature, we need to use that to 
+            // properly ignore out params. ctor calls don't have out params so we can just
+            // check that each arg is initialized
+            if let Some(sig) = invocation.sig() {
                 assert_eq!(
                     sig.params.len(),
                     call.args.len(),

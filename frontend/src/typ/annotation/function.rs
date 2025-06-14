@@ -9,7 +9,6 @@ use crate::typ::FunctionSig;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
-use crate::typ::InvocationValue;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
@@ -20,6 +19,7 @@ use derivative::Derivative;
 use std::borrow::Cow;
 use std::sync::Arc;
 use terapascal_common::span::Span;
+use crate::typ::annotation::invoke::InvocationValue;
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Hash, Debug, PartialEq)]

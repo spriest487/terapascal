@@ -3,19 +3,18 @@ mod symbol;
 pub mod overload;
 pub mod method;
 pub mod function;
+mod ufcs;
 
 use crate::ast;
 use crate::ast::Annotation;
 use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
-use crate::ast::Visibility;
 pub use crate::typ::annotation::invoke::InvocationValue;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::Expr;
-use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::Literal;
 use crate::typ::function::FunctionValue;
 use crate::typ::method::MethodValue;
@@ -36,6 +35,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::sync::Arc;
 pub use symbol::*;
+pub use ufcs::*;
 use terapascal_common::span::*;
 
 #[derive(Clone, Eq, Derivative)]
@@ -326,52 +326,6 @@ pub struct ConstValue {
 impl From<ConstValue> for Value {
     fn from(a: ConstValue) -> Self {
         Value::Const(Arc::new(a))
-    }
-}
-
-#[derive(Eq, Clone, Derivative)]
-#[derivative(Hash, Debug, PartialEq)]
-pub struct UfcsValue {
-    pub function_name: Symbol,
-    pub visibility: Visibility,
-
-    pub self_arg: Box<Expr>,
-
-    pub decl: Arc<FunctionDecl>,
-    pub sig: Arc<FunctionSig>,
-
-    #[derivative(Debug = "ignore")]
-    #[derivative(Hash = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub span: Span,
-}
-
-impl UfcsValue {
-    pub fn new(
-        function_name: Symbol,
-        visibility: Visibility,
-        self_arg: Expr,
-        decl: Arc<FunctionDecl>,
-        span: Span,
-    ) -> Self {
-        Self {
-            self_arg: Box::new(self_arg),
-            function_name,
-            sig: Arc::new(decl.sig()),
-            decl,
-            visibility,
-            span,
-        }
-    }
-
-    pub fn func_ty(&self) -> Type {
-        Type::Function(self.sig.clone())
-    }
-
-    pub fn should_call_noargs_in_expr(&self, expect_ty: &Type) -> bool {
-        let self_arg_ty = self.self_arg.annotation().ty();
-
-        self.decl.sig().should_call_noargs_in_expr(expect_ty, self_arg_ty.as_ref())
     }
 }
 

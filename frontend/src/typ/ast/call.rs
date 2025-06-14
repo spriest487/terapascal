@@ -25,7 +25,7 @@ use crate::typ::TypeArgList;
 use crate::typ::TypeError;
 use crate::typ::TypeName;
 use crate::typ::TypeResult;
-use crate::typ::UfcsValue;
+use crate::typ::annotation::UfcsValue;
 use crate::typ::Value;
 pub use args::*;
 pub use overload::*;
@@ -190,8 +190,8 @@ fn typecheck_func_call(
         // when making a function call with an empty args list, and the target is a
         // call to a no-args function, this "inner" call replaces the outer call entirely
         // since the extra arg list is redundant
-        Value::Invocation(invocation) 
-        if invocation.args().is_empty() && func_call.args.is_empty() => {
+        Value::Invocation(invocation)
+        if invocation.args().count() == 0 && func_call.args.is_empty() => {
             invocation.clone()
         }
 
@@ -226,16 +226,13 @@ fn typecheck_func_call(
                 None => None,
             };
 
-            let typecheck_call = typecheck_ufcs_invocation(
-                ufcs_call,
-                &func_call.args,
-                call_ty_args,
-                func_call.annotation.span(),
-                func_call.args_span.as_ref(),
-                ctx,
-            );
+            let call_span = func_call.annotation.span();
+            
+            let args = &func_call.args;
+            let args_span = func_call.args_span.as_ref();
 
-            typecheck_call.map(Arc::new)?
+            typecheck_ufcs_invocation(ufcs_call, args, call_ty_args, call_span, args_span, ctx)
+                .map(Arc::new)?
         },
 
         // reference to an overloaded name that could resolve to a method, function or ufcs function
@@ -293,7 +290,7 @@ fn typecheck_func_call(
     Ok(FunctionCall {
         target,
         type_args: invocation.type_args().cloned(),
-        args: invocation.args().to_vec(),
+        args: invocation.args().cloned().collect(),
         args_span: invocation.args_span().cloned(),
         annotation: Value::Invocation(invocation),
     })
@@ -655,6 +652,8 @@ fn typecheck_ufcs_invocation(
         decl: ufcs.decl.clone(),
         visibility: ufcs.visibility,
     };
+    
+    // eprintln!("-- func invocation: {} with {} args", func_val.decl, specialized_call_args.actual_args.len());
 
     Ok(InvocationValue::Function {
         function: Arc::new(func_val),

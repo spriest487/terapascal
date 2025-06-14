@@ -63,12 +63,15 @@ impl Expr {
                 *self.annotation_mut() = Value::from(invocation);
             }
 
-            Value::UfcsFunction(_ufcs) => {
-                unimplemented!()
+            Value::UfcsFunction(ufcs) => {
+                let invocation = ufcs.create_invocation(&[], None, None, expect_ty, &ufcs.span, ctx)?;
+                *self.annotation_mut() = Value::from(invocation);
             }
+
             Value::Method(_method) => {
                 unimplemented!()
             }
+
             Value::VariantCase(case_val) => {
                 let invocation = case_val.create_ctor_invocation(
                     &[],
