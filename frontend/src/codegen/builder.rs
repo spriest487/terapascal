@@ -126,8 +126,8 @@ impl<'m> Builder<'m> {
 
     pub fn translate_func(
         &mut self,
-        func_name: &Symbol,
-        func_sig: &Arc<typ::FunctionSig>,
+        decl_name: &Symbol,
+        decl_sig: &Arc<typ::FunctionSig>,
         mut call_ty_args: Option<typ::TypeArgList>,
     ) -> FunctionInstance {
         if let Some(args_list) = &mut call_ty_args {
@@ -139,8 +139,8 @@ impl<'m> Builder<'m> {
         let mut key = FunctionDefKey {
             type_args: call_ty_args,
             decl_key: FunctionDeclKey::Function { 
-                name: func_name.full_path.clone(),
-                sig: func_sig.clone(),
+                name: decl_name.full_path.clone(),
+                sig: decl_sig.clone(),
             },
         };
 

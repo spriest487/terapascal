@@ -8,25 +8,23 @@ use bigdecimal::BigDecimal;
 use bigdecimal::Zero;
 use crate::ir;
 
-pub fn translate_object_ctor(ctor: &typ::ast::ObjectCtor, builder: &mut Builder) -> ir::Ref {
-    let object_ty = builder.translate_type(&ctor.annotation.ty());
+pub fn build_object_ctor_invocation(
+    object_ty: &typ::Type,
+    members: &[typ::ast::ObjectCtorMember],
+    builder: &mut Builder
+) -> ir::Ref {
+    let object_ty = builder.translate_type(object_ty);
 
     let struct_id = match &object_ty {
         ir::Type::RcPointer(ir::VirtualTypeID::Class(struct_id)) => *struct_id,
         ir::Type::Struct(struct_id) => *struct_id,
-        _ => panic!(
-            "type of object ctor expr `{}` must be a record or class",
-            ctor
-        ),
+        _ => panic!("type of object ctor expr must be a record or class"),
     };
 
     let struct_def = builder
         .get_struct(struct_id)
         .unwrap_or_else(|| {
-            panic!("target type {} referenced in object ctor must exist", ctor.type_expr
-                .as_ref()
-                .map(|expr| expr.to_string())
-                .unwrap_or_else(|| object_ty.to_string()))
+            panic!("target type {} referenced in object ctor must exist", object_ty)
         })
         .clone();
 
@@ -40,7 +38,7 @@ pub fn translate_object_ctor(ctor: &typ::ast::ObjectCtor, builder: &mut Builder)
     }
 
     builder.scope(|builder| {
-        for member in &ctor.args.members {
+        for member in members {
             let member_val = expr::translate_expr(&member.value, builder);
             let field_id = struct_def
                 .find_field(&member.ident.name)
@@ -72,6 +70,12 @@ pub fn translate_object_ctor(ctor: &typ::ast::ObjectCtor, builder: &mut Builder)
     });
 
     out_val
+}
+
+pub fn translate_object_ctor(ctor: &typ::ast::ObjectCtor, builder: &mut Builder) -> ir::Ref {
+    let object_ty = ctor.annotation.ty();
+    
+    build_object_ctor_invocation(object_ty.as_ref(), &ctor.args.members, builder)
 }
 
 pub fn translate_collection_ctor(ctor: &typ::ast::CollectionCtor, builder: &mut Builder) -> ir::Ref {

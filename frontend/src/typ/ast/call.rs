@@ -278,7 +278,7 @@ fn typecheck_func_call(
             Arc::new(InvocationValue::ObjectCtor {
                 span: ctor.annotation.clone(),
                 type_args,
-                args: Vec::new(),
+                members: Vec::new(),
                 object_type, 
             })
         }

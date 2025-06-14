@@ -433,6 +433,13 @@ pub fn translate_invocation(
             build_variant_ctor_call(variant_type.ty(), case.as_str(), arg.as_ref(), builder)
         },
 
-        _ => unimplemented!(),
+        InvocationValue::ObjectCtor { object_type, members, .. } => {
+            let ctor_result = build_object_ctor_invocation(object_type.ty(), members.as_slice(), builder);
+            Some(ctor_result)
+        }
+
+        InvocationValue::FunctionValue { .. } => {
+            unimplemented!()
+        }
     }
 }

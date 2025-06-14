@@ -53,10 +53,7 @@ pub fn typecheck_object_ctor(
         span: span.clone(),
         object_type: ctor_ty.clone(),
         type_args: type_args.clone(),
-        args: args.members
-            .iter()
-            .map(|arg| arg.value.clone())
-            .collect(),
+        members: args.members.clone(),
     });
 
     Ok(ObjectCtor {
