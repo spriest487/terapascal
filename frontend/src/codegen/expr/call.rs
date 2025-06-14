@@ -7,6 +7,8 @@ use crate::typ::InvocationValue;
 use crate::typ::Specializable as _;
 use crate::typ::Value;
 use std::borrow::Cow;
+use std::sync::Arc;
+use crate::codegen::expr::ctor::build_object_ctor_invocation;
 
 fn translate_args(
     args: &[typ::ast::Expr],
@@ -389,7 +391,12 @@ pub fn translate_invocation(
             type_args,
             ..
         } => {
-            let func = builder.translate_func(&function.name, &function.sig, type_args.clone());
+            // eprintln!("translating func invocation of: {} ({})", function.name, function.sig);
+            
+            // this needs to be the name and signature *as declared*, not the invoked signature,
+            // so the function builder can apply the type args to the source type properly
+            let decl_sig = Arc::new(function.decl.sig());
+            let func = builder.translate_func(&function.name, &decl_sig, type_args.clone());
             let args: Vec<_> = invocation.args()
                 .cloned()
                 .collect();
