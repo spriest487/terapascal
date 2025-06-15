@@ -1,23 +1,22 @@
 use crate::ast;
-use crate::typ::ast::{evaluate_expr, implicit_conversion};
-use crate::typ::ast::typecheck_expr;
+use crate::ast::ElseBranch;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::ast::Expr;
 use crate::typ::ast::Stmt;
+use crate::typ::ast::{evaluate_expr, implicit_conversion};
 use crate::typ::Binding;
 use crate::typ::Context;
 use crate::typ::Primitive;
 use crate::typ::Type;
-use crate::typ::TypePattern;
 use crate::typ::TypeError;
+use crate::typ::TypePattern;
 use crate::typ::TypeResult;
-use crate::typ::Value;
 use crate::typ::TypedValue;
+use crate::typ::Value;
 use crate::typ::ValueKind;
+use std::borrow::Cow;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::borrow::Cow;
-use crate::ast::ElseBranch;
 
 pub type IfCond<B> = ast::IfCond<Value, B>;
 pub type IfCondExpression = ast::IfCond<Value, Expr>;
@@ -34,7 +33,7 @@ fn typecheck_cond_expr<B>(
         Type::Primitive(Primitive::Boolean)
     };
 
-    let cond = typecheck_expr(&if_cond.cond, &cond_expect_ty, ctx)?;
+    let cond = evaluate_expr(&if_cond.cond, &cond_expect_ty, ctx)?;
 
     // if there's no is-match, implicit conversion of the condition expr to bool
     let cond = match if_cond.is_pattern {

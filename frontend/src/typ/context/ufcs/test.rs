@@ -3,7 +3,7 @@ use crate::typ::context::ufcs::find_ufcs_free_functions;
 use crate::typ::test::try_unit_from_src;
 use crate::typ::test::unit_from_src;
 use crate::typ::test::units_from_src;
-use crate::typ::{InstanceMethod, NameError, TypeError, Value};
+use crate::typ::{InstanceMethod, InvocationValue, NameError, TypeError, Value};
 use crate::typ::Type;
 use crate::typ::SYSTEM_UNIT_NAME;
 
@@ -227,18 +227,20 @@ fn finds_func_in_its_own_body() {
         panic!("expected second item to be a function");
     };
     
-    let ast::Stmt::Call(call) = &def.body.stmts[0] else {
-        panic!("expected first statement to be a call");
+    let Value::Invocation(invocation) = def.body.stmts[0].annotation() else {
+        panic!("expected first statement to be an invocation");
     };
-    
-    let func_call = call.as_func_call().expect("expected function call");
-    assert_eq!("a.MyFunc", func_call.target.to_string());
-    
-    let Value::Function(func_val) = func_call.target.annotation() else {
-        panic!("expected function value");
-    };
-    
-    assert_eq!(func_val.name.to_string(), "Test.MyFunc");
+
+    match invocation.as_ref() {
+        InvocationValue::Function { function, args, .. } => {
+            assert_eq!("Test.MyFunc", function.name.to_string());
+            assert_eq!("a", args[0].to_string());
+        }
+        
+        _ => {
+            panic!("expected function invocation");
+        }
+    }
 }
 
 // all these tests should ignore any builtin UFCS candidates, we're only checking for the

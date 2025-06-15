@@ -185,6 +185,9 @@ fn typecheck_func_call(
 ) -> TypeResult<FunctionCall> {
     let target = typecheck_expr(&func_call.target, expect_ty, ctx)?;
 
+    // eprintln!("typechecking `{}`: target is {:#?}", func_call, target.annotation());
+    // eprintln!("\ttype args: {:?}", func_call.type_args);
+
     let invocation = match target.annotation() {
         // value with function type (eg lambda, reference to function)
         Value::Typed(..) | Value::Invocation(..) => match target.annotation().ty().as_ref() {
@@ -402,7 +405,7 @@ fn typecheck_func_overload_call(
             } else {
                 Ok(InvocationValue::Method {
                     method,
-                    type_args,
+                    type_args: overload.type_args,
                     args: args.collect(),
                     span: func_call.span().clone(),
                     args_span: func_call.args_span.clone(),

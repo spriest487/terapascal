@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::typ::ast::implicit_conversion;
+use crate::typ::ast::{evaluate_expr, implicit_conversion};
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::ast::Expr;
@@ -27,7 +27,7 @@ fn typecheck_match_cond<B>(
     match_block: &ast::MatchBlock<Span, B>,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
-    let cond_expr = typecheck_expr(&match_block.cond_expr, &Type::Nothing, ctx)?;
+    let cond_expr = evaluate_expr(&match_block.cond_expr, &Type::Nothing, ctx)?;
 
     let cond_ty = cond_expr.annotation().ty();
     if !cond_ty.is_matchable() {

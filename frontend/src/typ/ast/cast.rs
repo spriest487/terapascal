@@ -1,14 +1,14 @@
 use crate::ast;
-use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
+use crate::typ::ast::evaluate_expr;
 use crate::typ::typecheck_type;
 use crate::typ::Context;
 use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use crate::typ::Value;
 use crate::typ::TypedValue;
+use crate::typ::Value;
 use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
@@ -140,7 +140,7 @@ pub fn check_explicit_cast(
 
 pub fn typecheck_cast_expr(cast: &ast::Cast<Span>, ctx: &mut Context) -> TypeResult<Cast> {
     let cast_ty = typecheck_type(&cast.as_type, ctx)?;
-    let expr = typecheck_expr(&cast.expr, &cast_ty, ctx)?;
+    let expr = evaluate_expr(&cast.expr, &cast_ty, ctx)?;
 
     expr.annotation().expect_any_value()?;
 
