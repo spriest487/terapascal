@@ -146,7 +146,15 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
             type_args,
             ..
         } => {
-            // eprintln!("build_method_call: {} ({}){} = {}", method_call, method_call.iface_type, method_call.self_type, method_call.iface_method_index);
+            assert_eq!(
+                args.len(),
+                method.decl.func_decl.params.len(),
+                "argument count mismatch for {} at {}",
+                method.decl.func_decl.name,
+                method.span,
+            );
+            
+            // eprintln!("build_method_invocation: {} ({}) = {}", call, method.self_ty, method.index);
             build_method_invocation(
                 method.self_ty.ty().clone(),
                 method.self_ty.ty().clone(),
@@ -277,6 +285,13 @@ pub fn build_method_invocation(
 
     let method_decl_sig = method_decl.func_decl.sig().with_self(&self_ty);
 
+    assert_eq!(
+        args.len(), 
+        method_decl_sig.params.len(), 
+        "argument count mismatch for {}",
+        method_decl.func_decl.name, 
+    );
+
     let call_generic_ctx = if let Some(ty_args_list) = &ty_args {
         let ty_params_list = method_decl
             .func_decl
@@ -364,6 +379,8 @@ fn build_func_invocation(
     is_instance_method: bool,
     builder: &mut Builder
 ) -> Option<ir::Ref> {
+    assert_eq!(args.len(), func.sig.params.len(), "argument count mismatch");
+    
     let result = if func.sig.result_ty == typ::Type::Nothing {
         None
     } else {
@@ -406,13 +423,21 @@ pub fn translate_invocation(
         },
 
         InvocationValue::Method {
-            method, args, type_args, ..
+            method, args, type_args, .. 
         } => {
+            assert_eq!(
+                args.len(),
+                method.decl.func_decl.params.len(),
+                "argument count mismatch for {} at {}",
+                method.decl.func_decl.name,
+                method.span,
+            );
+            
             build_method_invocation(
                 method.self_ty.ty().clone(),
                 method.self_ty.ty().clone(),
                 method.index,
-                args,
+                args.as_slice(),
                 type_args.clone(),
                 builder,
             )

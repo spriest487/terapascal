@@ -187,10 +187,21 @@ fn expect_call_initialized(call: &Call, ctx: &Context) -> TypeResult<()> {
                 assert_eq!(
                     sig.params.len(),
                     args.len(),
-                    "function call with wrong number of args shouldn't pass type checking. got:\n{}\nexpected:\n{} @ {}",
-                    args.iter().map(Expr::to_string).collect::<Vec<_>>().join("; "),
-                    sig.params.iter().map(|param| param.ty.to_string()).collect::<Vec<_>>().join("; "),
-                    Span::range(&call.args).map(|span| format!("{} {}-{}", span.file.display(), span.start, span.end)).unwrap_or_else(|| "<none>".to_string()),
+                    "function call to {} with wrong number of args shouldn't pass type checking. got:\n{}\nexpected:\n{} @ {}",
+                    call.target,
+                    args
+                        .iter()
+                        .map(Expr::to_string)
+                        .collect::<Vec<_>>()
+                        .join("; "),
+                    sig.params
+                        .iter()
+                        .map(|param| param.ty.to_string())
+                        .collect::<Vec<_>>()
+                        .join("; "),
+                    Span::range(&call.args)
+                        .map(|span| format!("{} {}-{}", span.file.display(), span.start, span.end))
+                        .unwrap_or_else(|| "<none>".to_string()),
                 );
 
                 for (arg, param) in args.iter().zip(sig.params.iter()) {

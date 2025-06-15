@@ -119,6 +119,10 @@ impl OverloadValue {
                 let self_ty = TypeName::inferred(self_ty.clone());
 
                 let sig = resolved.func_sig(self_ty.ty(), &self.candidates);
+                let args = resolved.args;
+                let type_args = resolved.type_args;
+                
+                assert_eq!(args.len(), sig.params.len());
 
                 let method_val = MethodValue {
                     self_ty,
@@ -131,10 +135,10 @@ impl OverloadValue {
 
                 Ok(InvocationValue::Method {
                     method: Arc::new(method_val),
-                    args: resolved.args,
+                    args,
                     args_span: args_span.cloned(),
                     span: span.clone(),
-                    type_args: resolved.type_args,
+                    type_args,
                 })
             },
         }

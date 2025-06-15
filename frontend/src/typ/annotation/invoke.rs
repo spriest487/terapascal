@@ -32,6 +32,9 @@ pub enum InvocationValue {
         method: Arc<MethodValue>,
         type_args: Option<TypeArgList>,
 
+        /// this list should include the self-arg, which may or may not also be present in the method
+        /// value depending on how the method was invoked.
+        /// i.e. the length of this vec should match the method's parameter count
         args: Vec<Expr>,
         args_span: Option<Span>,
 
@@ -113,11 +116,11 @@ impl InvocationValue {
             InvocationValue::Function { args, .. } => Box::new(args.iter()),
 
             InvocationValue::Method { method, args, .. } => {
-                Box::new(method.self_arg.iter().map(Box::as_ref).chain(args.iter()))
+                Box::new(args.iter())
             },
 
             InvocationValue::VirtualMethod { method, args, .. } => {
-                Box::new(method.self_arg.iter().map(Box::as_ref).chain(args.iter()))
+                Box::new(args.iter())
             },
             InvocationValue::ObjectCtor { members, .. } => {
                 Box::new(members.iter().map(|mem| &mem.value))

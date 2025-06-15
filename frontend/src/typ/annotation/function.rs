@@ -90,6 +90,8 @@ impl FunctionValue {
     ) -> TypeResult<InvocationValue> {
         self.check_visible(span, ctx)?;
         
+        assert_eq!(args.len(), self.sig.params.len());
+        
         // eprintln!("creating invocation of {}", self.name);
         // if let Some(args) = type_args {
         //     eprintln!("\t type args: {}", args);

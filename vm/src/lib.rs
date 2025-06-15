@@ -527,7 +527,8 @@ impl Interpreter {
 
         if args.len() != func.param_tys().len() {
             let msg = format!(
-                "arguments provided for function call are invalid (expected {} args, got {})",
+                "arguments provided for call to {} are invalid (expected {} args, got {})",
+                func_info.name,
                 func.param_tys().len(),
                 args.len()
             );
@@ -1838,7 +1839,7 @@ impl Interpreter {
                 self.functions.insert(*func_id, FunctionInfo {
                     name: Rc::new(match func.debug_name() {
                         Some(name) => name.to_string(),
-                        None => format!("function {}", func_id)
+                        None => format!("{}", func_id)
                     }),
                     func: Rc::new(func),
                 });

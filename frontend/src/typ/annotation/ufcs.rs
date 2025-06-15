@@ -71,6 +71,8 @@ impl UfcsValue {
             &self.span,
             ctx
         )?;
+        
+        assert_eq!(*self.self_arg, args.actual_args[0], "specialize_call_args should never modify the self-arg");
 
         let func_value = FunctionValue {
             name: self.function_name.clone(),

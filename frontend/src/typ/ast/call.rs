@@ -381,10 +381,14 @@ fn typecheck_func_overload_call(
 
             // eprintln!("method call (overload) {} = ({}){}.{} -> {} ({})", func_call, iface_ty, self_ty, ident, index, sig);
             
-            let mut args = overload.args.into_iter();
+            let args: Vec<_> = overload.args
+                .into_iter()
+                .collect();
+            
             let self_arg = args
-                .next()
-                .expect("method must have at least one arg");
+                .get(0)
+                .expect("method must have at least one arg")
+                .clone();
 
             let method = Arc::new(MethodValue {
                 span: func_call.span().clone(),
@@ -394,11 +398,19 @@ fn typecheck_func_overload_call(
                 index: *index,
                 sig: Arc::new(sig),
             });
+
+            assert_eq!(
+                args.len(),
+                method.decl.func_decl.params.len(),
+                "argument count mismatch for {} at {}",
+                method.decl.func_decl.name,
+                method.span,
+            );
             
             if self_ty.as_iface().is_some() {
                 Ok(InvocationValue::VirtualMethod {
                     method,
-                    args: args.collect(),
+                    args,
                     span: func_call.span().clone(),
                     args_span: func_call.args_span.clone(),
                 })
@@ -406,7 +418,7 @@ fn typecheck_func_overload_call(
                 Ok(InvocationValue::Method {
                     method,
                     type_args: overload.type_args,
-                    args: args.collect(),
+                    args,
                     span: func_call.span().clone(),
                     args_span: func_call.args_span.clone(),
                 })    
