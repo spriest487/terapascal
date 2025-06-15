@@ -1,18 +1,20 @@
-use terapascal_common::DiagnosticOutput;
-use terapascal_common::span::Span;
 use crate::ast;
 use crate::ast::Access;
 use crate::typ::ast::call::overload::resolve_overload;
 use crate::typ::ast::call::overload::OverloadCandidate;
+use crate::typ::ast::call::test::util::candidates_from_src;
 use crate::typ::ast::call::test::util::expr_from_str;
-use crate::typ::ast::call::test::util::{candidates_from_src, type_args_from_str};
+use crate::typ::ast::call::test::util::type_args_from_str;
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
 use crate::typ::test::try_module_from_srcs;
-use crate::typ::{InvocationValue, Type};
+use crate::typ::InvocationValue;
+use crate::typ::Primitive;
+use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::Value;
-use crate::typ::Primitive;
+use terapascal_common::span::Span;
+use terapascal_common::DiagnosticOutput;
 
 mod util;
 
@@ -133,7 +135,7 @@ fn method_call_validates_too_few_args() {
             assert_eq!(2, actual.len());
             assert_eq!(3, expected.len());
         },
-        
+
         Ok(..) => panic!("expected invalid args error but succeeded"),
 
         Err(other) => panic!("expected invalid args error, got: {}", other.main()),
@@ -221,12 +223,12 @@ fn specializes_method_call_by_arg_ty() {
             assert_eq!("Test.B", call.args[1].annotation().ty().to_string());
 
             assert_eq!("A", call.target.to_string());
-            
+
             match call.annotation.as_invocation() {
                 Some(InvocationValue::Method { method, .. }) => {
                     assert_eq!("Test.C", method.self_ty.to_string());
-                }
-                
+                },
+
                 _ => panic!("expected method invocation"),
             }
 
@@ -275,12 +277,11 @@ fn specializes_method_call_by_lambda_arg_ty() {
                 call.args[1].annotation().ty().to_string()
             );
 
-
             match call.annotation.as_invocation() {
                 Some(InvocationValue::Method { method, .. }) => {
                     assert_eq!("A", method.decl.func_decl.name.ident.name.as_str());
                     assert_eq!("Test.C", method.self_ty.to_string());
-                }
+                },
 
                 _ => panic!("expected method invocation"),
             }
@@ -289,7 +290,7 @@ fn specializes_method_call_by_lambda_arg_ty() {
                 "Test.B",
                 call.type_args.as_ref().unwrap().items[0].to_string()
             );
-        }
+        },
 
         other => panic!("expected call to A, got {:?}", other),
     }
@@ -334,7 +335,7 @@ fn specializes_method_call_by_dynarray_element_ty() {
                 Some(InvocationValue::Method { method, .. }) => {
                     assert_eq!("A", method.decl.func_decl.name.ident.name.as_str());
                     assert_eq!("Test.C", method.self_ty.to_string());
-                }
+                },
 
                 _ => panic!("expected method invocation"),
             }
@@ -343,7 +344,7 @@ fn specializes_method_call_by_dynarray_element_ty() {
                 "Test.B",
                 call.type_args.as_ref().unwrap().items[0].to_string()
             );
-        }
+        },
 
         other => panic!("expected call to A, got {:?}", other),
     }
@@ -371,31 +372,28 @@ fn specializes_free_func_call_by_dynarray_element_ty() {
     let module = module_from_src("Test", src);
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
-    match init.body[1].as_call() {
-        Some(ast::Call::Function(func_call)) => {
-            assert_eq!(
-                "array of Test.B",
-                func_call.args[0].annotation().ty().to_string()
-            );
+    match init.body[1].annotation().as_invocation() {
+        Some(InvocationValue::Function {
+            function,
+            args,
+            type_args,
+            ..
+        }) => {
+            assert_eq!("array of Test.B", args[0].annotation().ty().to_string());
 
-            assert_eq!("arr.A", func_call.target.to_string());
-            assert_eq!(
-                "Test.B",
-                func_call.type_args.as_ref().unwrap().items[0].to_string()
-            );
-
-            match func_call.target.annotation() {
-                Value::Function(target_func) => {
-                    assert_eq!(target_func.name.to_string(), "Test.A[Test.B]")
-                },
-                other => {
-                    panic!("expected function A, got: {}", other)
-                },
-            }
+            assert_eq!("Test.A[Test.B]", function.name.to_string());
+            assert_eq!("Test.B", type_args.as_ref().unwrap().items[0].to_string());
         },
 
-        other => {
-            panic!("expected call to A, got {:?}", other)
+        Some(other) => {
+            panic!("expected invocation of A, got {:?}", other)
+        },
+
+        None => {
+            panic!(
+                "expected invocation of A, got: {:?}",
+                init.body[1].annotation()
+            )
         },
     }
 }
@@ -628,7 +626,7 @@ fn resolving_overload_with_generic_selected() {
         Ok(result) => result,
         Err(err) => panic!("{:#?}", err),
     };
-    
+
     assert_eq!(
         overload.type_args.unwrap().items[0].to_string(),
         "System.String"

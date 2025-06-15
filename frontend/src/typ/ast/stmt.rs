@@ -255,13 +255,15 @@ pub fn typecheck_stmt(
 fn typecheck_member_stmt(member: &ast::MemberStmt, expect_ty: &Type, ctx: &mut Context) -> Result<Result<Stmt, TypeError>, TypeError> {
     let base = evaluate_expr(&member.base, expect_ty, ctx)?;
 
-    let value = member_value(
+    let mut value = member_value(
         &base,
         &member.name,
         &member.annotation,
         expect_ty,
         ctx
     )?;
+    
+    value.evaluate(expect_ty, ctx)?;
 
     Ok(Ok(Stmt::Member(MemberStmt {
         annotation: value,

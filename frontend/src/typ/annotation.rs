@@ -11,7 +11,7 @@ use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 pub use crate::typ::annotation::invoke::InvocationValue;
-use crate::typ::ast::implicit_conversion;
+use crate::typ::ast::{implicit_conversion, specialize_call_args};
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::Expr;
@@ -533,6 +533,88 @@ impl Value {
         match self {
             Value::Namespace(_, _) => true,
             _ => false,
+        }
+    }
+    
+    /// A node can be an unevaluated reference like a function name, which is valid in some contexts
+    /// e.g. as the target of a function call argument list or to have its address taken. In contexts
+    /// where only the value is legal, this operation forces the reference to be evaluated e.g.
+    /// turns a function reference into a function invocation. This is the logic behind no-args
+    /// function calls.
+    /// 
+    /// This operation may fail with an error if the *type* of value can be evaluated, but this
+    /// particular value is invalid: a function reference that is evaluated could be a valid
+    /// no-args call, but if it requires more parameters, it should be treated like any invalid
+    /// invocation and raise an InvalidArgs error.
+    /// 
+    /// This will *not* fail with an error for node values that can't be evaluated, and will instead
+    /// return itself. For example, a typed Integer value node is already a value so evaluating it
+    /// does nothing, and a Type value node has no possible value, so we should leave it alone
+    /// and allow the expression to fail typechecking.  
+    pub fn evaluate(&mut self, expect_ty: &Type, ctx: &mut Context) -> TypeResult<()> {
+        match self {
+            // can't be evaluated
+            Value::Untyped(..)
+            | Value::Type(_, _)
+            | Value::Namespace(_, _)
+
+            // already a value
+            | Value::Invocation(_)
+            | Value::Typed(_)
+            | Value::Const(_) => Ok(()),
+
+            // references to functions become no-args invocations when evaluated
+            Value::Function(func) => {
+                let args = specialize_call_args(
+                    &func.decl,
+                    &[],
+                    None,
+                    None,
+                    &func.span,
+                    ctx
+                )?;
+
+                let invocation = func.create_invocation(
+                    &args.actual_args,
+                    None,
+                    args.type_args.as_ref(),
+                    expect_ty,
+                    &func.span,
+                    ctx
+                )?;
+                
+                *self = Value::from(invocation);
+                Ok(())
+            }
+
+            Value::UfcsFunction(ufcs) => {
+                let invocation = ufcs.create_zero_args_invocation(expect_ty, &ufcs.span, ctx)?;
+                *self = Value::from(invocation);
+                Ok(())
+            }
+
+            Value::Method(_method) => {
+                unimplemented!()
+            }
+
+            Value::VariantCase(case_val) => {
+                let invocation = case_val.create_ctor_invocation(
+                    &[],
+                    None,
+                    expect_ty,
+                    &case_val.span,
+                    ctx
+                )?;
+
+                *self = Value::from(invocation);
+                Ok(())
+            }
+
+            Value::Overload(overload_val) => {
+                let invocation = overload_val.create_invocation(&[], None, None, &overload_val.span, ctx)?;
+                *self = Value::from(invocation);
+                Ok(())
+            }
         }
     }
 }
