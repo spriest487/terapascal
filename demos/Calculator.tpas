@@ -1,10 +1,11 @@
 unit Calculator;
 implementation
 
-const addCommand: Byte = 43; // '+'
-    subCommand: Byte = 45; // '-'
-    mulCommand: Byte = 42; // '*'
-    divCommand: Byte = 47; // '/'
+const 
+    COMMAND_ADD: Byte = '+';
+    COMMAND_SUB: Byte = '-';
+    COMMAND_MUL: Byte = '*';
+    COMMAND_DIV: Byte = '/';
 
 initialization
     WriteLn('Enter an expression e.g. ''2*3'', ''4/2'' or ''exit''.');
@@ -23,7 +24,7 @@ initialization
         for var i := 0 to command.Length - 1 do begin
             var c := command.CharAt(i);
     
-            if c = mulCommand or c = divCommand or c = addCommand or c = subCommand then 
+            if c = COMMAND_MUL or c = COMMAND_DIV or c = COMMAND_ADD or c = COMMAND_SUB then 
             begin
                 opIndex := i;
                 break;
@@ -45,10 +46,10 @@ initialization
             .StrToInt;
     
         var result := case op of
-            addCommand: lhs + rhs;
-            subCommand: lhs - rhs;
-            divCommand: lhs div rhs;
-            mulCommand: lhs * rhs;
+            COMMAND_ADD: lhs + rhs;
+            COMMAND_SUB: lhs - rhs;
+            COMMAND_DIV: lhs div rhs;
+            COMMAND_MUL: lhs * rhs;
             else begin
                 WriteLn('invalid operator found for command ' + command);
                 -1
