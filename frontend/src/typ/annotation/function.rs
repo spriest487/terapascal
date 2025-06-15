@@ -24,13 +24,15 @@ use terapascal_common::span::Span;
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Hash, Debug, PartialEq)]
 pub struct FunctionValue {
+    /// name of the function as referenced, with type args applied (should match sig)
     pub name: Symbol,
+
     pub visibility: Visibility,
 
-    /// original decl
+    /// unspecialized decl
     pub decl: Arc<FunctionDecl>,
 
-    /// sig of this reference ot the function, with any type args applied
+    /// sig of this reference to the function, with any type args applied
     pub sig: Arc<FunctionSig>,
 
     #[derivative(Debug = "ignore")]

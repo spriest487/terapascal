@@ -130,7 +130,8 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
             type_args,
             ..
         } => {
-            let func = builder.translate_func(&function.name, &function.sig, type_args.clone());
+            let decl_sig = Arc::new(function.decl.sig());
+            let func = builder.translate_func(&function.name, &decl_sig, type_args.clone());
 
             let func_val = ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(func.id)));
 
@@ -146,7 +147,7 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
             ..
         } => {
             // eprintln!("build_method_call: {} ({}){} = {}", method_call, method_call.iface_type, method_call.self_type, method_call.iface_method_index);
-            build_method_call(
+            build_method_invocation(
                 method.self_ty.ty().clone(),
                 method.self_ty.ty().clone(),
                 method.index,
@@ -253,7 +254,7 @@ fn build_func_val_invocation(
     translate_call_with_args(call_target, args, &func_sig, builder)
 }
 
-fn build_method_call(
+pub fn build_method_invocation(
     iface_ty: typ::Type,
     self_ty: typ::Type,
     method_index: usize,
@@ -405,19 +406,16 @@ pub fn translate_invocation(
         },
 
         InvocationValue::Method {
-            method, type_args, ..
+            method, args, type_args, ..
         } => {
-            let func = builder.translate_method(
+            build_method_invocation(
+                method.self_ty.ty().clone(),
                 method.self_ty.ty().clone(),
                 method.index,
+                args,
                 type_args.clone(),
-            );
-
-            let args: Vec<_> = invocation.args()
-                .cloned()
-                .collect();
-
-            build_func_invocation(&args, func, true, builder)
+                builder,
+            )
         },
 
         InvocationValue::VirtualMethod { method, .. } => {
