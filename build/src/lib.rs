@@ -54,7 +54,7 @@ pub enum BuildArtifact {
 }
 
 pub struct BuildOutput {
-    pub artifact: BuildArtifact,
+    pub artifact: BuildResult<BuildArtifact>,
     pub log: BuildLog,
 }
 
@@ -94,32 +94,33 @@ pub fn preprocess_project(input: &BuildInput, log: &mut BuildLog) -> BuildResult
 }
 
 pub fn parse_units(input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseOutput> {
+    let verbose = input.compile_opts.verbose;
+    
     let mut sources = create_source_collection(input, log)?;
 
     // auto-add system units if we're going beyond parsing
-    let include_stdlib = input.output_stage >= BuildStage::Typecheck;
+    let include_system = input.output_stage >= BuildStage::Typecheck;
     
-    let stdlib_units = [
+    let system_units = [
         IdentPath::from_parts([builtin_ident(SYSTEM_UNIT_NAME)])  
     ];
     
-    let mut stdlib_paths = Vec::with_capacity(stdlib_units.len());
+    let mut system_paths = Vec::with_capacity(system_units.len());
 
-    if include_stdlib {
-        for stdlib_unit in &stdlib_units {
+    if include_system {
+        for stdlib_unit in &system_units {
             let filename = PathBuf::from(stdlib_unit.to_string())
                 .with_extension(SRC_FILE_DEFAULT_EXT);
 
             let unit_path = sources.add(&filename, None, log)?;
             
-            stdlib_paths.push(unit_path);
+            system_paths.push(unit_path);
         }
     }
 
     // files parsed in the order specified, either by the project unit or on the command line
     let mut parsed_units: LinkedHashMap<PathBuf, ast::Unit> = LinkedHashMap::new();
 
-    // not actually used for sorting, just an easy way to detect circular deps
     let mut dep_sort = TopologicalSort::<IdentPath>::new();
 
     let mut main_ident = None;
@@ -128,8 +129,8 @@ pub fn parse_units(input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseO
     // we don't try to load two units with the same name at different locations
     let mut used_unit_paths: HashMap<IdentPath, PathBuf> = HashMap::new();
 
-    for (unit_name, path) in stdlib_units.into_iter().zip(stdlib_paths.into_iter()) {
-        used_unit_paths.insert(unit_name, path);
+    for (unit_name, path) in system_units.iter().zip(system_paths.into_iter()) {
+        used_unit_paths.insert(unit_name.clone(), path);
     }
 
     loop {
@@ -148,7 +149,7 @@ pub fn parse_units(input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseO
             },
 
             None => {
-                if input.compile_opts.verbose {
+                if verbose {
                     log.trace(format!("parsing unit @ `{}`", unit_filename.display()));
                 }
 
@@ -230,98 +231,124 @@ pub fn parse_units(input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseO
                 }
             }
 
-            // check for cycles
-            dep_sort.add_dependency(used_unit.ident.clone(), unit_ident.clone());
-            if dep_sort.peek().is_none() {
-                return Err(BuildError::CircularDependency {
-                    unit_ident,
-                    used_unit: used_unit.ident,
-                    span: used_unit.span.clone(),
-                });
-            }
+            add_unit_dep(&unit_ident, &used_unit.ident, &mut dep_sort, log, verbose)?;
         }
     }
+    
+    let mut sorted_unit_names: Vec<_> = dep_sort.collect();
+    sorted_unit_names.reverse();
 
-    fn add_unit_path(
-        unit_ident: &IdentPath,
-        unit_path: &PathBuf,
-        unit_paths: &mut HashMap<IdentPath, PathBuf>,
-    ) -> Result<(), BuildError> {
-        match unit_paths.entry(unit_ident.clone()) {
-            Entry::Occupied(occupied_ident_filename) => {
-                // the same unit can't be loaded from two separate filenames. it might
-                // already be in the filename map because we insert the builtin units ahead
-                // of time
-                if *occupied_ident_filename.get() != *unit_path {
-                    Err(BuildError::DuplicateUnit {
-                        unit_ident: occupied_ident_filename.key().clone(),
-                        new_path: unit_path.clone(),
-                        existing_path: occupied_ident_filename.get().to_path_buf(),
-                    })
-                } else {
-                    Ok(())
-                }
-            },
-
-            Entry::Vacant(vacant_ident_filename) => {
-                vacant_ident_filename.insert(unit_path.clone());
-
-                Ok(())
-            },
-        }
+    let mut sorted_units = LinkedHashMap::new();    
+    for unit_name in sorted_unit_names {
+        let unit_path = &used_unit_paths[&unit_name];
+        let unit = parsed_units.remove(unit_path).unwrap();
+        sorted_units.insert(unit_path.clone(), unit);
     }
 
-    if input.compile_opts.verbose {
+    drop(parsed_units);
+
+    if verbose {
         log.trace("Compilation units:");
-        for (unit_path, unit) in &parsed_units {
+        for (unit_path, unit) in &sorted_units {
             log.trace(format!("\t{} in '{}'", unit.ident, unit_path.display()));
         }
     }
     
     Ok(ParseOutput {
-        units: parsed_units,
+        units: sorted_units,
     })
 }
 
-pub fn build(input: BuildInput) -> Result<BuildOutput, BuildError> {
-    let mut log = BuildLog::new();
+fn add_unit_dep(
+    unit_ident: &IdentPath,
+    used_unit: &IdentPath,
+    dep_sort: &mut TopologicalSort<IdentPath>,
+    log: &mut BuildLog,
+    verbose: bool,
+) -> BuildResult<()> {
+    if verbose {
+        log.trace(format!("Unit dependency: {unit_ident} -> {used_unit}"));
+    }
+    
+    dep_sort.add_dependency(used_unit.clone(), unit_ident.clone());
 
-    // if we just want preprocessor output, no unit refs need to be looked up, just process and
-    // print the units provided on the cli in that order
-    if input.output_stage == BuildStage::Preprocess {
-        let units = preprocess_project(&input, &mut log)?;
-        return Ok(BuildOutput {
-            artifact: BuildArtifact::PreprocessedText(units),
-            log,
+    // check for cycles
+    if dep_sort.peek().is_none() {
+        return Err(BuildError::CircularDependency {
+            unit_ident: unit_ident.clone(),
+            used_unit: used_unit.clone(),
+            span: used_unit.path_span(),
         });
     }
 
-    let parse_output = parse_units(&input, &mut log)?;
+    Ok(())
+}
+
+fn add_unit_path(
+    unit_ident: &IdentPath,
+    unit_path: &PathBuf,
+    unit_paths: &mut HashMap<IdentPath, PathBuf>,
+) -> Result<(), BuildError> {
+    match unit_paths.entry(unit_ident.clone()) {
+        Entry::Occupied(occupied_ident_filename) => {
+            // the same unit can't be loaded from two separate filenames. it might
+            // already be in the filename map because we insert the builtin units ahead
+            // of time
+            if *occupied_ident_filename.get() != *unit_path {
+                Err(BuildError::DuplicateUnit {
+                    unit_ident: occupied_ident_filename.key().clone(),
+                    new_path: unit_path.clone(),
+                    existing_path: occupied_ident_filename.get().to_path_buf(),
+                })
+            } else {
+                Ok(())
+            }
+        },
+
+        Entry::Vacant(vacant_ident_filename) => {
+            vacant_ident_filename.insert(unit_path.clone());
+
+            Ok(())
+        },
+    }
+}
+
+pub fn build(input: BuildInput) -> BuildOutput {
+    let mut log = BuildLog::new();
+    
+    let artifact = build_with_log(input, &mut log);
+    
+    BuildOutput {
+        artifact,
+        log,
+    }
+}
+
+fn build_with_log(input: BuildInput, log: &mut BuildLog) -> BuildResult<BuildArtifact> {
+    // if we just want preprocessor output, no unit refs need to be looked up, just process and
+    // print the units provided on the cli in that order
+    if input.output_stage == BuildStage::Preprocess {
+        let units = preprocess_project(&input, log)?;
+        return Ok(BuildArtifact::PreprocessedText(units));
+    }
+
+    let parse_output = parse_units(&input, log)?;
 
     if input.output_stage == BuildStage::Parse {
-        return Ok(BuildOutput {
-            artifact: BuildArtifact::ParsedUnits(parse_output),
-            log,
-        });
+        return Ok(BuildArtifact::ParsedUnits(parse_output));
     }
 
     // reverse the compilation order for typechecking, modules should be processed after all their
     // dependencies
-    let typed_module = typecheck(parse_output.units.iter(), input.compile_opts.verbose, &mut log)?;
+    let typed_module = typecheck(parse_output.units.iter(), input.compile_opts.verbose, log)?;
 
     if input.output_stage == BuildStage::Typecheck {
-        return Ok(BuildOutput {
-            artifact: BuildArtifact::TypedModule(typed_module),
-            log,
-        });
+        return Ok(BuildArtifact::TypedModule(typed_module));
     }
 
     let library = codegen_ir(&typed_module, input.codegen_opts);
 
-    Ok(BuildOutput { 
-        artifact: BuildArtifact::Library(library),
-        log,
-    })
+    Ok(BuildArtifact::Library(library))
 }
 
 pub fn bincode_config() -> bincode::config::Configuration {

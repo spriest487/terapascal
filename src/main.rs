@@ -22,14 +22,15 @@ use std::time::Duration;
 use structopt::StructOpt;
 use terapascal_backend_c as backend_c;
 use terapascal_backend_c::c;
+use terapascal_build::bincode_config;
 use terapascal_build::build;
-use terapascal_build::error::BuildError;
+use terapascal_build::error::{BuildError, BuildResult};
 use terapascal_build::BuildArtifact;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildOutput;
 use terapascal_build::BuildStage;
-use terapascal_build::bincode_config;
-use terapascal_common::build_log::{BuildLog, BuildLogEntry};
+use terapascal_common::build_log::BuildLog;
+use terapascal_common::build_log::BuildLogEntry;
 use terapascal_common::span::*;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticOutput;
@@ -65,10 +66,11 @@ fn compile(args: &Args) -> Result<(), RunError> {
             log.trace(format!("loading existing module: {}", args.file.display()));
         }
 
-        let module = load_lib(&args.file)?;
+        let artifact = load_lib(&args.file)
+            .map(BuildArtifact::Library);
         
         return handle_output(BuildOutput {
-            artifact: BuildArtifact::Library(module),
+            artifact,
             log,
         }, args);
     }
@@ -86,12 +88,12 @@ fn compile(args: &Args) -> Result<(), RunError> {
         units,
     };
     
-    let output = build(input)?;
+    let output = build(input);
     
     handle_output(output, args)
 }
 
-fn load_lib(path: &Path) -> Result<ir::Library, RunError> {
+fn load_lib(path: &Path) -> BuildResult<ir::Library> {
     let mut module_bytes = Vec::new();
 
     File::open(&path)
@@ -165,7 +167,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
         }
     }
     
-    match output.artifact {
+    match output.artifact? {
         BuildArtifact::PreprocessedText(units) => print_output(args.output.as_ref(), |dst| {
             for pp_unit in units {
                 writeln!(dst, "{}:", pp_unit.filename.display())?;
