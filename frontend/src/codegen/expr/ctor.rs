@@ -127,6 +127,7 @@ fn translate_static_array_ctor(
                     let el_init = translate_expr(&el.value, builder);
 
                     builder.mov(el_ptr.clone().to_deref(), el_init);
+                    builder.retain(el_ptr.clone().to_deref(), &el_ty);
                 });
             }
         });
