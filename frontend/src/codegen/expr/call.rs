@@ -1,14 +1,13 @@
 use crate::codegen::builder::Builder;
-use crate::codegen::typ;
 use crate::codegen::expr;
-use crate::codegen::FunctionInstance;
+use crate::codegen::expr::ctor::build_object_ctor_invocation;
+use crate::codegen::typ;
 use crate::ir;
 use crate::typ::Invocation;
 use crate::typ::Specializable as _;
 use crate::typ::Value;
 use std::borrow::Cow;
 use std::sync::Arc;
-use crate::codegen::expr::ctor::build_object_ctor_invocation;
 
 fn translate_args(
     args: &[typ::ast::Expr],
@@ -69,18 +68,25 @@ fn translate_call_with_args(
     }
 
     match call_target {
-        CallTarget::Closure { function, .. }
         | CallTarget::Function(function)
         | CallTarget::InstanceMethod(function) => {
+            builder.call(function, arg_vals.clone(), out_val.clone());
+        },
+        
+        CallTarget::Closure { function, .. } => {
             builder.call(function, arg_vals.clone(), out_val.clone());
         },
 
         CallTarget::Virtual {
             iface_id,
             iface_method_id,
+            self_ty,
+            iface_ty,
         } => {
             let self_arg = arg_vals[0].clone();
             let rest_args = arg_vals[1..].to_vec();
+
+            // eprintln!("({sig}) => building vcall: {iface_id}.{} vs for type {self_ty}/{iface_ty}", iface_method_id.0);
 
             builder.vcall(
                 iface_id,
@@ -100,8 +106,8 @@ fn translate_call_with_args(
 }
 
 enum CallTarget {
-    Function(ir::Value),
-    InstanceMethod(ir::Value),
+    Function(ir::FunctionID),
+    InstanceMethod(ir::FunctionID),
     Closure {
         function: ir::Value,
         closure_ptr: ir::Value,
@@ -109,6 +115,8 @@ enum CallTarget {
     Virtual {
         iface_id: ir::InterfaceID,
         iface_method_id: ir::MethodID,
+        self_ty: typ::Type,
+        iface_ty: typ::Type,
     },
 }
 
@@ -122,57 +130,8 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
             call.annotation()
         );
     };
-
-    match invocation.as_ref() {
-        Invocation::Function {
-            function,
-            args,
-            type_args,
-            ..
-        } => {
-            let decl_sig = Arc::new(function.decl.sig());
-            let func = builder.translate_func(&function.name, &decl_sig, type_args.clone());
-
-            let func_val = ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(func.id)));
-
-            let call_target = CallTarget::Function(func_val);
-
-            translate_call_with_args(call_target, args, &func.sig, builder)
-        },
-
-        Invocation::Method {
-            method,
-            args,
-            type_args,
-            ..
-        } => {
-            assert_eq!(
-                args.len(),
-                method.decl.func_decl.params.len(),
-                "argument count mismatch for {} at {}",
-                method.decl.func_decl.name,
-                method.span,
-            );
-            
-            // eprintln!("build_method_invocation: {} ({}) = {}", call, method.self_ty, method.index);
-            build_method_invocation(
-                method.self_ty.ty().clone(),
-                method.self_ty.ty().clone(),
-                method.index,
-                args,
-                type_args.clone(),
-                builder,
-            )
-        },
-
-        Invocation::ObjectCtor { .. } => unimplemented!(),
-        Invocation::VariantCtor { .. } => unimplemented!(),
-        
-        Invocation::FunctionValue { value, args, .. } => {
-            let value_ty = value.annotation().ty();
-            build_func_val_invocation(value, value_ty.as_ref(), args, None, builder)
-        },
-    }
+    
+    translate_invocation(invocation, builder)
 }
 
 fn build_func_val_invocation(
@@ -232,6 +191,11 @@ pub fn build_method_invocation(
     } else {
         &self_ty
     };
+    // 
+    // eprintln!("## method invocation");
+    // eprintln!("  iface_ty = {iface_ty}");
+    // eprintln!("   self_ty = {self_ty}");
+    // eprintln!("   decl ty = {method_decl_ty}");
 
     let method_decl_index = builder.get_impl_method_index(method_decl_ty, &iface_ty, method_index);
     let method_decl = builder.get_method(method_decl_ty, method_decl_index);
@@ -269,6 +233,8 @@ pub fn build_method_invocation(
             CallTarget::Virtual {
                 iface_id,
                 iface_method_id: ir::MethodID(method_decl_index),
+                self_ty,
+                iface_ty,
             }
         },
 
@@ -278,9 +244,7 @@ pub fn build_method_invocation(
             let func_instance =
                 builder.translate_method(method_decl_ty.clone(), method_decl_index, ty_args);
 
-            let func_val = ir::Ref::from(func_instance.id);
-
-            CallTarget::InstanceMethod(func_val.into())
+            CallTarget::InstanceMethod(func_instance.id)
         },
     };
 
@@ -326,32 +290,6 @@ fn build_variant_ctor_call(
     Some(out)
 }
 
-fn build_func_invocation(
-    args: &[typ::ast::Expr],
-    func: FunctionInstance,
-    is_instance_method: bool,
-    builder: &mut Builder
-) -> Option<ir::Ref> {
-    assert_eq!(args.len(), func.sig.params.len(), "argument count mismatch");
-    
-    let result = if func.sig.result_ty == typ::Type::Nothing {
-        None
-    } else {
-        let result_ty = builder.translate_type(&func.sig.result_ty);
-        Some(builder.local_new(result_ty, None))
-    };
-
-    builder.scope(|builder| {
-        let arg_values = translate_args(args, &func.sig, is_instance_method, builder);
-
-        let func_val = ir::Ref::Global(ir::GlobalRef::Function(func.id));
-
-        builder.call(func_val, arg_values, result.clone());
-    });
-    
-    result
-}
-
 pub fn translate_invocation(
     invocation: &Invocation,
     builder: &mut Builder,
@@ -372,11 +310,12 @@ pub fn translate_invocation(
                 .cloned()
                 .collect();
 
-            build_func_invocation(&args, func, false, builder)
+            let call_target = CallTarget::Function(func.id);
+            translate_call_with_args(call_target, &args, &func.sig, builder)
         },
 
         Invocation::Method {
-            method, args, type_args, .. 
+            self_ty, method, args, type_args, .. 
         } => {
             assert_eq!(
                 args.len(),
@@ -388,7 +327,7 @@ pub fn translate_invocation(
             
             build_method_invocation(
                 method.self_ty.ty().clone(),
-                method.self_ty.ty().clone(),
+                self_ty.clone(),
                 method.index,
                 args.as_slice(),
                 type_args.clone(),

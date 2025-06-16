@@ -330,7 +330,7 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
         .flatten()?;
 
     let impl_method_val = MethodValue::new(
-        TypeName::inferred(src_ty.into_owned()),
+        TypeName::inferred((*src_ty).clone()),
         Some(expr.clone()),
         impl_method_index,
         impl_method_decl,
@@ -344,6 +344,7 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
 
     let invocation = Invocation::Method { 
         method: Arc::new(impl_method_val),
+        self_ty: src_ty.into_owned(),
         args,
         type_args: None,
         span,
@@ -618,6 +619,8 @@ fn typecheck_member_value(
         InstanceMember::Method { iface_ty, self_ty, method } => {
             let sig = method.func_decl.sig();
 
+            // eprintln!("{}.{}: iface_ty = {iface_ty}, self_ty = {self_ty}", lhs, member_ident);
+            
             let (method_index, iface_method) = iface_ty
                 .find_method(method.func_decl.ident(), &sig, ctx)
                 .ok()

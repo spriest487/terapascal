@@ -31,6 +31,12 @@ pub enum Invocation {
     Method {
         method: Arc<MethodValue>,
         type_args: Option<TypeArgList>,
+        
+        /// it's possible for this to be different to the method's own self-type in cases where
+        /// an interface method is being invoked for a currently unknown (e.g. generic) self type.
+        /// in that case, we need to know both types (the real self-type and the type the abstract
+        /// method is declared in), and the call will be de-virtualized during codegen 
+        self_ty: Type,
 
         /// this list should include the self-arg, which may or may not also be present in the method
         /// value depending on how the method was invoked.

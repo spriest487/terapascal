@@ -27,6 +27,7 @@ pub enum InstanceMethod {
         self_ty: Type,
         iface_ty: Type,
 
+        /// index here is always the method index in the *iface* type
         index: usize,
         method: MethodDecl,
     },
@@ -134,7 +135,7 @@ fn find_ufcs_methods(self_ty: &Type, ctx: &Context) -> NameResult<Vec<InstanceMe
                 }
             }
         }
-        
+
         ty => {
             (ty.methods(ctx)?, ty.clone())
         },

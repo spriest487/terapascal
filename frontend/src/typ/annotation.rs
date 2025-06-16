@@ -613,8 +613,25 @@ impl Value {
                 Ok(())
             }
 
-            Value::Method(_method) => {
-                unimplemented!()
+            Value::Method(method) => {
+                let args = specialize_call_args(
+                    &method.decl.func_decl,
+                    &[],
+                    method.self_arg.as_ref().map(Box::as_ref),
+                    None,
+                    &method.span,
+                    ctx
+                )?;
+
+                *self = Value::from(Invocation::Method {
+                    method: method.clone(),
+                    self_ty: method.self_ty.ty().clone(),
+                    args: args.actual_args,
+                    args_span: None,
+                    span: method.span.clone(),
+                    type_args: args.type_args,
+                });
+                Ok(())
             }
 
             Value::VariantCase(case_val) => {

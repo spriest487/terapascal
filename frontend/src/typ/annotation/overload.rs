@@ -111,21 +111,21 @@ impl OverloadValue {
             },
 
             OverloadCandidate::Method {
-                iface_ty: _,
+                iface_ty,
                 self_ty,
                 index,
                 decl,
             } => {
-                let self_ty = TypeName::inferred(self_ty.clone());
+                let iface_ty = TypeName::inferred(iface_ty.clone());
 
-                let sig = resolved.func_sig(self_ty.ty(), &self.candidates);
+                let sig = resolved.func_sig(self_ty, &self.candidates);
                 let args = resolved.args;
                 let type_args = resolved.type_args;
                 
                 assert_eq!(args.len(), sig.params.len());
 
                 let method_val = MethodValue {
-                    self_ty,
+                    self_ty: iface_ty,
                     self_arg: self_arg.cloned().map(Box::new),
                     index: *index,
                     decl: decl.clone(),
@@ -135,6 +135,7 @@ impl OverloadValue {
 
                 Ok(Invocation::Method {
                     method: Arc::new(method_val),
+                    self_ty: self_ty.clone(),
                     args,
                     args_span: args_span.cloned(),
                     span: span.clone(),

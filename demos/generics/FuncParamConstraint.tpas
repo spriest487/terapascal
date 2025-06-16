@@ -2,17 +2,24 @@ implementation
 uses System;
 
 type 
-    Greetable = interface
+    // several methods to ensure we get different method IDs per impl 
+    IGreetable = interface
+        function Method1: String;
+        function Method2: String;
         function Name: String;
     end;
 
-    Person = record of Greetable
+    Person = record of IGreetable
         name: String;
         function Name: String;
+        function Method1: String;
+        function Method2: String;
     end;
 
-    Cat = class of Greetable
+    Cat = class of IGreetable
+        function Method1: String;
         function Name: String;
+        function Method2: String;
     end;
 
 function Person.Name: String;
@@ -20,17 +27,37 @@ begin
     self.name
 end;
 
+function Person.Method1: String;
+begin
+    raise 'unreachable'
+end;
+
+function Person.Method2: String;
+begin
+    raise 'unreachable'
+end;
+
 function Cat.Name: String;
 begin
     'kitty'
 end;
 
+function Cat.Method1: String;
+begin
+    raise 'unreachable'
+end;
+
+function Cat.Method2: String;
+begin
+    raise 'unreachable'
+end;
+
 function Greet[T](t: T) 
 where 
-    T is Greetable;
+    T is IGreetable;
 begin
     WriteLn('hello, ' + t.Name);
-    WriteLn('hello again, ' + Greetable.Name(t));
+    WriteLn('hello again, ' + IGreetable.Name(t));
 end;
 
 initialization

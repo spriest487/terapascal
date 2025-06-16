@@ -19,7 +19,6 @@ use crate::typ::FunctionSigParam;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::Invocation;
-use crate::typ::NameError;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
@@ -28,7 +27,6 @@ use crate::typ::TypeResult;
 use crate::typ::Value;
 pub use args::*;
 pub use overload::*;
-use std::borrow::Cow;
 use std::iter;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -72,7 +70,7 @@ fn invalid_args(
     }
 }
 
-fn build_args_for_params(
+pub(crate) fn build_args_for_params(
     params: &[FunctionSigParam],
     src_args: &[ast::Expr<Span>],
     self_arg: Option<&Expr>,
@@ -184,8 +182,10 @@ fn typecheck_func_call(
 ) -> TypeResult<FunctionCall> {
     let target = typecheck_expr(&func_call.target, expect_ty, ctx)?;
 
-    // eprintln!("typechecking `{}`: target is {:#?}", func_call, target.annotation());
-    // eprintln!("\ttype args: {:?}", func_call.type_args);
+    // eprintln!("typechecking `{}`: target is {}", func_call, target.annotation());
+    // if let Some(args) = &func_call.type_args {
+    //     eprintln!("\ttype args: {}", args);
+    // }
 
     let invocation = match target.annotation() {
         // value with function type (eg lambda, reference to function)
@@ -258,7 +258,7 @@ fn typecheck_func_call(
 
         // direct reference to a single method
         Value::Method(method) => {
-            typecheck_method_call(method, func_call, method.self_arg.as_ref().map(Box::as_ref), ctx)
+            typecheck_method_call(method, func_call, ctx)
                 .map(Arc::new)?
         }
 
@@ -356,6 +356,7 @@ fn typecheck_func_overload_call(
 
         OverloadCandidate::Method {
             self_ty,
+            iface_ty,
             decl,
             index,
             ..
@@ -392,7 +393,7 @@ fn typecheck_func_overload_call(
             let method = Arc::new(MethodValue {
                 span: func_call.span().clone(),
                 self_arg: Some(Box::new(self_arg)),
-                self_ty: TypeName::inferred(self_ty.clone()),
+                self_ty: TypeName::inferred(iface_ty.clone()),
                 decl: decl.clone(),
                 index: *index,
                 sig: Arc::new(sig),
@@ -408,6 +409,7 @@ fn typecheck_func_overload_call(
             
             Ok(Invocation::Method {
                 method,
+                self_ty: self_ty.clone(),
                 type_args: overload.type_args,
                 args,
                 span: func_call.span().clone(),
@@ -517,18 +519,8 @@ pub fn check_overload_visibility(
 fn typecheck_method_call(
     method: &Arc<MethodValue>,
     func_call: &ast::FunctionCall<Span>,
-    with_self_arg: Option<&Expr>,
     ctx: &mut Context,
 ) -> TypeResult<Invocation> {
-    if method.self_ty.get_current_access(ctx) < method.decl.access {
-        return Err(TypeError::TypeMemberInaccessible {
-            ty: method.self_ty.ty().clone(),
-            access: method.decl.access,
-            member: method.decl.func_decl.ident().clone(),
-            span: func_call.span().clone(),
-        });
-    }
-
     // not yet supported
     if let Some(call_type_args) = &func_call.type_args {
         return Err(TypeError::from_generic_err(
@@ -541,76 +533,7 @@ fn typecheck_method_call(
         ));
     }
 
-    // branch the context to check the self-arg, because we're about to re-check it in a second
-    let self_type = match &with_self_arg {
-        Some(self_arg) => {
-            self_arg.annotation().ty()
-        },
-
-        None => {
-            let mut ctx = ctx.clone();
-            let first_self_pos = method.decl.func_decl.params
-                .iter()
-                .position(|param| param.ty == Type::MethodSelf);
-            
-            match first_self_pos {
-                Some(index) => {
-                    // note that this isn't the "self arg" used for typecheck_args, because we're not passing
-                    // it implicitly as a separate arg (like the self-arg `x` of `x.Y()` in a UFCS call).
-                    // it's just the first arg from which we can infer the self-type
-                    let first_self_arg = typecheck_expr(
-                        &func_call.args[index],
-                        &Type::Nothing,
-                        &mut ctx
-                    )?;
-
-                    Cow::Owned(first_self_arg.annotation().ty().into_owned())
-                }
-                
-                None => Cow::Owned(Type::Nothing),
-            }
-        }
-    };
-
-    let sig = method.decl.func_decl.sig().with_self(&self_type);
-
-    let typechecked_args = build_args_for_params(
-        &sig.params,
-        &func_call.args,
-        with_self_arg,
-        func_call.span(), ctx
-    )?;
-
-    if let Type::Interface(..) = method.self_ty.ty() {
-        let is_impl = ctx
-            .is_implementation(self_type.as_ref(), &method.self_ty)
-            .map_err(|err| TypeError::from_name_err(err, func_call.span().clone()))?;
-
-        if !is_impl {
-            return Err(TypeError::from_name_err(NameError::NoImplementationFound {
-                owning_ty: method.self_ty.ty().clone(),
-                impl_ty: self_type.into_owned(),
-            }, func_call.span().clone()));
-        }
-    } else if let Some(..) = &with_self_arg {
-        if method.self_ty != *self_type {
-            return Err(TypeError::type_mismatch(
-                method.self_ty.ty().clone(),
-                self_type.into_owned(),
-                func_call.span().clone()
-            ));
-        }
-    }
-
-    let invocation = Invocation::Method {
-        method: method.clone(),
-        type_args: None,
-        args: typechecked_args,
-        args_span: func_call.args_span.clone(),
-        span: func_call.span().clone(),
-    };
-    
-    Ok(invocation)
+    method.create_invocation(&func_call.args, func_call.args_span.as_ref(), func_call.span(), ctx)
 }
 
 fn typecheck_ufcs_invocation(

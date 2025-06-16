@@ -101,6 +101,10 @@ impl Type {
             _ => false,
         }
     }
+    
+    pub fn iface_ptr(id: InterfaceID) -> Self {
+        Type::RcPointer(VirtualTypeID::Interface(id))
+    }
 
     pub fn as_iface(&self) -> Option<InterfaceID> {
         match self {
