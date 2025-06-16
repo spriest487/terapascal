@@ -4,13 +4,16 @@ mod test;
 use crate::ast;
 use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::create_default_literal;
+use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::Expr;
+use crate::typ::ArrayType;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
+use crate::typ::Invocation;
 use crate::typ::NameError;
 use crate::typ::Specializable;
 use crate::typ::Type;
@@ -20,7 +23,6 @@ use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::{ArrayType, Invocation};
 use linked_hash_map::LinkedHashMap;
 use std::iter;
 use std::sync::Arc;
@@ -44,7 +46,7 @@ pub fn typecheck_object_ctor(
         ctor.type_args.as_ref(),
         expect_ty,
         &span,
-        ctx
+        ctx,
     )?;
 
     let args = typecheck_object_ctor_args(&ctor_ty, &ctor.annotation, &ctor.args, ctx)?;
@@ -68,29 +70,30 @@ pub fn typecheck_object_ctor_args(
     ctor_ty: &Type,
     ctor_span: &Span,
     src: &ast::ObjectCtorArgs,
-    ctx: &mut Context
+    ctx: &mut Context,
 ) -> TypeResult<ObjectCtorArgs> {
-    let ty_fields = ctor_ty
-        .fields(ctx)
-        .map_err(|err| TypeError::NameError {
-            err,
-            span: ctor_span.clone(),
-        })?;
+    let ty_fields = ctor_ty.fields(ctx).map_err(|err| TypeError::NameError {
+        err,
+        span: ctor_span.clone(),
+    })?;
 
     let mut expect_fields: LinkedHashMap<_, _> = ty_fields
         .into_iter()
-        .flat_map(|member| member.idents
-            .into_iter()
-            .map(move |ident| (ident, (member.ty.clone(), member.span.clone(), member.access))))
+        .flat_map(|member| {
+            member.idents.into_iter().map(move |ident| {
+                (
+                    ident,
+                    (member.ty.clone(), member.span.clone(), member.access),
+                )
+            })
+        })
         .collect();
 
     let mut members: Vec<ObjectCtorMember> = Vec::new();
 
     for member in &src.members {
         // check for duplicate items for the same field
-        let find_prev = members
-            .iter()
-            .find(|a| a.ident == member.ident);
+        let find_prev = members.iter().find(|a| a.ident == member.ident);
 
         if let Some(prev) = find_prev {
             return Err(TypeError::DuplicateNamedArg {
@@ -121,7 +124,7 @@ pub fn typecheck_object_ctor_args(
         }
 
         let value = implicit_conversion(
-            typecheck_expr(&member.value, &member_ty, ctx)?,
+            evaluate_expr(&member.value, &member_ty, ctx)?,
             &member_ty,
             ctx,
         )?;
@@ -165,7 +168,7 @@ pub fn typecheck_object_ctor_args(
         span: src.span.clone(),
         members,
     };
-    
+
     Ok(args)
 }
 
@@ -174,7 +177,7 @@ fn typecheck_object_ctor_type(
     type_args: Option<&ast::TypeArgList>,
     expect_ty: &Type,
     ctor_span: &Span,
-    ctx: &mut Context
+    ctx: &mut Context,
 ) -> TypeResult<(TypeName, Option<Expr>, Option<TypeArgList>)> {
     let ty_args = match type_args {
         Some(list) => Some(typecheck_type_args(list, ctx)?),
@@ -186,7 +189,13 @@ fn typecheck_object_ctor_type(
         None => None,
     };
 
-    let ctor_ty = find_ctor_ty(expect_ty, ty_args.as_ref(), type_expr.as_ref(), ctor_span, ctx)?;
+    let ctor_ty = find_ctor_ty(
+        expect_ty,
+        ty_args.as_ref(),
+        type_expr.as_ref(),
+        ctor_span,
+        ctx,
+    )?;
 
     let Some(ctor_ty_name) = ctor_ty.full_name() else {
         return Err(TypeError::InvalidCtorType {
@@ -222,8 +231,8 @@ fn find_ctor_ty(
     ty_args: Option<&TypeArgList>,
     type_expr: Option<&Expr>,
     span: &Span,
-    ctx: &mut Context
-) -> TypeResult<TypeName>  {
+    ctx: &mut Context,
+) -> TypeResult<TypeName> {
     let Some(type_expr) = type_expr else {
         return Ok(TypeName::Inferred(expect_ty.clone()));
     };
@@ -244,19 +253,23 @@ fn find_ctor_ty(
                 .ok_or_else(|| {
                     // eprintln!("specialization failed:\n{:#?}\ninto:\n{:#?}", generic_ty, expect_ty);
 
-                    TypeError::from_generic_err(GenericError::CannotInferArgs {
-                        target: GenericTarget::Type(generic_ty.clone()),
-                        hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
-                    }, span.clone())
+                    TypeError::from_generic_err(
+                        GenericError::CannotInferArgs {
+                            target: GenericTarget::Type(generic_ty.clone()),
+                            hint: GenericTypeHint::ExpectedValueType(expect_ty.clone()),
+                        },
+                        span.clone(),
+                    )
                 })?
                 .clone();
 
             Ok(TypeName::named(spec_ty, type_expr.span().clone()))
         },
 
-        None  => {
-            Ok(TypeName::named(generic_ty.clone(), type_expr.span().clone()))
-        }
+        None => Ok(TypeName::named(
+            generic_ty.clone(),
+            type_expr.span().clone(),
+        )),
 
         Some(args) => {
             let spec_ty = generic_ty
@@ -293,21 +306,21 @@ pub fn typecheck_collection_ctor(
                 &element_ty,
                 &mut elements,
                 ctx,
-                ctor.annotation.span()
+                ctor.annotation.span(),
             )?;
 
             let array_ty = ArrayType::new(element_ty, elements.len()).into();
 
             (array_ty, elements)
-        }
-        
+        },
+
         // any set - creating that set
         Type::Set(set_type) => {
             let element_type = &set_type.item_type;
             let elements = collection_ctor_elements(ctor, &element_type, ctx)?;
 
             (expect_ty.clone(), elements)
-        }
+        },
 
         // unknown/no type hint - this ctor is creating a static array of exactly these elements
         _ => {
@@ -329,7 +342,7 @@ pub fn typecheck_collection_ctor(
 fn array_ctor_elements(
     expect_ty: &Type,
     ctor: &ast::CollectionCtor<Span>,
-    ctx: &mut Context
+    ctx: &mut Context,
 ) -> TypeResult<(Vec<CollectionCtorElement>, Type)> {
     let (elements, element_ty) = match expect_ty.element_ty() {
         Some(elem_ty) if !elem_ty.contains_unresolved_params(ctx) => {
@@ -343,7 +356,7 @@ fn array_ctor_elements(
             (elements, elem_ty)
         },
     };
-    
+
     Ok((elements, element_ty))
 }
 
@@ -359,7 +372,7 @@ fn elements_for_inferred_ty(
     }
 
     let mut elements = Vec::new();
-    let first_element_val = typecheck_expr(&ctor.elements[0].value, &Type::Nothing, ctx)?;
+    let first_element_val = evaluate_expr(&ctor.elements[0].value, &Type::Nothing, ctx)?;
     let expected_ty = first_element_val.annotation().ty().into_owned();
 
     elements.push(CollectionCtorElement {
@@ -367,7 +380,7 @@ fn elements_for_inferred_ty(
     });
 
     for e in ctor.elements.iter().skip(1) {
-        let element = typecheck_expr(&e.value, &expected_ty, ctx)?;
+        let element = evaluate_expr(&e.value, &expected_ty, ctx)?;
         element.annotation().expect_value(&expected_ty)?;
 
         elements.push(CollectionCtorElement { value: element });
@@ -383,7 +396,7 @@ pub fn collection_ctor_elements(
 ) -> TypeResult<Vec<CollectionCtorElement>> {
     let mut elements = Vec::new();
     for e in &ctor.elements {
-        let value = typecheck_expr(&e.value, expect_element_type, ctx)?;
+        let value = evaluate_expr(&e.value, expect_element_type, ctx)?;
         value.annotation().expect_value(&expect_element_type)?;
 
         elements.push(CollectionCtorElement { value });
@@ -397,27 +410,27 @@ fn default_fill_elements(
     element_ty: &Type,
     elements: &mut Vec<CollectionCtorElement>,
     ctx: &Context,
-    span: &Span
+    span: &Span,
 ) -> TypeResult<()> {
     if expect_dim <= elements.len() {
         return Ok(());
     }
 
-    let has_default = element_ty
-        .has_default(ctx)
-        .map_err(|e| TypeError::from_name_err(e, span.clone()))?;
+    let has_default =
+        element_ty.has_default(ctx).map_err(|e| TypeError::from_name_err(e, span.clone()))?;
 
     if has_default {
         let default_count = expect_dim - elements.len();
         let default_val = create_default_literal(element_ty.clone(), span.clone());
-        
-        let default_element = CollectionCtorElement { value: default_val.clone() };
 
-        let default_elements = iter::repeat(default_element)
-            .take(default_count);
+        let default_element = CollectionCtorElement {
+            value: default_val.clone(),
+        };
+
+        let default_elements = iter::repeat(default_element).take(default_count);
 
         elements.extend(default_elements);
     }
-    
+
     Ok(())
 }
