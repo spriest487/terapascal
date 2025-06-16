@@ -204,7 +204,7 @@ fn translate_indexer(
 }
 
 pub fn translate_if_cond_expr(
-    if_cond: &typ::ast::IfCondExpression,
+    if_cond: &typ::ast::IfCondExpr,
     builder: &mut Builder,
 ) -> Option<ir::Ref> {
     cond::translate_if_cond(if_cond, builder, |branch, out_ref, out_ty, builder| {
@@ -221,7 +221,7 @@ pub fn translate_if_cond_expr(
 }
 
 pub fn translate_if_cond_stmt(
-    if_cond: &typ::ast::IfCondStatement,
+    if_cond: &typ::ast::IfCondStmt,
     builder: &mut Builder,
 ) -> Option<ir::Ref> {
     cond::translate_if_cond(if_cond, builder, |branch, out_ref, _out_ty, builder| {

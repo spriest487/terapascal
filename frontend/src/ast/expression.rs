@@ -87,7 +87,7 @@ pub enum Expr<A: Annotation = Span> {
     Call(Box<Call<A>>),
     ObjectCtor(Box<ObjectCtor<A>>),
     CollectionCtor(Box<CollectionCtor<A>>),
-    IfCond(Box<IfCond<A, Expr<A>>>),
+    IfCond(Box<IfCond<Expr<A>, A>>),
     Block(Box<Block<A>>),
     Raise(Box<Raise<A>>),
     Exit(Box<Exit<A>>),
@@ -135,8 +135,8 @@ impl<A: Annotation> From<CollectionCtor<A>> for Expr<A> {
     }
 }
 
-impl<A: Annotation> From<IfCond<A, Expr<A>>> for Expr<A> {
-    fn from(cond: IfCond<A, Expr<A>>) -> Self {
+impl<A: Annotation> From<IfCond<Expr<A>, A>> for Expr<A> {
+    fn from(cond: IfCond<Expr<A>, A>) -> Self {
         Expr::IfCond(Box::new(cond))
     }
 }

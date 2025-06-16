@@ -66,7 +66,7 @@ impl<B: Parse> ElseBranch<B> {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct IfCond<A, B>
+pub struct IfCond<B, A = Span>
 where
     A: Annotation,
 {
@@ -109,7 +109,7 @@ fn try_parse_is_pattern(tokens: &mut TokenStream) -> ParseResult<(Option<Span>, 
     }
 }
 
-impl IfCond<Span, Expr> {
+impl IfCond<Expr, Span> {
     pub fn parse_expr(tokens: &mut TokenStream) -> ParseResult<Self> {
         let if_token = tokens.match_one(Keyword::If)?;
         let cond = Expr::parse(tokens)?;
@@ -141,7 +141,7 @@ impl IfCond<Span, Expr> {
     }
 }
 
-impl IfCond<Span, Stmt> {
+impl IfCond<Stmt, Span> {
     pub fn parse_stmt(tokens: &mut TokenStream) -> ParseResult<Self> {
         let if_token = tokens.match_one(Keyword::If)?;
         let cond = Expr::parse(tokens)?;
@@ -236,7 +236,7 @@ impl IfCond<Span, Stmt> {
     }
 }
 
-impl<A, B> fmt::Display for IfCond<A, B>
+impl<B, A> fmt::Display for IfCond<B, A>
 where
     A: Annotation,
     B: fmt::Display,
@@ -258,7 +258,7 @@ where
     }
 }
 
-impl<A, B> Spanned for IfCond<A, B>
+impl<B, A> Spanned for IfCond<B, A>
 where
     A: Annotation,
     B: Parse,
@@ -268,8 +268,8 @@ where
     }
 }
 
-impl IfCond<Span, Stmt<Span>> {
-    pub fn to_expr(&self) -> Option<IfCond<Span, Expr<Span>>> {
+impl IfCond<Stmt> {
+    pub fn to_expr(&self) -> Option<IfCond<Expr>> {
         let then_branch = self.then_branch.to_expr()?;
         let else_branch = match &self.else_branch {
             Some(else_branch) => Some(ElseBranch {

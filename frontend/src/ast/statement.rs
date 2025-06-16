@@ -60,7 +60,7 @@ pub enum Stmt<A: Annotation = Span> {
     WhileLoop(Box<WhileLoop<A>>),
     Assignment(Box<Assignment<A>>),
     CompoundAssignment(Box<CompoundAssignment<A>>),
-    If(Box<IfCond<A, Stmt<A>>>),
+    If(Box<IfCond<Stmt<A>, A>>),
     Break(
         #[derivative(PartialEq = "ignore")]
         #[derivative(Hash = "ignore")]

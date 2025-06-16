@@ -15,15 +15,14 @@ use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
 use std::borrow::Cow;
-use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
-pub type IfCond<B> = ast::IfCond<Value, B>;
-pub type IfCondExpression = ast::IfCond<Value, Expr>;
-pub type IfCondStatement = ast::IfCond<Value, Stmt>;
+pub type IfCond<B> = ast::IfCond<B, Value>;
+pub type IfCondExpr = IfCond<Expr>;
+pub type IfCondStmt = IfCond<Stmt>;
 
 fn typecheck_cond_expr<B>(
-    if_cond: &ast::IfCond<Span, B>,
+    if_cond: &ast::IfCond<B>,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
     // condition expr has a boolean hint if we're not doing an is-match
@@ -45,7 +44,7 @@ fn typecheck_cond_expr<B>(
 }
 
 fn typecheck_pattern_match<B>(
-    if_cond: &ast::IfCond<Span, B>,
+    if_cond: &ast::IfCond<B>,
     cond: &Expr,
     ctx: &mut Context,
 ) -> TypeResult<Option<TypePattern>> {
@@ -90,7 +89,7 @@ fn create_then_branch_ctx(
 }
 
 pub fn typecheck_if_cond_stmt(
-    if_cond: &ast::IfCond<Span, ast::Stmt<Span>>,
+    if_cond: &ast::IfCond<ast::Stmt>,
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<IfCond<Stmt>> {
@@ -134,7 +133,7 @@ pub fn typecheck_if_cond_stmt(
 }
 
 pub fn typecheck_if_cond_expr(
-    if_cond: &ast::IfCond<Span, ast::Expr<Span>>,
+    if_cond: &ast::IfCond<ast::Expr>,
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<IfCond<Expr>> {
@@ -159,8 +158,8 @@ pub fn typecheck_if_cond_expr(
                 },
 
                 then_ty => {
-                    then_branch.annotation().expect_value(&Type::Nothing)?;
-                    else_expr.annotation().expect_value(&Type::Nothing)?;
+                    then_branch.annotation().expect_any_value()?;
+                    else_expr.annotation().expect_any_value()?;
 
                     implicit_conversion(else_expr, &then_ty, ctx)?
                 },
