@@ -396,13 +396,20 @@ pub fn translate_invocation(
             )
         },
 
-        InvocationValue::VirtualMethod { method, .. } => {
+        InvocationValue::VirtualMethod { method, args, .. } => {
             assert!(
                 method.self_ty.is_strong_rc_reference(),
                 "virtual call self type must be a class or interface pointer"
             );
 
-            unimplemented!()
+            build_method_invocation(
+                method.self_ty.ty().clone(),
+                method.self_ty.ty().clone(),
+                method.index,
+                args.as_slice(),
+                None,
+                builder,
+            )
         },
 
         InvocationValue::VariantCtor { variant_type, case, arg, .. } => {
