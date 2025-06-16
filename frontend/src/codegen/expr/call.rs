@@ -164,7 +164,7 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
                 builder,
             )
         },
-        InvocationValue::VirtualMethod { .. } => unimplemented!(),
+
         InvocationValue::ObjectCtor { .. } => unimplemented!(),
         InvocationValue::VariantCtor { .. } => unimplemented!(),
         
@@ -392,22 +392,6 @@ pub fn translate_invocation(
                 method.index,
                 args.as_slice(),
                 type_args.clone(),
-                builder,
-            )
-        },
-
-        InvocationValue::VirtualMethod { method, args, .. } => {
-            assert!(
-                method.self_ty.is_strong_rc_reference(),
-                "virtual call self type must be a class or interface pointer"
-            );
-
-            build_method_invocation(
-                method.self_ty.ty().clone(),
-                method.self_ty.ty().clone(),
-                method.index,
-                args.as_slice(),
-                None,
                 builder,
             )
         },

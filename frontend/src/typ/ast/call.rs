@@ -406,22 +406,13 @@ fn typecheck_func_overload_call(
                 method.span,
             );
             
-            if self_ty.as_iface().is_some() {
-                Ok(InvocationValue::VirtualMethod {
-                    method,
-                    args,
-                    span: func_call.span().clone(),
-                    args_span: func_call.args_span.clone(),
-                })
-            } else {
-                Ok(InvocationValue::Method {
-                    method,
-                    type_args: overload.type_args,
-                    args,
-                    span: func_call.span().clone(),
-                    args_span: func_call.args_span.clone(),
-                })    
-            }
+            Ok(InvocationValue::Method {
+                method,
+                type_args: overload.type_args,
+                args,
+                span: func_call.span().clone(),
+                args_span: func_call.args_span.clone(),
+            })
         },
     }
 }
@@ -589,8 +580,8 @@ fn typecheck_method_call(
         with_self_arg,
         func_call.span(), ctx
     )?;
-    
-    let is_virtual = if let Type::Interface(..) = method.self_ty.ty() {
+
+    if let Type::Interface(..) = method.self_ty.ty() {
         let is_impl = ctx
             .is_implementation(self_type.as_ref(), &method.self_ty)
             .map_err(|err| TypeError::from_name_err(err, func_call.span().clone()))?;
@@ -601,37 +592,22 @@ fn typecheck_method_call(
                 impl_ty: self_type.into_owned(),
             }, func_call.span().clone()));
         }
-        
-        matches!(self_type.as_ref(), Type::Interface(..) | Type::Any)
     } else if let Some(..) = &with_self_arg {
         if method.self_ty != *self_type {
             return Err(TypeError::type_mismatch(
-                method.self_ty.ty().clone(), 
-                self_type.into_owned(), 
+                method.self_ty.ty().clone(),
+                self_type.into_owned(),
                 func_call.span().clone()
             ));
         }
-        
-        false
-    } else {
-        false
-    };
-    
-    let invocation = if is_virtual {
-        InvocationValue::VirtualMethod {
-            method: method.clone(),
-            args: typechecked_args,
-            args_span: func_call.args_span.clone(),
-            span: func_call.span().clone(),
-        }
-    } else {
-        InvocationValue::Method {
-            method: method.clone(),
-            type_args: None,
-            args: typechecked_args,
-            args_span: func_call.args_span.clone(),
-            span: func_call.span().clone(),
-        }
+    }
+
+    let invocation = InvocationValue::Method {
+        method: method.clone(),
+        type_args: None,
+        args: typechecked_args,
+        args_span: func_call.args_span.clone(),
+        span: func_call.span().clone(),
     };
     
     Ok(invocation)

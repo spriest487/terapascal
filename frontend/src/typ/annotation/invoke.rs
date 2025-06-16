@@ -40,14 +40,6 @@ pub enum InvocationValue {
 
         span: Span,
     },
-    VirtualMethod {
-        method: Arc<MethodValue>,
-
-        args: Vec<Expr>,
-        args_span: Option<Span>,
-
-        span: Span,
-    },
     ObjectCtor {
         object_type: TypeName,
 
@@ -79,7 +71,6 @@ impl InvocationValue {
         match self {
             InvocationValue::Function { function, .. } => &function.sig.result_ty,
             InvocationValue::Method { method, .. } => &method.sig.result_ty,
-            InvocationValue::VirtualMethod { method, .. } => &method.sig.result_ty,
             InvocationValue::ObjectCtor { object_type, .. } => object_type.ty(),
             InvocationValue::VariantCtor { variant_type, .. } => variant_type.ty(),
             InvocationValue::FunctionValue { sig, .. } => &sig.result_ty,
@@ -90,7 +81,6 @@ impl InvocationValue {
         match self {
             InvocationValue::Function { function, .. } => Some(&function.span),
             InvocationValue::Method { method, .. } => Some(&method.span),
-            InvocationValue::VirtualMethod { method, .. } => Some(&method.span),
             InvocationValue::ObjectCtor { object_type, .. } => object_type.get_span(),
             InvocationValue::VariantCtor { variant_type, .. } => variant_type.get_span(),
             InvocationValue::FunctionValue { value, .. } => Some(value.span()),
@@ -104,8 +94,7 @@ impl InvocationValue {
 
             InvocationValue::FunctionValue { sig, .. } => Some(sig),
 
-            InvocationValue::Method { method, .. }
-            | InvocationValue::VirtualMethod { method, .. } => Some(&method.sig),
+            InvocationValue::Method { method, .. } => Some(&method.sig),
 
             InvocationValue::ObjectCtor { .. } | InvocationValue::VariantCtor { .. } => None,
         }
@@ -119,9 +108,6 @@ impl InvocationValue {
                 Box::new(args.iter())
             },
 
-            InvocationValue::VirtualMethod { args, .. } => {
-                Box::new(args.iter())
-            },
             InvocationValue::ObjectCtor { members, .. } => {
                 Box::new(members.iter().map(|mem| &mem.value))
             },
@@ -137,7 +123,6 @@ impl InvocationValue {
         match self {
             InvocationValue::Function { args_span, .. } => args_span.as_ref(),
             InvocationValue::Method { args_span, .. } => args_span.as_ref(),
-            InvocationValue::VirtualMethod { args_span, .. } => args_span.as_ref(),
             InvocationValue::ObjectCtor { .. } => None,
             InvocationValue::VariantCtor { .. } => None,
             InvocationValue::FunctionValue { args_span, .. } => args_span.as_ref(),
@@ -150,8 +135,7 @@ impl InvocationValue {
             | InvocationValue::Method { type_args, .. }
             | InvocationValue::ObjectCtor { type_args, .. } => type_args.as_ref(),
 
-            InvocationValue::VirtualMethod { .. }
-            | InvocationValue::VariantCtor { .. }
+            InvocationValue::VariantCtor { .. }
             | InvocationValue::FunctionValue { .. } => None,
         }
     }
@@ -162,7 +146,6 @@ impl Spanned for InvocationValue {
         match self {
             InvocationValue::Function { span, .. } => span,
             InvocationValue::Method { span, .. } => span,
-            InvocationValue::VirtualMethod { span, .. } => span,
             InvocationValue::ObjectCtor { span, .. } => span,
             InvocationValue::VariantCtor { span, .. } => span,
             InvocationValue::FunctionValue { value, .. } => value.span(),
@@ -186,13 +169,6 @@ impl fmt::Display for InvocationValue {
                 write!(
                     f,
                     "invocation of method {}.{}",
-                    method.self_ty, method.decl.func_decl.name.ident
-                )
-            },
-            InvocationValue::VirtualMethod { method, .. } => {
-                write!(
-                    f,
-                    "virtual invocation of method {}.{}",
                     method.self_ty, method.decl.func_decl.name.ident
                 )
             },
