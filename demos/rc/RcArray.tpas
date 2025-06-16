@@ -8,8 +8,11 @@ begin
 end;
 
 initialization
-    var x := ['Hello, ' + 'World', 'Hello, ' + 'Everyone'];
-    
+    var x := [
+        StringConcat('Hello, ', 'World'), 
+        StringConcat('Hello, ', 'Everyone')
+    ];
+
     var y := x;
     
     PrintNth(y, 0);

@@ -693,9 +693,9 @@ impl Interpreter {
 
                 if self.opts.trace_rc {
                     println!(
-                        "[rc] destroy @ {} ({}+{} refs remain)",
+                        "[rc] destroy @ {} ({}+{} refs will remain)",
                         ptr.to_pretty_string(&self.metadata),
-                        struct_rc.strong_count,
+                        struct_rc.strong_count - 1,
                         struct_rc.weak_count,
                     );
                 }
@@ -873,17 +873,23 @@ impl Interpreter {
 
     pub fn execute(&mut self, instructions: &[ir::Instruction]) -> ExecResult<()> {
         let labels = find_labels(instructions);
-        let line_count_width = instructions.len().to_string().len();
+        let line_count_width = instructions.len().to_string().len().max(4);
 
         let mut pc = 0;
         while pc < instructions.len() {
             if self.opts.trace_ir {
+                let indent = str::repeat("    ", self
+                    .current_frame()
+                    .map(|frame| frame.block_depth())
+                    .unwrap_or(0)
+                    .saturating_sub(2));
+                
                 let mut instruction_str = String::new();
                 self.metadata
                     .format_instruction(&instructions[pc], &mut instruction_str)
                     .unwrap();
-                eprintln!(
-                    "{:>width$}| {}",
+                println!(
+                    "[vm] {:>width$}| {indent}{}",
                     pc,
                     instruction_str,
                     width = line_count_width
@@ -1851,6 +1857,7 @@ impl Interpreter {
         self.native_heap.set_metadata(self.metadata.clone(), self.marshaller.clone());
 
         let mut string_lit_values = HashMap::new();
+
         for (id, literal) in lib.metadata().strings() {
             let str_val = self
                 .create_string(literal, true)
@@ -1959,6 +1966,10 @@ impl Interpreter {
             .marshaller
             .stack_alloc_size(lib.init())
             .map_err(|err| self.add_stack_trace(err.into()))?;
+        
+        if self.opts.verbose {
+            println!("[vm] entering library init");
+        }
 
         self.push_stack(Rc::new("<init>".to_string()), init_stack_size);
         // self.execute(lib.init())?;
@@ -1966,6 +1977,10 @@ impl Interpreter {
         self.execute(lib.init())?;
 
         self.pop_stack()?;
+
+        if self.opts.verbose {
+            println!("[vm] exiting library init");
+        }
         
         Ok(())
     }
@@ -2398,6 +2413,8 @@ pub struct InterpreterOpts {
     pub trace_ir: bool,
     
     pub diag_port: u16,
+
+    pub verbose: bool,
 }
 
 #[derive(Debug, Clone)]

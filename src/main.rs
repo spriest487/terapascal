@@ -240,10 +240,12 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     trace_ir: args.trace_ir,
                     
                     diag_port: args.diag_port,
+                    
+                    verbose: args.verbose,
                 };
 
                 let mut interpreter = Interpreter::new(interpret_opts);
-                interpreter.load_lib(&lib)?;                
+                interpreter.load_lib(&lib)?;
                 interpreter.shutdown()?;
 
                 Ok(())

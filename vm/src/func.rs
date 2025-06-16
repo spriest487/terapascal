@@ -80,7 +80,7 @@ impl Function {
         match self {
             Function::Builtin(def) => {
                 if state.opts().trace_ir {
-                    println!("calling {} (vm builtin)", def.debug_name);
+                    println!("[vm] calling {} (builtin)", def.debug_name);
                 }
                 (def.func)(state)?
             }
@@ -94,11 +94,11 @@ impl Function {
                 };
 
                 if state.opts().trace_ir {
-                    println!("entering {}", display_name);
+                    println!("[vm] entering {}", display_name);
                 }
                 state.execute(&def.body)?;
                 if state.opts().trace_ir {
-                    println!("exiting {}", display_name);
+                    println!("[vm] exiting {}", display_name);
                 }
             }
         };

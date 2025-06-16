@@ -250,6 +250,10 @@ impl StackFrame {
         Ok(())
     }
     
+    pub fn block_depth(&self) -> usize {
+        self.block_stack.len()
+    }
+    
     pub fn debug_push(&mut self, ctx: Span) {
         self.debug_ctx_stack.push(ctx);
     }
