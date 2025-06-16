@@ -156,6 +156,29 @@ impl FunctionName {
             context: FunctionDeclContext::FreeFunction,
         }
     }
+    
+    pub fn to_debug_string(&self, type_args: Option<&TypeArgList>) -> String {
+        let mut string = String::new();
+
+        if let FunctionDeclContext::MethodDef { declaring_type: self_ty, .. } = &self.context {
+            string.push_str(&format!("{}.", self_ty));
+        }
+
+        string.push_str(&self.ident.as_str());
+        
+        match type_args {
+            None => {
+                if let Some(ty_list) = &self.type_params {
+                    string.push_str(&ty_list.to_string());
+                }
+            }
+            Some(args) => {
+                string.push_str(&args.to_string());
+            }
+        }
+        
+        string
+    }
 }
 
 impl ast::FunctionName for FunctionName {    
@@ -199,17 +222,7 @@ impl ast::FunctionName for FunctionName {
 
 impl fmt::Display for FunctionName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let FunctionDeclContext::MethodDef { declaring_type: self_ty, .. } = &self.context {
-            write!(f, "{}.", self_ty)?;
-        }
-
-        write!(f, "{}", self.ident)?;
-
-        if let Some(ty_list) = &self.type_params {
-            write!(f, "{}", ty_list)?;
-        }
-        
-        Ok(())
+        write!(f, "{}", self.to_debug_string(None))
     }
 }
 

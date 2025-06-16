@@ -394,13 +394,13 @@ impl LibraryBuilder {
             sig: Arc::new(sig),
         };
 
-        self.translated_funcs.insert(key, cached_func.clone());
-
         let debug_name = if self.opts.debug {
-            Some(specialized_decl.to_string())
+            Some(specialized_decl.name.to_debug_string(key.type_args.as_ref()))
         } else {
             None
         };
+
+        self.translated_funcs.insert(key, cached_func.clone());
 
         let ir_func = build_func_def(
             self,
@@ -585,13 +585,14 @@ impl LibraryBuilder {
             decl_key: FunctionDeclKey::Method(method_key.clone()),
             type_args: type_args.cloned(),
         };
-        self.translated_funcs.insert(key, cached_func.clone());
 
         let debug_name = if self.opts.debug {
-            Some(specialized_decl.to_string())
+            Some(specialized_decl.name.to_debug_string(key.type_args.as_ref()))
         } else {
             None
         };
+        
+        self.translated_funcs.insert(key, cached_func.clone());
 
         let ir_func = build_func_def(
             self,
