@@ -123,8 +123,10 @@ pub fn typecheck_object_ctor_args(
             });
         }
 
+        let val_expr = evaluate_expr(&member.value, &member_ty, ctx)?;
+
         let value = implicit_conversion(
-            evaluate_expr(&member.value, &member_ty, ctx)?,
+            val_expr,
             &member_ty,
             ctx,
         )?;

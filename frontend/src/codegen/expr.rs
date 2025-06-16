@@ -113,7 +113,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
         | typ::Value::Namespace(_, _)
         | typ::Value::VariantCase(_)
         | typ::Value::Overload(_) => {
-            panic!("untranslatable value for expression {}: {}", expr, expr.annotation());
+            panic!("{}: untranslatable value for expression {}: {}", expr.span(), expr, expr.annotation());
         }
     };
 
