@@ -532,8 +532,12 @@ fn typecheck_method_call(
             call_type_args.span().clone(),
         ));
     }
-
-    method.create_invocation(&func_call.args, func_call.args_span.as_ref(), func_call.span(), ctx)
+    
+    let invocation = method.create_invocation(&func_call.args, func_call.args_span.as_ref(), func_call.span(), ctx)?;
+    
+    // eprintln!("{}: {func_call} => {:#?}", func_call.span(), invocation);
+    
+    Ok(invocation)
 }
 
 fn typecheck_ufcs_invocation(

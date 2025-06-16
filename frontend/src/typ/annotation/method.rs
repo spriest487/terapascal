@@ -158,7 +158,7 @@ impl MethodValue {
         // eprintln!("{func_call}: method call with {self_type}");
 
         let invocation = Invocation::Method {
-            self_ty: self.self_ty.ty().clone(),
+            self_ty: self_type.into_owned(),
             method: Arc::new(self.clone()),
             type_args: None,
             args: typechecked_args,

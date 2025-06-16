@@ -80,8 +80,6 @@ fn translate_call_with_args(
         CallTarget::Virtual {
             iface_id,
             iface_method_id,
-            self_ty,
-            iface_ty,
         } => {
             let self_arg = arg_vals[0].clone();
             let rest_args = arg_vals[1..].to_vec();
@@ -115,8 +113,6 @@ enum CallTarget {
     Virtual {
         iface_id: ir::InterfaceID,
         iface_method_id: ir::MethodID,
-        self_ty: typ::Type,
-        iface_ty: typ::Type,
     },
 }
 
@@ -233,8 +229,6 @@ pub fn build_method_invocation(
             CallTarget::Virtual {
                 iface_id,
                 iface_method_id: ir::MethodID(method_decl_index),
-                self_ty,
-                iface_ty,
             }
         },
 
