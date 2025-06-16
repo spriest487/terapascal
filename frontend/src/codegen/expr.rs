@@ -96,14 +96,15 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
             }
         }
         
-        // todo function pointers
         typ::Value::Function(func_val) => {
             let decl_sig = Arc::new(func_val.decl.sig());
             let func = builder.translate_func(&func_val.name, &decl_sig, None);
-
-            ir::Ref::from(ir::GlobalRef::Function(func.id))
+            
+            // wrap the function reference in an invokable static closure
+            builder.build_function_closure(&func)
         }
         
+        // TODO: other types of function pointers
         | typ::Value::UfcsFunction(_)
         | typ::Value::Method(_)
 
