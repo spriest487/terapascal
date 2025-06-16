@@ -20,7 +20,7 @@ use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::{ArrayType, InvocationValue};
+use crate::typ::{ArrayType, Invocation};
 use linked_hash_map::LinkedHashMap;
 use std::iter;
 use std::sync::Arc;
@@ -49,7 +49,7 @@ pub fn typecheck_object_ctor(
 
     let args = typecheck_object_ctor_args(&ctor_ty, &ctor.annotation, &ctor.args, ctx)?;
 
-    let invocation = Value::from(InvocationValue::ObjectCtor {
+    let invocation = Value::from(Invocation::ObjectCtor {
         span: span.clone(),
         object_type: ctor_ty.clone(),
         type_args: type_args.clone(),

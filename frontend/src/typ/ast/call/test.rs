@@ -8,7 +8,7 @@ use crate::typ::ast::call::test::util::type_args_from_str;
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
 use crate::typ::test::try_module_from_srcs;
-use crate::typ::InvocationValue;
+use crate::typ::Invocation;
 use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
@@ -164,7 +164,7 @@ fn specializes_func_call_by_arg_ty() {
 
     
     match init.body[1].annotation().as_invocation() {
-        Some(InvocationValue::Function { function, args, .. }) => {
+        Some(Invocation::Function { function, args, .. }) => {
             assert_eq!("Test.A[Test.B]", function.name.to_string());
 
             assert_eq!("arg", args[0].to_string());
@@ -217,7 +217,7 @@ fn specializes_method_call_by_arg_ty() {
             assert_eq!("instance.A", call.target.to_string());
 
             match call.annotation.as_invocation() {
-                Some(InvocationValue::Method { method, type_args, .. }) => {
+                Some(Invocation::Method { method, type_args, .. }) => {
                     assert_eq!("Test.C", method.self_ty.to_string());
                     assert_eq!("A", method.decl.func_decl.name.ident.to_string());
 
@@ -271,7 +271,7 @@ fn specializes_method_call_by_lambda_arg_ty() {
             );
 
             match call.annotation.as_invocation() {
-                Some(InvocationValue::Method { method, .. }) => {
+                Some(Invocation::Method { method, .. }) => {
                     assert_eq!("A", method.decl.func_decl.name.ident.name.as_str());
                     assert_eq!("Test.C", method.self_ty.to_string());
                 },
@@ -325,7 +325,7 @@ fn specializes_method_call_by_dynarray_element_ty() {
             );
 
             match call.annotation.as_invocation() {
-                Some(InvocationValue::Method { method, .. }) => {
+                Some(Invocation::Method { method, .. }) => {
                     assert_eq!("A", method.decl.func_decl.name.ident.name.as_str());
                     assert_eq!("Test.C", method.self_ty.to_string());
                 },
@@ -366,7 +366,7 @@ fn specializes_free_func_call_by_dynarray_element_ty() {
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].annotation().as_invocation() {
-        Some(InvocationValue::Function {
+        Some(Invocation::Function {
             function,
             args,
             type_args,

@@ -30,7 +30,7 @@ use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::InstanceMember;
-use crate::typ::InvocationValue;
+use crate::typ::Invocation;
 use crate::typ::NameError;
 use crate::typ::Primitive;
 use crate::typ::Symbol;
@@ -342,7 +342,7 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
     let args = vec![expr.clone()];
     let span = expr.span().clone();
 
-    let invocation = InvocationValue::Method { 
+    let invocation = Invocation::Method { 
         method: Arc::new(impl_method_val),
         args,
         type_args: None,
@@ -404,7 +404,7 @@ fn desugar_string_concat(
             let concat_args = vec![bin_op.lhs.clone(), bin_op.rhs.clone()];
             let concat_span = bin_op.span().clone();
 
-            let invocation = InvocationValue::Function {
+            let invocation = Invocation::Function {
                 function: Arc::new(concat_func_val),
                 args: concat_args,
                 args_span: None,

@@ -10,7 +10,7 @@ use crate::ast::Annotation;
 use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
-pub use crate::typ::annotation::invoke::InvocationValue;
+pub use crate::typ::annotation::invoke::Invocation;
 use crate::typ::ast::{implicit_conversion, specialize_call_args};
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_type_args;
@@ -67,7 +67,7 @@ impl VariantCaseValue {
         expect_ty: &Type,
         span: &Span,
         ctx: &mut Context,
-    ) -> TypeResult<InvocationValue> {
+    ) -> TypeResult<Invocation> {
         let variant_sym = match type_args {
             Some(type_name_list) => {
                 let type_list = typecheck_type_args(type_name_list, ctx)?;
@@ -138,7 +138,7 @@ impl VariantCaseValue {
         expect_ty: &Type,
         span: &Span,
         ctx: &mut Context,
-    ) -> TypeResult<InvocationValue> {
+    ) -> TypeResult<Invocation> {
         // validate visibility
         if !ctx.is_visible(&self.variant_name.full_path) {
             return Err(TypeError::NameNotVisible {
@@ -225,7 +225,7 @@ impl VariantCaseValue {
             },
         };
 
-        Ok(InvocationValue::VariantCtor {
+        Ok(Invocation::VariantCtor {
             variant_type: TypeName::named(
                 Type::variant(variant_sym.into_owned()),
                 self.variant_name_span.clone(),
@@ -377,7 +377,7 @@ pub enum Value {
     Function(Arc<FunctionValue>),
     UfcsFunction(Arc<UfcsValue>),
 
-    Invocation(Arc<InvocationValue>),
+    Invocation(Arc<Invocation>),
 
     // direct method reference e.g. `Interface.Method`
     Method(Arc<MethodValue>),
@@ -462,7 +462,7 @@ impl Value {
         Ok(())
     }
 
-    pub fn as_invocation(&self) -> Option<&InvocationValue> {
+    pub fn as_invocation(&self) -> Option<&Invocation> {
         match self {
             Value::Invocation(invocation) => Some(invocation.as_ref()),
             _ => None,

@@ -3,7 +3,7 @@ use crate::codegen::typ;
 use crate::codegen::expr;
 use crate::codegen::FunctionInstance;
 use crate::ir;
-use crate::typ::InvocationValue;
+use crate::typ::Invocation;
 use crate::typ::Specializable as _;
 use crate::typ::Value;
 use std::borrow::Cow;
@@ -124,7 +124,7 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
     };
 
     match invocation.as_ref() {
-        InvocationValue::Function {
+        Invocation::Function {
             function,
             args,
             type_args,
@@ -140,7 +140,7 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
             translate_call_with_args(call_target, args, &func.sig, builder)
         },
 
-        InvocationValue::Method {
+        Invocation::Method {
             method,
             args,
             type_args,
@@ -165,10 +165,10 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
             )
         },
 
-        InvocationValue::ObjectCtor { .. } => unimplemented!(),
-        InvocationValue::VariantCtor { .. } => unimplemented!(),
+        Invocation::ObjectCtor { .. } => unimplemented!(),
+        Invocation::VariantCtor { .. } => unimplemented!(),
         
-        InvocationValue::FunctionValue { value, args, .. } => {
+        Invocation::FunctionValue { value, args, .. } => {
             let value_ty = value.annotation().ty();
             build_func_val_invocation(value, value_ty.as_ref(), args, None, builder)
         },
@@ -353,11 +353,11 @@ fn build_func_invocation(
 }
 
 pub fn translate_invocation(
-    invocation: &InvocationValue,
+    invocation: &Invocation,
     builder: &mut Builder,
 ) -> Option<ir::Ref> {
     match invocation {
-        InvocationValue::Function {
+        Invocation::Function {
             function,
             type_args,
             ..
@@ -375,7 +375,7 @@ pub fn translate_invocation(
             build_func_invocation(&args, func, false, builder)
         },
 
-        InvocationValue::Method {
+        Invocation::Method {
             method, args, type_args, .. 
         } => {
             assert_eq!(
@@ -396,16 +396,16 @@ pub fn translate_invocation(
             )
         },
 
-        InvocationValue::VariantCtor { variant_type, case, arg, .. } => {
+        Invocation::VariantCtor { variant_type, case, arg, .. } => {
             build_variant_ctor_call(variant_type.ty(), case.as_str(), arg.as_ref(), builder)
         },
 
-        InvocationValue::ObjectCtor { object_type, members, .. } => {
+        Invocation::ObjectCtor { object_type, members, .. } => {
             let ctor_result = build_object_ctor_invocation(object_type.ty(), members.as_slice(), builder);
             Some(ctor_result)
         }
 
-        InvocationValue::FunctionValue { value, args, .. } => {
+        Invocation::FunctionValue { value, args, .. } => {
             let value_ty = value.annotation().ty();
             build_func_val_invocation(value, value_ty.as_ref(), args, None, builder)
         }

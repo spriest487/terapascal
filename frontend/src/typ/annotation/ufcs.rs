@@ -4,7 +4,7 @@ use crate::typ::ast::{specialize_call_args, Expr};
 use crate::typ::function::FunctionValue;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
-use crate::typ::InvocationValue;
+use crate::typ::Invocation;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeResult;
@@ -62,7 +62,7 @@ impl UfcsValue {
         expect_ty: &Type,
         span: &Span,
         ctx: &mut Context,
-    ) -> TypeResult<InvocationValue> {
+    ) -> TypeResult<Invocation> {
         let args = specialize_call_args(
             &self.decl,
             &[],

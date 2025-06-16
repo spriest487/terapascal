@@ -3,7 +3,7 @@ use crate::typ::context::ufcs::find_ufcs_free_functions;
 use crate::typ::test::try_unit_from_src;
 use crate::typ::test::unit_from_src;
 use crate::typ::test::units_from_src;
-use crate::typ::{InstanceMethod, InvocationValue, NameError, TypeError, Value};
+use crate::typ::{InstanceMethod, Invocation, NameError, TypeError, Value};
 use crate::typ::Type;
 use crate::typ::SYSTEM_UNIT_NAME;
 
@@ -232,7 +232,7 @@ fn finds_func_in_its_own_body() {
     };
 
     match invocation.as_ref() {
-        InvocationValue::Function { function, args, .. } => {
+        Invocation::Function { function, args, .. } => {
             assert_eq!("Test.MyFunc", function.name.to_string());
             assert_eq!("a", args[0].to_string());
         }

@@ -4,7 +4,7 @@ use terapascal_common::span::Span;
 use crate::typ::annotation::function::FunctionValue;
 use crate::ast;
 use crate::typ::ast::{resolve_overload, Expr, MethodDecl, OverloadCandidate};
-use crate::typ::{Context, FunctionSig, InvocationValue, Type, TypeArgList, TypeName, TypeResult, Value};
+use crate::typ::{Context, FunctionSig, Invocation, Type, TypeArgList, TypeName, TypeResult, Value};
 use crate::typ::method::MethodValue;
 
 #[derive(Eq, Clone, Derivative)]
@@ -79,7 +79,7 @@ impl OverloadValue {
         type_args: Option<&TypeArgList>,
         span: &Span,
         ctx: &mut Context,
-    ) -> TypeResult<InvocationValue> {
+    ) -> TypeResult<Invocation> {
         let self_arg = self.self_arg.as_ref().map(Box::as_ref);
         let resolved = resolve_overload(&self.candidates, args, type_args, self_arg, span, ctx)?;
 
@@ -101,7 +101,7 @@ impl OverloadValue {
                 
                 // eprintln!("overloaded invocation of `{}` with {} args (self arg? {})", decl, resolved.args.len(), self.self_arg.is_some());
 
-                Ok(InvocationValue::Function {
+                Ok(Invocation::Function {
                     function: Arc::new(func_val),
                     type_args: resolved.type_args,
                     span: span.clone(),
@@ -133,7 +133,7 @@ impl OverloadValue {
                     sig: Arc::new(sig),
                 };
 
-                Ok(InvocationValue::Method {
+                Ok(Invocation::Method {
                     method: Arc::new(method_val),
                     args,
                     args_span: args_span.cloned(),

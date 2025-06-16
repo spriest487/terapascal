@@ -18,7 +18,7 @@ use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
-use crate::typ::InvocationValue;
+use crate::typ::Invocation;
 use crate::typ::NameError;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
@@ -277,7 +277,7 @@ fn typecheck_func_call(
             
             let object_type = TypeName::named(target_type.clone(), span.clone());
             
-            Arc::new(InvocationValue::ObjectCtor {
+            Arc::new(Invocation::ObjectCtor {
                 span: ctor.annotation.clone(),
                 type_args,
                 members: Vec::new(),
@@ -317,7 +317,7 @@ fn typecheck_func_overload_call(
     target: &Expr,
     expect_ty: &Type,
     ctx: &mut Context,
-) -> TypeResult<InvocationValue> {
+) -> TypeResult<Invocation> {
     let type_args = match &func_call.type_args {
         Some(args) => Some(typecheck_type_args(args, ctx)?),
         None => None,
@@ -406,7 +406,7 @@ fn typecheck_func_overload_call(
                 method.span,
             );
             
-            Ok(InvocationValue::Method {
+            Ok(Invocation::Method {
                 method,
                 type_args: overload.type_args,
                 args,
@@ -519,7 +519,7 @@ fn typecheck_method_call(
     func_call: &ast::FunctionCall<Span>,
     with_self_arg: Option<&Expr>,
     ctx: &mut Context,
-) -> TypeResult<InvocationValue> {
+) -> TypeResult<Invocation> {
     if method.self_ty.get_current_access(ctx) < method.decl.access {
         return Err(TypeError::TypeMemberInaccessible {
             ty: method.self_ty.ty().clone(),
@@ -602,7 +602,7 @@ fn typecheck_method_call(
         }
     }
 
-    let invocation = InvocationValue::Method {
+    let invocation = Invocation::Method {
         method: method.clone(),
         type_args: None,
         args: typechecked_args,
@@ -620,7 +620,7 @@ fn typecheck_ufcs_invocation(
     span: &Span,
     args_span: Option<&Span>,
     ctx: &mut Context,
-) -> TypeResult<InvocationValue> {
+) -> TypeResult<Invocation> {
     if ufcs.visibility < Visibility::Interface
         && !ctx.is_current_namespace_child(&ufcs.function_name.full_path) {
         return Err(TypeError::NameNotVisible {
@@ -658,7 +658,7 @@ fn typecheck_ufcs_invocation(
     
     // eprintln!("-- func invocation: {} with {} args", func_val.decl, specialized_call_args.actual_args.len());
 
-    Ok(InvocationValue::Function {
+    Ok(Invocation::Function {
         function: Arc::new(func_val),
         args: specialized_call_args.actual_args,
         args_span: args_span.cloned(),
@@ -676,7 +676,7 @@ fn typecheck_func_value_invocation(
     self_arg: Option<&Expr>,
     sig: &Arc<FunctionSig>,
     ctx: &mut Context,
-) -> TypeResult<InvocationValue> {
+) -> TypeResult<Invocation> {
     let args = build_args_for_params(
         &sig.params,
         &func_call.args,
@@ -685,7 +685,7 @@ fn typecheck_func_value_invocation(
         ctx
     )?;
 
-    Ok(InvocationValue::FunctionValue {
+    Ok(Invocation::FunctionValue {
         value: target,
         args,
         args_span: func_call.args_span.clone(),
@@ -693,7 +693,7 @@ fn typecheck_func_value_invocation(
     })
 }
 
-pub fn evaluate_no_args_function_call(func: &Arc<FunctionValue>) -> TypeResult<InvocationValue> {
+pub fn evaluate_no_args_function_call(func: &Arc<FunctionValue>) -> TypeResult<Invocation> {
     if func.sig.params.len() > 0 {
         return Err(TypeError::invalid_args_with_sig(&func.sig, [], func.span.clone()));
     }
@@ -706,7 +706,7 @@ pub fn evaluate_no_args_function_call(func: &Arc<FunctionValue>) -> TypeResult<I
         }, func.span.clone()));
     }
     
-    let invocation = InvocationValue::Function {
+    let invocation = Invocation::Function {
         span: func.span.clone(),
         function: func.clone(),
         type_args: None,

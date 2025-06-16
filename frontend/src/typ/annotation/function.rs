@@ -1,5 +1,5 @@
 use crate::ast::Visibility;
-use crate::typ::annotation::invoke::InvocationValue;
+use crate::typ::annotation::invoke::Invocation;
 use crate::typ::ast::specialize_func_decl;
 use crate::typ::ast::validate_args;
 use crate::typ::ast::Expr;
@@ -87,7 +87,7 @@ impl FunctionValue {
         expect_ty: &Type,
         span: &Span,
         ctx: &mut Context,
-    ) -> TypeResult<InvocationValue> {
+    ) -> TypeResult<Invocation> {
         self.check_visible(span, ctx)?;
         
         assert_eq!(args.len(), self.sig.params.len());
@@ -156,7 +156,7 @@ impl FunctionValue {
 
         // eprintln!("{func_call} -> {}", func_val.sig);
 
-        Ok(InvocationValue::Function {
+        Ok(Invocation::Function {
             args,
             args_span: args_span.cloned(),
             type_args: type_args.map(Cow::into_owned),
