@@ -411,12 +411,20 @@ impl Value {
 
     pub fn expect_value(&self, expect_ty: &Type) -> TypeResult<()> {
         let (actual_ty, span) = match self {
-            Value::Typed(val) => (val.ty.clone(), &val.span),
-            Value::Const(const_val) => (const_val.ty.clone(), &const_val.span),
-            Value::Invocation(val) => (val.result_type().clone(), val.span()),
+            Value::Typed(val) => {
+                (val.ty.clone(), &val.span)
+            },
+            Value::Const(const_val) => {
+                (const_val.ty.clone(), &const_val.span)
+            },
+            Value::Invocation(val) => {
+                (val.result_type().clone(), val.span())
+            },
+            Value::Function(func_val) => {
+                (Type::Function(func_val.sig.clone()), &func_val.span)
+            },
 
             Value::Method(..)
-            | Value::Function(..)
             | Value::Overload(..)
             | Value::UfcsFunction(..)
             | Value::Untyped(..)
@@ -482,17 +490,28 @@ impl Value {
         match self {
             Value::Namespace(_, _)
             | Value::Untyped(_)
-            | Value::Function(_)
             | Value::UfcsFunction(_)
             | Value::Method(_)
             | Value::Overload(_)
             | Value::Type(_, _)
-            | Value::VariantCase(..) => Cow::Owned(Type::Nothing),
+            | Value::VariantCase(..) => {
+                Cow::Owned(Type::Nothing)
+            },
 
-            Value::Invocation(invocation) => Cow::Borrowed(invocation.result_type()),
+            Value::Function(func_val) => {
+                Cow::Owned(Type::Function(func_val.sig.clone()))
+            },
 
-            Value::Const(const_val) => Cow::Borrowed(&const_val.ty),
-            Value::Typed(val) => Cow::Borrowed(&val.ty),
+            Value::Invocation(invocation) => {
+                Cow::Borrowed(invocation.result_type())
+            },
+
+            Value::Const(const_val) => {
+                Cow::Borrowed(&const_val.ty)
+            },
+            Value::Typed(val) => {
+                Cow::Borrowed(&val.ty)
+            },
         }
     }
 
@@ -525,6 +544,7 @@ impl Value {
             Value::Typed(val) => Some(val.value_kind),
             Value::Const { .. } => Some(ValueKind::Immutable),
             Value::Invocation(..) => Some(ValueKind::Temporary),
+            Value::Function(..) => Some(ValueKind::Immutable),
             _ => None,
         }
     }

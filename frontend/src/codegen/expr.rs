@@ -13,6 +13,7 @@ use crate::typ::TypedValue;
 use crate::typ::STRING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
 use std::rc::Rc;
+use std::sync::Arc;
 use terapascal_common::span::*;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
@@ -96,7 +97,13 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
         }
         
         // todo function pointers
-        typ::Value::Function(_)
+        typ::Value::Function(func_val) => {
+            let decl_sig = Arc::new(func_val.decl.sig());
+            let func = builder.translate_func(&func_val.name, &decl_sig, None);
+
+            ir::Ref::from(ir::GlobalRef::Function(func.id))
+        }
+        
         | typ::Value::UfcsFunction(_)
         | typ::Value::Method(_)
 

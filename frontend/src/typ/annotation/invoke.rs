@@ -115,11 +115,11 @@ impl InvocationValue {
         match self {
             InvocationValue::Function { args, .. } => Box::new(args.iter()),
 
-            InvocationValue::Method { method, args, .. } => {
+            InvocationValue::Method { args, .. } => {
                 Box::new(args.iter())
             },
 
-            InvocationValue::VirtualMethod { method, args, .. } => {
+            InvocationValue::VirtualMethod { args, .. } => {
                 Box::new(args.iter())
             },
             InvocationValue::ObjectCtor { members, .. } => {

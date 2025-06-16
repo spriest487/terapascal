@@ -1414,6 +1414,10 @@ pub enum InvalidTagReason {
 }
 
 fn args_to_string(args: &[Type]) -> String {
+    if args.is_empty() {
+        return "<no arguments>".to_string();
+    }
+    
     args.iter()
         .map(|arg| arg.to_string())
         .collect::<Vec<_>>()

@@ -398,14 +398,39 @@ pub fn validate_args(
         if params[i].is_by_ref() {
             continue;
         }
-
-        args[i] = implicit_conversion(args[i].clone(), &params[i].ty, ctx)
-            .map_err(|err| match err {
-                TypeError::TypeMismatch { .. } => {
-                    call::invalid_args(args.to_vec(), params, span.clone())
-                },
-                err => err,
-            })?;
+        
+        let param_ty = &params[i].ty;
+        let arg_expr = &mut args[i];
+        
+        // eprintln!("{span}: arg {i} = {arg_expr} ({}: {}), param = {param_ty}", arg_expr.annotation(), arg_expr.annotation().ty());
+        
+        // first try converting the unevaluated value. if there's no valid conversion, 
+        // try evaluating it and converting the result. this way, params of function type will
+        // first accept an arg referencing a function directly before trying to evaluate the arg
+        // expression as a call to that function
+        match implicit_conversion(arg_expr.clone(), &params[i].ty, ctx) {
+            Ok(converted_arg) => {
+                *arg_expr = converted_arg;
+            }
+            
+            Err(TypeError::TypeMismatch { .. } | TypeError::NotValueExpr { .. }) => {
+                // don't care about this error, we'll report the first error instead
+                let evaluated_arg = arg_expr
+                    .clone()
+                    .evaluate(&param_ty, ctx)
+                    .and_then(|expr| implicit_conversion(expr, param_ty, ctx));
+                
+                if let Ok(evaluated_arg) = evaluated_arg {
+                    *arg_expr = evaluated_arg;
+                } else {
+                    return Err(call::invalid_args(args.to_vec(), params, span.clone()));
+                }
+            }
+            
+            Err(err) => {
+                return Err(err);
+            }
+        }
     }
 
     let args_and_params = args.iter().zip(params.iter());

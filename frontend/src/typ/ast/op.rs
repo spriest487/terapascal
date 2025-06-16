@@ -4,9 +4,10 @@ mod test;
 mod variant_case;
 
 use crate::ast;
+use crate::ast::Ident;
 use crate::ast::IdentPath;
+use crate::ast::Literal;
 use crate::ast::Operator;
-use crate::ast::{Ident, Literal};
 use crate::typ::annotation::UfcsValue;
 use crate::typ::ast::collection_ctor_elements;
 use crate::typ::ast::const_eval_integer;
@@ -714,7 +715,11 @@ pub fn typecheck_unary_op(
     };
 
     let span = unary_op.span().clone();
+    
+    // do *not* evaluate the expression here - if it isn't already an addressable value,
+    // evaluating it can only produce a temporary value anyway
     let operand = typecheck_expr(&unary_op.operand, &operand_expect_ty, ctx)?;
+
     let operand_ty = operand.annotation().ty();
 
     let typed_val = match unary_op.op {

@@ -102,7 +102,7 @@ fn build_args_for_params(
         .map(Some)
         .chain(iter::repeat(None));
 
-    // typ each arg (don't do conversions yet, we haven't figured out the self ty_def yet)
+    // typecheck each arg (don't do conversions yet, we haven't figured out the self type yet)
     for (expected_param, arg) in rest_params_or_none.zip(src_args.iter()) {
         // keep checking the provided arguments even when there aren't parameters for them,
         // so we can show a complete error message. this will also make any errors checking the 
@@ -111,7 +111,7 @@ fn build_args_for_params(
             Some(param) => &param.ty,
             None => &Type::Nothing,
         };
-
+        
         let arg_expr = typecheck_expr(arg, param_expect_ty, ctx)?;
         checked_args.push(arg_expr);
     }
@@ -127,22 +127,21 @@ fn build_args_for_params(
 
     for i in 0..params.len() {
         let expected = &params[i];
-        if expected.ty != Type::MethodSelf {
-            continue;
-        }
+        
+        if expected.ty == Type::MethodSelf {
+            match &self_ty {
+                // this is the first arg passed as a Self param, use this as the self ty_def from now on
+                None => {
+                    let actual_self_ty = checked_args[i].annotation().ty().into_owned();
+                    params[i].ty = actual_self_ty.clone();
+                    self_ty = Some(actual_self_ty);
+                },
 
-        match &self_ty {
-            // this is the first arg passed as a Self param, use this as the self ty_def from now on
-            None => {
-                let actual_self_ty = checked_args[i].annotation().ty().into_owned();
-                params[i].ty = actual_self_ty.clone();
-                self_ty = Some(actual_self_ty);
-            },
-
-            // we have already deduced a self ty_def and are using that one
-            Some(actual_self_ty) => {
-                params[i].ty = actual_self_ty.clone();
-            },
+                // we have already deduced a self ty_def and are using that one
+                Some(actual_self_ty) => {
+                    params[i].ty = actual_self_ty.clone();
+                },
+            }
         }
     }
     
@@ -268,7 +267,7 @@ fn typecheck_func_call(
             let Some(ctor) = func_call.clone().try_into_empty_object_ctor() else {
                 return Err(TypeError::NotCallable(Box::new(target.annotation().clone())))
             };
-            
+
             let type_args = match ctor.type_args {
                 Some(list) => Some(typecheck_type_args(&list, ctx)?),
                 None => None,
@@ -702,31 +701,17 @@ fn typecheck_func_value_invocation(
     sig: &Arc<FunctionSig>,
     ctx: &mut Context,
 ) -> TypeResult<InvocationValue> {
-    let mut call_args = Vec::with_capacity(func_call.args.len());
-    let expect_arg_tys = sig.params
-        .iter()
-        .map(|p| &p.ty)
-        .chain(iter::repeat(&Type::Nothing));
-
-    if let Some(self_arg) = self_arg {
-        call_args.push(self_arg.clone());
-    }
-    
-    for (arg, expect_ty) in func_call.args.iter().zip(expect_arg_tys) {
-        let arg = typecheck_expr(arg, expect_ty, ctx)?;
-        call_args.push(arg);
-    }
-
-    validate_args(
-        &mut call_args,
+    let args = build_args_for_params(
         &sig.params,
+        &func_call.args,
+        self_arg,
         func_call.span(),
-        ctx,
+        ctx
     )?;
 
     Ok(InvocationValue::FunctionValue {
         value: target,
-        args: call_args,
+        args,
         args_span: func_call.args_span.clone(),
         sig: sig.clone(),
     })

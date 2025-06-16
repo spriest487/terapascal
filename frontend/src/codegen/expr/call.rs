@@ -167,58 +167,11 @@ pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Re
         InvocationValue::VirtualMethod { .. } => unimplemented!(),
         InvocationValue::ObjectCtor { .. } => unimplemented!(),
         InvocationValue::VariantCtor { .. } => unimplemented!(),
-        InvocationValue::FunctionValue { .. } => unimplemented!(),
-    }
-}
-
-fn build_func_call(
-    target: &typ::ast::Expr,
-    args: &[typ::ast::Expr],
-    call_ty_args: Option<typ::TypeArgList>,
-    builder: &mut Builder,
-) -> Option<ir::Ref> {
-    match target.annotation() {
-        // calling a function directly
-        typ::Value::Function(_func) => {
-            unreachable!()
+        
+        InvocationValue::FunctionValue { value, args, .. } => {
+            let value_ty = value.annotation().ty();
+            build_func_val_invocation(value, value_ty.as_ref(), args, None, builder)
         },
-
-        typ::Value::UfcsFunction(func) => {
-            let func_instance = builder.translate_func(&func.function_name, &func.sig, None);
-            let func_val = ir::Value::from(func_instance.id);
-
-            let call_target = CallTarget::Function(func_val);
-
-            let mut args_with_self_arg = Vec::with_capacity(args.len() + 1);
-            args_with_self_arg.push((*func.self_arg).clone());
-            args_with_self_arg.extend(args.iter().cloned());
-
-            translate_call_with_args(
-                call_target,
-                &args_with_self_arg,
-                &func_instance.sig,
-                builder,
-            )
-        },
-
-        // invoking a closure value that refers to a function invocation
-        typ::Value::Typed(val) => {
-            build_func_val_invocation(target, &val.ty, args, call_ty_args, builder)
-        },
-
-        // invoking a closure returned by a function
-        typ::Value::Invocation(invocation) => build_func_val_invocation(
-            target,
-            invocation.result_type(),
-            args,
-            call_ty_args,
-            builder,
-        ),
-
-        unexpected => panic!(
-            "type of function call expr must be a function or callable value got: {:#?}",
-            unexpected
-        ),
     }
 }
 
@@ -461,8 +414,9 @@ pub fn translate_invocation(
             Some(ctor_result)
         }
 
-        InvocationValue::FunctionValue { .. } => {
-            unimplemented!()
+        InvocationValue::FunctionValue { value, args, .. } => {
+            let value_ty = value.annotation().ty();
+            build_func_val_invocation(value, value_ty.as_ref(), args, None, builder)
         }
     }
 }
