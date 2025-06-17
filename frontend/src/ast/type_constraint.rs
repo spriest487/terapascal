@@ -24,10 +24,6 @@ pub struct TypeConstraint<A: Annotation = Span> {
     pub name: Ident,
 
     pub is_ty: A::TypeName,
-    
-    // TODO: make the AST type constraints and the ones used by the type system separate types
-    // this can't use A::TypeName right now because inferred params don't have source info
-    pub is_ty_span: Option<Span>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -148,7 +144,6 @@ impl ParseSeq for WhereClauseItem {
         Ok(WhereClauseItem(TypeConstraint {
             span: param_ident.span().to(is_ty.span()),
             name: param_ident,
-            is_ty_span:  Some(is_ty.span().clone()),
             is_ty,
             is_kw_span: Some(is_kw_tt.into_span()),
         }))

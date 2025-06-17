@@ -1,6 +1,4 @@
 use crate::ast;
-use crate::ast::Ident;
-use crate::ast::TypeConstraint;
 use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::GenericError;
@@ -47,7 +45,7 @@ impl TypeParamList {
         self
             .map(|ty_param, _pos| {
                 let constraint = ty_param.constraint
-                    .map(|constraint| TypeConstraint {
+                    .map(|constraint| ast::TypeConstraint {
                         is_ty: constraint.is_ty.apply_type_args(params, args),
                         ..constraint
                     });
@@ -99,7 +97,6 @@ pub fn typecheck_type_params(
                     is_kw_span: constraint.is_kw_span.clone(),
                     name: ty_param.name.clone(),
                     span: constraint.span.clone(),
-                    is_ty_span: Some(constraint.is_ty.span().clone()),
                     is_ty,
                 })
             }
@@ -134,7 +131,7 @@ pub fn validate_generic_constraints(args: &TypeArgList, params: &TypeParamList, 
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct TypeParamListItem {
-    pub name: Ident,
+    pub name: ast::Ident,
     pub is_ty: TypeName,
 }
 

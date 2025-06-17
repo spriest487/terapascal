@@ -31,7 +31,6 @@ impl WhereClause {
                 is_kw_span: constraint.is_kw_span.clone(),
                 
                 is_ty,
-                is_ty_span: constraint.is_ty_span.clone(),
 
                 name: constraint.name.clone(),
                 span: constraint.span.clone(),
