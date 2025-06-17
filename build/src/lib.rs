@@ -162,7 +162,7 @@ pub fn parse_units(input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseO
                 let tokens = tokenize(pp_unit)?;
                 let parsed_unit = parse(unit_filename.clone(), tokens)?;
 
-                add_unit_path(&parsed_unit.ident, &unit_filename, &mut used_unit_paths)?;
+                add_unit_path(&parsed_unit.ident, &unit_filename, &mut used_unit_paths, verbose, log)?;
 
                 dep_sort.insert(parsed_unit.ident.clone());
 
@@ -220,10 +220,12 @@ pub fn parse_units(input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseO
                             )?
                         },
 
-                        None => sources.add_used_unit(&unit_filename, &used_unit.ident, log)?,
+                        None => {
+                            sources.add_used_unit(&unit_filename, &used_unit.ident, log)?
+                        },
                     };
 
-                    add_unit_path(&used_unit.ident, &used_unit_path, &mut used_unit_paths)?;
+                    add_unit_path(&used_unit.ident, &used_unit_path, &mut used_unit_paths, verbose, log)?;
                 } else {
                     return Err(BuildError::UnitNotLoaded {
                         unit_name: used_unit.ident.clone(),
@@ -288,6 +290,8 @@ fn add_unit_path(
     unit_ident: &IdentPath,
     unit_path: &PathBuf,
     unit_paths: &mut HashMap<IdentPath, PathBuf>,
+    verbose: bool,
+    log: &mut BuildLog,
 ) -> Result<(), BuildError> {
     match unit_paths.entry(unit_ident.clone()) {
         Entry::Occupied(occupied_ident_filename) => {
@@ -306,6 +310,10 @@ fn add_unit_path(
         },
 
         Entry::Vacant(vacant_ident_filename) => {
+            if verbose {
+                log.trace(format!("{}: adding filename {}", vacant_ident_filename.key(), unit_path.display()))
+            }
+            
             vacant_ident_filename.insert(unit_path.clone());
 
             Ok(())

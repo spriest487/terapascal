@@ -1,4 +1,4 @@
-use crate::error::BuildError;
+use crate::error::{BuildError, BuildResult};
 use std::collections::LinkedList;
 use std::env;
 use std::path::Path;
@@ -115,8 +115,12 @@ impl SourceCollection {
         used_unit: &IdentPath,
         filename: &PathBuf,
         log: &mut BuildLog,
-    ) -> Result<PathBuf, BuildError> {
+    ) -> BuildResult<PathBuf> {
         if let Some(unit_dir) = unit_dir.parent() {
+            if self.verbose {
+                eprintln!("searching unit dir: {}", unit_dir.display());
+            }
+
             if let Some(used_path) = find_in_path(filename, unit_dir) {
                 if self.verbose {
                     log.trace(format!("added source path {} for unit {}", used_path.display(), used_unit));
