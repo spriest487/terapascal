@@ -1,4 +1,5 @@
 use crate::ast;
+use crate::ast::ElseBranch;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_stmt;
@@ -10,17 +11,15 @@ use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
-use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use crate::ast::ElseBranch;
 
-pub type CaseBranch<Item> = ast::CaseBranch<Value, Item>;
-pub type CaseBlock<Item> = ast::CaseBlock<Value, Item>;
+pub type CaseBranch<Item> = ast::CaseBranch<Item, Value>;
+pub type CaseBlock<Item> = ast::CaseBlock<Item, Value>;
 pub type CaseExpr = ast::CaseExpr<Value>;
 pub type CaseStmt = ast::CaseStmt<Value>;
 
 pub fn typecheck_case_stmt(
-    case: &ast::CaseStmt<Span>,
+    case: &ast::CaseStmt,
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<CaseStmt> {
@@ -62,7 +61,7 @@ pub fn typecheck_case_stmt(
 }
 
 pub fn typecheck_case_expr(
-    case: &ast::CaseExpr<Span>,
+    case: &ast::CaseExpr,
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<CaseExpr> {
@@ -112,7 +111,7 @@ pub fn typecheck_case_expr(
         Some(branch) => {
             let expr = typecheck_expr(&branch.item, &result_ty, ctx)?;
             ElseBranch::new(branch.else_kw_span.clone(), expr)
-        }
+        },
 
         _ => {
             return Err(TypeError::InvalidCaseExprBlock { span });
@@ -140,10 +139,11 @@ pub fn typecheck_case_expr(
 
 fn typecheck_case_values<Item>(
     cond_ty: &Type,
-    branch: &ast::CaseBranch<Span, Item>,
-    ctx: &mut Context
-) -> TypeResult<Vec<Expr>>{
-    branch.case_values
+    branch: &ast::CaseBranch<Item>,
+    ctx: &mut Context,
+) -> TypeResult<Vec<Expr>> {
+    branch
+        .case_values
         .iter()
         .map(|expr| {
             let expr = typecheck_expr(expr, &cond_ty, ctx)?;

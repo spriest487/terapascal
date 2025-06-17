@@ -22,12 +22,12 @@ use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 
-pub type CaseStmt<A = Span> = CaseBlock<A, Stmt<A>>;
-pub type CaseExpr<A = Span> = CaseBlock<A, Expr<A>>;
+pub type CaseStmt<A = Span> = CaseBlock<Stmt<A>, A>;
+pub type CaseExpr<A = Span> = CaseBlock<Expr<A>, A>;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]
-pub struct CaseBlock<A: Annotation, B> {
+pub struct CaseBlock<B, A: Annotation = Span> {
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -39,7 +39,7 @@ pub struct CaseBlock<A: Annotation, B> {
     pub of_span: Span,
     
     pub cond_expr: Box<Expr<A>>,
-    pub branches: Vec<CaseBranch<A, B>>,
+    pub branches: Vec<CaseBranch<B, A>>,
     pub else_branch: Option<ElseBranch<B>>,
 
     #[derivative(Hash = "ignore")]
@@ -53,7 +53,7 @@ pub struct CaseBlock<A: Annotation, B> {
     pub annotation: A,
 }
 
-impl<A, B> Spanned for CaseBlock<A, B>
+impl<B, A> Spanned for CaseBlock<B, A>
 where
     A: Annotation,
 {
@@ -62,7 +62,7 @@ where
     }
 }
 
-impl<A, B> fmt::Display for CaseBlock<A, B>
+impl<B, A> fmt::Display for CaseBlock<B, A>
 where
     A: Annotation,
     B: fmt::Display,
@@ -94,7 +94,7 @@ impl CaseExpr {
 
     fn parse_branches(
         tokens: &mut TokenStream,
-        branches: &mut Vec<CaseBranch<Span, Expr>>
+        branches: &mut Vec<CaseBranch<Expr>>
     ) -> ParseResult<Option<ElseBranch<Expr>>> {
         let expect_else = if tokens.look_ahead().match_one(Keyword::Else).is_some() {
             true
@@ -202,7 +202,7 @@ impl CaseStmt {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]
-pub struct CaseBranch<A: Annotation, Item> {
+pub struct CaseBranch<Item, A: Annotation = Span> {
     pub case_values: Vec<Expr<A>>,
     pub item: Box<Item>,
 
@@ -212,7 +212,7 @@ pub struct CaseBranch<A: Annotation, Item> {
     pub span: Span,
 }
 
-impl<A, Item> Spanned for CaseBranch<A, Item>
+impl<Item, A> Spanned for CaseBranch<Item, A>
 where
     A: Annotation,
 {
@@ -221,7 +221,7 @@ where
     }
 }
 
-impl<A, Item> fmt::Display for CaseBranch<A, Item>
+impl<Item, A> fmt::Display for CaseBranch<Item, A>
 where
     A: Annotation,
     Item: fmt::Display,
@@ -238,7 +238,7 @@ where
     }
 }
 
-impl<Item> CaseBranch<Span, Item>
+impl<Item> CaseBranch<Item>
 where
     Item: Spanned,
 {
@@ -272,7 +272,7 @@ fn parse_case_values(tokens: &mut TokenStream) -> ParseResult<Vec<Expr>> {
     Ok(values)
 }
 
-impl<Item> CaseBranch<Span, Item>
+impl<Item> CaseBranch<Item>
 where
     Item: Parse + Spanned,
 {
@@ -323,9 +323,9 @@ struct CaseBlockGroup {
 
 impl CaseBlockGroup {
     pub fn finish_block<B>(self,
-        branches: Vec<CaseBranch<Span, B>>,
+        branches: Vec<CaseBranch<B>>,
         else_branch: Option<ElseBranch<B>>
-    ) -> ParseResult<CaseBlock<Span, B>> {
+    ) -> ParseResult<CaseBlock<B>> {
         self.tokens.finish()?;
 
         Ok(CaseBlock {
