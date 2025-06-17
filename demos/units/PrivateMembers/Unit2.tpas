@@ -9,15 +9,15 @@ type C = class
     value: Integer;
 end;
 
+type V = variant
+    Left;
+    Right;
+end;
+
 implementation
 
 type R2 = record
     value: Integer;
-end;
-
-type V = variant
-    Left;
-    Right;
 end;
 
 end
