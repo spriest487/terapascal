@@ -11,8 +11,9 @@ use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 pub use crate::typ::annotation::invoke::Invocation;
-use crate::typ::ast::{implicit_conversion, specialize_call_args};
-use crate::typ::ast::typecheck_expr;
+use crate::typ::ast::evaluate_expr;
+use crate::typ::ast::implicit_conversion;
+use crate::typ::ast::specialize_call_args;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::Expr;
 use crate::typ::ast::Literal;
@@ -35,8 +36,8 @@ use std::fmt;
 use std::hash::Hash;
 use std::sync::Arc;
 pub use symbol::*;
-pub use ufcs::*;
 use terapascal_common::span::*;
+pub use ufcs::*;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
@@ -118,7 +119,7 @@ impl VariantCaseValue {
                 _ => &Type::Nothing,
             };
 
-            let arg = typecheck_expr(&args[i], expect_ty, ctx)?;
+            let arg = evaluate_expr(&args[i], expect_ty, ctx)?;
             arg_exprs.push(arg);
         }
 
