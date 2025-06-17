@@ -1,6 +1,7 @@
 use crate::ast;
-use crate::typ::ast::{evaluate_expr, implicit_conversion};
-use crate::typ::ast::typecheck_expr;
+use crate::ast::ElseBranch;
+use crate::typ::ast::evaluate_expr;
+use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::ast::Expr;
 use crate::typ::ast::Stmt;
@@ -16,7 +17,6 @@ use crate::typ::Value;
 use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use crate::ast::ElseBranch;
 
 pub type MatchBlock<B> = ast::MatchBlock<B, Value>;
 pub type MatchExpr = MatchBlock<Expr>;
@@ -54,7 +54,7 @@ where
     if match_block.branches.is_empty() {
         return Err(TypeError::EmptyMatchBlock {
             span: match_block.span().clone(),
-        })
+        });
     }
 
     let mut branches = Vec::new();
@@ -69,18 +69,16 @@ where
 
         let branch = ctx.scope(branch_env, |branch_ctx| {
             let pattern = TypePattern::typecheck(&branch.pattern, cond_ty, branch_ctx)?;
-            let bindings = pattern.bindings(branch_ctx)
+            let bindings = pattern
+                .bindings(branch_ctx)
                 .map_err(|err| TypeError::from_name_err(err, pattern.span().clone()))?;
 
             for binding in bindings {
-                branch_ctx.declare_local_var(
-                    binding.ident.clone(),
-                    Binding {
-                        ty: binding.ty,
-                        def: Some(binding.ident),
-                        kind: ValueKind::Temporary,
-                    },
-                )?;
+                branch_ctx.declare_local_var(binding.ident.clone(), Binding {
+                    ty: binding.ty,
+                    def: Some(binding.ident),
+                    kind: ValueKind::Temporary,
+                })?;
             }
 
             let item = check_item(&branch.item, expect_ty, &branches, branch_ctx)?;
@@ -161,20 +159,20 @@ pub fn typecheck_match_expr(
             expect_ty,
             block_ctx,
             |item_expr, expect_ty, branches: &[MatchBlockBranch<Expr>], ctx| {
-                if branches.len() > 0 {
-                    let result_ty = branches[0].item.annotation().ty();
-                    let item_expr = typecheck_expr(item_expr, &result_ty, ctx)?;
-                    
-                    // it's OK for a match expression to result in Nothing (it'll probably need
-                    // to be converted to a match statement afterward though to continue)
-                    if *result_ty != Type::Nothing {
-                        implicit_conversion(item_expr, &result_ty, ctx)
-                    } else {
-                        item_expr.annotation().expect_no_value()?;
-                        Ok(item_expr)
-                    }
+                if branches.is_empty() {
+                    return evaluate_expr(item_expr, expect_ty, ctx);
+                }
+
+                let result_ty = branches[0].item.annotation().ty();
+                let item_expr = evaluate_expr(item_expr, &result_ty, ctx)?;
+
+                // it's OK for a match expression to result in Nothing (it'll probably need
+                // to be converted to a match statement afterward though to continue)
+                if *result_ty != Type::Nothing {
+                    implicit_conversion(item_expr, &result_ty, ctx)
                 } else {
-                    typecheck_expr(item_expr, expect_ty, ctx)
+                    item_expr.annotation().expect_no_value()?;
+                    Ok(item_expr)
                 }
             },
         )?;
@@ -183,7 +181,7 @@ pub fn typecheck_match_expr(
 
         let else_branch = match &match_expr.else_branch {
             Some(branch) => {
-                let else_stmt = typecheck_expr(&branch.item, expect_ty, block_ctx)?;
+                let else_stmt = evaluate_expr(&branch.item, expect_ty, block_ctx)?;
                 Some(ElseBranch::new(branch.else_kw_span.clone(), else_stmt))
             },
             None => None,
@@ -195,10 +193,11 @@ pub fn typecheck_match_expr(
                 Type::Any | Type::Interface(..) => {
                     // matches on dynamic RC types can never be exhaustive
                     false
-                }
+                },
 
                 Type::Variant(var_sym) => {
-                    let variant_def = block_ctx.find_variant_def(&var_sym.full_path)
+                    let variant_def = block_ctx
+                        .find_variant_def(&var_sym.full_path)
                         .map_err(|err| TypeError::from_name_err(err, match_expr.span().clone()))?;
 
                     // add all variants and remove the ones mentioned by any variant pattern, or
@@ -218,16 +217,16 @@ pub fn typecheck_match_expr(
                     }
 
                     missing_cases.is_empty()
-                }
+                },
 
-                _ =>  true,
+                _ => true,
             };
 
             if !is_exhaustive {
                 return Err(TypeError::MatchExprNotExhaustive {
                     span: match_expr.span().clone(),
                     missing_cases,
-                })
+                });
             }
         }
 
@@ -236,7 +235,8 @@ pub fn typecheck_match_expr(
             span: match_expr.span().clone(),
             decl: None,
             value_kind: ValueKind::Temporary,
-        }.into();
+        }
+        .into();
 
         Ok(MatchExpr {
             kw_span: match_expr.kw_span.clone(),
