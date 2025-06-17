@@ -1,4 +1,4 @@
-use crate::ast::{Ident, TypeIdentList};
+use crate::ast::{Ident, TypeIdentList, Visibility};
 use crate::ast::IdentPath;
 use crate::typ::context::Decl;
 use crate::typ::{FunctionSig, TypeParamList};
@@ -8,6 +8,8 @@ use crate::typ::Value;
 use terapascal_common::span::*;
 use std::fmt;
 use std::fmt::Debug;
+use std::path::PathBuf;
+use terapascal_common::{DiagnosticLabel, DiagnosticMessage};
 
 #[derive(Debug)]
 pub enum GenericTarget {
@@ -316,6 +318,111 @@ impl NameError {
             member: ident.into(),
         }
     }
+    
+    pub fn see_also(&self) -> Vec<DiagnosticMessage> {
+        match self {
+            NameError::AlreadyDeclared { new, existing, existing_kind, conflict, .. } => {
+                if *existing.span().file.as_ref() == PathBuf::from("<builtin>") {
+                    // don't show this message for conflicts with builtin identifiers
+                    return Vec::new()
+                }
+
+                let title = format!("{} `{}` previously declared here", existing_kind, new);
+
+                let existing_label = DiagnosticLabel::new(existing.span().clone());
+
+                let message = DiagnosticMessage::new(title)
+                    .with_label(match conflict {
+                        DeclConflict::Visibility { prev: Some(prev), .. } => {
+                            existing_label.with_text(format!("with visibility: {prev}"))
+                        }
+
+                        DeclConflict::Type { prev, .. } => {
+                            existing_label.with_text(format!("with type: {prev}"))
+                        },
+                        
+                        _ => existing_label,
+                    });
+
+                match conflict {
+                    DeclConflict::Type { new, .. } => {
+                        vec![message.with_note(format!("new type: {new}"))]
+                    },
+                    DeclConflict::Visibility { new: Some(new), .. } => {
+                        vec![message.with_note(format!("new visibility: {new}"))]
+                    },
+                    _ => vec![message],
+                }
+            }
+
+            NameError::AlreadyDefined { ident, existing } => {
+                // zero-length sources are builtins
+                if existing.start == existing.end {
+                    return Vec::new()
+                }
+
+                vec![DiagnosticMessage {
+                    title: format!("`{}` previously defined here", ident),
+                    label: Some(DiagnosticLabel {
+                        text: None,
+                        span: existing.span().clone(),
+                    }),
+                    notes: Vec::new(),
+                }]
+            },
+
+            NameError::AlreadyImplemented {
+                owning_ty: iface,
+                method,
+                existing,
+                ..
+            } => vec![DiagnosticMessage {
+                title: format!("`{}.{}` previously implemented here", iface, method),
+                label: Some(DiagnosticLabel {
+                    text: None,
+                    span: existing.clone(),
+                }),
+                notes: Vec::new(),
+            }],
+
+            NameError::Ambiguous { ident, options } => {
+                let mut see_also: Vec<_> = options
+                    .iter()
+                    .map(|option| DiagnosticMessage {
+                        title: format!("`{}` could refer to `{}`", ident, option.join(".")),
+                        label: Some(DiagnosticLabel {
+                            text: None,
+                            span: option.last().span().clone(),
+                        }),
+                        notes: Vec::new(),
+                    })
+                    .collect();
+                see_also.sort();
+                see_also
+            }
+
+            NameError::DefDeclMismatch { def, decl, path: ident } => vec![
+                DiagnosticMessage {
+                    title: format!("Previous declaration of `{}`", ident),
+                    label: Some(DiagnosticLabel {
+                        text: None,
+                        span: decl.clone(),
+                    }),
+                    notes: Vec::new(),
+                },
+                DiagnosticMessage {
+                    title: format!("Conflicting definition of `{}`", ident),
+                    label: Some(DiagnosticLabel {
+                        text: None,
+                        span: def.clone(),
+                    }),
+                    notes: Vec::new(),
+                },
+            ],
+
+            _ => Vec::new(),
+        }
+    }
 }
 
 impl From<GenericError> for NameError {
@@ -360,15 +467,15 @@ impl fmt::Display for NameError {
                 write!(f, "`{}` was already declared in this scope with ", new)?;
                 write!(f, "{}", match conflict {
                     DeclConflict::Name => "the same name",
-                    DeclConflict::Type => "a conflicting type",
-                    DeclConflict::Visibility => "conflicting visibility",
+                    DeclConflict::Type { .. } => "a conflicting type",
+                    DeclConflict::Visibility { .. } => "conflicting visibility",
                 })?;
 
                 Ok(())
             },
             NameError::AlreadyDefined { ident, .. } => {
                 write!(f, "`{}` was already defined", ident)
-                },
+            },
             NameError::Ambiguous { ident, .. } => {
                 write!(f, "`{}` is ambiguous in this context", ident)
             },
@@ -399,11 +506,17 @@ impl fmt::Display for NameError {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DeclConflict {
     Name,
-    Type,
-    Visibility,
+    Type {
+        prev: Type,
+        new: Type,
+    },
+    Visibility {
+        prev: Option<Visibility>,
+        new: Option<Visibility>,
+    }
 }
 
 pub type NameResult<T> = Result<T, NameError>;

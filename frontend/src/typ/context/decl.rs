@@ -74,7 +74,10 @@ impl Decl {
     /// Handles forward declarations and source code definitions of builtin decls.
     pub fn get_conflict(&self, new_decl: &Decl) -> Option<DeclConflict> {
         if self.visibility() != new_decl.visibility() {
-            return Some(DeclConflict::Visibility);
+            return Some(DeclConflict::Visibility {
+                prev: self.visibility(),
+                new: new_decl.visibility(),
+            });
         }
 
         if new_decl.is_valid_builtin_redecl() {
@@ -88,7 +91,10 @@ impl Decl {
                 return if old_ty == new_ty {
                     None
                 } else {
-                    Some(DeclConflict::Type)
+                    Some(DeclConflict::Type {
+                        new: new_ty.clone(),
+                        prev: old_ty.clone(),
+                    })
                 }
             }
         }

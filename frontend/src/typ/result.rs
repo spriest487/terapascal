@@ -1,30 +1,31 @@
 use crate::ast;
+use crate::ast::Access;
+use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Operator;
-use crate::ast::{Access, FunctionDeclKind};
 use crate::parse::IllegalStatement;
 use crate::typ::annotation::Value;
-use crate::typ::ast::{Call, FunctionName};
+use crate::typ::ast::Call;
 use crate::typ::ast::DeclMod;
 use crate::typ::ast::Expr;
+use crate::typ::ast::FunctionName;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::Stmt;
 use crate::typ::ast::VariantDef;
 use crate::typ::context::NameError;
+use crate::typ::FunctionSig;
 use crate::typ::GenericError;
 use crate::typ::Type;
 use crate::typ::ValueKind;
 use crate::typ::MAX_FLAGS_BITS;
-use crate::typ::FunctionSig;
 use crate::IntConstant;
+use std::fmt;
 use terapascal_common::span::*;
 use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
-use std::fmt;
-use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum TypeError {
@@ -720,90 +721,7 @@ impl DiagnosticOutput for TypeError {
 
     fn see_also(&self) -> Vec<DiagnosticMessage> {
         match self {
-            TypeError::NameError { err, .. } => match err {
-                NameError::AlreadyDeclared { new, existing, existing_kind, .. } => {
-                    if *existing.span().file.as_ref() == PathBuf::from("<builtin>") {
-                        // don't show this message for conflicts with builtin identifiers
-                        return Vec::new()
-                    }
-
-                    vec![DiagnosticMessage {
-                        title: format!("{} `{}` previously declared here", existing_kind, new),
-                        label: Some(DiagnosticLabel {
-                            text: None,
-                            span: existing.span().clone(),
-                        }),
-                        notes: Vec::new(),
-                    }]
-                }
-
-                NameError::AlreadyDefined { ident, existing } => {
-                    // zero-length sources are builtins
-                    if existing.start == existing.end {
-                        return Vec::new()
-                    }
-                    
-                    vec![DiagnosticMessage {
-                        title: format!("`{}` previously defined here", ident),
-                        label: Some(DiagnosticLabel {
-                            text: None,
-                            span: existing.span().clone(),
-                        }),
-                        notes: Vec::new(),
-                    }]
-                },
-
-                NameError::AlreadyImplemented {
-                    owning_ty: iface,
-                    method,
-                    existing,
-                    ..
-                } => vec![DiagnosticMessage {
-                    title: format!("`{}.{}` previously implemented here", iface, method),
-                    label: Some(DiagnosticLabel {
-                        text: None,
-                        span: existing.clone(),
-                    }),
-                    notes: Vec::new(),
-                }],
-
-                NameError::Ambiguous { ident, options } => {
-                    let mut see_also: Vec<_> = options
-                        .iter()
-                        .map(|option| DiagnosticMessage {
-                            title: format!("`{}` could refer to `{}`", ident, option.join(".")),
-                            label: Some(DiagnosticLabel {
-                                text: None,
-                                span: option.last().span().clone(),
-                            }),
-                            notes: Vec::new(),
-                        })
-                        .collect();
-                    see_also.sort();
-                    see_also
-                }
-
-                NameError::DefDeclMismatch { def, decl, path: ident } => vec![
-                    DiagnosticMessage {
-                        title: format!("Previous declaration of `{}`", ident),
-                        label: Some(DiagnosticLabel {
-                            text: None,
-                            span: decl.clone(),
-                        }),
-                        notes: Vec::new(),
-                    },
-                    DiagnosticMessage {
-                        title: format!("Conflicting definition of `{}`", ident),
-                        label: Some(DiagnosticLabel {
-                            text: None,
-                            span: def.clone(),
-                        }),
-                        notes: Vec::new(),
-                    },
-                ],
-
-                _ => Vec::new(),
-            },
+            TypeError::NameError { err, .. } => err.see_also(),
 
             TypeError::UndefinedSymbols { undefined: syms, .. } => syms
                 .iter()

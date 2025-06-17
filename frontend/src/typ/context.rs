@@ -518,7 +518,7 @@ impl Context {
                                 new: name,
                                 existing_kind: ScopeMemberKind::Decl,
                                 existing: old_ident,
-                                conflict: DeclConflict::Type,
+                                conflict: DeclConflict::Name,
                             },
                         })
                     },
