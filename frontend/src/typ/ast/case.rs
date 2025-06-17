@@ -1,7 +1,7 @@
 use crate::ast;
 use crate::ast::ElseBranch;
+use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
-use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::ast::Expr;
 use crate::typ::Context;
@@ -23,7 +23,7 @@ pub fn typecheck_case_stmt(
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> TypeResult<CaseStmt> {
-    let cond_expr = typecheck_expr(&case.cond_expr, &Type::Nothing, ctx)?;
+    let cond_expr = evaluate_expr(&case.cond_expr, &Type::Nothing, ctx)?;
     let cond_ty = cond_expr.annotation().ty();
 
     let mut branches = Vec::new();
@@ -71,7 +71,7 @@ pub fn typecheck_case_expr(
         return Err(TypeError::InvalidCaseExprBlock { span });
     }
 
-    let cond_expr = typecheck_expr(&case.cond_expr, &Type::Nothing, ctx)?;
+    let cond_expr = evaluate_expr(&case.cond_expr, &Type::Nothing, ctx)?;
     let cond_ty = cond_expr.annotation().ty();
     let mut branches = Vec::new();
 
@@ -84,7 +84,7 @@ pub fn typecheck_case_expr(
     for branch in &case.branches {
         let case_values = typecheck_case_values(&cond_ty, branch, ctx)?;
 
-        let mut branch_expr = typecheck_expr(&branch.item, &expect_ty, ctx)?;
+        let mut branch_expr = evaluate_expr(&branch.item, &expect_ty, ctx)?;
 
         if let Some(branch_expr_ty) = &branch_expr_ty {
             branch_expr = implicit_conversion(branch_expr, branch_expr_ty, ctx)?;
@@ -109,7 +109,7 @@ pub fn typecheck_case_expr(
 
     let else_branch = match &case.else_branch {
         Some(branch) => {
-            let expr = typecheck_expr(&branch.item, &result_ty, ctx)?;
+            let expr = evaluate_expr(&branch.item, &result_ty, ctx)?;
             ElseBranch::new(branch.else_kw_span.clone(), expr)
         },
 
@@ -146,7 +146,7 @@ fn typecheck_case_values<Item>(
         .case_values
         .iter()
         .map(|expr| {
-            let expr = typecheck_expr(expr, &cond_ty, ctx)?;
+            let expr = evaluate_expr(expr, &cond_ty, ctx)?;
             expr.annotation().expect_value(&cond_ty)?;
             Ok(expr)
         })
