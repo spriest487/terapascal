@@ -241,7 +241,7 @@ fn is_string_class(class: &typ::Symbol) -> bool {
 }
 
 pub fn literal_to_val(
-    lit: &ast::Literal<typ::Type>,
+    lit: &typ::ast::Literal,
     ty: &typ::Type,
     builder: &mut Builder,
 ) -> ir::Value {
@@ -402,7 +402,7 @@ pub fn literal_to_val(
 }
 
 pub fn translate_literal(
-    lit: &ast::Literal<typ::Type>,
+    lit: &typ::ast::Literal,
     ty: &typ::Type,
     builder: &mut Builder,
 ) -> ir::Ref {

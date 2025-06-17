@@ -1,24 +1,26 @@
 use crate::ast;
 use crate::ast::TypeAnnotation;
 use crate::typ::ast::Expr;
+use crate::typ::builtin_typeinfo_name;
+use crate::typ::string_to_char_lit;
 use crate::typ::string_type;
-use crate::typ::typecheck_type;
+use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
 use crate::typ::STRING_CHAR_TYPE;
-use crate::typ::{builtin_typeinfo_name, string_to_char_lit};
 use crate::IntConstant;
 use crate::RealConstant;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 
-pub type Literal = ast::Literal<Type>;
+pub type Literal = ast::Literal<TypeName>;
 
 impl Literal {
     pub fn as_string(&self) -> Option<&Arc<String>> {
@@ -335,7 +337,7 @@ pub fn typecheck_literal(
         }
 
         ast::Literal::SizeOf(size_of_ty) => {
-            let ty = typecheck_type(&size_of_ty, ctx)?;
+            let ty = typecheck_typename(&size_of_ty, ctx)?;
             let annotation = TypedValue {
                 ty: Type::Primitive(Primitive::Int32),
                 span: span.clone(),
@@ -356,10 +358,10 @@ pub fn typecheck_literal(
                         expr: Box::new(ast::Expr::literal(lit.clone(), span.clone())),
                     });
                 } else {
-                    expect_ty.clone()
+                    TypeName::inferred(expect_ty.clone())
                 }
             } else {
-                typecheck_type(default_of_ty, ctx)?
+                typecheck_typename(default_of_ty, ctx)?
             };
 
             ty.expect_sized(ctx, span)?;
@@ -370,7 +372,7 @@ pub fn typecheck_literal(
 
             if !has_default {
                 return Err(TypeError::NotDefaultable {
-                    ty,
+                    ty: Type::from(ty),
                     span: span.clone(),
                 });
             }
@@ -379,7 +381,7 @@ pub fn typecheck_literal(
         }
 
         ast::Literal::TypeInfo(typename) => {
-            let ty = typecheck_type(typename, ctx)?; 
+            let ty = typecheck_typename(typename, ctx)?; 
             
             let typeinfo_type = Type::Class(Arc::new(builtin_typeinfo_name()));
             let val = TypedValue::temp(typeinfo_type, span.clone());
@@ -389,16 +391,16 @@ pub fn typecheck_literal(
     }
 }
 
-pub fn create_default_literal(ty: Type, span: Span) -> Expr {
+pub fn create_default_literal(typename: TypeName, span: Span) -> Expr {
     let annotation = TypedValue {
-        ty: ty.clone(),
+        ty: typename.ty().clone(),
         decl: None,
         span: span.clone(),
         value_kind: ValueKind::Temporary,
     };
 
     Expr::literal(
-        Literal::DefaultValue(Box::new(ty)),
+        Literal::DefaultValue(Box::new(typename)),
         annotation.into(),
     )
 }

@@ -295,7 +295,7 @@ impl FunctionDecl<Span> {
                     inner: type_list_inner,
                     span: type_list_span,
                     ..
-                })) => {                
+                })) => {
                     let mut type_list_tokens = TokenStream::new(type_list_inner, type_list_span.clone());
                     
                     let type_list_items: Vec<Ident> = TypeList::parse_items(&mut type_list_tokens)?;

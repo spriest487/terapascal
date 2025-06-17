@@ -144,19 +144,6 @@ impl FunctionName {
         }
     }
     
-    pub fn new_free_func(
-        ident: impl Into<Ident>,
-        type_params: Option<TypeParamList>,
-        span: impl Into<Span>
-    ) -> Self {
-        Self {
-            ident: ident.into(),
-            type_params,
-            span: span.into(),
-            context: FunctionDeclContext::FreeFunction,
-        }
-    }
-    
     pub fn to_debug_string(&self, type_args: Option<&TypeArgList>) -> String {
         let mut string = String::new();
 

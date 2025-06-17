@@ -48,7 +48,7 @@ pub enum Literal<T: TypeAnnotation = TypeName> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct LiteralItem<A: Annotation = Span> {
-    pub literal: Literal<A::Type>,
+    pub literal: Literal<A::TypeName>,
     
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
@@ -319,7 +319,7 @@ impl<A: Annotation> Expr<A> {
         }
     }
 
-    pub fn as_literal(&self) -> Option<&Literal<A::Type>> {
+    pub fn as_literal(&self) -> Option<&Literal<A::TypeName>> {
         match self {
             Expr::Literal(lit) => Some(&lit.literal),
             _ => None,
@@ -345,7 +345,7 @@ impl<A: Annotation> Expr<A> {
         }
     }
     
-    pub fn literal(literal: Literal<A::Type>, annotation: A) -> Self {
+    pub fn literal(literal: Literal<A::TypeName>, annotation: A) -> Self {
         Self::Literal(LiteralItem { literal, annotation })
     }
 }

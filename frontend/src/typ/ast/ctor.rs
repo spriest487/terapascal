@@ -148,10 +148,12 @@ pub fn typecheck_object_ctor_args(
             .map_err(|e| TypeError::from_name_err(e, member_span.clone()))?;
 
         if has_default {
+            let default_typename = TypeName::inferred(member_ty);
+            
             members.push(ObjectCtorMember {
                 ident: member_ident,
                 span: member_span.clone(),
-                value: create_default_literal(member_ty, ctor_span.clone()),
+                value: create_default_literal(default_typename, ctor_span.clone()),
             });
         } else {
             missing_members.push(member_ident);
@@ -423,7 +425,9 @@ fn default_fill_elements(
 
     if has_default {
         let default_count = expect_dim - elements.len();
-        let default_val = create_default_literal(element_ty.clone(), span.clone());
+        
+        let default_typename = TypeName::inferred(element_ty.clone()); 
+        let default_val = create_default_literal(default_typename, span.clone());
 
         let default_element = CollectionCtorElement {
             value: default_val.clone(),
