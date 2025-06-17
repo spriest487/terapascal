@@ -276,23 +276,22 @@ fn typecheck_member_stmt(member: &ast::MemberStmt, expect_ty: &Type, ctx: &mut C
 fn typecheck_ident_stmt(ident: &Ident, span: &Span, ctx: &mut Context) -> TypeResult<Stmt> {
     let target = ast::Expr::Ident(ident.clone(), span.clone());
 
-    // an expression which appears on its own as a statement MUST be a function we call call with
+    // an expression which appears on its own as a statement MUST be a function we call with
     // no args, so if the statement expression here typechecks to anything else (even another valid
     // stmt kind), raise an error.
     // we handle other kind of expr->stmt conversions during parsing, this is just the only
     // case where we need type information to decide
-    match typecheck_expr(&target, &Type::Nothing, ctx)? {
-        ast::Expr::Call(call) => {
-            let call_stmt = Stmt::Call(call);
-            Ok(call_stmt)
-        },
-
-        invalid => {
-            // this would only be valid as an expression
-            let invalid_stmt = IllegalStatement(Box::new(invalid));
-            return Err(TypeError::InvalidStatement(invalid_stmt));
-        }
+    let Expr::Ident(ident, value) = evaluate_expr(&target, &Type::Nothing, ctx)? else {
+        unreachable!("ident expr should always typecheck into the same ident");
+    };
+    
+    if !value.as_invocation().is_some() {
+        // this would only be valid as an expression
+        let invalid_stmt = IllegalStatement(Box::new(Expr::Ident(ident, value)));
+        return Err(TypeError::InvalidStatement(invalid_stmt));
     }
+    
+    Ok(Stmt::Ident(ident, value))
 }
 
 fn expect_in_loop(stmt: &ast::Stmt<Span>, ctx: &Context) -> TypeResult<()> {
