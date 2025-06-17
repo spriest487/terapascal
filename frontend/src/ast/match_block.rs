@@ -19,7 +19,7 @@ use terapascal_common::TracedError;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct MatchBlock<A, B>
+pub struct MatchBlock<B, A = Span>
 where
     A: Annotation
 {
@@ -35,7 +35,7 @@ where
     
     pub cond_expr: Expr<A>,
 
-    pub branches: Vec<MatchBlockBranch<A, B>>,
+    pub branches: Vec<MatchBlockBranch<B, A>>,
     pub else_branch: Option<ElseBranch<B>>,
 
     #[derivative(Hash = "ignore")]
@@ -49,8 +49,8 @@ where
     pub annotation: A,
 }
 
-pub type MatchExpr<A = Span> = MatchBlock<A, Expr<A>>;
-pub type MatchStmt<A = Span> = MatchBlock<A, Stmt<A>>;
+pub type MatchExpr<A = Span> = MatchBlock<Expr<A>, A>;
+pub type MatchStmt<A = Span> = MatchBlock<Stmt<A>, A>;
 
 impl MatchExpr {
     pub fn parse_expr(tokens: &mut TokenStream) -> ParseResult<Self> {
@@ -64,7 +64,7 @@ impl MatchExpr {
     
     fn parse_branches(
         tokens: &mut TokenStream,
-        branches: &mut Vec<MatchBlockBranch<Span, Expr>>
+        branches: &mut Vec<MatchBlockBranch<Expr>>
     ) -> ParseResult<Option<ElseBranch<Expr>>> {
         let expect_else = if tokens.look_ahead().match_one(Keyword::Else).is_some() { 
             true 
@@ -166,7 +166,7 @@ impl MatchStmt {
     }
 }
 
-impl<B> MatchBlock<Span, B> {
+impl<B> MatchBlock<B> {
     fn parse_block_group(tokens: &mut TokenStream) -> ParseResult<MatchBlockGroup> {
         let block_group = DelimitedGroup::parse(tokens, DelimiterPair::MatchEnd)?;
 
@@ -219,7 +219,7 @@ impl<B> MatchBlock<Span, B> {
     }
 }
 
-impl<B: Parse> MatchBlock<Span, B> {
+impl<B: Parse> MatchBlock<B> {
     pub(crate) fn parse_else_item(tokens: &mut TokenStream) -> ParseResult<ElseBranch<B>> {
         let branch = ElseBranch::parse(tokens)?;
         tokens.match_one_maybe(Separator::Semicolon);
@@ -234,7 +234,7 @@ pub(crate) enum MatchBranchNextItem {
     End,
 }
 
-impl<A, B> fmt::Display for MatchBlock<A, B>
+impl<B, A> fmt::Display for MatchBlock<B, A>
 where
     A: Annotation,
     B: fmt::Display
@@ -285,7 +285,7 @@ impl MatchStmt<Span> {
     }
 }
 
-impl<A, B> Spanned for MatchBlock<A, B>
+impl<B, A> Spanned for MatchBlock<B, A>
 where
     A: Annotation
 {
@@ -305,9 +305,9 @@ struct MatchBlockGroup {
 
 impl MatchBlockGroup {
     pub fn finish_block<B>(self,
-        branches: Vec<MatchBlockBranch<Span, B>>,
+        branches: Vec<MatchBlockBranch<B>>,
         else_branch: Option<ElseBranch<B>>
-    ) -> ParseResult<MatchBlock<Span, B>> {
+    ) -> ParseResult<MatchBlock<B>> {
         self.tokens.finish()?;
         
         Ok(MatchBlock {
@@ -324,7 +324,7 @@ impl MatchBlockGroup {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct MatchBlockBranch<A, B>
+pub struct MatchBlockBranch<B, A = Span>
 where
     A: Annotation
 {
@@ -337,7 +337,7 @@ where
     pub span: Span,
 }
 
-impl<B> MatchBlockBranch<Span, B>
+impl<B> MatchBlockBranch<B>
 where
     B: Spanned
 {
@@ -352,7 +352,7 @@ where
     }
 }
 
-impl<B> Parse for MatchBlockBranch<Span, B>
+impl<B> Parse for MatchBlockBranch<B>
 where
     B: Parse + Spanned
 {
@@ -370,7 +370,7 @@ where
     }
 }
 
-impl<A, B> Spanned for MatchBlockBranch<A, B>
+impl<B, A> Spanned for MatchBlockBranch<B, A>
 where
     A: Annotation
 {

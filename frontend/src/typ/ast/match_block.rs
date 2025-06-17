@@ -18,13 +18,13 @@ use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use crate::ast::ElseBranch;
 
-pub type MatchBlock<B> = ast::MatchBlock<Value, B>;
+pub type MatchBlock<B> = ast::MatchBlock<B, Value>;
 pub type MatchExpr = MatchBlock<Expr>;
 pub type MatchStmt = MatchBlock<Stmt>;
-pub type MatchBlockBranch<B> = ast::MatchBlockBranch<Value, B>;
+pub type MatchBlockBranch<B> = ast::MatchBlockBranch<B, Value>;
 
 fn typecheck_match_cond<B>(
-    match_block: &ast::MatchBlock<Span, B>,
+    match_block: &ast::MatchBlock<B>,
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
     let cond_expr = evaluate_expr(&match_block.cond_expr, &Type::Nothing, ctx)?;
@@ -41,7 +41,7 @@ fn typecheck_match_cond<B>(
 }
 
 fn typecheck_match_branches<BSrc, B, ItemCheck>(
-    match_block: &ast::MatchBlock<Span, BSrc>,
+    match_block: &ast::MatchBlock<BSrc>,
     cond_ty: &Type,
     expect_ty: &Type,
     ctx: &mut Context,
