@@ -339,7 +339,7 @@ where
                 self.add(span, SEMANTIC_KEYWORD);
             }
 
-            if let Some(span) = &constraint.is_ty_span {
+            if let Some(span) = &constraint.is_ty.get_span() {
                 self.add(span, SEMANTIC_TYPE);
             }
         }
@@ -431,7 +431,7 @@ where
 
     fn add_if_cond<B: Spanned, BranchFn>(
         &mut self,
-        if_cond: &ast::IfCond<A, B>,
+        if_cond: &ast::IfCond<B, A>,
         add_branch: BranchFn,
     ) where
         BranchFn: Fn(&mut Self, &B),
@@ -458,7 +458,7 @@ where
 
     fn add_case_block<B, BranchFn>(
         &mut self,
-        block: &ast::CaseBlock<A, B>,
+        block: &ast::CaseBlock<B, A>,
         add_branch: BranchFn,
     ) where
         BranchFn: Fn(&mut Self, &B),
@@ -484,7 +484,7 @@ where
 
     fn add_match_block<B, BranchFn>(
         &mut self,
-        block: &ast::MatchBlock<A, B>,
+        block: &ast::MatchBlock<B, A>,
         add_branch: BranchFn,
     ) where
         BranchFn: Fn(&mut Self, &B),
