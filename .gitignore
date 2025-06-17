@@ -6,3 +6,4 @@
 *.exp
 *.lib
 **/node_modules
+vscode-extension/terapascal/dist
