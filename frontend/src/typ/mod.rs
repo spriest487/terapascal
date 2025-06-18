@@ -15,11 +15,12 @@ pub use self::ty::*;
 use crate::ast::Unit;
 use ast::typecheck_unit;
 use std::path::PathBuf;
+use std::sync::Arc;
 use terapascal_common::build_log::BuildLog;
 
 #[derive(Debug, Clone)]
 pub struct ModuleUnit {
-    pub path: PathBuf,
+    pub path: Arc<PathBuf>,
     
     pub unit: ast::Unit,
     pub context: Context,

@@ -1,5 +1,7 @@
 use std::fmt;
 use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::sync::Arc;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
@@ -61,6 +63,8 @@ where
 {
     cur_line: u32,
     cur_col: u32,
+    
+    file: Arc<PathBuf>,
 
     result: Vec<SemanticToken>,
     
@@ -71,11 +75,13 @@ impl<A> SemanticTokenBuilder<A>
 where
     A: Annotation + fmt::Display + fmt::Debug,
 {
-    pub fn new(line: u32, col: u32) -> Self {
+    pub fn new(file: Arc<PathBuf>, line: u32, col: u32) -> Self {
         Self {
             cur_line: line,
             cur_col: col,
             result: Vec::new(),
+            
+            file,
             
             _a: PhantomData,
         }
@@ -89,7 +95,7 @@ where
         let prev_line = self.cur_line;
         let line = span.start.line as u32;
         if line < prev_line {
-            eprintln!("[token_delta] invalid line in {debug_desc} span {} (expected >= {}:{})", span, prev_line + 1, self.cur_col + 1);
+            eprintln!("[semantic_tokens] invalid line in {debug_desc} span {} (expected >= {}:{})", span, prev_line + 1, self.cur_col + 1);
             return None;
         }
         
@@ -101,7 +107,7 @@ where
 
         let col = span.start.col as u32;
         if line == prev_line && col < self.cur_col {
-            eprintln!("[token_delta] invalid col in {debug_desc} span {} (expected >= {}:{})", span, line + 1, self.cur_col + 1);
+            eprintln!("[semantic_tokens] invalid col in {debug_desc} span {} (expected >= {}:{})", span, line + 1, self.cur_col + 1);
             return None;
         }
         
@@ -112,6 +118,11 @@ where
     }
 
     fn add(&mut self, span: &Span, token_type: u32, debug_desc: &str) {
+        if span.file != self.file {
+            eprintln!("[semantic_tokens] invalid {} span @ {}-{}: not from this file ({})", debug_desc, span, span.end, self.file.display());
+            return;
+        }
+        
         let Some((delta_line, delta_col)) = self.token_delta(span, debug_desc) else {
             return;
         };
@@ -598,7 +609,7 @@ where
         if let Some(args) = &call.type_args {
             self.add_type_arg_list(args);
         }
-        
+
         for arg in &call.args {
             self.add_expr(arg);
         }
@@ -703,11 +714,6 @@ where
     ) {
         if let Some(typename_span) = typename.get_span() {
             let (left, right) = lit_span.split(typename_span);
-            eprintln!("{} literal::", type_desc);
-            eprintln!("\t left: {}-{}", left.start, left.end);
-            eprintln!("\t main: {}-{}", typename_span.start, typename_span.end);
-            eprintln!("\t right: {}-{}", right.start, right.end);
-            
             self.add(&left, SEMANTIC_KEYWORD, lit_desc);
             self.add(typename_span, SEMANTIC_TYPE, type_desc);
             self.add(&right, SEMANTIC_KEYWORD, lit_desc);

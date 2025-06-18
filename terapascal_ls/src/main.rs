@@ -102,7 +102,7 @@ impl LanguageServer for TerapascalServer {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        eprintln!("did_open: {}", params.text_document.uri);
+        eprintln!("[did_open] {}", params.text_document.uri);
 
         let uri = params.text_document.uri.clone();
 
@@ -114,7 +114,7 @@ impl LanguageServer for TerapascalServer {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        eprintln!("did_change: {}", params.text_document.uri);
+        eprintln!("[did_change] {}", params.text_document.uri);
 
         let text = params.content_changes.into_iter().next().unwrap().text;
 
@@ -131,16 +131,16 @@ impl LanguageServer for TerapascalServer {
         }
 
         if let Err(build_err) = self.update_document(params.text_document.uri).await {
-            eprintln!("did_change: {build_err}")
+            eprintln!("[did_change] {build_err}")
         }
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        eprintln!("did_save: {}", params.text_document.uri)
+        eprintln!("[did_save] {}", params.text_document.uri)
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        eprintln!("did_close: {}", params.text_document.uri);
+        eprintln!("[did_close] {}", params.text_document.uri);
 
         let uri = params.text_document.uri;
         self.documents.remove(&uri);
@@ -163,12 +163,12 @@ impl LanguageServer for TerapascalServer {
         params: SemanticTokensParams,
     ) -> RpcResult<Option<SemanticTokensResult>> {
 
-        eprintln!("semantic_tokens_full: {}", params.text_document.uri);
+        eprintln!("[semantic_tokens_full] {}", params.text_document.uri);
 
         let doc_path = match url_to_path(&params.text_document.uri) {
             Ok(path) => path,
             Err(err) => {
-                eprintln!("semantic_tokens_full: {}", err);
+                eprintln!("[semantic_tokens_full] {}", err);
                 return Ok(None);
             }
         };
@@ -176,7 +176,7 @@ impl LanguageServer for TerapascalServer {
         let projects = self.projects.read().await;
 
         let Some(project) = projects.get_document_project(&doc_path) else {
-            eprintln!("semantic_tokens_full: workspace project not found for path {}", doc_path.display());
+            eprintln!("[semantic_tokens_full] workspace project not found for path {}", doc_path.display());
             return Ok(None);
         };
 
@@ -189,7 +189,7 @@ impl LanguageServer for TerapascalServer {
             }
             
             None => {
-                eprintln!("semantic_tokens_full: no tokens loaded for {}", doc_path.display());
+                eprintln!("[semantic_tokens_full] no tokens loaded for {}", doc_path.display());
                 Ok(None)
             }
         }
@@ -198,14 +198,14 @@ impl LanguageServer for TerapascalServer {
     async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
         for added in params.event.added {
             eprintln!(
-                "did_change_workspace_folders: added {} ({})",
+                "[did_change_workspace_folders] added {} ({})",
                 added.name, added.uri
             )
         }
 
         for removed in params.event.removed {
             eprintln!(
-                "did_change_workspace_folders: removed {} ({})",
+                "[did_change_workspace_folders] removed {} ({})",
                 removed.name, removed.uri
             )
         }

@@ -597,7 +597,7 @@ pub fn typecheck_unit(unit_path: &PathBuf, unit: &ast::Unit, ctx: &mut Context) 
 
         Ok(ModuleUnit {
             context: unit_ctx,
-            path: unit_path.clone(),
+            path: Arc::new(unit_path.clone()),
             unit,
         })
     })

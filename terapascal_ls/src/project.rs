@@ -1,6 +1,7 @@
 use crate::semantic_tokens::SemanticTokenBuilder;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 use terapascal_build::error::BuildError;
 use terapascal_build::parse_units;
 use terapascal_build::BuildInput;
@@ -32,7 +33,7 @@ impl ProjectCollection {
         project_path: &PathBuf,
         unit_paths: impl IntoIterator<Item=PathBuf>
     ) {
-        eprintln!("add_project_units: units in project {}:", project_path.display());
+        eprintln!("[add_project_units] units in project {}:", project_path.display());
 
         for unit_path in unit_paths.into_iter() {
             eprintln!(" - {}", unit_path.display());
@@ -44,7 +45,7 @@ impl ProjectCollection {
         self.projects.remove(project_path);
         self.remove_project_units(project_path);
         
-        eprintln!("remove_project: {}", project_path.display());
+        eprintln!("[remove_project] {}", project_path.display());
     }
     
     pub fn update_document(&mut self, doc_path: &PathBuf) {
@@ -58,7 +59,7 @@ impl ProjectCollection {
             self.remove_project_units(&project_path);
             self.add_project_units(&project_path, unit_paths);
         } else {
-            eprintln!("update_document: creating project {}", doc_path.display());
+            eprintln!("[update_document] creating project {}", doc_path.display());
 
             // load the current unit as a project
             // todo: should be able to search for/specify the root project file
@@ -74,7 +75,7 @@ impl ProjectCollection {
 pub struct Project {
     main_file: PathBuf,
 
-    pub semantic_tokens: HashMap<PathBuf, Vec<SemanticToken>>,
+    pub semantic_tokens: HashMap<Arc<PathBuf>, Vec<SemanticToken>>,
 
     parse_output: Option<ParseOutput>,
     module: Option<typ::Module>,
@@ -117,25 +118,33 @@ impl Project {
                 match typecheck(parsed_output.units.iter(), input.compile_opts.verbose, &mut log) {
                     Ok(module) => {
                         for unit in &module.units {
-                            let mut token_builder = SemanticTokenBuilder::new(0, 0);
+                            eprintln!("[build] processing unit: {} ({})", unit.unit.ident, unit.path.display());
+
+                            let unit_path = unit.path.clone();
+    
+                            let mut token_builder = SemanticTokenBuilder::new(unit_path.clone(), 0, 0);
                             token_builder.add_unit(&unit.unit);
 
                             let tokens = token_builder.finish();
-                            self.semantic_tokens.insert(unit.path.clone(), tokens);
+                            self.semantic_tokens.insert(unit_path, tokens);
                         }
 
                         self.module = Some(module);
                     },
 
                     Err(err) => {
-                        eprintln!("build: {} ({})", err.main(), err.span());
+                        eprintln!("[build] {} ({})", err.main(), err.span());
 
                         for (unit_path, unit) in &parsed_output.units {
-                            let mut token_builder = SemanticTokenBuilder::new(0, 0);
+                            eprintln!("[build] processing unit: {} ({})", unit.ident, unit_path.display());
+
+                            let unit_path = Arc::new(unit_path.clone());
+
+                            let mut token_builder = SemanticTokenBuilder::new(unit_path.clone(), 0, 0);
                             token_builder.add_unit(unit);
 
                             let tokens = token_builder.finish();
-                            self.semantic_tokens.insert(unit_path.clone(), tokens);
+                            self.semantic_tokens.insert(unit_path, tokens);
                         }
                     },
                 }
@@ -144,16 +153,16 @@ impl Project {
             },
 
             Err(BuildError::ParseError(parse_err)) => {
-                eprintln!("build: {} ({})", parse_err.err.main(), parse_err.span());
+                eprintln!("[build] {} ({})", parse_err.err.main(), parse_err.span());
             },
 
             Err(err) => {
-                eprintln!("build: {}", err.main());
+                eprintln!("[build] {}", err.main());
             },
         };
         
         for log_entry in log.entries {
-            eprintln!("build: {}", log_entry);
+            eprintln!("[build] {}", log_entry);
         }
         
         result

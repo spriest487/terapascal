@@ -274,11 +274,22 @@ pub fn typecheck_call(
             return Err(TypeError::NotCallable(Box::new(other.clone())))
         },
     };
+    
+    let mut args: Vec<_> = invocation.args().cloned().collect();
+    // HACK: the call node's arg list should not include the self-arg, but the invocation args
+    // will contain it. this is the only case where the arg list lengths differ, and the self
+    // can only be arg 0, so if they don't match, simply remove the first arg
+    if args.len() != func_call.args.len() {
+        assert!(args.len() > func_call.args.len());
+        assert_eq!(func_call.args.len(), args.len() - 1);
+        
+        args.remove(0);
+    }
 
     Ok(Call {
         target,
         type_args: invocation.type_args().cloned(),
-        args: invocation.args().cloned().collect(),
+        args,
         args_span: invocation.args_span().cloned(),
         annotation: Value::Invocation(invocation),
     })
