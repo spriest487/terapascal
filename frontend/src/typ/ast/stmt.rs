@@ -7,9 +7,10 @@ use crate::ast::Ident;
 use crate::ast::Operator;
 use crate::parse::IllegalStatement;
 use crate::typ::ast::cast::implicit_conversion;
-use crate::typ::ast::{evaluate_expr, member_value};
+use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::evaluate_no_args_function_call;
 use crate::typ::ast::expr::typecheck_call;
+use crate::typ::ast::member_value;
 use crate::typ::ast::stmt::assign::typecheck_assignment;
 use crate::typ::ast::stmt::assign::typecheck_compound_assignment;
 use crate::typ::ast::typecheck_block;
@@ -168,15 +169,15 @@ pub fn typecheck_stmt(
             // only a function invocation (and not a ctor invocation) is valid a statement
             // if it's a function reference with no args to make it evaluate to a call immediately,
             // evaluate it into a call now
-            match call.annotation() {
+            match &call.annotation {
                 Value::Invocation(..) => {
                     // any invocation is valid as a statement
                     Ok(Stmt::Call(Box::new(call)))
                 }
 
                 Value::Function(function) => {
-                    let invocation = evaluate_no_args_function_call(function)?;
-                    *call.annotation_mut() = Value::from(invocation);
+                    let invocation = evaluate_no_args_function_call(&function)?;
+                    call.annotation = Value::from(invocation);
                     Ok(Stmt::Call(Box::new(call)))
                 }
 

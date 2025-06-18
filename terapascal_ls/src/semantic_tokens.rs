@@ -593,23 +593,13 @@ where
     }
     
     fn add_call(&mut self, call: &ast::Call<A>) {
-        if let Some(target_expr) = call.target_expr() {
-            self.add_expr(target_expr);
-        } else {
-            if let Some(span) = call.type_qualification_span() {
-                self.add(span, SEMANTIC_TYPE, "call type qualification");
-            }
+        self.add_expr(&call.target);
         
-            if let Some(span) = call.method_name_span() {
-                self.add(span, SEMANTIC_METHOD, "call method name");
-            }
-        }
-        
-        if let Some(args) = call.type_args() {
+        if let Some(args) = &call.type_args {
             self.add_type_arg_list(args);
         }
         
-        for arg in call.args() {
+        for arg in &call.args {
             self.add_expr(arg);
         }
     }

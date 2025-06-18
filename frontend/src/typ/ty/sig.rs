@@ -2,7 +2,7 @@ use crate::ast;
 use crate::ast::FunctionParamMod;
 use crate::typ::ast::AnonymousFunctionDef;
 use crate::typ::ast::Expr;
-use crate::typ::ast::FunctionCall;
+use crate::typ::ast::Call;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParam;
 use crate::typ::Context;
@@ -413,13 +413,13 @@ impl FunctionSig {
         args: impl IntoIterator<Item = Expr>,
         args_span: Span,
         type_args: Option<TypeArgList>,
-    ) -> FunctionCall {
+    ) -> Call {
         let func_val_annotation = match &self.result_ty {
             Type::Nothing => Value::Untyped(span),
             return_ty => Value::new_temp_val(return_ty.clone(), span),
         };
 
-        FunctionCall {
+        Call {
             annotation: func_val_annotation,
             args: args.into_iter().collect(),
             args_span: Some(args_span),

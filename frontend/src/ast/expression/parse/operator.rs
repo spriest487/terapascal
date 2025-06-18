@@ -1,22 +1,24 @@
+use crate::ast::expression::explicit_spec::ExplicitSpecExpr;
 use crate::ast::expression::parse::CompoundExpressionPart;
 use crate::ast::type_name::TypeName;
-use crate::ast::{ArgList, ObjectCtor, ObjectCtorArgs, UnaryPosition};
+use crate::ast::ArgList;
 use crate::ast::BinOp;
 use crate::ast::Call;
 use crate::ast::Cast;
 use crate::ast::Expr;
-use crate::ast::FunctionCall;
+use crate::ast::ObjectCtor;
+use crate::ast::ObjectCtorArgs;
 use crate::ast::TypeList;
 use crate::ast::UnaryOp;
+use crate::ast::UnaryPosition;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::Operator;
 use crate::Position;
+use std::cmp::Ordering;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use std::cmp::Ordering;
-use crate::ast::expression::explicit_spec::ExplicitSpecExpr;
 
 fn resolve_postfix<F>(
     parts: Vec<CompoundExpressionPart>,
@@ -93,13 +95,13 @@ pub(super) fn resolve_ops_by_precedence(
             let target = resolve_ops_by_precedence(before_op.to_vec())?;
             let span = target.annotation().span().to(&args.close);
 
-            let op_expr = Expr::from(Call::Function(FunctionCall {
+            let op_expr = Expr::from(Call {
                 annotation: span.clone(),
                 args_span: Some(args.list_span()),
                 args: args.args,
                 target,
                 type_args,
-            }));
+            });
 
             let merged_parts: Vec<_> = [CompoundExpressionPart::Operand(op_expr)]
                 .into_iter()

@@ -32,21 +32,8 @@ use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned as _;
 
-pub type MethodCall = ast::MethodCall<Value>;
-pub type FunctionCall = ast::FunctionCall<Value>;
-pub type FunctionCallNoArgs = ast::FunctionCallNoArgs<Value>;
-pub type MethodCallNoArgs = ast::MethodCallNoArgs<Value>;
-pub type VariantCtorCall = ast::VariantCtorCall<Value>;
 pub type Call = ast::Call<Value>;
-
-impl MethodCallNoArgs {
-    pub fn method(&self) -> &MethodValue {
-        match self.target.annotation() {
-            Value::Method(method) => method.as_ref(),
-            other => panic!("method call target can only be a method, got: {other}"),
-        }
-    }
-}
+pub type VariantCtorCall = ast::VariantCtorCall<Value>;
 
 fn invalid_args(
     actual_args: Vec<Expr>,
@@ -162,24 +149,10 @@ pub fn typecheck_type_args(
 }
 
 pub fn typecheck_call(
-    call: &ast::Call<Span>,
-    expect_ty: &Type,
-    ctx: &mut Context,
-) -> TypeResult<Call> {
-    let func_call = match call {
-        ast::Call::Function(func_call) => {
-            typecheck_func_call(&func_call, expect_ty, ctx)?
-        },
-    };
-    
-    Ok(Call::Function(func_call))
-}
-
-fn typecheck_func_call(
-    func_call: &ast::FunctionCall,
+    func_call: &ast::Call,
     expect_ty: &Type,
     ctx: &mut Context
-) -> TypeResult<FunctionCall> {
+) -> TypeResult<Call> {
     let target = typecheck_expr(&func_call.target, expect_ty, ctx)?;
 
     // eprintln!("typechecking `{}`: target is {}", func_call, target.annotation());
@@ -302,7 +275,7 @@ fn typecheck_func_call(
         },
     };
 
-    Ok(FunctionCall {
+    Ok(Call {
         target,
         type_args: invocation.type_args().cloned(),
         args: invocation.args().cloned().collect(),
@@ -313,7 +286,7 @@ fn typecheck_func_call(
 
 fn typecheck_func_overload_call(
     overloaded: &OverloadValue,
-    func_call: &ast::FunctionCall<Span>,
+    func_call: &ast::Call<Span>,
     target: &Expr,
     expect_ty: &Type,
     ctx: &mut Context,
@@ -518,7 +491,7 @@ pub fn check_overload_visibility(
 /// * `ctx` - current typechecking context
 fn typecheck_method_call(
     method: &Arc<MethodValue>,
-    func_call: &ast::FunctionCall<Span>,
+    func_call: &ast::Call<Span>,
     ctx: &mut Context,
 ) -> TypeResult<Invocation> {
     // not yet supported
@@ -599,7 +572,7 @@ fn typecheck_ufcs_invocation(
 // all parameter types exactly and have no type arguments
 fn typecheck_func_value_invocation(
     target: Expr,
-    func_call: &ast::FunctionCall<Span>,
+    func_call: &ast::Call<Span>,
     self_arg: Option<&Expr>,
     sig: &Arc<FunctionSig>,
     ctx: &mut Context,

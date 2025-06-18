@@ -119,11 +119,11 @@ enum CallTarget {
 pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Ref> {
     // eprintln!("build_call: {} @ {}", call, call.span());
 
-    let Value::Invocation(invocation) = call.annotation() else {
+    let Value::Invocation(invocation) = &call.annotation else {
         panic!(
             "bad value for call expression `{}`: {}",
             call,
-            call.annotation()
+            call.annotation
         );
     };
     

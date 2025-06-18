@@ -1,7 +1,7 @@
 use crate::ast;
 use crate::typ;
 use crate::typ::ast::Call;
-use crate::typ::ast::FunctionCall;
+use crate::typ::ast::Call;
 use crate::typ::ast::Stmt;
 use crate::typ::ast::StructDef;
 use crate::typ::context::*;
@@ -345,7 +345,7 @@ fn get_stmt(module_unit: &ModuleUnit, init_pos: usize) -> &Stmt {
         })
 }
 
-fn get_func_call(module_unit: &ModuleUnit, init_pos: usize) -> &FunctionCall {
+fn get_func_call(module_unit: &ModuleUnit, init_pos: usize) -> &Call {
     get_stmt(module_unit, init_pos)
         .as_call()
         .and_then(Call::as_func_call)

@@ -13,8 +13,7 @@ pub use self::local_binding::LocalBinding;
 pub use self::member::MemberStmt;
 use crate::ast::case::CaseBlock;
 use crate::ast::case::CaseStmt;
-use crate::ast::Block;
-use crate::ast::Call;
+use crate::ast::{Block, Call};
 use crate::ast::ElseBranch;
 use crate::ast::Expr;
 use crate::ast::ForLoop;
@@ -84,7 +83,7 @@ impl<A: Annotation> Stmt<A> {
             Stmt::Ident(_ident, annotation) => annotation,
             Stmt::Member(member) => &member.annotation,
             Stmt::LocalBinding(binding) => &binding.annotation,
-            Stmt::Call(call) => &call.annotation(),
+            Stmt::Call(call) => &call.annotation,
             Stmt::Exit(exit) => exit.annotation(),
             Stmt::Block(block) => &block.annotation,
             Stmt::ForLoop(for_loop) => &for_loop.annotation,
@@ -125,11 +124,7 @@ impl Stmt<Span> {
             }
             
             Stmt::Call(call) => {
-                match call.as_ref() {
-                    call_func @ Call::Function(..) => {
-                        Some(Expr::Call(Box::new(call_func.clone())))
-                    }
-                }
+                Some(Expr::Call(call.clone()))
             },
 
             Stmt::Block(block) => {
