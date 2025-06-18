@@ -21,6 +21,13 @@
       ],
       "aliases": ["Terapascal", "terapascal"]
     }],
+    "grammars": [
+      {
+        "language": "terapascal",
+        "scopeName": "source.terapascal",
+        "path": "./syntaxes/terapascal.tmLanguage.json"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "terapascal-ls",

@@ -1,0 +1,119 @@
+{
+    "scopeName": "source.terapascal",
+    "patterns": [
+        {
+            "include": "#expression"
+        }
+    ],
+    "repository": {
+        "expression": {
+            "patterns": [
+                { "include": "#comment-line" },
+                { "include": "#comment-block" },
+                { "include": "#comment-brace" },
+                { "include": "#keyword" },
+                { "include": "#keyword-variable" },
+                { "include": "#keyword-function" },
+                { "include": "#keyword-block" },
+                { "include": "#keyword-decl" },
+                { "include": "#keyword-stmt" },
+                { "include": "#keyword-operator" },
+                { "include": "#keyword-unit" },
+                { "include": "#keyword-type" },
+                { "include": "#keyword-literal" },
+                { "include": "#operator" },
+                { "include": "#lit-string" },
+                { "include": "#lit-number" },
+                { "include": "#paren-expression" },
+                { "include": "#index-expression" }
+            ]
+        },
+        "keyword-variable": {
+            "match": "\\b(var|out)\\b",
+            "name": "keyword.other.variable"
+        },
+        "keyword-function": {
+            "match": "\\b(procedure|function|lambda|constructor|destructor)\\b",
+            "name": "keyword.other.function"
+        },
+        "keyword-block": {
+            "match": "\\b(begin|end|match|case|unsafe)\\b",
+            "name": "keyword.other.block"
+        },
+        "keyword-decl": {
+            "match": "\\b(uses|type|record|packed|class|variant|set|public|private|published|where)\\b",
+            "name": "keyword.other.decl"
+        },
+        "keyword-stmt": {
+            "match": "\\b(if|while|then|else|for|to|downto|do|break|continue|exit|try|except|finally|raise|exit|is)\\b",
+            "name": "keyword.control"
+        },
+        "keyword-operator": {
+            "match": "\\b(in|or|and|not|div|as|shl|shr|mod)\\b",
+            "name": "keyword.operator.keyword"
+        },
+        "keyword-unit": {
+            "match": "\\b(unit|program|library|interface|implementation|initialization|finalization)\\b",
+            "name": "keyword.other.unit"
+        },
+        "keyword-type": {
+            "match": "\\b(array|of|const|weak|with)\\b",
+            "name": "keyword.other.type"
+        },
+        "keyword-literal": {
+            "match": "\\b(nil|true|false|sizeof|default|typeinfo)\\b",
+            "name": "keyword.other.literal"
+        },
+        "operator": {
+            "match": "[:<>+-]=|\\.\\.|[<>&~!.\\-+=*/|@^]",
+            "name": "keyword.operator"
+        },
+        "paren-expression": {
+            "begin": "\\(",
+            "end": "\\)",
+            "beginCaptures": {
+                "0": { "name": "punctuation.paren.open" }
+            },
+            "endCaptures": {
+                "0": { "name": "punctuation.paren.close" }
+            },
+            "name": "expression.group",
+            "patterns": [{ "include": "#expression" }]
+        },
+        "index-expression": {
+            "begin": "\\[",
+            "end": "\\]",
+            "beginCaptures": {
+                "0": { "name": "keyword.operator.index.open" }
+            },
+            "endCaptures": {
+                "0": { "name": "keyword.operator.index.close" }
+            },
+            "name": "expression.group",
+            "patterns": [{ "include": "#expression" }]
+        },
+        "comment-block": {
+            "begin": "\\(\\*",
+            "end": "\\*\\)",
+            "name": "comment.block.bracket"
+        },
+        "comment-brace": {
+            "begin": "\\{",
+            "end": "\\}",
+            "name": "comment.block.brace"
+        },
+        "comment-line": {
+            "match": "\/\/.+$",
+            "name": "comment.line.double-slash"
+        },
+        "lit-string": {
+            "begin": "'",
+            "end": "'",
+            "name": "string.quoted.single"
+        },
+        "lit-number": {
+            "match": "\\b\\d+(\\.\\d+)?\\b",
+            "name": "constant.numeric"
+        }
+    }
+}
