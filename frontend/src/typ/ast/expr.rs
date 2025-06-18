@@ -2,8 +2,9 @@ mod init;
 mod literal;
 
 use crate::ast;
-use crate::ast::{Ident, SemanticHint};
+use crate::ast::Ident;
 use crate::ast::IdentPath;
+use crate::ast::SemanticHint;
 pub use crate::typ::ast::call::typecheck_call;
 use crate::typ::ast::cast::typecheck_cast_expr;
 use crate::typ::ast::const_eval::ConstEval;

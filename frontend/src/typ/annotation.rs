@@ -751,7 +751,7 @@ impl Annotation for Value {
     fn semantic_hint(&self) -> SemanticHint {
         match self {
             Value::Untyped(_) => SemanticHint::None,
-            Value::Typed(_) => SemanticHint::Variable,
+            Value::Typed(val) => val.semantic_hint,
             Value::Function(_) | Value::UfcsFunction(_) => SemanticHint::Function,
             Value::Invocation(invocation) => invocation.semantic_hint(),
             Value::Method(_) => SemanticHint::Method,

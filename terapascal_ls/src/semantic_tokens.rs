@@ -606,12 +606,13 @@ where
                 match &range.init {
                     ast::ForLoopCounterInit::Binding {
                         binding_kw_span,
-                        name: _,
+                        name,
                         ty,
                         assign_op_span,
                         init,
                     } => {
                         self.add_keyword(binding_kw_span);
+                        self.add(name.span(), SEMANTIC_VARIABLE, "for loop counter binding");
                         self.add_typename(ty, "for loop counter type");
 
                         self.add(
@@ -665,6 +666,30 @@ where
         self.add_keyword(&while_loop.do_kw_span);
         self.add_stmt(&while_loop.body);
     }
+    
+    fn add_arg_list(&mut self, args: &[ast::Expr<A>], args_span: Option<&Span>) {
+        let (args_open, args_close) = match (&args_span, Span::range(&args)) {
+            (Some(args_span), Some(args_inner_span)) => {
+                let (left, right) = args_span.split(&args_inner_span);
+
+                (Some(left), Some(right))
+            }
+
+            _ => (None, None),
+        };
+
+        if let Some(span) = &args_open {
+            self.add(span, SEMANTIC_OPERATOR, "arg list open bracket");
+        }
+
+        for arg in args {
+            self.add_expr(arg);
+        }
+
+        if let Some(span) = &args_close {
+            self.add(span, SEMANTIC_OPERATOR, "arg list close bracket");
+        }
+    }
 
     fn add_call(&mut self, call: &ast::Call<A>) {
         self.add_expr(&call.target);
@@ -673,9 +698,7 @@ where
             self.add_type_arg_list(args);
         }
 
-        for arg in &call.args {
-            self.add_expr(arg);
-        }
+        self.add_arg_list(&call.args, call.args_span.as_ref());
     }
 
     fn add_type_arg_list(&mut self, args: &ast::TypeArgList<A>) {
@@ -689,7 +712,9 @@ where
             ast::Expr::BinOp(op) => self.add_bin_op(op),
             ast::Expr::UnaryOp(op) => self.add_unary_op(op),
             ast::Expr::Literal(item) => self.add_literal(item),
-            ast::Expr::Ident(ident, value) => self.add_value(value, ident.span(), "ident expr"),
+            ast::Expr::Ident(ident, value) => {
+                self.add_value(value, ident.span(), "ident expr")
+            },
             ast::Expr::Call(call) => self.add_call(call),
             ast::Expr::ObjectCtor(ctor) => self.add_object_ctor(ctor),
             ast::Expr::CollectionCtor(_) => {},
