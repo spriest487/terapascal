@@ -547,19 +547,15 @@ where
     }
     
     fn add_cast(&mut self, cast: &ast::Cast<A>) {
-        // workaround: if the cast typename doesn't have a span, it's probably a synthetic
-        // cast node and should be skipped
-        let Some(type_span) = cast.as_type.get_span() else {
-            return;
-        };
-        
         self.add_expr(&cast.expr);
-        
+
         if let Some(span) = &cast.as_kw {
             self.add_keyword(span);
         }
-        
-        self.add(type_span, SEMANTIC_TYPE, "cast typename");
+
+        if let Some(type_span) = cast.as_type.get_span() {
+            self.add(type_span, SEMANTIC_TYPE, "cast typename");
+        }
     }
     
     fn add_for(&mut self, for_loop: &ast::ForLoop<A>) {
