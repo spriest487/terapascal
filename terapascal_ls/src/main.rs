@@ -121,7 +121,7 @@ impl LanguageServer for TerapascalServer {
         {
             let Some(mut doc) = self.documents.get_mut(&params.text_document.uri) else {
                 eprintln!(
-                    "did_change: no document previously loaded at {}",
+                    "[did_change] no document previously loaded at {}",
                     params.text_document.uri
                 );
                 return;
