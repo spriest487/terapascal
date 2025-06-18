@@ -95,10 +95,10 @@ where
         let prev_line = self.cur_line;
         let line = span.start.line as u32;
         if line < prev_line {
-            eprintln!("[semantic_tokens] invalid line in {debug_desc} span {} (expected >= {}:{})", span, prev_line + 1, self.cur_col + 1);
+            eprintln!("[semantic_tokens] invalid line in {debug_desc} span {}-{} (expected >= {}:{})", span, span.end, prev_line + 1, self.cur_col + 1);
             return None;
         }
-        
+
         let delta_line = line.saturating_sub(self.cur_line);
         if line != self.cur_line {
             self.cur_line = line;
@@ -107,10 +107,10 @@ where
 
         let col = span.start.col as u32;
         if line == prev_line && col < self.cur_col {
-            eprintln!("[semantic_tokens] invalid col in {debug_desc} span {} (expected >= {}:{})", span, line + 1, self.cur_col + 1);
+            eprintln!("[semantic_tokens] invalid col in {debug_desc} span {}-{} (expected >= {}:{})", span, span.end, line + 1, self.cur_col + 1);
             return None;
         }
-        
+
         let delta_col = col.saturating_sub(self.cur_col);
         self.cur_col = col;
 

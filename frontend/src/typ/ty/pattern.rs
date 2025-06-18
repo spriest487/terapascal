@@ -281,7 +281,6 @@ impl TypePattern {
 
                 match Self::find_variant_case(name, ctx)? {
                     Some((variant_name, case)) => {
-                        let variant_name_span = variant_name.path_span();
                         let variant = Self::find_pattern_variant(&variant_name, &span, expect_ty, ctx)?;
 
                         match kind {
@@ -289,7 +288,7 @@ impl TypePattern {
                                 let data_binding = kind.binding().cloned();
                                 Ok(TypePattern::VariantCase {
                                     variant,
-                                    variant_name_span,
+                                    variant_name_span: name.path_span(),
                                     case, 
                                     data_binding, 
                                     span,
@@ -299,7 +298,7 @@ impl TypePattern {
                                 Ok(TypePattern::NegatedVariantCase { 
                                     not_kw: not_kw_span.clone(),
                                     variant,
-                                    variant_name_span,
+                                    variant_name_span: name.path_span(),
                                     case, 
                                     span, 
                                 })
@@ -320,10 +319,10 @@ impl TypePattern {
                         match kind {
                             ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding { .. } => {
                                 let binding = kind.binding().cloned();
-                                Ok(TypePattern::Type { 
-                                    ty, 
-                                    binding, 
-                                    span, 
+                                Ok(TypePattern::Type {
+                                    ty,
+                                    binding,
+                                    span,
                                 })
                             }
                             ast::TypeNamePatternKind::IsNot { not_kw_span } => {
