@@ -391,7 +391,7 @@ where
 
     fn add_stmt(&mut self, stmt: &ast::Stmt<A>) {
         match stmt {
-            ast::Stmt::Ident(_, value) => self.add_value(value, value.span()),
+            ast::Stmt::Ident(ident, value) => self.add_value(value, ident.span(), "ident statement"),
             ast::Stmt::Member(member) => self.add_member_stmt(member),
             ast::Stmt::LocalBinding(binding) => self.add_local_binding(binding),
             ast::Stmt::Call(call) => self.add_call(call),
@@ -410,8 +410,9 @@ where
     }
     
     fn add_member_stmt(&mut self, member_stmt: &ast::MemberStmt<A>) {
-        self.add_expr(&member_stmt.base); 
-        self.add_value(&member_stmt.annotation, &member_stmt.name.span);
+        self.add_expr(&member_stmt.base);
+
+        self.add_value(&member_stmt.annotation, &member_stmt.name.span, "member statement name");
     }
 
     fn add_assignment(&mut self, assignment: &ast::Assignment<A>) {
@@ -644,7 +645,7 @@ where
             ast::Expr::BinOp(op) => self.add_bin_op(op),
             ast::Expr::UnaryOp(op) => self.add_unary_op(op),
             ast::Expr::Literal(item) => self.add_literal(item),
-            ast::Expr::Ident(_, value) => self.add_value(value, value.span()),
+            ast::Expr::Ident(ident, value) => self.add_value(value, ident.span(), "ident expr"),
             ast::Expr::Call(call) => self.add_call(call),
             ast::Expr::ObjectCtor(ctor) => self.add_object_ctor(ctor),
             ast::Expr::CollectionCtor(_) => {},
@@ -660,7 +661,7 @@ where
         }
     }
     
-    fn add_value(&mut self, value: &A, display_span: &Span) {
+    fn add_value(&mut self, value: &A, display_span: &Span, debug_desc: &str) {
         let token_type = match value.semantic_hint() {
             SemanticHint::None => return,
             SemanticHint::Variable => SEMANTIC_VARIABLE,
@@ -673,8 +674,8 @@ where
             SemanticHint::Property => SEMANTIC_PROPERTY,
             SemanticHint::String => SEMANTIC_STRING,
         };
-        
-        self.add(display_span, token_type, "value");
+
+        self.add(display_span, token_type, debug_desc);
     }
 
     fn add_bin_op(&mut self, bin_op: &ast::BinOp<A>) {

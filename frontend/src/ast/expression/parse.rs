@@ -508,7 +508,8 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
             .into_ident()
             .unwrap();
 
-        self.push_operand(Expr::from(member_ident));
+        let member_span = member_ident.span.clone();
+        self.push_operand(Expr::Ident(member_ident, member_span));
 
         self.last_was_operand = true;
 

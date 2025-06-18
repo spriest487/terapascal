@@ -414,18 +414,17 @@ fn typecheck_member_op(
 
     match &bin_op.rhs {
         // x.y
-        ast::Expr::Ident(member_ident, _) => {
-            let annotation = member_value(&lhs, member_ident, span, expect_ty, ctx)?;
+        ast::Expr::Ident(member_ident, member_span) => {
+            let rhs_value = member_value(&lhs, member_ident, member_span, expect_ty, ctx)?;
 
-            let rhs_value = Value::Untyped(member_ident.span.clone());
-            let rhs = Expr::Ident(member_ident.clone(), rhs_value);
-            
+            let rhs = Expr::Ident(member_ident.clone(), rhs_value.clone());
+
             let member_op = BinOp {
                 lhs,
                 op: Operator::Period,
                 op_span: bin_op.op_span.clone().into(),
                 rhs,
-                annotation,
+                annotation: rhs_value,
             };
 
             Ok(Expr::from(member_op))
@@ -437,7 +436,7 @@ fn typecheck_member_op(
             Err(TypeError::InvalidBinOp {
                 lhs: lhs.annotation().ty().into_owned(),
                 rhs: rhs.annotation().ty().into_owned(),
-                span: bin_op.annotation.clone(),
+                span: span.clone(),
                 op: Operator::Period,
             })
         },
@@ -450,7 +449,7 @@ fn typecheck_type_member(
     member_ident: &Ident,
     expect_return_ty: &Type,
     span: Span,
-    ctx: &mut Context,
+    ctx: &Context,
 ) -> TypeResult<Value> {
     let type_member = ctx.find_type_member(
         ty,
@@ -512,7 +511,7 @@ pub fn member_value(
     member_ident: &Ident,
     span: &Span,
     expect_ty: &Type,
-    ctx: &mut Context,
+    ctx: &Context,
 ) -> TypeResult<Value> {
     match base_expr.annotation() {
         // x is the name of a variant type - we are constructing that variant
@@ -592,7 +591,7 @@ fn typecheck_member_value(
     value_kind: ValueKind,
     member_ident: &Ident,
     span: Span,
-    ctx: &mut Context,
+    ctx: &Context,
 ) -> TypeResult<Value> {
     let member = ctx
         .find_instance_member(&lhs.annotation().ty(), &member_ident)

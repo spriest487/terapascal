@@ -23,7 +23,7 @@ pub fn typecheck_variant_type_member(
     variant_name: &Symbol,
     member_ident: &Ident,
     variant_name_span: &Span,
-    ctx: &mut Context,
+    ctx: &Context,
 ) -> TypeResult<VariantTypeMemberValue> {
     let span = variant_name_span.to(member_ident);
     

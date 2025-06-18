@@ -98,13 +98,6 @@ pub enum Expr<A: Annotation = Span> {
     ExplicitSpec(Box<ExplicitSpecExpr<A>>)
 }
 
-impl<A: Annotation + From<Span>> From<Ident> for Expr<A> {
-    fn from(ident: Ident) -> Self {
-        let annotation = ident.span().clone().into();
-        Expr::Ident(ident, annotation)
-    }
-}
-
 impl<A: Annotation> From<BinOp<A>> for Expr<A> {
     fn from(bin_op: BinOp<A>) -> Self {
         Expr::BinOp(Box::new(bin_op))
@@ -193,8 +186,7 @@ impl From<IdentPath> for Expr<Span> {
         let mut prev_span = first_span.clone();
         
         let mut expr = Expr::Ident(first_part, first_span);
-        
-        
+
         while let Some(next_part) = part.next() {
             let next_span = next_part.span.clone();
 

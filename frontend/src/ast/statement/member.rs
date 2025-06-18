@@ -1,6 +1,8 @@
-use crate::ast::{Annotation, BinOp};
+use crate::ast::Annotation;
+use crate::ast::BinOp;
 use crate::ast::Expr;
-use crate::{Ident, Operator};
+use crate::Ident;
+use crate::Operator;
 use derivative::Derivative;
 use std::fmt;
 use terapascal_common::span::Span;
@@ -25,7 +27,7 @@ pub struct MemberStmt<A: Annotation = Span> {
     pub annotation: A,
 }
 
-impl MemberStmt<Span> {    
+impl MemberStmt<Span> {
     pub fn into_bin_op(self) -> BinOp {
         let name_span = self.name.span.clone();
 
