@@ -235,18 +235,18 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
         kind: FunctionDeclKind::Function,
         params: vec![
             ast::FunctionParam {
-                ident: builtin_ident(SELF_PARAM_NAME),
+                name: Arc::new(SELF_PARAM_NAME.to_string()),
                 ty: self_param_ty.clone(),
                 ty_span: None,
                 modifier: None,
-                span: builtin_span.clone(),
+                span: None,
             },
             ast::FunctionParam {
-                ident: builtin_ident("other"),
+                name: Arc::new("other".to_string()),
                 ty: self_param_ty.clone(),
                 ty_span: None,
                 modifier: None,
-                span: builtin_span.clone(),
+                span: None,
             }
         ],
         result_ty: Type::from(Primitive::Int32),
@@ -302,11 +302,11 @@ pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Typ
         kind: FunctionDeclKind::Function,
         params: vec![
             ast::FunctionParam {
-                ident: builtin_ident(SELF_PARAM_NAME),
+                name: Arc::new(SELF_PARAM_NAME.to_string()),
                 ty: self_param_ty,
                 ty_span: None,
                 modifier: None,
-                span: builtin_span.clone(),
+                span: None,
             }
         ],
         result_ty: Type::class(IdentPath::from_vec(vec![

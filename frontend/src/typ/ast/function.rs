@@ -549,27 +549,28 @@ fn typecheck_params(
     let mut params = Vec::new();
 
     if let Some(self_ty) = implicit_self {
-        let self_span = decl.name.span().clone();
-
         params.push(FunctionParam {
             ty: self_ty,
             ty_span: None,
-            ident: Ident::new(SELF_PARAM_NAME, self_span.clone()),
+            name: Arc::new(SELF_PARAM_NAME.to_string()),
             modifier: None,
-            span: self_span,
+            span: None,
         });
     }
     
     for param in &decl.params {
         let find_name_dup = params
             .iter()
-            .find(|p| p.ident == param.ident);
+            .find(|p| p.name == param.name);
 
         if let Some(prev) = find_name_dup {
             return Err(TypeError::DuplicateNamedArg {
-                name: param.ident.clone(),
-                span: param.span.clone(),
-                previous: prev.span().clone(),
+                name: Ident::new(&param.name, decl.name.span().clone()),
+                span: param.span.clone()
+                    .unwrap_or_else(|| {
+                        decl.span.clone()
+                    }),
+                previous: prev.span.clone(),
             });
         }
 
@@ -577,7 +578,7 @@ fn typecheck_params(
 
         let param = FunctionParam {
             modifier: param.modifier.clone(),
-            ident: param.ident.clone(),
+            name: param.name.clone(),
             span: param.span.clone(),
             ty,
             ty_span: param.ty_span.clone(),
@@ -717,7 +718,7 @@ pub fn typecheck_func_def(
             ctx.declare_type_params(&decl_type_params)?;
         }
     
-        declare_func_params_in_body(&decl.params, ctx)?;
+        declare_func_params_in_body(&decl.params, &decl.name.span, ctx)?;
 
         let locals = declare_locals_in_body(&def, ctx)?;
     
@@ -791,25 +792,32 @@ fn declare_locals_in_body(
     Ok(locals)
 }
 
-fn declare_func_params_in_body(params: &[FunctionParam], ctx: &mut Context) -> TypeResult<()> {
+fn declare_func_params_in_body(params: &[FunctionParam], default_span: &Span, ctx: &mut Context) -> TypeResult<()> {
     for param in params {
         let (kind, init) = match param.modifier {
             Some(ast::FunctionParamMod::Var) => (ValueKind::Mutable, true),
             Some(ast::FunctionParamMod::Out) => (ValueKind::Uninitialized, false),
             None => (ValueKind::Mutable, false),
         };
+        
+        // if the param doesn't have a span itself, it's an implicit span, so just use the function
+        // name as the span
+        let decl_span = param.span
+            .clone()
+            .unwrap_or_else(|| default_span.clone());
+        let decl_ident = Ident::new(&param.name, decl_span);
 
         ctx.declare_local_var(
-            param.ident.clone(),
+            decl_ident.clone(),
             Binding {
                 ty: param.ty.clone(),
                 kind,
-                def: Some(param.ident.clone()),
+                def: Some(decl_ident.clone()),
             },
         )?;
 
         if init {
-            ctx.initialize(&param.ident);
+            ctx.initialize(&decl_ident);
         }
     }
 
@@ -922,7 +930,7 @@ pub fn typecheck_func_expr(
 
         params.push(FunctionParam {
             modifier: param.modifier.clone(),
-            ident: param.ident.clone(),
+            name: param.name.clone(),
             span: param.span.clone(),
             ty,
             ty_span: param.ty_span.clone(),
@@ -950,7 +958,7 @@ pub fn typecheck_func_expr(
         captures: LinkedHashMap::new(),
     });
 
-    let body_result = declare_func_params_in_body(&params, ctx)
+    let body_result = declare_func_params_in_body(&params, &src_def.annotation, ctx)
         .and_then(|_| {
             let expect_block_return = known_return_ty
                 .as_ref()

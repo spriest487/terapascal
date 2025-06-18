@@ -164,13 +164,13 @@ pub enum TypeError {
     },
     DuplicateParamName {
         name: Ident,
-        previous: Span,
         span: Span,
+        previous: Option<Span>,
     },
     DuplicateNamedArg {
         name: Ident,
-        previous: Span,
         span: Span,
+        previous: Option<Span>,
     },
     UndefinedSymbols {
         unit: IdentPath,
@@ -777,12 +777,13 @@ impl DiagnosticOutput for TypeError {
             ],
 
             TypeError::DuplicateNamedArg { name, previous, .. } 
-            | TypeError::DuplicateParamName { name, previous, .. } => 
-                vec![
-                    DiagnosticMessage::new(format!("previous occurrence of `{}`", name))
-                    .with_label(DiagnosticLabel::new(previous.clone()))
-                ],
-
+            | TypeError::DuplicateParamName { name, previous, .. } => {
+                let message = DiagnosticMessage::new(format!("previous occurrence of `{}`", name));
+                match previous {
+                    None => vec![message],
+                    Some(span) => vec![message.with_label(DiagnosticLabel::new(span.clone()))]
+                }
+            },
             TypeError::AmbiguousFunction { candidates, .. } => {
                 candidates
                     .iter()

@@ -262,7 +262,7 @@ impl FunctionParam {
             None => (builder.translate_type(&param.ty), false),
         };
 
-        let name = (*param.ident.name).clone();
+        let name = param.name.to_string();
 
         FunctionParam {
             name,

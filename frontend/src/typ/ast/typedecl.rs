@@ -163,12 +163,12 @@ impl TagItem {
         tag_item: &ast::tag::TagItem,
         ctx: &mut Context
     ) -> TypeResult<Self> {
-        let tag_type = typecheck_type(&tag_item.tag_type, ctx)?;
+        let tag_type = typecheck_typename(&tag_item.tag_type, ctx)?;
         let span = tag_item.span.clone();
         
         if tag_type.is_unspecialized_generic() {
             return Err(TypeError::InvalidTagItem {
-                reason: InvalidTagReason::InvalidType(tag_type.clone()),
+                reason: InvalidTagReason::InvalidType(Type::from(tag_type)),
                 span,
             });
         }
@@ -177,14 +177,14 @@ impl TagItem {
             .map_err(|e| TypeError::from_name_err(e, tag_item.span.clone()))?; 
         if !sized {
             return Err(TypeError::InvalidTagItem { 
-                reason: InvalidTagReason::UnsizedType(tag_type.clone()),
+                reason: InvalidTagReason::UnsizedType(Type::from(tag_type)),
                 span,
             })
         }
         
-        if !matches!(tag_type, Type::Class(..)) {
+        if !matches!(tag_type.ty(), Type::Class(..)) {
             return Err(TypeError::InvalidTagItem {
-                reason: InvalidTagReason::InvalidType(tag_type.clone()),
+                reason: InvalidTagReason::InvalidType(Type::from(tag_type)),
                 span,
             });
         }

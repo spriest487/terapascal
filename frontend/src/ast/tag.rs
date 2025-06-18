@@ -68,7 +68,7 @@ impl Parse for Tag<Span> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct TagItem<A: Annotation = Span> {
-    pub tag_type: A::Type,
+    pub tag_type: A::TypeName,
     pub args: ObjectCtorArgs<A>,
 
     pub span: Span,

@@ -99,7 +99,7 @@ pub fn typecheck_object_ctor_args(
             return Err(TypeError::DuplicateNamedArg {
                 name: member.ident.clone(),
                 span: member.span().clone(),
-                previous: prev.span().clone(),
+                previous: Some(prev.span().clone()),
             });
         }
 

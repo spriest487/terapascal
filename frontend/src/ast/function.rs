@@ -32,7 +32,7 @@ use derivative::*;
 use linked_hash_map::LinkedHashMap;
 use std::fmt;
 use std::sync::Arc;
-use terapascal_common::span::Span;
+use terapascal_common::span::{MaybeSpanned, Span};
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 
@@ -97,7 +97,7 @@ impl fmt::Display for FunctionParamMod {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct FunctionParam<A: Annotation = Span> {
-    pub ident: Ident,
+    pub name: Arc<String>,
     
     pub ty: A::Type,
 
@@ -108,10 +108,11 @@ pub struct FunctionParam<A: Annotation = Span> {
     
     pub modifier: Option<FunctionParamMod>,
 
+    // may be None for implicit params
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
-    pub span: Span,
+    pub span: Option<Span>,
 }
 
 impl<A: Annotation> fmt::Display for FunctionParam<A> {
@@ -119,13 +120,13 @@ impl<A: Annotation> fmt::Display for FunctionParam<A> {
         if let Some(modifier) = &self.modifier {
             write!(f, "{} ", modifier)?;
         }
-        write!(f, "{}: {}", self.ident, self.ty)
+        write!(f, "{}: {}", self.name, self.ty)
     }
 }
 
-impl<A: Annotation> Spanned for FunctionParam<A> {
-    fn span(&self) -> &Span {
-        &self.span
+impl<A: Annotation> MaybeSpanned for FunctionParam<A> {
+    fn get_span(&self) -> Option<&Span> {
+        self.span.as_ref()
     }
 }
 
@@ -377,12 +378,13 @@ impl FunctionDecl<Span> {
             tokens.match_one(Separator::Colon)?;
             let ty = TypeName::parse(tokens)?;
 
-
             // TODO: the AST should preserve the groups as written
             // right now type spans need to be optional because we only want to include the same
             // span once per group of identifiers when producing semantic tokens, but this makes
             // this code more complicated than it needs to be
             for i in 0..idents.len() {
+                let ident = &idents[i];
+
                 let ty_span = if i == idents.len() - 1 {
                     Some(ty.span().clone())
                 } else {
@@ -390,10 +392,10 @@ impl FunctionDecl<Span> {
                 };
 
                 params.push(FunctionParam {
-                    span: idents[i].span.clone(),
+                    span: Some(ident.span.clone()),
                     ty: ty.clone(),
                     ty_span,
-                    ident: idents[i].clone(),
+                    name: ident.name.clone(),
                     modifier,
                 })
             }
@@ -712,7 +714,7 @@ impl<A: Annotation> fmt::Display for AnonymousFunctionDef<A> {
                 if let Some(modifier) = &param.modifier {
                     write!(f, "{} ", modifier)?;
                 }
-                write!(f, "{}: {}", param.ident, param.ty)?;
+                write!(f, "{}: {}", param.name, param.ty)?;
             }
 
             write!(f, ")")?;
@@ -783,11 +785,11 @@ impl Parse for AnonymousFunctionDef<Span> {
                     };
 
                     params.push(FunctionParam {
-                        span: ident.span().clone(),
+                        name: ident.name,
+                        span: Some(ident.span),
                         ty,
                         ty_span,
                         modifier: None,
-                        ident,
                     });
 
                     if params_tokens.match_one_maybe(Separator::Semicolon).is_none() {

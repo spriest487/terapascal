@@ -713,6 +713,11 @@ where
     ) {
         if let Some(typename_span) = typename.get_span() {
             let (left, right) = lit_span.split(typename_span);
+            eprintln!("{} literal::", type_desc);
+            eprintln!("\t left: {}-{}", left.start, left.end);
+            eprintln!("\t main: {}-{}", typename_span.start, typename_span.end);
+            eprintln!("\t right: {}-{}", right.start, right.end);
+            
             self.add(&left, SEMANTIC_KEYWORD, lit_desc);
             self.add(typename_span, SEMANTIC_TYPE, type_desc);
             self.add(&right, SEMANTIC_KEYWORD, lit_desc);
@@ -760,6 +765,10 @@ where
     fn add_tags(&mut self, tags: &[ast::tag::Tag<A>]) {
         for tag in tags {
             for item in &tag.items {
+                if let Some(span) = item.tag_type.get_span() {
+                    self.add(span, SEMANTIC_TYPE, "tag typename");
+                }
+                
                 self.add_object_ctor_args(&item.args)
             }
         }
@@ -785,7 +794,10 @@ where
         }
 
         for param in &decl.params {
-            self.add(&param.ident.span, SEMANTIC_PARAMETER, "function parameter name");
+            if let Some(param_span) = param.get_span() {
+                self.add(param_span, SEMANTIC_PARAMETER, "function parameter name");
+            }
+
             if let Some(ty_span) = &param.ty_span {
                 self.add(ty_span, SEMANTIC_TYPE, "function parameter type");
             }
