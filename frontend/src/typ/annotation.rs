@@ -9,6 +9,7 @@ use crate::ast;
 use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
+use crate::ast::TypeAnnotation;
 use crate::ast::{Annotation, SemanticHint};
 pub use crate::typ::annotation::invoke::Invocation;
 use crate::typ::ast::evaluate_expr;
@@ -754,7 +755,7 @@ impl Annotation for Value {
             Value::Function(_) | Value::UfcsFunction(_) => SemanticHint::Function,
             Value::Invocation(invocation) => invocation.semantic_hint(),
             Value::Method(_) => SemanticHint::Method,
-            Value::Type(_, _) => SemanticHint::Type,
+            Value::Type(ty, _) => ty.semantic_hint(),
             Value::Namespace(_, _) => SemanticHint::Namespace,
             Value::VariantCase(_) => SemanticHint::VariantCase,
             Value::Overload(overload) => overload.semantic_hint(),

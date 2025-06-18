@@ -18,13 +18,15 @@ pub use self::result::*;
 pub use self::scope::*;
 pub use self::ufcs::InstanceMethod;
 pub use self::value_kind::*;
+use crate::ast::Access;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
+use crate::ast::MethodOwner;
 use crate::ast::Path;
+use crate::ast::SemanticHint;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::ast::{Access, MethodOwner};
 use crate::typ::ast::EnumDecl;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;
@@ -36,7 +38,7 @@ use crate::typ::ast::SetDecl;
 use crate::typ::ast::StructDef;
 use crate::typ::ast::VariantDef;
 use crate::typ::ast::SELF_TY_NAME;
-use crate::typ::{specialize_by_return_ty, TypeName};
+use crate::typ::specialize_by_return_ty;
 use crate::typ::specialize_iface_def;
 use crate::typ::specialize_struct_def;
 use crate::typ::specialize_variant_def;
@@ -45,6 +47,7 @@ use crate::typ::Primitive;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeParamList;
 use crate::typ::TypeParamListItem;
 use crate::typ::TypeResult;
@@ -59,6 +62,8 @@ pub struct Binding {
     pub ty: Type,
     pub kind: ValueKind,
     pub def: Option<Ident>,
+    
+    pub semantic_hint: SemanticHint,
 }
 
 #[derive(Clone, Debug)]

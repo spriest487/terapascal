@@ -78,6 +78,7 @@ where
                     ty: binding.ty,
                     def: Some(binding.ident),
                     kind: ValueKind::Temporary,
+                    semantic_hint: SemanticHint::Variable,
                 })?;
             }
 

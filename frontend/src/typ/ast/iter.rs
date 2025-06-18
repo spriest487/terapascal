@@ -1,4 +1,5 @@
 use crate::ast;
+use crate::ast::SemanticHint;
 use crate::ast::TypeAnnotation;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
@@ -61,6 +62,7 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
                         kind: ValueKind::Mutable,
                         ty: counter_ty.ty().clone(),
                         def: Some(name.clone()),
+                        semantic_hint: SemanticHint::Variable,
                     };
 
                     ctx.declare_local_var(name.clone(), binding)?;
@@ -216,6 +218,7 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
                 kind: ValueKind::Immutable,
                 ty: binding_ty.ty().clone(),
                 def: Some(range.binding_name.clone()),
+                semantic_hint: SemanticHint::Variable,
             };
 
             ctx.declare_local_var(range.binding_name.clone(), binding)?;

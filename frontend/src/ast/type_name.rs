@@ -4,10 +4,12 @@ mod function_name;
 pub use self::function_name::FunctionTypeName;
 pub use self::function_name::FunctionTypeNameParam;
 pub use self::ty_path::TypePath;
+use crate::ast::Expr;
 use crate::ast::IdentPath;
+use crate::ast::SemanticHint;
 use crate::ast::TypeAnnotation;
+use crate::ast::TypeArgList;
 use crate::ast::TypeList;
-use crate::ast::{Expr, TypeArgList};
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Match;
 use crate::parse::Matcher;
@@ -146,6 +148,10 @@ impl TypeAnnotation for TypeName {
             TypeName::Unspecified(_) => false,
             _ => true,
         }
+    }
+
+    fn semantic_hint(&self) -> SemanticHint {
+        SemanticHint::Type
     }
 }
 

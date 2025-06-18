@@ -126,6 +126,7 @@ pub fn typecheck_local_binding(
         },
         ty: binding_ty.ty().clone(),
         def: Some(name.clone()),
+        semantic_hint: SemanticHint::Variable,
     };
 
     ctx.declare_local_var(name.clone(), var_binding)?;

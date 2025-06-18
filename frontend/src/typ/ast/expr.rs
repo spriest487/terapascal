@@ -278,7 +278,7 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
                 ty: binding.ty.clone(),
                 value_kind: binding.kind,
                 decl: decl_name,
-                semantic_hint: SemanticHint::Variable,
+                semantic_hint: binding.semantic_hint,
             })
         }
 

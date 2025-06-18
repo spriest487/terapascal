@@ -20,14 +20,16 @@ pub use self::sig::*;
 pub use self::specialize::*;
 pub use self::ty_param::*;
 use crate::ast;
+use crate::ast::Access;
+use crate::ast::ArrayTypeName;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::IdentTypeName;
+use crate::ast::MethodOwner;
+use crate::ast::SemanticHint;
 use crate::ast::StructKind;
 use crate::ast::TypeAnnotation;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::ast::{Access, MethodOwner};
-use crate::ast::ArrayTypeName;
 use crate::typ::ast::FieldDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::SELF_TY_NAME;
@@ -57,7 +59,8 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use terapascal_common::span::{MaybeSpanned, Span};
+use terapascal_common::span::MaybeSpanned;
+use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
@@ -1399,6 +1402,18 @@ impl TypeAnnotation for Type {
     fn is_known(&self) -> bool {
         true
     }
+
+    fn semantic_hint(&self) -> SemanticHint {
+        match self {
+            Type::MethodSelf | Type::GenericParam(_) => SemanticHint::TypeParameter,
+            Type::Variant(_) => SemanticHint::Variant,
+            Type::Enum(_) => SemanticHint::Enum,
+            
+            Type::Set(_) => SemanticHint::Number,
+            
+            _ => SemanticHint::Type,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -1719,6 +1734,10 @@ impl MaybeSpanned for TypeName {
 impl TypeAnnotation for TypeName {
     fn is_known(&self) -> bool {
         self.ty().is_known()
+    }
+
+    fn semantic_hint(&self) -> SemanticHint {
+        self.ty().semantic_hint()
     }
 }
 

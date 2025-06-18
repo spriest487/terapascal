@@ -1,14 +1,15 @@
-use std::path::PathBuf;
 use crate::ast;
-use crate::ast::{BindingDeclKind, UnitBindingItemInitializer};
+use crate::ast::BindingDeclKind;
 use crate::ast::FunctionName;
 use crate::ast::IdentPath;
+use crate::ast::SemanticHint;
 use crate::ast::StructKind;
 use crate::ast::TypeAnnotation;
+use crate::ast::UnitBindingItemInitializer;
 use crate::ast::Visibility;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::expr::expect_stmt_initialized;
-use crate::typ::ast::{typecheck_alias, FunctionDeclContext};
+use crate::typ::ast::typecheck_alias;
 use crate::typ::ast::typecheck_enum_decl;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::typecheck_func_def;
@@ -18,6 +19,7 @@ use crate::typ::ast::typecheck_struct_decl;
 use crate::typ::ast::typecheck_variant;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::FunctionDeclContext;
 use crate::typ::ast::SetDecl;
 use crate::typ::ast::WhereClause;
 use crate::typ::typecheck_type;
@@ -38,6 +40,7 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
@@ -536,6 +539,7 @@ fn typecheck_global_binding_item(
                     ty: ty.clone(),
                     def: Some(ident.clone()),
                     kind: ValueKind::Mutable,
+                    semantic_hint: SemanticHint::Variable,
                 }, visibility)?;
             }
 

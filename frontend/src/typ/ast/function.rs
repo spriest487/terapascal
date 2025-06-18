@@ -6,6 +6,7 @@ pub use self::decl_mod::*;
 use crate::ast;
 use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
+use crate::ast::SemanticHint;
 use crate::ast::TypeAnnotation;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::typecheck_block;
@@ -171,6 +172,14 @@ impl FunctionName {
 impl ast::FunctionName for FunctionName {    
     fn ident(&self) -> &Ident {
         &self.ident
+    }
+
+    fn owning_type_name_semantic_hint(&self) -> SemanticHint {
+        match &self.context {
+            FunctionDeclContext::FreeFunction => SemanticHint::None,
+            FunctionDeclContext::MethodDecl { enclosing_type, .. } => enclosing_type.semantic_hint(),
+            FunctionDeclContext::MethodDef { declaring_type, .. } => declaring_type.semantic_hint(),
+        }
     }
 
     fn owning_type_name_span(&self) -> Option<&Span> {
@@ -712,7 +721,7 @@ pub fn typecheck_func_def(
                 ctx.declare_type_params(enclosing_ty_params)?;
             }
         }
-    
+
         // declare decl's own type params within the body too
         if let Some(decl_type_params) = decl.name.type_params.as_ref() {
             ctx.declare_type_params(&decl_type_params)?;
@@ -776,6 +785,7 @@ fn declare_locals_in_body(
                     kind: binding_kind,
                     ty: ty.clone(),
                     def: Some(local.ident.clone()),
+                    semantic_hint: SemanticHint::Variable,
                 })?;
             },
         }
@@ -813,6 +823,7 @@ fn declare_func_params_in_body(params: &[FunctionParam], default_span: &Span, ct
                 ty: param.ty.clone(),
                 kind,
                 def: Some(decl_ident.clone()),
+                semantic_hint: SemanticHint::Parameter,
             },
         )?;
 

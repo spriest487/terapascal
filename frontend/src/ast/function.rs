@@ -3,7 +3,7 @@ mod test;
 
 use crate::ast::tag::Tag;
 use crate::ast::type_name::TypeName;
-use crate::ast::Annotation;
+use crate::ast::{Annotation, SemanticHint};
 use crate::ast::BindingDeclKind;
 use crate::ast::Block;
 use crate::ast::DeclMod;
@@ -893,6 +893,10 @@ impl QualifiedFunctionName {
 impl FunctionName for QualifiedFunctionName {
     fn ident(&self) -> &Ident {
         &self.ident
+    }
+
+    fn owning_type_name_semantic_hint(&self) -> SemanticHint {
+        SemanticHint::Type
     }
 
     fn owning_type_name_span(&self) -> Option<&Span> {

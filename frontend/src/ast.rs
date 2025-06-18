@@ -57,11 +57,13 @@ pub use unit::*;
 
 pub trait TypeAnnotation : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
     fn is_known(&self) -> bool;
+    fn semantic_hint(&self) -> SemanticHint;
 }
 
 pub trait FunctionName : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
     fn ident(&self) -> &Ident;
     
+    fn owning_type_name_semantic_hint(&self) -> SemanticHint;
     fn owning_type_name_span(&self) -> Option<&Span>;
     fn owning_type_params_len(&self) -> usize;
     fn owning_type_param_span(&self, index: usize) -> &Span;
@@ -148,8 +150,13 @@ pub enum SemanticHint {
     Method,
     Const,
     Type,
+    Enum,
+    Number,
+    Variant,
     VariantCase,
     Namespace,
     String,
     Property,
+    Parameter,
+    TypeParameter,
 }
