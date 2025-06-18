@@ -254,7 +254,7 @@ struct FunctionParam {
 
 impl FunctionParam {
     fn from_ast(param: &typ::ast::FunctionParam, builder: &mut Builder) -> Self {
-        let (param_ty, by_ref) = match &param.modifier {
+        let (param_ty, by_ref) = match param.get_modifier() {
             Some(ast::FunctionParamMod::Var) | Some(ast::FunctionParamMod::Out) => {
                 (builder.translate_type(&param.ty).ptr(), true)
             },

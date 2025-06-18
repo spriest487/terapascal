@@ -81,6 +81,17 @@ pub enum FunctionParamMod {
     Out,
 }
 
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
+pub struct FunctionParamModDecl {
+    pub param_mod: FunctionParamMod, 
+    
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub span: Span,
+}
+
 impl fmt::Display for FunctionParamMod {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -106,7 +117,10 @@ pub struct FunctionParam<A: Annotation = Span> {
     #[derivative(Hash = "ignore")]
     pub ty_span: Option<Span>,
     
-    pub modifier: Option<FunctionParamMod>,
+    pub modifier: Option<FunctionParamModDecl>,
+    
+    // true if this is the implicit `self` parameter of a method
+    pub is_implicit_self: bool,
 
     // may be None for implicit params
     #[derivative(Debug = "ignore")]
@@ -115,10 +129,17 @@ pub struct FunctionParam<A: Annotation = Span> {
     pub span: Option<Span>,
 }
 
+impl<A: Annotation> FunctionParam<A> {
+    pub fn get_modifier(&self) -> Option<FunctionParamMod> {
+        self.modifier.as_ref().map(|m| m.param_mod)
+    }
+}
+
+
 impl<A: Annotation> fmt::Display for FunctionParam<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(modifier) = &self.modifier {
-            write!(f, "{} ", modifier)?;
+            write!(f, "{} ", modifier.param_mod)?;
         }
         write!(f, "{}: {}", self.name, self.ty)
     }
@@ -359,8 +380,14 @@ impl FunctionDecl<Span> {
 
             // might start with a modifier keyword which applies to all params declared in this group
             let modifier = match tokens.match_one_maybe(match_mod.clone()) {
-                Some(tt) if tt.is_keyword(Keyword::Var) => Some(FunctionParamMod::Var),
-                Some(tt) if tt.is_keyword(Keyword::Out) => Some(FunctionParamMod::Out),
+                Some(tt) if tt.is_keyword(Keyword::Var) => Some(FunctionParamModDecl {
+                    param_mod: FunctionParamMod::Var,
+                    span: tt.into_span(),
+                }),
+                Some(tt) if tt.is_keyword(Keyword::Out) => Some(FunctionParamModDecl {
+                    param_mod: FunctionParamMod::Out,
+                    span: tt.into_span(),
+                }),
                 _ => None,
             };
 
@@ -396,7 +423,8 @@ impl FunctionDecl<Span> {
                     ty: ty.clone(),
                     ty_span,
                     name: ident.name.clone(),
-                    modifier,
+                    is_implicit_self: false,
+                    modifier: modifier.clone(),
                 })
             }
         }
@@ -712,7 +740,7 @@ impl<A: Annotation> fmt::Display for AnonymousFunctionDef<A> {
                     write!(f, ";")?;
                 }
                 if let Some(modifier) = &param.modifier {
-                    write!(f, "{} ", modifier)?;
+                    write!(f, "{} ", modifier.param_mod)?;
                 }
                 write!(f, "{}: {}", param.name, param.ty)?;
             }
@@ -790,6 +818,7 @@ impl Parse for AnonymousFunctionDef<Span> {
                         ty,
                         ty_span,
                         modifier: None,
+                        is_implicit_self: false,
                     });
 
                     if params_tokens.match_one_maybe(Separator::Semicolon).is_none() {

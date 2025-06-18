@@ -679,14 +679,17 @@ where
         };
 
         if let Some(span) = &args_open {
+            // eprintln!("left span: {span}-{}", span.end);
             self.add(span, SEMANTIC_OPERATOR, "arg list open bracket");
         }
 
         for arg in args {
+            // eprintln!("arg ({arg}) span: {}-{}", arg.span(), arg.span().end);
             self.add_expr(arg);
         }
 
         if let Some(span) = &args_close {
+            // eprintln!("right span: {span}-{}", span.end);
             self.add(span, SEMANTIC_OPERATOR, "arg list close bracket");
         }
     }
@@ -913,6 +916,10 @@ where
         }
 
         for param in &decl.params {
+            if let Some(modifier) = &param.modifier {
+                self.add_keyword(&modifier.span);
+            }
+            
             if let Some(param_span) = param.get_span() {
                 self.add(param_span, SEMANTIC_PARAMETER, "function parameter name");
             }

@@ -240,6 +240,7 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
                 ty_span: None,
                 modifier: None,
                 span: None,
+                is_implicit_self: true,
             },
             ast::FunctionParam {
                 name: Arc::new("other".to_string()),
@@ -247,6 +248,7 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
                 ty_span: None,
                 modifier: None,
                 span: None,
+                is_implicit_self: false,
             }
         ],
         result_ty: Type::from(Primitive::Int32),
@@ -302,6 +304,7 @@ pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Typ
         kind: FunctionDeclKind::Function,
         params: vec![
             ast::FunctionParam {
+                is_implicit_self: true,
                 name: Arc::new(SELF_PARAM_NAME.to_string()),
                 ty: self_param_ty,
                 ty_span: None,

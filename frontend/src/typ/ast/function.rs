@@ -562,6 +562,7 @@ fn typecheck_params(
             ty: self_ty,
             ty_span: None,
             name: Arc::new(SELF_PARAM_NAME.to_string()),
+            is_implicit_self: true,
             modifier: None,
             span: None,
         });
@@ -591,6 +592,7 @@ fn typecheck_params(
             span: param.span.clone(),
             ty,
             ty_span: param.ty_span.clone(),
+            is_implicit_self: false,
         };
         params.push(param);
     }
@@ -804,7 +806,7 @@ fn declare_locals_in_body(
 
 fn declare_func_params_in_body(params: &[FunctionParam], default_span: &Span, ctx: &mut Context) -> TypeResult<()> {
     for param in params {
-        let (kind, init) = match param.modifier {
+        let (kind, init) = match param.get_modifier() {
             Some(ast::FunctionParamMod::Var) => (ValueKind::Mutable, true),
             Some(ast::FunctionParamMod::Out) => (ValueKind::Uninitialized, false),
             None => (ValueKind::Mutable, false),
@@ -945,6 +947,7 @@ pub fn typecheck_func_expr(
             span: param.span.clone(),
             ty,
             ty_span: param.ty_span.clone(),
+            is_implicit_self: false,
         });
     }
 

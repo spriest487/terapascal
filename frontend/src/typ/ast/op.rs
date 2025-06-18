@@ -414,17 +414,17 @@ fn typecheck_member_op(
 
     match &bin_op.rhs {
         // x.y
-        ast::Expr::Ident(member_ident, member_span) => {
-            let rhs_value = member_value(&lhs, member_ident, member_span, expect_ty, ctx)?;
+        ast::Expr::Ident(member_ident, ..) => {
+            let value = member_value(&lhs, member_ident, span, expect_ty, ctx)?;
 
-            let rhs = Expr::Ident(member_ident.clone(), rhs_value.clone());
+            let rhs = Expr::Ident(member_ident.clone(), value.clone());
 
             let member_op = BinOp {
                 lhs,
                 op: Operator::Period,
                 op_span: bin_op.op_span.clone().into(),
                 rhs,
-                annotation: rhs_value,
+                annotation: value,
             };
 
             Ok(Expr::from(member_op))

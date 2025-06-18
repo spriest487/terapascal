@@ -103,8 +103,8 @@ impl ParseSeq for DeclMod<Span> {
             Self::EXTERNAL_WORD => {
                 let src = Expr::parse(tokens)?;
                 DeclMod::External {
-                    kw_span: src.span().clone(),
                     span: word_token.span.to(src.span()),
+                    kw_span: word_token.span,
                     src: Box::new(src),
                 }
             },

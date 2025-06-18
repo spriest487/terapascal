@@ -1287,7 +1287,7 @@ impl LibraryBuilder {
                     ty => self.translate_type(ty, &generic_ctx)
                 };
 
-                if matches!(param.modifier, Some(FunctionParamMod::Var | FunctionParamMod::Out)) {
+                if matches!(param.get_modifier(), Some(FunctionParamMod::Var | FunctionParamMod::Out)) {
                     param_ty = param_ty.ptr();
                 }
 

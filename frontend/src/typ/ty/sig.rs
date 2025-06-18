@@ -56,8 +56,8 @@ impl FunctionSigParam {
     
     pub fn from_decl_param(param: FunctionParam) -> Self {
         Self {
+            modifier: param.get_modifier(),
             ty: param.ty,
-            modifier: param.modifier,
         }
     }
 }
