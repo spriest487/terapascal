@@ -6,10 +6,10 @@ pub mod function;
 mod ufcs;
 
 use crate::ast;
-use crate::ast::Annotation;
 use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
+use crate::ast::{Annotation, SemanticHint};
 pub use crate::typ::annotation::invoke::Invocation;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
@@ -29,6 +29,7 @@ use crate::typ::GenericTypeHint;
 use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::ValueKind;
+use crate::typ::ValueKind::Temporary;
 use crate::IntConstant;
 use derivative::*;
 use std::borrow::Cow;
@@ -250,6 +251,8 @@ pub struct TypedValue {
     pub ty: Type,
     pub value_kind: ValueKind,
     pub decl: Option<IdentPath>,
+    
+    pub semantic_hint: SemanticHint,
 
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]
@@ -258,48 +261,63 @@ pub struct TypedValue {
 }
 
 impl TypedValue {
-    pub fn temp(ty: Type, span: Span) -> Self {
+    pub fn temp(ty: impl Into<Type>, span: Span) -> Self {
         TypedValue {
-            ty,
+            ty: ty.into(),
             span,
             value_kind: ValueKind::Temporary,
+            semantic_hint: SemanticHint::None,
             decl: None,
         }
     }
 
-    pub fn unit_const(ty: Type, decl: IdentPath, span: Span) -> Self {
+    pub fn unit_const(ty: impl Into<Type>, decl: IdentPath, span: Span) -> Self {
         TypedValue {
-            ty,
+            ty: ty.into(),
             span,
             value_kind: ValueKind::Immutable,
+            semantic_hint: SemanticHint::Const,
             decl: Some(decl),
         }
     }
 
-    pub fn local_const(ty: Type, name: Ident, span: Span) -> Self {
+    pub fn local_const(ty: impl Into<Type>, name: Ident, span: Span) -> Self {
         TypedValue {
-            ty,
+            ty: ty.into(),
             span,
             value_kind: ValueKind::Immutable,
+            semantic_hint: SemanticHint::Const,
             decl: Some(IdentPath::from(name)),
         }
     }
 
-    pub fn unit_var(ty: Type, decl: IdentPath, span: Span) -> Self {
+    pub fn unit_var(ty: impl Into<Type>, decl: IdentPath, span: Span) -> Self {
         TypedValue {
-            ty,
+            ty: ty.into(),
             span,
             value_kind: ValueKind::Mutable,
+            semantic_hint: SemanticHint::Variable,
             decl: Some(decl),
         }
     }
 
-    pub fn local_var(ty: Type, name: Ident, span: Span) -> Self {
+    pub fn local_var(ty: impl Into<Type>, name: Ident, span: Span) -> Self {
         TypedValue {
-            ty,
+            ty: ty.into(),
             span,
             value_kind: ValueKind::Mutable,
+            semantic_hint: SemanticHint::Variable,
             decl: Some(IdentPath::from(name)),
+        }
+    }
+    
+    pub fn literal(ty: impl Into<Type>, span: Span) -> Self {
+        TypedValue {
+            ty: ty.into(),
+            span,
+            value_kind: Temporary,
+            semantic_hint: SemanticHint::Const,
+            decl: None,
         }
     }
 }
@@ -475,16 +493,6 @@ impl Value {
             Value::Const(const_val) => Some(const_val.as_ref()),
             _ => None,
         }
-    }
-
-    pub fn new_temp_val(ty: Type, span: Span) -> Self {
-        let typed_val = TypedValue {
-            decl: None,
-            value_kind: ValueKind::Temporary,
-            ty,
-            span,
-        };
-        typed_val.into()
     }
 
     pub fn ty(&self) -> Cow<Type> {
@@ -738,4 +746,19 @@ impl Annotation for Value {
     type ConstStringExpr = EvaluatedConstExpr<String>;
     type ConstIntegerExpr = EvaluatedConstExpr<IntConstant>;
     type ConstValue = Literal;
+
+    fn semantic_hint(&self) -> SemanticHint {
+        match self {
+            Value::Untyped(_) => SemanticHint::None,
+            Value::Typed(_) => SemanticHint::Variable,
+            Value::Function(_) | Value::UfcsFunction(_) => SemanticHint::Function,
+            Value::Invocation(invocation) => invocation.semantic_hint(),
+            Value::Method(_) => SemanticHint::Method,
+            Value::Type(_, _) => SemanticHint::Type,
+            Value::Namespace(_, _) => SemanticHint::Namespace,
+            Value::VariantCase(_) => SemanticHint::VariantCase,
+            Value::Overload(overload) => overload.semantic_hint(),
+            Value::Const(_) => SemanticHint::Const,
+        }
+    }
 }

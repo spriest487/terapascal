@@ -1,11 +1,16 @@
-use crate::ast::{Annotation, Expr};
+use crate::ast::Annotation;
+use crate::ast::Expr;
 use std::fmt;
-use terapascal_common::span::{Span, Spanned};
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Cast<A: Annotation> {
     pub expr: Expr<A>,
-    pub as_type: A::Type,
+    pub as_type: A::TypeName,
+
+    pub as_kw: Option<Span>,
+
     pub annotation: A,
 }
 

@@ -236,6 +236,7 @@ pub(super) fn resolve_ops_by_precedence(
                     expr: operand,
                     annotation: span,
                     as_type: ty,
+                    as_kw: Some(kw_span.clone()),
                 })
             })
         }

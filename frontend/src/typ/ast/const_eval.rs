@@ -118,7 +118,7 @@ impl ConstEval for Cast {
     fn const_eval(&self, ctx: &Context) -> Option<Literal> {
         let lit_value = self.expr.const_eval(ctx)?;
 
-        match &self.as_type {
+        match self.as_type.ty() {
             Type::Primitive(primitive) => {
                 lit_value.cast_to_primitive(*primitive)
             }
@@ -127,7 +127,7 @@ impl ConstEval for Cast {
                 // can only cast to the String class, and can only (redundantly) 
                 // cast literal strings to it
                 if **class == builtin_string_name() 
-                    && *self.expr.annotation().ty().as_ref() == self.as_type {
+                    && *self.expr.annotation().ty().as_ref() == *self.as_type.ty() {
                     Some(lit_value)
                 } else {
                     None

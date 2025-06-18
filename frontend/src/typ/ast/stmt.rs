@@ -3,7 +3,7 @@ mod assign;
 pub use self::assign::Assignment;
 pub use self::assign::CompoundAssignment;
 use crate::ast;
-use crate::ast::Ident;
+use crate::ast::{Ident, SemanticHint};
 use crate::ast::Operator;
 use crate::parse::IllegalStatement;
 use crate::typ::ast::cast::implicit_conversion;
@@ -315,11 +315,13 @@ pub fn typecheck_exit(
     // since no value will ever be assigned to `x` if the exit expr is reached
     let make_annotation = |span: &Span| match expect_ty {
         Type::Nothing => Value::Untyped(span.clone()),
+        
         _ => TypedValue {
             span: span.clone(),
             value_kind: ValueKind::Temporary,
             ty: expect_ty.clone(),
             decl: None,
+            semantic_hint: SemanticHint::None,
         }
         .into(),
     };

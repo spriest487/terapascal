@@ -11,7 +11,6 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -115,13 +114,7 @@ pub fn typecheck_block(
                     Value::Untyped(span)
                 } else {
                     let out_ty = out_expr.annotation().ty().into_owned();
-                    TypedValue {
-                        ty: out_ty,
-                        value_kind: ValueKind::Temporary,
-                        span,
-                        decl: None,
-                    }
-                    .into()
+                    Value::from(TypedValue::temp(out_ty, span))
                 }
             },
             None => Value::Untyped(span),

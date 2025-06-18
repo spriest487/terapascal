@@ -15,6 +15,7 @@ use std::sync::Arc;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::ast::SemanticHint;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
@@ -143,6 +144,16 @@ impl Invocation {
 
             Invocation::VariantCtor { .. }
             | Invocation::FunctionValue { .. } => None,
+        }
+    }
+    
+    pub fn semantic_hint(&self) -> SemanticHint {
+        match self {
+            Invocation::Function { .. } => SemanticHint::Function,
+            Invocation::Method { .. } => SemanticHint::Method,
+            Invocation::ObjectCtor { .. } => SemanticHint::Type,
+            Invocation::VariantCtor { .. } => SemanticHint::VariantCase,
+            Invocation::FunctionValue { .. } => SemanticHint::Variable,
         }
     }
 }

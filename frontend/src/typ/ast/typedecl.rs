@@ -20,7 +20,9 @@ use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::TypeDeclItemInfo;
 use crate::typ::set::SetType;
-use crate::typ::{ConstValue, TypeName};
+use crate::typ::typecheck_type;
+use crate::typ::typecheck_typename;
+use crate::typ::ConstValue;
 use crate::typ::Context;
 use crate::typ::Def;
 use crate::typ::FunctionSig;
@@ -35,10 +37,11 @@ use crate::typ::Specializable;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
+use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::MAX_FLAGS_BITS;
-use crate::typ::{typecheck_type, typecheck_typename};
 use crate::IntConstant;
 use std::borrow::Cow;
 use std::mem;
@@ -202,7 +205,8 @@ impl TagItem {
             let member_ty = member.value.annotation().ty().into_owned();
             let member_span = member.value.span().clone();
 
-            let mut lit_expr = Expr::literal(const_val_expr, Value::new_temp_val(member_ty, member_span));
+            let lit_val = TypedValue::temp(member_ty, member_span);
+            let mut lit_expr = Expr::literal(const_val_expr, lit_val);
 
             mem::swap(&mut lit_expr, &mut member.value);
         }

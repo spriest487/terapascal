@@ -4,10 +4,11 @@ mod test;
 mod variant_case;
 
 use crate::ast;
-use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Literal;
 use crate::ast::Operator;
+use crate::ast::Ident;
+use crate::ast::SemanticHint;
 use crate::typ::annotation::UfcsValue;
 use crate::typ::ast::collection_ctor_elements;
 use crate::typ::ast::const_eval_integer;
@@ -140,7 +141,7 @@ pub fn typecheck_bin_op(
 
             let annotation = match result_ty {
                 Type::Nothing => Value::Untyped(span.clone()),
-                ty => Value::new_temp_val(ty, span.clone()),
+                ty => Value::from(TypedValue::temp(ty, span.clone())),
             };
 
             let bin_op = ast::BinOp {
@@ -173,20 +174,14 @@ fn typecheck_logical_op(
     let rhs = evaluate_expr(&bin_op.rhs, &bool_ty, ctx)?;
     rhs.annotation().expect_value(&bool_ty)?;
 
-    let annotation = TypedValue {
-        ty: bool_ty,
-        value_kind: ValueKind::Temporary,
-        span,
-        decl: None,
-    }
-    .into();
+    let value = TypedValue::temp(bool_ty, span);
 
     Ok(BinOp {
         lhs,
         rhs,
         op: bin_op.op,
         op_span: bin_op.op_span.clone(),
-        annotation,
+        annotation: Value::from(value),
     })
 }
 
@@ -205,20 +200,14 @@ fn typecheck_equality(
         return Err(invalid_bin_op(bin_op, &lhs, &rhs));
     }
 
-    let annotation = TypedValue {
-        ty: Type::Primitive(Primitive::Boolean),
-        value_kind: ValueKind::Temporary,
-        span,
-        decl: None,
-    }
-    .into();
+    let value = TypedValue::temp(Primitive::Boolean, span);
 
     Ok(BinOp {
         lhs,
         rhs,
         op: bin_op.op,
         op_span: bin_op.op_span.clone(),
-        annotation,
+        annotation: Value::from(value),
     })
 }
 
@@ -237,20 +226,14 @@ fn typecheck_comparison(
         return Err(invalid_bin_op(&bin_op, &lhs, &rhs));
     }
 
-    let annotation = TypedValue {
-        ty: Type::Primitive(Primitive::Boolean),
-        value_kind: ValueKind::Temporary,
-        span,
-        decl: None,
-    }
-    .into();
+    let value = TypedValue::temp(Primitive::Boolean, span);
 
     Ok(BinOp {
         lhs,
         rhs,
         op: bin_op.op,
         op_span: bin_op.op_span.clone(),
-        annotation,
+        annotation: Value::from(value),
     })
 }
 
@@ -687,6 +670,7 @@ fn typecheck_member_value(
                 span: span.clone(),
                 value_kind,
                 decl: None,
+                semantic_hint: SemanticHint::Property,
             })
         },
     };
@@ -796,6 +780,7 @@ pub fn typecheck_unary_op(
                 value_kind,
                 span,
                 decl: None,
+                semantic_hint: SemanticHint::None,
             })
         },
 
@@ -887,13 +872,13 @@ pub fn typecheck_indexer(
         },
     };
 
-    let annotation = TypedValue {
+    let annotation = Value::from(TypedValue {
         value_kind,
         ty: el_ty,
         span: span.clone(),
         decl: None,
-    }
-    .into();
+        semantic_hint: SemanticHint::None, 
+    });
 
     Ok(Expr::from(BinOp {
         lhs: base,

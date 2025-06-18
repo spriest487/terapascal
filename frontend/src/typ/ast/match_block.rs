@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::ast::ElseBranch;
+use crate::ast::{ElseBranch, SemanticHint};
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_stmt;
@@ -230,13 +230,13 @@ pub fn typecheck_match_expr(
             }
         }
 
-        let annotation = TypedValue {
+        let annotation = Value::from(TypedValue {
             ty: result_ty,
             span: match_expr.span().clone(),
             decl: None,
             value_kind: ValueKind::Temporary,
-        }
-        .into();
+            semantic_hint: SemanticHint::None,
+        });
 
         Ok(MatchExpr {
             kw_span: match_expr.kw_span.clone(),

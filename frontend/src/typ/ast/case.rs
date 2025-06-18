@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::ast::ElseBranch;
+use crate::ast::{ElseBranch, SemanticHint};
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_stmt;
@@ -118,13 +118,13 @@ pub fn typecheck_case_expr(
         },
     };
 
-    let annotation = TypedValue {
+    let annotation = Value::from(TypedValue {
         span,
         decl: None,
         value_kind: ValueKind::Temporary,
         ty: result_ty,
-    }
-    .into();
+        semantic_hint: SemanticHint::None,
+    });
 
     Ok(CaseExpr {
         kw_span: case.kw_span.clone(),

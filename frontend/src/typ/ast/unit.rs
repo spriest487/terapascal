@@ -466,14 +466,14 @@ fn typecheck_global_binding_item(
                 const_ident.span.clone(),
             )?;
 
-            let annotation = ConstValue {
+            let value = ConstValue {
                 value: const_val_literal.clone(),
                 span: val_span,
                 decl: Some(ctx.namespace().child(const_ident)),
                 ty: ty.clone(),
             };
 
-            const_val_init.expr = Box::new(Expr::literal(const_val_literal.clone(), annotation.into()));
+            const_val_init.expr = Box::new(Expr::literal(const_val_literal.clone(), value));
             (ty, Some(const_val_init))
         }
 

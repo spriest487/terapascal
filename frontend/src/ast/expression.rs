@@ -345,8 +345,11 @@ impl<A: Annotation> Expr<A> {
         }
     }
     
-    pub fn literal(literal: Literal<A::TypeName>, annotation: A) -> Self {
-        Self::Literal(LiteralItem { literal, annotation })
+    pub fn literal(literal: Literal<A::TypeName>, annotation: impl Into<A>) -> Self {
+        Self::Literal(LiteralItem { 
+            literal,
+            annotation: annotation.into() 
+        })
     }
 }
 

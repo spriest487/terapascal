@@ -2,11 +2,12 @@ mod init;
 mod literal;
 
 use crate::ast;
-use crate::ast::Ident;
+use crate::ast::{Ident, SemanticHint};
 use crate::ast::IdentPath;
 pub use crate::typ::ast::call::typecheck_call;
 use crate::typ::ast::cast::typecheck_cast_expr;
 use crate::typ::ast::const_eval::ConstEval;
+use crate::typ::ast::typecheck_bin_op;
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_case_expr;
 use crate::typ::ast::typecheck_collection_ctor;
@@ -19,7 +20,6 @@ use crate::typ::ast::typecheck_raise;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::typecheck_unary_op;
 use crate::typ::ast::OverloadCandidate;
-use crate::typ::ast::typecheck_bin_op;
 use crate::typ::function::FunctionValue;
 use crate::typ::overload::OverloadValue;
 use crate::typ::Context;
@@ -278,6 +278,7 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
                 ty: binding.ty.clone(),
                 value_kind: binding.kind,
                 decl: decl_name,
+                semantic_hint: SemanticHint::Variable,
             })
         }
 
@@ -291,6 +292,7 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
                 ty: binding.ty.clone(),
                 value_kind: binding.kind,
                 decl: decl_name,
+                semantic_hint: SemanticHint::Variable,
             })
         }
 

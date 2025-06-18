@@ -186,13 +186,7 @@ pub fn typecheck_if_cond_expr(
             Value::Untyped(span)
         },
 
-        (then_ty, Some(_else_branch)) => TypedValue {
-            ty: then_ty.into_owned(),
-            value_kind: ValueKind::Temporary,
-            span,
-            decl: None,
-        }
-        .into(),
+        (then_ty, Some(_else_branch)) => Value::from(TypedValue::temp(then_ty.into_owned(), span)),
     };
 
     Ok(IfCond {

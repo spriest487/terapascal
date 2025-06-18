@@ -9,6 +9,7 @@ use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use crate::ast;
+use crate::ast::SemanticHint;
 
 pub type Raise = ast::Raise<Value>;
 
@@ -23,13 +24,13 @@ pub fn typecheck_raise(
 
     // the "raise" expr just aborts, so it has whatever type is expected of it, so we
     // can use it in any expr position
-    let annotation = TypedValue {
+    let annotation = Value::from(TypedValue {
         ty: expect_ty.clone(),
         span: raise.span().clone(),
         decl: None,
         value_kind: ValueKind::Temporary,
-    }
-    .into();
+        semantic_hint: SemanticHint::None,
+    });
 
     Ok(Raise {
         value: Box::new(value),

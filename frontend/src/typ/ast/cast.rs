@@ -1,15 +1,15 @@
 use crate::ast;
-use crate::typ::ast::Expr;
 use crate::typ::ast::evaluate_expr;
-use crate::typ::typecheck_type;
+use crate::typ::ast::Expr;
+use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -21,12 +21,13 @@ enum Conversion {
     Illegal,
 }
 
-pub fn implicit_conversion(
-    expr: Expr,
-    to: &Type,
-    ctx: &Context,
-) -> TypeResult<Expr> {
-    assert_ne!(Type::Nothing, *to, "bad usage of implicit_conversion: can't convert {} to nothing ({expr})", expr.annotation().ty());
+pub fn implicit_conversion(expr: Expr, to: &Type, ctx: &Context) -> TypeResult<Expr> {
+    assert_ne!(
+        Type::Nothing,
+        *to,
+        "bad usage of implicit_conversion: can't convert {} to nothing ({expr})",
+        expr.annotation().ty()
+    );
 
     expr.annotation().expect_any_value()?;
 
@@ -39,7 +40,7 @@ pub fn implicit_conversion(
 
     check_implicit_conversion(&expr_ty, to, &span, ctx)?;
 
-    Ok(Expr::from(create_cast(expr, to.clone(), span)))
+    Ok(Expr::from(synthetic_cast(expr, to.clone(), span)))
 }
 
 pub fn check_implicit_conversion(
@@ -66,10 +67,10 @@ pub fn check_implicit_conversion(
             if *from == Type::Primitive(Primitive::Pointer) =>
         {
             Conversion::UnsafeBlittable
-        }
+        },
 
         Type::Pointer(_) if *to == *from || *from == Type::Nil => Conversion::Blittable,
-        
+
         Type::Weak(weak_ty) if weak_ty.as_ref() == from => Conversion::Blittable,
 
         Type::Interface(..) if from.is_strong_rc_reference() => {
@@ -98,16 +99,15 @@ pub fn check_implicit_conversion(
             span: span.clone(),
         }),
 
-        Conversion::Illegal => Err(TypeError::type_mismatch(to.clone(), from.clone(), span.clone())),
+        Conversion::Illegal => Err(TypeError::type_mismatch(
+            to.clone(),
+            from.clone(),
+            span.clone(),
+        )),
     }
 }
 
-pub fn check_explicit_cast(
-    from: &Type,
-    to: &Type,
-    span: &Span,
-    ctx: &Context,
-) -> TypeResult<()> {
+pub fn check_explicit_cast(from: &Type, to: &Type, span: &Span, ctx: &Context) -> TypeResult<()> {
     if check_implicit_conversion(from, to, span, ctx).is_ok() {
         return Ok(());
     }
@@ -119,8 +119,7 @@ pub fn check_explicit_cast(
         | (Type::Primitive(..), Type::Primitive(..))
         | (Type::Pointer(..) | Type::Nil, Type::Pointer(..) | Type::Nil)
         | (Type::Pointer(..) | Type::Nil, Type::Primitive(..))
-        | (Type::Primitive(..), Type::Pointer(..) | Type::Nil)
-            => Ok(()),
+        | (Type::Primitive(..), Type::Pointer(..) | Type::Nil) => Ok(()),
 
         | (Type::Enum(..), Type::Primitive(p)) if p.is_integer() => Ok(()),
 
@@ -128,38 +127,45 @@ pub fn check_explicit_cast(
         | (Type::Class(..) | Type::Interface(..) | Type::DynArray { .. }, Type::Any) => Ok(()),
 
         // upcast class ref to interface it implements
-        | (Type::Class(..), Type::Interface(..)) if ctx.is_implementation_at(from, to, span)? => Ok(()),
+        | (Type::Class(..), Type::Interface(..)) if ctx.is_implementation_at(from, to, span)? => {
+            Ok(())
+        },
 
         | _ => Err(TypeError::InvalidCast {
-                from: from.clone(),
-                to: to.clone(),
-                span: span.clone(),
-            })
+            from: from.clone(),
+            to: to.clone(),
+            span: span.clone(),
+        }),
     }
 }
 
 pub fn typecheck_cast_expr(cast: &ast::Cast<Span>, ctx: &mut Context) -> TypeResult<Cast> {
-    let cast_ty = typecheck_type(&cast.as_type, ctx)?;
+    let cast_ty = typecheck_typename(&cast.as_type, ctx)?;
     let expr = evaluate_expr(&cast.expr, &cast_ty, ctx)?;
 
     expr.annotation().expect_any_value()?;
 
     check_explicit_cast(&expr.annotation().ty(), &cast_ty, &cast.annotation, ctx)?;
 
-    Ok(create_cast(expr, cast_ty, cast.span().clone()))
+    let value = TypedValue::temp(cast_ty.ty().clone(), cast.span().clone());
+
+    Ok(Cast {
+        expr,
+        as_kw: cast.as_kw.clone(),
+        as_type: cast_ty,
+        annotation: Value::from(value),
+    })
 }
 
-fn create_cast(expr: Expr, cast_ty: Type, span: Span) -> Cast {
-    let annotation = TypedValue {
-        ty: cast_ty.clone(),
-        span,
-        value_kind: ValueKind::Temporary,
-        decl: None,
-    };
+// HACK: this should probably be handled as a value annotation instead, leaving the AST unchanged.
+// creates a cast node wrapping an existing expression
+fn synthetic_cast(expr: Expr, cast_ty: Type, span: Span) -> Cast {
+    let value = TypedValue::temp(cast_ty.clone(), span);
 
     Cast {
-        annotation: annotation.into(),
         expr,
-        as_type: cast_ty,
+        as_kw: None,
+        as_type: TypeName::inferred(cast_ty),
+        annotation: Value::from(value),
     }
 }

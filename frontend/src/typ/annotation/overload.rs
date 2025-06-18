@@ -3,6 +3,7 @@ use derivative::Derivative;
 use terapascal_common::span::Span;
 use crate::typ::annotation::function::FunctionValue;
 use crate::ast;
+use crate::ast::SemanticHint;
 use crate::typ::ast::{resolve_overload, Expr, MethodDecl, OverloadCandidate};
 use crate::typ::{Context, FunctionSig, Invocation, Type, TypeArgList, TypeName, TypeResult, Value};
 use crate::typ::method::MethodValue;
@@ -142,6 +143,14 @@ impl OverloadValue {
                     type_args,
                 })
             },
+        }
+    }
+    
+    pub fn semantic_hint(&self) -> SemanticHint {
+        if self.candidates.iter().all(|c| matches!(c, OverloadCandidate::Method {..})) {
+            SemanticHint::Method
+        } else {
+            SemanticHint::Function
         }
     }
 }

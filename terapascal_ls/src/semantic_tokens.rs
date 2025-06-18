@@ -7,7 +7,7 @@ use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_frontend::ast;
 pub use terapascal_frontend::ast::Annotation;
-use terapascal_frontend::ast::FunctionName;
+use terapascal_frontend::ast::{FunctionName, SemanticHint};
 use terapascal_frontend::ast::InterfaceDecl;
 use terapascal_frontend::ast::MemberDeclSection;
 use terapascal_frontend::ast::Pattern;
@@ -545,6 +545,22 @@ where
         }
     }
     
+    fn add_cast(&mut self, cast: &ast::Cast<A>) {
+        // workaround: if the cast typename doesn't have a span, it's probably a synthetic
+        // cast node and should be skipped
+        let Some(type_span) = cast.as_type.get_span() else {
+            return;
+        };
+        
+        self.add_expr(&cast.expr);
+        
+        if let Some(span) = &cast.as_kw {
+            self.add_keyword(span);
+        }
+        
+        self.add(type_span, SEMANTIC_TYPE, "cast typename");
+    }
+    
     fn add_for(&mut self, for_loop: &ast::ForLoop<A>) {
         self.add_keyword(&for_loop.for_kw_span);
 
@@ -638,14 +654,27 @@ where
             ast::Expr::Exit(exit) => self.add_exit(exit),
             ast::Expr::Case(block) => self.add_case_block(block, Self::add_expr),
             ast::Expr::Match(block) => self.add_match_block(block, Self::add_expr),
-            ast::Expr::Cast(_) => {},
+            ast::Expr::Cast(cast) => self.add_cast(cast),
             ast::Expr::AnonymousFunction(_) => {},
             ast::Expr::ExplicitSpec(_) => {},
         }
     }
     
-    fn add_value(&mut self, _value: &A, _display_span: &Span) {
+    fn add_value(&mut self, value: &A, display_span: &Span) {
+        let token_type = match value.semantic_hint() {
+            SemanticHint::None => return,
+            SemanticHint::Variable => SEMANTIC_VARIABLE,
+            SemanticHint::Function => SEMANTIC_FUNCTION,
+            SemanticHint::Method => SEMANTIC_METHOD,
+            SemanticHint::Const => SEMANTIC_NAMESPACE,
+            SemanticHint::Type => SEMANTIC_TYPE,
+            SemanticHint::VariantCase => SEMANTIC_ENUM_MEMBER,
+            SemanticHint::Namespace => SEMANTIC_NAMESPACE,
+            SemanticHint::Property => SEMANTIC_PROPERTY,
+            SemanticHint::String => SEMANTIC_STRING,
+        };
         
+        self.add(display_span, token_type, "value");
     }
 
     fn add_bin_op(&mut self, bin_op: &ast::BinOp<A>) {

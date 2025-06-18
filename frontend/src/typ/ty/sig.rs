@@ -1,8 +1,8 @@
 use crate::ast;
 use crate::ast::FunctionParamMod;
 use crate::typ::ast::AnonymousFunctionDef;
-use crate::typ::ast::Expr;
 use crate::typ::ast::Call;
+use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParam;
 use crate::typ::Context;
@@ -15,6 +15,7 @@ use crate::typ::TypeArgResolver;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
+use crate::typ::TypedValue;
 use crate::typ::Value;
 use std::fmt;
 use std::sync::Arc;
@@ -416,7 +417,7 @@ impl FunctionSig {
     ) -> Call {
         let func_val_annotation = match &self.result_ty {
             Type::Nothing => Value::Untyped(span),
-            return_ty => Value::new_temp_val(return_ty.clone(), span),
+            return_ty => Value::from(TypedValue::temp(return_ty.clone(), span)),
         };
 
         Call {

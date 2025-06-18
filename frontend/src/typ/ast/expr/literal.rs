@@ -13,7 +13,6 @@ use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::ValueKind;
 use crate::typ::STRING_CHAR_TYPE;
 use crate::IntConstant;
 use crate::RealConstant;
@@ -273,28 +272,15 @@ pub fn typecheck_literal(
                 }
             }
 
-            let binding = ValueKind::Immutable;
-            let annotation = TypedValue {
-                ty: string_type(ctx)?,
-                value_kind: binding,
-                span: span.clone(),
-                decl: None,
-            }
-                .into();
+            let value = TypedValue::literal(string_type(ctx)?, span.clone());
 
-            Ok(Expr::literal(Literal::String(s.clone()), annotation))
+            Ok(Expr::literal(Literal::String(s.clone()), value))
         }
 
         ast::Literal::Boolean(b) => {
-            let annotation = TypedValue {
-                ty: Type::Primitive(Primitive::Boolean),
-                value_kind: ValueKind::Immutable,
-                span: span.clone(),
-                decl: None,
-            }
-                .into();
+            let value = TypedValue::literal(Primitive::Boolean, span.clone());
 
-            Ok(Expr::literal(Literal::Boolean(*b), annotation))
+            Ok(Expr::literal(Literal::Boolean(*b), value))
         }
 
         ast::Literal::Integer(i) => typecheck_literal_int(i, expect_ty, span.clone()),
@@ -306,17 +292,11 @@ pub fn typecheck_literal(
                 unimplemented!("real literal outside range of f32")
             };
 
-            let annotation = TypedValue {
-                ty,
-                value_kind: ValueKind::Immutable,
-                span: span.clone(),
-                decl: None,
-            }
-                .into();
+            let value = TypedValue::literal(ty, span.clone());
 
             Ok(ast::Expr::literal(
                 ast::Literal::Real(x.clone()),
-                annotation,
+                value,
             ))
         }
 
@@ -326,29 +306,16 @@ pub fn typecheck_literal(
                 _ => Type::Nil,
             };
 
-            let annotation = TypedValue {
-                ty,
-                value_kind: ValueKind::Temporary,
-                span: span.clone(),
-                decl: None,
-            };
+            let value = TypedValue::literal(ty, span.clone());
 
-            Ok(Expr::literal(Literal::Nil, annotation.into()))
+            Ok(Expr::literal(Literal::Nil, value))
         }
 
         ast::Literal::SizeOf(size_of_ty) => {
             let ty = typecheck_typename(&size_of_ty, ctx)?;
-            let annotation = TypedValue {
-                ty: Type::Primitive(Primitive::Int32),
-                span: span.clone(),
-                decl: None,
-                value_kind: ValueKind::Temporary,
-            };
+            let value = TypedValue::literal(Primitive::Int32, span.clone());
 
-            Ok(Expr::literal(
-                Literal::SizeOf(Box::new(ty)),
-                annotation.into(),
-            ))
+            Ok(Expr::literal(Literal::SizeOf(Box::new(ty)), value))
         }
 
         ast::Literal::DefaultValue(default_of_ty) => {
@@ -392,16 +359,11 @@ pub fn typecheck_literal(
 }
 
 pub fn create_default_literal(typename: TypeName, span: Span) -> Expr {
-    let annotation = TypedValue {
-        ty: typename.ty().clone(),
-        decl: None,
-        span: span.clone(),
-        value_kind: ValueKind::Temporary,
-    };
+    let annotation = TypedValue::literal(typename.ty().clone(), span);
 
     Expr::literal(
         Literal::DefaultValue(Box::new(typename)),
-        annotation.into(),
+        annotation,
     )
 }
 
@@ -448,15 +410,9 @@ fn typecheck_literal_int(i: &IntConstant, expect_ty: &Type, span: Span) -> TypeR
         },
     };
 
-    let annotation = TypedValue {
-        ty,
-        value_kind: ValueKind::Immutable,
-        span,
-        decl: None,
-    }
-        .into();
+    let value = TypedValue::literal(ty, span);
 
-    Ok(ast::Expr::literal(ast::Literal::Integer(*i), annotation))
+    Ok(ast::Expr::literal(ast::Literal::Integer(*i), value))
 }
 
 fn try_map_primitive_int<F, T>(i: &IntConstant, primitive_ty: Primitive, f: F) -> Type

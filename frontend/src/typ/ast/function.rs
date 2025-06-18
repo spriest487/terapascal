@@ -990,19 +990,13 @@ pub fn typecheck_func_expr(
         params: sig_params,
         type_params: None,
     });
-    
-    let annotation = TypedValue {
-        decl: None,
-        span: src_def.span().clone(),
-        ty: Type::Function(sig),
-        value_kind: ValueKind::Temporary,
-    }
-    .into();
+
+    let value = TypedValue::temp(Type::Function(sig), src_def.span().clone());
 
     Ok(AnonymousFunctionDef {
         params,
         return_ty,
-        annotation,
+        annotation: Value::from(value),
         body,
         captures: closure_env.captures,
     })

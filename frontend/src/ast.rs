@@ -117,6 +117,8 @@ pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
     type ConstIntegerExpr: ConstExprValue<Self, IntConstant>;
 
     type ConstValue: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
+    
+    fn semantic_hint(&self) -> SemanticHint;
 }
 
 impl Annotation for Span {
@@ -131,4 +133,23 @@ impl Annotation for Span {
     type ConstStringExpr = Box<Expr<Span>>;
     type ConstIntegerExpr = Box<Expr<Span>>;
     type ConstValue = Box<Expr<Span>>;
+
+    fn semantic_hint(&self) -> SemanticHint {
+        SemanticHint::None
+    }
+}
+
+// for external tools e.g. syntax highlighting
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub enum SemanticHint {
+    None,
+    Variable,
+    Function,
+    Method,
+    Const,
+    Type,
+    VariantCase,
+    Namespace,
+    String,
+    Property,
 }
