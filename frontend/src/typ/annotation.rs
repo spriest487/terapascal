@@ -483,6 +483,45 @@ impl Value {
 
         Ok(())
     }
+    
+    pub fn with_span(&self, span: Span) -> Self {
+        match self {
+            Value::Untyped(..) => Value::Untyped(span),
+            Value::Typed(val) => Value::from(TypedValue {
+                span,
+                ..val.as_ref().clone()
+            }),
+            Value::Function(func) => Value::from(FunctionValue {
+                span,
+               ..func.as_ref().clone() 
+            }),
+            Value::UfcsFunction(ufcs) => Value::from(UfcsValue {
+                span,
+                ..ufcs.as_ref().clone()
+            }),
+            Value::Invocation(invocation) => Value::from(
+                invocation.as_ref().clone().with_span(span)
+            ),
+            Value::Method(method) => Value::from(MethodValue {
+                span,
+                ..method.as_ref().clone()
+            }),
+            Value::Type(ty, ..) => Value::Type(ty.clone(), span),
+            Value::Namespace(namespace, ..) => Value::Namespace(namespace.clone(), span),
+            Value::VariantCase(case_val) => Value::from(VariantCaseValue {
+                span,
+                ..case_val.as_ref().clone()
+            }),
+            Value::Overload(overload) => Value::from(OverloadValue {
+                span,
+                ..overload.as_ref().clone()
+            }),
+            Value::Const(const_val) => Value::from(ConstValue {
+                span,
+                ..const_val.as_ref().clone()
+            }),
+        }
+    }
 
     pub fn as_invocation(&self) -> Option<&Invocation> {
         match self {

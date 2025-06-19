@@ -156,6 +156,21 @@ impl Invocation {
             Invocation::FunctionValue { .. } => SemanticHint::Variable,
         }
     }
+    
+    pub fn with_span(mut self, span: Span) -> Self {
+        match &mut self {
+            Invocation::Function { span: old, .. } => *old = span,
+            Invocation::Method { span: old, .. } => *old = span,
+            Invocation::ObjectCtor { span: old, .. } => *old = span,
+            Invocation::VariantCtor { span: old, .. } => *old = span,
+            Invocation::FunctionValue { value, .. } => {
+                let new_annotaton = value.annotation().with_span(span);
+                *value.annotation_mut() = new_annotaton;
+            },
+        };
+
+        self
+    }
 }
 
 impl Spanned for Invocation {

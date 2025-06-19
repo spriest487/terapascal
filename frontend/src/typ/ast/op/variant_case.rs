@@ -24,11 +24,9 @@ pub fn typecheck_variant_type_member(
     member_ident: &Ident,
     variant_name_span: &Span,
     ctx: &Context,
-) -> TypeResult<VariantTypeMemberValue> {
-    let span = variant_name_span.to(member_ident);
-    
+) -> TypeResult<VariantTypeMemberValue> {    
     let variant_def = ctx.find_variant_def(&variant_name.full_path)
-        .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
+        .map_err(|err| TypeError::from_name_err(err, member_ident.span.clone()))?;
 
     let case_exists = variant_def.find_case(member_ident.as_str()).is_some();
 
@@ -37,7 +35,7 @@ pub fn typecheck_variant_type_member(
             variant_name: Arc::new(variant_name.clone()),
             variant_name_span: variant_name_span.clone(),
             case: member_ident.clone(),
-            span,
+            span: member_ident.span.clone(),
         };
 
         Ok(VariantTypeMemberValue::Case(Value::VariantCase(Arc::new(case_val))))
@@ -46,7 +44,7 @@ pub fn typecheck_variant_type_member(
         // we need the full specialized type in this case
         let variant_def = ctx
             .instantiate_variant_def(&variant_name)
-            .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
+            .map_err(|err| TypeError::from_name_err(err, member_ident.span.clone()))?;
 
         let variant_ty = Type::variant(variant_name.clone());
 
@@ -65,7 +63,7 @@ pub fn typecheck_variant_type_member(
         if method_candidates.is_empty() {
             return Err(TypeError::from_name_err(
                 NameError::type_member_not_found(variant_ty, member_ident.clone()),
-                span.clone(),
+                member_ident.span.clone(),
             ));
         }
 
@@ -77,7 +75,7 @@ pub fn typecheck_variant_type_member(
         
         Ok(VariantTypeMemberValue::Method(Value::from(OverloadValue {
             candidates: method_candidates,
-            span: span.clone(),
+            span: member_ident.span.clone(),
             self_arg: None,
             sig: known_sig,
         })))

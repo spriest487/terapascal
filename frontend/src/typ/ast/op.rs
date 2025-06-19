@@ -415,16 +415,18 @@ fn typecheck_member_op(
     match &bin_op.rhs {
         // x.y
         ast::Expr::Ident(member_ident, ..) => {
-            let value = member_value(&lhs, member_ident, span, expect_ty, ctx)?;
-
-            let rhs = Expr::Ident(member_ident.clone(), value.clone());
+            let rhs_value = member_value(&lhs, member_ident, expect_ty, ctx)?;
+            let op_value = rhs_value.with_span(span.clone());
+            
+            let rhs = Expr::Ident(member_ident.clone(), rhs_value);
+            
 
             let member_op = BinOp {
                 lhs,
                 op: Operator::Period,
                 op_span: bin_op.op_span.clone().into(),
                 rhs,
-                annotation: value,
+                annotation: op_value,
             };
 
             Ok(Expr::from(member_op))
@@ -509,10 +511,11 @@ fn typecheck_type_member(
 pub fn member_value(
     base_expr: &Expr,
     member_ident: &Ident,
-    span: &Span,
     expect_ty: &Type,
     ctx: &Context,
 ) -> TypeResult<Value> {
+    let member_span = member_ident.span.clone();
+
     match base_expr.annotation() {
         // x is the name of a variant type - we are constructing that variant
         Value::Type(Type::Variant(variant_name), variant_name_span) => {
@@ -527,7 +530,7 @@ pub fn member_value(
         // x is a non-variant typename - we are accessing a member of that type
         // e.g. calling an interface method by its type-qualified name
         Value::Type(ty, span) => {
-            typecheck_type_member(ty, span, &member_ident, expect_ty, span.clone(), ctx)
+            typecheck_type_member(ty, span, &member_ident, expect_ty, member_span, ctx)
         },
 
         // x is a value - we are accessing a member of that value
@@ -537,7 +540,6 @@ pub fn member_value(
                 &base_val.ty,
                 base_val.value_kind,
                 &member_ident,
-                span.clone(),
                 ctx,
             )
         },
@@ -548,7 +550,6 @@ pub fn member_value(
                 invocation.result_type(),
                 ValueKind::Temporary,
                 &member_ident,
-                span.clone(),
                 ctx,
             )
         }
@@ -559,7 +560,7 @@ pub fn member_value(
 
             match ctx.find_path(&full_path) {
                 Some(member) => {
-                    let value = member_annotation(&member, span.clone(), ctx);
+                    let value = member_annotation(&member, member_ident.span.clone(), ctx);
 
                     Ok(value)
                 },
@@ -569,7 +570,7 @@ pub fn member_value(
                         member_ident.clone(),
                     );
 
-                    Err(TypeError::from_name_err(err, span.clone()))
+                    Err(TypeError::from_name_err(err, member_ident.span.clone()))
                 },
             }
         },
@@ -580,7 +581,7 @@ pub fn member_value(
                 base_expr.annotation(),
                 member_ident.clone(),
             );
-            Err(TypeError::from_name_err(err, span.clone()))
+            Err(TypeError::from_name_err(err, member_ident.span.clone()))
         },
     }
 }
@@ -590,12 +591,13 @@ fn typecheck_member_value(
     base_ty: &Type,
     value_kind: ValueKind,
     member_ident: &Ident,
-    span: Span,
     ctx: &Context,
 ) -> TypeResult<Value> {
+    let member_span = member_ident.span.clone();
+    
     let member = ctx
         .find_instance_member(&lhs.annotation().ty(), &member_ident)
-        .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
+        .map_err(|err| TypeError::from_name_err(err, member_span.clone()))?;
 
     let annotation = match member {
         InstanceMember::Method { iface_ty, self_ty, method } => {
@@ -622,7 +624,7 @@ fn typecheck_member_value(
                 method_index,
                 lhs.clone(),
                 iface_method,
-                span.clone(),
+                member_span,
             );
 
             Value::from(method)
@@ -635,7 +637,7 @@ fn typecheck_member_value(
                 visibility,
                 lhs.clone(),
                 decl.clone(),
-                span.clone(),
+                member_span,
             ))
         },
 
@@ -643,17 +645,17 @@ fn typecheck_member_value(
             Value::from(OverloadValue::new(
                 candidates,
                 Some(Box::new(lhs.clone())),
-                span.clone(),
+                member_span,
             ))
         }
 
-        InstanceMember::Field { ty: member_ty, access: field_access } => {
-            if base_ty.get_current_access(ctx) < field_access {
+        InstanceMember::Field { ty, access, decl, decl_index } => {
+            if base_ty.get_current_access(ctx) < access {
                 return Err(TypeError::TypeMemberInaccessible {
                     member: member_ident.clone(),
                     ty: base_ty.clone(),
-                    access: field_access,
-                    span,
+                    access,
+                    span: member_span,
                 });
             }
             
@@ -664,14 +666,20 @@ fn typecheck_member_value(
                 _ => value_kind,
             };
 
+            let decl_ident = decl.idents[decl_index].clone();
+            let decl_path = match ty.full_path() {
+                Some(ty_path) => ty_path.into_owned().child(decl_ident),
+                None => IdentPath::from(decl_ident),
+            };
+
             Value::from(TypedValue {
-                ty: member_ty.clone(),
-                span: span.clone(),
+                ty: ty.clone(),
+                span: member_span,
                 value_kind,
-                decl: None,
+                decl: Some(decl_path),
                 semantic_hint: SemanticHint::Property,
             })
-        },
+        }
     };
 
     Ok(annotation)

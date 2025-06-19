@@ -27,7 +27,7 @@ use crate::ast::SemanticHint;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::typ::ast::EnumDecl;
+use crate::typ::ast::{EnumDecl, FieldDecl};
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;
 use crate::typ::ast::InterfaceDecl;
@@ -71,6 +71,8 @@ pub enum InstanceMember {
     Field {
         ty: Type,
         access: Access,
+        decl: FieldDecl,
+        decl_index: usize,
     },
     Method {
         iface_ty: Type,
@@ -1567,9 +1569,11 @@ impl Context {
             .collect();
 
         match (field_decl, matching_methods.len()) {
-            (Some((decl, _)), 0) => Ok(InstanceMember::Field {
+            (Some((decl, decl_index)), 0) => Ok(InstanceMember::Field {
                 ty: Type::from(decl.ty.clone()),
                 access: decl.access,
+                decl,
+                decl_index,
             }),
 
             // unambiguous method

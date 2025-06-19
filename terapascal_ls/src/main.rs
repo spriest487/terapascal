@@ -312,7 +312,7 @@ fn get_definition_links(
                 },
                 end: Position {
                     line: span.end.line as u32,
-                    character: span.end.col as u32,
+                    character: span.end.col as u32 + 1,
                 }
             };
             Some(LocationLink {

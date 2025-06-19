@@ -8,7 +8,7 @@ use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_frontend::Ident;
 use terapascal_frontend::Operator;
-use terapascal_frontend::ast::Exit;
+use terapascal_frontend::ast::{Exit, ForLoopCounterInit, ForLoopRange};
 use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::Literal;
 use terapascal_frontend::ast::SetDeclRange;
@@ -23,7 +23,7 @@ use terapascal_frontend::typ::TypeName;
 use terapascal_frontend::typ::TypeParamList;
 use terapascal_frontend::typ::TypePattern;
 use terapascal_frontend::typ::Value;
-use terapascal_frontend::typ::ast::AliasDecl;
+use terapascal_frontend::typ::ast::{AliasDecl, CaseBlock, ForLoop, MatchBlock, SupersClause, WhereClause, WhileLoop};
 use terapascal_frontend::typ::ast::Block;
 use terapascal_frontend::typ::ast::Call;
 use terapascal_frontend::typ::ast::EnumDecl;
@@ -41,6 +41,7 @@ use terapascal_frontend::typ::ast::Tag;
 use terapascal_frontend::typ::ast::TypeDeclItem;
 use terapascal_frontend::typ::ast::UnitDecl;
 use terapascal_frontend::typ::ast::VariantDecl;
+use terapascal_frontend::typ::seq::TypeSequenceSupport;
 
 struct DefinitionEntry {
     span: Span,
@@ -158,6 +159,7 @@ impl DefinitionMap {
             },
             UnitDecl::FunctionDef { def } => {
                 self.add_func_decl(def.decl.as_ref(), ctx);
+                self.add_block(&def.body, ctx);
             },
 
             UnitDecl::Type { decl } => {
@@ -172,8 +174,8 @@ impl DefinitionMap {
     }
 
     fn add_type_decl(&mut self, type_decl: &TypeDeclItem, ctx: &Context) {
-        let ident = type_decl.name().ident();
-        self.add(ident.span.clone(), ident.span.clone());
+        // let ident = type_decl.name().ident();
+        // self.add(ident.span.clone(), ident.span.clone());
 
         match type_decl {
             TypeDeclItem::Struct(struct_decl) => {
@@ -196,9 +198,32 @@ impl DefinitionMap {
             },
         }
     }
+    
+    fn add_supers_clause(&mut self, supers: &SupersClause, ctx: &Context) {
+        for super_type in &supers.types {
+            self.add_typename(super_type, ctx);
+        }
+    }
+
+    fn add_where_clause(&mut self, where_clause: &WhereClause, ctx: &Context) {
+        for constraint in &where_clause.constraints {
+            self.add_typename(&constraint.is_ty, ctx);
+        }
+    }
 
     fn add_struct_decl(&mut self, struct_decl: &StructDecl, ctx: &Context) {
         self.add_tags(&struct_decl.tags, ctx);
+
+        if let Some(params) = &struct_decl.name.type_params {
+            self.add_type_params(params, ctx);
+        }
+        
+        if let Some(implements) = &struct_decl.implements {
+            self.add_supers_clause(implements, ctx);
+        }
+        if let Some(where_clause) = &struct_decl.where_clause {
+            self.add_where_clause(where_clause, ctx);
+        }
 
         for member in struct_decl.members() {
             match member {
@@ -215,6 +240,17 @@ impl DefinitionMap {
     fn add_iface_decl(&mut self, iface_decl: &InterfaceDecl, ctx: &Context) {
         self.add_tags(&iface_decl.tags, ctx);
 
+        if let Some(params) = &iface_decl.name.type_params {
+            self.add_type_params(params, ctx);
+        }
+
+        if let Some(supers) = &iface_decl.supers {
+            self.add_supers_clause(supers, ctx);
+        }
+        if let Some(where_clause) = &iface_decl.where_clause {
+            self.add_where_clause(where_clause, ctx);
+        }
+
         for method_decl in &iface_decl.methods {
             self.add_func_decl(&method_decl.decl, ctx);
         }
@@ -222,6 +258,17 @@ impl DefinitionMap {
 
     fn add_variant_decl(&mut self, variant_decl: &VariantDecl, ctx: &Context) {
         self.add_tags(&variant_decl.tags, ctx);
+
+        if let Some(params) = &variant_decl.name.type_params {
+            self.add_type_params(params, ctx);
+        }
+
+        if let Some(implements) = &variant_decl.implements {
+            self.add_supers_clause(implements, ctx);
+        }
+        if let Some(where_clause) = &variant_decl.where_clause {
+            self.add_where_clause(where_clause, ctx);
+        }
 
         for case in &variant_decl.cases {
             let Some(data) = &case.data else {
@@ -331,12 +378,12 @@ impl DefinitionMap {
             let type_path_name = TypeName::named(declaring_type.clone(), ty_name_span.clone());
             self.add_typename(&type_path_name, ctx);
         };
+        
+        if let Some(params) = &func_decl.name.type_params {
+            self.add_type_params(params, ctx);
+        }
 
         for param in &func_decl.params {
-            if let Some(span) = &param.name_span {
-                self.add(span.clone(), span.clone());
-            }
-
             let Some(span) = &param.ty_span else {
                 continue;
             };
@@ -360,7 +407,7 @@ impl DefinitionMap {
             },
 
             Stmt::LocalBinding(binding) => {
-                self.add(binding.name.span.clone(), binding.name.span.clone());
+                // self.add(binding.name.span.clone(), binding.name.span.clone());
 
                 self.add_typename(&binding.ty, ctx);
                 if let Some(expr) = &binding.val {
@@ -382,8 +429,12 @@ impl DefinitionMap {
                 self.add_block(block, ctx);
             },
 
-            Stmt::ForLoop(_) => {},
-            Stmt::WhileLoop(_) => {},
+            Stmt::ForLoop(for_loop) => {
+                self.add_for_loop(for_loop.as_ref(), ctx);
+            },
+            Stmt::WhileLoop(while_loop) => {
+                self.add_while_loop(while_loop.as_ref(), ctx);
+            },
             Stmt::Assignment(assignment) => {
                 self.add_expr(&assignment.lhs, ctx);
                 self.add_expr(&assignment.rhs, ctx);
@@ -399,11 +450,62 @@ impl DefinitionMap {
                 self.add_expr(&raise.value, ctx);
             },
 
-            Stmt::Case(_) => {},
-            Stmt::Match(_) => {},
+            Stmt::Case(case_block) => {
+                self.add_case_block(case_block, ctx, &Self::add_stmt);
+            },
+            Stmt::Match(match_block) => {
+                self.add_match_block(match_block, ctx, &Self::add_stmt);
+            },
 
             Stmt::Break(_) | Stmt::Continue(_) => {},
         }
+    }
+    
+    fn add_for_loop(&mut self, for_loop: &ForLoop, ctx: &Context) {
+        match &for_loop.range {
+            ForLoopRange::UpTo(range) => {
+                match &range.init {
+                    ForLoopCounterInit::Binding { init, ty, .. } => {
+                        self.add_typename(ty, ctx);
+                        self.add_expr(init, ctx);
+                    }
+                    ForLoopCounterInit::Assignment { value, counter, .. } => {
+                        self.add_expr(value, ctx);
+                        self.add_expr(counter, ctx);
+                    }
+                }
+                
+                self.add_expr(&range.to_expr, ctx);
+            }
+            
+            ForLoopRange::InSequence(sequence) => {
+                self.add_typename(&sequence.binding_ty, ctx);
+                self.add_expr(&sequence.src_expr, ctx);
+
+                // link the "in" keyword to the sequence type
+                let src_ty = sequence.src_expr.annotation().ty();
+                if let Some(seq_ty_span) = Self::find_sequence_type_def(&src_ty, ctx) {
+                    self.add(sequence.in_kw_span.clone(), seq_ty_span);
+                }
+            }
+        }
+        
+        self.add_stmt(&for_loop.body, ctx);
+    }
+
+    fn find_sequence_type_def(src_ty: &Type, ctx: &Context) -> Option<Span> {
+        let seq_support = TypeSequenceSupport::try_from_type(src_ty, ctx).ok()?;
+
+        let path = seq_support.sequence_type.full_path()?;
+
+        let ty_def = ctx.find_type_def(path.as_ref())?;
+
+        Some(ty_def.ident().span.clone())
+    }
+
+    fn add_while_loop(&mut self, while_loop: &WhileLoop, ctx: &Context) {
+        self.add_expr(&while_loop.condition, ctx);
+        self.add_stmt(&while_loop.body, ctx);
     }
 
     fn add_expr(&mut self, expr: &Expr, ctx: &Context) {
@@ -417,7 +519,9 @@ impl DefinitionMap {
             },
             Expr::Ident(ident, value) => self.add_value(value, ident.span(), ctx),
             Expr::Literal(item) => match &item.literal {
-                Literal::SizeOf(ty) | Literal::DefaultValue(ty) | Literal::TypeInfo(ty) => {
+                Literal::SizeOf(ty) 
+                | Literal::DefaultValue(ty) 
+                | Literal::TypeInfo(ty) => {
                     self.add_typename(ty.as_ref(), ctx);
                 },
                 _ => {},
@@ -458,8 +562,12 @@ impl DefinitionMap {
                     self.add_expr(value_expr, ctx);
                 }
             },
-            Expr::Case(_) => {},
-            Expr::Match(_) => {},
+            Expr::Case(case_block) => {
+                self.add_case_block(case_block, ctx, &Self::add_expr)
+            },
+            Expr::Match(match_block) => {
+                self.add_match_block(match_block, ctx, &Self::add_expr)
+            },
             Expr::Cast(cast) => {
                 self.add_typename(&cast.as_type, ctx);
                 self.add_expr(&cast.expr, ctx);
@@ -541,7 +649,7 @@ impl DefinitionMap {
                 self.add(at_span.clone(), method.decl.func_decl.name.span.clone());
             },
 
-            Value::Type(ty, span) => {
+            Value::Type(ty, ..) => {
                 let typename = TypeName::named(ty.clone(), at_span.clone());
                 self.add_typename(&typename, ctx);
             },
@@ -612,6 +720,48 @@ impl DefinitionMap {
         add_item(self, &if_cond.then_branch, ctx);
 
         if let Some(branch) = &if_cond.else_branch {
+            add_item(self, &branch.item, ctx);
+        }
+    }
+
+    fn add_match_block<B, AddItemFn>(
+        &mut self,
+        match_block: &MatchBlock<B>,
+        ctx: &Context,
+        add_item: &AddItemFn,
+    ) where
+        AddItemFn: Fn(&mut Self, &B, &Context),
+    {
+        self.add_expr(&match_block.cond_expr, ctx);
+        for branch in &match_block.branches {
+            self.add_type_pattern(&branch.pattern, ctx);
+            
+            add_item(self, &branch.item, ctx);
+        }
+        
+        if let Some(branch) = &match_block.else_branch {
+            add_item(self, &branch.item, ctx);
+        }
+    }
+
+    fn add_case_block<B, AddItemFn>(
+        &mut self,
+        match_block: &CaseBlock<B>,
+        ctx: &Context,
+        add_item: &AddItemFn,
+    ) where
+        AddItemFn: Fn(&mut Self, &B, &Context),
+    {
+        self.add_expr(&match_block.cond_expr, ctx);
+        for branch in &match_block.branches {
+            for case_value in &branch.case_values {
+                self.add_expr(case_value, ctx);
+            }
+
+            add_item(self, &branch.item, ctx);
+        }
+
+        if let Some(branch) = &match_block.else_branch {
             add_item(self, &branch.item, ctx);
         }
     }
