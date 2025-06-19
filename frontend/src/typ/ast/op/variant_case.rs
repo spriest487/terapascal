@@ -30,7 +30,7 @@ pub fn typecheck_variant_type_member(
     let variant_def = ctx.find_variant_def(&variant_name.full_path)
         .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
 
-    let case_exists = variant_def.find_case(member_ident).is_some();
+    let case_exists = variant_def.find_case(member_ident.as_str()).is_some();
 
     if case_exists {
         let case_val = VariantCaseValue {

@@ -12,7 +12,7 @@ pub struct ExplicitSpecExpr<A = Span> where A: Annotation {
     /// expression, which must refer to a type, these arguments will be applied to
     pub type_expr: Expr<A>,
     
-    pub type_args: TypeList<A::Type>,
+    pub type_args: TypeList<A::TypeName>,
     
     pub annotation: A,
 }

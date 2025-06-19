@@ -131,8 +131,8 @@ impl<A: Annotation> VariantDecl<A> {
         self.cases.iter().position(|c| c.ident == *case_ident)
     }
     
-    pub fn find_case(&self, case: &Ident) -> Option<&VariantCase<A>> {
-        self.cases.iter().find(|c| c.ident == *case)
+    pub fn find_case(&self, case: &str) -> Option<&VariantCase<A>> {
+        self.cases.iter().find(|c| c.ident.as_str() == case)
     }
 
     pub fn implements_types(&self) -> &[A::TypeName] {

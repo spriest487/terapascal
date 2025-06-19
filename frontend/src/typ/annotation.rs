@@ -252,7 +252,9 @@ pub struct TypedValue {
     pub ty: Type,
     pub value_kind: ValueKind,
     pub decl: Option<IdentPath>,
-    
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub semantic_hint: SemanticHint,
 
     #[derivative(Debug = "ignore")]

@@ -6,19 +6,30 @@ use terapascal_common::span::Location;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_frontend::ast::MemberDeclSection;
+use terapascal_frontend::Ident;
+use terapascal_frontend::ast::{Exit, Literal, SetDeclRange};
+use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::TypeMemberDecl;
-use terapascal_frontend::typ::Context;
+use terapascal_frontend::typ::{Context, ScopeMemberRef};
+use terapascal_frontend::typ::Invocation;
 use terapascal_frontend::typ::ModuleUnit;
 use terapascal_frontend::typ::Type;
+use terapascal_frontend::typ::TypeArgList;
 use terapascal_frontend::typ::TypeName;
+use terapascal_frontend::typ::TypeParamList;
+use terapascal_frontend::typ::TypePattern;
+use terapascal_frontend::typ::Value;
 use terapascal_frontend::typ::ast::AliasDecl;
+use terapascal_frontend::typ::ast::Block;
+use terapascal_frontend::typ::ast::Call;
 use terapascal_frontend::typ::ast::EnumDecl;
 use terapascal_frontend::typ::ast::Expr;
 use terapascal_frontend::typ::ast::FunctionDecl;
 use terapascal_frontend::typ::ast::FunctionDeclContext;
+use terapascal_frontend::typ::ast::IfCond;
 use terapascal_frontend::typ::ast::InterfaceDecl;
 use terapascal_frontend::typ::ast::ObjectCtorArgs;
+use terapascal_frontend::typ::ast::ObjectCtorMember;
 use terapascal_frontend::typ::ast::SetDecl;
 use terapascal_frontend::typ::ast::Stmt;
 use terapascal_frontend::typ::ast::StructDecl;
@@ -169,7 +180,7 @@ impl DefinitionMap {
 
     fn add_struct_decl(&mut self, struct_decl: &StructDecl, ctx: &Context) {
         self.add_tags(&struct_decl.tags, ctx);
-        
+
         for member in struct_decl.members() {
             match member {
                 TypeMemberDecl::Field(field_decl) => {
@@ -213,9 +224,24 @@ impl DefinitionMap {
     }
 
     fn add_enum_decl(&mut self, enum_decl: &EnumDecl, ctx: &Context) {
+        for item in &enum_decl.items {
+            if let Some(expr) = &item.value {
+                self.add_expr(&expr.expr, ctx);
+            }
+        }
     }
 
     fn add_set_decl(&mut self, set_decl: &SetDecl, ctx: &Context) {
+        match &set_decl.range.as_ref() {
+            SetDeclRange::Type { ty, span } => {
+                let type_name = TypeName::named(ty.clone(), span.clone());
+                self.add_typename(&type_name, ctx);
+            }
+            SetDeclRange::Range { from, to, .. } => {
+                self.add_expr(from, ctx);
+                self.add_expr(to, ctx);
+            }
+        }
     }
 
     fn add_tags(&mut self, tags: &[Tag], ctx: &Context) {
@@ -223,19 +249,35 @@ impl DefinitionMap {
             for item in &tag.items {
                 self.add_typename(&item.tag_type, ctx);
 
-                self.add_object_ctor_args(item.tag_type.ty(), &item.args, ctx);
+                self.add_object_ctor_args(Some(item.tag_type.ty()), &item.args, ctx);
             }
         }
     }
 
-    fn add_object_ctor_args(&mut self, ty: &Type, args: &ObjectCtorArgs, ctx: &Context) {
-        for arg in &args.members {
-            if let Ok(Some((decl, index))) = ty.find_field_decl(arg.ident.as_str(), ctx) {
-                self.add(arg.ident.span.clone(), decl.idents[index].span.clone());
-            }
-            
-            self.add_expr(&arg.value, ctx);
+    fn add_object_ctor_args(&mut self,
+        object_ty: Option<&Type>,
+        args: &ObjectCtorArgs,
+        ctx: &Context
+    ) {
+        for member in &args.members {
+            self.add_object_ctor_member(object_ty, member, ctx);
         }
+    }
+
+    fn add_object_ctor_member(&mut self,
+        object_ty: Option<&Type>,
+        member: &ObjectCtorMember,
+        ctx: &Context
+    ) {
+        if let Some(ty) = object_ty {
+            if let Ok(Some((decl, index))) = ty.find_field_decl(member.ident.as_str(), ctx) {
+                let decl_ident = &decl.idents[index];
+
+                self.add(member.ident.span.clone(), decl_ident.span.clone());
+            }
+        }
+
+        self.add_expr(&member.value, ctx);
     }
 
     fn add_typename(&mut self, type_name: &TypeName, ctx: &Context) {
@@ -257,7 +299,7 @@ impl DefinitionMap {
 
     fn add_func_decl(&mut self, func_decl: &FunctionDecl, ctx: &Context) {
         self.add_tags(&func_decl.tags, ctx);
-        
+
         if let FunctionDeclContext::MethodDef {
             declaring_type,
             ty_name_span,
@@ -270,6 +312,8 @@ impl DefinitionMap {
         };
 
         for param in &func_decl.params {
+            // self.add(param.name)
+            
             let Some(span) = &param.ty_span else {
                 continue;
             };
@@ -282,10 +326,326 @@ impl DefinitionMap {
     }
 
     fn add_stmt(&mut self, stmt: &Stmt, ctx: &Context) {
+        match stmt {
+            Stmt::Ident(ident, value) => {
+                self.add_value(value, ident.span(), ctx);
+            },
+
+            Stmt::Member(member) => {
+                self.add_expr(&member.base, ctx);
+                self.add_value(&member.annotation, member.name.span(), ctx);
+            },
+
+            Stmt::LocalBinding(binding) => {
+                self.add(binding.name.span.clone(), binding.name.span.clone());
+
+                self.add_typename(&binding.ty, ctx);
+                if let Some(expr) = &binding.val {
+                    self.add_expr(expr, ctx);
+                }
+            },
+
+            Stmt::Call(call) => {
+                self.add_call(call, ctx);
+            },
+
+            Stmt::Exit(exit_stmt) => {
+                if let Exit::WithValue { value_expr, .. } = exit_stmt.as_ref() {
+                    self.add_expr(value_expr, ctx);
+                }
+            },
+
+            Stmt::Block(block) => {
+                self.add_block(block, ctx);
+            },
+
+            Stmt::ForLoop(_) => {},
+            Stmt::WhileLoop(_) => {},
+            Stmt::Assignment(assignment) => {
+                self.add_expr(&assignment.lhs, ctx);
+                self.add_expr(&assignment.rhs, ctx);
+            },
+            Stmt::CompoundAssignment(assignment) => {
+                self.add_expr(&assignment.lhs, ctx);
+                self.add_expr(&assignment.rhs, ctx);
+            },
+            Stmt::If(if_cond) => {
+                self.add_if_cond(if_cond, ctx, &Self::add_stmt);
+            },
+            Stmt::Raise(raise) => {
+                self.add_expr(&raise.value, ctx);
+            },
+
+            Stmt::Case(_) => {},
+            Stmt::Match(_) => {},
+
+            Stmt::Break(_) | Stmt::Continue(_) => {},
+        }
     }
 
     fn add_expr(&mut self, expr: &Expr, ctx: &Context) {
+        match expr {
+            Expr::BinOp(bin_op) => {
+                self.add_expr(&bin_op.lhs, ctx);
+                self.add_expr(&bin_op.rhs, ctx);
+            },
+            Expr::UnaryOp(unary_op) => {
+                self.add_expr(&unary_op.operand, ctx);
+            },
+            Expr::Ident(ident, value) => self.add_value(value, ident.span(), ctx),
+            Expr::Literal(item) => match &item.literal {
+                Literal::SizeOf(ty) 
+                | Literal::DefaultValue(ty) 
+                | Literal::TypeInfo(ty) => {
+                    self.add_typename(ty.as_ref(), ctx);
+                }
+                _ => {},
+            },
+            Expr::Call(call) => {
+                self.add_call(call, ctx);
+            },
+            Expr::ObjectCtor(ctor) => {
+                if let Some(expr) = &ctor.type_expr {
+                    self.add_expr(expr, ctx);
+
+                    let object_ty = match expr.annotation() {
+                        Value::Type(object_ty, _) => Some(object_ty),
+                        _ => None,
+                    };
+                    
+                    self.add_object_ctor_args(object_ty, &ctor.args, ctx);
+                } else {
+                    self.add_object_ctor_args(None, &ctor.args, ctx);
+                }
+            },
+            Expr::CollectionCtor(ctor) => {
+                for element in &ctor.elements {
+                    self.add_expr(&element.value, ctx);
+                }
+            },
+            Expr::IfCond(if_cond) => {
+                self.add_if_cond(if_cond, ctx, &Self::add_expr);
+            },
+            Expr::Block(block) => {
+                self.add_block(block, ctx);
+            },
+            Expr::Raise(raise) => {
+                self.add_expr(&raise.value, ctx);
+            },
+            Expr::Exit(exit_expr) => {
+                if let Exit::WithValue { value_expr, .. } = exit_expr.as_ref() {
+                    self.add_expr(value_expr, ctx);
+                }
+            },
+            Expr::Case(_) => {},
+            Expr::Match(_) => {},
+            Expr::Cast(cast) => {
+                self.add_typename(&cast.as_type, ctx);
+                self.add_expr(&cast.expr, ctx);
+            },
+            Expr::AnonymousFunction(_) => {},
+            Expr::ExplicitSpec(spec) => {
+                self.add_expr(&spec.type_expr, ctx);
+                self.add_type_args(&spec.type_args, ctx);
+            },
+        }
     }
+
+    fn add_type_params(&mut self, params: &TypeParamList, ctx: &Context) {
+        for param in &params.items {
+            if let Some(constraint) = &param.constraint {
+                self.add_typename(&constraint.is_ty, ctx);
+            }
+        }
+    }
+
+    fn add_type_args(&mut self, args: &TypeArgList, ctx: &Context) {
+        for arg in &args.items {
+            self.add_typename(arg, ctx);
+        }
+    }
+
+    fn add_value(&mut self, value: &Value, at_span: &Span, ctx: &Context) {
+        match value {
+            Value::Typed(typed_val) => {
+                if let Some(decl) = &typed_val.decl {
+                    self.add(typed_val.span.clone(), decl.path_span().clone())
+                }
+            },
+
+            Value::Function(function) => {
+                self.add(at_span.clone(), function.decl.name.span.clone());
+            },
+
+            Value::UfcsFunction(ufcs) => {
+                self.add(at_span.clone(), ufcs.decl.name.span.clone());
+            },
+
+            Value::Invocation(invocation) => match invocation.as_ref() {
+                Invocation::Function { function, .. } => {
+                    self.add(at_span.clone(), function.decl.name.span.clone());
+                },
+                Invocation::Method { method, .. } => {
+                    self.add(at_span.clone(), method.decl.func_decl.name.span.clone());
+                },
+                Invocation::ObjectCtor {
+                    object_type,
+                    members,
+                    ..
+                } => {
+                    self.add_typename(object_type, ctx);
+
+                    for member in members {
+                        self.add_object_ctor_member(Some(object_type.ty()), member, ctx);
+                    }
+                },
+                Invocation::VariantCtor {
+                    variant_type, case, ..
+                } => {
+                    if let Some(variant_path) = variant_type.full_path() {
+                        self.add_variant_case(
+                            variant_path.as_ref(),
+                            &variant_path.path_span(),
+                            &case,
+                            ctx,
+                        );
+                    }
+                },
+                Invocation::FunctionValue { value, .. } => {
+                    self.add_expr(value, ctx);
+                },
+            },
+
+            Value::Method(method) => {
+                self.add(at_span.clone(), method.decl.func_decl.name.span.clone());
+            },
+
+            Value::Type(ty, span) => {
+                let typename = TypeName::named(ty.clone(), at_span.clone());
+                self.add_typename(&typename, ctx);
+            },
+
+            Value::Namespace(path, ..) => {
+                if let Some(ScopeMemberRef::Scope { path }) = ctx.find_path(&path) {
+                    let namespace = path.to_namespace();
+                    self.add(at_span.clone(), namespace.path_span());
+                }
+            },
+
+            Value::VariantCase(case_val) => {
+                self.add_variant_case(
+                    &case_val.variant_name.full_path,
+                    &case_val.variant_name_span,
+                    &case_val.case,
+                    ctx,
+                );
+            },
+
+            Value::Overload(_) => {},
+
+            Value::Const(const_val) => {
+                if let Some(path) = &const_val.decl {
+                    self.add(at_span.clone(), path.path_span());
+                }
+            },
+
+            Value::Untyped(_) => {
+                // nothing
+            },
+        }
+    }
+
+    fn add_variant_case(
+        &mut self,
+        variant_path: &IdentPath,
+        variant_name_span: &Span,
+        case_ident: &Ident,
+        ctx: &Context,
+    ) {
+        if let Some((variant_span, case_def_span)) =
+            find_variant_case_def_span(variant_path, case_ident.as_str(), ctx)
+        {
+            self.add(variant_name_span.clone(), variant_span);
+            self.add(case_ident.span.clone(), case_def_span);
+        }
+    }
+
+    fn add_if_cond<B, AddItemFn>(
+        &mut self,
+        if_cond: &IfCond<B>,
+        ctx: &Context,
+        add_item: &AddItemFn,
+    ) where
+        AddItemFn: Fn(&mut Self, &B, &Context),
+    {
+        self.add_expr(&if_cond.cond, ctx);
+
+        if let Some(pattern) = &if_cond.is_pattern {
+            self.add_type_pattern(pattern, ctx);
+        }
+
+        add_item(self, &if_cond.then_branch, ctx);
+
+        if let Some(branch) = &if_cond.else_branch {
+            add_item(self, &branch.item, ctx);
+        }
+    }
+
+    fn add_type_pattern(&mut self, pattern: &TypePattern, ctx: &Context) {
+        match pattern {
+            TypePattern::VariantCase {
+                variant,
+                case,
+                variant_name_span,
+                ..
+            }
+            | TypePattern::NegatedVariantCase {
+                variant,
+                case,
+                variant_name_span,
+                ..
+            } => {
+                self.add_variant_case(&variant.full_path, variant_name_span, case, ctx);
+            },
+
+            TypePattern::Type { ty, .. } | TypePattern::NegatedType { ty, .. } => {
+                self.add_typename(ty, ctx);
+            },
+        }
+    }
+
+    fn add_block(&mut self, block: &Block, ctx: &Context) {
+        for stmt in &block.stmts {
+            self.add_stmt(stmt, ctx);
+        }
+
+        if let Some(expr) = &block.output {
+            self.add_expr(expr, ctx);
+        }
+    }
+
+    fn add_call(&mut self, call: &Call, ctx: &Context) {
+        self.add_expr(&call.target, ctx);
+
+        if let Some(args) = &call.type_args {
+            self.add_type_args(args, ctx);
+        }
+
+        for arg in &call.args {
+            self.add_expr(arg, ctx);
+        }
+    }
+}
+
+fn find_variant_case_def_span(
+    variant: &IdentPath,
+    case: &str,
+    ctx: &Context,
+) -> Option<(Span, Span)> {
+    let variant_decl = ctx.find_variant_def(variant).ok()?;
+    let case = variant_decl.find_case(case)?;
+
+    Some((variant_decl.name.span().clone(), case.span.clone()))
 }
 
 fn by_span_start(entry: &DefinitionEntry) -> Location {
