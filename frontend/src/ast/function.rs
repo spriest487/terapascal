@@ -126,7 +126,7 @@ pub struct FunctionParam<A: Annotation = Span> {
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
-    pub span: Option<Span>,
+    pub name_span: Option<Span>,
 }
 
 impl<A: Annotation> FunctionParam<A> {
@@ -147,7 +147,7 @@ impl<A: Annotation> fmt::Display for FunctionParam<A> {
 
 impl<A: Annotation> MaybeSpanned for FunctionParam<A> {
     fn get_span(&self) -> Option<&Span> {
-        self.span.as_ref()
+        self.name_span.as_ref()
     }
 }
 
@@ -414,7 +414,7 @@ impl FunctionDecl<Span> {
                 };
 
                 params.push(FunctionParam {
-                    span: Some(ident.span.clone()),
+                    name_span: Some(ident.span.clone()),
                     ty: ty.clone(),
                     ty_span,
                     name: ident.name.clone(),
@@ -809,7 +809,7 @@ impl Parse for AnonymousFunctionDef<Span> {
 
                     params.push(FunctionParam {
                         name: ident.name,
-                        span: Some(ident.span),
+                        name_span: Some(ident.span),
                         ty,
                         ty_span,
                         modifier: None,

@@ -563,7 +563,7 @@ fn typecheck_params(
             name: Arc::new(SELF_PARAM_NAME.to_string()),
             is_implicit_self: true,
             modifier: None,
-            span: None,
+            name_span: None,
         });
     }
     
@@ -575,11 +575,11 @@ fn typecheck_params(
         if let Some(prev) = find_name_dup {
             return Err(TypeError::DuplicateNamedArg {
                 name: Ident::new(&param.name, decl.name.span().clone()),
-                span: param.span.clone()
+                span: param.name_span.clone()
                     .unwrap_or_else(|| {
                         decl.span.clone()
                     }),
-                previous: prev.span.clone(),
+                previous: prev.name_span.clone(),
             });
         }
 
@@ -588,7 +588,7 @@ fn typecheck_params(
         let param = FunctionParam {
             modifier: param.modifier.clone(),
             name: param.name.clone(),
-            span: param.span.clone(),
+            name_span: param.name_span.clone(),
             ty,
             ty_span: param.ty_span.clone(),
             is_implicit_self: false,
@@ -813,7 +813,7 @@ fn declare_func_params_in_body(params: &[FunctionParam], default_span: &Span, ct
         
         // if the param doesn't have a span itself, it's an implicit span, so just use the function
         // name as the span
-        let decl_span = param.span
+        let decl_span = param.name_span
             .clone()
             .unwrap_or_else(|| default_span.clone());
         let decl_ident = Ident::new(&param.name, decl_span);
@@ -943,7 +943,7 @@ pub fn typecheck_func_expr(
         params.push(FunctionParam {
             modifier: param.modifier.clone(),
             name: param.name.clone(),
-            span: param.span.clone(),
+            name_span: param.name_span.clone(),
             ty,
             ty_span: param.ty_span.clone(),
             is_implicit_self: false,

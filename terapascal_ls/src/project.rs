@@ -192,7 +192,7 @@ impl Project {
         paths
     }
     
-    pub fn find_definition(&self, file: &PathBuf, at: Location) -> Option<&Span> {
+    pub fn find_definition(&self, file: &PathBuf, at: Location) -> &[Span] {
         self.definition_map.find(file, at)
     }
 }

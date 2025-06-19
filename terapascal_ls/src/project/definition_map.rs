@@ -7,12 +7,16 @@ use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_frontend::Ident;
-use terapascal_frontend::ast::{Exit, Literal, SetDeclRange};
+use terapascal_frontend::Operator;
+use terapascal_frontend::ast::Exit;
 use terapascal_frontend::ast::IdentPath;
+use terapascal_frontend::ast::Literal;
+use terapascal_frontend::ast::SetDeclRange;
 use terapascal_frontend::ast::TypeMemberDecl;
-use terapascal_frontend::typ::{Context, ScopeMemberRef};
+use terapascal_frontend::typ::Context;
 use terapascal_frontend::typ::Invocation;
 use terapascal_frontend::typ::ModuleUnit;
+use terapascal_frontend::typ::ScopeMemberRef;
 use terapascal_frontend::typ::Type;
 use terapascal_frontend::typ::TypeArgList;
 use terapascal_frontend::typ::TypeName;
@@ -40,7 +44,7 @@ use terapascal_frontend::typ::ast::VariantDecl;
 
 struct DefinitionEntry {
     span: Span,
-    definition: Span,
+    definitions: Vec<Span>,
 }
 
 pub struct DefinitionMap {
@@ -75,39 +79,51 @@ impl DefinitionMap {
 
         match file_entries.binary_search_by_key(&span.start, by_span_start) {
             Ok(existing) => {
-                let existing_def = &file_entries[existing].definition;
-                eprintln!(
-                    "[definition_map] already have a definition starting at {} (old: {}-{}, new: {}-{})",
-                    span, existing_def, existing_def.end, definition, definition.end
-                );
+                let existing_entry = &mut file_entries[existing];
+                if existing_entry.span == span {
+                    existing_entry.definitions.push(definition);
+                } else {
+                    let existing_def = &existing_entry.definitions[0];
+
+                    eprintln!(
+                        "[definition_map] already have a definition starting at {} (old: {}-{}, new: {}-{})",
+                        span, existing_def, existing_def.end, definition, definition.end
+                    );
+                }
             },
 
             Err(insert_index) => {
-                file_entries.insert(insert_index, DefinitionEntry { span, definition });
+                file_entries.insert(insert_index, DefinitionEntry {
+                    span,
+                    definitions: vec![definition],
+                });
             },
         }
     }
 
-    pub fn find(&self, file_path: &PathBuf, location: Location) -> Option<&Span> {
-        let file_entries = self.entries.get(file_path)?;
+    pub fn find(&self, file_path: &PathBuf, location: Location) -> &[Span] {
+        let Some(file_entries) = self.entries.get(file_path) else {
+            return &[];
+        };
 
         match file_entries.binary_search_by_key(&location, by_span_start) {
             Ok(index) => {
                 let entry = &file_entries[index];
-                if entry.span.contains(&location) {
-                    Some(&file_entries[index].definition)
-                } else {
-                    None
+                if !entry.span.contains(&location) {
+                    return &[];
                 }
+
+                &file_entries[index].definitions
             },
 
             Err(index) => {
-                let existing = file_entries.get(index.saturating_sub(1))?;
-                if existing.span.contains(&location) {
-                    Some(&existing.definition)
-                } else {
-                    None
+                if let Some(existing) = file_entries.get(index.saturating_sub(1)) {
+                    if existing.span.contains(&location) {
+                        return &existing.definitions;
+                    }
                 }
+
+                &[]
             },
         }
     }
@@ -156,6 +172,9 @@ impl DefinitionMap {
     }
 
     fn add_type_decl(&mut self, type_decl: &TypeDeclItem, ctx: &Context) {
+        let ident = type_decl.name().ident();
+        self.add(ident.span.clone(), ident.span.clone());
+
         match type_decl {
             TypeDeclItem::Struct(struct_decl) => {
                 self.add_struct_decl(struct_decl, ctx);
@@ -236,11 +255,11 @@ impl DefinitionMap {
             SetDeclRange::Type { ty, span } => {
                 let type_name = TypeName::named(ty.clone(), span.clone());
                 self.add_typename(&type_name, ctx);
-            }
+            },
             SetDeclRange::Range { from, to, .. } => {
                 self.add_expr(from, ctx);
                 self.add_expr(to, ctx);
-            }
+            },
         }
     }
 
@@ -254,20 +273,22 @@ impl DefinitionMap {
         }
     }
 
-    fn add_object_ctor_args(&mut self,
+    fn add_object_ctor_args(
+        &mut self,
         object_ty: Option<&Type>,
         args: &ObjectCtorArgs,
-        ctx: &Context
+        ctx: &Context,
     ) {
         for member in &args.members {
             self.add_object_ctor_member(object_ty, member, ctx);
         }
     }
 
-    fn add_object_ctor_member(&mut self,
+    fn add_object_ctor_member(
+        &mut self,
         object_ty: Option<&Type>,
         member: &ObjectCtorMember,
-        ctx: &Context
+        ctx: &Context,
     ) {
         if let Some(ty) = object_ty {
             if let Ok(Some((decl, index))) = ty.find_field_decl(member.ident.as_str(), ctx) {
@@ -312,8 +333,10 @@ impl DefinitionMap {
         };
 
         for param in &func_decl.params {
-            // self.add(param.name)
-            
+            if let Some(span) = &param.name_span {
+                self.add(span.clone(), span.clone());
+            }
+
             let Some(span) = &param.ty_span else {
                 continue;
             };
@@ -394,11 +417,9 @@ impl DefinitionMap {
             },
             Expr::Ident(ident, value) => self.add_value(value, ident.span(), ctx),
             Expr::Literal(item) => match &item.literal {
-                Literal::SizeOf(ty) 
-                | Literal::DefaultValue(ty) 
-                | Literal::TypeInfo(ty) => {
+                Literal::SizeOf(ty) | Literal::DefaultValue(ty) | Literal::TypeInfo(ty) => {
                     self.add_typename(ty.as_ref(), ctx);
-                }
+                },
                 _ => {},
             },
             Expr::Call(call) => {
@@ -412,7 +433,7 @@ impl DefinitionMap {
                         Value::Type(object_ty, _) => Some(object_ty),
                         _ => None,
                     };
-                    
+
                     self.add_object_ctor_args(object_ty, &ctor.args, ctx);
                 } else {
                     self.add_object_ctor_args(None, &ctor.args, ctx);
@@ -541,7 +562,11 @@ impl DefinitionMap {
                 );
             },
 
-            Value::Overload(_) => {},
+            Value::Overload(overload) => {
+                for candidate in &overload.candidates {
+                    self.add(at_span.clone(), candidate.decl().name.span.clone());
+                }
+            },
 
             Value::Const(const_val) => {
                 if let Some(path) = &const_val.decl {
@@ -625,7 +650,20 @@ impl DefinitionMap {
     }
 
     fn add_call(&mut self, call: &Call, ctx: &Context) {
-        self.add_expr(&call.target, ctx);
+        match &call.target {
+            Expr::BinOp(bin_op)
+                if bin_op.op == Operator::Period && bin_op.rhs.as_ident().is_some() =>
+            {
+                let rhs_ident = bin_op.rhs.as_ident().unwrap();
+
+                self.add_expr(&bin_op.lhs, ctx);
+                self.add_value(&call.annotation, rhs_ident.span(), ctx);
+            },
+
+            _ => {
+                self.add_expr(&call.target, ctx);
+            },
+        }
 
         if let Some(args) = &call.type_args {
             self.add_type_args(args, ctx);

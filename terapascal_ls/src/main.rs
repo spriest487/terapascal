@@ -168,20 +168,18 @@ impl LanguageServer for TerapascalServer {
             return Ok(None);
         };
 
-        match get_definition_link(project, &file_path, params) {
-            Some(link) => {
-                eprintln!("[goto_definition] linked to: {}:{}:{}-{}:{}",
-                    link.target_uri,
-                    link.target_range.start.line + 1,
-                    link.target_range.start.character + 1,
-                    link.target_range.end.line + 1,
-                    link.target_range.end.character + 1,
-                );
-                
-                Ok(Some(GotoDefinitionResponse::Link(vec![link])))
-            },
-            None => Ok(None)
+        let links = get_definition_links(project, &file_path, params);
+        for link in &links {
+            eprintln!("[goto_definition] linked to: {}:{}:{}-{}:{}",
+                link.target_uri,
+                link.target_range.start.line + 1,
+                link.target_range.start.character + 1,
+                link.target_range.end.line + 1,
+                link.target_range.end.character + 1,
+            );
         }
+        
+        Ok(Some(GotoDefinitionResponse::Link(links)))
     }
 
     async fn document_highlight(
@@ -290,37 +288,39 @@ fn url_to_path(url: &Url) -> BuildResult<PathBuf> {
     }
 }
 
-fn get_definition_link(
+fn get_definition_links(
     project: &Project,
     file_path: &PathBuf,
     params: GotoDefinitionParams
-) -> Option<LocationLink> {
+) -> Vec<LocationLink> {
     let position = params.text_document_position_params.position;
     let location = Location {
         line: position.line as usize,
         col: position.character as usize,
     };
 
-    let span = project.find_definition(&file_path, location)?;
+    project
+        .find_definition(&file_path, location)
+        .iter()
+        .filter_map(|span| {
+            let target_uri = Url::from_file_path(span.file.as_ref()).ok()?;
 
-    let target_uri = Url::from_file_path(span.file.as_ref()).ok()?;
-
-    let range = Range {
-        start: Position {
-            line: span.start.line as u32,
-            character: span.start.col as u32,
-        },
-        end: Position {
-            line: span.end.line as u32,
-            character: span.end.col as u32,
-        }
-    };
-
-    Some(LocationLink {
-        target_uri,
-        origin_selection_range: None,
-        target_range: range,
-        target_selection_range: range,
-    })
+            let range = Range {
+                start: Position {
+                    line: span.start.line as u32,
+                    character: span.start.col as u32,
+                },
+                end: Position {
+                    line: span.end.line as u32,
+                    character: span.end.col as u32,
+                }
+            };
+            Some(LocationLink {
+                target_uri,
+                origin_selection_range: None,
+                target_range: range,
+                target_selection_range: range,
+            })
+        })
+        .collect()
 }
-

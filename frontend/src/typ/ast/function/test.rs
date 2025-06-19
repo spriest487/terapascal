@@ -106,7 +106,7 @@ fn make_decl(
                 ty,
                 ty_span: None,
                 modifier: None,
-                span: test_span.clone(),
+                name_span: test_span.clone(),
             })
             .collect(),
         result_ty: return_ty,

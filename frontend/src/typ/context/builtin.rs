@@ -239,7 +239,7 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
                 ty: self_param_ty.clone(),
                 ty_span: None,
                 modifier: None,
-                span: None,
+                name_span: None,
                 is_implicit_self: true,
             },
             ast::FunctionParam {
@@ -247,7 +247,7 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
                 ty: self_param_ty.clone(),
                 ty_span: None,
                 modifier: None,
-                span: None,
+                name_span: None,
                 is_implicit_self: false,
             }
         ],
@@ -308,7 +308,7 @@ pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Typ
                 ty: self_param_ty,
                 ty_span: None,
                 modifier: None,
-                span: None,
+                name_span: None,
             }
         ],
         result_ty: TypeName::inferred(Type::class(IdentPath::from_vec(vec![
