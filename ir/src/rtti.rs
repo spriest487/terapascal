@@ -1,7 +1,7 @@
+use crate::FunctionID;
 use crate::Metadata;
 use crate::StringID;
 use crate::Type;
-use crate::FunctionID;
 use serde::Deserialize;
 use serde::Serialize;
 

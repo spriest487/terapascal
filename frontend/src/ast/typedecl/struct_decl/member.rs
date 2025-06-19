@@ -75,12 +75,7 @@ pub enum TypeMemberDeclRef<'a, A: Annotation = Span> {
 pub struct FieldDecl<A: Annotation = Span> {
     pub idents: Vec<Ident>,
 
-    pub ty: A::Type,
-
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    #[derivative(Hash = "ignore")]
-    pub ty_span: Span,
+    pub ty: A::TypeName,
 
     pub access: Access,
 
@@ -207,7 +202,6 @@ fn parse_field(tokens: &mut TokenStream, access: Access) -> ParseResult<FieldDec
         idents: rest_idents,
         access,
         span,
-        ty_span: ty.span().clone(),
         ty,
     })
 }

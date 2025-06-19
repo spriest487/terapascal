@@ -4,12 +4,12 @@ use crate::marshal::MarshalError;
 use crate::stack::StackError;
 use crate::stack::StackTrace;
 use crate::Pointer;
-use terapascal_common::span::Span;
-use terapascal_common::DiagnosticLabel;
-use terapascal_common::DiagnosticOutput;
 use ir::InstructionFormatter;
 use ir::RawInstructionFormatter;
 use std::fmt;
+use terapascal_common::span::Span;
+use terapascal_common::DiagnosticLabel;
+use terapascal_common::DiagnosticOutput;
 
 #[derive(Debug)]
 pub enum ExecError {

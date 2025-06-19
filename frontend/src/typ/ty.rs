@@ -45,7 +45,6 @@ use crate::typ::NameResult;
 use crate::typ::Symbol;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
-use crate::typ::Value;
 use crate::typ::ANY_TYPE_NAME;
 use crate::typ::NIL_NAME;
 use crate::typ::NOTHING_TYPE_NAME;
@@ -348,13 +347,17 @@ impl Type {
         }
     }
 
-    pub fn find_field_decl(&self, member: &Ident, ctx: &Context) -> NameResult<Option<FieldDecl>> {
+    pub fn find_field_decl(&self, member: &str, ctx: &Context) -> NameResult<Option<(FieldDecl, usize)>> {
         match self {
             Type::Class(class_name) | Type::Record(class_name) => {
                 let struct_kind = self.struct_kind().unwrap();
                 let def = ctx.instantiate_struct_def(class_name, struct_kind)?;
+                
+                let Some((decl, index)) = def.find_field_decl(member) else {
+                    return Ok(None);
+                };
 
-                Ok(def.find_field_decl(member).cloned())
+                Ok(Some((decl.clone(), index)))
             },
 
             _ => Ok(None),

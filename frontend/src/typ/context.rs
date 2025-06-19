@@ -1558,20 +1558,23 @@ impl Context {
         of_ty: &'ty Type,
         member: &Ident,
     ) -> NameResult<InstanceMember> {
-        let field_decl = of_ty.find_field_decl(member, self)?;
+        let field_decl = of_ty.find_field_decl(member.as_str(), self)?;
 
         let methods = ufcs::find_instance_methods_of(of_ty, self)?;
-        let matching_methods: Vec<_> = methods.iter().filter(|m| *m.ident() == *member).collect();
+        let matching_methods: Vec<_> = methods
+            .iter()
+            .filter(|m| *m.ident() == *member)
+            .collect();
 
         match (field_decl, matching_methods.len()) {
-            (Some(decl), 0) => Ok(InstanceMember::Field {
-                ty: decl.ty,
+            (Some((decl, _)), 0) => Ok(InstanceMember::Field {
+                ty: Type::from(decl.ty.clone()),
                 access: decl.access,
             }),
 
             // unambiguous method
             (None, 1) => match matching_methods.last().unwrap() {
-                ufcs::InstanceMethod::Method {
+                InstanceMethod::Method {
                     iface_ty,
                     self_ty,
                     method,
@@ -1582,7 +1585,7 @@ impl Context {
                     method: method.clone(),
                 }),
 
-                ufcs::InstanceMethod::FreeFunction { func_name, decl, visibility } => {
+                InstanceMethod::FreeFunction { func_name, decl, visibility } => {
                     Ok(InstanceMember::UFCSCall {
                         func_name: func_name.clone(),
                         decl: decl.clone(),

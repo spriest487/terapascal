@@ -1,9 +1,9 @@
+use crate::ir;
 use crate::marshal::ForeignType;
 use crate::ExecResult;
 use crate::Interpreter;
 use ::libffi::middle::Cif;
 use ::libffi::raw::ffi_call as ffi_raw_call;
-use crate::ir;
 use smallvec::*;
 use std::ffi::c_void;
 use std::ptr::null_mut;

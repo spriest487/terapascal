@@ -2,11 +2,11 @@ use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::SetAliasID;
 use crate::ty_decl::TypeDefID;
+use crate::TagLocation;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
 use std::rc::Rc;
-use crate::TagLocation;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Type {

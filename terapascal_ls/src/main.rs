@@ -1,6 +1,7 @@
 mod semantic_tokens;
 mod project;
 
+use crate::project::{Project, ProjectCollection};
 use crate::semantic_tokens::semantic_legend;
 use dashmap::DashMap;
 use std::path::PathBuf;
@@ -8,7 +9,7 @@ use terapascal_build::error::BuildError;
 use terapascal_build::error::BuildResult;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result as RpcResult;
-use tower_lsp::lsp_types::DidChangeTextDocumentParams;
+use tower_lsp::lsp_types::{DidChangeTextDocumentParams, LocationLink, Position, Range};
 use tower_lsp::lsp_types::DidChangeWorkspaceFoldersParams;
 use tower_lsp::lsp_types::DidCloseTextDocumentParams;
 use tower_lsp::lsp_types::DidOpenTextDocumentParams;
@@ -16,6 +17,8 @@ use tower_lsp::lsp_types::DidSaveTextDocumentParams;
 use tower_lsp::lsp_types::DocumentFilter;
 use tower_lsp::lsp_types::DocumentHighlight;
 use tower_lsp::lsp_types::DocumentHighlightParams;
+use tower_lsp::lsp_types::GotoDefinitionParams;
+use tower_lsp::lsp_types::GotoDefinitionResponse;
 use tower_lsp::lsp_types::InitializeParams;
 use tower_lsp::lsp_types::InitializeResult;
 use tower_lsp::lsp_types::InitializedParams;
@@ -39,7 +42,7 @@ use tower_lsp::lsp_types::WorkspaceServerCapabilities;
 use tower_lsp::LanguageServer;
 use tower_lsp::LspService;
 use tower_lsp::Server;
-use crate::project::ProjectCollection;
+use terapascal_common::span::Location;
 
 struct TerapascalServer {
     documents: DashMap<Url, String>,
@@ -86,7 +89,7 @@ impl LanguageServer for TerapascalServer {
                 text_document_sync: Some(text_document_sync),
                 document_highlight_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(semantic_token_reg_opts.into()),
-                definition_provider: Some(OneOf::Left(false)),
+                definition_provider: Some(OneOf::Left(true)),
                 workspace: Some(workspace_folders),
                 ..ServerCapabilities::default()
             },
@@ -148,6 +151,36 @@ impl LanguageServer for TerapascalServer {
         if let Ok(file_path) = url_to_path(&uri) {
             let mut projects = self.projects.write().await;
             projects.remove_project(&file_path);
+        }
+    }
+
+    async fn goto_definition(&self, params: GotoDefinitionParams) -> RpcResult<Option<GotoDefinitionResponse>> {
+        let position = params.text_document_position_params.position;
+        let uri = &params.text_document_position_params.text_document.uri;
+        eprintln!("[goto_definition] {}:{}:{}", uri, position.line + 1, position.character + 1);
+
+        let Ok(file_path) = url_to_path(uri) else {
+            return Ok(None);
+        };
+
+        let projects = self.projects.read().await;
+        let Some(project) = projects.get_document_project(&file_path) else {
+            return Ok(None);
+        };
+
+        match get_definition_link(project, &file_path, params) {
+            Some(link) => {
+                eprintln!("[goto_definition] linked to: {}:{}:{}-{}:{}",
+                    link.target_uri,
+                    link.target_range.start.line + 1,
+                    link.target_range.start.character + 1,
+                    link.target_range.end.line + 1,
+                    link.target_range.end.character + 1,
+                );
+                
+                Ok(Some(GotoDefinitionResponse::Link(vec![link])))
+            },
+            None => Ok(None)
         }
     }
 
@@ -256,3 +289,38 @@ fn url_to_path(url: &Url) -> BuildResult<PathBuf> {
         }
     }
 }
+
+fn get_definition_link(
+    project: &Project,
+    file_path: &PathBuf,
+    params: GotoDefinitionParams
+) -> Option<LocationLink> {
+    let position = params.text_document_position_params.position;
+    let location = Location {
+        line: position.line as usize,
+        col: position.character as usize,
+    };
+
+    let span = project.find_definition(&file_path, location)?;
+
+    let target_uri = Url::from_file_path(span.file.as_ref()).ok()?;
+
+    let range = Range {
+        start: Position {
+            line: span.start.line as u32,
+            character: span.start.col as u32,
+        },
+        end: Position {
+            line: span.end.line as u32,
+            character: span.end.col as u32,
+        }
+    };
+
+    Some(LocationLink {
+        target_uri,
+        origin_selection_range: None,
+        target_range: range,
+        target_selection_range: range,
+    })
+}
+

@@ -393,7 +393,7 @@ impl TypePattern {
                     .expect("variant case pattern with a binding must always reference a case which has a data member");
 
                 let binding = PatternBinding {
-                    ty: case_ty,
+                    ty: Type::from(case_ty),
                     ident: ident.clone(),
                 };
                 Ok(vec![binding])

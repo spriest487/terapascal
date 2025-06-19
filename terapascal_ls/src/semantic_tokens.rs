@@ -5,7 +5,6 @@ use std::sync::Arc;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_frontend::Operator;
 use terapascal_frontend::ast;
 pub use terapascal_frontend::ast::Annotation;
 use terapascal_frontend::ast::ConstExprValue;
@@ -23,6 +22,7 @@ use terapascal_frontend::ast::TypeDeclItem;
 use terapascal_frontend::ast::TypeMemberDeclRef;
 use terapascal_frontend::ast::UnaryPosition;
 use terapascal_frontend::ast::VariantDecl;
+use terapascal_frontend::Operator;
 use tower_lsp::lsp_types::SemanticToken;
 use tower_lsp::lsp_types::SemanticTokenType;
 
@@ -166,11 +166,14 @@ where
             self.add_keyword(unit_kw);
         }
 
-        self.add(
-            &unit.ident.path_span(),
-            SEMANTIC_NAMESPACE,
-            "unit identifier",
-        );
+        let unit_path_span = unit.ident.path_span();
+        if unit_path_span.end.col != 0 {
+            self.add(
+                &unit.ident.path_span(),
+                SEMANTIC_NAMESPACE,
+                "unit identifier",
+            );
+        }
 
         if let Some(iface_kw) = &unit.iface_kw {
             self.add_keyword(iface_kw);
@@ -241,18 +244,26 @@ where
                 TypeDeclItem::Struct(struct_decl) => {
                     self.add_struct_decl(struct_decl);
                 },
-                TypeDeclItem::Interface(iface_decl) => self.add_iface_decl(iface_decl),
+
+                TypeDeclItem::Interface(iface_decl) => {
+                    self.add_iface_decl(iface_decl)
+                },
 
                 TypeDeclItem::Variant(variant_decl) => {
                     self.add_variant_decl(variant_decl);
                 },
 
                 TypeDeclItem::Alias(aliased) => {
-                    self.add_type(&aliased.ty, &aliased.ty_span, "alias typename");
+                    self.add_typename(&aliased.target, "alias typename");
                 },
 
-                TypeDeclItem::Enum(enum_decl) => self.add_enum_decl(enum_decl),
-                TypeDeclItem::Set(set_decl) => self.add_set_decl(set_decl),
+                TypeDeclItem::Enum(enum_decl) => {
+                    self.add_enum_decl(enum_decl)
+                },
+                
+                TypeDeclItem::Set(set_decl) => {
+                    self.add_set_decl(set_decl)
+                },
             }
         }
     }
@@ -292,7 +303,7 @@ where
             self.add(&case.ident.span, SEMANTIC_ENUM_MEMBER, "variant case name");
 
             if let Some(data) = &case.data {
-                self.add_type(&data.ty, &data.span, "variant case data type");
+                self.add_typename(&data.ty, "variant case data type");
             }
         }
 
@@ -368,7 +379,7 @@ where
                     for ident in &field.idents {
                         self.add(ident.span(), SEMANTIC_PROPERTY, "field name");
                     }
-                    self.add_type(&field.ty, &field.ty_span, "field type");
+                    self.add_typename(&field.ty, "field type");
                 },
 
                 TypeMemberDeclRef::Method(decl) => {
@@ -929,9 +940,7 @@ where
             }
         }
 
-        if let Some(result_ty_span) = &decl.result_ty_span {
-            self.add_type(&decl.result_ty, &result_ty_span, "function result type");
-        }
+        self.add_typename(&decl.result_ty, "function result type");
 
         if let Some(clause) = &decl.where_clause {
             self.add_where_clause(clause);

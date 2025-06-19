@@ -2,11 +2,11 @@ mod member;
 
 use crate::ast::tag::Tag;
 use crate::ast::typedecl::TypeDeclStart;
-use crate::ast::{Access, SupersClause};
+use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::DeclIdent;
-use crate::ast::Ident;
 use crate::ast::MethodOwner;
+use crate::ast::SupersClause;
 use crate::ast::WhereClause;
 use crate::parse::Matcher;
 use crate::parse::ParseResult;
@@ -88,9 +88,11 @@ impl<A: Annotation> StructDecl<A> {
             })
     }
 
-    pub fn find_field_decl(&self, by_ident: &Ident) -> Option<&FieldDecl<A>> {
-        self.fields().find(|field| {
-            field.idents.contains(by_ident)
+    pub fn find_field_decl(&self, str: &str) -> Option<(&FieldDecl<A>, usize)> {
+        self.fields().find_map(|field_decl| {
+            let pos = field_decl.idents.iter().position(|f| f.as_str() == str)?;
+            
+            Some((field_decl, pos))
         })
     }
 

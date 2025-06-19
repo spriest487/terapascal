@@ -7,12 +7,12 @@ use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::DynValue;
 use crate::Pointer;
-use terapascal_common::span::Span;
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fmt;
 use std::mem::size_of;
 use std::rc::Rc;
+use terapascal_common::span::Span;
 
 const SENTINEL: usize = 12345678;
 

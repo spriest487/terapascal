@@ -1,6 +1,7 @@
 use crate::ir;
 use crate::marshal::MarshalError;
 use crate::marshal::Marshaller;
+use crate::ptr::POINTER_FMT_WIDTH;
 use crate::DynValue;
 use crate::Pointer;
 use serde::Serialize;
@@ -8,7 +9,6 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::mem::forget;
 use std::rc::Rc;
-use crate::ptr::POINTER_FMT_WIDTH;
 
 #[derive(Clone, Debug)]
 pub enum NativeHeapError {

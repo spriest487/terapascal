@@ -76,7 +76,7 @@ pub struct VariantCaseData<T> {
 #[derivative(Debug, PartialEq, Hash)]
 pub struct VariantCase<A: Annotation> {
     pub ident: Ident,
-    pub data: Option<VariantCaseData<A::Type>>,
+    pub data: Option<VariantCaseData<A::TypeName>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]

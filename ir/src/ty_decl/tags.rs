@@ -1,7 +1,7 @@
-use crate::{FieldID, FunctionID};
 use crate::InterfaceID;
 use crate::TypeDefID;
 use crate::Value;
+use crate::{FieldID, FunctionID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;

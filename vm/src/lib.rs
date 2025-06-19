@@ -24,8 +24,7 @@ use crate::rtti_map::RttiMap;
 use crate::stack::StackFrame;
 use crate::stack::StackTrace;
 use crate::stack::StackTraceFrame;
-use terapascal_ir as ir;
-use ir::{InstructionFormatter as _};
+use ir::InstructionFormatter as _;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
@@ -33,6 +32,7 @@ use std::ops::BitAnd;
 use std::ops::BitOr;
 use std::ops::BitXor;
 use std::rc::Rc;
+use terapascal_ir as ir;
 
 #[derive(Debug)]
 pub struct Interpreter {

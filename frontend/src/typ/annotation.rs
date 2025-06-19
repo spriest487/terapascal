@@ -213,7 +213,7 @@ impl VariantCaseValue {
             Some(data) => {
                 if args.len() != 1 {
                     return Err(TypeError::invalid_variant_ctor_args(
-                        Some(data.ty.clone()),
+                        Some(data.ty.ty().clone()),
                         args,
                         span.clone(),
                     ));

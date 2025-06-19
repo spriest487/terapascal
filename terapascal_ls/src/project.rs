@@ -1,3 +1,5 @@
+mod definition_map;
+
 use crate::semantic_tokens::SemanticTokenBuilder;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -8,12 +10,13 @@ use terapascal_build::BuildInput;
 use terapascal_build::BuildStage;
 use terapascal_build::ParseOutput;
 use terapascal_common::build_log::BuildLog;
-use terapascal_common::span::Spanned;
+use terapascal_common::span::{Location, Span, Spanned};
 use terapascal_common::{CompileOpts, DiagnosticOutput};
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
 use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types::SemanticToken;
+use crate::project::definition_map::DefinitionMap;
 
 pub struct ProjectCollection {
     projects: HashMap<PathBuf, Project>,
@@ -79,6 +82,8 @@ pub struct Project {
 
     parse_output: Option<ParseOutput>,
     module: Option<typ::Module>,
+
+    definition_map: DefinitionMap,
 }
 
 impl Project {
@@ -90,6 +95,8 @@ impl Project {
 
             module: None,
             parse_output: None,
+
+            definition_map: DefinitionMap::empty(),
         }
     }
 
@@ -165,6 +172,9 @@ impl Project {
             eprintln!("[build] {}", log_entry);
         }
         
+        self.definition_map = DefinitionMap::from_project(self);
+        eprintln!("[build] updated definition map ({} entries)", self.definition_map.count_entries());
+        
         result
     }
     
@@ -180,6 +190,10 @@ impl Project {
         }
 
         paths
+    }
+    
+    pub fn find_definition(&self, file: &PathBuf, at: Location) -> Option<&Span> {
+        self.definition_map.find(file, at)
     }
 }
 

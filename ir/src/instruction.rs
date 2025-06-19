@@ -9,10 +9,10 @@ use crate::ty_decl::TypeDefID;
 use crate::val::LocalID;
 use crate::val::Ref;
 use crate::val::Value;
-use terapascal_common::span::Span;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
+use terapascal_common::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Instruction {

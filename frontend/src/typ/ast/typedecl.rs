@@ -46,7 +46,7 @@ use crate::IntConstant;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
-use terapascal_common::span::Span;
+use terapascal_common::span::{MaybeSpanned, Span};
 use terapascal_common::span::Spanned;
 
 pub type StructDecl = ast::StructDecl<Value>;
@@ -448,13 +448,16 @@ fn typecheck_field(
     field: &ast::FieldDecl,
     ctx: &mut Context
 ) -> TypeResult<FieldDecl> {
-    let ty = typecheck_type(&field.ty, ctx)?.clone();
+    let ty = typecheck_typename(&field.ty, ctx)?.clone();
+    
+    let ty_span = field.ty
+        .get_span()
+        .unwrap_or_else(|| &field.span);
 
-    ty.expect_sized(ctx, &field.ty_span)?;
+    ty.expect_sized(ctx, ty_span)?;
 
     let field = FieldDecl {
         ty,
-        ty_span: field.ty_span.clone(),
         idents: field.idents.clone(),
         access: field.access,
         span: field.span.clone(),
@@ -556,7 +559,7 @@ pub fn typecheck_variant(
         let data = match &case.data {
             Some(data) => {
                 Some(ast::VariantCaseData {
-                    ty: typecheck_type(&data.ty, ctx)?,
+                    ty: typecheck_typename(&data.ty, ctx)?,
                     span: data.span.clone(),
                 })
             }

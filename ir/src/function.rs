@@ -1,4 +1,3 @@
-use crate::{Instruction, StringID};
 use crate::InstructionFormatter;
 use crate::Label;
 use crate::LocalID;
@@ -7,6 +6,7 @@ use crate::RawInstructionFormatter;
 use crate::Ref;
 use crate::Type;
 use crate::TypeDefID;
+use crate::{Instruction, StringID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
