@@ -12,12 +12,8 @@ use crate::ast::type_name::TypeName;
 #[derivative(PartialEq, Hash, Debug)]
 pub struct AliasDecl<A: Annotation = Span> {
     pub name: A::DeclName,
-    pub ty: Box<A::Type>,
 
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    #[derivative(Hash = "ignore")]
-    pub ty_span: Span,
+    pub target: Box<A::TypeName>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -33,8 +29,7 @@ impl AliasDecl<Span> {
         Ok(Self {
             name,
             span,
-            ty_span: ty.span().clone(),
-            ty: Box::new(ty),
+            target: Box::new(ty),
         })
     }
 }
@@ -50,6 +45,6 @@ where
 
 impl<A> fmt::Display for AliasDecl<A> where A: Annotation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.ty)
+        write!(f, "{}", self.target)
     }
 }

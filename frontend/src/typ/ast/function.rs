@@ -4,16 +4,16 @@ mod decl_mod;
 
 pub use self::decl_mod::*;
 use crate::ast;
-use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::SemanticHint;
 use crate::ast::TypeAnnotation;
+use crate::ast::FunctionDeclKind;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::where_clause::WhereClause;
 use crate::typ::ast::Tag;
-use crate::typ::typecheck_type;
+use crate::typ::{typecheck_type, typecheck_typename, TypeName};
 use crate::typ::typecheck_type_params;
 use crate::typ::typecheck_type_path;
 use crate::typ::validate_generic_constraints;
@@ -318,14 +318,14 @@ impl FunctionDecl {
                 },
             };
 
-            let return_ty = match decl.kind {
+            let result_ty = match decl.kind {
                 FunctionDeclKind::Function | FunctionDeclKind::ClassMethod =>  match &decl.result_ty {
-                    ast::TypeName::Unspecified(..) => Type::Nothing,
-                    ty_name => typecheck_type(ty_name, ctx)?,
+                    ast::TypeName::Unspecified(..) => TypeName::inferred(Type::Nothing),
+                    ty_name => typecheck_typename(ty_name, ctx)?,
                 },
                 
                 FunctionDeclKind::Destructor => {
-                    Type::Nothing
+                    TypeName::inferred(Type::Nothing)
                 }
 
                 FunctionDeclKind::Constructor => {
@@ -353,7 +353,7 @@ impl FunctionDecl {
                             .map_err(|e| TypeError::from_generic_err(e, decl.span.clone()))?
                             .into_owned();
                     }
-                    ctor_return_ty
+                    TypeName::inferred(ctor_return_ty)
                 }
             };
 
@@ -392,7 +392,7 @@ impl FunctionDecl {
                         .map(|param| FunctionSigParam::from_decl_param(param))
                         .collect();
                     let method_sig = FunctionSig::new(
-                        return_ty.clone(),
+                        result_ty.ty().clone(),
                         param_sigs,
                         type_params.clone());
 
@@ -451,8 +451,7 @@ impl FunctionDecl {
                 kind: decl.kind,
                 params,
                 where_clause,
-                result_ty: return_ty,
-                result_ty_span: decl.result_ty_span.clone(),
+                result_ty,
                 span: decl.span.clone(),
                 mods: decl_mods,
             };
@@ -708,10 +707,10 @@ pub fn typecheck_func_def(
     
     let decl = Arc::new(decl);
 
-    let return_ty = decl.result_ty.clone();
+    let result_ty = decl.result_ty.clone();
 
     let body_env = FunctionBodyEnvironment {
-        result_ty: return_ty,
+        result_ty: Type::from(result_ty),
         ty_params: decl.name.type_params.clone(),
         self_ty: decl.method_declaring_type().cloned(),
     };

@@ -2,8 +2,8 @@ use crate::ast::Ident;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;
 use crate::typ::ast::InterfaceDecl;
-use crate::typ::ast::StructDef;
-use crate::typ::ast::VariantDef;
+use crate::typ::ast::StructDecl;
+use crate::typ::ast::VariantDecl;
 use crate::typ::ast::{EnumDecl, SetDecl};
 use crate::typ::Decl;
 use crate::typ::FunctionSig;
@@ -17,9 +17,9 @@ use terapascal_common::span::Spanned;
 pub enum Def {
     External(Arc<FunctionDecl>),
     Function(Arc<FunctionDef>),
-    Struct(Arc<StructDef>),
+    Struct(Arc<StructDecl>),
     Interface(Arc<InterfaceDecl>),
-    Variant(Arc<VariantDef>),
+    Variant(Arc<VariantDecl>),
     Enum(Arc<EnumDecl>),
     Set(Arc<SetDecl>),
 }

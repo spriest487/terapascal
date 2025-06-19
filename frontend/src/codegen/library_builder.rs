@@ -1396,7 +1396,7 @@ impl LibraryBuilder {
         func_id
     }
 
-    pub fn aligned_struct_members<'a>(&self, struct_def: &'a typ::ast::StructDef) -> Vec<StructLayoutMember<'a>> {
+    pub fn aligned_struct_members<'a>(&self, struct_def: &'a typ::ast::StructDecl) -> Vec<StructLayoutMember<'a>> {
         let layout = if struct_def.packed {
             StructLayout::Packed
         } else {

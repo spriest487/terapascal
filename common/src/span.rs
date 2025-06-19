@@ -150,6 +150,10 @@ impl Span {
         (left, right)
     }
     
+    pub fn contains(&self, location: &Location) -> bool {
+        *location >= self.start && *location <= self.end
+    }
+    
     pub fn range(spans: &[impl Spanned]) -> Option<Self> {
         match spans {
             [] => None,

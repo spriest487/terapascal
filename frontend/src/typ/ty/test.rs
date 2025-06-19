@@ -3,7 +3,7 @@ use crate::typ;
 use crate::typ::ast::Call;
 use crate::typ::ast::Call;
 use crate::typ::ast::Stmt;
-use crate::typ::ast::StructDef;
+use crate::typ::ast::StructDecl;
 use crate::typ::context::*;
 use crate::typ::ty::*;
 use crate::typ::ModuleUnit;
@@ -16,7 +16,7 @@ fn module_from_src(unit_name: &'static str, src: &'static str) -> ModuleUnit {
     module.units.into_iter().next().unwrap()
 }
 
-fn main_unit_structs(module: &typ::ModuleUnit) -> Vec<Arc<StructDef>> {
+fn main_unit_structs(module: &typ::ModuleUnit) -> Vec<Arc<StructDecl>> {
     module.unit
         .type_decls()
         .flat_map(|(_vis, decl)| decl.items.iter())

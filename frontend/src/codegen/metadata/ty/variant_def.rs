@@ -5,7 +5,7 @@ use crate::codegen::typ;
 use crate::typ::ast::VARIANT_TAG_TYPE;
 
 pub fn translate_variant_def(
-    variant_def: &typ::ast::VariantDef,
+    variant_def: &typ::ast::VariantDecl,
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::VariantDef {

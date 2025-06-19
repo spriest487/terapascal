@@ -7,8 +7,8 @@ use crate::typ::ast::FunctionDeclContext;
 use crate::typ::ast::InterfaceDecl;
 use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::MethodDecl;
-use crate::typ::ast::StructDef;
-use crate::typ::ast::VariantDef;
+use crate::typ::ast::StructDecl;
+use crate::typ::ast::VariantDecl;
 use crate::typ::ast::WhereClause;
 use crate::typ::ast::{apply_func_decl_named_ty_args, FieldDecl, StructDeclSection};
 use crate::typ::FunctionSig;
@@ -64,10 +64,10 @@ fn specialise_where_clause(generic_where: Option<&WhereClause>, generic_ctx: &Ge
 }
 
 pub fn specialize_struct_def<'a>(
-    generic_def: &Arc<StructDef>,
+    generic_def: &Arc<StructDecl>,
     ty_args: &TypeArgList,
     ctx: &Context,
-) -> GenericResult<Arc<StructDef>> {
+) -> GenericResult<Arc<StructDecl>> {
     let struct_ty_params = match &generic_def.name.type_params {
         None => return Ok(generic_def.clone()),
         Some(param_list) => param_list,
@@ -135,7 +135,7 @@ pub fn specialize_struct_def<'a>(
         sections.push(section);
     }
 
-    Ok(Arc::new(StructDef {
+    Ok(Arc::new(StructDecl {
         kw_span: generic_def.kw_span.clone(),
         name: specialized_name,
         where_clause: specialized_where,
@@ -180,10 +180,10 @@ fn specialize_method_section(
 }
 
 pub fn specialize_variant_def(
-    generic_def: &VariantDef,
+    generic_def: &VariantDecl,
     args: &TypeArgList,
     ctx: &Context,
-) -> GenericResult<VariantDef> {
+) -> GenericResult<VariantDecl> {
     let variant_ty_params = match &generic_def.name.type_params {
         None => return Ok(generic_def.clone()),
         Some(param_list) => param_list,
@@ -233,7 +233,7 @@ pub fn specialize_variant_def(
         })
         .collect();
 
-    Ok(VariantDef {
+    Ok(VariantDecl {
         kw_span: generic_def.kw_span.clone(),
         name: Arc::new(parameterized_name),
         where_clause: specialized_where,

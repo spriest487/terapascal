@@ -251,8 +251,7 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
                 is_implicit_self: false,
             }
         ],
-        result_ty: Type::from(Primitive::Int32),
-        result_ty_span: None,
+        result_ty: TypeName::inferred(Primitive::Int32),
         mods: Vec::new(),
         span: builtin_span.clone(),
     }
@@ -312,11 +311,10 @@ pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Typ
                 span: None,
             }
         ],
-        result_ty: Type::class(IdentPath::from_vec(vec![
+        result_ty: TypeName::inferred(Type::class(IdentPath::from_vec(vec![
             Ident::new(SYSTEM_UNIT_NAME, builtin_span.clone()),
             Ident::new(STRING_TYPE_NAME, builtin_span.clone()),
-        ])),
-        result_ty_span: None,
+        ]))),
         mods: Vec::new(),
         span: builtin_span.clone(),
     }

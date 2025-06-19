@@ -139,7 +139,7 @@ impl FunctionSig {
             .map(|p| FunctionSigParam::from_decl_param(p))
             .collect();
         
-        let sig = Self::new(return_ty, param_sigs, decl.name.type_params);
+        let sig = Self::new(Type::from(return_ty), param_sigs, decl.name.type_params);
 
         sig
     }

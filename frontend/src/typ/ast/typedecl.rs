@@ -49,14 +49,14 @@ use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
-pub type StructDef = ast::StructDecl<Value>;
+pub type StructDecl = ast::StructDecl<Value>;
 pub type StructMemberDecl = ast::TypeMemberDecl<Value>;
 pub type StructDeclSection = ast::StructDeclSection<Value>;
 pub type MethodDeclSection = ast::MethodDeclSection<Value>;
 pub type FieldDecl = ast::FieldDecl<Value>;
 pub type MethodDecl = ast::MethodDecl<Value>;
 pub type InterfaceDecl = ast::InterfaceDecl<Value>;
-pub type VariantDef = ast::VariantDecl<Value>;
+pub type VariantDecl = ast::VariantDecl<Value>;
 pub type AliasDecl = ast::AliasDecl<Value>;
 pub type EnumDecl = ast::EnumDecl<Value>;
 pub type EnumDeclItem = ast::EnumDeclItem<Value>;
@@ -71,7 +71,7 @@ pub const SET_DEFAULT_VALUE_TYPE: Type = Type::Primitive(Primitive::UInt8);
 
 const ENUM_ORD_TYPE: Type = Type::Primitive(Primitive::NativeInt);
 
-impl VariantDef {
+impl VariantDecl {
     pub fn find_method<'a>(&'a self, name: &'a Ident, sig: &FunctionSig) -> Option<&'a MethodDecl> {
         self.find_methods(name)
             .find_map(move |(_,m)|{
@@ -223,7 +223,7 @@ pub fn typecheck_struct_decl(
     info: TypeDeclItemInfo,
     struct_def: &ast::StructDecl<Span>,
     ctx: &mut Context,
-) -> TypeResult<StructDef> {
+) -> TypeResult<StructDecl> {
     assert!(struct_def.tags.is_empty() || !struct_def.forward);
     let tags = Tag::typecheck_tags(&struct_def.tags, ctx)?;
     
@@ -249,7 +249,7 @@ pub fn typecheck_struct_decl(
         ctx
     )?;
 
-    Ok(StructDef {
+    Ok(StructDecl {
         kw_span: struct_def.kw_span.clone(),
         kind: struct_def.kind,
         name: info.name,
@@ -529,7 +529,7 @@ pub fn typecheck_variant(
     info: TypeDeclItemInfo,
     variant_def: &ast::VariantDecl<Span>,
     ctx: &mut Context,
-) -> TypeResult<VariantDef> {
+) -> TypeResult<VariantDecl> {
     assert!(variant_def.tags.is_empty() || !variant_def.forward);
     let tags = Tag::typecheck_tags(&variant_def.tags, ctx)?;
 
@@ -579,7 +579,7 @@ pub fn typecheck_variant(
         ctx
     )?;
 
-    Ok(VariantDef {
+    Ok(VariantDecl {
         kw_span: variant_def.kw_span.clone(),
         name: info.name.into(),
         where_clause: info.where_clause,
@@ -598,12 +598,11 @@ pub fn typecheck_alias(
     alias: &ast::AliasDecl<Span>,
     ctx: &mut Context,
 ) -> TypeResult<AliasDecl> {
-    let ty = typecheck_type(&alias.ty, ctx)?;
+    let ty = typecheck_typename(&alias.target, ctx)?;
 
     Ok(AliasDecl {
         name,
-        ty_span: alias.ty_span.clone(),
-        ty: Box::new(ty),
+        target: Box::new(ty),
         span: alias.span.clone(),
     })
 }

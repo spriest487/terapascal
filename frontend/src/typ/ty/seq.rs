@@ -60,7 +60,7 @@ impl TypeSequenceSupport {
 
         Ok(TypeSequenceSupport {
             item_type: item_ty,
-            sequence_type: sequence_ty.clone(),
+            sequence_type: sequence_ty.ty().clone(),
             
             sequence_method_index: seq_method_index,
             sequence_method_decl: seq_method.func_decl,
@@ -81,7 +81,7 @@ impl TypeSequenceSupport {
             TypeSequenceError::AmbiguousNextMethod,
         )?;
 
-        match &next_method.func_decl.result_ty {
+        match next_method.func_decl.result_ty.ty() {
             Type::Variant(sym) if is_system_option_name(sym) => {
                 let Some(item_ty) = sym.type_args
                     .as_ref()

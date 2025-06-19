@@ -173,12 +173,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
 
     pub params: Vec<FunctionParam<A>>,
 
-    pub result_ty: A::Type,
-
-    #[derivative(Hash = "ignore")]
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub result_ty_span: Option<Span>,
+    pub result_ty: A::TypeName,
 
     pub mods: Vec<DeclMod<A>>,
 }
@@ -239,20 +234,21 @@ impl FunctionDecl<Span> {
             Vec::new()
         };
 
-        let (return_ty, return_ty_span) = if expect_result_ty {
+        let result_ty = if expect_result_ty {
             match tokens.match_one_maybe(Separator::Colon) {
                 Some(_) => {
-                    // look for a return type
+                    // look for a result type
                     let ty = TypeName::parse(tokens)?;
-                    let ty_span = ty.span().clone(); 
-                    span = span.to(&ty_span);
-                    (ty, Some(ty_span))
+                    span = span.to(ty.span());
+                    ty
                 },
 
-                None => (TypeName::Unspecified(kw_span.clone()), None),
+                None => {
+                    TypeName::Unspecified(kw_span.clone())
+                    },
             }
         } else {
-            (TypeName::Unspecified(kw_span.clone()), None)
+            TypeName::Unspecified(kw_span.clone())
         };
 
         let mods = DeclMod::parse_seq(tokens)?;
@@ -269,8 +265,7 @@ impl FunctionDecl<Span> {
             tags,
             kind,
             span,
-            result_ty: return_ty,
-            result_ty_span: return_ty_span,
+            result_ty,
             params,
             mods,
         })

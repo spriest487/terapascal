@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use typ::layout::StructLayoutMember;
 
 pub fn translate_struct_def(
-    struct_def: &typ::ast::StructDef,
+    struct_def: &typ::ast::StructDecl,
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::Struct {    

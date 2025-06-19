@@ -35,8 +35,8 @@ use crate::typ::ast::Literal;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::SetDecl;
-use crate::typ::ast::StructDef;
-use crate::typ::ast::VariantDef;
+use crate::typ::ast::StructDecl;
+use crate::typ::ast::VariantDecl;
 use crate::typ::ast::SELF_TY_NAME;
 use crate::typ::specialize_by_return_ty;
 use crate::typ::specialize_iface_def;
@@ -639,7 +639,7 @@ impl Context {
 
     pub fn declare_variant(
         &mut self,
-        variant: Arc<VariantDef>,
+        variant: Arc<VariantDecl>,
         visibility: Visibility,
     ) -> TypeResult<()> {
         let name = variant.name.ident().clone();
@@ -663,7 +663,7 @@ impl Context {
 
     pub fn declare_struct(
         &mut self,
-        struct_def: Arc<StructDef>,
+        struct_def: Arc<StructDecl>,
         visibility: Visibility,
     ) -> TypeResult<()> {
         let name = struct_def.name.ident().clone();
@@ -1304,7 +1304,7 @@ impl Context {
         self.find_def(name, &DefKey::Sig(sig))
     }
 
-    pub fn find_struct_def(&self, name: &IdentPath, kind: StructKind) -> NameResult<&Arc<StructDef>> {
+    pub fn find_struct_def(&self, name: &IdentPath, kind: StructKind) -> NameResult<&Arc<StructDecl>> {
         match self.find_type_def(name) {
             Some(Def::Struct(struct_def)) if struct_def.kind == kind => {
                 Ok(struct_def)
@@ -1323,7 +1323,7 @@ impl Context {
         }
     }
 
-    pub fn instantiate_struct_def(&self, name: &Symbol, kind: StructKind) -> NameResult<Arc<StructDef>> {
+    pub fn instantiate_struct_def(&self, name: &Symbol, kind: StructKind) -> NameResult<Arc<StructDecl>> {
         name.expect_not_unspecialized()?;
 
         let generic_def = self.find_struct_def(&name.full_path, kind)?;
@@ -1336,7 +1336,7 @@ impl Context {
         Ok(specialized_def)
     }
 
-    pub fn find_variant_def(&self, name: &IdentPath) -> NameResult<&Arc<VariantDef>> {
+    pub fn find_variant_def(&self, name: &IdentPath) -> NameResult<&Arc<VariantDecl>> {
         match self.find_type_def(name) {
             Some(Def::Variant(variant_def)) => Ok(variant_def),
 
@@ -1348,7 +1348,7 @@ impl Context {
         }
     }
 
-    pub fn instantiate_variant_def(&self, name: &Symbol) -> NameResult<Arc<VariantDef>> {
+    pub fn instantiate_variant_def(&self, name: &Symbol) -> NameResult<Arc<VariantDecl>> {
         name.expect_not_unspecialized()?;
 
         let base_def = self.find_variant_def(&name.full_path)?;

@@ -1,6 +1,6 @@
 use crate::ast::StructKind;
 use crate::ast::FieldDecl;
-use crate::typ::ast::StructDef;
+use crate::typ::ast::StructDecl;
 use crate::typ::ast::VARIANT_TAG_TYPE;
 use crate::typ::Context;
 use crate::typ::GenericError;
@@ -157,7 +157,7 @@ impl StructLayout {
 
     pub fn members_of<'a>(
         self,
-        def: &'a StructDef,
+        def: &'a StructDecl,
         ctx: &Context,
     ) -> NameResult<Vec<StructLayoutMember<'a>>> {
         let mut members = Vec::with_capacity(def.fields().count());

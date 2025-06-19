@@ -12,7 +12,7 @@ use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionName;
 use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::Stmt;
-use crate::typ::ast::VariantDef;
+use crate::typ::ast::VariantDecl;
 use crate::typ::context::NameError;
 use crate::typ::FunctionSig;
 use crate::typ::GenericError;
@@ -232,7 +232,7 @@ pub enum TypeError {
 
     EmptyVariantDecl(Box<ast::VariantDecl<Span>>),
     EmptyVariantCaseBinding {
-        variant: Box<VariantDef>,
+        variant: Box<VariantDecl>,
         case_index: usize,
         span: Span,
     },

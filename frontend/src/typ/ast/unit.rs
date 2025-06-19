@@ -249,7 +249,7 @@ fn typecheck_type_decl_item(
 
             ctx.declare_type(
                 alias.name.ident().clone(),
-                (*alias.ty).clone(),
+                alias.target.ty().clone(),
                 visibility,
                 false
             )?;

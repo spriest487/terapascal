@@ -30,7 +30,7 @@ use crate::ast::SemanticHint;
 use crate::ast::StructKind;
 use crate::ast::TypeAnnotation;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::typ::ast::FieldDecl;
+use crate::typ::ast::{FieldDecl, TypeDeclItem};
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::SELF_TY_NAME;
 use crate::typ::builtin_span;
@@ -300,32 +300,32 @@ impl Type {
         Ok(result)
     }
 
-    pub fn of_decl(type_decl: &ast::TypeDeclItem<Value>, ctx: &Context) -> TypeResult<Self> {
+    pub fn of_decl(type_decl: &TypeDeclItem, ctx: &Context) -> TypeResult<Self> {
         match type_decl {
-            ast::TypeDeclItem::Struct(class)
+            TypeDeclItem::Struct(class)
             if class.kind == StructKind::Record => {
                 Ok(Type::Record(Arc::new(class.name.clone())))
             },
 
-            ast::TypeDeclItem::Struct(class) => {
+            TypeDeclItem::Struct(class) => {
                 Ok(Type::Class(Arc::new(class.name.clone())))
             },
 
-            ast::TypeDeclItem::Variant(variant) => {
+            TypeDeclItem::Variant(variant) => {
                 Ok(Type::Variant(variant.name.clone()))
             },
 
-            ast::TypeDeclItem::Interface(iface) => {
+            TypeDeclItem::Interface(iface) => {
                 Ok(Type::interface(iface.name.clone()))
             },
 
-            ast::TypeDeclItem::Enum(enum_decl) => {
+            TypeDeclItem::Enum(enum_decl) => {
                 enum_decl.name.expect_no_type_params(InvalidTypeParamsDeclKind::Enum)?;
                 
                 Ok(Type::enumeration(enum_decl.name.full_path.clone()))
             },
             
-            ast::TypeDeclItem::Set(set_decl) => {
+            TypeDeclItem::Set(set_decl) => {
                 set_decl.name.expect_no_type_params(InvalidTypeParamsDeclKind::Set)?;
 
                 let name = &set_decl.name.full_path;
@@ -342,8 +342,8 @@ impl Type {
                 Ok(Type::set(set_type))
             }
 
-            ast::TypeDeclItem::Alias(alias) => {
-                Ok((*alias.ty).clone())
+            TypeDeclItem::Alias(alias) => {
+                Ok(alias.target.ty().clone())
             },
         }
     }
