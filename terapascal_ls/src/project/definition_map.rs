@@ -168,8 +168,41 @@ impl DefinitionMap {
                 }
             },
 
-            UnitDecl::Uses { .. } => {},
-            UnitDecl::Binding { .. } => {},
+            UnitDecl::Uses { decl } => {
+                for item in &decl.units {
+                    self.add_unit_ident(&item.ident, ctx);
+                }
+            },
+
+            UnitDecl::Binding { decl } => {
+                for item in &decl.items {
+                    if let Some(init) = &item.init {
+                        self.add_expr(&init.expr, ctx);
+                    }
+                }
+            },
+        }
+    }
+    
+    fn add_unit_ident(&mut self, unit_ident: &IdentPath, ctx: &Context) {
+        let mut partial_path = IdentPath::from(unit_ident.first().clone());
+        let mut next_index = 1;
+        
+        loop {
+            if let Some(scope_member) = ctx.find_path(&partial_path) {
+                if let ScopeMemberRef::Scope { path } = scope_member {
+                    let def_span = path.to_namespace().path_span();
+
+                    self.add(partial_path.last().span.clone(), def_span);
+                }
+            }
+            
+            let Some(next_part) = unit_ident.as_slice().get(next_index) else {
+                break;
+            };
+            
+            partial_path = partial_path.child(next_part.clone());
+            next_index += 1;
         }
     }
 

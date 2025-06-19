@@ -267,7 +267,7 @@ impl Context {
         F: FnOnce(&mut Context) -> TypeResult<T>,
     {
         let path_len = unit_path.as_slice().len();
-        let mut path_parts = unit_path.into_vec();
+        let mut path_parts = unit_path.clone().into_vec();
 
         let mut unit_scopes = Vec::with_capacity(path_len);
         let mut part_path = Vec::with_capacity(path_len);
@@ -320,6 +320,17 @@ impl Context {
                     return Err(TypeError::from_name_err(err, part_span));
                 },
             }
+        }
+        
+        match self.scopes.current_mut().env_mut() {
+            Environment::Namespace { namespace } if *namespace == unit_path => {
+                // in case it was previously declared elsewhere (part of another unit or builtin)
+                // final namespace with the full unit name provided. the ident provided here should
+                // be the unit's own declaring ident, so it's the canonical one for this namespace
+                *namespace = unit_path;
+            }
+
+            _ => unreachable!("top scope must now be the namespace {unit_path}") 
         }
 
         let result = f(self);
