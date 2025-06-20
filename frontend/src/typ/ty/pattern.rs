@@ -363,7 +363,7 @@ impl TypePattern {
         }
     }
 
-    pub fn bindings(&self, ctx: &mut Context) -> NameResult<Vec<PatternBinding>> {
+    pub fn bindings(&self, ctx: &Context) -> NameResult<Vec<PatternBinding>> {
         match self {
             TypePattern::Type {
                 ty,

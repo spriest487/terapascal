@@ -1,15 +1,22 @@
-mod semantic_tokens;
 mod project;
+mod semantic_tokens;
 
-use crate::project::{Project, ProjectCollection};
+use crate::project::LinksEntry;
+use crate::project::ProjectCollection;
 use crate::semantic_tokens::semantic_legend;
 use dashmap::DashMap;
 use std::path::PathBuf;
 use terapascal_build::error::BuildError;
 use terapascal_build::error::BuildResult;
+use terapascal_common::span::Location;
+use terapascal_common::span::Span;
 use tokio::sync::RwLock;
+use tower_lsp::LanguageServer;
+use tower_lsp::LspService;
+use tower_lsp::Server;
 use tower_lsp::jsonrpc::Result as RpcResult;
-use tower_lsp::lsp_types::{DidChangeTextDocumentParams, LocationLink, Position, Range};
+use tower_lsp::lsp_types as lsp;
+use tower_lsp::lsp_types::DidChangeTextDocumentParams;
 use tower_lsp::lsp_types::DidChangeWorkspaceFoldersParams;
 use tower_lsp::lsp_types::DidCloseTextDocumentParams;
 use tower_lsp::lsp_types::DidOpenTextDocumentParams;
@@ -23,6 +30,7 @@ use tower_lsp::lsp_types::InitializeParams;
 use tower_lsp::lsp_types::InitializeResult;
 use tower_lsp::lsp_types::InitializedParams;
 use tower_lsp::lsp_types::OneOf;
+use tower_lsp::lsp_types::ReferenceParams;
 use tower_lsp::lsp_types::SemanticTokens;
 use tower_lsp::lsp_types::SemanticTokensFullOptions;
 use tower_lsp::lsp_types::SemanticTokensLegend;
@@ -39,10 +47,6 @@ use tower_lsp::lsp_types::Url;
 use tower_lsp::lsp_types::WorkDoneProgressOptions;
 use tower_lsp::lsp_types::WorkspaceFoldersServerCapabilities;
 use tower_lsp::lsp_types::WorkspaceServerCapabilities;
-use tower_lsp::LanguageServer;
-use tower_lsp::LspService;
-use tower_lsp::Server;
-use terapascal_common::span::Location;
 
 struct TerapascalServer {
     documents: DashMap<Url, String>,
@@ -90,6 +94,7 @@ impl LanguageServer for TerapascalServer {
                 document_highlight_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(semantic_token_reg_opts.into()),
                 definition_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(true)),
                 workspace: Some(workspace_folders),
                 ..ServerCapabilities::default()
             },
@@ -147,19 +152,26 @@ impl LanguageServer for TerapascalServer {
 
         let uri = params.text_document.uri;
         self.documents.remove(&uri);
-        
+
         if let Ok(file_path) = url_to_path(&uri) {
             let mut projects = self.projects.write().await;
             projects.remove_project(&file_path);
         }
     }
 
-    async fn goto_definition(&self, params: GotoDefinitionParams) -> RpcResult<Option<GotoDefinitionResponse>> {
-        let position = params.text_document_position_params.position;
-        let uri = &params.text_document_position_params.text_document.uri;
-        eprintln!("[goto_definition] {}:{}:{}", uri, position.line + 1, position.character + 1);
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> RpcResult<Option<GotoDefinitionResponse>> {
+        let text_pos = &params.text_document_position_params;
+        eprintln!(
+            "[goto_definition] {}:{}:{}",
+            text_pos.text_document.uri,
+            text_pos.position.line + 1,
+            text_pos.position.character + 1
+        );
 
-        let Ok(file_path) = url_to_path(uri) else {
+        let Some((file_path, location)) = convert_text_doc_position_params(text_pos) else {
             return Ok(None);
         };
 
@@ -168,9 +180,15 @@ impl LanguageServer for TerapascalServer {
             return Ok(None);
         };
 
-        let links = get_definition_links(project, &file_path, params);
+        let Some(defs) = project.find_definition(&file_path, location) else {
+            return Ok(None);
+        };
+
+        let links = collect_definition_links(defs, false);
+
         for link in &links {
-            eprintln!("[goto_definition] linked to: {}:{}:{}-{}:{}",
+            eprintln!(
+                "[goto_definition] linked to: {}:{}:{}-{}:{}",
                 link.target_uri,
                 link.target_range.start.line + 1,
                 link.target_range.start.character + 1,
@@ -178,8 +196,61 @@ impl LanguageServer for TerapascalServer {
                 link.target_range.end.character + 1,
             );
         }
-        
-        Ok(Some(GotoDefinitionResponse::Link(links)))
+
+        let result = if links.is_empty() {
+            None
+        } else {
+            Some(GotoDefinitionResponse::Link(links))
+        };
+
+        Ok(result)
+    }
+
+    async fn references(&self, params: ReferenceParams) -> RpcResult<Option<Vec<lsp::Location>>> {
+        let text_pos = &params.text_document_position;
+        eprintln!(
+            "[references] {}:{}:{}",
+            text_pos.text_document.uri,
+            text_pos.position.line + 1,
+            text_pos.position.character + 1
+        );
+
+        let Some((file_path, location)) = convert_text_doc_position_params(text_pos) else {
+            return Ok(None);
+        };
+
+        let projects = self.projects.read().await;
+        let Some(project) = projects.get_document_project(&file_path) else {
+            return Ok(None);
+        };
+
+        let Some(references) = project.find_usages(&file_path, location) else {
+            return Ok(None);
+        };
+
+        let links = collect_definition_links(references, params.context.include_declaration);
+        if links.is_empty() {
+            return Ok(None);
+        }
+
+        let mut locations = Vec::with_capacity(links.len());
+        for link in links {
+            eprintln!(
+                "[references] linked to: {}:{}:{}-{}:{}",
+                link.target_uri,
+                link.target_range.start.line + 1,
+                link.target_range.start.character + 1,
+                link.target_range.end.line + 1,
+                link.target_range.end.character + 1,
+            );
+            
+            locations.push(lsp::Location {
+                uri: link.target_uri,
+                range: link.target_range,
+            });
+        }
+
+        Ok(Some(locations))
     }
 
     async fn document_highlight(
@@ -193,7 +264,6 @@ impl LanguageServer for TerapascalServer {
         &self,
         params: SemanticTokensParams,
     ) -> RpcResult<Option<SemanticTokensResult>> {
-
         eprintln!("[semantic_tokens_full] {}", params.text_document.uri);
 
         let doc_path = match url_to_path(&params.text_document.uri) {
@@ -201,28 +271,32 @@ impl LanguageServer for TerapascalServer {
             Err(err) => {
                 eprintln!("[semantic_tokens_full] {}", err);
                 return Ok(None);
-            }
+            },
         };
 
         let projects = self.projects.read().await;
 
         let Some(project) = projects.get_document_project(&doc_path) else {
-            eprintln!("[semantic_tokens_full] workspace project not found for path {}", doc_path.display());
+            eprintln!(
+                "[semantic_tokens_full] workspace project not found for path {}",
+                doc_path.display()
+            );
             return Ok(None);
         };
 
         match project.semantic_tokens.get(&doc_path) {
-            Some(tokens) => {
-                Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-                    data: tokens.clone(),
-                    result_id: None,
-                })))
-            }
-            
+            Some(tokens) => Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+                data: tokens.clone(),
+                result_id: None,
+            }))),
+
             None => {
-                eprintln!("[semantic_tokens_full] no tokens loaded for {}", doc_path.display());
+                eprintln!(
+                    "[semantic_tokens_full] no tokens loaded for {}",
+                    doc_path.display()
+                );
                 Ok(None)
-            }
+            },
         }
     }
 
@@ -273,54 +347,77 @@ fn url_to_path(url: &Url) -> BuildResult<PathBuf> {
         return Err(BuildError::ReadSourceFileFailed {
             path: PathBuf::from(url.to_string()),
             msg: "invalid file path".to_string(),
-        })
+        });
     };
 
     match file_path.canonicalize() {
         Ok(path) => Ok(path),
 
-        Err(err) => {
-            Err(BuildError::ReadSourceFileFailed {
-                path: file_path,
-                msg: err.to_string(),
-            })
-        }
+        Err(err) => Err(BuildError::ReadSourceFileFailed {
+            path: file_path,
+            msg: err.to_string(),
+        }),
     }
 }
 
-fn get_definition_links(
-    project: &Project,
-    file_path: &PathBuf,
-    params: GotoDefinitionParams
-) -> Vec<LocationLink> {
-    let position = params.text_document_position_params.position;
+fn convert_text_doc_position_params(
+    params: &lsp::TextDocumentPositionParams,
+) -> Option<(PathBuf, Location)> {
+    let uri = &params.text_document.uri;
+
+    let Ok(file_path) = url_to_path(uri) else {
+        return None;
+    };
+
+    let position = params.position;
     let location = Location {
         line: position.line as usize,
         col: position.character as usize,
     };
 
-    project
-        .find_definition(&file_path, location)
-        .iter()
-        .filter_map(|span| {
-            let target_uri = Url::from_file_path(span.file.as_ref()).ok()?;
+    Some((file_path, location))
+}
 
-            let range = Range {
-                start: Position {
-                    line: span.start.line as u32,
-                    character: span.start.col as u32,
-                },
-                end: Position {
-                    line: span.end.line as u32,
-                    character: span.end.col as u32 + 1,
-                }
-            };
-            Some(LocationLink {
-                target_uri,
-                origin_selection_range: None,
-                target_range: range,
-                target_selection_range: range,
-            })
-        })
-        .collect()
+fn convert_location(location: Location) -> lsp::Position {
+    lsp::Position {
+        line: location.line as u32,
+        character: location.col as u32,
+    }
+}
+
+fn convert_range(start: Location, end: Location) -> lsp::Range {
+    let mut result = lsp::Range {
+        start: convert_location(start),
+        end: convert_location(end),
+    };
+
+    // end is exclusive not inclusive
+    result.end.character += 1;
+
+    result
+}
+
+fn collect_definition_links(entries: &LinksEntry, include_key: bool) -> Vec<lsp::LocationLink> {
+    let mut links: Vec<_> = entries.links.iter().filter_map(span_to_location_link).collect();
+
+    if include_key {
+        if let Some(key_link) = span_to_location_link(&entries.key) {
+            links.insert(0, key_link);
+        }
+    }
+
+    links
+}
+
+fn span_to_location_link(span: &Span) -> Option<lsp::LocationLink> {
+    let target_uri = Url::from_file_path(span.file.as_ref()).ok()?;
+
+    let range = convert_range(span.start, span.end);
+
+    Some(lsp::LocationLink {
+        target_uri,
+        origin_selection_range: None,
+        target_range: range,
+        target_selection_range: range,
+    })
 }

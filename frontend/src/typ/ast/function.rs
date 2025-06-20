@@ -813,23 +813,29 @@ fn declare_func_params_in_body(params: &[FunctionParam], default_span: &Span, ct
         
         // if the param doesn't have a span itself, it's an implicit span, so just use the function
         // name as the span
-        let decl_span = param.name_span
+        let name_span = param.name_span
             .clone()
             .unwrap_or_else(|| default_span.clone());
-        let decl_ident = Ident::new(&param.name, decl_span);
+        let name = Ident::new(&param.name, name_span);
+        
+        // but don't give the parameter binding a def ident
+        let def_ident = match param.name_span {
+            None => None,
+            Some(..) => Some(name.clone()),
+        };
 
         ctx.declare_local_var(
-            decl_ident.clone(),
+            name.clone(),
             Binding {
                 ty: param.ty.clone(),
                 kind,
-                def: Some(decl_ident.clone()),
+                def: def_ident,
                 semantic_hint: SemanticHint::Parameter,
             },
         )?;
 
         if init {
-            ctx.initialize(&decl_ident);
+            ctx.initialize(&name);
         }
     }
 
