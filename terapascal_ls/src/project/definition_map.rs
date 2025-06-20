@@ -148,14 +148,21 @@ impl DefinitionMap {
     }
 
     pub fn add(&mut self, span: Span, definition: Span) {
-        let file_entries = self.entries.entry(span.file.clone()).or_insert_with(FileEntry::new);
+        let target_file = self.entries
+            .entry(span.file.clone())
+            .or_insert_with(FileEntry::new);
 
         LinksEntry::insert(
-            &mut file_entries.definitions,
+            &mut target_file.definitions,
             span.clone(),
             definition.clone(),
         );
-        LinksEntry::insert(&mut file_entries.usages, definition, span);
+
+        let def_file = self.entries
+            .entry(definition.file.clone())
+            .or_insert_with(FileEntry::new);
+        
+        LinksEntry::insert(&mut def_file.usages, definition, span);
     }
 
     pub fn add_self_def(&mut self, span: &Span) {
