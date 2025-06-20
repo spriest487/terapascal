@@ -367,7 +367,7 @@ impl DefinitionMap {
 
         for case in &variant_decl.cases {
             self.add_self_def(&case.ident.span);
-            
+
             let Some(data) = &case.data else {
                 continue;
             };
@@ -464,18 +464,27 @@ impl DefinitionMap {
 
     fn add_func_decl(&mut self, func_decl: &FunctionDecl, ctx: &Context) {
         self.add_tags(&func_decl.tags, ctx);
-        
-        self.add_self_def(&func_decl.name.ident.span);
 
-        if let FunctionDeclContext::MethodDef {
-            declaring_type,
-            ty_name_span,
-            ..
-        } = &func_decl.name.context
-        {
-            // typename with a span of only the path part
-            let type_path_name = TypeName::named(declaring_type.clone(), ty_name_span.clone());
-            self.add_typename(&type_path_name, ctx);
+        let name_span = &func_decl.name.ident.span;
+
+        match &func_decl.name.context {
+            // the name of a method definition links to
+            // 1. the declaring type (the type qualification part)
+            // 2. the method decl within the type (the name part)
+            FunctionDeclContext::MethodDef { declaring_type, ty_name_span, .. } => {
+                // typename with a span of only the path part
+                let type_path_name = TypeName::named(declaring_type.clone(), ty_name_span.clone());
+                self.add_typename(&type_path_name, ctx);
+
+                if let Some(span) = Self::find_method_name_decl(func_decl, declaring_type, ctx) {
+                    self.add(name_span.clone(), span);
+                }
+            }
+
+            // other function names just refer to themselves and replace previous forward decls
+            _ => {
+                self.add_self_def(name_span);
+            }
         };
 
         if let Some(params) = &func_decl.name.type_params {
@@ -595,6 +604,26 @@ impl DefinitionMap {
 
         self.add_stmt(&for_loop.body, ctx);
     }
+    
+    fn find_method_name_decl(func_decl: &FunctionDecl, declaring_type: &Type, ctx: &Context) -> Option<Span> {
+        let sig = func_decl.sig();
+
+        match declaring_type.find_method(&func_decl.name.ident, &sig, ctx) {
+            Ok(Some((_, decl_in_type))) => {
+                Some(decl_in_type.func_decl.name.span.clone())
+            }
+
+            Ok(None) => {
+                eprintln!("[definition_map] missing method decl for {declaring_type}.{}", func_decl.name.ident);
+                None
+            }
+
+            Err(err) => {
+                eprintln!("[definition_map] {err}");
+                None
+            }
+        }
+    }
 
     fn find_sequence_type_def(src_ty: &Type, ctx: &Context) -> Option<Span> {
         let seq_support = TypeSequenceSupport::try_from_type(src_ty, ctx).ok()?;
@@ -680,7 +709,7 @@ impl DefinitionMap {
     fn add_type_params(&mut self, params: &TypeParamList, ctx: &Context) {
         for param in &params.items {
             self.add_self_def(&param.name.span);
-            
+
             if let Some(constraint) = &param.constraint {
                 self.add_typename(&constraint.is_ty, ctx);
             }
