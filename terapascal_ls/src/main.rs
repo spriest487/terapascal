@@ -1,19 +1,14 @@
 mod project;
 mod semantic_tokens;
+mod fs;
 
 use crate::project::LinksEntry;
-use crate::project::ProjectCollection;
+use crate::project::Workspace;
 use crate::semantic_tokens::semantic_legend;
-use dashmap::DashMap;
 use std::path::PathBuf;
-use terapascal_build::error::BuildError;
-use terapascal_build::error::BuildResult;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use tokio::sync::RwLock;
-use tower_lsp::LanguageServer;
-use tower_lsp::LspService;
-use tower_lsp::Server;
 use tower_lsp::jsonrpc::Result as RpcResult;
 use tower_lsp::lsp_types as lsp;
 use tower_lsp::lsp_types::DidChangeTextDocumentParams;
@@ -47,11 +42,12 @@ use tower_lsp::lsp_types::Url;
 use tower_lsp::lsp_types::WorkDoneProgressOptions;
 use tower_lsp::lsp_types::WorkspaceFoldersServerCapabilities;
 use tower_lsp::lsp_types::WorkspaceServerCapabilities;
+use tower_lsp::LanguageServer;
+use tower_lsp::LspService;
+use tower_lsp::Server;
 
 struct TerapascalServer {
-    documents: DashMap<Url, String>,
-
-    projects: RwLock<ProjectCollection>,
+    workspace: RwLock<Workspace>,
 }
 
 #[tower_lsp::async_trait]
@@ -112,35 +108,34 @@ impl LanguageServer for TerapascalServer {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         eprintln!("[did_open] {}", params.text_document.uri);
 
+        let mut workspace = self.workspace.write().await;
+        
         let uri = params.text_document.uri.clone();
+        let Ok(file_path) = workspace.url_to_path(&uri) else {
+            eprintln!("[did_open] bad uri: {uri}");
+            return;
+        };
 
-        self.documents.insert(params.text_document.uri, params.text_document.text);
-
-        if let Err(err) = self.update_document(uri).await {
-            eprintln!("{}", err)
-        }
+        workspace.filesystem.add(file_path.clone(), params.text_document.text);
+        workspace.update_document(&file_path);
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         eprintln!("[did_change] {}", params.text_document.uri);
 
-        let text = params.content_changes.into_iter().next().unwrap().text;
+        let Some(change) = params.content_changes.into_iter().next() else {
+            return;
+        };
 
-        {
-            let Some(mut doc) = self.documents.get_mut(&params.text_document.uri) else {
-                eprintln!(
-                    "[did_change] no document previously loaded at {}",
-                    params.text_document.uri
-                );
-                return;
-            };
+        let mut workspace = self.workspace.write().await;
 
-            *doc = text;
-        }
+        let Ok(file_path) = workspace.url_to_path(&params.text_document.uri) else {
+            eprintln!("[did_change] bad uri: {}", params.text_document.uri);
+            return;
+        };
 
-        if let Err(build_err) = self.update_document(params.text_document.uri).await {
-            eprintln!("[did_change] {build_err}")
-        }
+        workspace.filesystem.add(file_path.clone(), change.text);
+        workspace.update_document(&file_path);
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
@@ -150,13 +145,15 @@ impl LanguageServer for TerapascalServer {
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         eprintln!("[did_close] {}", params.text_document.uri);
 
-        let uri = params.text_document.uri;
-        self.documents.remove(&uri);
+        let mut workspace = self.workspace.write().await;
 
-        if let Ok(file_path) = url_to_path(&uri) {
-            let mut projects = self.projects.write().await;
-            projects.remove_project(&file_path);
-        }
+        let Ok(file_path) = workspace.url_to_path(&params.text_document.uri) else {
+            eprintln!("[did_change] bad uri: {}", params.text_document.uri);
+            return;
+        };
+        
+        workspace.filesystem.remove(&file_path);
+        workspace.remove_project(&file_path);
     }
 
     async fn goto_definition(
@@ -171,12 +168,13 @@ impl LanguageServer for TerapascalServer {
             text_pos.position.character + 1
         );
 
-        let Some((file_path, location)) = convert_text_doc_position_params(text_pos) else {
+        let workspace = self.workspace.read().await;
+
+        let Some((file_path, location)) = convert_text_doc_position_params(&workspace, text_pos) else {
             return Ok(None);
         };
 
-        let projects = self.projects.read().await;
-        let Some(project) = projects.get_document_project(&file_path) else {
+        let Some(project) = workspace.get_document_project(&file_path) else {
             return Ok(None);
         };
 
@@ -214,13 +212,14 @@ impl LanguageServer for TerapascalServer {
             text_pos.position.line + 1,
             text_pos.position.character + 1
         );
+        
+        let workspace = self.workspace.read().await;
 
-        let Some((file_path, location)) = convert_text_doc_position_params(text_pos) else {
+        let Some((file_path, location)) = convert_text_doc_position_params(&workspace, text_pos) else {
             return Ok(None);
         };
 
-        let projects = self.projects.read().await;
-        let Some(project) = projects.get_document_project(&file_path) else {
+        let Some(project) = workspace.get_document_project(&file_path) else {
             return Ok(None);
         };
 
@@ -266,7 +265,9 @@ impl LanguageServer for TerapascalServer {
     ) -> RpcResult<Option<SemanticTokensResult>> {
         eprintln!("[semantic_tokens_full] {}", params.text_document.uri);
 
-        let doc_path = match url_to_path(&params.text_document.uri) {
+        let workspace = self.workspace.read().await;
+
+        let doc_path = match workspace.url_to_path(&params.text_document.uri) {
             Ok(path) => path,
             Err(err) => {
                 eprintln!("[semantic_tokens_full] {}", err);
@@ -274,9 +275,7 @@ impl LanguageServer for TerapascalServer {
             },
         };
 
-        let projects = self.projects.read().await;
-
-        let Some(project) = projects.get_document_project(&doc_path) else {
+        let Some(project) = workspace.get_document_project(&doc_path) else {
             eprintln!(
                 "[semantic_tokens_full] workspace project not found for path {}",
                 doc_path.display()
@@ -317,55 +316,26 @@ impl LanguageServer for TerapascalServer {
     }
 }
 
-impl TerapascalServer {
-    async fn update_document(&self, uri: Url) -> BuildResult<()> {
-        let doc_path = url_to_path(&uri)?;
-
-        let mut projects = self.projects.write().await;
-        projects.update_document(&doc_path);
-
-        Ok(())
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
     let (service, socket) = LspService::build(|_client| TerapascalServer {
-        documents: DashMap::new(),
-        projects: RwLock::new(ProjectCollection::new()),
+        workspace: RwLock::new(Workspace::new()),
     })
     .finish();
 
     Server::new(stdin, stdout, socket).serve(service).await;
 }
 
-fn url_to_path(url: &Url) -> BuildResult<PathBuf> {
-    let Ok(file_path) = url.to_file_path() else {
-        return Err(BuildError::ReadSourceFileFailed {
-            path: PathBuf::from(url.to_string()),
-            msg: "invalid file path".to_string(),
-        });
-    };
-
-    match file_path.canonicalize() {
-        Ok(path) => Ok(path),
-
-        Err(err) => Err(BuildError::ReadSourceFileFailed {
-            path: file_path,
-            msg: err.to_string(),
-        }),
-    }
-}
-
 fn convert_text_doc_position_params(
+    workspace: &Workspace,
     params: &lsp::TextDocumentPositionParams,
 ) -> Option<(PathBuf, Location)> {
     let uri = &params.text_document.uri;
 
-    let Ok(file_path) = url_to_path(uri) else {
+    let Ok(file_path) = workspace.url_to_path(uri) else {
         return None;
     };
 

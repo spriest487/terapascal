@@ -1,4 +1,3 @@
-use crate::path_relative_to_cwd;
 use serde::Deserialize;
 use serde::Serialize;
 use std::cmp::Ordering;
@@ -176,7 +175,7 @@ impl fmt::Debug for Span {
         write!(
             f,
             "Span({}:{}:{}..{}:{})",
-            path_relative_to_cwd(&self.file).display(),
+            &self.file.display(),
             self.start.line,
             self.start.col,
             self.end.line,
@@ -187,7 +186,7 @@ impl fmt::Debug for Span {
 
 impl fmt::Display for Span {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let rel_file = path_relative_to_cwd(&self.file);
+        let rel_file = &self.file;
         write!(f, "{}:{}", rel_file.display(), self.start)
     }
 }

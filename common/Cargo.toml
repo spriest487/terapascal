@@ -8,3 +8,5 @@ edition = "2021"
 backtrace = "0.3.75"
 encoding_rs = "0.8.35"
 serde = { version = "1.0.219", features = ["derive", "rc"] }
+dunce = { version = "1.0.5" }
+relative-path = "2.0.1"

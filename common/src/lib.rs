@@ -8,10 +8,8 @@ pub use backtrace::Backtrace;
 use std::cmp::Ordering;
 use std::collections::hash_map::HashMap;
 use std::collections::HashSet;
-use std::env;
 use std::fmt;
 use std::ops::Deref;
-use std::path::Path;
 
 pub const IR_LIB_EXT: &str = "lib";
 pub const SRC_FILE_DEFAULT_EXT: &str = "tpas";
@@ -273,10 +271,10 @@ impl fmt::Display for LanguageMode {
     }
 }
 
-pub fn path_relative_to_cwd(path: &Path) -> &Path {
-    env::current_dir()
-        .ok()
-        .and_then(|cwd| cwd.canonicalize().ok())
-        .and_then(|cwd| path.strip_prefix(cwd).ok())
-        .unwrap_or(path)
-}
+// pub fn path_relative_to_cwd(path: &Path) -> &Path {
+//     env::current_dir()
+//         .ok()
+//         .and_then(|cwd| cwd.canonicalize().ok())
+//         .and_then(|cwd| path.strip_prefix(cwd).ok())
+//         .unwrap_or(path)
+// }

@@ -11,7 +11,6 @@ use std::io::Write;
 use std::path::Path;
 use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::fs::Filesystem;
-use terapascal_common::path_relative_to_cwd;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
@@ -51,15 +50,15 @@ fn label_from_source_file<'a>(
     file_ids: &mut HashMap<&'a Path, usize>,
     code_map: &mut CodeMap
 ) -> Result<Label<usize>, FileError> {
-    let nice_filename = path_relative_to_cwd(&label.span.file);
+    let file_path = &label.span.file;
 
-    let file_id = match file_ids.get(&nice_filename) {
+    let file_id = match file_ids.get(file_path.as_path()) {
         Some(file_id) => *file_id,
         None => {
             let src = DefaultFilesystem.read_source(label.span.file.as_ref())?;
 
-            let file_id = code_map.add(nice_filename.display().to_string(), src.into_owned());
-            file_ids.insert(nice_filename, file_id);
+            let file_id = code_map.add(file_path.display().to_string(), src.into_owned());
+            file_ids.insert(file_path, file_id);
             file_id
         }
     };

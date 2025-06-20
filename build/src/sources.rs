@@ -25,7 +25,7 @@ impl<'fs, Fs: Filesystem> SourceCollection<'fs, Fs> {
     pub fn new(filesystem: &'fs Fs, search_dirs: &[PathBuf], verbose: bool) -> Result<Self, BuildError> {
         let source_dirs = search_dirs
             .iter()
-            .filter(|dir| dir.exists())
+            .filter(|dir| filesystem.exists(dir))
             .cloned()
             .chain({
                 let mut unit_dirs = Vec::with_capacity(4);
@@ -39,7 +39,7 @@ impl<'fs, Fs: Filesystem> SourceCollection<'fs, Fs> {
 
                 unit_dirs
                     .into_iter()
-                    .filter(|dir| dir.exists())
+                    .filter(|dir| filesystem.exists(dir))
             })
             .collect();
 

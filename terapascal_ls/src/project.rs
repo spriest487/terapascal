@@ -1,33 +1,38 @@
 mod definition_map;
 
+use crate::fs::WorkspaceFilesystem;
 pub use crate::project::definition_map::DefinitionMap;
 pub use crate::project::definition_map::LinksEntry;
 use crate::semantic_tokens::SemanticTokenBuilder;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use terapascal_build::error::BuildError;
+use terapascal_build::error::BuildResult;
+use terapascal_build::parse_units;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildStage;
 use terapascal_build::ParseOutput;
-use terapascal_build::error::BuildError;
-use terapascal_build::parse_units;
-use terapascal_common::CompileOpts;
-use terapascal_common::DiagnosticOutput;
 use terapascal_common::build_log::BuildLog;
+use terapascal_common::fs::Filesystem;
 use terapascal_common::span::Location;
 use terapascal_common::span::Spanned;
+use terapascal_common::CompileOpts;
+use terapascal_common::DiagnosticOutput;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
 use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types::SemanticToken;
-use terapascal_common::fs::DefaultFilesystem;
+use tower_lsp::lsp_types::Url;
 
-pub struct ProjectCollection {
+pub struct Workspace {
     projects: HashMap<PathBuf, Project>,
     document_projects: HashMap<PathBuf, PathBuf>,
+
+    pub filesystem: WorkspaceFilesystem,
 }
 
-impl ProjectCollection {
+impl Workspace {
     pub fn get_document_project(&self, document_path: &PathBuf) -> Option<&Project> {
         self.projects.get(self.document_projects.get(document_path)?)
     }
@@ -53,10 +58,11 @@ impl ProjectCollection {
     }
 
     pub fn remove_project(&mut self, project_path: &PathBuf) {
-        self.projects.remove(project_path);
-        self.remove_project_units(project_path);
+        if self.projects.remove(project_path).is_some() {
+            self.remove_project_units(project_path);
 
-        eprintln!("[remove_project] {}", project_path.display());
+            eprintln!("[remove_project] removed {}", project_path.display());
+        }
     }
 
     pub fn update_document(&mut self, doc_path: &PathBuf) {
@@ -64,7 +70,7 @@ impl ProjectCollection {
 
         if let Some(project_path) = project_path {
             let project = self.projects.get_mut(&project_path).unwrap();
-            project.build();
+            project.build(&self.filesystem);
 
             let unit_paths = project.unit_paths();
             self.remove_project_units(&project_path);
@@ -75,10 +81,28 @@ impl ProjectCollection {
             // load the current unit as a project
             // todo: should be able to search for/specify the root project file
             let mut project = Project::new(doc_path.clone());
-            project.build();
+            project.build(&self.filesystem);
 
             self.add_project_units(&doc_path, project.unit_paths());
             self.projects.insert(doc_path.clone(), project);
+        }
+    }
+
+    pub fn url_to_path(&self, url: &Url) -> BuildResult<PathBuf> {
+        let Ok(file_path) = url.to_file_path() else {
+            return Err(BuildError::ReadSourceFileFailed {
+                path: PathBuf::from(url.to_string()),
+                msg: "invalid file path".to_string(),
+            });
+        };
+
+        match self.filesystem.canonicalize(&file_path) {
+            Ok(path) => Ok(path),
+
+            Err(err) => Err(BuildError::ReadSourceFileFailed {
+                path: file_path,
+                msg: err.to_string(),
+            }),
         }
     }
 }
@@ -108,7 +132,7 @@ impl Project {
         }
     }
 
-    fn build(&mut self) {
+    fn build(&mut self, filesystem: &impl Filesystem) {
         self.parse_output = None;
         self.module = None;
 
@@ -127,11 +151,8 @@ impl Project {
         };
 
         let mut log = BuildLog::new();
-        
-        // TODO
-        let fs = DefaultFilesystem;
 
-        let result = match parse_units(&fs, &input, &mut log) {
+        let result = match parse_units(filesystem, &input, &mut log) {
             Ok(parsed_output) => {
                 match typecheck(
                     parsed_output.units.iter(),
@@ -229,9 +250,10 @@ impl Project {
     }
 }
 
-impl ProjectCollection {
+impl Workspace {
     pub fn new() -> Self {
-        ProjectCollection {
+        Workspace {
+            filesystem: WorkspaceFilesystem::new(),
             projects: HashMap::new(),
             document_projects: HashMap::new(),
         }
