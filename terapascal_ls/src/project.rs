@@ -8,103 +8,59 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_build::error::BuildError;
-use terapascal_build::error::BuildResult;
 use terapascal_build::parse_units;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildStage;
 use terapascal_build::ParseOutput;
 use terapascal_common::build_log::BuildLog;
-use terapascal_common::fs::Filesystem;
 use terapascal_common::span::Location;
 use terapascal_common::span::Spanned;
 use terapascal_common::CompileOpts;
+use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
 use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types::SemanticToken;
-use tower_lsp::lsp_types::Url;
 
-pub struct Workspace {
-    projects: HashMap<PathBuf, Project>,
-    document_projects: HashMap<PathBuf, PathBuf>,
-
-    pub filesystem: WorkspaceFilesystem,
+pub struct FileDiagnostics {
+    pub errors: Vec<DiagnosticMessage>,
+    pub version: Option<i32>,
 }
 
-impl Workspace {
-    pub fn get_document_project(&self, document_path: &PathBuf) -> Option<&Project> {
-        self.projects.get(self.document_projects.get(document_path)?)
+pub struct BuildDiagnostics {
+    pub files: HashMap<PathBuf, FileDiagnostics>,
+}
+
+impl BuildDiagnostics {
+    pub fn add_err(&mut self, err: impl Into<BuildError>, filesystem: &WorkspaceFilesystem) {
+        let err = err.into();
+        let message = err.main();
+
+        if let Some(path) = message_path(&message) {
+            let version = filesystem.file_version(&path);
+
+            self.file_diagnostics(path, version).errors.push(message);
+        }
     }
 
-    fn remove_project_units(&mut self, project_path: &PathBuf) {
-        self.document_projects.retain(|_doc_path, doc_proj_path| doc_proj_path != project_path);
-    }
-
-    fn add_project_units(
+    pub fn file_diagnostics(
         &mut self,
-        project_path: &PathBuf,
-        unit_paths: impl IntoIterator<Item = PathBuf>,
-    ) {
-        eprintln!(
-            "[add_project_units] units in project {}:",
-            project_path.display()
-        );
-
-        for unit_path in unit_paths.into_iter() {
-            eprintln!(" - {}", unit_path.display());
-            self.document_projects.insert(unit_path, project_path.clone());
-        }
+        path: PathBuf,
+        version: Option<i32>,
+    ) -> &mut FileDiagnostics {
+        self.files.entry(path).or_insert_with(|| FileDiagnostics {
+            errors: Vec::new(),
+            version,
+        })
     }
+}
 
-    pub fn remove_project(&mut self, project_path: &PathBuf) {
-        if self.projects.remove(project_path).is_some() {
-            self.remove_project_units(project_path);
+fn message_path(message: &DiagnosticMessage) -> Option<PathBuf> {
+    let label = message.label.as_ref()?;
+    let path = label.span.file.to_path_buf();
 
-            eprintln!("[remove_project] removed {}", project_path.display());
-        }
-    }
-
-    pub fn update_document(&mut self, doc_path: &PathBuf) {
-        let project_path = self.document_projects.get(doc_path).cloned();
-
-        if let Some(project_path) = project_path {
-            let project = self.projects.get_mut(&project_path).unwrap();
-            project.build(&self.filesystem);
-
-            let unit_paths = project.unit_paths();
-            self.remove_project_units(&project_path);
-            self.add_project_units(&project_path, unit_paths);
-        } else {
-            eprintln!("[update_document] creating project {}", doc_path.display());
-
-            // load the current unit as a project
-            // todo: should be able to search for/specify the root project file
-            let mut project = Project::new(doc_path.clone());
-            project.build(&self.filesystem);
-
-            self.add_project_units(&doc_path, project.unit_paths());
-            self.projects.insert(doc_path.clone(), project);
-        }
-    }
-
-    pub fn url_to_path(&self, url: &Url) -> BuildResult<PathBuf> {
-        let Ok(file_path) = url.to_file_path() else {
-            return Err(BuildError::ReadSourceFileFailed {
-                path: PathBuf::from(url.to_string()),
-                msg: "invalid file path".to_string(),
-            });
-        };
-
-        match self.filesystem.canonicalize(&file_path) {
-            Ok(path) => Ok(path),
-
-            Err(err) => Err(BuildError::ReadSourceFileFailed {
-                path: file_path,
-                msg: err.to_string(),
-            }),
-        }
-    }
+    Some(path)
 }
 
 pub struct Project {
@@ -119,7 +75,7 @@ pub struct Project {
 }
 
 impl Project {
-    fn new(main_file: PathBuf) -> Self {
+    pub fn new(main_file: PathBuf) -> Self {
         Project {
             main_file,
 
@@ -132,7 +88,7 @@ impl Project {
         }
     }
 
-    fn build(&mut self, filesystem: &impl Filesystem) {
+    pub fn build(&mut self, filesystem: &WorkspaceFilesystem) -> BuildDiagnostics {
         self.parse_output = None;
         self.module = None;
 
@@ -152,7 +108,11 @@ impl Project {
 
         let mut log = BuildLog::new();
 
-        let result = match parse_units(filesystem, &input, &mut log) {
+        let mut diagnostics = BuildDiagnostics {
+            files: HashMap::new(),
+        };
+
+        match parse_units(filesystem, &input, &mut log) {
             Ok(parsed_output) => {
                 match typecheck(
                     parsed_output.units.iter(),
@@ -161,6 +121,9 @@ impl Project {
                 ) {
                     Ok(module) => {
                         for unit in &module.units {
+                            let version = filesystem.file_version(unit.path.as_ref());
+                            diagnostics.file_diagnostics(unit.path.to_path_buf(), version);
+
                             eprintln!(
                                 "[build] processing unit: {} ({})",
                                 unit.unit.ident,
@@ -182,8 +145,12 @@ impl Project {
 
                     Err(err) => {
                         eprintln!("[build] {} ({})", err.main(), err.span());
+                        diagnostics.add_err(err, filesystem);
 
                         for (unit_path, unit) in &parsed_output.units {
+                            let version = filesystem.file_version(unit_path);
+                            diagnostics.file_diagnostics(unit_path.to_path_buf(), version);
+
                             eprintln!(
                                 "[build] processing unit: {} ({})",
                                 unit.ident,
@@ -206,11 +173,14 @@ impl Project {
             },
 
             Err(BuildError::ParseError(parse_err)) => {
-                eprintln!("[build] {} ({})", parse_err.err.main(), parse_err.span());
+                eprintln!("[build] {} ({})", parse_err.main(), parse_err.span());
+
+                diagnostics.add_err(parse_err, filesystem);
             },
 
             Err(err) => {
                 eprintln!("[build] {}", err.main());
+                diagnostics.add_err(err, filesystem);
             },
         };
 
@@ -224,10 +194,10 @@ impl Project {
             self.definition_map.count_entries()
         );
 
-        result
+        diagnostics
     }
 
-    fn unit_paths(&self) -> Vec<PathBuf> {
+    pub fn unit_paths(&self) -> Vec<PathBuf> {
         let mut paths = Vec::new();
 
         if let Some(parse_output) = &self.parse_output {
@@ -247,15 +217,5 @@ impl Project {
 
     pub fn find_usages(&self, file: &PathBuf, at: Location) -> Option<&LinksEntry> {
         self.definition_map.find_usages(file, at)
-    }
-}
-
-impl Workspace {
-    pub fn new() -> Self {
-        Workspace {
-            filesystem: WorkspaceFilesystem::new(),
-            projects: HashMap::new(),
-            document_projects: HashMap::new(),
-        }
     }
 }

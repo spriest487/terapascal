@@ -4,8 +4,13 @@ use std::path::PathBuf;
 use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::fs::Filesystem;
 
+pub struct WorkspaceFileEntry {
+    source: String,
+    version: i32,
+}
+
 pub struct WorkspaceFilesystem {
-    files: HashMap<PathBuf, String>,
+    files: HashMap<PathBuf, WorkspaceFileEntry>,
     default_fs: DefaultFilesystem,
 }
 
@@ -17,19 +22,27 @@ impl WorkspaceFilesystem {
         }
     }
     
-    pub fn add(&mut self, path: PathBuf, src: String) {
-        self.files.insert(path, src);
+    pub fn add(&mut self, path: PathBuf, source: String, version: i32) {
+        self.files.insert(path, WorkspaceFileEntry {
+            source,
+            version,
+        });
     }
     
     pub fn remove(&mut self, path: &PathBuf) {
         self.files.remove(path);
     }
+    
+    pub fn file_version(&self, path: &PathBuf) -> Option<i32> {
+        let entry = self.files.get(path)?;
+        Some(entry.version)
+    }
 }
 
 impl Filesystem for WorkspaceFilesystem {
     fn read_source(&self, path: &PathBuf) -> std::io::Result<Cow<str>> {
-        if let Some(src) = self.files.get(path) {
-            Ok(Cow::Borrowed(src.as_str()))
+        if let Some(file_entry) = self.files.get(path) {
+            Ok(Cow::Borrowed(file_entry.source.as_str()))
         } else {
             self.default_fs.read_source(path)
         }

@@ -1,13 +1,14 @@
+mod fs;
 mod project;
 mod semantic_tokens;
-mod fs;
+mod util;
+mod workspace;
 
-use crate::project::LinksEntry;
-use crate::project::Workspace;
 use crate::semantic_tokens::semantic_legend;
-use std::path::PathBuf;
-use terapascal_common::span::Location;
-use terapascal_common::span::Span;
+use crate::util::collect_definition_links;
+use crate::util::convert_text_doc_position_params;
+use crate::util::span_range;
+use crate::workspace::Workspace;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result as RpcResult;
 use tower_lsp::lsp_types as lsp;
@@ -42,12 +43,16 @@ use tower_lsp::lsp_types::Url;
 use tower_lsp::lsp_types::WorkDoneProgressOptions;
 use tower_lsp::lsp_types::WorkspaceFoldersServerCapabilities;
 use tower_lsp::lsp_types::WorkspaceServerCapabilities;
+use tower_lsp::lsp_types::DiagnosticSeverity;
+use tower_lsp::Client;
 use tower_lsp::LanguageServer;
 use tower_lsp::LspService;
 use tower_lsp::Server;
 
 struct TerapascalServer {
     workspace: RwLock<Workspace>,
+
+    client: Client,
 }
 
 #[tower_lsp::async_trait]
@@ -83,10 +88,16 @@ impl LanguageServer for TerapascalServer {
             file_operations: None,
         };
 
+        // let diagnostic_opts = DiagnosticOptions {
+        //     inter_file_dependencies: true,
+        //     ..Default::default()
+        // };
+
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(text_document_sync),
+                // diagnostic_provider: Some(DiagnosticServerCapabilities::Options(diagnostic_opts)),
                 document_highlight_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(semantic_token_reg_opts.into()),
                 definition_provider: Some(OneOf::Left(true)),
@@ -98,7 +109,7 @@ impl LanguageServer for TerapascalServer {
     }
 
     async fn initialized(&self, _params: InitializedParams) {
-        eprintln!("initialized")
+        eprintln!("[initialized]")
     }
 
     async fn shutdown(&self) -> RpcResult<()> {
@@ -106,36 +117,23 @@ impl LanguageServer for TerapascalServer {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        eprintln!("[did_open] {}", params.text_document.uri);
+        let doc = params.text_document;
 
-        let mut workspace = self.workspace.write().await;
-        
-        let uri = params.text_document.uri.clone();
-        let Ok(file_path) = workspace.url_to_path(&uri) else {
-            eprintln!("[did_open] bad uri: {uri}");
-            return;
-        };
+        eprintln!("[did_open] {}", doc.uri);
 
-        workspace.filesystem.add(file_path.clone(), params.text_document.text);
-        workspace.update_document(&file_path);
+        self.update_document(doc.uri, doc.text, doc.version).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        eprintln!("[did_change] {}", params.text_document.uri);
+        let doc = params.text_document;
+
+        eprintln!("[did_change] {}", doc.uri);
 
         let Some(change) = params.content_changes.into_iter().next() else {
             return;
         };
 
-        let mut workspace = self.workspace.write().await;
-
-        let Ok(file_path) = workspace.url_to_path(&params.text_document.uri) else {
-            eprintln!("[did_change] bad uri: {}", params.text_document.uri);
-            return;
-        };
-
-        workspace.filesystem.add(file_path.clone(), change.text);
-        workspace.update_document(&file_path);
+        self.update_document(doc.uri, change.text, doc.version).await;
     }
 
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
@@ -151,8 +149,7 @@ impl LanguageServer for TerapascalServer {
             eprintln!("[did_change] bad uri: {}", params.text_document.uri);
             return;
         };
-        
-        workspace.filesystem.remove(&file_path);
+
         workspace.remove_project(&file_path);
     }
 
@@ -170,7 +167,8 @@ impl LanguageServer for TerapascalServer {
 
         let workspace = self.workspace.read().await;
 
-        let Some((file_path, location)) = convert_text_doc_position_params(&workspace, text_pos) else {
+        let Some((file_path, location)) = convert_text_doc_position_params(&workspace, text_pos)
+        else {
             return Ok(None);
         };
 
@@ -212,10 +210,11 @@ impl LanguageServer for TerapascalServer {
             text_pos.position.line + 1,
             text_pos.position.character + 1
         );
-        
+
         let workspace = self.workspace.read().await;
 
-        let Some((file_path, location)) = convert_text_doc_position_params(&workspace, text_pos) else {
+        let Some((file_path, location)) = convert_text_doc_position_params(&workspace, text_pos)
+        else {
             return Ok(None);
         };
 
@@ -242,7 +241,7 @@ impl LanguageServer for TerapascalServer {
                 link.target_range.end.line + 1,
                 link.target_range.end.character + 1,
             );
-            
+
             locations.push(lsp::Location {
                 uri: link.target_uri,
                 range: link.target_range,
@@ -316,78 +315,65 @@ impl LanguageServer for TerapascalServer {
     }
 }
 
+impl TerapascalServer {
+    async fn update_document(&self, file_uri: Url, src: String, version: i32) {
+        let workspace_diagnostics = {
+            let mut workspace = self.workspace.write().await;
+
+            let Ok(file_path) = workspace.url_to_path(&file_uri) else {
+                eprintln!("[update_document] bad uri: {file_uri}");
+                return;
+            };
+
+            workspace.update_document(&file_path, src, version)
+        };
+
+        for (file_path, file_diagnostics) in workspace_diagnostics.files {
+            let Ok(uri) = Url::from_file_path(file_path.as_path()) else {
+                eprintln!(
+                    "[update_document] path not valid as uri: {}",
+                    file_path.display()
+                );
+                continue;
+            };
+
+            let mut diagnostics = Vec::with_capacity(file_diagnostics.errors.len());
+
+            for error in file_diagnostics.errors {
+                let Some(label) = error.label.as_ref() else {
+                    continue;
+                };
+
+                let mut message = error.title;
+                
+                if let Some(label_text) = &label.text {
+                    message.push_str("\n");
+                    message.push_str(label_text);
+                }
+
+                diagnostics.push(lsp::Diagnostic {
+                    range: span_range(&label.span),
+                    message,
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    ..Default::default()
+                });
+            }
+
+            self.client.publish_diagnostics(uri, diagnostics, file_diagnostics.version).await;
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::build(|_client| TerapascalServer {
+    let (service, socket) = LspService::build(|client| TerapascalServer {
         workspace: RwLock::new(Workspace::new()),
+        client,
     })
     .finish();
 
     Server::new(stdin, stdout, socket).serve(service).await;
-}
-
-fn convert_text_doc_position_params(
-    workspace: &Workspace,
-    params: &lsp::TextDocumentPositionParams,
-) -> Option<(PathBuf, Location)> {
-    let uri = &params.text_document.uri;
-
-    let Ok(file_path) = workspace.url_to_path(uri) else {
-        return None;
-    };
-
-    let position = params.position;
-    let location = Location {
-        line: position.line as usize,
-        col: position.character as usize,
-    };
-
-    Some((file_path, location))
-}
-
-fn convert_location(location: Location) -> lsp::Position {
-    lsp::Position {
-        line: location.line as u32,
-        character: location.col as u32,
-    }
-}
-
-fn convert_range(start: Location, end: Location) -> lsp::Range {
-    let mut result = lsp::Range {
-        start: convert_location(start),
-        end: convert_location(end),
-    };
-
-    // end is exclusive not inclusive
-    result.end.character += 1;
-
-    result
-}
-
-fn collect_definition_links(entries: &LinksEntry, include_key: bool) -> Vec<lsp::LocationLink> {
-    let mut links: Vec<_> = entries.links.iter().filter_map(span_to_location_link).collect();
-
-    if include_key {
-        if let Some(key_link) = span_to_location_link(&entries.key) {
-            links.insert(0, key_link);
-        }
-    }
-
-    links
-}
-
-fn span_to_location_link(span: &Span) -> Option<lsp::LocationLink> {
-    let target_uri = Url::from_file_path(span.file.as_ref()).ok()?;
-
-    let range = convert_range(span.start, span.end);
-
-    Some(lsp::LocationLink {
-        target_uri,
-        origin_selection_range: None,
-        target_range: range,
-        target_selection_range: range,
-    })
 }
