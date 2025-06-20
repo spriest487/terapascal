@@ -208,11 +208,21 @@ where
 
     fn add_unit_decl(&mut self, decl: &ast::UnitDecl<A>) {
         match decl {
-            ast::UnitDecl::FunctionDecl { decl } => self.add_func_decl(decl, SEMANTIC_FUNCTION),
-            ast::UnitDecl::FunctionDef { def } => self.add_func_def(def, SEMANTIC_FUNCTION),
+            ast::UnitDecl::FunctionDecl { decl } => {
+                self.add_func_decl(decl, SEMANTIC_FUNCTION)
+            },
+            ast::UnitDecl::FunctionDef { def } => {
+                self.add_func_def(def, SEMANTIC_FUNCTION)
+            },
 
             ast::UnitDecl::Type { decl } => self.add_type_decl(decl),
-            ast::UnitDecl::Uses { .. } => {},
+            ast::UnitDecl::Uses { decl } => {
+                for unit_path in &decl.units {
+                    for part in unit_path.ident.as_slice() {
+                        self.add(&part.span, SEMANTIC_NAMESPACE, "used namespace");
+                    }
+                }
+            }
             ast::UnitDecl::Binding { decl } => self.add_unit_binding(decl),
         }
     }
