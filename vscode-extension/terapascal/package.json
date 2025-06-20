@@ -19,7 +19,8 @@
       "extensions": [
         ".tpas"
       ],
-      "aliases": ["Terapascal", "terapascal"]
+      "aliases": ["Terapascal", "terapascal"],
+      "configuration": "./language-configuration.json"
     }],
     "grammars": [
       {
