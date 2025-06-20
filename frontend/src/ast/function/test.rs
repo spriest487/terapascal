@@ -2,9 +2,10 @@ use super::*;
 use crate::ast::IdentPath;
 use crate::pp::Preprocessor;
 use terapascal_common::CompileOpts;
+use terapascal_common::fs::DefaultFilesystem;
 
 fn try_parse_func_decl(src: &str) -> ParseResult<FunctionDecl> {
-    let test_unit = Preprocessor::new("test", CompileOpts::default())
+    let test_unit = Preprocessor::new(&DefaultFilesystem, "test", CompileOpts::default())
         .preprocess(src)
         .unwrap();
     let tokens = TokenTree::tokenize(test_unit).unwrap();

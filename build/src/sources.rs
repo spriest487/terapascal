@@ -1,36 +1,18 @@
-use crate::error::{BuildError, BuildResult};
+use crate::error::BuildError;
+use crate::error::BuildResult;
 use std::collections::LinkedList;
 use std::env;
 use std::path::Path;
 use std::path::PathBuf;
 use terapascal_common::build_log::BuildLog;
+use terapascal_common::fs::Filesystem;
 use terapascal_common::span::*;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
 use terapascal_frontend::ast::IdentPath;
 
-fn find_in_path(filename: &PathBuf, dir: &Path) -> Option<PathBuf> {
-    let file_path = dir.join(filename);
-
-    if file_path.exists() {
-        file_path.canonicalize().ok()
-    } else {
-        None
-    }
-}
-
-fn find_in_paths(filename: &PathBuf, search_paths: &[PathBuf]) -> Option<PathBuf> {
-    for search_path in search_paths.iter() {
-        if search_path.exists() && search_path.is_dir() {
-            if let Some(result_path) = find_in_path(filename, search_path) {
-                return Some(result_path);
-            }
-        }
-    }
-
-    None
-}
-
-pub struct SourceCollection {
+pub struct SourceCollection<'fs, Fs: Filesystem> {
+    filesystem: &'fs Fs,
+    
     verbose: bool,
 
     source_dirs: Vec<PathBuf>,
@@ -39,8 +21,8 @@ pub struct SourceCollection {
     source_list: LinkedList<PathBuf>,
 }
 
-impl SourceCollection {
-    pub fn new<'a>(search_dirs: &[PathBuf], verbose: bool) -> Result<Self, BuildError> {
+impl<'fs, Fs: Filesystem> SourceCollection<'fs, Fs> {
+    pub fn new(filesystem: &'fs Fs, search_dirs: &[PathBuf], verbose: bool) -> Result<Self, BuildError> {
         let source_dirs = search_dirs
             .iter()
             .filter(|dir| dir.exists())
@@ -62,6 +44,8 @@ impl SourceCollection {
             .collect();
 
         let sources = Self {
+            filesystem,
+
             verbose,
 
             source_dirs,
@@ -76,11 +60,11 @@ impl SourceCollection {
     }
     
     pub fn find_unit(&self, unit_filename: &PathBuf) -> Option<PathBuf> {
-        find_in_paths(unit_filename, &self.source_dirs)
+        self.find_in_paths(unit_filename, &self.source_dirs)
     }
 
     pub fn add(&mut self, unit_filename: &PathBuf, span: Option<Span>, log: &mut BuildLog) -> Result<PathBuf, BuildError> {
-        match find_in_paths(unit_filename, &self.source_dirs) {
+        match self.find_in_paths(unit_filename, &self.source_dirs) {
             Some(path) => {
                 if !self.source_list.contains(&path) {
                     if self.verbose {
@@ -121,7 +105,7 @@ impl SourceCollection {
                 eprintln!("searching unit dir: {}", unit_dir.display());
             }
 
-            if let Some(used_path) = find_in_path(filename, unit_dir) {
+            if let Some(used_path) = self.find_in_path(filename, unit_dir) {
                 if self.verbose {
                     log.trace(format!("added source path {} for unit {}", used_path.display(), used_unit));
                 }
@@ -136,5 +120,29 @@ impl SourceCollection {
 
     pub fn next(&mut self) -> Option<PathBuf> {
         self.source_list.pop_front()
+    }
+
+    fn find_in_path(&self, filename: &PathBuf, dir: &Path) -> Option<PathBuf> {
+        let file_path = dir.join(filename);
+
+        if self.filesystem.exists(&file_path) {
+            self.filesystem.canonicalize(&file_path).ok()
+        } else {
+            None
+        }
+    }
+
+    fn find_in_paths(&self, filename: &PathBuf, search_paths: &[PathBuf]) -> Option<PathBuf> {
+        for search_path in search_paths.iter() {
+            if !self.filesystem.exists(search_path) || !self.filesystem.is_dir(search_path) {
+                continue;
+            }
+
+            if let Some(result_path) = self.find_in_path(filename, search_path) {
+                return Some(result_path);
+            }
+        }
+
+        None
     }
 }

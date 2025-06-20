@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
-use terapascal_common::read_source_file;
+use terapascal_common::fs::Filesystem;
 use terapascal_common::CompileOpts;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
 use terapascal_frontend::ast;
@@ -62,8 +62,8 @@ pub struct ParseOutput {
     pub units: LinkedHashMap<PathBuf, ast::Unit>,
 }
 
-pub fn create_source_collection(input: &BuildInput, log: &mut BuildLog) -> BuildResult<SourceCollection> {
-    let mut sources = SourceCollection::new(&input.search_dirs, input.compile_opts.verbose)?;
+pub fn create_source_collection<'fs, Fs: Filesystem>(fs: &'fs Fs, input: &BuildInput, log: &mut BuildLog) -> BuildResult<SourceCollection<'fs, Fs>> {
+    let mut sources = SourceCollection::new(fs, &input.search_dirs, input.compile_opts.verbose)?;
 
     // add extra referenced units
     for unit_arg in input.units.iter() {
@@ -81,22 +81,22 @@ pub fn create_source_collection(input: &BuildInput, log: &mut BuildLog) -> Build
     Ok(sources)
 }
 
-pub fn preprocess_project(input: &BuildInput, log: &mut BuildLog) -> BuildResult<Vec<PreprocessedUnit>> {
-    let mut sources = create_source_collection(input, log)?;
+pub fn preprocess_project(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog) -> BuildResult<Vec<PreprocessedUnit>> {
+    let mut sources = create_source_collection(fs, input, log)?;
 
     let mut pp_units = Vec::new();
     while let Some(source_path) = sources.next() {
-        let pp_unit = preprocess(&source_path, input.compile_opts.clone())?;
+        let pp_unit = preprocess(fs, &source_path, input.compile_opts.clone())?;
         pp_units.push(pp_unit);
     }
     
     Ok(pp_units)
 }
 
-pub fn parse_units(input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseOutput> {
+pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseOutput> {
     let verbose = input.compile_opts.verbose;
     
-    let mut sources = create_source_collection(input, log)?;
+    let mut sources = create_source_collection(fs, input, log)?;
 
     // auto-add system units if we're going beyond parsing
     let include_system = input.output_stage >= BuildStage::Typecheck;
@@ -153,7 +153,7 @@ pub fn parse_units(input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseO
                     log.trace(format!("parsing unit @ `{}`", unit_filename.display()));
                 }
 
-                let pp_unit = preprocess(&unit_filename, input.compile_opts.clone())?;
+                let pp_unit = preprocess(fs, &unit_filename, input.compile_opts.clone())?;
 
                 for warning in pp_unit.warnings.clone() {
                     log.warn(warning);
@@ -321,10 +321,10 @@ fn add_unit_path(
     }
 }
 
-pub fn build(input: BuildInput) -> BuildOutput {
+pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
     let mut log = BuildLog::new();
     
-    let artifact = build_with_log(input, &mut log);
+    let artifact = build_with_log(fs, input, &mut log);
     
     BuildOutput {
         artifact,
@@ -332,15 +332,15 @@ pub fn build(input: BuildInput) -> BuildOutput {
     }
 }
 
-fn build_with_log(input: BuildInput, log: &mut BuildLog) -> BuildResult<BuildArtifact> {
+fn build_with_log(fs: &impl Filesystem, input: BuildInput, log: &mut BuildLog) -> BuildResult<BuildArtifact> {
     // if we just want preprocessor output, no unit refs need to be looked up, just process and
     // print the units provided on the cli in that order
     if input.output_stage == BuildStage::Preprocess {
-        let units = preprocess_project(&input, log)?;
+        let units = preprocess_project(fs, &input, log)?;
         return Ok(BuildArtifact::PreprocessedText(units));
     }
 
-    let parse_output = parse_units(&input, log)?;
+    let parse_output = parse_units(fs, &input, log)?;
 
     if input.output_stage == BuildStage::Parse {
         return Ok(BuildArtifact::ParsedUnits(parse_output));
@@ -363,12 +363,12 @@ pub fn bincode_config() -> bincode::config::Configuration {
     bincode::config::Configuration::default()
 }
 
-fn preprocess(filename: &PathBuf, opts: CompileOpts) -> Result<PreprocessedUnit, BuildError> {
-    let src = read_source_file(filename).map_err(|err| BuildError::ReadSourceFileFailed {
+fn preprocess(fs: &impl Filesystem, filename: &PathBuf, opts: CompileOpts) -> Result<PreprocessedUnit, BuildError> {
+    let src = fs.read_source(filename).map_err(|err| BuildError::ReadSourceFileFailed {
         path: filename.to_path_buf(),
         msg: err.to_string(),
     })?;
 
-    let preprocessed = terapascal_frontend::preprocess(filename, &src, opts)?;
+    let preprocessed = terapascal_frontend::preprocess(fs, filename, &src, opts)?;
     Ok(preprocessed)
 }

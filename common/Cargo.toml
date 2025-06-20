@@ -5,7 +5,6 @@ authors = ["spriest487 <spriest487@googlemail.com>"]
 edition = "2021"
 
 [dependencies]
-backtrace = "0.3.73"
-encoding_rs = "0.8.34"
-serde = { version = "1.0.210", features = ["derive", "rc"] }
-derivative = "2.2.0"
+backtrace = "0.3.75"
+encoding_rs = "0.8.35"
+serde = { version = "1.0.219", features = ["derive", "rc"] }

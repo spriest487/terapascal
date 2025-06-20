@@ -39,15 +39,17 @@ use terapascal_common::build_log::BuildLog;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::CompileOpts;
+use terapascal_common::fs::Filesystem;
 use terapascal_common::TracedError;
 use terapascal_ir as ir;
 
 pub fn preprocess(
+    fs: &impl Filesystem,
     filename: impl Into<PathBuf>,
     src: &str,
     opts: CompileOpts
 ) -> Result<PreprocessedUnit, PreprocessorError> {
-    let pp = pp::Preprocessor::new(filename, opts);
+    let pp = pp::Preprocessor::new(fs, filename, opts);
     pp.preprocess(&src)
 }
 

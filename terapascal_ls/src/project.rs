@@ -20,6 +20,7 @@ use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
 use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types::SemanticToken;
+use terapascal_common::fs::DefaultFilesystem;
 
 pub struct ProjectCollection {
     projects: HashMap<PathBuf, Project>,
@@ -126,8 +127,11 @@ impl Project {
         };
 
         let mut log = BuildLog::new();
+        
+        // TODO
+        let fs = DefaultFilesystem;
 
-        let result = match parse_units(&input, &mut log) {
+        let result = match parse_units(&fs, &input, &mut log) {
             Ok(parsed_output) => {
                 match typecheck(
                     parsed_output.units.iter(),

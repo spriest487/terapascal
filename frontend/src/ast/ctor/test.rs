@@ -2,10 +2,11 @@ use crate::ast::{Expr, ObjectCtor};
 use crate::TokenStream;
 use terapascal_common::span::Span;
 use terapascal_common::CompileOpts;
+use terapascal_common::fs::DefaultFilesystem;
 
 fn expr_from_src(src: &str) -> Expr {
     let opts = CompileOpts::default();
-    let unit = crate::preprocess("test", src, opts).unwrap();
+    let unit = crate::preprocess(&DefaultFilesystem, "test", src, opts).unwrap();
     let tokens = crate::tokenize(unit).unwrap();
     let span = Span::zero("test");
 
@@ -20,8 +21,7 @@ fn expr_from_src(src: &str) -> Expr {
 fn to_ctor(expr: Expr) -> ObjectCtor {
     match expr {
         Expr::ObjectCtor(ctor) => *ctor,
-        Expr::Call(call) => call.try_into_func_call()
-            .expect("expected to parse as a function call")
+        Expr::Call(call) => call
             .try_into_empty_object_ctor()
             .expect("function call must be convertible to a ctor"),
         invalid => panic!("parsed invalid non-ctor expression: {invalid:?}"),

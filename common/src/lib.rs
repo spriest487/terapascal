@@ -1,22 +1,17 @@
 pub mod source_map;
 pub mod span;
 pub mod build_log;
+pub mod fs;
 
 use crate::span::*;
 pub use backtrace::Backtrace;
-use encoding_rs::Encoding;
-use encoding_rs::UTF_8;
 use std::cmp::Ordering;
 use std::collections::hash_map::HashMap;
 use std::collections::HashSet;
 use std::env;
 use std::fmt;
-use std::fs::File;
-use std::io;
-use std::io::Read;
 use std::ops::Deref;
 use std::path::Path;
-use std::path::PathBuf;
 
 pub const IR_LIB_EXT: &str = "lib";
 pub const SRC_FILE_DEFAULT_EXT: &str = "tpas";
@@ -284,17 +279,4 @@ pub fn path_relative_to_cwd(path: &Path) -> &Path {
         .and_then(|cwd| cwd.canonicalize().ok())
         .and_then(|cwd| path.strip_prefix(cwd).ok())
         .unwrap_or(path)
-}
-
-pub fn read_source_file(filename: &PathBuf) -> io::Result<String> {
-    let mut file = File::open(filename)?;
-
-    let mut file_buf = Vec::new();
-    file.read_to_end(&mut file_buf)?;
-
-    let (encoding, _bom_len) = Encoding::for_bom(&file_buf).unwrap_or((UTF_8, 3));
-
-    let (src_str, _replaced) = encoding.decode_with_bom_removal(&file_buf);
-
-    Ok(src_str.to_string())
 }

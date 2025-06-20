@@ -6,7 +6,7 @@ use crate::pp::directive::DirectiveParser;
 use crate::pp::error::PreprocessorError;
 use std::path::PathBuf;
 use std::sync::Arc;
-use terapascal_common::read_source_file;
+use terapascal_common::fs::Filesystem;
 use terapascal_common::source_map::SourceMap;
 use terapascal_common::source_map::SourceMapBuilder;
 use terapascal_common::source_map::SourceMapEntry;
@@ -19,7 +19,9 @@ struct SymbolCondition {
     start_line: usize,
 }
 
-pub struct Preprocessor {
+pub struct Preprocessor<'fs, Fs: Filesystem> {
+    filesystem: &'fs Fs,
+    
     directive_parser: DirectiveParser,
 
     condition_stack: Vec<SymbolCondition>,
@@ -50,7 +52,7 @@ struct CommentBlock {
 }
 
 #[derive(Clone, Debug)]
-pub struct PreprocessedUnit {
+pub struct PreprocessedUnit {    
     pub filename: Arc<PathBuf>,
     pub source: String,
 
@@ -61,10 +63,12 @@ pub struct PreprocessedUnit {
     pub warnings: Vec<PreprocessorError>,
 }
 
-impl Preprocessor {
-    pub fn new(filename: impl Into<PathBuf>, opts: CompileOpts) -> Self {
+impl<'fs, Fs: Filesystem> Preprocessor<'fs, Fs> {
+    pub fn new(fs: &'fs Fs, filename: impl Into<PathBuf>, opts: CompileOpts) -> Self {
         let filename = Arc::new(filename.into());
         Preprocessor {
+            filesystem: fs,
+
             filename: filename.clone(),
 
             directive_parser: DirectiveParser::new(),
@@ -281,7 +285,8 @@ impl Preprocessor {
         Ok(())
     }
 
-    fn process_directive(&mut self,
+    fn process_directive(
+        &mut self,
         comment_block: CommentBlock,
         current_col: usize,
         output: &mut String
@@ -384,14 +389,15 @@ impl Preprocessor {
                         None => PathBuf::from(&filename),
                     };
 
-                    let include_src = read_source_file(&full_path)
+                    let include_src = self.filesystem
+                        .read_source(&full_path)
                         .map_err(|err| PreprocessorError::IncludeError {
                             filename,
                             err: err.to_string(),
                             at: directive_src_span.clone(),
                         })?;
 
-                    self.include_file(full_path, include_src, output)?;
+                    self.include_file(full_path, include_src.as_ref(), output)?;
                 }
 
                 None => {
@@ -416,9 +422,9 @@ impl Preprocessor {
         Ok(())
     }
 
-    fn include_file(&mut self, full_path: PathBuf, include_src: String, output: &mut String) -> Result<(), PreprocessorError> {
-        let pp = Preprocessor::new(full_path, self.opts.clone());
-        let include_output = pp.preprocess(&include_src)?;
+    fn include_file(&mut self, full_path: PathBuf, include_src: &str, output: &mut String) -> Result<(), PreprocessorError> {
+        let pp = Preprocessor::new(self.filesystem, full_path, self.opts.clone());
+        let include_output = pp.preprocess(include_src)?;
 
         self.warnings.extend(include_output.warnings);
 

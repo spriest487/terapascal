@@ -5,10 +5,11 @@ use crate::pp::Preprocessor;
 use crate::token_tree::TokenTree;
 use crate::Operator;
 use terapascal_common::CompileOpts;
+use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::TracedError;
 
 fn tokenize(src: &str) -> TokenStream {
-    let test_unit = Preprocessor::new("test", CompileOpts::default())
+    let test_unit = Preprocessor::new(&DefaultFilesystem, "test", CompileOpts::default())
         .preprocess(src)
         .unwrap();
     let tokens = TokenTree::tokenize(test_unit).unwrap();
@@ -85,32 +86,30 @@ fn invocation_with_empty_type_args_is_error() {
 #[test]
 fn parse_invocation_with_type_args() {
     match parse_expr("A[B, C]()") {
-        Expr::Call(call) => match call.as_ref() {
-            Call::Function(func_call) => {
-                let target_ident = func_call.target.as_ident().unwrap_or_else(|| {
-                    panic!("parsed func call should have ident as the call target");
-                });
-                assert_eq!(target_ident.name.as_str(), "A");
+        Expr::Call(call) => {
+            let target_ident = call.target.as_ident().unwrap_or_else(|| {
+                panic!("parsed func call should have ident as the call target");
+            });
+            assert_eq!(target_ident.name.as_str(), "A");
 
-                let type_args = func_call.type_args.as_ref().unwrap_or_else(|| {
-                    panic!("parsed func call should have type args")
-                });
+            let type_args = call.type_args.as_ref().unwrap_or_else(|| {
+                panic!("parsed func call should have type args")
+            });
 
-                let expect_args = [ "B", "C" ];
-                assert_eq!(expect_args.len(), type_args.items.len());
+            let expect_args = [ "B", "C" ];
+            assert_eq!(expect_args.len(), type_args.items.len());
 
-                for (&expected, actual) in expect_args.iter().zip(type_args.items.iter()) {
-                    match actual {
-                        TypeName::Ident(IdentTypeName { ident, .. }) => {
-                            assert_eq!(None, ident.parent());
-                            assert_eq!(expected, ident.last().name.as_str());
-                        }
-
-                        invalid => panic!("expected all args to be idents, got {:#?}", invalid)
+            for (&expected, actual) in expect_args.iter().zip(type_args.items.iter()) {
+                match actual {
+                    TypeName::Ident(IdentTypeName { ident, .. }) => {
+                        assert_eq!(None, ident.parent());
+                        assert_eq!(expected, ident.last().name.as_str());
                     }
+
+                    invalid => panic!("expected all args to be idents, got {:#?}", invalid)
                 }
-            },
-        },
+            }
+        }
         invalid => panic!("expected call, got {:#?}", invalid)
     }
 }

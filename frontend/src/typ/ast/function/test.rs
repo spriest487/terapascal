@@ -48,7 +48,6 @@ fn make_ty_param_of(name: &str, constraint: Type) -> TypeParam {
             span: name.span.clone(),
             name,
             is_ty: TypeName::inferred(constraint),
-            is_ty_span: None,
             is_kw_span: None,
         }),
         span: builtin_span(),
@@ -102,15 +101,15 @@ fn make_decl(
             .into_iter()
             .enumerate()
             .map(|(pos, ty)| FunctionParam {
-                ident: test_ident(&format!("arg{}", pos)),
+                name: Arc::new(format!("arg{}", pos)),
+                is_implicit_self: false,
                 ty,
                 ty_span: None,
                 modifier: None,
-                name_span: test_span.clone(),
+                name_span: None,
             })
             .collect(),
-        result_ty: return_ty,
-        result_ty_span: None,
+        result_ty: TypeName::inferred(return_ty),
         mods: Vec::new(),
         span: test_span.clone(),
         where_clause,
@@ -130,7 +129,7 @@ fn specialized_func_decl_has_specialized_return_ty() {
     let specialized = specialize_func_decl(&decl, &args, &ctx)
         .unwrap();
     
-    assert_eq!(Type::Primitive(Primitive::Int32), specialized.result_ty);
+    assert_eq!(Type::Primitive(Primitive::Int32), *specialized.result_ty.ty());
 }
 
 #[test]

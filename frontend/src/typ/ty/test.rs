@@ -1,8 +1,6 @@
 use crate::ast;
 use crate::typ;
-use crate::typ::ast::Call;
-use crate::typ::ast::Call;
-use crate::typ::ast::Stmt;
+use crate::typ::ast::{Call, Stmt};
 use crate::typ::ast::StructDecl;
 use crate::typ::context::*;
 use crate::typ::ty::*;
@@ -205,7 +203,7 @@ fn specialized_class_has_correct_method_types_with_method_ty_params() {
     assert_eq!(self_ty, methods[0].func_decl.params[0].ty);
     assert_eq!(INT32, methods[0].func_decl.params[1].ty);
     assert_eq!(BYTE, methods[0].func_decl.params[2].ty);
-    assert_eq!(generic_u, methods[0].func_decl.result_ty);
+    assert_eq!(generic_u, *methods[0].func_decl.result_ty.ty());
 }
 
 #[test]
@@ -348,7 +346,6 @@ fn get_stmt(module_unit: &ModuleUnit, init_pos: usize) -> &Stmt {
 fn get_func_call(module_unit: &ModuleUnit, init_pos: usize) -> &Call {
     get_stmt(module_unit, init_pos)
         .as_call()
-        .and_then(Call::as_func_call)
         .unwrap_or_else(|| {
             panic!("expected unit to have a function call at position {} in its init block", init_pos)
         })

@@ -34,6 +34,7 @@ use terapascal_common::build_log::BuildLogEntry;
 use terapascal_common::span::*;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
@@ -88,7 +89,7 @@ fn compile(args: &Args) -> Result<(), RunError> {
         units,
     };
     
-    let output = build(input);
+    let output = build(&DefaultFilesystem, input);
     
     handle_output(output, args)
 }

@@ -1485,12 +1485,10 @@ name = "terapascal-build"
 version = "0.1.0"
 dependencies = [
  "bincode",
- "codespan",
  "linked-hash-map",
  "terapascal-backend-c",
  "terapascal-common",
  "terapascal-frontend",
- "terapascal-ir",
  "topological-sort",
 ]
 
@@ -1499,7 +1497,6 @@ name = "terapascal-common"
 version = "0.1.0"
 dependencies = [
  "backtrace",
- "derivative",
  "encoding_rs",
  "serde",
 ]
@@ -1525,7 +1522,6 @@ dependencies = [
  "linked-hash-map",
  "serde",
  "terapascal-common",
- "terapascal-frontend",
  "topological-sort",
 ]
 

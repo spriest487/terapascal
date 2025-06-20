@@ -6,14 +6,15 @@ use codespan_reporting::files::Error as FileError;
 use codespan_reporting::files::Files;
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::termcolor;
-use terapascal_common::read_source_file;
-use terapascal_common::DiagnosticMessage;
-use terapascal_common::DiagnosticOutput;
-use terapascal_common::path_relative_to_cwd;
-use terapascal_common::DiagnosticLabel;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
+use terapascal_common::fs::DefaultFilesystem;
+use terapascal_common::fs::Filesystem;
+use terapascal_common::path_relative_to_cwd;
+use terapascal_common::DiagnosticLabel;
+use terapascal_common::DiagnosticMessage;
+use terapascal_common::DiagnosticOutput;
 
 type CodeMap = SimpleFiles<String, String>;
 
@@ -55,9 +56,9 @@ fn label_from_source_file<'a>(
     let file_id = match file_ids.get(&nice_filename) {
         Some(file_id) => *file_id,
         None => {
-            let src = read_source_file(label.span.file.as_ref())?;
+            let src = DefaultFilesystem.read_source(label.span.file.as_ref())?;
 
-            let file_id = code_map.add(nice_filename.display().to_string(), src);
+            let file_id = code_map.add(nice_filename.display().to_string(), src.into_owned());
             file_ids.insert(nice_filename, file_id);
             file_id
         }

@@ -2,7 +2,7 @@ use super::*;
 use crate::ast::expression::test::parse_expr;
 use crate::ast::TypeNamePatternKind;
 
-fn parse_if_cond(src: &str) -> IfCond<Span, Expr<Span>> {
+fn parse_if_cond(src: &str) -> IfCond<Expr<Span>> {
     match parse_expr(src) {
         Expr::IfCond(if_cond) => *if_cond,
         expr => panic!("expected expr to be an if condition, got: {:?}", expr),

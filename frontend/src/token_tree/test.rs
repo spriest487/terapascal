@@ -9,12 +9,13 @@ use std::sync::Arc;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::CompileOpts;
+use terapascal_common::fs::DefaultFilesystem;
 
 fn tokenize(s: &str, case_sensitive: bool) -> Vec<TokenTree> {
     let mut opts = CompileOpts::default();
     opts.case_sensitive = case_sensitive;
 
-    let test_unit = Preprocessor::new("test", opts)
+    let test_unit = Preprocessor::new(&DefaultFilesystem, "test", opts)
         .preprocess(s)
         .unwrap();
 

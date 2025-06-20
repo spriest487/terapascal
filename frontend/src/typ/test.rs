@@ -6,11 +6,11 @@ use crate::typ::ModuleUnit;
 use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeResult;
-use terapascal_common::read_source_file;
 use std::collections::HashMap;
 use std::iter;
 use std::path::PathBuf;
 use terapascal_common::build_log::BuildLog;
+use terapascal_common::fs::{DefaultFilesystem, Filesystem};
 use terapascal_common::span::Spanned;
 
 const INT32: Type = Type::Primitive(Primitive::Int32);
@@ -32,7 +32,9 @@ where
 
     // always include the system unit from the configure unit path
     let unit_path = PathBuf::from(env!("TERAPASCAL_UNITS"));
-    let system_src = read_source_file(&unit_path.join("System.tpas")).unwrap();
+    let system_src = DefaultFilesystem.read_source(&unit_path.join("System.tpas"))
+        .unwrap()
+        .into_owned();
 
     let unit_srcs = iter::once(("System", system_src)).chain(
         unit_srcs
