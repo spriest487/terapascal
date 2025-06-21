@@ -59,6 +59,7 @@ pub(super) fn resolve_ops_by_precedence(
     if parts.len() == 1 {
         return Ok(match parts.into_iter().next().unwrap() {
             CompoundExpressionPart::Operand(operand) => operand,
+
             CompoundExpressionPart::Operator(op_part) => {
                 let err = ParseError::UnexpectedOperator {
                     operator: op_part.span(),

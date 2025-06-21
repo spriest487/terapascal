@@ -6,7 +6,7 @@ use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::pp::Preprocessor;
 use crate::TokenTree;
-use terapascal_common::span::Span;
+use terapascal_common::span::{Span, Spanned};
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticOutput;

@@ -40,6 +40,7 @@ pub enum ParseError {
     InvalidUnitFilename(Span),
     
     UnexpectedToken(Box<TokenTree>, Option<Matcher>),
+    UnexpectedTokens(Span, Option<Matcher>),
     UnexpectedEOF(Matcher, Span),
     EmptyOperand { operator: Span, before: bool },
     UnexpectedOperator { operator: Span },
@@ -122,9 +123,11 @@ impl Spanned for ParseError {
         match self {
             ParseError::InvalidUnitFilename(span) => span,
             ParseError::UnexpectedToken(tt, _) => match tt.as_ref() {
+                TokenTree::Delimited(group) if group.inner.is_empty() => &group.span,
                 TokenTree::Delimited(group) => group.open.span(),
                 _ => tt.span(),
             },
+            ParseError::UnexpectedTokens(span, _) => span,
             ParseError::UnexpectedEOF(_, tt) => tt.span(),
             ParseError::EmptyOperand { operator, .. } => operator.span(),
             ParseError::UnexpectedOperator { operator } => operator.span(),
@@ -157,6 +160,7 @@ impl fmt::Display for ParseError {
             ParseError::InvalidUnitFilename(..) => write!(f, "Invalid unit filename"),
 
             ParseError::UnexpectedToken(..) => write!(f, "Unexpected token"),
+            ParseError::UnexpectedTokens(..) => write!(f, "Unexpected tokens"),
             ParseError::UnexpectedEOF(..) => write!(f, "Unexpected end of sequence"),
             ParseError::EmptyOperand { .. } => write!(f, "Empty operand"),
             ParseError::UnexpectedOperator { .. } => write!(f, "Unexpected operator"),
@@ -203,6 +207,14 @@ impl DiagnosticOutput for ParseError {
             }
 
             ParseError::UnexpectedToken(tt, None) => Some(format!("unexpected {}", tt)),
+
+            ParseError::UnexpectedTokens(_, Some(expected)) => {
+                Some(format!("expected {}", expected))
+            }
+
+            ParseError::UnexpectedTokens(_, None) => {
+                None
+            }
 
             ParseError::UnexpectedEOF(expected, _tt) => {
                 Some(format!("expected {} but reached end of sequence", expected))

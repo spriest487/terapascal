@@ -221,7 +221,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
             };
 
             if !more {
-                break {
+                let expr = {
                     if self.parts.is_empty() {
                         let expected = Matcher::ExprOperandStart;
                         return Err(TracedError::trace(match self.tokens.look_ahead().next() {
@@ -235,8 +235,10 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
                         }));
                     }
 
-                    resolve_ops_by_precedence(self.parts)
+                    resolve_ops_by_precedence(self.parts)?
                 };
+                
+                break Ok(expr);
             }
         }
     }

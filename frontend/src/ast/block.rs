@@ -169,8 +169,8 @@ fn parse_block_stmts_agg(
 ) -> ParseResult<Block> {
     let mut errors = Vec::new();
 
-    'parse_stmts: loop {
-        if block.output.is_some() || tokens.look_ahead().next().is_none() {
+    loop {
+        if tokens.look_ahead().next().is_none() {
             break;
         }
         
@@ -180,6 +180,12 @@ fn parse_block_stmts_agg(
             }
             
             Ok(BlockStatementParsedItem::OutputExpr(expr)) => {
+                if let Some(old_output) = block.output.take() {
+                    let illegal = IllegalStatement(Box::new(old_output));
+                    
+                    errors.push(TracedError::from(ParseError::IsExpr(illegal)));
+                }
+                
                 block.output = Some(expr);
             }
             
@@ -189,21 +195,35 @@ fn parse_block_stmts_agg(
         }
 
         // continue parsing after the next semicolon, if there is one
-        loop {
-            match tokens.look_ahead().next() {
+        let mut unexpected_after_stmt = Vec::new();
+       
+        let more = loop {
+            match tokens.look_ahead().next().cloned() {
                 Some(tt) => {
-                    let at_sep = tt.is_separator(Separator::Semicolon);
                     tokens.advance(1);
 
-                    if at_sep {
-                        continue 'parse_stmts;
+                    if tt.is_separator(Separator::Semicolon) {
+                        break true;
                     }
+                    
+                    unexpected_after_stmt.push(tt);
                 }
 
                 None => {
-                    break 'parse_stmts
+                    break false;
                 },
-            }
+            };
+        };
+
+        if let Some(unexpected_span) = Span::range(&unexpected_after_stmt) {
+            errors.push(TracedError::from(ParseError::UnexpectedTokens(
+                unexpected_span,
+                Some(Matcher::Separator(Separator::Semicolon))
+            )));
+        }
+        
+        if !more {
+            break;
         }
     }
 

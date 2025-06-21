@@ -12,7 +12,7 @@ use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use terapascal_common::span::Span;
-use terapascal_common::DiagnosticOutput;
+use terapascal_common::{DiagnosticOutput, Severity};
 
 mod util;
 
@@ -103,7 +103,7 @@ fn method_call_validates_too_many_args() {
 
         Ok(..) => panic!("expected invalid args error but succeeded"),
 
-        Err(other) => panic!("expected invalid args error, got: {}", other.main()),
+        Err(other) => panic!("expected invalid args error, got: {}", other.main(Severity::Error)),
     }
 }
 
@@ -136,7 +136,7 @@ fn method_call_validates_too_few_args() {
 
         Ok(..) => panic!("expected invalid args error but succeeded"),
 
-        Err(other) => panic!("expected invalid args error, got: {}", other.main()),
+        Err(other) => panic!("expected invalid args error, got: {}", other.main(Severity::Error)),
     }
 }
 

@@ -178,8 +178,8 @@ pub enum TokenTree {
     Delimited(DelimitedGroup),
 }
 
-impl TokenTree {
-    pub fn span(&self) -> &Span {
+impl Spanned for TokenTree {
+    fn span(&self) -> &Span {
         match self {
             TokenTree::Ident(ident) => &ident.span,
             TokenTree::IntNumber { span, .. } => span,
@@ -191,7 +191,9 @@ impl TokenTree {
             TokenTree::Delimited(DelimitedGroup { span, .. }) => span,
         }
     }
+}
 
+impl TokenTree {
     pub fn into_span(self) -> Span {
         match self {
             TokenTree::Ident(ident) => ident.span,
