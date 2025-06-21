@@ -19,7 +19,7 @@
         [ "'", "'" ]
     ],
     "indentationRules": {
-        "increaseIndentPattern": "\\b(begin|match|case)\\b",
+        "increaseIndentPattern": "(\\b(begin|match|case|then|else|do)\\b)|(=\\s+(class|record|interface|variant))",
         "decreaseIndentPattern": "end"
     }
   }
