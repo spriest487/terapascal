@@ -331,7 +331,7 @@ impl NameError {
 
                 let existing_label = DiagnosticLabel::new(existing.span().clone());
 
-                let message = DiagnosticMessage::new(title)
+                let message = DiagnosticMessage::info(title)
                     .with_label(match conflict {
                         DeclConflict::Visibility { prev: Some(prev), .. } => {
                             existing_label.with_text(format!("with visibility: {prev}"))
@@ -361,14 +361,10 @@ impl NameError {
                     return Vec::new()
                 }
 
-                vec![DiagnosticMessage {
-                    title: format!("`{}` previously defined here", ident),
-                    label: Some(DiagnosticLabel {
-                        text: None,
-                        span: existing.span().clone(),
-                    }),
-                    notes: Vec::new(),
-                }]
+                vec![
+                    DiagnosticMessage::info(format!("`{}` previously defined here", ident))
+                        .with_label(DiagnosticLabel::new(existing.span().clone()))
+                ]
             },
 
             NameError::AlreadyImplemented {
@@ -376,48 +372,36 @@ impl NameError {
                 method,
                 existing,
                 ..
-            } => vec![DiagnosticMessage {
-                title: format!("`{}.{}` previously implemented here", iface, method),
-                label: Some(DiagnosticLabel {
-                    text: None,
-                    span: existing.clone(),
-                }),
-                notes: Vec::new(),
-            }],
+            } => {
+                let title = format!("`{}.{}` previously implemented here", iface, method);
+
+                vec![
+                    DiagnosticMessage::info(title)
+                        .with_label(DiagnosticLabel::new(existing.clone()))
+                ]
+            },
 
             NameError::Ambiguous { ident, options } => {
                 let mut see_also: Vec<_> = options
                     .iter()
-                    .map(|option| DiagnosticMessage {
-                        title: format!("`{}` could refer to `{}`", ident, option.join(".")),
-                        label: Some(DiagnosticLabel {
-                            text: None,
-                            span: option.last().span().clone(),
-                        }),
-                        notes: Vec::new(),
+                    .map(|option| {
+                        let title = format!("`{}` could refer to `{}`", ident, option.join("."));
+                        let label_span = option.last().span().clone();
+
+                        DiagnosticMessage::info(title)
+                            .with_label(DiagnosticLabel::new(label_span))
                     })
                     .collect();
+
                 see_also.sort();
                 see_also
             }
 
             NameError::DefDeclMismatch { def, decl, path: ident } => vec![
-                DiagnosticMessage {
-                    title: format!("Previous declaration of `{}`", ident),
-                    label: Some(DiagnosticLabel {
-                        text: None,
-                        span: decl.clone(),
-                    }),
-                    notes: Vec::new(),
-                },
-                DiagnosticMessage {
-                    title: format!("Conflicting definition of `{}`", ident),
-                    label: Some(DiagnosticLabel {
-                        text: None,
-                        span: def.clone(),
-                    }),
-                    notes: Vec::new(),
-                },
+                DiagnosticMessage::info(format!("Previous declaration of `{}`", ident))
+                    .with_label(DiagnosticLabel::new(decl.clone())),
+                DiagnosticMessage::info(format!("Conflicting definition of `{}`", ident))
+                    .with_label(DiagnosticLabel::new(def.clone())),
             ],
 
             _ => Vec::new(),

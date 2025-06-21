@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_common::Backtrace;
+use terapascal_common::{Backtrace, Severity};
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
@@ -70,16 +70,16 @@ impl From<PreprocessorError> for BuildError {
 }
 
 impl DiagnosticOutput for BuildError {
-    fn main(&self) -> DiagnosticMessage {
+    fn main(&self, severity: Severity) -> DiagnosticMessage {
         match self {
-            Self::TokenizeError(err) => err.err.main(),
-            Self::ParseError(err) => err.err.main(),
-            Self::TypecheckError(err) => err.main(),
-            Self::PreprocessorError(err) => err.main(),
+            Self::TokenizeError(err) => err.err.main(severity),
+            Self::ParseError(err) => err.err.main(severity),
+            Self::TypecheckError(err) => err.main(severity),
+            Self::PreprocessorError(err) => err.main(severity),
 
             Self::FileNotFound(path, span) => {
                 let title = format!("file not found: {}", path.display());
-                let message = DiagnosticMessage::new(title);
+                let message = DiagnosticMessage::new(severity, title);
 
                 match span {
                     Some(span) => message.with_label(DiagnosticLabel::new(span.clone())),
@@ -89,7 +89,7 @@ impl DiagnosticOutput for BuildError {
 
             Self::ReadSourceFileFailed { path, .. } => {
                 let title = format!("failed to read source file {}", path.display());
-                DiagnosticMessage::new(title)
+                DiagnosticMessage::new(severity, title)
             },
 
             Self::DuplicateUnit { unit_ident, new_path, existing_path } => {
@@ -100,20 +100,20 @@ impl DiagnosticOutput for BuildError {
                     existing_path.display()
                 );
 
-                DiagnosticMessage::new(title)
+                DiagnosticMessage::new(severity, title)
                     .with_label(DiagnosticLabel::new(unit_ident.span().clone()))
             }
 
             Self::UnexpectedMainUnit { unit_path, unit_kind, existing_ident } => {
                 if let Some(ident) = existing_ident {
-                    DiagnosticMessage::new(format!(
+                    DiagnosticMessage::new(severity, format!(
                         "encountered {} unit @ `{}` but main unit `{}` was already loaded",
                         unit_kind,
                         unit_path.display(),
                         ident
                     ))
                 } else {
-                    DiagnosticMessage::new(format!(
+                    DiagnosticMessage::new(severity, format!(
                         "encountered {} unit @ `{}` after other units were already loaded",
                         unit_kind,
                         unit_path.display()
@@ -127,14 +127,14 @@ impl DiagnosticOutput for BuildError {
                     used_unit, unit_ident
                 );
 
-                DiagnosticMessage::new(title)
+                DiagnosticMessage::new(severity, title)
                     .with_label(DiagnosticLabel::new(span.clone())
                         .with_text("unit used here".to_string()))
             }
 
             Self::UnitNotLoaded { unit_name } => {
                 let title = "used units must be referenced by the main unit or on the command line";
-                DiagnosticMessage::new(title)
+                DiagnosticMessage::new(severity, title)
                     .with_label(DiagnosticLabel::new(unit_name.path_span().clone()))
                     .with_note(format!("unit `{}` is not loaded", unit_name))
             },

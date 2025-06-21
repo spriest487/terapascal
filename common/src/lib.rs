@@ -27,12 +27,13 @@ pub trait DiagnosticOutput: fmt::Display {
         Vec::new()
     }
 
-    fn main(&self) -> DiagnosticMessage {
+    fn main(&self, severity: Severity) -> DiagnosticMessage {
         let title = self.title();
         let label = self.label();
         let notes = self.notes().to_vec();
 
         DiagnosticMessage {
+            severity,
             title,
             label,
             notes,
@@ -83,22 +84,45 @@ impl PartialOrd for DiagnosticLabel {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub enum Severity {
+    Help,
+    Info,
+    Warning,
+    Error,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct DiagnosticMessage {
+    pub severity: Severity,
+    
     pub title: String,
     pub notes: Vec<String>,
     pub label: Option<DiagnosticLabel>,
 }
 
 impl DiagnosticMessage {
-    pub fn new(title: impl Into<String>) -> Self {
+    pub fn new(severity: Severity, title: impl Into<String>) -> Self {
         Self {
+            severity,
             title: title.into(),
             label: None,
             notes: Vec::new(),
         }
     }
-    
+
+    pub fn info(title: impl Into<String>) -> Self {
+        Self::new(Severity::Info, title)
+    }
+
+    pub fn error(title: impl Into<String>) -> Self {
+        Self::new(Severity::Warning, title)
+    }
+
+    pub fn warning(title: impl Into<String>) -> Self {
+        Self::new(Severity::Error, title)
+    }
+
     pub fn with_label(mut self, label: DiagnosticLabel) -> Self {
         self.label = Some(label);
         self

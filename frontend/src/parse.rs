@@ -7,11 +7,12 @@ use crate::ast::TypeName;
 use crate::ast::*;
 use crate::token_tree::*;
 use terapascal_common::span::*;
-use terapascal_common::DiagnosticLabel;
+use terapascal_common::{DiagnosticLabel, Severity};
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::TracedError;
 use std::fmt;
+use std::iter::once;
 
 #[derive(Debug)]
 pub struct IllegalStatement<A: Annotation = Span>(pub Box<Expr<A>>);
@@ -69,6 +70,8 @@ pub enum ParseError {
     
     EmptyTypeDecl { span: Span },
     InvalidTagLocation { location: InvalidTagLocation, span: Span, tags_span: Span },
+    
+    AggregateBlock(AggregateParseError<Block>),
 }
 
 impl ParseError {
@@ -143,6 +146,7 @@ impl Spanned for ParseError {
             ParseError::InvalidTypeParamName(span) => span,
             ParseError::InvalidSetRangeExpr { span } => span,
             ParseError::InvalidTagLocation { span, .. } => span,
+            ParseError::AggregateBlock(err) => err.first.span(),
         }
     }
 }
@@ -183,6 +187,8 @@ impl fmt::Display for ParseError {
             
             ParseError::EmptyTypeDecl { .. } => write!(f, "Empty type declaration"),
             ParseError::InvalidTagLocation { .. } => write!(f, "Invalid tag location"),
+            
+            ParseError::AggregateBlock(agg) => write!(f, "{}", agg.first.err),
         }
     }
 }
@@ -277,6 +283,10 @@ impl DiagnosticOutput for ParseError {
 
                 Some(format!("{loc_name} must not have tags"))
             }
+            
+            ParseError::AggregateBlock(agg) => {
+                agg.first.label().as_ref().and_then(|label| label.text.clone())
+            }
         };
 
         Some(DiagnosticLabel {
@@ -288,15 +298,19 @@ impl DiagnosticOutput for ParseError {
     fn see_also(&self) -> Vec<DiagnosticMessage> {
         match self {
             ParseError::DuplicateModifier { existing, .. } => vec![
-                DiagnosticMessage::new("Duplicate modifier occurrence")
-                .with_label(DiagnosticLabel::new(existing.span().clone())
-                    .with_text(format!("`{}` appears here", existing.keyword())))
+                DiagnosticMessage::info("Duplicate modifier occurrence")
+                    .with_label(DiagnosticLabel::new(existing.span().clone())
+                        .with_text(format!("`{}` appears here", existing.keyword())))
             ],
-            
+
             ParseError::InvalidTagLocation { tags_span, .. } => vec![
-                DiagnosticMessage::new("Tags declared here".to_string())
+                DiagnosticMessage::info("Tags declared here".to_string())
                     .with_label(DiagnosticLabel::new(tags_span.clone()))
             ],
+            
+            ParseError::AggregateBlock(agg) => {
+                agg.rest_messages()
+            }
 
             _ => Vec::new(),
         }
@@ -332,3 +346,60 @@ pub enum InvalidTagLocation {
     SetDecl,
     EnumDecl,
 } 
+
+#[derive(Debug)]
+pub struct AggregateParseError<T> {
+    pub item: Box<T>,
+
+    pub first: Box<TracedError<ParseError>>,
+    pub rest: Vec<TracedError<ParseError>>,
+}
+
+impl<T> AggregateParseError<T> {
+    pub fn result(item: T, mut errors: Vec<TracedError<ParseError>>) -> AggregateParseResult<T> {
+        if errors.is_empty() {
+            return Ok(item);
+        }
+
+        let first_err = errors.remove(0);
+
+        Err(AggregateParseError {
+            item: Box::new(item),
+            first: Box::new(first_err),
+            rest: errors,
+        })
+    }
+    
+    pub fn first_title(&self) -> String {
+        self.first.err.title()
+    }
+    
+    pub fn first_label_text(&self) -> Option<String> {
+        self.first.err.label().and_then(|label| label.text)
+    }
+    
+    pub fn rest_messages(&self) -> Vec<DiagnosticMessage> {
+        self.rest
+            .iter()
+            .flat_map(|err| {
+                let main = err.main(Severity::Error);
+                let see_also = err.see_also();
+                
+                once(main).chain(see_also)
+            })
+            .collect()
+    }
+}
+
+impl From<AggregateParseError<Block>> for TracedError<ParseError> {
+    fn from(value: AggregateParseError<Block>) -> Self {
+        let bt = value.first.bt.clone();
+        
+        TracedError { 
+            err: ParseError::AggregateBlock(value), 
+            bt 
+        }
+    }
+} 
+
+pub type AggregateParseResult<T> = Result<T, AggregateParseError<T>>;

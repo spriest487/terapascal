@@ -2,7 +2,7 @@ use std::fmt;
 use std::io;
 use terapascal_build::error::BuildError;
 use terapascal_common::span::Span;
-use terapascal_common::Backtrace;
+use terapascal_common::{Backtrace, Severity};
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::TracedError;
@@ -78,10 +78,11 @@ impl From<io::Error> for RunError {
 }
 
 impl DiagnosticOutput for RunError {
-    fn main(&self) -> DiagnosticMessage {
+    fn main(&self, severity: Severity) -> DiagnosticMessage {
         match self {
-            RunError::BuildError(err) => err.main(),
+            RunError::BuildError(err) => err.main(severity),
             RunError::OutputFailed(span, err) => DiagnosticMessage {
+                severity,
                 title: format!(
                     "Writing output file `{}` failed: {}",
                     span.file.display(),
@@ -91,27 +92,32 @@ impl DiagnosticOutput for RunError {
                 notes: Vec::new(),
             },
             RunError::ExecError(ExecError::Raised { msg, .. }) => DiagnosticMessage {
+                severity,
                 title: msg.clone(),
                 label: None,
                 notes: Vec::new(),
             },
-            RunError::ExecError(err) => err.main(),
+            RunError::ExecError(err) => err.main(severity),
             RunError::InternalError(msg) => DiagnosticMessage {
+                severity,
                 title: msg.to_string(),
                 label: None,
                 notes: Vec::new(),
             },
             RunError::UnknownOutputFormat(ext) => DiagnosticMessage {
+                severity,
                 title: format!("extension {} is not supported on this platform", ext),
                 label: None,
                 notes: Vec::new(),
             },
             RunError::ClangBuildFailed(err) => DiagnosticMessage {
+                severity,
                 title: err.to_string(),
                 notes: Vec::new(),
                 label: None,
             },
             RunError::InvalidArguments(err) => DiagnosticMessage {
+                severity,
                 title: err.to_string(),
                 notes: Vec::new(),
                 label: None,

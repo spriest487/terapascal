@@ -22,10 +22,10 @@ use crate::typ::MAX_FLAGS_BITS;
 use crate::IntConstant;
 use std::fmt;
 use terapascal_common::span::*;
-use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::Backtrace;
 
 #[derive(Debug)]
 pub enum TypeError {
@@ -725,18 +725,17 @@ impl DiagnosticOutput for TypeError {
 
             TypeError::UndefinedSymbols { undefined: syms, .. } => syms
                 .iter()
-                .map(|(path, span)| DiagnosticMessage {
-                    title: format!("`{}` is declared but not defined", path),
-                    label: Some(DiagnosticLabel {
-                        text: Some("declared here".to_string()),
-                        span: span.clone(),
-                    }),
-                    notes: Vec::new(),
+                .map(|(path, span)| {
+                    let title = format!("`{}` is declared but not defined", path);
+                    
+                    DiagnosticMessage::info(title)
+                        .with_label(DiagnosticLabel::new(span.clone())
+                            .with_text("declared here"))
                 })
                 .collect(),
 
             TypeError::NotInitialized { ident, .. } => vec![
-                DiagnosticMessage::new(format!("uninitialized value `{}`", ident))
+                DiagnosticMessage::info(format!("uninitialized value `{}`", ident))
                     .with_label(DiagnosticLabel::new(ident.span().clone())
                         .with_text("declared here")),
             ],
@@ -744,41 +743,38 @@ impl DiagnosticOutput for TypeError {
             TypeError::NotMutable {
                 decl: Some(decl),
                 ..
-            } => vec![DiagnosticMessage {
-                title: "modifying immutable value".to_string(),
-                label: Some(DiagnosticLabel {
-                    text: Some("declared as immutable here".to_string()),
-                    span: decl.span().clone(),
-                }),
-                notes: Vec::new(),
-            }],
-            
-            TypeError::DuplicateDeclMod { existing, .. } => vec![DiagnosticMessage {
-                title: "duplicate modifier".to_string(),
-                label: Some(DiagnosticLabel {
-                    text: Some("previously appeared here".to_string()),
-                    span: existing.clone(),
-                }),
-                notes: Vec::new(),
-            }],
-            
+            } => vec![
+                DiagnosticMessage::info("modifying immutable value")
+                    .with_label(DiagnosticLabel::new(decl.span().clone())
+                        .with_text("declared as immutable here")),
+            ],
+
+            TypeError::DuplicateDeclMod { existing, .. } => vec![
+                DiagnosticMessage::info("duplicate modifier")
+                    .with_label(DiagnosticLabel::new(existing.clone())
+                        .with_text("previously appeared here"))
+            ],
+
             TypeError::TypeHasMultipleDtors { new_dtor, prev_dtor, .. } => vec![
-                DiagnosticMessage::new("new destructor declaration")
+                DiagnosticMessage::info("new destructor declaration")
                     .with_label(DiagnosticLabel::new(new_dtor.clone())),
-                DiagnosticMessage::new("previous destructor declaration")
+                
+                DiagnosticMessage::info("previous destructor declaration")
                     .with_label(DiagnosticLabel::new(prev_dtor.clone())
                         .with_text("previously declared here")),
             ],
 
             TypeError::IncompatibleDeclMod { first_span, first_keyword, .. } => vec![
-                DiagnosticMessage::new("incompatible modifier")
+                DiagnosticMessage::info("incompatible modifier")
                     .with_label(DiagnosticLabel::new(first_span.clone())
                         .with_text(format!("`{first_keyword}` previously appeared here")))
             ],
 
             TypeError::DuplicateNamedArg { name, previous, .. } 
             | TypeError::DuplicateParamName { name, previous, .. } => {
-                let message = DiagnosticMessage::new(format!("previous occurrence of `{}`", name));
+                let title = format!("previous occurrence of `{}`", name);
+
+                let message = DiagnosticMessage::info(title);
                 match previous {
                     None => vec![message],
                     Some(span) => vec![message.with_label(DiagnosticLabel::new(span.clone()))]
@@ -788,7 +784,7 @@ impl DiagnosticOutput for TypeError {
                 candidates
                     .iter()
                     .map(|c| {
-                        DiagnosticMessage::new(format!("may refer to {}", c))
+                        DiagnosticMessage::info(format!("may refer to {}", c))
                             .with_label(DiagnosticLabel::new(c.span().clone()))
                     })
                     .collect()
@@ -799,7 +795,7 @@ impl DiagnosticOutput for TypeError {
                 prev_decls
                     .iter()
                     .map(|ident| {
-                        DiagnosticMessage::new(format!("{} previously declared here", ident))
+                        DiagnosticMessage::info(format!("{} previously declared here", ident))
                             .with_label(DiagnosticLabel::new(ident.span.clone()))
                     })
                     .collect()
@@ -809,7 +805,7 @@ impl DiagnosticOutput for TypeError {
                 decls
                     .iter()
                     .map(|decl| {
-                        DiagnosticMessage::new(format!("declaration of {} {} here", decl.kind, decl.name))
+                        DiagnosticMessage::info(format!("declaration of {} {} here", decl.kind, decl.name))
                             .with_label(DiagnosticLabel::new(decl.span.clone()))
                     })
                     .collect()
@@ -825,10 +821,10 @@ impl DiagnosticOutput for TypeError {
                         let actual_msg = "mismatched implementation here".to_string();
 
                         vec![
-                            DiagnosticMessage::new(decl_msg)
+                            DiagnosticMessage::info(decl_msg)
                                 .with_label(DiagnosticLabel::new(i.iface_method_name.span.clone()))
                                 .with_note(i.expect_sig.to_string()),
-                            DiagnosticMessage::new(actual_msg)
+                            DiagnosticMessage::info(actual_msg)
                                 .with_label(DiagnosticLabel::new(i.impl_method_name.span.clone()))
                                 .with_note(i.actual_sig.to_string()),
                         ]
@@ -837,7 +833,7 @@ impl DiagnosticOutput for TypeError {
                 messages.extend(missing
                     .iter()
                     .map(|i| {
-                        DiagnosticMessage::new(format!("{} declared here", i.method_name))
+                        DiagnosticMessage::info(format!("{} declared here", i.method_name))
                             .with_label(DiagnosticLabel::new(i.method_name.span.clone()))
                     }));
                 messages

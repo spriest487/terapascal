@@ -1,17 +1,18 @@
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::diagnostic::Label;
 use codespan_reporting::diagnostic::LabelStyle;
-use codespan_reporting::diagnostic::Severity;
+use codespan_reporting::diagnostic::Severity as ReportSeverity;
 use codespan_reporting::files::Error as FileError;
 use codespan_reporting::files::Files;
 use codespan_reporting::files::SimpleFiles;
 use codespan_reporting::term::termcolor;
 use std::collections::HashMap;
 use std::io::Write;
+use std::iter::once;
 use std::path::Path;
 use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::fs::Filesystem;
-use terapascal_common::DiagnosticLabel;
+use terapascal_common::{DiagnosticLabel, Severity};
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 
@@ -21,7 +22,7 @@ fn output_to_report_diag(
     diag: DiagnosticMessage,
     code_map: &mut CodeMap,
     style: LabelStyle,
-    severity: Severity,
+    severity: ReportSeverity,
 ) -> Result<Diagnostic<usize>, FileError> {
     let mut file_ids = HashMap::new();
 
@@ -74,33 +75,46 @@ fn label_from_source_file<'a>(
     Ok(label)
 }
 
-pub fn report_err(err: &dyn DiagnosticOutput, severity: Severity) -> Result<(), FileError> {
+pub fn convert_report_severity(severity: ReportSeverity) -> Severity {
+    match severity {
+        ReportSeverity::Help => Severity::Help,
+        ReportSeverity::Note => Severity::Info,
+        ReportSeverity::Warning => Severity::Warning,
+        ReportSeverity::Error | ReportSeverity::Bug => Severity::Error,
+    }
+}
+
+pub fn convert_severity_to_report(severity: Severity) -> ReportSeverity {
+    match severity {
+         Severity::Help => ReportSeverity::Help,
+         Severity::Info => ReportSeverity::Note,
+         Severity::Warning => ReportSeverity::Warning,
+         Severity::Error => ReportSeverity::Error,
+    }
+}
+
+pub fn report_err(err: &dyn DiagnosticOutput, severity: ReportSeverity) -> Result<(), FileError> {
     let mut out = termcolor::StandardStream::stderr(termcolor::ColorChoice::Auto);
     let config = codespan_reporting::term::Config::default();
 
     let mut code_map = CodeMap::new();
+    
+    let severity = convert_report_severity(severity);
+    
+    let messages = once(err.main(severity))
+        .chain(err.see_also());
+    
+    for message in messages {
+        let message_severity = convert_severity_to_report(message.severity);
+        
+        let main_diag = output_to_report_diag(
+            message,
+            &mut code_map,
+            LabelStyle::Primary,
+            message_severity,
+        )?;
 
-    let diag_msg = err.main();
-    let main_diag = output_to_report_diag(
-        diag_msg,
-        &mut code_map,
-        LabelStyle::Primary,
-        severity,
-    )?;
-
-    codespan_reporting::term::emit(&mut out.lock(), &config, &code_map, &main_diag)?;
-
-    let see_also_diags: Vec<_> = err
-        .see_also()
-        .into_iter()
-        .map(|diag| {
-            output_to_report_diag(diag, &mut code_map, LabelStyle::Primary, Severity::Note)
-        })
-        .collect::<Result<_, _>>()?;
-
-    for diag in see_also_diags {
-        writeln!(out)?;
-        codespan_reporting::term::emit(&mut out.lock(), &config, &code_map, &diag)?;
+        codespan_reporting::term::emit(&mut out.lock(), &config, &code_map, &main_diag)?;
     }
 
     out.flush()?;

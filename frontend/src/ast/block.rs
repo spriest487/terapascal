@@ -58,6 +58,40 @@ impl<A: Annotation> Block<A> {
 }
 
 impl Block<Span> {
+    pub fn parse_agg(tokens: &mut TokenStream) -> ParseResult<Self> {
+        let unsafe_kw = tokens
+            .match_one_maybe(Keyword::Unsafe)
+            .map(|unsafe_tt| unsafe_tt.into_span());
+
+        let body_group = DelimitedGroup::parse(tokens, DelimiterPair::BeginEnd)?;
+
+        let begin = body_group.open.clone();
+        let end = body_group.close.clone();
+        
+        let span = match &unsafe_kw {
+            Some(span) => span.to(&body_group.close),
+            None => body_group.span.clone(),
+        };
+
+        let stmt_tokens = body_group.into_inner_tokens();
+        
+        let block = Self {
+            stmts: Vec::new(),
+            annotation: span,
+
+            output: None,
+
+            begin,
+            end,
+
+            unsafe_kw,
+        };
+
+        let block = parse_block_stmts_agg(stmt_tokens, block)?;
+
+        Ok(block)
+    }
+    
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let unsafe_kw = tokens
             .match_one_maybe(Keyword::Unsafe)
@@ -126,6 +160,118 @@ impl Block<Span> {
 
         // block that doesn't work as an expr
         None
+    }
+}
+
+fn parse_block_stmts_agg(
+    mut tokens: TokenStream,
+    mut block: Block,
+) -> ParseResult<Block> {
+    let mut errors = Vec::new();
+
+    'parse_stmts: loop {
+        if block.output.is_some() || tokens.look_ahead().next().is_none() {
+            break;
+        }
+        
+        match parse_block_stmt_agg(&mut tokens) {
+            Ok(BlockStatementParsedItem::Stmt(stmt)) => {
+                block.stmts.push(stmt);
+            }
+            
+            Ok(BlockStatementParsedItem::OutputExpr(expr)) => {
+                block.output = Some(expr);
+            }
+            
+            Err(err) => {
+                errors.push(err);
+            }
+        }
+
+        // continue parsing after the next semicolon, if there is one
+        loop {
+            match tokens.look_ahead().next() {
+                Some(tt) => {
+                    let at_sep = tt.is_separator(Separator::Semicolon);
+                    tokens.advance(1);
+
+                    if at_sep {
+                        continue 'parse_stmts;
+                    }
+                }
+
+                None => {
+                    break 'parse_stmts
+                },
+            }
+        }
+    }
+
+    if !block.stmts.is_empty() || block.output.is_some() {
+        tokens.match_one_maybe(Separator::Semicolon);
+    }
+
+    if let Err(err) = tokens.finish() {
+        errors.push(err);
+    }
+
+    let result = AggregateParseError::result(block, errors)?;
+    Ok(result)
+}
+
+enum BlockStatementParsedItem {
+    Stmt(Stmt),
+    OutputExpr(Expr),
+}
+
+fn parse_block_stmt_agg(tokens: &mut TokenStream) -> ParseResult<BlockStatementParsedItem> {
+    // we want to be able to asser than when we reinterpret an invalid statement as the output
+    // expr, it's actually the expr starting from the same token as where we tried to parse the
+    // statement. if it isn't, a statement nested within this has failed to properly handle
+    // an InvalidStatement error itself!
+    let stmt_start = tokens
+        .look_ahead()
+        .next()
+        .map(|tt| tt.span().start);
+
+    match Stmt::parse(tokens) {
+        Ok(stmt) => {
+            Ok(BlockStatementParsedItem::Stmt(stmt))
+        },
+
+        Err(traced_err) => match traced_err.err {
+            // if the final stmt is invalid as a stmt but still a valid
+            // expr, assume it's the block output. some expressions (eg calls) are
+            // always valid as statements regardless of type, so in some cases the block
+            // output can't be determined until typechecking
+            err @ ParseError::IsExpr(..) => {
+                let mut ahead = tokens.look_ahead();
+
+                // if there's more statements after this, we can't use it as the output
+                let stmt_after_tokens = ahead
+                    .match_sequence(Separator::Semicolon + Matcher::AnyToken);
+
+                if stmt_after_tokens.is_some() {
+                    return Err(TracedError::trace(err));
+                }
+
+                let ParseError::IsExpr(IllegalStatement(bad_expr)) = err else {
+                    unreachable!()
+                };
+
+                assert_eq!(
+                    Some(bad_expr.span().start),
+                    stmt_start,
+                    "expression @ {} used as block output has the wrong position (child statement failed to handle invalid statement correctly)",
+                    bad_expr.span()
+                );
+
+                Ok(BlockStatementParsedItem::OutputExpr(*bad_expr))
+            }
+
+            // failed for other reasons, this is an actual error
+            _ => Err(traced_err),
+        },
     }
 }
 

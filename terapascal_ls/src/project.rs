@@ -15,7 +15,7 @@ use terapascal_build::ParseOutput;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::span::Location;
 use terapascal_common::span::Spanned;
-use terapascal_common::CompileOpts;
+use terapascal_common::{CompileOpts, Severity};
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_frontend::codegen::CodegenOpts;
@@ -35,13 +35,21 @@ pub struct BuildDiagnostics {
 impl BuildDiagnostics {
     pub fn add_err(&mut self, err: impl Into<BuildError>, filesystem: &WorkspaceFilesystem) {
         let err = err.into();
-        let message = err.main();
-
-        if let Some(path) = message_path(&message) {
-            let version = filesystem.file_version(&path);
-
-            self.file_diagnostics(path, version).errors.push(message);
+        
+        self.add_message(err.main(Severity::Error), filesystem);
+        for message in err.see_also() {
+            self.add_message(message, filesystem);
         }
+    }
+    
+    fn add_message(&mut self, message: DiagnosticMessage, filesystem: &WorkspaceFilesystem) {
+        let Some(path) = message_path(&message) else {
+            return;
+        };
+        
+        let version = filesystem.file_version(&path);
+
+        self.file_diagnostics(path, version).errors.push(message);
     }
 
     pub fn file_diagnostics(
@@ -144,7 +152,7 @@ impl Project {
                     },
 
                     Err(err) => {
-                        eprintln!("[build] {} ({})", err.main(), err.span());
+                        eprintln!("[build] {} ({})", err.main(Severity::Error), err.span());
                         diagnostics.add_err(err, filesystem);
 
                         for (unit_path, unit) in &parsed_output.units {
@@ -173,13 +181,13 @@ impl Project {
             },
 
             Err(BuildError::ParseError(parse_err)) => {
-                eprintln!("[build] {} ({})", parse_err.main(), parse_err.span());
+                eprintln!("[build] {} ({})", parse_err.main(Severity::Error), parse_err.span());
 
                 diagnostics.add_err(parse_err, filesystem);
             },
 
             Err(err) => {
-                eprintln!("[build] {}", err.main());
+                eprintln!("[build] {}", err.main(Severity::Error));
                 diagnostics.add_err(err, filesystem);
             },
         };

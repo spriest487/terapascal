@@ -1,5 +1,5 @@
 use std::fmt;
-use crate::DiagnosticOutput;
+use crate::{DiagnosticOutput, Severity};
 
 pub enum BuildLogEntry {
     Trace(String),
@@ -14,7 +14,7 @@ impl fmt::Display for BuildLogEntry {
             }
 
             BuildLogEntry::Warn(warning) => {
-                write!(f, "{}", warning.main())?;
+                write!(f, "{}", warning.main(Severity::Warning))?;
                 for see_also in warning.see_also() {
                     writeln!(f)?;
                     write!(f, "{}", see_also)?;

@@ -5,7 +5,7 @@ mod reporting;
 use crate::args::*;
 use crate::compile_error::*;
 use crate::reporting::report_err;
-use codespan_reporting::diagnostic::Severity;
+use codespan_reporting::diagnostic::Severity as ReportSeverity;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
@@ -32,7 +32,7 @@ use terapascal_build::BuildStage;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::build_log::BuildLogEntry;
 use terapascal_common::span::*;
-use terapascal_common::CompileOpts;
+use terapascal_common::{CompileOpts, Severity};
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::IR_LIB_EXT;
@@ -161,8 +161,8 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
             }
 
             BuildLogEntry::Warn(warning) => {
-                if report_err(warning.as_ref(), Severity::Warning).is_err() {
-                    eprintln!("warning: {}", warning.main());
+                if report_err(warning.as_ref(), ReportSeverity::Warning).is_err() {
+                    eprintln!("warning: {}", warning.main(Severity::Warning));
                 }
             }
         }
@@ -358,7 +358,7 @@ fn main() {
     let print_bt = args.backtrace;
 
     if let Err(err) = compile(&args) {
-        if let Err(output_err) = report_err(&err, Severity::Error) {
+        if let Err(output_err) = report_err(&err, ReportSeverity::Error) {
             eprintln!("error: {}", err);
             eprintln!("error reporting output: {}", output_err);
         }
