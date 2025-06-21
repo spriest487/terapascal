@@ -58,7 +58,7 @@ impl<A: Annotation> Block<A> {
 }
 
 impl Block<Span> {
-    pub fn parse_agg(tokens: &mut TokenStream) -> ParseResult<Self> {
+    pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let unsafe_kw = tokens
             .match_one_maybe(Keyword::Unsafe)
             .map(|unsafe_tt| unsafe_tt.into_span());
@@ -87,45 +87,7 @@ impl Block<Span> {
             unsafe_kw,
         };
 
-        let block = parse_block_stmts_agg(stmt_tokens, block)?;
-
-        Ok(block)
-    }
-    
-    pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
-        let unsafe_kw = tokens
-            .match_one_maybe(Keyword::Unsafe)
-            .map(|unsafe_tt| unsafe_tt.into_span());
-
-        let body_tt = tokens.match_one(DelimiterPair::BeginEnd)?;
-
-        let span = body_tt.span().clone();
-
-        let body_tt_group = match body_tt {
-            TokenTree::Delimited(group) => group,
-            _ => unreachable!(),
-        };
-
-        let begin = body_tt_group.open.clone();
-        let end = body_tt_group.close.clone();
-
-        let mut stmt_tokens = body_tt_group.clone().into_inner_tokens();
-
-        let (statements, output_expr) = parse_block_stmts(&mut stmt_tokens)?;
-
-        stmt_tokens.finish()?;
-
-        let block = Self {
-            stmts: statements,
-            annotation: span,
-
-            // we don't know until typechecking
-            output: output_expr,
-            begin,
-            end,
-
-            unsafe_kw,
-        };
+        let block = parse_block_stmts(stmt_tokens, block)?;
 
         Ok(block)
     }
@@ -163,7 +125,7 @@ impl Block<Span> {
     }
 }
 
-fn parse_block_stmts_agg(
+fn parse_block_stmts(
     mut tokens: TokenStream,
     mut block: Block,
 ) -> ParseResult<Block> {
@@ -293,79 +255,6 @@ fn parse_block_stmt_agg(tokens: &mut TokenStream) -> ParseResult<BlockStatementP
             _ => Err(traced_err),
         },
     }
-}
-
-fn parse_block_stmts(
-    tokens: &mut TokenStream,
-) -> ParseResult<(Vec<Stmt<Span>>, Option<Expr<Span>>)> {
-    let mut statements = Vec::new();
-    let mut output_expr: Option<Expr<_>> = None;
-
-    loop {
-        if output_expr.is_some() || !Stmt::has_more(&statements, &mut tokens.look_ahead()) {
-            break;
-        }
-
-        if !statements.is_empty() {
-            tokens.match_one(Separator::Semicolon)?;
-        }
-        
-        // we want to be able to asser than when we reinterpret an invalid statement as the output
-        // expr, it's actually the expr starting from the same token as where we tried to parse the
-        // statement. if it isn't, a statement nested within this has failed to properly handle
-        // an InvalidStatement error itself!
-        let stmt_start = tokens
-            .look_ahead()
-            .next()
-            .map(|tt| tt.span().start);
-
-        match Stmt::parse(tokens) {
-            Ok(stmt) => {
-                statements.push(stmt);
-            },
-
-            Err(traced_err) => match traced_err.err {
-                // if the final stmt is invalid as a stmt but still a valid
-                // expr, assume it's the block output. some expressions (eg calls) are
-                // always valid as statements regardless of type, so in some cases the block
-                // output can't be determined until typechecking
-                err @ ParseError::IsExpr(..) => {
-                    let mut ahead = tokens.look_ahead();
-                    
-                    // if there's more statements after this, we can't use it as the output
-                    let stmt_after_tokens = ahead
-                        .match_sequence(Separator::Semicolon + Matcher::AnyToken);
-
-                    if stmt_after_tokens.is_some() {
-                        return Err(TracedError::trace(err));
-                    }
-
-                    let ParseError::IsExpr(IllegalStatement(bad_expr)) = err else {
-                        unreachable!()
-                    };
-                    
-                    assert_eq!(
-                        Some(bad_expr.span().start), 
-                        stmt_start, 
-                        "expression @ {} used as block output has the wrong position (child statement failed to handle invalid statement correctly)", 
-                        bad_expr.span()
-                    );
-
-                    output_expr = Some(*bad_expr);
-                    break;
-                }
-
-                // failed for other reasons, this is an actual error
-                _ => return Err(traced_err),
-            },
-        }
-    }
-
-    if !statements.is_empty() || output_expr.is_some() {
-        tokens.match_one_maybe(Separator::Semicolon);
-    }
-
-    Ok((statements, output_expr))
 }
 
 impl<A: Annotation> fmt::Display for Block<A> {

@@ -183,7 +183,7 @@ impl Unit<Span> {
             // instead of a separate init block, program units always have a "main" block
             // after any decls with the usual begin/end keywords
 
-            let main_block = Block::parse_agg(tokens)?;
+            let main_block = Block::parse(tokens)?;
 
             end_span = match tokens.match_one_maybe(Operator::Period) {
                 Some(tt) => main_block.end.span().to(tt.span()),
