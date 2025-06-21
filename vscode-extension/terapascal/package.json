@@ -9,6 +9,12 @@
   "categories": [
     "Other"
   ],
+  "license": "MIT",
+  "repository": { 
+    "url": "https://vrostu@bitbucket.org/vrostu/terapascal.git",
+    "directory": "vscode-extension/terapascal",
+    "type": "bitbucket"
+  },
   "activationEvents": [
     "onLanguage:terapascal"
   ],
