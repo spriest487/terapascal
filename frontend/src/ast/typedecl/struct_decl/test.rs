@@ -1,9 +1,9 @@
 use crate::ast::util::*;
 use crate::ast::StructDecl;
-use crate::ast::Unit;
-use crate::ast::Visibility;
 use crate::ast::TypeAnnotation;
 use crate::ast::TypeDeclItem;
+use crate::ast::Unit;
+use crate::ast::Visibility;
 use crate::parse::ParseError;
 use crate::Separator;
 use terapascal_common::span::Span;
@@ -104,12 +104,29 @@ pub fn semicolon_separator_is_single() {
         end
     ");
     
-    assert!(match unit.map_err(TracedError::into_inner) {
+    let result = unit.map_err(TracedError::into_inner);
+
+    match result {
         Err(ParseError::UnexpectedToken(tt, ..)) => {
-            tt.is_separator(Separator::Semicolon)
+            assert!(tt.is_separator(Separator::Semicolon))
         },
-        _ => false,
-    }, "should fail on the unexpected semicolon token")
+
+        Err(ParseError::AggregateUnit(err, ..)) => {
+            match err.first.err {
+                ParseError::UnexpectedToken(tt, ..) => {
+                    assert!(tt.is_separator(Separator::Semicolon))
+                }
+                
+                other => {
+                    panic!("wrong error type: should be unexpected token, was: {:#?}", other)
+                },
+            }
+        },
+        
+        Err(other) => panic!("wrong error type: should be unexpected token, was: {:#?}", other),
+        
+        Ok(..) => panic!("should fail on the unexpected semicolon token"),
+    }
 }
 
 #[test]

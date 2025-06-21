@@ -23,7 +23,7 @@ impl<T, E> AggregateError<T, E> {
         }
     }
 
-    pub fn split(self) -> (T, Vec<E>) {
+    pub fn unwrap(self) -> (T, Vec<E>) {
         let mut errors = self.rest;
         errors.insert(0, *self.first);
 
@@ -141,6 +141,10 @@ pub trait FromAggregateError<T> : Sized {
 
 impl<T, E: FromAggregateError<T>> AggregateError<T, E> {
     pub fn into_err(self) -> E {
-        E::from_aggregate_error(self)
+        if self.rest.is_empty() {
+            *self.first
+        } else {
+            E::from_aggregate_error(self)
+        }
     }
 }

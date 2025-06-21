@@ -168,7 +168,7 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
                     Ok(unit) => unit,
                     Err(err) => match err.err {
                         ParseError::AggregateUnit(err) => {
-                            let (unit, errors) = err.split();
+                            let (unit, errors) = err.unwrap();
                             for error in errors {
                                 log.error(error);
                             }
