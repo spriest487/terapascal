@@ -140,6 +140,58 @@ impl TokenStream {
             }
         }
     }
+    
+    /// Try to match the next token. If it doesn't match, advance the stream until we either
+    /// find a match or reach the end of the sequence. All non-matching tokens encountered are
+    /// collected into a list of invalid tokens. 
+    pub fn match_or_advance(&mut self, matcher: impl Into<Matcher>) -> MatchOrAdvanceResult {
+        let matcher = matcher.into();
+        let mut invalid = Vec::new();
+
+        let matched = loop {
+            match self.look_ahead().next().cloned() {
+                Some(tt) if matcher.is_match(&tt) => {
+                    self.advance(1);
+
+                    break Some(tt);
+                }
+                
+                Some(invalid_tt) => {
+                    self.advance(1);
+
+                    invalid.push(invalid_tt);
+                }
+
+                None => {
+                    break None;
+                },
+            };
+        };
+
+        MatchOrAdvanceResult {
+            matched,
+            matcher,
+            invalid,
+        }
+    }
+}
+
+pub struct MatchOrAdvanceResult {
+    pub matcher: Matcher,
+
+    pub matched: Option<TokenTree>,
+    pub invalid: Vec<TokenTree>,
+}
+
+impl MatchOrAdvanceResult {
+    pub fn to_err(&self) -> Option<TracedError<ParseError>> {
+        let unexpected_span = Span::range(&self.invalid)?;
+
+        Some(TracedError::from(ParseError::UnexpectedTokens(
+            unexpected_span,
+            Some(self.matcher.clone()),
+        )))
+    }
 }
 
 pub trait Parse

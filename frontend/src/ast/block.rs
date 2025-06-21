@@ -155,36 +155,13 @@ fn parse_block_stmts(
                 errors.push(err);
             }
         }
-
-        // continue parsing after the next semicolon, if there is one
-        let mut unexpected_after_stmt = Vec::new();
-       
-        let more = loop {
-            match tokens.look_ahead().next().cloned() {
-                Some(tt) => {
-                    tokens.advance(1);
-
-                    if tt.is_separator(Separator::Semicolon) {
-                        break true;
-                    }
-                    
-                    unexpected_after_stmt.push(tt);
-                }
-
-                None => {
-                    break false;
-                },
-            };
-        };
-
-        if let Some(unexpected_span) = Span::range(&unexpected_after_stmt) {
-            errors.push(TracedError::from(ParseError::UnexpectedTokens(
-                unexpected_span,
-                Some(Matcher::Separator(Separator::Semicolon))
-            )));
-        }
         
-        if !more {
+        let to_semicolon = tokens.match_or_advance(Separator::Semicolon);
+        if let Some(err) = to_semicolon.to_err() {
+            errors.push(err);
+        }
+
+        if to_semicolon.matched.is_none() {
             break;
         }
     }
