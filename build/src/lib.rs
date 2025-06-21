@@ -12,13 +12,14 @@ use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::Filesystem;
 use terapascal_common::CompileOpts;
-use terapascal_common::SRC_FILE_DEFAULT_EXT;
+use terapascal_common::{TracedError, SRC_FILE_DEFAULT_EXT};
 use terapascal_frontend::ast;
 use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::UnitKind;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::codegen_ir;
 use terapascal_frontend::parse;
+use terapascal_frontend::parse::ParseError;
 use terapascal_frontend::pp::PreprocessedUnit;
 use terapascal_frontend::tokenize;
 use terapascal_frontend::typ;
@@ -95,7 +96,7 @@ pub fn preprocess_project(fs: &impl Filesystem, input: &BuildInput, log: &mut Bu
 
 pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseOutput> {
     let verbose = input.compile_opts.verbose;
-    
+
     let mut sources = create_source_collection(fs, input, log)?;
 
     // auto-add system units if we're going beyond parsing
@@ -104,7 +105,7 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
     let system_units = [
         IdentPath::from_parts([builtin_ident(SYSTEM_UNIT_NAME)])  
     ];
-    
+
     let mut system_paths = Vec::with_capacity(system_units.len());
 
     if include_system {
@@ -160,7 +161,29 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
                 }
 
                 let tokens = tokenize(pp_unit)?;
-                let parsed_unit = parse(unit_filename.clone(), tokens)?;
+
+                // if the unit is parsed to completion with errors, add the errors to the log
+                // and continue with the partially parsed unit
+                let parsed_unit = match parse(unit_filename.clone(), tokens) {
+                    Ok(unit) => unit,
+                    Err(err) => match err.err {
+                        ParseError::AggregateUnit(err) => {
+                            let (unit, errors) = err.split();
+                            for error in errors {
+                                log.error(error);
+                            }
+                            
+                            unit
+                        },
+
+                        other => {
+                            return Err(BuildError::from(TracedError {
+                                err: other,
+                                bt: err.bt
+                            }));
+                        },
+                    }
+                };
 
                 add_unit_path(&parsed_unit.ident, &unit_filename, &mut used_unit_paths, verbose, log)?;
 
@@ -325,7 +348,7 @@ pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
     let mut log = BuildLog::new();
     
     let artifact = build_with_log(fs, input, &mut log);
-    
+
     BuildOutput {
         artifact,
         log,
@@ -352,6 +375,10 @@ fn build_with_log(fs: &impl Filesystem, input: BuildInput, log: &mut BuildLog) -
 
     if input.output_stage == BuildStage::Typecheck {
         return Ok(BuildArtifact::TypedModule(typed_module));
+    }
+
+    if log.has_errors() {
+        return Err(BuildError::CompletedWithErrors);
     }
 
     let library = codegen_ir(&typed_module, input.codegen_opts);

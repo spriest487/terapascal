@@ -22,6 +22,13 @@ impl<T, E> AggregateError<T, E> {
             rest: Vec::new(),
         }
     }
+
+    pub fn split(self) -> (T, Vec<E>) {
+        let mut errors = self.rest;
+        errors.insert(0, *self.first);
+
+        (*self.item, errors)
+    }
     
     pub fn map<F, Next>(result: AggregateResult<T, E>, f: F) -> AggregateResult<Next, E> 
     where

@@ -16,6 +16,9 @@ use terapascal_frontend::TokenizeError;
 
 #[derive(Debug)]
 pub enum BuildError {
+    /// The build ran to completion but there were one or more errors in the build log
+    CompletedWithErrors,
+
     TokenizeError(TracedError<TokenizeError>),
     ParseError(TracedError<ParseError>),
     TypecheckError(TypeError),
@@ -72,6 +75,9 @@ impl From<PreprocessorError> for BuildError {
 impl DiagnosticOutput for BuildError {
     fn main(&self, severity: Severity) -> DiagnosticMessage {
         match self {
+            Self::CompletedWithErrors => {
+                DiagnosticMessage::new(Severity::Error, "Build error")
+            }
             Self::TokenizeError(err) => err.err.main(severity),
             Self::ParseError(err) => err.err.main(severity),
             Self::TypecheckError(err) => err.main(severity),
@@ -163,6 +169,7 @@ impl DiagnosticOutput for BuildError {
 impl fmt::Display for BuildError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Self::CompletedWithErrors => write!(f, "completed with errors"), 
             Self::TokenizeError(err) => write!(f, "{}", err.err),
             Self::ParseError(err) => write!(f, "{}", err.err),
             Self::TypecheckError(err) => write!(f, "{}", err),

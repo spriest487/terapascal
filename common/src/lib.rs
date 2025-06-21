@@ -40,6 +40,13 @@ pub trait DiagnosticOutput: fmt::Display {
             notes,
         }
     }
+    
+    fn to_messages(&self, main_severity: Severity) -> Vec<DiagnosticMessage> {
+        let mut messages = self.see_also();
+        messages.insert(0, self.main(main_severity));
+
+        messages
+    }
 
     fn see_also(&self) -> Vec<DiagnosticMessage> {
         Vec::new()

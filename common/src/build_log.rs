@@ -3,6 +3,7 @@ use crate::{DiagnosticOutput, Severity};
 
 pub enum BuildLogEntry {
     Trace(String),
+    Error(Box<dyn DiagnosticOutput>),
     Warn(Box<dyn DiagnosticOutput>),
 }
 
@@ -16,6 +17,14 @@ impl fmt::Display for BuildLogEntry {
             BuildLogEntry::Warn(warning) => {
                 write!(f, "{}", warning.main(Severity::Warning))?;
                 for see_also in warning.see_also() {
+                    writeln!(f)?;
+                    write!(f, "{}", see_also)?;
+                }
+            }
+
+            BuildLogEntry::Error(error) => {
+                write!(f, "{}", error.main(Severity::Error))?;
+                for see_also in error.see_also() {
                     writeln!(f)?;
                     write!(f, "{}", see_also)?;
                 }
@@ -43,5 +52,13 @@ impl BuildLog {
 
     pub fn warn(&mut self, warning: impl DiagnosticOutput + 'static) {
         self.entries.push(BuildLogEntry::Warn(Box::new(warning)));
+    }
+
+    pub fn error(&mut self, error: impl DiagnosticOutput + 'static) {
+        self.entries.push(BuildLogEntry::Error(Box::new(error)));
+    }
+    
+    pub fn has_errors(&self) -> bool {
+        self.entries.iter().any(|e| matches!(e, BuildLogEntry::Error(..)))
     }
 }

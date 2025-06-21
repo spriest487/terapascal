@@ -12,7 +12,7 @@ use terapascal_build::parse_units;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildStage;
 use terapascal_build::ParseOutput;
-use terapascal_common::build_log::BuildLog;
+use terapascal_common::build_log::{BuildLog, BuildLogEntry};
 use terapascal_common::span::Location;
 use terapascal_common::span::Spanned;
 use terapascal_common::{CompileOpts, Severity};
@@ -153,7 +153,7 @@ impl Project {
 
                     Err(err) => {
                         eprintln!("[build] {} ({})", err.main(Severity::Error), err.span());
-                        diagnostics.add_err(err, filesystem);
+                        log.error(err);
 
                         for (unit_path, unit) in &parsed_output.units {
                             let version = filesystem.file_version(unit_path);
@@ -194,6 +194,20 @@ impl Project {
 
         for log_entry in log.entries {
             eprintln!("[build] {}", log_entry);
+            
+            match log_entry {
+                BuildLogEntry::Trace(..) => { }
+                BuildLogEntry::Error(err) => {
+                    for message in err.to_messages(Severity::Error) {
+                        diagnostics.add_message(message, filesystem);
+                    }
+                }
+                BuildLogEntry::Warn(warn) => {
+                    for message in warn.to_messages(Severity::Warning) {
+                        diagnostics.add_message(message, filesystem);
+                    }
+                }
+            }
         }
 
         self.definition_map = DefinitionMap::from_project(self);

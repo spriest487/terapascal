@@ -165,6 +165,12 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     eprintln!("warning: {}", warning.main(Severity::Warning));
                 }
             }
+
+            BuildLogEntry::Error(warning) => {
+                if report_err(warning.as_ref(), ReportSeverity::Error).is_err() {
+                    eprintln!("warning: {}", warning.main(Severity::Error));
+                }
+            }
         }
     }
     
