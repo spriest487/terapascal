@@ -7,7 +7,7 @@ use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeName;
 use crate::typ::Value;
-use crate::Ident;
+use crate::ast::Ident;
 use derivative::Derivative;
 use std::fmt;
 use std::iter;

@@ -1,4 +1,5 @@
-use crate::ast::{DeclName, IdentPath};
+use crate::ast::DeclName;
+use crate::ast::IdentPath;
 use crate::ast::DeclIdent;
 use crate::typ::ast::WhereClause;
 use crate::typ::typecheck_type_params;
@@ -16,7 +17,7 @@ use crate::typ::TypeError;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
-use crate::Ident;
+use crate::ast::Ident;
 use std::borrow::Cow;
 use std::fmt;
 use std::sync::Arc;

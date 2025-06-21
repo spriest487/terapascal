@@ -1,3 +1,4 @@
+use terapascal_common::aggregate_err::AggregateError;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Unit;
@@ -46,7 +47,9 @@ pub fn try_unit_from_string(unit_name: &str, src: &str) -> ParseResult<Unit<Span
 
     let unit_ident = Ident::new(unit_name, Span::zero(unit_name));
 
-    let unit = Unit::parse(&mut tokens, IdentPath::from_parts(vec![unit_ident]))?;
+    let unit = Unit::parse(&mut tokens, IdentPath::from_parts(vec![unit_ident]))
+        .map_err(AggregateError::into_err)?;
+
     tokens.finish()?;
 
     Ok(unit)

@@ -22,10 +22,7 @@ pub use ast::keyword::Keyword;
 pub use ast::operators::CompoundAssignmentOperator;
 pub use ast::operators::Operator;
 pub use ast::operators::Position;
-pub use ast::Ident;
 
-use crate::ast::IdentPath;
-use crate::ast::Unit;
 use crate::codegen::CodegenOpts;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
@@ -35,11 +32,12 @@ use crate::typ::Module;
 use crate::typ::TypeResult;
 use std::path::PathBuf;
 use std::sync::Arc;
+use terapascal_common::aggregate_err::AggregateError;
 use terapascal_common::build_log::BuildLog;
+use terapascal_common::fs::Filesystem;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::CompileOpts;
-use terapascal_common::fs::Filesystem;
 use terapascal_common::TracedError;
 use terapascal_ir as ir;
 
@@ -60,7 +58,7 @@ pub fn tokenize(unit: PreprocessedUnit) -> TokenizeResult<Vec<TokenTree>>{
 pub fn parse(
     filename: impl Into<PathBuf>,
     tokens: impl IntoIterator<Item=TokenTree>
-) -> ParseResult<Unit<Span>> {
+) -> ParseResult<ast::Unit> {
     let file_span = Span {
         file: Arc::new(filename.into()),
         start: Location::zero(),
@@ -71,10 +69,10 @@ pub fn parse(
         .with_extension("")
         .file_name()
         .map(|file_name| {
-            let unit_ident = IdentPath::from_parts(file_name
+            let unit_ident = ast::IdentPath::from_parts(file_name
                 .to_string_lossy()
                 .split('.')
-                .map(|part| Ident::new(part, file_span.clone())));
+                .map(|part| ast::Ident::new(part, file_span.clone())));
 
             unit_ident
         })
@@ -83,15 +81,18 @@ pub fn parse(
             TracedError::trace(err)
         })?;
 
-    let mut tokens = TokenStream::new(tokens, file_span); 
-    let parsed_unit = ast::Unit::parse(&mut tokens, unit_ident)?;
+    let mut tokens = TokenStream::new(tokens, file_span);
+    
+    let unit = ast::Unit::parse(&mut tokens, unit_ident)
+        .map_err(AggregateError::into_err)?;
+    
     tokens.finish()?;
-
-    Ok(parsed_unit)
+    
+    Ok(unit)
 }
 
 pub fn typecheck<'a>(
-    units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>,
+    units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a ast::Unit)>,
     verbose: bool,
     log: &mut BuildLog
 ) -> TypeResult<Module> {

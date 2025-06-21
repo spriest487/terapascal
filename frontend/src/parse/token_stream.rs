@@ -145,6 +145,8 @@ impl TokenStream {
     /// find a match or reach the end of the sequence. All non-matching tokens encountered are
     /// collected into a list of invalid tokens. 
     pub fn match_or_advance(&mut self, matcher: impl Into<Matcher>) -> MatchOrAdvanceResult {
+        let at = self.context().clone();
+        
         let matcher = matcher.into();
         let mut invalid = Vec::new();
 
@@ -169,6 +171,7 @@ impl TokenStream {
         };
 
         MatchOrAdvanceResult {
+            at,
             matched,
             matcher,
             invalid,
@@ -177,6 +180,7 @@ impl TokenStream {
 }
 
 pub struct MatchOrAdvanceResult {
+    pub at: Span,
     pub matcher: Matcher,
 
     pub matched: Option<TokenTree>,
@@ -191,6 +195,14 @@ impl MatchOrAdvanceResult {
             unexpected_span,
             Some(self.matcher.clone()),
         )))
+    }
+    
+    pub fn and_continue(self, errors: &mut Vec<TracedError<ParseError>>) -> bool {
+        if let Some(err) = self.to_err() {
+            errors.push(err);
+        }
+        
+        self.matched.is_some()
     }
 }
 

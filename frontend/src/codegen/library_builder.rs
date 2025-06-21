@@ -52,7 +52,7 @@ use crate::typ::TypeArgsResult;
 use crate::typ::TypeParamContainer;
 use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::Ident;
+use crate::ast::Ident;
 pub use function::*;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;

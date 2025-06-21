@@ -19,7 +19,7 @@ use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::DelimiterPair;
-use crate::Ident;
+use crate::ast::Ident;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;

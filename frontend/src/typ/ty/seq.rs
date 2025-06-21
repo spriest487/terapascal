@@ -1,4 +1,5 @@
-use crate::ast::{Access, FunctionDeclKind};
+use crate::ast::Access;
+use crate::ast::FunctionDeclKind;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::OverloadCandidate;
@@ -6,7 +7,7 @@ use crate::typ::is_system_option_name;
 use crate::typ::Context;
 use crate::typ::NameError;
 use crate::typ::Type;
-use crate::Ident;
+use crate::ast::Ident;
 use std::sync::Arc;
 
 pub const SEQUENCE_METHOD_NAME: &str = "Sequence";

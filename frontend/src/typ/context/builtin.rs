@@ -16,7 +16,7 @@ use crate::typ::Type;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
-use crate::Ident;
+use crate::ast::Ident;
 use crate::IntConstant;
 use linked_hash_map::LinkedHashMap;
 use std::path::PathBuf;

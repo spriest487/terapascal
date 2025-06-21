@@ -7,7 +7,7 @@ use crate::ast::TypeName;
 use crate::ast::*;
 use crate::token_tree::*;
 use std::fmt;
-use terapascal_common::aggregate_err::AggregateError;
+use terapascal_common::aggregate_err::{AggregateError, AggregateResult};
 use terapascal_common::aggregate_err::FromAggregateError;
 use terapascal_common::span::*;
 use terapascal_common::DiagnosticLabel;
@@ -100,6 +100,7 @@ pub enum ParseError {
     },
 
     AggregateBlock(AggregateParseError<Block>),
+    AggregateUnit(AggregateParseError<Unit>),
 }
 
 impl ParseError {
@@ -176,7 +177,9 @@ impl Spanned for ParseError {
             ParseError::InvalidTypeParamName(span) => span,
             ParseError::InvalidSetRangeExpr { span } => span,
             ParseError::InvalidTagLocation { span, .. } => span,
+            
             ParseError::AggregateBlock(err) => err.first.span(),
+            ParseError::AggregateUnit(err) => err.first.span(),
         }
     }
 }
@@ -229,6 +232,7 @@ impl fmt::Display for ParseError {
             ParseError::InvalidTagLocation { .. } => write!(f, "Invalid tag location"),
 
             ParseError::AggregateBlock(agg) => write!(f, "{}", agg.first.err),
+            ParseError::AggregateUnit(agg) => write!(f, "{}", agg.first.err),
         }
     }
 }
@@ -333,7 +337,11 @@ impl DiagnosticOutput for ParseError {
             }
 
             ParseError::AggregateBlock(agg) => {
-                agg.first.label().as_ref().and_then(|label| label.text.clone())
+                agg.first_label_text()
+            }
+            
+            ParseError::AggregateUnit(agg) => {
+                agg.first_label_text()
             }
         };
 
@@ -410,3 +418,54 @@ impl FromAggregateError<Block> for TracedError<ParseError> {
     }
 }
 
+impl FromAggregateError<Unit> for TracedError<ParseError> {
+    fn from_aggregate_error(err: AggregateError<Unit, Self>) -> Self {
+        let first_bt = err.first.bt.clone();
+
+        TracedError {
+            err: ParseError::AggregateUnit(err),
+            bt: first_bt,
+        }
+    }
+}
+
+pub type AggregateParseResult<T> = AggregateResult<T, TracedError<ParseError>>;
+
+pub trait ContinueParse : Sized {
+    type Item;
+
+    fn and_continue(self,
+        errors: &mut Vec<TracedError<ParseError>>,
+        or_default: Self::Item
+    ) -> Self::Item {
+        self.and_continue_with(errors, || or_default)
+    }
+    
+    fn and_continue_with<DefaultFn>(self,
+        errors: &mut Vec<TracedError<ParseError>>,
+        f: DefaultFn
+    ) -> Self::Item
+    where DefaultFn: FnOnce() -> Self::Item;
+}
+
+impl<T> ContinueParse for ParseResult<T> {
+    type Item = T;
+
+    fn and_continue_with<DefaultFn>(self,
+        errors: &mut Vec<TracedError<ParseError>>,
+        f: DefaultFn
+    ) -> Self::Item
+    where DefaultFn: FnOnce() -> Self::Item
+    {
+        match self {
+            Err(err) => {
+                errors.push(err);
+                f()
+            }
+
+            Ok(item) => {
+                item
+            }
+        }
+    }
+}

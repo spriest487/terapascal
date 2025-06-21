@@ -198,7 +198,9 @@ where
                 self.add_stmt(stmt);
             }
 
-            self.add_keyword(&init_block.end_span);
+            if let Some(span) = &init_block.end_span {
+                self.add_keyword(span);
+            }
         }
 
         if let Some(span) = &unit.end_kw {

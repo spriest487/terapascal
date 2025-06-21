@@ -136,7 +136,7 @@ fn parse_block_stmts(
             break;
         }
         
-        match parse_block_stmt_agg(&mut tokens) {
+        match parse_block_stmt(&mut tokens) {
             Ok(BlockStatementParsedItem::Stmt(stmt)) => {
                 block.stmts.push(stmt);
             }
@@ -156,12 +156,7 @@ fn parse_block_stmts(
             }
         }
         
-        let to_semicolon = tokens.match_or_advance(Separator::Semicolon);
-        if let Some(err) = to_semicolon.to_err() {
-            errors.push(err);
-        }
-
-        if to_semicolon.matched.is_none() {
+        if !tokens.match_or_advance(Separator::Semicolon).and_continue(&mut errors) {
             break;
         }
     }
@@ -184,7 +179,7 @@ enum BlockStatementParsedItem {
     OutputExpr(Expr),
 }
 
-fn parse_block_stmt_agg(tokens: &mut TokenStream) -> ParseResult<BlockStatementParsedItem> {
+fn parse_block_stmt(tokens: &mut TokenStream) -> ParseResult<BlockStatementParsedItem> {
     // we want to be able to asser than when we reinterpret an invalid statement as the output
     // expr, it's actually the expr starting from the same token as where we tried to parse the
     // statement. if it isn't, a statement nested within this has failed to properly handle

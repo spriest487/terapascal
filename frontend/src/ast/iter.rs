@@ -1,4 +1,4 @@
-use crate::ast::Annotation;
+use crate::ast::{Annotation, Ident};
 use crate::ast::Expr;
 use crate::ast::Stmt;
 use crate::ast::TypeAnnotation;
@@ -6,7 +6,6 @@ use crate::ast::TypeName;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
-use crate::Ident;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;

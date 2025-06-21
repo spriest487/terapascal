@@ -18,7 +18,7 @@ use crate::typ::TypeError;
 use crate::typ::TypeParamList;
 use crate::typ::TypeParamListItem;
 use crate::typ::TypeResult;
-use crate::Ident;
+use crate::ast::Ident;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;

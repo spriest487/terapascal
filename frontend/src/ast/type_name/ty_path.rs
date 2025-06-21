@@ -1,9 +1,10 @@
 use crate::ast::IdentPath;
 use crate::ast::TypeList;
 use crate::parse::ParseResult;
-use crate::parse::{Parse, TryParse};
+use crate::parse::Parse;
+use crate::parse::TryParse;
 use crate::TokenStream;
-use crate::Ident;
+use crate::ast::Ident;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use derivative::Derivative;

@@ -1,7 +1,7 @@
 use crate::ast::Annotation;
 use crate::ast::BinOp;
 use crate::ast::Expr;
-use crate::Ident;
+use crate::ast::Ident;
 use crate::Operator;
 use derivative::Derivative;
 use std::fmt;

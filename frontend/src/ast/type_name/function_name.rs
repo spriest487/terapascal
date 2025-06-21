@@ -4,7 +4,7 @@ use crate::parse::LookAheadTokenStream;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
-use crate::Ident;
+use crate::ast::Ident;
 use crate::Keyword;
 use crate::Separator;
 use crate::TokenStream;

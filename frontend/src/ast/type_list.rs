@@ -7,7 +7,7 @@ use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::parse::TryParse;
 use crate::DelimiterPair;
-use crate::Ident;
+use crate::ast::Ident;
 use crate::Separator;
 use crate::TokenTree;
 use derivative::Derivative;
