@@ -78,9 +78,14 @@ impl From<io::Error> for RunError {
 }
 
 impl DiagnosticOutput for RunError {
-    fn main(&self, severity: Severity) -> DiagnosticMessage {
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+    
+    fn main(&self) -> DiagnosticMessage {
+        let severity = self.severity();
         match self {
-            RunError::BuildError(err) => err.main(severity),
+            RunError::BuildError(err) => err.main(),
             RunError::OutputFailed(span, err) => DiagnosticMessage {
                 severity,
                 title: format!(
@@ -97,7 +102,7 @@ impl DiagnosticOutput for RunError {
                 label: None,
                 notes: Vec::new(),
             },
-            RunError::ExecError(err) => err.main(severity),
+            RunError::ExecError(err) => err.main(),
             RunError::InternalError(msg) => DiagnosticMessage {
                 severity,
                 title: msg.to_string(),

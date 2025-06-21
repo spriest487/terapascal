@@ -8,7 +8,7 @@ use ir::InstructionFormatter;
 use ir::RawInstructionFormatter;
 use std::fmt;
 use terapascal_common::span::Span;
-use terapascal_common::DiagnosticLabel;
+use terapascal_common::{DiagnosticLabel, Severity};
 use terapascal_common::DiagnosticOutput;
 
 #[derive(Debug)]
@@ -118,6 +118,10 @@ impl fmt::Display for ExecError {
 }
 
 impl DiagnosticOutput for ExecError {
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
     fn label(&self) -> Option<DiagnosticLabel> {
         match self {
             ExecError::WithStackTrace { err, stack_trace } => {

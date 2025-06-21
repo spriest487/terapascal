@@ -20,7 +20,7 @@ use std::ops::Add;
 use std::ops::BitOr;
 use std::sync::Arc;
 use terapascal_common::span::*;
-use terapascal_common::DiagnosticLabel;
+use terapascal_common::{DiagnosticLabel, Severity};
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::TracedError;
 
@@ -382,6 +382,10 @@ impl Spanned for TokenizeError {
 }
 
 impl DiagnosticOutput for TokenizeError {
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+
     fn label(&self) -> Option<DiagnosticLabel> {
         match self {
             TokenizeError::IllegalToken(_, span) => {

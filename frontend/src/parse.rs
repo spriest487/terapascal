@@ -10,7 +10,7 @@ use std::fmt;
 use terapascal_common::aggregate_err::{AggregateError, AggregateResult};
 use terapascal_common::aggregate_err::FromAggregateError;
 use terapascal_common::span::*;
-use terapascal_common::DiagnosticLabel;
+use terapascal_common::{DiagnosticLabel, Severity};
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::TracedError;
@@ -238,6 +238,10 @@ impl fmt::Display for ParseError {
 }
 
 impl DiagnosticOutput for ParseError {
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+    
     fn label(&self) -> Option<DiagnosticLabel> {
         let text = match self {
             ParseError::InvalidUnitFilename(..) => None,

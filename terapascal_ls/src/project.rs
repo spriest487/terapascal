@@ -15,9 +15,9 @@ use terapascal_build::ParseOutput;
 use terapascal_common::build_log::{BuildLog, BuildLogEntry};
 use terapascal_common::span::Location;
 use terapascal_common::span::Spanned;
-use terapascal_common::{CompileOpts, Severity};
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::CompileOpts;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
 use terapascal_frontend::typecheck;
@@ -36,7 +36,7 @@ impl BuildDiagnostics {
     pub fn add_err(&mut self, err: impl Into<BuildError>, filesystem: &WorkspaceFilesystem) {
         let err = err.into();
         
-        self.add_message(err.main(Severity::Error), filesystem);
+        self.add_message(err.main(), filesystem);
         for message in err.see_also() {
             self.add_message(message, filesystem);
         }
@@ -152,8 +152,8 @@ impl Project {
                     },
 
                     Err(err) => {
-                        eprintln!("[build] {} ({})", err.main(Severity::Error), err.span());
-                        log.error(err);
+                        eprintln!("[build] {} ({})", err.main(), err.span());
+                        log.diagnostic(err);
 
                         for (unit_path, unit) in &parsed_output.units {
                             let version = filesystem.file_version(unit_path);
@@ -181,13 +181,13 @@ impl Project {
             },
 
             Err(BuildError::ParseError(parse_err)) => {
-                eprintln!("[build] {} ({})", parse_err.main(Severity::Error), parse_err.span());
+                eprintln!("[build] {} ({})", parse_err.main(), parse_err.span());
 
                 diagnostics.add_err(parse_err, filesystem);
             },
 
             Err(err) => {
-                eprintln!("[build] {}", err.main(Severity::Error));
+                eprintln!("[build] {}", err.main());
                 diagnostics.add_err(err, filesystem);
             },
         };
@@ -196,14 +196,10 @@ impl Project {
             eprintln!("[build] {}", log_entry);
             
             match log_entry {
-                BuildLogEntry::Trace(..) => { }
-                BuildLogEntry::Error(err) => {
-                    for message in err.to_messages(Severity::Error) {
-                        diagnostics.add_message(message, filesystem);
-                    }
-                }
-                BuildLogEntry::Warn(warn) => {
-                    for message in warn.to_messages(Severity::Warning) {
+                BuildLogEntry::Trace(..) => {}
+
+                BuildLogEntry::Diagnostic(err) => {
+                    for message in err.to_messages() {
                         diagnostics.add_message(message, filesystem);
                     }
                 }

@@ -1,6 +1,5 @@
-use crate::DiagnosticOutput;
-use crate::Severity;
 use crate::DiagnosticMessage;
+use crate::DiagnosticOutput;
 use std::iter::once;
 use std::mem;
 
@@ -126,7 +125,7 @@ impl<T, E: DiagnosticOutput> AggregateError<T, E> {
         self.rest
             .iter()
             .flat_map(|err| {
-                let main = err.main(Severity::Error);
+                let main = err.main();
                 let see_also = err.see_also();
 
                 once(main).chain(see_also)

@@ -75,15 +75,6 @@ fn label_from_source_file<'a>(
     Ok(label)
 }
 
-pub fn convert_report_severity(severity: ReportSeverity) -> Severity {
-    match severity {
-        ReportSeverity::Help => Severity::Help,
-        ReportSeverity::Note => Severity::Info,
-        ReportSeverity::Warning => Severity::Warning,
-        ReportSeverity::Error | ReportSeverity::Bug => Severity::Error,
-    }
-}
-
 pub fn convert_severity_to_report(severity: Severity) -> ReportSeverity {
     match severity {
          Severity::Help => ReportSeverity::Help,
@@ -93,15 +84,13 @@ pub fn convert_severity_to_report(severity: Severity) -> ReportSeverity {
     }
 }
 
-pub fn report_err(err: &dyn DiagnosticOutput, severity: ReportSeverity) -> Result<(), FileError> {
+pub fn report_err(err: &dyn DiagnosticOutput) -> Result<(), FileError> {
     let mut out = termcolor::StandardStream::stderr(termcolor::ColorChoice::Auto);
     let config = codespan_reporting::term::Config::default();
 
     let mut code_map = CodeMap::new();
-    
-    let severity = convert_report_severity(severity);
-    
-    let messages = once(err.main(severity))
+
+    let messages = once(err.main())
         .chain(err.see_also());
     
     for message in messages {

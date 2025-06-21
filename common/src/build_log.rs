@@ -1,30 +1,23 @@
-use std::fmt;
 use crate::{DiagnosticOutput, Severity};
+use std::fmt;
 
 pub enum BuildLogEntry {
     Trace(String),
-    Error(Box<dyn DiagnosticOutput>),
-    Warn(Box<dyn DiagnosticOutput>),
+    Diagnostic(Box<dyn DiagnosticOutput>),
 }
 
 impl fmt::Display for BuildLogEntry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             BuildLogEntry::Trace(message) => {
-                write!(f, "{message}")?;
+                write!(f, "[trace] {message}")?;
             }
 
-            BuildLogEntry::Warn(warning) => {
-                write!(f, "{}", warning.main(Severity::Warning))?;
-                for see_also in warning.see_also() {
-                    writeln!(f)?;
-                    write!(f, "{}", see_also)?;
-                }
-            }
-
-            BuildLogEntry::Error(error) => {
-                write!(f, "{}", error.main(Severity::Error))?;
-                for see_also in error.see_also() {
+            BuildLogEntry::Diagnostic(diagnostic) => {
+                write!(f, "[{}]", diagnostic.severity().to_string().to_lowercase())?;
+                
+                write!(f, "{}", diagnostic.main())?;
+                for see_also in diagnostic.see_also() {
                     writeln!(f)?;
                     write!(f, "{}", see_also)?;
                 }
@@ -50,15 +43,14 @@ impl BuildLog {
         self.entries.push(BuildLogEntry::Trace(message.into()));
     }
 
-    pub fn warn(&mut self, warning: impl DiagnosticOutput + 'static) {
-        self.entries.push(BuildLogEntry::Warn(Box::new(warning)));
-    }
-
-    pub fn error(&mut self, error: impl DiagnosticOutput + 'static) {
-        self.entries.push(BuildLogEntry::Error(Box::new(error)));
+    pub fn diagnostic(&mut self, warning: impl DiagnosticOutput + 'static) {
+        self.entries.push(BuildLogEntry::Diagnostic(Box::new(warning)));
     }
     
     pub fn has_errors(&self) -> bool {
-        self.entries.iter().any(|e| matches!(e, BuildLogEntry::Error(..)))
+        self.entries.iter().any(|e| match e {
+            BuildLogEntry::Trace(..) => false,
+            BuildLogEntry::Diagnostic(diag) => diag.severity() >= Severity::Error,
+        })
     }
 }

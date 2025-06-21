@@ -18,7 +18,7 @@ pub fn member_bin_op_expr_is_member_stmt() {
         },
 
         Err(err) => {
-            panic!("should parse as a valid statement, got: {}", err.err.main(Severity::Error))
+            panic!("should parse as a valid statement, got: {}", err.err.main())
         },
     }
 }

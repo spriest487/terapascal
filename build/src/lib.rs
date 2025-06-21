@@ -157,7 +157,7 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
                 let pp_unit = preprocess(fs, &unit_filename, input.compile_opts.clone())?;
 
                 for warning in pp_unit.warnings.clone() {
-                    log.warn(warning);
+                    log.diagnostic(warning);
                 }
 
                 let tokens = tokenize(pp_unit)?;
@@ -170,7 +170,7 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
                         ParseError::AggregateUnit(err) => {
                             let (unit, errors) = err.unwrap();
                             for error in errors {
-                                log.error(error);
+                                log.diagnostic(error);
                             }
                             
                             unit

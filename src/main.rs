@@ -5,7 +5,6 @@ mod reporting;
 use crate::args::*;
 use crate::compile_error::*;
 use crate::reporting::report_err;
-use codespan_reporting::diagnostic::Severity as ReportSeverity;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
@@ -24,17 +23,18 @@ use terapascal_backend_c as backend_c;
 use terapascal_backend_c::c;
 use terapascal_build::bincode_config;
 use terapascal_build::build;
-use terapascal_build::error::{BuildError, BuildResult};
+use terapascal_build::error::BuildError;
+use terapascal_build::error::BuildResult;
 use terapascal_build::BuildArtifact;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildOutput;
 use terapascal_build::BuildStage;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::build_log::BuildLogEntry;
-use terapascal_common::span::*;
-use terapascal_common::{CompileOpts, Severity};
-use terapascal_common::DiagnosticOutput;
 use terapascal_common::fs::DefaultFilesystem;
+use terapascal_common::span::*;
+use terapascal_common::CompileOpts;
+use terapascal_common::DiagnosticOutput;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
@@ -157,18 +157,12 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
     for log_entry in &output.log.entries {
         match log_entry {
             BuildLogEntry::Trace(trace) => {
-                println!("{}", trace);
+                println!("Trace: {}", trace);
             }
 
-            BuildLogEntry::Warn(warning) => {
-                if report_err(warning.as_ref(), ReportSeverity::Warning).is_err() {
-                    eprintln!("warning: {}", warning.main(Severity::Warning));
-                }
-            }
-
-            BuildLogEntry::Error(warning) => {
-                if report_err(warning.as_ref(), ReportSeverity::Error).is_err() {
-                    eprintln!("warning: {}", warning.main(Severity::Error));
+            BuildLogEntry::Diagnostic(warning) => {
+                if report_err(warning.as_ref()).is_err() {
+                    eprintln!("{}: {}", warning.severity(), warning.main());
                 }
             }
         }
@@ -364,7 +358,7 @@ fn main() {
     let print_bt = args.backtrace;
 
     if let Err(err) = compile(&args) {
-        if let Err(output_err) = report_err(&err, ReportSeverity::Error) {
+        if let Err(output_err) = report_err(&err) {
             eprintln!("error: {}", err);
             eprintln!("error reporting output: {}", output_err);
         }

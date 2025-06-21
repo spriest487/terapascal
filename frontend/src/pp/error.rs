@@ -1,7 +1,4 @@
-use terapascal_common::{
-    span::{Span, Spanned},
-    DiagnosticLabel, DiagnosticOutput,
-};
+use terapascal_common::{span::{Span, Spanned}, DiagnosticLabel, DiagnosticOutput, Severity};
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -59,6 +56,10 @@ impl Spanned for PreprocessorError {
 }
 
 impl DiagnosticOutput for PreprocessorError {
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+
     fn label(&self) -> Option<DiagnosticLabel> {
         Some(DiagnosticLabel {
             span: self.span().clone(),

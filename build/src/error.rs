@@ -73,19 +73,23 @@ impl From<PreprocessorError> for BuildError {
 }
 
 impl DiagnosticOutput for BuildError {
-    fn main(&self, severity: Severity) -> DiagnosticMessage {
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+    
+    fn main(&self) -> DiagnosticMessage {
         match self {
             Self::CompletedWithErrors => {
                 DiagnosticMessage::new(Severity::Error, "Build error")
             }
-            Self::TokenizeError(err) => err.err.main(severity),
-            Self::ParseError(err) => err.err.main(severity),
-            Self::TypecheckError(err) => err.main(severity),
-            Self::PreprocessorError(err) => err.main(severity),
+            Self::TokenizeError(err) => err.err.main(),
+            Self::ParseError(err) => err.err.main(),
+            Self::TypecheckError(err) => err.main(),
+            Self::PreprocessorError(err) => err.main(),
 
             Self::FileNotFound(path, span) => {
                 let title = format!("file not found: {}", path.display());
-                let message = DiagnosticMessage::new(severity, title);
+                let message = DiagnosticMessage::new(self.severity(), title);
 
                 match span {
                     Some(span) => message.with_label(DiagnosticLabel::new(span.clone())),
@@ -95,7 +99,7 @@ impl DiagnosticOutput for BuildError {
 
             Self::ReadSourceFileFailed { path, .. } => {
                 let title = format!("failed to read source file {}", path.display());
-                DiagnosticMessage::new(severity, title)
+                DiagnosticMessage::new(self.severity(), title)
             },
 
             Self::DuplicateUnit { unit_ident, new_path, existing_path } => {
@@ -106,20 +110,20 @@ impl DiagnosticOutput for BuildError {
                     existing_path.display()
                 );
 
-                DiagnosticMessage::new(severity, title)
+                DiagnosticMessage::new(self.severity(), title)
                     .with_label(DiagnosticLabel::new(unit_ident.span().clone()))
             }
 
             Self::UnexpectedMainUnit { unit_path, unit_kind, existing_ident } => {
                 if let Some(ident) = existing_ident {
-                    DiagnosticMessage::new(severity, format!(
+                    DiagnosticMessage::new(self.severity(), format!(
                         "encountered {} unit @ `{}` but main unit `{}` was already loaded",
                         unit_kind,
                         unit_path.display(),
                         ident
                     ))
                 } else {
-                    DiagnosticMessage::new(severity, format!(
+                    DiagnosticMessage::new(self.severity(), format!(
                         "encountered {} unit @ `{}` after other units were already loaded",
                         unit_kind,
                         unit_path.display()
@@ -133,14 +137,14 @@ impl DiagnosticOutput for BuildError {
                     used_unit, unit_ident
                 );
 
-                DiagnosticMessage::new(severity, title)
+                DiagnosticMessage::new(self.severity(), title)
                     .with_label(DiagnosticLabel::new(span.clone())
                         .with_text("unit used here".to_string()))
             }
 
             Self::UnitNotLoaded { unit_name } => {
                 let title = "used units must be referenced by the main unit or on the command line";
-                DiagnosticMessage::new(severity, title)
+                DiagnosticMessage::new(self.severity(), title)
                     .with_label(DiagnosticLabel::new(unit_name.path_span().clone()))
                     .with_note(format!("unit `{}` is not loaded", unit_name))
             },

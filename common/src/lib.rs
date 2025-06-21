@@ -16,6 +16,8 @@ pub const IR_LIB_EXT: &str = "lib";
 pub const SRC_FILE_DEFAULT_EXT: &str = "tpas";
 
 pub trait DiagnosticOutput: fmt::Display {
+    fn severity(&self) -> Severity;
+    
     fn title(&self) -> String {
         self.to_string()
     }
@@ -28,7 +30,8 @@ pub trait DiagnosticOutput: fmt::Display {
         Vec::new()
     }
 
-    fn main(&self, severity: Severity) -> DiagnosticMessage {
+    fn main(&self) -> DiagnosticMessage {
+        let severity = self.severity();
         let title = self.title();
         let label = self.label();
         let notes = self.notes().to_vec();
@@ -41,9 +44,9 @@ pub trait DiagnosticOutput: fmt::Display {
         }
     }
     
-    fn to_messages(&self, main_severity: Severity) -> Vec<DiagnosticMessage> {
+    fn to_messages(&self) -> Vec<DiagnosticMessage> {
         let mut messages = self.see_also();
-        messages.insert(0, self.main(main_severity));
+        messages.insert(0, self.main());
 
         messages
     }
@@ -98,6 +101,17 @@ pub enum Severity {
     Info,
     Warning,
     Error,
+}
+
+impl fmt::Display for Severity {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Severity::Help => write!(f, "help"),
+            Severity::Info => write!(f, "info"),
+            Severity::Warning => write!(f, "warning"),
+            Severity::Error => write!(f, "error"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -236,6 +250,10 @@ impl<T: fmt::Display> fmt::Display for TracedError<T> {
 }
 
 impl<T: DiagnosticOutput> DiagnosticOutput for TracedError<T> {
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+    
     fn title(&self) -> String {
         self.err.title()
     }
@@ -248,8 +266,8 @@ impl<T: DiagnosticOutput> DiagnosticOutput for TracedError<T> {
         self.err.notes()
     }
 
-    fn main(&self, severity: Severity) -> DiagnosticMessage {
-        self.err.main(severity)
+    fn main(&self) -> DiagnosticMessage {
+        self.err.main()
     }
 
     fn see_also(&self) -> Vec<DiagnosticMessage> {

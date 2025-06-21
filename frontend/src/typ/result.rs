@@ -22,7 +22,7 @@ use crate::typ::MAX_FLAGS_BITS;
 use crate::IntConstant;
 use std::fmt;
 use terapascal_common::span::*;
-use terapascal_common::DiagnosticLabel;
+use terapascal_common::{DiagnosticLabel, Severity};
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::Backtrace;
@@ -532,6 +532,10 @@ impl Spanned for TypeError {
 }
 
 impl DiagnosticOutput for TypeError {
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+    
     fn title(&self) -> String {
         String::from(match self {
             TypeError::NameError { err, ..  } => match err {
