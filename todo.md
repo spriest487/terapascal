@@ -1,10 +1,7 @@
 # LS
-* decl mods and arg mods
 * fix the leading keyword in a unit getting highlighted wrong
-* comment tokens
 * pattern value annotations
 * cast value annotations
-* files need to be read from in memory not disk to match in-progress edits
 
 # features
 * add a named type case to typ::Type for all the things that use full_path, full_name etc

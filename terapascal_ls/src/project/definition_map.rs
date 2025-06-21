@@ -203,6 +203,10 @@ impl DefinitionMap {
         let unit = &module_unit.unit;
         let ctx = &module_unit.context;
 
+        if unit.ident.last().span.end.col > 0 {
+            self.add_namespace(&unit.ident, ctx);
+        }
+
         for iface_decl in &unit.iface_decls {
             self.add_unit_decl(iface_decl, ctx);
         }
@@ -236,7 +240,7 @@ impl DefinitionMap {
 
             UnitDecl::Uses { decl } => {
                 for item in &decl.units {
-                    self.add_unit_ident(&item.ident, ctx);
+                    self.add_namespace(&item.ident, ctx);
                 }
             },
 
@@ -250,7 +254,7 @@ impl DefinitionMap {
         }
     }
 
-    fn add_unit_ident(&mut self, unit_ident: &IdentPath, ctx: &Context) {
+    fn add_namespace(&mut self, unit_ident: &IdentPath, ctx: &Context) {
         let mut partial_path = IdentPath::from(unit_ident.first().clone());
         let mut next_index = 1;
 
