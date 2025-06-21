@@ -253,7 +253,7 @@ impl TypeName {
 
             None => match tokens.match_one(Matcher::Delimited(DelimiterPair::SquareBracket))? {
                 TokenTree::Delimited(group) => {
-                    let mut dim_tokens = group.to_inner_tokens();
+                    let mut dim_tokens = group.into_inner_tokens();
                     let dim_expr = Expr::parse(&mut dim_tokens)?;
                     dim_tokens.finish()?;
 
@@ -295,7 +295,7 @@ impl TypeName {
             Some(TokenTree::Delimited(group)) => {
                 span_end = group.close.clone();
 
-                let mut params_tokens = group.to_inner_tokens();
+                let mut params_tokens = group.into_inner_tokens();
                 let params = FunctionTypeNameParam::parse_seq(&mut params_tokens)?;
                 params_tokens.finish()?;
 

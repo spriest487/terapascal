@@ -45,7 +45,7 @@ impl Parse for Tag<Span> {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let group = DelimitedGroup::parse(tokens, DelimiterPair::SquareBracket)?;
         let span = group.span.clone();
-        let mut tag_tokens = group.to_inner_tokens();
+        let mut tag_tokens = group.into_inner_tokens();
 
         let mut items = Vec::new();
 

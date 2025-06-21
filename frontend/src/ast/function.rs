@@ -225,7 +225,7 @@ impl FunctionDecl<Span> {
 
             span = span.to(&params_group.span);
 
-            let mut params_tokens = params_group.to_inner_tokens();
+            let mut params_tokens = params_group.into_inner_tokens();
             let params = Self::parse_params(&mut params_tokens)?;
             
             params_tokens.finish()?;
@@ -795,7 +795,7 @@ impl Parse for AnonymousFunctionDef<Span> {
                 let mut params_tokens = params_group
                     .into_delimited_group()
                     .unwrap()
-                    .to_inner_tokens();
+                    .into_inner_tokens();
                 
                 while let Some(TokenTree::Ident(ident)) = params_tokens.match_one_maybe(Matcher::AnyIdent) {                    
                     let (ty, ty_span) = if params_tokens.match_one_maybe(Separator::Colon).is_some() {
@@ -853,7 +853,7 @@ impl Parse for AnonymousFunctionDef<Span> {
                         unreachable!()
                     };
                     
-                    let mut params_tokens = params_group.to_inner_tokens();
+                    let mut params_tokens = params_group.into_inner_tokens();
                     let params = FunctionDecl::parse_params(&mut params_tokens)?;
                     params_tokens.finish()?;
                     

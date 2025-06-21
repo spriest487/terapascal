@@ -348,7 +348,7 @@ impl Parse for CaseBlockGroup {
         let end_span = group.close.clone();
         let span = group.span.clone();
 
-        let mut group_tokens = group.to_inner_tokens();
+        let mut group_tokens = group.into_inner_tokens();
 
         let cond_expr = Expr::parse(&mut group_tokens)?;
         

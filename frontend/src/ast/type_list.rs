@@ -114,7 +114,7 @@ where
 {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let (span, mut items_tokens) = match tokens.match_one(DelimiterPair::SquareBracket)? {
-            TokenTree::Delimited(group) => (group.span.clone(), group.to_inner_tokens()),
+            TokenTree::Delimited(group) => (group.span.clone(), group.into_inner_tokens()),
             _ => unreachable!(),
         };
 

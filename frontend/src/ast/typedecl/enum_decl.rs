@@ -53,7 +53,7 @@ impl EnumDecl<Span> {
             .match_one(DelimiterPair::Bracket)?
             .into_delimited_group()
             .unwrap();
-        let mut items_tokens = group.to_inner_tokens();
+        let mut items_tokens = group.into_inner_tokens();
 
         let first_item = EnumDeclItem::parse(&mut items_tokens)?;
 

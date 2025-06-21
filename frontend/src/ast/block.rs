@@ -75,7 +75,7 @@ impl Block<Span> {
         let begin = body_tt_group.open.clone();
         let end = body_tt_group.close.clone();
 
-        let mut stmt_tokens = body_tt_group.clone().to_inner_tokens();
+        let mut stmt_tokens = body_tt_group.clone().into_inner_tokens();
 
         let (statements, output_expr) = parse_block_stmts(&mut stmt_tokens)?;
 

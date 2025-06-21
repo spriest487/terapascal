@@ -82,7 +82,7 @@ fn parse_size_of(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
     let kw = tokens.match_one(Keyword::SizeOf)?;
 
     let (close_bracket, mut ty_tokens) = match tokens.match_one(DelimiterPair::Bracket)? {
-        TokenTree::Delimited(group) => (group.close.clone(), group.to_inner_tokens()),
+        TokenTree::Delimited(group) => (group.close.clone(), group.into_inner_tokens()),
         _ => unreachable!(),
     };
 
@@ -101,7 +101,7 @@ fn parse_default(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
         Some(TokenTree::Delimited(group)) => {
             let span = kw.span().to(group.close.span());
 
-            let mut ty_tokens = group.to_inner_tokens();
+            let mut ty_tokens = group.into_inner_tokens();
             let ty_name = TypeName::parse(&mut ty_tokens)?;
             ty_tokens.finish()?;
 
@@ -127,7 +127,7 @@ fn parse_type_info_expr(tokens: &mut TokenStream) -> ParseResult<Expr> {
 
     let span = kw.span().to(&typename_group.close);
     
-    let mut typename_tokens = typename_group.to_inner_tokens();
+    let mut typename_tokens = typename_group.into_inner_tokens();
     let typename = TypeName::parse(&mut typename_tokens)?;
     typename_tokens.finish()?;
 
@@ -384,7 +384,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
         let open_bracket = group.open.clone();
         let close_bracket = group.close.clone();
 
-        let mut tokens = group.to_inner_tokens();
+        let mut tokens = group.into_inner_tokens();
 
         let mut sub_expr;
 
@@ -450,7 +450,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
         
         let mut inner_tokens = match self.tokens.look_ahead().next().cloned() {
             Some(TokenTree::Delimited(group)) => {
-                group.to_inner_tokens()
+                group.into_inner_tokens()
             },
 
             Some(bad) => {
@@ -577,7 +577,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
                     
                     let with_span = with_group.span.clone();
                     
-                    let mut with_tokens = with_group.to_inner_tokens();
+                    let mut with_tokens = with_group.into_inner_tokens();
                     let mut arg_types = Vec::new();
                     loop {
                         if !arg_types.is_empty() {
@@ -634,7 +634,7 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
         let index_span = index_group.span.clone();
 
         let index = {
-            let mut index_tokens = index_group.to_inner_tokens();
+            let mut index_tokens = index_group.into_inner_tokens();
             let index_expr = Expr::parse(&mut index_tokens)?;
             index_tokens.finish()?;
 

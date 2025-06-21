@@ -161,7 +161,7 @@ impl DelimitedGroup {
 }
 
 impl DelimitedGroup {
-    pub fn to_inner_tokens(self) -> TokenStream {
+    pub fn into_inner_tokens(self) -> TokenStream {
         TokenStream::new(self.inner, self.open)
     }
 }

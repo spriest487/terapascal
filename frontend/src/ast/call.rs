@@ -164,7 +164,7 @@ impl ArgList<Span> {
 
         let open = args_group.open.clone();
         let close = args_group.close.clone();
-        let mut args_tokens = args_group.to_inner_tokens();
+        let mut args_tokens = args_group.into_inner_tokens();
 
         let args = ArgListItem::parse_seq(&mut args_tokens)?
             .into_iter()

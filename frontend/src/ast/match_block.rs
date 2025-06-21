@@ -173,7 +173,7 @@ impl<B> MatchBlock<B> {
         let kw_span = block_group.open.clone();
         let end_span = block_group.close.clone();
 
-        let mut inner_tokens = block_group.to_inner_tokens();
+        let mut inner_tokens = block_group.into_inner_tokens();
 
         let cond_expr = Expr::parse(&mut inner_tokens)?;
         let of_span = inner_tokens.match_one(Keyword::Of)?.into_span();
