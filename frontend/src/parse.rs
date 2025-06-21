@@ -6,13 +6,14 @@ pub use self::token_stream::*;
 use crate::ast::TypeName;
 use crate::ast::*;
 use crate::token_tree::*;
+use std::fmt;
+use terapascal_common::aggregate_err::AggregateError;
+use terapascal_common::aggregate_err::FromAggregateError;
 use terapascal_common::span::*;
-use terapascal_common::{DiagnosticLabel, Severity};
+use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::TracedError;
-use std::fmt;
-use std::iter::once;
 
 #[derive(Debug)]
 pub struct IllegalStatement<A: Annotation = Span>(pub Box<Expr<A>>);
@@ -38,40 +39,66 @@ impl<A: Annotation> From<Expr<A>> for IllegalStatement<A> {
 #[derive(Debug)]
 pub enum ParseError {
     InvalidUnitFilename(Span),
-    
+
     UnexpectedToken(Box<TokenTree>, Option<Matcher>),
     UnexpectedTokens(Span, Option<Matcher>),
     UnexpectedEOF(Matcher, Span),
-    EmptyOperand { operator: Span, before: bool },
-    UnexpectedOperator { operator: Span },
+    EmptyOperand {
+        operator: Span,
+        before: bool,
+    },
+    UnexpectedOperator {
+        operator: Span,
+    },
 
     StatementIsIllegal(Box<Stmt>),
     ExprIsIllegal(IllegalStatement),
     IsExpr(IllegalStatement),
 
-    UnterminatedStatement { span: Span },
+    UnterminatedStatement {
+        span: Span,
+    },
     InvalidForLoopInit(Stmt<Span>),
-    
-    DuplicateModifier { new: DeclMod, existing: DeclMod },
-    
-    CtorWithTypeArgs { span: Span },
-    InvalidAssignmentExpr { span: Span },
-    
-    InvalidSetRangeExpr { span: Span },
-    
+
+    DuplicateModifier {
+        new: DeclMod,
+        existing: DeclMod,
+    },
+
+    CtorWithTypeArgs {
+        span: Span,
+    },
+    InvalidAssignmentExpr {
+        span: Span,
+    },
+
+    InvalidSetRangeExpr {
+        span: Span,
+    },
+
     EmptyTypeParamList(TypeIdentList),
     EmptyTypeArgList(TypeArgList),
     InvalidTypeParamName(Span),
-    
+
     EmptyWhereClause(WhereClause),
-    
+
     InvalidFunctionImplType(TypeName),
-    EmptyConstOrVarDecl { span: Span },
-    MultiVarDeclHasInitExpr { span: Span },
-    
-    EmptyTypeDecl { span: Span },
-    InvalidTagLocation { location: InvalidTagLocation, span: Span, tags_span: Span },
-    
+    EmptyConstOrVarDecl {
+        span: Span,
+    },
+    MultiVarDeclHasInitExpr {
+        span: Span,
+    },
+
+    EmptyTypeDecl {
+        span: Span,
+    },
+    InvalidTagLocation {
+        location: InvalidTagLocation,
+        span: Span,
+        tags_span: Span,
+    },
+
     AggregateBlock(AggregateParseError<Block>),
 }
 
@@ -87,18 +114,18 @@ impl ParseError {
     pub fn is_stmt(stmt: impl Into<Box<Stmt>>) -> Self {
         Self::StatementIsIllegal(stmt.into())
     }
-    
+
     pub fn expr_is_illegal(self) -> Self {
         match self {
-            ParseError::IsExpr(expr) => ParseError::ExprIsIllegal(expr), 
+            ParseError::IsExpr(expr) => ParseError::ExprIsIllegal(expr),
             other => other,
         }
     }
-    
+
     pub fn invalid_tag_loc(
         location: InvalidTagLocation,
         span: Span,
-        tags: &[impl Spanned]
+        tags: &[impl Spanned],
     ) -> Self {
         ParseError::InvalidTagLocation {
             location,
@@ -166,32 +193,41 @@ impl fmt::Display for ParseError {
             ParseError::UnexpectedOperator { .. } => write!(f, "Unexpected operator"),
 
             ParseError::StatementIsIllegal(..) => write!(f, "Statement is not legal here"),
-            
+
             ParseError::ExprIsIllegal(invalid) => write!(f, "{}", invalid.title()),
             ParseError::IsExpr(invalid) => write!(f, "{}", invalid.title()),
 
             ParseError::UnterminatedStatement { .. } => write!(f, "Unterminated stmt"),
-            ParseError::InvalidForLoopInit( .. ) => write!(f, "Invalid for-loop initialization stmt"),
-            
+            ParseError::InvalidForLoopInit(..) => write!(f, "Invalid for-loop initialization stmt"),
+
             ParseError::DuplicateModifier { .. } => write!(f, "Duplicate modifier"),
             ParseError::CtorWithTypeArgs { .. } => write!(f, "Constructor with type args"),
 
-            ParseError::InvalidSetRangeExpr { .. } => write!(f, "Invalid range expression for set declaration"),
-            
+            ParseError::InvalidSetRangeExpr { .. } => {
+                write!(f, "Invalid range expression for set declaration")
+            },
+
             ParseError::EmptyWhereClause(..) => write!(f, "Empty `where` clause"),
 
             ParseError::EmptyTypeParamList { .. } => write!(f, "Empty type parameter list"),
             ParseError::EmptyTypeArgList { .. } => write!(f, "Empty type argument list"),
-            ParseError::InvalidTypeParamName( .. ) => write!(f, "Invalid type parameter name"),
+            ParseError::InvalidTypeParamName(..) => write!(f, "Invalid type parameter name"),
 
-            ParseError::InvalidFunctionImplType(..) => write!(f, "Invalid interface type for method"),
+            ParseError::InvalidFunctionImplType(..) => {
+                write!(f, "Invalid interface type for method")
+            },
             ParseError::InvalidAssignmentExpr { .. } => write!(f, "Illegal assignment"),
-            ParseError::EmptyConstOrVarDecl { .. } => write!(f, "Empty const or variable declaration"),
-            ParseError::MultiVarDeclHasInitExpr { .. } => write!(f, "Multiple const or variable declaration has initialization expression"),
-            
+            ParseError::EmptyConstOrVarDecl { .. } => {
+                write!(f, "Empty const or variable declaration")
+            },
+            ParseError::MultiVarDeclHasInitExpr { .. } => write!(
+                f,
+                "Multiple const or variable declaration has initialization expression"
+            ),
+
             ParseError::EmptyTypeDecl { .. } => write!(f, "Empty type declaration"),
             ParseError::InvalidTagLocation { .. } => write!(f, "Invalid tag location"),
-            
+
             ParseError::AggregateBlock(agg) => write!(f, "{}", agg.first.err),
         }
     }
@@ -201,7 +237,7 @@ impl DiagnosticOutput for ParseError {
     fn label(&self) -> Option<DiagnosticLabel> {
         let text = match self {
             ParseError::InvalidUnitFilename(..) => None,
-            
+
             ParseError::UnexpectedToken(tt, Some(expected)) => {
                 Some(format!("found {}, expected {}", tt, expected))
             }
@@ -226,7 +262,7 @@ impl DiagnosticOutput for ParseError {
             }
 
             ParseError::UnexpectedOperator { .. } => Some("expected operand, found operator".to_string()),
-            
+
             ParseError::StatementIsIllegal(..) => None,
             ParseError::ExprIsIllegal(..) => None,
 
@@ -236,7 +272,7 @@ impl DiagnosticOutput for ParseError {
                 "the modifier `{}` is already present on this declaration",
                 new.keyword(),
             )),
-            
+
             ParseError::InvalidSetRangeExpr { .. } => None,
 
             ParseError::CtorWithTypeArgs { .. } => {
@@ -276,7 +312,7 @@ impl DiagnosticOutput for ParseError {
             ParseError::EmptyConstOrVarDecl { .. } => {
                 Some("declaration must contain one or more constants".to_string())
             }
-            
+
             ParseError::MultiVarDeclHasInitExpr { .. } => {
                 Some("declaration with an initialization expression may only declare a single name".to_string())
             }
@@ -284,7 +320,7 @@ impl DiagnosticOutput for ParseError {
             ParseError::InvalidForLoopInit(stmt) => {
                 Some(format!("stmt `{}` cannot be used to initialize the counter variable of a for-loop", stmt))
             }
-            
+
             ParseError::InvalidTagLocation { location, .. } => {
                 let loc_name = match location {
                     InvalidTagLocation::ForwardDecl => "forward declaration",
@@ -295,7 +331,7 @@ impl DiagnosticOutput for ParseError {
 
                 Some(format!("{loc_name} must not have tags"))
             }
-            
+
             ParseError::AggregateBlock(agg) => {
                 agg.first.label().as_ref().and_then(|label| label.text.clone())
             }
@@ -309,20 +345,19 @@ impl DiagnosticOutput for ParseError {
 
     fn see_also(&self) -> Vec<DiagnosticMessage> {
         match self {
-            ParseError::DuplicateModifier { existing, .. } => vec![
-                DiagnosticMessage::info("Duplicate modifier occurrence")
-                    .with_label(DiagnosticLabel::new(existing.span().clone())
-                        .with_text(format!("`{}` appears here", existing.keyword())))
-            ],
+            ParseError::DuplicateModifier { existing, .. } => {
+                vec![DiagnosticMessage::info("Duplicate modifier occurrence").with_label(
+                    DiagnosticLabel::new(existing.span().clone())
+                        .with_text(format!("`{}` appears here", existing.keyword())),
+                )]
+            },
 
-            ParseError::InvalidTagLocation { tags_span, .. } => vec![
-                DiagnosticMessage::info("Tags declared here".to_string())
-                    .with_label(DiagnosticLabel::new(tags_span.clone()))
-            ],
-            
-            ParseError::AggregateBlock(agg) => {
-                agg.rest_messages()
-            }
+            ParseError::InvalidTagLocation { tags_span, .. } => {
+                vec![DiagnosticMessage::info("Tags declared here".to_string())
+                    .with_label(DiagnosticLabel::new(tags_span.clone()))]
+            },
+
+            ParseError::AggregateBlock(agg) => agg.rest_messages(),
 
             _ => Vec::new(),
         }
@@ -337,11 +372,14 @@ pub trait Match {
     fn is_match(tokens: &mut LookAheadTokenStream) -> bool;
 }
 
-pub trait TryParse : Sized {
+pub trait TryParse: Sized {
     fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>>;
 }
 
-impl<T> TryParse for T where T : Parse + Match {
+impl<T> TryParse for T
+where
+    T: Parse + Match,
+{
     fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
         if Self::is_match(&mut tokens.look_ahead()) {
             Self::parse(tokens).map(Some)
@@ -357,61 +395,18 @@ pub enum InvalidTagLocation {
     AliasDecl,
     SetDecl,
     EnumDecl,
-} 
-
-#[derive(Debug)]
-pub struct AggregateParseError<T> {
-    pub item: Box<T>,
-
-    pub first: Box<TracedError<ParseError>>,
-    pub rest: Vec<TracedError<ParseError>>,
 }
 
-impl<T> AggregateParseError<T> {
-    pub fn result(item: T, mut errors: Vec<TracedError<ParseError>>) -> AggregateParseResult<T> {
-        if errors.is_empty() {
-            return Ok(item);
+pub type AggregateParseError<T> = AggregateError<T, TracedError<ParseError>>;
+
+impl FromAggregateError<Block> for TracedError<ParseError> {
+    fn from_aggregate_error(err: AggregateError<Block, Self>) -> Self {
+        let first_bt = err.first.bt.clone();
+
+        TracedError {
+            err: ParseError::AggregateBlock(err),
+            bt: first_bt,
         }
-
-        let first_err = errors.remove(0);
-
-        Err(AggregateParseError {
-            item: Box::new(item),
-            first: Box::new(first_err),
-            rest: errors,
-        })
-    }
-    
-    pub fn first_title(&self) -> String {
-        self.first.err.title()
-    }
-    
-    pub fn first_label_text(&self) -> Option<String> {
-        self.first.err.label().and_then(|label| label.text)
-    }
-    
-    pub fn rest_messages(&self) -> Vec<DiagnosticMessage> {
-        self.rest
-            .iter()
-            .flat_map(|err| {
-                let main = err.main(Severity::Error);
-                let see_also = err.see_also();
-                
-                once(main).chain(see_also)
-            })
-            .collect()
     }
 }
 
-impl From<AggregateParseError<Block>> for TracedError<ParseError> {
-    fn from(value: AggregateParseError<Block>) -> Self {
-        let bt = value.first.bt.clone();
-        
-        TracedError { 
-            err: ParseError::AggregateBlock(value), 
-            bt 
-        }
-    }
-} 
-
-pub type AggregateParseResult<T> = Result<T, AggregateParseError<T>>;

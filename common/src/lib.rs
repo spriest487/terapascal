@@ -2,6 +2,7 @@ pub mod source_map;
 pub mod span;
 pub mod build_log;
 pub mod fs;
+pub mod aggregate_err;
 
 use crate::span::*;
 pub use backtrace::Backtrace;
@@ -218,6 +219,38 @@ impl<T> Deref for TracedError<T> {
 
     fn deref(&self) -> &T {
         &self.err
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for TracedError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.err)
+    }
+}
+
+impl<T: DiagnosticOutput> DiagnosticOutput for TracedError<T> {
+    fn title(&self) -> String {
+        self.err.title()
+    }
+
+    fn label(&self) -> Option<DiagnosticLabel> {
+        self.err.label()
+    }
+
+    fn notes(&self) -> Vec<String> {
+        self.err.notes()
+    }
+
+    fn main(&self, severity: Severity) -> DiagnosticMessage {
+        self.err.main(severity)
+    }
+
+    fn see_also(&self) -> Vec<DiagnosticMessage> {
+        self.err.see_also()
+    }
+
+    fn backtrace(&self) -> Option<&Backtrace> {
+        Some(&self.bt)
     }
 }
 

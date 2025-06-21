@@ -4,9 +4,9 @@ use crate::ast::Stmt;
 use crate::parse::*;
 use crate::token_tree::*;
 use crate::Keyword;
-use terapascal_common::span::*;
 use derivative::Derivative;
 use std::fmt;
+use terapascal_common::span::*;
 use terapascal_common::TracedError;
 
 #[derive(Clone, Eq, Derivative)]
@@ -197,7 +197,8 @@ fn parse_block_stmts(
         errors.push(err);
     }
 
-    let result = AggregateParseError::result(block, errors)?;
+    let result = AggregateParseError::result(block, errors)
+        .map_err(AggregateParseError::into_err)?;
     Ok(result)
 }
 
