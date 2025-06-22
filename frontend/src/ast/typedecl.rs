@@ -12,8 +12,8 @@ pub use self::enum_decl::*;
 pub use self::iface_decl::*;
 pub use self::set_decl::*;
 pub use self::struct_decl::*;
-pub use self::variant_decl::*;
 pub use self::supers_clause::*;
+pub use self::variant_decl::*;
 use crate::ast::tag::Tag;
 use crate::ast::unit::AliasDecl;
 use crate::ast::FunctionDeclKind;
@@ -24,7 +24,6 @@ use crate::ast::TypeList;
 use crate::ast::TypeName;
 use crate::ast::WhereClause;
 use crate::ast::{Annotation, DeclName};
-use crate::parse::InvalidTagLocation;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -33,6 +32,7 @@ use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::parse::TryParse;
+use crate::parse::InvalidTagLocation;
 use crate::DelimiterPair;
 use crate::Separator;
 use crate::TokenTree;
@@ -397,6 +397,8 @@ impl TypeDeclStart {
         tags: &[Tag],
         name_span: &Span,
     ) -> ParseResult<Self> {
+        // 
+        
         let kw_tt = tokens.match_one(kw_matcher)?;
         let mut span = kw_tt.span().clone();
         

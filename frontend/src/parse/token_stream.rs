@@ -141,10 +141,10 @@ impl TokenStream {
         }
     }
     
-    /// Try to match the next token. If it doesn't match, advance the stream until we either
-    /// find a match or reach the end of the sequence. All non-matching tokens encountered are
-    /// collected into a list of invalid tokens. 
-    pub fn match_or_advance(&mut self, matcher: impl Into<Matcher>) -> MatchOrAdvanceResult {
+    /// Advance until the next token matches, or the end of the stream is reached.
+    /// All non-matching tokens encountered are collected into a list of invalid tokens.
+    /// The matched token is not consumed.
+    pub fn advance_until(&mut self, matcher: impl Into<Matcher>) -> AdvanceUntilResult {
         let at = self.context().clone();
         
         let matcher = matcher.into();
@@ -153,8 +153,6 @@ impl TokenStream {
         let matched = loop {
             match self.look_ahead().next().cloned() {
                 Some(tt) if matcher.is_match(&tt) => {
-                    self.advance(1);
-
                     break Some(tt);
                 }
                 
@@ -170,7 +168,7 @@ impl TokenStream {
             };
         };
 
-        MatchOrAdvanceResult {
+        AdvanceUntilResult {
             at,
             matched,
             matcher,
@@ -179,7 +177,7 @@ impl TokenStream {
     }
 }
 
-pub struct MatchOrAdvanceResult {
+pub struct AdvanceUntilResult {
     pub at: Span,
     pub matcher: Matcher,
 
@@ -187,7 +185,7 @@ pub struct MatchOrAdvanceResult {
     pub invalid: Vec<TokenTree>,
 }
 
-impl MatchOrAdvanceResult {
+impl AdvanceUntilResult {
     pub fn to_err(&self) -> Option<TracedError<ParseError>> {
         let unexpected_span = Span::range(&self.invalid)?;
 

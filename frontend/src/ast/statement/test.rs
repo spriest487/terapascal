@@ -1,6 +1,6 @@
 use crate::ast::util::try_parse_from_string;
 use crate::ast::Stmt;
-use terapascal_common::{DiagnosticOutput, Severity};
+use terapascal_common::DiagnosticOutput;
 
 #[test]
 pub fn member_bin_op_expr_is_member_stmt() {

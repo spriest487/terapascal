@@ -23,7 +23,7 @@ pub struct Block<A: Annotation = Span> {
     // we can identify this during parsing if the last "stmt" in the block is an
     // expr which can't be parsed as a valid standalone stmt. otherwise, this gets
     // populated during typechecking.
-    // e.g. a function call at the end a block may be the the block output depending on the return
+    // e.g. a function call at the end a block may be the block output depending on the return
     // type of the function, but we don't know that until typechecking. a value on its own, however,
     // would HAVE to be the block output to be valid!
     pub output: Option<Expr<A>>,
@@ -91,7 +91,6 @@ impl Block<Span> {
 
         Ok(block)
     }
-
     // convert block-as-stmt into an block-as-expr
     // todo: should these be two different types?
     pub fn to_expr(&self) -> Option<Self> {
@@ -123,6 +122,10 @@ impl Block<Span> {
         // block that doesn't work as an expr
         None
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.stmts.is_empty() && self.output.is_none()
+    }
 }
 
 fn parse_block_stmts(
@@ -136,33 +139,31 @@ fn parse_block_stmts(
             break;
         }
         
-        match parse_block_stmt(&mut tokens) {
+        let done = match parse_block_stmt(&mut tokens) {
             Ok(BlockStatementParsedItem::Stmt(stmt)) => {
                 block.stmts.push(stmt);
+                false
             }
             
             Ok(BlockStatementParsedItem::OutputExpr(expr)) => {
-                if let Some(old_output) = block.output.take() {
-                    let illegal = IllegalStatement(Box::new(old_output));
-                    
-                    errors.push(TracedError::from(ParseError::IsExpr(illegal)));
-                }
-                
                 block.output = Some(expr);
+                true
             }
             
             Err(err) => {
                 errors.push(err);
+                false
             }
-        }
+        };
         
-        if !tokens.match_or_advance(Separator::Semicolon).and_continue(&mut errors) {
+        if tokens.advance_until(Separator::Semicolon).and_continue(&mut errors) {
+            tokens.advance(1);
+            if done { 
+                break;
+            }
+        } else {
             break;
         }
-    }
-
-    if !block.stmts.is_empty() || block.output.is_some() {
-        tokens.match_one_maybe(Separator::Semicolon);
     }
 
     if let Err(err) = tokens.finish() {

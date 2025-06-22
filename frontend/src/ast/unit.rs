@@ -66,12 +66,9 @@ pub struct Unit<A: Annotation = Span> {
     pub kind: UnitKind,
 
     pub ident: IdentPath,
-
-    pub iface_kw: Option<Span>,
-    pub iface_decls: Vec<UnitDecl<A>>,
     
-    pub impl_kw: Option<Span>,
-    pub impl_decls: Vec<UnitDecl<A>>,
+    pub iface_section: UnitDeclSection<A>,
+    pub impl_section: UnitDeclSection<A>,
 
     pub init: Option<InitBlock<A>>,
     
@@ -86,13 +83,23 @@ pub struct InitBlock<A: Annotation = Span> {
     pub end_span: Option<Span>,
 }
 
+/// a block of declarations grouped by visibility, e.g. the "implementation" or "interface" section
+#[derive(Clone, Debug)]
+pub struct UnitDeclSection<A: Annotation = Span> {
+    // may or may not start with a keyword - program/library units have a decl section, but
+    // it's always an "implementation" section so no keyword is needed
+    pub kw_span: Option<Span>,
+    
+    pub decls: Vec<UnitDecl<A>>,
+}
+
 impl<A: Annotation> Unit<A> {
     pub fn all_decls(&self) -> impl Iterator<Item = (Visibility, &UnitDecl<A>)> {
-        self.iface_decls
+        self.impl_section.decls
             .iter()
             .map(|decl| (Visibility::Interface, decl))
             .chain(
-                self.impl_decls
+                self.iface_section.decls
                     .iter()
                     .map(|decl| (Visibility::Implementation, decl)),
             )
@@ -158,7 +165,8 @@ impl Unit<Span> {
                     errors.push(TracedError::from(err));
                 }
                 
-                tokens.match_or_advance(Separator::Semicolon).and_continue(&mut errors);
+                tokens.advance_until(Separator::Semicolon).and_continue(&mut errors);
+                tokens.advance(1);
 
                 let kind = match kw {
                     Keyword::Program => UnitKind::Program,
@@ -176,23 +184,31 @@ impl Unit<Span> {
             unit_kw,
             kind: unit_kind,
             ident,
-            iface_kw: None,
-            iface_decls: Vec::new(),
-            impl_kw: None,
-            impl_decls: Vec::new(),
+            iface_section: UnitDeclSection {
+                kw_span: None,
+                decls: Vec::new(),
+            },
+            impl_section: UnitDeclSection {
+                kw_span: None,
+                decls: Vec::new(),
+            },
             init: None,
             end_kw: None,
         };
 
         if unit_kind == UnitKind::Program {
-            let decls = UnitDecl::parse_seq(Keyword::Implementation, tokens)
-                .and_continue_with(&mut errors, Vec::new);
+            let decls = UnitDecl::parse_seq(tokens, Visibility::Implementation)
+                .unwrap_or_else(|err| {
+                    let (decls, mut new_errors) = err.unwrap();
+                    errors.append(&mut new_errors);
+                    decls
+                });
 
             if !decls.is_empty() {
-                tokens.match_or_advance(Separator::Semicolon).and_continue(&mut errors);
+                tokens.advance_until(Separator::Semicolon).and_continue(&mut errors);
             }
 
-            unit.impl_decls.extend(decls);
+            unit.impl_section.decls.extend(decls);
 
             // instead of a separate init block, program units always have a "main" block
             // after any decls with the usual begin/end keywords
@@ -219,16 +235,18 @@ impl Unit<Span> {
             }
         } else {
             let has_interface = parse_decls_section(
-                Keyword::Interface,
-                &mut unit.iface_kw,
-                &mut unit.iface_decls,
+                Visibility::Interface,
+                &mut unit.iface_section.kw_span,
+                &mut unit.iface_section.decls,
+                &mut errors,
                 tokens
             ).and_continue(&mut errors, false);
 
             let has_implementation = parse_decls_section(
-                Keyword::Implementation,
-                &mut unit.impl_kw,
-                &mut unit.impl_decls,
+                Visibility::Implementation,
+                &mut unit.impl_section.kw_span,
+                &mut unit.impl_section.decls,
+                &mut errors,
                 tokens,
             ).and_continue(&mut errors, false);
 
@@ -266,7 +284,7 @@ impl Unit<Span> {
         }
         
         // add auto refs
-        add_auto_ref_paths(&unit.ident, &mut unit.iface_decls);
+        add_auto_ref_paths(&unit.ident, &mut unit.iface_section.decls);
         
         AggregateError::result(unit, errors)
     }
@@ -286,18 +304,24 @@ fn match_unit_end(tokens: &mut TokenStream) -> ParseResult<Span> {
 }
 
 fn parse_decls_section(
-    keyword: Keyword,
+    visibility: Visibility,
     out_kw: &mut Option<Span>,
     out_decls: &mut Vec<UnitDecl<Span>>,
+    errors: &mut Vec<TracedError<ParseError>>,
     tokens: &mut TokenStream,
 ) -> ParseResult<bool> {
-    let Some(kw_tt) = tokens.match_one_maybe(keyword) else {
+    let Some(kw_tt) = tokens.match_one_maybe(visibility.keyword()) else {
         return Ok(false)
     };
-    
+
     *out_kw = Some(kw_tt.into_span());
 
-    let decls = UnitDecl::parse_seq(keyword, tokens)?;
+    let decls = UnitDecl::parse_seq(tokens, visibility)
+        .unwrap_or_else(|err| {
+            let (decls, mut new_errors) = err.unwrap();
+            errors.append(&mut new_errors);
+            decls
+        });
 
     if !decls.is_empty() {
         tokens.match_one(Separator::Semicolon)?;
@@ -325,12 +349,12 @@ pub(crate) fn unit_func_decl_start_matcher() -> Matcher {
         | DelimiterPair::SquareBracket
 }
 
-fn parse_unit_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<UnitDecl<Span>> {
+fn parse_unit_decl(tokens: &mut TokenStream, visibility: Visibility) -> ParseResult<UnitDecl> {
     let decl_start = UnitDecl::start_matcher();
 
     let decl = match tokens.look_ahead().match_one(decl_start) {
         Some(tt) if unit_func_decl_start_matcher().is_match(&tt) => {
-            parse_unit_func_decl(tokens, part_kw)?
+            parse_unit_func_decl(tokens, visibility)?
         },
 
         Some(tt) if tt.is_keyword(Keyword::Type) => UnitDecl::Type {
@@ -363,11 +387,11 @@ fn parse_unit_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<Un
     Ok(decl)
 }
 
-fn parse_unit_func_decl(tokens: &mut TokenStream, part_kw: Keyword) -> ParseResult<UnitDecl<Span>> {
+fn parse_unit_func_decl(tokens: &mut TokenStream, visibility: Visibility) -> ParseResult<UnitDecl> {
     let tags = Tag::parse_seq(tokens)?;
     let func_decl = Arc::new(FunctionDecl::parse(tokens, true, tags)?);
 
-    let body_ahead = if part_kw == Keyword::Interface {
+    let body_ahead = if visibility == Visibility::Interface {
         // interface funcs - never expect a body, unless the function is marked `inline`
         func_decl.mods.iter().any(|decl_mod| match decl_mod {
             DeclMod::Inline(..) => true,
@@ -406,26 +430,40 @@ fn parse_init_section(tokens: &mut TokenStream) -> ParseResult<Vec<Stmt<Span>>> 
 
 impl<A: Annotation> fmt::Display for Unit<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "unit {};", self.ident)?;
-
-        writeln!(f, "interface")?;
-        writeln!(f)?;
-
-        for decl in &self.iface_decls {
-            writeln!(f, "{};", decl)?;
+        match self.kind {
+            UnitKind::Program => write!(f, "program ")?,
+            UnitKind::Library => write!(f, "library ")?,
+            UnitKind::Unit => write!(f, "unit ")?,
         }
-        writeln!(f)?;
 
-        writeln!(f, "implementation")?;
-        writeln!(f)?;
+        writeln!(f, "{};", self.ident)?;
 
-        for decl in &self.impl_decls {
+        if !self.iface_section.decls.is_empty() {
+            writeln!(f, "interface")?;
+            writeln!(f)?;
+
+            for decl in &self.iface_section.decls {
+                writeln!(f, "{};", decl)?;
+            }
+            writeln!(f)?;
+        }
+
+        if self.kind == UnitKind::Unit {
+            writeln!(f, "implementation")?;
+            writeln!(f)?;
+        }
+
+        for decl in &self.impl_section.decls {
             writeln!(f, "{};", decl)?;
         }
         writeln!(f)?;
         
         if let Some(init_block) = &self.init {
-            writeln!(f, "initialization")?;
+            if self.kind == UnitKind::Unit {
+                writeln!(f, "initialization")?;
+            } else {
+                writeln!(f, "begin")?;
+            }
             
             for init_stmt in &init_block.body {
                 writeln!(f, "\t{};", init_stmt)?;

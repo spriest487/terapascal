@@ -1942,10 +1942,13 @@ impl Context {
 
         let ty_method_defs = self.method_defs.get(&ty);
 
-        let ty_methods = ty
-            .methods(self)
-            .expect("illegal state: undefined_ty_members failed to get methods from type");
-
+        let Ok(ty_methods) = ty.methods(self) else {
+            // this can happen when builtin types are missing their definitions in the System unit,
+            // so we can't panic here
+            // panic!("illegal state: undefined_ty_members failed to get methods from type");
+            return Vec::new();
+        };
+        
         let mut missing = Vec::new();
 
         for method in ty_methods {
@@ -1966,15 +1969,15 @@ impl Context {
                 .unwrap_or(false);
 
             if !has_def {
-                eprintln!("no def for {}: {}\ndefs are: {}", def_key.name, def_key.sig, ty_method_defs
-                    .cloned()
-                    .unwrap_or_else(|| MethodCollection::new())
-                    .methods
-                    .keys()
-                    .filter(|k| k.name == *method.func_decl.ident())
-                    .map(|k| format!("{}: {}", k.name, k.sig))
-                    .collect::<Vec<_>>()
-                    .join(",\n\t"));
+                // eprintln!("no def for {}: {}\ndefs are: {}", def_key.name, def_key.sig, ty_method_defs
+                //     .cloned()
+                //     .unwrap_or_else(|| MethodCollection::new())
+                //     .methods
+                //     .keys()
+                //     .filter(|k| k.name == *method.func_decl.ident())
+                //     .map(|k| format!("{}: {}", k.name, k.sig))
+                //     .collect::<Vec<_>>()
+                //     .join(",\n\t"));
                 
                 let decl_name = ty_name
                     .clone()

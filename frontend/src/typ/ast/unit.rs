@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::ast::BindingDeclKind;
+use crate::ast::{BindingDeclKind, UnitDeclSection};
 use crate::ast::FunctionName;
 use crate::ast::IdentPath;
 use crate::ast::SemanticHint;
@@ -566,8 +566,8 @@ fn typecheck_global_binding_item(
 
 pub fn typecheck_unit(unit_path: &PathBuf, unit: &ast::Unit, ctx: &mut Context) -> TypeResult<ModuleUnit> {
     ctx.unit_scope(unit.ident.clone(), |ctx| {
-        let iface_decls = typecheck_section(&unit.iface_decls, Visibility::Interface, ctx)?;
-        let impl_decls = typecheck_section(&unit.impl_decls, Visibility::Implementation, ctx)?;
+        let iface_decls = typecheck_section(&unit.iface_section.decls, Visibility::Interface, ctx)?;
+        let impl_decls = typecheck_section(&unit.impl_section.decls, Visibility::Implementation, ctx)?;
 
         let init = match &unit.init {
             Some(init_block) => {
@@ -592,10 +592,14 @@ pub fn typecheck_unit(unit_path: &PathBuf, unit: &ast::Unit, ctx: &mut Context) 
             kind: unit.kind,
             ident: unit.ident.clone(),
             init,
-            iface_kw: unit.iface_kw.clone(),
-            iface_decls,
-            impl_kw: unit.impl_kw.clone(),
-            impl_decls,
+            iface_section: UnitDeclSection {
+                kw_span: unit.iface_section.kw_span.clone(),
+                decls: iface_decls,
+            },
+            impl_section: UnitDeclSection {
+                kw_span: unit.impl_section.kw_span.clone(),
+                decls: impl_decls,
+            },
             end_kw: unit.end_kw.clone(),
         };
 

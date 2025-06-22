@@ -7,15 +7,17 @@ use crate::ast::FunctionDef;
 use crate::ast::TypeDecl;
 use crate::ast::UnitBinding;
 use crate::ast::UseDecl;
-use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
-use crate::parse::ParseResult;
 use crate::parse::TokenStream;
+use crate::parse::AggregateParseResult;
+use crate::parse::ContinueParse;
+use crate::parse::LookAheadTokenStream;
 use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Separator;
 use std::fmt;
 use std::sync::Arc;
+use terapascal_common::aggregate_err::AggregateError;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -23,6 +25,15 @@ use terapascal_common::span::Spanned;
 pub enum Visibility {
     Implementation,
     Interface,
+}
+
+impl Visibility {
+    pub fn keyword(self) -> Keyword {
+        match self {
+            Visibility::Implementation => Keyword::Implementation,
+            Visibility::Interface => Keyword::Interface,
+        }
+    }
 }
 
 impl fmt::Display for Visibility {
@@ -81,23 +92,36 @@ impl UnitDecl<Span> {
             | DelimiterPair::SquareBracket // tags group before function
     }
 
-    pub fn parse_seq(part_kw: Keyword, tokens: &mut TokenStream) -> ParseResult<Vec<Self>> {
+    pub fn parse_seq(tokens: &mut TokenStream, visibility: Visibility) -> AggregateParseResult<Vec<Self>> {
         let mut items = Vec::new();
+        let mut errors = Vec::new();
 
         loop {
+            eprintln!("next iteration @ {}", tokens.context());
+
             if !Self::has_more(&items, &mut tokens.look_ahead()) {
                 break;
             }
 
             if !items.is_empty() {
-                tokens.match_one(Separator::Semicolon)?;
+                if !tokens.advance_until(Separator::Semicolon).and_continue(&mut errors) {
+                    break;
+                }
+                tokens.advance(1);
             }
-
-            let item = parse_unit_decl(tokens, part_kw)?;
-            items.push(item);
+            let ctx = tokens.context().clone();
+            if let Some(item) = parse_unit_decl(tokens, visibility)
+                .map(Some)
+                .and_continue(&mut errors, None)
+            {
+                items.push(item);
+            }
+            else { 
+                eprintln!("skipping decl @ {ctx}")
+            }
         }
 
-        Ok(items)
+        AggregateError::result(items, errors)
     }
 
     pub fn has_more(prev: &[Self], tokens: &mut LookAheadTokenStream) -> bool {
