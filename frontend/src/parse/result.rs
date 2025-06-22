@@ -427,7 +427,7 @@ pub trait ContinueParse: Sized {
     ) -> Self::Item {
         self.and_continue_with(errors, || or_default)
     }
-
+    
     fn and_continue_with<DefaultFn>(
         self,
         errors: &mut Vec<TracedError<ParseError>>,
@@ -435,6 +435,8 @@ pub trait ContinueParse: Sized {
     ) -> Self::Item
     where
         DefaultFn: FnOnce() -> Self::Item;
+
+    fn ok_or_continue(self, errors: &mut Vec<TracedError<ParseError>>) -> Option<Self::Item>;
 }
 
 impl<T> ContinueParse for ParseResult<T> {
@@ -456,5 +458,9 @@ impl<T> ContinueParse for ParseResult<T> {
 
             Ok(item) => item,
         }
+    }
+
+    fn ok_or_continue(self, errors: &mut Vec<TracedError<ParseError>>) -> Option<Self::Item> {
+        self.map(Some).and_continue(errors, None)
     }
 }

@@ -162,9 +162,12 @@ impl StructDecl<Span> {
                 StructKind::Record => Access::Public,
             };
 
-            let sections = parse_struct_sections(parser, default_access)?;
+            let sections = parse_struct_sections(parser, default_access);
 
-            let end_token = parser.tokens().match_one(Keyword::End)?;
+            let (span, end_kw_span) = match parser.advance_to(Keyword::End) {
+                None => (span, None),
+                Some(end_span) => (span.to(&end_span), Some(end_span.into_span())),  
+            };
 
             Ok(StructDecl {
                 kw_span,
@@ -176,9 +179,8 @@ impl StructDecl<Span> {
                 forward: false,
                 implements: decl_start.supers,
                 sections,
-                span: span.to(end_token.span()),
-                
-                end_kw_span: Some(end_token.into_span()),
+                span,
+                end_kw_span,
             })
         }
     }

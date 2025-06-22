@@ -6,7 +6,6 @@ pub use self::matcher::*;
 pub use self::result::*;
 pub use self::token_stream::*;
 use crate::TokenTree;
-use terapascal_common::aggregate_err::FromAggregateError;
 use terapascal_common::TracedError;
 
 pub struct Parser {

@@ -22,7 +22,7 @@ type
     end;
 
     Option[T] = variant
-        None;     
+        None;
         Some: T;
     public
         function Get: T;

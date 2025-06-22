@@ -112,7 +112,7 @@ pub fn struct_member_start() -> Matcher {
 pub fn parse_struct_sections(
     parser: &mut Parser,
     default_access: Access,
-) -> ParseResult<Vec<StructDeclSection>> {
+) -> Vec<StructDeclSection> {
     let mut current_access = default_access;
     let mut current_access_span = None;
 
@@ -147,29 +147,34 @@ pub fn parse_struct_sections(
             }
 
             Some(tt) if !struct_member_start().is_match(tt) => {
-                let err = ParseError::UnexpectedToken(
-                    Box::new(tt.clone()),
-                    Some(struct_member_start() | Keyword::End)
-                );
-                return Err(TracedError::trace(err));
+                let unexpected = Box::new(tt.clone());
+                let expected = Some(struct_member_start() | Keyword::End);
+
+                parser.error(TracedError::trace(ParseError::UnexpectedToken(unexpected, expected)));
             }
             
             Some(TokenTree::Ident(..)) => {
-                let field = parse_field(parser.tokens(), current_access)?;
-                members.push(TypeMemberDecl::Field(field));
+                if let Some(field) = parse_field(parser.tokens(), current_access)
+                    .ok_or_continue(parser.errors())
+                {
+                    members.push(TypeMemberDecl::Field(field));
+                }
             },
 
             Some(method_start_tt) => {
                 assert!(type_method_start().is_match(&method_start_tt));
 
-                let method = parse_method_decl(parser.tokens(), current_access)?;
-                members.push(TypeMemberDecl::Method(method));
+                if let Some(method) = parse_method_decl(parser.tokens(), current_access)
+                    .ok_or_continue(parser.errors()) 
+                {
+                    members.push(TypeMemberDecl::Method(method));    
+                }
             },
 
             None => break,
         };
         
-        if parser.tokens().match_one_maybe(Separator::Semicolon).is_none() {
+        if parser.advance_to(Separator::Semicolon).is_none() {
             break;
         }
     }
@@ -182,7 +187,7 @@ pub fn parse_struct_sections(
         });
     }
 
-    Ok(sections)
+    sections
 }
 
 fn parse_field(tokens: &mut TokenStream, access: Access) -> ParseResult<FieldDecl> {
