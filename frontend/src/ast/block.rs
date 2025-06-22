@@ -156,7 +156,7 @@ fn parse_block_stmts(
             }
         };
         
-        if !tokens.advance_to(Separator::Semicolon).and_continue(&mut errors) || done {
+        if tokens.advance_to(Separator::Semicolon).and_continue(&mut errors).is_none() || done {
             break;
         }
     }

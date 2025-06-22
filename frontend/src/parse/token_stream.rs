@@ -204,12 +204,12 @@ impl AdvanceUntilResult {
         )))
     }
     
-    pub fn and_continue(self, errors: &mut Vec<TracedError<ParseError>>) -> bool {
+    pub fn and_continue(self, errors: &mut Vec<TracedError<ParseError>>) -> Option<TokenTree> {
         if let Some(err) = self.to_err() {
             errors.push(err);
         }
         
-        self.matched.is_some()
+        self.matched
     }
 }
 

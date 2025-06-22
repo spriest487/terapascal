@@ -7,17 +7,14 @@ use crate::ast::FunctionDef;
 use crate::ast::TypeDecl;
 use crate::ast::UnitBinding;
 use crate::ast::UseDecl;
-use crate::parse::Matcher;
-use crate::parse::TokenStream;
-use crate::parse::AggregateParseResult;
 use crate::parse::ContinueParse;
 use crate::parse::LookAheadTokenStream;
+use crate::parse::{Matcher, Parser};
 use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Separator;
 use std::fmt;
 use std::sync::Arc;
-use terapascal_common::aggregate_err::AggregateError;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -92,31 +89,33 @@ impl UnitDecl<Span> {
             | DelimiterPair::SquareBracket // tags group before function
     }
 
-    pub fn parse_seq(tokens: &mut TokenStream, visibility: Visibility) -> AggregateParseResult<Vec<Self>> {
+    pub fn parse_seq(parser: &mut Parser, visibility: Visibility) -> Vec<Self> {
         let mut items = Vec::new();
-        let mut errors = Vec::new();
 
         loop {
-            if !Self::has_more(&items, &mut tokens.look_ahead()) {
+            if !Self::has_more(&items, &mut parser.tokens().look_ahead()) {
                 break;
             }
 
             if !items.is_empty() {
-                if !tokens.advance_until(Separator::Semicolon).and_continue(&mut errors) {
+                if parser.tokens()
+                    .advance_to(Separator::Semicolon)
+                    .and_continue(parser.errors())
+                    .is_none() 
+                {
                     break;
                 }
-                tokens.advance(1);
             }
 
-            if let Some(item) = parse_unit_decl(tokens, visibility, &mut errors)
+            if let Some(item) = parse_unit_decl(parser, visibility)
                 .map(Some)
-                .and_continue(&mut errors, None)
+                .and_continue(parser.errors(), None)
             {
                 items.push(item);
             }
         }
 
-        AggregateError::result(items, errors)
+        items
     }
 
     pub fn has_more(prev: &[Self], tokens: &mut LookAheadTokenStream) -> bool {

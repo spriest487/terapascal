@@ -24,8 +24,8 @@ pub use ast::operators::Operator;
 pub use ast::operators::Position;
 
 use crate::codegen::CodegenOpts;
-use crate::parse::ParseError;
 use crate::parse::ParseResult;
+use crate::parse::{AggregateParseError, ParseError, Parser};
 use crate::pp::error::PreprocessorError;
 use crate::pp::PreprocessedUnit;
 use crate::typ::Module;
@@ -81,14 +81,15 @@ pub fn parse(
             TracedError::trace(err)
         })?;
 
-    let mut tokens = TokenStream::new(tokens, file_span);
+    let tokens = TokenStream::new(tokens, file_span);
+    let mut parser = Parser::new(tokens);
     
-    let unit = ast::Unit::parse(&mut tokens, unit_ident)
-        .map_err(AggregateError::into_err)?;
+    let unit = ast::Unit::parse(&mut parser, unit_ident);
     
-    tokens.finish()?;
+    let errors = parser.finish();
     
-    Ok(unit)
+    AggregateParseError::result(unit, errors)
+        .map_err(AggregateError::into_err)
 }
 
 pub fn typecheck<'a>(

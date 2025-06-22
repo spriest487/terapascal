@@ -10,7 +10,7 @@ use crate::ast::SupersClause;
 use crate::ast::WhereClause;
 use crate::parse::Matcher;
 use crate::parse::ParseResult;
-use crate::parse::TokenStream;
+use crate::parse::Parser;
 use crate::Keyword;
 use derivative::*;
 pub use member::*;
@@ -113,8 +113,8 @@ impl<A: Annotation> MethodOwner<A> for StructDecl<A> {
 }
 
 impl StructDecl<Span> {
-    pub fn parse(tokens: &mut TokenStream, name: DeclIdent, tags: Vec<Tag>) -> ParseResult<Self> {
-        let packed_kw = tokens.match_one_maybe(Keyword::Packed);
+    pub fn parse(parser: &mut Parser, name: DeclIdent, tags: Vec<Tag>) -> ParseResult<Self> {
+        let packed_kw = parser.tokens().match_one_maybe(Keyword::Packed);
         let packed = packed_kw.is_some();
         
         let match_kw = if packed {
@@ -123,7 +123,7 @@ impl StructDecl<Span> {
             Keyword::Record | Keyword::Class
         };
 
-        let decl_start = TypeDeclHeader::parse(tokens, match_kw, &tags, &name.span)?;
+        let decl_start = TypeDeclHeader::parse(parser.tokens(), match_kw, &tags, &name.span)?;
 
         let kind = match &decl_start.keyword {
             tt if tt.is_keyword(Keyword::Class) => StructKind::Class,
@@ -162,9 +162,9 @@ impl StructDecl<Span> {
                 StructKind::Record => Access::Public,
             };
 
-            let sections = parse_struct_sections(tokens, default_access)?;
+            let sections = parse_struct_sections(parser, default_access)?;
 
-            let end_token = tokens.match_one(Keyword::End)?;
+            let end_token = parser.tokens().match_one(Keyword::End)?;
 
             Ok(StructDecl {
                 kw_span,

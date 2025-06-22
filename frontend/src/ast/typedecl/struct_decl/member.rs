@@ -1,16 +1,16 @@
 use crate::ast::tag::Tag;
+use crate::ast::type_method_start;
 use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
-use crate::ast::TypeName;
-use crate::ast::type_method_start;
+use crate::ast::Ident;
 use crate::ast::StructDeclSection;
-use crate::parse::Matcher;
-use crate::parse::Parse;
+use crate::ast::TypeName;
+use crate::parse::{ContinueParse, Parse};
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
-use crate::ast::Ident;
+use crate::parse::{Matcher, Parser};
 use crate::Keyword;
 use crate::Separator;
 use crate::TokenStream;
@@ -110,7 +110,7 @@ pub fn struct_member_start() -> Matcher {
 }
 
 pub fn parse_struct_sections(
-    tokens: &mut TokenStream,
+    parser: &mut Parser,
     default_access: Access,
 ) -> ParseResult<Vec<StructDeclSection>> {
     let mut current_access = default_access;
@@ -120,7 +120,9 @@ pub fn parse_struct_sections(
 
     let mut members = Vec::new();
     loop {
-        if let Some((new_access, access_span)) = Access::try_parse(tokens)? {
+        if let Some((new_access, access_span)) = Access::try_parse(parser.tokens())
+            .and_continue(parser.errors(), None) 
+        {
             if !members.is_empty() || current_access_span.is_some() {
                 let mut section_members = Vec::new();
                 section_members.append(&mut members);
@@ -136,7 +138,7 @@ pub fn parse_struct_sections(
             current_access_span = Some(access_span);
         }
         
-        let mut ahead = tokens.look_ahead();
+        let mut ahead = parser.tokens().look_ahead();
         let next_start = ahead.next();
         
         match next_start {
@@ -153,21 +155,21 @@ pub fn parse_struct_sections(
             }
             
             Some(TokenTree::Ident(..)) => {
-                let field = parse_field(tokens, current_access)?;
+                let field = parse_field(parser.tokens(), current_access)?;
                 members.push(TypeMemberDecl::Field(field));
             },
 
             Some(method_start_tt) => {
                 assert!(type_method_start().is_match(&method_start_tt));
 
-                let method = parse_method_decl(tokens, current_access)?;
+                let method = parse_method_decl(parser.tokens(), current_access)?;
                 members.push(TypeMemberDecl::Method(method));
             },
 
             None => break,
         };
         
-        if tokens.match_one_maybe(Separator::Semicolon).is_none() {
+        if parser.tokens().match_one_maybe(Separator::Semicolon).is_none() {
             break;
         }
     }

@@ -24,7 +24,7 @@ use crate::ast::TypeList;
 use crate::ast::TypeName;
 use crate::ast::WhereClause;
 use crate::ast::{Annotation, DeclName};
-use crate::parse::InvalidTagLocation;
+use crate::parse::{ContinueParse, InvalidTagLocation, Parser};
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseError;
@@ -62,16 +62,16 @@ pub struct TypeDecl<A: Annotation = Span> {
 }
 
 impl TypeDecl {
-    pub fn parse(tokens: &mut TokenStream, errors: &mut Vec<TracedError<ParseError>>) -> ParseResult<Self> {
-        let kw_tt = tokens.match_one(Keyword::Type)?;
+    pub fn parse(parser: &mut Parser) -> ParseResult<Self> {
+        let kw_tt = parser.tokens().match_one(Keyword::Type)?;
 
         let mut items = Vec::new();
 
-        while TypeDeclItem::has_more(&items, &mut tokens.look_ahead()) {
-            match TypeDeclItem::parse_item(&items, tokens, errors) {
+        while TypeDeclItem::has_more(&items, &mut parser.tokens().look_ahead()) {
+            match TypeDeclItem::parse_item(&items, parser) {
                 Ok(decl) => items.push(decl),
                 Err(err) => {
-                    errors.push(err);
+                    parser.errors().push(err);
                 }
             }
         }
@@ -261,20 +261,21 @@ impl DeclIdent {
 }
 
 impl TypeDeclItem {
-    fn parse(tokens: &mut TokenStream, errors: &mut Vec<TracedError<ParseError>>) -> ParseResult<Self> {
-        let tags = Tag::parse_seq(tokens)?;
+    fn parse(parser: &mut Parser) -> ParseResult<Self> {
+        let tags = Tag::parse_seq(parser.tokens())
+            .and_continue_with(parser.errors(), Vec::new);
 
-        let name = DeclIdent::parse(tokens)?;
-        tokens.match_one(Operator::Equals)?;
+        let name = DeclIdent::parse(parser.tokens())?;
+        parser.tokens().match_one(Operator::Equals)?;
 
         let struct_kw_matcher = Keyword::Packed | Keyword::Class | Keyword::Record;
         let decl_start_matcher = struct_kw_matcher.clone().or(Keyword::Variant);
 
-        match tokens.look_ahead().next() {
+        match parser.tokens().look_ahead().next() {
             Some(ref tt) if struct_kw_matcher.is_match(tt) => {
-                let struct_decl = StructDecl::parse(tokens, name, tags)
+                let struct_decl = StructDecl::parse(parser, name, tags)
                     .map_err(|err| {
-                        tokens.advance_to(Keyword::End).and_continue(errors);
+                        parser.tokens().advance_to(Keyword::End).and_continue(parser.errors());
                         err
                     })?;
 
@@ -282,9 +283,9 @@ impl TypeDeclItem {
             },
 
             Some(tt) if tt.is_keyword(Keyword::Interface) => {
-                let iface_decl = InterfaceDecl::parse(tokens, name, tags)
+                let iface_decl = InterfaceDecl::parse(parser.tokens(), name, tags)
                     .map_err(|err| {
-                        tokens.advance_to(Keyword::End).and_continue(errors);
+                        parser.tokens().advance_to(Keyword::End).and_continue(parser.errors());
                         err
                     })?;
 
@@ -292,9 +293,9 @@ impl TypeDeclItem {
             },
 
             Some(tt) if tt.is_keyword(Keyword::Variant) => {
-                let variant_decl = VariantDecl::parse(tokens, name, tags)
+                let variant_decl = VariantDecl::parse(parser.tokens(), name, tags)
                     .map_err(|err| {
-                        tokens.advance_to(Keyword::End).and_continue(errors);
+                        parser.tokens().advance_to(Keyword::End).and_continue(parser.errors());
                         err
                     })?;
 
@@ -310,7 +311,7 @@ impl TypeDeclItem {
                     ).into());
                 }
                 
-                let enum_decl = EnumDecl::parse(name, tokens)?;
+                let enum_decl = EnumDecl::parse(name, parser.tokens())?;
                 Ok(TypeDeclItem::Enum(Arc::new(enum_decl)))
             },
 
@@ -323,7 +324,7 @@ impl TypeDeclItem {
                     ).into());
                 }
                 
-                let set_decl = SetDecl::parse(name, tokens)?;
+                let set_decl = SetDecl::parse(name, parser.tokens())?;
                 Ok(TypeDeclItem::Set(Arc::new(set_decl)))
             }
 
@@ -338,25 +339,25 @@ impl TypeDeclItem {
                     ).into());
                 }
 
-                let alias_decl = AliasDecl::parse(tokens, name)?;
+                let alias_decl = AliasDecl::parse(parser.tokens(), name)?;
                 Ok(TypeDeclItem::Alias(Arc::new(alias_decl)))
             },
 
             None => {
                 Err(TracedError::trace(ParseError::UnexpectedEOF(
                     decl_start_matcher.clone(),
-                    tokens.context().clone(),
+                    parser.tokens().context().clone(),
                 )))
             }
         }
     }
 
-    fn parse_item(prev: &[Self], tokens: &mut TokenStream, errors: &mut Vec<TracedError<ParseError>>) -> ParseResult<Self> {
+    fn parse_item(prev: &[Self], parser: &mut Parser) -> ParseResult<Self> {
         if !prev.is_empty() {
-            tokens.advance_to(Separator::Semicolon).and_continue(errors);
+            parser.tokens().advance_to(Separator::Semicolon).and_continue(parser.errors());
         }
 
-        TypeDeclItem::parse(tokens, errors)
+        TypeDeclItem::parse(parser)
     }
 
     fn has_more(prev: &[Self], tokens: &mut LookAheadTokenStream) -> bool {

@@ -195,7 +195,10 @@ pub struct TracedError<T> {
 }
 
 impl<T> TracedError<T> {
-    fn trace_skip(err: T, skip_frames: usize) -> Self {
+    pub const SKIP_FRAMES: usize = 2;
+
+    #[inline(always)]
+    pub fn trace_skip(err: T, skip_frames: usize) -> Self {
         let mut frames: Vec<_> = Backtrace::new().into();
         frames.rotate_left(skip_frames);
         frames.truncate(frames.len() - skip_frames);
@@ -206,8 +209,9 @@ impl<T> TracedError<T> {
         }
     }
     
+    #[inline(always)]
     pub fn trace(err: T) -> Self {
-        Self::trace_skip(err, 4)
+        Self::trace_skip(err, Self::SKIP_FRAMES)
     }
 
     pub fn chain<TNext: From<T>>(self) -> TracedError<TNext> {

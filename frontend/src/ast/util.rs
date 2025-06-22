@@ -2,7 +2,7 @@ use terapascal_common::aggregate_err::AggregateError;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Unit;
-use crate::parse::Parse;
+use crate::parse::{Parse, Parser};
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::pp::Preprocessor;
@@ -43,16 +43,19 @@ pub fn try_parse_from_string<T: Parse>(unit_name: &str, src: &str) -> ParseResul
 }
 
 pub fn try_unit_from_string(unit_name: &str, src: &str) -> ParseResult<Unit<Span>> {
-    let mut tokens = tokens_from_string(unit_name, src);
+    let tokens = tokens_from_string(unit_name, src);
 
     let unit_ident = Ident::new(unit_name, Span::zero(unit_name));
+    let unit_path = IdentPath::from_parts(vec![unit_ident]);
+    
+    let mut parser = Parser::new(tokens);
 
-    let unit = Unit::parse(&mut tokens, IdentPath::from_parts(vec![unit_ident]))
-        .map_err(AggregateError::into_err)?;
+    let unit = Unit::parse(&mut parser, unit_path);
 
-    tokens.finish()?;
+    let errors = parser.finish();
 
-    Ok(unit)
+    AggregateError::result(unit, errors)
+        .map_err(AggregateError::into_err)
 }
 
 pub fn unit_from_string(unit_name: &str, src: &str) -> Unit<Span> {
