@@ -29,6 +29,13 @@ impl<T, E> AggregateError<T, E> {
         (*self.item, errors)
     }
     
+    pub fn and_continue(mut self, errors: &mut Vec<E>) -> T {
+        errors.push(*self.first);
+        errors.append(&mut self.rest);
+
+        *self.item
+    }
+    
     pub fn map<F, Next>(result: AggregateResult<T, E>, f: F) -> AggregateResult<Next, E> 
     where
         F: Fn(T) -> AggregateResult<Next, E>

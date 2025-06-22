@@ -1,7 +1,7 @@
 mod member;
 
 use crate::ast::tag::Tag;
-use crate::ast::typedecl::TypeDeclStart;
+use crate::ast::typedecl::TypeDeclHeader;
 use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::DeclIdent;
@@ -123,7 +123,7 @@ impl StructDecl<Span> {
             Keyword::Record | Keyword::Class
         };
 
-        let decl_start = TypeDeclStart::parse(tokens, match_kw, &tags, &name.span)?;
+        let decl_start = TypeDeclHeader::parse(tokens, match_kw, &tags, &name.span)?;
 
         let kind = match &decl_start.keyword {
             tt if tt.is_keyword(Keyword::Class) => StructKind::Class,

@@ -97,8 +97,6 @@ impl UnitDecl<Span> {
         let mut errors = Vec::new();
 
         loop {
-            eprintln!("next iteration @ {}", tokens.context());
-
             if !Self::has_more(&items, &mut tokens.look_ahead()) {
                 break;
             }
@@ -109,15 +107,12 @@ impl UnitDecl<Span> {
                 }
                 tokens.advance(1);
             }
-            let ctx = tokens.context().clone();
-            if let Some(item) = parse_unit_decl(tokens, visibility)
+
+            if let Some(item) = parse_unit_decl(tokens, visibility, &mut errors)
                 .map(Some)
                 .and_continue(&mut errors, None)
             {
                 items.push(item);
-            }
-            else { 
-                eprintln!("skipping decl @ {ctx}")
             }
         }
 

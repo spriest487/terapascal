@@ -1,6 +1,6 @@
 use crate::ast::{iface_method_start, SupersClause};
 use crate::ast::tag::Tag;
-use crate::ast::typedecl::TypeDeclStart;
+use crate::ast::typedecl::TypeDeclHeader;
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
@@ -117,7 +117,7 @@ impl InterfaceDecl<Span> {
         name: DeclIdent,
         tags: Vec<Tag>
     ) -> ParseResult<Self> {
-        let decl_start = TypeDeclStart::parse(tokens, Keyword::Interface, &tags, &name.span)?;
+        let decl_start = TypeDeclHeader::parse(tokens, Keyword::Interface, &tags, &name.span)?;
 
         if decl_start.forward {
             Ok(InterfaceDecl {

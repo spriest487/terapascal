@@ -20,7 +20,7 @@ use crate::ast::IdentPath;
 use crate::ast::Stmt;
 use crate::ast::TypeDecl;
 use crate::ast::TypeDeclItem;
-use crate::parse::AggregateParseResult;
+use crate::parse::{AggregateParseError, AggregateParseResult};
 use crate::parse::ContinueParse;
 pub use crate::parse::MatchOneOf;
 use crate::parse::Matcher;
@@ -165,8 +165,7 @@ impl Unit<Span> {
                     errors.push(TracedError::from(err));
                 }
                 
-                tokens.advance_until(Separator::Semicolon).and_continue(&mut errors);
-                tokens.advance(1);
+                tokens.advance_to(Separator::Semicolon).and_continue(&mut errors);
 
                 let kind = match kw {
                     Keyword::Program => UnitKind::Program,
@@ -199,13 +198,11 @@ impl Unit<Span> {
         if unit_kind == UnitKind::Program {
             let decls = UnitDecl::parse_seq(tokens, Visibility::Implementation)
                 .unwrap_or_else(|err| {
-                    let (decls, mut new_errors) = err.unwrap();
-                    errors.append(&mut new_errors);
-                    decls
+                    err.and_continue(&mut errors)
                 });
 
             if !decls.is_empty() {
-                tokens.advance_until(Separator::Semicolon).and_continue(&mut errors);
+                tokens.advance_to(Separator::Semicolon).and_continue(&mut errors);
             }
 
             unit.impl_section.decls.extend(decls);
@@ -234,21 +231,29 @@ impl Unit<Span> {
                 }
             }
         } else {
-            let has_interface = parse_decls_section(
-                Visibility::Interface,
-                &mut unit.iface_section.kw_span,
-                &mut unit.iface_section.decls,
-                &mut errors,
-                tokens
-            ).and_continue(&mut errors, false);
+            let iface_section = parse_decls_section(Visibility::Interface, tokens)
+                .unwrap_or_else(|err| {
+                    err.and_continue(&mut errors)
+                });
+            let has_iface_section = match iface_section {
+                Some(section) => {
+                    unit.iface_section = section;
+                    true
+                }
+                None => false,
+            };
 
-            let has_implementation = parse_decls_section(
-                Visibility::Implementation,
-                &mut unit.impl_section.kw_span,
-                &mut unit.impl_section.decls,
-                &mut errors,
-                tokens,
-            ).and_continue(&mut errors, false);
+            let impl_section = parse_decls_section(Visibility::Implementation, tokens)
+                .unwrap_or_else(|err| {
+                    err.and_continue(&mut errors)
+                });
+            let has_impl_section = match impl_section {
+                Some(section) => {
+                    unit.impl_section = section;
+                    true
+                }
+                None => false,
+            };
 
             let init_kw = tokens.match_one_maybe(Keyword::Initialization);
             if let Some(init_kw) = &init_kw {
@@ -270,7 +275,7 @@ impl Unit<Span> {
                 unit.end_kw = match_unit_end(tokens).map(Some).and_continue(&mut errors, None);
             }
 
-            if !(has_interface || has_implementation || init_kw.is_some()) {
+            if !(has_iface_section || has_impl_section || init_kw.is_some()) {
                 // empty units are invalid! use this to throw an error
                 let Err(err) = tokens.match_one(unit_kind_kw_match
                     | Keyword::Interface
@@ -305,16 +310,20 @@ fn match_unit_end(tokens: &mut TokenStream) -> ParseResult<Span> {
 
 fn parse_decls_section(
     visibility: Visibility,
-    out_kw: &mut Option<Span>,
-    out_decls: &mut Vec<UnitDecl<Span>>,
-    errors: &mut Vec<TracedError<ParseError>>,
     tokens: &mut TokenStream,
-) -> ParseResult<bool> {
+) -> AggregateParseResult<Option<UnitDeclSection>> {
+    let mut errors = Vec::new();
+    
     let Some(kw_tt) = tokens.match_one_maybe(visibility.keyword()) else {
-        return Ok(false)
+        return Ok(None);
     };
 
-    *out_kw = Some(kw_tt.into_span());
+    let kw_span = Some(kw_tt.into_span());
+    
+    let mut section = UnitDeclSection {
+        kw_span,
+        decls: Vec::new()
+    };
 
     let decls = UnitDecl::parse_seq(tokens, visibility)
         .unwrap_or_else(|err| {
@@ -324,12 +333,14 @@ fn parse_decls_section(
         });
 
     if !decls.is_empty() {
-        tokens.match_one(Separator::Semicolon)?;
+        if tokens.advance_until(Separator::Semicolon).and_continue(&mut errors) {
+            tokens.advance(1);
+        }
     }
 
-    out_decls.extend(decls);
+    section.decls.extend(decls);
 
-    Ok(true)
+    AggregateParseError::result(Some(section), errors)
 }
 
 fn unit_binding_start_matcher() -> Matcher {
@@ -349,7 +360,11 @@ pub(crate) fn unit_func_decl_start_matcher() -> Matcher {
         | DelimiterPair::SquareBracket
 }
 
-fn parse_unit_decl(tokens: &mut TokenStream, visibility: Visibility) -> ParseResult<UnitDecl> {
+fn parse_unit_decl(
+    tokens: &mut TokenStream,
+    visibility: Visibility,
+    errors: &mut Vec<TracedError<ParseError>>
+) -> ParseResult<UnitDecl> {
     let decl_start = UnitDecl::start_matcher();
 
     let decl = match tokens.look_ahead().match_one(decl_start) {
@@ -358,7 +373,7 @@ fn parse_unit_decl(tokens: &mut TokenStream, visibility: Visibility) -> ParseRes
         },
 
         Some(tt) if tt.is_keyword(Keyword::Type) => UnitDecl::Type {
-            decl: TypeDecl::parse(tokens)?,
+            decl: TypeDecl::parse(tokens, errors)?,
         },
 
         Some(tt) if tt.is_keyword(Keyword::Uses) => UnitDecl::Uses {

@@ -175,6 +175,15 @@ impl TokenStream {
             invalid,
         }
     }
+
+    pub fn advance_to(&mut self, matcher: impl Into<Matcher>) -> AdvanceUntilResult {
+        let result = self.advance_until(matcher);
+        if result.matched.is_some() {
+            self.advance(1);
+        }
+        
+        result
+    }
 }
 
 pub struct AdvanceUntilResult {

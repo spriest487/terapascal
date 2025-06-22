@@ -1,6 +1,6 @@
 use crate::ast::tag::Tag;
 use crate::ast::type_name::TypeName;
-use crate::ast::typedecl::TypeDeclStart;
+use crate::ast::typedecl::TypeDeclHeader;
 use crate::ast::{Access, SupersClause};
 use crate::ast::Annotation;
 use crate::ast::DeclIdent;
@@ -145,7 +145,7 @@ impl<A: Annotation> VariantDecl<A> {
 
 impl VariantDecl<Span> {
     pub fn parse(tokens: &mut TokenStream, name: DeclIdent, tags: Vec<Tag>) -> ParseResult<Self> {
-        let decl_start = TypeDeclStart::parse(tokens, Keyword::Variant, &tags, &name.span)?;
+        let decl_start = TypeDeclHeader::parse(tokens, Keyword::Variant, &tags, &name.span)?;
 
         let kw_span = decl_start.keyword.into_span();
 

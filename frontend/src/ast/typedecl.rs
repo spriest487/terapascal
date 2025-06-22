@@ -24,7 +24,7 @@ use crate::ast::TypeList;
 use crate::ast::TypeName;
 use crate::ast::WhereClause;
 use crate::ast::{Annotation, DeclName};
-use crate::parse::LookAheadTokenStream;
+use crate::parse::InvalidTagLocation;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseError;
@@ -32,7 +32,7 @@ use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::parse::TryParse;
-use crate::parse::InvalidTagLocation;
+use crate::parse::LookAheadTokenStream;
 use crate::DelimiterPair;
 use crate::Separator;
 use crate::TokenTree;
@@ -61,11 +61,20 @@ pub struct TypeDecl<A: Annotation = Span> {
     pub span: Span,
 }
 
-impl Parse for TypeDecl<Span> {
-    fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
+impl TypeDecl {
+    pub fn parse(tokens: &mut TokenStream, errors: &mut Vec<TracedError<ParseError>>) -> ParseResult<Self> {
         let kw_tt = tokens.match_one(Keyword::Type)?;
 
-        let items = TypeDeclItem::parse_seq(tokens)?;
+        let mut items = Vec::new();
+
+        while TypeDeclItem::has_more(&items, &mut tokens.look_ahead()) {
+            match TypeDeclItem::parse_item(&items, tokens, errors) {
+                Ok(decl) => items.push(decl),
+                Err(err) => {
+                    errors.push(err);
+                }
+            }
+        }
 
         let last_item = items.last().ok_or_else(|| {
             TracedError::trace(ParseError::EmptyTypeDecl {
@@ -160,32 +169,6 @@ impl<A: Annotation> TypeDeclItem<A> {
     }
 }
 
-impl ParseSeq for TypeDeclItem<Span> {
-    fn parse_group(prev: &[Self], tokens: &mut TokenStream) -> ParseResult<Self> {
-        if !prev.is_empty() {
-            tokens.match_one(Separator::Semicolon)?;
-        }
-
-        TypeDeclItem::parse(tokens)
-    }
-
-    fn has_more(prev: &[Self], tokens: &mut LookAheadTokenStream) -> bool {
-        if !prev.is_empty() && tokens.match_one(Separator::Semicolon).is_none() {
-            return false;
-        }
-
-        // skip past tags, because a valid function decl following a type block could start with
-        // any number of these
-        loop {
-            match tokens.next() {
-                Some(tt) if tt.is_delimited(DelimiterPair::SquareBracket) => continue,
-                Some(TokenTree::Ident(..)) => break true,
-                _ => break false,
-            }
-        }
-    }
-}
-
 pub fn iface_method_start() -> Matcher {
     Keyword::Function 
         | Keyword::Procedure
@@ -277,8 +260,8 @@ impl DeclIdent {
     }
 }
 
-impl Parse for TypeDeclItem<Span> {
-    fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
+impl TypeDeclItem {
+    fn parse(tokens: &mut TokenStream, errors: &mut Vec<TracedError<ParseError>>) -> ParseResult<Self> {
         let tags = Tag::parse_seq(tokens)?;
 
         let name = DeclIdent::parse(tokens)?;
@@ -289,17 +272,32 @@ impl Parse for TypeDeclItem<Span> {
 
         match tokens.look_ahead().next() {
             Some(ref tt) if struct_kw_matcher.is_match(tt) => {
-                let struct_decl = StructDecl::parse(tokens, name, tags)?;
+                let struct_decl = StructDecl::parse(tokens, name, tags)
+                    .map_err(|err| {
+                        tokens.advance_to(Keyword::End).and_continue(errors);
+                        err
+                    })?;
+
                 Ok(TypeDeclItem::Struct(Arc::new(struct_decl)))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Interface) => {
-                let iface_decl = InterfaceDecl::parse(tokens, name, tags)?;
+                let iface_decl = InterfaceDecl::parse(tokens, name, tags)
+                    .map_err(|err| {
+                        tokens.advance_to(Keyword::End).and_continue(errors);
+                        err
+                    })?;
+
                 Ok(TypeDeclItem::Interface(Arc::new(iface_decl)))
             },
 
             Some(tt) if tt.is_keyword(Keyword::Variant) => {
-                let variant_decl = VariantDecl::parse(tokens, name, tags)?;
+                let variant_decl = VariantDecl::parse(tokens, name, tags)
+                    .map_err(|err| {
+                        tokens.advance_to(Keyword::End).and_continue(errors);
+                        err
+                    })?;
+
                 Ok(TypeDeclItem::Variant(Arc::new(variant_decl)))
             },
             
@@ -344,10 +342,36 @@ impl Parse for TypeDeclItem<Span> {
                 Ok(TypeDeclItem::Alias(Arc::new(alias_decl)))
             },
 
-            None => Err(TracedError::trace(ParseError::UnexpectedEOF(
-                decl_start_matcher.clone(),
-                tokens.context().clone(),
-            ))),
+            None => {
+                Err(TracedError::trace(ParseError::UnexpectedEOF(
+                    decl_start_matcher.clone(),
+                    tokens.context().clone(),
+                )))
+            }
+        }
+    }
+
+    fn parse_item(prev: &[Self], tokens: &mut TokenStream, errors: &mut Vec<TracedError<ParseError>>) -> ParseResult<Self> {
+        if !prev.is_empty() {
+            tokens.advance_to(Separator::Semicolon).and_continue(errors);
+        }
+
+        TypeDeclItem::parse(tokens, errors)
+    }
+
+    fn has_more(prev: &[Self], tokens: &mut LookAheadTokenStream) -> bool {
+        if !prev.is_empty() && tokens.match_one(Separator::Semicolon).is_none() {
+            return false;
+        }
+
+        // skip past tags, because a valid function decl following a type block could start with
+        // any number of these
+        loop {
+            match tokens.next() {
+                Some(tt) if tt.is_delimited(DelimiterPair::SquareBracket) => continue,
+                Some(TokenTree::Ident(..)) => break true,
+                _ => break false,
+            }
         }
     }
 }
@@ -379,7 +403,7 @@ impl<A: Annotation> fmt::Display for TypeDeclItem<A> {
 }
 
 #[derive(Debug, Clone)]
-struct TypeDeclStart {
+struct TypeDeclHeader {
     keyword: TokenTree,
 
     where_clause: Option<WhereClause>,
@@ -390,7 +414,7 @@ struct TypeDeclStart {
     span: Span,
 }
 
-impl TypeDeclStart {
+impl TypeDeclHeader {
     pub fn parse(
         tokens: &mut TokenStream,
         kw_matcher: impl Into<Matcher>,
