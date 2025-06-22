@@ -175,19 +175,19 @@ where
             );
         }
 
-        if let Some(iface_kw) = &unit.iface_kw {
+        if let Some(iface_kw) = &unit.iface_section.kw_span {
             self.add_keyword(iface_kw);
         }
 
-        for decl in &unit.iface_decls {
+        for decl in &unit.iface_section.decls {
             self.add_unit_decl(decl);
         }
 
-        if let Some(impl_kw) = &unit.impl_kw {
+        if let Some(impl_kw) = &unit.impl_section.kw_span {
             self.add_keyword(impl_kw);
         }
 
-        for decl in &unit.impl_decls {
+        for decl in &unit.impl_section.decls {
             self.add_unit_decl(decl);
         }
 

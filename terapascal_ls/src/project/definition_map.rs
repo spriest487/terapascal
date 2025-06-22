@@ -206,11 +206,11 @@ impl DefinitionMap {
             self.add_namespace(&unit.ident, ctx);
         }
 
-        for iface_decl in &unit.iface_decls {
+        for iface_decl in &unit.iface_section.decls {
             self.add_unit_decl(iface_decl, ctx);
         }
 
-        for impl_decl in &unit.impl_decls {
+        for impl_decl in &unit.impl_section.decls {
             self.add_unit_decl(impl_decl, ctx);
         }
 
