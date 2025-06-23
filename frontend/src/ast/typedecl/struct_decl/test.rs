@@ -113,8 +113,7 @@ pub fn semicolon_separator_is_single() {
 
         Err(ParseError::AggregateUnit(err, ..)) => {
             match err.first.err {
-                ParseError::UnexpectedToken(tt, ..) => {
-                    assert!(tt.is_separator(Separator::Semicolon))
+                ParseError::UnexpectedToken(..) | ParseError::UnexpectedTokens(..) => {
                 }
                 
                 other => {

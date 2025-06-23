@@ -6,11 +6,12 @@ use crate::ast::FunctionDecl;
 use crate::ast::Ident;
 use crate::ast::StructDeclSection;
 use crate::ast::TypeName;
-use crate::parse::{ContinueParse, Parse};
-use crate::parse::ParseError;
+use crate::parse::{ContinueParse, ParseError};
+use crate::parse::Matcher;
+use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
-use crate::parse::{Matcher, Parser};
+use crate::parse::Parser;
 use crate::Keyword;
 use crate::Separator;
 use crate::TokenStream;
@@ -35,7 +36,7 @@ impl<A: Annotation> TypeMemberDecl<A> {
             _ => None,
         }
     }
-    
+
     pub fn as_method(&self) -> Option<&MethodDecl<A>> {
         match self {
             TypeMemberDecl::Method(method) => Some(method),
@@ -86,7 +87,7 @@ pub struct FieldDecl<A: Annotation = Span> {
     pub span: Span,
 }
 
-impl<A:Annotation> Spanned for FieldDecl<A> {
+impl<A: Annotation> Spanned for FieldDecl<A> {
     fn span(&self) -> &Span {
         &self.span
     }
@@ -131,50 +132,33 @@ pub fn parse_struct_sections(
                     members: section_members,
                 });
             }
-            
+
             current_access = new_access;
             current_access_span = Some(access_span);
         }
         
-        let mut ahead = parser.tokens().look_ahead();
-        let next_start = ahead.next();
-        
-        match next_start {
-            Some(TokenTree::Keyword { kw: Keyword::End, .. }) => {
-                break;
-            }
-
-            Some(tt) if !struct_member_start().is_match(tt) => {
-                let unexpected = Box::new(tt.clone());
-                let expected = Some(struct_member_start() | Keyword::End);
-
-                parser.error(TracedError::trace(ParseError::UnexpectedToken(unexpected, expected)));
-            }
-            
-            Some(TokenTree::Ident(..)) => {
-                if let Some(field) = parse_field(parser.tokens(), current_access)
-                    .ok_or_continue(parser.errors())
-                {
-                    members.push(TypeMemberDecl::Field(field));
-                }
-            },
-
-            Some(method_start_tt) => {
-                assert!(type_method_start().is_match(&method_start_tt));
-
-                if let Some(method) = parse_method_decl(parser.tokens(), current_access)
-                    .ok_or_continue(parser.errors()) 
-                {
-                    members.push(TypeMemberDecl::Method(method));    
-                }
-            },
-
-            None => break,
-        };
-        
-        if parser.advance_to(Separator::Semicolon).is_none() {
+        if parser.tokens().look_ahead().match_one(Keyword::End).is_some() {
             break;
         }
+
+        if let Some(member) = try_parse_section_member(parser, current_access) {
+            members.push(member);
+        }
+
+        match parser.advance_until(Separator::Semicolon | Keyword::End) {
+            Some(tt) if tt.is_keyword(Keyword::End) => {
+                break;
+            },
+
+            Some(..) => {
+                // semicolon
+                parser.tokens().advance(1);
+            },
+
+            None => {
+                break;
+            },
+        };
     }
 
     if !members.is_empty() || current_access_span.is_some() {
@@ -188,6 +172,33 @@ pub fn parse_struct_sections(
     sections
 }
 
+fn try_parse_section_member(parser: &mut Parser, access: Access) -> Option<TypeMemberDecl> {
+    parser.advance_until(struct_member_start());
+    
+    let mut ahead = parser.tokens().look_ahead();
+    let next_start = ahead.next()?;
+    
+    if type_method_start().is_match(&next_start) {
+        let method = parse_method_decl(parser.tokens(), access)
+            .ok_or_continue(parser.errors())?;
+
+        Some(TypeMemberDecl::Method(method))
+    } else if next_start.as_ident().is_some() {
+        let field = parse_field(parser.tokens(), access)
+            .ok_or_continue(parser.errors())?;
+
+        Some(TypeMemberDecl::Field(field))
+    } else {
+        let unexpected = Box::new(next_start.clone());
+        let expected = Some(type_method_start() | Matcher::AnyIdent);
+        parser.error(TracedError::from(ParseError::UnexpectedToken(unexpected, expected)));
+        
+        parser.tokens().advance(1);
+        
+        None
+    }
+}
+
 fn parse_field(tokens: &mut TokenStream, access: Access) -> ParseResult<FieldDecl> {
     let first_ident = Ident::parse(tokens)?;
 
@@ -199,11 +210,11 @@ fn parse_field(tokens: &mut TokenStream, access: Access) -> ParseResult<FieldDec
 
     tokens.match_one(Separator::Colon)?;
     let ty = TypeName::parse(tokens)?;
-    
+
     let span = first_ident.span.to(ty.span());
 
     rest_idents.insert(0, first_ident);
-    
+
     Ok(FieldDecl {
         idents: rest_idents,
         access,
@@ -212,18 +223,44 @@ fn parse_field(tokens: &mut TokenStream, access: Access) -> ParseResult<FieldDec
     })
 }
 
-fn parse_method_decl(
-    tokens: &mut TokenStream,
-    access: Access) -> ParseResult<MethodDecl> {
+fn parse_method_decl(tokens: &mut TokenStream, access: Access) -> ParseResult<MethodDecl> {
     let tags = Tag::parse_seq(tokens)?;
-    
+
     // these get parsed one at a time
     let decl = FunctionDecl::parse(tokens, true, tags)?;
-    
+
     Ok(MethodDecl {
         func_decl: Arc::new(decl),
         access,
     })
+}
+
+pub fn parse_separated_members<F, T>(
+    parser: &mut Parser,
+    items: &mut Vec<T>,
+    f: F,
+) -> Option<TokenTree>
+where
+    F: Fn(&mut Parser) -> Option<T>,
+{
+    loop {
+        let sep = if !items.is_empty() {
+            let next_sep = parser.advance_to(Separator::Semicolon);
+            if next_sep.is_none() {
+                break None;
+            } else {
+                next_sep
+            }
+        } else {
+            None
+        };
+
+        if let Some(item) = f(parser) {
+            items.push(item);
+        } else {
+            break sep;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -233,33 +270,39 @@ pub struct MethodDecl<A: Annotation = Span> {
 }
 
 pub trait MemberDeclSection<A: Annotation = Span> {
-    type Source : MemberDeclSection<Span>;
+    type Source: MemberDeclSection<Span>;
 
     fn clone_empty(other: &Self::Source) -> Self;
 
     fn access(&self) -> Access;
-    
+
     fn add_field(&mut self, field: FieldDecl<A>) -> bool;
     fn add_method(&mut self, method: MethodDecl<A>) -> bool;
 
     fn access_kw_span(&self) -> Option<&Span>;
 
-    fn members<'a>(&'a self) -> impl Iterator<Item=TypeMemberDeclRef<'a, A>> where A: 'a;
-    
-    fn fields<'a>(&'a self) -> impl Iterator<Item=&'a FieldDecl<A>> where A: 'a {
-        self.members()
-            .filter_map(|member| match member {
-                TypeMemberDeclRef::Field(field) => Some(field),
-                TypeMemberDeclRef::Method(_) => None,
-            })
+    fn members<'a>(&'a self) -> impl Iterator<Item = TypeMemberDeclRef<'a, A>>
+    where
+        A: 'a;
+
+    fn fields<'a>(&'a self) -> impl Iterator<Item = &'a FieldDecl<A>>
+    where
+        A: 'a,
+    {
+        self.members().filter_map(|member| match member {
+            TypeMemberDeclRef::Field(field) => Some(field),
+            TypeMemberDeclRef::Method(_) => None,
+        })
     }
 
-    fn methods<'a>(&'a self) -> impl Iterator<Item=&'a MethodDecl<A>> where A: 'a {
-        self.members()
-            .filter_map(|member| match member {
-                TypeMemberDeclRef::Method(method) => Some(method),
-                TypeMemberDeclRef::Field(_) => None,
-            })
+    fn methods<'a>(&'a self) -> impl Iterator<Item = &'a MethodDecl<A>>
+    where
+        A: 'a,
+    {
+        self.members().filter_map(|member| match member {
+            TypeMemberDeclRef::Method(method) => Some(method),
+            TypeMemberDeclRef::Field(_) => None,
+        })
     }
 }
 
@@ -272,13 +315,13 @@ pub struct MethodDeclSection<A: Annotation = Span> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
     pub access_kw_span: Option<Span>,
-    
+
     pub methods: Vec<MethodDecl<A>>,
 }
 
 impl<A: Annotation> MemberDeclSection<A> for MethodDeclSection<A> {
     type Source = MethodDeclSection;
-    
+
     fn clone_empty(other: &MethodDeclSection) -> Self {
         Self {
             access: other.access,
@@ -304,11 +347,10 @@ impl<A: Annotation> MemberDeclSection<A> for MethodDeclSection<A> {
         self.access_kw_span.as_ref()
     }
 
-    fn members<'a>(&'a self) -> impl Iterator<Item=TypeMemberDeclRef<'a, A>>
-    where A: 'a
+    fn members<'a>(&'a self) -> impl Iterator<Item = TypeMemberDeclRef<'a, A>>
+    where
+        A: 'a,
     {
-        self.methods
-            .iter()
-            .map(TypeMemberDeclRef::Method)
+        self.methods.iter().map(TypeMemberDeclRef::Method)
     }
 }

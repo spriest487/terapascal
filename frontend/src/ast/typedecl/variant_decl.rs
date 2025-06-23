@@ -1,7 +1,7 @@
 use crate::ast::tag::Tag;
 use crate::ast::type_name::TypeName;
 use crate::ast::typedecl::TypeDeclHeader;
-use crate::ast::Annotation;
+use crate::ast::{parse_separated_members, Annotation};
 use crate::ast::DeclIdent;
 use crate::ast::FunctionDecl;
 use crate::ast::Ident;
@@ -132,28 +132,12 @@ impl VariantDecl {
             }
         } else {
             let mut cases = Vec::new();
-
-            let last_sep = loop {
-                let sep = if !cases.is_empty() {
-                    let next_sep = parser.advance_to(Separator::Semicolon);
-                    if next_sep.is_none() {
-                        break None;
-                    } else {
-                        next_sep
-                    }
-                } else {
-                    None
-                };
-
-                if let Some(case) = VariantCase::try_parse(parser)
+            
+            let last_sep = parse_separated_members(parser, &mut cases, |parser| {
+                VariantCase::try_parse(parser)
                     .ok_or_continue(parser.errors())
-                    .flatten()
-                {
-                    cases.push(case);
-                } else {
-                    break sep;
-                }
-            };
+                    .flatten() 
+            });
 
             let sections = if last_sep.is_some() {
                 parse_method_sections(parser, Access::Public)

@@ -223,7 +223,7 @@ fn finds_func_in_its_own_body() {
         end.
     ");
 
-    let ast::UnitDecl::FunctionDef { def } = &unit.unit.impl_decls[1] else {
+    let ast::UnitDecl::FunctionDef { def } = &unit.unit.impl_section.decls[1] else {
         panic!("expected second item to be a function");
     };
     

@@ -35,10 +35,7 @@ impl Visibility {
 
 impl fmt::Display for Visibility {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            Visibility::Implementation => Keyword::Implementation,
-            Visibility::Interface => Keyword::Interface,
-        })
+        write!(f, "{}", self.keyword())
     }
 }
 

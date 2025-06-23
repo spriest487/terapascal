@@ -94,11 +94,11 @@ pub struct UnitDeclSection<A: Annotation = Span> {
 
 impl<A: Annotation> Unit<A> {
     pub fn all_decls(&self) -> impl Iterator<Item = (Visibility, &UnitDecl<A>)> {
-        self.impl_section.decls
+        self.iface_section.decls
             .iter()
             .map(|decl| (Visibility::Interface, decl))
             .chain(
-                self.iface_section.decls
+                self.impl_section.decls
                     .iter()
                     .map(|decl| (Visibility::Implementation, decl)),
             )
