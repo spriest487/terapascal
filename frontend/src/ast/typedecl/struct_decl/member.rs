@@ -120,9 +120,7 @@ pub fn parse_struct_sections(
 
     let mut members = Vec::new();
     loop {
-        if let Some((new_access, access_span)) = Access::try_parse(parser.tokens())
-            .or_continue(parser.errors(), None) 
-        {
+        if let Some((new_access, access_span)) = Access::try_parse(parser.tokens()) {
             if !members.is_empty() || current_access_span.is_some() {
                 let mut section_members = Vec::new();
                 section_members.append(&mut members);

@@ -1,7 +1,6 @@
 use crate::ast::tag::Tag;
 use crate::ast::type_name::TypeName;
 use crate::ast::typedecl::TypeDeclHeader;
-use crate::ast::{Access, SupersClause};
 use crate::ast::Annotation;
 use crate::ast::DeclIdent;
 use crate::ast::FunctionDecl;
@@ -11,13 +10,13 @@ use crate::ast::MethodDecl;
 use crate::ast::MethodOwner;
 use crate::ast::WhereClause;
 use crate::ast::{type_method_start, MethodDeclSection};
-use crate::parse::LookAheadTokenStream;
+use crate::ast::{Access, SupersClause};
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
-use crate::parse::TokenStream;
-use crate::Separator;
+use crate::parse::{ContinueParse, Parser};
+use crate::{Separator, TokenTree};
 use derivative::*;
 use std::fmt;
 use std::sync::Arc;
@@ -26,7 +25,7 @@ use terapascal_common::span::Spanned;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct VariantDecl<A: Annotation> {
+pub struct VariantDecl<A: Annotation = Span> {
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -69,12 +68,16 @@ impl<A: Annotation> MethodOwner<A> for VariantDecl<A> {
 #[derivative(Debug, PartialEq, Hash)]
 pub struct VariantCaseData<T> {
     pub ty: T,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub span: Span,
 }
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct VariantCase<A: Annotation> {
+pub struct VariantCase<A: Annotation = Span> {
     pub ident: Ident,
     pub data: Option<VariantCaseData<A::TypeName>>,
 
@@ -82,48 +85,6 @@ pub struct VariantCase<A: Annotation> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
     pub span: Span,
-}
-
-impl ParseSeq for VariantCase<Span> {
-    fn parse_group(prev: &[Self], tokens: &mut TokenStream) -> ParseResult<Self> {
-        if !prev.is_empty() {
-            tokens.match_one(Separator::Semicolon)?;
-        }
-
-        let ident = Ident::parse(tokens)?;
-
-        let case = match tokens.match_one_maybe(Separator::Colon) {
-            Some(..) => {
-                let ty = TypeName::parse(tokens)?;
-                let span = ident.span().to(ty.span());
-
-                VariantCase {
-                    span,
-                    ident,
-                    data: Some(VariantCaseData {
-                        span: ty.span().clone(),
-                        ty
-                    }),
-                }
-            },
-
-            None => VariantCase {
-                span: ident.span.clone(),
-                ident,
-                data: None,
-            },
-        };
-
-        Ok(case)
-    }
-
-    fn has_more(prev: &[Self], tokens: &mut LookAheadTokenStream) -> bool {
-        if !prev.is_empty() && tokens.match_one(Separator::Semicolon).is_none() {
-            return false;
-        }
-
-        tokens.match_one(Matcher::AnyIdent).is_some()
-    }
 }
 
 impl<A: Annotation> VariantDecl<A> {
@@ -143,18 +104,18 @@ impl<A: Annotation> VariantDecl<A> {
     }
 }
 
-impl VariantDecl<Span> {
-    pub fn parse(tokens: &mut TokenStream, name: DeclIdent, tags: Vec<Tag>) -> ParseResult<Self> {
-        let decl_start = TypeDeclHeader::parse(tokens, Keyword::Variant, &tags, &name.span)?;
+impl VariantDecl {
+    pub fn parse(parser: &mut Parser, name: DeclIdent, tags: Vec<Tag>, keyword_token: TokenTree) -> Self {
+        let header = TypeDeclHeader::parse_or_empty(parser, Keyword::Variant, keyword_token, &tags, &name.span);
 
-        let kw_span = decl_start.keyword.into_span();
+        let kw_span = header.keyword.into_span();
 
-        if decl_start.forward {
-            Ok(VariantDecl {
+        if header.forward {
+            VariantDecl {
                 kw_span: kw_span.into(),
 
                 name: Arc::new(name),
-                where_clause: decl_start.where_clause,
+                where_clause: header.where_clause,
                 
                 forward: true,
 
@@ -162,46 +123,115 @@ impl VariantDecl<Span> {
                 
                 cases: Vec::new(),
                 
-                implements: decl_start.supers,
+                implements: header.supers,
                 sections: Vec::new(),
                 
-                span: decl_start.span.into(),
+                span: header.span.into(),
                 
                 end_kw_span: None,
-            })
+            }
         } else {
-            let cases = VariantCase::parse_seq(tokens)?;
+            let mut cases = Vec::new();
 
-            let sections = if tokens.match_one_maybe(Separator::Semicolon).is_some() {
-                parse_method_sections(tokens, Access::Public)?
+            let last_sep = loop {
+                let sep = if !cases.is_empty() {
+                    let next_sep = parser.advance_to(Separator::Semicolon);
+                    if next_sep.is_none() {
+                        break None;
+                    } else {
+                        next_sep
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(case) = VariantCase::try_parse(parser)
+                    .ok_or_continue(parser.errors())
+                    .flatten()
+                {
+                    cases.push(case);
+                } else {
+                    break sep;
+                }
+            };
+
+            let sections = if last_sep.is_some() {
+                parse_method_sections(parser, Access::Public)
             } else {
                 Vec::new()
             };
+            
+            let end_kw_span = parser.advance_to(Keyword::End)
+                .map(TokenTree::into_span);
+            
+            let decl_span = end_kw_span
+                .as_ref()
+                .map(|end_span| header.span.to(end_span))
+                .unwrap_or_else(|| {
+                    sections
+                        .last()
+                        .and_then(|last_section| last_section.methods.last())
+                        .map(|last_decl| last_decl.func_decl.span())
+                        .cloned()
+                        .unwrap_or_else(|| header.span.clone())
+                });
 
-            let end_kw = tokens.match_one(Keyword::End)?;
-
-            Ok(VariantDecl {
+            VariantDecl {
                 kw_span: kw_span.into(),
 
                 name: Arc::new(name),
-                where_clause: decl_start.where_clause,
+                where_clause: header.where_clause,
 
                 tags,
 
                 forward: false,
                 cases,
-                span: decl_start.span.to(end_kw.span()).into(),
+                span: decl_span,
 
-                implements: decl_start.supers,
+                implements: header.supers,
                 sections,
                 
-                end_kw_span: Some(end_kw.into_span().into()),
-            })
+                end_kw_span,
+            }
         }
     }
 }
 
-fn parse_method_sections(tokens: &mut TokenStream, default_access: Access) -> ParseResult<Vec<MethodDeclSection>> {
+impl VariantCase {
+    fn try_parse(parser: &mut Parser) -> ParseResult<Option<Self>> {        
+        let Some(tt) = parser.tokens().match_one_maybe(Matcher::AnyIdent) else {
+            return Ok(None);
+        };
+        
+        let ident = tt.into_ident().unwrap();
+
+        let case = match parser.tokens().match_one_maybe(Separator::Colon) {
+            Some(..) => {
+                let ty = TypeName::parse(parser.tokens())?;
+                let span = ident.span().to(ty.span());
+
+                VariantCase {
+                    span,
+                    ident,
+                    data: Some(VariantCaseData {
+                        span: ty.span().clone(),
+                        ty
+                    }),
+                }
+            },
+
+            None => VariantCase {
+                span: ident.span.clone(),
+                ident,
+                data: None,
+            },
+        };
+
+        Ok(Some(case))
+    }
+}
+
+fn parse_method_sections(parser: &mut Parser, default_access: Access) -> Vec<MethodDeclSection> {
     let mut sections = Vec::new();
     
     let mut current_access = default_access;
@@ -209,7 +239,7 @@ fn parse_method_sections(tokens: &mut TokenStream, default_access: Access) -> Pa
 
     let mut methods = Vec::new();
     loop {
-        if let Some((new_access, new_access_span)) = Access::try_parse(tokens)? {
+        if let Some((new_access, new_access_span)) = Access::try_parse(parser.tokens()) {
             if current_access_kw.is_some() || !methods.is_empty() {
                 let mut section_methods = Vec::with_capacity(methods.len());
                 section_methods.append(&mut methods);
@@ -225,7 +255,8 @@ fn parse_method_sections(tokens: &mut TokenStream, default_access: Access) -> Pa
             current_access_kw = Some(new_access_span);
         }
 
-        let func_ahead = tokens
+        let func_ahead = parser
+            .tokens()
             .look_ahead()
             .match_one(type_method_start())
             .is_some();
@@ -234,16 +265,27 @@ fn parse_method_sections(tokens: &mut TokenStream, default_access: Access) -> Pa
             break;
         }
 
-        let tags = Tag::parse_seq(tokens)?;
+        let tags = Tag::parse_seq(parser.tokens())
+            .or_continue_with(parser.errors(), Vec::new);
 
-        let method_decl= FunctionDecl::parse(tokens, true, tags)?;
-        methods.push(MethodDecl {
-            func_decl: method_decl.into(),
-            access: current_access,
-        });
-
-        if tokens.match_one_maybe(Separator::Semicolon).is_none() {
-            break;
+        match FunctionDecl::parse(parser.tokens(), true, tags) {
+            Ok(method_decl) => {
+                methods.push(MethodDecl {
+                    func_decl: method_decl.into(),
+                    access: current_access,
+                });
+                
+                if parser.tokens().match_one_maybe(Separator::Semicolon).is_none() {
+                    break;
+                }
+            }
+            
+            Err(err) => {
+                parser.error(err);
+                if !parser.advance_to(Separator::Semicolon).is_some() {
+                    break;
+                }
+            }
         }
     }
 
@@ -255,7 +297,7 @@ fn parse_method_sections(tokens: &mut TokenStream, default_access: Access) -> Pa
         });
     }
     
-    Ok(sections)
+    sections
 }
 
 impl<A: Annotation> fmt::Display for VariantDecl<A> {

@@ -30,10 +30,10 @@ fn keyword_matcher() -> Matcher {
 }
 
 impl Access {
-    pub fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<(Self, Span)>> {
+    pub fn try_parse(tokens: &mut TokenStream) -> Option<(Self, Span)> {
         match tokens.match_one_maybe(keyword_matcher()) {
-            Some(tt) => Ok(Some(unwrap_tt(tt))),
-            None => Ok(None),
+            Some(tt) => Some(unwrap_tt(tt)),
+            None => None,
         }
     }
 

@@ -304,12 +304,7 @@ impl TypeDeclItem {
             }
             
             Some(Keyword::Variant) => {
-                let variant_decl = VariantDecl::parse(parser.tokens(), name, tags)
-                    .map_err(|err| {
-                        parser.tokens().advance_to(Keyword::End).and_continue(parser.errors());
-                        err
-                    })?;
-
+                let variant_decl = VariantDecl::parse(parser, name, tags, first_token);
                 Ok(TypeDeclItem::Variant(Arc::new(variant_decl)))
             }
             
