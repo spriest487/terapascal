@@ -9,9 +9,8 @@ use crate::ast::MethodOwner;
 use crate::ast::SupersClause;
 use crate::ast::WhereClause;
 use crate::parse::Matcher;
-use crate::parse::ParseResult;
 use crate::parse::Parser;
-use crate::Keyword;
+use crate::{Keyword, TokenTree};
 use derivative::*;
 pub use member::*;
 use std::fmt;
@@ -113,7 +112,12 @@ impl<A: Annotation> MethodOwner<A> for StructDecl<A> {
 }
 
 impl StructDecl<Span> {
-    pub fn parse(parser: &mut Parser, name: DeclIdent, tags: Vec<Tag>) -> ParseResult<Self> {
+    pub fn parse(
+        parser: &mut Parser,
+        name: DeclIdent,
+        tags: Vec<Tag>,
+        keyword_token: TokenTree,
+    ) -> Self {
         let packed_kw = parser.tokens().match_one_maybe(Keyword::Packed);
         let packed = packed_kw.is_some();
         
@@ -123,39 +127,45 @@ impl StructDecl<Span> {
             Keyword::Record | Keyword::Class
         };
 
-        let decl_start = TypeDeclHeader::parse(parser.tokens(), match_kw, &tags, &name.span)?;
+        let header = TypeDeclHeader::parse_or_empty(
+            parser,
+            match_kw,
+            keyword_token,
+            &tags,
+            &name.span,
+        );
 
-        let kind = match &decl_start.keyword {
+        let kind = match &header.keyword {
             tt if tt.is_keyword(Keyword::Class) => StructKind::Class,
             tt if tt.is_keyword(Keyword::Record) => StructKind::Record,
             _ => unreachable!(),
         };
         
-        let kw_span = decl_start.keyword.into_span();
+        let kw_span = header.keyword.into_span();
 
         let span = match packed_kw {
-            Some(tt) => tt.span().to(&decl_start.span),
-            None => decl_start.span,
+            Some(tt) => tt.span().to(&header.span),
+            None => header.span,
         };
         
         // the last type in a section can never be forward, so every legal forward declaration
         // will end with a semicolon
-        if decl_start.forward {
-            Ok(StructDecl {
+        if header.forward {
+            StructDecl {
                 kw_span,
                 kind,
                 name,
-                where_clause: decl_start.where_clause,
+                where_clause: header.where_clause,
                 packed,
                 tags: Vec::new(),
 
                 forward: true,
-                implements: decl_start.supers,
+                implements: header.supers,
                 
                 sections: Vec::new(),
                 span,
                 end_kw_span: None,
-            })
+            }
         } else {
             let default_access = match kind {
                 StructKind::Class => Access::Private,
@@ -169,19 +179,19 @@ impl StructDecl<Span> {
                 Some(end_span) => (span.to(&end_span), Some(end_span.into_span())),  
             };
 
-            Ok(StructDecl {
+            StructDecl {
                 kw_span,
                 kind,
                 name,
-                where_clause: decl_start.where_clause,
+                where_clause: header.where_clause,
                 packed,
                 tags,
                 forward: false,
-                implements: decl_start.supers,
+                implements: header.supers,
                 sections,
                 span,
                 end_kw_span,
-            })
+            }
         }
     }
 }

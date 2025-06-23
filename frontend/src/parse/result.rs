@@ -420,15 +420,15 @@ pub type AggregateParseResult<T> = AggregateResult<T, TracedError<ParseError>>;
 pub trait ContinueParse: Sized {
     type Item;
 
-    fn and_continue(
+    fn or_continue(
         self,
         errors: &mut Vec<TracedError<ParseError>>,
         or_default: Self::Item,
     ) -> Self::Item {
-        self.and_continue_with(errors, || or_default)
+        self.or_continue_with(errors, || or_default)
     }
     
-    fn and_continue_with<DefaultFn>(
+    fn or_continue_with<DefaultFn>(
         self,
         errors: &mut Vec<TracedError<ParseError>>,
         f: DefaultFn,
@@ -442,7 +442,7 @@ pub trait ContinueParse: Sized {
 impl<T> ContinueParse for ParseResult<T> {
     type Item = T;
 
-    fn and_continue_with<DefaultFn>(
+    fn or_continue_with<DefaultFn>(
         self,
         errors: &mut Vec<TracedError<ParseError>>,
         f: DefaultFn,
@@ -461,6 +461,6 @@ impl<T> ContinueParse for ParseResult<T> {
     }
 
     fn ok_or_continue(self, errors: &mut Vec<TracedError<ParseError>>) -> Option<Self::Item> {
-        self.map(Some).and_continue(errors, None)
+        self.map(Some).or_continue(errors, None)
     }
 }

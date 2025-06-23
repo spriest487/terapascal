@@ -46,7 +46,8 @@ use crate::IntConstant;
 use std::borrow::Cow;
 use std::mem;
 use std::sync::Arc;
-use terapascal_common::span::{MaybeSpanned, Span};
+use terapascal_common::span::MaybeSpanned;
+use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
 pub type StructDecl = ast::StructDecl<Value>;
@@ -86,7 +87,7 @@ impl VariantDecl {
 
 impl SupersClause {
     pub fn typecheck(
-        src: &ast::SupersClause<Span>,
+        src: &ast::SupersClause,
         self_ty: &Type,
         ctx: &mut Context
     ) -> TypeResult<Self> {
@@ -221,7 +222,7 @@ impl TagItem {
 
 pub fn typecheck_struct_decl(
     info: TypeDeclItemInfo,
-    struct_def: &ast::StructDecl<Span>,
+    struct_def: &ast::StructDecl,
     ctx: &mut Context,
 ) -> TypeResult<StructDecl> {
     assert!(struct_def.tags.is_empty() || !struct_def.forward);
@@ -272,7 +273,7 @@ pub fn typecheck_members<Section>(
     ctx: &mut Context,
 ) -> TypeResult<Vec<Section>>
 where
-    Section: ast::MemberDeclSection<Value>,
+    Section: MemberDeclSection<Value>,
 {
     let mut owning_type = Cow::Borrowed(owning_type);
     // methods impls are typechecked within the body of their enclosing type, so the type

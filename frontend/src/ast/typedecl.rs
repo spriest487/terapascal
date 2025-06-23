@@ -68,11 +68,10 @@ impl TypeDecl {
         let mut items = Vec::new();
 
         while TypeDeclItem::has_more(&items, &mut parser.tokens().look_ahead()) {
-            match TypeDeclItem::parse_item(&items, parser) {
-                Ok(decl) => items.push(decl),
-                Err(err) => {
-                    parser.errors().push(err);
-                }
+            if let Some(item) = TypeDeclItem::parse_item(&items, parser)
+                .ok_or_continue(parser.errors()) 
+            {
+                items.push(item);
             }
         }
 
@@ -263,26 +262,38 @@ impl DeclIdent {
 impl TypeDeclItem {
     fn parse(parser: &mut Parser) -> ParseResult<Self> {
         let tags = Tag::parse_seq(parser.tokens())
-            .and_continue_with(parser.errors(), Vec::new);
+            .or_continue_with(parser.errors(), Vec::new);
 
+        // name and the initial keyword are enough to continue parsing the type, even if there's
+        // parse errors in the rest of the type header, so we shouldn't return an error after this
+        // point if possible
         let name = DeclIdent::parse(parser.tokens())?;
         parser.tokens().match_one(Operator::Equals)?;
 
         let struct_kw_matcher = Keyword::Packed | Keyword::Class | Keyword::Record;
-        let decl_start_matcher = struct_kw_matcher.clone().or(Keyword::Variant);
-
-        match parser.tokens().look_ahead().next() {
-            Some(ref tt) if struct_kw_matcher.is_match(tt) => {
-                let struct_decl = StructDecl::parse(parser, name, tags)
-                    .map_err(|err| {
-                        parser.tokens().advance_to(Keyword::End).and_continue(parser.errors());
-                        err
-                    })?;
-
+        let decl_kw_matcher = struct_kw_matcher.clone() | Keyword::Variant | Keyword::Interface;
+        
+        // get the first token from lookahead, since each kind of decl expects to start
+        // parsing from the keyword
+        let Some(first_token) = parser
+            .tokens()
+            .look_ahead()
+            .next()
+            .cloned()
+        else {
+            return Err(TracedError::trace(ParseError::UnexpectedEOF(
+                decl_kw_matcher.clone(),
+                parser.tokens().context().clone(),
+            )));
+        };
+        
+        match first_token.as_keyword() {
+            Some(Keyword::Packed | Keyword::Record | Keyword::Class) => {
+                let struct_decl = StructDecl::parse(parser, name, tags, first_token);
                 Ok(TypeDeclItem::Struct(Arc::new(struct_decl)))
-            },
-
-            Some(tt) if tt.is_keyword(Keyword::Interface) => {
+            }
+            
+            Some(Keyword::Interface) => {
                 let iface_decl = InterfaceDecl::parse(parser.tokens(), name, tags)
                     .map_err(|err| {
                         parser.tokens().advance_to(Keyword::End).and_continue(parser.errors());
@@ -290,9 +301,9 @@ impl TypeDeclItem {
                     })?;
 
                 Ok(TypeDeclItem::Interface(Arc::new(iface_decl)))
-            },
-
-            Some(tt) if tt.is_keyword(Keyword::Variant) => {
+            }
+            
+            Some(Keyword::Variant) => {
                 let variant_decl = VariantDecl::parse(parser.tokens(), name, tags)
                     .map_err(|err| {
                         parser.tokens().advance_to(Keyword::End).and_continue(parser.errors());
@@ -300,54 +311,47 @@ impl TypeDeclItem {
                     })?;
 
                 Ok(TypeDeclItem::Variant(Arc::new(variant_decl)))
-            },
+            }
             
-            Some(tt) if tt.is_delimited(DelimiterPair::Bracket) => {
-                if !tags.is_empty() {
-                    return Err(ParseError::invalid_tag_loc(
-                        InvalidTagLocation::EnumDecl,
-                        tt.span().clone(),
-                        &tags
-                    ).into());
-                }
-                
-                let enum_decl = EnumDecl::parse(name, parser.tokens())?;
-                Ok(TypeDeclItem::Enum(Arc::new(enum_decl)))
-            },
-
-            Some(tt) if tt.is_keyword(Keyword::Set) => {
+            Some(Keyword::Set) => {
                 if !tags.is_empty() {
                     return Err(ParseError::invalid_tag_loc(
                         InvalidTagLocation::SetDecl,
-                        tt.span().clone(),
+                        first_token.span().clone(),
                         &tags
                     ).into());
                 }
-                
+
                 let set_decl = SetDecl::parse(name, parser.tokens())?;
                 Ok(TypeDeclItem::Set(Arc::new(set_decl)))
             }
+            
+            _ if first_token.is_delimited(DelimiterPair::Bracket) => {
+                if !tags.is_empty() {
+                    return Err(ParseError::invalid_tag_loc(
+                        InvalidTagLocation::EnumDecl,
+                        first_token.span().clone(),
+                        &tags
+                    ).into());
+                }
 
-            // if it isn't a type def keyword, then it must be the name of an existing type to
-            // declare an alias
-            Some(tt) => {
+                let enum_decl = EnumDecl::parse(name, parser.tokens())?;
+                Ok(TypeDeclItem::Enum(Arc::new(enum_decl)))
+            }
+            
+            _ => {
+                // if it isn't a type def keyword, then it must be the name of an existing type to
+                // declare an alias
                 if !tags.is_empty() {
                     return Err(ParseError::invalid_tag_loc(
                         InvalidTagLocation::AliasDecl,
-                        tt.span().clone(),
+                        first_token.span().clone(),
                         &tags
                     ).into());
                 }
 
                 let alias_decl = AliasDecl::parse(parser.tokens(), name)?;
                 Ok(TypeDeclItem::Alias(Arc::new(alias_decl)))
-            },
-
-            None => {
-                Err(TracedError::trace(ParseError::UnexpectedEOF(
-                    decl_start_matcher.clone(),
-                    parser.tokens().context().clone(),
-                )))
             }
         }
     }
@@ -416,14 +420,22 @@ struct TypeDeclHeader {
 }
 
 impl TypeDeclHeader {
+    pub fn new(keyword_token: TokenTree) -> Self {
+        Self {
+            span: keyword_token.span().clone(),
+            keyword: keyword_token,
+            where_clause: None,
+            supers: None,
+            forward: false,
+        }
+    }
+    
     pub fn parse(
         tokens: &mut TokenStream,
         kw_matcher: impl Into<Matcher>,
         tags: &[Tag],
         name_span: &Span,
     ) -> ParseResult<Self> {
-        // 
-        
         let kw_tt = tokens.match_one(kw_matcher)?;
         let mut span = kw_tt.span().clone();
         
@@ -475,7 +487,23 @@ impl TypeDeclHeader {
         }
         
         Ok(result)
-    }    
+    }
+    
+    pub fn parse_or_empty(
+        parser: &mut Parser,
+        kw_matcher: impl Into<Matcher>,
+        keyword_token: TokenTree,
+        tags: &[Tag],
+        name_span: &Span
+    ) -> Self {
+        let kw_matcher = kw_matcher.into();
+        assert!(kw_matcher.is_match(&keyword_token));
+        
+        Self::parse(parser.tokens(), kw_matcher, tags, name_span)
+            .or_continue_with(parser.errors(), || {
+                Self::new(keyword_token)
+            })
+    }
 }
 
 

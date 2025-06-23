@@ -195,7 +195,7 @@ pub struct TracedError<T> {
 }
 
 impl<T> TracedError<T> {
-    pub const SKIP_FRAMES: usize = 2;
+    pub const SKIP_FRAMES: usize = 4;
 
     #[inline(always)]
     pub fn trace_skip(err: T, skip_frames: usize) -> Self {

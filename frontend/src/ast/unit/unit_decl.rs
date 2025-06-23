@@ -109,7 +109,7 @@ impl UnitDecl<Span> {
 
             if let Some(item) = parse_unit_decl(parser, visibility)
                 .map(Some)
-                .and_continue(parser.errors(), None)
+                .or_continue(parser.errors(), None)
             {
                 items.push(item);
             }

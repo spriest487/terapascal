@@ -158,7 +158,7 @@ impl Unit<Span> {
         {
             Some(TokenTree::Keyword { kw, span }) => {
                 let ident = IdentPath::parse(parser.tokens())
-                    .and_continue_with(parser.errors(), || file_ident.clone());
+                    .or_continue_with(parser.errors(), || file_ident.clone());
 
                 if file_ident != ident {
                     let err = ParseError::InvalidUnitFilename(ident.path_span());
@@ -250,11 +250,11 @@ impl Unit<Span> {
             let init_kw = parser.tokens().match_one_maybe(Keyword::Initialization);
             if let Some(init_kw) = &init_kw {
                 let init_body = parse_init_section(parser.tokens())
-                    .and_continue_with(parser.errors(), Vec::new);
+                    .or_continue_with(parser.errors(), Vec::new);
 
                 let end_kw = match_unit_end(parser.tokens())
                     .map(Some)
-                    .and_continue(parser.errors(), None);
+                    .or_continue(parser.errors(), None);
 
                 unit.end_kw = end_kw.clone();
                 
@@ -266,7 +266,7 @@ impl Unit<Span> {
             } else {
                 unit.end_kw = match_unit_end(parser.tokens())
                     .map(Some)
-                    .and_continue(parser.errors(), None);
+                    .or_continue(parser.errors(), None);
             }
 
             if !(has_iface_section || has_impl_section || init_kw.is_some()) {
