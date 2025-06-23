@@ -292,6 +292,11 @@ impl TypeDeclItem {
                 let struct_decl = StructDecl::parse(parser, name, tags, first_token);
                 Ok(TypeDeclItem::Struct(Arc::new(struct_decl)))
             }
+
+            Some(Keyword::Variant) => {
+                let variant_decl = VariantDecl::parse(parser, name, tags, first_token);
+                Ok(TypeDeclItem::Variant(Arc::new(variant_decl)))
+            }
             
             Some(Keyword::Interface) => {
                 let iface_decl = InterfaceDecl::parse(parser.tokens(), name, tags)
@@ -301,11 +306,6 @@ impl TypeDeclItem {
                     })?;
 
                 Ok(TypeDeclItem::Interface(Arc::new(iface_decl)))
-            }
-            
-            Some(Keyword::Variant) => {
-                let variant_decl = VariantDecl::parse(parser, name, tags, first_token);
-                Ok(TypeDeclItem::Variant(Arc::new(variant_decl)))
             }
             
             Some(Keyword::Set) => {

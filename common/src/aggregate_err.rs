@@ -147,10 +147,6 @@ pub trait FromAggregateError<T> : Sized {
 
 impl<T, E: FromAggregateError<T>> AggregateError<T, E> {
     pub fn into_err(self) -> E {
-        if self.rest.is_empty() {
-            *self.first
-        } else {
-            E::from_aggregate_error(self)
-        }
+        E::from_aggregate_error(self)
     }
 }

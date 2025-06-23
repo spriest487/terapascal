@@ -106,8 +106,9 @@ pub enum ParseError {
         tags_span: Span,
     },
 
-    AggregateBlock(AggregateParseError<Block>),
-    AggregateUnit(AggregateParseError<Unit>),
+    // item was parsable, but some of its internal items failed to parse
+    BlockWithErrors(AggregateParseError<Block>),
+    UnitWithErrors(AggregateParseError<Unit>),
 }
 
 impl ParseError {
@@ -185,8 +186,8 @@ impl Spanned for ParseError {
             ParseError::InvalidSetRangeExpr { span } => span,
             ParseError::InvalidTagLocation { span, .. } => span,
 
-            ParseError::AggregateBlock(err) => err.first.span(),
-            ParseError::AggregateUnit(err) => err.first.span(),
+            ParseError::BlockWithErrors(err) => err.first.span(),
+            ParseError::UnitWithErrors(err) => err.first.span(),
         }
     }
 }
@@ -238,8 +239,8 @@ impl fmt::Display for ParseError {
             ParseError::EmptyTypeDecl { .. } => write!(f, "Empty type declaration"),
             ParseError::InvalidTagLocation { .. } => write!(f, "Invalid tag location"),
 
-            ParseError::AggregateBlock(agg) => write!(f, "{}", agg.first.err),
-            ParseError::AggregateUnit(agg) => write!(f, "{}", agg.first.err),
+            ParseError::BlockWithErrors(agg) => write!(f, "{}", agg.first.err),
+            ParseError::UnitWithErrors(agg) => write!(f, "{}", agg.first.err),
         }
     }
 }
@@ -347,11 +348,11 @@ impl DiagnosticOutput for ParseError {
                 Some(format!("{loc_name} must not have tags"))
             }
 
-            ParseError::AggregateBlock(agg) => {
+            ParseError::BlockWithErrors(agg) => {
                 agg.first_label_text()
             }
 
-            ParseError::AggregateUnit(agg) => {
+            ParseError::UnitWithErrors(agg) => {
                 agg.first_label_text()
             }
         };
@@ -376,7 +377,7 @@ impl DiagnosticOutput for ParseError {
                     .with_label(DiagnosticLabel::new(tags_span.clone()))]
             },
 
-            ParseError::AggregateBlock(agg) => agg.rest_messages(),
+            ParseError::BlockWithErrors(agg) => agg.rest_messages(),
 
             _ => Vec::new(),
         }
@@ -398,7 +399,7 @@ impl FromAggregateError<Block> for TracedError<ParseError> {
         let first_bt = err.first.bt.clone();
 
         TracedError {
-            err: ParseError::AggregateBlock(err),
+            err: ParseError::BlockWithErrors(err),
             bt: first_bt,
         }
     }
@@ -409,7 +410,7 @@ impl FromAggregateError<Unit> for TracedError<ParseError> {
         let first_bt = err.first.bt.clone();
 
         TracedError {
-            err: ParseError::AggregateUnit(err),
+            err: ParseError::UnitWithErrors(err),
             bt: first_bt,
         }
     }

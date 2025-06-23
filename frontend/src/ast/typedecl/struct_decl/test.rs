@@ -111,7 +111,7 @@ pub fn semicolon_separator_is_single() {
             assert!(tt.is_separator(Separator::Semicolon))
         },
 
-        Err(ParseError::AggregateUnit(err, ..)) => {
+        Err(ParseError::UnitWithErrors(err, ..)) => {
             match err.first.err {
                 ParseError::UnexpectedToken(..) | ParseError::UnexpectedTokens(..) => {
                 }
