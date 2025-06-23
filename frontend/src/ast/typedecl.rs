@@ -299,7 +299,7 @@ impl TypeDeclItem {
             }
             
             Some(Keyword::Interface) => {
-                let iface_decl = InterfaceDecl::parse(parser.tokens(), name, tags)
+                let iface_decl = InterfaceDecl::parse(parser, name, tags, first_token)
                     .map_err(|err| {
                         parser.tokens().advance_to(Keyword::End).and_continue(parser.errors());
                         err

@@ -1,4 +1,4 @@
-use crate::ast::{iface_method_start, SupersClause};
+use crate::ast::{iface_method_start, parse_separated_members, SupersClause};
 use crate::ast::tag::Tag;
 use crate::ast::typedecl::TypeDeclHeader;
 use crate::ast::Annotation;
@@ -7,12 +7,12 @@ use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::DeclIdent;
 use crate::ast::WhereClause;
-use crate::parse::LookAheadTokenStream;
+use crate::parse::{ContinueParse, LookAheadTokenStream, Parser};
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
-use crate::Keyword;
+use crate::{Keyword, TokenTree};
 use crate::Separator;
 use derivative::*;
 use std::fmt;
@@ -113,51 +113,79 @@ impl<A: Annotation> InterfaceDecl<A> {
 
 impl InterfaceDecl<Span> {
     pub fn parse(
-        tokens: &mut TokenStream,
+        parser: &mut Parser,
         name: DeclIdent,
-        tags: Vec<Tag>
+        tags: Vec<Tag>,
+        keyword_token: TokenTree,
     ) -> ParseResult<Self> {
-        let decl_start = TypeDeclHeader::parse(tokens, Keyword::Interface, &tags, &name.span)?;
+        let header = TypeDeclHeader::parse(parser.tokens(), Keyword::Interface, &tags, &name.span)
+            .or_continue_with(parser.errors(), || TypeDeclHeader::new(keyword_token));
 
-        if decl_start.forward {
+        if header.forward {
             Ok(InterfaceDecl {
-                kw_span: decl_start.keyword.into_span().into(),
+                kw_span: header.keyword.into_span().into(),
                 name,
-                where_clause: decl_start.where_clause,
+                where_clause: header.where_clause,
                 tags: Vec::new(),
 
-                supers: decl_start.supers,
-                span: decl_start.span.into(),
+                supers: header.supers,
+                span: header.span.into(),
                 forward: true,
                 methods: Vec::new(),
                 end_kw_span: None,
             })
         } else {
-            let methods = InterfaceMethodDecl::parse_seq(tokens)?;
-            tokens.match_one_maybe(Separator::Semicolon);
+            let mut methods = Vec::new();
+            parse_separated_members(parser, &mut methods, |parser| {
+                if parser.tokens().look_ahead().match_one(iface_method_start()).is_none() {
+                    return None;
+                }
+                
+                let tags = Tag::parse_seq(parser.tokens())
+                    .or_continue_with(parser.errors(), Vec::new);
+
+                let decl = FunctionDecl::parse(parser.tokens(), false, tags)
+                    .ok_or_continue(parser.errors())?;
+                
+                Some(InterfaceMethodDecl {
+                    decl: decl.into(),
+                })
+            });
 
             // no more methods found, must be "end" next, but if there's an invalid token, the error
             // should indicate that it could've been a method too
-            let end = tokens
-                .match_one(Keyword::End)
-                .map_err(|mut err| {
-                    if let ParseError::UnexpectedToken(_, Some(expected)) = &mut err.err {
-                        *expected |= iface_method_start()
-                    }
+            let end_span = if let Err(mut err) = parser.tokens().match_one(Keyword::End) {
+                if let ParseError::UnexpectedToken(_, Some(expected)) = &mut err.err {
+                    *expected |= iface_method_start()
+                }
 
-                    err
-                })?;
+                parser.error(err);
+                parser.advance_to(Keyword::End).map(TokenTree::into_span)
+            } else {
+                None
+            };
+            
+            let decl_span = match &end_span {
+                Some(end_span) => {
+                    header.keyword.span().to(end_span)
+                }  
+                
+                None => match methods.last().map(|m| &m.decl.span) {
+                    Some(method_span) => header.keyword.span().to(method_span),
+                    None => header.keyword.span().clone(),
+                }
+            };
 
             Ok(InterfaceDecl {
                 name,
-                where_clause: decl_start.where_clause,
+                where_clause: header.where_clause,
                 tags,
-                supers: decl_start.supers,
+                supers: header.supers,
                 forward: false,
                 methods,
-                span: decl_start.keyword.span().to(end.span()).into(),
-                kw_span: decl_start.keyword.into_span().into(),
-                end_kw_span: Some(end.into_span().into()),
+                span: decl_span,
+                kw_span: header.keyword.into_span().into(),
+                end_kw_span: end_span,
             })
         }
     }
