@@ -17,7 +17,6 @@ use terapascal_frontend::ast::PatternSemanticElement;
 use terapascal_frontend::ast::SemanticHint;
 use terapascal_frontend::ast::SetDeclRange;
 use terapascal_frontend::ast::StructDecl;
-use terapascal_frontend::ast::TypeAnnotation;
 use terapascal_frontend::ast::TypeDeclItem;
 use terapascal_frontend::ast::TypeMemberDeclRef;
 use terapascal_frontend::ast::UnaryPosition;
