@@ -1136,10 +1136,10 @@ impl Context {
                         // key, throw an error unless it's a valid redecl
                         if let Some(existing) = self.find_def(&full_name, &def_key) {
                             // allow the redeclaration of certain builtin types in the System unit,
-                            // as long as the new definition matches the builtin one exactly
-                            if !value.is_valid_builtin_redecl() || *existing != def {
-                                dbg!(existing);
-                                dbg!(&def);
+                            // as long as the new definition matches the builtin one
+                            if !value.is_valid_builtin_redecl() || !existing.can_redefine_with(&def) {
+                                // dbg!(existing);
+                                // dbg!(&def);
 
                                 let err = NameError::AlreadyDefined {
                                     ident: full_name,
