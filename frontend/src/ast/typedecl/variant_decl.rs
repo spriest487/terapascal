@@ -79,7 +79,7 @@ pub struct VariantCaseData<TypeName> {
 #[derivative(Debug, PartialEq, Hash)]
 pub struct VariantCase<A: Annotation = Span> {
     pub ident: Ident,
-    pub data: Option<VariantCaseData<A::TypeName>>,
+    pub data: Option<VariantCaseData<TypeName<A>>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -96,7 +96,7 @@ impl<A: Annotation> VariantDecl<A> {
         self.cases.iter().find(|c| c.ident.as_str() == case)
     }
 
-    pub fn implements_types(&self) -> &[A::TypeName] {
+    pub fn implements_types(&self) -> &[TypeName<A>] {
         match &self.implements {
             Some(implements) => &implements.types,
             None => &[],

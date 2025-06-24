@@ -1,7 +1,7 @@
-use crate::ast::{Annotation, Ident};
+use crate::ast::Annotation;
+use crate::ast::Ident;
 use crate::ast::Expr;
 use crate::ast::Stmt;
-use crate::ast::TypeAnnotation;
 use crate::ast::TypeName;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
@@ -25,7 +25,7 @@ pub enum ForLoopCounterInit<A: Annotation> {
         binding_kw_span: Span,
         
         name: Ident,
-        ty: A::TypeName,
+        ty: TypeName<A>,
 
         #[derivative(Debug = "ignore")]
         #[derivative(PartialEq = "ignore")]
@@ -90,7 +90,7 @@ pub struct ForLoopSequenceRange<A: Annotation = Span> {
     pub binding_kw_span: Span,
     
     pub binding_name: Ident,
-    pub binding_ty: A::TypeName,
+    pub binding_ty: TypeName<A>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -165,7 +165,7 @@ impl ForLoop<Span> {
 
                 let binding_ty = match tokens.match_one_maybe(Separator::Colon) {
                     Some(..) => TypeName::parse(tokens)?,
-                    None => TypeName::Unspecified,
+                    None => TypeName::unspecified(),
                 };
 
                 if let Some(in_tt) = tokens.match_one_maybe(Operator::In) {

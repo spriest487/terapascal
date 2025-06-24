@@ -307,8 +307,8 @@ fn apply_implements_ty_args(
 ) -> SupersClause {
     let types = implements.types
         .iter()
-        .map(|implements_ty| {
-            implements_ty.clone().map(|ty| generic_ctx.apply_to_type(ty))
+        .map(|implements_typename| {
+            generic_ctx.apply_to_typename(implements_typename.clone())
         })
         .collect();
     

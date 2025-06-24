@@ -1,4 +1,4 @@
-use crate::ast::Annotation;
+use crate::ast::{Annotation, UncheckedType};
 use crate::ast::Expr;
 use crate::ast::IdentTypeName;
 use crate::ast::DeclIdent;
@@ -58,6 +58,7 @@ impl SetDecl<Span> {
                         ident: type_name,
                         indirection: 0,
                         type_args: None,
+                        ty: UncheckedType,
                     }),
                 }
             },
@@ -100,7 +101,7 @@ impl<A: Annotation> fmt::Display for SetDecl<A> {
 #[derivative(Debug, PartialEq, Hash)]
 pub enum SetDeclRange<A: Annotation = Span> {
     Type {
-        ty: A::TypeName,
+        ty: TypeName<A>,
         
         #[derivative(Debug = "ignore")]
         #[derivative(Hash = "ignore")]

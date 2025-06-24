@@ -1,9 +1,8 @@
 use crate::ast;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use crate::ast::{IdentPath, UncheckedType};
 use crate::ast::IdentTypeName;
 use crate::ast::PatternSemanticElement;
-use crate::typ::context;
+use crate::ast::Ident;
 use crate::typ::result::*;
 use crate::typ::ty::Specializable;
 use crate::typ::ty::Type;
@@ -15,6 +14,7 @@ use crate::typ::NameResult;
 use crate::typ::Symbol;
 use crate::typ::TypeName;
 use crate::typ::Value;
+use crate::typ::context;
 use derivative::Derivative;
 use std::fmt;
 use std::sync::Arc;
@@ -115,7 +115,15 @@ impl ast::Pattern for TypePattern {
             }
 
             TypePattern::VariantCase { variant_name_span, variant, case, data_binding, .. } => {
-                let variant_ty_name = TypeName::named(Type::Variant(variant.clone()), variant_name_span.clone());
+                let variant_name = variant.full_path.clone();
+                let variant_ty_name = TypeName::Ident(IdentTypeName {
+                    ty: Type::variant(variant.clone()),
+                    ident: variant_name.clone(),
+                    span: variant_name_span.clone(),
+                    indirection: 0,
+                    type_args: None,
+                });
+                
                 elements.push(PatternSemanticElement::Type(variant_ty_name));
                 elements.push(PatternSemanticElement::VariantCase(case.span.clone()));
 
@@ -127,7 +135,15 @@ impl ast::Pattern for TypePattern {
             TypePattern::NegatedVariantCase { not_kw, variant_name_span, variant, case, .. } => {
                 elements.push(PatternSemanticElement::Keyword(not_kw.clone()));
 
-                let variant_ty_name = TypeName::named(Type::Variant(variant.clone()), variant_name_span.clone());
+                let variant_name = variant.full_path.clone();
+                let variant_ty_name = TypeName::Ident(IdentTypeName {
+                    ty: Type::variant(variant.clone()),
+                    ident: variant_name.clone(),
+                    span: variant_name_span.clone(),
+                    indirection: 0,
+                    type_args: None,
+                });
+
                 elements.push(PatternSemanticElement::Type(variant_ty_name));
                 elements.push(PatternSemanticElement::VariantCase(case.span.clone()));
             }
@@ -190,36 +206,34 @@ impl TypePattern {
         expect_ty: &Type,
         ctx: &mut Context,
     ) -> TypeResult<TypeName> {
-        let raw_ty = match name {
+        let mut matchable_ty = match name {
             ast::TypeName::Ident(IdentTypeName { ident, .. }) => {
                 let (_ident_path, ty) = ctx.find_type(ident)
                     .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
 
-                TypeName::named(ty.clone(), ident.path_span())
+                TypeName::from_path(ident.clone(), ty.clone())
             },
             _ => {
                 typecheck_typename(name, ctx)?
             },
         };
 
-        let matchable_ty = if raw_ty.is_matchable() {
-            raw_ty
-                .infer_specialized_from_hint(&TypeName::inferred(expect_ty.clone()))
-                .cloned()
-                .map(|ty| {
-                    match raw_ty.get_span() {
-                        Some(span) => TypeName::named(ty, span.clone()),
-                        None => TypeName::inferred(ty),
-                    }
-                })
-        } else {
-            None
-        };
+        if matchable_ty.is_matchable() {
+            match matchable_ty.ty().infer_specialized_from_hint(expect_ty) {
+                Some(spec_ty) => {
+                    *matchable_ty.ty_mut() = spec_ty.clone();
+                }
 
-        matchable_ty.ok_or_else(|| TypeError::NotMatchable {
-            ty: raw_ty.ty().clone(),
-            span: span.clone(),
-        })
+                None => {
+                    return Err(TypeError::NotMatchable {
+                        ty: matchable_ty.ty().clone(),
+                        span: span.clone(),
+                    });
+                }
+            }
+        }
+
+        Ok(matchable_ty)
     }
 
     // find_pattern_ty, but for variant type patterns
@@ -312,6 +326,7 @@ impl TypePattern {
                             indirection: 0,
                             type_args: None,
                             ident: name.clone(),
+                            ty: UncheckedType,
                         });
 
                         let ty = Self::find_pattern_ty(&ty_name, pattern.span(), expect_ty, ctx)?;

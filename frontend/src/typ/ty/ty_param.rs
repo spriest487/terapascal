@@ -16,6 +16,8 @@ pub type TypeParam = ast::TypeParam<Value>;
 
 impl TypeParam {
     pub fn into_generic_param_ty(self) -> TypeName {
+        let name = self.name.clone();
+
         let ty=  match self.constraint {
             Some(constraint) => {
                 Type::generic_constrained_param(self.name, constraint.is_ty)
@@ -24,8 +26,8 @@ impl TypeParam {
                 Type::generic_param(self.name)
             },
         };
-        
-        TypeName::named(ty, self.span)
+
+        TypeName::from_ident(name, ty)
     }
 }
 
@@ -33,8 +35,7 @@ pub type TypeArgList = ast::TypeArgList<Value>;
 
 impl TypeArgList {
     pub fn apply_type_args(self, params: &impl TypeParamContainer, args: &impl TypeArgResolver) -> Self {
-        self.map(|arg, _pos | arg
-            .map(|ty| ty.apply_type_args(params, args)))
+        self.map(|arg, _pos| arg.apply_type_args(params, args))
     }
 }
 
@@ -59,6 +60,8 @@ impl TypeParamList {
     
     pub fn into_type_args(self) -> TypeArgList {
         self.map(|item, _pos| {
+            let name = item.name.clone();
+
             let ty = Type::GenericParam(Arc::new(TypeParamListItem {
                 name: item.name,
                 is_ty: item
@@ -67,7 +70,7 @@ impl TypeParamList {
                     .unwrap_or(TypeName::inferred(Type::Any))
             }));
 
-            TypeName::named(ty, item.span)
+            TypeName::from_ident(name, ty)
         })
     }
     

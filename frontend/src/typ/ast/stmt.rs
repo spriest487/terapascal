@@ -47,7 +47,7 @@ pub fn typecheck_local_binding(
     ctx: &mut Context,
 ) -> TypeResult<LocalBinding> {
     let (val, binding_ty) = match &binding.ty {
-        ast::TypeName::Unspecified => match &binding.val {
+        ast::TypeName::Unspecified(..) => match &binding.val {
             None => {
                 return Err(TypeError::UninitBindingWithNoType {
                     binding: Box::new(binding.clone()),

@@ -1,12 +1,21 @@
-use std::sync::Arc;
-use derivative::Derivative;
-use terapascal_common::span::Span;
-use crate::typ::annotation::function::FunctionValue;
 use crate::ast;
 use crate::ast::SemanticHint;
-use crate::typ::ast::{resolve_overload, Expr, MethodDecl, OverloadCandidate};
-use crate::typ::{Context, FunctionSig, Invocation, Type, TypeArgList, TypeName, TypeResult, Value};
+use crate::typ::annotation::function::FunctionValue;
+use crate::typ::ast::resolve_overload;
+use crate::typ::ast::Expr;
+use crate::typ::ast::MethodDecl;
+use crate::typ::ast::OverloadCandidate;
 use crate::typ::method::MethodValue;
+use crate::typ::Context;
+use crate::typ::FunctionSig;
+use crate::typ::Invocation;
+use crate::typ::Type;
+use crate::typ::TypeArgList;
+use crate::typ::TypeResult;
+use crate::typ::Value;
+use derivative::Derivative;
+use std::sync::Arc;
+use terapascal_common::span::Span;
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Hash, Debug, PartialEq)]
@@ -99,7 +108,7 @@ impl OverloadValue {
                     sig: Arc::new(sig),
                     span: self.span.clone(),
                 };
-                
+
                 // eprintln!("overloaded invocation of `{}` with {} args (self arg? {})", decl, resolved.args.len(), self.self_arg.is_some());
 
                 Ok(Invocation::Function {
@@ -117,16 +126,14 @@ impl OverloadValue {
                 index,
                 decl,
             } => {
-                let iface_ty = TypeName::inferred(iface_ty.clone());
-
                 let sig = resolved.func_sig(self_ty, &self.candidates);
                 let args = resolved.args;
                 let type_args = resolved.type_args;
-                
+
                 assert_eq!(args.len(), sig.params.len());
 
                 let method_val = MethodValue {
-                    self_ty: iface_ty,
+                    self_ty: iface_ty.clone(),
                     self_arg: self_arg.cloned().map(Box::new),
                     index: *index,
                     decl: decl.clone(),
@@ -145,9 +152,9 @@ impl OverloadValue {
             },
         }
     }
-    
+
     pub fn semantic_hint(&self) -> SemanticHint {
-        if self.candidates.iter().all(|c| matches!(c, OverloadCandidate::Method {..})) {
+        if self.candidates.iter().all(|c| matches!(c, OverloadCandidate::Method { .. })) {
             SemanticHint::Method
         } else {
             SemanticHint::Function

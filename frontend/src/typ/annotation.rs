@@ -6,11 +6,11 @@ pub mod function;
 mod ufcs;
 
 use crate::ast;
+use crate::ast::Annotation;
 use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
-use crate::ast::TypeAnnotation;
-use crate::ast::{Annotation, SemanticHint};
+use crate::ast::SemanticHint;
 pub use crate::typ::annotation::invoke::Invocation;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
@@ -229,10 +229,7 @@ impl VariantCaseValue {
         };
 
         Ok(Invocation::VariantCtor {
-            variant_type: TypeName::named(
-                Type::variant(variant_sym.into_owned()),
-                self.variant_name_span.clone(),
-            ),
+            variant_type: Type::variant(variant_sym.into_owned()),
             case: self.case.clone(),
             arg,
             span: self.span.clone(),
@@ -676,7 +673,7 @@ impl Value {
 
                 *self = Value::from(Invocation::Method {
                     method: method.clone(),
-                    self_ty: method.self_ty.ty().clone(),
+                    self_ty: method.self_ty.clone(),
                     args: args.actual_args,
                     args_span: None,
                     span: method.span.clone(),
@@ -780,7 +777,6 @@ impl Spanned for Value {
 
 impl Annotation for Value {
     type Type = Type;
-    type TypeName = TypeName;
     type DeclName = Symbol;
     type Pattern = TypePattern;
     type FunctionName = crate::typ::ast::FunctionName;
@@ -796,11 +792,23 @@ impl Annotation for Value {
             Value::Function(_) | Value::UfcsFunction(_) => SemanticHint::Function,
             Value::Invocation(invocation) => invocation.semantic_hint(),
             Value::Method(_) => SemanticHint::Method,
-            Value::Type(ty, _) => ty.semantic_hint(),
+            Value::Type(ty, _) => match ty {
+                Type::MethodSelf | Type::GenericParam(_) => SemanticHint::TypeParameter,
+                Type::Variant(_) => SemanticHint::Variant,
+                Type::Enum(_) => SemanticHint::Enum,
+
+                Type::Set(_) => SemanticHint::Number,
+
+                _ => SemanticHint::Type,
+            },
             Value::Namespace(_, _) => SemanticHint::Namespace,
             Value::VariantCase(_) => SemanticHint::VariantCase,
             Value::Overload(overload) => overload.semantic_hint(),
             Value::Const(_) => SemanticHint::Const,
         }
+    }
+
+    fn is_known_type(_type_name: &TypeName) -> bool {
+        true
     }
 }

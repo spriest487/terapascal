@@ -4,10 +4,10 @@ mod test;
 mod variant_case;
 
 use crate::ast;
+use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Literal;
 use crate::ast::Operator;
-use crate::ast::Ident;
 use crate::ast::SemanticHint;
 use crate::typ::annotation::UfcsValue;
 use crate::typ::ast::collection_ctor_elements;
@@ -38,7 +38,6 @@ use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeMember;
-use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
@@ -313,7 +312,7 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
         .flatten()?;
 
     let impl_method_val = MethodValue::new(
-        TypeName::inferred((*src_ty).clone()),
+        src_ty.clone().into_owned(),
         Some(expr.clone()),
         impl_method_index,
         impl_method_decl,
@@ -447,7 +446,6 @@ fn typecheck_member_op(
 
 fn typecheck_type_member(
     ty: &Type,
-    ty_span: &Span,
     member_ident: &Ident,
     expect_return_ty: &Type,
     span: Span,
@@ -483,8 +481,7 @@ fn typecheck_type_member(
             }
 
             // this is a reference to the method itself, args list to follow presumably
-            let iface_ty = TypeName::named(candidate.iface_ty, ty_span.clone());
-            MethodValue::new(iface_ty, None, candidate.index, candidate.method, span).into()
+            MethodValue::new(candidate.iface_ty, None, candidate.index, candidate.method, span).into()
         },
         
         TypeMember::MethodGroup(group) => {
@@ -529,8 +526,8 @@ pub fn member_value(
 
         // x is a non-variant typename - we are accessing a member of that type
         // e.g. calling an interface method by its type-qualified name
-        Value::Type(ty, span) => {
-            typecheck_type_member(ty, span, &member_ident, expect_ty, member_span, ctx)
+        Value::Type(ty, _span) => {
+            typecheck_type_member(ty, &member_ident, expect_ty, member_span, ctx)
         },
 
         // x is a value - we are accessing a member of that value

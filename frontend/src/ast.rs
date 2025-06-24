@@ -46,7 +46,6 @@ pub use statement::*;
 use std::fmt;
 use std::hash::Hash;
 use terapascal_common::span::Spanned;
-use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 pub use type_constraint::*;
 pub use type_list::*;
@@ -55,18 +54,10 @@ pub use type_name_pattern::*;
 pub use typedecl::*;
 pub use unit::*;
 
-pub trait TypeAnnotation : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
-    fn is_known(&self) -> bool;
-    fn semantic_hint(&self) -> SemanticHint;
-}
-
-pub trait FunctionName : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
+pub trait FunctionName<A: Annotation> : fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
     fn ident(&self) -> &Ident;
-    
-    fn owning_type_name_semantic_hint(&self) -> SemanticHint;
-    fn owning_type_name_span(&self) -> Option<&Span>;
-    fn owning_type_params_len(&self) -> usize;
-    fn owning_type_param_span(&self, index: usize) -> &Span;
+
+    fn owning_type_qualifier(&self) -> Option<TypeName<A>>;
 
     fn type_params_len(&self) -> usize;
     fn type_param_span(&self, index: usize) -> &Span;
@@ -91,7 +82,7 @@ pub trait DeclName: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
 pub enum PatternSemanticElement<A> where A: Annotation {
     Keyword(Span),
     Binding(Span),
-    Type(A::TypeName),
+    Type(TypeName<A>),
     VariantCase(Span),
     
     // could be either a type or an enum, not enough info (parsed AST only)
@@ -106,14 +97,13 @@ pub trait Pattern: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
 }
 
 pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
-    type Type: TypeAnnotation;
-    type TypeName: TypeAnnotation + MaybeSpanned;
+    type Type: Clone + Eq + PartialEq + Hash + fmt::Debug;
     
     type DeclName: DeclName;
     
     type Pattern: Pattern<Annotation = Self>; 
 
-    type FunctionName: FunctionName;
+    type FunctionName: FunctionName<Self>;
 
     type ConstStringExpr: ConstExprValue<Self, String>;
     type ConstIntegerExpr: ConstExprValue<Self, IntConstant>;
@@ -121,11 +111,12 @@ pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
     type ConstValue: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
     
     fn semantic_hint(&self) -> SemanticHint;
+
+    fn is_known_type(type_name: &TypeName<Self>) -> bool;
 }
 
 impl Annotation for Span {
-    type Type = TypeName;
-    type TypeName = TypeName;
+    type Type = UncheckedType;
     
     type DeclName = DeclIdent;
     type Pattern = TypeNamePattern;
@@ -138,6 +129,10 @@ impl Annotation for Span {
 
     fn semantic_hint(&self) -> SemanticHint {
         SemanticHint::None
+    }
+
+    fn is_known_type(type_name: &TypeName<Self>) -> bool {
+        *type_name != TypeName::Unspecified(UncheckedType)
     }
 }
 

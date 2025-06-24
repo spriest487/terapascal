@@ -22,7 +22,6 @@ use crate::typ::Invocation;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
-use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 pub use args::*;
@@ -236,7 +235,7 @@ pub fn typecheck_call(
         }
 
         // object constructor invocation without args is indistinguishable from a call expression
-        Value::Type(target_type, span) => {
+        Value::Type(target_type, _span) => {
             let Some(ctor) = func_call.clone().try_into_empty_object_ctor() else {
                 return Err(TypeError::NotCallable(Box::new(target.annotation().clone())))
             };
@@ -248,7 +247,7 @@ pub fn typecheck_call(
             
             assert_eq!(0, ctor.args.members.len());
             
-            let object_type = TypeName::named(target_type.clone(), span.clone());
+            let object_type = target_type.clone();
             
             Arc::new(Invocation::ObjectCtor {
                 span: ctor.annotation.clone(),
@@ -377,7 +376,7 @@ fn typecheck_func_overload_call(
             let method = Arc::new(MethodValue {
                 span: func_call.span().clone(),
                 self_arg: Some(Box::new(self_arg)),
-                self_ty: TypeName::inferred(iface_ty.clone()),
+                self_ty: iface_ty.clone(),
                 decl: decl.clone(),
                 index: *index,
                 sig: Arc::new(sig),

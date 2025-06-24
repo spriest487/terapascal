@@ -1,6 +1,6 @@
 use crate::ast::type_name::IdentTypeName;
 use crate::ast::type_name::TypeName;
-use crate::ast::IdentPath;
+use crate::ast::{IdentPath, UncheckedType};
 use crate::ast::Keyword;
 use crate::ast::{Annotation, Ident};
 use crate::parse::LookAheadTokenStream;
@@ -23,7 +23,7 @@ use terapascal_common::TracedError;
 pub struct TypeConstraint<A: Annotation = Span> {
     pub name: Ident,
 
-    pub is_ty: A::TypeName,
+    pub is_ty: TypeName<A>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -141,6 +141,7 @@ impl ParseSeq for WhereClauseItem {
             type_args: None,
             ident: is_ty_path,
             indirection: 0,
+            ty: UncheckedType,
         });
 
         Ok(WhereClauseItem(TypeConstraint {

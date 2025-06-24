@@ -6,7 +6,6 @@ use crate::ast::expression::parse::operator::SymbolOperator;
 use crate::ast::match_block::MatchExpr;
 use crate::ast::operators::*;
 use crate::ast::type_name::TypeName;
-use crate::ast::AnonymousFunctionDef;
 use crate::ast::ArgList;
 use crate::ast::Block;
 use crate::ast::CaseExpr;
@@ -21,12 +20,13 @@ use crate::ast::ObjectCtorMember;
 use crate::ast::Raise;
 use crate::ast::TypeArgList;
 use crate::ast::TypeList;
+use crate::ast::AnonymousFunctionDef;
 use crate::parse::*;
 use crate::token_tree::*;
 use crate::Keyword;
+use std::fmt;
 use terapascal_common::span::*;
 use terapascal_common::TracedError;
-use std::fmt;
 
 fn parse_identifier(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
     // the context of an identifier expr should be the first part of the
@@ -111,7 +111,7 @@ fn parse_default(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
         Some(..) => unreachable!(),
 
         None => {
-            (TypeName::Unspecified, kw.into_span())
+            (TypeName::unspecified(), kw.into_span())
         }
     };
 

@@ -2,7 +2,6 @@ use crate::ast::type_name::TypeName;
 use crate::ast::Annotation;
 use crate::ast::Expr;
 use crate::ast::Ident;
-use crate::ast::TypeAnnotation;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
@@ -18,7 +17,7 @@ use terapascal_common::span::Span;
 #[derivative(Debug, PartialEq, Hash)]
 pub struct LocalBinding<A: Annotation = Span> {
     pub name: Ident,
-    pub ty: A::TypeName,
+    pub ty: TypeName<A>,
     pub val: Option<Expr<A>>,
 
     #[derivative(Hash = "ignore")]
@@ -48,7 +47,7 @@ impl LocalBinding {
         let mut binding = LocalBinding {
             kw_span,
             name,
-            ty: TypeName::Unspecified,
+            ty: TypeName::unspecified(),
             assign_op_span: None,
             val: None,
             annotation: binding_span,

@@ -16,7 +16,7 @@ pub struct SupersClause<A: Annotation = Span> {
     #[derivative(Hash = "ignore")]
     pub kw_span: Span,
 
-    pub types: Vec<A::TypeName>,
+    pub types: Vec<TypeName<A>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]

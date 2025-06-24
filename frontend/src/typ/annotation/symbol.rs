@@ -2,7 +2,7 @@ use crate::ast::DeclName;
 use crate::ast::IdentPath;
 use crate::ast::DeclIdent;
 use crate::typ::ast::WhereClause;
-use crate::typ::typecheck_type_params;
+use crate::typ::{typecheck_type_params, TypeName};
 use crate::typ::validate_generic_constraints;
 use crate::typ::Context;
 use crate::typ::GenericError;
@@ -127,8 +127,10 @@ impl Symbol {
         let type_args = if let Some(existing_args) = &self.type_args {
             existing_args
                 .clone()
-                .map(|arg, _pos| arg
-                    .map(|ty| ty.apply_type_args(type_params, args)))
+                .map(|arg, _pos| {
+                    let arg_ty = arg.ty().clone().apply_type_args(type_params, args);
+                    TypeName::inferred(arg_ty)
+                })
         } else {
             let mut resolved_args = Vec::with_capacity(type_params.len());
 

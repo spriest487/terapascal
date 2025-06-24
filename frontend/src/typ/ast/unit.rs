@@ -1,11 +1,11 @@
 use crate::ast;
-use crate::ast::{BindingDeclKind, UnitDeclSection};
+use crate::ast::BindingDeclKind;
 use crate::ast::FunctionName;
 use crate::ast::IdentPath;
 use crate::ast::SemanticHint;
 use crate::ast::StructKind;
-use crate::ast::TypeAnnotation;
 use crate::ast::UnitBindingItemInitializer;
+use crate::ast::UnitDeclSection;
 use crate::ast::Visibility;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::expr::expect_stmt_initialized;
@@ -22,7 +22,7 @@ use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDeclContext;
 use crate::typ::ast::SetDecl;
 use crate::typ::ast::WhereClause;
-use crate::typ::typecheck_type;
+use crate::typ::typecheck_typename;
 use crate::typ::Binding;
 use crate::typ::ConstValue;
 use crate::typ::Context;
@@ -37,6 +37,7 @@ use crate::typ::ScopeMemberRef;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::ValueKind;
@@ -61,7 +62,11 @@ pub struct TypeDeclItemInfo {
 }
 
 impl TypeDeclItemInfo {
-    pub fn expect_not_generic(&self, kind: InvalidTypeParamsDeclKind, item_span: &Span) -> TypeResult<()> {
+    pub fn expect_not_generic(
+        &self,
+        kind: InvalidTypeParamsDeclKind,
+        item_span: &Span,
+    ) -> TypeResult<()> {
         if self.name.type_params.is_some() {
             return Err(TypeError::InvalidDeclWithTypeParams {
                 kind,
@@ -72,10 +77,10 @@ impl TypeDeclItemInfo {
         if self.name.type_params.is_some() {
             return Err(TypeError::from_generic_err(
                 GenericError::UnexpectedConstraintList,
-                item_span.clone())
-            );
+                item_span.clone(),
+            ));
         }
-        
+
         Ok(())
     }
 }
@@ -110,7 +115,7 @@ fn typecheck_unit_decl(
             let decl = typecheck_global_binding(decl, visibility, ctx)?;
 
             Ok(ast::UnitDecl::Binding { decl })
-        }
+        },
     }
 }
 
@@ -153,22 +158,28 @@ fn typecheck_unit_func_def(
 ) -> TypeResult<UnitDecl> {
     let func_decl = FunctionDecl::typecheck(&func_def.decl, true, ctx)?;
     let func_name = &func_decl.name;
-    
+
     // free functions may not already have a declaration in scope if they weren't forward
     // declared, do that now
-    if func_decl.name.context == FunctionDeclContext::FreeFunction && !ctx.is_function_declared(&func_decl) {
-        ctx.declare_function(func_name.ident().clone(), Arc::new(func_decl.clone()), visibility)?;
+    if func_decl.name.context == FunctionDeclContext::FreeFunction
+        && !ctx.is_function_declared(&func_decl)
+    {
+        ctx.declare_function(
+            func_name.ident().clone(),
+            Arc::new(func_decl.clone()),
+            visibility,
+        )?;
     }
 
     let func_def = Arc::new(typecheck_func_def(func_decl.clone(), func_def, ctx)?);
     match func_decl.method_declaring_type() {
         Some(ty) => {
             ctx.define_method(ty.clone(), func_def.clone())?;
-        }
+        },
 
         None => {
             ctx.define_function(func_name.ident().clone(), func_def.clone())?;
-        }
+        },
     }
 
     Ok(UnitDecl::FunctionDef { def: func_def })
@@ -230,12 +241,8 @@ fn typecheck_type_decl_item(
         None => None,
     };
 
-    let full_name = Symbol::from_local_decl_name(
-        &type_decl.name(),
-        where_clause.as_ref(),
-        ctx
-    )?;
-    
+    let full_name = Symbol::from_local_decl_name(&type_decl.name(), where_clause.as_ref(), ctx)?;
+
     let item_info = TypeDeclItemInfo {
         name: full_name,
         where_clause,
@@ -253,11 +260,11 @@ fn typecheck_type_decl_item(
                 alias.name.ident().clone(),
                 alias.target.ty().clone(),
                 visibility,
-                false
+                false,
             )?;
 
             Ok(TypeDeclItem::Alias(Arc::new(alias)))
-        }
+        },
 
         ast::TypeDeclItem::Struct(def) => match def.kind {
             StructKind::Class => {
@@ -268,7 +275,7 @@ fn typecheck_type_decl_item(
                 let ty = Type::record(item_info.name.clone());
                 typecheck_type_decl_item_with_def(item_info, ty, type_decl, ctx)
             },
-        }
+        },
 
         ast::TypeDeclItem::Interface(_) => {
             let ty = Type::interface(item_info.name.clone());
@@ -280,7 +287,7 @@ fn typecheck_type_decl_item(
         },
         ast::TypeDeclItem::Enum(enum_decl) => {
             item_info.expect_not_generic(InvalidTypeParamsDeclKind::Enum, &enum_decl.span)?;
-            
+
             let ty = Type::enumeration(item_info.name.full_path.clone());
             typecheck_type_decl_item_with_def(item_info, ty, type_decl, ctx)
         },
@@ -288,7 +295,7 @@ fn typecheck_type_decl_item(
             item_info.expect_not_generic(InvalidTypeParamsDeclKind::Set, &set_decl.span)?;
 
             typecheck_set_decl_item(set_decl, item_info.name, visibility, ctx)
-        }
+        },
     }
 }
 
@@ -296,10 +303,10 @@ fn typecheck_set_decl_item(
     set_decl: &ast::SetDecl,
     full_name: Symbol,
     visibility: Visibility,
-    ctx: &mut Context
+    ctx: &mut Context,
 ) -> TypeResult<TypeDeclItem> {
     let set_decl = Arc::new(SetDecl::typecheck(set_decl, full_name, ctx)?);
-    
+
     ctx.declare_set(&set_decl, visibility)?;
 
     Ok(TypeDeclItem::Set(set_decl))
@@ -310,12 +317,10 @@ fn typecheck_type_decl_item_with_def(
     info: TypeDeclItemInfo,
     ty: Type,
     type_decl: &ast::TypeDeclItem,
-    ctx: &mut Context
+    ctx: &mut Context,
 ) -> TypeResult<TypeDeclItem> {
     // type decls have an inner scope
-    let ty_scope = ctx.push_scope(Environment::TypeDecl {
-        ty,
-    });
+    let ty_scope = ctx.push_scope(Environment::TypeDecl { ty });
 
     if let Some(ty_params) = &info.name.type_params {
         ctx.declare_type_params(&ty_params)?;
@@ -341,13 +346,13 @@ fn typecheck_type_decl_item_with_def(
 
         TypeDeclItem::Enum(enum_decl) => {
             ctx.declare_enum(enum_decl.clone(), visibility)?;
-        }
+        },
 
         TypeDeclItem::Set(..) => {
             unreachable!("handled separately")
-        }
-        
-        TypeDeclItem::Alias(_) => unreachable!()
+        },
+
+        TypeDeclItem::Alias(_) => unreachable!(),
     }
 
     Ok(type_decl)
@@ -357,7 +362,7 @@ fn typecheck_type_decl_body(
     info: TypeDeclItemInfo,
     type_decl: &ast::TypeDeclItem<Span>,
     ctx: &mut Context,
-) -> TypeResult<TypeDeclItem> {    
+) -> TypeResult<TypeDeclItem> {
     let type_decl = match type_decl {
         ast::TypeDeclItem::Struct(class) => {
             let class = typecheck_struct_decl(info, class, ctx)?;
@@ -382,12 +387,12 @@ fn typecheck_type_decl_body(
         ast::TypeDeclItem::Enum(enum_decl) => {
             let enum_decl = typecheck_enum_decl(info.name, enum_decl, ctx)?;
             ast::TypeDeclItem::Enum(Arc::new(enum_decl))
-        }
+        },
 
         ast::TypeDeclItem::Set(set_decl) => {
             let set_decl = SetDecl::typecheck(set_decl, info.name, ctx)?;
             ast::TypeDeclItem::Set(Arc::new(set_decl))
-        }
+        },
     };
 
     Ok(type_decl)
@@ -423,34 +428,34 @@ fn typecheck_global_binding_item(
 
     let (ty, val) = match kind {
         BindingDeclKind::Const => {
-            let (ty, mut const_val_init) = match (&item.ty, &item.init) {
+            let (typename, mut const_val_init) = match (&item.ty, &item.init) {
                 (_, None) => {
                     return Err(TypeError::ConstDeclWithNoValue { span: decl_span });
-                }
+                },
 
                 (unknown_ty, Some(init)) if !unknown_ty.is_known() => {
                     // infer from provided value expr
                     let init_expr = typecheck_expr(&init.expr, &Type::Nothing, ctx)?;
                     let ty = init_expr.annotation().ty().into_owned();
-                    
-                    (ty, UnitBindingItemInitializer {
+
+                    (TypeName::inferred(ty), UnitBindingItemInitializer {
                         expr: Box::new(init_expr),
                         eq_span: init.eq_span.clone(),
                     })
-                }
+                },
 
                 (explicit_ty, Some(init)) => {
                     // use explicitly provided type
-                    let ty = typecheck_type(explicit_ty, ctx)?;
+                    let ty = typecheck_typename(explicit_ty, ctx)?;
                     let const_val_expr = typecheck_expr(&init.expr, &ty, ctx)?;
 
                     (ty, UnitBindingItemInitializer {
                         expr: Box::new(const_val_expr),
                         eq_span: init.eq_span.clone(),
                     })
-                }
+                },
             };
-            
+
             let val_span = const_val_init.expr.span().clone();
 
             let const_val_literal = match const_val_init.expr.const_eval(ctx) {
@@ -459,14 +464,18 @@ fn typecheck_global_binding_item(
                     expr: const_val_init.expr,
                 }),
             }?;
-            
-            assert_eq!(1, item.idents.len(), "parser should not produce multi-item const bindings");
+
+            assert_eq!(
+                1,
+                item.idents.len(),
+                "parser should not produce multi-item const bindings"
+            );
             let const_ident = item.idents[0].clone();
 
             ctx.declare_global_const(
                 const_ident.clone(),
                 const_val_literal.clone(),
-                ty.clone(),
+                typename.ty().clone(),
                 visibility,
                 const_ident.span.clone(),
             )?;
@@ -475,21 +484,21 @@ fn typecheck_global_binding_item(
                 value: const_val_literal.clone(),
                 span: val_span,
                 decl: Some(ctx.namespace().child(const_ident)),
-                ty: ty.clone(),
+                ty: typename.ty().clone(),
             };
 
             const_val_init.expr = Box::new(Expr::literal(const_val_literal.clone(), value));
-            (ty, Some(const_val_init))
-        }
+            (typename, Some(const_val_init))
+        },
 
         BindingDeclKind::Var => {
-            let (ty, val) = match (&item.ty, &item.init) {
+            let (typename, val) = match (&item.ty, &item.init) {
                 (unknown_ty, None) if !unknown_ty.is_known() => {
                     return Err(TypeError::BindingWithNoType {
                         binding_names: item.idents.clone(),
                         span: item.span.clone(),
                         value: None,
-                    })
+                    });
                 },
 
                 (unknown_ty, Some(init)) if !unknown_ty.is_known() => {
@@ -500,11 +509,11 @@ fn typecheck_global_binding_item(
                         expr: Box::new(val_expr),
                         eq_span: init.eq_span.clone(),
                     };
-                    (actual_ty, Some(init))
-                }
+                    (TypeName::inferred(actual_ty), Some(init))
+                },
 
                 (explicit_ty, Some(init)) => {
-                    let explicit_ty = typecheck_type(explicit_ty, ctx)?;
+                    let explicit_ty = typecheck_typename(explicit_ty, ctx)?;
                     let val_expr = typecheck_expr(&init.expr, &explicit_ty, ctx)?;
 
                     let init = UnitBindingItemInitializer {
@@ -516,14 +525,14 @@ fn typecheck_global_binding_item(
                 },
 
                 (explicit_ty, None) => {
-                    let explicit_ty = typecheck_type(explicit_ty, ctx)?;
+                    let explicit_ty = typecheck_typename(explicit_ty, ctx)?;
                     (explicit_ty, None)
-                }
+                },
             };
 
             // global bindings must always be initialized or be of a default-able type
             if val.is_none() {
-                let has_default = ty
+                let has_default = typename
                     .has_default(ctx)
                     .map_err(|e| TypeError::from_name_err(e, item.span.clone()))?;
 
@@ -531,22 +540,26 @@ fn typecheck_global_binding_item(
                     return Err(TypeError::UninitGlobalBinding {
                         binding_names: item.idents.clone(),
                         span: item.span.clone(),
-                        ty,
+                        ty: typename.ty().clone(),
                     });
                 }
             }
-            
+
             for ident in &item.idents {
-                ctx.declare_global_var(ident.clone(), Binding {
-                    ty: ty.clone(),
-                    def: Some(ident.clone()),
-                    kind: ValueKind::Mutable,
-                    semantic_hint: SemanticHint::Variable,
-                }, visibility)?;
+                ctx.declare_global_var(
+                    ident.clone(),
+                    Binding {
+                        ty: typename.ty().clone(),
+                        def: Some(ident.clone()),
+                        kind: ValueKind::Mutable,
+                        semantic_hint: SemanticHint::Variable,
+                    },
+                    visibility,
+                )?;
             }
 
-            (ty, val)
-        }
+            (typename, val)
+        },
     };
 
     if ty == Type::Nothing {
@@ -566,15 +579,18 @@ fn typecheck_global_binding_item(
     })
 }
 
-pub fn typecheck_unit(unit_path: &PathBuf, unit: &ast::Unit, ctx: &mut Context) -> TypeResult<ModuleUnit> {
+pub fn typecheck_unit(
+    unit_path: &PathBuf,
+    unit: &ast::Unit,
+    ctx: &mut Context,
+) -> TypeResult<ModuleUnit> {
     ctx.unit_scope(unit.ident.clone(), |ctx| {
         let iface_decls = typecheck_section(&unit.iface_section.decls, Visibility::Interface, ctx)?;
-        let impl_decls = typecheck_section(&unit.impl_section.decls, Visibility::Implementation, ctx)?;
+        let impl_decls =
+            typecheck_section(&unit.impl_section.decls, Visibility::Implementation, ctx)?;
 
         let init = match &unit.init {
-            Some(init_block) => {
-                Some(typecheck_init_block(&init_block, ctx)?)
-            },
+            Some(init_block) => Some(typecheck_init_block(&init_block, ctx)?),
 
             None => None,
         };
@@ -641,13 +657,13 @@ fn typecheck_init_block(init_block: &ast::InitBlock, ctx: &mut Context) -> TypeR
 fn typecheck_section(
     src_decls: &[ast::UnitDecl<Span>],
     visibility: Visibility,
-    ctx: &mut Context
+    ctx: &mut Context,
 ) -> TypeResult<Vec<UnitDecl>> {
     let mut decls = Vec::new();
 
     for decl in src_decls {
         decls.push(typecheck_unit_decl(decl, ctx, visibility)?);
     }
-    
+
     Ok(decls)
 }

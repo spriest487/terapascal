@@ -13,7 +13,7 @@ use crate::ast::type_name::TypeName;
 pub struct AliasDecl<A: Annotation = Span> {
     pub name: A::DeclName,
 
-    pub target: Box<A::TypeName>,
+    pub target: Box<TypeName<A>>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]

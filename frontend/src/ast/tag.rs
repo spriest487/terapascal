@@ -1,4 +1,4 @@
-use crate::ast::IdentPath;
+use crate::ast::{IdentPath, UncheckedType};
 use crate::ast::IdentTypeName;
 use crate::ast::TypeName;
 use crate::ast::Annotation;
@@ -68,7 +68,7 @@ impl Parse for Tag<Span> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct TagItem<A: Annotation = Span> {
-    pub tag_type: A::TypeName,
+    pub tag_type: TypeName<A>,
     pub args: ObjectCtorArgs<A>,
 
     pub span: Span,
@@ -97,6 +97,7 @@ impl TagItem {
                 span: tag_type.path_span().clone(),
                 ident: tag_type,
                 indirection: 0,
+                ty: UncheckedType,
             }),
             args,
             span,

@@ -1,16 +1,20 @@
-use crate::ast::Expr;
+use crate::ast;
 use crate::typ::ast::const_eval_integer;
 use crate::typ::ast::typecheck_expr;
-use crate::typ::{typecheck_type, TypeName};
+use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
+use crate::typ::Value;
 use std::fmt;
 use std::sync::Arc;
-use terapascal_common::span::{Span, Spanned};
-use crate::ast;
+use terapascal_common::span::Spanned;
+
+pub type ArrayTypeName = ast::ArrayTypeName<Value>;
+
+const ARRAY_DIM_TY: Type = Type::Primitive(Primitive::Int32);
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ArrayType {
@@ -30,34 +34,54 @@ impl fmt::Display for ArrayType {
     }
 }
 
-pub fn typecheck_array_type(element: &Box<ast::TypeName>, dim: &Option<Box<Expr>>, span: &Span, ctx: &mut Context) -> TypeResult<TypeName> {
-    let element_ty = typecheck_type(element.as_ref(), ctx)?;
+pub fn typecheck_array_type(array_type_name: &ast::ArrayTypeName, ctx: &mut Context) -> TypeResult<ArrayTypeName> {
+    let element_ty = typecheck_typename(array_type_name.element.as_ref(), ctx)?;
 
-    match dim {
+    let (array_ty, dim_expr) = match &array_type_name.dim {
         Some(dim_expr) => {
-            let dim_expr =
-                typecheck_expr(dim_expr, &Type::Primitive(Primitive::Int32), ctx)?;
+            let dim_expr = typecheck_expr(dim_expr, &ARRAY_DIM_TY, ctx)?;
             let dim_val = const_eval_integer(&dim_expr, ctx)?;
 
             let dim = dim_val.value
-                .as_usize()
+                .as_i32()
                 .ok_or_else(|| TypeError::TypeMismatch {
                     span: dim_expr.span().clone(),
                     actual: dim_expr.annotation().ty().into_owned(),
-                    expected: Type::Primitive(Primitive::Int32),
+                    expected: ARRAY_DIM_TY,
                 })?;
             
-            let array_ty = ArrayType { element_ty, dim };
+            let Ok(dim) = usize::try_from(dim) else {
+                // use the dynarray type for the error because we don't have a valid static dimension
+                return Err(TypeError::IndexOutOfBounds {
+                    index: dim_val.value,
+                    span: dim_expr.span().clone(),
+                    base_ty: Box::new(Type::dyn_array(element_ty.ty().clone())),
+                });
+            };
 
-            Ok(TypeName::named(array_ty, span.clone()))
+            let array_ty = Type::from(ArrayType {
+                element_ty: element_ty.ty().clone(),
+                dim,
+            }).indirect_by(array_type_name.indirection);
+
+            (array_ty, Some(Box::new(dim_expr)))
         },
 
         None => {
             let dyn_array_ty = Type::DynArray {
-                element: Arc::new(element_ty),
+                element: Arc::new(element_ty.ty().clone()),
             };
-            
-            Ok(TypeName::named(dyn_array_ty, span.clone()))
+
+            (dyn_array_ty, None)
         }
-    }
+    };
+
+    Ok(ArrayTypeName {
+        element: Box::new(element_ty),
+        indirection: array_type_name.indirection,
+        span: array_type_name.span.clone(),
+        ty: array_ty,
+        of_kw: array_type_name.of_kw.clone(),
+        dim: dim_expr,
+    })
 }

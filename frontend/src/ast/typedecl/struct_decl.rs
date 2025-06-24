@@ -7,10 +7,12 @@ use crate::ast::Annotation;
 use crate::ast::DeclIdent;
 use crate::ast::MethodOwner;
 use crate::ast::SupersClause;
+use crate::ast::TypeName;
 use crate::ast::WhereClause;
 use crate::parse::Matcher;
 use crate::parse::Parser;
-use crate::{Keyword, TokenTree};
+use crate::Keyword;
+use crate::TokenTree;
 use derivative::*;
 pub use member::*;
 use std::fmt;
@@ -44,13 +46,13 @@ pub struct StructDecl<A: Annotation = Span> {
     pub where_clause: Option<WhereClause<A>>,
 
     pub tags: Vec<Tag<A>>,
-    
+
     pub packed: bool,
-    
+
     pub forward: bool,
 
     pub sections: Vec<StructDeclSection<A>>,
-    
+
     pub implements: Option<SupersClause<A>>,
 
     #[derivative(Debug = "ignore")]
@@ -64,38 +66,34 @@ pub struct StructDecl<A: Annotation = Span> {
     pub end_kw_span: Option<Span>,
 }
 
-impl<A: Annotation> StructDecl<A> {    
-    pub fn members(&self) -> impl Iterator<Item=&TypeMemberDecl<A>> {
-        self.sections
-            .iter()
-            .flat_map(|section| section.members.iter())
-    }
-    
-    pub fn fields(&self) -> impl Iterator<Item=&FieldDecl<A>> {
-        self.members()
-            .filter_map(|member| match member {
-                TypeMemberDecl::Field(field) => Some(field),
-                TypeMemberDecl::Method(..) => None,
-            })
+impl<A: Annotation> StructDecl<A> {
+    pub fn members(&self) -> impl Iterator<Item = &TypeMemberDecl<A>> {
+        self.sections.iter().flat_map(|section| section.members.iter())
     }
 
-    pub fn methods(&self) -> impl Iterator<Item=&MethodDecl<A>> {
-        self.members()
-            .filter_map(|member| match member {
-                TypeMemberDecl::Method(method) => Some(method),
-                TypeMemberDecl::Field(..) => None,
-            })
+    pub fn fields(&self) -> impl Iterator<Item = &FieldDecl<A>> {
+        self.members().filter_map(|member| match member {
+            TypeMemberDecl::Field(field) => Some(field),
+            TypeMemberDecl::Method(..) => None,
+        })
+    }
+
+    pub fn methods(&self) -> impl Iterator<Item = &MethodDecl<A>> {
+        self.members().filter_map(|member| match member {
+            TypeMemberDecl::Method(method) => Some(method),
+            TypeMemberDecl::Field(..) => None,
+        })
     }
 
     pub fn find_field_decl(&self, str: &str) -> Option<(&FieldDecl<A>, usize)> {
         self.fields().find_map(|field_decl| {
             let pos = field_decl.idents.iter().position(|f| f.as_str() == str)?;
-            
+
             Some((field_decl, pos))
         })
     }
 
-    pub fn implements_types(&self) -> &[A::TypeName] {
+    pub fn implements_types(&self) -> &[TypeName<A>] {
         match &self.implements {
             Some(implements) => &implements.types,
             None => &[],
@@ -104,8 +102,9 @@ impl<A: Annotation> StructDecl<A> {
 }
 
 impl<A: Annotation> MethodOwner<A> for StructDecl<A> {
-    fn methods<'a>(&'a self) -> impl Iterator<Item=&'a MethodDecl<A>>
-    where A: 'a
+    fn methods<'a>(&'a self) -> impl Iterator<Item = &'a MethodDecl<A>>
+    where
+        A: 'a,
     {
         StructDecl::methods(self)
     }
@@ -120,34 +119,29 @@ impl StructDecl<Span> {
     ) -> Self {
         let packed_kw = parser.tokens().match_one_maybe(Keyword::Packed);
         let packed = packed_kw.is_some();
-        
+
         let match_kw = if packed {
             Matcher::from(Keyword::Record)
         } else {
             Keyword::Record | Keyword::Class
         };
 
-        let header = TypeDeclHeader::parse_or_empty(
-            parser,
-            match_kw,
-            keyword_token,
-            &tags,
-            &name.span,
-        );
+        let header =
+            TypeDeclHeader::parse_or_empty(parser, match_kw, keyword_token, &tags, &name.span);
 
         let kind = match &header.keyword {
             tt if tt.is_keyword(Keyword::Class) => StructKind::Class,
             tt if tt.is_keyword(Keyword::Record) => StructKind::Record,
             _ => unreachable!(),
         };
-        
+
         let kw_span = header.keyword.into_span();
 
         let span = match packed_kw {
             Some(tt) => tt.span().to(&header.span),
             None => header.span,
         };
-        
+
         // the last type in a section can never be forward, so every legal forward declaration
         // will end with a semicolon
         if header.forward {
@@ -161,7 +155,7 @@ impl StructDecl<Span> {
 
                 forward: true,
                 implements: header.supers,
-                
+
                 sections: Vec::new(),
                 span,
                 end_kw_span: None,
@@ -176,7 +170,7 @@ impl StructDecl<Span> {
 
             let (span, end_kw_span) = match parser.advance_to(Keyword::End) {
                 None => (span, None),
-                Some(end_span) => (span.to(&end_span), Some(end_span.into_span())),  
+                Some(end_span) => (span.to(&end_span), Some(end_span.into_span())),
             };
 
             StructDecl {
@@ -213,7 +207,7 @@ impl<A: Annotation> fmt::Display for StructDecl<A> {
             StructKind::Class => "class",
         };
         writeln!(f, "{}", kind)?;
-        
+
         for section in &self.sections {
             writeln!(f, "{}", section.access)?;
             for member in &section.members {
@@ -237,7 +231,7 @@ pub struct StructDeclSection<A: Annotation = Span> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
     pub access_kw_span: Option<Span>,
-    
+
     pub members: Vec<TypeMemberDecl<A>>,
 }
 
@@ -270,14 +264,13 @@ impl<A: Annotation> MemberDeclSection<A> for StructDeclSection<A> {
         self.access_kw_span.as_ref()
     }
 
-    fn members<'a>(&'a self) -> impl Iterator<Item=TypeMemberDeclRef<'a, A>>
-    where A: 'a
+    fn members<'a>(&'a self) -> impl Iterator<Item = TypeMemberDeclRef<'a, A>>
+    where
+        A: 'a,
     {
-        self.members
-            .iter()
-            .map(|member| match member {
-                TypeMemberDecl::Field(field) => TypeMemberDeclRef::Field(field),
-                TypeMemberDecl::Method(method) => TypeMemberDeclRef::Method(method),
-            })
+        self.members.iter().map(|member| match member {
+            TypeMemberDecl::Field(field) => TypeMemberDeclRef::Field(field),
+            TypeMemberDecl::Method(method) => TypeMemberDeclRef::Method(method),
+        })
     }
-} 
+}

@@ -6,16 +6,15 @@ pub use self::decl_mod::*;
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::SemanticHint;
-use crate::ast::TypeAnnotation;
-use crate::ast::FunctionDeclKind;
+use crate::ast::{FunctionDeclKind, IdentTypeName};
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::where_clause::WhereClause;
 use crate::typ::ast::Tag;
-use crate::typ::{typecheck_type, typecheck_typename, TypeName};
 use crate::typ::typecheck_type_params;
 use crate::typ::typecheck_type_path;
+use crate::typ::typecheck_typename;
 use crate::typ::validate_generic_constraints;
 use crate::typ::Binding;
 use crate::typ::ClosureBodyEnvironment;
@@ -35,6 +34,7 @@ use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeArgResolver;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
 use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
@@ -169,37 +169,31 @@ impl FunctionName {
     }
 }
 
-impl ast::FunctionName for FunctionName {    
+impl ast::FunctionName<Value> for FunctionName {    
     fn ident(&self) -> &Ident {
         &self.ident
     }
 
-    fn owning_type_name_semantic_hint(&self) -> SemanticHint {
+    fn owning_type_qualifier(&self) -> Option<TypeName> {
         match &self.context {
-            FunctionDeclContext::FreeFunction => SemanticHint::None,
-            FunctionDeclContext::MethodDecl { enclosing_type, .. } => enclosing_type.semantic_hint(),
-            FunctionDeclContext::MethodDef { declaring_type, .. } => declaring_type.semantic_hint(),
-        }
-    }
-
-    fn owning_type_name_span(&self) -> Option<&Span> {
-        match &self.context {
-            FunctionDeclContext::MethodDef { ty_name_span, ..  } => Some(ty_name_span),
-            _ => None,
-        }
-    }
-
-    fn owning_type_params_len(&self) -> usize {
-        match &self.context {
-            FunctionDeclContext::MethodDef { ty_param_spans, ..  } => ty_param_spans.len(),
-            _ => 0,
-        }
-    }
-
-    fn owning_type_param_span(&self, index: usize) -> &Span {
-        match &self.context {
-            FunctionDeclContext::MethodDef { ty_param_spans, ..  } => &ty_param_spans[index],
-            _ => panic!("function name `{}` does not have type params", self),
+            FunctionDeclContext::FreeFunction => None,
+            FunctionDeclContext::MethodDecl { .. } => None,
+            FunctionDeclContext::MethodDef { declaring_type, ty_name_span, .. } => {
+                // we could assert this is always present because you can only declare method
+                // defs for types with a path, but this is only really needed for the language
+                // server so let's just avoid panicking in weird situations
+                let path = declaring_type.full_path()?;
+                let type_args = declaring_type.type_params()
+                    .map(|params| params.clone().into_type_args());
+                
+                Some(TypeName::Ident(IdentTypeName {
+                    ty: declaring_type.clone(),
+                    type_args,
+                    span: ty_name_span.clone(),
+                    indirection: 0,
+                    ident: path.into_owned(),
+                }))
+            }
         }
     }
 
@@ -320,7 +314,7 @@ impl FunctionDecl {
 
             let result_ty = match decl.kind {
                 FunctionDeclKind::Function | FunctionDeclKind::ClassMethod =>  match &decl.result_ty {
-                    ast::TypeName::Unspecified => TypeName::inferred(Type::Nothing),
+                    ast::TypeName::Unspecified(..) => TypeName::inferred(Type::Nothing),
                     ty_name => typecheck_typename(ty_name, ctx)?,
                 },
                 
@@ -748,11 +742,11 @@ fn declare_locals_in_body(
     let mut locals = Vec::new();
 
     for local in &def.locals {
-        let ty = typecheck_type(&local.ty, ctx)?;
+        let binding_ty = typecheck_typename(&local.ty, ctx)?;
 
         let initial_val = match &local.initial_val {
             Some(expr) => {
-                let expr = typecheck_expr(expr, &ty, ctx)?;
+                let expr = typecheck_expr(expr, &binding_ty, ctx)?;
                 let value = expr.const_eval(ctx).ok_or_else(|| TypeError::InvalidConstExpr {
                     expr: Box::new(expr.clone()),
                 })?;
@@ -771,7 +765,7 @@ fn declare_locals_in_body(
                     },
                 };
 
-                ctx.declare_local_const(local.ident.clone(), val.clone(), ty.clone(), local.span.clone())?;
+                ctx.declare_local_const(local.ident.clone(), val.clone(), binding_ty.ty().clone(), local.span.clone())?;
             },
 
             ast::BindingDeclKind::Var => {
@@ -782,7 +776,7 @@ fn declare_locals_in_body(
 
                 ctx.declare_local_var(local.ident.clone(), Binding {
                     kind: binding_kind,
-                    ty: ty.clone(),
+                    ty: binding_ty.ty().clone(),
                     def: Some(local.ident.clone()),
                     semantic_hint: SemanticHint::Variable,
                 })?;
@@ -793,7 +787,7 @@ fn declare_locals_in_body(
             ident: local.ident.clone(),
             kind: local.kind,
             initial_val,
-            ty,
+            ty: binding_ty,
             span: local.span.clone(),
         });
     }
@@ -955,9 +949,11 @@ pub fn typecheck_func_expr(
 
     // if the return type isn't explicitly specified, we might be able to infer it to aid
     // in typechecking the body if we have an expected function signature
-    let known_return_ty = match &src_def.return_ty {
-        ast::TypeName::Unspecified => expect_sig.map(|sig| sig.result_ty.clone()),
-        src_return_ty => Some(typecheck_type(src_return_ty, ctx)?),
+    let known_return_ty = match &src_def.result_ty {
+        ast::TypeName::Unspecified(..) => expect_sig.map(|sig| {
+            TypeName::inferred(sig.result_ty.clone())
+        }),
+        src_return_ty => Some(typecheck_typename(src_return_ty, ctx)?),
     };
 
     let sig_params = params
@@ -970,7 +966,7 @@ pub fn typecheck_func_expr(
     // we manage the scope manually here so we can retrieve this environment object after
     // the body is finished and get the final captures
     let body_scope_id = ctx.push_scope(ClosureBodyEnvironment {
-        result_ty: known_return_ty.clone(),
+        result_ty: known_return_ty.as_ref().map(TypeName::ty).cloned(),
         captures: LinkedHashMap::new(),
     });
 
@@ -978,6 +974,7 @@ pub fn typecheck_func_expr(
         .and_then(|_| {
             let expect_block_return = known_return_ty
                 .as_ref()
+                .map(TypeName::ty)
                 .unwrap_or(&Type::Nothing);
 
             typecheck_block(&src_def.body, &expect_block_return, ctx)
@@ -992,17 +989,25 @@ pub fn typecheck_func_expr(
 
     // use the result type here, because checking the body of the closure might have given
     // us an inferred return type too e.g. an explicit exit statement
-    let return_ty = match closure_env.result_ty {
-        Some(ty) => ty,
-        None => body.annotation.ty().into_owned(),
+    let result_ty = match (known_return_ty, closure_env.result_ty) {
+        (Some(known_ty), Some(actual_ty)) => {
+            if *known_ty.ty() == actual_ty {
+                known_ty
+            } else {
+                TypeName::inferred(actual_ty)
+            }
+        },
+        (Some(known_ty), None) => known_ty,
+        (None, Some(ty)) => TypeName::inferred(ty),
+        (None, None) => TypeName::inferred(body.annotation.ty().into_owned()),
     };
 
-    if return_ty == Type::Nothing {
+    if *result_ty.ty() == Type::Nothing {
         assert_eq!(None, body.output);
     }
 
     let sig = Arc::new(FunctionSig {
-        result_ty: return_ty.clone(),
+        result_ty: result_ty.ty().clone(),
         params: sig_params,
         type_params: None,
     });
@@ -1011,7 +1016,7 @@ pub fn typecheck_func_expr(
 
     Ok(AnonymousFunctionDef {
         params,
-        return_ty,
+        result_ty,
         annotation: Value::from(value),
         body,
         captures: closure_env.captures,

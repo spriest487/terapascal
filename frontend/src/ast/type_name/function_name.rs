@@ -1,23 +1,26 @@
-use crate::ast::FunctionParamMod;
+use crate::ast::Ident;
 use crate::ast::TypeName;
+use crate::ast::Annotation;
+use crate::ast::FunctionParamMod;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
-use crate::ast::Ident;
 use crate::Keyword;
 use crate::Separator;
 use crate::TokenStream;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use derivative::Derivative;
 use std::fmt;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
-pub struct FunctionTypeName {
-    pub params: Vec<FunctionTypeNameParam>,
-    pub return_ty: Option<Box<TypeName>>,
+pub struct FunctionTypeName<A: Annotation = Span> {
+    pub params: Vec<FunctionTypeNameParam<A>>,
+    pub return_ty: Option<Box<TypeName<A>>>,
+    
+    pub ty: A::Type,
 
     pub indirection: usize,
 
@@ -27,13 +30,13 @@ pub struct FunctionTypeName {
     pub span: Span,
 }
 
-impl Spanned for FunctionTypeName {
+impl<A: Annotation> Spanned for FunctionTypeName<A> {
     fn span(&self) -> &Span {
         &self.span
     }
 }
 
-impl fmt::Display for FunctionTypeName {
+impl<A: Annotation> fmt::Display for FunctionTypeName<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "function")?;
         
@@ -58,12 +61,12 @@ impl fmt::Display for FunctionTypeName {
 
 #[derive(Debug, Clone, Eq, Derivative)]
 #[derivative(Hash, PartialEq)]
-pub struct FunctionTypeNameParam {
+pub struct FunctionTypeNameParam<A: Annotation = Span> {
     #[derivative(Hash = "ignore")]
     #[derivative(PartialEq = "ignore")]
     pub name: Option<Ident>,
 
-    pub ty: TypeName,
+    pub ty: TypeName<A>,
     pub modifier: Option<FunctionParamMod>,
 }
 
@@ -116,7 +119,7 @@ impl ParseSeq for FunctionTypeNameParam {
     }
 }
 
-impl fmt::Display for FunctionTypeNameParam {
+impl<A: Annotation> fmt::Display for FunctionTypeNameParam<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(name) = &self.name {
             write!(f, "{}: ", name)?;

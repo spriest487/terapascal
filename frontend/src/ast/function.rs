@@ -3,7 +3,6 @@ mod test;
 
 use crate::ast::tag::Tag;
 use crate::ast::type_name::TypeName;
-use crate::ast::{Annotation, SemanticHint};
 use crate::ast::BindingDeclKind;
 use crate::ast::Block;
 use crate::ast::DeclMod;
@@ -11,17 +10,21 @@ use crate::ast::Expr;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
-use crate::ast::TypeAnnotation;
 use crate::ast::TypeList;
 use crate::ast::TypePath;
+use crate::ast::UncheckedType;
 use crate::ast::WhereClause;
-use crate::parse::{ContinueParse, Matcher, Parser};
+use crate::ast::{Annotation, IdentTypeName};
+use crate::parse::ContinueParse;
+use crate::parse::MatchOneOf;
+use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
+use crate::parse::Parser;
 use crate::parse::TokenStream;
-use crate::parse::{MatchOneOf, TryParse};
+use crate::parse::TryParse;
 use crate::token_tree::DelimitedGroup;
 use crate::DelimiterPair;
 use crate::Keyword;
@@ -32,7 +35,8 @@ use derivative::*;
 use linked_hash_map::LinkedHashMap;
 use std::fmt;
 use std::sync::Arc;
-use terapascal_common::span::{MaybeSpanned, Span};
+use terapascal_common::span::MaybeSpanned;
+use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 
@@ -40,13 +44,13 @@ use terapascal_common::TracedError;
 pub enum FunctionDeclKind {
     // function or procedure
     Function,
-    
+
     // declared with a preceding `class` keyword, must be within a type decl
     ClassMethod,
-    
+
     // declared with the `constructor` keyword, must not specify a return type
     Constructor,
-    
+
     // declared with the `destructor` keyword, must not specify a return type or
     // any parameters. one per concrete type
     Destructor,
@@ -54,13 +58,19 @@ pub enum FunctionDeclKind {
 
 impl FunctionDeclKind {
     pub fn is_static_method(self) -> bool {
-        matches!(self, FunctionDeclKind::ClassMethod | FunctionDeclKind::Constructor)
+        matches!(
+            self,
+            FunctionDeclKind::ClassMethod | FunctionDeclKind::Constructor
+        )
     }
-    
+
     pub fn must_be_method(self) -> bool {
-        matches!(self, FunctionDeclKind::Destructor 
-            | FunctionDeclKind::Constructor 
-            | FunctionDeclKind::ClassMethod)
+        matches!(
+            self,
+            FunctionDeclKind::Destructor
+                | FunctionDeclKind::Constructor
+                | FunctionDeclKind::ClassMethod
+        )
     }
 }
 
@@ -84,8 +94,8 @@ pub enum FunctionParamMod {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct FunctionParamModDecl {
-    pub param_mod: FunctionParamMod, 
-    
+    pub param_mod: FunctionParamMod,
+
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
@@ -94,14 +104,10 @@ pub struct FunctionParamModDecl {
 
 impl fmt::Display for FunctionParamMod {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                FunctionParamMod::Var => "var",
-                FunctionParamMod::Out => "out",
-            }
-        )
+        write!(f, "{}", match self {
+            FunctionParamMod::Var => "var",
+            FunctionParamMod::Out => "out",
+        })
     }
 }
 
@@ -109,11 +115,11 @@ impl fmt::Display for FunctionParamMod {
 #[derivative(Debug, PartialEq, Hash)]
 pub struct FunctionParam<A: Annotation = Span> {
     pub name: Arc<String>,
-    
-    pub ty: A::TypeName,
-    
+
+    pub ty: TypeName<A>,
+
     pub modifier: Option<FunctionParamModDecl>,
-    
+
     // true if this is the implicit `self` parameter of a method
     pub is_implicit_self: bool,
 
@@ -129,7 +135,6 @@ impl<A: Annotation> FunctionParam<A> {
         self.modifier.as_ref().map(|m| m.param_mod)
     }
 }
-
 
 impl<A: Annotation> fmt::Display for FunctionParam<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -153,7 +158,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
     pub kw_span: Span,
-    
+
     pub name: A::FunctionName,
     pub where_clause: Option<WhereClause<A>>,
 
@@ -168,7 +173,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
 
     pub params: Vec<FunctionParam<A>>,
 
-    pub result_ty: A::TypeName,
+    pub result_ty: TypeName<A>,
 
     pub mods: Vec<DeclMod<A>>,
 }
@@ -178,14 +183,11 @@ impl FunctionDecl<Span> {
         let mut kw_matcher = Keyword::Function | Keyword::Procedure;
 
         if allow_methods {
-            kw_matcher = kw_matcher
-                | Keyword::Class
-                | Keyword::Constructor
-                | Keyword::Destructor;
+            kw_matcher = kw_matcher | Keyword::Class | Keyword::Constructor | Keyword::Destructor;
         }
 
         let func_kw = parser.match_one(kw_matcher)?;
-        
+
         let (kw_span, kind, expect_result_ty) = match func_kw.as_keyword().unwrap() {
             Keyword::Class => {
                 let class_func_kw = parser.match_one(Keyword::Function | Keyword::Procedure)?;
@@ -201,19 +203,19 @@ impl FunctionDecl<Span> {
                 kw_span.extend(class_func_kw.span());
 
                 (kw_span, kind, expect_return)
-            }
+            },
 
             Keyword::Function => (func_kw.into_span(), FunctionDeclKind::Function, true),
             Keyword::Procedure => (func_kw.into_span(), FunctionDeclKind::Function, false),
             Keyword::Constructor => (func_kw.into_span(), FunctionDeclKind::Constructor, false),
             Keyword::Destructor => (func_kw.into_span(), FunctionDeclKind::Destructor, false),
-            
+
             _ => unreachable!("doesn't match matcher"),
         };
 
         let name = Self::parse_name(parser)?;
         let span = kw_span.to(&name.span());
-        
+
         // from this point on we have enough info to return at least a partial version of this
         // func decl and should return this instead of failing on any subsequent error
         let mut func_decl = FunctionDecl {
@@ -224,7 +226,7 @@ impl FunctionDecl<Span> {
             params: Vec::new(),
             mods: Vec::new(),
             where_clause: None,
-            result_ty: TypeName::Unspecified,
+            result_ty: TypeName::Unspecified(UncheckedType),
             span,
         };
 
@@ -237,9 +239,9 @@ impl FunctionDecl<Span> {
             func_decl.span.extend(&params_group.span);
 
             let mut params_tokens = params_group.into_inner_tokens();
-            
-            func_decl.params = Self::parse_params(&mut params_tokens)
-                .or_continue_with(parser.errors(), Vec::new);
+
+            func_decl.params =
+                Self::parse_params(&mut params_tokens).or_continue_with(parser.errors(), Vec::new);
 
             params_tokens.finish().or_continue(parser.errors(), ());
         }
@@ -258,25 +260,25 @@ impl FunctionDecl<Span> {
         if let Some(last_mod) = func_decl.mods.last() {
             func_decl.span.extend(last_mod.span());
         }
-        
-        func_decl.where_clause = WhereClause::try_parse(parser.tokens())
-            .or_continue(parser.errors(), None);
+
+        func_decl.where_clause =
+            WhereClause::try_parse(parser.tokens()).or_continue(parser.errors(), None);
 
         Ok(func_decl)
     }
-    
+
     fn parse_name(tokens: &mut TokenStream) -> ParseResult<QualifiedFunctionName> {
         let mut instance_ty_path = Vec::new();
-        
+
         // the name always starts with at least one ident
         instance_ty_path.push(Ident::parse(tokens)?);
-        
+
         let mut instance_ty_params = None;
-        
+
         // note this returns a list of type *idents*, because constraints (needed for TypeParams)
         // are parsed later
         let mut type_params = None;
-        
+
         loop {
             // nested types aren't supported, so if we get a type arg list, the next
             // tokens must be the method name and that's the end of the path
@@ -285,17 +287,20 @@ impl FunctionDecl<Span> {
             } else {
                 Matcher::from(Operator::Period)
             };
-            
+
             match tokens.match_one_maybe(match_next) {
                 // followed by subsequent path parts for a potentially namespace-qualified type name
-                Some(TokenTree::Operator { op: Operator::Period, .. }) => {
+                Some(TokenTree::Operator {
+                    op: Operator::Period,
+                    ..
+                }) => {
                     // if there's a period following the type list, it's actually the type params
                     // for the instance type of this method decl
                     if type_params.is_some() {
                         assert!(instance_ty_params.is_none(), "matcher shouldn't allow this");
                         instance_ty_params = type_params.take();
                     }
-                    
+
                     instance_ty_path.push(Ident::parse(tokens)?);
                 },
 
@@ -307,23 +312,24 @@ impl FunctionDecl<Span> {
                     span: type_list_span,
                     ..
                 })) => {
-                    let mut type_list_tokens = TokenStream::new(type_list_inner, type_list_span.clone());
-                    
+                    let mut type_list_tokens =
+                        TokenStream::new(type_list_inner, type_list_span.clone());
+
                     let type_list_items: Vec<Ident> = TypeList::parse_items(&mut type_list_tokens)?;
                     type_list_tokens.finish()?;
 
                     let type_list = TypeList::new(type_list_items, type_list_span);
                     type_params = Some(type_list);
                 },
-                
+
                 None => break,
-                
+
                 _ => unreachable!("patterns above must match the matchable tokens"),
             }
         }
-        
+
         let name_ident = instance_ty_path.remove(instance_ty_path.len() - 1);
-        
+
         let instance_ty = if instance_ty_path.is_empty() {
             None
         } else {
@@ -341,12 +347,12 @@ impl FunctionDecl<Span> {
                 type_params: instance_ty_params,
             }))
         };
-        
+
         let qualified_name = QualifiedFunctionName {
             ident: name_ident,
             owning_ty_qual: instance_ty,
             type_params,
-        }; 
+        };
 
         Ok(qualified_name)
     }
@@ -419,7 +425,7 @@ impl<A: Annotation> FunctionDecl<A> {
     pub fn ident(&self) -> &Ident {
         self.name.ident()
     }
-    
+
     pub fn external_src(&self) -> Option<&A::ConstStringExpr> {
         self.mods
             .iter()
@@ -430,20 +436,17 @@ impl<A: Annotation> FunctionDecl<A> {
             .next()
     }
 
-
     pub fn get_mod(&self, keyword: &str) -> Option<&DeclMod<A>> {
-        self.mods
-            .iter()
-            .find(|decl_mod| decl_mod.keyword() == keyword)
+        self.mods.iter().find(|decl_mod| decl_mod.keyword() == keyword)
     }
-    
+
     pub fn is_overload(&self) -> bool {
         self.get_mod(DeclMod::<A>::OVERLOAD_WORD).is_some() && self.external_src().is_none()
     }
-    
+
     pub fn type_params_len(&self) -> usize {
         self.name.type_params_len()
-    } 
+    }
 }
 
 impl<A: Annotation> Spanned for FunctionDecl<A> {
@@ -462,7 +465,7 @@ impl<A: Annotation> fmt::Display for FunctionDecl<A> {
         })?;
 
         write!(f, "{}", self.name)?;
-        
+
         if !self.params.is_empty() {
             write!(f, "(")?;
 
@@ -475,8 +478,11 @@ impl<A: Annotation> fmt::Display for FunctionDecl<A> {
             write!(f, ")")?;
         }
 
-        if self.result_ty.is_known() 
-            && matches!(self.kind, FunctionDeclKind::Function | FunctionDeclKind::ClassMethod) 
+        if self.result_ty.is_known()
+            && matches!(
+                self.kind,
+                FunctionDeclKind::Function | FunctionDeclKind::ClassMethod
+            )
         {
             write!(f, ": {}", self.result_ty)?;
         }
@@ -487,12 +493,13 @@ impl<A: Annotation> fmt::Display for FunctionDecl<A> {
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Hash, PartialEq, Debug)]
 pub struct FunctionLocalBinding<A = Span>
-    where A: Annotation
+where
+    A: Annotation,
 {
     pub kind: BindingDeclKind,
 
     pub ident: Ident,
-    pub ty: A::Type,
+    pub ty: TypeName<A>,
 
     pub initial_val: Option<A::ConstValue>,
 
@@ -509,7 +516,7 @@ impl<A: Annotation> Spanned for FunctionLocalBinding<A> {
 }
 
 impl FunctionLocalBinding<Span> {
-    // matches the next token of any optional element that wasn't parsed as part of this 
+    // matches the next token of any optional element that wasn't parsed as part of this
     // otherwise valid decl, e.g. the explicit init of a variable. used for better error messages
     pub fn match_trailing(&self) -> Option<Matcher> {
         match self.initial_val.as_ref() {
@@ -544,7 +551,7 @@ impl FunctionDef<Span> {
         decl: Arc<FunctionDecl<Span>>,
     ) -> ParseResult<Self> {
         let body_start_matcher = Self::match_body_start();
-        
+
         let mut trailing_semicolon = false;
 
         let mut locals = Vec::new();
@@ -570,16 +577,15 @@ impl FunctionDef<Span> {
                     locals.extend(consts);
 
                     trailing_semicolon = parser.match_one_maybe(Separator::Semicolon).is_some();
-                }
+                },
 
                 _ => break,
             }
         }
 
-        let body = Block::parse(parser)
-            .map_err(|err| {
-                Self::map_unexpected_err_after_locals(err, trailing_semicolon, &locals)
-            })?;
+        let body = Block::parse(parser).map_err(|err| {
+            Self::map_unexpected_err_after_locals(err, trailing_semicolon, &locals)
+        })?;
 
         let span = decl.span.to(body.span());
 
@@ -590,11 +596,12 @@ impl FunctionDef<Span> {
             span,
         })
     }
-    
+
     fn map_unexpected_err_after_locals(
         err: TracedError<ParseError>,
         trailing_semicolon: bool,
-        locals: &[FunctionLocalBinding<Span>]) -> TracedError<ParseError> {       
+        locals: &[FunctionLocalBinding<Span>],
+    ) -> TracedError<ParseError> {
         err.map(|err| match err {
             ParseError::UnexpectedToken(tt, expected) if !trailing_semicolon => {
                 let trailing_match = Self::match_trailing_for_locals(&locals);
@@ -605,18 +612,21 @@ impl FunctionDef<Span> {
                     (None, Some(trailing)) => Some(trailing),
                     (None, trailing) => trailing,
                 })
-            }
+            },
 
             _ => err,
         })
     }
-    
+
     fn match_trailing_for_locals(locals: &[FunctionLocalBinding<Span>]) -> Option<Matcher> {
         let last_local = locals.last()?;
         last_local.match_trailing()
     }
 
-    fn parse_locals_block(tokens: &mut TokenStream, kind: BindingDeclKind) -> ParseResult<Vec<FunctionLocalBinding<Span>>> {
+    fn parse_locals_block(
+        tokens: &mut TokenStream,
+        kind: BindingDeclKind,
+    ) -> ParseResult<Vec<FunctionLocalBinding<Span>>> {
         let mut decls = Vec::new();
         loop {
             // separator from previous item
@@ -634,7 +644,7 @@ impl FunctionDef<Span> {
 
             // if there's a colon following the names, expect an explicit type name to follow
             let ty = match tokens.match_one_maybe(Separator::Colon) {
-                None => TypeName::Unspecified,
+                None => TypeName::Unspecified(UncheckedType),
                 Some(..) => TypeName::parse(tokens)?,
             };
 
@@ -647,14 +657,13 @@ impl FunctionDef<Span> {
                 None => None,
             };
 
-            decls.extend(idents.into_iter()
-                .map(|ident| FunctionLocalBinding {
-                    span: ident.span.clone(),
-                    kind,
-                    ident,
-                    ty: ty.clone(),
-                    initial_val: initial_val.clone(),
-                }));
+            decls.extend(idents.into_iter().map(|ident| FunctionLocalBinding {
+                span: ident.span.clone(),
+                kind,
+                ident,
+                ty: ty.clone(),
+                initial_val: initial_val.clone(),
+            }));
 
             let mut look_ahead = tokens.look_ahead();
             if !decls.is_empty() && look_ahead.match_one(Separator::Semicolon).is_none() {
@@ -669,10 +678,7 @@ impl FunctionDef<Span> {
     }
 
     pub fn match_body_start() -> Matcher {
-        Keyword::Unsafe
-            .or(DelimiterPair::BeginEnd)
-            .or(Keyword::Var)
-            .or(Keyword::Const)
+        Keyword::Unsafe.or(DelimiterPair::BeginEnd).or(Keyword::Var).or(Keyword::Const)
     }
 }
 
@@ -709,7 +715,7 @@ pub struct AnonymousFunctionDef<A: Annotation> {
     pub annotation: A,
 
     pub params: Vec<FunctionParam<A>>,
-    pub return_ty: A::Type,
+    pub result_ty: TypeName<A>,
 
     pub body: Block<A>,
     pub captures: LinkedHashMap<Ident, A::Type>,
@@ -735,26 +741,26 @@ impl<A: Annotation> fmt::Display for AnonymousFunctionDef<A> {
             write!(f, ")")?;
         }
 
-        if self.return_ty.is_known() {
-            write!(f, ": {}", self.return_ty)?;
+        if self.result_ty.is_known() {
+            write!(f, ": {}", self.result_ty)?;
         }
         write!(f, ";")?;
-        
+
         match (self.body.stmts.len(), &self.body.output) {
             (0, Some(output)) => {
                 write!(f, " {}", output)?;
-            }
+            },
 
             (1, None) => {
                 write!(f, " {}", self.body.stmts[0])?;
-            }
-            
+            },
+
             _ => {
                 writeln!(f)?;
                 write!(f, "{}", self.body)?;
-            }
+            },
         }
-        
+
         Ok(())
     }
 }
@@ -770,7 +776,7 @@ impl Parse for AnonymousFunctionDef<Span> {
         let func_kw = tokens.match_one(Keyword::Function | Keyword::Procedure | Keyword::Lambda)?;
 
         // the two forms are parsed differently:
-        //  * using the short form (`lambda`), expect an argument list with optional types 
+        //  * using the short form (`lambda`), expect an argument list with optional types
         //    and a single expression as the body. the type of the result can't be explicitly
         //    specified and depends on the type of the body expression.
         //    examples:
@@ -784,16 +790,16 @@ impl Parse for AnonymousFunctionDef<Span> {
             let mut params = Vec::new();
 
             if let Some(params_group) = tokens.match_one_maybe(DelimiterPair::Bracket) {
-                let mut params_tokens = params_group
-                    .into_delimited_group()
-                    .unwrap()
-                    .into_inner_tokens();
-                
-                while let Some(TokenTree::Ident(ident)) = params_tokens.match_one_maybe(Matcher::AnyIdent) {                    
-                    let ty= if params_tokens.match_one_maybe(Separator::Colon).is_some() {
+                let mut params_tokens =
+                    params_group.into_delimited_group().unwrap().into_inner_tokens();
+
+                while let Some(TokenTree::Ident(ident)) =
+                    params_tokens.match_one_maybe(Matcher::AnyIdent)
+                {
+                    let ty = if params_tokens.match_one_maybe(Separator::Colon).is_some() {
                         TypeName::parse(&mut params_tokens)?
                     } else {
-                        TypeName::Unspecified
+                        TypeName::unspecified()
                     };
 
                     params.push(FunctionParam {
@@ -831,7 +837,7 @@ impl Parse for AnonymousFunctionDef<Span> {
                 annotation: span,
                 body,
                 params,
-                return_ty: TypeName::Unspecified,
+                result_ty: TypeName::unspecified(),
                 captures: Default::default(),
             }
         } else {
@@ -840,25 +846,25 @@ impl Parse for AnonymousFunctionDef<Span> {
                     let TokenTree::Delimited(params_group) = tt else {
                         unreachable!()
                     };
-                    
+
                     let mut params_tokens = params_group.into_inner_tokens();
                     let params = FunctionDecl::parse_params(&mut params_tokens)?;
                     params_tokens.finish()?;
-                    
+
                     params
-                }
+                },
 
                 None => Vec::new(),
             };
 
             let can_have_result = !func_kw.is_keyword(Keyword::Procedure);
-            let expect_result = can_have_result
-                && tokens.match_one_maybe(Separator::Colon).is_some();
-            
+            let expect_result =
+                can_have_result && tokens.match_one_maybe(Separator::Colon).is_some();
+
             let return_ty = if expect_result {
                 TypeName::parse(tokens)?
             } else {
-                TypeName::Unspecified
+                TypeName::unspecified()
             };
 
             tokens.match_one(Separator::Semicolon)?;
@@ -871,7 +877,7 @@ impl Parse for AnonymousFunctionDef<Span> {
                 annotation: span,
                 body,
                 params,
-                return_ty,
+                result_ty: return_ty,
                 captures: Default::default(),
             }
         };
@@ -883,7 +889,7 @@ impl Parse for AnonymousFunctionDef<Span> {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct QualifiedFunctionName {
     /// if the declaration is qualified with the owning type of this method, the name of that type.
-    /// e.g. in `function A.B`, this is `Some(A)`, and in `function B` this is `None` 
+    /// e.g. in `function A.B`, this is `Some(A)`, and in `function B` this is `None`
     pub owning_ty_qual: Option<Box<TypePath>>,
 
     pub ident: Ident,
@@ -897,51 +903,40 @@ impl QualifiedFunctionName {
             (None, None) => self.ident.span.clone(),
             (Some(instance_ty), None) => instance_ty.span().to(self.ident.span()),
             (Some(instance_ty), Some(ty_params)) => instance_ty.span().to(ty_params.span()),
-            (None, Some(ty_params)) => self.ident.span.to(&ty_params.span), 
+            (None, Some(ty_params)) => self.ident.span.to(&ty_params.span),
         }
     }
 }
 
-impl FunctionName for QualifiedFunctionName {
+impl FunctionName<Span> for QualifiedFunctionName {
     fn ident(&self) -> &Ident {
         &self.ident
     }
 
-    fn owning_type_name_semantic_hint(&self) -> SemanticHint {
-        SemanticHint::Type
-    }
-
-    fn owning_type_name_span(&self) -> Option<&Span> {
-        self.owning_ty_qual
-            .as_ref()
-            .map(|qual| &qual.name_span)
-    }
-
-    fn owning_type_params_len(&self) -> usize {
-        self.owning_ty_qual
-            .as_ref()
-            .and_then(|qual| qual.type_params.as_ref())
-            .map(|params| params.len())
-            .unwrap_or(0)
-    }
-
-    fn owning_type_param_span(&self, index: usize) -> &Span {
-        let owning_ty_params = &self.owning_ty_qual.as_ref().unwrap().type_params;
-        &owning_ty_params.as_ref().unwrap().items[index].span
+    fn owning_type_qualifier(&self) -> Option<TypeName> {
+        let ty_path = self.owning_ty_qual.as_ref()?;
+        
+        let type_args = ty_path.type_params
+            .clone()
+            .map(|params| params.map(|ident, _pos| {
+                TypeName::from_ident(ident, UncheckedType)
+            }));
+        
+        Some(TypeName::Ident(IdentTypeName {
+            ident: ty_path.name.clone(),
+            type_args,
+            indirection: 0,
+            ty: UncheckedType,
+            span: ty_path.span.clone(),
+        }))
     }
 
     fn type_params_len(&self) -> usize {
-        self.type_params
-            .as_ref()
-            .map(|list| list.len())
-            .unwrap_or(0)
+        self.type_params.as_ref().map(|list| list.len()).unwrap_or(0)
     }
 
     fn type_param_span(&self, index: usize) -> &Span {
-        &self.type_params
-            .as_ref()
-            .unwrap()
-            .items[index].span
+        &self.type_params.as_ref().unwrap().items[index].span
     }
 }
 
@@ -950,14 +945,13 @@ impl fmt::Display for QualifiedFunctionName {
         if let Some(instance_ty) = &self.owning_ty_qual {
             write!(f, "{}.", instance_ty)?;
         }
-        
-        write!(f, "{}", self.ident)?;
 
+        write!(f, "{}", self.ident)?;
 
         if let Some(ty_list) = &self.type_params {
             write!(f, "{}", ty_list)?;
         }
-        
+
         Ok(())
     }
 }

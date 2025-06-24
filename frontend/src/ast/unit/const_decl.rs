@@ -1,5 +1,5 @@
 use crate::ast::type_name::TypeName;
-use crate::ast::{Annotation, TypeAnnotation};
+use crate::ast::Annotation;
 use crate::ast::BindingDeclKind;
 use crate::ast::Expr;
 use crate::ast::Ident;
@@ -12,11 +12,12 @@ use crate::parse::TokenStream;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
-use terapascal_common::span::{MaybeSpanned, Span};
-use terapascal_common::span::Spanned;
-use terapascal_common::TracedError;
 use derivative::*;
 use std::fmt;
+use terapascal_common::span::MaybeSpanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+use terapascal_common::TracedError;
 
 /// var or const binding (depending on the keyword)
 #[derive(Clone, Eq, Derivative)]
@@ -75,7 +76,7 @@ impl Parse for UnitBinding<Span> {
                     (ty, ty_span)
                 },
                 None => {
-                    (TypeName::Unspecified, None)
+                    (TypeName::unspecified(), None)
                 },
             };
 
@@ -166,7 +167,7 @@ pub struct UnitBindingItemInitializer<A: Annotation = Span> {
 pub struct UnitBindingItem<A: Annotation = Span> {
     pub idents: Vec<Ident>,
     
-    pub ty: A::Type,
+    pub ty: TypeName<A>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]

@@ -156,7 +156,7 @@ pub fn build_closure_function_def(
     let generic_ctx = typ::GenericContext::empty();
     let mut body_builder = create_function_body_builder(lib, generic_ctx, debug_name.clone());
 
-    let return_ty = bind_function_return(&func_def.return_ty, &mut body_builder);
+    let return_ty = bind_function_return(&func_def.result_ty, &mut body_builder);
 
     // the type-erased pointer to the closure struct is included as the 0th param but
     // *not* bound like a normal param since it can't be named from code, so bind it in the scope

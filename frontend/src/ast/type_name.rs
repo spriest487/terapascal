@@ -4,10 +4,10 @@ mod function_name;
 pub use self::function_name::FunctionTypeName;
 pub use self::function_name::FunctionTypeNameParam;
 pub use self::ty_path::TypePath;
+use crate::ast::Annotation;
 use crate::ast::Expr;
+use crate::ast::Ident;
 use crate::ast::IdentPath;
-use crate::ast::SemanticHint;
-use crate::ast::TypeAnnotation;
 use crate::ast::TypeArgList;
 use crate::ast::TypeList;
 use crate::parse::LookAheadTokenStream;
@@ -19,23 +19,25 @@ use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
 use crate::DelimiterPair;
-use crate::ast::Ident;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
 use crate::TokenTree;
 use derivative::Derivative;
 use std::fmt;
-use terapascal_common::span::{MaybeSpanned, Span};
+use terapascal_common::span::MaybeSpanned;
+use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
-pub struct IdentTypeName {
+pub struct IdentTypeName<A: Annotation = Span> {
     pub ident: IdentPath,
-    pub type_args: Option<TypeArgList>,
+    pub type_args: Option<TypeArgList<A>>,
     pub indirection: usize,
+    
+    pub ty: A::Type,
 
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
@@ -43,19 +45,19 @@ pub struct IdentTypeName {
     pub span: Span,
 }
 
-impl IdentTypeName {
+impl<A: Annotation> IdentTypeName<A> {
     pub fn is_single_ident(&self) -> bool {
         self.ident.len() == 1 && self.indirection == 0 && self.type_args.is_none()
     }
 }
 
-impl Spanned for IdentTypeName {
+impl<A: Annotation> Spanned for IdentTypeName<A> {
     fn span(&self) -> &Span {
         &self.span
     }
 }
 
-impl fmt::Display for IdentTypeName {
+impl<A: Annotation> fmt::Display for IdentTypeName<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for _ in 0..self.indirection {
             write!(f, "^")?;
@@ -79,9 +81,9 @@ impl fmt::Display for IdentTypeName {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
-pub struct ArrayTypeName {
-    pub element: Box<TypeName>,
-    pub dim: Option<Box<Expr<Span>>>,
+pub struct ArrayTypeName<A: Annotation = Span> {
+    pub element: Box<TypeName<A>>,
+    pub dim: Option<Box<Expr<A>>>,
     pub indirection: usize,
 
     #[derivative(Hash = "ignore")]
@@ -93,15 +95,17 @@ pub struct ArrayTypeName {
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     pub of_kw: Span,
+
+    pub ty: A::Type,
 }
 
-impl Spanned for ArrayTypeName {
+impl<A: Annotation> Spanned for ArrayTypeName<A> {
     fn span(&self) -> &Span {
         &self.span
     }
 }
 
-impl fmt::Display for ArrayTypeName {
+impl<A: Annotation> fmt::Display for ArrayTypeName<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.dim {
             Some(dim) => write!(f, "array[{}] of {}", dim, self.element),
@@ -112,48 +116,51 @@ impl fmt::Display for ArrayTypeName {
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]
-pub enum TypeName {
-    /// type is unknown or unnamed at parse time
-    Unspecified,
+pub struct WeakTypeName<A: Annotation = Span> {
+    #[derivative(Debug = "ignore")]
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub weak_kw: Span,
 
-    Ident(IdentTypeName),
-    Array(ArrayTypeName),
+    pub type_name: Box<TypeName<A>>,
     
-    Weak(
-        Box<TypeName>,
-        #[derivative(Debug = "ignore")]
-        #[derivative(Hash = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        Span
-    ),
+    pub ty: A::Type,
 
-    Function(FunctionTypeName),
+    #[derivative(Debug = "ignore")]
+    #[derivative(Hash = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub span: Span,
 }
 
-impl MaybeSpanned for TypeName {
+#[derive(Eq, Clone, Derivative)]
+#[derivative(PartialEq, Hash, Debug)]
+pub enum TypeName<A: Annotation = Span> {
+    /// type is unknown or unnamed at parse time
+    Unspecified(A::Type),
+
+    Ident(IdentTypeName<A>),
+    Array(ArrayTypeName<A>),
+    
+    Weak(WeakTypeName<A>),
+
+    Function(FunctionTypeName<A>),
+}
+
+impl<A: Annotation> MaybeSpanned for TypeName<A> {
     fn get_span(&self) -> Option<&Span> {
         match self {
+            TypeName::Unspecified(..) => None,
             TypeName::Ident(i) => Some(i.span()),
             TypeName::Array(a) => Some(a.span()),
-            TypeName::Unspecified => None,
             TypeName::Function(f) => Some(f.span()),
-            TypeName::Weak(_, span) => Some(span),
+            TypeName::Weak(weak_ty) => Some(&weak_ty.span),
         }
     }
 }
 
-impl TypeAnnotation for TypeName {
-    fn is_known(&self) -> bool {
-        match self {
-            TypeName::Unspecified => false,
-            _ => true,
-        }
-    }
-
-    fn semantic_hint(&self) -> SemanticHint {
-        SemanticHint::Type
-    }
-}
+#[derive(Eq, Clone, Derivative)]
+#[derivative(PartialEq, Hash, Debug)]
+pub struct UncheckedType;
 
 impl Parse for TypeName {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
@@ -185,8 +192,9 @@ impl Parse for TypeName {
             },
             
             Some(weak_kw) if weak_kw.is_keyword(Keyword::Weak) => {
-                let mut span = weak_kw.span().clone();
-                
+                let weak_kw_span = weak_kw.span().clone();
+                let mut span = weak_kw_span.clone();
+
                 tokens.advance(1);
                 let weak_ty = Self::parse(tokens)?;
                 
@@ -199,7 +207,14 @@ impl Parse for TypeName {
 
                 span.maybe_extend(&weak_ty);
                 
-                Ok(TypeName::Weak(Box::new(weak_ty), span))
+                let weak_ty_name = WeakTypeName {
+                    weak_kw: weak_kw_span,
+                    type_name: Box::new(weak_ty),
+                    ty: UncheckedType,
+                    span,
+                };
+                
+                Ok(TypeName::Weak(weak_ty_name))
             }
 
             Some(bad) => {
@@ -220,6 +235,7 @@ impl From<Ident> for TypeName {
         TypeName::Ident(IdentTypeName {
             span: value.span().clone(),
             ident: IdentPath::from(value),
+            ty: UncheckedType,
             type_args: None,
             indirection: 0,
         })
@@ -236,7 +252,57 @@ fn start_non_weak_matcher() -> Matcher {
     Keyword::Array | Keyword::Function | Keyword::Procedure | Matcher::AnyIdent
 }
 
+impl<A: Annotation> TypeName<A> {
+    pub fn from_ident(ident: Ident, ty: A::Type) -> Self {
+        Self::Ident(IdentTypeName {
+            span: ident.span.clone(),
+            type_args: None,
+            ident: IdentPath::from(ident),
+            ty,
+            indirection: 0,
+        })
+    }
+
+    pub fn from_path(ident: IdentPath, ty: A::Type) -> Self {
+        Self::Ident(IdentTypeName {
+            span: ident.path_span(),
+            type_args: None,
+            ident,
+            ty,
+            indirection: 0,
+        })
+    }
+    
+    pub fn is_known(&self) -> bool {
+        A::is_known_type(self)
+    }
+    
+    pub fn ty(&self) -> &A::Type {
+        match self {
+            TypeName::Unspecified(ty) => ty,
+            TypeName::Ident(ident_ty) => &ident_ty.ty,
+            TypeName::Array(array_ty) => &array_ty.ty,
+            TypeName::Weak(weak_ty) => &weak_ty.ty,
+            TypeName::Function(func_ty) => &func_ty.ty,
+        }
+    }
+    
+    pub fn into_ty(self) -> A::Type {
+        match self {
+            TypeName::Unspecified(ty) => ty,
+            TypeName::Ident(ident_ty) => ident_ty.ty,
+            TypeName::Array(array_ty) => array_ty.ty,
+            TypeName::Weak(weak_ty) => weak_ty.ty,
+            TypeName::Function(func_ty) => func_ty.ty,
+        }
+    }
+}
+
 impl TypeName {
+    pub const fn unspecified() -> Self {
+        TypeName::Unspecified(UncheckedType)
+    }
+    
     pub fn start_matcher() -> Matcher {
         start_non_weak_matcher() | Keyword::Weak
     }
@@ -286,6 +352,7 @@ impl TypeName {
             indirection,
             of_kw,
             element: Box::new(element),
+            ty: UncheckedType,
         }))
     }
 
@@ -328,6 +395,7 @@ impl TypeName {
             params,
             span,
             return_ty,
+            ty: UncheckedType,
         };
 
         Ok(TypeName::Function(func_ty_name))
@@ -363,10 +431,11 @@ impl TypeName {
             ident,
             indirection,
             type_args,
+            ty: UncheckedType,
             span,
         }))
     }
-    
+
     pub fn into_single_ident(self) -> Result<Ident, Self> {
         match self {
             TypeName::Ident(name) if name.is_single_ident() => {
@@ -374,17 +443,17 @@ impl TypeName {
             }
             other => Err(other)
         }
-    } 
+    }
 }
 
-impl fmt::Display for TypeName {
+impl<A: Annotation> fmt::Display for TypeName<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TypeName::Ident(ident_type_name) => write!(f, "{}", ident_type_name),
             TypeName::Array(array_type_name) => write!(f, "{}", array_type_name),
             TypeName::Function(func_type_name) => write!(f, "{}", func_type_name),
-            TypeName::Weak(type_name, ..) => write!(f, "weak {}", type_name),
-            TypeName::Unspecified => write!(f, "<unknown type>"),
+            TypeName::Weak(type_name, ..) => write!(f, "weak {}", type_name.type_name),
+            TypeName::Unspecified(..) => write!(f, "<unknown type>"),
         }
     }
 }

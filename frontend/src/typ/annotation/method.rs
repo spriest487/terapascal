@@ -9,7 +9,6 @@ use crate::typ::Invocation;
 use crate::typ::NameError;
 use crate::typ::Type;
 use crate::typ::TypeError;
-use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use derivative::Derivative;
@@ -23,7 +22,7 @@ pub struct MethodValue {
     /// the type via which this method is being referred to. we don't distinguish here between
     /// an interface method (implemented on a type other than the self type) and a direct method
     /// call (known to be implemented on the self type used here)
-    pub self_ty: TypeName,
+    pub self_ty: Type,
     pub index: usize,
 
     /// None for class methods
@@ -52,7 +51,7 @@ pub struct MethodValue {
 
 impl MethodValue {
     pub fn new(
-        self_ty: TypeName,
+        self_ty: Type,
         self_arg: Option<Expr>,
         index: usize,
         decl: MethodDecl,
@@ -85,7 +84,7 @@ impl MethodValue {
     ) -> TypeResult<Invocation> {
         if self.self_ty.get_current_access(ctx) < self.decl.access {
             return Err(TypeError::TypeMemberInaccessible {
-                ty: self.self_ty.ty().clone(),
+                ty: self.self_ty.clone(),
                 access: self.decl.access,
                 member: self.decl.func_decl.ident().clone(),
                 span: span.clone(),
@@ -139,7 +138,7 @@ impl MethodValue {
             if !is_impl {
                 return Err(TypeError::from_name_err(
                     NameError::NoImplementationFound {
-                        owning_ty: self.self_ty.ty().clone(),
+                        owning_ty: self.self_ty.clone(),
                         impl_ty: self_type.into_owned(),
                     },
                     span.clone(),
@@ -148,7 +147,7 @@ impl MethodValue {
         } else if let Some(..) = &self.self_arg {
             if self.self_ty != *self_type {
                 return Err(TypeError::type_mismatch(
-                    self.self_ty.ty().clone(),
+                    self.self_ty.clone(),
                     self_type.into_owned(),
                     span.clone(),
                 ));

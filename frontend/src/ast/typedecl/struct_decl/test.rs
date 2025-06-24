@@ -1,6 +1,5 @@
 use crate::ast::util::*;
 use crate::ast::StructDecl;
-use crate::ast::TypeAnnotation;
 use crate::ast::TypeDeclItem;
 use crate::ast::Unit;
 use crate::ast::Visibility;

@@ -1,5 +1,4 @@
 use crate::ast;
-use crate::ast::TypeAnnotation;
 use crate::typ::ast::Expr;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::string_to_char_lit;
@@ -19,7 +18,7 @@ use crate::RealConstant;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 
-pub type Literal = ast::Literal<TypeName>;
+pub type Literal = ast::Literal<Value>;
 
 impl Literal {
     pub fn as_string(&self) -> Option<&Arc<String>> {
@@ -256,7 +255,7 @@ impl Literal {
 }
 
 pub fn typecheck_literal(
-    lit: &ast::Literal<ast::TypeName>,
+    lit: &ast::Literal,
     expect_ty: &Type,
     span: &Span,
     ctx: &mut Context,

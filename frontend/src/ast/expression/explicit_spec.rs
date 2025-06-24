@@ -1,4 +1,5 @@
 use crate::ast::Annotation;
+use crate::ast::TypeName;
 use crate::ast::Expr;
 use crate::ast::TypeList;
 use terapascal_common::span::Span;
@@ -12,7 +13,7 @@ pub struct ExplicitSpecExpr<A = Span> where A: Annotation {
     /// expression, which must refer to a type, these arguments will be applied to
     pub type_expr: Expr<A>,
     
-    pub type_args: TypeList<A::TypeName>,
+    pub type_args: TypeList<TypeName<A>>,
     
     pub annotation: A,
 }

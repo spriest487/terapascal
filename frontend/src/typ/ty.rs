@@ -1,5 +1,5 @@
-mod specialize;
 mod array;
+mod specialize;
 
 #[cfg(test)]
 mod test;
@@ -7,10 +7,10 @@ mod test;
 pub mod layout;
 pub mod pattern;
 pub mod primitive;
+pub mod seq;
+pub mod set;
 pub mod sig;
 pub mod ty_param;
-pub mod set;
-pub mod seq;
 
 pub use self::array::*;
 pub use self::pattern::*;
@@ -21,19 +21,20 @@ pub use self::specialize::*;
 pub use self::ty_param::*;
 use crate::ast;
 use crate::ast::Access;
-use crate::ast::ArrayTypeName;
+use crate::ast::FunctionTypeName;
+use crate::ast::FunctionTypeNameParam;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::IdentTypeName;
 use crate::ast::MethodOwner;
-use crate::ast::SemanticHint;
 use crate::ast::StructKind;
-use crate::ast::TypeAnnotation;
+use crate::ast::WeakTypeName;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::typ::ast::{FieldDecl, TypeDeclItem};
+use crate::typ::ast::FieldDecl;
 use crate::typ::ast::MethodDecl;
+use crate::typ::ast::TypeDeclItem;
 use crate::typ::ast::SELF_TY_NAME;
-use crate::typ::builtin_span;
+use crate::typ::builtin_string_name;
 use crate::typ::builtin_unit_path;
 use crate::typ::Context;
 use crate::typ::Def;
@@ -45,18 +46,18 @@ use crate::typ::NameResult;
 use crate::typ::Symbol;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
+use crate::typ::Value;
 use crate::typ::ANY_TYPE_NAME;
 use crate::typ::NIL_NAME;
 use crate::typ::NOTHING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
 use crate::Keyword;
 use crate::Operator;
-use derivative::Derivative;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt;
 use std::hash::Hash;
-use std::hash::Hasher;
+use std::mem;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
@@ -117,17 +118,17 @@ impl Type {
     pub fn set(set: impl Into<Arc<SetType>>) -> Self {
         Type::Set(set.into())
     }
-    
+
     pub fn interface(name: impl Into<Symbol>) -> Self {
         Type::Interface(Arc::new(name.into()))
     }
-    
+
     pub fn generic_param(name: Ident) -> Type {
         let ty_param_ty = TypeParamListItem {
             name,
             is_ty: TypeName::inferred(Type::Any),
         };
-        
+
         Type::GenericParam(Arc::new(ty_param_ty))
     }
 
@@ -139,7 +140,9 @@ impl Type {
     }
 
     pub fn dyn_array(self) -> Self {
-        Type::DynArray { element: Arc::new(self) }
+        Type::DynArray {
+            element: Arc::new(self),
+        }
     }
 
     pub fn generic_constrained_param(name: Ident, is_iface: impl Into<TypeName>) -> Type {
@@ -150,16 +153,16 @@ impl Type {
 
         Type::GenericParam(Arc::new(ty_param_ty))
     }
-    
+
     pub fn from_struct_type(sym: impl Into<Symbol>, kind: StructKind) -> Self {
         let sym = Arc::new(sym.into());
-        
+
         match kind {
             StructKind::Class => Type::Class(sym),
             StructKind::Record => Type::Record(sym),
         }
     }
-    
+
     // todo: this doesn't reflect the declared type exactly since it loses the "packed" qualifier
     // does "packed" actually need to be a separate struct kind or could it become a decl field?
     pub fn struct_kind(&self) -> Option<StructKind> {
@@ -174,14 +177,13 @@ impl Type {
         fn builtin_sym(name: &str) -> Option<Cow<Symbol>> {
             Some(Cow::Owned(Symbol::from(builtin_unit_path(name))))
         }
-        
+
         match self {
             Type::Nothing => builtin_sym(NOTHING_TYPE_NAME),
             Type::Any => builtin_sym(ANY_TYPE_NAME),
             Type::Primitive(p) => builtin_sym(p.name()),
 
             // Type::MethodSelf => Some(Cow::Owned(IdentPath::from(Ident::new(SELF_TY_NAME, builtin_span())))),
-
             Type::Interface(decl_name)
             | Type::Record(decl_name)
             | Type::Class(decl_name)
@@ -190,20 +192,19 @@ impl Type {
             _ => None,
         }
     }
-    
+
     pub fn full_path(&self) -> Option<Cow<IdentPath>> {
         match self {
             Type::Nothing => Some(Cow::Owned(builtin_unit_path(NOTHING_TYPE_NAME))),
             Type::Any => Some(Cow::Owned(builtin_unit_path(ANY_TYPE_NAME))),
             Type::Primitive(p) => Some(Cow::Owned(builtin_unit_path(p.name()))),
-            
+
             // Type::MethodSelf => Some(Cow::Owned(IdentPath::from(Ident::new(SELF_TY_NAME, builtin_span())))),
-            
             Type::Interface(decl_name)
-            | Type::Record(decl_name) 
-            | Type::Class(decl_name) 
+            | Type::Record(decl_name)
+            | Type::Class(decl_name)
             | Type::Variant(decl_name) => Some(Cow::Borrowed(&decl_name.full_path)),
-            
+
             _ => None,
         }
     }
@@ -262,7 +263,7 @@ impl Type {
                 }
 
                 result
-            }
+            },
 
             | Type::Record(..) => {
                 let fields = self.fields(ctx)?;
@@ -273,57 +274,49 @@ impl Type {
                         break;
                     }
                 }
-                
+
                 result
-            }
+            },
 
             Type::Array(array_ty) => array_ty.element_ty.has_default(ctx)?,
 
             Type::Nil => true,
             Type::Primitive(..) => true,
             Type::Pointer(..) => true,
-            
+
             Type::MethodSelf => {
-                let current_self_ty = ctx
-                    .current_function_body_env()
-                    .and_then(|env| env.self_ty.as_ref());
-                
+                let current_self_ty =
+                    ctx.current_function_body_env().and_then(|env| env.self_ty.as_ref());
+
                 if let Some(self_ty) = current_self_ty {
                     self_ty.has_default(ctx)?
                 } else {
                     false
                 }
-            }
+            },
         };
-        
+
         Ok(result)
     }
 
     pub fn of_decl(type_decl: &TypeDeclItem, ctx: &Context) -> TypeResult<Self> {
         match type_decl {
-            TypeDeclItem::Struct(class)
-            if class.kind == StructKind::Record => {
+            TypeDeclItem::Struct(class) if class.kind == StructKind::Record => {
                 Ok(Type::Record(Arc::new(class.name.clone())))
             },
 
-            TypeDeclItem::Struct(class) => {
-                Ok(Type::Class(Arc::new(class.name.clone())))
-            },
+            TypeDeclItem::Struct(class) => Ok(Type::Class(Arc::new(class.name.clone()))),
 
-            TypeDeclItem::Variant(variant) => {
-                Ok(Type::Variant(variant.name.clone()))
-            },
+            TypeDeclItem::Variant(variant) => Ok(Type::Variant(variant.name.clone())),
 
-            TypeDeclItem::Interface(iface) => {
-                Ok(Type::interface(iface.name.clone()))
-            },
+            TypeDeclItem::Interface(iface) => Ok(Type::interface(iface.name.clone())),
 
             TypeDeclItem::Enum(enum_decl) => {
                 enum_decl.name.expect_no_type_params(InvalidTypeParamsDeclKind::Enum)?;
-                
+
                 Ok(Type::enumeration(enum_decl.name.full_path.clone()))
             },
-            
+
             TypeDeclItem::Set(set_decl) => {
                 set_decl.name.expect_no_type_params(InvalidTypeParamsDeclKind::Set)?;
 
@@ -335,24 +328,26 @@ impl Type {
                         _ => None,
                     })
                     .ok_or_else(|| TypeError::name_not_found(name.clone(), name.path_span()))?;
-                
+
                 let set_type = set_decl.to_set_type(ctx)?;
 
                 Ok(Type::set(set_type))
-            }
-
-            TypeDeclItem::Alias(alias) => {
-                Ok(alias.target.ty().clone())
             },
+
+            TypeDeclItem::Alias(alias) => Ok(alias.target.ty().clone()),
         }
     }
 
-    pub fn find_field_decl(&self, member: &str, ctx: &Context) -> NameResult<Option<(FieldDecl, usize)>> {
+    pub fn find_field_decl(
+        &self,
+        member: &str,
+        ctx: &Context,
+    ) -> NameResult<Option<(FieldDecl, usize)>> {
         match self {
             Type::Class(class_name) | Type::Record(class_name) => {
                 let struct_kind = self.struct_kind().unwrap();
                 let def = ctx.instantiate_struct_def(class_name, struct_kind)?;
-                
+
                 let Some((decl, index)) = def.find_field_decl(member) else {
                     return Ok(None);
                 };
@@ -370,7 +365,7 @@ impl Type {
                 let struct_kind = self.struct_kind().unwrap();
                 let class = ctx.instantiate_struct_def(class, struct_kind)?;
                 let field = class.fields().nth(index).cloned();
-                
+
                 Ok(field)
             },
 
@@ -410,28 +405,20 @@ impl Type {
 
     /// is this type, or any of the type parameters that it contains, a generic param type?
     /// e.g. in the sig `X[T](a: Box[T])`, the type of param `a` is "Box of type param 0".
-    /// if this type appears in a context where the params already refer to specific types, 
+    /// if this type appears in a context where the params already refer to specific types,
     /// for example in the body of a function where this type refers to one of the function's type
     /// params, we ignore those types since they'll be real types when actually used
     pub fn contains_unresolved_params(&self, ctx: &Context) -> bool {
         if let Type::GenericParam(ty_param_ty) = self {
-            let mut func_ty_params = ctx
-                .current_function_body_env()
-                .into_iter()
-                .flat_map(|env| {
-                    let func_ty_params = env.ty_params
-                        .iter()
-                        .flat_map(|params| params.iter());
-                    
-                    let enclosing_ty_params = env.self_ty
-                        .iter()
-                        .flat_map(|self_ty| self_ty
-                            .type_params()
-                            .into_iter()
-                            .flat_map(|params| params.iter()));
-                    
-                    func_ty_params.chain(enclosing_ty_params)
+            let mut func_ty_params = ctx.current_function_body_env().into_iter().flat_map(|env| {
+                let func_ty_params = env.ty_params.iter().flat_map(|params| params.iter());
+
+                let enclosing_ty_params = env.self_ty.iter().flat_map(|self_ty| {
+                    self_ty.type_params().into_iter().flat_map(|params| params.iter())
                 });
+
+                func_ty_params.chain(enclosing_ty_params)
+            });
 
             return !func_ty_params.any(|param| param.name == ty_param_ty.name);
         }
@@ -442,12 +429,10 @@ impl Type {
 
         match self {
             Type::Array(array_ty) => array_ty.element_ty.contains_unresolved_params(ctx),
-            
+
             Type::DynArray { element, .. } => element.contains_unresolved_params(ctx),
-            
-            Type::Function(sig) => {
-                sig.contains_generic_params(ctx)
-            }
+
+            Type::Function(sig) => sig.contains_generic_params(ctx),
 
             _ => false,
         }
@@ -476,29 +461,29 @@ impl Type {
             },
 
             (Type::Array(arr), Type::Array(other_arr)) => {
-                arr.dim == other_arr.dim 
+                arr.dim == other_arr.dim
                     && arr.element_ty.can_specialize_to(&other_arr.element_ty, ctx)
-            }
+            },
 
-            (Type::DynArray { element }, Type::DynArray { element: other_element }) => {
-                element.can_specialize_to(other_element, ctx)
-            }
+            (
+                Type::DynArray { element },
+                Type::DynArray {
+                    element: other_element,
+                },
+            ) => element.can_specialize_to(other_element, ctx),
 
             (Type::Function(sig), Type::Function(other_sig)) => {
                 if !sig.result_ty.can_specialize_to(&other_sig.result_ty, ctx)
-                    || sig.params.len() == other_sig.params.len() {
+                    || sig.params.len() == other_sig.params.len()
+                {
                     return false;
                 }
-                
-                sig.params
-                    .iter()
-                    .zip(other_sig.params.iter())
-                    .all(|(p, other_p)| {
-                        p.modifier == other_p.modifier
-                            && p.ty.can_specialize_to(&other_p.ty, ctx)
-                    })
-            }
-            
+
+                sig.params.iter().zip(other_sig.params.iter()).all(|(p, other_p)| {
+                    p.modifier == other_p.modifier && p.ty.can_specialize_to(&other_p.ty, ctx)
+                })
+            },
+
             _ => self.same_decl_type(other),
         }
     }
@@ -517,18 +502,14 @@ impl Type {
         match self {
             Type::Variant(name) | Type::Class(name) | Type::Record(name) => {
                 match (&name.type_params, &name.type_args) {
-                    (Some(type_params), None) => {
-                        TypeArgsResult::Unspecialized(type_params)
-                    }
+                    (Some(type_params), None) => TypeArgsResult::Unspecialized(type_params),
 
                     (Some(type_params), Some(type_args)) => {
                         TypeArgsResult::Specialized(type_params, type_args)
-                    }
-                    
-                    (None, None) => {
-                        TypeArgsResult::NotGeneric
-                    }
-                    
+                    },
+
+                    (None, None) => TypeArgsResult::NotGeneric,
+
                     (None, Some(..)) => unreachable!(),
                 }
             },
@@ -574,16 +555,14 @@ impl Type {
             _ => false,
         }
     }
-    
+
     pub fn is_sized(&self, ctx: &Context) -> NameResult<bool> {
         let is_unsized = ctx.is_unsized_ty(self)?;
         Ok(!is_unsized)
     }
-    
+
     pub fn expect_sized(&self, ctx: &Context, at: &Span) -> TypeResult<()> {
-        let sized = self
-            .is_sized(ctx)
-            .map_err(|e| TypeError::from_name_err(e, at.clone()))?;
+        let sized = self.is_sized(ctx).map_err(|e| TypeError::from_name_err(e, at.clone()))?;
 
         if !sized {
             return Err(TypeError::InvalidUnsizedType {
@@ -591,7 +570,7 @@ impl Type {
                 span: at.clone(),
             });
         }
-        
+
         Ok(())
     }
 
@@ -639,9 +618,9 @@ impl Type {
             (Type::Pointer(..) | Type::Primitive(Primitive::Pointer), Type::Nil) => true,
 
             // weak and strong rc ptrs can be compared to null in an unsafe context
-            (a, Type::Nil) | (Type::Nil, a) if a.is_strong_rc_reference() => allow_unsafe, 
+            (a, Type::Nil) | (Type::Nil, a) if a.is_strong_rc_reference() => allow_unsafe,
             (Type::Weak(..), Type::Nil) | (Type::Nil, Type::Weak(..)) => allow_unsafe,
-            
+
             (a, b) if a == b => a.self_equatable(),
             _ => false,
         }
@@ -668,8 +647,8 @@ impl Type {
                 }
 
                 Some(Cow::Owned(Type::Primitive(Primitive::NativeInt)))
-            }
-            
+            },
+
             // pointer arithmetic:
             // - lhs is any pointer
             // - operator is +, - or any bitwise operator
@@ -687,7 +666,7 @@ impl Type {
                 if (op == Operator::Add || op == Operator::Sub) && self.deref_ty().is_none() {
                     return None;
                 }
-                
+
                 let rhs_valid = rhs_primitive.is_integer() || rhs_primitive.is_pointer();
                 if !rhs_valid || rhs_primitive.native_size() > Primitive::Pointer.native_size() {
                     return None;
@@ -702,10 +681,7 @@ impl Type {
             // - rhs is another pointer of the same type
             (
                 Type::Pointer(_),
-                Operator::Add
-                | Operator::BitAnd
-                | Operator::BitOr
-                | Operator::Caret,
+                Operator::Add | Operator::BitAnd | Operator::BitOr | Operator::Caret,
                 Type::Pointer(..),
             ) => {
                 // can't offset untyped pointers
@@ -748,7 +724,7 @@ impl Type {
                 if !a.is_numeric() || *a != *b {
                     return None;
                 }
-                
+
                 Some(Cow::Borrowed(self))
             },
 
@@ -771,25 +747,25 @@ impl Type {
 
             // bitwise ops are valid for sets with the same element type
             (
-                Type::Set(lhs_set), 
+                Type::Set(lhs_set),
                 Operator::Shl
                 | Operator::Shr
                 | Operator::BitAnd
                 | Operator::BitOr
-                | Operator::Caret, 
-                Type::Set(rhs_set)
+                | Operator::Caret,
+                Type::Set(rhs_set),
             ) => {
                 if lhs_set.item_type != rhs_set.item_type {
                     return None;
                 }
 
                 Some(Cow::Borrowed(self))
-            }
+            },
 
             _ => None,
         }
     }
-    
+
     pub fn methods(&self, ctx: &Context) -> NameResult<Vec<MethodDecl>> {
         match self {
             Type::Interface(name) => {
@@ -802,12 +778,12 @@ impl Type {
                 let methods = iface_def
                     .methods
                     .iter()
-                    .map(|m| MethodDecl { 
+                    .map(|m| MethodDecl {
                         func_decl: m.decl.clone(),
                         access: IFACE_METHOD_ACCESS,
                     })
                     .collect();
-                
+
                 Ok(methods)
             },
 
@@ -819,13 +795,10 @@ impl Type {
                     ctx.instantiate_struct_def(&name, struct_kind)?
                 };
 
-                let methods = struct_def 
-                    .methods()
-                    .map(|method| method.clone())
-                    .collect();
+                let methods = struct_def.methods().map(|method| method.clone()).collect();
 
                 Ok(methods)
-            }
+            },
 
             Type::Variant(name) => {
                 let variant_def = if name.is_unspecialized_generic() {
@@ -833,45 +806,33 @@ impl Type {
                 } else {
                     ctx.instantiate_variant_def(&name)?
                 };
-                
+
                 Ok(variant_def.methods().cloned().collect())
-            }
+            },
 
             Type::Primitive(primitive) => {
-                let methods = ctx
-                    .get_primitive_methods(*primitive)
-                    .values()
-                    .cloned()
-                    .collect();
+                let methods = ctx.get_primitive_methods(*primitive).values().cloned().collect();
 
                 Ok(methods)
-            }
+            },
 
             // Type::GenericParam(param) => match &param.is_iface {
             //     Some(is_iface) => is_iface.methods(ctx),
             //     None => Ok(Vec::new()),
             // }
-
             _ => Ok(Vec::new()),
         }
     }
-    
-    pub fn methods_at(&self,
-        ctx: &Context,
-        at: &Span
-    ) -> TypeResult<Vec<MethodDecl>> {
-        self
-            .methods(ctx)
-            .map_err(|err| {
-                TypeError::from_name_err(err, at.clone())
-            })
+
+    pub fn methods_at(&self, ctx: &Context, at: &Span) -> TypeResult<Vec<MethodDecl>> {
+        self.methods(ctx).map_err(|err| TypeError::from_name_err(err, at.clone()))
     }
 
     pub fn find_method_index(
         &self,
         name: &Ident,
         sig: &FunctionSig,
-        ctx: &Context
+        ctx: &Context,
     ) -> NameResult<Option<usize>> {
         match self {
             Type::Interface(iface_name) => {
@@ -881,20 +842,16 @@ impl Type {
                     ctx.instantiate_iface_def(&iface_name)?
                 };
 
-                let index = iface_def
-                    .methods
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, m)| {
-                        if *m.ident() == *name && m.decl.sig().eq_as_impl(sig) {
-                            Some(index)
-                        } else {
-                            None
-                        }
-                    });
+                let index = iface_def.methods.iter().enumerate().find_map(|(index, m)| {
+                    if *m.ident() == *name && m.decl.sig().eq_as_impl(sig) {
+                        Some(index)
+                    } else {
+                        None
+                    }
+                });
 
                 Ok(index)
-            }
+            },
 
             Type::Record(type_name) | Type::Class(type_name) => {
                 let struct_kind = self.struct_kind().unwrap();
@@ -905,7 +862,7 @@ impl Type {
                 };
 
                 Ok(find_in_method_decls(name, sig, struct_def.methods()))
-            }
+            },
 
             Type::Variant(type_name) => {
                 let variant_def = if type_name.is_unspecialized_generic() {
@@ -915,19 +872,18 @@ impl Type {
                 };
 
                 Ok(find_in_method_decls(name, sig, variant_def.methods()))
-            }
+            },
 
             Type::Primitive(primitive) => {
                 let methods = ctx.get_primitive_methods(*primitive);
-                
+
                 Ok(find_in_method_decls(name, sig, methods.values()))
-            }
+            },
 
             // Type::GenericParam(param) => match &param.is_iface {
             //     Some(is_iface) => is_iface.find_method_index(name, sig, ctx),
             //     None => Ok(None),
             // }
-
             _ => Ok(None),
         }
     }
@@ -941,10 +897,10 @@ impl Type {
                     ctx.instantiate_iface_def(&name)?
                 };
 
-                let iface_method = iface_def.methods
-                    .get(method_index)
-                    .unwrap_or_else(|| panic!("invalid method index: {} in {}", method_index, name));
-                
+                let iface_method = iface_def.methods.get(method_index).unwrap_or_else(|| {
+                    panic!("invalid method index: {} in {}", method_index, name)
+                });
+
                 Ok(MethodDecl {
                     func_decl: iface_method.decl.clone(),
                     access: IFACE_METHOD_ACCESS,
@@ -961,7 +917,7 @@ impl Type {
 
                 let method = struct_def.methods().nth(method_index);
                 Ok(method.cloned().expect("invalid method index"))
-            }
+            },
 
             Type::Variant(name) => {
                 let variant_def = if name.is_unspecialized_generic() {
@@ -972,57 +928,55 @@ impl Type {
 
                 let method = variant_def.methods().nth(method_index);
                 Ok(method.cloned().expect("invalid method index"))
-            }
+            },
 
             Type::Primitive(primitive) => {
                 let methods = ctx.get_primitive_methods(*primitive);
                 let method = methods.values().nth(method_index);
 
                 Ok(method.cloned().expect("invalid method index"))
-            }
+            },
 
             // Type::GenericParam(param) => match &param.is_iface {
             //     Some(is_iface) => is_iface.get_method(method_index, ctx),
             //     None => panic!("invalid type for method: {self}"),
             // }
-
             _ => panic!("invalid type for method: {self}"),
         }
     }
-    
-    pub fn find_method(&self,
+
+    pub fn find_method(
+        &self,
         method_ident: &Ident,
         sig: &FunctionSig,
-        ctx: &Context
+        ctx: &Context,
     ) -> NameResult<Option<(usize, MethodDecl)>> {
         match self.find_method_index(method_ident, sig, ctx)? {
             Some(index) => {
                 let method = self.get_method(index, ctx)?;
                 Ok(Some((index, method)))
-            }
+            },
 
-            None => {
-                Ok(None)
-            }
+            None => Ok(None),
         }
     }
-    
+
     pub fn get_current_access(&self, ctx: &Context) -> Access {
         match self.full_path() {
             Some(name) => ctx.get_access(name.as_ref()),
-            
+
             None => Access::Public,
         }
     }
-    
+
     fn implemented_ifaces_rec(
         base_tys: &[TypeName],
         all_ifaces: &mut HashSet<Type>,
-        ctx: &Context
+        ctx: &Context,
     ) -> NameResult<()> {
         for base_ty in base_tys {
             let Type::Interface(iface_name) = base_ty.ty() else {
-               panic!("all base types must be interfaces")
+                panic!("all base types must be interfaces")
             };
 
             let iface_def = ctx.instantiate_iface_def(iface_name)?;
@@ -1030,7 +984,7 @@ impl Type {
 
             all_ifaces.insert(base_ty.ty().clone());
         }
-        
+
         Ok(())
     }
 
@@ -1044,38 +998,35 @@ impl Type {
 
             Type::Primitive(primitive) => {
                 Ok(ctx.get_primitive_impls(*primitive).iter().cloned().collect())
-            }
+            },
 
             Type::Record(name) | Type::Class(name) => {
                 let struct_kind = self.struct_kind().unwrap();
                 let def = ctx.instantiate_struct_def(name, struct_kind)?;
-                
+
                 let mut implements = HashSet::new();
                 Self::implemented_ifaces_rec(def.implements_types(), &mut implements, ctx)?;
-                
+
                 Ok(implements)
-            }
-            
+            },
+
             Type::Variant(name) => {
                 let def = ctx.instantiate_variant_def(name)?;
-                
+
                 let mut implements = HashSet::new();
                 Self::implemented_ifaces_rec(def.implements_types(), &mut implements, ctx)?;
 
                 Ok(implements)
-            }
-
-            _ => {
-                Ok(HashSet::new())
             },
+
+            _ => Ok(HashSet::new()),
         }
     }
-    
+
     pub fn implemented_ifaces_at(&self, ctx: &Context, at: &Span) -> TypeResult<HashSet<Type>> {
-        self.implemented_ifaces(ctx)
-            .map_err(|err| TypeError::from_name_err(err, at.clone()))
+        self.implemented_ifaces(ctx).map_err(|err| TypeError::from_name_err(err, at.clone()))
     }
-    
+
     pub fn into_something(self) -> Option<Self> {
         match self {
             Type::Nothing => None,
@@ -1140,7 +1091,7 @@ impl Type {
             other => Err(other),
         }
     }
-    
+
     pub fn as_set(&self) -> Option<&Arc<SetType>> {
         match self {
             Type::Set(set_type) => Some(set_type),
@@ -1160,7 +1111,7 @@ impl Type {
             Type::Interface(..) => {
                 // todo should we try to return an error here?
                 ctx.is_implementation(self, constraint_ty).ok().unwrap_or(false)
-            }
+            },
 
             // "Any" used as a constraint means all types, nothing to validate
             Type::Any => true,
@@ -1199,13 +1150,13 @@ impl Type {
 
                 Cow::Owned(variant_ty)
             },
-            
+
             Type::Interface(iface) => {
                 let sym = iface.specialize(args, ctx)?;
                 let iface_ty = Type::Interface(Arc::new(sym.into_owned()));
 
                 Cow::Owned(iface_ty)
-            }
+            },
 
             not_parameterized => {
                 return Err(GenericError::ArgsLenMismatch {
@@ -1221,7 +1172,7 @@ impl Type {
 
     pub fn visit_generics<Visitor>(mut self, visitor: Visitor) -> Self
     where
-        Visitor: Fn(TypeParamListItem) -> TypeParamListItem + Copy
+        Visitor: Fn(TypeParamListItem) -> TypeParamListItem + Copy,
     {
         self.visit_types_mut(|ty| {
             if let Type::GenericParam(type_param) = ty {
@@ -1235,16 +1186,14 @@ impl Type {
     pub fn visit_types<Visitor>(&self, visitor: Visitor)
     where
         Visitor: Copy + Fn(&Type),
-    {        
+    {
         match self {
-            Type::Record(sym) 
-            | Type::Class(sym)
-            | Type::Variant(sym) => {
+            Type::Record(sym) | Type::Class(sym) | Type::Variant(sym) => {
                 sym.visit_types_ref(visitor);
             },
-            
+
             // todo: update this for generic interfaces decls
-            Type::Interface(..) => {}, 
+            Type::Interface(..) => {},
 
             Type::Array(array_ty) => {
                 array_ty.element_ty.visit_types(visitor);
@@ -1260,15 +1209,15 @@ impl Type {
 
             Type::Pointer(deref) => {
                 deref.visit_types(visitor);
-            }
+            },
 
             Type::Weak(weak_ty) => {
                 weak_ty.visit_types(visitor);
-            }
+            },
 
             | Type::GenericParam(param_ty) => {
                 param_ty.is_ty.visit_types(visitor);
-            }
+            },
 
             | Type::Enum(..)
             | Type::Set(..)
@@ -1281,22 +1230,20 @@ impl Type {
 
         visitor(self);
     }
-    
-    pub fn visit_types_mut<Visitor>(&mut self, visitor: Visitor) 
+
+    pub fn visit_types_mut<Visitor>(&mut self, visitor: Visitor)
     where
         Visitor: Copy + Fn(&mut Type),
     {
         match self {
-            Type::Record(sym)
-            | Type::Class(sym)
-            | Type::Variant(sym) => {
+            Type::Record(sym) | Type::Class(sym) | Type::Variant(sym) => {
                 let mut new_sym = (**sym).clone();
                 new_sym.visit_types_mut(visitor);
                 *sym = Arc::new(new_sym)
             },
 
             // todo: update this for generic interfaces decls
-            Type::Interface(..) => {}
+            Type::Interface(..) => {},
 
             Type::Array(array_ty) => {
                 let mut element_ty = array_ty.element_ty.clone();
@@ -1325,20 +1272,20 @@ impl Type {
                 let mut new_deref = (**deref).clone();
                 new_deref.visit_types_mut(visitor);
                 *deref = Arc::new(new_deref);
-            }
+            },
 
             Type::Weak(weak_ty) => {
                 let mut new_deref = (**weak_ty).clone();
                 new_deref.visit_types_mut(visitor);
                 *weak_ty = Arc::new(new_deref);
-            }
-            
+            },
+
             Type::GenericParam(param_ty) => {
                 let mut new_param_ty = (**param_ty).clone();
                 new_param_ty.is_ty.visit_types_mut(visitor);
                 *param_ty = Arc::new(new_param_ty);
-            }
-            
+            },
+
             Type::Nothing
             | Type::Enum(..)
             | Type::Set(..)
@@ -1363,7 +1310,9 @@ impl Type {
             Type::Interface(..) => "interface".to_string(),
             Type::Variant(..) => "variant".to_string(),
             Type::Array(array_ty) => format!("array of {}", array_ty.element_ty.kind_description()),
-            Type::DynArray { element } => format!("dynamic array of {}", element.kind_description()), 
+            Type::DynArray { element } => {
+                format!("dynamic array of {}", element.kind_description())
+            },
             Type::MethodSelf => "self".to_string(),
             Type::GenericParam(..) => "generic argument".to_string(),
             Type::Weak(..) => "weak reference".to_string(),
@@ -1379,10 +1328,9 @@ impl fmt::Display for Type {
         match self {
             Type::Nil => write!(f, "{NIL_NAME}"),
 
-            Type::Class(name) 
-            | Type::Record(name)  => write!(f, "{}", name),
+            Type::Class(name) | Type::Record(name) => write!(f, "{}", name),
 
-            Type::Enum(name)  => write!(f, "{}", name),
+            Type::Enum(name) => write!(f, "{}", name),
 
             Type::Set(set) => write!(f, "{}", set),
 
@@ -1399,24 +1347,6 @@ impl fmt::Display for Type {
             Type::Variant(variant) => write!(f, "{}", variant),
             Type::MethodSelf => write!(f, "{SELF_TY_NAME}"),
             Type::Function(sig) => write!(f, "{}", sig),
-        }
-    }
-}
-
-impl TypeAnnotation for Type {
-    fn is_known(&self) -> bool {
-        true
-    }
-
-    fn semantic_hint(&self) -> SemanticHint {
-        match self {
-            Type::MethodSelf | Type::GenericParam(_) => SemanticHint::TypeParameter,
-            Type::Variant(_) => SemanticHint::Variant,
-            Type::Enum(_) => SemanticHint::Enum,
-            
-            Type::Set(_) => SemanticHint::Number,
-            
-            _ => SemanticHint::Type,
         }
     }
 }
@@ -1447,7 +1377,7 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
                     .zip(actual.iter())
                     .all(|(param, actual_name)| param.name == *actual_name)
             }
-        }
+        },
         (None, None) => true,
         _ => false,
     };
@@ -1461,7 +1391,7 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
 
         return Err(TypeError::from_generic_err(err, path.span.clone()));
     }
-    
+
     Ok(ty)
 }
 
@@ -1471,22 +1401,16 @@ pub fn typecheck_type(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<Type>
 
 pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<TypeName> {
     match ty {
-        ast::TypeName::Ident(IdentTypeName {
-            ident,
-            indirection,
-            type_args,
-            span,
-        }) => {
-            let (_, raw_ty) = ctx
-                .find_type(ident)
-                .map_err(|err| TypeError::NameError {
+        ast::TypeName::Ident(ident_ty) => {
+            let (_, raw_ty) =
+                ctx.find_type(&ident_ty.ident).map_err(|err| TypeError::NameError {
                     err,
-                    span: ident.path_span(),
+                    span: ident_ty.ident.path_span(),
                 })?;
 
             let raw_ty = raw_ty.clone();
 
-            let ty = match type_args {
+            let (ty, type_args) = match &ident_ty.type_args {
                 Some(type_args) => {
                     let mut checked_type_arg_items = Vec::new();
                     for arg in &type_args.items {
@@ -1495,74 +1419,105 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
                     }
 
                     let type_args_span = type_args.span().clone();
-                    let checked_type_args = TypeArgList::new(checked_type_arg_items, type_args_span);
+                    let checked_type_args =
+                        TypeArgList::new(checked_type_arg_items, type_args_span);
 
-                    Type::specialize(&raw_ty, &checked_type_args, ctx)
-                        .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
-                        .into_owned()
+                    let ty = Type::specialize(&raw_ty, &checked_type_args, ctx)
+                        .map_err(|err| TypeError::from_generic_err(err, ident_ty.span.clone()))?
+                        .into_owned();
+
+                    (ty, Some(checked_type_args))
                 },
 
                 None if raw_ty.is_unspecialized_generic() => {
-                    return Err(TypeError::from_generic_err(GenericError::IllegalUnspecialized {
-                        ty: raw_ty,
-                    }, ty.get_span().unwrap_or(span).clone()));
-                }
+                    return Err(TypeError::from_generic_err(
+                        GenericError::IllegalUnspecialized { ty: raw_ty },
+                        ty.get_span().unwrap_or(&ident_ty.span).clone(),
+                    ));
+                },
 
                 None => {
                     // eprintln!("using RAW: {raw_ty:?}");
-                    raw_ty.clone()
+                    (raw_ty.clone(), None)
                 },
             };
 
-            Ok(TypeName::named(ty.indirect_by(*indirection), span.clone()))
+            Ok(TypeName::Ident(IdentTypeName {
+                ident: ident_ty.ident.clone(),
+                ty,
+                indirection: ident_ty.indirection,
+                span: ident_ty.span.clone(),
+                type_args,
+            }))
         },
 
-        ast::TypeName::Array(ArrayTypeName { element, dim, span, indirection, .. }) => {
-            let typename = typecheck_array_type(element, dim, span, ctx)?;
-            
-            Ok(typename.map(|ty| ty.indirect_by(*indirection)))
+        ast::TypeName::Array(array_typename) => {
+            let typename = typecheck_array_type(array_typename, ctx)?;
+
+            Ok(TypeName::Array(typename))
         },
 
         ast::TypeName::Function(func_ty_name) => {
             let return_ty = match &func_ty_name.return_ty {
-                Some(return_ty) => typecheck_type(return_ty, ctx)?,
-                None => Type::Nothing,
+                Some(return_ty) => typecheck_typename(return_ty, ctx)?,
+                None => TypeName::inferred(Type::Nothing),
             };
 
             let mut params = Vec::new();
-            for param in &func_ty_name.params {
-                let param_ty = typecheck_type(&param.ty, ctx)?;
+            let mut sig_params = Vec::new();
 
-                params.push(FunctionSigParam {
+            for param in &func_ty_name.params {
+                let param_ty = typecheck_typename(&param.ty, ctx)?;
+
+                sig_params.push(FunctionSigParam {
+                    ty: param_ty.ty().clone(),
+                    modifier: param.modifier.clone(),
+                });
+
+                params.push(FunctionTypeNameParam {
+                    name: param.name.clone(),
                     ty: param_ty,
                     modifier: param.modifier.clone(),
                 });
             }
 
-            let sig = FunctionSig::new(return_ty, params, None);
+            let sig = FunctionSig::new(return_ty.ty().clone(), sig_params, None);
 
             let mut ty = Type::Function(Arc::new(sig));
             for _ in 0..func_ty_name.indirection {
                 ty = ty.ptr();
             }
 
-            Ok(TypeName::named(ty, func_ty_name.span.clone()))
-        }
-
-        ast::TypeName::Weak(weak_type, span) => {
-            let weak_type = typecheck_type(weak_type, ctx)?;
-
-            if !weak_type.is_strong_rc_reference() {
-                return Err(TypeError::InvalidWeakType {
-                    ty: weak_type,
-                    span: ty.get_span().unwrap_or(span).clone(),
-                });
-            }
-            
-            Ok(TypeName::named(Type::Weak(Arc::new(weak_type)), span.clone()))
+            Ok(TypeName::Function(FunctionTypeName {
+                ty,
+                span: func_ty_name.span.clone(),
+                indirection: func_ty_name.indirection,
+                return_ty: Some(Box::new(return_ty)),
+                params,
+            }))
         },
 
-        ast::TypeName::Unspecified => unreachable!("trying to resolve unknown type"),
+        ast::TypeName::Weak(weak_type) => {
+            let weak_type_name = typecheck_typename(&weak_type.type_name, ctx)?;
+
+            if !weak_type_name.is_strong_rc_reference() {
+                return Err(TypeError::InvalidWeakType {
+                    ty: weak_type_name.ty().clone(),
+                    span: ty.get_span().unwrap_or(&weak_type.span).clone(),
+                });
+            }
+
+            let ty = Type::Weak(Arc::new(weak_type_name.ty().clone()));
+
+            Ok(TypeName::Weak(WeakTypeName {
+                type_name: Box::new(weak_type_name),
+                span: weak_type.span.clone(),
+                weak_kw: weak_type.weak_kw.clone(),
+                ty,
+            }))
+        },
+
+        ast::TypeName::Unspecified(..) => unreachable!("trying to resolve unknown type"),
     }
 }
 
@@ -1589,18 +1544,25 @@ impl Specializable for Type {
     }
 
     fn name(&self) -> Cow<IdentPath> {
-        self.full_path()
-            .expect("only types with full paths can be specialized")
+        self.full_path().expect("only types with full paths can be specialized")
     }
 
     /// Apply type a given set of type arguments to this type, with a parameter list indicating
     /// which parameters we're providing matching arguments for.
     /// e.g. in the method `Class[A].Method[B](a: A, b: B)`, there are two separate parameter
     /// lists which a provided arg list of length 1 could satisfy
-    fn apply_type_args(mut self, params: &impl TypeParamContainer, args: &impl TypeArgResolver) -> Self {
+    fn apply_type_args(
+        mut self,
+        params: &impl TypeParamContainer,
+        args: &impl TypeArgResolver,
+    ) -> Self {
         // callers should already have checked this
-        assert_eq!(params.len(), args.len(), "apply_type_args: params and args counts did not match");
-        
+        assert_eq!(
+            params.len(),
+            args.len(),
+            "apply_type_args: params and args counts did not match"
+        );
+
         self.visit_types_mut(|ty| {
             if let Some(result) = params.find_in_type_args(ty, args) {
                 *ty = result.clone();
@@ -1610,6 +1572,8 @@ impl Specializable for Type {
         self
     }
 }
+
+pub type TypeName = ast::TypeName<Value>;
 
 impl Specializable for TypeName {
     type GenericID = <Type as Specializable>::GenericID;
@@ -1622,136 +1586,71 @@ impl Specializable for TypeName {
         self.ty().name()
     }
 
-    fn apply_type_args(self, params: &impl TypeParamContainer, args: &impl TypeArgResolver) -> Self {
-        self.map(|ty| ty.apply_type_args(params, args))
+    fn apply_type_args(
+        mut self,
+        params: &impl TypeParamContainer,
+        args: &impl TypeArgResolver,
+    ) -> Self {
+        let mut old_ty = Type::Nothing;
+        mem::swap(&mut old_ty, self.ty_mut());
+
+        *self.ty_mut() = old_ty.apply_type_args(params, args);
+        self
     }
 }
 
 fn find_in_method_decls<'it, MethodsIter>(
     name: &Ident,
     sig: &FunctionSig,
-    methods: MethodsIter
+    methods: MethodsIter,
 ) -> Option<usize>
 where
-    MethodsIter: Iterator<Item=&'it MethodDecl>
+    MethodsIter: Iterator<Item = &'it MethodDecl>,
 {
-    methods
-        .enumerate()
-        .find_map(|(index, m)| {
-            if *m.func_decl.ident() == *name && m.func_decl.sig().eq_as_impl(sig) {
-                Some(index)
-            } else {
-                None
-            }
-        })
+    methods.enumerate().find_map(|(index, m)| {
+        if *m.func_decl.ident() == *name && m.func_decl.sig().eq_as_impl(sig) {
+            Some(index)
+        } else {
+            None
+        }
+    })
 }
 
-pub fn string_type(ctx: &mut Context) -> TypeResult<Type> {
-    let span = builtin_span();
-    let ns = IdentPath::from(Ident::new("System", span.clone()));
-    let str_class_name = ast::TypeName::Ident(IdentTypeName {
-        ident: ns.child(Ident::new("String", span.clone())),
-        indirection: 0,
-        type_args: None,
-        span,
-    });
+pub fn string_type(_ctx: &mut Context) -> TypeResult<Type> {
+    // let span = builtin_span();
+    // let ns = IdentPath::from(Ident::new("System", span.clone()));
+    //
+    // let str_class_name = TypeName::Ident(IdentTypeName {
+    //     ident: ns.child(Ident::new("String", span.clone())),
+    //     indirection: 0,
+    //     type_args: None,
+    //     ty: Type::Class(Arc::new(builtin_string_name())),
+    //     span,
+    // });
 
-    typecheck_type(&str_class_name, ctx)
-}
-
-#[derive(Clone, Eq, Derivative)]
-#[derivative(Debug)]
-pub enum TypeName {
-    Named {
-        ty: Type,
-
-        #[derivative(Debug = "ignore")]
-        span: Span,
-    },
-    Inferred(Type),
-}
-
-impl Hash for TypeName {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.ty().hash(state);
-    }
-}
-
-impl PartialEq for TypeName {
-    fn eq(&self, other: &Self) -> bool {
-        self.ty().eq(other.ty())
-    }
+    // typecheck_type(&str_class_name, ctx)
+    Ok(Type::Class(Arc::new(builtin_string_name())))
 }
 
 impl TypeName {
-    pub fn named(ty: impl Into<Type>, span: impl Into<Span>) -> Self {
-        Self::Named {
-            ty: ty.into(),
-            span: span.into(),
-        }
-    }
-
     pub fn inferred(ty: impl Into<Type>) -> Self {
-        Self::Inferred(ty.into())
-    }
-    
-    pub fn is_inferred(&self) -> bool {
-        matches!(self, TypeName::Inferred(..))
-    }
-    
-    pub fn ty(&self) -> &Type {
-        match self {
-            TypeName::Named { ty, .. } => ty,
-            TypeName::Inferred(ty) => ty,
-        }
+        Self::Unspecified(ty.into())
     }
 
     pub fn ty_mut(&mut self) -> &mut Type {
         match self {
-            TypeName::Named { ty, .. } => ty,
-            TypeName::Inferred(ty) => ty,
+            TypeName::Unspecified(ty) => ty,
+            TypeName::Ident(item) => &mut item.ty,
+            TypeName::Array(item) => &mut item.ty,
+            TypeName::Weak(item) => &mut item.ty,
+            TypeName::Function(item) => &mut item.ty,
         }
-    }
-    
-    pub fn map(self, f: impl Fn(Type) -> Type) -> Self {
-        match self {
-            TypeName::Named { ty, span } => TypeName::Named { ty: f(ty), span },
-            TypeName::Inferred(ty) => TypeName::Inferred(f(ty)),
-        }
-    }
-}
-
-impl fmt::Display for TypeName {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.ty().fmt(f)
-    }
-}
-
-impl MaybeSpanned for TypeName {
-    fn get_span(&self) -> Option<&Span> {
-        match self {
-            TypeName::Named { span, .. } => Some(span),
-            TypeName::Inferred(..) => None,
-        }
-    }
-}
-
-impl TypeAnnotation for TypeName {
-    fn is_known(&self) -> bool {
-        self.ty().is_known()
-    }
-
-    fn semantic_hint(&self) -> SemanticHint {
-        self.ty().semantic_hint()
     }
 }
 
 impl From<TypeName> for Type {
     fn from(value: TypeName) -> Self {
-        match value {
-            TypeName::Named { ty, .. } => ty,
-            TypeName::Inferred(ty) => ty,
-        }
+        value.into_ty()
     }
 }
 

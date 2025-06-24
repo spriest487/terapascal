@@ -320,7 +320,7 @@ pub fn translate_invocation(
             );
             
             build_method_invocation(
-                method.self_ty.ty().clone(),
+                method.self_ty.clone(),
                 self_ty.clone(),
                 method.index,
                 args.as_slice(),
@@ -330,11 +330,11 @@ pub fn translate_invocation(
         },
 
         Invocation::VariantCtor { variant_type, case, arg, .. } => {
-            build_variant_ctor_call(variant_type.ty(), case.as_str(), arg.as_ref(), builder)
+            build_variant_ctor_call(variant_type, case.as_str(), arg.as_ref(), builder)
         },
 
         Invocation::ObjectCtor { object_type, members, .. } => {
-            let ctor_result = build_object_ctor_invocation(object_type.ty(), members.as_slice(), builder);
+            let ctor_result = build_object_ctor_invocation(object_type, members.as_slice(), builder);
             Some(ctor_result)
         }
 

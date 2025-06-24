@@ -1,6 +1,5 @@
 use crate::ast;
 use crate::ast::SemanticHint;
-use crate::ast::TypeAnnotation;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_stmt;
@@ -53,7 +52,7 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
                     } else {
                         let init_expr = evaluate_expr(init, &DEFAULT_COUNTER_TY, ctx)?;
                         let counter_ty =
-                            TypeName::Inferred(init_expr.annotation().ty().into_owned());
+                            TypeName::inferred(init_expr.annotation().ty().into_owned());
 
                         (counter_ty, init_expr)
                     };
@@ -98,7 +97,7 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
                         assign_op_span: assign_op_span.clone(),
                     };
 
-                    (init, TypeName::Inferred(counter_ty))
+                    (init, TypeName::inferred(counter_ty))
                 },
             };
 
@@ -140,10 +139,10 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
             // or infer that binding type from the elements produced by the sequence type
             match (
                 seq_expr.annotation().ty().as_ref(),
-                binding_ty.is_inferred(),
+                binding_ty.is_known(),
             ) {
                 (Type::Array(array_ty), true) => {
-                    binding_ty = TypeName::Inferred(array_ty.element_ty.clone());
+                    binding_ty = TypeName::inferred(array_ty.element_ty.clone());
                 },
 
                 (Type::Array(array_ty), false) => {
@@ -152,7 +151,7 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
                 },
 
                 (Type::DynArray { element }, true) => {
-                    binding_ty = TypeName::Inferred((**element).clone());
+                    binding_ty = TypeName::inferred((**element).clone());
                 },
 
                 (Type::DynArray { .. }, false) => {
@@ -200,7 +199,7 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
                     };
 
                     if inferred {
-                        binding_ty = TypeName::Inferred(element_ty);
+                        binding_ty = TypeName::inferred(element_ty);
                     } else {
                         if *binding_ty.ty() != element_ty {
                             return Err(TypeError::InvalidBinOp {

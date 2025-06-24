@@ -1,4 +1,5 @@
-use crate::ast::Annotation;
+use crate::ast::Ident;
+use crate::ast::TypeName;
 use crate::ast::TypeParam;
 use crate::parse::Match;
 use crate::parse::Parse;
@@ -7,7 +8,6 @@ use crate::parse::ParseResult;
 use crate::parse::TokenStream;
 use crate::parse::TryParse;
 use crate::DelimiterPair;
-use crate::ast::Ident;
 use crate::Separator;
 use crate::TokenTree;
 use derivative::Derivative;
@@ -50,16 +50,13 @@ impl<Item> TypeList<Item> {
 
         Self { items, span }
     }
-    
+
     pub fn map<MapFn, ToItem>(self, f: MapFn) -> TypeList<ToItem>
-        where MapFn: Fn(Item, usize) -> ToItem
+    where
+        MapFn: Fn(Item, usize) -> ToItem,
     {
         TypeList {
-            items: self.items
-                .into_iter()
-                .enumerate()
-                .map(|(pos, item)| f(item, pos))
-                .collect(),
+            items: self.items.into_iter().enumerate().map(|(pos, item)| f(item, pos)).collect(),
             span: self.span,
         }
     }
@@ -110,7 +107,7 @@ impl<Item> IndexMut<usize> for TypeList<Item> {
 
 impl<Item> Parse for TypeList<Item>
 where
-    Item: Parse + Match
+    Item: Parse + Match,
 {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let (span, mut items_tokens) = match tokens.match_one(DelimiterPair::SquareBracket)? {
@@ -129,11 +126,11 @@ where
     }
 }
 
-pub type TypeArgList<A = Span> = TypeList<<A as Annotation>::TypeName>;
+pub type TypeArgList<A = Span> = TypeList<TypeName<A>>;
 
 impl<Item> TryParse for TypeList<Item>
 where
-    Item: Parse + Match
+    Item: Parse + Match,
 {
     fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
         if tokens.look_ahead().match_one(DelimiterPair::SquareBracket).is_none() {
@@ -185,7 +182,7 @@ where
             let item = Item::parse(tokens)?;
             items.push(item);
         }
-        
+
         Ok(items)
     }
 }
@@ -194,20 +191,19 @@ pub type TypeIdentList = TypeList<Ident>;
 
 impl TypeIdentList {
     pub fn parse_type_params(tokens: &mut TokenStream) -> ParseResult<Self> {
-        let type_list = Self::parse(tokens)
-            .and_then(Self::not_empty)?;
-        
+        let type_list = Self::parse(tokens).and_then(Self::not_empty)?;
+
         Ok(Self::not_empty(type_list)?)
     }
-    
+
     pub fn try_parse_type_params(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
         match Self::try_parse(tokens)? {
             Some(type_list) => {
                 let type_list = Self::not_empty(type_list)?;
-                
+
                 Ok(Some(type_list))
-            }
-            
+            },
+
             None => Ok(None),
         }
     }
@@ -215,7 +211,7 @@ impl TypeIdentList {
     pub fn to_unconstrained_params(self) -> TypeList<TypeParam> {
         self.map(|name, _| TypeParam::new(name))
     }
-    
+
     fn not_empty(self) -> ParseResult<Self> {
         if self.items.len() == 0 {
             let err = ParseError::EmptyTypeParamList(self);

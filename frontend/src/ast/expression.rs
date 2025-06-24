@@ -8,8 +8,6 @@ use crate::ast::expression::explicit_spec::ExplicitSpecExpr;
 use crate::ast::expression::parse::CompoundExpressionParser;
 use crate::ast::ident::*;
 use crate::ast::match_block::MatchExpr;
-use crate::ast::Annotation;
-use crate::ast::TypeName;
 use crate::ast::AnonymousFunctionDef;
 use crate::ast::BinOp;
 use crate::ast::Block;
@@ -22,8 +20,9 @@ use crate::ast::IfCond;
 use crate::ast::ObjectCtor;
 use crate::ast::Raise;
 use crate::ast::Stmt;
-use crate::ast::TypeAnnotation;
+use crate::ast::TypeName;
 use crate::ast::UnaryOp;
+use crate::ast::Annotation;
 use crate::consts::*;
 use crate::parse::*;
 use crate::Operator;
@@ -34,21 +33,21 @@ use terapascal_common::span::*;
 use terapascal_common::TracedError;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum Literal<T: TypeAnnotation = TypeName> {
+pub enum Literal<A: Annotation = Span> {
     Nil,
     Integer(IntConstant),
     Real(RealConstant),
     String(Arc<String>),
     Boolean(bool),
-    SizeOf(Box<T>),
-    DefaultValue(Box<T>),
-    TypeInfo(Box<T>),
+    SizeOf(Box<TypeName<A>>),
+    DefaultValue(Box<TypeName<A>>),
+    TypeInfo(Box<TypeName<A>>),
 }
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct LiteralItem<A: Annotation = Span> {
-    pub literal: Literal<A::TypeName>,
+    pub literal: Literal<A>,
     
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
@@ -56,7 +55,7 @@ pub struct LiteralItem<A: Annotation = Span> {
     pub annotation: A,
 }
 
-impl<T: TypeAnnotation> fmt::Display for Literal<T> {
+impl<A: Annotation> fmt::Display for Literal<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Literal::Nil => write!(f, "nil"),
@@ -311,7 +310,7 @@ impl<A: Annotation> Expr<A> {
         }
     }
 
-    pub fn as_literal(&self) -> Option<&Literal<A::TypeName>> {
+    pub fn as_literal(&self) -> Option<&Literal<A>> {
         match self {
             Expr::Literal(lit) => Some(&lit.literal),
             _ => None,
@@ -337,7 +336,7 @@ impl<A: Annotation> Expr<A> {
         }
     }
     
-    pub fn literal(literal: Literal<A::TypeName>, annotation: impl Into<A>) -> Self {
+    pub fn literal(literal: Literal<A>, annotation: impl Into<A>) -> Self {
         Self::Literal(LiteralItem { 
             literal,
             annotation: annotation.into() 

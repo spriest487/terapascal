@@ -1,3 +1,5 @@
+use crate::ast::Ident;
+use crate::ast::SemanticHint;
 use crate::typ::ast::Expr;
 use crate::typ::ast::ObjectCtorMember;
 use crate::typ::function::FunctionValue;
@@ -5,17 +7,13 @@ use crate::typ::method::MethodValue;
 use crate::typ::FunctionSig;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
-use crate::typ::TypeName;
 use crate::typ::Value;
-use crate::ast::Ident;
 use derivative::Derivative;
 use std::fmt;
 use std::iter;
 use std::sync::Arc;
-use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use crate::ast::SemanticHint;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
@@ -48,7 +46,7 @@ pub enum Invocation {
         span: Span,
     },
     ObjectCtor {
-        object_type: TypeName,
+        object_type: Type,
 
         members: Vec<ObjectCtorMember>,
         type_args: Option<TypeArgList>,
@@ -56,7 +54,7 @@ pub enum Invocation {
         span: Span,
     },
     VariantCtor {
-        variant_type: TypeName,
+        variant_type: Type,
         case: Ident,
 
         arg: Option<Expr>,
@@ -78,19 +76,9 @@ impl Invocation {
         match self {
             Invocation::Function { function, .. } => &function.sig.result_ty,
             Invocation::Method { method, .. } => &method.sig.result_ty,
-            Invocation::ObjectCtor { object_type, .. } => object_type.ty(),
-            Invocation::VariantCtor { variant_type, .. } => variant_type.ty(),
+            Invocation::ObjectCtor { object_type, .. } => object_type,
+            Invocation::VariantCtor { variant_type, .. } => variant_type,
             Invocation::FunctionValue { sig, .. } => &sig.result_ty,
-        }
-    }
-
-    pub fn target_span(&self) -> Option<&Span> {
-        match self {
-            Invocation::Function { function, .. } => Some(&function.span),
-            Invocation::Method { method, .. } => Some(&method.span),
-            Invocation::ObjectCtor { object_type, .. } => object_type.get_span(),
-            Invocation::VariantCtor { variant_type, .. } => variant_type.get_span(),
-            Invocation::FunctionValue { value, .. } => Some(value.span()),
         }
     }
 

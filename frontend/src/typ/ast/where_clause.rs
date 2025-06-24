@@ -1,5 +1,4 @@
 use crate::ast;
-use crate::ast::TypeAnnotation;
 use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::TypeName;

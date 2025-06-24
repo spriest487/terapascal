@@ -182,7 +182,7 @@ fn typecheck_object_ctor_type(
     expect_ty: &Type,
     ctor_span: &Span,
     ctx: &mut Context,
-) -> TypeResult<(TypeName, Option<Expr>, Option<TypeArgList>)> {
+) -> TypeResult<(Type, Option<Expr>, Option<TypeArgList>)> {
     let ty_args = match type_args {
         Some(list) => Some(typecheck_type_args(list, ctx)?),
         None => None,
@@ -236,9 +236,9 @@ fn find_ctor_ty(
     type_expr: Option<&Expr>,
     span: &Span,
     ctx: &mut Context,
-) -> TypeResult<TypeName> {
+) -> TypeResult<Type> {
     let Some(type_expr) = type_expr else {
-        return Ok(TypeName::Inferred(expect_ty.clone()));
+        return Ok(expect_ty.clone());
     };
 
     // the target expression of a call evaluated as a constructor must name a Type
@@ -267,13 +267,10 @@ fn find_ctor_ty(
                 })?
                 .clone();
 
-            Ok(TypeName::named(spec_ty, type_expr.span().clone()))
+            Ok(spec_ty)
         },
 
-        None => Ok(TypeName::named(
-            generic_ty.clone(),
-            type_expr.span().clone(),
-        )),
+        None => Ok(generic_ty.clone()),
 
         Some(args) => {
             let spec_ty = generic_ty
@@ -281,7 +278,7 @@ fn find_ctor_ty(
                 .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
                 .into_owned();
 
-            Ok(TypeName::named(spec_ty, type_expr.span().clone()))
+            Ok(spec_ty)
         },
     }
 }

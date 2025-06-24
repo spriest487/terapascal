@@ -77,7 +77,7 @@ pub enum TypeMemberDeclRef<'a, A: Annotation = Span> {
 pub struct FieldDecl<A: Annotation = Span> {
     pub idents: Vec<Ident>,
 
-    pub ty: A::TypeName,
+    pub ty: TypeName<A>,
 
     pub access: Access,
 

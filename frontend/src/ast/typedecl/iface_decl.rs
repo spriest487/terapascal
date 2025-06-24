@@ -8,6 +8,7 @@ use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
 use crate::ast::SupersClause;
+use crate::ast::TypeName;
 use crate::ast::WhereClause;
 use crate::parse::ContinueParse;
 use crate::parse::ParseError;
@@ -52,11 +53,11 @@ pub struct InterfaceDecl<A: Annotation = Span> {
     pub where_clause: Option<WhereClause<A>>,
 
     pub tags: Vec<Tag<A>>,
-    
+
     pub methods: Vec<InterfaceMethodDecl<A>>,
 
     pub supers: Option<SupersClause<A>>,
-    
+
     pub forward: bool,
 
     #[derivative(Hash = "ignore")]
@@ -79,8 +80,8 @@ impl<A: Annotation> InterfaceDecl<A> {
     pub fn get_method(&self, method: &Ident) -> Option<&InterfaceMethodDecl<A>> {
         self.methods.iter().find(|m| *m.ident() == *method)
     }
-    
-    pub fn super_types(&self) -> &[A::TypeName] {
+
+    pub fn super_types(&self) -> &[TypeName<A>] {
         match &self.supers {
             Some(supers) => &supers.types,
             None => &[],
@@ -117,16 +118,14 @@ impl InterfaceDecl<Span> {
                 if parser.tokens().look_ahead().match_one(iface_method_start()).is_none() {
                     return None;
                 }
-                
-                let tags = Tag::parse_seq(parser.tokens())
-                    .or_continue_with(parser.errors(), Vec::new);
 
-                let decl = FunctionDecl::parse(parser, false, tags)
-                    .ok_or_continue(parser.errors())?;
-                
-                Some(InterfaceMethodDecl {
-                    decl: decl.into(),
-                })
+                let tags =
+                    Tag::parse_seq(parser.tokens()).or_continue_with(parser.errors(), Vec::new);
+
+                let decl =
+                    FunctionDecl::parse(parser, false, tags).ok_or_continue(parser.errors())?;
+
+                Some(InterfaceMethodDecl { decl: decl.into() })
             });
 
             // no more methods found, must be "end" next, but if there's an invalid token, the error
@@ -141,16 +140,14 @@ impl InterfaceDecl<Span> {
             } else {
                 None
             };
-            
+
             let decl_span = match &end_span {
-                Some(end_span) => {
-                    header.keyword.span().to(end_span)
-                }  
-                
+                Some(end_span) => header.keyword.span().to(end_span),
+
                 None => match methods.last().map(|m| &m.decl.span) {
                     Some(method_span) => header.keyword.span().to(method_span),
                     None => header.keyword.span().clone(),
-                }
+                },
             };
 
             Ok(InterfaceDecl {

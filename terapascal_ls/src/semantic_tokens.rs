@@ -832,7 +832,7 @@ where
         }
     }
 
-    fn add_typename(&mut self, type_name: &A::TypeName, debug_desc: &str) {
+    fn add_typename(&mut self, type_name: &ast::TypeName<A>, debug_desc: &str) {
         let Some(span) = type_name.get_span() else {
             return;
         };
@@ -852,7 +852,7 @@ where
     fn add_literal_with_type(
         &mut self,
         lit_span: &Span,
-        typename: &A::TypeName,
+        typename: &ast::TypeName<A>,
         lit_desc: &str,
         type_desc: &str,
     ) {
