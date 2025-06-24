@@ -23,8 +23,15 @@ pub enum Invocation {
         type_args: Option<TypeArgList>,
 
         args: Vec<Expr>,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         args_span: Option<Span>,
 
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
     Method {
@@ -41,8 +48,15 @@ pub enum Invocation {
         /// value depending on how the method was invoked.
         /// i.e. the length of this vec should match the method's parameter count
         args: Vec<Expr>,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         args_span: Option<Span>,
 
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
     ObjectCtor {
@@ -51,6 +65,9 @@ pub enum Invocation {
         members: Vec<ObjectCtorMember>,
         type_args: Option<TypeArgList>,
 
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
     VariantCtor {
@@ -59,12 +76,19 @@ pub enum Invocation {
 
         arg: Option<Expr>,
 
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         span: Span,
     },
     FunctionValue {
         value: Expr,
 
         args: Vec<Expr>,
+
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        #[derivative(Hash = "ignore")]
         args_span: Option<Span>,
 
         sig: Arc<FunctionSig>,
