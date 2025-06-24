@@ -100,7 +100,7 @@ impl<A: Annotation> fmt::Display for SetDecl<A> {
 #[derivative(Debug, PartialEq, Hash)]
 pub enum SetDeclRange<A: Annotation = Span> {
     Type {
-        ty: A::Type,
+        ty: A::TypeName,
         
         #[derivative(Debug = "ignore")]
         #[derivative(Hash = "ignore")]

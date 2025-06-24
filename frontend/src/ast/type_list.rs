@@ -110,7 +110,7 @@ impl<Item> IndexMut<usize> for TypeList<Item> {
 
 impl<Item> Parse for TypeList<Item>
 where
-    Item: Spanned + Parse + Match
+    Item: Parse + Match
 {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let (span, mut items_tokens) = match tokens.match_one(DelimiterPair::SquareBracket)? {
@@ -129,9 +129,11 @@ where
     }
 }
 
+pub type TypeArgList<A = Span> = TypeList<<A as Annotation>::TypeName>;
+
 impl<Item> TryParse for TypeList<Item>
 where
-    Item: Spanned + Parse + Match
+    Item: Parse + Match
 {
     fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
         if tokens.look_ahead().match_one(DelimiterPair::SquareBracket).is_none() {
@@ -142,8 +144,6 @@ where
         Ok(Some(list))
     }
 }
-
-pub type TypeArgList<A = Span> = TypeList<<A as Annotation>::TypeName>;
 
 impl TypeArgList {
     pub(crate) fn parse_type_args(tokens: &mut TokenStream) -> ParseResult<Self> {

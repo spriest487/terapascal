@@ -89,7 +89,7 @@ pub enum ParseError {
 
     EmptyWhereClause(WhereClause),
 
-    InvalidFunctionImplType(TypeName),
+    InvalidFunctionImplType(TypeName, Span),
     EmptyConstOrVarDecl {
         span: Span,
     },
@@ -176,7 +176,7 @@ impl Spanned for ParseError {
             ParseError::EmptyTypeArgList(tl) => tl.span(),
             ParseError::EmptyWhereClause(c) => c.span(),
             ParseError::UnterminatedStatement { span } => span,
-            ParseError::InvalidFunctionImplType(tn) => tn.span(),
+            ParseError::InvalidFunctionImplType(_, span) => span,
             ParseError::InvalidAssignmentExpr { span } => span,
             ParseError::EmptyConstOrVarDecl { span, .. } => span,
             ParseError::MultiVarDeclHasInitExpr { span, .. } => span,
@@ -313,7 +313,7 @@ impl DiagnosticOutput for ParseError {
                 Some("statement here is unterminated".to_string())
             }
 
-            ParseError::InvalidFunctionImplType(ty) => {
+            ParseError::InvalidFunctionImplType(ty, ..) => {
                 Some(format!("type {} cannot have interface implementation functions declared for it", ty))
             }
 

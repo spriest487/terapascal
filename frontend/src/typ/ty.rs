@@ -1481,7 +1481,7 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
                 .find_type(ident)
                 .map_err(|err| TypeError::NameError {
                     err,
-                    span: ty.span().clone(),
+                    span: ident.path_span(),
                 })?;
 
             let raw_ty = raw_ty.clone();
@@ -1505,7 +1505,7 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
                 None if raw_ty.is_unspecialized_generic() => {
                     return Err(TypeError::from_generic_err(GenericError::IllegalUnspecialized {
                         ty: raw_ty,
-                    }, ty.span().clone()));
+                    }, ty.get_span().unwrap_or(span).clone()));
                 }
 
                 None => {
@@ -1517,7 +1517,7 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
             Ok(TypeName::named(ty.indirect_by(*indirection), span.clone()))
         },
 
-        ast::TypeName::Array(ArrayTypeName { element, dim, span, indirection }) => {
+        ast::TypeName::Array(ArrayTypeName { element, dim, span, indirection, .. }) => {
             let typename = typecheck_array_type(element, dim, span, ctx)?;
             
             Ok(typename.map(|ty| ty.indirect_by(*indirection)))
@@ -1555,14 +1555,14 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
             if !weak_type.is_strong_rc_reference() {
                 return Err(TypeError::InvalidWeakType {
                     ty: weak_type,
-                    span: ty.span().clone(),
+                    span: ty.get_span().unwrap_or(span).clone(),
                 });
             }
             
             Ok(TypeName::named(Type::Weak(Arc::new(weak_type)), span.clone()))
         },
 
-        ast::TypeName::Unspecified(_) => unreachable!("trying to resolve unknown type"),
+        ast::TypeName::Unspecified => unreachable!("trying to resolve unknown type"),
     }
 }
 

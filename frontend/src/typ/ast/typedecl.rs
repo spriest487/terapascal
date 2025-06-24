@@ -20,7 +20,6 @@ use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::TypeDeclItemInfo;
 use crate::typ::set::SetType;
-use crate::typ::typecheck_type;
 use crate::typ::typecheck_typename;
 use crate::typ::ConstValue;
 use crate::typ::Context;
@@ -99,14 +98,16 @@ impl SupersClause {
             match implements_ty.ty() {
                 Type::Interface(iface_name) => {
                     let iface_def = ctx.find_iface_def(&iface_name.full_path)
-                        .map_err(|err| TypeError::from_name_err(err, base_ty_name.span().clone()))?;
+                        .map_err(|err| {
+                            TypeError::from_name_err(err, iface_name.full_path.path_span())
+                        })?;
 
                     if iface_def.forward {
                         return Err(TypeError::InvalidBaseType {
                             ty: self_ty.clone(),
+                            span: iface_name.full_path.path_span(),
                             invalid_base_ty: implements_ty.into(),
                             reason: InvalidBaseTypeReason::Forward,
-                            span: base_ty_name.span().clone(),
                         })
                     }
 
@@ -117,7 +118,7 @@ impl SupersClause {
                     ty: self_ty.clone(),
                     invalid_base_ty: implements_ty.into(),
                     reason: InvalidBaseTypeReason::NotInterface,
-                    span: base_ty_name.span().clone(),
+                    span: base_ty_name.get_span().unwrap_or(&src.span).clone(),
                 }),
             }
         }
@@ -561,7 +562,6 @@ pub fn typecheck_variant(
             Some(data) => {
                 Some(ast::VariantCaseData {
                     ty: typecheck_typename(&data.ty, ctx)?,
-                    span: data.span.clone(),
                 })
             }
 
@@ -738,15 +738,15 @@ impl SetDecl {
                 }
             }
             
-            SetDeclRange::Type { ty, .. } => {
-                let range_ty = typecheck_type(ty, ctx)?;
+            SetDeclRange::Type { ty, span, .. } => {
+                let range_ty = typecheck_typename(ty, ctx)?;
 
                 // just do this here to raise an error if it's invalid
-                _ = get_set_type_range(&range_ty, ty.span(), ctx)?;
-                
+                _ = get_set_type_range(&range_ty, span, ctx)?;
+
                 SetDeclRange::Type { 
                     ty: range_ty,
-                    span: ty.span().clone(),
+                    span: span.clone(),
                 }
             }
         };

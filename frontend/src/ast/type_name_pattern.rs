@@ -1,17 +1,17 @@
 use crate::ast::type_name::IdentTypeName;
 use crate::ast::type_name::TypeName;
-use crate::ast::{Annotation, IdentPath};
 use crate::ast::Operator;
+use crate::ast::{Annotation, IdentPath};
 use crate::ast::{Ident, Pattern, PatternSemanticElement};
+use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
-use crate::parse::Matcher;
 use crate::{Keyword, TokenTree};
 use derivative::Derivative;
 use std::fmt;
-use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use terapascal_common::span::{MaybeSpanned, Span};
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
@@ -103,6 +103,7 @@ impl TypeNamePattern {
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let not_kw = tokens.match_one_maybe(Operator::Not);
         let name = TypeName::parse(tokens)?;
+        let name_span = name.get_span().expect("parsed typename must have a src span");
 
         let pattern_path = match &name {
             TypeName::Ident(IdentTypeName {
@@ -131,7 +132,8 @@ impl TypeNamePattern {
 
         let (kind, span) = match (binding, not_kw) {
             (Some(binding), None) => {
-                let span = name.span().to(binding.span());
+                let span = name_span.to(binding.span());
+
                 let kind = TypeNamePatternKind::IsWithBinding {
                     binding, 
                 };
@@ -140,7 +142,8 @@ impl TypeNamePattern {
             },
 
             (None, Some(not_kw)) => {
-                let span = not_kw.span().to(name.span());
+                let span = name_span.to(not_kw.span());
+
                 let kind = TypeNamePatternKind::IsNot {
                     not_kw_span: not_kw.into_span(),
                 };
@@ -149,9 +152,8 @@ impl TypeNamePattern {
             },
 
             (None, None) => {
-                let span = name.span().clone();
                 let kind = TypeNamePatternKind::Is;
-                (kind, span)
+                (kind, name_span.clone())
             },
 
             (Some(..), Some(..)) => {

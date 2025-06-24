@@ -110,12 +110,7 @@ impl fmt::Display for FunctionParamMod {
 pub struct FunctionParam<A: Annotation = Span> {
     pub name: Arc<String>,
     
-    pub ty: A::Type,
-
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    #[derivative(Hash = "ignore")]
-    pub ty_span: Option<Span>,
+    pub ty: A::TypeName,
     
     pub modifier: Option<FunctionParamModDecl>,
     
@@ -219,8 +214,6 @@ impl FunctionDecl<Span> {
         let name = Self::parse_name(parser)?;
         let span = kw_span.to(&name.span());
         
-        let unknown_return_ty = TypeName::Unspecified(kw_span.clone());
-
         // from this point on we have enough info to return at least a partial version of this
         // func decl and should return this instead of failing on any subsequent error
         let mut func_decl = FunctionDecl {
@@ -231,7 +224,7 @@ impl FunctionDecl<Span> {
             params: Vec::new(),
             mods: Vec::new(),
             where_clause: None,
-            result_ty: unknown_return_ty,
+            result_ty: TypeName::Unspecified,
             span,
         };
 
@@ -254,7 +247,9 @@ impl FunctionDecl<Span> {
         if expect_result_ty && parser.match_one_maybe(Separator::Colon).is_some() {
             // look for a result type
             if let Some(ty) = TypeName::parse(parser).ok_or_continue(parser.errors()) {
-                func_decl.span.extend(ty.span());
+                if let Some(ty_span) = ty.get_span() {
+                    func_decl.span.extend(ty_span);
+                }
                 func_decl.result_ty = ty;
             }
         }
@@ -406,16 +401,9 @@ impl FunctionDecl<Span> {
             for i in 0..idents.len() {
                 let ident = &idents[i];
 
-                let ty_span = if i == idents.len() - 1 {
-                    Some(ty.span().clone())
-                } else {
-                    None
-                };
-
                 params.push(FunctionParam {
                     name_span: Some(ident.span.clone()),
                     ty: ty.clone(),
-                    ty_span,
                     name: ident.name.clone(),
                     is_implicit_self: false,
                     modifier: modifier.clone(),
@@ -646,7 +634,7 @@ impl FunctionDef<Span> {
 
             // if there's a colon following the names, expect an explicit type name to follow
             let ty = match tokens.match_one_maybe(Separator::Colon) {
-                None => TypeName::Unspecified(Span::of_slice(&idents)),
+                None => TypeName::Unspecified,
                 Some(..) => TypeName::parse(tokens)?,
             };
 
@@ -802,20 +790,16 @@ impl Parse for AnonymousFunctionDef<Span> {
                     .into_inner_tokens();
                 
                 while let Some(TokenTree::Ident(ident)) = params_tokens.match_one_maybe(Matcher::AnyIdent) {                    
-                    let (ty, ty_span) = if params_tokens.match_one_maybe(Separator::Colon).is_some() {
-                        let ty = TypeName::parse(&mut params_tokens)?;
-                        let ty_span = ty.span().clone();
-                        (ty, Some(ty_span))
+                    let ty= if params_tokens.match_one_maybe(Separator::Colon).is_some() {
+                        TypeName::parse(&mut params_tokens)?
                     } else {
-                        let ty = TypeName::Unspecified(ident.span.clone());
-                        (ty, None)
+                        TypeName::Unspecified
                     };
 
                     params.push(FunctionParam {
                         name: ident.name,
                         name_span: Some(ident.span),
                         ty,
-                        ty_span,
                         modifier: None,
                         is_implicit_self: false,
                     });
@@ -847,7 +831,7 @@ impl Parse for AnonymousFunctionDef<Span> {
                 annotation: span,
                 body,
                 params,
-                return_ty: TypeName::Unspecified(func_kw.span().clone()),
+                return_ty: TypeName::Unspecified,
                 captures: Default::default(),
             }
         } else {
@@ -874,7 +858,7 @@ impl Parse for AnonymousFunctionDef<Span> {
             let return_ty = if expect_result {
                 TypeName::parse(tokens)?
             } else {
-                TypeName::Unspecified(func_kw.span().clone())
+                TypeName::Unspecified
             };
 
             tokens.match_one(Separator::Semicolon)?;

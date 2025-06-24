@@ -111,8 +111,7 @@ fn parse_default(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
         Some(..) => unreachable!(),
 
         None => {
-            let no_type = TypeName::Unspecified(kw.span().clone());
-            (no_type, kw.into_span())
+            (TypeName::Unspecified, kw.into_span())
         }
     };
 

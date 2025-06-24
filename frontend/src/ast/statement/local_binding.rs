@@ -9,14 +9,14 @@ use crate::parse::TokenStream;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
-use std::fmt;
 use derivative::Derivative;
+use std::fmt;
+use terapascal_common::span::Spanned;
+use terapascal_common::span::Span;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct LocalBinding<A: Annotation> {
+pub struct LocalBinding<A: Annotation = Span> {
     pub name: Ident,
     pub ty: A::TypeName,
     pub val: Option<Expr<A>>,
@@ -37,43 +37,35 @@ pub struct LocalBinding<A: Annotation> {
     pub annotation: A,
 }
 
-impl LocalBinding<Span> {
+impl LocalBinding {
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let var_kw_tt = tokens.match_one(Keyword::Var)?;
+        let kw_span = var_kw_tt.into_span();
+
         let name = Ident::parse(tokens)?;
 
-        let ty = match tokens.match_one_maybe(Separator::Colon) {
-            Some(_) => TypeName::parse(tokens)?,
-            None => TypeName::Unspecified(name.span().clone()),
+        let binding_span = kw_span.to(&name);
+        let mut binding = LocalBinding {
+            kw_span,
+            name,
+            ty: TypeName::Unspecified,
+            assign_op_span: None,
+            val: None,
+            annotation: binding_span,
         };
 
-        let binding = match tokens.match_one_maybe(Operator::Assignment) {
-            Some(tt) => {
-                let op_span = tt.into_span();
-                let val = Expr::parse(tokens)?;
-                let span = var_kw_tt.span().to(val.annotation());
+        if tokens.match_one_maybe(Separator::Colon).is_some() {
+            binding.ty = TypeName::parse(tokens)?;
+            binding.annotation.maybe_extend(&binding.ty);
+        }
 
-                LocalBinding {
-                    val: Some(val),
-                    annotation: span,
-                    kw_span: var_kw_tt.into_span(),
-                    assign_op_span: Some(op_span),
-                    name,
-                    ty,
-                }
-            }
-            
-            None => {
-                LocalBinding {
-                    val: None,
-                    annotation: var_kw_tt.span().to(ty.span()),
-                    kw_span: var_kw_tt.into_span(),
-                    assign_op_span: None,
-                    name,
-                    ty,
-                }
-            },
-        };
+        if let Some(tt) = tokens.match_one_maybe(Operator::Assignment) {
+            binding.assign_op_span = Some(tt.into_span());
+
+            let val_expr = Expr::parse(tokens)?;
+            binding.annotation.extend(&val_expr);
+            binding.val = Some(val_expr);
+        }
 
         Ok(binding)
     }

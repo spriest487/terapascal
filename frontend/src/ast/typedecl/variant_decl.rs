@@ -71,13 +71,8 @@ impl<A: Annotation> MethodOwner<A> for VariantDecl<A> {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct VariantCaseData<T> {
-    pub ty: T,
-
-    #[derivative(Hash = "ignore")]
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub span: Span,
+pub struct VariantCaseData<TypeName> {
+    pub ty: TypeName,
 }
 
 #[derive(Clone, Eq, Derivative)]
@@ -205,15 +200,16 @@ impl VariantCase {
         let case = match parser.tokens().match_one_maybe(Separator::Colon) {
             Some(..) => {
                 let ty = TypeName::parse(parser.tokens())?;
-                let span = ident.span().to(ty.span());
+                
+                let mut case_span = ident.span.clone();
+                case_span.maybe_extend(&ty);
 
                 VariantCase {
-                    span,
                     ident,
                     data: Some(VariantCaseData {
-                        span: ty.span().clone(),
                         ty,
                     }),
+                    span: case_span,
                 }
             },
 

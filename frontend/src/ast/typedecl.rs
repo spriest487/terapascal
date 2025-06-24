@@ -458,14 +458,13 @@ impl TypeDeclHeader {
                 // where clause, in which case there may still be a where clause afterwards
                 if result.where_clause.is_none() {
                     result.supers = SupersClause::parse(tokens)?;
-                    
+
                     if let Some(supers) = &result.supers {
-                        let super_last_span = supers.types[supers.types.len() - 1].span();
-                        result.span = result.span.to(super_last_span);
+                        result.span.extend(&supers.span);
                     }
                     
                     if let Some(where_clause) = WhereClause::try_parse(tokens)? {
-                        result.span = result.span.to(where_clause.span());
+                        result.span.extend(where_clause.span());
                         result.where_clause = Some(where_clause);
                     }
                 }

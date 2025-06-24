@@ -134,15 +134,17 @@ impl ParseSeq for WhereClauseItem {
 
         let is_ty_path = IdentPath::parse(tokens)?;
 
+        let is_ty_span = is_ty_path.span().clone(); 
+        
         let is_ty = TypeName::Ident(IdentTypeName {
-            span: is_ty_path.span().clone(),
+            span: is_ty_span.clone(),
             type_args: None,
             ident: is_ty_path,
             indirection: 0,
         });
 
         Ok(WhereClauseItem(TypeConstraint {
-            span: param_ident.span().to(is_ty.span()),
+            span: param_ident.span().to(&is_ty_span),
             name: param_ident,
             is_ty,
             is_kw_span: Some(is_kw_tt.into_span()),

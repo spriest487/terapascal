@@ -212,7 +212,6 @@ pub fn specialize_variant_def(
                 Some(data) => {
                     Some(ast::VariantCaseData {
                         ty: data.ty.clone().apply_type_args(variant_ty_params, args),
-                        span: data.span.clone(),
                     })
                 },
             };

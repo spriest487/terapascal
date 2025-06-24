@@ -24,7 +24,9 @@ pub struct AliasDecl<A: Annotation = Span> {
 impl AliasDecl<Span> {
     pub fn parse(tokens: &mut TokenStream, name: DeclIdent) -> ParseResult<Self> {
         let ty = TypeName::parse(tokens)?;
-        let span = name.span().to(ty.span());
+        
+        let mut span = name.span.clone();
+        span.maybe_extend(&ty);
 
         Ok(Self {
             name,

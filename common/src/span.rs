@@ -80,6 +80,12 @@ impl Span {
     pub fn extend(&mut self, other: &impl Spanned) {
         self.end = other.span().end;
     }
+
+    pub fn maybe_extend(&mut self, other: &impl MaybeSpanned) {
+        if let Some(other_span) = other.get_span() {
+            self.end = other_span.end;
+        }
+    }
     
     pub fn until(&self, next: &impl Spanned) -> Self {
         let next = next.span();
@@ -218,5 +224,23 @@ pub trait MaybeSpanned {
 impl<T: Spanned> MaybeSpanned for T {
     fn get_span(&self) -> Option<&Span> {
         Some(self.span())
+    }
+}
+
+impl MaybeSpanned for Option<Span> {
+    fn get_span(&self) -> Option<&Span> {
+        self.as_ref()
+    }
+}
+
+impl MaybeSpanned for &Option<Span> {
+    fn get_span(&self) -> Option<&Span> {
+        self.as_ref()
+    }
+}
+
+impl MaybeSpanned for Option<&Span> {
+    fn get_span(&self) -> Option<&Span> {
+        self.clone()
     }
 }

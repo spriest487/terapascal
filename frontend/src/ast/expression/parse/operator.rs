@@ -16,7 +16,7 @@ use crate::parse::ParseResult;
 use crate::Operator;
 use crate::Position;
 use std::cmp::Ordering;
-use terapascal_common::span::Span;
+use terapascal_common::span::{MaybeSpanned, Span};
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 
@@ -231,7 +231,10 @@ pub(super) fn resolve_ops_by_precedence(
 
         OperatorPart::AsCast { ty, kw_span } => {
             resolve_postfix(parts, lo_op_index, &kw_span, |operand| {
-                let span = operand.span().to(&ty);
+                let mut span = operand.span().clone();
+                if let Some(ty_span) = ty.get_span() {
+                    span.extend(ty_span);
+                }
 
                 Expr::from(Cast {
                     expr: operand,
@@ -329,8 +332,13 @@ impl OperatorPart {
             
             OperatorPart::Call { args, .. } => args.open.to(&args.close),
             
-            OperatorPart::AsCast { kw_span, ty } => kw_span.to(ty.span()),
-            
+            OperatorPart::AsCast { kw_span, ty } => {
+                match ty.get_span() {
+                    Some(ty_span) => kw_span.to(ty_span),
+                    None => kw_span.clone(),
+                }
+            },
+
             OperatorPart::WithTypeArgs { kw_span, arg_types } => {
                 kw_span.to(arg_types.span())
             },

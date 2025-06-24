@@ -6,7 +6,7 @@ use crate::Keyword;
 use crate::Separator;
 use crate::TokenStream;
 use derivative::Derivative;
-use terapascal_common::span::{Span, Spanned};
+use terapascal_common::span::{MaybeSpanned, Span, Spanned};
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
@@ -40,9 +40,12 @@ impl SupersClause {
                 break;
             }
         }
+        
+        let mut span = of_tt.span().clone();
+        span.maybe_extend(&types.last().and_then(|ty| ty.get_span()));
 
         Ok(Some(SupersClause {
-            span: of_tt.span().to(types.last().unwrap().span()),
+            span,
             kw_span: of_tt.into_span(),
             types,
         }))

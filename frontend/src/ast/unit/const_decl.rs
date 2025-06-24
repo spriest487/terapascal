@@ -12,7 +12,7 @@ use crate::parse::TokenStream;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
-use terapascal_common::span::Span;
+use terapascal_common::span::{MaybeSpanned, Span};
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 use derivative::*;
@@ -71,12 +71,11 @@ impl Parse for UnitBinding<Span> {
             let (ty, ty_span) = match tokens.match_one_maybe(Separator::Colon) {
                 Some(..) => {
                     let ty = TypeName::parse(tokens)?;
-                    let ty_span = ty.span().clone();
-                    (ty, Some(ty_span))
+                    let ty_span = ty.get_span().cloned();
+                    (ty, ty_span)
                 },
                 None => {
-                    let ty = TypeName::Unspecified(idents_span);
-                    (ty, None)
+                    (TypeName::Unspecified, None)
                 },
             };
 

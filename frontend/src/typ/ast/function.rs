@@ -320,7 +320,7 @@ impl FunctionDecl {
 
             let result_ty = match decl.kind {
                 FunctionDeclKind::Function | FunctionDeclKind::ClassMethod =>  match &decl.result_ty {
-                    ast::TypeName::Unspecified(..) => TypeName::inferred(Type::Nothing),
+                    ast::TypeName::Unspecified => TypeName::inferred(Type::Nothing),
                     ty_name => typecheck_typename(ty_name, ctx)?,
                 },
                 
@@ -558,8 +558,7 @@ fn typecheck_params(
 
     if let Some(self_ty) = implicit_self {
         params.push(FunctionParam {
-            ty: self_ty,
-            ty_span: None,
+            ty: TypeName::inferred(self_ty),
             name: Arc::new(SELF_PARAM_NAME.to_string()),
             is_implicit_self: true,
             modifier: None,
@@ -583,14 +582,13 @@ fn typecheck_params(
             });
         }
 
-        let ty = typecheck_type(&param.ty, ctx)?;
+        let ty = typecheck_typename(&param.ty, ctx)?;
 
         let param = FunctionParam {
             modifier: param.modifier.clone(),
             name: param.name.clone(),
             name_span: param.name_span.clone(),
             ty,
-            ty_span: param.ty_span.clone(),
             is_implicit_self: false,
         };
         params.push(param);
@@ -827,7 +825,7 @@ fn declare_func_params_in_body(params: &[FunctionParam], default_span: &Span, ct
         ctx.declare_local_var(
             name.clone(),
             Binding {
-                ty: param.ty.clone(),
+                ty: param.ty.ty().clone(),
                 kind,
                 def: def_ident,
                 semantic_hint: SemanticHint::Parameter,
@@ -928,14 +926,14 @@ pub fn typecheck_func_expr(
 
     for (i, param) in src_def.params.iter().enumerate() {
         let ty = if param.ty.is_known() {
-            typecheck_type(&param.ty, ctx)?
+            typecheck_typename(&param.ty, ctx)?
         } else {
             let sig_param = expect_sig
                 .and_then(|sig| sig.params.get(i));
             
             match sig_param {
                 Some(expect_param) if expect_param.modifier.is_none() => {
-                    expect_param.ty.clone()
+                    TypeName::inferred(expect_param.ty.clone())
                 },
 
                 _ => {
@@ -951,7 +949,6 @@ pub fn typecheck_func_expr(
             name: param.name.clone(),
             name_span: param.name_span.clone(),
             ty,
-            ty_span: param.ty_span.clone(),
             is_implicit_self: false,
         });
     }
@@ -959,7 +956,7 @@ pub fn typecheck_func_expr(
     // if the return type isn't explicitly specified, we might be able to infer it to aid
     // in typechecking the body if we have an expected function signature
     let known_return_ty = match &src_def.return_ty {
-        ast::TypeName::Unspecified(..) => expect_sig.map(|sig| sig.result_ty.clone()),
+        ast::TypeName::Unspecified => expect_sig.map(|sig| sig.result_ty.clone()),
         src_return_ty => Some(typecheck_type(src_return_ty, ctx)?),
     };
 

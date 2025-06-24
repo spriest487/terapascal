@@ -236,16 +236,14 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
         params: vec![
             ast::FunctionParam {
                 name: Arc::new(SELF_PARAM_NAME.to_string()),
-                ty: self_param_ty.clone(),
-                ty_span: None,
+                ty: TypeName::inferred(self_param_ty.clone()),
                 modifier: None,
                 name_span: None,
                 is_implicit_self: true,
             },
             ast::FunctionParam {
                 name: Arc::new("other".to_string()),
-                ty: self_param_ty.clone(),
-                ty_span: None,
+                ty: TypeName::inferred(self_param_ty.clone()),
                 modifier: None,
                 name_span: None,
                 is_implicit_self: false,
@@ -305,8 +303,7 @@ pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Typ
             ast::FunctionParam {
                 is_implicit_self: true,
                 name: Arc::new(SELF_PARAM_NAME.to_string()),
-                ty: self_param_ty,
-                ty_span: None,
+                ty: TypeName::inferred(self_param_ty),
                 modifier: None,
                 name_span: None,
             }

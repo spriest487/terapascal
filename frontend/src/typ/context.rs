@@ -2142,17 +2142,17 @@ fn ambig_paths<'a>(options: impl IntoIterator<Item = (Type, Ident)>) -> Vec<Iden
         .collect()
 }
 
-fn ambig_matching_methods(methods: &[&ufcs::InstanceMethod]) -> Vec<(Type, Ident)> {
+fn ambig_matching_methods(methods: &[&InstanceMethod]) -> Vec<(Type, Ident)> {
     methods
         .iter()
         .map(|im| match im {
-            ufcs::InstanceMethod::Method { self_ty, method, .. } => {
+            InstanceMethod::Method { self_ty, method, .. } => {
                 (self_ty.clone(), method.func_decl.name.ident.clone())
             }
 
-            ufcs::InstanceMethod::FreeFunction { decl, func_name, .. } => {
+            InstanceMethod::FreeFunction { decl, func_name, .. } => {
                 let of_ty = decl.params.first().unwrap().ty.clone();
-                (of_ty.clone(), func_name.ident().clone())
+                (of_ty.ty().clone(), func_name.ident().clone())
             },
         })
         .collect()

@@ -165,7 +165,7 @@ impl ForLoop<Span> {
 
                 let binding_ty = match tokens.match_one_maybe(Separator::Colon) {
                     Some(..) => TypeName::parse(tokens)?,
-                    None => TypeName::Unspecified(binding_name.span.clone()),
+                    None => TypeName::Unspecified,
                 };
 
                 if let Some(in_tt) = tokens.match_one_maybe(Operator::In) {

@@ -1282,7 +1282,7 @@ impl LibraryBuilder {
             .iter()
             .map(|param| {
                 // in RTTI, "self" params for interfaces become untyped pointers
-                let mut param_ty = match &param.ty {
+                let mut param_ty = match param.ty.ty() {
                     typ::Type::MethodSelf => ir::Type::Nothing.ptr(),
                     ty => self.translate_type(ty, &generic_ctx)
                 };

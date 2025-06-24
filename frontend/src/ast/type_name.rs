@@ -26,7 +26,7 @@ use crate::Separator;
 use crate::TokenTree;
 use derivative::Derivative;
 use std::fmt;
-use terapascal_common::span::Span;
+use terapascal_common::span::{MaybeSpanned, Span};
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 
@@ -88,6 +88,11 @@ pub struct ArrayTypeName {
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     pub span: Span,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub of_kw: Span,
 }
 
 impl Spanned for ArrayTypeName {
@@ -109,12 +114,7 @@ impl fmt::Display for ArrayTypeName {
 #[derivative(PartialEq, Hash, Debug)]
 pub enum TypeName {
     /// type is unknown or unnamed at parse time
-    Unspecified(
-        #[derivative(Debug = "ignore")]
-        #[derivative(Hash = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        Span
-    ),
+    Unspecified,
 
     Ident(IdentTypeName),
     Array(ArrayTypeName),
@@ -130,14 +130,14 @@ pub enum TypeName {
     Function(FunctionTypeName),
 }
 
-impl Spanned for TypeName {
-    fn span(&self) -> &Span {
+impl MaybeSpanned for TypeName {
+    fn get_span(&self) -> Option<&Span> {
         match self {
-            TypeName::Ident(i) => i.span(),
-            TypeName::Array(a) => a.span(),
-            TypeName::Unspecified(span) => span,
-            TypeName::Function(f) => f.span(),
-            TypeName::Weak(_, span) => span,
+            TypeName::Ident(i) => Some(i.span()),
+            TypeName::Array(a) => Some(a.span()),
+            TypeName::Unspecified => None,
+            TypeName::Function(f) => Some(f.span()),
+            TypeName::Weak(_, span) => Some(span),
         }
     }
 }
@@ -145,7 +145,7 @@ impl Spanned for TypeName {
 impl TypeAnnotation for TypeName {
     fn is_known(&self) -> bool {
         match self {
-            TypeName::Unspecified(_) => false,
+            TypeName::Unspecified => false,
             _ => true,
         }
     }
@@ -185,7 +185,7 @@ impl Parse for TypeName {
             },
             
             Some(weak_kw) if weak_kw.is_keyword(Keyword::Weak) => {
-                let kw_span = weak_kw.span().clone();
+                let mut span = weak_kw.span().clone();
                 
                 tokens.advance(1);
                 let weak_ty = Self::parse(tokens)?;
@@ -197,7 +197,7 @@ impl Parse for TypeName {
                     return Err(TracedError::trace(err))
                 }
 
-                let span = kw_span.to(weak_ty.span());
+                span.maybe_extend(&weak_ty);
                 
                 Ok(TypeName::Weak(Box::new(weak_ty), span))
             }
@@ -247,12 +247,16 @@ impl TypeName {
         indirection: usize,
         indirection_span: Option<Span>,
     ) -> ParseResult<Self> {
+        let mut span = array_kw_span.clone();
+
         // `array of` means the array is dynamic (no dimension)
         let dim = match tokens.look_ahead().match_one(Keyword::Of) {
             Some(_) => None,
 
             None => match tokens.match_one(Matcher::Delimited(DelimiterPair::SquareBracket))? {
                 TokenTree::Delimited(group) => {
+                    span.extend(&group.close);
+
                     let mut dim_tokens = group.into_inner_tokens();
                     let dim_expr = Expr::parse(&mut dim_tokens)?;
                     dim_tokens.finish()?;
@@ -264,20 +268,23 @@ impl TypeName {
             },
         };
 
-        tokens.match_one(Keyword::Of)?;
+        let of_kw = tokens.match_one(Keyword::Of)?.into_span();
+        span.extend(&of_kw);
 
         let element = Self::parse(tokens)?;
-
-        let array_span = array_kw_span.to(element.span());
-        let span = match indirection_span {
-            Some(indir_span) => indir_span.to(&array_span),
-            None => array_span,
-        };
+        if let Some(element_span) = element.get_span() {
+            span.extend(element_span);
+        }
+        
+        if let Some(indirection_span) = indirection_span {
+            span.extend(&indirection_span);
+        }
 
         Ok(TypeName::Array(ArrayTypeName {
             dim,
             span,
             indirection,
+            of_kw,
             element: Box::new(element),
         }))
     }
@@ -288,12 +295,11 @@ impl TypeName {
         indirection: usize,
         indirection_span: Option<Span>,
     ) -> ParseResult<Self> {
-        let span_begin = indirection_span.unwrap_or_else(|| kw_span.clone());
-        let mut span_end = kw_span;
+        let mut span = indirection_span.unwrap_or_else(|| kw_span.clone());
 
         let params = match tokens.match_one_maybe(DelimiterPair::Bracket) {
             Some(TokenTree::Delimited(group)) => {
-                span_end = group.close.clone();
+                span.extend(&group.close);
 
                 let mut params_tokens = group.into_inner_tokens();
                 let params = FunctionTypeNameParam::parse_seq(&mut params_tokens)?;
@@ -310,8 +316,7 @@ impl TypeName {
         let return_ty = match tokens.match_one_maybe(Separator::Colon) {
             Some(..) => {
                 let return_ty = TypeName::parse(tokens)?;
-
-                span_end = return_ty.span().clone();
+                span.maybe_extend(&return_ty);
 
                 Some(Box::new(return_ty))
             },
@@ -321,7 +326,7 @@ impl TypeName {
         let func_ty_name = FunctionTypeName {
             indirection,
             params,
-            span: span_begin.to(&span_end),
+            span,
             return_ty,
         };
 
@@ -379,7 +384,7 @@ impl fmt::Display for TypeName {
             TypeName::Array(array_type_name) => write!(f, "{}", array_type_name),
             TypeName::Function(func_type_name) => write!(f, "{}", func_type_name),
             TypeName::Weak(type_name, ..) => write!(f, "weak {}", type_name),
-            TypeName::Unspecified(_) => write!(f, "<unknown type>"),
+            TypeName::Unspecified => write!(f, "<unknown type>"),
         }
     }
 }
