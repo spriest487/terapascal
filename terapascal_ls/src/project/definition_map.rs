@@ -480,10 +480,9 @@ impl DefinitionMap {
             // the name of a method definition links to
             // 1. the declaring type (the type qualification part)
             // 2. the method decl within the type (the name part)
-            FunctionDeclContext::MethodDef { declaring_type, ty_name_span, .. } => {
+            FunctionDeclContext::MethodDef { declaring_type, .. } => {
                 // typename with a span of only the path part
-                let type_path_name = TypeName::named(declaring_type.clone(), ty_name_span.clone());
-                self.add_typename(&type_path_name, ctx);
+                self.add_typename(declaring_type, ctx);
 
                 if let Some(span) = Self::find_method_name_decl(func_decl, declaring_type, ctx) {
                     self.add(name_span.clone(), span);
@@ -501,12 +500,7 @@ impl DefinitionMap {
         }
 
         for param in &func_decl.params {
-            let Some(span) = &param.ty_span else {
-                continue;
-            };
-
-            let param_ty_name = TypeName::named(param.ty.clone(), span.clone());
-            self.add_typename(&param_ty_name, ctx);
+            self.add_typename(&param.ty, ctx);
         }
 
         self.add_typename(&func_decl.result_ty, ctx);
@@ -515,12 +509,12 @@ impl DefinitionMap {
     fn add_stmt(&mut self, stmt: &Stmt, ctx: &Context) {
         match stmt {
             Stmt::Ident(ident, value) => {
-                self.add_value(value, ident.span(), ctx);
+                self.add_ident(&ident, value, ctx);
             },
 
             Stmt::Member(member) => {
                 self.add_expr(&member.base, ctx);
-                self.add_value(&member.annotation, member.name.span(), ctx);
+                self.add_ident(&member.name, &member.annotation, ctx);
             },
 
             Stmt::LocalBinding(binding) => {
@@ -658,7 +652,7 @@ impl DefinitionMap {
             Expr::UnaryOp(unary_op) => {
                 self.add_expr(&unary_op.operand, ctx);
             },
-            Expr::Ident(ident, value) => self.add_value(value, ident.span(), ctx),
+            Expr::Ident(ident, value) => self.add_ident(ident, value, ctx),
             Expr::Literal(item) => match &item.literal {
                 Literal::SizeOf(ty) | Literal::DefaultValue(ty) | Literal::TypeInfo(ty) => {
                     self.add_typename(ty.as_ref(), ctx);
@@ -731,7 +725,9 @@ impl DefinitionMap {
         }
     }
 
-    fn add_value(&mut self, value: &Value, at_span: &Span, ctx: &Context) {
+    fn add_ident(&mut self, ident: &Ident, value: &Value, ctx: &Context) {
+        let at_span = ident.span();
+
         match value {
             Value::Typed(typed_val) => {
                 if let Some(decl) = &typed_val.decl {
@@ -754,16 +750,8 @@ impl DefinitionMap {
                 Invocation::Method { method, .. } => {
                     self.add(at_span.clone(), method.decl.func_decl.name.span.clone());
                 },
-                Invocation::ObjectCtor {
-                    object_type,
-                    members,
-                    ..
-                } => {
-                    self.add_typename(object_type, ctx);
-
-                    for member in members {
-                        self.add_object_ctor_member(Some(object_type.ty()), member, ctx);
-                    }
+                Invocation::ObjectCtor { .. } => {
+                    // object ctors must always be call or ctor items
                 },
                 Invocation::VariantCtor {
                     variant_type, case, ..
@@ -787,7 +775,7 @@ impl DefinitionMap {
             },
 
             Value::Type(ty, ..) => {
-                let typename = TypeName::named(ty.clone(), at_span.clone());
+                let typename = TypeName::from_ident(ident.clone(), ty.clone());
                 self.add_typename(&typename, ctx);
             },
 
@@ -958,7 +946,7 @@ impl DefinitionMap {
                 let rhs_ident = bin_op.rhs.as_ident().unwrap();
 
                 self.add_expr(&bin_op.lhs, ctx);
-                self.add_value(&call.annotation, rhs_ident.span(), ctx);
+                self.add_ident(rhs_ident, &call.annotation, ctx);
             },
 
             _ => {
