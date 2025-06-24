@@ -353,7 +353,7 @@ fn parse_unit_decl(
 
     let decl = match parser.tokens().look_ahead().match_one(decl_start) {
         Some(tt) if unit_func_decl_start_matcher().is_match(&tt) => {
-            parse_unit_func_decl(parser.tokens(), visibility)?
+            parse_unit_func_decl(parser, visibility)?
         },
 
         Some(tt) if tt.is_keyword(Keyword::Type) => UnitDecl::Type {
@@ -386,9 +386,10 @@ fn parse_unit_decl(
     Ok(decl)
 }
 
-fn parse_unit_func_decl(tokens: &mut TokenStream, visibility: Visibility) -> ParseResult<UnitDecl> {
-    let tags = Tag::parse_seq(tokens)?;
-    let func_decl = Arc::new(FunctionDecl::parse(tokens, true, tags)?);
+fn parse_unit_func_decl(parser: &mut Parser, visibility: Visibility) -> ParseResult<UnitDecl> {
+    let tags = Tag::parse_seq(parser.tokens()).or_continue_with(parser.errors(), Vec::new);
+
+    let func_decl = Arc::new(FunctionDecl::parse(parser, true, tags)?);
 
     let body_ahead = if visibility == Visibility::Interface {
         // interface funcs - never expect a body, unless the function is marked `inline`
@@ -406,9 +407,9 @@ fn parse_unit_func_decl(tokens: &mut TokenStream, visibility: Visibility) -> Par
     };
 
     if body_ahead {
-        tokens.match_one(Separator::Semicolon)?;
+        parser.match_one(Separator::Semicolon)?;
 
-        let def = FunctionDef::parse_body_of_decl(func_decl, tokens)?;
+        let def = FunctionDef::parse_body_of_decl(func_decl, parser)?;
 
         Ok(UnitDecl::FunctionDef { def: Arc::new(def) })
     } else {

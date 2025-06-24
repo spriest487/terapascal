@@ -1,20 +1,24 @@
 use super::*;
 use crate::ast::IdentPath;
 use crate::pp::Preprocessor;
-use terapascal_common::CompileOpts;
+use terapascal_common::aggregate_err::AggregateError;
 use terapascal_common::fs::DefaultFilesystem;
+use terapascal_common::CompileOpts;
 
 fn try_parse_func_decl(src: &str) -> ParseResult<FunctionDecl> {
     let test_unit = Preprocessor::new(&DefaultFilesystem, "test", CompileOpts::default())
         .preprocess(src)
         .unwrap();
     let tokens = TokenTree::tokenize(test_unit).unwrap();
-    let mut token_stream = TokenStream::new(tokens, Span::zero("test"));
+    let token_stream = TokenStream::new(tokens, Span::zero("test"));
+    let mut parser = Parser::new(token_stream);
 
-    let decl = FunctionDecl::parse(&mut token_stream, false, Vec::new())?;
-    token_stream.finish()?;
+    let decl = FunctionDecl::parse(&mut parser, false, Vec::new())?;
+    
+    let errors = parser.finish();
 
-    Ok(decl)
+    AggregateError::result(decl, errors)
+        .map_err(|err| *err.first)
 }
 
 fn parse_func_decl(src: &str) -> FunctionDecl<Span> {

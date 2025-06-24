@@ -2,6 +2,7 @@ mod matcher;
 mod token_stream;
 mod result;
 
+use std::ops::{Deref, DerefMut};
 pub use self::matcher::*;
 pub use self::result::*;
 pub use self::token_stream::*;
@@ -11,6 +12,20 @@ use terapascal_common::TracedError;
 pub struct Parser {
     tokens: TokenStream,
     errors: Vec<TracedError<ParseError>>,
+}
+
+impl Deref for Parser {
+    type Target = TokenStream;
+
+    fn deref(&self) -> &Self::Target {
+        &self.tokens
+    }
+}
+
+impl DerefMut for Parser {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.tokens
+    }
 }
 
 impl Parser {

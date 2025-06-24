@@ -179,7 +179,7 @@ fn try_parse_section_member(parser: &mut Parser, access: Access) -> Option<TypeM
     let next_start = ahead.next()?;
     
     if type_method_start().is_match(&next_start) {
-        let method = parse_method_decl(parser.tokens(), access)
+        let method = parse_method_decl(parser, access)
             .ok_or_continue(parser.errors())?;
 
         Some(TypeMemberDecl::Method(method))
@@ -223,11 +223,11 @@ fn parse_field(tokens: &mut TokenStream, access: Access) -> ParseResult<FieldDec
     })
 }
 
-fn parse_method_decl(tokens: &mut TokenStream, access: Access) -> ParseResult<MethodDecl> {
-    let tags = Tag::parse_seq(tokens)?;
+fn parse_method_decl(parser: &mut Parser, access: Access) -> ParseResult<MethodDecl> {
+    let tags = Tag::parse_seq(parser)?;
 
     // these get parsed one at a time
-    let decl = FunctionDecl::parse(tokens, true, tags)?;
+    let decl = FunctionDecl::parse(parser, true, tags)?;
 
     Ok(MethodDecl {
         func_decl: Arc::new(decl),

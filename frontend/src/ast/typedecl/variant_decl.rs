@@ -260,7 +260,7 @@ fn parse_method_sections(parser: &mut Parser, default_access: Access) -> Vec<Met
 
         let tags = Tag::parse_seq(parser.tokens()).or_continue_with(parser.errors(), Vec::new);
 
-        match FunctionDecl::parse(parser.tokens(), true, tags) {
+        match FunctionDecl::parse(parser, true, tags) {
             Ok(method_decl) => {
                 methods.push(MethodDecl {
                     func_decl: method_decl.into(),

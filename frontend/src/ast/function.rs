@@ -15,7 +15,7 @@ use crate::ast::TypeAnnotation;
 use crate::ast::TypeList;
 use crate::ast::TypePath;
 use crate::ast::WhereClause;
-use crate::parse::Matcher;
+use crate::parse::{ContinueParse, Matcher, Parser};
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
@@ -179,7 +179,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
 }
 
 impl FunctionDecl<Span> {
-    pub fn parse(tokens: &mut TokenStream, allow_methods: bool, tags: Vec<Tag>) -> ParseResult<Self> {
+    pub fn parse(parser: &mut Parser, allow_methods: bool, tags: Vec<Tag>) -> ParseResult<Self> {
         let mut kw_matcher = Keyword::Function | Keyword::Procedure;
 
         if allow_methods {
@@ -189,86 +189,85 @@ impl FunctionDecl<Span> {
                 | Keyword::Destructor;
         }
 
-        let func_kw = tokens.match_one(kw_matcher)?;
+        let func_kw = parser.match_one(kw_matcher)?;
         
-        let (kw_span, kind, expect_result_ty) = if func_kw.is_keyword(Keyword::Class) {
-            let class_func_kw = tokens.match_one(Keyword::Function | Keyword::Procedure)?;
+        let (kw_span, kind, expect_result_ty) = match func_kw.as_keyword().unwrap() {
+            Keyword::Class => {
+                let class_func_kw = parser.match_one(Keyword::Function | Keyword::Procedure)?;
 
-            let kind = FunctionDeclKind::ClassMethod;
-            let expect_return = match class_func_kw.as_keyword() {
-                Some(Keyword::Function) => true,
-                Some(Keyword::Procedure) => false,
-                _ => unreachable!(),
-            };
+                let kind = FunctionDeclKind::ClassMethod;
+                let expect_return = match class_func_kw.as_keyword() {
+                    Some(Keyword::Function) => true,
+                    Some(Keyword::Procedure) => false,
+                    _ => unreachable!(),
+                };
 
-            (func_kw.span().to(class_func_kw.span()), kind, expect_return)
-        } else {
-            let (kind, expect_return) = match func_kw.as_keyword() {
-                Some(Keyword::Function) => (FunctionDeclKind::Function, true),
-                Some(Keyword::Procedure) => (FunctionDeclKind::Function, false),
-                Some(Keyword::Constructor) => (FunctionDeclKind::Constructor, false),
-                Some(Keyword::Destructor) => (FunctionDeclKind::Destructor, false),
-                _ => unreachable!(),
-            };
+                let mut kw_span = func_kw.into_span();
+                kw_span.extend(class_func_kw.span());
 
-            (func_kw.into_span(), kind, expect_return)
+                (kw_span, kind, expect_return)
+            }
+
+            Keyword::Function => (func_kw.into_span(), FunctionDeclKind::Function, true),
+            Keyword::Procedure => (func_kw.into_span(), FunctionDeclKind::Function, false),
+            Keyword::Constructor => (func_kw.into_span(), FunctionDeclKind::Constructor, false),
+            Keyword::Destructor => (func_kw.into_span(), FunctionDeclKind::Destructor, false),
+            
+            _ => unreachable!("doesn't match matcher"),
         };
-        
-        let name = Self::parse_name(tokens)?;
-        let mut span = name.span();
 
-        let params = if let Some(params_tt) = tokens.match_one_maybe(DelimiterPair::Bracket) {
+        let name = Self::parse_name(parser)?;
+        let span = kw_span.to(&name.span());
+        
+        let unknown_return_ty = TypeName::Unspecified(kw_span.clone());
+
+        // from this point on we have enough info to return at least a partial version of this
+        // func decl and should return this instead of failing on any subsequent error
+        let mut func_decl = FunctionDecl {
+            tags,
+            kind,
+            name,
+            kw_span,
+            params: Vec::new(),
+            mods: Vec::new(),
+            where_clause: None,
+            result_ty: unknown_return_ty,
+            span,
+        };
+
+        if let Some(params_tt) = parser.match_one_maybe(DelimiterPair::Bracket) {
             let params_group = match params_tt {
                 TokenTree::Delimited(group) => group,
                 _ => unreachable!(),
             };
 
-            span = span.to(&params_group.span);
+            func_decl.span.extend(&params_group.span);
 
             let mut params_tokens = params_group.into_inner_tokens();
-            let params = Self::parse_params(&mut params_tokens)?;
             
-            params_tokens.finish()?;
-            params
-        } else {
-            Vec::new()
-        };
+            func_decl.params = Self::parse_params(&mut params_tokens)
+                .or_continue_with(parser.errors(), Vec::new);
 
-        let result_ty = if expect_result_ty {
-            match tokens.match_one_maybe(Separator::Colon) {
-                Some(_) => {
-                    // look for a result type
-                    let ty = TypeName::parse(tokens)?;
-                    span = span.to(ty.span());
-                    ty
-                },
+            params_tokens.finish().or_continue(parser.errors(), ());
+        }
 
-                None => {
-                    TypeName::Unspecified(kw_span.clone())
-                    },
+        if expect_result_ty && parser.match_one_maybe(Separator::Colon).is_some() {
+            // look for a result type
+            if let Some(ty) = TypeName::parse(parser).ok_or_continue(parser.errors()) {
+                func_decl.span.extend(ty.span());
+                func_decl.result_ty = ty;
             }
-        } else {
-            TypeName::Unspecified(kw_span.clone())
-        };
+        }
 
-        let mods = DeclMod::parse_seq(tokens)?;
-        if let Some(last_mod) = mods.last() {
-            span = span.to(last_mod.span());
+        func_decl.mods = DeclMod::parse_seq(parser).or_continue_with(parser.errors(), Vec::new);
+        if let Some(last_mod) = func_decl.mods.last() {
+            func_decl.span.extend(last_mod.span());
         }
         
-        let where_clause = WhereClause::try_parse(tokens)?;
+        func_decl.where_clause = WhereClause::try_parse(parser.tokens())
+            .or_continue(parser.errors(), None);
 
-        Ok(FunctionDecl {
-            kw_span,
-            name,
-            where_clause,
-            tags,
-            kind,
-            span,
-            result_ty,
-            params,
-            mods,
-        })
+        Ok(func_decl)
     }
     
     fn parse_name(tokens: &mut TokenStream) -> ParseResult<QualifiedFunctionName> {

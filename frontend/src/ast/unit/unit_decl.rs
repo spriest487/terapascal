@@ -9,7 +9,8 @@ use crate::ast::UnitBinding;
 use crate::ast::UseDecl;
 use crate::parse::ContinueParse;
 use crate::parse::LookAheadTokenStream;
-use crate::parse::{Matcher, Parser};
+use crate::parse::Matcher;
+use crate::parse::Parser;
 use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Separator;
@@ -95,18 +96,13 @@ impl UnitDecl<Span> {
             }
 
             if !items.is_empty() {
-                if parser.tokens()
-                    .advance_to(Separator::Semicolon)
-                    .and_continue(parser.errors())
-                    .is_none() 
-                {
+                if parser.advance_to(Separator::Semicolon).is_none() {
                     break;
                 }
             }
 
             if let Some(item) = parse_unit_decl(parser, visibility)
-                .map(Some)
-                .or_continue(parser.errors(), None)
+                .ok_or_continue(parser.errors())
             {
                 items.push(item);
             }

@@ -77,6 +77,10 @@ impl Span {
         }
     }
     
+    pub fn extend(&mut self, other: &impl Spanned) {
+        self.end = other.span().end;
+    }
+    
     pub fn until(&self, next: &impl Spanned) -> Self {
         let next = next.span();
 

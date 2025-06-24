@@ -1,19 +1,21 @@
-use crate::ast::{iface_method_start, parse_separated_members, SupersClause};
+use crate::ast::iface_method_start;
+use crate::ast::parse_separated_members;
 use crate::ast::tag::Tag;
 use crate::ast::typedecl::TypeDeclHeader;
 use crate::ast::Annotation;
+use crate::ast::DeclIdent;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
-use crate::ast::DeclIdent;
+use crate::ast::SupersClause;
 use crate::ast::WhereClause;
-use crate::parse::{ContinueParse, LookAheadTokenStream, Parser};
+use crate::parse::ContinueParse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
-use crate::parse::TokenStream;
-use crate::{Keyword, TokenTree};
-use crate::Separator;
+use crate::parse::Parser;
+use crate::Keyword;
+use crate::TokenTree;
 use derivative::*;
 use std::fmt;
 use std::sync::Arc;
@@ -21,7 +23,7 @@ use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct InterfaceMethodDecl<A: Annotation> {
+pub struct InterfaceMethodDecl<A: Annotation = Span> {
     pub decl: Arc<FunctionDecl<A>>,
 }
 
@@ -40,31 +42,6 @@ impl<A: Annotation> Spanned for InterfaceMethodDecl<A> {
 impl<A: Annotation> fmt::Display for InterfaceMethodDecl<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.decl)
-    }
-}
-
-impl ParseSeq for InterfaceMethodDecl<Span> {
-    fn parse_group(prev: &[Self], tokens: &mut TokenStream) -> ParseResult<Self> {
-        if !prev.is_empty() {
-            tokens.match_one(Separator::Semicolon)?;
-        }
-
-        let tags = Tag::parse_seq(tokens)?;
-
-        let decl = FunctionDecl::parse(tokens, false, tags)?;
-        Ok(InterfaceMethodDecl { 
-            decl: decl.into(),
-        })
-    }
-
-    fn has_more(prev: &[Self], tokens: &mut LookAheadTokenStream) -> bool {
-        if !prev.is_empty() && tokens.match_one(Separator::Semicolon).is_none() {
-            return false;
-        }
-
-        tokens
-            .match_one(iface_method_start())
-            .is_some()
     }
 }
 
@@ -144,7 +121,7 @@ impl InterfaceDecl<Span> {
                 let tags = Tag::parse_seq(parser.tokens())
                     .or_continue_with(parser.errors(), Vec::new);
 
-                let decl = FunctionDecl::parse(parser.tokens(), false, tags)
+                let decl = FunctionDecl::parse(parser, false, tags)
                     .ok_or_continue(parser.errors())?;
                 
                 Some(InterfaceMethodDecl {

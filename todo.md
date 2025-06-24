@@ -1,7 +1,11 @@
 # LS
-* fix the leading keyword in a unit getting highlighted wrong
+* remove unspecified typename span
+* typename AST nodes should exist after typechecking (better type highlighting)
 * pattern value annotations
 * cast value annotations
+* split up var/param decl items to represent the AST (whichever one it is that still needs this)
+* partial tokenization
+* partial typechecking
 
 # features
 * add a named type case to typ::Type for all the things that use full_path, full_name etc
