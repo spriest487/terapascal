@@ -458,8 +458,13 @@ impl DefinitionMap {
         let Some(span) = type_name.get_span() else {
             return;
         };
+        
+        // TODO: more sophisticated typename highlighting
+        self.add_type_ref(type_name.ty(), span, ctx);
+    }
 
-        let Some(type_path) = type_name.ty().full_path() else {
+    fn add_type_ref(&mut self, ty: &Type, at: &Span, ctx: &Context) {
+        let Some(type_path) = ty.full_path() else {
             return;
         };
 
@@ -468,7 +473,7 @@ impl DefinitionMap {
         };
 
         let definition = def.ident().span().clone();
-        self.add(span.clone(), definition);
+        self.add(at.clone(), definition);
     }
 
     fn add_func_decl(&mut self, func_decl: &FunctionDecl, ctx: &Context) {
@@ -480,9 +485,10 @@ impl DefinitionMap {
             // the name of a method definition links to
             // 1. the declaring type (the type qualification part)
             // 2. the method decl within the type (the name part)
-            FunctionDeclContext::MethodDef { declaring_type, .. } => {
-                // typename with a span of only the path part
-                self.add_typename(declaring_type, ctx);
+            FunctionDeclContext::MethodDef { declaring_type, ty_name_span, .. } => {
+                // TODO: use typename
+                self.add_type_ref(declaring_type, ty_name_span, ctx);
+                // self.add_typename(declaring_type, ctx);
 
                 if let Some(span) = Self::find_method_name_decl(func_decl, declaring_type, ctx) {
                     self.add(name_span.clone(), span);

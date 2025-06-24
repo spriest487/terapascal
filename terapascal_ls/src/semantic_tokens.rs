@@ -362,8 +362,8 @@ where
 
     fn add_set_decl(&mut self, set_decl: &ast::SetDecl<A>) {
         match set_decl.range.as_ref() {
-            SetDeclRange::Type { span, ty, .. } => {
-                self.add_type(ty, span, "set type name");
+            SetDeclRange::Type { ty, .. } => {
+                self.add_typename(ty, "set type name");
             },
 
             SetDeclRange::Range {
@@ -434,9 +434,7 @@ where
                 self.add(&ident.span, SEMANTIC_VARIABLE, "unit binding name");
             }
 
-            if let Some(span) = &item.ty_span {
-                self.add_type(&item.ty, span, "unit binding type");
-            }
+            self.add_typename(&item.ty, "unit binding type");
 
             if let Some(init) = &item.init {
                 self.add(&init.eq_span, SEMANTIC_OPERATOR, "unit binding assignment");
@@ -836,16 +834,17 @@ where
             return;
         };
 
-        if let Some(token_type) = semantic_hint_to_token_type(type_name.semantic_hint()) {
-            self.add(span, token_type, debug_desc);
-        }
+        // TODO
+        // if let Some(token_type) = semantic_hint_to_token_type(type_name.semantic_hint()) {
+        //     self.add(span, token_type, debug_desc);
+        // }
     }
 
     // TODO: uses of generally indicate types that should be replaced with typenames in the nodes
     fn add_type(&mut self, ty: &A::Type, span: &Span, debug_desc: &str) {
-        if let Some(token_type) = semantic_hint_to_token_type(ty.semantic_hint()) {
-            self.add(span, token_type, debug_desc);
-        }
+        // if let Some(token_type) = semantic_hint_to_token_type(ty.semantic_hint()) {
+        //     self.add(span, token_type, debug_desc);
+        // }
     }
 
     fn add_literal_with_type(
@@ -916,18 +915,8 @@ where
 
         self.add_keyword(&decl.kw_span);
 
-        if let Some(name_span) = decl.name.owning_type_name_span() {
-            let hint = decl.name.owning_type_name_semantic_hint();
-
-            if let Some(token_type) = semantic_hint_to_token_type(hint) {
-                let desc = "function owning type qualification";
-                self.add(name_span, token_type, desc);
-            }
-        }
-
-        for i in 0..decl.name.owning_type_params_len() {
-            let desc = "function owning type parameter";
-            self.add(decl.name.owning_type_param_span(i), SEMANTIC_TYPE_PARAMETER, desc);
+        if let Some(typename) = decl.name.owning_type_qualifier() {
+            self.add_typename(&typename, "function owning type qualification");
         }
 
         self.add(&decl.name.ident().span, name_type, "function name");
@@ -946,9 +935,7 @@ where
                 self.add(param_span, SEMANTIC_PARAMETER, "function parameter name");
             }
 
-            if let Some(ty_span) = &param.ty_span {
-                self.add_type(&param.ty, ty_span, "function parameter type");
-            }
+            self.add_typename(&param.ty, "function parameter type");
         }
 
         self.add_typename(&decl.result_ty, "function result type");
