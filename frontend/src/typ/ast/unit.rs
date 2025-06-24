@@ -182,9 +182,11 @@ fn typecheck_unit_func_decl(
     let name = func_decl.name.clone();
     let func_decl = Arc::new(FunctionDecl::typecheck(func_decl, false, ctx)?);
 
-    assert_eq!(func_decl.name.context, FunctionDeclContext::FreeFunction, "not yet implemented: can't forward-declare methods");
-
-    ctx.declare_function(name.ident().clone(), func_decl.clone(), visibility)?;
+    // this is always true in valid code - only free functions can be declared without definition
+    // at the unit level - but we might be typechecking partially parsed code
+    if matches!(func_decl.name.context, FunctionDeclContext::FreeFunction) {
+        ctx.declare_function(name.ident().clone(), func_decl.clone(), visibility)?;
+    }
 
     Ok(UnitDecl::FunctionDecl { decl: func_decl })
 }

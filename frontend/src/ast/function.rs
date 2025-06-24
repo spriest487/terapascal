@@ -552,8 +552,8 @@ pub struct FunctionDef<A: Annotation = Span> {
 
 impl FunctionDef<Span> {
     pub fn parse_body_of_decl(
+        parser: &mut Parser,
         decl: Arc<FunctionDecl<Span>>,
-        tokens: &mut TokenStream
     ) -> ParseResult<Self> {
         let body_start_matcher = Self::match_body_start();
         
@@ -561,29 +561,34 @@ impl FunctionDef<Span> {
 
         let mut locals = Vec::new();
         loop {
-            match tokens.look_ahead().match_one(body_start_matcher.clone()) {
+            match parser.look_ahead().match_one(body_start_matcher.clone()) {
                 Some(tt) if tt.is_keyword(Keyword::Var) => {
-                    tokens.advance(1);
-                    locals.extend(
-                        Self::parse_locals_block(tokens, BindingDeclKind::Var)?
-                    );
+                    parser.advance(1);
 
-                    trailing_semicolon = tokens.match_one_maybe(Separator::Semicolon).is_some();
+                    let vars = Self::parse_locals_block(parser, BindingDeclKind::Var)
+                        .or_continue_with(parser.errors(), Vec::new);
+
+                    locals.extend(vars);
+
+                    trailing_semicolon = parser.match_one_maybe(Separator::Semicolon).is_some();
                 },
-                Some(tt) if tt.is_keyword(Keyword::Const) => {
-                    tokens.advance(1);
-                    locals.extend(
-                        Self::parse_locals_block(tokens, BindingDeclKind::Const)?
-                    );
 
-                    trailing_semicolon = tokens.match_one_maybe(Separator::Semicolon).is_some();
+                Some(tt) if tt.is_keyword(Keyword::Const) => {
+                    parser.advance(1);
+
+                    let consts = Self::parse_locals_block(parser, BindingDeclKind::Const)
+                        .or_continue_with(parser.errors(), Vec::new);
+
+                    locals.extend(consts);
+
+                    trailing_semicolon = parser.match_one_maybe(Separator::Semicolon).is_some();
                 }
 
                 _ => break,
             }
         }
 
-        let body = Block::parse(tokens)
+        let body = Block::parse(parser)
             .map_err(|err| {
                 Self::map_unexpected_err_after_locals(err, trailing_semicolon, &locals)
             })?;

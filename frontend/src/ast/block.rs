@@ -57,7 +57,7 @@ impl<A: Annotation> Block<A> {
     }
 }
 
-impl Block<Span> {
+impl Block {
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
         let unsafe_kw = tokens
             .match_one_maybe(Keyword::Unsafe)

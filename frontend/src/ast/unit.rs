@@ -351,7 +351,7 @@ fn parse_unit_decl(
 ) -> ParseResult<UnitDecl> {
     let decl_start = UnitDecl::start_matcher();
 
-    let decl = match parser.tokens().look_ahead().match_one(decl_start) {
+    let decl = match parser.advance_until(decl_start) {
         Some(tt) if unit_func_decl_start_matcher().is_match(&tt) => {
             parse_unit_func_decl(parser, visibility)?
         },
@@ -407,11 +407,17 @@ fn parse_unit_func_decl(parser: &mut Parser, visibility: Visibility) -> ParseRes
     };
 
     if body_ahead {
-        parser.match_one(Separator::Semicolon)?;
+        parser.advance_to(Separator::Semicolon);
 
-        let def = FunctionDef::parse_body_of_decl(func_decl, parser)?;
+        let decl = FunctionDef::parse_body_of_decl(parser, func_decl.clone())
+            .map(|def| {
+                UnitDecl::FunctionDef { def: Arc::new(def) }
+            })
+            .or_continue_with(parser.errors(), || {
+                UnitDecl::FunctionDecl { decl: func_decl }
+            });
 
-        Ok(UnitDecl::FunctionDef { def: Arc::new(def) })
+        Ok(decl)
     } else {
         Ok(UnitDecl::FunctionDecl { decl: func_decl })
     }
