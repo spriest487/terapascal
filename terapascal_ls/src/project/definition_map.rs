@@ -406,9 +406,8 @@ impl DefinitionMap {
 
     fn add_set_decl(&mut self, set_decl: &SetDecl, ctx: &Context) {
         match &set_decl.range.as_ref() {
-            SetDeclRange::Type { ty, span } => {
-                let type_name = TypeName::named(ty.clone(), span.clone());
-                self.add_typename(&type_name, ctx);
+            SetDeclRange::Type { ty, .. } => {
+                self.add_typename(ty, ctx);
             },
             SetDeclRange::Range { from, to, .. } => {
                 self.add_expr(from, ctx);
