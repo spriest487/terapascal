@@ -6,8 +6,8 @@ use crate::typ::context::*;
 use crate::typ::ty::*;
 use crate::typ::ModuleUnit;
 
-const INT32: TypeName = TypeName::Inferred(Type::Primitive(Primitive::Int32));
-const BYTE: TypeName = TypeName::Inferred(Type::Primitive(Primitive::UInt8));
+const INT32: TypeName = TypeName::Unspecified(Type::Primitive(Primitive::Int32));
+const BYTE: TypeName = TypeName::Unspecified(Type::Primitive(Primitive::UInt8));
 
 fn module_from_src(unit_name: &'static str, src: &'static str) -> ModuleUnit {
     let module = typ::test::module_from_src(unit_name, src);
@@ -200,9 +200,9 @@ fn specialized_class_has_correct_method_types_with_method_ty_params() {
     let generic_u = Type::generic_param(builtin_ident("U"));
 
     let methods: Vec<_> = specialized_def.methods().collect();
-    assert_eq!(self_ty, methods[0].func_decl.params[0].ty);
-    assert_eq!(INT32, methods[0].func_decl.params[1].ty);
-    assert_eq!(BYTE, methods[0].func_decl.params[2].ty);
+    assert_eq!(self_ty, *methods[0].func_decl.params[0].ty.ty());
+    assert_eq!(INT32, *methods[0].func_decl.params[1].ty.ty());
+    assert_eq!(BYTE, *methods[0].func_decl.params[2].ty.ty());
     assert_eq!(generic_u, *methods[0].func_decl.result_ty.ty());
 }
 

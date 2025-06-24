@@ -103,8 +103,7 @@ fn make_decl(
             .map(|(pos, ty)| FunctionParam {
                 name: Arc::new(format!("arg{}", pos)),
                 is_implicit_self: false,
-                ty,
-                ty_span: None,
+                ty: TypeName::Unspecified(ty),
                 modifier: None,
                 name_span: None,
             })
@@ -150,8 +149,8 @@ fn specialized_func_decl_has_specialized_param_tys() {
     let specialized = specialize_func_decl(&decl, &args, &ctx)
         .unwrap();
 
-    assert_eq!(Type::Primitive(Primitive::Boolean), specialized.params[0].ty);
-    assert_eq!(Type::Primitive(Primitive::Int32), specialized.params[1].ty);
+    assert_eq!(Type::Primitive(Primitive::Boolean), *specialized.params[0].ty.ty());
+    assert_eq!(Type::Primitive(Primitive::Int32), *specialized.params[1].ty.ty());
 }
 
 #[test]
