@@ -25,8 +25,8 @@ use crate::Separator;
 use crate::TokenTree;
 use derivative::Derivative;
 use std::fmt;
-use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
+use std::hash::Hasher;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
@@ -513,26 +513,5 @@ impl<'a, A: Annotation> PartialEq for SyntaxIdentity<'a, A> {
             }
             _ => false,
         }
-    }
-}
-
-#[derive(Eq, Copy, Clone)]
-pub struct TypeIdentity<'a, A: Annotation>(pub &'a TypeName<A>);
-
-impl<'a, A: Annotation> fmt::Display for TypeIdentity<'a, A> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.ty().fmt(f)
-    }
-}
-
-impl<'a, A: Annotation> Hash for TypeIdentity<'a, A> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.ty().hash(state)
-    }
-}
-
-impl<'a, A: Annotation> PartialEq for TypeIdentity<'a, A> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.ty().eq(other.0.ty())
     }
 }

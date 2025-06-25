@@ -6,7 +6,7 @@ pub mod function;
 mod ufcs;
 
 use crate::ast;
-use crate::ast::{Annotation, TypeIdentity};
+use crate::ast::Annotation;
 use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
@@ -36,6 +36,7 @@ use derivative::*;
 use std::borrow::Cow;
 use std::fmt;
 use std::hash::Hash;
+use std::hash::Hasher;
 use std::sync::Arc;
 pub use symbol::*;
 use terapascal_common::span::*;
@@ -777,7 +778,7 @@ impl Spanned for Value {
 
 impl Annotation for Value {
     type Type = Type;
-    type TypeNameIdentity<'a> = TypeIdentity<'a, Value>;
+    type TypeNameIdentity<'a> = TypeIdentity<'a>;
 
     type DeclName = Symbol;
     type Pattern = TypePattern;
@@ -814,7 +815,28 @@ impl Annotation for Value {
         true
     }
 
-    fn typename_identity(type_name: &ast::TypeName<Self>) -> TypeIdentity<Self> {
+    fn typename_identity(type_name: &ast::TypeName<Self>) -> TypeIdentity {
         TypeIdentity(type_name)
+    }
+}
+
+#[derive(Eq, Copy, Clone)]
+pub struct TypeIdentity<'a>(pub &'a crate::ast::TypeName<Value>);
+
+impl<'a> fmt::Display for TypeIdentity<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self.0.ty(), f)
+    }
+}
+
+impl<'a> Hash for TypeIdentity<'a> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.ty().hash(state)
+    }
+}
+
+impl<'a> PartialEq for TypeIdentity<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.ty().eq(other.0.ty())
     }
 }
