@@ -166,7 +166,14 @@ pub(super) fn resolve_ops_by_precedence(
                 let rhs_operand =
                     resolve_ops_by_precedence(after_op.iter().skip(1).cloned().collect())?;
 
-                let span = lhs_operand.annotation().to(rhs_operand.annotation());
+                // for indexer ops specifically, the span needs to be adjusted, because the operator
+                // surrounds the operand
+                let span = if op_token.op == Operator::Index {
+                    lhs_operand.annotation().to(&op_token.span)
+                } else {
+                    lhs_operand.annotation().to(rhs_operand.annotation())
+                };
+
                 let bin_op = BinOp {
                     lhs: lhs_operand,
                     op: op_token.op,
