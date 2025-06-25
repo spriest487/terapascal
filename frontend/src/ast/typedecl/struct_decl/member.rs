@@ -246,7 +246,7 @@ where
 {
     loop {
         let sep = if !items.is_empty() {
-            let next_sep = parser.advance_to(Separator::Semicolon);
+            let next_sep = parser.tokens().match_one_maybe(Separator::Semicolon);
             if next_sep.is_none() {
                 break None;
             } else {

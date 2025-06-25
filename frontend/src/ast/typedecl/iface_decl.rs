@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod test;
+
 use crate::ast::iface_method_start;
 use crate::ast::parse_separated_members;
 use crate::ast::tag::Tag;
@@ -114,7 +117,7 @@ impl InterfaceDecl<Span> {
             })
         } else {
             let mut methods = Vec::new();
-            parse_separated_members(parser, &mut methods, |parser| {
+            let final_sep = parse_separated_members(parser, &mut methods, |parser| {
                 if parser.tokens().look_ahead().match_one(iface_method_start()).is_none() {
                     return None;
                 }
@@ -130,15 +133,20 @@ impl InterfaceDecl<Span> {
 
             // no more methods found, must be "end" next, but if there's an invalid token, the error
             // should indicate that it could've been a method too
-            let end_span = if let Err(mut err) = parser.tokens().match_one(Keyword::End) {
-                if let ParseError::UnexpectedToken(_, Some(expected)) = &mut err.err {
-                    *expected |= iface_method_start()
-                }
+            let end_span = match parser.tokens().advance_to(Keyword::End).ok() {
+                Ok(tt) => Some(tt.into_span()),
+                Err(mut err) => {
+                    if final_sep.is_some() {
+                        // if there was a final separator, it could have been another method decl
+                        // as well as an "end" keyword
+                        if let ParseError::UnexpectedTokens(.., Some(expected)) = &mut err.err {
+                            *expected = expected.clone() | iface_method_start();
+                        };
+                    }
 
-                parser.error(err);
-                parser.advance_to(Keyword::End).map(TokenTree::into_span)
-            } else {
-                None
+                    parser.error(err);
+                    None
+                }
             };
 
             let decl_span = match &end_span {

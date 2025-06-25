@@ -204,6 +204,28 @@ impl AdvanceUntilResult {
         )))
     }
     
+    pub fn ok(self) -> ParseResult<TokenTree> {
+        match self.matched {
+            Some(tt) => Ok(tt),
+            None => {
+                match Span::range(&self.invalid) {
+                    Some(invalid_span) => {
+                        let unexpected_err = ParseError::UnexpectedTokens(
+                            invalid_span,
+                            Some(self.matcher.clone())
+                        );
+
+                        Err(TracedError::trace(unexpected_err))
+                    }
+                    None => {
+                        let eof_err = ParseError::UnexpectedEOF(self.matcher, self.at.clone());
+                        Err(TracedError::trace(eof_err))
+                    }
+                }
+            }
+        }
+    }
+
     pub fn and_continue(self, errors: &mut Vec<TracedError<ParseError>>) -> Option<TokenTree> {
         if let Some(err) = self.to_err() {
             errors.push(err);
