@@ -20,7 +20,7 @@ pub use self::sig::*;
 pub use self::specialize::*;
 pub use self::ty_param::*;
 use crate::ast;
-use crate::ast::Access;
+use crate::ast::{Access, SemanticHint};
 use crate::ast::FunctionTypeName;
 use crate::ast::FunctionTypeNameParam;
 use crate::ast::Ident;
@@ -190,6 +190,18 @@ impl Type {
             | Type::Variant(decl_name) => Some(Cow::Borrowed(decl_name)),
 
             _ => None,
+        }
+    }
+
+    pub fn semantic_hint(&self) -> SemanticHint {
+        match self {
+            Type::MethodSelf | Type::GenericParam(_) => SemanticHint::TypeParameter,
+            Type::Variant(_) => SemanticHint::Variant,
+            Type::Enum(_) => SemanticHint::Enum,
+
+            Type::Set(_) => SemanticHint::Number,
+
+            _ => SemanticHint::Type,
         }
     }
 
@@ -1458,7 +1470,7 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
         },
 
         ast::TypeName::Function(func_ty_name) => {
-            let return_ty = match &func_ty_name.return_ty {
+            let return_ty = match &func_ty_name.result_type {
                 Some(return_ty) => typecheck_typename(return_ty, ctx)?,
                 None => TypeName::inferred(Type::Nothing),
             };
@@ -1471,7 +1483,7 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
 
                 sig_params.push(FunctionSigParam {
                     ty: param_ty.ty().clone(),
-                    modifier: param.modifier.clone(),
+                    modifier: param.modifier.as_ref().map(|pm| pm.param_mod),
                 });
 
                 params.push(FunctionTypeNameParam {
@@ -1487,10 +1499,11 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
                 .indirect_by(func_ty_name.indirection);
 
             Ok(TypeName::Function(FunctionTypeName {
+                func_kw: func_ty_name.func_kw.clone(),
                 ty,
                 span: func_ty_name.span.clone(),
                 indirection: func_ty_name.indirection,
-                return_ty: Some(Box::new(return_ty)),
+                result_type: Some(Box::new(return_ty)),
                 params,
             }))
         },

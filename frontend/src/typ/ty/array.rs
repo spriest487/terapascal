@@ -37,12 +37,12 @@ impl fmt::Display for ArrayType {
 pub fn typecheck_array_type(array_type_name: &ast::ArrayTypeName, ctx: &mut Context) -> TypeResult<ArrayTypeName> {
     let element_ty = typecheck_typename(array_type_name.element.as_ref(), ctx)?;
 
-    let (array_ty, dim_expr) = match &array_type_name.dim {
-        Some(dim_expr) => {
-            let dim_expr = typecheck_expr(dim_expr, &ARRAY_DIM_TY, ctx)?;
+    let (array_ty, array_dim) = match &array_type_name.dim {
+        Some(dim) => {
+            let dim_expr = typecheck_expr(&dim.dim_expr, &ARRAY_DIM_TY, ctx)?;
             let dim_val = const_eval_integer(&dim_expr, ctx)?;
 
-            let dim = dim_val.value
+            let dim_size = dim_val.value
                 .as_i32()
                 .ok_or_else(|| TypeError::TypeMismatch {
                     span: dim_expr.span().clone(),
@@ -50,7 +50,7 @@ pub fn typecheck_array_type(array_type_name: &ast::ArrayTypeName, ctx: &mut Cont
                     expected: ARRAY_DIM_TY,
                 })?;
             
-            let Ok(dim) = usize::try_from(dim) else {
+            let Ok(dim_size) = usize::try_from(dim_size) else {
                 // use the dynarray type for the error because we don't have a valid static dimension
                 return Err(TypeError::IndexOutOfBounds {
                     index: dim_val.value,
@@ -61,11 +61,15 @@ pub fn typecheck_array_type(array_type_name: &ast::ArrayTypeName, ctx: &mut Cont
 
             let array_ty = Type::from(ArrayType {
                 element_ty: element_ty.ty().clone(),
-                dim,
+                dim: dim_size,
             }).indirect_by(array_type_name.indirection);
 
-            (array_ty, Some(Box::new(dim_expr)))
-        },
+            (array_ty, Some(Box::new(ast::ArrayTypeNameDim {
+                open_bracket: dim.open_bracket.clone(),
+                dim_expr,
+                close_bracket: dim.close_bracket.clone(),
+            })))
+        }
 
         None => {
             let dyn_array_ty = Type::DynArray {
@@ -81,7 +85,8 @@ pub fn typecheck_array_type(array_type_name: &ast::ArrayTypeName, ctx: &mut Cont
         indirection: array_type_name.indirection,
         span: array_type_name.span.clone(),
         ty: array_ty,
+        array_kw: array_type_name.array_kw.clone(),
         of_kw: array_type_name.of_kw.clone(),
-        dim: dim_expr,
+        dim: array_dim,
     })
 }

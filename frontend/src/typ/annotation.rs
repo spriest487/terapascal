@@ -6,11 +6,10 @@ pub mod function;
 mod ufcs;
 
 use crate::ast;
-use crate::ast::Annotation;
-use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::SemanticHint;
+use crate::ast::{Annotation, ConstExprValue};
 pub use crate::typ::annotation::invoke::Invocation;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
@@ -80,21 +79,21 @@ impl VariantCaseValue {
                     .specialize(&type_list, ctx)
                     .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
                     .into_owned()
-            },
+            }
 
             None => {
                 // infer the specialized generic type if the written one is generic and the hint is a specialized
                 // version of that same generic variant
                 match expect_ty {
                     Type::Variant(expect_variant)
-                        if expect_variant.full_path == self.variant_name.full_path =>
-                    {
-                        (**expect_variant).clone()
-                    },
+                    if expect_variant.full_path == self.variant_name.full_path =>
+                        {
+                            (**expect_variant).clone()
+                        }
 
                     _ => (*self.variant_name).clone(),
                 }
-            },
+            }
         };
 
         if variant_sym.is_unspecialized_generic() {
@@ -161,7 +160,7 @@ impl VariantCaseValue {
                 let inferred_name = match expect_ty {
                     Type::Variant(expect_name) => {
                         self.variant_name.infer_specialized_from_hint(expect_name).cloned()
-                    },
+                    }
 
                     _ => None,
                 };
@@ -173,7 +172,7 @@ impl VariantCaseValue {
                     };
                     TypeError::from_generic_err(err, span.clone())
                 })?
-            },
+            }
 
             (None, None) => Cow::Borrowed(self.variant_name.as_ref()),
         };
@@ -194,7 +193,7 @@ impl VariantCaseValue {
                     },
                     span.clone(),
                 ));
-            },
+            }
         };
 
         // validate arg count matches (0 or 1)
@@ -209,7 +208,7 @@ impl VariantCaseValue {
                 }
 
                 None
-            },
+            }
 
             Some(data) => {
                 if args.len() != 1 {
@@ -224,9 +223,9 @@ impl VariantCaseValue {
                 // eprintln!("arg: {}, ty: {}", arg.annotation(), arg.annotation().ty());
 
                 let data_val = implicit_conversion(arg, &data.ty, ctx)?;
-                
+
                 Some(data_val)
-            },
+            }
         };
 
         Ok(Invocation::VariantCtor {
@@ -311,7 +310,7 @@ impl TypedValue {
             decl: Some(IdentPath::from(name)),
         }
     }
-    
+
     pub fn literal(ty: impl Into<Type>, span: Span) -> Self {
         TypedValue {
             ty: ty.into(),
@@ -433,16 +432,16 @@ impl Value {
         let (actual_ty, span) = match self {
             Value::Typed(val) => {
                 (val.ty.clone(), &val.span)
-            },
+            }
             Value::Const(const_val) => {
                 (const_val.ty.clone(), &const_val.span)
-            },
+            }
             Value::Invocation(val) => {
                 (val.result_type().clone(), val.span())
-            },
+            }
             Value::Function(func_val) => {
                 (Type::Function(func_val.sig.clone()), &func_val.span)
-            },
+            }
 
             Value::Method(..)
             | Value::Overload(..)
@@ -455,7 +454,7 @@ impl Value {
                     expected: expect_ty.clone(),
                     actual: self.clone(),
                 });
-            },
+            }
         };
 
         if actual_ty == Type::Nothing {
@@ -481,7 +480,7 @@ impl Value {
 
         Ok(())
     }
-    
+
     pub fn with_span(&self, span: Span) -> Self {
         match self {
             Value::Untyped(..) => Value::Untyped(span),
@@ -491,7 +490,7 @@ impl Value {
             }),
             Value::Function(func) => Value::from(FunctionValue {
                 span,
-               ..func.as_ref().clone() 
+                ..func.as_ref().clone()
             }),
             Value::UfcsFunction(ufcs) => Value::from(UfcsValue {
                 span,
@@ -545,22 +544,22 @@ impl Value {
             | Value::Type(_, _)
             | Value::VariantCase(..) => {
                 Cow::Owned(Type::Nothing)
-            },
+            }
 
             Value::Function(func_val) => {
                 Cow::Owned(Type::Function(func_val.sig.clone()))
-            },
+            }
 
             Value::Invocation(invocation) => {
                 Cow::Borrowed(invocation.result_type())
-            },
+            }
 
             Value::Const(const_val) => {
                 Cow::Borrowed(&const_val.ty)
-            },
+            }
             Value::Typed(val) => {
                 Cow::Borrowed(&val.ty)
-            },
+            }
         }
     }
 
@@ -584,7 +583,7 @@ impl Value {
                 let case_path = ctor.variant_name.full_path.clone().child(ctor.case.clone());
 
                 Some(Cow::Owned(case_path))
-            },
+            }
         }
     }
 
@@ -604,18 +603,18 @@ impl Value {
             _ => false,
         }
     }
-    
+
     /// A node can be an unevaluated reference like a function name, which is valid in some contexts
     /// e.g. as the target of a function call argument list or to have its address taken. In contexts
     /// where only the value is legal, this operation forces the reference to be evaluated e.g.
     /// turns a function reference into a function invocation. This is the logic behind no-args
     /// function calls.
-    /// 
+    ///
     /// This operation may fail with an error if the *type* of value can be evaluated, but this
     /// particular value is invalid: a function reference that is evaluated could be a valid
     /// no-args call, but if it requires more parameters, it should be treated like any invalid
     /// invocation and raise an InvalidArgs error.
-    /// 
+    ///
     /// This will *not* fail with an error for node values that can't be evaluated, and will instead
     /// return itself. For example, a typed Integer value node is already a value so evaluating it
     /// does nothing, and a Type value node has no possible value, so we should leave it alone
@@ -640,7 +639,7 @@ impl Value {
                     None,
                     None,
                     &func.span,
-                    ctx
+                    ctx,
                 )?;
 
                 let invocation = func.create_invocation(
@@ -649,9 +648,9 @@ impl Value {
                     args.type_args.as_ref(),
                     expect_ty,
                     &func.span,
-                    ctx
+                    ctx,
                 )?;
-                
+
                 *self = Value::from(invocation);
                 Ok(())
             }
@@ -669,7 +668,7 @@ impl Value {
                     method.self_arg.as_ref().map(Box::as_ref),
                     None,
                     &method.span,
-                    ctx
+                    ctx,
                 )?;
 
                 *self = Value::from(Invocation::Method {
@@ -689,7 +688,7 @@ impl Value {
                     None,
                     expect_ty,
                     &case_val.span,
-                    ctx
+                    ctx,
                 )?;
 
                 *self = Value::from(invocation);
@@ -710,19 +709,19 @@ impl fmt::Display for Value {
         match self {
             Value::Untyped(_) => {
                 write!(f, "untyped value")
-            },
+            }
             Value::Typed(val) => {
                 write!(f, "{} of type {}", val.value_kind, val.ty)
-            },
+            }
             Value::Function(func) => {
                 write!(f, "function {}", func.name)
-            },
+            }
             Value::UfcsFunction(func) => {
                 write!(f, "function (UFCS) {}", func.function_name)
-            },
+            }
             Value::Invocation(invoked) => {
                 write!(f, "{invoked}")
-            },
+            }
             Value::Method(method) => {
                 write!(
                     f,
@@ -730,30 +729,30 @@ impl fmt::Display for Value {
                     method.self_ty,
                     method.decl.func_decl.ident()
                 )
-            },
+            }
             Value::Type(ty, ..) => {
                 write!(f, "type {}", ty)
-            },
+            }
             Value::Namespace(ns, ..) => {
                 write!(f, "namespace {}", ns)
-            },
+            }
             Value::VariantCase(case) => {
                 write!(f, "variant case {}.{}", case.variant_name, case.case)
-            },
+            }
             Value::Overload(overload) => {
                 write!(f, "overloaded function")?;
                 if let Some(sig) = &overload.sig {
                     write!(f, " with signature {}", sig)?;
                 }
                 Ok(())
-            },
+            }
             Value::Const(const_val) => {
                 write!(f, "constant")?;
                 if let Some(decl) = &const_val.decl {
                     write!(f, " {}", decl)?;
                 }
                 write!(f, "({})", const_val.value)
-            },
+            }
         }
     }
 }
@@ -778,7 +777,6 @@ impl Spanned for Value {
 
 impl Annotation for Value {
     type Type = Type;
-    type TypeNameIdentity<'a> = TypeIdentity<'a>;
 
     type DeclName = Symbol;
     type Pattern = TypePattern;
@@ -815,28 +813,19 @@ impl Annotation for Value {
         true
     }
 
-    fn typename_identity(type_name: &ast::TypeName<Self>) -> TypeIdentity {
-        TypeIdentity(type_name)
+    fn typename_eq(typename_a: &ast::TypeName<Self>, typename_b: &ast::TypeName<Self>) -> bool {
+        typename_a.ty().eq(typename_b.ty())
     }
-}
 
-#[derive(Eq, Copy, Clone)]
-pub struct TypeIdentity<'a>(pub &'a crate::ast::TypeName<Value>);
-
-impl<'a> fmt::Display for TypeIdentity<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self.0.ty(), f)
+    fn typename_hash<H: Hasher>(typename: &ast::TypeName<Self>, state: &mut H) {
+        typename.ty().hash(state)
     }
-}
 
-impl<'a> Hash for TypeIdentity<'a> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.ty().hash(state)
+    fn typename_fmt(f: &mut fmt::Formatter, typename: &ast::TypeName<Self>) -> fmt::Result {
+        fmt::Display::fmt(typename.ty(), f)
     }
-}
 
-impl<'a> PartialEq for TypeIdentity<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.ty().eq(other.0.ty())
+    fn type_semantic_hint(ty: &Type) -> SemanticHint {
+        ty.semantic_hint()
     }
 }

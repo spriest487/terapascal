@@ -1,7 +1,7 @@
-use crate::ast::Ident;
-use crate::ast::TypeName;
 use crate::ast::Annotation;
-use crate::ast::FunctionParamMod;
+use crate::ast::TypeName;
+use crate::ast::FunctionParamModDecl;
+use crate::ast::Ident;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
@@ -17,8 +17,14 @@ use terapascal_common::span::Spanned;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
 pub struct FunctionTypeName<A: Annotation = Span> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub func_kw: Span,
+    
     pub params: Vec<FunctionTypeNameParam<A>>,
-    pub return_ty: Option<Box<TypeName<A>>>,
+    
+    pub result_type: Option<Box<TypeName<A>>>,
     
     pub ty: A::Type,
 
@@ -51,7 +57,7 @@ impl<A: Annotation> fmt::Display for FunctionTypeName<A> {
             write!(f, ")")?;
         }
 
-        if let Some(return_ty) = &self.return_ty {
+        if let Some(return_ty) = &self.result_type {
             write!(f, ": {}", return_ty)?;
         }
 
@@ -67,7 +73,7 @@ pub struct FunctionTypeNameParam<A: Annotation = Span> {
     pub name: Option<Ident>,
 
     pub ty: TypeName<A>,
-    pub modifier: Option<FunctionParamMod>,
+    pub modifier: Option<FunctionParamModDecl>,
 }
 
 impl ParseSeq for FunctionTypeNameParam {
@@ -76,12 +82,7 @@ impl ParseSeq for FunctionTypeNameParam {
             tokens.match_one(Separator::Semicolon)?;
         }
 
-        let modifier = match tokens.match_one_maybe(Keyword::Var | Keyword::Out) {
-            Some(tt) if tt.is_keyword(Keyword::Var) => Some(FunctionParamMod::Var),
-            Some(tt) if tt.is_keyword(Keyword::Out) => Some(FunctionParamMod::Out),
-            Some(..) => unreachable!(),
-            None => None,
-        };
+        let modifier = FunctionParamModDecl::try_parse(tokens);
 
         let mut ty = TypeName::parse(tokens)?;
         let mut param_name = None;
@@ -126,7 +127,7 @@ impl<A: Annotation> fmt::Display for FunctionTypeNameParam<A> {
         }
         
         if let Some(modifier) = &self.modifier {
-            write!(f, "{} ", modifier)?;
+            write!(f, "{} ", modifier.param_mod)?;
         }
         write!(f, "{}", self.ty)
     }

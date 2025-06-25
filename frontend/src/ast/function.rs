@@ -102,6 +102,23 @@ pub struct FunctionParamModDecl {
     pub span: Span,
 }
 
+impl FunctionParamModDecl {
+    pub fn try_parse(tokens: &mut TokenStream) -> Option<Self> {
+        match tokens.match_one_maybe(Keyword::Var | Keyword::Out) {
+            Some(tt) if tt.is_keyword(Keyword::Var) => Some(FunctionParamModDecl {
+                param_mod: FunctionParamMod::Var,
+                span: tt.into_span(),
+            }),
+            Some(tt) if tt.is_keyword(Keyword::Out) => Some(FunctionParamModDecl {
+                param_mod: FunctionParamMod::Out,
+                span: tt.into_span(),
+            }),
+            Some(..) => unreachable!(),
+            None => None,
+        }
+    }
+}
+
 impl fmt::Display for FunctionParamMod {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", match self {
@@ -360,31 +377,22 @@ impl FunctionDecl<Span> {
     pub fn parse_params(tokens: &mut TokenStream) -> ParseResult<Vec<FunctionParam<Span>>> {
         let mut params = Vec::new();
 
-        let match_mod = Keyword::Var.or(Keyword::Out);
-        let match_more = match_mod.clone().or(Matcher::AnyIdent);
-
         loop {
             if !params.is_empty() && tokens.match_one_maybe(Separator::Semicolon).is_none() {
                 break;
             }
 
             // check if there's another param ahead
-            if tokens.look_ahead().match_one(match_more.clone()).is_none() {
+            if tokens
+                .look_ahead()
+                .match_one(Keyword::Var | Keyword::Out | Matcher::AnyIdent)
+                .is_none()
+            {
                 break;
             }
 
             // might start with a modifier keyword which applies to all params declared in this group
-            let modifier = match tokens.match_one_maybe(match_mod.clone()) {
-                Some(tt) if tt.is_keyword(Keyword::Var) => Some(FunctionParamModDecl {
-                    param_mod: FunctionParamMod::Var,
-                    span: tt.into_span(),
-                }),
-                Some(tt) if tt.is_keyword(Keyword::Out) => Some(FunctionParamModDecl {
-                    param_mod: FunctionParamMod::Out,
-                    span: tt.into_span(),
-                }),
-                _ => None,
-            };
+            let modifier = FunctionParamModDecl::try_parse(tokens);
 
             // match comma-separated idents for this param type
             let mut idents = Vec::new();

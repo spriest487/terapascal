@@ -83,20 +83,42 @@ impl<A: Annotation> fmt::Display for IdentTypeName<A> {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, Hash, PartialEq)]
+pub struct ArrayTypeNameDim<A: Annotation = Span> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub open_bracket: Span,
+
+    pub dim_expr: Expr<A>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub close_bracket: Span,
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, Hash, PartialEq)]
 pub struct ArrayTypeName<A: Annotation = Span> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub array_kw: Span,
+
+    pub dim: Option<Box<ArrayTypeNameDim<A>>>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub of_kw: Span,
+
     pub element: Box<TypeName<A>>,
-    pub dim: Option<Box<Expr<A>>>,
     pub indirection: usize,
 
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     pub span: Span,
-
-    #[derivative(Hash = "ignore")]
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub of_kw: Span,
 
     pub ty: A::Type,
 }
@@ -110,7 +132,7 @@ impl<A: Annotation> Spanned for ArrayTypeName<A> {
 impl<A: Annotation> fmt::Display for ArrayTypeName<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.dim {
-            Some(dim) => write!(f, "array[{}] of {}", dim, self.element),
+            Some(dim) => write!(f, "array[{}] of {}", dim.dim_expr, self.element),
             None => write!(f, "array of {}", self.element),
         }
     }
@@ -324,12 +346,21 @@ impl TypeName {
             None => match tokens.match_one(Matcher::Delimited(DelimiterPair::SquareBracket))? {
                 TokenTree::Delimited(group) => {
                     span.extend(&group.close);
+                    
+                    let open_bracket = group.open.clone();
+                    let close_bracket = group.close.clone();
 
                     let mut dim_tokens = group.into_inner_tokens();
                     let dim_expr = Expr::parse(&mut dim_tokens)?;
                     dim_tokens.finish()?;
+                    
+                    let dim = ArrayTypeNameDim {
+                        open_bracket,
+                        dim_expr,
+                        close_bracket,
+                    };
 
-                    Some(Box::new(dim_expr))
+                    Some(Box::new(dim))
                 },
 
                 _ => unreachable!("match failed"),
@@ -349,10 +380,11 @@ impl TypeName {
         }
 
         Ok(TypeName::Array(ArrayTypeName {
+            array_kw: array_kw_span.clone(),
+            of_kw,
             dim,
             span,
             indirection,
-            of_kw,
             element: Box::new(element),
             ty: UncheckedType,
         }))
@@ -377,9 +409,9 @@ impl TypeName {
                 params
             },
 
-            Some(..) => unreachable!(),
-
             None => Vec::new(),
+
+            Some(..) => unreachable!(),
         };
 
         let return_ty = match tokens.match_one_maybe(Separator::Colon) {
@@ -393,10 +425,11 @@ impl TypeName {
         };
 
         let func_ty_name = FunctionTypeName {
+            func_kw: kw_span,
             indirection,
             params,
             span,
-            return_ty,
+            result_type: return_ty,
             ty: UncheckedType,
         };
 
@@ -450,68 +483,18 @@ impl TypeName {
 
 impl<A: Annotation> fmt::Display for TypeName<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        A::typename_identity(self).fmt(f)
+        A::typename_fmt(f, self)
     }
 }
 
 impl<A: Annotation> PartialEq for TypeName<A> {
     fn eq(&self, other: &Self) -> bool {
-        A::typename_identity(self).eq(&A::typename_identity(other))
+        A::typename_eq(self, other)
     }
 }
 
 impl<A: Annotation> Hash for TypeName<A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        A::typename_identity(self).hash(state)
-    }
-}
-
-#[derive(Eq, Copy, Clone)]
-pub struct SyntaxIdentity<'a, A: Annotation>(pub &'a TypeName<A>);
-
-impl<'a, A: Annotation> fmt::Display for SyntaxIdentity<'a, A> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.0 {
-            TypeName::Ident(ident_type_name) => write!(f, "{}", ident_type_name),
-            TypeName::Array(array_type_name) => write!(f, "{}", array_type_name),
-            TypeName::Function(func_type_name) => write!(f, "{}", func_type_name),
-            TypeName::Weak(type_name, ..) => write!(f, "weak {}", type_name.type_name),
-            TypeName::Unspecified(..) => write!(f, "<unknown type>"),
-        }
-    }
-}
-
-impl<'a, A: Annotation> Hash for SyntaxIdentity<'a, A> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self.0 {
-            TypeName::Ident(ident_type_name) => ident_type_name.hash(state),
-            TypeName::Array(array_type_name) => array_type_name.hash(state),
-            TypeName::Function(func_type_name) => func_type_name.hash(state),
-            TypeName::Weak(weak_type_name, ..) => weak_type_name.hash(state),
-            TypeName::Unspecified(ty) => ty.hash(state),
-        }
-    }
-}
-
-impl<'a, A: Annotation> PartialEq for SyntaxIdentity<'a, A> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self.0, other.0) {
-            (TypeName::Unspecified(name), TypeName::Unspecified(other_name)) => {
-                name.eq(other_name)
-            }
-            (TypeName::Ident(name), TypeName::Ident(other_name)) => {
-                name.eq(other_name)
-            }
-            (TypeName::Array(name), TypeName::Array(other_name)) => {
-                name.eq(other_name)
-            }
-            (TypeName::Weak(name), TypeName::Weak(other_name)) => {
-                name.eq(other_name)
-            }
-            (TypeName::Function(name), TypeName::Function(other_name)) => {
-                name.eq(other_name)
-            }
-            _ => false,
-        }
+        A::typename_hash(self, state)
     }
 }
