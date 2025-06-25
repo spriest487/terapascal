@@ -25,6 +25,8 @@ use crate::Separator;
 use crate::TokenTree;
 use derivative::Derivative;
 use std::fmt;
+use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
@@ -133,7 +135,7 @@ pub struct WeakTypeName<A: Annotation = Span> {
 }
 
 #[derive(Eq, Clone, Derivative)]
-#[derivative(PartialEq, Hash, Debug)]
+#[derivative(Debug)]
 pub enum TypeName<A: Annotation = Span> {
     /// type is unknown or unnamed at parse time
     Unspecified(A::Type),
@@ -448,12 +450,89 @@ impl TypeName {
 
 impl<A: Annotation> fmt::Display for TypeName<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
+        A::typename_identity(self).fmt(f)
+    }
+}
+
+impl<A: Annotation> PartialEq for TypeName<A> {
+    fn eq(&self, other: &Self) -> bool {
+        A::typename_identity(self).eq(&A::typename_identity(other))
+    }
+}
+
+impl<A: Annotation> Hash for TypeName<A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        A::typename_identity(self).hash(state)
+    }
+}
+
+#[derive(Eq, Copy, Clone)]
+pub struct SyntaxIdentity<'a, A: Annotation>(pub &'a TypeName<A>);
+
+impl<'a, A: Annotation> fmt::Display for SyntaxIdentity<'a, A> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
             TypeName::Ident(ident_type_name) => write!(f, "{}", ident_type_name),
             TypeName::Array(array_type_name) => write!(f, "{}", array_type_name),
             TypeName::Function(func_type_name) => write!(f, "{}", func_type_name),
             TypeName::Weak(type_name, ..) => write!(f, "weak {}", type_name.type_name),
             TypeName::Unspecified(..) => write!(f, "<unknown type>"),
         }
+    }
+}
+
+impl<'a, A: Annotation> Hash for SyntaxIdentity<'a, A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self.0 {
+            TypeName::Ident(ident_type_name) => ident_type_name.hash(state),
+            TypeName::Array(array_type_name) => array_type_name.hash(state),
+            TypeName::Function(func_type_name) => func_type_name.hash(state),
+            TypeName::Weak(weak_type_name, ..) => weak_type_name.hash(state),
+            TypeName::Unspecified(ty) => ty.hash(state),
+        }
+    }
+}
+
+impl<'a, A: Annotation> PartialEq for SyntaxIdentity<'a, A> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self.0, other.0) {
+            (TypeName::Unspecified(name), TypeName::Unspecified(other_name)) => {
+                name.eq(other_name)
+            }
+            (TypeName::Ident(name), TypeName::Ident(other_name)) => {
+                name.eq(other_name)
+            }
+            (TypeName::Array(name), TypeName::Array(other_name)) => {
+                name.eq(other_name)
+            }
+            (TypeName::Weak(name), TypeName::Weak(other_name)) => {
+                name.eq(other_name)
+            }
+            (TypeName::Function(name), TypeName::Function(other_name)) => {
+                name.eq(other_name)
+            }
+            _ => false,
+        }
+    }
+}
+
+#[derive(Eq, Copy, Clone)]
+pub struct TypeIdentity<'a, A: Annotation>(pub &'a TypeName<A>);
+
+impl<'a, A: Annotation> fmt::Display for TypeIdentity<'a, A> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.ty().fmt(f)
+    }
+}
+
+impl<'a, A: Annotation> Hash for TypeIdentity<'a, A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.ty().hash(state)
+    }
+}
+
+impl<'a, A: Annotation> PartialEq for TypeIdentity<'a, A> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.ty().eq(other.0.ty())
     }
 }

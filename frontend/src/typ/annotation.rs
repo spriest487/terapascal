@@ -6,7 +6,7 @@ pub mod function;
 mod ufcs;
 
 use crate::ast;
-use crate::ast::Annotation;
+use crate::ast::{Annotation, TypeIdentity};
 use crate::ast::ConstExprValue;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
@@ -777,6 +777,8 @@ impl Spanned for Value {
 
 impl Annotation for Value {
     type Type = Type;
+    type TypeNameIdentity<'a> = TypeIdentity<'a, Value>;
+
     type DeclName = Symbol;
     type Pattern = TypePattern;
     type FunctionName = crate::typ::ast::FunctionName;
@@ -810,5 +812,9 @@ impl Annotation for Value {
 
     fn is_known_type(_type_name: &TypeName) -> bool {
         true
+    }
+
+    fn typename_identity(type_name: &ast::TypeName<Self>) -> TypeIdentity<Self> {
+        TypeIdentity(type_name)
     }
 }

@@ -1444,7 +1444,7 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
 
             Ok(TypeName::Ident(IdentTypeName {
                 ident: ident_ty.ident.clone(),
-                ty,
+                ty: ty.indirect_by(ident_ty.indirection),
                 indirection: ident_ty.indirection,
                 span: ident_ty.span.clone(),
                 type_args,
@@ -1483,10 +1483,8 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
 
             let sig = FunctionSig::new(return_ty.ty().clone(), sig_params, None);
 
-            let mut ty = Type::Function(Arc::new(sig));
-            for _ in 0..func_ty_name.indirection {
-                ty = ty.ptr();
-            }
+            let ty = Type::Function(Arc::new(sig))
+                .indirect_by(func_ty_name.indirection);
 
             Ok(TypeName::Function(FunctionTypeName {
                 ty,

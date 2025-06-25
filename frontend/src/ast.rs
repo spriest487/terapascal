@@ -45,8 +45,8 @@ pub use raise::*;
 pub use statement::*;
 use std::fmt;
 use std::hash::Hash;
-use terapascal_common::span::Spanned;
 use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 pub use type_constraint::*;
 pub use type_list::*;
 pub use type_name::*;
@@ -98,7 +98,8 @@ pub trait Pattern: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
 
 pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
     type Type: Clone + Eq + PartialEq + Hash + fmt::Debug;
-    
+    type TypeNameIdentity<'a>: fmt::Display + Eq + PartialEq + Hash where Self: 'a;
+
     type DeclName: DeclName;
     
     type Pattern: Pattern<Annotation = Self>; 
@@ -113,10 +114,15 @@ pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
     fn semantic_hint(&self) -> SemanticHint;
 
     fn is_known_type(type_name: &TypeName<Self>) -> bool;
+    
+    fn typename_identity(type_name: &TypeName<Self>) -> Self::TypeNameIdentity<'_>;
+    // fn display_typename(f: &mut fmt::Formatter, type_name: &TypeName<Self>) -> fmt::Result;
+    // fn typename_eq(a: &TypeName<Self>, b: &TypeName<Self>) -> bool;
 }
 
 impl Annotation for Span {
     type Type = UncheckedType;
+    type TypeNameIdentity<'a> = SyntaxIdentity<'a, Span>;
     
     type DeclName = DeclIdent;
     type Pattern = TypeNamePattern;
@@ -134,6 +140,10 @@ impl Annotation for Span {
     fn is_known_type(type_name: &TypeName<Self>) -> bool {
         *type_name != TypeName::Unspecified(UncheckedType)
     }
+
+    fn typename_identity(type_name: &TypeName<Self>) -> SyntaxIdentity<Span> {
+        SyntaxIdentity(type_name)
+    }    
 }
 
 // for external tools e.g. syntax highlighting
