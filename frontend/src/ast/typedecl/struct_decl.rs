@@ -119,7 +119,7 @@ impl StructDecl<Span> {
     ) -> Self {
         let packed_kw = parser.tokens().match_one_maybe(Keyword::Packed);
         let packed = packed_kw.is_some();
-
+        
         let match_kw = if packed {
             Matcher::from(Keyword::Record)
         } else {

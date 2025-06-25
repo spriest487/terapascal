@@ -491,7 +491,6 @@ impl TypeDeclHeader {
         name_span: &Span
     ) -> Self {
         let kw_matcher = kw_matcher.into();
-        assert!(kw_matcher.is_match(&keyword_token));
         
         Self::parse(parser.tokens(), kw_matcher, tags, name_span)
             .or_continue_with(parser.errors(), || {
