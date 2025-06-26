@@ -268,9 +268,9 @@ pub fn specialize_call_args(
         let mut actual_args = Vec::new();
 
         if let Some(self_arg) = self_arg.cloned() {
-            let (decl_self_param, _) = decl.params().nth(0).unwrap();
+            let decl_self_ty = decl.param_type(0).unwrap().ty();
             let actual_self_arg = specialize_arg(
-                &decl_self_param.ty,
+                decl_self_ty,
                 &mut inferred_ty_args,
                 |_expect_ty, _ctx| Ok(self_arg),
                 span,
@@ -281,11 +281,10 @@ pub fn specialize_call_args(
         }
 
         for (i, arg) in args.iter().enumerate() {
-            let (arg_param, _) = decl.params().nth(i + self_arg_len).unwrap();
-            let param_ty = &arg_param.ty;
+            let param_ty = decl.param_type(i + self_arg_len).unwrap();
 
             let actual_arg = specialize_arg(
-                param_ty,
+                param_ty.ty(),
                 &mut inferred_ty_args,
                 |expect_ty, ctx| evaluate_expr(arg, expect_ty, ctx),
                 span,

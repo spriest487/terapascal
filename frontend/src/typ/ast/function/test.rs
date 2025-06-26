@@ -97,7 +97,7 @@ fn make_decl(
         },
         tags: Vec::new(),
         kind: FunctionDeclKind::Function,
-        params: params
+        param_groups: params
             .into_iter()
             .enumerate()
             .map(|(pos, ty)| FunctionParamGroup {
@@ -148,8 +148,8 @@ fn specialized_func_decl_has_specialized_param_tys() {
     let specialized = specialize_func_decl(&decl, &args, &ctx)
         .unwrap();
 
-    assert_eq!(Type::Primitive(Primitive::Boolean), *specialized.params[0].ty.ty());
-    assert_eq!(Type::Primitive(Primitive::Int32), *specialized.params[1].ty.ty());
+    assert_eq!(Type::Primitive(Primitive::Boolean), *specialized.param_type(0).unwrap().ty());
+    assert_eq!(Type::Primitive(Primitive::Int32), *specialized.param_type(1).unwrap().ty());
 }
 
 #[test]

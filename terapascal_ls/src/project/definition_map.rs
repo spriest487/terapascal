@@ -503,8 +503,13 @@ impl DefinitionMap {
             self.add_type_params(params, ctx);
         }
 
-        for param in &func_decl.params {
-            self.add_typename(&param.ty, ctx);
+        for param_group in &func_decl.param_groups {
+            for item in &param_group.param_items {
+                if let Some(name_span) = &item.name_span {
+                    self.add_self_def(name_span);
+                }
+            }
+            self.add_typename(&param_group.ty, ctx);
         }
 
         self.add_typename(&func_decl.result_ty, ctx);

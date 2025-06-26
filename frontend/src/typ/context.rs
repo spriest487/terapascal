@@ -2152,10 +2152,9 @@ fn ambig_matching_methods(methods: &[&InstanceMethod]) -> Vec<(Type, Ident)> {
                 }
 
                 InstanceMethod::FreeFunction { decl, func_name, .. } => {
-                    let (self_param, _) = decl.params().nth(0).unwrap();
-                    let of_ty = self_param.ty.clone();
+                    let of_ty = decl.param_type(0).unwrap().ty().clone();
 
-                    (of_ty.ty().clone(), func_name.ident().clone())
+                    (of_ty, func_name.ident().clone())
                 },
             }
         })

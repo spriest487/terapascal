@@ -543,6 +543,11 @@ impl<A: Annotation> FunctionDecl<A> {
                 .iter()
                 .map(move |item| (group, item)))
     }
+
+    pub fn param_type(&self, index: usize) -> Option<&TypeName<A>> {
+        let (param, _) = self.params().nth(index)?;
+        Some(&param.ty)
+    }
 }
 
 impl<A: Annotation> Spanned for FunctionDecl<A> {

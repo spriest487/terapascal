@@ -953,13 +953,15 @@ where
             self.add(decl.name.type_param_span(i), SEMANTIC_TYPE_PARAMETER, type_param_desc);
         }
 
-        for param in &decl.params {
+        for param in &decl.param_groups {
             if let Some(modifier) = &param.modifier {
                 self.add_keyword(&modifier.span);
             }
             
-            if let Some(param_span) = param.get_span() {
-                self.add(param_span, SEMANTIC_PARAMETER, "function parameter name");
+            for item in &param.param_items {
+                if let Some(name_span) = &item.name_span {
+                    self.add(name_span, SEMANTIC_PARAMETER, "function parameter name");    
+                } 
             }
 
             self.add_typename(&param.ty);

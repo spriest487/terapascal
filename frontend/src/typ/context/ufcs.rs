@@ -99,11 +99,11 @@ fn find_ufcs_free_functions(ty: &Type, ctx: &Context) -> Vec<InstanceMethod> {
         
         for overload in overloads {
             // ignore decls that can't possibly be called via UFCS since they have 0 params
-            let Some((self_param, _)) = &overload.decl().params().nth(0) else {
+            let Some(self_ty) = &overload.decl().param_type(0) else {
                 continue;
             };
 
-            if self_param.ty.can_specialize_to(ty, ctx) {
+            if self_ty.ty().can_specialize_to(ty, ctx) {
                 let func_name = Symbol::from(decl_path.clone())
                     .with_ty_params(overload.decl().name.type_params.clone());
 
