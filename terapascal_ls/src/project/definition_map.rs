@@ -3,28 +3,15 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::span::Location;
-use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_frontend::Operator;
-use terapascal_frontend::ast::{Exit, Ident};
 use terapascal_frontend::ast::ForLoopCounterInit;
 use terapascal_frontend::ast::ForLoopRange;
 use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::Literal;
 use terapascal_frontend::ast::SetDeclRange;
 use terapascal_frontend::ast::TypeMemberDecl;
-use terapascal_frontend::typ::Context;
-use terapascal_frontend::typ::Invocation;
-use terapascal_frontend::typ::ModuleUnit;
-use terapascal_frontend::typ::ScopeMemberRef;
-use terapascal_frontend::typ::Type;
-use terapascal_frontend::typ::TypeArgList;
-use terapascal_frontend::typ::TypeName;
-use terapascal_frontend::typ::TypeParamList;
-use terapascal_frontend::typ::TypePattern;
-use terapascal_frontend::typ::Value;
-use terapascal_frontend::typ::ast::AliasDecl;
+use terapascal_frontend::ast::{Exit, Ident};
 use terapascal_frontend::typ::ast::Block;
 use terapascal_frontend::typ::ast::Call;
 use terapascal_frontend::typ::ast::CaseBlock;
@@ -48,7 +35,19 @@ use terapascal_frontend::typ::ast::UnitDecl;
 use terapascal_frontend::typ::ast::VariantDecl;
 use terapascal_frontend::typ::ast::WhereClause;
 use terapascal_frontend::typ::ast::WhileLoop;
+use terapascal_frontend::typ::ast::{member_annotation, AliasDecl};
 use terapascal_frontend::typ::seq::TypeSequenceSupport;
+use terapascal_frontend::typ::Context;
+use terapascal_frontend::typ::Invocation;
+use terapascal_frontend::typ::ModuleUnit;
+use terapascal_frontend::typ::ScopeMemberRef;
+use terapascal_frontend::typ::Type;
+use terapascal_frontend::typ::TypeArgList;
+use terapascal_frontend::typ::TypeName;
+use terapascal_frontend::typ::TypeParamList;
+use terapascal_frontend::typ::TypePattern;
+use terapascal_frontend::typ::Value;
+use terapascal_frontend::Operator;
 
 pub struct LinksEntry {
     pub key: Span,
@@ -203,7 +202,7 @@ impl DefinitionMap {
         let ctx = &module_unit.context;
 
         if unit.ident.last().span.end.col > 0 {
-            self.add_namespace(&unit.ident, ctx);
+            self.add_path(&unit.ident, ctx);
         }
 
         for iface_decl in &unit.iface_section.decls {
@@ -239,7 +238,7 @@ impl DefinitionMap {
 
             UnitDecl::Uses { decl } => {
                 for item in &decl.units {
-                    self.add_namespace(&item.ident, ctx);
+                    self.add_path(&item.ident, ctx);
                 }
             },
 
@@ -253,20 +252,19 @@ impl DefinitionMap {
         }
     }
 
-    fn add_namespace(&mut self, unit_ident: &IdentPath, ctx: &Context) {
-        let mut partial_path = IdentPath::from(unit_ident.first().clone());
+    fn add_path(&mut self, path: &IdentPath, ctx: &Context) {
+        let mut partial_path = IdentPath::from(path.first().clone());
         let mut next_index = 1;
 
         loop {
-            if let Some(scope_member) = ctx.find_path(&partial_path) {
-                if let ScopeMemberRef::Scope { path } = scope_member {
-                    let def_span = path.to_namespace().path_span();
+            let part = partial_path.last();
 
-                    self.add(partial_path.last().span.clone(), def_span);
-                }
+            if let Some(scope_member) = ctx.find_path(&partial_path) {
+                let value = member_annotation(&scope_member, part.span.clone(), ctx);
+                self.add_ident(part, &value, ctx);
             }
 
-            let Some(next_part) = unit_ident.as_slice().get(next_index) else {
+            let Some(next_part) = path.as_slice().get(next_index) else {
                 break;
             };
 
@@ -455,12 +453,40 @@ impl DefinitionMap {
     }
 
     fn add_typename(&mut self, type_name: &TypeName, ctx: &Context) {
-        let Some(span) = type_name.get_span() else {
-            return;
-        };
-        
-        // TODO: more sophisticated typename highlighting
-        self.add_type_ref(type_name.ty(), span, ctx);
+        match type_name {
+            TypeName::Unspecified(..) => {
+                // doesn't have a span, so nothing to do
+            }
+
+            TypeName::Ident(ident_name) => {
+                self.add_path(&ident_name.ident, ctx);
+                if let Some(type_args) = &ident_name.type_args {
+                    self.add_type_args(type_args, ctx);
+                }
+            }
+
+            TypeName::Array(array_name) => {
+                if let Some(dim) = &array_name.dim {
+                    self.add_expr(&dim.dim_expr, ctx);
+                }
+                
+                self.add_typename(&array_name.element, ctx);
+            }
+
+            TypeName::Weak(weak_name) => {
+                self.add_typename(&weak_name.type_name, ctx);
+            }
+
+            TypeName::Function(func_name) => {
+                for param in &func_name.params {
+                    self.add_typename(&param.ty, ctx);
+                }
+
+                if let Some(result_ty) = &func_name.result_type {
+                    self.add_typename(result_ty, ctx);
+                }
+            }
+        }
     }
 
     fn add_type_ref(&mut self, ty: &Type, at: &Span, ctx: &Context) {
@@ -784,8 +810,7 @@ impl DefinitionMap {
             },
 
             Value::Type(ty, ..) => {
-                let typename = TypeName::from_ident(ident.clone(), ty.clone());
-                self.add_typename(&typename, ctx);
+                self.add_type_ref(ty, at_span, ctx);
             },
 
             Value::Namespace(path, ..) => {
