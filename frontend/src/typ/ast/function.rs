@@ -4,7 +4,7 @@ mod decl_mod;
 
 pub use self::decl_mod::*;
 use crate::ast;
-use crate::ast::FunctionDeclKind;
+use crate::ast::{FunctionDeclKind, FunctionParamItem};
 use crate::ast::Ident;
 use crate::ast::SemanticHint;
 use crate::typ::ast::const_eval::ConstEval;
@@ -54,7 +54,7 @@ pub const SELF_TY_NAME: &str = "Self";
 
 pub type FunctionDecl = ast::FunctionDecl<Value>;
 pub type FunctionDef = ast::FunctionDef<Value>;
-pub type FunctionParam = ast::FunctionParam<Value>;
+pub type FunctionParamGroup = ast::FunctionParamGroup<Value>;
 pub type InterfaceMethodDecl = ast::InterfaceMethodDecl<Value>;
 pub type AnonymousFunctionDef = ast::AnonymousFunctionDef<Value>;
 pub type FunctionLocalBinding = ast::FunctionLocalBinding<Value>;
@@ -311,11 +311,11 @@ impl FunctionDecl {
                 }
             };
 
-            let params: Vec<FunctionParam>;
+            let param_groups: Vec<FunctionParamGroup>;
 
             match &decl_context {
                 FunctionDeclContext::FreeFunction => {
-                    params = typecheck_params(decl, None, ctx)?;
+                    param_groups = typecheck_params(decl, None, ctx)?;
                 },
 
                 // method definition
@@ -339,12 +339,14 @@ impl FunctionDecl {
                         None
                     };
 
-                    params = typecheck_params(decl, self_arg_ty, ctx)?;
+                    param_groups = typecheck_params(decl, self_arg_ty, ctx)?;
 
-                    let param_sigs = params.iter()
+                    let param_sigs = param_groups
+                        .iter()
                         .cloned()
-                        .map(|param| FunctionSigParam::from_decl_param(param))
+                        .flat_map(|param| FunctionSigParam::from_decl_param(param))
                         .collect();
+
                     let method_sig = FunctionSig::new(
                         result_ty.ty().clone(),
                         param_sigs,
@@ -389,7 +391,7 @@ impl FunctionDecl {
                         None
                     };
 
-                    params = typecheck_params(decl, self_param_ty, ctx)?;
+                    param_groups = typecheck_params(decl, self_param_ty, ctx)?;
                 }
             };
 
@@ -403,7 +405,7 @@ impl FunctionDecl {
                 },
                 tags,
                 kind: decl.kind,
-                params,
+                param_groups,
                 where_clause,
                 result_ty,
                 span: decl.span.clone(),
@@ -507,45 +509,54 @@ fn typecheck_params(
     decl: &ast::FunctionDecl,
     implicit_self: Option<Type>,
     ctx: &mut Context
-) -> TypeResult<Vec<FunctionParam>> {
+) -> TypeResult<Vec<FunctionParamGroup>> {
     let mut params = Vec::new();
 
     if let Some(self_ty) = implicit_self {
-        params.push(FunctionParam {
+        params.push(FunctionParamGroup {
+            param_items: vec![FunctionParamItem::implicit_self()],
             ty: TypeName::inferred(self_ty),
-            name: Arc::new(SELF_PARAM_NAME.to_string()),
-            is_implicit_self: true,
             modifier: None,
-            name_span: None,
+            span: None,
         });
     }
     
-    for param in &decl.params {
-        let find_name_dup = params
-            .iter()
-            .find(|p| p.name == param.name);
+    for src_param in &decl.param_groups {
+        let src_items = &src_param.param_items;
 
-        if let Some(prev) = find_name_dup {
-            return Err(TypeError::DuplicateNamedArg {
-                name: Ident::new(&param.name, decl.name.span().clone()),
-                span: param.name_span.clone()
-                    .unwrap_or_else(|| {
-                        decl.span.clone()
-                    }),
-                previous: prev.name_span.clone(),
-            });
+        for item in src_items {
+            let find_name_dup = (0..params.len())
+                .find_map(|group_index| {
+                    let item_index = params[group_index].param_items
+                        .iter()
+                        .position(|other_item| other_item.name == item.name)?;
+
+                    Some((group_index, item_index))
+                });
+
+            if let Some((existing_group, existing_item)) = find_name_dup {
+                let prev = &params[existing_group].param_items[existing_item];
+
+                return Err(TypeError::DuplicateNamedArg {
+                    name: Ident::new(&item.name, decl.name.span().clone()),
+                    span: item.name_span
+                        .clone()
+                        .unwrap_or_else(|| {
+                            decl.span.clone()
+                        }),
+                    previous: prev.name_span.clone(),
+                });
+            }
         }
 
-        let ty = typecheck_typename(&param.ty, ctx)?;
+        let ty = typecheck_typename(&src_param.ty, ctx)?;
 
-        let param = FunctionParam {
-            modifier: param.modifier.clone(),
-            name: param.name.clone(),
-            name_span: param.name_span.clone(),
+        params.push(FunctionParamGroup {
+            modifier: src_param.modifier.clone(),
+            param_items: src_param.param_items.clone(),
             ty,
-            is_implicit_self: false,
-        };
-        params.push(param);
+            span: src_param.span.clone(),
+        });
     }
 
     Ok(params)
@@ -679,11 +690,11 @@ pub fn typecheck_func_def(
         if let Some(decl_type_params) = decl.name.type_params.as_ref() {
             ctx.declare_type_params(&decl_type_params)?;
         }
-    
-        declare_func_params_in_body(&decl.params, &decl.name.span, ctx)?;
+
+        declare_func_params_in_body(&decl.param_groups, &decl.name.span, ctx)?;
 
         let locals = declare_locals_in_body(&def, ctx)?;
-    
+
         let body = typecheck_block(&def.body, &decl.result_ty, ctx)?;
 
         Ok(FunctionDef {
@@ -755,7 +766,7 @@ fn declare_locals_in_body(
     Ok(locals)
 }
 
-fn declare_func_params_in_body(params: &[FunctionParam], default_span: &Span, ctx: &mut Context) -> TypeResult<()> {
+fn declare_func_params_in_body(params: &[FunctionParamGroup], default_span: &Span, ctx: &mut Context) -> TypeResult<()> {
     for param in params {
         let (kind, init) = match param.get_modifier() {
             Some(ast::FunctionParamMod::Var) => (ValueKind::Mutable, true),
@@ -763,31 +774,33 @@ fn declare_func_params_in_body(params: &[FunctionParam], default_span: &Span, ct
             None => (ValueKind::Mutable, false),
         };
         
-        // if the param doesn't have a span itself, it's an implicit span, so just use the function
-        // name as the span
-        let name_span = param.name_span
-            .clone()
-            .unwrap_or_else(|| default_span.clone());
-        let name = Ident::new(&param.name, name_span);
-        
-        // but don't give the parameter binding a def ident
-        let def_ident = match param.name_span {
-            None => None,
-            Some(..) => Some(name.clone()),
-        };
+        for item in &param.param_items {
+            // if the param doesn't have a span itself, it's an implicit span, so just use the function
+            // name as the span
+            let name_span = item.name_span
+                .clone()
+                .unwrap_or_else(|| default_span.clone());
+            let name = Ident::new(&item.name, name_span);
 
-        ctx.declare_local_var(
-            name.clone(),
-            Binding {
-                ty: param.ty.ty().clone(),
-                kind,
-                def: def_ident,
-                semantic_hint: SemanticHint::Parameter,
-            },
-        )?;
+            // but don't give the parameter binding a def ident
+            let def_ident = match item.name_span {
+                None => None,
+                Some(..) => Some(name.clone()),
+            };
 
-        if init {
-            ctx.initialize(&name);
+            ctx.declare_local_var(
+                name.clone(),
+                Binding {
+                    ty: param.ty.ty().clone(),
+                    kind,
+                    def: def_ident,
+                    semantic_hint: SemanticHint::Parameter,
+                },
+            )?;
+
+            if init {
+                ctx.initialize(&name);
+            }
         }
     }
 
@@ -860,7 +873,7 @@ fn visit_type_refs<F, E>(decl: &mut FunctionDecl, mut f: F) -> Result<(), E>
 where
     F: FnMut(&mut Type) -> Result<(), E>
 {
-    for param in decl.params.iter_mut() {
+    for param in decl.param_groups.iter_mut() {
         f(&mut param.ty)?;
     }
 
@@ -898,12 +911,11 @@ pub fn typecheck_func_expr(
             }
         };
 
-        params.push(FunctionParam {
+        params.push(FunctionParamGroup {
+            param_items: param.param_items.clone(),
             modifier: param.modifier.clone(),
-            name: param.name.clone(),
-            name_span: param.name_span.clone(),
             ty,
-            is_implicit_self: false,
+            span: param.span.clone(),
         });
     }
 
@@ -918,7 +930,7 @@ pub fn typecheck_func_expr(
 
     let sig_params = params
         .iter()
-        .map(|p|{
+        .flat_map(|p|{
             FunctionSigParam::from_decl_param(p.clone())
         })
         .collect();

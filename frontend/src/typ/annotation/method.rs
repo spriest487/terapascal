@@ -100,9 +100,8 @@ impl MethodValue {
                 let first_self_pos = self
                     .decl
                     .func_decl
-                    .params
-                    .iter()
-                    .position(|param| param.ty == Type::MethodSelf);
+                    .params()
+                    .position(|(group, _param)| group.ty == Type::MethodSelf);
 
                 match first_self_pos {
                     Some(index) => {

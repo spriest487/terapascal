@@ -130,7 +130,7 @@ where
             return false;
         }
 
-        if method_decl.params.len() != 1 || method_decl.params[0].ty != *ty {
+        if method_decl.params_len() != 1 || method_decl.param_groups[0].ty != *ty {
             return false;
         }
 

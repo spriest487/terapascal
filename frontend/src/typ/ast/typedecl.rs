@@ -324,7 +324,7 @@ where
                         }
                         dtor_span = Some(func_decl.span.clone());
 
-                        if func_decl.params.len() != 1 {
+                        if func_decl.params_len() != 1 {
                             return Err(TypeError::DtorCannotHaveParams { span: func_decl.span.clone() })
                         }
                         if !func_decl.name.type_params.is_none() {

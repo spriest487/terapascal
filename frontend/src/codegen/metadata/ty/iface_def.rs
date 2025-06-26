@@ -27,9 +27,8 @@ pub fn translate_iface(
                 },
                 params: method
                     .decl
-                    .params
-                    .iter()
-                    .map(|param| match param.ty.ty() {
+                    .params()
+                    .map(|(param, _)| match param.ty.ty() {
                         typ::Type::MethodSelf => self_ty.clone(),
                         param_ty => lib.translate_type(param_ty, generic_ctx),
                     })

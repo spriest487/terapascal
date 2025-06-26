@@ -2145,15 +2145,19 @@ fn ambig_paths<'a>(options: impl IntoIterator<Item = (Type, Ident)>) -> Vec<Iden
 fn ambig_matching_methods(methods: &[&InstanceMethod]) -> Vec<(Type, Ident)> {
     methods
         .iter()
-        .map(|im| match im {
-            InstanceMethod::Method { self_ty, method, .. } => {
-                (self_ty.clone(), method.func_decl.name.ident.clone())
-            }
+        .map(|im| {
+            match im {
+                InstanceMethod::Method { self_ty, method, .. } => {
+                    (self_ty.clone(), method.func_decl.name.ident.clone())
+                }
 
-            InstanceMethod::FreeFunction { decl, func_name, .. } => {
-                let of_ty = decl.params.first().unwrap().ty.clone();
-                (of_ty.ty().clone(), func_name.ident().clone())
-            },
+                InstanceMethod::FreeFunction { decl, func_name, .. } => {
+                    let (self_param, _) = decl.params().nth(0).unwrap();
+                    let of_ty = self_param.ty.clone();
+
+                    (of_ty.ty().clone(), func_name.ident().clone())
+                },
+            }
         })
         .collect()
 }

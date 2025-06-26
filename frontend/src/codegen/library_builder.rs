@@ -405,7 +405,7 @@ impl LibraryBuilder {
         let ir_func = build_func_def(
             self,
             generic_ctx,
-            &specialized_decl.params,
+            &specialized_decl.param_groups,
             &specialized_decl.result_ty,
             &func_def.locals,
             &func_def.body,
@@ -597,7 +597,7 @@ impl LibraryBuilder {
         let ir_func = build_func_def(
             self,
             generic_ctx,
-            &generic_method_def.decl.params,
+            &generic_method_def.decl.param_groups,
             &generic_method_def.decl.result_ty,
             &generic_method_def.locals,
             &generic_method_def.body,
@@ -1278,9 +1278,9 @@ impl LibraryBuilder {
 
         let generic_ctx = GenericContext::empty();
 
-        let params = decl.params
-            .iter()
-            .map(|param| {
+        let params = decl
+            .params()
+            .map(|(param, _)| {
                 // in RTTI, "self" params for interfaces become untyped pointers
                 let mut param_ty = match param.ty.ty() {
                     typ::Type::MethodSelf => ir::Type::Nothing.ptr(),

@@ -1,11 +1,10 @@
-use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
+use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Path;
 use crate::ast::Visibility;
+use crate::ast::{Access, FunctionParamItem};
 use crate::typ;
-use crate::typ::{ast, TypeName};
-use crate::typ::ast::SELF_PARAM_NAME;
 use crate::typ::Context;
 use crate::typ::Environment;
 use crate::typ::FunctionSig;
@@ -16,7 +15,7 @@ use crate::typ::Type;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
-use crate::ast::Ident;
+use crate::typ::{ast, TypeName};
 use crate::IntConstant;
 use linked_hash_map::LinkedHashMap;
 use std::path::PathBuf;
@@ -233,20 +232,22 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
         tags: Vec::new(),
         where_clause: None,
         kind: FunctionDeclKind::Function,
-        params: vec![
-            ast::FunctionParam {
-                name: Arc::new(SELF_PARAM_NAME.to_string()),
+        param_groups: vec![
+            ast::FunctionParamGroup {
+                param_items: vec![FunctionParamItem::implicit_self()],
                 ty: TypeName::inferred(self_param_ty.clone()),
                 modifier: None,
-                name_span: None,
-                is_implicit_self: true,
+                span: None,
             },
-            ast::FunctionParam {
-                name: Arc::new("other".to_string()),
+            ast::FunctionParamGroup {
+                param_items: vec![FunctionParamItem {
+                    name: Arc::new("other".to_string()),
+                    name_span: None,
+                    is_implicit_self: false,
+                }],
                 ty: TypeName::inferred(self_param_ty.clone()),
                 modifier: None,
-                name_span: None,
-                is_implicit_self: false,
+                span: None,
             }
         ],
         result_ty: TypeName::inferred(Primitive::Int32),
@@ -299,13 +300,12 @@ pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Typ
         tags: Vec::new(),
         where_clause: None,
         kind: FunctionDeclKind::Function,
-        params: vec![
-            ast::FunctionParam {
-                is_implicit_self: true,
-                name: Arc::new(SELF_PARAM_NAME.to_string()),
+        param_groups: vec![
+            ast::FunctionParamGroup {
+                param_items: vec![FunctionParamItem::implicit_self()],
                 ty: TypeName::inferred(self_param_ty),
                 modifier: None,
-                name_span: None,
+                span: None,
             }
         ],
         result_ty: TypeName::inferred(Type::class(IdentPath::from_vec(vec![

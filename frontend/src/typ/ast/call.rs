@@ -384,7 +384,7 @@ fn typecheck_func_overload_call(
 
             assert_eq!(
                 args.len(),
-                method.decl.func_decl.params.len(),
+                method.decl.func_decl.params_len(),
                 "argument count mismatch for {} at {}",
                 method.decl.func_decl.name,
                 method.span,

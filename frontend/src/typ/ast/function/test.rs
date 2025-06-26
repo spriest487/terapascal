@@ -1,8 +1,8 @@
-use crate::ast::FunctionDeclKind;
+use crate::ast::{FunctionDeclKind, FunctionParamItem};
 use crate::ast::TypeConstraint;
 use crate::typ::ast::{specialize_func_decl, FunctionDeclContext, FunctionName};
 use crate::typ::ast::FunctionDecl;
-use crate::typ::ast::FunctionParam;
+use crate::typ::ast::FunctionParamGroup;
 use crate::typ::ast::WhereClause;
 use crate::typ::{builtin_displayable_name, builtin_span, TypeName, TypeParam};
 use crate::typ::test::module_from_src;
@@ -100,12 +100,11 @@ fn make_decl(
         params: params
             .into_iter()
             .enumerate()
-            .map(|(pos, ty)| FunctionParam {
-                name: Arc::new(format!("arg{}", pos)),
-                is_implicit_self: false,
+            .map(|(pos, ty)| FunctionParamGroup {
+                param_items: vec![FunctionParamItem::new(format!("arg{}", pos), None)],
                 ty: TypeName::Unspecified(ty),
                 modifier: None,
-                name_span: None,
+                span: None,
             })
             .collect(),
         result_ty: TypeName::inferred(return_ty),

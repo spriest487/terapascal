@@ -43,7 +43,7 @@ fn create_function_body_builder<'m>(
 pub fn build_func_def(
     module: &mut LibraryBuilder,
     generic_ctx: typ::GenericContext,
-    def_params: &[typ::ast::FunctionParam],
+    def_params: &[typ::ast::FunctionParamGroup],
     def_return_ty: &typ::Type,
     def_locals: &[typ::ast::FunctionLocalBinding],
     def_body: &typ::ast::Block,
@@ -60,7 +60,7 @@ pub fn build_func_def(
 
     let def_params: Vec<_> = def_params
         .iter()
-        .map(|param| FunctionParam::from_ast(param, &mut body_builder))
+        .flat_map(|param| FunctionParam::from_ast(param, &mut body_builder))
         .collect();
     let bound_params = bind_function_params(def_params, is_instance_method, &mut body_builder);
 
@@ -166,7 +166,7 @@ pub fn build_closure_function_def(
 
     let def_params: Vec<_> = func_def.params
         .iter()
-        .map(|param| FunctionParam::from_ast(param, &mut body_builder))
+        .flat_map(|param| FunctionParam::from_ast(param, &mut body_builder))
         .collect();
 
     let bound_params = bind_function_params(def_params, false, &mut body_builder);
@@ -253,7 +253,9 @@ struct FunctionParam {
 }
 
 impl FunctionParam {
-    fn from_ast(param: &typ::ast::FunctionParam, builder: &mut Builder) -> Self {
+    fn from_ast(param: &typ::ast::FunctionParamGroup, builder: &mut Builder) -> Vec<Self> {
+        let mut params = Vec::new();
+        
         let (param_ty, by_ref) = match param.get_modifier() {
             Some(ast::FunctionParamMod::Var) | Some(ast::FunctionParamMod::Out) => {
                 (builder.translate_type(&param.ty).ptr(), true)
@@ -262,13 +264,17 @@ impl FunctionParam {
             None => (builder.translate_type(&param.ty), false),
         };
 
-        let name = param.name.to_string();
+        for item in &param.param_items {
+            let name = item.name.to_string();
 
-        FunctionParam {
-            name,
-            by_ref,
-            ty: param_ty,
-        }
+            params.push(FunctionParam {
+                name,
+                by_ref,
+                ty: param_ty.clone(),
+            });
+        };
+
+        params
     }
 }
 

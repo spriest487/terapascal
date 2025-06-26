@@ -39,6 +39,7 @@ use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
+use crate::typ::ast::SELF_PARAM_NAME;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum FunctionDeclKind {
@@ -130,41 +131,84 @@ impl fmt::Display for FunctionParamMod {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct FunctionParam<A: Annotation = Span> {
+pub struct FunctionParamItem {
     pub name: Arc<String>,
-
-    pub ty: TypeName<A>,
-
-    pub modifier: Option<FunctionParamModDecl>,
-
-    // true if this is the implicit `self` parameter of a method
-    pub is_implicit_self: bool,
 
     // may be None for implicit params
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
     pub name_span: Option<Span>,
+
+    // true if this is the implicit `self` parameter of a method
+    pub is_implicit_self: bool,
 }
 
-impl<A: Annotation> FunctionParam<A> {
+impl FunctionParamItem {
+    pub fn new(name: impl Into<Arc<String>>, name_span: Option<Span>) -> Self {
+        Self {
+            name: name.into(),
+            name_span,
+            is_implicit_self: false,
+        }
+    }
+    
+    pub fn implicit_self() -> Self {
+        Self {
+            name: Arc::new(SELF_PARAM_NAME.to_string()),
+            is_implicit_self: true,
+            name_span: None,
+        }
+    }
+}
+
+impl MaybeSpanned for FunctionParamItem {
+    fn get_span(&self) -> Option<&Span> {
+        self.name_span.as_ref()
+    }
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
+pub struct FunctionParamGroup<A: Annotation = Span> {
+    pub modifier: Option<FunctionParamModDecl>,
+
+    pub param_items: Vec<FunctionParamItem>,
+
+    pub ty: TypeName<A>,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub span: Option<Span>,
+}
+
+impl<A: Annotation> MaybeSpanned for FunctionParamGroup<A> {
+    fn get_span(&self) -> Option<&Span> {
+        self.span.as_ref()
+    }
+}
+
+impl<A: Annotation> FunctionParamGroup<A> {
     pub fn get_modifier(&self) -> Option<FunctionParamMod> {
         self.modifier.as_ref().map(|m| m.param_mod)
     }
 }
 
-impl<A: Annotation> fmt::Display for FunctionParam<A> {
+impl<A: Annotation> fmt::Display for FunctionParamGroup<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(modifier) = &self.modifier {
             write!(f, "{} ", modifier.param_mod)?;
         }
-        write!(f, "{}: {}", self.name, self.ty)
-    }
-}
+        
+        for i in 0..self.param_items.len() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", self.param_items[i].name)?;
+        }
 
-impl<A: Annotation> MaybeSpanned for FunctionParam<A> {
-    fn get_span(&self) -> Option<&Span> {
-        self.name_span.as_ref()
+        write!(f, ": {}", self.ty)
     }
 }
 
@@ -188,7 +232,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
     #[derivative(Hash = "ignore")]
     pub span: Span,
 
-    pub params: Vec<FunctionParam<A>>,
+    pub param_groups: Vec<FunctionParamGroup<A>>,
 
     pub result_ty: TypeName<A>,
 
@@ -240,7 +284,7 @@ impl FunctionDecl<Span> {
             kind,
             name,
             kw_span,
-            params: Vec::new(),
+            param_groups: Vec::new(),
             mods: Vec::new(),
             where_clause: None,
             result_ty: TypeName::Unspecified(UncheckedType),
@@ -257,8 +301,11 @@ impl FunctionDecl<Span> {
 
             let mut params_tokens = params_group.into_inner_tokens();
 
-            func_decl.params =
-                Self::parse_params(&mut params_tokens).or_continue_with(parser.errors(), Vec::new);
+            func_decl.param_groups = parse_param_groups(
+                &mut params_tokens,
+                true,
+                false
+            ).or_continue_with(parser.errors(), Vec::new);
 
             params_tokens.finish().or_continue(parser.errors(), ());
         }
@@ -373,60 +420,86 @@ impl FunctionDecl<Span> {
 
         Ok(qualified_name)
     }
+}
 
-    pub fn parse_params(tokens: &mut TokenStream) -> ParseResult<Vec<FunctionParam<Span>>> {
-        let mut params = Vec::new();
+pub fn parse_param_groups(
+    tokens: &mut TokenStream,
+    mods_allowed: bool,
+    types_optional: bool
+) -> ParseResult<Vec<FunctionParamGroup<Span>>> {
+    let mut params = Vec::new();
 
-        loop {
-            if !params.is_empty() && tokens.match_one_maybe(Separator::Semicolon).is_none() {
-                break;
-            }
+    let mut more_ahead = Matcher::AnyIdent;
+    if mods_allowed {
+        more_ahead |= Keyword::Var | Keyword::Out;
+    }
 
-            // check if there's another param ahead
-            if tokens
-                .look_ahead()
-                .match_one(Keyword::Var | Keyword::Out | Matcher::AnyIdent)
-                .is_none()
-            {
-                break;
-            }
+    loop {
+        if !params.is_empty() && tokens.match_one_maybe(Separator::Semicolon).is_none() {
+            break;
+        }
 
+        // check if there's another param ahead
+        if tokens.look_ahead().match_one(more_ahead.clone()).is_none() {
+            break;
+        }
+
+        let modifier = if mods_allowed {
             // might start with a modifier keyword which applies to all params declared in this group
-            let modifier = FunctionParamModDecl::try_parse(tokens);
+            FunctionParamModDecl::try_parse(tokens)
+        } else {
+            None
+        };
 
-            // match comma-separated idents for this param type
-            let mut idents = Vec::new();
-            loop {
-                let ident = Ident::parse(tokens)?;
-                idents.push(ident);
+        let mut items = Vec::new();
 
-                if tokens.match_one_maybe(Separator::Comma).is_none() {
-                    break;
-                }
-            }
+        // match comma-separated idents for this param type
+        loop {
+            let ident = Ident::parse(tokens)?;
+            items.push(FunctionParamItem {
+                name: ident.name,
+                name_span: Some(ident.span),
+                is_implicit_self: false,
+            });
 
-            tokens.match_one(Separator::Colon)?;
-            let ty = TypeName::parse(tokens)?;
-
-            // TODO: the AST should preserve the groups as written
-            // right now type spans need to be optional because we only want to include the same
-            // span once per group of identifiers when producing semantic tokens, but this makes
-            // this code more complicated than it needs to be
-            for i in 0..idents.len() {
-                let ident = &idents[i];
-
-                params.push(FunctionParam {
-                    name_span: Some(ident.span.clone()),
-                    ty: ty.clone(),
-                    name: ident.name.clone(),
-                    is_implicit_self: false,
-                    modifier: modifier.clone(),
-                })
+            if tokens.match_one_maybe(Separator::Comma).is_none() {
+                break;
             }
         }
 
-        Ok(params)
+        let mut span = match &modifier {
+            Some(param_mod) => param_mod.span.clone(),
+            None => items[0].name_span.clone().unwrap(),
+        };
+
+        let expect_typename = if types_optional {
+            tokens.match_one_maybe(Separator::Colon).is_some()
+        } else {
+            tokens.match_one(Separator::Colon)?;
+            true
+        };
+        
+        let ty = if expect_typename {
+            let ty = TypeName::parse(tokens)?;
+            
+            if let Some(ty_span) = ty.get_span() {
+                span.extend(ty_span);
+            }
+            
+            ty
+        } else {
+            TypeName::Unspecified(UncheckedType)
+        };
+
+        params.push(FunctionParamGroup {
+            span: Some(span),
+            param_items: items,
+            ty,
+            modifier,
+        });
     }
+
+    Ok(params)
 }
 
 impl<A: Annotation> FunctionDecl<A> {
@@ -455,6 +528,21 @@ impl<A: Annotation> FunctionDecl<A> {
     pub fn type_params_len(&self) -> usize {
         self.name.type_params_len()
     }
+
+    pub fn params_len(&self) -> usize {
+        self.param_groups
+            .iter()
+            .map(|p| p.param_items.len())
+            .sum()
+    }
+
+    pub fn params(&self) -> impl Iterator<Item=(&FunctionParamGroup<A>, &FunctionParamItem)> + '_ {
+        self.param_groups
+            .iter()
+            .flat_map(|group| group.param_items
+                .iter()
+                .map(move |item| (group, item)))
+    }
 }
 
 impl<A: Annotation> Spanned for FunctionDecl<A> {
@@ -474,10 +562,10 @@ impl<A: Annotation> fmt::Display for FunctionDecl<A> {
 
         write!(f, "{}", self.name)?;
 
-        if !self.params.is_empty() {
+        if !self.param_groups.is_empty() {
             write!(f, "(")?;
 
-            for (i, param) in self.params.iter().enumerate() {
+            for (i, param) in self.param_groups.iter().enumerate() {
                 if i > 0 {
                     write!(f, "; ")?;
                 }
@@ -722,7 +810,7 @@ impl<A: Annotation> fmt::Display for FunctionDef<A> {
 pub struct AnonymousFunctionDef<A: Annotation> {
     pub annotation: A,
 
-    pub params: Vec<FunctionParam<A>>,
+    pub params: Vec<FunctionParamGroup<A>>,
     pub result_ty: TypeName<A>,
 
     pub body: Block<A>,
@@ -740,10 +828,7 @@ impl<A: Annotation> fmt::Display for AnonymousFunctionDef<A> {
                 if i > 0 {
                     write!(f, ";")?;
                 }
-                if let Some(modifier) = &param.modifier {
-                    write!(f, "{} ", modifier.param_mod)?;
-                }
-                write!(f, "{}: {}", param.name, param.ty)?;
+                write!(f, "{}", param)?;
             }
 
             write!(f, ")")?;
@@ -795,35 +880,19 @@ impl Parse for AnonymousFunctionDef<Span> {
         //    type arguments and explicit return type. the body must be enclosed in a begin/end
         //    block as usual.
         let function_def = if func_kw.is_keyword(Keyword::Lambda) {
-            let mut params = Vec::new();
+            let params;
 
             if let Some(params_group) = tokens.match_one_maybe(DelimiterPair::Bracket) {
-                let mut params_tokens =
-                    params_group.into_delimited_group().unwrap().into_inner_tokens();
+                let mut params_tokens = params_group
+                    .into_delimited_group()
+                    .unwrap()
+                    .into_inner_tokens();
 
-                while let Some(TokenTree::Ident(ident)) =
-                    params_tokens.match_one_maybe(Matcher::AnyIdent)
-                {
-                    let ty = if params_tokens.match_one_maybe(Separator::Colon).is_some() {
-                        TypeName::parse(&mut params_tokens)?
-                    } else {
-                        TypeName::unspecified()
-                    };
-
-                    params.push(FunctionParam {
-                        name: ident.name,
-                        name_span: Some(ident.span),
-                        ty,
-                        modifier: None,
-                        is_implicit_self: false,
-                    });
-
-                    if params_tokens.match_one_maybe(Separator::Semicolon).is_none() {
-                        break;
-                    }
-                }
+                params = parse_param_groups(&mut params_tokens, false, true)?;
 
                 params_tokens.finish()?;
+            } else {
+                params = Vec::new();
             }
 
             tokens.match_one(Separator::Colon)?;
@@ -856,7 +925,7 @@ impl Parse for AnonymousFunctionDef<Span> {
                     };
 
                     let mut params_tokens = params_group.into_inner_tokens();
-                    let params = FunctionDecl::parse_params(&mut params_tokens)?;
+                    let params = parse_param_groups(&mut params_tokens, true, false)?;
                     params_tokens.finish()?;
 
                     params

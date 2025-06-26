@@ -251,7 +251,7 @@ pub fn specialize_call_args(
     } else {        
         // we haven't checked arg length matches yet because we haven't typechecked args
         let self_arg_len = if self_arg.is_some() { 1 } else { 0 };
-        if args.len() + self_arg_len != decl.params.len() {
+        if args.len() + self_arg_len != decl.params_len() {
             // this is an inferral error because we don't have enough information to report
             // it as an arg type mismatch
             return Err(TypeError::from_generic_err(
@@ -268,7 +268,7 @@ pub fn specialize_call_args(
         let mut actual_args = Vec::new();
 
         if let Some(self_arg) = self_arg.cloned() {
-            let decl_self_param = &decl.params[0];
+            let (decl_self_param, _) = decl.params().nth(0).unwrap();
             let actual_self_arg = specialize_arg(
                 &decl_self_param.ty,
                 &mut inferred_ty_args,
@@ -281,7 +281,8 @@ pub fn specialize_call_args(
         }
 
         for (i, arg) in args.iter().enumerate() {
-            let param_ty = &decl.params[i + self_arg_len].ty;
+            let (arg_param, _) = decl.params().nth(i + self_arg_len).unwrap();
+            let param_ty = &arg_param.ty;
 
             let actual_arg = specialize_arg(
                 param_ty,

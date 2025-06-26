@@ -4,7 +4,7 @@ use crate::typ::ast::AnonymousFunctionDef;
 use crate::typ::ast::Call;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
-use crate::typ::ast::FunctionParam;
+use crate::typ::ast::FunctionParamGroup;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericResult;
@@ -54,11 +54,18 @@ impl FunctionSigParam {
         }
     }
     
-    pub fn from_decl_param(param: FunctionParam) -> Self {
-        Self {
-            modifier: param.get_modifier(),
-            ty: Type::from(param.ty),
-        }
+    pub fn from_decl_param(param: FunctionParamGroup) -> Vec<Self> {
+        let modifier = param.get_modifier();
+        let ty = Type::from(param.ty);
+
+        (0..param.param_items.len())
+            .map(|_| {
+                Self {
+                    modifier,
+                    ty: ty.clone(),
+                }
+            })
+            .collect()
     }
 }
 
@@ -134,9 +141,9 @@ impl FunctionSig {
         let return_ty = decl.result_ty;
 
         let param_sigs = decl
-            .params
+            .param_groups
             .into_iter()
-            .map(|p| FunctionSigParam::from_decl_param(p))
+            .flat_map(FunctionSigParam::from_decl_param)
             .collect();
         
         let sig = Self::new(Type::from(return_ty), param_sigs, decl.name.type_params);
