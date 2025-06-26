@@ -65,8 +65,8 @@ pub fn candidates_from_module(module: &Module, unit_name: &str) -> Vec<OverloadC
 
                 Some(OverloadCandidate::Method {
                     index: method_index,
-                    self_ty: declaring_type.clone(),
-                    iface_ty: declaring_type.clone(),
+                    self_ty: declaring_type.ty().clone(),
+                    iface_ty: declaring_type.ty().clone(),
                     decl: method,
                 })
             },

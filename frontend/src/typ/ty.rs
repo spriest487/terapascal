@@ -1369,7 +1369,7 @@ pub struct TypeMemberRef<'ty> {
     pub ty: &'ty Type,
 }
 
-pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResult<Type> {
+pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResult<TypeName> {
     let (_, ty) = ctx
         .find_type(&path.name)
         .map_err(|err| TypeError::from_name_err(err, path.span.clone()))?;
@@ -1403,8 +1403,17 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
 
         return Err(TypeError::from_generic_err(err, path.span.clone()));
     }
+    
+    let ident_name = IdentTypeName {
+        ident: path.name.clone(),
+        type_args: expect_params
+            .map(|params| params.into_type_args()),
+        indirection: 0,
+        ty,
+        span: path.span.clone(),
+    };
 
-    Ok(ty)
+    Ok(TypeName::Ident(ident_name))
 }
 
 pub fn typecheck_type(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<Type> {

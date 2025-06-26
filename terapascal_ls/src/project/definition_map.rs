@@ -485,10 +485,8 @@ impl DefinitionMap {
             // the name of a method definition links to
             // 1. the declaring type (the type qualification part)
             // 2. the method decl within the type (the name part)
-            FunctionDeclContext::MethodDef { declaring_type, ty_name_span, .. } => {
-                // TODO: use typename
-                self.add_type_ref(declaring_type, ty_name_span, ctx);
-                // self.add_typename(declaring_type, ctx);
+            FunctionDeclContext::MethodDef { declaring_type, .. } => {
+                self.add_typename(&declaring_type, ctx);
 
                 if let Some(span) = Self::find_method_name_decl(func_decl, declaring_type, ctx) {
                     self.add(name_span.clone(), span);

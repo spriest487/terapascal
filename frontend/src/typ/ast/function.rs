@@ -4,9 +4,9 @@ mod decl_mod;
 
 pub use self::decl_mod::*;
 use crate::ast;
+use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::SemanticHint;
-use crate::ast::{FunctionDeclKind, IdentTypeName};
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_expr;
@@ -67,17 +67,7 @@ pub enum FunctionDeclContext {
         enclosing_type: Type,
     },
     MethodDef {
-        declaring_type: Type,
-
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        ty_name_span: Span,
-
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        ty_param_spans: Vec<Span>,
+        declaring_type: TypeName,
     },
 }
 
@@ -86,22 +76,9 @@ impl FunctionDeclContext {
         FunctionDeclContext::MethodDecl { enclosing_type }
     }
     
-    pub fn method_def<Param: Spanned>(
-        ty: impl Into<Type>,
-        src_name: &ast::IdentPath,
-        src_params: Option<&ast::TypeList<Param>>,
-    ) -> Self {
+    pub fn method_def(ty: impl Into<TypeName>) -> Self {
         FunctionDeclContext::MethodDef {
             declaring_type: ty.into(),
-            ty_name_span: src_name.path_span(),
-            ty_param_spans: src_params
-                .as_ref()
-                .map(|list| list.items
-                    .iter()
-                    .map(|param| param.span().clone())
-                    .collect()
-                )
-                .unwrap_or_else(Vec::new),
         }
     }
 
@@ -178,21 +155,8 @@ impl ast::FunctionName<Value> for FunctionName {
         match &self.context {
             FunctionDeclContext::FreeFunction => None,
             FunctionDeclContext::MethodDecl { .. } => None,
-            FunctionDeclContext::MethodDef { declaring_type, ty_name_span, .. } => {
-                // we could assert this is always present because you can only declare method
-                // defs for types with a path, but this is only really needed for the language
-                // server so let's just avoid panicking in weird situations
-                let path = declaring_type.full_path()?;
-                let type_args = declaring_type.type_params()
-                    .map(|params| params.clone().into_type_args());
-                
-                Some(TypeName::Ident(IdentTypeName {
-                    ty: declaring_type.clone(),
-                    type_args,
-                    span: ty_name_span.clone(),
-                    indirection: 0,
-                    ident: path.into_owned(),
-                }))
+            FunctionDeclContext::MethodDef { declaring_type, .. } => {
+                Some(declaring_type.clone())
             }
         }
     }
@@ -239,13 +203,9 @@ impl FunctionDecl {
             }
 
             (Some(owning_ty_name), None) => {
-                let ty = typecheck_type_path(owning_ty_name, ctx)?;
+                let typename = typecheck_type_path(owning_ty_name, ctx)?;
                 
-                FunctionDeclContext::method_def(
-                    ty.clone(),
-                    &owning_ty_name.name,
-                    owning_ty_name.type_params.as_ref()
-                )
+                FunctionDeclContext::method_def(typename)
             },
 
             (None, Some(enclosing_ty)) => {
@@ -371,7 +331,7 @@ impl FunctionDecl {
                     // as the actual type itself, parameterized by its own type params.
                     let self_arg_ty = if !decl.kind.is_static_method() {
                         Some(specialize_self_ty(
-                            declaring_type.clone(),
+                            declaring_type.ty().clone(),
                             explicit_ty_span,
                             ctx
                         )?)
@@ -390,12 +350,12 @@ impl FunctionDecl {
                         param_sigs,
                         type_params.clone());
 
-                    match &declaring_type {
+                    match declaring_type.ty() {
                         // can't define interface methods
                         Type::Interface(..) => {
                             return Err(TypeError::AbstractMethodDefinition {
                                 span: decl.span.clone(),
-                                owning_ty: declaring_type.clone(),
+                                owning_ty: declaring_type.ty().clone(),
                                 method: decl.name.ident.clone(),
                             });
                         }
