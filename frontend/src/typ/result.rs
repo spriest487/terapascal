@@ -5,6 +5,7 @@ use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Operator;
 use crate::parse::IllegalStatement;
+use crate::result::ErrorContinue;
 use crate::typ::annotation::Value;
 use crate::typ::ast::Call;
 use crate::typ::ast::DeclMod;
@@ -14,24 +15,29 @@ use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::Stmt;
 use crate::typ::ast::VariantDecl;
 use crate::typ::context::NameError;
-use crate::typ::{GenericError, GenericTarget, MatchPattern};
+use crate::typ::Context;
+use crate::typ::FunctionSig;
+use crate::typ::GenericError;
+use crate::typ::GenericTarget;
+use crate::typ::MatchPattern;
 use crate::typ::Type;
+use crate::typ::TypeName;
 use crate::typ::ValueKind;
 use crate::typ::MAX_FLAGS_BITS;
-use crate::typ::{FunctionSig, TypeName};
 use crate::IntConstant;
 use std::fmt;
 use terapascal_common::span::*;
 use terapascal_common::Backtrace;
+use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
-use terapascal_common::{DiagnosticLabel, Severity};
+use terapascal_common::Severity;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypeError {
     NameError {
         err: NameError,
-        span: Span
+        span: Span,
     },
     NotCallable(Box<Value>),
     InvalidArgs {
@@ -146,7 +152,7 @@ pub enum TypeError {
     },
     TypeHasMultipleDtors {
         owning_type: Type,
-        
+
         new_dtor: Span,
         prev_dtor: Span,
     },
@@ -154,10 +160,10 @@ pub enum TypeError {
         span: Span,
     },
     DtorCannotHaveTypeParams {
-        span: Span,  
+        span: Span,
     },
-    InvalidDtorOwningType { 
-        ty: Type, 
+    InvalidDtorOwningType {
+        ty: Type,
         span: Span,
     },
     MethodDeclMissingType {
@@ -218,7 +224,7 @@ pub enum TypeError {
         expr: Box<Expr>,
     },
     InvalidStatement(IllegalStatement<Value>),
-    
+
     InvalidSetValueType {
         actual: Type,
         span: Span,
@@ -262,7 +268,7 @@ pub enum TypeError {
 
     InvalidMethodModifiers {
         mods: Vec<DeclMod>,
-        span: Span
+        span: Span,
     },
     InvalidMethodOwningType {
         method_ident: Ident,
@@ -284,7 +290,7 @@ pub enum TypeError {
         ty: Type,
         span: Span,
     },
-    
+
     InvalidImplementation {
         ty: Type,
         missing: Vec<MissingImplementation>,
@@ -292,7 +298,7 @@ pub enum TypeError {
         span: Span,
     },
 
-    InvalidBaseType { 
+    InvalidBaseType {
         ty: Type,
         invalid_base_ty: Type,
         reason: InvalidBaseTypeReason,
@@ -373,23 +379,20 @@ pub enum TypeError {
         next_ident: Ident,
         next_val: i128,
     },
-    
+
     InvalidExplicitSpec {
         target: Value,
     },
 
     InvalidTagItem {
         reason: InvalidTagReason,
-        span: Span
+        span: Span,
     },
 }
 
 impl TypeError {
     pub fn from_name_err(err: NameError, span: Span) -> Self {
-        TypeError::NameError {
-            err,
-            span
-        }
+        TypeError::NameError { err, span }
     }
 
     pub fn from_generic_err(err: GenericError, span: Span) -> Self {
@@ -398,27 +401,26 @@ impl TypeError {
             span,
         }
     }
-    
+
     pub fn name_not_found(name: impl Into<IdentPath>, span: impl Into<Span>) -> Self {
         TypeError::from_name_err(NameError::NotFound { ident: name.into() }, span.into())
     }
-    
-    pub fn invalid_args_with_sig(sig: &FunctionSig, actual: impl IntoIterator<Item=Type>, span: Span) -> Self {
-        TypeError::InvalidArgs { 
-            expected: sig.params
-                .iter()
-                .map(|p| p.ty.clone())
-                .collect(),
+
+    pub fn invalid_args_with_sig(
+        sig: &FunctionSig,
+        actual: impl IntoIterator<Item = Type>,
+        span: Span,
+    ) -> Self {
+        TypeError::InvalidArgs {
+            expected: sig.params.iter().map(|p| p.ty.clone()).collect(),
             actual: actual.into_iter().collect(),
             span,
         }
     }
-    
+
     pub fn invalid_variant_ctor_args(expected: Option<Type>, actual: &[Expr], span: Span) -> Self {
         TypeError::InvalidArgs {
-            expected: expected
-                .map(|ty| vec![ty])
-                .unwrap_or_else(Vec::new),
+            expected: expected.map(|ty| vec![ty]).unwrap_or_else(Vec::new),
             actual: actual
                 .iter()
                 .map(|expr| expr.annotation().ty().into_owned())
@@ -426,19 +428,27 @@ impl TypeError {
             span: span.clone(),
         }
     }
-    
-    pub fn generic_args_len_mismatch(expected: usize, actual: usize, target: GenericTarget, span: Span) -> Self {
-        TypeError::from_generic_err(GenericError::ArgsLenMismatch {
-            expected,
-            actual,
-            target,
-        }, span)
+
+    pub fn generic_args_len_mismatch(
+        expected: usize,
+        actual: usize,
+        target: GenericTarget,
+        span: Span,
+    ) -> Self {
+        TypeError::from_generic_err(
+            GenericError::ArgsLenMismatch {
+                expected,
+                actual,
+                target,
+            },
+            span,
+        )
     }
-    
+
     pub fn type_mismatch(expected: impl Into<Type>, actual: impl Into<Type>, span: Span) -> Self {
         let expected = expected.into();
         let actual = actual.into();
-        
+
         // eprintln!("expect: {:#?}", expected);
         // eprintln!("actual: {:#?}", actual);
 
@@ -451,6 +461,35 @@ impl TypeError {
 }
 
 pub type TypeResult<T> = Result<T, TypeError>;
+
+impl<T> ErrorContinue for TypeResult<T> {
+    type Item = T;
+    type Error = TypeError;
+    type ErrorSink<'a> = &'a mut Context;
+
+    fn or_continue_with<DefaultFn>(self, ctx: &mut Context, f: DefaultFn) -> Self::Item
+    where
+        DefaultFn: FnOnce() -> Self::Item,
+    {
+        match self {
+            Ok(item) => item,
+            Err(err) => {
+                ctx.error(err);
+                f()
+            },
+        }
+    }
+
+    fn ok_or_continue<'a>(self, ctx: &'a mut Context) -> Option<Self::Item> {
+        match self {
+            Ok(item) => Some(item),
+            Err(err) => {
+                ctx.error(err);
+                None
+            },
+        }
+    }
+}
 
 impl Spanned for TypeError {
     fn span(&self) -> &Span {
@@ -475,14 +514,14 @@ impl Spanned for TypeError {
             TypeError::InvalidBlockOutput(expr) => expr.span(),
             TypeError::AmbiguousFunction { span, .. } => span,
             TypeError::ExternalGenericFunction { func, .. } => func.span(),
-            
+
             TypeError::DuplicateDeclMod { span, .. } => span,
             TypeError::IncompatibleDeclMod { second_span, .. } => second_span,
-            
+
             TypeError::AmbiguousSelfType { span, .. } => span,
             TypeError::InvalidFunctionOverload { ident, .. } => ident.span(),
             TypeError::InvalidMethodOverload { method, .. } => method.span(),
-            
+
             TypeError::InvalidCtorType { span, .. } => span,
             TypeError::CtorMissingMembers { span, .. } => span,
             TypeError::MethodDeclMissingType { span, .. } => span,
@@ -492,7 +531,7 @@ impl Spanned for TypeError {
             TypeError::InvalidDtorOwningType { span, .. } => span,
             TypeError::DuplicateNamedArg { span, .. } => span,
             TypeError::DuplicateParamName { span, .. } => span,
-            
+
             TypeError::UndefinedSymbols { unit, .. } => unit.span(),
             TypeError::UnableToInferType { expr } => expr.annotation().span(),
             TypeError::UnableToInferFunctionExprType { func } => func.span(),
@@ -504,7 +543,7 @@ impl Spanned for TypeError {
             TypeError::NotInitialized { usage, .. } => usage.span(),
             TypeError::InvalidRefExpression { expr } => expr.annotation().span(),
             TypeError::InvalidStatement(expr) => expr.0.annotation().span(),
-            
+
             TypeError::InvalidSetValueType { span, .. } => span,
             TypeError::SetValuesMustBeSequential { span, .. } => span,
             TypeError::TooManySetValues { span, .. } => span,
@@ -512,12 +551,12 @@ impl Spanned for TypeError {
 
             TypeError::EmptyVariantDecl(variant) => variant.span(),
             TypeError::EmptyVariantCaseBinding { span, .. } => span,
-            
+
             TypeError::NoLoopContext { stmt, .. } => stmt.annotation().span(),
             TypeError::NoFunctionContext { stmt, .. } => stmt.annotation().span(),
             TypeError::InvalidWeakType { span: at, .. } => at,
             TypeError::InvalidUnsizedType { span: at, .. } => at,
-            
+
             TypeError::InvalidMethodModifiers { span, .. } => span,
             TypeError::InvalidMethodOwningType { span, .. } => span,
             TypeError::InvalidMethodInstanceType { span, .. } => span,
@@ -528,7 +567,7 @@ impl Spanned for TypeError {
             TypeError::InvalidBaseType { span, .. } => span,
             TypeError::NameNotVisible { span, .. } => span,
             TypeError::TypeMemberInaccessible { span, .. } => span,
-            
+
             TypeError::UnsafeConversionNotAllowed { span, .. } => span,
             TypeError::UnsafeAddressOfNotAllowed { span, .. } => span,
             TypeError::InvalidConstExpr { expr } => expr.span(),
@@ -552,10 +591,10 @@ impl DiagnosticOutput for TypeError {
     fn severity(&self) -> Severity {
         Severity::Error
     }
-    
+
     fn title(&self) -> String {
         String::from(match self {
-            TypeError::NameError { err, ..  } => match err {
+            TypeError::NameError { err, .. } => match err {
                 NameError::NotFound { .. } => "Name not found",
                 NameError::MemberNotFound { .. } => "Named member not found",
                 NameError::Unexpected { .. } => "Name had unexpected type",
@@ -566,18 +605,22 @@ impl DiagnosticOutput for TypeError {
                 NameError::AlreadyImplemented { .. } => "Method already implemented",
                 NameError::DefDeclMismatch { .. } => {
                     "Definition does not match previous declaration"
-                }
+                },
                 NameError::GenericError(err) => match err {
                     GenericError::ArgsLenMismatch { .. } => "Wrong number of type arguments",
                     GenericError::ParamMismatch { .. } => "Parameter list mismatch",
-                    GenericError::ConstraintNotSatisfied { .. } => "Type parameter constraint not satisfied by argument",
+                    GenericError::ConstraintNotSatisfied { .. } => {
+                        "Type parameter constraint not satisfied by argument"
+                    },
                     GenericError::UnexpectedConstraintList => "Unexpected constraint list",
                     GenericError::UnexpectedConstraint { .. } => "Unexpected constraint",
                     GenericError::DuplicateConstraint { .. } => "Duplicate constraint",
                     GenericError::CannotInferArgs { .. } => "Cannot infer type arguments",
-                    GenericError::IllegalUnspecialized { .. } => "Illegal use of unspecialized type",
-                }
-            }
+                    GenericError::IllegalUnspecialized { .. } => {
+                        "Illegal use of unspecialized type"
+                    },
+                },
+            },
             TypeError::NotCallable(_) => "Not callable",
             TypeError::InvalidArgs { .. } => "Invalid arguments",
             TypeError::InvalidCallInExpression(_) => "Invalid call in expression",
@@ -597,105 +640,85 @@ impl DiagnosticOutput for TypeError {
             TypeError::InvalidBlockOutput(_) => "Invalid block output expression",
             TypeError::AmbiguousFunction { .. } => "Function reference is ambiguous",
             TypeError::AmbiguousSelfType { .. } => "Self type of method is ambiguous",
-            TypeError::ExternalGenericFunction { .. } => "Function imported from external module may not have type parameters",
-            
+            TypeError::ExternalGenericFunction { .. } => {
+                "Function imported from external module may not have type parameters"
+            },
+
             TypeError::DuplicateDeclMod { .. } => "Duplicate modifier",
             TypeError::IncompatibleDeclMod { .. } => "Incompatible modifiers",
-            
-            TypeError::InvalidCtorType { .. } => {
-                "Invalid constructor expression type"
-            }
+
+            TypeError::InvalidCtorType { .. } => "Invalid constructor expression type",
             TypeError::CtorMissingMembers { .. } => {
                 "Constructor is missing one or more named members"
-            }
-            TypeError::TypeHasMultipleDtors { .. } => {
-                "Type has multiple destructors"
-            }
-            TypeError::DtorCannotHaveParams { .. } => {
-                "Destructor cannot have parameters"
-            }
-            TypeError::DtorCannotHaveTypeParams { .. } => {
-                "Destructor cannot have type parameters"
-            }
-            TypeError::InvalidDtorOwningType { .. } => {
-                "Type cannot have destructor"
-            }
+            },
+            TypeError::TypeHasMultipleDtors { .. } => "Type has multiple destructors",
+            TypeError::DtorCannotHaveParams { .. } => "Destructor cannot have parameters",
+            TypeError::DtorCannotHaveTypeParams { .. } => "Destructor cannot have type parameters",
+            TypeError::InvalidDtorOwningType { .. } => "Type cannot have destructor",
             TypeError::MethodDeclMissingType { .. } => {
                 "Method declaration missing type specification"
-            }
+            },
             TypeError::UndefinedSymbols { .. } => "Undefined symbol(s)",
-            TypeError::UnableToInferType { .. } => {
-                "Unable to infer type of expression"
-            }
+            TypeError::UnableToInferType { .. } => "Unable to infer type of expression",
             TypeError::UnableToInferFunctionExprType { .. } => {
                 "Unable to infer function type of function expression"
-            }
-            TypeError::UnableToInferSpecialization { .. } => {
-                "Unable to infer type specialization"
-            }
-            TypeError::UninitGlobalBinding { .. } => {
-                "Uninitialized global variable"
-            }
+            },
+            TypeError::UnableToInferSpecialization { .. } => "Unable to infer type specialization",
+            TypeError::UninitGlobalBinding { .. } => "Uninitialized global variable",
             TypeError::UninitBindingWithNoType { .. } => {
                 "Uninitialized variable must have an explicit type"
-            }
-            TypeError::BindingWithNoType { .. } => {
-                "Value bound to name must have a type"
-            }
+            },
+            TypeError::BindingWithNoType { .. } => "Value bound to name must have a type",
             TypeError::InvalidPatternBinding { .. } => "Invalid pattern binding",
             TypeError::NotInitialized { .. } => "Use of uninitialized value",
-            TypeError::InvalidRefExpression { .. } => {
-                "Invalid reference expression"
-            }
+            TypeError::InvalidRefExpression { .. } => "Invalid reference expression",
             TypeError::InvalidStatement(invalid_stmt) => return invalid_stmt.title(),
-            
+
             TypeError::InvalidSetValueType { .. } => "Invalid set value type",
             TypeError::SetValuesMustBeSequential { .. } => "Set values must be sequential",
             TypeError::EmptySetDecl { .. } => "Empty set declaration",
             TypeError::TooManySetValues { .. } => "Set contains too many values",
 
             TypeError::EmptyVariantDecl(..) => "Empty variant declaration",
-            TypeError::EmptyVariantCaseBinding { .. } => {
-                "Empty variant case binding"
-            }
+            TypeError::EmptyVariantCaseBinding { .. } => "Empty variant case binding",
 
             TypeError::NoLoopContext { .. } => "Statement requires loop context",
             TypeError::NoFunctionContext { .. } => "Statement requires function context",
 
             TypeError::InvalidWeakType { .. } => "Invalid weak reference type",
             TypeError::InvalidUnsizedType { .. } => "Size of type is unknown",
-            
-            TypeError::InvalidMethodOwningType { .. } => "Explicit interface implementation for method is invalid",
+
+            TypeError::InvalidMethodOwningType { .. } => {
+                "Explicit interface implementation for method is invalid"
+            },
             TypeError::InvalidMethodModifiers { .. } => "Invalid method modifier(s)",
 
-            TypeError::InvalidMethodInstanceType { .. } => {
-                "Invalid instance type for method"
-            },
-            
-            TypeError::InvalidImplementation { .. } => {
-                "Incomplete interface implementation"
-            }
+            TypeError::InvalidMethodInstanceType { .. } => "Invalid instance type for method",
+
+            TypeError::InvalidImplementation { .. } => "Incomplete interface implementation",
 
             TypeError::InvalidFunctionOverload { .. } => "Invalid function overload",
             TypeError::InvalidMethodOverload { .. } => "Invalid method overload",
 
-            TypeError::InvalidBaseType { .. } => {
-                "Invalid base type"
-            }
-            
+            TypeError::InvalidBaseType { .. } => "Invalid base type",
+
             TypeError::AbstractMethodDefinition { .. } => "Cannot define abstract method",
 
             TypeError::NoMethodContext { .. } => "Method requires enclosing type",
             TypeError::MethodDefMismatch { .. } => "Method definition mismatch",
 
             TypeError::NameNotVisible { .. } => "Name is not visible",
-            
+
             TypeError::TypeMemberInaccessible { .. } => "Member is inaccessible",
 
             TypeError::DuplicateParamName { .. } => "Duplicate parameter name",
             TypeError::DuplicateNamedArg { .. } => "Duplicate named argument",
-            TypeError::UnsafeConversionNotAllowed { .. } => "Conversion not allowed in a safe context",
-            TypeError::UnsafeAddressOfNotAllowed { .. } => "Address operator not allowed on this type in a safe context",
+            TypeError::UnsafeConversionNotAllowed { .. } => {
+                "Conversion not allowed in a safe context"
+            },
+            TypeError::UnsafeAddressOfNotAllowed { .. } => {
+                "Address operator not allowed on this type in a safe context"
+            },
 
             TypeError::InvalidConstExpr { .. } => "Invalid constant expression",
 
@@ -711,7 +734,7 @@ impl DiagnosticOutput for TypeError {
             TypeError::InvalidDeclWithTypeParams { .. } => "Invalid type declared with type params",
             TypeError::EnumValuesMustBeAscending { .. } => "Enumeration values must be ascending",
             TypeError::InvalidExplicitSpec { .. } => "Invalid explicit specialization",
-            
+
             TypeError::InvalidTagItem { .. } => "Invalid tag type",
         })
     }
@@ -727,17 +750,19 @@ impl DiagnosticOutput for TypeError {
 
     fn notes(&self) -> Vec<String> {
         match self {
-            TypeError::InvalidArgs { expected, actual, .. } => {
+            TypeError::InvalidArgs {
+                expected, actual, ..
+            } => {
                 vec![
                     format!("expected: {}", args_to_string(expected)),
                     format!("actual: {}", args_to_string(actual)),
                 ]
-            }
-            TypeError::BindingWithNoType { value: Some(value), .. } => {
-                vec![ 
-                    format!("was: {value}")
-                ]
-            }
+            },
+            TypeError::BindingWithNoType {
+                value: Some(value), ..
+            } => {
+                vec![format!("was: {value}")]
+            },
             _ => Vec::new(),
         }
     }
@@ -746,122 +771,123 @@ impl DiagnosticOutput for TypeError {
         match self {
             TypeError::NameError { err, .. } => err.see_also(),
 
-            TypeError::UndefinedSymbols { undefined: syms, .. } => syms
+            TypeError::UndefinedSymbols {
+                undefined: syms, ..
+            } => syms
                 .iter()
                 .map(|(path, span)| {
                     let title = format!("`{}` is declared but not defined", path);
-                    
+
                     DiagnosticMessage::info(title)
-                        .with_label(DiagnosticLabel::new(span.clone())
-                            .with_text("declared here"))
+                        .with_label(DiagnosticLabel::new(span.clone()).with_text("declared here"))
                 })
                 .collect(),
 
-            TypeError::NotInitialized { ident, .. } => vec![
-                DiagnosticMessage::info(format!("uninitialized value `{}`", ident))
-                    .with_label(DiagnosticLabel::new(ident.span().clone())
-                        .with_text("declared here")),
-            ],
+            TypeError::NotInitialized { ident, .. } => {
+                vec![DiagnosticMessage::info(format!("uninitialized value `{}`", ident))
+                    .with_label(
+                        DiagnosticLabel::new(ident.span().clone()).with_text("declared here"),
+                    )]
+            },
 
             TypeError::NotMutable {
-                decl: Some(decl),
+                decl: Some(decl), ..
+            } => vec![DiagnosticMessage::info("modifying immutable value").with_label(
+                DiagnosticLabel::new(decl.span().clone()).with_text("declared as immutable here"),
+            )],
+
+            TypeError::DuplicateDeclMod { existing, .. } => {
+                vec![DiagnosticMessage::info("duplicate modifier").with_label(
+                    DiagnosticLabel::new(existing.clone()).with_text("previously appeared here"),
+                )]
+            },
+
+            TypeError::TypeHasMultipleDtors {
+                new_dtor,
+                prev_dtor,
                 ..
             } => vec![
-                DiagnosticMessage::info("modifying immutable value")
-                    .with_label(DiagnosticLabel::new(decl.span().clone())
-                        .with_text("declared as immutable here")),
-            ],
-
-            TypeError::DuplicateDeclMod { existing, .. } => vec![
-                DiagnosticMessage::info("duplicate modifier")
-                    .with_label(DiagnosticLabel::new(existing.clone())
-                        .with_text("previously appeared here"))
-            ],
-
-            TypeError::TypeHasMultipleDtors { new_dtor, prev_dtor, .. } => vec![
                 DiagnosticMessage::info("new destructor declaration")
                     .with_label(DiagnosticLabel::new(new_dtor.clone())),
-                
-                DiagnosticMessage::info("previous destructor declaration")
-                    .with_label(DiagnosticLabel::new(prev_dtor.clone())
-                        .with_text("previously declared here")),
+                DiagnosticMessage::info("previous destructor declaration").with_label(
+                    DiagnosticLabel::new(prev_dtor.clone()).with_text("previously declared here"),
+                ),
             ],
 
-            TypeError::IncompatibleDeclMod { first_span, first_keyword, .. } => vec![
-                DiagnosticMessage::info("incompatible modifier")
-                    .with_label(DiagnosticLabel::new(first_span.clone())
-                        .with_text(format!("`{first_keyword}` previously appeared here")))
-            ],
+            TypeError::IncompatibleDeclMod {
+                first_span,
+                first_keyword,
+                ..
+            } => vec![DiagnosticMessage::info("incompatible modifier").with_label(
+                DiagnosticLabel::new(first_span.clone())
+                    .with_text(format!("`{first_keyword}` previously appeared here")),
+            )],
 
-            TypeError::DuplicateNamedArg { name, previous, .. } 
+            TypeError::DuplicateNamedArg { name, previous, .. }
             | TypeError::DuplicateParamName { name, previous, .. } => {
                 let title = format!("previous occurrence of `{}`", name);
 
                 let message = DiagnosticMessage::info(title);
                 match previous {
                     None => vec![message],
-                    Some(span) => vec![message.with_label(DiagnosticLabel::new(span.clone()))]
+                    Some(span) => vec![message.with_label(DiagnosticLabel::new(span.clone()))],
                 }
             },
-            TypeError::AmbiguousFunction { candidates, .. } => {
-                candidates
-                    .iter()
-                    .map(|c| {
-                        DiagnosticMessage::info(format!("may refer to {}", c))
-                            .with_label(DiagnosticLabel::new(c.span().clone()))
-                    })
-                    .collect()
-            }
+            TypeError::AmbiguousFunction { candidates, .. } => candidates
+                .iter()
+                .map(|c| {
+                    DiagnosticMessage::info(format!("may refer to {}", c))
+                        .with_label(DiagnosticLabel::new(c.span().clone()))
+                })
+                .collect(),
 
             TypeError::InvalidMethodOverload { prev_decls, .. }
-            | TypeError::InvalidFunctionOverload { prev_decls, .. } => {
-                prev_decls
-                    .iter()
-                    .map(|ident| {
-                        DiagnosticMessage::info(format!("{} previously declared here", ident))
-                            .with_label(DiagnosticLabel::new(ident.span.clone()))
-                    })
-                    .collect()
-            }
-            
-            TypeError::MethodDefMismatch { decls, .. } => {
-                decls
-                    .iter()
-                    .map(|decl| {
-                        DiagnosticMessage::info(format!("declaration of {} {} here", decl.kind, decl.name))
-                            .with_label(DiagnosticLabel::new(decl.span.clone()))
-                    })
-                    .collect()
-            }
-            
-            TypeError::InvalidImplementation { missing, mismatched, .. } => {
+            | TypeError::InvalidFunctionOverload { prev_decls, .. } => prev_decls
+                .iter()
+                .map(|ident| {
+                    DiagnosticMessage::info(format!("{} previously declared here", ident))
+                        .with_label(DiagnosticLabel::new(ident.span.clone()))
+                })
+                .collect(),
+
+            TypeError::MethodDefMismatch { decls, .. } => decls
+                .iter()
+                .map(|decl| {
+                    DiagnosticMessage::info(format!(
+                        "declaration of {} {} here",
+                        decl.kind, decl.name
+                    ))
+                    .with_label(DiagnosticLabel::new(decl.span.clone()))
+                })
+                .collect(),
+
+            TypeError::InvalidImplementation {
+                missing,
+                mismatched,
+                ..
+            } => {
                 let mut messages = Vec::new();
 
-                messages.extend(mismatched
-                    .iter()
-                    .flat_map(|i| {
-                        let decl_msg = "declared here".to_string();
-                        let actual_msg = "mismatched implementation here".to_string();
+                messages.extend(mismatched.iter().flat_map(|i| {
+                    let decl_msg = "declared here".to_string();
+                    let actual_msg = "mismatched implementation here".to_string();
 
-                        vec![
-                            DiagnosticMessage::info(decl_msg)
-                                .with_label(DiagnosticLabel::new(i.iface_method_name.span.clone()))
-                                .with_note(i.expect_sig.to_string()),
-                            DiagnosticMessage::info(actual_msg)
-                                .with_label(DiagnosticLabel::new(i.impl_method_name.span.clone()))
-                                .with_note(i.actual_sig.to_string()),
-                        ]
-                    }));
-                    
-                messages.extend(missing
-                    .iter()
-                    .map(|i| {
-                        DiagnosticMessage::info(format!("{} declared here", i.method_name))
-                            .with_label(DiagnosticLabel::new(i.method_name.span.clone()))
-                    }));
+                    vec![
+                        DiagnosticMessage::info(decl_msg)
+                            .with_label(DiagnosticLabel::new(i.iface_method_name.span.clone()))
+                            .with_note(i.expect_sig.to_string()),
+                        DiagnosticMessage::info(actual_msg)
+                            .with_label(DiagnosticLabel::new(i.impl_method_name.span.clone()))
+                            .with_note(i.actual_sig.to_string()),
+                    ]
+                }));
+
+                messages.extend(missing.iter().map(|i| {
+                    DiagnosticMessage::info(format!("{} declared here", i.method_name))
+                        .with_label(DiagnosticLabel::new(i.method_name.span.clone()))
+                }));
                 messages
-                            
-            }
+            },
 
             _ => Vec::new(),
         }
@@ -878,117 +904,194 @@ impl fmt::Display for TypeError {
             TypeError::NameError { err, .. } => write!(f, "{}", err),
             TypeError::NotCallable(val) => {
                 write!(f, "{} is not a callable function", val)
-            }
+            },
 
             TypeError::InvalidArgs { .. } => {
-                write!(f, "argument list provided did not match the expected parameters")
-            }
+                write!(
+                    f,
+                    "argument list provided did not match the expected parameters"
+                )
+            },
 
             TypeError::InvalidCallInExpression(call) => {
-                write!(f, "function call `{}` returns no value and cannot be used as part of an expr", call)
-            }
+                write!(
+                    f,
+                    "function call `{}` returns no value and cannot be used as part of an expr",
+                    call
+                )
+            },
 
             TypeError::InvalidIndexer { base, index_ty, .. } => {
                 let base_ty = base.annotation().ty();
-                write!(f, "`{}` cannot be used as an index for `{}` of type `{}`", index_ty, base, base_ty)
-            }
+                write!(
+                    f,
+                    "`{}` cannot be used as an index for `{}` of type `{}`",
+                    index_ty, base, base_ty
+                )
+            },
 
             TypeError::IndexOutOfBounds { base_ty, index, .. } => {
-                write!(f, "index value `{}` is out of range for type `{}`", index, base_ty)
-            }
+                write!(
+                    f,
+                    "index value `{}` is out of range for type `{}`",
+                    index, base_ty
+                )
+            },
 
-            TypeError::TypeMismatch { expected, actual, .. } => {
+            TypeError::TypeMismatch {
+                expected, actual, ..
+            } => {
                 write!(f, "type mismatch: expected {}, found {}", expected, actual)
-            }
+            },
 
             TypeError::NotMutable { expr, .. } => {
                 write!(f, "`{}` does not refer to a mutable value", expr)
-            }
+            },
 
-            TypeError::NotAddressable { ty, value_kind, .. } => {
-                match value_kind {
-                    Some(value_kind) => write!(f, "{} of type {} cannot have its address taken", value_kind, ty),
-                    None => write!(f, "expr without a value cannot have its address taken"),
-                }
-            }
+            TypeError::NotAddressable { ty, value_kind, .. } => match value_kind {
+                Some(value_kind) => write!(
+                    f,
+                    "{} of type {} cannot have its address taken",
+                    value_kind, ty
+                ),
+                None => write!(f, "expr without a value cannot have its address taken"),
+            },
 
             TypeError::NotDerefable { ty, .. } => {
                 write!(f, "value of type `{}` cannot be dereferenced", ty)
-            }
+            },
 
             TypeError::NameNotMatchable { name: ty, .. } => {
                 write!(f, "name `{}` cannot be used in matching constructs", ty)
-            }
-            
+            },
+
             TypeError::NotDefaultable { ty, .. } => {
-                write!(f, "type `{}` does not have a default value in this context", ty)
-            }
-            
-            TypeError::NotValueExpr { expected, actual, .. } => {
+                write!(
+                    f,
+                    "type `{}` does not have a default value in this context",
+                    ty
+                )
+            },
+
+            TypeError::NotValueExpr {
+                expected, actual, ..
+            } => {
                 if *expected == Type::Nothing {
                     write!(f, "expected value, found `{}`", actual)
                 } else {
-                    write!(f, "expected value of type `{}`, found `{}`", expected, actual)
+                    write!(
+                        f,
+                        "expected value of type `{}`, found `{}`",
+                        expected, actual
+                    )
                 }
-            }
+            },
 
-            TypeError::InvalidBinOp { lhs, rhs, op, .. } => {
-                match op {
-                    Operator::Assignment => {
-                        write!(f, "`{}` is not assignable to `{}`", rhs, lhs)
-                    },
-                    _ => {
-                        write!(f, "operator {} cannot be applied to the operand types `{}` and `{}`", op, lhs, rhs)
-                    }
-                }
-            }
+            TypeError::InvalidBinOp { lhs, rhs, op, .. } => match op {
+                Operator::Assignment => {
+                    write!(f, "`{}` is not assignable to `{}`", rhs, lhs)
+                },
+                _ => {
+                    write!(
+                        f,
+                        "operator {} cannot be applied to the operand types `{}` and `{}`",
+                        op, lhs, rhs
+                    )
+                },
+            },
 
             TypeError::InvalidUnaryOp { operand, op, .. } => {
-                write!(f, "operator {} cannot be applied to an operand of type `{}`", op, operand)
-            }
+                write!(
+                    f,
+                    "operator {} cannot be applied to an operand of type `{}`",
+                    op, operand
+                )
+            },
 
-            TypeError::BlockOutputIsNotExpression { stmt, expected_expr_ty } => {
-                write!(f, "expected expression of type `{}` but found stmt `{}`", expected_expr_ty, stmt)
-            }
+            TypeError::BlockOutputIsNotExpression {
+                stmt,
+                expected_expr_ty,
+            } => {
+                write!(
+                    f,
+                    "expected expression of type `{}` but found stmt `{}`",
+                    expected_expr_ty, stmt
+                )
+            },
 
             TypeError::InvalidBlockOutput(expr) => {
                 write!(f, "expr `{}` is not valid as the final expr in a block because it is not a complete stmt", expr)
-            }
+            },
 
             TypeError::AmbiguousFunction { .. } => {
                 write!(f, "call to function was ambiguous")
-            }
+            },
 
             TypeError::AmbiguousSelfType { method, iface, .. } => {
-                write!(f, "the type implementing `{}` could not be deduced for `{}` in this context", iface, method)
-            }
-            
-            TypeError::InvalidFunctionOverload { ident, kind, .. } => {
-                write!(f, "this overload of function `{}` is not valid: {}", ident, kind)
-            }
+                write!(
+                    f,
+                    "the type implementing `{}` could not be deduced for `{}` in this context",
+                    iface, method
+                )
+            },
 
-            TypeError::InvalidMethodOverload { owning_type, method, kind, .. } => {
-                write!(f, "this overload of method `{}.{}` is not valid: {}", owning_type, method, kind)
-            }
+            TypeError::InvalidFunctionOverload { ident, kind, .. } => {
+                write!(
+                    f,
+                    "this overload of function `{}` is not valid: {}",
+                    ident, kind
+                )
+            },
+
+            TypeError::InvalidMethodOverload {
+                owning_type,
+                method,
+                kind,
+                ..
+            } => {
+                write!(
+                    f,
+                    "this overload of method `{}.{}` is not valid: {}",
+                    owning_type, method, kind
+                )
+            },
 
             TypeError::ExternalGenericFunction { func, .. } => {
-                write!(f, "`{}` is generic but is declared with the `{}` modifier", func, DeclMod::EXTERNAL_WORD)
-            }
-            
+                write!(
+                    f,
+                    "`{}` is generic but is declared with the `{}` modifier",
+                    func,
+                    DeclMod::EXTERNAL_WORD
+                )
+            },
+
             TypeError::DuplicateDeclMod { keyword, .. } => {
-                write!(f, "the modifier `{keyword}` cannot appear multiple times on this declaration")
-            }
-            
-            TypeError::IncompatibleDeclMod { first_keyword, second_keyword, .. } => {
+                write!(
+                    f,
+                    "the modifier `{keyword}` cannot appear multiple times on this declaration"
+                )
+            },
+
+            TypeError::IncompatibleDeclMod {
+                first_keyword,
+                second_keyword,
+                ..
+            } => {
                 write!(f, "the modifiers `{first_keyword}` and `{second_keyword}` cannot appear on the same declaration")
-            }
+            },
 
             TypeError::InvalidCtorType { ty, .. } => {
                 write!(f, "type `{}` cannot be created with a constructor expr", ty)
-            }
+            },
 
-            TypeError::CtorMissingMembers { ctor_ty, members, .. } => {
-                write!(f, "the following members are missing from the constructor for type `{}`: ", ctor_ty)?;
+            TypeError::CtorMissingMembers {
+                ctor_ty, members, ..
+            } => {
+                write!(
+                    f,
+                    "the following members are missing from the constructor for type `{}`: ",
+                    ctor_ty
+                )?;
                 for (i, member) in members.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -996,49 +1099,75 @@ impl fmt::Display for TypeError {
                     write!(f, "{}", member)?;
                 }
                 Ok(())
-            }
-            
+            },
+
             TypeError::TypeHasMultipleDtors { owning_type, .. } => {
-                write!(f, "type `{}` has already declared a destructor", owning_type)
-            }
-            
+                write!(
+                    f,
+                    "type `{}` has already declared a destructor",
+                    owning_type
+                )
+            },
+
             TypeError::DtorCannotHaveParams { .. } => {
                 write!(f, "destructor must be declared without parameters")
-            }
-            
+            },
+
             TypeError::DtorCannotHaveTypeParams { .. } => {
                 write!(f, "destructor must be declared without type parameters")
-            }
-            
+            },
+
             TypeError::InvalidDtorOwningType { ty, .. } => {
-                write!(f, "{} `{}` cannot have a destructor", ty.kind_description(), ty)
-            }
+                write!(
+                    f,
+                    "{} `{}` cannot have a destructor",
+                    ty.kind_description(),
+                    ty
+                )
+            },
 
             TypeError::MethodDeclMissingType { kind, ident, .. } => {
                 write!(f, "{} definition `{}` must belong to a type", kind, ident)
-            }
+            },
 
             TypeError::UndefinedSymbols { unit, .. } => {
                 write!(f, "unit `{}` contains undefined symbols", unit)
-            }
+            },
 
             TypeError::UnableToInferType { expr } => {
                 write!(f, "unable to infer the type of `{}`", expr)
-            }
+            },
 
             TypeError::UnableToInferFunctionExprType { .. } => {
-                write!(f, "unable to infer the type of this function expression from the usage")
-            }
+                write!(
+                    f,
+                    "unable to infer the type of this function expression from the usage"
+                )
+            },
 
-            TypeError::UnableToInferSpecialization { generic_ty, hint_ty, .. } => {
+            TypeError::UnableToInferSpecialization {
+                generic_ty,
+                hint_ty,
+                ..
+            } => {
                 write!(f, "unable to infer specialization of the generic type `{}` from expected type `{}`", generic_ty, hint_ty)
-            }
+            },
 
-            TypeError::UninitGlobalBinding { binding_names, ty, .. } => {
+            TypeError::UninitGlobalBinding {
+                binding_names, ty, ..
+            } => {
                 if binding_names.len() == 1 {
-                    write!(f, "this binding `{}` of type `{}` requires an initializer", binding_names[0], ty)
+                    write!(
+                        f,
+                        "this binding `{}` of type `{}` requires an initializer",
+                        binding_names[0], ty
+                    )
                 } else {
-                    write!(f, "these bindings of the type `{}` require an initializer: ", ty)?;
+                    write!(
+                        f,
+                        "these bindings of the type `{}` require an initializer: ",
+                        ty
+                    )?;
                     for i in 0..binding_names.len() {
                         if i > 0 {
                             write!(f, ", ")?;
@@ -1048,15 +1177,23 @@ impl fmt::Display for TypeError {
 
                     Ok(())
                 }
-            }
+            },
 
             TypeError::UninitBindingWithNoType { binding } => {
-                write!(f, "the type of `{}` cannot be inferred because it has no initial value", binding.name)
-            }
+                write!(
+                    f,
+                    "the type of `{}` cannot be inferred because it has no initial value",
+                    binding.name
+                )
+            },
 
             TypeError::BindingWithNoType { binding_names, .. } => {
                 if binding_names.len() == 1 {
-                    write!(f, "the declaration of binding `{}` must have a type", binding_names[0])
+                    write!(
+                        f,
+                        "the declaration of binding `{}` must have a type",
+                        binding_names[0]
+                    )
                 } else {
                     write!(f, "the declaration of these bindings is missing a type: ")?;
                     for i in 0..binding_names.len() {
@@ -1065,107 +1202,155 @@ impl fmt::Display for TypeError {
                         }
                         write!(f, "{}", binding_names[i])?;
                     }
-                        
+
                     Ok(())
                 }
-            }
-            
+            },
+
             TypeError::InvalidPatternBinding { pattern, .. } => {
                 write!(f, "the result of pattern `{pattern}` can not be bound")
-            }
+            },
 
             TypeError::NotInitialized { ident, .. } => {
                 write!(f, "`{}` is used before initialization", ident)
-            }
+            },
 
             TypeError::InvalidRefExpression { expr } => {
-                write!(f, "`{}` does not refer to a value that can be passed by reference", expr)
-            }
+                write!(
+                    f,
+                    "`{}` does not refer to a value that can be passed by reference",
+                    expr
+                )
+            },
 
             TypeError::InvalidStatement(invalid_stmt) => {
                 write!(f, "{}", invalid_stmt)
-            }
-            
-            TypeError::InvalidSetValueType { actual: actual_ty, .. } => {
+            },
+
+            TypeError::InvalidSetValueType {
+                actual: actual_ty, ..
+            } => {
                 write!(f, "type `{}` is not an integer type or enum", actual_ty)
-            }
+            },
 
             TypeError::SetValuesMustBeSequential { from, to, .. } => {
                 write!(f, "{from} is greater than {to}")
-            }
+            },
 
-            TypeError::EmptySetDecl { name, .. } => {
-                match name {
-                    Some(path) => write!(f, "set declaration `{path}` contains no values"),
-                    None => write!(f, "set declaration contains no values")
-                }
-            }
-            
-            TypeError::TooManySetValues { count, ..  } => {
+            TypeError::EmptySetDecl { name, .. } => match name {
+                Some(path) => write!(f, "set declaration `{path}` contains no values"),
+                None => write!(f, "set declaration contains no values"),
+            },
+
+            TypeError::TooManySetValues { count, .. } => {
                 write!(f, "set type contains {count} values, which is more than the maximum number of flag bits ({MAX_FLAGS_BITS})")
-            }
+            },
 
             TypeError::EmptyVariantDecl(variant) => {
                 write!(f, "variant declaration `{}` has no cases", variant.name)
-            }
+            },
 
-            TypeError::EmptyVariantCaseBinding { variant, case_index, .. } => {
+            TypeError::EmptyVariantCaseBinding {
+                variant,
+                case_index,
+                ..
+            } => {
                 let case_ident = &variant.cases[*case_index].ident;
-                write!(f, "cannot bind value of empty variant case `{}.{}`", variant.name, case_ident)
-            }
+                write!(
+                    f,
+                    "cannot bind value of empty variant case `{}.{}`",
+                    variant.name, case_ident
+                )
+            },
 
             TypeError::NoLoopContext { stmt } => {
                 write!(f, "the stmt `{}` can only appear inside a loop", stmt)
-            }
+            },
 
             TypeError::NoFunctionContext { stmt } => {
                 write!(f, "the stmt `{}` can only appear inside a function", stmt)
-            }
+            },
 
             TypeError::InvalidWeakType { ty, .. } => {
                 write!(f, "the type `{}` cannot be used as a weak reference", ty)
-            }
+            },
 
             TypeError::InvalidUnsizedType { ty, .. } => {
-                write!(f, "the type `{}` cannot be used because its size is unknown in this context", ty)
-            }
+                write!(
+                    f,
+                    "the type `{}` cannot be used because its size is unknown in this context",
+                    ty
+                )
+            },
 
             TypeError::InvalidMethodModifiers { mods, .. } => {
                 if mods.len() > 1 {
-                    write!(f, "the following modifiers can not appear on a method declaration:")?;
-                    write!(f, "{}", mods.iter()
-                        .map(|m| format!("`{}`", m))
-                        .collect::<Vec<_>>()
-                        .join(", "))
+                    write!(
+                        f,
+                        "the following modifiers can not appear on a method declaration:"
+                    )?;
+                    write!(
+                        f,
+                        "{}",
+                        mods.iter()
+                            .map(|m| format!("`{}`", m))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
                 } else {
-                    write!(f, "the modifier `{}` can not appear on a method declaration", mods[0])
+                    write!(
+                        f,
+                        "the modifier `{}` can not appear on a method declaration",
+                        mods[0]
+                    )
                 }
-            }
+            },
 
             TypeError::InvalidMethodOwningType { method_ident, .. } => {
-                write!(f, "method `{}` declared in this scope cannot explicitly implement an interface", method_ident)
-            }
-            
+                write!(
+                    f,
+                    "method `{}` declared in this scope cannot explicitly implement an interface",
+                    method_ident
+                )
+            },
+
             TypeError::NoMethodContext { method_ident, .. } => {
                 write!(f, "method `{}` is not declared within a type", method_ident)
-            }
+            },
 
-            TypeError::MethodDefMismatch { method_ident, owning_ty, actual_kind, .. } => {
-                writeln!(f, "definition of {} `{}.{}` does not match previous declaration", actual_kind, owning_ty, method_ident)?;
+            TypeError::MethodDefMismatch {
+                method_ident,
+                owning_ty,
+                actual_kind,
+                ..
+            } => {
+                writeln!(
+                    f,
+                    "definition of {} `{}.{}` does not match previous declaration",
+                    actual_kind, owning_ty, method_ident
+                )?;
                 Ok(())
-            }
+            },
 
             TypeError::InvalidMethodInstanceType { ty, .. } => {
                 write!(f, "`{}` is not a type which supports methods", ty)
-            }
-            
-            TypeError::InvalidImplementation { ty, missing, mismatched, .. } => {
-                writeln!(f, "type `{}` is missing the following methods for interfaces it implements:", ty)?;
-                let names = mismatched.iter()
+            },
+
+            TypeError::InvalidImplementation {
+                ty,
+                missing,
+                mismatched,
+                ..
+            } => {
+                writeln!(
+                    f,
+                    "type `{}` is missing the following methods for interfaces it implements:",
+                    ty
+                )?;
+                let names = mismatched
+                    .iter()
                     .map(|item| &item.iface_method_name)
-                    .chain(missing
-                        .iter()
-                        .map(|item| &item.method_name))
+                    .chain(missing.iter().map(|item| &item.method_name))
                     .enumerate();
 
                 for (i, name) in names {
@@ -1175,70 +1360,115 @@ impl fmt::Display for TypeError {
                     write!(f, "{}", name)?;
                 }
                 Ok(())
-            }
-            
-            TypeError::InvalidBaseType { ty, invalid_base_ty, reason, .. } => {
-                write!(f, "`{}` is not valid as a base type for `{}`: ", invalid_base_ty, ty)?;
-                
+            },
+
+            TypeError::InvalidBaseType {
+                ty,
+                invalid_base_ty,
+                reason,
+                ..
+            } => {
+                write!(
+                    f,
+                    "`{}` is not valid as a base type for `{}`: ",
+                    invalid_base_ty, ty
+                )?;
+
                 match reason {
                     InvalidBaseTypeReason::NotInterface => write!(f, "type is not an interface")?,
-                    InvalidBaseTypeReason::Forward => write!(f, "base type cannot be a forward declaration")?,
+                    InvalidBaseTypeReason::Forward => {
+                        write!(f, "base type cannot be a forward declaration")?
+                    },
                 }
-                
+
                 writeln!(f)
-            }
-            
-            TypeError::AbstractMethodDefinition { owning_ty, method, .. } => {
-                writeln!(f, "method `{}.{}` is abstract and cannot be defined", owning_ty, method)
-            }
+            },
+
+            TypeError::AbstractMethodDefinition {
+                owning_ty, method, ..
+            } => {
+                writeln!(
+                    f,
+                    "method `{}.{}` is abstract and cannot be defined",
+                    owning_ty, method
+                )
+            },
 
             TypeError::NameNotVisible { name, .. } => {
                 write!(f, "`{}` is not is not visible in the current context", name)
-            }
-            
-            TypeError::TypeMemberInaccessible { ty, member, access, .. } => {
-                write!(f, "{} member `{}.{}` is inaccessible in this context", access, ty, member)
-            }
+            },
+
+            TypeError::TypeMemberInaccessible {
+                ty, member, access, ..
+            } => {
+                write!(
+                    f,
+                    "{} member `{}.{}` is inaccessible in this context",
+                    access, ty, member
+                )
+            },
 
             TypeError::DuplicateNamedArg { name, .. } => {
-                write!(f, "named argument `{}` already occurred in this argument list", name)
-            }
-            
+                write!(
+                    f,
+                    "named argument `{}` already occurred in this argument list",
+                    name
+                )
+            },
+
             TypeError::DuplicateParamName { name, .. } => {
-                write!(f, "parameter named `{}` was already declared previously", name)
-            }
+                write!(
+                    f,
+                    "parameter named `{}` was already declared previously",
+                    name
+                )
+            },
 
             TypeError::UnsafeConversionNotAllowed { from, to, .. } => {
-                write!(f, "conversion from `{}` to `{}` is only allowed in an unsafe context", from, to)
-            }
+                write!(
+                    f,
+                    "conversion from `{}` to `{}` is only allowed in an unsafe context",
+                    from, to
+                )
+            },
 
             TypeError::UnsafeAddressOfNotAllowed { ty, .. } => {
-                write!(f, "value of type `{}` can only have its address taken in an unsafe context", ty)
-            }
+                write!(
+                    f,
+                    "value of type `{}` can only have its address taken in an unsafe context",
+                    ty
+                )
+            },
 
             TypeError::InvalidConstExpr { expr } => {
                 write!(f, "expr `{}` is not a constant value", expr)
-            }
+            },
 
             TypeError::InvalidCaseExprBlock { .. } => {
-                write!(f, "case expr must contain at least one branch and an `else` branch")
-            }
+                write!(
+                    f,
+                    "case expr must contain at least one branch and an `else` branch"
+                )
+            },
 
             TypeError::InvalidCast { from, to, .. } => {
                 write!(f, "`{}` cannot be cast to `{}`", from, to)
-            }
+            },
 
             TypeError::EmptyMatchBlock { .. } => {
                 write!(f, "this match block must have at least one branch")
-            }
+            },
 
             TypeError::InvalidMatchExpr { expr, .. } => {
                 let ty = expr.annotation().ty();
                 write!(f, "this expression with type {ty} is not valid as the condition for a match expression")
-            }
+            },
 
             TypeError::MatchExprNotExhaustive { missing_cases, .. } => {
-                write!(f, "this match expr must be exhaustive or have an `else` branch")?;
+                write!(
+                    f,
+                    "this match expr must be exhaustive or have an `else` branch"
+                )?;
                 if missing_cases.len() > 0 {
                     write!(f, " (unhandled cases: ")?;
                     for (i, missing_case) in missing_cases.iter().enumerate() {
@@ -1250,42 +1480,57 @@ impl fmt::Display for TypeError {
                     write!(f, ")")?;
                 }
                 Ok(())
-            }
+            },
 
             TypeError::InvalidExitWithValue { .. } => {
                 write!(f, "cannot exit with a value in this context")
-            }
+            },
 
             TypeError::ConstDeclWithNoValue { .. } => {
                 write!(f, "constant declaration must have a value")
-            }
+            },
 
             TypeError::InvalidLoopCounterType { counter_ty, .. } => {
                 write!(f, "type `{}` cannot be used as a loop counter", counter_ty)
-            }
+            },
 
             TypeError::InvalidLoopSeqType { seq_ty, .. } => {
                 write!(f, "type `{}` cannot be used as a sequence", seq_ty)
-            }
+            },
 
             TypeError::InvalidDeclWithTypeParams { kind, .. } => {
                 write!(f, "{} types cannot have type parameters", kind)
-            }
+            },
 
-            TypeError::EnumValuesMustBeAscending { prev_ident, prev_val, next_ident, next_val, .. } => {
-                write!(f, "item `{}` has lower value ({}) than previous item `{}` ({})", next_ident, next_val, prev_ident, prev_val)
-            }
-            
+            TypeError::EnumValuesMustBeAscending {
+                prev_ident,
+                prev_val,
+                next_ident,
+                next_val,
+                ..
+            } => {
+                write!(
+                    f,
+                    "item `{}` has lower value ({}) than previous item `{}` ({})",
+                    next_ident, next_val, prev_ident, prev_val
+                )
+            },
+
             TypeError::InvalidExplicitSpec { target, .. } => {
-                write!(f, "{target} cannot be explicitly specialized with type arguments")
-            }
-            
-            TypeError::InvalidTagItem { reason, .. } => {
-                match reason {
-                    InvalidTagReason::InvalidType(ty) =>  write!(f, "type {} is not valid for a tag item", ty),
-                    InvalidTagReason::UnsizedType(ty) =>  write!(f, "size of type {} is not known in this context", ty),
-                }
-            }
+                write!(
+                    f,
+                    "{target} cannot be explicitly specialized with type arguments"
+                )
+            },
+
+            TypeError::InvalidTagItem { reason, .. } => match reason {
+                InvalidTagReason::InvalidType(ty) => {
+                    write!(f, "type {} is not valid for a tag item", ty)
+                },
+                InvalidTagReason::UnsizedType(ty) => {
+                    write!(f, "size of type {} is not known in this context", ty)
+                },
+            },
         }
     }
 }
@@ -1315,11 +1560,18 @@ impl fmt::Display for InvalidOverloadKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             InvalidOverloadKind::MissingOverloadModifier => {
-                write!(f, "the declaration is missing the `{}` modifier", DeclMod::OVERLOAD_WORD)
-            }
+                write!(
+                    f,
+                    "the declaration is missing the `{}` modifier",
+                    DeclMod::OVERLOAD_WORD
+                )
+            },
             InvalidOverloadKind::Duplicate(..) => {
-                write!(f, "the declaration is a duplicate of a previous declaration")
-            }
+                write!(
+                    f,
+                    "the declaration is a duplicate of a previous declaration"
+                )
+            },
         }
     }
 }
@@ -1364,7 +1616,7 @@ fn args_to_string(args: &[Type]) -> String {
     if args.is_empty() {
         return "<no arguments>".to_string();
     }
-    
+
     args.iter()
         .map(|arg| arg.to_string())
         .collect::<Vec<_>>()

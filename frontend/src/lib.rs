@@ -1,12 +1,13 @@
 extern crate core;
 
 pub mod ast;
+pub mod codegen;
 pub mod consts;
 pub mod parse;
+pub mod pp;
+pub mod result;
 pub mod token_tree;
 pub mod typ;
-pub mod pp;
-pub mod codegen;
 
 pub use self::consts::EnumConstant;
 pub use self::consts::IntConstant;
@@ -24,8 +25,10 @@ pub use ast::operators::Operator;
 pub use ast::operators::Position;
 
 use crate::codegen::CodegenOpts;
+use crate::parse::AggregateParseError;
+use crate::parse::ParseError;
 use crate::parse::ParseResult;
-use crate::parse::{AggregateParseError, ParseError, Parser};
+use crate::parse::Parser;
 use crate::pp::error::PreprocessorError;
 use crate::pp::PreprocessedUnit;
 use crate::typ::Module;
@@ -45,34 +48,37 @@ pub fn preprocess(
     fs: &impl Filesystem,
     filename: impl Into<PathBuf>,
     src: &str,
-    opts: CompileOpts
+    opts: CompileOpts,
 ) -> Result<PreprocessedUnit, PreprocessorError> {
     let pp = pp::Preprocessor::new(fs, filename, opts);
     pp.preprocess(&src)
 }
 
-pub fn tokenize(unit: PreprocessedUnit) -> TokenizeResult<Vec<TokenTree>>{
+pub fn tokenize(unit: PreprocessedUnit) -> TokenizeResult<Vec<TokenTree>> {
     TokenTree::tokenize(unit)
 }
 
 pub fn parse(
     filename: impl Into<PathBuf>,
-    tokens: impl IntoIterator<Item=TokenTree>
+    tokens: impl IntoIterator<Item = TokenTree>,
 ) -> ParseResult<ast::Unit> {
     let file_span = Span {
         file: Arc::new(filename.into()),
         start: Location::zero(),
-        end: Location::zero()
+        end: Location::zero(),
     };
 
-    let unit_ident = file_span.file
+    let unit_ident = file_span
+        .file
         .with_extension("")
         .file_name()
         .map(|file_name| {
-            let unit_ident = ast::IdentPath::from_parts(file_name
-                .to_string_lossy()
-                .split('.')
-                .map(|part| ast::Ident::new(part, file_span.clone())));
+            let unit_ident = ast::IdentPath::from_parts(
+                file_name
+                    .to_string_lossy()
+                    .split('.')
+                    .map(|part| ast::Ident::new(part, file_span.clone())),
+            );
 
             unit_ident
         })
@@ -83,21 +89,26 @@ pub fn parse(
 
     let tokens = TokenStream::new(tokens, file_span);
     let mut parser = Parser::new(tokens);
-    
+
     let unit = ast::Unit::parse(&mut parser, unit_ident);
-    
+
     let errors = parser.finish();
-    
-    AggregateParseError::result(unit, errors)
-        .map_err(AggregateError::into_err)
+
+    AggregateParseError::result(unit, errors).map_err(AggregateError::into_err)
 }
 
 pub fn typecheck<'a>(
-    units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a ast::Unit)>,
+    units: impl DoubleEndedIterator<Item = (&'a PathBuf, &'a ast::Unit)>,
     verbose: bool,
-    log: &mut BuildLog
+    log: &mut BuildLog,
 ) -> TypeResult<Module> {
-    Module::typecheck(units, verbose, log)
+    let module = Module::typecheck(units, verbose, log)?;
+
+    for error in module.root_ctx.errors() {
+        log.diagnostic(error.clone());
+    }
+
+    Ok(module)
 }
 
 pub fn codegen_ir(module: &Module, opts: CodegenOpts) -> ir::Library {

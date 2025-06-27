@@ -1,7 +1,7 @@
 mod alias_decl;
 mod const_decl;
-mod unit_decl;
 mod decl_mod;
+mod unit_decl;
 mod use_decl;
 
 pub use self::alias_decl::*;
@@ -20,15 +20,15 @@ use crate::ast::IdentPath;
 use crate::ast::Stmt;
 use crate::ast::TypeDecl;
 use crate::ast::TypeDeclItem;
-use crate::parse::ContinueParse;
 pub use crate::parse::MatchOneOf;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
-use crate::parse::TokenStream;
 use crate::parse::Parser;
+use crate::parse::TokenStream;
+use crate::result::ErrorContinue;
 use crate::typ::builtin_span;
 use crate::typ::SYSTEM_UNIT_NAME;
 use crate::DelimiterPair;
@@ -65,12 +65,12 @@ pub struct Unit<A: Annotation = Span> {
     pub kind: UnitKind,
 
     pub ident: IdentPath,
-    
+
     pub iface_section: UnitDeclSection<A>,
     pub impl_section: UnitDeclSection<A>,
 
     pub init: Option<InitBlock<A>>,
-    
+
     pub end_kw: Option<Span>,
 }
 
@@ -78,7 +78,7 @@ pub struct Unit<A: Annotation = Span> {
 pub struct InitBlock<A: Annotation = Span> {
     pub keyword_span: Span,
     pub body: Vec<Stmt<A>>,
-    
+
     pub end_span: Option<Span>,
 }
 
@@ -88,17 +88,19 @@ pub struct UnitDeclSection<A: Annotation = Span> {
     // may or may not start with a keyword - program/library units have a decl section, but
     // it's always an "implementation" section so no keyword is needed
     pub kw_span: Option<Span>,
-    
+
     pub decls: Vec<UnitDecl<A>>,
 }
 
 impl<A: Annotation> Unit<A> {
     pub fn all_decls(&self) -> impl Iterator<Item = (Visibility, &UnitDecl<A>)> {
-        self.iface_section.decls
+        self.iface_section
+            .decls
             .iter()
             .map(|decl| (Visibility::Interface, decl))
             .chain(
-                self.impl_section.decls
+                self.impl_section
+                    .decls
                     .iter()
                     .map(|decl| (Visibility::Implementation, decl)),
             )
@@ -130,21 +132,21 @@ impl<A: Annotation> Unit<A> {
         self.type_decls()
             .flat_map(|(vis, decl)| decl.items.iter().map(move |item| (vis, item)))
     }
-    
+
     pub fn var_decl_items(&self) -> impl Iterator<Item = (Visibility, &UnitBindingItem<A>)> {
         self.all_decls()
             .filter_map(|(vis, decl)| match decl {
-                UnitDecl::Binding { 
-                    decl: binding @ UnitBinding { kind: BindingDeclKind::Var, .. }
-                } => {
-                    Some((vis, binding))
-                }
-                
+                UnitDecl::Binding {
+                    decl:
+                        binding @ UnitBinding {
+                            kind: BindingDeclKind::Var,
+                            ..
+                        },
+                } => Some((vis, binding)),
+
                 _ => None,
             })
-            .flat_map(|(vis, binding)| binding.items
-                .iter()
-                .map(move |item| (vis, item)))
+            .flat_map(|(vis, binding)| binding.items.iter().map(move |item| (vis, item)))
     }
 }
 
@@ -152,33 +154,31 @@ impl Unit<Span> {
     pub fn parse(parser: &mut Parser, file_ident: IdentPath) -> Self {
         let unit_kind_kw_match = Keyword::Unit | Keyword::Program | Keyword::Library;
 
-        let (unit_kw, unit_kind, ident) = match parser
-            .tokens()
-            .match_one_maybe(unit_kind_kw_match.clone()) 
-        {
-            Some(TokenTree::Keyword { kw, span }) => {
-                let ident = IdentPath::parse(parser.tokens())
-                    .or_continue_with(parser.errors(), || file_ident.clone());
+        let (unit_kw, unit_kind, ident) =
+            match parser.tokens().match_one_maybe(unit_kind_kw_match.clone()) {
+                Some(TokenTree::Keyword { kw, span }) => {
+                    let ident = IdentPath::parse(parser.tokens())
+                        .or_continue_with(parser.errors(), || file_ident.clone());
 
-                if file_ident != ident {
-                    let err = ParseError::InvalidUnitFilename(ident.path_span());
-                    parser.error(TracedError::from(err));
-                }
-                
-                parser.advance_to(Separator::Semicolon);
+                    if file_ident != ident {
+                        let err = ParseError::InvalidUnitFilename(ident.path_span());
+                        parser.error(TracedError::from(err));
+                    }
 
-                let kind = match kw {
-                    Keyword::Program => UnitKind::Program,
-                    Keyword::Library => UnitKind::Library,
-                    _ => UnitKind::Unit,
-                };
+                    parser.advance_to(Separator::Semicolon);
 
-                (Some(span), kind, ident)
-            },
+                    let kind = match kw {
+                        Keyword::Program => UnitKind::Program,
+                        Keyword::Library => UnitKind::Library,
+                        _ => UnitKind::Unit,
+                    };
 
-            _ => (None, UnitKind::Unit, file_ident),
-        };
-        
+                    (Some(span), kind, ident)
+                },
+
+                _ => (None, UnitKind::Unit, file_ident),
+            };
+
         let mut unit = Unit {
             unit_kw,
             kind: unit_kind,
@@ -206,7 +206,7 @@ impl Unit<Span> {
 
             // instead of a separate init block, program units always have a "main" block
             // after any decls with the usual begin/end keywords
-            
+
             match Block::parse(parser.tokens()) {
                 Ok(block) => {
                     let end_kw = match parser.tokens().match_one_maybe(Operator::Period) {
@@ -221,11 +221,11 @@ impl Unit<Span> {
                         body: vec![Stmt::Block(Box::new(block))],
                         end_span: Some(end_kw),
                     });
-                }
-                
+                },
+
                 Err(err) => {
                     parser.error(err);
-                }
+                },
             }
         } else {
             let iface_section = parse_decls_section(parser, Visibility::Interface);
@@ -233,7 +233,7 @@ impl Unit<Span> {
                 Some(section) => {
                     unit.iface_section = section;
                     true
-                }
+                },
                 None => false,
             };
 
@@ -243,21 +243,21 @@ impl Unit<Span> {
                 Some(section) => {
                     unit.impl_section = section;
                     true
-                }
+                },
                 None => false,
             };
 
             let init_kw = parser.tokens().match_one_maybe(Keyword::Initialization);
             if let Some(init_kw) = &init_kw {
-                let init_body = parse_init_section(parser.tokens())
-                    .or_continue_with(parser.errors(), Vec::new);
+                let init_body =
+                    parse_init_section(parser.tokens()).or_continue_with(parser.errors(), Vec::new);
 
                 let end_kw = match_unit_end(parser.tokens())
                     .map(Some)
                     .or_continue(parser.errors(), None);
 
                 unit.end_kw = end_kw.clone();
-                
+
                 unit.init = Some(InitBlock {
                     keyword_span: init_kw.span().clone(),
                     body: init_body,
@@ -271,17 +271,19 @@ impl Unit<Span> {
 
             if !(has_iface_section || has_impl_section || init_kw.is_some()) {
                 // empty units are invalid! use this to throw an error
-                let Err(err) = parser.tokens().match_one(unit_kind_kw_match
-                    | Keyword::Interface
-                    | Keyword::Implementation
-                    | Keyword::Initialization) else {
+                let Err(err) = parser.tokens().match_one(
+                    unit_kind_kw_match
+                        | Keyword::Interface
+                        | Keyword::Implementation
+                        | Keyword::Initialization,
+                ) else {
                     unreachable!();
                 };
 
                 parser.error(err);
             }
         }
-        
+
         // add auto refs
         add_auto_ref_paths(&unit.ident, &mut unit.iface_section.decls);
 
@@ -290,9 +292,7 @@ impl Unit<Span> {
 }
 
 fn match_unit_end(tokens: &mut TokenStream) -> ParseResult<Span> {
-    let span = tokens
-        .match_one(Keyword::End)?
-        .into_span();
+    let span = tokens.match_one(Keyword::End)?.into_span();
 
     // allow the traditional period after the final end, but don't require it
     if let Some(period) = tokens.match_one_maybe(Operator::Period) {
@@ -302,19 +302,16 @@ fn match_unit_end(tokens: &mut TokenStream) -> ParseResult<Span> {
     }
 }
 
-fn parse_decls_section(
-    parser: &mut Parser,
-    visibility: Visibility,
-) -> Option<UnitDeclSection> {
+fn parse_decls_section(parser: &mut Parser, visibility: Visibility) -> Option<UnitDeclSection> {
     let Some(kw_tt) = parser.tokens().match_one_maybe(visibility.keyword()) else {
         return None;
     };
 
     let kw_span = Some(kw_tt.into_span());
-    
+
     let mut section = UnitDeclSection {
         kw_span,
-        decls: Vec::new()
+        decls: Vec::new(),
     };
 
     let decls = UnitDecl::parse_seq(parser, visibility);
@@ -341,14 +338,10 @@ pub(crate) fn func_decl_kw_matcher() -> Matcher {
 }
 
 pub(crate) fn unit_func_decl_start_matcher() -> Matcher {
-    func_decl_kw_matcher()
-        | DelimiterPair::SquareBracket
+    func_decl_kw_matcher() | DelimiterPair::SquareBracket
 }
 
-fn parse_unit_decl(
-    parser: &mut Parser,
-    visibility: Visibility,
-) -> ParseResult<UnitDecl> {
+fn parse_unit_decl(parser: &mut Parser, visibility: Visibility) -> ParseResult<UnitDecl> {
     let decl_start = UnitDecl::start_matcher();
 
     let decl = match parser.advance_until(decl_start) {
@@ -410,11 +403,9 @@ fn parse_unit_func_decl(parser: &mut Parser, visibility: Visibility) -> ParseRes
         parser.advance_to(Separator::Semicolon);
 
         let decl = FunctionDef::parse_body_of_decl(parser, func_decl.clone())
-            .map(|def| {
-                UnitDecl::FunctionDef { def: Arc::new(def) }
-            })
-            .or_continue_with(parser.errors(), || {
-                UnitDecl::FunctionDecl { decl: func_decl }
+            .map(|def| UnitDecl::FunctionDef { def: Arc::new(def) })
+            .or_continue_with(parser.errors(), || UnitDecl::FunctionDecl {
+                decl: func_decl,
             });
 
         Ok(decl)
@@ -463,14 +454,14 @@ impl<A: Annotation> fmt::Display for Unit<A> {
             writeln!(f, "{};", decl)?;
         }
         writeln!(f)?;
-        
+
         if let Some(init_block) = &self.init {
             if self.kind == UnitKind::Unit {
                 writeln!(f, "initialization")?;
             } else {
                 writeln!(f, "begin")?;
             }
-            
+
             for init_stmt in &init_block.body {
                 writeln!(f, "\t{};", init_stmt)?;
             }
@@ -483,22 +474,22 @@ impl<A: Annotation> fmt::Display for Unit<A> {
 }
 
 // auto-ref namespaces are implicitly used by every compiled unit (e.g. "System").
-// if a unit's interface section doesn't literally contain a using decl for these units, 
+// if a unit's interface section doesn't literally contain a using decl for these units,
 // we synthesize new using decls and add them.
 // the parser does this (rather than adding implicit used units in the typechecking scope) because:
 // a) we look at parsed units to determine compilation order (until project is implemented)
 // b) they appear in the printed AST when outputting it this way, which is nice for debugging
-static AUTO_REF_NAMESPACES: [&str; 1] = [
-    SYSTEM_UNIT_NAME
-];
+static AUTO_REF_NAMESPACES: [&str; 1] = [SYSTEM_UNIT_NAME];
 
 fn auto_ref_namespaces() -> Vec<IdentPath> {
     AUTO_REF_NAMESPACES
         .iter()
         .map(|auto_ref_name| {
-            IdentPath::from_parts(auto_ref_name
-                .split('.')
-                .map(|part| ast::Ident::new(part, builtin_span())))
+            IdentPath::from_parts(
+                auto_ref_name
+                    .split('.')
+                    .map(|part| ast::Ident::new(part, builtin_span())),
+            )
         })
         .collect()
 }
@@ -509,7 +500,7 @@ fn add_auto_ref_paths(unit_namespace: &IdentPath, unit_decls: &mut Vec<UnitDecl<
         if auto_ref_path == *unit_namespace {
             continue;
         }
-        
+
         let has_using = unit_decls
             .iter()
             .flat_map(|decl| match decl {
@@ -527,7 +518,7 @@ fn add_auto_ref_paths(unit_namespace: &IdentPath, unit_decls: &mut Vec<UnitDecl<
                         path: None,
                     }],
                     span: builtin_span(),
-                }
+                },
             })
         }
     }

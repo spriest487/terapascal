@@ -194,7 +194,7 @@ pub fn typecheck_stmt(
         },
 
         ast::Stmt::Block(block) => {
-            let block = typecheck_block(block, expect_ty, ctx)?;
+            let block = typecheck_block(block, expect_ty, ctx);
 
             Ok(ast::Stmt::Block(Box::new(block)))
         },

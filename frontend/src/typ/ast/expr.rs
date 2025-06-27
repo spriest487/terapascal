@@ -134,7 +134,7 @@ pub fn typecheck_expr(
         },
 
         ast::Expr::Block(block) => {
-            let block = typecheck_block(block, expect_ty, ctx)?;
+            let block = typecheck_block(block, expect_ty, ctx);
             Ok(ast::Expr::from(block))
         },
 

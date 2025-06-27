@@ -13,7 +13,6 @@ use crate::ast::Ident;
 use crate::ast::SupersClause;
 use crate::ast::TypeName;
 use crate::ast::WhereClause;
-use crate::parse::ContinueParse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
@@ -25,6 +24,7 @@ use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::result::ErrorContinue;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct InterfaceMethodDecl<A: Annotation = Span> {

@@ -695,7 +695,7 @@ pub fn typecheck_func_def(
 
         let locals = declare_locals_in_body(&def, ctx)?;
 
-        let body = typecheck_block(&def.body, &decl.result_ty, ctx)?;
+        let body = typecheck_block(&def.body, &decl.result_ty, ctx);
 
         Ok(FunctionDef {
             decl,
@@ -943,13 +943,14 @@ pub fn typecheck_func_expr(
     });
 
     let body_result = declare_func_params_in_body(&params, &src_def.annotation, ctx)
-        .and_then(|_| {
+        .map(|_| {
             let expect_block_return = known_return_ty
                 .as_ref()
                 .map(TypeName::ty)
                 .unwrap_or(&Type::Nothing);
 
-            typecheck_block(&src_def.body, &expect_block_return, ctx)
+            let block = typecheck_block(&src_def.body, &expect_block_return, ctx);
+            block
         });
 
     let closure_env = match ctx.pop_scope(body_scope_id).into_env() {

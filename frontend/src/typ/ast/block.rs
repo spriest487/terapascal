@@ -1,4 +1,5 @@
 use crate::ast;
+use crate::result::ErrorContinue;
 use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::expr::expect_expr_initialized;
@@ -8,7 +9,6 @@ use crate::typ::Context;
 use crate::typ::Environment;
 use crate::typ::Type;
 use crate::typ::TypeError;
-use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
 use terapascal_common::span::Span;
@@ -20,7 +20,7 @@ pub fn typecheck_block(
     block: &ast::Block<Span>,
     expect_ty: &Type,
     ctx: &mut Context,
-) -> TypeResult<Block> {
+) -> Block {
     let block_env = Environment::Block {
         allow_unsafe: block.unsafe_kw.is_some(),
     };
@@ -38,27 +38,27 @@ pub fn typecheck_block(
                 // this is the final stmt in the block, and during parsing this block didn't
                 // get an output expr. we expect this block to have an output, so try to convert
                 // the final stmt here into an expr
-                match stmt.to_expr() {
-                    Some(src_output_stmt_expr) => {
-                        let mut output_stmt_expr =
-                            evaluate_expr(&src_output_stmt_expr, expect_ty, ctx)?;
+                if let Some(src_output) = stmt.to_expr() {
+                    if let Some(expr) = evaluate_expr(&src_output, expect_ty, ctx)
+                        .ok_or_continue(ctx)
+                    {
                         if *expect_ty != Type::Nothing {
-                            output_stmt_expr =
-                                implicit_conversion(output_stmt_expr, expect_ty, ctx)?;
+                            output = implicit_conversion(expr, expect_ty, ctx).ok_or_continue(ctx);
+                        } else {
+                            output = Some(expr);
                         }
-
-                        output = Some(output_stmt_expr);
-                    },
-
-                    None => {
-                        // typ the actual stmt which isn't a valid expr so we can use it
-                        // for a better error message
-                        let bad_stmt = typecheck_stmt(&stmt, expect_ty, ctx)?;
-                        return Err(TypeError::BlockOutputIsNotExpression {
+                    }
+                } else {
+                    // typ the actual stmt which isn't a valid expr so we can use it
+                    // for a better error message
+                    if let Some(bad_stmt) =  typecheck_stmt(&stmt, expect_ty, ctx)
+                        .ok_or_continue(ctx) 
+                    {
+                        ctx.error(TypeError::BlockOutputIsNotExpression {
                             stmt: Box::new(bad_stmt),
                             expected_expr_ty: expect_ty.clone(),
                         });
-                    },
+                    }
                 }
 
                 continue;
@@ -72,7 +72,7 @@ pub fn typecheck_block(
 
             match typecheck_stmt(stmt, &Type::Nothing, ctx) {
                 Ok(stmt) => {
-                    expect_stmt_initialized(&stmt, ctx)?;
+                    expect_stmt_initialized(&stmt, ctx).or_continue(ctx, ());
                     statements.push(stmt);
                 },
 
@@ -81,7 +81,9 @@ pub fn typecheck_block(
                     output = Some(expr);
                 },
 
-                Err(err) => return Err(err),
+                Err(err) => { 
+                    ctx.error(err);
+                }
             }
         }
 
@@ -93,18 +95,22 @@ pub fn typecheck_block(
             // we should not have tried to interpret any statements as output expressions
             assert_eq!(None, output);
 
-            let mut out_expr = evaluate_expr(src_output_expr, expect_ty, ctx)?;
-            if *expect_ty != Type::Nothing && !expect_ty.contains_unresolved_params(ctx) {
-                out_expr = implicit_conversion(out_expr, expect_ty, ctx)?;
-            } else {
-                out_expr.annotation().expect_any_value()?;
-            }
+            if let Some(out_expr) = evaluate_expr(src_output_expr, expect_ty, ctx)
+                .ok_or_continue(ctx) 
+            {
+                if *expect_ty != Type::Nothing && !expect_ty.contains_unresolved_params(ctx) {
+                    output = implicit_conversion(out_expr, expect_ty, ctx).ok_or_continue(ctx);
+                } else {
+                    out_expr.annotation().expect_any_value()
+                        .or_continue(ctx, ());
 
-            output = Some(out_expr);
+                    output = Some(out_expr);
+                }
+            }
         }
 
         if let Some(output_expr) = &output {
-            expect_expr_initialized(output_expr, ctx)?;
+            expect_expr_initialized(output_expr, ctx).or_continue(ctx, ());
         }
 
         let span = block.annotation.span().clone();
@@ -136,6 +142,6 @@ pub fn typecheck_block(
             out_ty.unwrap_or(Type::Nothing)
         });
 
-        Ok(block)
+        block
     })
 }

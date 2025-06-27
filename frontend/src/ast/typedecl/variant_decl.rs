@@ -14,12 +14,12 @@ use crate::ast::MethodDeclSection;
 use crate::ast::MethodOwner;
 use crate::ast::SupersClause;
 use crate::ast::WhereClause;
-use crate::parse::ContinueParse;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::Parser;
+use crate::result::ErrorContinue;
 use crate::Separator;
 use crate::TokenTree;
 use derivative::*;
@@ -65,7 +65,9 @@ impl<A: Annotation> MethodOwner<A> for VariantDecl<A> {
     where
         A: 'a,
     {
-        self.sections.iter().flat_map(|section| section.methods.iter())
+        self.sections
+            .iter()
+            .flat_map(|section| section.methods.iter())
     }
 }
 
@@ -145,7 +147,9 @@ impl VariantDecl {
             let mut cases = Vec::new();
 
             let last_sep = parse_separated_members(parser, &mut cases, |parser| {
-                VariantCase::try_parse(parser).ok_or_continue(parser.errors()).flatten()
+                VariantCase::try_parse(parser)
+                    .ok_or_continue(parser.errors())
+                    .flatten()
             });
 
             let sections = if last_sep.is_some() {
@@ -200,15 +204,13 @@ impl VariantCase {
         let case = match parser.tokens().match_one_maybe(Separator::Colon) {
             Some(..) => {
                 let ty = TypeName::parse(parser.tokens())?;
-                
+
                 let mut case_span = ident.span.clone();
                 case_span.maybe_extend(&ty);
 
                 VariantCase {
                     ident,
-                    data: Some(VariantCaseData {
-                        ty,
-                    }),
+                    data: Some(VariantCaseData { ty }),
                     span: case_span,
                 }
             },
@@ -248,7 +250,11 @@ fn parse_method_sections(parser: &mut Parser, default_access: Access) -> Vec<Met
             current_access_kw = Some(new_access_span);
         }
 
-        let func_ahead = parser.tokens().look_ahead().match_one(type_method_start()).is_some();
+        let func_ahead = parser
+            .tokens()
+            .look_ahead()
+            .match_one(type_method_start())
+            .is_some();
 
         if !func_ahead {
             break;
@@ -263,7 +269,11 @@ fn parse_method_sections(parser: &mut Parser, default_access: Access) -> Vec<Met
                     access: current_access,
                 });
 
-                if parser.tokens().match_one_maybe(Separator::Semicolon).is_none() {
+                if parser
+                    .tokens()
+                    .match_one_maybe(Separator::Semicolon)
+                    .is_none()
+                {
                     break;
                 }
             },

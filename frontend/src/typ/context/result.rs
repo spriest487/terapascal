@@ -11,7 +11,7 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use terapascal_common::{DiagnosticLabel, DiagnosticMessage};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GenericTarget {
     Name(IdentPath),
     FunctionSig(FunctionSig),
@@ -28,7 +28,7 @@ impl fmt::Display for GenericTarget {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GenericTypeHint {
     Unknown,
     ExpectedValueType(Type),
@@ -71,7 +71,7 @@ impl fmt::Display for GenericTypeHint {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum GenericError {
     ArgsLenMismatch {
         target: GenericTarget,
@@ -200,7 +200,7 @@ pub enum ExpectedKind {
     Namespace,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Named {
     Decl(Decl),
     Namespace(IdentPath),
@@ -246,7 +246,7 @@ impl fmt::Display for NameContainer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NameError {
     NotFound {
         ident: IdentPath,

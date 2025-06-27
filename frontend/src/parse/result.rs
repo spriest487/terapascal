@@ -21,8 +21,9 @@ use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::Severity;
 use terapascal_common::TracedError;
+use crate::result::ErrorContinue;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IllegalStatement<A: Annotation = Span>(pub Box<Expr<A>>);
 
 impl<A: Annotation> fmt::Display for IllegalStatement<A> {
@@ -418,34 +419,14 @@ impl FromAggregateError<Unit> for TracedError<ParseError> {
 
 pub type AggregateParseResult<T> = AggregateResult<T, TracedError<ParseError>>;
 
-pub trait ContinueParse: Sized {
-    type Item;
-
-    fn or_continue(
-        self,
-        errors: &mut Vec<TracedError<ParseError>>,
-        or_default: Self::Item,
-    ) -> Self::Item {
-        self.or_continue_with(errors, || or_default)
-    }
-    
-    fn or_continue_with<DefaultFn>(
-        self,
-        errors: &mut Vec<TracedError<ParseError>>,
-        f: DefaultFn,
-    ) -> Self::Item
-    where
-        DefaultFn: FnOnce() -> Self::Item;
-
-    fn ok_or_continue(self, errors: &mut Vec<TracedError<ParseError>>) -> Option<Self::Item>;
-}
-
-impl<T> ContinueParse for ParseResult<T> {
+impl<T> ErrorContinue for ParseResult<T> {
     type Item = T;
+    type Error = TracedError<ParseError>;
+    type ErrorSink<'a> = &'a mut Vec<Self::Error>;
 
     fn or_continue_with<DefaultFn>(
         self,
-        errors: &mut Vec<TracedError<ParseError>>,
+        errors: &mut Vec<Self::Error>,
         f: DefaultFn,
     ) -> Self::Item
     where
@@ -461,7 +442,7 @@ impl<T> ContinueParse for ParseResult<T> {
         }
     }
 
-    fn ok_or_continue(self, errors: &mut Vec<TracedError<ParseError>>) -> Option<Self::Item> {
+    fn ok_or_continue(self, errors: &mut Vec<Self::Error>) -> Option<Self::Item> {
         self.map(Some).or_continue(errors, None)
     }
 }

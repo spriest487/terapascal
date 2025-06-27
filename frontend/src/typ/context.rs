@@ -76,6 +76,8 @@ pub struct Context {
     method_defs: HashMap<Type, MethodCollection>,
 
     loop_stack: Vec<Span>,
+    
+    errors: Vec<TypeError>,
 }
 
 impl Context {
@@ -92,6 +94,8 @@ impl Context {
 
             primitive_methods: HashMap::new(),
             primitive_implements: Vec::new(),
+            
+            errors: Vec::new(),
         };
 
         let system_path = IdentPath::new(builtin_ident(SYSTEM_UNIT_NAME), []);
@@ -161,9 +165,9 @@ impl Context {
         }
     }
 
-    pub fn scope<F, T>(&mut self, env: impl Into<Environment>, f: F) -> TypeResult<T>
+    pub fn scope<F, T>(&mut self, env: impl Into<Environment>, f: F) -> T
     where
-        F: FnOnce(&mut Context) -> TypeResult<T>,
+        F: FnOnce(&mut Context) -> T,
     {
         let scope_id = self.push_scope(env);
 
@@ -2033,6 +2037,16 @@ impl Context {
         for name in all_init {
             self.initialize(&name);
         }
+        
+        // important: assumes no errors have been added to the source context since the branch
+        // operation started. make sure the source context isn't used again until is branches
+        // are either discarded or consolidated!
+        let src_error_count = self.errors.len();
+        for ctx in branch_contexts {
+            for error in &ctx.errors[src_error_count..] {
+                self.errors.push(error.clone());
+            }
+        }
     }
 
     pub fn is_visible(&self, name: &IdentPath) -> bool {
@@ -2041,6 +2055,14 @@ impl Context {
 
     pub fn get_access(&self, name: &IdentPath) -> Access {
         self.scopes.get_access(name)
+    }
+    
+    pub fn error(&mut self, err: impl Into<TypeError>) {
+        self.errors.push(err.into());
+    }
+    
+    pub fn errors(&self) -> &[TypeError] {
+        &self.errors
     }
 }
 

@@ -7,10 +7,10 @@ use crate::ast::FunctionDef;
 use crate::ast::TypeDecl;
 use crate::ast::UnitBinding;
 use crate::ast::UseDecl;
-use crate::parse::ContinueParse;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parser;
+use crate::result::ErrorContinue;
 use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Separator;
@@ -83,7 +83,8 @@ impl UnitDecl<Span> {
     pub fn start_matcher() -> Matcher {
         Keyword::Uses
             | Keyword::Type
-            | unit_func_decl_start_matcher() | unit_binding_start_matcher()
+            | unit_func_decl_start_matcher()
+            | unit_binding_start_matcher()
             | DelimiterPair::SquareBracket // tags group before function
     }
 
@@ -101,8 +102,7 @@ impl UnitDecl<Span> {
                 }
             }
 
-            if let Some(item) = parse_unit_decl(parser, visibility)
-                .ok_or_continue(parser.errors())
+            if let Some(item) = parse_unit_decl(parser, visibility).ok_or_continue(parser.errors())
             {
                 items.push(item);
             }

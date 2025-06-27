@@ -51,7 +51,12 @@ where
     units.reverse();
 
     let mut log = BuildLog::new();
-    Module::typecheck(units.iter().map(|(p, u)| (p, u)), false, &mut log)
+    let module = Module::typecheck(units.iter().map(|(p, u)| (p, u)), false, &mut log)?;
+
+    match module.root_ctx.errors().get(0) {
+        Some(err) => Err(err.clone()),
+        None => Ok(module),
+    }
 }
 
 pub fn module_from_srcs<'a, UnitSources>(unit_srcs: UnitSources) -> Module

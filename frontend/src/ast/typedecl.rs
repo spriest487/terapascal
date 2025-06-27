@@ -1,10 +1,10 @@
+mod access;
 mod enum_decl;
 mod iface_decl;
-mod struct_decl;
-mod variant_decl;
 mod set_decl;
-mod access;
+mod struct_decl;
 mod supers_clause;
+mod variant_decl;
 
 pub use self::access::Access;
 pub use self::access::IFACE_METHOD_ACCESS;
@@ -16,6 +16,8 @@ pub use self::supers_clause::*;
 pub use self::variant_decl::*;
 use crate::ast::tag::Tag;
 use crate::ast::unit::AliasDecl;
+use crate::ast::Annotation;
+use crate::ast::DeclName;
 use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::Keyword;
@@ -23,16 +25,17 @@ use crate::ast::Operator;
 use crate::ast::TypeList;
 use crate::ast::TypeName;
 use crate::ast::WhereClause;
-use crate::ast::{Annotation, DeclName};
-use crate::parse::{ContinueParse, InvalidTagLocation, Parser};
+use crate::parse::InvalidTagLocation;
+use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
+use crate::parse::Parser;
 use crate::parse::TokenStream;
 use crate::parse::TryParse;
-use crate::parse::LookAheadTokenStream;
+use crate::result::ErrorContinue;
 use crate::DelimiterPair;
 use crate::Separator;
 use crate::TokenTree;
@@ -52,7 +55,7 @@ pub struct TypeDecl<A: Annotation = Span> {
     #[derivative(Hash = "ignore")]
     #[derivative(PartialEq = "ignore")]
     pub kw_span: Span,
-    
+
     pub items: Vec<TypeDeclItem<A>>,
 
     #[derivative(Debug = "ignore")]
@@ -68,8 +71,8 @@ impl TypeDecl {
         let mut items = Vec::new();
 
         while TypeDeclItem::has_more(&items, &mut parser.tokens().look_ahead()) {
-            if let Some(item) = TypeDeclItem::parse_item(&items, parser)
-                .ok_or_continue(parser.errors()) 
+            if let Some(item) =
+                TypeDeclItem::parse_item(&items, parser).ok_or_continue(parser.errors())
             {
                 items.push(item);
             }
@@ -87,7 +90,7 @@ impl TypeDecl {
         Ok(TypeDecl {
             kw_span,
             items,
-            span, 
+            span,
         })
     }
 }
@@ -126,14 +129,12 @@ impl<A: Annotation> TypeDeclItem<A> {
     pub fn constraint_clause(&self) -> Option<&WhereClause<A>> {
         match self {
             TypeDeclItem::Struct(def) => def.where_clause.as_ref(),
-            
+
             // TODO
             TypeDeclItem::Interface(_def) => None,
             TypeDeclItem::Variant(_def) => None,
-            
-            TypeDeclItem::Alias(_)
-            | TypeDeclItem::Enum(_)
-            | TypeDeclItem::Set(_) => None,
+
+            TypeDeclItem::Alias(_) | TypeDeclItem::Enum(_) | TypeDeclItem::Set(_) => None,
         }
     }
 }
@@ -155,10 +156,8 @@ impl<A: Annotation> TypeDeclItem<A> {
             TypeDeclItem::Struct(class) => &class.tags,
             TypeDeclItem::Interface(iface) => &iface.tags,
             TypeDeclItem::Variant(variant) => &variant.tags,
-            
-            TypeDeclItem::Alias(..)
-            | TypeDeclItem::Enum(..)
-            | TypeDeclItem::Set(..) => &[],
+
+            TypeDeclItem::Alias(..) | TypeDeclItem::Enum(..) | TypeDeclItem::Set(..) => &[],
         }
     }
 
@@ -169,16 +168,11 @@ impl<A: Annotation> TypeDeclItem<A> {
 }
 
 pub fn iface_method_start() -> Matcher {
-    Keyword::Function 
-        | Keyword::Procedure
-        | DelimiterPair::SquareBracket //tags
+    Keyword::Function | Keyword::Procedure | DelimiterPair::SquareBracket // tags
 }
 
 pub fn type_method_start() -> Matcher {
-    iface_method_start() 
-        | Keyword::Class 
-        | Keyword::Constructor 
-        | Keyword::Destructor 
+    iface_method_start() | Keyword::Class | Keyword::Constructor | Keyword::Destructor
 }
 
 /// the common part of a typedecl before the `=`, eg in `type X[Y] = class...`, `X<Y>` is the decl
@@ -215,7 +209,10 @@ impl DeclName for DeclIdent {
     }
 
     fn type_params_len(&self) -> usize {
-        self.type_params.as_ref().map(|list| list.len()).unwrap_or(0)
+        self.type_params
+            .as_ref()
+            .map(|list| list.len())
+            .unwrap_or(0)
     }
 
     fn type_param_name_span(&self, index: usize) -> Option<&Span> {
@@ -261,8 +258,7 @@ impl DeclIdent {
 
 impl TypeDeclItem {
     fn parse(parser: &mut Parser) -> ParseResult<Self> {
-        let tags = Tag::parse_seq(parser.tokens())
-            .or_continue_with(parser.errors(), Vec::new);
+        let tags = Tag::parse_seq(parser.tokens()).or_continue_with(parser.errors(), Vec::new);
 
         // name and the initial keyword are enough to continue parsing the type, even if there's
         // parse errors in the rest of the type header, so we shouldn't return an error after this
@@ -272,68 +268,68 @@ impl TypeDeclItem {
 
         let struct_kw_matcher = Keyword::Packed | Keyword::Class | Keyword::Record;
         let decl_kw_matcher = struct_kw_matcher.clone() | Keyword::Variant | Keyword::Interface;
-        
+
         // get the first token from lookahead, since each kind of decl expects to start
         // parsing from the keyword
-        let Some(first_token) = parser
-            .tokens()
-            .look_ahead()
-            .next()
-            .cloned()
-        else {
+        let Some(first_token) = parser.tokens().look_ahead().next().cloned() else {
             return Err(TracedError::trace(ParseError::UnexpectedEOF(
                 decl_kw_matcher.clone(),
                 parser.tokens().context().clone(),
             )));
         };
-        
+
         match first_token.as_keyword() {
             Some(Keyword::Packed | Keyword::Record | Keyword::Class) => {
                 let struct_decl = StructDecl::parse(parser, name, tags, first_token);
                 Ok(TypeDeclItem::Struct(Arc::new(struct_decl)))
-            }
+            },
 
             Some(Keyword::Variant) => {
                 let variant_decl = VariantDecl::parse(parser, name, tags, first_token);
                 Ok(TypeDeclItem::Variant(Arc::new(variant_decl)))
-            }
-            
+            },
+
             Some(Keyword::Interface) => {
-                let iface_decl = InterfaceDecl::parse(parser, name, tags, first_token)
-                    .map_err(|err| {
-                        parser.tokens().advance_to(Keyword::End).and_continue(parser.errors());
+                let iface_decl =
+                    InterfaceDecl::parse(parser, name, tags, first_token).map_err(|err| {
+                        parser
+                            .tokens()
+                            .advance_to(Keyword::End)
+                            .and_continue(parser.errors());
                         err
                     })?;
 
                 Ok(TypeDeclItem::Interface(Arc::new(iface_decl)))
-            }
-            
+            },
+
             Some(Keyword::Set) => {
                 if !tags.is_empty() {
                     return Err(ParseError::invalid_tag_loc(
                         InvalidTagLocation::SetDecl,
                         first_token.span().clone(),
-                        &tags
-                    ).into());
+                        &tags,
+                    )
+                    .into());
                 }
 
                 let set_decl = SetDecl::parse(name, parser.tokens())?;
                 Ok(TypeDeclItem::Set(Arc::new(set_decl)))
-            }
-            
+            },
+
             _ if first_token.is_delimited(DelimiterPair::Bracket) => {
                 if !tags.is_empty() {
                     return Err(ParseError::invalid_tag_loc(
                         InvalidTagLocation::EnumDecl,
                         first_token.span().clone(),
-                        &tags
-                    ).into());
+                        &tags,
+                    )
+                    .into());
                 }
 
                 let enum_decl = EnumDecl::parse(name, parser.tokens())?;
                 Ok(TypeDeclItem::Enum(Arc::new(enum_decl)))
-            }
-            
+            },
+
             _ => {
                 // if it isn't a type def keyword, then it must be the name of an existing type to
                 // declare an alias
@@ -341,19 +337,23 @@ impl TypeDeclItem {
                     return Err(ParseError::invalid_tag_loc(
                         InvalidTagLocation::AliasDecl,
                         first_token.span().clone(),
-                        &tags
-                    ).into());
+                        &tags,
+                    )
+                    .into());
                 }
 
                 let alias_decl = AliasDecl::parse(parser.tokens(), name)?;
                 Ok(TypeDeclItem::Alias(Arc::new(alias_decl)))
-            }
+            },
         }
     }
 
     fn parse_item(prev: &[Self], parser: &mut Parser) -> ParseResult<Self> {
         if !prev.is_empty() {
-            parser.tokens().advance_to(Separator::Semicolon).and_continue(parser.errors());
+            parser
+                .tokens()
+                .advance_to(Separator::Semicolon)
+                .and_continue(parser.errors());
         }
 
         TypeDeclItem::parse(parser)
@@ -410,7 +410,7 @@ struct TypeDeclHeader {
     supers: Option<SupersClause>,
 
     forward: bool,
-    
+
     span: Span,
 }
 
@@ -424,7 +424,7 @@ impl TypeDeclHeader {
             forward: false,
         }
     }
-    
+
     pub fn parse(
         tokens: &mut TokenStream,
         kw_matcher: impl Into<Matcher>,
@@ -433,14 +433,14 @@ impl TypeDeclHeader {
     ) -> ParseResult<Self> {
         let kw_tt = tokens.match_one(kw_matcher)?;
         let mut span = kw_tt.span().clone();
-        
+
         // a forward decl can have a where clause before the semicolon
         let where_clause = WhereClause::try_parse(tokens)?;
-        
-        if let Some(where_span) = where_clause.as_ref().map(|x|x.span()) {
+
+        if let Some(where_span) = where_clause.as_ref().map(|x| x.span()) {
             span = span.to(where_span);
         }
-        
+
         let mut result = Self {
             keyword: kw_tt,
             where_clause,
@@ -462,47 +462,42 @@ impl TypeDeclHeader {
                     if let Some(supers) = &result.supers {
                         result.span.extend(&supers.span);
                     }
-                    
+
                     if let Some(where_clause) = WhereClause::try_parse(tokens)? {
                         result.span.extend(where_clause.span());
                         result.where_clause = Some(where_clause);
                     }
                 }
-            }
+            },
 
             Some(tt) => {
                 if !tags.is_empty() {
                     // forward type decls can't have tags
-                    return Err(ParseError::forward_decl_tags(name_span.clone(), &tags).into())
+                    return Err(ParseError::forward_decl_tags(name_span.clone(), &tags).into());
                 }
-                
+
                 result.span = result.span.to(tt.span());
-            }
+            },
         }
-        
+
         Ok(result)
     }
-    
+
     pub fn parse_or_empty(
         parser: &mut Parser,
         kw_matcher: impl Into<Matcher>,
         keyword_token: TokenTree,
         tags: &[Tag],
-        name_span: &Span
+        name_span: &Span,
     ) -> Self {
         let kw_matcher = kw_matcher.into();
-        
+
         Self::parse(parser.tokens(), kw_matcher, tags, name_span)
-            .or_continue_with(parser.errors(), || {
-                Self::new(keyword_token)
-            })
+            .or_continue_with(parser.errors(), || Self::new(keyword_token))
     }
 }
 
-
-pub fn parse_implements_clause(
-    tokens: &mut TokenStream,
-) -> ParseResult<Vec<TypeName>> {
+pub fn parse_implements_clause(tokens: &mut TokenStream) -> ParseResult<Vec<TypeName>> {
     let mut implements = Vec::new();
 
     if tokens.match_one_maybe(Keyword::Of).is_some() {
@@ -516,20 +511,21 @@ pub fn parse_implements_clause(
             }
         }
     }
-    
+
     Ok(implements)
 }
 
 pub trait MethodOwner<A: Annotation> {
-    fn methods<'a>(&'a self) -> impl Iterator<Item=&'a MethodDecl<A>>
-    where A: 'a;
+    fn methods<'a>(&'a self) -> impl Iterator<Item = &'a MethodDecl<A>>
+    where
+        A: 'a;
 
     fn find_methods<'a>(
-        &'a self, 
-        ident: &'a Ident
-    ) -> impl Iterator<Item=(usize, &'a MethodDecl<A>)> 
-    where 
-        A: 'a 
+        &'a self,
+        ident: &'a Ident,
+    ) -> impl Iterator<Item = (usize, &'a MethodDecl<A>)>
+    where
+        A: 'a,
     {
         self.methods()
             .enumerate()

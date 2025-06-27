@@ -14,8 +14,8 @@ use crate::ast::TypeList;
 use crate::ast::TypePath;
 use crate::ast::UncheckedType;
 use crate::ast::WhereClause;
-use crate::ast::{Annotation, IdentTypeName};
-use crate::parse::ContinueParse;
+use crate::ast::Annotation;
+use crate::ast::IdentTypeName;
 use crate::parse::MatchOneOf;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -39,6 +39,7 @@ use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
+use crate::result::ErrorContinue;
 use crate::typ::ast::SELF_PARAM_NAME;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]

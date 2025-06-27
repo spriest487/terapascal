@@ -6,12 +6,13 @@ use crate::ast::FunctionDecl;
 use crate::ast::Ident;
 use crate::ast::StructDeclSection;
 use crate::ast::TypeName;
-use crate::parse::{ContinueParse, ParseError};
 use crate::parse::Matcher;
 use crate::parse::Parse;
+use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::Parser;
+use crate::result::ErrorContinue;
 use crate::Keyword;
 use crate::Separator;
 use crate::TokenStream;
@@ -136,8 +137,13 @@ pub fn parse_struct_sections(
             current_access = new_access;
             current_access_span = Some(access_span);
         }
-        
-        if parser.tokens().look_ahead().match_one(Keyword::End).is_some() {
+
+        if parser
+            .tokens()
+            .look_ahead()
+            .match_one(Keyword::End)
+            .is_some()
+        {
             break;
         }
 
@@ -174,27 +180,27 @@ pub fn parse_struct_sections(
 
 fn try_parse_section_member(parser: &mut Parser, access: Access) -> Option<TypeMemberDecl> {
     parser.advance_until(struct_member_start());
-    
+
     let mut ahead = parser.tokens().look_ahead();
     let next_start = ahead.next()?;
-    
+
     if type_method_start().is_match(&next_start) {
-        let method = parse_method_decl(parser, access)
-            .ok_or_continue(parser.errors())?;
+        let method = parse_method_decl(parser, access).ok_or_continue(parser.errors())?;
 
         Some(TypeMemberDecl::Method(method))
     } else if next_start.as_ident().is_some() {
-        let field = parse_field(parser.tokens(), access)
-            .ok_or_continue(parser.errors())?;
+        let field = parse_field(parser.tokens(), access).ok_or_continue(parser.errors())?;
 
         Some(TypeMemberDecl::Field(field))
     } else {
         let unexpected = Box::new(next_start.clone());
         let expected = Some(type_method_start() | Matcher::AnyIdent);
-        parser.error(TracedError::from(ParseError::UnexpectedToken(unexpected, expected)));
-        
+        parser.error(TracedError::from(ParseError::UnexpectedToken(
+            unexpected, expected,
+        )));
+
         parser.tokens().advance(1);
-        
+
         None
     }
 }
