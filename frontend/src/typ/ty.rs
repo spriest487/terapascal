@@ -1405,16 +1405,19 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
                         actual: path.type_params.clone(),
                     }, path.span.clone()));
                 }
-
-                let arg_ty = TypeParamListItem {
-                    name: actual_param.clone(),
-                    is_ty: TypeName::inferred(expect_param.constraint
+                
+                let arg_typename = TypeName::Ident(IdentTypeName {
+                    ident: IdentPath::from(actual_param.clone()),
+                    indirection: 0,
+                    type_args: None,
+                    span: actual_param.span.clone(),
+                    ty: expect_param.constraint
                         .as_ref()
                         .map(|constraint| constraint.is_ty.ty().clone())
-                        .unwrap_or(Type::Any)),
-                };
+                        .unwrap_or(Type::Any),
+                });
 
-                path_args.push(TypeName::inferred(Type::GenericParam(Arc::new(arg_ty))));
+                path_args.push(arg_typename);
             }
             
             Some(TypeArgList::new(path_args, actual.span.clone()))
