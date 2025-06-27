@@ -9,7 +9,6 @@ pub use self::scope_stack::*;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::typ::Decl;
-use crate::typ::DeclConflict;
 use crate::typ::Environment;
 use std::cmp::Ordering;
 use std::collections::HashMap;

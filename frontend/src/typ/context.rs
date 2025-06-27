@@ -1,6 +1,8 @@
-pub mod builtin;
-pub mod scope;
-pub mod value_kind;
+mod builtin;
+mod scope;
+mod value_kind;
+mod binding;
+mod member;
 
 mod decl;
 mod def;
@@ -9,11 +11,13 @@ mod result;
 mod ufcs;
 mod generic;
 
+pub use self::binding::*;
 pub use self::builtin::*;
 pub use self::decl::*;
 pub use self::def::*;
 pub use self::env::*;
 pub use self::generic::*;
+pub use self::member::*;
 pub use self::result::*;
 pub use self::scope::*;
 pub use self::ufcs::InstanceMethod;
@@ -23,11 +27,9 @@ use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::MethodOwner;
 use crate::ast::Path;
-use crate::ast::SemanticHint;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::typ::ast::{EnumDecl, FieldDecl};
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;
 use crate::typ::ast::InterfaceDecl;
@@ -38,6 +40,7 @@ use crate::typ::ast::SetDecl;
 use crate::typ::ast::StructDecl;
 use crate::typ::ast::VariantDecl;
 use crate::typ::ast::SELF_TY_NAME;
+use crate::typ::ast::EnumDecl;
 use crate::typ::specialize_by_return_ty;
 use crate::typ::specialize_iface_def;
 use crate::typ::specialize_struct_def;
@@ -56,108 +59,6 @@ use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
 use std::sync::Arc;
 use terapascal_common::span::*;
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Binding {
-    pub ty: Type,
-    pub kind: ValueKind,
-    pub def: Option<Ident>,
-    
-    pub semantic_hint: SemanticHint,
-}
-
-impl Binding {
-    pub fn pattern_binding(name: Ident, ty: impl Into<Type>) -> Self {
-        Binding {
-            ty: ty.into(),
-            def: Some(name),
-            kind: ValueKind::Immutable,
-            semantic_hint: SemanticHint::Variable,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum InstanceMember {
-    Field {
-        ty: Type,
-        access: Access,
-        decl: FieldDecl,
-        decl_index: usize,
-    },
-    Method {
-        iface_ty: Type,
-        self_ty: Type,
-        method: MethodDecl,
-    },
-    UFCSCall {
-        func_name: Symbol,
-        visibility: Visibility,
-        decl: Arc<FunctionDecl>,
-    },
-    Overloaded {
-        candidates: Vec<OverloadCandidate>,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub enum TypeMember {
-    Method(MethodGroupMember),
-    MethodGroup(Vec<MethodGroupMember>),
-}
-
-impl TypeMember {
-    pub fn from_method_members(mut members: Vec<MethodGroupMember>) -> TypeMember {
-        if members.len() == 1 {
-            let single_method = members.remove(0);
-            TypeMember::Method(single_method)
-        } else {
-            TypeMember::MethodGroup(members)
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct MethodGroupMember {
-    pub iface_ty: Type,
-    pub method: MethodDecl,
-    pub index: usize,
-}
-
-impl TypeMember {
-    pub fn access(&self) -> Access {
-        match self {
-            TypeMember::Method(member) => member.method.access,
-
-            TypeMember::MethodGroup(members) => {
-                members
-                    .iter()
-                    .map(|m| m.method.access)
-                    .max()
-                    .unwrap_or(Access::Public)
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct MethodKey {
-    pub name: Ident,
-    pub sig: Arc<FunctionSig>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct MethodCollection {
-    methods: HashMap<MethodKey, Option<Arc<FunctionDef>>>,
-}
-
-impl MethodCollection {
-    fn new() -> Self {
-        Self {
-            methods: HashMap::new(),
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Context {

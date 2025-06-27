@@ -1,12 +1,17 @@
-use crate::ast::{Access, Ident};
+use crate::ast::Access;
+use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Visibility;
-use crate::typ::scope::*;
+use crate::typ::Decl;
+use crate::typ::DeclConflict;
 use crate::typ::NameError;
 use crate::typ::NameResult;
+use crate::typ::Scope;
 use crate::typ::ScopeMember;
 use crate::typ::ScopeMemberRef;
-use crate::typ::Decl;
+use crate::typ::ScopePathRef;
+use crate::typ::ScopePathRefMut;
+use std::fmt;
 use std::mem;
 
 #[derive(Debug, Clone)]
@@ -16,9 +21,7 @@ pub struct ScopeStack {
 
 impl ScopeStack {
     pub fn new(root: Scope) -> Self {
-        Self {
-            scopes: vec![root],
-        }
+        Self { scopes: vec![root] }
     }
 
     pub fn push_scope(&mut self, ns: Scope) {
@@ -30,14 +33,14 @@ impl ScopeStack {
             panic!("can't pop the root scope");
         }
 
-        let popped = self
-            .scopes
-            .pop()
-            .expect("pop called with no active scopes");
+        let popped = self.scopes.pop().expect("pop called with no active scopes");
 
         if let Some(popped_key) = popped.key().cloned() {
             let current = self.scopes.last_mut().unwrap();
-            if current.try_add_member(&popped_key, ScopeMember::Scope(popped.clone())).is_err() {
+            if current
+                .try_add_member(&popped_key, ScopeMember::Scope(popped.clone()))
+                .is_err()
+            {
                 unreachable!(
                     "should never be possible to declare something with same key as current scope"
                 );
@@ -47,22 +50,21 @@ impl ScopeStack {
         popped
     }
 
-    pub fn insert_decl(
-        &mut self,
-        member_key: impl Into<Ident>,
-        decl: Decl,
-    ) -> NameResult<()> {
+    pub fn insert_decl(&mut self, member_key: impl Into<Ident>, decl: Decl) -> NameResult<()> {
         let member_key = member_key.into();
 
         // eprintln!("{}.{}: {} ", self.current_path().to_namespace(), member_key, decl.to_string());
 
         let top = self.current_mut();
-        
+
         let new_key = member_key.clone();
         let new_member = ScopeMember::Decl(decl);
 
         if let Err((existing_key, existing_member)) = top.try_add_member(&new_key, new_member) {
-            let existing_path = self.current_path().to_namespace().child(existing_key.clone());
+            let existing_path = self
+                .current_path()
+                .to_namespace()
+                .child(existing_key.clone());
 
             return Err(NameError::AlreadyDeclared {
                 new: new_key,
@@ -71,16 +73,12 @@ impl ScopeStack {
                 conflict: DeclConflict::Name,
             });
         }
-        
+
         Ok(())
     }
 
     // todo: different error codes for "not defined at all" vs "defined but not in the current scope"
-    pub fn replace_decl(
-        &mut self,
-        key: impl Into<Ident>,
-        decl: Decl,
-    ) -> NameResult<()> {
+    pub fn replace_decl(&mut self, key: impl Into<Ident>, decl: Decl) -> NameResult<()> {
         let member_key = key.into();
         let top = self.current_mut();
 
@@ -88,7 +86,7 @@ impl ScopeStack {
             Some(_) => {
                 top.replace_member(member_key, ScopeMember::Decl(decl));
                 Ok(())
-            }
+            },
 
             None => Err(NameError::NotFound {
                 ident: IdentPath::from(member_key),
@@ -96,7 +94,9 @@ impl ScopeStack {
         }
     }
 
-    pub fn iter(&self) -> impl ExactSizeIterator<Item=&Scope> + DoubleEndedIterator<Item=&Scope> {
+    pub fn iter(
+        &self,
+    ) -> impl ExactSizeIterator<Item = &Scope> + DoubleEndedIterator<Item = &Scope> {
         self.scopes.iter()
     }
 
@@ -106,7 +106,9 @@ impl ScopeStack {
         }
     }
 
-    pub fn iter_mut(&mut self) -> impl ExactSizeIterator<Item=&mut Scope> + DoubleEndedIterator<Item=&mut Scope> {
+    pub fn iter_mut(
+        &mut self,
+    ) -> impl ExactSizeIterator<Item = &mut Scope> + DoubleEndedIterator<Item = &mut Scope> {
         self.scopes.iter_mut()
     }
 
@@ -135,7 +137,8 @@ impl ScopeStack {
             if next_path.is_parent_of(&current_path) {
                 // if the next named part in the current path is the part we're looking for, the
                 // path we're looking for is the current path
-                let next_named_part = current_path.scopes
+                let next_named_part = current_path
+                    .scopes
                     .iter()
                     .skip(next_path.scopes.len())
                     .find_map(|s| s.key());
@@ -169,7 +172,7 @@ impl ScopeStack {
                     } else {
                         None
                     };
-                }
+                },
             }
         }
 
@@ -177,9 +180,9 @@ impl ScopeStack {
     }
 
     pub fn visit_members<Predicate, Visitor>(&self, predicate: Predicate, mut visitor: Visitor)
-        where
-            Predicate: Fn(&IdentPath, &ScopeMember) -> bool,
-            Visitor: FnMut(&IdentPath, &Decl),
+    where
+        Predicate: Fn(&IdentPath, &ScopeMember) -> bool,
+        Visitor: FnMut(&IdentPath, &Decl),
     {
         // reused IdentPath instance so we don't need to reallocate this for every single entry
         // we can't make an empty IdentPath so we create this in the first iteration for each scope
@@ -206,32 +209,30 @@ impl ScopeStack {
     }
 
     pub fn visit_visible<Visitor>(&self, visitor: Visitor)
-        where
-            Visitor: FnMut(&IdentPath, &Decl),
+    where
+        Visitor: FnMut(&IdentPath, &Decl),
     {
         self.visit_members(
-            |member_path, _member| {
-                self.is_visible(&member_path)
-            },
+            |member_path, _member| self.is_visible(&member_path),
             visitor,
         );
     }
-    
+
     pub fn get_access(&self, name: &IdentPath) -> Access {
         let current_path = self.current_path();
 
         match self.resolve_path(name) {
             Some(ScopeMemberRef::Decl { parent_path, .. }) => {
                 let current_ns = current_path.to_namespace();
-                
+
                 let decl_unit_ns = IdentPath::from_parts(parent_path.keys().cloned());
                 if current_ns == decl_unit_ns || current_ns.is_parent_of(&decl_unit_ns) {
                     Access::Private
                 } else {
                     Access::Public
                 }
-            }
-            
+            },
+
             _ => Access::Public,
         }
     }
@@ -240,29 +241,27 @@ impl ScopeStack {
         let current_path = self.current_path();
 
         match self.resolve_path(name) {
-            Some(ScopeMemberRef::Decl { parent_path, value, .. }) => {
+            Some(ScopeMemberRef::Decl {
+                parent_path, value, ..
+            }) => {
                 let current_ns = current_path.to_namespace();
 
                 match value.visibility() {
-                    Some(Visibility::Interface) => {
-                        true
-                    },
+                    Some(Visibility::Interface) => true,
 
                     Some(Visibility::Implementation) => {
                         let decl_unit_ns = IdentPath::from_parts(parent_path.keys().cloned());
                         current_ns == decl_unit_ns || current_ns.is_parent_of(&decl_unit_ns)
-                    }
-                    
-                    None => {
-                        false
                     },
+
+                    None => false,
                 }
             },
 
             Some(ScopeMemberRef::Scope { .. }) => {
                 let current_uses = current_path.all_used_namespaces();
                 current_uses.contains(&name)
-            }
+            },
 
             None => false,
         }
@@ -285,7 +284,7 @@ fn visit_member<Predicate, Visitor>(
     match member {
         ScopeMember::Decl(value) => {
             visitor(member_path, value);
-        }
+        },
 
         ScopeMember::Scope(ns) => {
             let mut child_path = unsafe { IdentPath::empty() };
@@ -305,7 +304,7 @@ fn visit_member<Predicate, Visitor>(
             child_path = IdentPath::from_vec(child_member_path_parts);
 
             mem::swap(member_path, &mut child_path);
-        }
+        },
     }
 }
 
@@ -329,7 +328,7 @@ fn print_scope(ns: &Scope, indent: usize, f: &mut fmt::Formatter) -> fmt::Result
         match v {
             ScopeMember::Scope(child) => {
                 print_scope(child, member_indent, f)?;
-            }
+            },
 
             ScopeMember::Decl(val) => {
                 for _ in 0..member_indent {
@@ -337,7 +336,7 @@ fn print_scope(ns: &Scope, indent: usize, f: &mut fmt::Formatter) -> fmt::Result
                 }
 
                 writeln!(f, "{}: {}", k, val)?;
-            }
+            },
         }
     }
 
