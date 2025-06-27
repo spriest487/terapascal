@@ -533,6 +533,13 @@ impl Value {
             _ => None,
         }
     }
+    
+    pub fn as_variant_case(&self) -> Option<&VariantCaseValue> {
+        match self {
+            Value::VariantCase(case_val) => Some(case_val),
+            _ => None,
+        }
+    }
 
     pub fn ty(&self) -> Cow<Type> {
         match self {
@@ -779,7 +786,6 @@ impl Annotation for Value {
     type Type = Type;
 
     type DeclName = Symbol;
-    type Pattern = TypePattern;
     type FunctionName = crate::typ::ast::FunctionName;
 
     type ConstStringExpr = EvaluatedConstExpr<String>;

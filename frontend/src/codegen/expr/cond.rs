@@ -34,7 +34,13 @@ where
             // match the cond val against the type pattern that follows it
             Some(is_pattern) => {
                 let cond_ref = expr::translate_expr(&if_cond.cond, builder);
-                translate_pattern_match(is_pattern, &cond_ref, &cond_ty, builder)
+                translate_pattern_match(
+                    &is_pattern.pattern,
+                    is_pattern.binding.as_ref(),
+                    &cond_ref,
+                    &cond_ty,
+                    builder
+                )
             }
 
             // no pattern, the cond val must be a boolean and we're just testing that
@@ -117,8 +123,13 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Buil
             let skip_label = builder.alloc_label();
 
             builder.scope(|builder| {
-                let pattern_match =
-                    translate_pattern_match(&branch.pattern, &cond_expr, &cond_ty, builder);
+                let pattern_match = translate_pattern_match(
+                    &branch.pattern,
+                    branch.binding.as_ref(),
+                    &cond_expr,
+                    &cond_ty,
+                    builder,
+                );
 
                 // jump to skip label if pattern match return false
                 builder.not(is_skip.clone(), pattern_match.is_match.clone());

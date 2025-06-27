@@ -625,8 +625,13 @@ fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut Builder)
                 // label to skip this branch if it isn't a match
                 let skip_label = builder.alloc_label();
 
-                let pattern_match =
-                    translate_pattern_match(&branch.pattern, &cond_expr, &cond_ty, builder);
+                let pattern_match = translate_pattern_match(
+                    &branch.pattern,
+                    branch.binding.as_ref(),
+                    &cond_expr,
+                    &cond_ty,
+                    builder
+                );
 
                 // jump to skip label if pattern match return false
                 builder.not(is_skip.clone(), pattern_match.is_match.clone());

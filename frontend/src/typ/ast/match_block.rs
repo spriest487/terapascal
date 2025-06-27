@@ -1,16 +1,14 @@
 use crate::ast;
-use crate::ast::{ElseBranch, SemanticHint};
+use crate::ast::{ElseBranch, MatchPattern, SemanticHint};
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::ast::Expr;
 use crate::typ::ast::Stmt;
-use crate::typ::Binding;
 use crate::typ::Context;
 use crate::typ::Environment;
 use crate::typ::Type;
 use crate::typ::TypeError;
-use crate::typ::TypePattern;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
@@ -31,9 +29,8 @@ fn typecheck_match_cond<B>(
 
     let cond_ty = cond_expr.annotation().ty();
     if !cond_ty.is_matchable() {
-        return Err(TypeError::NotMatchable {
-            ty: cond_ty.into_owned(),
-            span: cond_expr.span().clone(),
+        return Err(TypeError::InvalidMatchExpr {
+            expr: Box::new(cond_expr),
         });
     }
 
@@ -68,18 +65,10 @@ where
         };
 
         let branch = ctx.scope(branch_env, |branch_ctx| {
-            let pattern = TypePattern::typecheck(&branch.pattern, cond_ty, branch_ctx)?;
-            let bindings = pattern
-                .bindings(branch_ctx)
-                .map_err(|err| TypeError::from_name_err(err, pattern.span().clone()))?;
+            let pattern = MatchPattern::typecheck(&branch.pattern, cond_ty, branch_ctx)?;
 
-            for binding in bindings {
-                branch_ctx.declare_local_var(binding.ident.clone(), Binding {
-                    ty: binding.ty,
-                    def: Some(binding.ident),
-                    kind: ValueKind::Temporary,
-                    semantic_hint: SemanticHint::Variable,
-                })?;
+            if let Some(binding) = &branch.binding {
+                pattern.declare_binding(binding, branch_ctx)?;
             }
 
             let item = check_item(&branch.item, expect_ty, &branches, branch_ctx)?;
@@ -87,6 +76,7 @@ where
             Ok(MatchBlockBranch {
                 item,
                 pattern,
+                binding: branch.binding.clone(),
                 span: branch.span().clone(),
             })
         })?;
@@ -206,10 +196,16 @@ pub fn typecheck_match_expr(
                     missing_cases.reserve(variant_def.cases.len());
 
                     for def_case in &variant_def.cases {
-                        let is_mentioned = branches.iter().any(|branch| match &branch.pattern {
-                            TypePattern::VariantCase { case, .. } => *case == def_case.ident,
-                            TypePattern::NegatedVariantCase { case, .. } => *case != def_case.ident,
-                            _ => false,
+                        let is_mentioned = branches.iter().any(|branch| {
+                            let mut result = false;
+                            branch.pattern.visit_references(&mut |_, value| {
+                                if let Value::VariantCase(case_val) = value {
+                                    if case_val.case == def_case.ident {
+                                        result = true;
+                                    }
+                                }
+                            });
+                            result
                         });
 
                         if !is_mentioned {

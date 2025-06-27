@@ -1,78 +1,43 @@
-use crate::ast::type_name::IdentTypeName;
 use crate::ast::type_name::TypeName;
+use crate::ast::{Annotation, Ident};
 use crate::ast::Operator;
-use crate::ast::{Annotation, IdentPath};
-use crate::ast::{Ident, Pattern, PatternSemanticElement};
-use crate::parse::Matcher;
+use crate::ast::UncheckedType;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
-use crate::{Keyword, TokenTree};
 use derivative::Derivative;
 use std::fmt;
+use terapascal_common::span::MaybeSpanned;
+use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_common::span::{MaybeSpanned, Span};
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
-pub enum TypeNamePatternKind {
-    Is,
-    IsWithBinding {
-        binding: Ident,
-    },
-    IsNot {
+pub enum MatchPattern<A: Annotation = Span> {
+    Name {
+        name: TypeName<A>,
+        
+        // not populated by the parser (requires type info). for patterns referencing
+        // variant cases, we remove the last element from the ident type path contained in the
+        // typename, and store it separately here
+        case: Option<Ident>,
+
+        // this represents the actual meaning of the typename
         #[derivative(Debug = "ignore")]
         #[derivative(PartialEq = "ignore")]
         #[derivative(Hash = "ignore")]
-        not_kw_span: Span,
+        annotation: A,
+        
+        // if we create a binding from this pattern, the type of that binding
+        binding_type: A::Type,
     },
-}
-
-impl TypeNamePatternKind {
-    pub fn binding(&self) -> Option<&Ident> {
-        match self {
-            TypeNamePatternKind::IsWithBinding { binding: name, .. } => Some(name),
-            _ => None,
-        }
-    }
-}
-
-impl TypeNamePatternKind {
-    fn semantic_elements<A: Annotation>(&self,
-        elements: &mut Vec<PatternSemanticElement<A>>,
-        pattern_element: PatternSemanticElement<A>,
-    ) {
-        match self {
-            TypeNamePatternKind::Is => { 
-                elements.push(pattern_element);
-            }
-            TypeNamePatternKind::IsWithBinding { binding } => {
-                elements.push(pattern_element);
-                elements.push(PatternSemanticElement::Binding(binding.span.clone()));
-            }
-            TypeNamePatternKind::IsNot { not_kw_span } => {
-                elements.push(PatternSemanticElement::Keyword(not_kw_span.clone()));
-                elements.push(pattern_element);
-            }
-        }
-    }
-}
-
-#[derive(Clone, Eq, Derivative)]
-#[derivative(Debug, PartialEq, Hash)]
-pub enum TypeNamePattern {
-    TypeName {
-        name: IdentPath,
-        kind: TypeNamePatternKind,
-
+    Not {
         #[derivative(Debug = "ignore")]
         #[derivative(PartialEq = "ignore")]
         #[derivative(Hash = "ignore")]
-        span: Span,
-    },
-    ExactType {
-        name: TypeName,
-        kind: TypeNamePatternKind,
+        not_kw: Span,
+
+        pattern: Box<Self>,
 
         #[derivative(Debug = "ignore")]
         #[derivative(PartialEq = "ignore")]
@@ -81,155 +46,66 @@ pub enum TypeNamePattern {
     },
 }
 
-impl TypeNamePattern {
-    pub fn kind(&self) -> &TypeNamePatternKind {
+impl<A: Annotation> MatchPattern<A> {
+    pub fn visit_references<F>(&self, f: &mut F) 
+    where
+        F: FnMut(&TypeName<A>, &A)
+    {
         match self {
-            TypeNamePattern::ExactType { kind, .. } => kind,
-            TypeNamePattern::TypeName { kind, .. } => kind,
+            MatchPattern::Name { name, annotation, .. } => {
+                f(name, annotation)
+            }
+            MatchPattern::Not { pattern, .. } => {
+                pattern.visit_references(f)
+            }
         }
     }
-    
-    pub fn try_parse(tokens: &mut TokenStream) -> ParseResult<Option<Self>> {
-        match tokens.look_ahead().match_one(Keyword::Is) {
-            Some(..) => {
-                let pattern = TypeNamePattern::parse(tokens)?;
-                Ok(Some(pattern))
-            },
+}
 
-            None => Ok(None),
-        }
-    }
-
+impl MatchPattern {
     pub fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
-        let not_kw = tokens.match_one_maybe(Operator::Not);
-        let name = TypeName::parse(tokens)?;
-        let name_span = name.get_span().expect("parsed typename must have a src span");
+        match tokens.match_one_maybe(Operator::Not) {
+            Some(not_kw) => {
+                let pattern = Self::parse(tokens)?;
+                let not_kw = not_kw.into_span();
+                let span = not_kw.to(&pattern);
 
-        let pattern_path = match &name {
-            TypeName::Ident(IdentTypeName {
-                ident,
-                type_args,
-                indirection,
-                ..
-            }) => {
-                if ident.as_slice().len() >= 2 && type_args.is_none() && *indirection == 0 {
-                    Some(ident)
-                } else {
-                    None
-                }
+                Ok(Self::Not {
+                    not_kw,
+                    pattern: Box::new(pattern),
+                    span,
+                })
             },
 
-            _ => None,
-        };
+            None => {
+                let name = TypeName::parse(tokens)?;
+                let annotation = name.get_span().unwrap().clone();
 
-        let binding = if not_kw.is_none() {
-            tokens
-                .match_one_maybe(Matcher::AnyIdent)
-                .and_then(TokenTree::into_ident)
-        } else {
-            None
-        };
-
-        let (kind, span) = match (binding, not_kw) {
-            (Some(binding), None) => {
-                let span = name_span.to(binding.span());
-
-                let kind = TypeNamePatternKind::IsWithBinding {
-                    binding, 
-                };
-
-                (kind, span)
+                Ok(Self::Name {
+                    name,
+                    annotation,
+                    binding_type: UncheckedType,
+                    case: None,
+                })
             },
-
-            (None, Some(not_kw)) => {
-                let span = name_span.to(not_kw.span());
-
-                let kind = TypeNamePatternKind::IsNot {
-                    not_kw_span: not_kw.into_span(),
-                };
-
-                (kind, span)
-            },
-
-            (None, None) => {
-                let kind = TypeNamePatternKind::Is;
-                (kind, name_span.clone())
-            },
-
-            (Some(..), Some(..)) => {
-                unreachable!()
-            },
-        };
-
-        match pattern_path {
-            Some(pattern_path) => Ok(TypeNamePattern::TypeName {
-                name: pattern_path.clone(),
-                span,
-                kind,
-            }),
-
-            None => Ok(TypeNamePattern::ExactType { 
-                name, 
-                span, 
-                kind 
-            }),
         }
     }
 }
 
-impl fmt::Display for TypeNamePattern {
+impl<A: Annotation> fmt::Display for MatchPattern<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TypeNamePattern::TypeName { name, kind, .. } => {
-                if let TypeNamePatternKind::IsNot { .. } = kind {
-                    write!(f, "not ")?;
-                }
-                write!(f, "{}", name)?;
-                if let TypeNamePatternKind::IsWithBinding { binding, .. } = kind {
-                    write!(f, " {}", binding)?;
-                }
-                Ok(())
-            },
-
-            TypeNamePattern::ExactType { name, kind, .. } => {
-                if let TypeNamePatternKind::IsNot { .. } = kind {
-                    write!(f, "not ")?;
-                }
-                write!(f, "{}", name)?;
-                if let TypeNamePatternKind::IsWithBinding { binding, .. } = kind {
-                    write!(f, " {}", binding)?;
-                }
-                Ok(())
-            },
+            MatchPattern::Name { name, .. } => write!(f, "{}", name),
+            MatchPattern::Not { pattern, .. } => write!(f, "not {}", pattern),
         }
     }
 }
 
-impl Pattern for TypeNamePattern {
-    type Annotation = Span;
-
-    fn semantic_elements(&self) -> Vec<PatternSemanticElement<Self::Annotation>> {
-        let mut elements = Vec::new();
-
-        match self {
-            TypeNamePattern::TypeName { name, kind, .. } => {
-                kind.semantic_elements(&mut elements, PatternSemanticElement::Path(name.path_span()));
-            }
-
-            TypeNamePattern::ExactType { name, kind, .. } => {
-                kind.semantic_elements(&mut elements, PatternSemanticElement::Type(name.clone()));
-            }
-        }
-        
-        elements
-    }
-}
-
-impl Spanned for TypeNamePattern {
+impl<A: Annotation> Spanned for MatchPattern<A> {
     fn span(&self) -> &Span {
         match self {
-            TypeNamePattern::TypeName { span, .. } => span,
-            TypeNamePattern::ExactType { span, .. } => span,
+            MatchPattern::Name { annotation, .. } => annotation.span(),
+            MatchPattern::Not { span, .. } => span,
         }
     }
 }

@@ -1,7 +1,8 @@
+use crate::ast::Ident;
 use crate::codegen::ir;
-use crate::codegen::typ::TypePattern;
 use crate::codegen::Builder;
-use crate::typ::Specializable;
+use crate::typ;
+use crate::typ::{MatchPattern, Specializable};
 
 pub struct PatternMatchBinding {
     pub name: String,
@@ -31,14 +32,27 @@ pub struct PatternMatchOutput {
 }
 
 pub fn translate_pattern_match(
-    pattern: &TypePattern,
+    pattern: &MatchPattern,
+    binding: Option<&Ident>,
     target_val: &ir::Ref,
     target_ty: &ir::Type,
     builder: &mut Builder
 ) -> PatternMatchOutput {
     match pattern {
-        TypePattern::Type { binding, ty, .. } => {
-            let is_ty = builder.translate_type(ty);
+        MatchPattern::Not { pattern, .. } => {
+            assert!(binding.is_none(), "negated binding ({}) should never have a binding", pattern);
+
+            let inner_pattern = translate_pattern_match(pattern, None, target_val, target_ty, builder);
+
+            PatternMatchOutput {
+                is_match: builder.not_to_val(inner_pattern.is_match),
+                bindings: Vec::new(),
+            }
+        }
+        
+        MatchPattern::Name { annotation: typ::Value::Type(is_ty, _), .. } => {
+            let is_ty = builder.translate_type(is_ty);
+
             let is = translate_is_ty(target_val.clone(), &target_ty, &is_ty, builder);
 
             let bindings = match binding {
@@ -62,6 +76,7 @@ pub fn translate_pattern_match(
                         binding_ref,
                     }]
                 },
+
                 None => Vec::new(),
             };
 
@@ -71,33 +86,16 @@ pub fn translate_pattern_match(
             }
         },
 
-        TypePattern::NegatedType { ty, .. } => {
-            let is_not_ty = builder.translate_type(ty);
-            let is = translate_is_ty(target_val.clone(), &target_ty, &is_not_ty, builder);
-
-            let is_not = builder.not_to_val(is);
-
-            PatternMatchOutput {
-                is_match: is_not,
-                bindings: Vec::new(),
-            }
-        },
-
-        TypePattern::VariantCase {
-             variant,
-             case,
-             data_binding,
-             ..
-         } => {
-            let variant = (**variant).clone()
+        MatchPattern::Name { annotation: typ::Value::VariantCase(case_val), .. } => {
+            let variant = case_val.variant_name.as_ref().clone()
                 .apply_type_args(builder.generic_context(), builder.generic_context());
 
             let (struct_id, case_index, case_ty) = builder
-                .translate_variant_case(&variant, &case.name);
+                .translate_variant_case(&variant, &case_val.case.name);
 
             let variant_ty = ir::Type::Variant(struct_id);
 
-            let bindings = match data_binding {
+            let bindings = match binding {
                 Some(binding) => {
                     let binding_name = binding.name.to_string();
 
@@ -106,13 +104,7 @@ pub fn translate_pattern_match(
                         .expect("variant pattern with binding must refer to a case with data");
 
                     let data_ptr = builder.local_temp(case_ty.clone().ptr());
-
-                    builder.append(ir::Instruction::VariantData {
-                        out: data_ptr.clone(),
-                        a: target_val.clone(),
-                        of_ty: variant_ty.clone(),
-                        tag: case_index,
-                    });
+                    builder.vardata(data_ptr.clone(), target_val.clone(), variant_ty.clone(), case_index);
 
                     vec![PatternMatchBinding {
                         name: binding_name,
@@ -131,21 +123,10 @@ pub fn translate_pattern_match(
                 bindings,
             }
         },
-
-        TypePattern::NegatedVariantCase { variant, case, .. } => {
-            let (struct_id, case_index, _case_ty) =
-                builder.translate_variant_case(variant, &case.name);
-
-            let variant_ty = ir::Type::Variant(struct_id);
-            let is = translate_is_variant(target_val.clone(), variant_ty, case_index, builder);
-
-            let is_not = builder.not_to_val(ir::Value::Ref(is));
-
-            PatternMatchOutput {
-                is_match: is_not,
-                bindings: Vec::new(),
-            }
-        },
+        
+        MatchPattern::Name { annotation: illegal, .. } => {
+            panic!("illegal value in typechecked pattern item {pattern}: {illegal}")
+        }
     }
 }
 

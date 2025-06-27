@@ -14,18 +14,18 @@ use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::Stmt;
 use crate::typ::ast::VariantDecl;
 use crate::typ::context::NameError;
-use crate::typ::FunctionSig;
-use crate::typ::GenericError;
+use crate::typ::{GenericError, GenericTarget, MatchPattern};
 use crate::typ::Type;
 use crate::typ::ValueKind;
 use crate::typ::MAX_FLAGS_BITS;
+use crate::typ::{FunctionSig, TypeName};
 use crate::IntConstant;
 use std::fmt;
 use terapascal_common::span::*;
-use terapascal_common::{DiagnosticLabel, Severity};
+use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
-use terapascal_common::Backtrace;
+use terapascal_common::{DiagnosticLabel, Severity};
 
 #[derive(Debug)]
 pub enum TypeError {
@@ -72,9 +72,12 @@ pub enum TypeError {
         ty: Type,
         span: Span,
     },
-    NotMatchable {
-        ty: Type,
+    NameNotMatchable {
+        name: TypeName,
         span: Span,
+    },
+    InvalidMatchExpr {
+        expr: Box<Expr>,
     },
     NotDefaultable {
         ty: Type,
@@ -202,6 +205,10 @@ pub enum TypeError {
         binding_names: Vec<Ident>,
         span: Span,
         value: Option<Value>,
+    },
+    InvalidPatternBinding {
+        pattern: MatchPattern,
+        span: Span,
     },
     NotInitialized {
         ident: Ident,
@@ -420,6 +427,14 @@ impl TypeError {
         }
     }
     
+    pub fn generic_args_len_mismatch(expected: usize, actual: usize, target: GenericTarget, span: Span) -> Self {
+        TypeError::from_generic_err(GenericError::ArgsLenMismatch {
+            expected,
+            actual,
+            target,
+        }, span)
+    }
+    
     pub fn type_mismatch(expected: impl Into<Type>, actual: impl Into<Type>, span: Span) -> Self {
         let expected = expected.into();
         let actual = actual.into();
@@ -450,7 +465,8 @@ impl Spanned for TypeError {
             TypeError::NotMutable { expr, .. } => expr.annotation().span(),
             TypeError::NotAddressable { span, .. } => span,
             TypeError::NotDerefable { span, .. } => span,
-            TypeError::NotMatchable { span, .. } => span,
+            TypeError::NameNotMatchable { span, .. } => span,
+            TypeError::InvalidMatchExpr { expr, .. } => expr.span(),
             TypeError::NotDefaultable { span, .. } => span,
             TypeError::NotValueExpr { actual, .. } => actual.span(),
             TypeError::InvalidBinOp { span, .. } => span,
@@ -484,6 +500,7 @@ impl Spanned for TypeError {
             TypeError::UninitGlobalBinding { span, .. } => span,
             TypeError::UninitBindingWithNoType { binding } => binding.annotation.span(),
             TypeError::BindingWithNoType { span, .. } => span,
+            TypeError::InvalidPatternBinding { span, .. } => span,
             TypeError::NotInitialized { usage, .. } => usage.span(),
             TypeError::InvalidRefExpression { expr } => expr.annotation().span(),
             TypeError::InvalidStatement(expr) => expr.0.annotation().span(),
@@ -570,7 +587,8 @@ impl DiagnosticOutput for TypeError {
             TypeError::NotMutable { .. } => "Value not mutable",
             TypeError::NotAddressable { .. } => "Value not addressable",
             TypeError::NotDerefable { .. } => "Value cannot be dereferenced",
-            TypeError::NotMatchable { .. } => "Type is not matchable",
+            TypeError::NameNotMatchable { .. } => "Type is not matchable",
+            TypeError::InvalidMatchExpr { .. } => "Invalid match expression",
             TypeError::NotDefaultable { .. } => "Type has no default value",
             TypeError::NotValueExpr { .. } => "Expected value expression",
             TypeError::InvalidBinOp { .. } => "Invalid binary operation",
@@ -624,6 +642,7 @@ impl DiagnosticOutput for TypeError {
             TypeError::BindingWithNoType { .. } => {
                 "Value bound to name must have a type"
             }
+            TypeError::InvalidPatternBinding { .. } => "Invalid pattern binding",
             TypeError::NotInitialized { .. } => "Use of uninitialized value",
             TypeError::InvalidRefExpression { .. } => {
                 "Invalid reference expression"
@@ -897,8 +916,8 @@ impl fmt::Display for TypeError {
                 write!(f, "value of type `{}` cannot be dereferenced", ty)
             }
 
-            TypeError::NotMatchable { ty, .. } => {
-                write!(f, "type `{}` cannot be used in matching constructs", ty)
+            TypeError::NameNotMatchable { name: ty, .. } => {
+                write!(f, "name `{}` cannot be used in matching constructs", ty)
             }
             
             TypeError::NotDefaultable { ty, .. } => {
@@ -1049,6 +1068,10 @@ impl fmt::Display for TypeError {
                         
                     Ok(())
                 }
+            }
+            
+            TypeError::InvalidPatternBinding { pattern, .. } => {
+                write!(f, "the result of pattern `{pattern}` can not be bound")
             }
 
             TypeError::NotInitialized { ident, .. } => {
@@ -1207,6 +1230,11 @@ impl fmt::Display for TypeError {
 
             TypeError::EmptyMatchBlock { .. } => {
                 write!(f, "this match block must have at least one branch")
+            }
+
+            TypeError::InvalidMatchExpr { expr, .. } => {
+                let ty = expr.annotation().ty();
+                write!(f, "this expression with type {ty} is not valid as the condition for a match expression")
             }
 
             TypeError::MatchExprNotExhaustive { missing_cases, .. } => {

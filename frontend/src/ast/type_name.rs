@@ -49,7 +49,11 @@ pub struct IdentTypeName<A: Annotation = Span> {
 
 impl<A: Annotation> IdentTypeName<A> {
     pub fn is_single_ident(&self) -> bool {
-        self.ident.len() == 1 && self.indirection == 0 && self.type_args.is_none()
+        self.is_simple_path() && self.ident.len() == 1
+    }
+    
+    pub fn is_simple_path(&self) -> bool {
+        self.indirection == 0 && self.type_args.is_none()
     }
 }
 

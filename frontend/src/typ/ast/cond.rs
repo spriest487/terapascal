@@ -1,27 +1,24 @@
 use crate::ast;
 use crate::ast::ElseBranch;
-use crate::ast::SemanticHint;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::ast::Expr;
 use crate::typ::ast::Stmt;
-use crate::typ::Binding;
 use crate::typ::Context;
 use crate::typ::Primitive;
 use crate::typ::Type;
-use crate::typ::TypeError;
-use crate::typ::TypePattern;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::ValueKind;
+use crate::typ::MatchPattern;
 use std::borrow::Cow;
 use terapascal_common::span::Spanned;
 
 pub type IfCond<B> = ast::IfCond<B, Value>;
 pub type IfCondExpr = IfCond<Expr>;
 pub type IfCondStmt = IfCond<Stmt>;
+pub type IsPatternMatch = ast::IsPatternMatch<Value>;
 
 fn typecheck_cond_expr<B>(
     if_cond: &ast::IfCond<B>,
@@ -49,13 +46,18 @@ fn typecheck_pattern_match<B>(
     if_cond: &ast::IfCond<B>,
     cond: &Expr,
     ctx: &mut Context,
-) -> TypeResult<Option<TypePattern>> {
+) -> TypeResult<Option<IsPatternMatch>> {
     let is_pattern = match &if_cond.is_pattern {
-        Some(pattern) => {
-            let pattern = TypePattern::typecheck(pattern, &cond.annotation().ty(), ctx)?;
+        Some(is_pattern) => {
+            let expect_ty = cond.annotation().ty();
+            let pattern = MatchPattern::typecheck(&is_pattern.pattern, &expect_ty, ctx)?;
 
-            Some(pattern)
-        },
+            Some(IsPatternMatch {
+                pattern,
+                is_kw: is_pattern.is_kw.clone(),
+                binding: is_pattern.binding.clone(),
+            })
+        }
 
         None => None,
     };
@@ -64,27 +66,15 @@ fn typecheck_pattern_match<B>(
 }
 
 fn create_then_branch_ctx(
-    is_pattern: Option<&TypePattern>,
+    is_pattern: Option<&IsPatternMatch>,
     ctx: &mut Context,
 ) -> TypeResult<Context> {
     let mut then_ctx = ctx.clone();
 
     // is-pattern binding only exists in the "then" branch, if present
-    if let Some(pattern) = &is_pattern {
-        let bindings = pattern
-            .bindings(ctx)
-            .map_err(|err| TypeError::from_name_err(err, pattern.span().clone()))?;
-
-        for binding in bindings {
-            then_ctx.declare_local_var(
-                binding.ident.clone(),
-                Binding {
-                    kind: ValueKind::Immutable,
-                    ty: binding.ty.clone(),
-                    def: Some(binding.ident.clone()),
-                    semantic_hint: SemanticHint::Variable,
-                },
-            )?;
+    if let Some(pattern) = is_pattern {
+        if let Some(binding_name) = &pattern.binding {
+            pattern.pattern.declare_binding(binding_name, &mut then_ctx)?;
         }
     }
 
@@ -126,7 +116,6 @@ pub fn typecheck_if_cond_stmt(
     Ok(IfCond {
         if_kw_span: if_cond.if_kw_span.clone(),
         cond,
-        is_kw: if_cond.is_kw.clone(),
         is_pattern,
         then_kw_span: if_cond.then_kw_span.clone(),
         then_branch,
@@ -195,7 +184,6 @@ pub fn typecheck_if_cond_expr(
     Ok(IfCond {
         if_kw_span: if_cond.if_kw_span.clone(),
         cond,
-        is_kw: if_cond.is_kw.clone(),
         is_pattern,
         then_kw_span: if_cond.then_kw_span.clone(),
         then_branch,

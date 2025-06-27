@@ -84,32 +84,10 @@ pub trait DeclName: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
     fn type_param_name_span(&self, index: usize) -> Option<&Span>;
 }
 
-pub enum PatternSemanticElement<A>
-where
-    A: Annotation,
-{
-    Keyword(Span),
-    Binding(Span),
-    Type(TypeName<A>),
-    VariantCase(Span),
-
-    // could be either a type or an enum, not enough info (parsed AST only)
-    Path(Span),
-}
-
-pub trait Pattern: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash {
-    type Annotation: Annotation;
-
-    // TODO this could be more nicely represented as a shared AST node type
-    fn semantic_elements(&self) -> Vec<PatternSemanticElement<Self::Annotation>>;
-}
-
 pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
     type Type: Clone + Eq + PartialEq + Hash + fmt::Debug;
 
     type DeclName: DeclName;
-
-    type Pattern: Pattern<Annotation = Self>;
 
     type FunctionName: FunctionName<Self>;
 
@@ -137,7 +115,6 @@ impl Annotation for Span {
     type Type = UncheckedType;
 
     type DeclName = DeclIdent;
-    type Pattern = TypeNamePattern;
 
     type FunctionName = QualifiedFunctionName;
 

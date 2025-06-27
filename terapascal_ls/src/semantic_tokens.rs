@@ -5,11 +5,13 @@ use std::sync::Arc;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_frontend::ast;
 use terapascal_frontend::Operator;
+use terapascal_frontend::ast;
+use terapascal_frontend::ast::ConstExprValue;
+use terapascal_frontend::ast::DeclName;
+use terapascal_frontend::ast::FunctionName;
 use tower_lsp::lsp_types::SemanticToken;
 use tower_lsp::lsp_types::SemanticTokenType;
-use terapascal_frontend::ast::{ConstExprValue, DeclName, FunctionName, Pattern};
 
 pub fn semantic_legend() -> Vec<SemanticTokenType> {
     vec![
@@ -195,12 +197,8 @@ where
 
     fn add_unit_decl(&mut self, decl: &ast::UnitDecl<A>) {
         match decl {
-            ast::UnitDecl::FunctionDecl { decl } => {
-                self.add_func_decl(decl, SEMANTIC_FUNCTION)
-            },
-            ast::UnitDecl::FunctionDef { def } => {
-                self.add_func_def(def, SEMANTIC_FUNCTION)
-            },
+            ast::UnitDecl::FunctionDecl { decl } => self.add_func_decl(decl, SEMANTIC_FUNCTION),
+            ast::UnitDecl::FunctionDef { def } => self.add_func_def(def, SEMANTIC_FUNCTION),
 
             ast::UnitDecl::Type { decl } => self.add_type_decl(decl),
             ast::UnitDecl::Uses { decl } => {
@@ -209,7 +207,7 @@ where
                         self.add(&part.span, SEMANTIC_NAMESPACE, "used namespace");
                     }
                 }
-            }
+            },
             ast::UnitDecl::Binding { decl } => self.add_unit_binding(decl),
         }
     }
@@ -242,9 +240,7 @@ where
                     self.add_struct_decl(struct_decl);
                 },
 
-                ast::TypeDeclItem::Interface(iface_decl) => {
-                    self.add_iface_decl(iface_decl)
-                },
+                ast::TypeDeclItem::Interface(iface_decl) => self.add_iface_decl(iface_decl),
 
                 ast::TypeDeclItem::Variant(variant_decl) => {
                     self.add_variant_decl(variant_decl);
@@ -254,13 +250,9 @@ where
                     self.add_typename(&aliased.target);
                 },
 
-                ast::TypeDeclItem::Enum(enum_decl) => {
-                    self.add_enum_decl(enum_decl)
-                },
-                
-                ast::TypeDeclItem::Set(set_decl) => {
-                    self.add_set_decl(set_decl)
-                },
+                ast::TypeDeclItem::Enum(enum_decl) => self.add_enum_decl(enum_decl),
+
+                ast::TypeDeclItem::Set(set_decl) => self.add_set_decl(set_decl),
             }
         }
     }
@@ -511,12 +503,13 @@ where
         self.add_keyword(&if_cond.if_kw_span);
         self.add_expr(&if_cond.cond);
 
-        if let Some(span) = &if_cond.is_kw {
-            self.add_keyword(span);
-        }
-
-        if let Some(pattern) = &if_cond.is_pattern {
-            self.add_pattern(pattern);
+        if let Some(is_pattern) = &if_cond.is_pattern {
+            self.add_keyword(&is_pattern.is_kw);
+            self.add_pattern(&is_pattern.pattern);
+            
+            if let Some(binding) = &is_pattern.binding {
+                self.add(&binding.span, SEMANTIC_VARIABLE, "if pattern binding");
+            }
         }
 
         self.add_keyword(&if_cond.then_kw_span);
@@ -561,6 +554,10 @@ where
 
         for branch in &block.branches {
             self.add_pattern(&branch.pattern);
+            if let Some(binding) = &branch.binding {
+                self.add(&binding.span, SEMANTIC_VARIABLE, "match binding");
+            }
+            
             add_branch(self, &branch.item);
         }
 
@@ -572,25 +569,25 @@ where
         self.add_keyword(&block.end_span);
     }
 
-    fn add_pattern(&mut self, pattern: &A::Pattern) {
-        for element in pattern.semantic_elements() {
-            match element {
-                ast::PatternSemanticElement::Keyword(span) => {
-                    self.add_keyword(&span);
-                },
-                ast::PatternSemanticElement::Binding(span) => {
-                    self.add(&span, SEMANTIC_VARIABLE, "pattern binding");
-                },
-                ast::PatternSemanticElement::Type(ty) => {
-                    self.add_typename(&ty);
-                },
-                ast::PatternSemanticElement::VariantCase(span) => {
-                    self.add(&span, SEMANTIC_ENUM_MEMBER, "variant member pattern");
-                },
-                ast::PatternSemanticElement::Path(span) => {
-                    self.add(&span, SEMANTIC_TYPE, "type pattern");
-                },
-            }
+    fn add_pattern(&mut self, pattern: &ast::MatchPattern<A>) {
+        match pattern {
+            ast::MatchPattern::Name { name, case, .. } => {
+                self.add_typename(name);
+                if let Some(ident) = case {
+                    self.add(
+                        &ident.span,
+                        SEMANTIC_ENUM_MEMBER,
+                        "pattern variant case match",
+                    );
+                }
+            },
+            
+            ast::MatchPattern::Not {
+                not_kw, pattern, ..
+            } => {
+                self.add_keyword(not_kw);
+                self.add_pattern(pattern);
+            },
         }
     }
 
@@ -672,14 +669,14 @@ where
         self.add_keyword(&while_loop.do_kw_span);
         self.add_stmt(&while_loop.body);
     }
-    
+
     fn add_arg_list(&mut self, args: &[ast::Expr<A>], args_span: Option<&Span>) {
         let (args_open, args_close) = match (&args_span, Span::range(&args)) {
             (Some(args_span), Some(args_inner_span)) => {
                 let (left, right) = args_span.split(&args_inner_span);
 
                 (Some(left), Some(right))
-            }
+            },
 
             _ => (None, None),
         };
@@ -721,9 +718,7 @@ where
             ast::Expr::BinOp(op) => self.add_bin_op(op),
             ast::Expr::UnaryOp(op) => self.add_unary_op(op),
             ast::Expr::Literal(item) => self.add_literal(item),
-            ast::Expr::Ident(ident, value) => {
-                self.add_value(value, ident.span(), "ident expr")
-            },
+            ast::Expr::Ident(ident, value) => self.add_value(value, ident.span(), "ident expr"),
             ast::Expr::Call(call) => self.add_call(call),
             ast::Expr::ObjectCtor(ctor) => self.add_object_ctor(ctor),
             ast::Expr::CollectionCtor(_) => {},
@@ -797,18 +792,10 @@ where
             ast::Literal::Boolean(..) => self.add(span, SEMANTIC_KEYWORD, "boolean literal"),
             ast::Literal::SizeOf(..) => self.add(span, SEMANTIC_KEYWORD, "sizeof literal"),
             ast::Literal::DefaultValue(typename) => {
-                self.add_literal_with_type(
-                    span,
-                    typename.as_ref(),
-                    "sizeof literal",
-                );
+                self.add_literal_with_type(span, typename.as_ref(), "sizeof literal");
             },
             ast::Literal::TypeInfo(typename) => {
-                self.add_literal_with_type(
-                    span,
-                    typename.as_ref(),
-                    "typeinfo literal",
-                );
+                self.add_literal_with_type(span, typename.as_ref(), "typeinfo literal");
             },
         }
     }
@@ -817,38 +804,42 @@ where
         match type_name {
             ast::TypeName::Unspecified(..) => {
                 // doesn't have a span, so nothing to highlight
-            }
-            
+            },
+
             ast::TypeName::Ident(ident_name) => {
                 for ident in ident_name.ident.as_slice() {
                     let hint = A::type_semantic_hint(&ident_name.ty);
                     if let Some(token) = semantic_hint_to_token_type(hint) {
                         self.add(&ident.span, token, "typename ident");
                     }
-
-                    if let Some(args) = &ident_name.type_args {
-                        self.add_type_args(args);
-                    }
                 }
-            }
+
+                if let Some(args) = &ident_name.type_args {
+                    self.add_type_args(args);
+                }
+            },
 
             ast::TypeName::Array(array_name) => {
                 self.add_keyword(&array_name.array_kw);
-                
+
                 if let Some(dim) = &array_name.dim {
                     self.add(&dim.open_bracket, SEMANTIC_OPERATOR, "array dimension open");
                     self.add_expr(&dim.dim_expr);
-                    self.add(&dim.close_bracket, SEMANTIC_OPERATOR, "array dimension close");
+                    self.add(
+                        &dim.close_bracket,
+                        SEMANTIC_OPERATOR,
+                        "array dimension close",
+                    );
                 }
-                
+
                 self.add_keyword(&array_name.of_kw);
                 self.add_typename(&array_name.element);
-            }
+            },
 
             ast::TypeName::Weak(weak_name) => {
                 self.add_keyword(&weak_name.weak_kw);
                 self.add_typename(&weak_name.type_name);
-            }
+            },
 
             ast::TypeName::Function(func_name) => {
                 self.add_keyword(&func_name.func_kw);
@@ -857,18 +848,22 @@ where
                         self.add_keyword(&param_mod.span);
                     }
                     if let Some(name) = &param.name {
-                        self.add(&name.span, SEMANTIC_PARAMETER, "function type parameter name");
+                        self.add(
+                            &name.span,
+                            SEMANTIC_PARAMETER,
+                            "function type parameter name",
+                        );
                     }
                     self.add_typename(&param.ty);
                 }
-                
+
                 if let Some(typename) = &func_name.result_type {
                     self.add_typename(typename);
                 }
-            }
+            },
         }
     }
-    
+
     fn add_type_args(&mut self, type_args: &ast::TypeArgList<A>) {
         for arg in &type_args.items {
             self.add_typename(arg);
@@ -950,18 +945,22 @@ where
 
         let type_param_desc = "function type parameter";
         for i in 0..decl.name.type_params_len() {
-            self.add(decl.name.type_param_span(i), SEMANTIC_TYPE_PARAMETER, type_param_desc);
+            self.add(
+                decl.name.type_param_span(i),
+                SEMANTIC_TYPE_PARAMETER,
+                type_param_desc,
+            );
         }
 
         for param in &decl.param_groups {
             if let Some(modifier) = &param.modifier {
                 self.add_keyword(&modifier.span);
             }
-            
+
             for item in &param.param_items {
                 if let Some(name_span) = &item.name_span {
-                    self.add(name_span, SEMANTIC_PARAMETER, "function parameter name");    
-                } 
+                    self.add(name_span, SEMANTIC_PARAMETER, "function parameter name");
+                }
             }
 
             self.add_typename(&param.ty);

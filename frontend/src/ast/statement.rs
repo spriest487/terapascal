@@ -246,7 +246,6 @@ impl Stmt<Span> {
                 Ok(Stmt::If(Box::new(IfCond {
                     if_kw_span: if_cond.if_kw_span,
                     cond: if_cond.cond,
-                    is_kw: if_cond.is_kw,
                     is_pattern: if_cond.is_pattern,
                     then_kw_span: if_cond.then_kw_span,
                     then_branch: then_stmt,

@@ -66,6 +66,17 @@ pub struct Binding {
     pub semantic_hint: SemanticHint,
 }
 
+impl Binding {
+    pub fn pattern_binding(name: Ident, ty: impl Into<Type>) -> Self {
+        Binding {
+            ty: ty.into(),
+            def: Some(name),
+            kind: ValueKind::Immutable,
+            semantic_hint: SemanticHint::Variable,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum InstanceMember {
     Field {

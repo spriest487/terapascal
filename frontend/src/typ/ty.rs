@@ -20,7 +20,6 @@ pub use self::sig::*;
 pub use self::specialize::*;
 pub use self::ty_param::*;
 use crate::ast;
-use crate::ast::{Access, SemanticHint};
 use crate::ast::FunctionTypeName;
 use crate::ast::FunctionTypeNameParam;
 use crate::ast::Ident;
@@ -30,10 +29,11 @@ use crate::ast::MethodOwner;
 use crate::ast::StructKind;
 use crate::ast::WeakTypeName;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::typ::ast::FieldDecl;
+use crate::ast::{Access, SemanticHint};
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::TypeDeclItem;
 use crate::typ::ast::SELF_TY_NAME;
+use crate::typ::ast::FieldDecl;
 use crate::typ::builtin_string_name;
 use crate::typ::builtin_unit_path;
 use crate::typ::Context;
@@ -1378,36 +1378,54 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
 
     // validate type params, it's an error to write a path with mismatched type params
     let expect_params = ty.type_params().cloned();
-
-    let params_match = match (&expect_params, &path.type_params) {
-        (Some(expect), Some(actual)) => {
-            if expect.len() != actual.len() {
-                false
-            } else {
-                expect
-                    .iter()
-                    .zip(actual.iter())
-                    .all(|(param, actual_name)| param.name == *actual_name)
-            }
-        },
-        (None, None) => true,
-        _ => false,
+    
+    let expect_params_count = expect_params.as_ref().map(ast::TypeList::len).unwrap_or(0);
+    let actual_params_count = path.type_params.as_ref().map(ast::TypeList::len).unwrap_or(0);
+    
+    if expect_params_count != actual_params_count {
+        return Err(TypeError::generic_args_len_mismatch(
+            expect_params_count,
+            actual_params_count,
+            GenericTarget::Type(ty),
+            path.span.clone()
+        ));
     };
 
-    if !params_match {
-        let err = GenericError::ParamMismatch {
-            target: GenericTarget::Name(path.name.clone()),
-            expected: expect_params,
-            actual: path.type_params.clone(),
-        };
+    let path_args = match (&expect_params, &path.type_params) {
+        (Some(expect), Some(actual)) => {
+            let mut path_args = Vec::new();
+            for (expect_param, actual_param) in expect
+                .iter()
+                .zip(actual.iter())
+            {
+                if actual_param.name != expect_param.name.name {
+                    return Err(TypeError::from_generic_err(GenericError::ParamMismatch {
+                        target: GenericTarget::Name(path.name.clone()),
+                        expected: expect_params.clone(),
+                        actual: path.type_params.clone(),
+                    }, path.span.clone()));
+                }
 
-        return Err(TypeError::from_generic_err(err, path.span.clone()));
-    }
+                let arg_ty = TypeParamListItem {
+                    name: actual_param.clone(),
+                    is_ty: TypeName::inferred(expect_param.constraint
+                        .as_ref()
+                        .map(|constraint| constraint.is_ty.ty().clone())
+                        .unwrap_or(Type::Any)),
+                };
+
+                path_args.push(TypeName::inferred(Type::GenericParam(Arc::new(arg_ty))));
+            }
+            
+            Some(TypeArgList::new(path_args, actual.span.clone()))
+        },
+        
+        _ => None,
+    };
     
     let ident_name = IdentTypeName {
         ident: path.name.clone(),
-        type_args: expect_params
-            .map(|params| params.into_type_args()),
+        type_args: path_args,
         indirection: 0,
         ty,
         span: path.span.clone(),

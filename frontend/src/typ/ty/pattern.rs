@@ -1,453 +1,255 @@
 use crate::ast;
-use crate::ast::{IdentPath, UncheckedType};
-use crate::ast::IdentTypeName;
-use crate::ast::PatternSemanticElement;
 use crate::ast::Ident;
+use crate::ast::IdentPath;
+use crate::ast::IdentTypeName;
+use crate::typ::ast::member_annotation;
+use crate::typ::ast::typecheck_type_args;
 use crate::typ::result::*;
-use crate::typ::ty::Specializable;
 use crate::typ::ty::Type;
 use crate::typ::typecheck_typename;
+use crate::typ::Binding;
 use crate::typ::Context;
-use crate::typ::Decl;
-use crate::typ::NameError;
-use crate::typ::NameResult;
-use crate::typ::Symbol;
+use crate::typ::Specializable;
 use crate::typ::TypeName;
 use crate::typ::Value;
-use crate::typ::context;
-use derivative::Derivative;
-use std::fmt;
+use crate::typ::VariantCaseValue;
 use std::sync::Arc;
-use terapascal_common::span::*;
+use terapascal_common::span::Spanned;
 
-#[derive(Clone, Eq, Derivative)]
-#[derivative(Debug, PartialEq, Hash)]
-pub enum TypePattern {
-    VariantCase {
-        variant: Arc<Symbol>,
+pub type MatchPattern = ast::MatchPattern<Value>;
 
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        variant_name_span: Span,
-
-        case: Ident,
-        data_binding: Option<Ident>,
-
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        span: Span,
-    },
-    NegatedVariantCase {
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        not_kw: Span,
-
-        variant: Arc<Symbol>,
-
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        variant_name_span: Span,
-
-        case: Ident,
-
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        span: Span,
-    },
-    Type {
-        ty: TypeName,
-        binding: Option<Ident>,
-
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        span: Span,
-    },
-    NegatedType {
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        not_kw: Span,
-
-        ty: TypeName,
-
-        #[derivative(Debug = "ignore")]
-        #[derivative(PartialEq = "ignore")]
-        #[derivative(Hash = "ignore")]
-        span: Span,
-    },
+struct NameMatch {
+    pub name: IdentTypeName<Value>,
+    pub case: Option<Ident>,
+    pub value: Value,
+    pub binding_type: Type,
 }
 
-impl Spanned for TypePattern {
-    fn span(&self) -> &Span {
-        match self {
-            TypePattern::VariantCase { span, .. } => span,
-            TypePattern::NegatedVariantCase { span, .. } => span,
-            TypePattern::Type { span, .. } => span,
-            TypePattern::NegatedType { span, .. } => span,
-        }
-    }
-}
-
-impl ast::Pattern for TypePattern {
-    type Annotation = Value;
-
-    fn semantic_elements(&self) -> Vec<PatternSemanticElement<Self::Annotation>> {
-        let mut elements = Vec::new();
-
-        match self {
-            TypePattern::Type { ty, binding, .. } => {
-                elements.push(PatternSemanticElement::Type(ty.clone()));
-                
-                if let Some(binding) = binding {
-                    elements.push(PatternSemanticElement::Binding(binding.span.clone()));
-                }
-            }
-
-            TypePattern::NegatedType { not_kw, ty, .. } => {
-                elements.push(PatternSemanticElement::Keyword(not_kw.clone()));
-                elements.push(PatternSemanticElement::Type(ty.clone()));
-            }
-
-            TypePattern::VariantCase { variant_name_span, variant, case, data_binding, .. } => {
-                let variant_name = variant.full_path.clone();
-                let variant_ty_name = TypeName::Ident(IdentTypeName {
-                    ty: Type::variant(variant.clone()),
-                    ident: variant_name.clone(),
-                    span: variant_name_span.clone(),
-                    indirection: 0,
-                    type_args: None,
-                });
-                
-                elements.push(PatternSemanticElement::Type(variant_ty_name));
-                elements.push(PatternSemanticElement::VariantCase(case.span.clone()));
-
-                if let Some(binding) = data_binding {
-                    elements.push(PatternSemanticElement::Binding(binding.span.clone()));
-                }
-            }
-
-            TypePattern::NegatedVariantCase { not_kw, variant_name_span, variant, case, .. } => {
-                elements.push(PatternSemanticElement::Keyword(not_kw.clone()));
-
-                let variant_name = variant.full_path.clone();
-                let variant_ty_name = TypeName::Ident(IdentTypeName {
-                    ty: Type::variant(variant.clone()),
-                    ident: variant_name.clone(),
-                    span: variant_name_span.clone(),
-                    indirection: 0,
-                    type_args: None,
-                });
-
-                elements.push(PatternSemanticElement::Type(variant_ty_name));
-                elements.push(PatternSemanticElement::VariantCase(case.span.clone()));
-            }
-        }
-
-        elements
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct PatternBinding {
-    pub ident: Ident,
-    pub ty: Type,
-}
-
-impl TypePattern {
-    // for an identPath (eg System.Option.Some) check if the last part is a declared variant
-    // case and return the separate variant ident (eg System.Option) and case ident (eg Some)
-    fn find_variant_case(
-        path: &IdentPath,
-        ctx: &Context,
-    ) -> TypeResult<Option<(IdentPath, Ident)>> {
-        let variant_parts = path.iter().cloned().take(path.as_slice().len() - 1);
-        let stem_name = IdentPath::from_parts(variant_parts);
-        let case_ident = path.last();
-
-        match ctx.find_path(&stem_name) {
-            Some(context::ScopeMemberRef::Decl {
-                     value: Decl::Type { ty, .. },
-                     ..
-                 }) if ty.as_variant().is_ok() => {
-                let variant = ty.as_variant().unwrap();
-                let variant_def = ctx.find_variant_def(&variant.full_path).unwrap();
-
-                // check case with this ident exists
-                if variant_def.case_position(case_ident).is_none() {
-                    let err_span = path.first().span.to(&case_ident.span);
-                    let variant_ty = Type::variant(variant_def.name.clone());
-
-                    let err = NameError::type_member_not_found(variant_ty, case_ident.clone());
-                    return Err(TypeError::from_name_err(err, err_span));
-                }
-
-                Ok(Some((
-                    variant_def.name.full_path.clone(),
-                    case_ident.clone(),
-                )))
-            }
-
-            _ => Ok(None),
-        }
-    }
-
-    // patterns referring to a typename can use a generic typename as the pattern, in which
-    // case we infer the specialized type (or throw NotMatchable for generics we can't infer a
-    // proper specialization for)
-    fn find_pattern_ty(
-        name: &ast::TypeName,
-        span: &Span,
-        expect_ty: &Type,
-        ctx: &mut Context,
-    ) -> TypeResult<TypeName> {
-        let mut matchable_ty = match name {
-            ast::TypeName::Ident(IdentTypeName { ident, .. }) => {
-                let (_ident_path, ty) = ctx.find_type(ident)
-                    .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
-
-                TypeName::from_path(ident.clone(), ty.clone())
-            },
-            _ => {
-                typecheck_typename(name, ctx)?
-            },
-        };
-
-        if matchable_ty.is_matchable() {
-            match matchable_ty.ty().infer_specialized_from_hint(expect_ty) {
-                Some(spec_ty) => {
-                    *matchable_ty.ty_mut() = spec_ty.clone();
-                }
-
-                None => {
-                    return Err(TypeError::NotMatchable {
-                        ty: matchable_ty.ty().clone(),
-                        span: span.clone(),
-                    });
-                }
-            }
-        }
-
-        Ok(matchable_ty)
-    }
-
-    // find_pattern_ty, but for variant type patterns
-    fn find_pattern_variant(
-        variant: &IdentPath,
-        span: &Span,
-        expect_ty: &Type,
-        ctx: &mut Context,
-    ) -> TypeResult<Arc<Symbol>> {
-        match expect_ty {
-            expect_var @ Type::Variant(..) => {
-                let variant_def = ctx.find_variant_def(variant)
-                    .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
-
-                let var_ty = Type::variant(variant_def.name.clone());
-
-                var_ty
-                    .infer_specialized_from_hint(expect_var)
-                    .map(|ty| match ty {
-                        Type::Variant(v) => {
-                            v.clone()
-                        },
-                        _ => unreachable!("should never infer a non-variant specialized type for a generic variant"),
-                    })
-                    .ok_or_else(|| TypeError::UnableToInferSpecialization {
-                        generic_ty: var_ty.clone(),
-                        hint_ty: expect_ty.clone(),
-                        span: span.clone(),
-                    })
-            }
-
-            _ => {
-                let variant_def = ctx.find_variant_def(variant)
-                    .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
-
-                // expect_ty is probably Nothing and we have to assume the type we find from
-                // just the typename is right (if not, we'll get a type mismatch later)
-                // todo: make sure we get a type mismatch later
-                Ok(variant_def.name.clone())
-            }
-        }
-    }
-
+impl MatchPattern {
     pub fn typecheck(
-        pattern: &ast::TypeNamePattern,
+        pattern: &ast::MatchPattern,
         expect_ty: &Type,
         ctx: &mut Context,
-    ) -> TypeResult<TypePattern> {
+    ) -> TypeResult<MatchPattern> {
         match pattern {
+            ast::MatchPattern::Not {
+                pattern,
+                not_kw,
+                span,
+            } => {
+                let pattern = Self::typecheck(pattern, &Type::Nothing, ctx)?;
+
+                Ok(MatchPattern::Not {
+                    pattern: Box::new(pattern),
+                    not_kw: not_kw.clone(),
+                    span: span.clone(),
+                })
+            },
+
             // this pattern typename will never contain generic args (we can't parse those here),
             // so either this is a non-generic type or we'll infer a specialization from the
             // expr's expected type
-            ast::TypeNamePattern::TypeName {
-                name,
-                kind,
-                span,
+            ast::MatchPattern::Name {
+                name, annotation, ..
             } => {
-                let span = span.clone();
+                let span = annotation.clone();
 
-                match Self::find_variant_case(name, ctx)? {
-                    Some((variant_name, case)) => {
-                        let variant = Self::find_pattern_variant(&variant_name, &span, expect_ty, ctx)?;
+                match name {
+                    ast::TypeName::Ident(ident_name) if ident_name.is_simple_path() => {
+                        let name_match = Self::find_name_match(&ident_name, expect_ty, ctx)?;
 
-                        match kind {
-                            ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding { .. } => {
-                                let data_binding = kind.binding().cloned();
-                                Ok(TypePattern::VariantCase {
-                                    variant,
-                                    variant_name_span: name.path_span(),
-                                    case, 
-                                    data_binding, 
-                                    span,
-                                })
-                            }
-                            ast::TypeNamePatternKind::IsNot { not_kw_span } => {
-                                Ok(TypePattern::NegatedVariantCase { 
-                                    not_kw: not_kw_span.clone(),
-                                    variant,
-                                    variant_name_span: name.path_span(),
-                                    case, 
-                                    span, 
-                                })
-                            }
-                        }
-                    }
+                        Ok(MatchPattern::Name {
+                            name: TypeName::Ident(name_match.name),
+                            annotation: name_match.value,
+                            binding_type: name_match.binding_type,
+                            case: name_match.case,
+                        })
+                    },
 
-                    None => {
-                        let ty_name = ast::TypeName::Ident(IdentTypeName {
-                            span: name.span().clone(),
-                            indirection: 0,
-                            type_args: None,
-                            ident: name.clone(),
-                            ty: UncheckedType,
-                        });
+                    // other typenames must be referring to a specific type
+                    _ => {
+                        let typename = typecheck_typename(name, ctx)?;
+                        let ty = typename.ty().clone();
 
-                        let ty = Self::find_pattern_ty(&ty_name, pattern.span(), expect_ty, ctx)?;
-
-                        match kind {
-                            ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding { .. } => {
-                                let binding = kind.binding().cloned();
-                                Ok(TypePattern::Type {
-                                    ty,
-                                    binding,
-                                    span,
-                                })
-                            }
-                            ast::TypeNamePatternKind::IsNot { not_kw_span } => {
-                                Ok(TypePattern::NegatedType {
-                                    not_kw: not_kw_span.clone(),
-                                    ty, 
-                                    span, 
-                                })
-                            }
-                        }
-                    }
+                        Ok(MatchPattern::Name {
+                            binding_type: ty.clone(),
+                            annotation: Value::Type(ty, span),
+                            name: typename,
+                            case: None,
+                        })
+                    },
                 }
             },
-
-            ast::TypeNamePattern::ExactType { name, kind, span } => {
-                let span = span.clone();
-
-                let ty = Self::find_pattern_ty(name, &span, expect_ty, ctx)?;
-
-                match kind {
-                    ast::TypeNamePatternKind::Is | ast::TypeNamePatternKind::IsWithBinding{ .. } => {
-                        let binding = kind.binding().cloned();
-                        Ok(TypePattern::Type { 
-                            ty, 
-                            binding,
-                            span,
-                        })
-                    }
-                    ast::TypeNamePatternKind::IsNot { not_kw_span } => {
-                        Ok(TypePattern::NegatedType { 
-                            not_kw: not_kw_span.clone(),
-                            ty, 
-                            span, 
-                        })
-                    }
-                }
-            }
         }
     }
 
-    pub fn bindings(&self, ctx: &Context) -> NameResult<Vec<PatternBinding>> {
-        match self {
-            TypePattern::Type {
-                ty,
-                binding: Some(ident),
-                ..
-            } => {
-                let binding = PatternBinding {
-                    ident: ident.clone(),
-                    ty: ty.ty().clone(),
-                };
-                Ok(vec![binding])
-            }
+    fn find_name_match(
+        name: &IdentTypeName,
+        expect_ty: &Type,
+        ctx: &mut Context,
+    ) -> TypeResult<NameMatch> {
+        // first try to match the whole path as a type name
+        let find_type = ctx
+            .find_path(&name.ident)
+            .map(|member| member_annotation(&member, name.span.clone(), ctx));
 
-            TypePattern::VariantCase {
-                variant,
-                case,
-                data_binding: Some(ident),
-                ..
-            } => {
-                let variant_def = ctx.instantiate_variant_def(variant)?;
-                let case_ty = variant_def.cases.iter()
-                    .find_map(|c| if c.ident == *case {
-                        c.data.as_ref().map(|data| data.ty.clone())
+        if let Some(Value::Type(ty, ty_span)) = find_type {
+            let (ty, type_args) = match &name.type_args {
+                None => {
+                    if ty.is_unspecialized_generic() {
+                        let spec_ty = ty
+                            .infer_specialized_from_hint(expect_ty)
+                            .cloned()
+                            .ok_or_else(|| TypeError::UnableToInferSpecialization {
+                                generic_ty: ty.clone(),
+                                hint_ty: expect_ty.clone(),
+                                span: name.span.clone(),
+                            })?;
+
+                        (spec_ty, None)
                     } else {
-                        None
-                    })
-                    .expect("variant case pattern with a binding must always reference a case which has a data member");
+                        (ty, None)
+                    }
+                },
 
-                let binding = PatternBinding {
-                    ty: Type::from(case_ty),
-                    ident: ident.clone(),
-                };
-                Ok(vec![binding])
-            }
+                Some(args) => {
+                    let args = typecheck_type_args(args, ctx)?;
+                    let ty = ty
+                        .specialize(&args, ctx)
+                        .map_err(|err| TypeError::from_generic_err(err, name.span.clone()))?
+                        .into_owned();
 
-            _ => Ok(Vec::new()),
+                    (ty, Some(args))
+                },
+            };
+
+            let value = Value::Type(ty.clone(), ty_span);
+
+            let name = IdentTypeName {
+                ident: name.ident.clone(),
+                type_args,
+                ty: ty.clone(),
+                span: name.span.clone(),
+                indirection: name.indirection,
+            };
+
+            return Ok(NameMatch {
+                name,
+                value,
+                binding_type: ty,
+                case: None,
+            });
+        }
+
+        // second, try to match the path up to the last part as a variant name
+        if name.ident.len() < 2 || name.type_args.is_some() || name.indirection != 0 {
+            // can only match a typename
+            return Err(TypeError::name_not_found(
+                name.ident.clone(),
+                name.span.clone(),
+            ));
+        }
+
+        Self::find_variant_case_match(name, expect_ty, ctx)
+    }
+
+    fn find_variant_case_match(
+        name: &IdentTypeName,
+        expect_ty: &Type,
+        ctx: &mut Context,
+    ) -> TypeResult<NameMatch> {
+        let variant_name_parts = name.ident.as_slice()[0..name.ident.len() - 1].to_vec();
+        let variant_name = IdentPath::from_vec(variant_name_parts);
+        let variant_name_span = variant_name.path_span();
+
+        let find_variant = ctx
+            .find_path(&variant_name)
+            .map(|member| member_annotation(&member, name.span.clone(), ctx));
+
+        let Some(Value::Type(Type::Variant(variant_def_name), ..)) = find_variant else {
+            return Err(TypeError::name_not_found(
+                name.ident.clone(),
+                name.span.clone(),
+            ));
+        };
+
+        let mut case_val = VariantCaseValue {
+            variant_name_span: variant_name_span.clone(),
+            variant_name: variant_def_name,
+            case: name.ident.last().clone(),
+            span: name.span.clone(),
+        };
+
+        if case_val.variant_name.is_unspecialized_generic() {
+            case_val.variant_name = expect_ty
+                .as_variant()
+                .ok()
+                .and_then(|variant_name| {
+                    case_val
+                        .variant_name
+                        .infer_specialized_from_hint(variant_name)
+                        .cloned()
+                })
+                .map(Arc::new)
+                .ok_or_else(|| TypeError::UnableToInferSpecialization {
+                    generic_ty: Type::variant(case_val.variant_name.clone()),
+                    hint_ty: expect_ty.clone(),
+                    span: name.span.clone(),
+                })?;
+        }
+
+        let variant_def = ctx
+            .instantiate_variant_def(&case_val.variant_name)
+            .map_err(|err| TypeError::from_name_err(err, name.span.clone()))?;
+
+        let Some(case) = variant_def.find_case(name.ident.last().as_str()) else {
+            return Err(TypeError::name_not_found(
+                name.ident.clone(),
+                name.span.clone(),
+            ));
+        };
+
+        let binding_type = case
+            .data
+            .as_ref()
+            .map(|data| data.ty.ty())
+            .cloned()
+            .unwrap_or(Type::Nothing);
+
+        Ok(NameMatch {
+            name: IdentTypeName {
+                ident: variant_name,
+                indirection: 0,
+                span: variant_name_span,
+                type_args: None,
+                ty: Type::variant(case_val.variant_name.clone()),
+            },
+            value: Value::VariantCase(Arc::new(case_val)),
+            binding_type,
+            case: Some(name.ident.last().clone()),
+        })
+    }
+
+    pub fn binding_type(&self) -> Option<&Type> {
+        match self {
+            MatchPattern::Name { binding_type, .. } => Some(binding_type),
+            MatchPattern::Not { .. } => None,
         }
     }
-}
 
-impl fmt::Display for TypePattern {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            TypePattern::Type { ty, binding, .. } => {
-                write!(f, "{}", ty)?;
-                if let Some(binding) = binding {
-                    write!(f, " {}", binding)?;
-                }
-                Ok(())
-            }
+    pub fn declare_binding(&self, binding_name: &Ident, ctx: &mut Context) -> TypeResult<()> {
+        let Some(binding_ty) = self.binding_type() else {
+            return Err(TypeError::InvalidPatternBinding {
+                pattern: self.clone(),
+                span: self.span().clone(),
+            });
+        };
 
-            TypePattern::NegatedType { ty, .. } => write!(f, "not {}", ty),
+        let binding = Binding::pattern_binding(binding_name.clone(), binding_ty.clone());
 
-            TypePattern::VariantCase {
-                variant,
-                case,
-                data_binding,
-                ..
-            } => {
-                write!(f, "{}.{}", variant.full_path, case)?;
-                if let Some(binding) = data_binding {
-                    write!(f, " {}", binding)?;
-                }
-                Ok(())
-            }
+        // doesn't need to be initialized because pattern bindings are always immutable
+        ctx.declare_local_var(binding_name.clone(), binding)?;
 
-            TypePattern::NegatedVariantCase { variant, case, .. } => {
-                write!(f, "not {}.{}", variant.full_path, case)
-            }
-        }
+        Ok(())
     }
 }

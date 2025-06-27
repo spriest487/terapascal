@@ -5,7 +5,7 @@ use std::sync::Arc;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_frontend::ast::ForLoopCounterInit;
+use terapascal_frontend::ast::{ForLoopCounterInit};
 use terapascal_frontend::ast::ForLoopRange;
 use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::Literal;
@@ -37,7 +37,7 @@ use terapascal_frontend::typ::ast::WhereClause;
 use terapascal_frontend::typ::ast::WhileLoop;
 use terapascal_frontend::typ::ast::{member_annotation, AliasDecl};
 use terapascal_frontend::typ::seq::TypeSequenceSupport;
-use terapascal_frontend::typ::Context;
+use terapascal_frontend::typ::{Context, MatchPattern};
 use terapascal_frontend::typ::Invocation;
 use terapascal_frontend::typ::ModuleUnit;
 use terapascal_frontend::typ::ScopeMemberRef;
@@ -45,9 +45,8 @@ use terapascal_frontend::typ::Type;
 use terapascal_frontend::typ::TypeArgList;
 use terapascal_frontend::typ::TypeName;
 use terapascal_frontend::typ::TypeParamList;
-use terapascal_frontend::typ::TypePattern;
 use terapascal_frontend::typ::Value;
-use terapascal_frontend::Operator;
+use terapascal_frontend::{ast, Operator};
 
 pub struct LinksEntry {
     pub key: Span,
@@ -64,7 +63,7 @@ impl LinksEntry {
                 }
 
                 Some(&entries[index])
-            },
+            }
 
             Err(index) => {
                 if let Some(existing) = entries.get(index.saturating_sub(1)) {
@@ -74,7 +73,7 @@ impl LinksEntry {
                 }
 
                 None
-            },
+            }
         }
     }
 
@@ -92,14 +91,14 @@ impl LinksEntry {
                         key, existing_def, existing_def.end, link, link.end
                     );
                 }
-            },
+            }
 
             Err(insert_index) => {
                 entries.insert(insert_index, LinksEntry {
                     key,
                     links: vec![link],
                 });
-            },
+            }
         }
     }
 }
@@ -159,7 +158,7 @@ impl DefinitionMap {
         let def_file = self.entries
             .entry(definition.file.clone())
             .or_insert_with(FileEntry::new);
-        
+
         LinksEntry::insert(&mut def_file.usages, definition, span);
     }
 
@@ -224,23 +223,23 @@ impl DefinitionMap {
         match unit_decl {
             UnitDecl::FunctionDecl { decl } => {
                 self.add_func_decl(decl.as_ref(), ctx);
-            },
+            }
             UnitDecl::FunctionDef { def } => {
                 self.add_func_decl(def.decl.as_ref(), ctx);
                 self.add_block(&def.body, ctx);
-            },
+            }
 
             UnitDecl::Type { decl } => {
                 for item in &decl.items {
                     self.add_type_decl(item, ctx);
                 }
-            },
+            }
 
             UnitDecl::Uses { decl } => {
                 for item in &decl.units {
                     self.add_path(&item.ident, ctx);
                 }
-            },
+            }
 
             UnitDecl::Binding { decl } => {
                 for item in &decl.items {
@@ -248,7 +247,7 @@ impl DefinitionMap {
                         self.add_expr(&init.expr, ctx);
                     }
                 }
-            },
+            }
         }
     }
 
@@ -279,22 +278,22 @@ impl DefinitionMap {
         match type_decl {
             TypeDeclItem::Struct(struct_decl) => {
                 self.add_struct_decl(struct_decl, ctx);
-            },
+            }
             TypeDeclItem::Interface(iface_decl) => {
                 self.add_iface_decl(iface_decl, ctx);
-            },
+            }
             TypeDeclItem::Variant(variant_decl) => {
                 self.add_variant_decl(variant_decl, ctx);
-            },
+            }
             TypeDeclItem::Alias(alias_decl) => {
                 self.add_alias_decl(alias_decl, ctx);
-            },
+            }
             TypeDeclItem::Enum(enum_decl) => {
                 self.add_enum_decl(enum_decl, ctx);
-            },
+            }
             TypeDeclItem::Set(set_decl) => {
                 self.add_set_decl(set_decl, ctx);
-            },
+            }
         }
     }
 
@@ -332,10 +331,10 @@ impl DefinitionMap {
                     }
 
                     self.add_typename(&field_decl.ty, ctx);
-                },
+                }
                 TypeMemberDecl::Method(method_decl) => {
                     self.add_func_decl(&method_decl.func_decl, ctx);
-                },
+                }
             }
         }
     }
@@ -406,11 +405,11 @@ impl DefinitionMap {
         match &set_decl.range.as_ref() {
             SetDeclRange::Type { ty, .. } => {
                 self.add_typename(ty, ctx);
-            },
+            }
             SetDeclRange::Range { from, to, .. } => {
                 self.add_expr(from, ctx);
                 self.add_expr(to, ctx);
-            },
+            }
         }
     }
 
@@ -469,7 +468,7 @@ impl DefinitionMap {
                 if let Some(dim) = &array_name.dim {
                     self.add_expr(&dim.dim_expr, ctx);
                 }
-                
+
                 self.add_typename(&array_name.element, ctx);
             }
 
@@ -545,12 +544,12 @@ impl DefinitionMap {
         match stmt {
             Stmt::Ident(ident, value) => {
                 self.add_ident(&ident, value, ctx);
-            },
+            }
 
             Stmt::Member(member) => {
                 self.add_expr(&member.base, ctx);
                 self.add_ident(&member.name, &member.annotation, ctx);
-            },
+            }
 
             Stmt::LocalBinding(binding) => {
                 self.add_self_def(&binding.name.span);
@@ -559,51 +558,51 @@ impl DefinitionMap {
                 if let Some(expr) = &binding.val {
                     self.add_expr(expr, ctx);
                 }
-            },
+            }
 
             Stmt::Call(call) => {
                 self.add_call(call, ctx);
-            },
+            }
 
             Stmt::Exit(exit_stmt) => {
                 if let Exit::WithValue { value_expr, .. } = exit_stmt.as_ref() {
                     self.add_expr(value_expr, ctx);
                 }
-            },
+            }
 
             Stmt::Block(block) => {
                 self.add_block(block, ctx);
-            },
+            }
 
             Stmt::ForLoop(for_loop) => {
                 self.add_for_loop(for_loop.as_ref(), ctx);
-            },
+            }
             Stmt::WhileLoop(while_loop) => {
                 self.add_while_loop(while_loop.as_ref(), ctx);
-            },
+            }
             Stmt::Assignment(assignment) => {
                 self.add_expr(&assignment.lhs, ctx);
                 self.add_expr(&assignment.rhs, ctx);
-            },
+            }
             Stmt::CompoundAssignment(assignment) => {
                 self.add_expr(&assignment.lhs, ctx);
                 self.add_expr(&assignment.rhs, ctx);
-            },
+            }
             Stmt::If(if_cond) => {
                 self.add_if_cond(if_cond, ctx, &Self::add_stmt);
-            },
+            }
             Stmt::Raise(raise) => {
                 self.add_expr(&raise.value, ctx);
-            },
+            }
 
             Stmt::Case(case_block) => {
                 self.add_case_block(case_block, ctx, &Self::add_stmt);
-            },
+            }
             Stmt::Match(match_block) => {
                 self.add_match_block(match_block, ctx, &Self::add_stmt);
-            },
+            }
 
-            Stmt::Break(_) | Stmt::Continue(_) => {},
+            Stmt::Break(_) | Stmt::Continue(_) => {}
         }
     }
 
@@ -616,15 +615,15 @@ impl DefinitionMap {
 
                         self.add_typename(ty, ctx);
                         self.add_expr(init, ctx);
-                    },
+                    }
                     ForLoopCounterInit::Assignment { value, counter, .. } => {
                         self.add_expr(value, ctx);
                         self.add_expr(counter, ctx);
-                    },
+                    }
                 }
 
                 self.add_expr(&range.to_expr, ctx);
-            },
+            }
 
             ForLoopRange::InSequence(sequence) => {
                 self.add_self_def(&sequence.binding_name.span);
@@ -637,12 +636,12 @@ impl DefinitionMap {
                 if let Some(seq_ty_span) = Self::find_sequence_type_def(&src_ty, ctx) {
                     self.add(sequence.in_kw_span.clone(), seq_ty_span);
                 }
-            },
+            }
         }
 
         self.add_stmt(&for_loop.body, ctx);
     }
-    
+
     fn find_method_name_decl(func_decl: &FunctionDecl, declaring_type: &Type, ctx: &Context) -> Option<Span> {
         let sig = func_decl.sig();
 
@@ -683,20 +682,20 @@ impl DefinitionMap {
             Expr::BinOp(bin_op) => {
                 self.add_expr(&bin_op.lhs, ctx);
                 self.add_expr(&bin_op.rhs, ctx);
-            },
+            }
             Expr::UnaryOp(unary_op) => {
                 self.add_expr(&unary_op.operand, ctx);
-            },
+            }
             Expr::Ident(ident, value) => self.add_ident(ident, value, ctx),
             Expr::Literal(item) => match &item.literal {
                 Literal::SizeOf(ty) | Literal::DefaultValue(ty) | Literal::TypeInfo(ty) => {
                     self.add_typename(ty.as_ref(), ctx);
-                },
-                _ => {},
+                }
+                _ => {}
             },
             Expr::Call(call) => {
                 self.add_call(call, ctx);
-            },
+            }
             Expr::ObjectCtor(ctor) => {
                 if let Some(expr) = &ctor.type_expr {
                     self.add_expr(expr, ctx);
@@ -710,37 +709,37 @@ impl DefinitionMap {
                 } else {
                     self.add_object_ctor_args(None, &ctor.args, ctx);
                 }
-            },
+            }
             Expr::CollectionCtor(ctor) => {
                 for element in &ctor.elements {
                     self.add_expr(&element.value, ctx);
                 }
-            },
+            }
             Expr::IfCond(if_cond) => {
                 self.add_if_cond(if_cond, ctx, &Self::add_expr);
-            },
+            }
             Expr::Block(block) => {
                 self.add_block(block, ctx);
-            },
+            }
             Expr::Raise(raise) => {
                 self.add_expr(&raise.value, ctx);
-            },
+            }
             Expr::Exit(exit_expr) => {
                 if let Exit::WithValue { value_expr, .. } = exit_expr.as_ref() {
                     self.add_expr(value_expr, ctx);
                 }
-            },
+            }
             Expr::Case(case_block) => self.add_case_block(case_block, ctx, &Self::add_expr),
             Expr::Match(match_block) => self.add_match_block(match_block, ctx, &Self::add_expr),
             Expr::Cast(cast) => {
                 self.add_typename(&cast.as_type, ctx);
                 self.add_expr(&cast.expr, ctx);
-            },
-            Expr::AnonymousFunction(_) => {},
+            }
+            Expr::AnonymousFunction(_) => {}
             Expr::ExplicitSpec(spec) => {
                 self.add_expr(&spec.type_expr, ctx);
                 self.add_type_args(&spec.type_args, ctx);
-            },
+            }
         }
     }
 
@@ -768,26 +767,26 @@ impl DefinitionMap {
                 if let Some(decl) = &typed_val.decl {
                     self.add(typed_val.span.clone(), decl.path_span().clone())
                 }
-            },
+            }
 
             Value::Function(function) => {
                 self.add(at_span.clone(), function.decl.name.span.clone());
-            },
+            }
 
             Value::UfcsFunction(ufcs) => {
                 self.add(at_span.clone(), ufcs.decl.name.span.clone());
-            },
+            }
 
             Value::Invocation(invocation) => match invocation.as_ref() {
                 Invocation::Function { function, .. } => {
                     self.add(at_span.clone(), function.decl.name.span.clone());
-                },
+                }
                 Invocation::Method { method, .. } => {
                     self.add(at_span.clone(), method.decl.func_decl.name.span.clone());
-                },
+                }
                 Invocation::ObjectCtor { .. } => {
                     // object ctors must always be call or ctor items
-                },
+                }
                 Invocation::VariantCtor {
                     variant_type, case, ..
                 } => {
@@ -799,26 +798,26 @@ impl DefinitionMap {
                             ctx,
                         );
                     }
-                },
+                }
                 Invocation::FunctionValue { value, .. } => {
                     self.add_expr(value, ctx);
-                },
+                }
             },
 
             Value::Method(method) => {
                 self.add(at_span.clone(), method.decl.func_decl.name.span.clone());
-            },
+            }
 
             Value::Type(ty, ..) => {
                 self.add_type_ref(ty, at_span, ctx);
-            },
+            }
 
             Value::Namespace(path, ..) => {
                 if let Some(ScopeMemberRef::Scope { path }) = ctx.find_path(&path) {
                     let namespace = path.to_namespace();
                     self.add(at_span.clone(), namespace.path_span());
                 }
-            },
+            }
 
             Value::VariantCase(case_val) => {
                 self.add_variant_case(
@@ -827,23 +826,23 @@ impl DefinitionMap {
                     &case_val.case,
                     ctx,
                 );
-            },
+            }
 
             Value::Overload(overload) => {
                 for candidate in &overload.candidates {
                     self.add(at_span.clone(), candidate.decl().name.span.clone());
                 }
-            },
+            }
 
             Value::Const(const_val) => {
                 if let Some(path) = &const_val.decl {
                     self.add(at_span.clone(), path.path_span());
                 }
-            },
+            }
 
             Value::Untyped(_) => {
                 // nothing
-            },
+            }
         }
     }
 
@@ -873,7 +872,11 @@ impl DefinitionMap {
         self.add_expr(&if_cond.cond, ctx);
 
         if let Some(pattern) = &if_cond.is_pattern {
-            self.add_type_pattern(pattern, ctx);
+            self.add_type_pattern(&pattern.pattern, ctx);
+            
+            if let Some(binding) = &pattern.binding {
+                self.add_self_def(&binding.span);
+            }
         }
 
         add_item(self, &if_cond.then_branch, ctx);
@@ -894,6 +897,9 @@ impl DefinitionMap {
         self.add_expr(&match_block.cond_expr, ctx);
         for branch in &match_block.branches {
             self.add_type_pattern(&branch.pattern, ctx);
+            if let Some(binding) = &branch.binding {
+                self.add_self_def(&binding.span);
+            }
 
             add_item(self, &branch.item, ctx);
         }
@@ -925,40 +931,23 @@ impl DefinitionMap {
         }
     }
 
-    fn add_type_pattern(&mut self, pattern: &TypePattern, ctx: &Context) {
+    fn add_type_pattern(&mut self, pattern: &MatchPattern, ctx: &Context) {
         match pattern {
-            TypePattern::VariantCase {
-                variant,
-                case,
-                variant_name_span,
-                data_binding,
-                ..
-            } => {
-                self.add_variant_case(&variant.full_path, variant_name_span, case, ctx);
-                if let Some(binding) = data_binding {
-                    self.add_self_def(&binding.span);
+            ast::MatchPattern::Name { name, annotation, case, .. } => {
+                self.add_typename(name, ctx);
+
+                if let Some(case) = case 
+                    && let Some(case_val) = annotation.as_variant_case()
+                    && let Some(def) = ctx.find_variant_def(&case_val.variant_name.full_path).ok()
+                    && let Some(case_def) = def.find_case(case.as_str())
+                {
+                    self.add(case.span.clone(), case_def.span.clone());
                 }
-            },
+            }
 
-            TypePattern::NegatedVariantCase {
-                variant,
-                case,
-                variant_name_span,
-                ..
-            } => {
-                self.add_variant_case(&variant.full_path, variant_name_span, case, ctx);
-            },
-
-            TypePattern::Type { ty, binding, .. } => {
-                self.add_typename(ty, ctx);
-                if let Some(binding) = binding {
-                    self.add_self_def(&binding.span);
-                }
-            },
-
-            TypePattern::NegatedType { ty, .. } => {
-                self.add_typename(ty, ctx);
-            },
+            ast::MatchPattern::Not { pattern, .. } => {
+                self.add_type_pattern(pattern, ctx);
+            }
         }
     }
 
@@ -975,17 +964,17 @@ impl DefinitionMap {
     fn add_call(&mut self, call: &Call, ctx: &Context) {
         match &call.target {
             Expr::BinOp(bin_op)
-                if bin_op.op == Operator::Period && bin_op.rhs.as_ident().is_some() =>
-            {
-                let rhs_ident = bin_op.rhs.as_ident().unwrap();
+            if bin_op.op == Operator::Period && bin_op.rhs.as_ident().is_some() =>
+                {
+                    let rhs_ident = bin_op.rhs.as_ident().unwrap();
 
-                self.add_expr(&bin_op.lhs, ctx);
-                self.add_ident(rhs_ident, &call.annotation, ctx);
-            },
+                    self.add_expr(&bin_op.lhs, ctx);
+                    self.add_ident(rhs_ident, &call.annotation, ctx);
+                }
 
             _ => {
                 self.add_expr(&call.target, ctx);
-            },
+            }
         }
 
         if let Some(args) = &call.type_args {

@@ -1,9 +1,8 @@
-use crate::ast::Annotation;
+use crate::ast::{Annotation, Ident, MatchPattern};
 use crate::ast::ElseBranch;
 use crate::ast::Expr;
 use crate::ast::Stmt;
-use crate::ast::TypeNamePattern;
-use crate::parse::Parse;
+use crate::parse::{Parse, TryParse};
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
@@ -100,12 +99,13 @@ impl MatchStmt {
             true
         } else {
             loop {
-                let pattern = TypeNamePattern::parse(&mut group.tokens)?;
+                let pattern = MatchPattern::parse(&mut group.tokens)?;
+                let binding = Ident::try_parse(&mut group.tokens)?;
                 group.tokens.match_one(Separator::Colon)?;
 
                 match Stmt::parse(&mut group.tokens) {
                     Ok(branch_stmt) => {
-                        branches.push(MatchBlockBranch::new(pattern, branch_stmt))
+                        branches.push(MatchBlockBranch::new(pattern, binding, branch_stmt))
                     },
 
                     // if the first branch is only valid as an expression, convert it into a match-expr
@@ -115,7 +115,11 @@ impl MatchStmt {
                         for branch in branches {
                             match branch.item.to_expr() {
                                 Some(branch_expr) => {
-                                    expr_branches.push(MatchBlockBranch::new(branch.pattern, branch_expr));
+                                    expr_branches.push(MatchBlockBranch::new(
+                                        branch.pattern, 
+                                        branch.binding,
+                                        branch_expr
+                                    ));
                                 },
 
                                 // if any previous branch was not a valid expression, this match block
@@ -126,7 +130,7 @@ impl MatchStmt {
                             }
                         }
 
-                        expr_branches.push(MatchBlockBranch::new(pattern, *illegal.0));
+                        expr_branches.push(MatchBlockBranch::new(pattern, binding, *illegal.0));
 
                         let else_branch = match Self::match_end_of_branches(&mut group.tokens) {
                             MatchBranchNextItem::Branch => {
@@ -262,6 +266,7 @@ impl MatchStmt<Span> {
             branches.push(MatchBlockBranch {
                 item,
                 pattern: branch.pattern.clone(),
+                binding: branch.binding.clone(),
                 span: branch.span.clone(),
             })
         }
@@ -328,7 +333,9 @@ pub struct MatchBlockBranch<B, A = Span>
 where
     A: Annotation
 {
-    pub pattern: A::Pattern,
+    pub pattern: MatchPattern<A>,
+    pub binding: Option<Ident>,
+
     pub item: B,
 
     #[derivative(Hash = "ignore")]
@@ -341,12 +348,13 @@ impl<B> MatchBlockBranch<B>
 where
     B: Spanned
 {
-    pub fn new(pattern: TypeNamePattern, item: B) -> Self {
+    pub fn new(pattern: MatchPattern, binding: Option<Ident>, item: B) -> Self {
         let span = pattern.span().to(&item);
         
         MatchBlockBranch {
             span,
             item,
+            binding,
             pattern,
         }
     }
@@ -357,13 +365,16 @@ where
     B: Parse + Spanned
 {
     fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
-        let pattern = TypeNamePattern::parse(tokens)?;
+        let pattern = MatchPattern::parse(tokens)?;
+        let binding = Ident::try_parse(tokens)?;
+        
         tokens.match_one(Separator::Colon)?;
 
         let item = B::parse(tokens)?;
 
         Ok(MatchBlockBranch {
             span: pattern.span().to(item.span()),
+            binding,
             pattern,
             item,
         })

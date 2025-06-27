@@ -1,11 +1,10 @@
 #[cfg(test)]
 mod test;
 
-use crate::ast::Annotation;
+use crate::ast::{Annotation, Ident, MatchPattern};
 use crate::ast::Expr;
 use crate::ast::Stmt;
-use crate::ast::TypeNamePattern;
-use crate::parse::IllegalStatement;
+use crate::parse::{IllegalStatement, TryParse};
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
@@ -66,6 +65,19 @@ impl<B: Parse> ElseBranch<B> {
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
+pub struct IsPatternMatch<A: Annotation = Span> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub is_kw: Span,
+    
+    pub pattern: MatchPattern<A>,
+
+    pub binding: Option<Ident>,
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct IfCond<B, A = Span>
 where
     A: Annotation,
@@ -77,12 +89,7 @@ where
 
     pub cond: Expr<A>,
 
-    #[derivative(Hash = "ignore")]
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub is_kw: Option<Span>,
-
-    pub is_pattern: Option<A::Pattern>,
+    pub is_pattern: Option<IsPatternMatch<A>>,
 
     #[derivative(Hash = "ignore")]
     #[derivative(Debug = "ignore")]
@@ -98,14 +105,21 @@ where
     pub annotation: A,
 }
 
-fn try_parse_is_pattern(tokens: &mut TokenStream) -> ParseResult<(Option<Span>, Option<TypeNamePattern>)> {
+fn try_parse_is_pattern(tokens: &mut TokenStream) -> ParseResult<Option<IsPatternMatch>> {
     match tokens.match_one_maybe(Keyword::Is) {
         Some(tt) => {
-            let pattern = TypeNamePattern::parse(tokens)?;
-            Ok((Some(tt.into_span()), Some(pattern)))
+            let pattern = MatchPattern::parse(tokens)?;
+            
+            let binding = Ident::try_parse(tokens)?;
+
+            Ok(Some(IsPatternMatch {
+                pattern,
+                is_kw: tt.into_span(),
+                binding,
+            }))
         },
 
-        None => Ok((None, None)),
+        None => Ok(None),
     }
 }
 
@@ -114,7 +128,7 @@ impl IfCond<Expr, Span> {
         let if_token = tokens.match_one(Keyword::If)?;
         let cond = Expr::parse(tokens)?;
 
-        let (is_kw, is_pattern) = try_parse_is_pattern(tokens)?;
+        let is_pattern = try_parse_is_pattern(tokens)?;
 
         let then_tt = tokens.match_one(Keyword::Then)?;
         let then_branch = Expr::parse(tokens)?;
@@ -127,8 +141,7 @@ impl IfCond<Expr, Span> {
         Ok(IfCond {
             if_kw_span: if_token.into_span(),
             cond,
-            
-            is_kw,
+
             is_pattern,
             
             then_kw_span: then_tt.into_span(),
@@ -146,7 +159,7 @@ impl IfCond<Stmt, Span> {
         let if_token = tokens.match_one(Keyword::If)?;
         let cond = Expr::parse(tokens)?;
 
-        let (is_kw, is_pattern) = try_parse_is_pattern(tokens)?;
+        let is_pattern = try_parse_is_pattern(tokens)?;
 
         let then_tt = tokens.match_one(Keyword::Then)?;
 
@@ -164,7 +177,6 @@ impl IfCond<Stmt, Span> {
                 let invalid_expr = Expr::IfCond(Box::new(IfCond {
                     if_kw_span: if_token.into_span(),
                     cond,
-                    is_kw,
                     is_pattern,
                     then_kw_span: then_tt.into_span(),
                     then_branch: *then_expr,
@@ -200,7 +212,6 @@ impl IfCond<Stmt, Span> {
                         let if_expr = Expr::IfCond(Box::new(IfCond {
                             if_kw_span: if_token.into_span(),
                             cond,
-                            is_kw,
                             is_pattern,
                             then_kw_span: then_tt.into_span(),
                             then_branch: then_expr,
@@ -226,7 +237,6 @@ impl IfCond<Stmt, Span> {
         Ok(IfCond {
             if_kw_span: if_token.into_span(),
             cond,
-            is_kw,
             is_pattern,
             then_kw_span: then_tt.into_span(),
             then_branch,
@@ -245,7 +255,10 @@ where
         write!(f, "if {} ", self.cond)?;
 
         if let Some(is_pattern) = &self.is_pattern {
-            write!(f, "is {}", is_pattern)?;
+            write!(f, "is {}", is_pattern.pattern)?;
+            if let Some(binding) = &is_pattern.binding {
+                write!(f, " {}", binding)?;
+            }
         }
 
         write!(f, " then {}", self.then_branch)?;
@@ -283,7 +296,6 @@ impl IfCond<Stmt> {
             if_kw_span: self.if_kw_span.clone(),
             cond: self.cond.clone(),
             annotation: self.annotation.clone(),
-            is_kw: self.is_kw.clone(),
             is_pattern: self.is_pattern.clone(),
             then_kw_span: self.then_kw_span.clone(),
             then_branch,
