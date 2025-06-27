@@ -1,16 +1,9 @@
 # LS
-* remove unspecified typename span
-* typename AST nodes should exist after typechecking (better type highlighting)
-* pattern value annotations
 * cast value annotations
-* split up var/param decl items to represent the AST (whichever one it is that still needs this)
 * partial tokenization
 * partial typechecking
 
 # features
-* add a named type case to typ::Type for all the things that use full_path, full_name etc
-* function/method tags 
-  * replace `external` etc with these
 * property syntax
 * numeric compiler error codes
 * compound assignment bitwise ops
@@ -24,6 +17,8 @@
 * can't infer generic args from object ctors
 
 # improvements
+* use tags instead of pascal-style modifiers for external etc
+* add a named type case to typ::Type for all the things that use full_path, full_name etc
 * undefined symbol checking can probably be moved to IR codegen rather than during typechecking 
 * type cache so we don't need to construct/pass around type objects all the time in the typechecker (This is really slow)
 * make IR function src spans optional?? some builtins don't have them
