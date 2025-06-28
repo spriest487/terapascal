@@ -4,22 +4,29 @@ use crate::fs::WorkspaceFilesystem;
 pub use crate::project::definition_map::DefinitionMap;
 pub use crate::project::definition_map::LinksEntry;
 use crate::semantic_tokens::SemanticTokenBuilder;
+use crate::util::{search_in_spanned, search_or_insert_spanned};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use terapascal_build::error::BuildError;
-use terapascal_build::parse_units;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildStage;
 use terapascal_build::ParseOutput;
-use terapascal_common::build_log::{BuildLog, BuildLogEntry};
-use terapascal_common::span::Location;
-use terapascal_common::span::Spanned;
+use terapascal_build::error::BuildError;
+use terapascal_build::parse_units;
+use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
-use terapascal_common::CompileOpts;
+use terapascal_common::build_log::BuildLog;
+use terapascal_common::build_log::BuildLogEntry;
+use terapascal_common::span::Location;
+use terapascal_common::span::Spanned;
+use terapascal_frontend::Operator;
+use terapascal_frontend::ast::IncompleteExpr;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
+use terapascal_frontend::typ::InstanceMember;
+use terapascal_frontend::typ::TypeError;
+use terapascal_frontend::typ::Value;
 use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types::SemanticToken;
 
@@ -35,18 +42,18 @@ pub struct BuildDiagnostics {
 impl BuildDiagnostics {
     pub fn add_err(&mut self, err: impl Into<BuildError>, filesystem: &WorkspaceFilesystem) {
         let err = err.into();
-        
+
         self.add_message(err.main(), filesystem);
         for message in err.see_also() {
             self.add_message(message, filesystem);
         }
     }
-    
+
     fn add_message(&mut self, message: DiagnosticMessage, filesystem: &WorkspaceFilesystem) {
         let Some(path) = message_path(&message) else {
             return;
         };
-        
+
         let version = filesystem.file_version(&path);
 
         self.file_diagnostics(path, version).errors.push(message);
@@ -74,7 +81,9 @@ fn message_path(message: &DiagnosticMessage) -> Option<PathBuf> {
 pub struct Project {
     main_file: PathBuf,
 
+    // todo: combine into one struct
     pub semantic_tokens: HashMap<Arc<PathBuf>, Vec<SemanticToken>>,
+    completion_points: HashMap<Arc<PathBuf>, Vec<IncompleteExpr<Value>>>,
 
     parse_output: Option<ParseOutput>,
     module: Option<typ::Module>,
@@ -93,6 +102,8 @@ impl Project {
             parse_output: None,
 
             definition_map: DefinitionMap::empty(),
+
+            completion_points: HashMap::new(),
         }
     }
 
@@ -126,8 +137,25 @@ impl Project {
                     parsed_output.units.iter(),
                     input.compile_opts.verbose,
                     &mut log,
-                ); 
-                
+                );
+
+                for error in module.root_ctx.errors() {
+                    diagnostics.add_err(error.clone(), filesystem);
+
+                    if let TypeError::IncompleteExpr { expr } = error {
+                        let file_completion_points = self
+                            .completion_points
+                            .entry(expr.context.span.file.clone())
+                            .or_insert_with(Vec::new);
+
+                        search_or_insert_spanned(
+                            file_completion_points,
+                            expr.context.span.clone(),
+                            || expr.clone(),
+                        );
+                    }
+                }
+
                 for unit in &module.units {
                     let version = filesystem.file_version(unit.path.as_ref());
                     diagnostics.file_diagnostics(unit.path.to_path_buf(), version);
@@ -140,8 +168,7 @@ impl Project {
 
                     let unit_path = unit.path.clone();
 
-                    let mut token_builder =
-                        SemanticTokenBuilder::new(unit_path.clone(), 0, 0);
+                    let mut token_builder = SemanticTokenBuilder::new(unit_path.clone(), 0, 0);
                     token_builder.add_unit(&unit.unit);
 
                     let tokens = token_builder.finish();
@@ -166,15 +193,15 @@ impl Project {
 
         for log_entry in log.entries {
             eprintln!("[build] {}", log_entry);
-            
+
             match log_entry {
-                BuildLogEntry::Trace(..) => {}
+                BuildLogEntry::Trace(..) => {},
 
                 BuildLogEntry::Diagnostic(err) => {
                     for message in err.to_messages() {
                         diagnostics.add_message(message, filesystem);
                     }
-                }
+                },
             }
         }
 
@@ -207,5 +234,43 @@ impl Project {
 
     pub fn find_usages(&self, file: &PathBuf, at: Location) -> Option<&LinksEntry> {
         self.definition_map.find_usages(file, at)
+    }
+
+    pub fn find_completion(&self, file: &PathBuf, at: Location) -> Option<Vec<Arc<String>>> {
+        let file_entries = self.completion_points.get(file)?;
+        let incomplete = search_in_spanned(file_entries, at)?;
+
+        let mut entries = Vec::new();
+        match (incomplete.completion_op, incomplete.target.annotation()) {
+            (Operator::Period, Value::Typed(typed_val)) => {
+                let ctx = &incomplete.context.context;
+                match ctx.instance_members(&typed_val.ty) {
+                    Ok(members) => {
+                        for member in members {
+                            entries.push(match member {
+                                InstanceMember::Field {
+                                    decl, decl_index, ..
+                                } => decl.idents[decl_index].name.clone(),
+                                InstanceMember::Method { method, .. } => {
+                                    method.func_decl.ident().name.clone()
+                                },
+                                InstanceMember::UFCSCall { decl, .. } => decl.ident().name.clone(),
+                                InstanceMember::Overloaded { candidates } => {
+                                    candidates[0].decl().ident().name.clone()
+                                },
+                            })
+                        }
+                    },
+
+                    Err(err) => {
+                        eprintln!("[find_completion] {}", err);
+                    },
+                }
+            },
+
+            _ => {},
+        }
+
+        Some(entries)
     }
 }

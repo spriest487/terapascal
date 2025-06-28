@@ -47,58 +47,39 @@ use terapascal_frontend::typ::TypeName;
 use terapascal_frontend::typ::TypeParamList;
 use terapascal_frontend::typ::Value;
 use terapascal_frontend::{ast, Operator};
+use crate::util::{search_in_spanned, search_or_insert_spanned};
 
 pub struct LinksEntry {
     pub key: Span,
     pub links: Vec<Span>,
 }
 
+impl Spanned for LinksEntry {
+    fn span(&self) -> &Span {
+        &self.key
+    }
+}
+
 impl LinksEntry {
     pub fn binary_search(entries: &[LinksEntry], location: Location) -> Option<&LinksEntry> {
-        match entries.binary_search_by_key(&location, by_span_start) {
-            Ok(index) => {
-                let entry = &entries[index];
-                if !entry.key.contains(&location) {
-                    return None;
-                }
-
-                Some(&entries[index])
-            }
-
-            Err(index) => {
-                if let Some(existing) = entries.get(index.saturating_sub(1)) {
-                    if existing.key.contains(&location) {
-                        return Some(&existing);
-                    }
-                }
-
-                None
-            }
-        }
+        search_in_spanned(entries, location)
     }
 
     pub fn insert(entries: &mut Vec<LinksEntry>, key: Span, link: Span) {
-        match entries.binary_search_by_key(&key.start, by_span_start) {
-            Ok(existing) => {
-                let existing_entry = &mut entries[existing];
-                if existing_entry.key == key {
-                    existing_entry.links.push(link);
-                } else {
-                    let existing_def = &existing_entry.links[0];
+        let entry = search_or_insert_spanned(entries, key.clone(), || LinksEntry {
+            key: key.clone(),
+            links: Vec::new(),
+        });
 
-                    eprintln!(
-                        "[definition_map] already have a link starting at {} (old: {}-{}, new: {}-{})",
-                        key, existing_def, existing_def.end, link, link.end
-                    );
-                }
-            }
+        if entry.key == key {
+            entry.links.push(link);
+        } else {
+            let existing_def = &entry.links[0];
 
-            Err(insert_index) => {
-                entries.insert(insert_index, LinksEntry {
-                    key,
-                    links: vec![link],
-                });
-            }
+            eprintln!(
+                "[definition_map] already have a link starting at {} (old: {}-{}, new: {}-{})",
+                key, existing_def, existing_def.end, link, link.end
+            );
         }
     }
 }
@@ -740,6 +721,10 @@ impl DefinitionMap {
                 self.add_expr(&spec.type_expr, ctx);
                 self.add_type_args(&spec.type_args, ctx);
             }
+            
+            Expr::Incomplete(incomplete) => {
+                self.add_expr(&incomplete.target, ctx);
+            }
         }
     }
 
@@ -998,6 +983,3 @@ fn find_variant_case_def_span(
     Some((variant_decl.name.span().clone(), case.span.clone()))
 }
 
-fn by_span_start(entry: &LinksEntry) -> Location {
-    entry.key.start
-}

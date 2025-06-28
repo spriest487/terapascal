@@ -442,3 +442,9 @@ impl<A: Annotation> fmt::Display for IncompleteExpr<A> {
         write!(f, "{}{}", self.target, self.completion_op)
     }
 }
+
+impl<A: Annotation> Spanned for IncompleteExpr<A> {
+    fn span(&self) -> &Span {
+        self.context.span()
+    }
+}

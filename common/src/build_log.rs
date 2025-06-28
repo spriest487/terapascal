@@ -16,7 +16,7 @@ impl fmt::Display for BuildLogEntry {
             BuildLogEntry::Diagnostic(diagnostic) => {
                 write!(f, "[{}]", diagnostic.severity().to_string().to_lowercase())?;
                 
-                write!(f, "{}", diagnostic.main())?;
+                write!(f, " {}", diagnostic.main())?;
                 for see_also in diagnostic.see_also() {
                     writeln!(f)?;
                     write!(f, "{}", see_also)?;

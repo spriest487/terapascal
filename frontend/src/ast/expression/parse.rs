@@ -546,10 +546,24 @@ impl<'a> CompoundExpressionParser<'a> {
             
             None => {
                 self.last_was_operand = false;
-                
+
+                let operator = member_op_tt.as_operator().unwrap();
+
+                // the completion range should extend to the end of the next token
+                let span = match self.tokens.next() {
+                    Some(next_tt) => member_op_tt.span().to(&next_tt),
+                    None => {
+                        // or just one extra column at the end of a block
+                        // TODO: within groups, parser should know where close token is and use that
+                        let mut span = member_op_tt.into_span();
+                        span.end.col += 1;
+                        span
+                    },
+                };
+
                 Ok(Some(SymbolOperator {
-                    op: member_op_tt.as_operator().unwrap(),
-                    span: member_op_tt.into_span(), 
+                    op: operator,
+                    span, 
                     pos: Position::Binary,
                 }))
             }

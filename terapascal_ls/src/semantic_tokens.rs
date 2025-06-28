@@ -754,6 +754,9 @@ where
             ast::Expr::Cast(cast) => self.add_cast(cast),
             ast::Expr::AnonymousFunction(func_expr) => self.add_anon_func(func_expr),
             ast::Expr::ExplicitSpec(_) => {},
+            ast::Expr::Incomplete(incomplete) => {
+                self.add_expr(&incomplete.target)
+            }
         }
     }
 

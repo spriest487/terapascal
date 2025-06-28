@@ -1557,6 +1557,48 @@ impl Context {
         }
     }
 
+    pub fn instance_members<'ty, 'ctx: 'ty>(
+        &'ctx self,
+        of_ty: &'ty Type,
+    ) -> NameResult<Vec<InstanceMember>> {
+        let mut members = Vec::new();
+        for field_decl in of_ty.fields(self)? {
+            for decl_index in 0..field_decl.idents.len() {
+                members.push(InstanceMember::Field {
+                    ty: Type::from(field_decl.ty.clone()),
+                    access: field_decl.access,
+                    decl: field_decl.clone(),
+                    decl_index,
+                });
+            }
+        } 
+        
+        for instance_method in ufcs::find_instance_methods_of(of_ty, self)? {
+            members.push(match instance_method {
+                InstanceMethod::Method {
+                    iface_ty,
+                    self_ty,
+                    method,
+                    ..
+                } => InstanceMember::Method {
+                    iface_ty: iface_ty.clone(),
+                    self_ty: self_ty.clone(),
+                    method: method.clone(),
+                },
+
+                InstanceMethod::FreeFunction { func_name, decl, visibility } => {
+                    InstanceMember::UFCSCall {
+                        func_name: func_name.clone(),
+                        decl: decl.clone(),
+                        visibility,
+                    }
+                },
+            });
+        }
+        
+        Ok(members)
+    }
+
     pub fn is_unsized_ty(&self, ty: &Type) -> NameResult<bool> {
         match ty {
             Type::Nothing | Type::MethodSelf => Ok(true),

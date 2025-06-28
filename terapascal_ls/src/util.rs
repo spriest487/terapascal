@@ -1,7 +1,7 @@
 use crate::project::LinksEntry;
 use crate::workspace::Workspace;
 use std::path::PathBuf;
-use terapascal_common::span::Location;
+use terapascal_common::span::{Location, Spanned};
 use terapascal_common::span::Span;
 use tower_lsp::lsp_types as lsp;
 use tower_lsp::lsp_types::Url;
@@ -71,4 +71,48 @@ pub fn span_to_location_link(span: &Span) -> Option<lsp::LocationLink> {
         target_range: range,
         target_selection_range: range,
     })
+}
+
+fn by_spanned_start<T: Spanned>(item: &T) -> Location {
+    item.span().start
+}
+
+pub fn search_in_spanned<T: Spanned>(entries: &[T], location: Location) -> Option<&T> {
+    match entries.binary_search_by_key(&location, by_spanned_start) {
+        Ok(index) => {
+            let entry = &entries[index];
+            if !entry.span().contains(&location) {
+                return None;
+            }
+
+            Some(&entries[index])
+        }
+
+        Err(index) => {
+            if let Some(existing) = entries.get(index.saturating_sub(1)) {
+                if existing.span().contains(&location) {
+                    return Some(&existing);
+                }
+            }
+
+            None
+        }
+    }
+}
+
+pub fn search_or_insert_spanned<T, InsertFn>(entries: &mut Vec<T>, key: Span, insert_new: InsertFn) -> &mut T
+where 
+    T: Spanned,
+    InsertFn: FnOnce() -> T
+{
+    match entries.binary_search_by_key(&key.start, by_spanned_start) {
+        Ok(existing) => {
+            &mut entries[existing]
+        }
+
+        Err(insert_index) => {
+            entries.insert(insert_index, insert_new());
+            &mut entries[insert_index]
+        }
+    }
 }

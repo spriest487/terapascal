@@ -1000,8 +1000,12 @@ impl fmt::Display for TypeError {
                 }
             },
 
-            TypeError::IncompleteExpr { .. } => {
-                write!(f, "this expression is incomplete")
+            TypeError::IncompleteExpr { expr, .. } => {
+                match expr.completion_op {
+                    Operator::Period => write!(f, "Expected member name"),
+                    _ => write!(f, "This expression is incomplete"),
+                }
+                
             },
 
             TypeError::InvalidBinOp { lhs, rhs, op, .. } => match op {

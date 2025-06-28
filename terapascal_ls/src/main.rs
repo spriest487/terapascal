@@ -12,7 +12,7 @@ use crate::workspace::Workspace;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result as RpcResult;
 use tower_lsp::lsp_types as lsp;
-use tower_lsp::lsp_types::DidChangeTextDocumentParams;
+use tower_lsp::lsp_types::DiagnosticSeverity;
 use tower_lsp::lsp_types::DidChangeWorkspaceFoldersParams;
 use tower_lsp::lsp_types::DidCloseTextDocumentParams;
 use tower_lsp::lsp_types::DidOpenTextDocumentParams;
@@ -43,7 +43,7 @@ use tower_lsp::lsp_types::Url;
 use tower_lsp::lsp_types::WorkDoneProgressOptions;
 use tower_lsp::lsp_types::WorkspaceFoldersServerCapabilities;
 use tower_lsp::lsp_types::WorkspaceServerCapabilities;
-use tower_lsp::lsp_types::DiagnosticSeverity;
+use tower_lsp::lsp_types::{CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams};
 use tower_lsp::Client;
 use tower_lsp::LanguageServer;
 use tower_lsp::LspService;
@@ -87,11 +87,11 @@ impl LanguageServer for TerapascalServer {
             }),
             file_operations: None,
         };
-
-        // let diagnostic_opts = DiagnosticOptions {
-        //     inter_file_dependencies: true,
-        //     ..Default::default()
-        // };
+        
+        let completion_opts = CompletionOptions {
+            trigger_characters: Some(vec![".".to_string()]),
+            ..CompletionOptions::default()  
+        };
 
         Ok(InitializeResult {
             server_info: None,
@@ -103,6 +103,7 @@ impl LanguageServer for TerapascalServer {
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 workspace: Some(workspace_folders),
+                completion_provider: Some(completion_opts), 
                 ..ServerCapabilities::default()
             },
         })
@@ -298,6 +299,44 @@ impl LanguageServer for TerapascalServer {
         }
     }
 
+    async fn completion(&self, params: CompletionParams) -> RpcResult<Option<CompletionResponse>> {
+        let position = &params.text_document_position;
+        eprintln!(
+            "[completion] {}:{}:{}", 
+            position.text_document.uri, 
+            position.position.line + 1, 
+            position.position.character + 1
+        );
+        
+        let workspace = self.workspace.read().await;
+
+        let Some((file_path, location)) = convert_text_doc_position_params(
+            &workspace, 
+            &params.text_document_position
+        ) else {
+            eprintln!("[completion] bad position");
+            return Ok(None);
+        };
+        
+        let Some(project) = workspace.get_document_project(&file_path) else {
+            eprintln!("[completion] no project found");
+            return Ok(None);
+        };
+        
+        let Some(completions) = project.find_completion(&file_path, location) else {
+            eprintln!("[completion] no completion found");
+            return Ok(None);
+        };
+
+        Ok(Some(CompletionResponse::Array(completions
+            .into_iter()
+            .map(|name| lsp::CompletionItem {
+                label: name.to_string(),
+                ..lsp::CompletionItem::default()
+            })
+            .collect())))
+    }
+
     async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {
         for added in params.event.added {
             eprintln!(
@@ -355,7 +394,7 @@ impl TerapascalServer {
                     range: span_range(&label.span),
                     message,
                     severity: Some(DiagnosticSeverity::ERROR),
-                    ..Default::default()
+                    ..lsp::Diagnostic::default()
                 });
             }
 
