@@ -16,11 +16,11 @@ pub struct FunctionInstance {
     pub sig: Arc<typ::FunctionSig>,
 }
 
-fn create_function_body_builder<'m>(
-    lib: &mut LibraryBuilder,
+fn create_function_body_builder<'m, 'l: 'm>(
+    lib: &'m mut LibraryBuilder<'l>,
     generic_ctx: typ::GenericContext,
     debug_name: Option<String>,
-) -> Builder {
+) -> Builder<'m, 'l> {
     let debug_comment = debug_name.map(|name| {
         let mut comment = format!("function def body of {}", name);
         if !generic_ctx.is_empty() {

@@ -22,8 +22,8 @@ use std::sync::Arc;
 use terapascal_common::span::Span;
 
 #[derive(Debug)]
-pub struct Builder<'m> {
-    library: &'m mut LibraryBuilder,
+pub struct Builder<'m, 'l: 'm> {
+    library: &'m mut LibraryBuilder<'l>,
 
     // positional list of type args that can be used to reify types in the current context
     // during this stage we only need to be able to substitute args, we don't need to validate
@@ -37,8 +37,8 @@ pub struct Builder<'m> {
     loop_stack: Vec<LoopScope>,
 }
 
-impl<'m> Builder<'m> {
-    pub fn new(lib: &'m mut LibraryBuilder) -> Self {
+impl<'m, 'l: 'm> Builder<'m, 'l> {
+    pub fn new(lib: &'m mut LibraryBuilder<'l>) -> Self {
         let mut instructions = Vec::new();
         instructions.push(Instruction::LocalBegin);
 

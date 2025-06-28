@@ -62,8 +62,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct LibraryBuilder {
-    src_metadata: typ::Context,
+pub struct LibraryBuilder<'a> {
+    src_metadata: &'a typ::Context,
     
     opts: CodegenOpts,
     
@@ -98,8 +98,8 @@ thread_local! {
     ];
 }
 
-impl LibraryBuilder {
-    pub fn new(src_metadata: typ::Context, mut metadata: ir::Metadata, opts: CodegenOpts) -> Self {
+impl<'a> LibraryBuilder<'a> {
+    pub fn new(src_metadata: &'a typ::Context, mut metadata: ir::Metadata, opts: CodegenOpts) -> Self {
         let builtin_classes = BUILTIN_CLASS_NAMES.with(|names| names.to_vec());
 
         for (_, builtin_class_id) in &builtin_classes {
@@ -1396,7 +1396,7 @@ impl LibraryBuilder {
         func_id
     }
 
-    pub fn aligned_struct_members<'a>(&self, struct_def: &'a typ::ast::StructDecl) -> Vec<StructLayoutMember<'a>> {
+    pub fn aligned_struct_members<'s>(&self, struct_def: &'s typ::ast::StructDecl) -> Vec<StructLayoutMember<'s>> {
         let layout = if struct_def.packed {
             StructLayout::Packed
         } else {
