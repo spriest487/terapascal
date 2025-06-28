@@ -96,26 +96,29 @@ impl MethodValue {
             Some(self_arg) => self_arg.annotation().ty(),
 
             None => {
-                let mut ctx = ctx.clone();
-                let first_self_pos = self
-                    .decl
-                    .func_decl
-                    .params()
-                    .position(|(group, _param)| group.ty == Type::MethodSelf);
+                ctx.with_temp_branch(|temp_ctx| {
+                    let first_self_pos = self
+                        .decl
+                        .func_decl
+                        .params()
+                        .position(|(group, _param)| group.ty == Type::MethodSelf);
 
-                match first_self_pos {
-                    Some(index) => {
-                        // note that this isn't the "self arg" used for typecheck_args, because we're not passing
-                        // it implicitly as a separate arg (like the self-arg `x` of `x.Y()` in a UFCS call).
-                        // it's just the first arg from which we can infer the self-type
-                        let first_self_arg =
-                            typecheck_expr(&rest_args[index], &Type::Nothing, &mut ctx)?;
+                    let self_ty: Cow<Type> = match first_self_pos {
+                        Some(index) => {
+                            // note that this isn't the "self arg" used for typecheck_args, because we're not passing
+                            // it implicitly as a separate arg (like the self-arg `x` of `x.Y()` in a UFCS call).
+                            // it's just the first arg from which we can infer the self-type
+                            let first_self_arg =
+                                typecheck_expr(&rest_args[index], &Type::Nothing, temp_ctx)?;
 
-                        Cow::Owned(first_self_arg.annotation().ty().into_owned())
-                    },
+                            Cow::Owned(first_self_arg.annotation().ty().into_owned())
+                        },
 
-                    None => Cow::Owned(Type::Nothing),
-                }
+                        None => Cow::Owned(Type::Nothing),
+                    };
+                    
+                    Ok(self_ty)
+                })?
             },
         };
 

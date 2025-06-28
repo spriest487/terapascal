@@ -69,7 +69,7 @@ fn create_then_branch_ctx(
     is_pattern: Option<&IsPatternMatch>,
     ctx: &mut Context,
 ) -> TypeResult<Context> {
-    let mut then_ctx = ctx.clone();
+    let mut then_ctx = ctx.branch();
 
     // is-pattern binding only exists in the "then" branch, if present
     if let Some(pattern) = is_pattern {
@@ -95,10 +95,11 @@ pub fn typecheck_if_cond_stmt(
     let then_branch = typecheck_stmt(&if_cond.then_branch, expect_ty, &mut then_ctx)?;
     let else_branch = match &if_cond.else_branch {
         Some(branch) => {
-            let mut else_ctx = ctx.clone();
+            let mut else_ctx = ctx.branch();
             let else_stmt = typecheck_stmt(&branch.item, &Type::Nothing, &mut else_ctx)?;
 
-            ctx.consolidate_branches(&[then_ctx, else_ctx]);
+            ctx.consolidate_branches([then_ctx, else_ctx]);
+
             Some(ElseBranch {
                 item: Box::new(else_stmt),
                 else_kw_span: branch.else_kw_span.clone(),
@@ -106,7 +107,7 @@ pub fn typecheck_if_cond_stmt(
         }
 
         None => {
-            ctx.consolidate_branches(&[then_ctx]);
+            ctx.consolidate_branches([then_ctx]);
             None
         },
     };
@@ -139,7 +140,7 @@ pub fn typecheck_if_cond_expr(
 
     let else_branch = match &if_cond.else_branch {
         Some(branch) => {
-            let mut else_ctx = ctx.clone();
+            let mut else_ctx = ctx.branch();
             let then_ty = then_branch.annotation().ty();
 
             let else_expr = evaluate_expr(&branch.item, &then_ty, &mut else_ctx)?;
@@ -157,7 +158,7 @@ pub fn typecheck_if_cond_expr(
                 },
             };
 
-            ctx.consolidate_branches(&[then_ctx, else_ctx]);
+            ctx.consolidate_branches([then_ctx, else_ctx]);
 
             Some(ElseBranch {
                 item: Box::new(else_expr),
@@ -166,7 +167,7 @@ pub fn typecheck_if_cond_expr(
         }
 
         None => {
-            ctx.consolidate_branches(&[then_ctx]);
+            ctx.consolidate_branches([then_ctx]);
             None
         },
     };

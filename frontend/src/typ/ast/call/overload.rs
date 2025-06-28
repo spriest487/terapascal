@@ -137,20 +137,14 @@ pub fn try_resolve_overload(
     span: &Span,
     ctx: &mut Context,
 ) -> Option<Overload> {
-    let mut tmp_ctx = ctx.clone();
-
-    let overload = resolve_overload(
+    ctx.with_temp_branch(|ctx| resolve_overload(
         candidates,
         args,
         type_args,
         self_arg,
         span,
-        &mut tmp_ctx
-    ).ok()?;
-    
-    ctx.consolidate_branches(&[tmp_ctx]);
-    
-    Some(overload)
+        ctx,
+    ).ok())
 }
 
 pub fn resolve_overload(

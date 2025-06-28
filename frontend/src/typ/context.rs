@@ -1992,8 +1992,32 @@ impl Context {
 
         None
     }
+    
+    pub fn branch(&self) -> Self {
+        let mut branch = self.clone();
+        branch.errors.clear();
 
-    pub fn consolidate_branches(&mut self, branch_contexts: &[Self]) {
+        branch
+    }
+    
+    pub fn end_branch(&mut self, other: &mut Self) {
+        self.errors.append(&mut other.errors);
+    }
+    
+    pub fn with_temp_branch<T, F>(&mut self, f: F) -> T 
+    where
+        F: FnOnce(&mut Self) -> T
+    {
+        let mut branch = self.branch();
+        let result = f(&mut branch);
+        self.end_branch(&mut branch);
+        
+        result
+    }
+
+    pub fn consolidate_branches(&mut self, branch_contexts: impl IntoIterator<Item=Self>) {
+        let branch_contexts: Vec<_> = branch_contexts.into_iter().collect();
+        
         let scope = self.scopes.current_path();
 
         let uninit_names: Vec<_> = scope
@@ -2010,7 +2034,8 @@ impl Context {
         let this_depth = scope.as_slice().len();
 
         // names initialized in all branches
-        let mut all_init = Vec::new();
+        let mut all_init = Vec::with_capacity(uninit_names.len());
+
         for uninit_name in uninit_names {
             let is_init_in_all = branch_contexts
                 .iter()
@@ -2038,14 +2063,8 @@ impl Context {
             self.initialize(&name);
         }
         
-        // important: assumes no errors have been added to the source context since the branch
-        // operation started. make sure the source context isn't used again until is branches
-        // are either discarded or consolidated!
-        let src_error_count = self.errors.len();
-        for ctx in branch_contexts {
-            for error in &ctx.errors[src_error_count..] {
-                self.errors.push(error.clone());
-            }
+        for mut branch_ctx in branch_contexts {
+            self.end_branch(&mut branch_ctx);
         }
     }
 

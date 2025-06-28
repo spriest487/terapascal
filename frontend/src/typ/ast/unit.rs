@@ -45,6 +45,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::result::ErrorContinue;
 
 pub type Unit = ast::Unit<Value>;
 pub type UnitDecl = ast::UnitDecl<Value>;
@@ -584,13 +585,13 @@ pub fn typecheck_unit(
     unit: &ast::Unit,
     ctx: &mut Context,
 ) -> TypeResult<ModuleUnit> {
-    ctx.unit_scope(unit.ident.clone(), |ctx| {
-        let iface_decls = typecheck_section(&unit.iface_section.decls, Visibility::Interface, ctx)?;
+    let mut module_unit = ctx.unit_scope(unit.ident.clone(), |ctx| {
+        let iface_decls = typecheck_section(&unit.iface_section.decls, Visibility::Interface, ctx);
         let impl_decls =
-            typecheck_section(&unit.impl_section.decls, Visibility::Implementation, ctx)?;
+            typecheck_section(&unit.impl_section.decls, Visibility::Implementation, ctx);
 
         let init = match &unit.init {
-            Some(init_block) => Some(typecheck_init_block(&init_block, ctx)?),
+            Some(init_block) => Some(typecheck_init_block(&init_block, ctx)),
 
             None => None,
         };
@@ -603,7 +604,7 @@ pub fn typecheck_unit(
             });
         }
 
-        let unit_ctx = ctx.clone();
+        let unit_ctx = ctx.branch();
 
         let unit = Unit {
             unit_kw: unit.unit_kw.clone(),
@@ -626,10 +627,14 @@ pub fn typecheck_unit(
             path: Arc::new(unit_path.clone()),
             unit,
         })
-    })
+    })?;
+
+    ctx.end_branch(&mut module_unit.context);
+
+    Ok(module_unit)
 }
 
-fn typecheck_init_block(init_block: &ast::InitBlock, ctx: &mut Context) -> TypeResult<InitBlock> {
+fn typecheck_init_block(init_block: &ast::InitBlock, ctx: &mut Context) -> InitBlock {
     // init stmt is implicitly a block
     let init_env = Environment::Block {
         allow_unsafe: false,
@@ -637,33 +642,37 @@ fn typecheck_init_block(init_block: &ast::InitBlock, ctx: &mut Context) -> TypeR
 
     let result = ctx.scope(init_env, |ctx| {
         let mut body = Vec::new();
-        for stmt in &init_block.body {
-            let stmt = typecheck_stmt(stmt, &Type::Nothing, ctx)?;
-            expect_stmt_initialized(&stmt, ctx)?;
 
-            body.push(stmt);
+        for stmt in &init_block.body {
+            if let Some(stmt) = typecheck_stmt(stmt, &Type::Nothing, ctx).ok_or_continue(ctx) {
+                expect_stmt_initialized(&stmt, ctx).or_continue(ctx, ());
+
+                body.push(stmt);
+            }
         }
 
-        Ok(InitBlock {
+        InitBlock {
             body,
             keyword_span: init_block.keyword_span.clone(),
             end_span: init_block.end_span.clone(),
-        })
-    })?;
+        }
+    });
 
-    Ok(result)
+    result
 }
 
 fn typecheck_section(
     src_decls: &[ast::UnitDecl<Span>],
     visibility: Visibility,
     ctx: &mut Context,
-) -> TypeResult<Vec<UnitDecl>> {
+) -> Vec<UnitDecl> {
     let mut decls = Vec::new();
 
     for decl in src_decls {
-        decls.push(typecheck_unit_decl(decl, ctx, visibility)?);
+        if let Some(decl) = typecheck_unit_decl(decl, ctx, visibility).ok_or_continue(ctx) {
+            decls.push(decl);    
+        }
     }
 
-    Ok(decls)
+    decls
 }

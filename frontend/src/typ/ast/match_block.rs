@@ -58,7 +58,7 @@ where
     let mut branch_ctxs = Vec::new();
 
     for branch in &match_block.branches {
-        let branch_ctx = ctx.clone();
+        let branch_ctx = ctx.branch();
 
         let branch_env = Environment::Block {
             allow_unsafe: false,
@@ -85,7 +85,7 @@ where
         branch_ctxs.push(branch_ctx);
     }
 
-    ctx.consolidate_branches(&branch_ctxs);
+    ctx.consolidate_branches(branch_ctxs);
 
     Ok(branches)
 }

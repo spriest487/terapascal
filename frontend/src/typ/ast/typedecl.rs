@@ -136,15 +136,17 @@ impl Tag {
     // the expressions parsed within should be typename paths and literals only
     pub fn typecheck(src_tag: &ast::tag::Tag, ctx: &mut Context) -> TypeResult<Tag> {
         let mut items = Vec::new();
-        
+
         // use a disposable branch context to ensure invalid statements/expressions that aren't
         // just const evals here don't affect the outside context
-        let mut ctx = ctx.clone();
+        ctx.with_temp_branch(|tag_ctx| {
+            for item in &src_tag.items {
+                let item = TagItem::typecheck(item, tag_ctx)?;
+                items.push(item);
+            }
 
-        for item in &src_tag.items {
-            let item = TagItem::typecheck(item, &mut ctx)?;
-            items.push(item);
-        }
+            Ok(())
+        })?;
 
         Ok(Tag {
             span: src_tag.span.clone(),
