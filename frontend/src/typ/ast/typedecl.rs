@@ -48,6 +48,7 @@ use std::sync::Arc;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::result::ErrorContinue;
 
 pub type StructDecl = ast::StructDecl<Value>;
 pub type StructMemberDecl = ast::TypeMemberDecl<Value>;
@@ -154,14 +155,16 @@ impl Tag {
         })
     }
 
-    pub fn typecheck_tags(src_tags: &[ast::tag::Tag], ctx: &mut Context) -> TypeResult<Vec<Tag>> {
+    pub fn typecheck_tags(src_tags: &[ast::tag::Tag], ctx: &mut Context) -> Vec<Tag> {
         let mut tags = Vec::new();
 
         for tag in src_tags {
-            tags.push(Tag::typecheck(tag, ctx)?)
+            if let Some(tag) = Tag::typecheck(tag, ctx).ok_or_continue(ctx) {
+                tags.push(tag);
+            }
         }
 
-        Ok(tags)
+        tags
     }
 }
 
@@ -229,12 +232,14 @@ pub fn typecheck_struct_decl(
     ctx: &mut Context,
 ) -> TypeResult<StructDecl> {
     assert!(struct_def.tags.is_empty() || !struct_def.forward);
-    let tags = Tag::typecheck_tags(&struct_def.tags, ctx)?;
+    let tags = Tag::typecheck_tags(&struct_def.tags, ctx);
     
     let self_ty = Type::from_struct_type(info.name.clone(), struct_def.kind);
 
     let implements = match &struct_def.implements {
-        Some(implements) => Some(SupersClause::typecheck(implements, &self_ty, ctx)?),
+        Some(implements) => {
+            SupersClause::typecheck(implements, &self_ty, ctx).ok_or_continue(ctx)
+        },
         None => None
     };
 
@@ -308,7 +313,7 @@ where
                 }
 
                 TypeMemberDeclRef::Method(method) => {
-                    let func_decl = typecheck_method(&method.func_decl, ctx)?;
+                    let func_decl = FunctionDecl::typecheck(&method.func_decl, false, ctx);
                     if func_decl.kind == FunctionDeclKind::Destructor {
                         if !matches!(owning_type.as_ref(), Type::Class(..)) {
                             return Err(TypeError::InvalidDtorOwningType {
@@ -443,11 +448,6 @@ where
     Ok(sections)
 }
 
-fn typecheck_method(decl: &ast::FunctionDecl, ctx: &mut Context) -> TypeResult<FunctionDecl> {
-    let decl = FunctionDecl::typecheck(decl, false, ctx)?;    
-    Ok(decl)
-}
-
 fn typecheck_field(
     field: &ast::FieldDecl,
     ctx: &mut Context
@@ -476,7 +476,8 @@ pub fn typecheck_iface(
     ctx: &mut Context,
 ) -> TypeResult<InterfaceDecl> {
     assert!(iface.tags.is_empty() || !iface.forward);
-    let tags = Tag::typecheck_tags(&iface.tags, ctx)?;
+
+    let tags = Tag::typecheck_tags(&iface.tags, ctx);
 
     let iface_ty = Type::interface(info.name.clone());
 
@@ -486,7 +487,9 @@ pub fn typecheck_iface(
     ctx.declare_type(iface.name.ident.clone(), iface_ty.clone(), info.visibility, true)?;
 
     let supers = match &iface.supers {
-        Some(supers) => Some(SupersClause::typecheck(supers, &iface_ty, ctx)?),
+        Some(supers) => {
+            SupersClause::typecheck(supers, &iface_ty, ctx).ok_or_continue(ctx)
+        },
         None => None
     };
 
@@ -510,7 +513,7 @@ pub fn typecheck_iface(
             });
         }
 
-        let method_decl = FunctionDecl::typecheck(&method.decl, false, ctx)?;
+        let method_decl = FunctionDecl::typecheck(&method.decl, false, ctx);
 
         methods.push(ast::InterfaceMethodDecl { 
             decl: Arc::new(method_decl),
@@ -538,7 +541,7 @@ pub fn typecheck_variant(
     ctx: &mut Context,
 ) -> TypeResult<VariantDecl> {
     assert!(variant_def.tags.is_empty() || !variant_def.forward);
-    let tags = Tag::typecheck_tags(&variant_def.tags, ctx)?;
+    let tags = Tag::typecheck_tags(&variant_def.tags, ctx);
 
     if variant_def.cases.is_empty() {
         return Err(TypeError::EmptyVariantDecl(Box::new(variant_def.clone())));
@@ -547,7 +550,9 @@ pub fn typecheck_variant(
     let variant_ty = Type::variant(info.name.clone());
 
     let implements = match &variant_def.implements {
-        Some(implements) => Some(SupersClause::typecheck(implements, &variant_ty, ctx)?),
+        Some(implements) => {
+            SupersClause::typecheck(implements, &variant_ty, ctx).ok_or_continue(ctx)
+        },
         None => None
     };
 

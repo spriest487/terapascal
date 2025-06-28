@@ -157,7 +157,7 @@ fn typecheck_unit_func_def(
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<UnitDecl> {
-    let func_decl = FunctionDecl::typecheck(&func_def.decl, true, ctx)?;
+    let func_decl = FunctionDecl::typecheck(&func_def.decl, true, ctx);
     let func_name = &func_decl.name;
 
     // free functions may not already have a declaration in scope if they weren't forward
@@ -192,7 +192,7 @@ fn typecheck_unit_func_decl(
     ctx: &mut Context,
 ) -> TypeResult<UnitDecl> {
     let name = func_decl.name.clone();
-    let func_decl = Arc::new(FunctionDecl::typecheck(func_decl, false, ctx)?);
+    let func_decl = Arc::new(FunctionDecl::typecheck(func_decl, false, ctx));
 
     // this is always true in valid code - only free functions can be declared without definition
     // at the unit level - but we might be typechecking partially parsed code
@@ -324,7 +324,7 @@ fn typecheck_type_decl_item_with_def(
     let ty_scope = ctx.push_scope(Environment::TypeDecl { ty });
 
     if let Some(ty_params) = &info.name.type_params {
-        ctx.declare_type_params(&ty_params)?;
+        ctx.declare_type_params(&ty_params);
     }
 
     let visibility = info.visibility;

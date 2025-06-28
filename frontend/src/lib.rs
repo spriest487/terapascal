@@ -32,7 +32,6 @@ use crate::parse::Parser;
 use crate::pp::error::PreprocessorError;
 use crate::pp::PreprocessedUnit;
 use crate::typ::Module;
-use crate::typ::TypeResult;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::aggregate_err::AggregateError;
@@ -101,14 +100,14 @@ pub fn typecheck<'a>(
     units: impl DoubleEndedIterator<Item = (&'a PathBuf, &'a ast::Unit)>,
     verbose: bool,
     log: &mut BuildLog,
-) -> TypeResult<Module> {
-    let module = Module::typecheck(units, verbose, log)?;
+) -> Module {
+    let module = Module::typecheck(units, verbose, log);
 
     for error in module.root_ctx.errors() {
         log.diagnostic(error.clone());
     }
 
-    Ok(module)
+    module
 }
 
 pub fn codegen_ir(module: &Module, opts: CodegenOpts) -> ir::Library {

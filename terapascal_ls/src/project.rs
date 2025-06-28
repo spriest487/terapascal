@@ -122,61 +122,33 @@ impl Project {
 
         match parse_units(filesystem, &input, &mut log) {
             Ok(parsed_output) => {
-                match typecheck(
+                let module = typecheck(
                     parsed_output.units.iter(),
                     input.compile_opts.verbose,
                     &mut log,
-                ) {
-                    Ok(module) => {
-                        for unit in &module.units {
-                            let version = filesystem.file_version(unit.path.as_ref());
-                            diagnostics.file_diagnostics(unit.path.to_path_buf(), version);
+                ); 
+                
+                for unit in &module.units {
+                    let version = filesystem.file_version(unit.path.as_ref());
+                    diagnostics.file_diagnostics(unit.path.to_path_buf(), version);
 
-                            eprintln!(
-                                "[build] processing unit: {} ({})",
-                                unit.unit.ident,
-                                unit.path.display()
-                            );
+                    eprintln!(
+                        "[build] processing unit: {} ({})",
+                        unit.unit.ident,
+                        unit.path.display()
+                    );
 
-                            let unit_path = unit.path.clone();
+                    let unit_path = unit.path.clone();
 
-                            let mut token_builder =
-                                SemanticTokenBuilder::new(unit_path.clone(), 0, 0);
-                            token_builder.add_unit(&unit.unit);
+                    let mut token_builder =
+                        SemanticTokenBuilder::new(unit_path.clone(), 0, 0);
+                    token_builder.add_unit(&unit.unit);
 
-                            let tokens = token_builder.finish();
-                            self.semantic_tokens.insert(unit_path, tokens);
-                        }
-
-                        self.module = Some(module);
-                    },
-
-                    Err(err) => {
-                        eprintln!("[build] {} ({})", err.main(), err.span());
-                        log.diagnostic(err);
-
-                        for (unit_path, unit) in &parsed_output.units {
-                            let version = filesystem.file_version(unit_path);
-                            diagnostics.file_diagnostics(unit_path.to_path_buf(), version);
-
-                            eprintln!(
-                                "[build] processing unit: {} ({})",
-                                unit.ident,
-                                unit_path.display()
-                            );
-
-                            let unit_path = Arc::new(unit_path.clone());
-
-                            let mut token_builder =
-                                SemanticTokenBuilder::new(unit_path.clone(), 0, 0);
-                            token_builder.add_unit(unit);
-
-                            let tokens = token_builder.finish();
-                            self.semantic_tokens.insert(unit_path, tokens);
-                        }
-                    },
+                    let tokens = token_builder.finish();
+                    self.semantic_tokens.insert(unit_path, tokens);
                 }
 
+                self.module = Some(module);
                 self.parse_output = Some(parsed_output);
             },
 

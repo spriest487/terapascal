@@ -371,7 +371,7 @@ fn build_with_log(fs: &impl Filesystem, input: BuildInput, log: &mut BuildLog) -
 
     // reverse the compilation order for typechecking, modules should be processed after all their
     // dependencies
-    let typed_module = typecheck(parse_output.units.iter(), input.compile_opts.verbose, log)?;
+    let typed_module = typecheck(parse_output.units.iter(), input.compile_opts.verbose, log);
 
     if input.output_stage == BuildStage::Typecheck {
         return Ok(BuildArtifact::TypedModule(typed_module));

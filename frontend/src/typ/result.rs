@@ -464,7 +464,6 @@ pub type TypeResult<T> = Result<T, TypeError>;
 
 impl<T> ErrorContinue for TypeResult<T> {
     type Item = T;
-    type Error = TypeError;
     type ErrorSink<'a> = &'a mut Context;
 
     fn or_continue_with<DefaultFn>(self, ctx: &mut Context, f: DefaultFn) -> Self::Item

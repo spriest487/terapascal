@@ -1,15 +1,19 @@
-use terapascal_common::span::Spanned;
 use crate::ast;
 use crate::typ::ast::InterfaceDecl;
+use crate::typ::builtin_string_type;
+use crate::typ::test::expect_type_error;
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
-use crate::typ::{builtin_string_name, Module, Primitive, Type};
+use crate::typ::Module;
 use crate::typ::NameError;
+use crate::typ::Primitive;
+use crate::typ::Type;
 use crate::typ::TypeError;
-use crate::typ::TypeResult;
 
 fn get_decl_iface<'a>(module: &'a Module, unit_name: &str, name: &str) -> &'a InterfaceDecl {
-    let unit = module.units.iter()
+    let unit = module
+        .units
+        .iter()
         .find(|u| u.unit.ident.to_string() == unit_name)
         .unwrap();
 
@@ -23,7 +27,8 @@ fn get_decl_iface<'a>(module: &'a Module, unit_name: &str, name: &str) -> &'a In
             match item {
                 ast::TypeDeclItem::Interface(iface_decl) => Some(iface_decl),
                 _ => None,
-            }})
+            }
+        })
         .unwrap()
         .as_ref()
 }
@@ -31,7 +36,7 @@ fn get_decl_iface<'a>(module: &'a Module, unit_name: &str, name: &str) -> &'a In
 #[test]
 fn self_ty_is_valid_in_interface() {
     let module = module_from_src(
-        "test", 
+        "test",
         r"
         implementation
 
@@ -39,10 +44,10 @@ fn self_ty_is_valid_in_interface() {
             function A(a: Self): Self;
         end;
 
-        end."
+        end.",
     );
-    
-    let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");    
+
+    let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");
     let method_a = &my_iface_decl.methods[0];
     assert_eq!("Self", method_a.decl.param_type(1).unwrap().to_string());
     assert_eq!("Self", method_a.decl.result_ty.to_string());
@@ -58,12 +63,15 @@ fn self_ty_is_valid_in_interface_sig_with_arrays() {
             function A(a: array of Self): array[2] of Self;
         end;
         
-        end."
+        end.",
     );
 
     let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");
     let method_a = &my_iface_decl.methods[0];
-    assert_eq!("array of Self", method_a.decl.param_type(1).unwrap().to_string());
+    assert_eq!(
+        "array of Self",
+        method_a.decl.param_type(1).unwrap().to_string()
+    );
     assert_eq!("array[2] of Self", method_a.decl.result_ty.to_string());
 }
 
@@ -80,23 +88,26 @@ fn self_ty_is_valid_in_interface_sig_with_generics() {
             function A(a: MyGeneric[Self]): MyGeneric[Self];
         end;
         
-        end."
+        end.",
     );
 
     let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");
     let method_a = &my_iface_decl.methods[0];
-    assert_eq!("test.MyGeneric[Self]", method_a.decl.param_type(1).unwrap().to_string());
+    assert_eq!(
+        "test.MyGeneric[Self]",
+        method_a.decl.param_type(1).unwrap().to_string()
+    );
     assert_eq!("test.MyGeneric[Self]", method_a.decl.result_ty.to_string());
 }
 
-fn expect_self_not_found_err(result: TypeResult<Module>) {
-    match result {
-        Ok(..) => panic!("expected type error, but got success"),
-        Err(TypeError::NameError { err: NameError::NotFound { ident, .. }, .. }) => {
-            assert_eq!("Self", ident.to_string());
-        }
-        Err(err) => panic!("expected NotFound for Self, got:\n{}\n{}", err, err.span())
-    }
+fn expect_self_not_found_err(result: Result<Module, Vec<TypeError>>) {
+    expect_type_error(result, |err| match err {
+        TypeError::NameError {
+            err: NameError::NotFound { ident, .. },
+            ..
+        } => ident.to_string() == "Self",
+        _ => false,
+    })
 }
 
 #[test]
@@ -110,7 +121,7 @@ fn self_ty_not_valid_in_class() {
             function A: Self;
         end;
 
-        end."
+        end.",
     );
 
     expect_self_not_found_err(result);
@@ -127,7 +138,7 @@ fn self_ty_not_valid_in_variant() {
             A: Self;
         end;
         
-        end."
+        end.",
     );
 
     expect_self_not_found_err(result);
@@ -143,17 +154,18 @@ fn set_decl_with_mixed_item_types_is_invalid() {
         type MySet = set of 1 as Integer..2 as Byte;
         
         end.
-        "
+        ",
     );
 
-    match result {
-        Ok(..) => panic!("expected error"),
-        Err(TypeError::TypeMismatch { expected, actual, .. }) => {
-            assert_eq!(Type::Primitive(Primitive::Int32), expected);
-            assert_eq!(Type::Primitive(Primitive::UInt8), actual);
-        }
-        Err(err) => panic!("expected type mismatch error, got: {}", err)
-    }
+    expect_type_error(result, |err| match err {
+        TypeError::TypeMismatch {
+            expected, actual, ..
+        } => {
+            Type::Primitive(Primitive::Int32) == *expected
+                && Type::Primitive(Primitive::UInt8) == *actual
+        },
+        _ => false,
+    });
 }
 
 #[test]
@@ -166,22 +178,18 @@ fn set_decl_with_non_numeric_types_is_invalid() {
         type MySet = set of 'hello'..'world';
         
         end.
-        "
+        ",
     );
 
-    match result {
-        Ok(..) => panic!("expected error"),
-        Err(TypeError::InvalidSetValueType { actual, .. }) => {
-            let string_ty = Type::class(builtin_string_name());
-            assert_eq!(string_ty, actual);
-        }
-        Err(err) => panic!("expected set values must be numeric error, got: {}", err)
-    }
+    expect_type_error(result, |err| match err {
+        TypeError::InvalidSetValueType { actual, .. } => *actual == builtin_string_type(),
+        _ => false,
+    });
 }
 
 #[test]
 fn set_decl_with_characters_is_valid() {
-    let result = try_module_from_src(
+    module_from_src(
         "test",
         r"
         implementation
@@ -189,18 +197,13 @@ fn set_decl_with_characters_is_valid() {
         type MySet = set of 'a'..'c';
         
         end.
-        "
+        ",
     );
-
-    if let Err(err) = result {
-        panic!("{}", err)
-    }
 }
-
 
 #[test]
 fn set_decl_with_enum_members_is_valid() {
-    let result = try_module_from_src(
+    module_from_src(
         "test",
         r"
         implementation
@@ -209,10 +212,6 @@ fn set_decl_with_enum_members_is_valid() {
         type MySet = set of NumOne..NumThree;
 
         end.
-        "
+        ",
     );
-
-    if let Err(err) = result {
-        panic!("{}", err)
-    }
 }

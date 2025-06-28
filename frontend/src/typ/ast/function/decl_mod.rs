@@ -1,8 +1,10 @@
 use crate::ast;
+use crate::result::ErrorContinue;
 use crate::typ::ast::const_eval_string;
 use crate::typ::ast::typecheck_expr;
-use crate::typ::string_type;
+use crate::typ::builtin_string_type;
 use crate::typ::Context;
+use crate::typ::EvaluatedConstExpr;
 use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
@@ -12,13 +14,17 @@ use terapascal_common::span::Spanned;
 pub type DeclMod = ast::DeclMod<Value>;
 
 impl DeclMod {
-    pub fn typecheck_mods(decl: &ast::FunctionDecl, is_method: bool, ctx: &mut Context) -> TypeResult<Vec<Self>> {
+    pub fn typecheck_mods(
+        decl: &ast::FunctionDecl,
+        is_method: bool,
+        ctx: &mut Context,
+    ) -> Vec<Self> {
         let mut results: Vec<DeclMod> = Vec::new();
-        
+
         // incompatible modifiers
         let mut external = None;
         let mut overload = None;
-        
+
         let mut invalid_method_mods = Vec::new();
 
         for decl_mod in &decl.mods {
@@ -26,26 +32,30 @@ impl DeclMod {
             let existing = results
                 .iter()
                 .find(|existing_mod| existing_mod.keyword() == decl_mod.keyword());
-            
+
             if let Some(existing_mod) = existing {
-                return Err(TypeError::DuplicateDeclMod {
+                ctx.error(TypeError::DuplicateDeclMod {
                     keyword: decl_mod.keyword().to_string(),
                     span: decl_mod.span().clone(),
                     existing: existing_mod.span().clone(),
                 });
             }
-            
+
             let result = match decl_mod {
                 ast::DeclMod::External { src, span, kw_span } => {
-                    check_incompatible_mod(&overload, Self::OVERLOAD_WORD, span, Self::EXTERNAL_WORD)?;
+                    check_incompatible_mod(
+                        &overload,
+                        Self::OVERLOAD_WORD,
+                        span,
+                        Self::EXTERNAL_WORD,
+                    )
+                    .or_continue(ctx, ());
 
                     if let Some(decl_type_params) = &decl.name.type_params {
-                        let ty_args_span = decl_type_params.items[0].span()
-                            .to(decl_type_params.items
-                                .last()
-                                .unwrap()
-                                .span());
-                        return Err(TypeError::ExternalGenericFunction {
+                        let params_end = decl_type_params.items.last().unwrap().span();
+                        let ty_args_span = decl_type_params.items[0].span().to(params_end);
+
+                        ctx.error(TypeError::ExternalGenericFunction {
                             func: decl.name.ident.clone(),
                             extern_modifier: span.clone(),
                             ty_args: ty_args_span,
@@ -53,11 +63,14 @@ impl DeclMod {
                     }
 
                     external = Some(span.clone());
-                    
-                    let string_ty = string_type(ctx)?;
 
-                    let src = typecheck_expr(src, &string_ty, ctx)?;
-                    let src_str = const_eval_string(&src, ctx)?;
+                    let string_ty = builtin_string_type();
+
+                    let src_str = typecheck_expr(src, &string_ty, ctx)
+                        .and_then(|src| const_eval_string(&src, ctx))
+                        .or_continue_with(ctx, || {
+                            EvaluatedConstExpr::create_string("", src.span().clone())
+                        });
 
                     let extern_mod = DeclMod::External {
                         src: src_str,
@@ -70,7 +83,7 @@ impl DeclMod {
                     }
 
                     extern_mod
-                }
+                },
 
                 ast::DeclMod::Inline(span) => {
                     let inline_mod = DeclMod::Inline(span.clone());
@@ -91,8 +104,13 @@ impl DeclMod {
                 },
 
                 ast::DeclMod::Overload(span) => {
-                    check_incompatible_mod(&external, Self::EXTERNAL_WORD, span, Self::OVERLOAD_WORD)?;
-                    
+                    check_incompatible_mod(
+                        &external,
+                        Self::EXTERNAL_WORD,
+                        span,
+                        Self::OVERLOAD_WORD,
+                    ).or_continue(ctx, ());
+
                     overload = Some(span.clone());
                     DeclMod::Overload(span.clone())
                 },
@@ -102,17 +120,22 @@ impl DeclMod {
         }
 
         if is_method && !invalid_method_mods.is_empty() {
-            return Err(TypeError::InvalidMethodModifiers {
+            ctx.error(TypeError::InvalidMethodModifiers {
                 mods: invalid_method_mods,
                 span: decl.span.clone(),
-            })
+            });
         }
 
-        Ok(results)
+        results
     }
 }
 
-fn check_incompatible_mod(first_span: &Option<Span>, first_kw: &str, span: &Span, kw: &str) -> TypeResult<()> {
+fn check_incompatible_mod(
+    first_span: &Option<Span>,
+    first_kw: &str,
+    span: &Span,
+    kw: &str,
+) -> TypeResult<()> {
     if let Some(first_span) = first_span {
         return Err(TypeError::IncompatibleDeclMod {
             first_keyword: first_kw.to_string(),
@@ -121,6 +144,6 @@ fn check_incompatible_mod(first_span: &Option<Span>, first_kw: &str, span: &Span
             second_span: span.clone(),
         });
     }
-    
+
     Ok(())
 }

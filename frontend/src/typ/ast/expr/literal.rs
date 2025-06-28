@@ -1,8 +1,8 @@
 use crate::ast;
 use crate::typ::ast::Expr;
+use crate::typ::builtin_string_type;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::string_to_char_lit;
-use crate::typ::string_type;
 use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::Primitive;
@@ -271,7 +271,7 @@ pub fn typecheck_literal(
                 }
             }
 
-            let value = TypedValue::literal(string_type(ctx)?, span.clone());
+            let value = TypedValue::literal(builtin_string_type(), span.clone());
 
             Ok(Expr::literal(Literal::String(s.clone()), value))
         }

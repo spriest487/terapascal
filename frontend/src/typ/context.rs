@@ -59,6 +59,7 @@ use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
 use std::sync::Arc;
 use terapascal_common::span::*;
+use crate::result::ErrorContinue;
 
 #[derive(Clone, Debug)]
 pub struct Context {
@@ -672,7 +673,7 @@ impl Context {
     }
 
     /// declare the type params of a function in the local scope
-    pub fn declare_type_params(&mut self, names: &TypeParamList) -> TypeResult<()> {
+    pub fn declare_type_params(&mut self, names: &TypeParamList) {
         for param in names.items.iter() {
             let is_ty = param
                 .constraint
@@ -688,10 +689,8 @@ impl Context {
                 })),
                 Visibility::Implementation,
                 false,
-            )?;
+            ).or_continue(self, ());
         }
-
-        Ok(())
     }
 
     pub fn declare_self_ty(&mut self, ty: Type, span: Span) -> TypeResult<()> {

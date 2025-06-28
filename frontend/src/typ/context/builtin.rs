@@ -121,6 +121,10 @@ pub fn builtin_string_name() -> Symbol {
     }
 }
 
+pub fn builtin_string_type() -> Type {
+    Type::class(builtin_string_name())
+}
+
 pub fn is_system_string_name(sym: &Symbol) -> bool {
     sym.type_params.is_none()
         && sym.full_path.len() == 2

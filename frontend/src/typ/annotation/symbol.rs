@@ -60,14 +60,14 @@ impl Symbol {
                     .clone()
                     .to_unconstrained_params();
                 
-                let params = typecheck_type_params(&param_list, ctx)?;
+                let params = typecheck_type_params(&param_list, ctx);
                 Some(params)
             },
 
             (Some(param_name_list), Some(where_clause)) => {
                 let params = where_clause
                     .clone()
-                    .typecheck_constrained_params(param_name_list.clone())?;
+                    .typecheck_constrained_params(param_name_list.clone(), ctx);
 
                 Some(params)
             }

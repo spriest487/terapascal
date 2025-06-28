@@ -5,18 +5,20 @@ use crate::typ::Module;
 use crate::typ::ModuleUnit;
 use crate::typ::Primitive;
 use crate::typ::Type;
-use crate::typ::TypeResult;
+use crate::typ::TypeError;
 use std::collections::HashMap;
+use std::fmt;
 use std::iter;
 use std::path::PathBuf;
 use terapascal_common::build_log::BuildLog;
-use terapascal_common::fs::{DefaultFilesystem, Filesystem};
-use terapascal_common::span::Spanned;
+use terapascal_common::fs::DefaultFilesystem;
+use terapascal_common::fs::Filesystem;
+use terapascal_common::DiagnosticOutput;
 
 const INT32: Type = Type::Primitive(Primitive::Int32);
 const BOOL: Type = Type::Primitive(Primitive::Boolean);
 
-pub fn try_module_from_src(unit_name: &str, src: &str) -> TypeResult<Module> {
+pub fn try_module_from_src(unit_name: &str, src: &str) -> Result<Module, Vec<TypeError>> {
     try_module_from_srcs(vec![(unit_name, src)])
 }
 
@@ -24,7 +26,9 @@ pub fn module_from_src(unit_name: &str, src: &str) -> Module {
     module_from_srcs(vec![(unit_name, src)])
 }
 
-pub fn try_module_from_srcs<'a, UnitSources>(unit_srcs: UnitSources) -> TypeResult<Module>
+pub fn try_module_from_srcs<'a, UnitSources>(
+    unit_srcs: UnitSources,
+) -> Result<Module, Vec<TypeError>>
 where
     UnitSources: IntoIterator<Item = (&'a str, &'a str)>,
 {
@@ -32,7 +36,8 @@ where
 
     // always include the system unit from the configure unit path
     let unit_path = PathBuf::from(env!("TERAPASCAL_UNITS"));
-    let system_src = DefaultFilesystem.read_source(&unit_path.join("System.tpas"))
+    let system_src = DefaultFilesystem
+        .read_source(&unit_path.join("System.tpas"))
         .unwrap()
         .into_owned();
 
@@ -47,15 +52,27 @@ where
 
         units.push((PathBuf::from(unit_name), unit));
     }
-    
+
     units.reverse();
 
     let mut log = BuildLog::new();
-    let module = Module::typecheck(units.iter().map(|(p, u)| (p, u)), false, &mut log)?;
 
-    match module.root_ctx.errors().get(0) {
-        Some(err) => Err(err.clone()),
-        None => Ok(module),
+    let units_by_path = units.iter().map(|(p, u)| (p, u));
+
+    let module = Module::typecheck(units_by_path, false, &mut log);
+
+    if !module.root_ctx.errors().is_empty() {
+        Err(module.root_ctx.errors().to_vec())
+    } else {
+        Ok(module)
+    }
+}
+
+pub fn print_errors(errors: &[TypeError]) {
+    for error in errors {
+        for message in error.to_messages() {
+            eprintln!("{}", message);
+        }
     }
 }
 
@@ -63,16 +80,22 @@ pub fn module_from_srcs<'a, UnitSources>(unit_srcs: UnitSources) -> Module
 where
     UnitSources: IntoIterator<Item = (&'a str, &'a str)>,
 {
-    try_module_from_srcs(unit_srcs)
-        .unwrap_or_else(|err| panic!("{}\n{}", err, err.span()))
+    try_module_from_srcs(unit_srcs).unwrap_or_else(|errors| {
+        print_errors(&errors);
+        panic!("module compilation failed with {} errors", errors.len())
+    })
 }
 
 pub fn unit_from_src(unit_name: &'static str, src: &'static str) -> ModuleUnit {
-    try_unit_from_src(unit_name, src)
-        .unwrap_or_else(|err| panic!("{}\n{}", err, err.span()))
+    let module = module_from_src(unit_name, src);
+
+    module.units.into_iter().next().unwrap()
 }
 
-pub fn try_unit_from_src(unit_name: &'static str, src: &'static str) -> TypeResult<ModuleUnit> {
+pub fn try_unit_from_src(
+    unit_name: &'static str,
+    src: &'static str,
+) -> Result<ModuleUnit, Vec<TypeError>> {
     let module = try_module_from_src(unit_name, src)?;
 
     Ok(module.units.into_iter().next().unwrap())
@@ -90,6 +113,21 @@ where
     }
 
     units
+}
+
+pub fn expect_type_error<T, Pred>(result: Result<T, Vec<TypeError>>, predicate: Pred)
+where
+    T: fmt::Debug,
+    Pred: Fn(&TypeError) -> bool,
+{
+    let errors = result.expect_err("expected error, got success");
+
+    let has_err = errors.iter().any(predicate);
+
+    if !has_err {
+        print_errors(&errors);
+        panic!("unexpected error types")
+    }
 }
 
 #[test]

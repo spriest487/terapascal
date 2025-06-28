@@ -46,7 +46,8 @@ impl WhereClause {
     pub fn typecheck_constrained_params(
         self,
         param_names: ast::TypeList<Ident>,
-    ) -> TypeResult<TypeParamList> {
+        ctx: &mut Context,
+    ) -> TypeParamList {
         let param_count = param_names.len();
         let span = param_names.span;
 
@@ -70,13 +71,14 @@ impl WhereClause {
                         .any(|p| p.name == type_param_ident);
                     
                     if duplicate {
-                        return Err(TypeError::from_generic_err(GenericError::DuplicateConstraint { 
-                            constraint: matched_constraint.name 
-                        }, matched_constraint.span));
+                        ctx.error(TypeError::from_generic_err(GenericError::DuplicateConstraint { 
+                            constraint: matched_constraint.name.clone() 
+                        }, matched_constraint.span.clone()));
                     }
 
                     Some(matched_constraint)
                 },
+
                 None => None,
             };
 
@@ -101,12 +103,12 @@ impl WhereClause {
                 GenericError::UnexpectedConstraint { constraint: first_bad.name }
             };
 
-            return Err(TypeError::from_generic_err(err, first_bad.span));
+            ctx.error(TypeError::from_generic_err(err, first_bad.span));
         }
 
         assert_eq!(constrained_params.len(), param_count);
 
-        Ok(ast::TypeList::new(constrained_params, span))
+        ast::TypeList::new(constrained_params, span)
     }
 
     pub fn apply_generics(mut self, generic_ctx: &GenericContext) -> Self {

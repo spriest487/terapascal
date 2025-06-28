@@ -421,12 +421,11 @@ pub type AggregateParseResult<T> = AggregateResult<T, TracedError<ParseError>>;
 
 impl<T> ErrorContinue for ParseResult<T> {
     type Item = T;
-    type Error = TracedError<ParseError>;
-    type ErrorSink<'a> = &'a mut Vec<Self::Error>;
+    type ErrorSink<'a> = &'a mut Vec<TracedError<ParseError>>;
 
     fn or_continue_with<DefaultFn>(
         self,
-        errors: &mut Vec<Self::Error>,
+        errors: Self::ErrorSink<'_>,
         f: DefaultFn,
     ) -> Self::Item
     where
@@ -442,7 +441,7 @@ impl<T> ErrorContinue for ParseResult<T> {
         }
     }
 
-    fn ok_or_continue(self, errors: &mut Vec<Self::Error>) -> Option<Self::Item> {
+    fn ok_or_continue(self, errors: Self::ErrorSink<'_>) -> Option<Self::Item> {
         self.map(Some).or_continue(errors, None)
     }
 }

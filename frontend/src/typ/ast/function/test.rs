@@ -1,10 +1,16 @@
-use crate::ast::{FunctionDeclKind, FunctionParamItem};
+use crate::ast::FunctionDeclKind;
+use crate::ast::FunctionParamItem;
+use crate::ast::Ident;
 use crate::ast::TypeConstraint;
-use crate::typ::ast::{specialize_func_decl, FunctionDeclContext, FunctionName};
+use crate::typ::ast::specialize_func_decl;
 use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::FunctionDeclContext;
+use crate::typ::ast::FunctionName;
 use crate::typ::ast::FunctionParamGroup;
 use crate::typ::ast::WhereClause;
-use crate::typ::{builtin_displayable_name, builtin_span, TypeName, TypeParam};
+use crate::typ::builtin_displayable_name;
+use crate::typ::builtin_span;
+use crate::typ::test::expect_type_error;
 use crate::typ::test::module_from_src;
 use crate::typ::test::try_module_from_src;
 use crate::typ::test::try_module_from_srcs;
@@ -15,13 +21,13 @@ use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
 use crate::typ::TypeError;
+use crate::typ::TypeName;
+use crate::typ::TypeParam;
 use crate::typ::TypeParamList;
 use crate::typ::TypeParamListItem;
-use crate::typ::TypeResult;
-use crate::ast::Ident;
+use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 
 fn test_span() -> Span {
     Span::zero("test")
@@ -41,7 +47,7 @@ fn make_ty_param(name: &str) -> TypeParam {
 
 fn make_ty_param_of(name: &str, constraint: Type) -> TypeParam {
     let name = test_ident(name);
-    
+
     TypeParam {
         name: name.clone(),
         constraint: Some(TypeConstraint {
@@ -70,13 +76,13 @@ fn make_ty_param_ty(param_list: &[TypeParam], pos: usize) -> Type {
 fn make_decl(
     owning_ty: Option<Type>,
     name: &str,
-    ty_params: impl IntoIterator<Item=TypeParam>,
+    ty_params: impl IntoIterator<Item = TypeParam>,
     where_clause: Option<WhereClause>,
-    params: impl IntoIterator<Item=Type>,
-    return_ty: Type
+    params: impl IntoIterator<Item = Type>,
+    return_ty: Type,
 ) -> FunctionDecl {
     let test_span = test_span();
-    
+
     let ty_params: Vec<_> = ty_params.into_iter().collect();
     let ty_params_list = if ty_params.len() == 0 {
         None
@@ -121,13 +127,15 @@ fn specialized_func_decl_has_specialized_return_ty() {
 
     let decl = make_decl(None, "A", ty_params, None, [], return_ty);
     let ctx = Context::root();
-    
+
     let args = TypeArgList::new([TypeName::inferred(Primitive::Int32)], test_span());
 
-    let specialized = specialize_func_decl(&decl, &args, &ctx)
-        .unwrap();
-    
-    assert_eq!(Type::Primitive(Primitive::Int32), *specialized.result_ty.ty());
+    let specialized = specialize_func_decl(&decl, &args, &ctx).unwrap();
+
+    assert_eq!(
+        Type::Primitive(Primitive::Int32),
+        *specialized.result_ty.ty()
+    );
 }
 
 #[test]
@@ -137,36 +145,48 @@ fn specialized_func_decl_has_specialized_param_tys() {
     let arg0_ty = make_ty_param_ty(&ty_params, 1);
     let arg1_ty = make_ty_param_ty(&ty_params, 0);
 
-    let decl = make_decl(None, "A", ty_params, None, [arg0_ty, arg1_ty], Type::Nothing);
+    let decl = make_decl(
+        None,
+        "A",
+        ty_params,
+        None,
+        [arg0_ty, arg1_ty],
+        Type::Nothing,
+    );
     let ctx = Context::root();
 
-    let args = TypeArgList::new([
-        TypeName::inferred(Primitive::Int32),
-        TypeName::inferred(Primitive::Boolean),
-    ], test_span());
+    let args = TypeArgList::new(
+        [TypeName::inferred(Primitive::Int32), TypeName::inferred(Primitive::Boolean)],
+        test_span(),
+    );
 
-    let specialized = specialize_func_decl(&decl, &args, &ctx)
-        .unwrap();
+    let specialized = specialize_func_decl(&decl, &args, &ctx).unwrap();
 
-    assert_eq!(Type::Primitive(Primitive::Boolean), *specialized.param_type(0).unwrap().ty());
-    assert_eq!(Type::Primitive(Primitive::Int32), *specialized.param_type(1).unwrap().ty());
+    assert_eq!(
+        Type::Primitive(Primitive::Boolean),
+        *specialized.param_type(0).unwrap().ty()
+    );
+    assert_eq!(
+        Type::Primitive(Primitive::Int32),
+        *specialized.param_type(1).unwrap().ty()
+    );
 }
 
 #[test]
 fn specialized_func_decl_checks_constraint() {
     let displayable = Type::interface(builtin_displayable_name().full_path);
-    
+
     let ty_params = [make_ty_param_of("T", displayable)];
 
     let decl = make_decl(None, "A", ty_params, None, [], Type::Nothing);
-    
+
     let ctx = Context::root();
-    
+
     // Any should implement no interfaces
     let args = TypeArgList::new([TypeName::inferred(Type::Any)], test_span());
 
     match specialize_func_decl(&decl, &args, &ctx) {
-        Err(GenericError::ConstraintNotSatisfied { .. }) => { 
+        Err(GenericError::ConstraintNotSatisfied { .. }) => {
             // ok
         },
         Err(other) => panic!("expected constraint violation error, but got {other}"),
@@ -176,7 +196,9 @@ fn specialized_func_decl_checks_constraint() {
 
 #[test]
 fn duplicate_overload_is_error() {
-    let result = try_module_from_src("Test", r"
+    let result = try_module_from_src(
+        "Test",
+        r"
     interface
 
     function A(x: Boolean); overload;
@@ -184,69 +206,65 @@ fn duplicate_overload_is_error() {
     function A(x: Integer); overload;
     
     end.
-    ");
-    
-    match result {
-        Err(TypeError::InvalidFunctionOverload { kind, ident, .. }) => {
-            assert_eq!("A", ident.name.as_str());
-            assert_eq!(
-                InvalidOverloadKind::Duplicate(1), 
-                kind
-            );
-        }
+    ",
+    );
 
-        Ok(..) => panic!("expected an error"),
-        Err(other) => panic!("expected invalid overload error, got:\n{}\n{}", other, other.span()),
-    }
+    expect_invalid_overload("A", InvalidOverloadKind::Duplicate(1), result);
 }
 
 #[test]
 fn missing_overload_modifier_on_existing_is_error() {
-    let result = try_module_from_src("Test", r"
+    let result = try_module_from_src(
+        "Test",
+        r"
     interface
 
     function A(x: Boolean);
     function A(x: Integer); overload;
     
     end.
-    ");
+    ",
+    );
 
-    expect_missing_overload(result);
+    expect_invalid_overload("A", InvalidOverloadKind::MissingOverloadModifier, result);
 }
 
 #[test]
 fn missing_overload_modifier_on_new_is_error() {
-    let result = try_module_from_src("Test", r"
+    let result = try_module_from_src(
+        "Test",
+        r"
     interface
     
     function A(x: Boolean); overload;
     function A(x: Integer);
     
     end.
-    ");
+    ",
+    );
 
-    expect_missing_overload(result);
+    expect_invalid_overload("A", InvalidOverloadKind::MissingOverloadModifier, result);
 }
 
-fn expect_missing_overload<T>(result: TypeResult<T>) {
-    match result {
-        Err(TypeError::InvalidFunctionOverload { kind, ident, .. }) => {
-            assert_eq!("A", ident.name.as_str());
-            assert_eq!(
-                InvalidOverloadKind::MissingOverloadModifier,
-                kind
-            );
-        }
+fn expect_invalid_overload<T: fmt::Debug>(
+    expect_ident: &str,
+    expect_kind: InvalidOverloadKind,
+    result: Result<T, Vec<TypeError>>,
+) {
+    expect_type_error(result, |err| match err {
+        TypeError::InvalidFunctionOverload { kind, ident, .. } => {
+            *kind == expect_kind && ident.as_str() == expect_ident
+        },
 
-        Err(other) => panic!("expected invalid overload error, got:\n{}", other),
-        
-        Ok(..) => panic!("expected an error"),
-    }
+        _ => false,
+    });
 }
 
 #[test]
 fn mixed_visibility_overload_is_ok() {
-    module_from_src("Test", r"
+    module_from_src(
+        "Test",
+        r"
         interface
         
         function A(x: Boolean); overload;
@@ -262,13 +280,16 @@ fn mixed_visibility_overload_is_ok() {
         end;
         
         end.
-    ");
+    ",
+    );
 }
 
 #[test]
 fn calling_invisible_function_from_outside_unit_is_err() {
     let srcs = [
-        ("UnitA", r"
+        (
+            "UnitA",
+            r"
             interface
             
             implementation
@@ -278,24 +299,30 @@ fn calling_invisible_function_from_outside_unit_is_err() {
             end;
             
             end.
-        "),
-        ("UnitB", r"
+        ",
+        ),
+        (
+            "UnitB",
+            r"
             implementation
             uses UnitA;
             
             initialization
                 A(123);
             end.
-        "),
+        ",
+        ),
     ];
 
-    expect_not_visible_err(try_module_from_srcs(srcs));
+    expect_not_visible_err("UnitA.A", try_module_from_srcs(srcs));
 }
 
 #[test]
 fn calling_less_visible_overload_from_outside_unit_is_err() {
     let srcs = [
-        ("UnitA", r"
+        (
+            "UnitA",
+            r"
             interface
             
             function A(x: Boolean); overload;
@@ -311,28 +338,28 @@ fn calling_less_visible_overload_from_outside_unit_is_err() {
             end;
             
             end.
-        "),
-        ("UnitB", r"
+        ",
+        ),
+        (
+            "UnitB",
+            r"
             implementation
             uses UnitA;
             
             initialization
                 A(123);
             end.
-        "),
+        ",
+        ),
     ];
-    
-    expect_not_visible_err(try_module_from_srcs(srcs));
+
+    expect_not_visible_err("UnitA.A", try_module_from_srcs(srcs));
 }
 
-fn expect_not_visible_err<T>(result: TypeResult<T>) {
-    match result {
-        Err(TypeError::NameNotVisible { name, .. }) => {
-            assert_eq!("UnitA.A", name.to_string());
-        }
+fn expect_not_visible_err<T: fmt::Debug>(expect_name: &str, result: Result<T, Vec<TypeError>>) {
+    expect_type_error(result, |err| match err {
+        TypeError::NameNotVisible { name, .. } => name.to_string() == expect_name,
 
-        Err(other) => panic!("expected name not visible error, got: {}", other),
-
-        Ok(..) => panic!("expected name not visible error, got success"),
-    }
+        _ => false,
+    });
 }

@@ -1,4 +1,5 @@
 use crate::ast;
+use crate::result::ErrorContinue;
 use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::GenericError;
@@ -6,7 +7,6 @@ use crate::typ::GenericResult;
 use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeName;
-use crate::typ::TypeResult;
 use crate::typ::Value;
 use std::fmt;
 use std::sync::Arc;
@@ -88,13 +88,14 @@ impl TypeParamList {
 pub fn typecheck_type_params(
     type_params: &ast::TypeList<ast::TypeParam>,
     ctx: &mut Context,
-) -> TypeResult<TypeParamList> {
+) -> TypeParamList {
     let mut items = Vec::new();
 
     for ty_param in &type_params.items {
         let constraint = match &ty_param.constraint {
             Some(constraint) => {
-                let is_ty = typecheck_typename(&constraint.is_ty, ctx)?;
+                let is_ty = typecheck_typename(&constraint.is_ty, ctx)
+                    .or_continue_with(ctx, TypeName::nothing);
                 
                 Some(ast::TypeConstraint {
                     is_kw_span: constraint.is_kw_span.clone(),
@@ -113,7 +114,7 @@ pub fn typecheck_type_params(
         });
     }
 
-    Ok(TypeParamList::new(items, type_params.span().clone()))
+    TypeParamList::new(items, type_params.span().clone())
 }
 
 pub fn validate_generic_constraints(args: &TypeArgList, params: &TypeParamList, ctx: &Context) -> GenericResult<()> {

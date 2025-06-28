@@ -1,6 +1,5 @@
 pub trait ErrorContinue: Sized {
     type Item;
-    type Error;
     type ErrorSink<'a>;
 
     fn or_continue(

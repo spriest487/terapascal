@@ -6,7 +6,7 @@ pub mod function;
 mod ufcs;
 
 use crate::ast;
-use crate::ast::Ident;
+use crate::ast::{Ident, LiteralItem};
 use crate::ast::IdentPath;
 use crate::ast::SemanticHint;
 use crate::ast::{Annotation, ConstExprValue};
@@ -22,7 +22,7 @@ use crate::typ::method::MethodValue;
 use crate::typ::overload::OverloadValue;
 use crate::typ::result::*;
 use crate::typ::ty::*;
-use crate::typ::Context;
+use crate::typ::{builtin_string_type, Context};
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
@@ -359,6 +359,23 @@ impl From<UfcsValue> for Value {
 pub struct EvaluatedConstExpr<Val> {
     pub expr: Box<Expr>,
     pub value: Val,
+}
+
+impl EvaluatedConstExpr<String> {
+    pub fn create_string(s: impl Into<String>, span: Span) -> Self {
+        let s = s.into();
+
+        let literal = Literal::String(Arc::new(s.clone()));
+        let value = Value::from(TypedValue::literal(builtin_string_type(), span));
+
+        EvaluatedConstExpr {
+            value: s,
+            expr: Box::new(Expr::Literal(LiteralItem {
+                annotation: value.clone(),
+                literal,
+            }))
+        }
+    }
 }
 
 impl<T> fmt::Display for EvaluatedConstExpr<T> {

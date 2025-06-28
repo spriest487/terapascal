@@ -2,6 +2,7 @@
 mod test;
 mod decl_mod;
 
+use std::borrow::Cow;
 pub use self::decl_mod::*;
 use crate::ast;
 use crate::ast::{FunctionDeclKind, FunctionParamItem};
@@ -48,6 +49,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::result::ErrorContinue;
 
 pub const SELF_PARAM_NAME: &str = "self";
 pub const SELF_TY_NAME: &str = "Self";
@@ -181,31 +183,35 @@ impl fmt::Display for FunctionName {
 }
 
 impl FunctionDecl {
-    pub fn typecheck(decl: &ast::FunctionDecl, is_def: bool, ctx: &mut Context) -> TypeResult<Self> {
-        let tags = Tag::typecheck_tags(&decl.tags, ctx)?;
+    pub fn typecheck(decl: &ast::FunctionDecl, is_def: bool, ctx: &mut Context) -> Self {
+        let tags = Tag::typecheck_tags(&decl.tags, ctx);
         
         let enclosing_ty = ctx.current_enclosing_ty().cloned();
         
         let decl_context = match (&decl.name.owning_ty_qual, &enclosing_ty) {
             (Some(type_qual), Some(..)) => {
-                return Err(TypeError::InvalidMethodOwningType {
+                ctx.error(TypeError::InvalidMethodOwningType {
                     method_ident: decl.name.ident.clone(),
                     span: type_qual.span().clone()
                 });
+
+                FunctionDeclContext::FreeFunction
             }
 
             (None, None) if is_def && decl.kind.must_be_method() => {
-                return Err(TypeError::MethodDeclMissingType {
+                ctx.error(TypeError::MethodDeclMissingType {
                     span: decl.name.span().clone(),
                     ident: decl.name.ident.clone(),
                     kind: decl.kind,
-                })
+                });
+
+                FunctionDeclContext::FreeFunction
             }
 
             (Some(owning_ty_name), None) => {
-                let typename = typecheck_type_path(owning_ty_name, ctx)?;
-                
-                FunctionDeclContext::method_def(typename)
+                typecheck_type_path(owning_ty_name, ctx)
+                    .map(FunctionDeclContext::method_def)
+                    .or_continue(ctx, FunctionDeclContext::FreeFunction)
             },
 
             (None, Some(enclosing_ty)) => {
@@ -233,38 +239,49 @@ impl FunctionDecl {
             // scope of the type, and can't be redeclared
             if let FunctionDeclContext::MethodDef { declaring_type, .. } = &decl_context {
                 if let Some(params) = declaring_type.type_params() {
-                    ctx.declare_type_params(params)?;
+                    ctx.declare_type_params(params);
                 }
             }
 
-            let decl_mods = DeclMod::typecheck_mods(&decl, is_method, ctx)?;
+            let decl_mods = DeclMod::typecheck_mods(&decl, is_method, ctx);
 
             let (type_params, where_clause) = match (&decl.name.type_params, &decl.where_clause) {
                 (Some(decl_type_params), None) => {
                     let unconstrained = decl_type_params.clone().to_unconstrained_params();
-                    let type_params = typecheck_type_params(&unconstrained, ctx)?;
+                    let type_params = typecheck_type_params(&unconstrained, ctx);
 
-                    ctx.declare_type_params(&type_params)?;
+                    ctx.declare_type_params(&type_params);
                     (Some(type_params), None)
                 },
 
                 (Some(decl_type_params), Some(where_clause)) => {
                     // TODO: need to typecheck these in a temp scope with the unconstrained params
                     // so we can support things like where T: ISomething[T]?
-
-                    let where_clause = WhereClause::typecheck(where_clause, ctx)?;
-                    let type_params = where_clause
-                        .clone()
-                        .typecheck_constrained_params(decl_type_params.clone())?;
+                    let where_clause = WhereClause::typecheck(where_clause, ctx)
+                        .ok_or_continue(ctx);
                     
-                    ctx.declare_type_params(&type_params)?;
+                    let type_params = if let Some(where_clause) = &where_clause {
+                        where_clause
+                            .clone()
+                            .typecheck_constrained_params(decl_type_params.clone(), ctx)
+                    } else {
+                        let unconstrained_params = decl_type_params
+                            .clone()
+                            .to_unconstrained_params();
+                        
+                        typecheck_type_params(&unconstrained_params, ctx)
+                    };
 
-                    (Some(type_params), Some(where_clause))
+                    ctx.declare_type_params(&type_params);
+
+                    (Some(type_params), where_clause)
                 }
 
                 (None, Some(unexpected_where)) => {
                     let err = GenericError::UnexpectedConstraintList;
-                    return Err(TypeError::from_generic_err(err, unexpected_where.span.clone()));
+                    ctx.error(TypeError::from_generic_err(err, unexpected_where.span.clone()));
+
+                    (None, None)
                 }
 
                 (None, None) => {
@@ -275,11 +292,14 @@ impl FunctionDecl {
             let result_ty = match decl.kind {
                 FunctionDeclKind::Function | FunctionDeclKind::ClassMethod =>  match &decl.result_ty {
                     ast::TypeName::Unspecified(..) => TypeName::inferred(Type::Nothing),
-                    ty_name => typecheck_typename(ty_name, ctx)?,
+                    
+                    ty_name => {
+                        typecheck_typename(ty_name, ctx).or_continue_with(ctx, TypeName::nothing)
+                    },
                 },
                 
                 FunctionDeclKind::Destructor => {
-                    TypeName::inferred(Type::Nothing)
+                    TypeName::nothing()
                 }
 
                 FunctionDeclKind::Constructor => {
@@ -304,8 +324,9 @@ impl FunctionDecl {
                         // specialize, not apply, because this is the declaring type of the ty params 
                         ctor_return_ty = ctor_return_ty
                             .specialize(&own_ty_args, ctx)
-                            .map_err(|e| TypeError::from_generic_err(e, decl.span.clone()))?
-                            .into_owned();
+                            .map(Cow::into_owned)
+                            .map_err(|e| TypeError::from_generic_err(e, decl.span.clone()))
+                            .or_continue_with(ctx, || ctor_return_ty.clone());
                     }
                     TypeName::inferred(ctor_return_ty)
                 }
@@ -315,7 +336,7 @@ impl FunctionDecl {
 
             match &decl_context {
                 FunctionDeclContext::FreeFunction => {
-                    param_groups = typecheck_params(decl, None, ctx)?;
+                    param_groups = typecheck_params(decl, None, ctx);
                 },
 
                 // method definition
@@ -334,12 +355,12 @@ impl FunctionDecl {
                             declaring_type.ty().clone(),
                             explicit_ty_span,
                             ctx
-                        )?)
+                        ).or_continue(ctx, Type::Nothing))
                     } else {
                         None
                     };
 
-                    param_groups = typecheck_params(decl, self_arg_ty, ctx)?;
+                    param_groups = typecheck_params(decl, self_arg_ty, ctx);
 
                     let param_sigs = param_groups
                         .iter()
@@ -355,7 +376,7 @@ impl FunctionDecl {
                     match declaring_type.ty() {
                         // can't define interface methods
                         Type::Interface(..) => {
-                            return Err(TypeError::AbstractMethodDefinition {
+                            ctx.error(TypeError::AbstractMethodDefinition {
                                 span: decl.span.clone(),
                                 owning_ty: declaring_type.ty().clone(),
                                 method: decl.name.ident.clone(),
@@ -372,7 +393,7 @@ impl FunctionDecl {
                                 decl.kind,
                                 ctx,
                                 decl.span(),
-                            )?;
+                            ).or_continue(ctx, ());
                         }
                     }
                 }
@@ -386,12 +407,13 @@ impl FunctionDecl {
                         Some(Type::MethodSelf)
                     } else if !decl.kind.is_static_method() {
                         let at = decl.name.ident.span();
-                        Some(specialize_self_ty(enclosing_type.clone(), at, ctx)?)
+                        Some(specialize_self_ty(enclosing_type.clone(), at, ctx)
+                            .or_continue(ctx, Type::Nothing))
                     } else {
                         None
                     };
 
-                    param_groups = typecheck_params(decl, self_param_ty, ctx)?;
+                    param_groups = typecheck_params(decl, self_param_ty, ctx);
                 }
             };
 
@@ -412,7 +434,7 @@ impl FunctionDecl {
                 mods: decl_mods,
             };
 
-            Ok(decl)
+            decl
         })
     }
 
@@ -509,7 +531,7 @@ fn typecheck_params(
     decl: &ast::FunctionDecl,
     implicit_self: Option<Type>,
     ctx: &mut Context
-) -> TypeResult<Vec<FunctionParamGroup>> {
+) -> Vec<FunctionParamGroup> {
     let mut params = Vec::new();
 
     if let Some(self_ty) = implicit_self {
@@ -537,7 +559,7 @@ fn typecheck_params(
             if let Some((existing_group, existing_item)) = find_name_dup {
                 let prev = &params[existing_group].param_items[existing_item];
 
-                return Err(TypeError::DuplicateNamedArg {
+                ctx.error(TypeError::DuplicateNamedArg {
                     name: Ident::new(&item.name, decl.name.span().clone()),
                     span: item.name_span
                         .clone()
@@ -549,7 +571,8 @@ fn typecheck_params(
             }
         }
 
-        let ty = typecheck_typename(&src_param.ty, ctx)?;
+        let ty = typecheck_typename(&src_param.ty, ctx)
+            .or_continue_with(ctx, TypeName::nothing);
 
         params.push(FunctionParamGroup {
             modifier: src_param.modifier.clone(),
@@ -559,7 +582,7 @@ fn typecheck_params(
         });
     }
 
-    Ok(params)
+    params
 }
 
 fn validate_method_def_matches_decl(
@@ -682,13 +705,13 @@ pub fn typecheck_func_def(
         // declare type parameters from the owning type, if this is a method
         if let Some(owning_ty) = decl.method_declaring_type() {
             if let Some(enclosing_ty_params) = owning_ty.type_params() {
-                ctx.declare_type_params(enclosing_ty_params)?;
+                ctx.declare_type_params(enclosing_ty_params);
             }
         }
 
         // declare decl's own type params within the body too
         if let Some(decl_type_params) = decl.name.type_params.as_ref() {
-            ctx.declare_type_params(&decl_type_params)?;
+            ctx.declare_type_params(&decl_type_params);
         }
 
         declare_func_params_in_body(&decl.param_groups, &decl.name.span, ctx)?;

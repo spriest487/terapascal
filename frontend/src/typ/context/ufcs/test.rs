@@ -1,10 +1,15 @@
 use crate::ast;
 use crate::typ::context::ufcs::find_ufcs_free_functions;
+use crate::typ::test::print_errors;
 use crate::typ::test::try_unit_from_src;
 use crate::typ::test::unit_from_src;
 use crate::typ::test::units_from_src;
-use crate::typ::{InstanceMethod, Invocation, NameError, TypeError, Value};
+use crate::typ::InstanceMethod;
+use crate::typ::Invocation;
+use crate::typ::NameError;
 use crate::typ::Type;
+use crate::typ::TypeError;
+use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
 
 #[test]
@@ -25,7 +30,10 @@ fn finds_ufcs_func() {
 
     let (_, target_decl) = unit.unit.type_decl_items().next().unwrap();
     let target = Type::of_decl(target_decl, &unit.context).unwrap();
-    assert_eq!(target.full_path().unwrap().last().name.as_str(), "UFCSTarget");
+    assert_eq!(
+        target.full_path().unwrap().last().name.as_str(),
+        "UFCSTarget"
+    );
 
     let methods = ignore_system_funcs(find_ufcs_free_functions(&target, &unit.context));
 
@@ -129,7 +137,7 @@ fn generic_class_method_has_correct_self_ty() {
             b.MyMethod();
         end.
     ";
-    
+
     // eprintln!("{:#?}", {
     //     let pp_unit = crate::preprocess("test", src, crate::BuildOptions::default())
     //         .unwrap();
@@ -137,7 +145,7 @@ fn generic_class_method_has_correct_self_ty() {
     //     let parsed = crate::parse("test", tokens).unwrap();
     //     parsed
     // });
-    
+
     unit_from_src("test", src);
 }
 
@@ -164,17 +172,19 @@ fn doesnt_find_free_func_with_mismatched_type_constraint() {
             x.MyFunc;
         end.
     ";
-    
-    match try_unit_from_src("Test", src) {
-        Ok(..) => panic!("expected error"),
-        
-        Err(TypeError::NameError { err: NameError::MemberNotFound { member, .. }, .. }) => {
-            assert_eq!(member.to_string(), "MyFunc")
-        }
-        
-        Err(other) => {
-            panic!("expected member not found error, got {}", other)
-        },
+
+    let errors = try_unit_from_src("Test", src).expect_err("expected member not found error");
+    let found = errors.iter().any(|err| match err {
+        TypeError::NameError {
+            err: NameError::MemberNotFound { member, .. },
+            ..
+        } => member.to_string() == "MyFunc",
+        _ => false,
+    });
+
+    if !found {
+        print_errors(&errors);
+        panic!("expected MyFunc member not found error");
     }
 }
 
@@ -202,14 +212,17 @@ fn finds_free_func_with_matched_type_constraint() {
         end.
     ";
 
-    if let Err(other) = try_unit_from_src("Test", src) {
-        panic!("expected success, got error:\n{}", other)
+    if let Err(errors) = try_unit_from_src("Test", src) {
+        print_errors(&errors);
+        panic!("expected success")
     }
 }
 
 #[test]
 fn finds_func_in_its_own_body() {
-    let unit = unit_from_src("Test", r"
+    let unit = unit_from_src(
+        "Test",
+        r"
         implementation
         
         type 
@@ -221,12 +234,13 @@ fn finds_func_in_its_own_body() {
             a.MyFunc;
         end;
         end.
-    ");
+    ",
+    );
 
     let ast::UnitDecl::FunctionDef { def } = &unit.unit.impl_section.decls[1] else {
         panic!("expected second item to be a function");
     };
-    
+
     let Value::Invocation(invocation) = def.body.stmts[0].annotation() else {
         panic!("expected first statement to be an invocation");
     };
@@ -235,24 +249,22 @@ fn finds_func_in_its_own_body() {
         Invocation::Function { function, args, .. } => {
             assert_eq!("Test.MyFunc", function.name.to_string());
             assert_eq!("a", args[0].to_string());
-        }
-        
+        },
+
         _ => {
             panic!("expected function invocation");
-        }
+        },
     }
 }
 
 // all these tests should ignore any builtin UFCS candidates, we're only checking for the
 // ones defined in the test units
 fn ignore_system_funcs(mut methods: Vec<InstanceMethod>) -> Vec<InstanceMethod> {
-    methods.retain(|im| {
-        match im {
-            InstanceMethod::Method { .. } => true,
-            InstanceMethod::FreeFunction { func_name, .. } => {
-                func_name.full_path.as_slice()[0].name.as_str() != SYSTEM_UNIT_NAME
-            },
-        }
+    methods.retain(|im| match im {
+        InstanceMethod::Method { .. } => true,
+        InstanceMethod::FreeFunction { func_name, .. } => {
+            func_name.full_path.as_slice()[0].name.as_str() != SYSTEM_UNIT_NAME
+        },
     });
     methods
 }

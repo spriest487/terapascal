@@ -1,5 +1,5 @@
 use crate::ast::Access;
-use crate::typ::test::try_module_from_srcs;
+use crate::typ::test::{expect_type_error, try_module_from_srcs};
 use crate::typ::TypeError;
 
 #[test]
@@ -39,15 +39,14 @@ fn private_field_not_accessible_from_other_unit() {
         ("UnitB", src_b),
     ];
 
-    match try_module_from_srcs(srcs) {
-        Ok(..) => panic!("expected access error"),
-        Err(TypeError::TypeMemberInaccessible { ty, member, access, .. }) => {
-            assert_eq!("UnitA.AClass", ty.to_string());
-            assert_eq!("a", member.name.as_str());
-            assert_eq!(Access::Private, access);
+    expect_type_error(try_module_from_srcs(srcs), |err| match err {
+        TypeError::TypeMemberInaccessible { ty, member, access, .. } => {
+            "UnitA.AClass" == ty.to_string()
+                && "a" == member.name.as_str()
+                && Access::Private == *access
         }
-        Err(other) => panic!("expected access error, got {}", other),
-    }
+        _ => false,
+    });
 }
 
 #[test]

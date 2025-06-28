@@ -2,8 +2,9 @@ use crate::ast::util::tokens_from_string;
 use crate::ast::DeclIdent;
 use crate::ast::Ident;
 use crate::ast::InterfaceDecl;
-use crate::parse::{ContinueParse, Parser};
 use crate::parse::ParseError;
+use crate::parse::Parser;
+use crate::result::ErrorContinue;
 use crate::Keyword;
 use crate::TokenTree;
 use terapascal_common::span::Span;
@@ -24,13 +25,12 @@ fn iface_decl_from_src(src: &str) -> Result<InterfaceDecl, Vec<TracedError<Parse
         span: Span::zero("Test"),
     };
 
-    let decl = InterfaceDecl::parse(&mut parser, name, vec![], kw)
-        .ok_or_continue(parser.errors());
+    let decl = InterfaceDecl::parse(&mut parser, name, vec![], kw).ok_or_continue(parser.errors());
     let errors = parser.finish();
-    
+
     match decl {
-        Some(decl) if errors.is_empty() => Ok(decl), 
-        _ => Err(errors)
+        Some(decl) if errors.is_empty() => Ok(decl),
+        _ => Err(errors),
     }
 }
 
@@ -41,8 +41,9 @@ pub fn parses_with_empty_members() {
         interface
         end
         ",
-    ).unwrap();
-    
+    )
+    .unwrap();
+
     assert_eq!(0, iface.methods.len())
 }
 
@@ -54,7 +55,8 @@ pub fn parses_with_single_separated_member() {
         function A: T;
         end
         ",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(1, iface.methods.len())
 }
@@ -67,7 +69,8 @@ pub fn parses_with_single_unseparated_member() {
         function A: T
         end
         ",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(1, iface.methods.len())
 }
@@ -81,7 +84,8 @@ pub fn parses_without_final_separator() {
         function B: T
         end
         ",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(2, iface.methods.len())
 }
@@ -95,7 +99,8 @@ pub fn parses_with_final_separator() {
         function B: T;
         end
         ",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert_eq!(2, iface.methods.len())
 }

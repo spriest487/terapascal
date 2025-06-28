@@ -17,6 +17,7 @@ use ast::typecheck_unit;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::build_log::BuildLog;
+use crate::result::ErrorContinue;
 
 #[derive(Debug, Clone)]
 pub struct ModuleUnit {
@@ -33,7 +34,7 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn typecheck<'a>(units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>, verbose: bool, log: &mut BuildLog) -> TypeResult<Self> {
+    pub fn typecheck<'a>(units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>, verbose: bool, log: &mut BuildLog) -> Self {
         // eprintln!("function sig size: {}", std::mem::size_of::<sig::FunctionSig>());
         // eprintln!("type size: {}", std::mem::size_of::<Type>());
         // eprintln!("type annotation size: {}", std::mem::size_of::<TypeAnnotation>());
@@ -54,15 +55,19 @@ impl Module {
                 log.trace(format!("Typechecking {} {}", unit.kind, unit.ident));
             }
 
-            module_units.push(typecheck_unit(unit_path, unit, &mut root_ctx)?);
+            if let Some(unit) = typecheck_unit(unit_path, unit, &mut root_ctx)
+                .ok_or_continue(&mut root_ctx)
+            {
+                module_units.push(unit);
+            }
         }
         
         module_units.reverse();
 
-        Ok(Module {
+        Module {
             units: module_units,
             root_ctx: Box::new(root_ctx),
-        })
+        }
     }
     
     pub fn main_unit(&self) -> &ModuleUnit {

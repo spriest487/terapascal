@@ -20,21 +20,21 @@ pub use self::sig::*;
 pub use self::specialize::*;
 pub use self::ty_param::*;
 use crate::ast;
+use crate::ast::Access;
 use crate::ast::FunctionTypeName;
 use crate::ast::FunctionTypeNameParam;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::IdentTypeName;
 use crate::ast::MethodOwner;
+use crate::ast::SemanticHint;
 use crate::ast::StructKind;
 use crate::ast::WeakTypeName;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::ast::{Access, SemanticHint};
+use crate::typ::ast::FieldDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::TypeDeclItem;
 use crate::typ::ast::SELF_TY_NAME;
-use crate::typ::ast::FieldDecl;
-use crate::typ::builtin_string_name;
 use crate::typ::builtin_unit_path;
 use crate::typ::Context;
 use crate::typ::Def;
@@ -1657,25 +1657,13 @@ where
     })
 }
 
-pub fn string_type(_ctx: &mut Context) -> TypeResult<Type> {
-    // let span = builtin_span();
-    // let ns = IdentPath::from(Ident::new("System", span.clone()));
-    //
-    // let str_class_name = TypeName::Ident(IdentTypeName {
-    //     ident: ns.child(Ident::new("String", span.clone())),
-    //     indirection: 0,
-    //     type_args: None,
-    //     ty: Type::Class(Arc::new(builtin_string_name())),
-    //     span,
-    // });
-
-    // typecheck_type(&str_class_name, ctx)
-    Ok(Type::Class(Arc::new(builtin_string_name())))
-}
-
 impl TypeName {
     pub fn inferred(ty: impl Into<Type>) -> Self {
         Self::Unspecified(ty.into())
+    }
+    
+    pub fn nothing() -> Self {
+        TypeName::inferred(Type::Nothing)
     }
 
     pub fn ty_mut(&mut self) -> &mut Type {
