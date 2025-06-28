@@ -598,7 +598,7 @@ pub fn typecheck_unit(
 
         let undefined = ctx.undefined_syms();
         if !undefined.is_empty() {
-            return Err(TypeError::UndefinedSymbols {
+            ctx.error(TypeError::UndefinedSymbols {
                 unit: unit.ident.clone(),
                 undefined,
             });
