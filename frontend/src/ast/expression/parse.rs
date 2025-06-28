@@ -6,7 +6,7 @@ use crate::ast::expression::parse::operator::SymbolOperator;
 use crate::ast::match_block::MatchExpr;
 use crate::ast::operators::*;
 use crate::ast::type_name::TypeName;
-use crate::ast::ArgList;
+use crate::ast::{ArgList, Ident, IncompleteExpr};
 use crate::ast::Block;
 use crate::ast::CaseExpr;
 use crate::ast::CollectionCtor;
@@ -27,6 +27,17 @@ use crate::Keyword;
 use std::fmt;
 use terapascal_common::span::*;
 use terapascal_common::TracedError;
+
+enum ExprParseStatus {
+    // we have reached the end of the expression and will not consume any more tokens
+    Done,
+    
+    // more expression parts may follow the currently accumulated parts
+    More,
+    
+    // parsing failed at a location suitable for completion suggestions  
+    Incomplete(SymbolOperator),
+}
 
 fn parse_identifier(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
     // the context of an identifier expr should be the first part of the
@@ -146,8 +157,8 @@ enum CompoundExpressionPart {
     Operator(OperatorPart),
 }
 
-pub struct CompoundExpressionParser<'tokens> {
-    tokens: &'tokens mut TokenStream,
+pub struct CompoundExpressionParser<'a> {
+    tokens: &'a mut TokenStream,
     last_was_operand: bool,
     parts: Vec<CompoundExpressionPart>,
 }
@@ -198,8 +209,8 @@ impl fmt::Display for CompoundExpressionPart {
     }
 }
 
-impl<'tokens> CompoundExpressionParser<'tokens> {
-    pub fn new(tokens: &'tokens mut TokenStream) -> Self {
+impl<'a> CompoundExpressionParser<'a> {
+    pub fn new(tokens: &'a mut TokenStream) -> Self {
         CompoundExpressionParser {
             tokens,
             last_was_operand: false,
@@ -213,36 +224,55 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
             // an operand, the next thing must be a member access, a list of arguments to
             // the function the operand referred to, an array element access, or a binary
             // operator connecting this operand to the next one
-            let more = if !self.last_was_operand {
+            let status = if !self.last_was_operand {
+                // if we fail to parse an operand, and the previous operator was a completion 
+                // trigger (.), pop that last operator, and use it to turn everything preceding
+                // it into a completable expression
                 self.parse_operand()?
             } else {
                 self.parse_operator()?
             };
-
-            if !more {
-                let expr = {
-                    if self.parts.is_empty() {
-                        let expected = Matcher::ExprOperandStart;
-                        return Err(TracedError::trace(match self.tokens.look_ahead().next() {
-                            Some(unexpected) => {
-                                ParseError::UnexpectedToken(Box::new(unexpected.clone()), Some(expected))
-                            },
-                            None => {
-                                let after = self.tokens.context().clone();
-                                ParseError::UnexpectedEOF(expected, after)
-                            },
-                        }));
-                    }
-
-                    resolve_ops_by_precedence(self.parts)?
-                };
+            
+            match status {
+                ExprParseStatus::More => {
+                    continue;
+                }
                 
-                break Ok(expr);
+                ExprParseStatus::Done => {
+                    break self.finish_expr();
+                }
+                
+                ExprParseStatus::Incomplete(completion_op) => {
+                    let expr = self.finish_expr()?;
+                    
+                    break Ok(Expr::Incomplete(IncompleteExpr {
+                        completion_op: completion_op.op,
+                        context: completion_op.span,
+                        target: Box::new(expr),
+                    }));
+                }
             }
         }
     }
+    
+    fn finish_expr(self) -> ParseResult<Expr> {
+        if self.parts.is_empty() {
+            let expected = Matcher::ExprOperandStart;
+            return Err(TracedError::trace(match self.tokens.look_ahead().next() {
+                Some(unexpected) => {
+                    ParseError::UnexpectedToken(Box::new(unexpected.clone()), Some(expected))
+                },
+                None => {
+                    let after = self.tokens.context().clone();
+                    ParseError::UnexpectedEOF(expected, after)
+                },
+            }));
+        }
 
-    fn parse_operand(&mut self) -> ParseResult<bool> {
+        resolve_ops_by_precedence(self.parts)
+    }
+
+    fn parse_operand(&mut self) -> ParseResult<ExprParseStatus> {
         self.last_was_operand = true;
 
         let mut look_ahead = self.tokens.look_ahead();
@@ -375,10 +405,10 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
 
             // next token is not valid as part of an operand, so this expr
             // must end here
-            None => return Ok(false),
+            None => return Ok(ExprParseStatus::Done),
         }
 
-        Ok(true)
+        Ok(ExprParseStatus::More)
     }
 
     fn parse_bracket_group(&mut self, group: DelimitedGroup) -> ParseResult<()> {
@@ -498,26 +528,35 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
         Ok(())
     }
 
-    fn parse_member_access(&mut self) -> ParseResult<()> {
+    // if a valid ident doesn't follow, returns location for completion
+    fn parse_member_access(&mut self) -> ParseResult<Option<SymbolOperator>> {
         let member_op_tt = self.tokens.match_one(Operator::Period)?;
 
-        self.push_operator_token(member_op_tt, Position::Binary);
+        match Ident::try_parse(self.tokens)? {
+            Some(member_ident) => {
+                self.push_operator_token(member_op_tt, Position::Binary);
 
-        let member_ident = self
-            .tokens
-            .match_one(Matcher::AnyIdent)?
-            .into_ident()
-            .unwrap();
+                let member_span = member_ident.span.clone();
+                self.push_operand(Expr::Ident(member_ident, member_span));
 
-        let member_span = member_ident.span.clone();
-        self.push_operand(Expr::Ident(member_ident, member_span));
-
-        self.last_was_operand = true;
-
-        Ok(())
+                self.last_was_operand = true;
+                
+                Ok(None)
+            }
+            
+            None => {
+                self.last_was_operand = false;
+                
+                Ok(Some(SymbolOperator {
+                    op: member_op_tt.as_operator().unwrap(),
+                    span: member_op_tt.into_span(), 
+                    pos: Position::Binary,
+                }))
+            }
+        }
     }
 
-    fn parse_operator(&mut self) -> ParseResult<bool> {
+    fn parse_operator(&mut self) -> ParseResult<ExprParseStatus> {
         let operator_matcher = Matcher::AnyOperatorInPosition(Position::Binary)
             | Matcher::AnyOperatorInPosition(Position::Postfix);
 
@@ -557,7 +596,9 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
                 op: Operator::Period,
                 ..
             }) => {
-                self.parse_member_access()?;
+                if let Some(completion_op) = self.parse_member_access()? {
+                    return Ok(ExprParseStatus::Incomplete(completion_op));
+                }
             },
 
             Some(TokenTree::Operator { .. }) => {
@@ -612,10 +653,10 @@ impl<'tokens> CompoundExpressionParser<'tokens> {
             Some(illegal) => panic!("pattern excludes anything else: got {}", illegal),
 
             // nothing following the last operand, which is fine, just end here
-            None => return Ok(false),
+            None => return Ok(ExprParseStatus::Done),
         }
 
-        Ok(true)
+        Ok(ExprParseStatus::More)
     }
 
     fn parse_invocation_with_type_args(&mut self) -> ParseResult<()> {

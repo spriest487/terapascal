@@ -95,6 +95,8 @@ pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
     type ConstIntegerExpr: ConstExprValue<Self, IntConstant>;
 
     type ConstValue: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;
+    
+    type CompletionPoint: Clone + Spanned;
 
     fn semantic_hint(&self) -> SemanticHint;
 
@@ -121,6 +123,8 @@ impl Annotation for Span {
     type ConstStringExpr = Box<Expr<Span>>;
     type ConstIntegerExpr = Box<Expr<Span>>;
     type ConstValue = Box<Expr<Span>>;
+    
+    type CompletionPoint = Span;
 
     fn semantic_hint(&self) -> SemanticHint {
         SemanticHint::None

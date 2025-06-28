@@ -1782,7 +1782,11 @@ impl Interpreter {
     }
 
     fn init_stdlib_globals(&mut self) -> ExecResult<()> {
-        for (ident, func, ret, params) in builtin::system_funcs(&self.metadata) {
+        let system_funcs: Vec<_> = builtin::system_funcs(&self.metadata)
+            .into_iter()
+            .collect();
+
+        for (ident, func, ret, params) in system_funcs {
             let name = ir::NamePath::new(vec!["System".to_string()], ident.to_string());
             self.define_builtin(name, func, ret, params)?;
         }

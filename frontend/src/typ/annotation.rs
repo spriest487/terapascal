@@ -11,7 +11,7 @@ use crate::ast::IdentPath;
 use crate::ast::SemanticHint;
 use crate::ast::{Annotation, ConstExprValue};
 pub use crate::typ::annotation::invoke::Invocation;
-use crate::typ::ast::evaluate_expr;
+use crate::typ::ast::{evaluate_expr, CompletionContext};
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::specialize_call_args;
 use crate::typ::ast::typecheck_type_args;
@@ -808,6 +808,8 @@ impl Annotation for Value {
     type ConstStringExpr = EvaluatedConstExpr<String>;
     type ConstIntegerExpr = EvaluatedConstExpr<IntConstant>;
     type ConstValue = Literal;
+
+    type CompletionPoint = CompletionContext;
 
     fn semantic_hint(&self) -> SemanticHint {
         match self {

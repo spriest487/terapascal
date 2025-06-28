@@ -93,6 +93,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
                 ast::Expr::AnonymousFunction(def) => builder.build_closure_expr(def),
 
                 ast::Expr::ExplicitSpec(..) => unreachable!(),
+                ast::Expr::Incomplete(..) => unreachable!(),
             }
         }
         

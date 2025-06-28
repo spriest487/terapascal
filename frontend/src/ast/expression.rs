@@ -70,7 +70,7 @@ impl<A: Annotation> fmt::Display for Literal<A> {
     }
 }
 
-#[derive(Clone, Eq, Derivative)]
+#[derive(Clone, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub enum Expr<A: Annotation = Span> {
     BinOp(Box<BinOp<A>>),
@@ -94,7 +94,16 @@ pub enum Expr<A: Annotation = Span> {
     Match(Box<MatchExpr<A>>),
     Cast(Box<Cast<A>>),
     AnonymousFunction(Box<AnonymousFunctionDef<A>>),
-    ExplicitSpec(Box<ExplicitSpecExpr<A>>)
+    ExplicitSpec(Box<ExplicitSpecExpr<A>>),
+    
+    /// Expression generated when the parser, in language server mode, encounters an invalid
+    /// expression ending with a completion-triggering character. For example, the tokens
+    /// `myObject.` will produce an incomplete expression where the target is `myObject` and the
+    /// completion point is the span of the period operator.
+    Incomplete(IncompleteExpr<A>),
+}
+
+impl<A: Annotation> Eq for Expr<A> {
 }
 
 impl<A: Annotation> From<BinOp<A>> for Expr<A> {
@@ -223,6 +232,7 @@ impl<A: Annotation> Expr<A> {
             Expr::Cast(_) => "cast",
             Expr::AnonymousFunction(_) => "anonymous function",
             Expr::ExplicitSpec(_) => "with expr",
+            Expr::Incomplete(_) => "incomplete expr",
         }
     }
     
@@ -244,6 +254,7 @@ impl<A: Annotation> Expr<A> {
             Expr::Cast(cast) => &cast.annotation,
             Expr::AnonymousFunction(def) => &def.annotation,
             Expr::ExplicitSpec(expr) => &expr.annotation,
+            Expr::Incomplete(incomplete) => incomplete.target.annotation(),
         }
     }
 
@@ -265,6 +276,7 @@ impl<A: Annotation> Expr<A> {
             Expr::Cast(cast) => &mut cast.annotation,
             Expr::AnonymousFunction(def) => &mut def.annotation,
             Expr::ExplicitSpec(expr) => &mut expr.annotation,
+            Expr::Incomplete(incomplete) => incomplete.target.annotation_mut(),
         }
     }
 
@@ -401,6 +413,7 @@ impl<A: Annotation> fmt::Display for Expr<A> {
             Expr::Cast(cast) => write!(f, "{}", cast),
             Expr::AnonymousFunction(def) => write!(f, "{}", def),
             Expr::ExplicitSpec(with_expr) => write!(f, "{}", with_expr),
+            Expr::Incomplete(incomplete) => write!(f, "{}", incomplete),
         }
     }
 }
@@ -408,5 +421,24 @@ impl<A: Annotation> fmt::Display for Expr<A> {
 impl<A: Annotation> Spanned for Expr<A> {
     fn span(&self) -> &Span {
         self.annotation().span()
+    }
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, Hash, PartialEq)]
+pub struct IncompleteExpr<A: Annotation> {
+    pub target: Box<Expr<A>>,
+    
+    pub completion_op: Operator,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub context: A::CompletionPoint,
+}
+
+impl<A: Annotation> fmt::Display for IncompleteExpr<A> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}{}", self.target, self.completion_op)
     }
 }

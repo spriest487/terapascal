@@ -1,11 +1,22 @@
+use crate::IntConstant;
 use crate::ast;
 use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
+use crate::ast::IncompleteExpr;
 use crate::ast::Operator;
 use crate::parse::IllegalStatement;
 use crate::result::ErrorContinue;
+use crate::typ::Context;
+use crate::typ::FunctionSig;
+use crate::typ::GenericError;
+use crate::typ::GenericTarget;
+use crate::typ::MAX_FLAGS_BITS;
+use crate::typ::MatchPattern;
+use crate::typ::Type;
+use crate::typ::TypeName;
+use crate::typ::ValueKind;
 use crate::typ::annotation::Value;
 use crate::typ::ast::Call;
 use crate::typ::ast::DeclMod;
@@ -15,23 +26,13 @@ use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::Stmt;
 use crate::typ::ast::VariantDecl;
 use crate::typ::context::NameError;
-use crate::typ::Context;
-use crate::typ::FunctionSig;
-use crate::typ::GenericError;
-use crate::typ::GenericTarget;
-use crate::typ::MatchPattern;
-use crate::typ::Type;
-use crate::typ::TypeName;
-use crate::typ::ValueKind;
-use crate::typ::MAX_FLAGS_BITS;
-use crate::IntConstant;
 use std::fmt;
-use terapascal_common::span::*;
 use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::Severity;
+use terapascal_common::span::*;
 
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -64,6 +65,9 @@ pub enum TypeError {
     NotValueExpr {
         expected: Type,
         actual: Value,
+    },
+    IncompleteExpr {
+        expr: IncompleteExpr<Value>,
     },
     NotMutable {
         expr: Box<Expr>,
@@ -507,6 +511,7 @@ impl Spanned for TypeError {
             TypeError::InvalidMatchExpr { expr, .. } => expr.span(),
             TypeError::NotDefaultable { span, .. } => span,
             TypeError::NotValueExpr { actual, .. } => actual.span(),
+            TypeError::IncompleteExpr { expr, .. } => expr.context.span(),
             TypeError::InvalidBinOp { span, .. } => span,
             TypeError::InvalidUnaryOp { span, .. } => span,
             TypeError::BlockOutputIsNotExpression { stmt, .. } => stmt.span(),
@@ -633,6 +638,7 @@ impl DiagnosticOutput for TypeError {
             TypeError::InvalidMatchExpr { .. } => "Invalid match expression",
             TypeError::NotDefaultable { .. } => "Type has no default value",
             TypeError::NotValueExpr { .. } => "Expected value expression",
+            TypeError::IncompleteExpr { .. } => "Incomplete expression",
             TypeError::InvalidBinOp { .. } => "Invalid binary operation",
             TypeError::InvalidUnaryOp { .. } => "Invalid unary operation",
             TypeError::BlockOutputIsNotExpression { .. } => "Expected block output expression",
@@ -783,17 +789,23 @@ impl DiagnosticOutput for TypeError {
                 .collect(),
 
             TypeError::NotInitialized { ident, .. } => {
-                vec![DiagnosticMessage::info(format!("uninitialized value `{}`", ident))
-                    .with_label(
+                vec![
+                    DiagnosticMessage::info(format!("uninitialized value `{}`", ident)).with_label(
                         DiagnosticLabel::new(ident.span().clone()).with_text("declared here"),
-                    )]
+                    ),
+                ]
             },
 
             TypeError::NotMutable {
                 decl: Some(decl), ..
-            } => vec![DiagnosticMessage::info("modifying immutable value").with_label(
-                DiagnosticLabel::new(decl.span().clone()).with_text("declared as immutable here"),
-            )],
+            } => {
+                vec![
+                    DiagnosticMessage::info("modifying immutable value").with_label(
+                        DiagnosticLabel::new(decl.span().clone())
+                            .with_text("declared as immutable here"),
+                    ),
+                ]
+            },
 
             TypeError::DuplicateDeclMod { existing, .. } => {
                 vec![DiagnosticMessage::info("duplicate modifier").with_label(
@@ -817,10 +829,12 @@ impl DiagnosticOutput for TypeError {
                 first_span,
                 first_keyword,
                 ..
-            } => vec![DiagnosticMessage::info("incompatible modifier").with_label(
-                DiagnosticLabel::new(first_span.clone())
-                    .with_text(format!("`{first_keyword}` previously appeared here")),
-            )],
+            } => vec![
+                DiagnosticMessage::info("incompatible modifier").with_label(
+                    DiagnosticLabel::new(first_span.clone())
+                        .with_text(format!("`{first_keyword}` previously appeared here")),
+                ),
+            ],
 
             TypeError::DuplicateNamedArg { name, previous, .. }
             | TypeError::DuplicateParamName { name, previous, .. } => {
@@ -986,6 +1000,10 @@ impl fmt::Display for TypeError {
                 }
             },
 
+            TypeError::IncompleteExpr { .. } => {
+                write!(f, "this expression is incomplete")
+            },
+
             TypeError::InvalidBinOp { lhs, rhs, op, .. } => match op {
                 Operator::Assignment => {
                     write!(f, "`{}` is not assignable to `{}`", rhs, lhs)
@@ -1019,7 +1037,11 @@ impl fmt::Display for TypeError {
             },
 
             TypeError::InvalidBlockOutput(expr) => {
-                write!(f, "expr `{}` is not valid as the final expr in a block because it is not a complete stmt", expr)
+                write!(
+                    f,
+                    "expr `{}` is not valid as the final expr in a block because it is not a complete stmt",
+                    expr
+                )
             },
 
             TypeError::AmbiguousFunction { .. } => {
@@ -1076,7 +1098,10 @@ impl fmt::Display for TypeError {
                 second_keyword,
                 ..
             } => {
-                write!(f, "the modifiers `{first_keyword}` and `{second_keyword}` cannot appear on the same declaration")
+                write!(
+                    f,
+                    "the modifiers `{first_keyword}` and `{second_keyword}` cannot appear on the same declaration"
+                )
             },
 
             TypeError::InvalidCtorType { ty, .. } => {
@@ -1149,7 +1174,11 @@ impl fmt::Display for TypeError {
                 hint_ty,
                 ..
             } => {
-                write!(f, "unable to infer specialization of the generic type `{}` from expected type `{}`", generic_ty, hint_ty)
+                write!(
+                    f,
+                    "unable to infer specialization of the generic type `{}` from expected type `{}`",
+                    generic_ty, hint_ty
+                )
             },
 
             TypeError::UninitGlobalBinding {
@@ -1242,7 +1271,10 @@ impl fmt::Display for TypeError {
             },
 
             TypeError::TooManySetValues { count, .. } => {
-                write!(f, "set type contains {count} values, which is more than the maximum number of flag bits ({MAX_FLAGS_BITS})")
+                write!(
+                    f,
+                    "set type contains {count} values, which is more than the maximum number of flag bits ({MAX_FLAGS_BITS})"
+                )
             },
 
             TypeError::EmptyVariantDecl(variant) => {
@@ -1460,7 +1492,10 @@ impl fmt::Display for TypeError {
 
             TypeError::InvalidMatchExpr { expr, .. } => {
                 let ty = expr.annotation().ty();
-                write!(f, "this expression with type {ty} is not valid as the condition for a match expression")
+                write!(
+                    f,
+                    "this expression with type {ty} is not valid as the condition for a match expression"
+                )
             },
 
             TypeError::MatchExprNotExhaustive { missing_cases, .. } => {

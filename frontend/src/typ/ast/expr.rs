@@ -2,7 +2,7 @@ mod init;
 mod literal;
 
 use crate::ast;
-use crate::ast::Ident;
+use crate::ast::{Ident, IncompleteExpr};
 use crate::ast::IdentPath;
 use crate::ast::SemanticHint;
 pub use crate::typ::ast::call::typecheck_call;
@@ -50,6 +50,18 @@ impl Expr {
         self.annotation_mut().evaluate(expect_ty, ctx)?;
         
         Ok(self)
+    }
+}
+
+#[derive(Clone)]
+pub struct CompletionContext {
+    pub span: Span,
+    pub context: Box<Context>,
+}
+
+impl Spanned for CompletionContext {
+    fn span(&self) -> &Span {
+        &self.span
     }
 }
 
@@ -187,6 +199,22 @@ pub fn typecheck_expr(
                     target: other.clone(),
                 }),
             }
+        }
+        
+        ast::Expr::Incomplete(incomplete) => {
+            let target = evaluate_expr(&incomplete.target, &Type::Nothing, ctx)?;
+            let completion_ctx = ctx.branch();
+            
+            Err(TypeError::IncompleteExpr {
+                expr: IncompleteExpr {
+                    target: Box::new(target),
+                    context: CompletionContext {
+                        context: Box::new(completion_ctx),
+                        span: incomplete.context.clone(),
+                    },
+                    completion_op: incomplete.completion_op.clone(),
+                }
+            })
         }
     }
 }
