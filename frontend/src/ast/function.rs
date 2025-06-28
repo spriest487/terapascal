@@ -812,9 +812,18 @@ impl<A: Annotation> fmt::Display for FunctionDef<A> {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq, Hash)]
 pub struct AnonymousFunctionDef<A: Annotation> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
     pub annotation: A,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub func_kw: Option<Span>,
 
     pub params: Vec<FunctionParamGroup<A>>,
     pub result_ty: TypeName<A>,
@@ -917,6 +926,7 @@ impl Parse for AnonymousFunctionDef<Span> {
             let span = func_kw.span().to(body.span());
 
             AnonymousFunctionDef {
+                func_kw: Some(func_kw.into_span()),
                 annotation: span,
                 body,
                 params,
@@ -957,6 +967,7 @@ impl Parse for AnonymousFunctionDef<Span> {
             let span = func_kw.span().to(body.span());
 
             AnonymousFunctionDef {
+                func_kw: Some(func_kw.into_span()),
                 annotation: span,
                 body,
                 params,

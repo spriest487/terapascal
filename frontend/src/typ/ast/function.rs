@@ -1011,6 +1011,7 @@ pub fn typecheck_func_expr(
     let value = TypedValue::temp(Type::Function(sig), src_def.span().clone());
 
     Ok(AnonymousFunctionDef {
+        func_kw: src_def.func_kw.clone(),
         params,
         result_ty,
         annotation: Value::from(value),
