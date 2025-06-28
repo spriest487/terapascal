@@ -331,7 +331,7 @@ pub fn declare_builtin_ty(
     let builtin_span = builtin_span();
     
     let ident = Ident::new(name, builtin_span.clone());
-    ctx.declare_type(ident, ty.clone(), Visibility::Interface, false)?;
+    ctx.declare_type(ident, ty.clone(), Visibility::Interface, false);
 
     let type_env = Environment::TypeDecl { ty: ty.clone() };
     ctx.scope(type_env, |ctx| {

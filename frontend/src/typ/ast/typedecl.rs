@@ -230,7 +230,7 @@ pub fn typecheck_struct_decl(
     info: TypeDeclItemInfo,
     struct_def: &ast::StructDecl,
     ctx: &mut Context,
-) -> TypeResult<StructDecl> {
+) -> StructDecl {
     assert!(struct_def.tags.is_empty() || !struct_def.forward);
     let tags = Tag::typecheck_tags(&struct_def.tags, ctx);
     
@@ -248,7 +248,7 @@ pub fn typecheck_struct_decl(
         self_ty.clone(),
         info.visibility,
         true,
-    )?;
+    );
     
     let sections = typecheck_members(
         &self_ty,
@@ -256,9 +256,9 @@ pub fn typecheck_struct_decl(
         implements.as_ref(),
         info.name.span(),
         ctx
-    )?;
+    );
 
-    Ok(StructDecl {
+    StructDecl {
         kw_span: struct_def.kw_span.clone(),
         kind: struct_def.kind,
         name: info.name,
@@ -270,7 +270,7 @@ pub fn typecheck_struct_decl(
         sections,
         forward: struct_def.forward,
         end_kw_span: struct_def.end_kw_span.clone(),
-    })
+    }
 }
 
 pub fn typecheck_members<Section>(
@@ -279,7 +279,7 @@ pub fn typecheck_members<Section>(
     implements: Option<&SupersClause>,
     name_span: &Span,
     ctx: &mut Context,
-) -> TypeResult<Vec<Section>>
+) -> Vec<Section>
 where
     Section: MemberDeclSection<Value>,
 {
@@ -290,13 +290,14 @@ where
         let owning_ty_args = owning_ty_params.clone().into_type_args();
         let inner_owning_ty = owning_type
             .specialize(&owning_ty_args, ctx)
-            .map_err(|err| TypeError::from_generic_err(err, name_span.clone()))?
-            .into_owned();
+            .map(Cow::into_owned)
+            .map_err(|err| TypeError::from_generic_err(err, name_span.clone()))
+            .or_continue(ctx, Type::Nothing);
 
         owning_type = Cow::Owned(inner_owning_ty);
     }
     
-    let mut dtor_span = None;
+    let mut dtor_span: Option<Span> = None;
 
     let mut sections: Vec<Section> = Vec::new();
     
@@ -306,9 +307,10 @@ where
         for member in src_section.members() {
             match member {
                 TypeMemberDeclRef::Field(field) => {
-                    let field = typecheck_field(field, ctx)?;
-                    if !section.add_field(field) {
-                        panic!("section type is incompatible with fields (parser should not produce this)");
+                    if let Some(field) = typecheck_field(field, ctx).ok_or_continue(ctx) {
+                        if !section.add_field(field) {
+                            panic!("section type is incompatible with fields (parser should not produce this)");
+                        }
                     }
                 }
 
@@ -316,26 +318,27 @@ where
                     let func_decl = FunctionDecl::typecheck(&method.func_decl, false, ctx);
                     if func_decl.kind == FunctionDeclKind::Destructor {
                         if !matches!(owning_type.as_ref(), Type::Class(..)) {
-                            return Err(TypeError::InvalidDtorOwningType {
-                                ty: owning_type.into_owned(),
+                            ctx.error(TypeError::InvalidDtorOwningType {
+                                ty: owning_type.as_ref().clone(),
                                 span: func_decl.span.clone(),
-                            })
+                            });
                         }
 
-                        if let Some(prev_dtor) = dtor_span {
-                            return Err(TypeError::TypeHasMultipleDtors {
-                                owning_type: owning_type.into_owned(),
+                        if let Some(prev_dtor) = &dtor_span {
+                            ctx.error(TypeError::TypeHasMultipleDtors {
+                                owning_type: owning_type.as_ref().clone(),
                                 new_dtor: func_decl.span.clone(),
-                                prev_dtor,
-                            })
+                                prev_dtor: prev_dtor.clone(),
+                            });
+                        } else {
+                            dtor_span = Some(func_decl.span.clone());
                         }
-                        dtor_span = Some(func_decl.span.clone());
 
                         if func_decl.params_len() != 1 {
-                            return Err(TypeError::DtorCannotHaveParams { span: func_decl.span.clone() })
+                            ctx.error(TypeError::DtorCannotHaveParams { span: func_decl.span.clone() });
                         }
                         if !func_decl.name.type_params.is_none() {
-                            return Err(TypeError::DtorCannotHaveTypeParams { span: func_decl.span.clone() })
+                            ctx.error(TypeError::DtorCannotHaveTypeParams { span: func_decl.span.clone() });
                         }
                     }
 
@@ -348,8 +351,8 @@ where
 
                     if !existing.is_empty() {
                         if let Some(invalid) = func_decl.check_new_overload(existing.clone()) {
-                            return Err(TypeError::InvalidMethodOverload {
-                                owning_type: owning_type.into_owned(),
+                            ctx.error(TypeError::InvalidMethodOverload {
+                                owning_type: owning_type.as_ref().clone(),
                                 prev_decls: existing
                                     .into_iter()
                                     .map(|decl| decl.ident().clone())
@@ -380,11 +383,15 @@ where
                 unreachable!("already checked that only valid types are accepted")
             };
 
-            let iface_def = ctx
+            let Some(iface_def) = ctx
                 .instantiate_iface_def(iface_name)
                 .map_err(|e| {
                     TypeError::from_name_err(e, iface_name.span().clone())
-                })?;
+                })
+                .ok_or_continue(ctx)
+            else {
+                continue;
+            };
 
             let mut missing_methods = Vec::new();
             let mut mismatched_methods = Vec::new();
@@ -435,8 +442,8 @@ where
             }
 
             if !missing_methods.is_empty() || !mismatched_methods.is_empty() {
-                return Err(TypeError::InvalidImplementation {
-                    ty: owning_type.into_owned(),
+                ctx.error(TypeError::InvalidImplementation {
+                    ty: owning_type.as_ref().clone(),
                     span: implements.span.clone(),
                     missing: missing_methods,
                     mismatched: mismatched_methods,
@@ -445,7 +452,7 @@ where
         }
     }
     
-    Ok(sections)
+    sections
 }
 
 fn typecheck_field(
@@ -474,7 +481,7 @@ pub fn typecheck_iface(
     info: TypeDeclItemInfo,
     iface: &ast::InterfaceDecl<Span>,
     ctx: &mut Context,
-) -> TypeResult<InterfaceDecl> {
+) -> InterfaceDecl {
     assert!(iface.tags.is_empty() || !iface.forward);
 
     let tags = Tag::typecheck_tags(&iface.tags, ctx);
@@ -483,8 +490,8 @@ pub fn typecheck_iface(
 
     // declare Self type - type decls are always in their own scope so we don't need to push
     // another one
-    ctx.declare_self_ty(Type::MethodSelf, iface.name.span().clone())?;
-    ctx.declare_type(iface.name.ident.clone(), iface_ty.clone(), info.visibility, true)?;
+    ctx.declare_self_ty(Type::MethodSelf, iface.name.span().clone());
+    ctx.declare_type(iface.name.ident.clone(), iface_ty.clone(), info.visibility, true);
 
     let supers = match &iface.supers {
         Some(supers) => {
@@ -504,7 +511,7 @@ pub fn typecheck_iface(
                 .clone()
                 .child(method.decl.name.ident().clone());
 
-            return Err(TypeError::NameError {
+            ctx.error(TypeError::NameError {
                 err: NameError::AlreadyDefined {
                     ident: method_path,
                     existing: existing.span().clone(),
@@ -520,7 +527,7 @@ pub fn typecheck_iface(
         });
     }
     
-    let iface_decl = InterfaceDecl {
+    InterfaceDecl {
         name: info.name,
         where_clause: info.where_clause,
         tags,
@@ -530,21 +537,19 @@ pub fn typecheck_iface(
         kw_span: iface.kw_span.clone(),
         span: iface.span.clone(),
         end_kw_span: iface.end_kw_span.clone(),
-    };
-    
-    Ok(iface_decl)
+    }
 }
 
 pub fn typecheck_variant(
     info: TypeDeclItemInfo,
     variant_def: &ast::VariantDecl<Span>,
     ctx: &mut Context,
-) -> TypeResult<VariantDecl> {
+) -> VariantDecl {
     assert!(variant_def.tags.is_empty() || !variant_def.forward);
     let tags = Tag::typecheck_tags(&variant_def.tags, ctx);
 
     if variant_def.cases.is_empty() {
-        return Err(TypeError::EmptyVariantDecl(Box::new(variant_def.clone())));
+        ctx.error(TypeError::EmptyVariantDecl(Box::new(variant_def.clone())));
     }
 
     let variant_ty = Type::variant(info.name.clone());
@@ -561,14 +566,15 @@ pub fn typecheck_variant(
         variant_ty.clone(),
         info.visibility,
         true
-    )?;
+    );
 
     let mut cases = Vec::with_capacity(variant_def.cases.len());
     for case in &variant_def.cases {
         let data = match &case.data {
             Some(data) => {
                 Some(ast::VariantCaseData {
-                    ty: typecheck_typename(&data.ty, ctx)?,
+                    ty: typecheck_typename(&data.ty, ctx)
+                        .or_continue_with(ctx, || TypeName::nothing()),
                 })
             }
 
@@ -588,9 +594,9 @@ pub fn typecheck_variant(
         implements.as_ref(),
         info.name.span(),
         ctx
-    )?;
+    );
 
-    Ok(VariantDecl {
+    VariantDecl {
         kw_span: variant_def.kw_span.clone(),
         name: info.name.into(),
         where_clause: info.where_clause,
@@ -601,21 +607,22 @@ pub fn typecheck_variant(
         sections,
         span: variant_def.span.clone(),
         end_kw_span: variant_def.end_kw_span.clone()
-    })
+    }
 }
 
 pub fn typecheck_alias(
     name: Symbol,
     alias: &ast::AliasDecl<Span>,
     ctx: &mut Context,
-) -> TypeResult<AliasDecl> {
-    let ty = typecheck_typename(&alias.target, ctx)?;
+) -> AliasDecl {
+    let ty = typecheck_typename(&alias.target, ctx)
+        .or_continue_with(ctx, || TypeName::nothing());
 
-    Ok(AliasDecl {
+    AliasDecl {
         name,
         target: Box::new(ty),
         span: alias.span.clone(),
-    })
+    }
 }
 
 pub fn typecheck_enum_decl(
@@ -693,7 +700,9 @@ impl SetDecl {
         name: Symbol,
         ctx: &mut Context,
     ) -> TypeResult<Self> {
-        name.expect_no_type_params(InvalidTypeParamsDeclKind::Set)?;
+        name.expect_no_type_params(InvalidTypeParamsDeclKind::Set)
+            .or_continue(ctx, ());
+
         assert!(name.type_args.is_none());
 
         let range = match set_decl.range.as_ref() {
@@ -708,7 +717,7 @@ impl SetDecl {
                 let to_num = get_set_range_expr_val(&to, range_span, ctx)?;
                 
                 if from_num.as_i128() > to_num.as_i128() {
-                    return Err(TypeError::SetValuesMustBeSequential {
+                    ctx.error(TypeError::SetValuesMustBeSequential {
                         from: from_num,
                         to: to_num,
                         span: range_span.clone(),
@@ -717,7 +726,7 @@ impl SetDecl {
 
                 let range_size = (to_num.as_i128() - from_num.as_i128()) as usize; 
                 if range_size > MAX_FLAGS_BITS {
-                    return Err(TypeError::TooManySetValues { 
+                    ctx.error(TypeError::TooManySetValues { 
                         span: range_span.clone(),
                         count: range_size,
                     });
@@ -746,7 +755,8 @@ impl SetDecl {
             }
             
             SetDeclRange::Type { ty, span, .. } => {
-                let range_ty = typecheck_typename(ty, ctx)?;
+                let range_ty = typecheck_typename(ty, ctx)
+                    .or_continue_with(ctx, || TypeName::nothing());
 
                 // just do this here to raise an error if it's invalid
                 _ = get_set_type_range(&range_ty, span, ctx)?;
@@ -758,13 +768,13 @@ impl SetDecl {
             }
         };
 
-        let set_decl = SetDecl {
-            span: set_decl.span.clone(),
+        let span = set_decl.span.clone();
+
+        Ok(SetDecl {
+            span,
             range: Box::new(range),
             name,
-        };
-
-        Ok(set_decl)
+        })
     }
     
     pub fn value_type(&self) -> Cow<Type> {

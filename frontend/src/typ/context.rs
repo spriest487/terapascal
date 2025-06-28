@@ -59,7 +59,6 @@ use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
 use std::sync::Arc;
 use terapascal_common::span::*;
-use crate::result::ErrorContinue;
 
 #[derive(Clone, Debug)]
 pub struct Context {
@@ -551,17 +550,17 @@ impl Context {
         let name = iface.name.ident().clone();
         let iface_ty = Type::interface(iface.name.clone());
 
-        self.declare_type(name.clone(), iface_ty, visibility, iface.forward)?;
-
-        if !iface.forward {
-            let map_unexpected = |_, _| unreachable!();
-            self.define(
-                name,
-                DefKey::Unique,
-                Def::Interface(iface.clone()),
-                DefDeclMatch::always_match,
-                map_unexpected,
-            )?;
+        if self.declare_type(name.clone(), iface_ty, visibility, iface.forward) {
+            if !iface.forward {
+                let map_unexpected = |_, _| unreachable!();
+                self.define(
+                    name,
+                    DefKey::Unique,
+                    Def::Interface(iface.clone()),
+                    DefDeclMatch::always_match,
+                    map_unexpected,
+                )?;
+            }
         }
 
         Ok(())
@@ -575,17 +574,18 @@ impl Context {
         let name = variant.name.ident().clone();
 
         let variant_ty = Type::variant(variant.name.clone());
-        self.declare_type(name.clone(), variant_ty, visibility, variant.forward)?;
-
-        if !variant.forward {
-            let map_unexpected = |_, _| unreachable!();
-            self.define(
-                name,
-                DefKey::Unique,
-                Def::Variant(variant.clone()),
-                DefDeclMatch::always_match,
-                map_unexpected,
-            )?;
+        
+        if self.declare_type(name.clone(), variant_ty, visibility, variant.forward) {
+            if !variant.forward {
+                let map_unexpected = |_, _| unreachable!();
+                self.define(
+                    name,
+                    DefKey::Unique,
+                    Def::Variant(variant.clone()),
+                    DefDeclMatch::always_match,
+                    map_unexpected,
+                )?;
+            }
         }
 
         Ok(())
@@ -603,22 +603,17 @@ impl Context {
             StructKind::Record => Type::record(struct_def.name.clone()),
         };
 
-        self.declare_type(
-            name.clone(),
-            class_ty.clone(),
-            visibility,
-            struct_def.forward,
-        )?;
-
-        if !struct_def.forward {
-            let map_unexpected = |_, _| unreachable!();
-            self.define(
-                name,
-                DefKey::Unique,
-                Def::Struct(struct_def.clone()),
-                DefDeclMatch::always_match,
-                map_unexpected,
-            )?;
+        if self.declare_type(name.clone(), class_ty.clone(), visibility, struct_def.forward) {
+            if !struct_def.forward {
+                let map_unexpected = |_, _| unreachable!();
+                self.define(
+                    name,
+                    DefKey::Unique,
+                    Def::Struct(struct_def.clone()),
+                    DefDeclMatch::always_match,
+                    map_unexpected,
+                )?;
+            }    
         }
 
         Ok(())
@@ -633,15 +628,15 @@ impl Context {
 
         let enum_ty = Type::enumeration(enum_decl.name.full_path.clone());
 
-        self.declare_type(name.clone(), enum_ty.clone(), visibility, false)?;
-
-        self.define(
-            name,
-            DefKey::Unique,
-            Def::Enum(enum_decl.clone()),
-            DefDeclMatch::always_match,
-            |_, _| unreachable!(),
-        )?;
+        if self.declare_type(name.clone(), enum_ty.clone(), visibility, false) {
+            self.define(
+                name,
+                DefKey::Unique,
+                Def::Enum(enum_decl.clone()),
+                DefDeclMatch::always_match,
+                |_, _| unreachable!(),
+            )?;
+        }
 
         for item in &enum_decl.items {
             let ord_val = item
@@ -665,15 +660,24 @@ impl Context {
     pub fn declare_set(&mut self,
         set_decl: &Arc<SetDecl>,
         visibility: Visibility
-    ) -> TypeResult<()> {
-        let set_type = set_decl.to_set_type(self)?;
-        let decl_ty = Type::set(set_type);
+    ) -> bool {
+        let decl_ty = match set_decl.to_set_type(self) {
+            Ok(set_type) => {
+                Type::set(set_type)
+            },
+            Err(err) => {
+                self.error(err);
+                return false;
+            }
+        };
 
         self.declare_type(set_decl.name.ident().clone(), decl_ty, visibility, false)
     }
 
     /// declare the type params of a function in the local scope
-    pub fn declare_type_params(&mut self, names: &TypeParamList) {
+    pub fn declare_type_params(&mut self, names: &TypeParamList) -> bool {
+        let mut ok = true;
+        
         for param in names.items.iter() {
             let is_ty = param
                 .constraint
@@ -681,7 +685,7 @@ impl Context {
                 .map(|c| c.is_ty.clone())
                 .unwrap_or(TypeName::inferred(Type::Any));
 
-            self.declare_type(
+            ok &= self.declare_type(
                 param.name.clone(),
                 Type::GenericParam(Arc::new(TypeParamListItem {
                     name: param.name.clone(),
@@ -689,11 +693,13 @@ impl Context {
                 })),
                 Visibility::Implementation,
                 false,
-            ).or_continue(self, ());
+            );
         }
+        
+        ok
     }
 
-    pub fn declare_self_ty(&mut self, ty: Type, span: Span) -> TypeResult<()> {
+    pub fn declare_self_ty(&mut self, ty: Type, span: Span) -> bool {
         let self_ident = Ident::new(SELF_TY_NAME, span);
         self.declare_type(self_ident, ty, Visibility::Implementation, false)
     }
@@ -704,17 +710,19 @@ impl Context {
         ty: Type,
         visibility: Visibility,
         forward: bool,
-    ) -> TypeResult<()> {
-        self.declare(
-            name,
-            Decl::Type {
-                ty: ty.clone(),
-                visibility,
-                forward,
-            },
-        )?;
-
-        Ok(())
+    ) -> bool {
+        let decl = Decl::Type {
+            ty: ty.clone(),
+            visibility,
+            forward,
+        };
+        
+        if let Err(err) = self.declare(name, decl) {
+            self.error(err);
+            return false;
+        }
+        
+        true
     }
 
     pub fn is_function_declared(&self, decl: &FunctionDecl) -> bool {

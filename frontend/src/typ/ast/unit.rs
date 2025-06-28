@@ -255,14 +255,14 @@ fn typecheck_type_decl_item(
         ast::TypeDeclItem::Alias(alias_decl) => {
             item_info.expect_not_generic(InvalidTypeParamsDeclKind::Alias, &alias_decl.span)?;
 
-            let alias = typecheck_alias(item_info.name, alias_decl, ctx)?;
+            let alias = typecheck_alias(item_info.name, alias_decl, ctx);
 
             ctx.declare_type(
                 alias.name.ident().clone(),
                 alias.target.ty().clone(),
                 visibility,
                 false,
-            )?;
+            );
 
             Ok(TypeDeclItem::Alias(Arc::new(alias)))
         },
@@ -308,7 +308,7 @@ fn typecheck_set_decl_item(
 ) -> TypeResult<TypeDeclItem> {
     let set_decl = Arc::new(SetDecl::typecheck(set_decl, full_name, ctx)?);
 
-    ctx.declare_set(&set_decl, visibility)?;
+    ctx.declare_set(&set_decl, visibility);
 
     Ok(TypeDeclItem::Set(set_decl))
 }
@@ -366,22 +366,22 @@ fn typecheck_type_decl_body(
 ) -> TypeResult<TypeDeclItem> {
     let type_decl = match type_decl {
         ast::TypeDeclItem::Struct(class) => {
-            let class = typecheck_struct_decl(info, class, ctx)?;
+            let class = typecheck_struct_decl(info, class, ctx);
             ast::TypeDeclItem::Struct(Arc::new(class))
         },
 
         ast::TypeDeclItem::Interface(iface) => {
-            let iface = typecheck_iface(info, iface, ctx)?;
+            let iface = typecheck_iface(info, iface, ctx);
             ast::TypeDeclItem::Interface(Arc::new(iface))
         },
 
         ast::TypeDeclItem::Variant(variant) => {
-            let variant = typecheck_variant(info, variant, ctx)?;
+            let variant = typecheck_variant(info, variant, ctx);
             ast::TypeDeclItem::Variant(Arc::new(variant))
         },
 
         ast::TypeDeclItem::Alias(alias) => {
-            let alias = typecheck_alias(info.name, alias, ctx)?;
+            let alias = typecheck_alias(info.name, alias, ctx);
             ast::TypeDeclItem::Alias(Arc::new(alias))
         },
 
