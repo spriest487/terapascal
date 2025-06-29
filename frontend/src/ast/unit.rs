@@ -21,7 +21,7 @@ use crate::ast::Stmt;
 use crate::ast::TypeDecl;
 use crate::ast::TypeDeclItem;
 pub use crate::parse::MatchOneOf;
-use crate::parse::Matcher;
+use crate::parse::{IllegalStatement, Matcher};
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
@@ -208,7 +208,12 @@ impl Unit<Span> {
             // after any decls with the usual begin/end keywords
 
             match Block::parse(parser.tokens()) {
-                Ok(block) => {
+                Ok(mut block) => {
+                    if let Some(bad_output) = block.output.take() {
+                        let illegal = IllegalStatement(Box::new(bad_output));
+                        parser.error(TracedError::trace(ParseError::ExprIsIllegal(illegal)));
+                    }
+                    
                     let end_kw = match parser.tokens().match_one_maybe(Operator::Period) {
                         Some(tt) => block.end.span().to(tt.span()),
                         None => block.end.clone(),
