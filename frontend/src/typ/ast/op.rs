@@ -591,9 +591,9 @@ fn typecheck_member_value(
     ctx: &Context,
 ) -> TypeResult<Value> {
     let member_span = member_ident.span.clone();
-    
+
     let member = ctx
-        .find_instance_member(&lhs.annotation().ty(), &member_ident)
+        .find_member(&lhs.annotation().ty(), &member_ident)
         .map_err(|err| TypeError::from_name_err(err, member_span.clone()))?;
 
     let annotation = match member {

@@ -8,8 +8,10 @@ use crate::typ::ast::SetDecl;
 use crate::typ::ast::StructDecl;
 use crate::typ::ast::Tag;
 use crate::typ::ast::VariantDecl;
+use crate::typ::Context;
 use crate::typ::Decl;
 use crate::typ::FunctionSig;
+use crate::typ::Type;
 use std::fmt;
 use std::fmt::Formatter;
 use std::iter;
@@ -41,11 +43,22 @@ impl Def {
         }
     }
 
+    pub fn defined_type(&self, ctx: &Context) -> Option<Type> {
+        match self {
+            Def::External(_) | Def::Function(_) => None,
+            Def::Struct(def) => Some(Type::from_struct_type(def.name.clone(), def.kind)),
+            Def::Interface(def) => Some(Type::interface(def.name.clone())),
+            Def::Variant(def) => Some(Type::variant(def.name.clone())),
+            Def::Enum(def) => Some(Type::enumeration(def.name.full_path.clone())),
+            Def::Set(def) => Some(Type::set(def.to_set_type(ctx).ok()?)),
+        }
+    }
+
     pub fn can_redefine_with(&self, new_def: &Self) -> bool {
         match (self, new_def) {
             (Def::External(decl_a), Def::External(decl_b)) => {
                 Self::equivalent_func_decl(decl_a, decl_b)
-            },
+            }
 
             (Def::Struct(a), Def::Struct(b)) => {
                 a.kind == b.kind
@@ -57,9 +70,9 @@ impl Def {
                     && a.fields().eq(b.fields())
                     && Self::redef_compare_all(a.tags.iter(), b.tags.iter(), Tag::eq)
                     && Self::redef_compare_all(a.methods(), b.methods(), |method_a, method_b| {
-                        Self::equivalent_method_decl(method_a, method_b)
-                    })
-            },
+                    Self::equivalent_method_decl(method_a, method_b)
+                })
+            }
 
             (Def::Interface(a), Def::Interface(b)) => {
                 a.forward == b.forward
@@ -68,13 +81,13 @@ impl Def {
                     && a.where_clause == b.where_clause
                     && Self::redef_compare_all(a.tags.iter(), b.tags.iter(), Tag::eq)
                     && Self::redef_compare_all(
-                        a.methods.iter(),
-                        b.methods.iter(),
-                        |a_method, b_method| {
-                            Self::equivalent_func_decl(&a_method.decl, &b_method.decl)
-                        },
-                    )
-            },
+                    a.methods.iter(),
+                    b.methods.iter(),
+                    |a_method, b_method| {
+                        Self::equivalent_func_decl(&a_method.decl, &b_method.decl)
+                    },
+                )
+            }
 
             (Def::Variant(a), Def::Variant(b)) => {
                 a.where_clause == b.where_clause
@@ -82,19 +95,19 @@ impl Def {
                     && a.name == b.name
                     && a.cases == b.cases
                     && Self::redef_compare_all(a.tags.iter(), b.tags.iter(), Tag::eq)
-            },
+            }
 
             (Def::Enum(a), Def::Enum(b)) => {
                 a == b
-            },
+            }
 
             (Def::Set(a), Def::Set(b)) => {
                 a == b
-            },
+            }
 
             // can't redefine a builtin function that has a builtin definition
             (Def::Function(_), Def::Function(_)) => false,
-            
+
             // non-matching
             _ => false,
         }
@@ -103,8 +116,8 @@ impl Def {
     // compare two lists of items for a redef. the redef must contain the original items in the same
     // order, but may have extras afterwards
     fn redef_compare_all<'a, T: 'a, F>(
-        a: impl IntoIterator<Item = &'a T>,
-        b: impl IntoIterator<Item = &'a T>,
+        a: impl IntoIterator<Item=&'a T>,
+        b: impl IntoIterator<Item=&'a T>,
         f: F,
     ) -> bool
     where

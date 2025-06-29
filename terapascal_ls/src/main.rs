@@ -330,11 +330,8 @@ impl LanguageServer for TerapascalServer {
 
         Ok(Some(CompletionResponse::Array(completions
             .into_iter()
-            .map(|name| lsp::CompletionItem {
-                label: name.to_string(),
-                ..lsp::CompletionItem::default()
-            })
-            .collect())))
+            .collect()
+        )))
     }
 
     async fn did_change_workspace_folders(&self, params: DidChangeWorkspaceFoldersParams) {

@@ -50,8 +50,6 @@ pub enum Decl {
     },
 
     Alias(IdentPath),
-
-    Namespace(IdentPath),
 }
 
 
@@ -64,7 +62,6 @@ impl Decl {
             | Decl::GlobalConst { visibility, .. } => Some(*visibility),
 
             | Decl::Alias(_)
-            | Decl::Namespace(_)
             | Decl::LocalVariable { .. } => None,
             | Decl::LocalConst { .. } => None,
         }
@@ -143,8 +140,6 @@ impl fmt::Display for Decl {
             },
             
             Decl::Alias(aliased) => write!(f, "{}", aliased),
-            
-            Decl::Namespace(namespace) => write!(f, "{}", namespace)
         }
     }
 }

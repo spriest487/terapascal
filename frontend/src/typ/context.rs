@@ -1489,7 +1489,7 @@ impl Context {
         &self.primitive_implements
     }
 
-    pub fn find_instance_member<'ty, 'ctx: 'ty>(
+    pub fn find_member<'ty, 'ctx: 'ty>(
         &'ctx self,
         of_ty: &'ty Type,
         member: &Ident,
@@ -1562,16 +1562,19 @@ impl Context {
         of_ty: &'ty Type,
     ) -> NameResult<Vec<InstanceMember>> {
         let mut members = Vec::new();
+
         for field_decl in of_ty.fields(self)? {
             for decl_index in 0..field_decl.idents.len() {
-                members.push(InstanceMember::Field {
+                let field_member = InstanceMember::Field {
                     ty: Type::from(field_decl.ty.clone()),
                     access: field_decl.access,
                     decl: field_decl.clone(),
                     decl_index,
-                });
+                };
+
+                members.push(field_member);
             }
-        } 
+        }
         
         for instance_method in ufcs::find_instance_methods_of(of_ty, self)? {
             members.push(match instance_method {

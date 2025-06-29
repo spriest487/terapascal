@@ -395,10 +395,6 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
             Value::Type(ty.clone(), span)
         },
 
-        ScopeMemberRef::Decl { value: Decl::Namespace(path), .. } => {
-            Value::Namespace(path.clone(), span)
-        },
-
         ScopeMemberRef::Scope { path } => {
             Value::Namespace(IdentPath::from_parts(path.keys().cloned()), span)
         },

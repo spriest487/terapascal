@@ -1,34 +1,35 @@
+mod completion;
 mod definition_map;
 
 use crate::fs::WorkspaceFilesystem;
+use crate::project::completion::resolve_completions;
 pub use crate::project::definition_map::DefinitionMap;
 pub use crate::project::definition_map::LinksEntry;
 use crate::semantic_tokens::SemanticTokenBuilder;
-use crate::util::{search_in_spanned, search_or_insert_spanned};
+use crate::util::search_in_spanned;
+use crate::util::search_or_insert_spanned;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use terapascal_build::error::BuildError;
+use terapascal_build::parse_units;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildStage;
 use terapascal_build::ParseOutput;
-use terapascal_build::error::BuildError;
-use terapascal_build::parse_units;
-use terapascal_common::CompileOpts;
-use terapascal_common::DiagnosticMessage;
-use terapascal_common::DiagnosticOutput;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::build_log::BuildLogEntry;
 use terapascal_common::span::Location;
 use terapascal_common::span::Spanned;
-use terapascal_frontend::Operator;
+use terapascal_common::CompileOpts;
+use terapascal_common::DiagnosticMessage;
+use terapascal_common::DiagnosticOutput;
 use terapascal_frontend::ast::IncompleteExpr;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
-use terapascal_frontend::typ::InstanceMember;
 use terapascal_frontend::typ::TypeError;
 use terapascal_frontend::typ::Value;
 use terapascal_frontend::typecheck;
-use tower_lsp::lsp_types::SemanticToken;
+use tower_lsp::lsp_types as lsp;
 
 pub struct FileDiagnostics {
     pub errors: Vec<DiagnosticMessage>,
@@ -82,7 +83,7 @@ pub struct Project {
     main_file: PathBuf,
 
     // todo: combine into one struct
-    pub semantic_tokens: HashMap<Arc<PathBuf>, Vec<SemanticToken>>,
+    pub semantic_tokens: HashMap<Arc<PathBuf>, Vec<lsp::SemanticToken>>,
     completion_points: HashMap<Arc<PathBuf>, Vec<IncompleteExpr<Value>>>,
 
     parse_output: Option<ParseOutput>,
@@ -236,41 +237,21 @@ impl Project {
         self.definition_map.find_usages(file, at)
     }
 
-    pub fn find_completion(&self, file: &PathBuf, at: Location) -> Option<Vec<Arc<String>>> {
-        let file_entries = self.completion_points.get(file)?;
-        let incomplete = search_in_spanned(file_entries, at)?;
+    pub fn find_completion(
+        &self,
+        file: &PathBuf,
+        at: Location,
+    ) -> Option<Vec<lsp::CompletionItem>> {
+        let Some(file_entries) = self.completion_points.get(file) else {
+            eprintln!("[find_completion] no entries for {}", file.display());
+            return None;
+        };
 
-        let mut entries = Vec::new();
-        match (incomplete.completion_op, incomplete.target.annotation()) {
-            (Operator::Period, Value::Typed(typed_val)) => {
-                let ctx = &incomplete.context.context;
-                match ctx.instance_members(&typed_val.ty) {
-                    Ok(members) => {
-                        for member in members {
-                            entries.push(match member {
-                                InstanceMember::Field {
-                                    decl, decl_index, ..
-                                } => decl.idents[decl_index].name.clone(),
-                                InstanceMember::Method { method, .. } => {
-                                    method.func_decl.ident().name.clone()
-                                },
-                                InstanceMember::UFCSCall { decl, .. } => decl.ident().name.clone(),
-                                InstanceMember::Overloaded { candidates } => {
-                                    candidates[0].decl().ident().name.clone()
-                                },
-                            })
-                        }
-                    },
+        let Some(incomplete) = search_in_spanned(file_entries, at) else {
+            eprintln!("[find_completion] no matches for {at}");
+            return None;
+        };
 
-                    Err(err) => {
-                        eprintln!("[find_completion] {}", err);
-                    },
-                }
-            },
-
-            _ => {},
-        }
-
-        Some(entries)
+        Some(resolve_completions(&incomplete))
     }
 }
