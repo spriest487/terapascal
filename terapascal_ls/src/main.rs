@@ -11,10 +11,10 @@ use crate::util::collect_definition_links;
 use crate::util::convert_text_doc_position_params;
 use crate::util::span_range;
 use crate::workspace::Workspace;
+use terapascal_common::Severity;
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result as RpcResult;
 use tower_lsp::lsp_types as lsp;
-use tower_lsp::lsp_types::DiagnosticSeverity;
 use tower_lsp::lsp_types::DidChangeWorkspaceFoldersParams;
 use tower_lsp::lsp_types::DidCloseTextDocumentParams;
 use tower_lsp::lsp_types::DidOpenTextDocumentParams;
@@ -375,24 +375,37 @@ impl TerapascalServer {
                 continue;
             };
 
-            let mut diagnostics = Vec::with_capacity(file_diagnostics.errors.len());
+            let mut diagnostics = Vec::with_capacity(file_diagnostics.messages.len());
 
-            for error in file_diagnostics.errors {
-                let Some(label) = error.label.as_ref() else {
+            for diagnostic in file_diagnostics.messages {
+                let Some(label) = &diagnostic.label else {
                     continue;
                 };
 
-                let mut message = error.title;
+                let mut message = diagnostic.title;
                 
                 if let Some(label_text) = &label.text {
-                    message.push_str("\n");
+                    message.push_str(": ");
                     message.push_str(label_text);
                 }
+
+                for note in &diagnostic.notes {
+                    message.push_str("\n");
+                    message.push_str(note);
+                }
+                
+                let severity = match diagnostic.severity {
+                    Severity::Help => lsp::DiagnosticSeverity::HINT,
+                    Severity::Info => lsp::DiagnosticSeverity::INFORMATION,
+                    Severity::Warning => lsp::DiagnosticSeverity::WARNING,
+                    Severity::Error => lsp::DiagnosticSeverity::ERROR,
+                };
 
                 diagnostics.push(lsp::Diagnostic {
                     range: span_range(&label.span),
                     message,
-                    severity: Some(DiagnosticSeverity::ERROR),
+                    source: Some("Terapascal".to_string()),
+                    severity: Some(severity),
                     ..lsp::Diagnostic::default()
                 });
             }

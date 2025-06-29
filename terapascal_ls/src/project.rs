@@ -31,7 +31,7 @@ use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types as lsp;
 
 pub struct FileDiagnostics {
-    pub errors: Vec<DiagnosticMessage>,
+    pub messages: Vec<DiagnosticMessage>,
     pub version: Option<i32>,
 }
 
@@ -56,7 +56,7 @@ impl BuildDiagnostics {
 
         let version = filesystem.file_version(&path);
 
-        self.file_diagnostics(path, version).errors.push(message);
+        self.file_diagnostics(path, version).messages.push(message);
     }
 
     pub fn file_diagnostics(
@@ -65,7 +65,7 @@ impl BuildDiagnostics {
         version: Option<i32>,
     ) -> &mut FileDiagnostics {
         self.files.entry(path).or_insert_with(|| FileDiagnostics {
-            errors: Vec::new(),
+            messages: Vec::new(),
             version,
         })
     }
