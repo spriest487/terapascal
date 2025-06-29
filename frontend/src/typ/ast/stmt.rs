@@ -7,7 +7,7 @@ use crate::ast::{Ident, SemanticHint};
 use crate::ast::Operator;
 use crate::parse::IllegalStatement;
 use crate::typ::ast::cast::implicit_conversion;
-use crate::typ::ast::evaluate_expr;
+use crate::typ::ast::{evaluate_expr, handle_incomplete_expr};
 use crate::typ::ast::evaluate_no_args_function_call;
 use crate::typ::ast::expr::typecheck_call;
 use crate::typ::ast::member_value;
@@ -251,6 +251,10 @@ pub fn typecheck_stmt(
             let match_stmt = typecheck_match_stmt(match_stmt, expect_ty, ctx)?;
             Ok(ast::Stmt::Match(Box::new(match_stmt)))
         },
+        
+        ast::Stmt::IncompleteExpr(incomplete) => {
+            Err(handle_incomplete_expr(&incomplete, ctx)?)
+        }
     }
 }
 

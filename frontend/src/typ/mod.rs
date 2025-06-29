@@ -17,6 +17,7 @@ use ast::typecheck_unit;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::build_log::BuildLog;
+use terapascal_common::CompileOpts;
 use crate::result::ErrorContinue;
 
 #[derive(Debug, Clone)]
@@ -34,7 +35,7 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn typecheck<'a>(units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>, verbose: bool, log: &mut BuildLog) -> Self {
+    pub fn typecheck<'a>(units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>, opts: CompileOpts, log: &mut BuildLog) -> Self {
         // eprintln!("function sig size: {}", std::mem::size_of::<sig::FunctionSig>());
         // eprintln!("type size: {}", std::mem::size_of::<Type>());
         // eprintln!("type annotation size: {}", std::mem::size_of::<TypeAnnotation>());
@@ -45,7 +46,9 @@ impl Module {
         // eprintln!("ident path size: {}", std::mem::size_of::<IdentPath>());
         // eprintln!("span size: {}", std::mem::size_of::<Span>());
 
-        let mut root_ctx = Context::root();
+        let verbose = opts.verbose;
+
+        let mut root_ctx = Context::root(opts);
         let mut module_units = Vec::new();
 
         // typecheck in reverse order - the parsing order starts with the root unit, but we

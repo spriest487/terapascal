@@ -1,5 +1,3 @@
-extern crate core;
-
 pub mod ast;
 pub mod codegen;
 pub mod consts;
@@ -98,10 +96,10 @@ pub fn parse(
 
 pub fn typecheck<'a>(
     units: impl DoubleEndedIterator<Item = (&'a PathBuf, &'a ast::Unit)>,
-    verbose: bool,
+    opts: CompileOpts,
     log: &mut BuildLog,
 ) -> Module {
-    let module = Module::typecheck(units, verbose, log);
+    let module = Module::typecheck(units, opts, log);
 
     for error in module.root_ctx.errors() {
         log.diagnostic(error.clone());

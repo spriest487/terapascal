@@ -440,6 +440,7 @@ where
             ast::Stmt::Raise(raise) => self.add_raise(raise),
             ast::Stmt::Case(block) => self.add_case_block(block, Self::add_stmt),
             ast::Stmt::Match(block) => self.add_match_block(block, Self::add_stmt),
+            ast::Stmt::IncompleteExpr(incomplete) => self.add_expr(&incomplete.target),
         }
     }
 
@@ -506,7 +507,7 @@ where
         if let Some(is_pattern) = &if_cond.is_pattern {
             self.add_keyword(&is_pattern.is_kw);
             self.add_pattern(&is_pattern.pattern);
-            
+
             if let Some(binding) = &is_pattern.binding {
                 self.add(&binding.span, SEMANTIC_VARIABLE, "if pattern binding");
             }
@@ -557,7 +558,7 @@ where
             if let Some(binding) = &branch.binding {
                 self.add(&binding.span, SEMANTIC_VARIABLE, "match binding");
             }
-            
+
             add_branch(self, &branch.item);
         }
 
@@ -581,7 +582,7 @@ where
                     );
                 }
             },
-            
+
             ast::MatchPattern::Not {
                 not_kw, pattern, ..
             } => {
@@ -600,27 +601,27 @@ where
 
         self.add_typename(&cast.as_type);
     }
-    
+
     fn add_anon_func(&mut self, func_expr: &ast::AnonymousFunctionDef<A>) {
         if let Some(func_kw) = &func_expr.func_kw {
             self.add_keyword(func_kw);
         }
-        
+
         for param in &func_expr.params {
             if let Some(modifier) = &param.modifier {
                 self.add_keyword(&modifier.span);
             }
-            
+
             for item in &param.param_items {
                 if let Some(name_span) = &item.name_span {
                     self.add(name_span, SEMANTIC_PARAMETER, "anonymous func param");
                 }
             }
-            
+
             self.add_typename(&param.ty);
         }
 
-        self.add_typename(&func_expr.result_ty); 
+        self.add_typename(&func_expr.result_ty);
         self.add_block(&func_expr.body);
     }
 
@@ -754,9 +755,7 @@ where
             ast::Expr::Cast(cast) => self.add_cast(cast),
             ast::Expr::AnonymousFunction(func_expr) => self.add_anon_func(func_expr),
             ast::Expr::ExplicitSpec(_) => {},
-            ast::Expr::Incomplete(incomplete) => {
-                self.add_expr(&incomplete.target)
-            }
+            ast::Expr::Incomplete(incomplete) => self.add_expr(&incomplete.target),
         }
     }
 

@@ -83,6 +83,8 @@ pub fn expect_stmt_initialized(stmt: &Stmt, ctx: &Context) -> TypeResult<()> {
         ast::Stmt::Case(case) => expect_case_stmt_initialized(case, ctx),
 
         ast::Stmt::Match(match_stmt) => expect_match_stmt_initialized(match_stmt, ctx),
+        
+        ast::Stmt::IncompleteExpr(..) => Ok(()),
     }
 }
 

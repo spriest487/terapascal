@@ -3,7 +3,7 @@ use crate::DiagnosticOutput;
 use std::iter::once;
 use std::mem;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AggregateError<T, E> {
     pub item: Box<T>,
 

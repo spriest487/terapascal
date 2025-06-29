@@ -13,7 +13,7 @@ pub use self::local_binding::LocalBinding;
 pub use self::member::MemberStmt;
 use crate::ast::case::CaseBlock;
 use crate::ast::case::CaseStmt;
-use crate::ast::{Block, Call};
+use crate::ast::{Block, Call, IncompleteExpr};
 use crate::ast::ElseBranch;
 use crate::ast::Expr;
 use crate::ast::ForLoop;
@@ -40,7 +40,7 @@ use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 
-#[derive(Clone, Eq, Derivative)]
+#[derive(Clone, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub enum Stmt<A: Annotation = Span> {
     Ident(
@@ -75,7 +75,14 @@ pub enum Stmt<A: Annotation = Span> {
     Raise(Box<Raise<A>>),
     Case(Box<CaseStmt<A>>),
     Match(Box<MatchStmt<A>>),
+    
+    // See the equivalent in Expr. We treat incomplete statements as valid because we don't know
+    // without completing them, and still want to offer completion hints here
+    IncompleteExpr(IncompleteExpr<A>),
 }
+
+impl<A: Annotation> Eq for Stmt<A> {
+} 
 
 impl<A: Annotation> Stmt<A> {
     pub fn annotation(&self) -> &A {
@@ -96,6 +103,7 @@ impl<A: Annotation> Stmt<A> {
             Stmt::Raise(raise) => &raise.annotation,
             Stmt::Case(case) => &case.annotation,
             Stmt::Match(match_stmt) => &match_stmt.annotation,
+            Stmt::IncompleteExpr(incomplete) => incomplete.target.annotation(),
         }
     }
 
@@ -150,6 +158,10 @@ impl Stmt<Span> {
             Stmt::Match(match_stmt) => {
                 let match_expr = match_stmt.to_expr()?;
                 Some(Expr::from(match_expr))
+            }
+            
+            Stmt::IncompleteExpr(incomplete) => {
+                Some(Expr::Incomplete(incomplete.clone()))
             }
 
             _ => None,
@@ -263,6 +275,8 @@ impl Stmt<Span> {
             // raise and exit are always valid in either context
             Expr::Raise(raise) => Ok(Stmt::Raise(raise)),
             Expr::Exit(exit) => Ok(Stmt::Exit(exit)),
+
+            Expr::Incomplete(incomplete) => Ok(Stmt::IncompleteExpr(incomplete)),
 
             invalid => Err(invalid),
         }
@@ -416,6 +430,7 @@ impl<A: Annotation> fmt::Display for Stmt<A> {
             Stmt::Raise(raise) => write!(f, "{}", raise),
             Stmt::Case(case) => write!(f, "{}", case),
             Stmt::Match(match_stmt) => write!(f, "{}", match_stmt),
+            Stmt::IncompleteExpr(expr) => write!(f, "{}", expr),
         }
     }
 }

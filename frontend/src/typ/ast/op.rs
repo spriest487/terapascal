@@ -4,13 +4,13 @@ mod test;
 mod variant_case;
 
 use crate::ast;
-use crate::ast::Ident;
+use crate::ast::{Ident, IncompleteExpr};
 use crate::ast::IdentPath;
 use crate::ast::Literal;
 use crate::ast::Operator;
 use crate::ast::SemanticHint;
 use crate::typ::annotation::UfcsValue;
-use crate::typ::ast::collection_ctor_elements;
+use crate::typ::ast::{collection_ctor_elements, CompletionContext};
 use crate::typ::ast::const_eval_integer;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
@@ -410,6 +410,17 @@ fn typecheck_member_op(
     let span = &bin_op.annotation;
 
     let lhs = evaluate_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
+    
+    if ctx.opts().lang_server {
+        ctx.completion(IncompleteExpr {
+            target: Box::new(lhs.clone()),
+            completion_op: Some(Operator::Period),
+            context: CompletionContext {
+                context: Box::new(ctx.branch()),
+                span: bin_op.op_span.to(bin_op.rhs.span()),
+            }
+        });
+    }
 
     match &bin_op.rhs {
         // x.y

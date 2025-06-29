@@ -582,6 +582,10 @@ impl DefinitionMap {
             Stmt::Match(match_block) => {
                 self.add_match_block(match_block, ctx, &Self::add_stmt);
             }
+            
+            Stmt::IncompleteExpr(incomplete) => {
+                self.add_expr(&incomplete.target, ctx);
+            }
 
             Stmt::Break(_) | Stmt::Continue(_) => {}
         }

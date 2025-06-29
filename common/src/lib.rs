@@ -289,6 +289,8 @@ pub struct CompileOpts {
     pub lang_mode: LanguageMode,
 
     pub verbose: bool,
+    
+    pub lang_server: bool,
 
     pp_symbols: HashSet<String>,
     switches: HashMap<String, bool>,
@@ -300,6 +302,7 @@ impl Default for CompileOpts {
             verbose: false,
             case_sensitive: true,
             lang_mode: LanguageMode::Default,
+            lang_server: false,
             pp_symbols: HashSet::new(),
             switches: HashMap::new(),
         }

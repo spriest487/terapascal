@@ -429,7 +429,7 @@ impl<A: Annotation> Spanned for Expr<A> {
 pub struct IncompleteExpr<A: Annotation> {
     pub target: Box<Expr<A>>,
     
-    pub completion_op: Operator,
+    pub completion_op: Option<Operator>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -439,7 +439,12 @@ pub struct IncompleteExpr<A: Annotation> {
 
 impl<A: Annotation> fmt::Display for IncompleteExpr<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}{}", self.target, self.completion_op)
+        write!(f, "{}", self.target)?;
+        if let Some(op) = self.completion_op {
+            write!(f, "{}", op)?;
+        }
+        
+        Ok(())
     }
 }
 

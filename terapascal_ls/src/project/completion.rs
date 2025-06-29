@@ -32,7 +32,7 @@ pub fn resolve_completions(incomplete: &IncompleteExpr<Value>) -> Vec<lsp::Compl
     let ctx = &incomplete.context.context;
 
     match (incomplete.completion_op, incomplete.target.annotation()) {
-        (Operator::Period, Value::Typed(typed_val)) => {
+        (Some(Operator::Period), Value::Typed(typed_val)) => {
             let access = typed_val.ty.get_current_access(ctx);
 
             match ctx.instance_members(&typed_val.ty) {
@@ -48,11 +48,11 @@ pub fn resolve_completions(incomplete: &IncompleteExpr<Value>) -> Vec<lsp::Compl
             }
         },
 
-        (Operator::Period, Value::Type(ty, ..)) => {
+        (Some(Operator::Period), Value::Type(ty, ..)) => {
             type_static_members_to_completions(ty, ctx, &mut entries);
         },
 
-        (Operator::Period, Value::Namespace(namespace, ..)) => {
+        (Some(Operator::Period), Value::Namespace(namespace, ..)) => {
             namespace_members_to_completions(namespace, ctx, &mut entries);
         },
 

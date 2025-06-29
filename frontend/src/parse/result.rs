@@ -44,7 +44,7 @@ impl<A: Annotation> From<Expr<A>> for IllegalStatement<A> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ParseError {
     InvalidUnitFilename(Span),
 

@@ -85,6 +85,10 @@ pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
         ast::Stmt::Match(match_stmt) => {
             translate_match_stmt(match_stmt, builder);
         },
+
+        ast::Stmt::IncompleteExpr(expr) => {
+            panic!("illegal state: {expr} is not a complete expression")
+        }
     }
 
     builder.pop_debug_context()

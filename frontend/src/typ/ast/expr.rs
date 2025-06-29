@@ -202,21 +202,35 @@ pub fn typecheck_expr(
         }
         
         ast::Expr::Incomplete(incomplete) => {
-            let target = evaluate_expr(&incomplete.target, &Type::Nothing, ctx)?;
-            let completion_ctx = ctx.branch();
-            
-            Err(TypeError::IncompleteExpr {
-                expr: IncompleteExpr {
-                    target: Box::new(target),
-                    context: CompletionContext {
-                        context: Box::new(completion_ctx),
-                        span: incomplete.context.clone(),
-                    },
-                    completion_op: incomplete.completion_op.clone(),
-                }
-            })
+            Err(handle_incomplete_expr(&incomplete, ctx)?)
         }
     }
+}
+
+pub fn handle_incomplete_expr(incomplete: &&IncompleteExpr<Span>, ctx: &mut Context) -> TypeResult<TypeError> {
+    let target = evaluate_expr(&incomplete.target, &Type::Nothing, ctx)?;
+    let completion_ctx = ctx.branch();
+
+    let span = incomplete.context.clone();
+    let completion_op = incomplete.completion_op;
+
+    let incomplete = IncompleteExpr {
+        target: Box::new(target),
+        context: CompletionContext {
+            context: Box::new(completion_ctx),
+            span: incomplete.context.clone(),
+        },
+        completion_op: incomplete.completion_op.clone(),
+    };
+
+    if ctx.opts().lang_server {
+        ctx.completion(incomplete);
+    }
+
+    Err(TypeError::IncompleteExpr {
+        span,
+        completion_op,
+    })
 }
 
 fn typecheck_ident(

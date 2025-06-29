@@ -43,8 +43,8 @@ impl BuildLog {
         self.entries.push(BuildLogEntry::Trace(message.into()));
     }
 
-    pub fn diagnostic(&mut self, warning: impl DiagnosticOutput + 'static) {
-        self.entries.push(BuildLogEntry::Diagnostic(Box::new(warning)));
+    pub fn diagnostic(&mut self, diagnostic: impl DiagnosticOutput + 'static) {
+        self.entries.push(BuildLogEntry::Diagnostic(Box::new(diagnostic)));
     }
     
     pub fn has_errors(&self) -> bool {

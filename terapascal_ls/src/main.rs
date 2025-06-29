@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 mod fs;
 mod project;
 mod semantic_tokens;

@@ -1,22 +1,11 @@
-use crate::IntConstant;
 use crate::ast;
 use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
-use crate::ast::IncompleteExpr;
 use crate::ast::Operator;
 use crate::parse::IllegalStatement;
 use crate::result::ErrorContinue;
-use crate::typ::Context;
-use crate::typ::FunctionSig;
-use crate::typ::GenericError;
-use crate::typ::GenericTarget;
-use crate::typ::MAX_FLAGS_BITS;
-use crate::typ::MatchPattern;
-use crate::typ::Type;
-use crate::typ::TypeName;
-use crate::typ::ValueKind;
 use crate::typ::annotation::Value;
 use crate::typ::ast::Call;
 use crate::typ::ast::DeclMod;
@@ -26,13 +15,23 @@ use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::Stmt;
 use crate::typ::ast::VariantDecl;
 use crate::typ::context::NameError;
+use crate::typ::Context;
+use crate::typ::FunctionSig;
+use crate::typ::GenericError;
+use crate::typ::GenericTarget;
+use crate::typ::MatchPattern;
+use crate::typ::Type;
+use crate::typ::TypeName;
+use crate::typ::ValueKind;
+use crate::typ::MAX_FLAGS_BITS;
+use crate::IntConstant;
 use std::fmt;
+use terapascal_common::span::*;
 use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::Severity;
-use terapascal_common::span::*;
 
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -67,7 +66,8 @@ pub enum TypeError {
         actual: Value,
     },
     IncompleteExpr {
-        expr: IncompleteExpr<Value>,
+        span: Span,
+        completion_op: Option<Operator>,
     },
     NotMutable {
         expr: Box<Expr>,
@@ -511,7 +511,7 @@ impl Spanned for TypeError {
             TypeError::InvalidMatchExpr { expr, .. } => expr.span(),
             TypeError::NotDefaultable { span, .. } => span,
             TypeError::NotValueExpr { actual, .. } => actual.span(),
-            TypeError::IncompleteExpr { expr, .. } => expr.context.span(),
+            TypeError::IncompleteExpr { span, .. } => span,
             TypeError::InvalidBinOp { span, .. } => span,
             TypeError::InvalidUnaryOp { span, .. } => span,
             TypeError::BlockOutputIsNotExpression { stmt, .. } => stmt.span(),
@@ -1000,9 +1000,9 @@ impl fmt::Display for TypeError {
                 }
             },
 
-            TypeError::IncompleteExpr { expr, .. } => {
-                match expr.completion_op {
-                    Operator::Period => write!(f, "Expected member name"),
+            TypeError::IncompleteExpr { completion_op, .. } => {
+                match completion_op {
+                    Some(Operator::Period) => write!(f, "Expected member name"),
                     _ => write!(f, "This expression is incomplete"),
                 }
                 

@@ -26,7 +26,6 @@ use terapascal_common::DiagnosticOutput;
 use terapascal_frontend::ast::IncompleteExpr;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
-use terapascal_frontend::typ::TypeError;
 use terapascal_frontend::typ::Value;
 use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types as lsp;
@@ -115,6 +114,7 @@ impl Project {
         self.semantic_tokens.clear();
 
         let mut opts = CompileOpts::default();
+        opts.lang_server = true;
         opts.verbose = true;
 
         // todo: make search dirs and compiler options configurable
@@ -136,25 +136,12 @@ impl Project {
             Ok(parsed_output) => {
                 let module = typecheck(
                     parsed_output.units.iter(),
-                    input.compile_opts.verbose,
+                    input.compile_opts,
                     &mut log,
                 );
 
-                for error in module.root_ctx.errors() {
-                    diagnostics.add_err(error.clone(), filesystem);
-
-                    if let TypeError::IncompleteExpr { expr } = error {
-                        let file_completion_points = self
-                            .completion_points
-                            .entry(expr.context.span.file.clone())
-                            .or_insert_with(Vec::new);
-
-                        search_or_insert_spanned(
-                            file_completion_points,
-                            expr.context.span.clone(),
-                            || expr.clone(),
-                        );
-                    }
+                for completion in module.root_ctx.completions() {
+                    self.add_completion(completion);
                 }
 
                 for unit in &module.units {
@@ -213,6 +200,19 @@ impl Project {
         );
 
         diagnostics
+    }
+    
+    fn add_completion(&mut self, expr: &IncompleteExpr<Value>) {
+        let file_completion_points = self
+            .completion_points
+            .entry(expr.context.span.file.clone())
+            .or_insert_with(Vec::new);
+
+        search_or_insert_spanned(
+            file_completion_points,
+            expr.context.span.clone(),
+            || expr.clone(),
+        );
     }
 
     pub fn unit_paths(&self) -> Vec<PathBuf> {

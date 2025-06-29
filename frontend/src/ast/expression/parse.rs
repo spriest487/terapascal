@@ -244,9 +244,9 @@ impl<'a> CompoundExpressionParser<'a> {
                 
                 ExprParseStatus::Incomplete(completion_op) => {
                     let expr = self.finish_expr()?;
-                    
+
                     break Ok(Expr::Incomplete(IncompleteExpr {
-                        completion_op: completion_op.op,
+                        completion_op: Some(completion_op.op),
                         context: completion_op.span,
                         target: Box::new(expr),
                     }));

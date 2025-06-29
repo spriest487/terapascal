@@ -22,7 +22,6 @@ pub use self::result::*;
 pub use self::scope::*;
 pub use self::ufcs::InstanceMethod;
 pub use self::value_kind::*;
-use crate::ast::Access;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::MethodOwner;
@@ -30,6 +29,8 @@ use crate::ast::Path;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
 use crate::ast::IFACE_METHOD_ACCESS;
+use crate::ast::{Access, IncompleteExpr};
+use crate::typ::ast::EnumDecl;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;
 use crate::typ::ast::InterfaceDecl;
@@ -40,8 +41,6 @@ use crate::typ::ast::SetDecl;
 use crate::typ::ast::StructDecl;
 use crate::typ::ast::VariantDecl;
 use crate::typ::ast::SELF_TY_NAME;
-use crate::typ::ast::EnumDecl;
-use crate::typ::specialize_by_return_ty;
 use crate::typ::specialize_iface_def;
 use crate::typ::specialize_struct_def;
 use crate::typ::specialize_variant_def;
@@ -54,10 +53,12 @@ use crate::typ::TypeName;
 use crate::typ::TypeParamList;
 use crate::typ::TypeParamListItem;
 use crate::typ::TypeResult;
+use crate::typ::{specialize_by_return_ty, Value};
 use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
 use std::sync::Arc;
+use terapascal_common::CompileOpts;
 use terapascal_common::span::*;
 
 #[derive(Clone, Debug)]
@@ -78,10 +79,14 @@ pub struct Context {
     loop_stack: Vec<Span>,
     
     errors: Vec<TypeError>,
+
+    completions: Vec<IncompleteExpr<Value>>,
+    
+    opts: CompileOpts,
 }
 
 impl Context {
-    pub fn root() -> Self {
+    pub fn root(opts: CompileOpts) -> Self {
         let mut root_ctx = Self {
             scopes: ScopeStack::new(Scope::new(ScopeID(0), Environment::Global)),
             next_scope_id: ScopeID(1),
@@ -96,6 +101,8 @@ impl Context {
             primitive_implements: Vec::new(),
             
             errors: Vec::new(),
+            completions: Vec::new(),
+            opts,
         };
 
         let system_path = IdentPath::new(builtin_ident(SYSTEM_UNIT_NAME), []);
@@ -141,6 +148,10 @@ impl Context {
             .push(Type::interface(builtin_comparable_name().full_path));
 
         root_ctx
+    }
+    
+    pub fn opts(&self) -> &CompileOpts {
+        &self.opts
     }
 
     pub fn push_scope(&mut self, env: impl Into<Environment>) -> ScopeID {
@@ -2048,12 +2059,14 @@ impl Context {
     pub fn branch(&self) -> Self {
         let mut branch = self.clone();
         branch.errors.clear();
+        branch.completions.clear();
 
         branch
     }
     
     pub fn end_branch(&mut self, other: &mut Self) {
         self.errors.append(&mut other.errors);
+        self.completions.append(&mut other.completions);
     }
     
     pub fn with_temp_branch<T, F>(&mut self, f: F) -> T 
@@ -2134,6 +2147,14 @@ impl Context {
     
     pub fn errors(&self) -> &[TypeError] {
         &self.errors
+    }
+
+    pub fn completion(&mut self, expr: IncompleteExpr<Value>) {
+        self.completions.push(expr);
+    }
+
+    pub fn completions(&self) -> &[IncompleteExpr<Value>] {
+        &self.completions
     }
 }
 
