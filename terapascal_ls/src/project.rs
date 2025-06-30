@@ -11,6 +11,7 @@ use crate::util::search_or_insert_spanned;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 use terapascal_build::error::BuildError;
 use terapascal_build::parse_units;
 use terapascal_build::BuildInput;
@@ -132,13 +133,24 @@ impl Project {
             files: HashMap::new(),
         };
 
-        match parse_units(filesystem, &input, &mut log) {
+        let parse_start_time = Instant::now();
+        let parse_result = parse_units(filesystem, &input, &mut log);
+        eprintln!("[build] parsing complete: {}ms", Instant::now()
+            .duration_since(parse_start_time)
+            .as_millis());
+
+        match parse_result {
             Ok(parsed_output) => {
+                let typecheck_start_time = Instant::now();
                 let module = typecheck(
                     parsed_output.units.iter(),
                     input.compile_opts,
                     &mut log,
                 );
+
+                eprintln!("[build] typechecking complete: {}ms", Instant::now()
+                    .duration_since(typecheck_start_time)
+                    .as_millis());
 
                 for completion in module.root_ctx.completions() {
                     self.add_completion(completion);

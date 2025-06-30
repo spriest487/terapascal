@@ -199,7 +199,7 @@ impl<T> TracedError<T> {
 
     #[inline(always)]
     pub fn trace_skip(err: T, skip_frames: usize) -> Self {
-        let mut frames: Vec<_> = Backtrace::new().into();
+        let mut frames: Vec<_> = Backtrace::new_unresolved().into();
         frames.rotate_left(skip_frames);
         frames.truncate(frames.len() - skip_frames);
 
