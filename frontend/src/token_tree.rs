@@ -20,9 +20,9 @@ use std::ops::Add;
 use std::ops::BitOr;
 use std::sync::Arc;
 use terapascal_common::span::*;
-use terapascal_common::{DiagnosticLabel, Severity};
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::TracedError;
+use terapascal_common::{DiagnosticLabel, Severity};
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 pub enum DelimiterPair {

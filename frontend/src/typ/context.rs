@@ -3,6 +3,7 @@ mod scope;
 mod value_kind;
 mod binding;
 mod member;
+pub mod completion;
 
 mod decl;
 mod def;
@@ -29,7 +30,7 @@ use crate::ast::Path;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::ast::{Access, IncompleteExpr};
+use crate::ast::Access;
 use crate::typ::ast::EnumDecl;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;
@@ -41,6 +42,7 @@ use crate::typ::ast::SetDecl;
 use crate::typ::ast::StructDecl;
 use crate::typ::ast::VariantDecl;
 use crate::typ::ast::SELF_TY_NAME;
+use crate::typ::completion::CompletionHint;
 use crate::typ::specialize_iface_def;
 use crate::typ::specialize_struct_def;
 use crate::typ::specialize_variant_def;
@@ -53,13 +55,14 @@ use crate::typ::TypeName;
 use crate::typ::TypeParamList;
 use crate::typ::TypeParamListItem;
 use crate::typ::TypeResult;
-use crate::typ::{specialize_by_return_ty, Value};
+use crate::typ::specialize_by_return_ty;
 use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
+use std::mem;
 use std::sync::Arc;
-use terapascal_common::CompileOpts;
 use terapascal_common::span::*;
+use terapascal_common::CompileOpts;
 
 #[derive(Clone, Debug)]
 pub struct Context {
@@ -80,7 +83,7 @@ pub struct Context {
     
     errors: Vec<TypeError>,
 
-    completions: Vec<IncompleteExpr<Value>>,
+    completions: Vec<CompletionHint>,
     
     opts: CompileOpts,
 }
@@ -999,6 +1002,10 @@ impl Context {
         let method = method_defs.methods.get(&key)?.as_ref()?;
 
         Some(&method)
+    }
+    
+    pub fn current_scope(&self) -> ScopePathRef {
+        self.scopes.current_path()
     }
 
     pub fn namespace(&self) -> IdentPath {
@@ -2056,10 +2063,18 @@ impl Context {
         None
     }
     
-    pub fn branch(&self) -> Self {
-        let mut branch = self.clone();
-        branch.errors.clear();
-        branch.completions.clear();
+    pub fn branch(&mut self) -> Self {
+        // swap to avoid cloning these
+        let mut empty_completions = Vec::new();
+        let mut empty_errors = Vec::new();
+
+        mem::swap(&mut self.completions, &mut empty_completions);
+        mem::swap(&mut self.errors, &mut empty_errors);
+
+        let branch = self.clone();
+
+        mem::swap(&mut empty_completions, &mut self.completions);
+        mem::swap(&mut empty_errors, &mut self.errors);
 
         branch
     }
@@ -2149,11 +2164,11 @@ impl Context {
         &self.errors
     }
 
-    pub fn completion(&mut self, expr: IncompleteExpr<Value>) {
-        self.completions.push(expr);
+    pub fn completion(&mut self, hint: impl Into<CompletionHint>) {
+        self.completions.push(hint.into());
     }
 
-    pub fn completions(&self) -> &[IncompleteExpr<Value>] {
+    pub fn completions(&self) -> &[CompletionHint] {
         &self.completions
     }
 }

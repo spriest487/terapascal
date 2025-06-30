@@ -24,10 +24,9 @@ use terapascal_common::span::Spanned;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
-use terapascal_frontend::ast::IncompleteExpr;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::typ;
-use terapascal_frontend::typ::Value;
+use terapascal_frontend::typ::completion::CompletionHint;
 use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types as lsp;
 
@@ -84,7 +83,7 @@ pub struct Project {
 
     // todo: combine into one struct
     pub semantic_tokens: HashMap<Arc<PathBuf>, Vec<lsp::SemanticToken>>,
-    completion_points: HashMap<Arc<PathBuf>, Vec<IncompleteExpr<Value>>>,
+    completion_points: HashMap<Arc<PathBuf>, Vec<CompletionHint>>,
 
     parse_output: Option<ParseOutput>,
     module: Option<typ::Module>,
@@ -214,16 +213,18 @@ impl Project {
         diagnostics
     }
     
-    fn add_completion(&mut self, expr: &IncompleteExpr<Value>) {
+    fn add_completion(&mut self, hint: &CompletionHint) {
+        let context_span = hint.span();
+
         let file_completion_points = self
             .completion_points
-            .entry(expr.context.span.file.clone())
+            .entry(context_span.file.clone())
             .or_insert_with(Vec::new);
 
         search_or_insert_spanned(
             file_completion_points,
-            expr.context.span.clone(),
-            || expr.clone(),
+            context_span.clone(),
+            || hint.clone(),
         );
     }
 
@@ -259,11 +260,11 @@ impl Project {
             return None;
         };
 
-        let Some(incomplete) = search_in_spanned(file_entries, at) else {
+        let Some(hint) = search_in_spanned(file_entries, at) else {
             eprintln!("[find_completion] no matches for {at}");
             return None;
         };
 
-        Some(resolve_completions(&incomplete))
+        Some(resolve_completions(&hint))
     }
 }

@@ -1,28 +1,19 @@
-mod invoke;
-mod symbol;
-pub mod overload;
-pub mod method;
 pub mod function;
+mod invoke;
+pub mod method;
+pub mod overload;
+mod symbol;
 mod ufcs;
 
+use crate::IntConstant;
 use crate::ast;
-use crate::ast::{Ident, LiteralItem};
+use crate::ast::Annotation;
+use crate::ast::ConstExprValue;
+use crate::ast::Ident;
 use crate::ast::IdentPath;
+use crate::ast::LiteralItem;
 use crate::ast::SemanticHint;
-use crate::ast::{Annotation, ConstExprValue};
-pub use crate::typ::annotation::invoke::Invocation;
-use crate::typ::ast::{evaluate_expr, CompletionContext};
-use crate::typ::ast::implicit_conversion;
-use crate::typ::ast::specialize_call_args;
-use crate::typ::ast::typecheck_type_args;
-use crate::typ::ast::Expr;
-use crate::typ::ast::Literal;
-use crate::typ::function::FunctionValue;
-use crate::typ::method::MethodValue;
-use crate::typ::overload::OverloadValue;
-use crate::typ::result::*;
-use crate::typ::ty::*;
-use crate::typ::{builtin_string_type, Context};
+use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericTarget;
 use crate::typ::GenericTypeHint;
@@ -30,7 +21,20 @@ use crate::typ::NameContainer;
 use crate::typ::NameError;
 use crate::typ::ValueKind;
 use crate::typ::ValueKind::Temporary;
-use crate::IntConstant;
+pub use crate::typ::annotation::invoke::Invocation;
+use crate::typ::ast::Expr;
+use crate::typ::ast::Literal;
+use crate::typ::ast::evaluate_expr;
+use crate::typ::ast::implicit_conversion;
+use crate::typ::ast::specialize_call_args;
+use crate::typ::ast::typecheck_type_args;
+use crate::typ::builtin_string_type;
+use crate::typ::completion::CompletionContext;
+use crate::typ::function::FunctionValue;
+use crate::typ::method::MethodValue;
+use crate::typ::overload::OverloadValue;
+use crate::typ::result::*;
+use crate::typ::ty::*;
 use derivative::*;
 use std::borrow::Cow;
 use std::fmt;
@@ -79,21 +83,21 @@ impl VariantCaseValue {
                     .specialize(&type_list, ctx)
                     .map_err(|err| TypeError::from_generic_err(err, span.clone()))?
                     .into_owned()
-            }
+            },
 
             None => {
                 // infer the specialized generic type if the written one is generic and the hint is a specialized
                 // version of that same generic variant
                 match expect_ty {
                     Type::Variant(expect_variant)
-                    if expect_variant.full_path == self.variant_name.full_path =>
-                        {
-                            (**expect_variant).clone()
-                        }
+                        if expect_variant.full_path == self.variant_name.full_path =>
+                    {
+                        (**expect_variant).clone()
+                    },
 
                     _ => (*self.variant_name).clone(),
                 }
-            }
+            },
         };
 
         if variant_sym.is_unspecialized_generic() {
@@ -158,9 +162,10 @@ impl VariantCaseValue {
 
             (None, Some(..)) => {
                 let inferred_name = match expect_ty {
-                    Type::Variant(expect_name) => {
-                        self.variant_name.infer_specialized_from_hint(expect_name).cloned()
-                    }
+                    Type::Variant(expect_name) => self
+                        .variant_name
+                        .infer_specialized_from_hint(expect_name)
+                        .cloned(),
 
                     _ => None,
                 };
@@ -172,7 +177,7 @@ impl VariantCaseValue {
                     };
                     TypeError::from_generic_err(err, span.clone())
                 })?
-            }
+            },
 
             (None, None) => Cow::Borrowed(self.variant_name.as_ref()),
         };
@@ -193,7 +198,7 @@ impl VariantCaseValue {
                     },
                     span.clone(),
                 ));
-            }
+            },
         };
 
         // validate arg count matches (0 or 1)
@@ -208,7 +213,7 @@ impl VariantCaseValue {
                 }
 
                 None
-            }
+            },
 
             Some(data) => {
                 if args.len() != 1 {
@@ -225,7 +230,7 @@ impl VariantCaseValue {
                 let data_val = implicit_conversion(arg, &data.ty, ctx)?;
 
                 Some(data_val)
-            }
+            },
         };
 
         Ok(Invocation::VariantCtor {
@@ -373,7 +378,7 @@ impl EvaluatedConstExpr<String> {
             expr: Box::new(Expr::Literal(LiteralItem {
                 annotation: value.clone(),
                 literal,
-            }))
+            })),
         }
     }
 }
@@ -447,18 +452,10 @@ impl Value {
 
     pub fn expect_value(&self, expect_ty: &Type) -> TypeResult<()> {
         let (actual_ty, span) = match self {
-            Value::Typed(val) => {
-                (val.ty.clone(), &val.span)
-            }
-            Value::Const(const_val) => {
-                (const_val.ty.clone(), &const_val.span)
-            }
-            Value::Invocation(val) => {
-                (val.result_type().clone(), val.span())
-            }
-            Value::Function(func_val) => {
-                (Type::Function(func_val.sig.clone()), &func_val.span)
-            }
+            Value::Typed(val) => (val.ty.clone(), &val.span),
+            Value::Const(const_val) => (const_val.ty.clone(), &const_val.span),
+            Value::Invocation(val) => (val.result_type().clone(), val.span()),
+            Value::Function(func_val) => (Type::Function(func_val.sig.clone()), &func_val.span),
 
             Value::Method(..)
             | Value::Overload(..)
@@ -471,7 +468,7 @@ impl Value {
                     expected: expect_ty.clone(),
                     actual: self.clone(),
                 });
-            }
+            },
         };
 
         if actual_ty == Type::Nothing {
@@ -482,7 +479,11 @@ impl Value {
         }
 
         if actual_ty != *expect_ty && *expect_ty != Type::Nothing {
-            return Err(TypeError::type_mismatch(expect_ty.clone(), actual_ty, span.clone()));
+            return Err(TypeError::type_mismatch(
+                expect_ty.clone(),
+                actual_ty,
+                span.clone(),
+            ));
         }
 
         Ok(())
@@ -492,7 +493,11 @@ impl Value {
         let actual_ty = self.ty();
 
         if *actual_ty != Type::Nothing {
-            return Err(TypeError::type_mismatch(Type::Nothing, actual_ty.into_owned(), self.span().clone()));
+            return Err(TypeError::type_mismatch(
+                Type::Nothing,
+                actual_ty.into_owned(),
+                self.span().clone(),
+            ));
         }
 
         Ok(())
@@ -513,9 +518,9 @@ impl Value {
                 span,
                 ..ufcs.as_ref().clone()
             }),
-            Value::Invocation(invocation) => Value::from(
-                invocation.as_ref().clone().with_span(span)
-            ),
+            Value::Invocation(invocation) => {
+                Value::from(invocation.as_ref().clone().with_span(span))
+            },
             Value::Method(method) => Value::from(MethodValue {
                 span,
                 ..method.as_ref().clone()
@@ -550,7 +555,7 @@ impl Value {
             _ => None,
         }
     }
-    
+
     pub fn as_variant_case(&self) -> Option<&VariantCaseValue> {
         match self {
             Value::VariantCase(case_val) => Some(case_val),
@@ -566,24 +571,14 @@ impl Value {
             | Value::Method(_)
             | Value::Overload(_)
             | Value::Type(_, _)
-            | Value::VariantCase(..) => {
-                Cow::Owned(Type::Nothing)
-            }
+            | Value::VariantCase(..) => Cow::Owned(Type::Nothing),
 
-            Value::Function(func_val) => {
-                Cow::Owned(Type::Function(func_val.sig.clone()))
-            }
+            Value::Function(func_val) => Cow::Owned(Type::Function(func_val.sig.clone())),
 
-            Value::Invocation(invocation) => {
-                Cow::Borrowed(invocation.result_type())
-            }
+            Value::Invocation(invocation) => Cow::Borrowed(invocation.result_type()),
 
-            Value::Const(const_val) => {
-                Cow::Borrowed(&const_val.ty)
-            }
-            Value::Typed(val) => {
-                Cow::Borrowed(&val.ty)
-            }
+            Value::Const(const_val) => Cow::Borrowed(&const_val.ty),
+            Value::Typed(val) => Cow::Borrowed(&val.ty),
         }
     }
 
@@ -607,7 +602,7 @@ impl Value {
                 let case_path = ctor.variant_name.full_path.clone().child(ctor.case.clone());
 
                 Some(Cow::Owned(case_path))
-            }
+            },
         }
     }
 
@@ -733,19 +728,19 @@ impl fmt::Display for Value {
         match self {
             Value::Untyped(_) => {
                 write!(f, "untyped value")
-            }
+            },
             Value::Typed(val) => {
                 write!(f, "{} of type {}", val.value_kind, val.ty)
-            }
+            },
             Value::Function(func) => {
                 write!(f, "function {}", func.name)
-            }
+            },
             Value::UfcsFunction(func) => {
                 write!(f, "function (UFCS) {}", func.function_name)
-            }
+            },
             Value::Invocation(invoked) => {
                 write!(f, "{invoked}")
-            }
+            },
             Value::Method(method) => {
                 write!(
                     f,
@@ -753,30 +748,30 @@ impl fmt::Display for Value {
                     method.self_ty,
                     method.decl.func_decl.ident()
                 )
-            }
+            },
             Value::Type(ty, ..) => {
                 write!(f, "type {}", ty)
-            }
+            },
             Value::Namespace(ns, ..) => {
                 write!(f, "namespace {}", ns)
-            }
+            },
             Value::VariantCase(case) => {
                 write!(f, "variant case {}.{}", case.variant_name, case.case)
-            }
+            },
             Value::Overload(overload) => {
                 write!(f, "overloaded function")?;
                 if let Some(sig) = &overload.sig {
                     write!(f, " with signature {}", sig)?;
                 }
                 Ok(())
-            }
+            },
             Value::Const(const_val) => {
                 write!(f, "constant")?;
                 if let Some(decl) = &const_val.decl {
                     write!(f, " {}", decl)?;
                 }
                 write!(f, "({})", const_val.value)
-            }
+            },
         }
     }
 }

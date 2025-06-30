@@ -6,13 +6,16 @@ use crate::ast::expression::parse::operator::SymbolOperator;
 use crate::ast::match_block::MatchExpr;
 use crate::ast::operators::*;
 use crate::ast::type_name::TypeName;
-use crate::ast::{ArgList, Ident, IncompleteExpr};
+use crate::ast::AnonymousFunctionDef;
+use crate::ast::ArgList;
 use crate::ast::Block;
 use crate::ast::CaseExpr;
 use crate::ast::CollectionCtor;
 use crate::ast::Exit;
 use crate::ast::Expr;
+use crate::ast::Ident;
 use crate::ast::IfCond;
+use crate::ast::IncompleteExpr;
 use crate::ast::Literal;
 use crate::ast::ObjectCtor;
 use crate::ast::ObjectCtorArgs;
@@ -20,7 +23,6 @@ use crate::ast::ObjectCtorMember;
 use crate::ast::Raise;
 use crate::ast::TypeArgList;
 use crate::ast::TypeList;
-use crate::ast::AnonymousFunctionDef;
 use crate::parse::*;
 use crate::token_tree::*;
 use crate::Keyword;
@@ -31,11 +33,11 @@ use terapascal_common::TracedError;
 enum ExprParseStatus {
     // we have reached the end of the expression and will not consume any more tokens
     Done,
-    
+
     // more expression parts may follow the currently accumulated parts
     More,
-    
-    // parsing failed at a location suitable for completion suggestions  
+
+    // parsing failed at a location suitable for completion suggestions
     Incomplete(SymbolOperator),
 }
 
@@ -118,12 +120,10 @@ fn parse_default(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
 
             (ty_name, span)
         },
-        
+
         Some(..) => unreachable!(),
 
-        None => {
-            (TypeName::unspecified(), kw.into_span())
-        }
+        None => (TypeName::unspecified(), kw.into_span()),
     };
 
     Ok(Expr::literal(Literal::DefaultValue(Box::new(ty)), span))
@@ -131,12 +131,13 @@ fn parse_default(tokens: &mut TokenStream) -> ParseResult<Expr<Span>> {
 
 fn parse_type_info_expr(tokens: &mut TokenStream) -> ParseResult<Expr> {
     let kw = tokens.match_one(Keyword::TypeInfo)?;
-    let typename_group = tokens.match_one(DelimiterPair::Bracket)?
+    let typename_group = tokens
+        .match_one(DelimiterPair::Bracket)?
         .into_delimited_group()
         .unwrap();
 
     let span = kw.span().to(&typename_group.close);
-    
+
     let mut typename_tokens = typename_group.into_inner_tokens();
     let typename = TypeName::parse(&mut typename_tokens)?;
     typename_tokens.finish()?;
@@ -188,13 +189,13 @@ impl fmt::Display for CompoundExpressionPart {
                 write!(f, ")")?;
                 Ok(())
             },
-            
+
             CompoundExpressionPart::Operator(OperatorPart::ObjectCtor { args, type_args }) => {
                 write!(f, "ctor")?;
                 if let Some(type_args) = type_args {
                     write!(f, " {}", type_args)?;
                 }
-                
+
                 write!(f, ": {args}")
             },
 
@@ -225,23 +226,23 @@ impl<'a> CompoundExpressionParser<'a> {
             // the function the operand referred to, an array element access, or a binary
             // operator connecting this operand to the next one
             let status = if !self.last_was_operand {
-                // if we fail to parse an operand, and the previous operator was a completion 
+                // if we fail to parse an operand, and the previous operator was a completion
                 // trigger (.), pop that last operator, and use it to turn everything preceding
                 // it into a completable expression
                 self.parse_operand()?
             } else {
                 self.parse_operator()?
             };
-            
+
             match status {
                 ExprParseStatus::More => {
                     continue;
-                }
-                
+                },
+
                 ExprParseStatus::Done => {
                     break self.finish_expr();
-                }
-                
+                },
+
                 ExprParseStatus::Incomplete(completion_op) => {
                     let expr = self.finish_expr()?;
 
@@ -250,11 +251,11 @@ impl<'a> CompoundExpressionParser<'a> {
                         context: completion_op.span,
                         target: Box::new(expr),
                     }));
-                }
+                },
             }
         }
     }
-    
+
     fn finish_expr(self) -> ParseResult<Expr> {
         if self.parts.is_empty() {
             let expected = Matcher::ExprOperandStart;
@@ -380,11 +381,11 @@ impl<'a> CompoundExpressionParser<'a> {
                 let expr = Expr::from(raise);
                 self.push_operand(expr);
             },
-            
+
             Some(tt) if tt.is_keyword(Keyword::TypeInfo) => {
                 let expr = parse_type_info_expr(self.tokens)?;
                 self.push_operand(expr);
-            }
+            },
 
             Some(tt) if tt.is_delimited(DelimiterPair::CaseEnd) => {
                 let expr = parse_case_expr(self.tokens)?;
@@ -396,7 +397,11 @@ impl<'a> CompoundExpressionParser<'a> {
                 self.push_operand(expr);
             },
 
-            Some(tt) if tt.is_keyword(Keyword::Function) || tt.is_keyword(Keyword::Procedure) || tt.is_keyword(Keyword::Lambda) => {
+            Some(tt)
+                if tt.is_keyword(Keyword::Function)
+                    || tt.is_keyword(Keyword::Procedure)
+                    || tt.is_keyword(Keyword::Lambda) =>
+            {
                 let func_def = AnonymousFunctionDef::parse(self.tokens)?;
                 self.push_operand(Expr::from(func_def))
             },
@@ -478,23 +483,21 @@ impl<'a> CompoundExpressionParser<'a> {
 
     fn parse_invocation(&mut self, type_args: Option<TypeArgList>) -> ParseResult<()> {
         let match_arg_list = Matcher::from(DelimiterPair::Bracket);
-        
+
         let mut inner_tokens = match self.tokens.look_ahead().next().cloned() {
-            Some(TokenTree::Delimited(group)) => {
-                group.into_inner_tokens()
-            },
+            Some(TokenTree::Delimited(group)) => group.into_inner_tokens(),
 
             Some(bad) => {
                 return Err(TracedError::trace(ParseError::UnexpectedToken(
                     Box::new(bad),
                     Some(match_arg_list),
-                )))
+                )));
             },
             None => {
                 return Err(TracedError::trace(ParseError::UnexpectedEOF(
                     match_arg_list,
                     self.tokens.context().clone(),
-                )))
+                )));
             },
         };
 
@@ -509,18 +512,20 @@ impl<'a> CompoundExpressionParser<'a> {
 
         if is_ctor_ahead {
             let args = ObjectCtorArgs::parse(&mut self.tokens)?;
-            
-            self.parts.push(CompoundExpressionPart::Operator(OperatorPart::ObjectCtor {
-                args,
-                type_args
-            }));
+
+            self.parts
+                .push(CompoundExpressionPart::Operator(OperatorPart::ObjectCtor {
+                    args,
+                    type_args,
+                }));
         } else {
             let args = ArgList::parse(&mut self.tokens)?;
 
-            self.parts.push(CompoundExpressionPart::Operator(OperatorPart::Call { 
-                args, 
-                type_args
-            }));
+            self.parts
+                .push(CompoundExpressionPart::Operator(OperatorPart::Call {
+                    args,
+                    type_args,
+                }));
         }
 
         self.last_was_operand = true;
@@ -540,10 +545,10 @@ impl<'a> CompoundExpressionParser<'a> {
                 self.push_operand(Expr::Ident(member_ident, member_span));
 
                 self.last_was_operand = true;
-                
+
                 Ok(None)
-            }
-            
+            },
+
             None => {
                 self.last_was_operand = false;
 
@@ -563,10 +568,10 @@ impl<'a> CompoundExpressionParser<'a> {
 
                 Ok(Some(SymbolOperator {
                     op: operator,
-                    span, 
+                    span,
                     pos: Position::Binary,
                 }))
-            }
+            },
         }
     }
 
@@ -626,13 +631,11 @@ impl<'a> CompoundExpressionParser<'a> {
                     self.last_was_operand = true;
                     self.push_operator_cast(op_tt, as_typename);
                 } else if op == Operator::With {
-                    let with_group = DelimitedGroup::parse(
-                        self.tokens, 
-                        DelimiterPair::SquareBracket
-                    )?;
-                    
+                    let with_group =
+                        DelimitedGroup::parse(self.tokens, DelimiterPair::SquareBracket)?;
+
                     let with_span = with_group.span.clone();
-                    
+
                     let mut with_tokens = with_group.into_inner_tokens();
                     let mut arg_types = Vec::new();
                     loop {
@@ -641,15 +644,15 @@ impl<'a> CompoundExpressionParser<'a> {
                                 break;
                             }
                         }
-                        
+
                         let arg_type = TypeName::parse(&mut with_tokens)?;
                         arg_types.push(arg_type);
                     }
 
                     with_tokens.finish()?;
-                    
+
                     let arg_types = TypeList::new(arg_types, with_span);
-                    
+
                     self.last_was_operand = true;
                     self.push_operator_with(op_tt, arg_types);
                 } else if op.is_valid_in_pos(Position::Postfix) {

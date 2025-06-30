@@ -1,84 +1,123 @@
-use terapascal_frontend::Operator;
 use terapascal_frontend::ast::Access;
 use terapascal_frontend::ast::FunctionDeclKind;
 use terapascal_frontend::ast::IdentPath;
-use terapascal_frontend::ast::IncompleteExpr;
 use terapascal_frontend::ast::Visibility;
-use terapascal_frontend::typ::Binding;
-use terapascal_frontend::typ::Context;
+use terapascal_frontend::typ::ast::FunctionDecl;
+use terapascal_frontend::typ::ast::Literal;
+use terapascal_frontend::typ::ast::OverloadCandidate;
+use terapascal_frontend::typ::completion::CompletionHint;
+use terapascal_frontend::typ::{Context, Environment};
 use terapascal_frontend::typ::Decl;
 use terapascal_frontend::typ::InstanceMember;
 use terapascal_frontend::typ::ScopeMember;
 use terapascal_frontend::typ::ScopeMemberRef;
+use terapascal_frontend::typ::ScopePathRef;
 use terapascal_frontend::typ::Type;
 use terapascal_frontend::typ::Value;
-use terapascal_frontend::typ::ast::FunctionDecl;
-use terapascal_frontend::typ::ast::Literal;
-use terapascal_frontend::typ::ast::OverloadCandidate;
+use terapascal_frontend::typ::{Binding, Scope};
+use terapascal_frontend::Operator;
 use tower_lsp::lsp_types as lsp;
-use tower_lsp::lsp_types::CompletionItemLabelDetails;
 
 const FIELD_ORDER: usize = 0;
+const VARIABLE_ORDER: usize = 0;
 const METHOD_ORDER: usize = 1;
 const UFCS_ORDER: usize = 2;
 const FUNCTION_ORDER: usize = 3;
 const TYPE_ORDER: usize = 3;
 const NAMESPACE_ORDER: usize = 3;
-const VARIABLE_ORDER: usize = 0;
 
-pub fn resolve_completions(incomplete: &IncompleteExpr<Value>) -> Vec<lsp::CompletionItem> {
+pub fn resolve_completions(hint: &CompletionHint) -> Vec<lsp::CompletionItem> {
     let mut entries = Vec::new();
 
-    let ctx = &incomplete.context.context;
+    match hint {
+        CompletionHint::Expr(incomplete) => {
+            let ctx = &incomplete.context.context;
 
-    match (incomplete.completion_op, incomplete.target.annotation()) {
-        (Some(Operator::Period), Value::Typed(typed_val)) => {
-            let access = typed_val.ty.get_current_access(ctx);
+            match (incomplete.completion_op, incomplete.target.annotation()) {
+                (Some(Operator::Period), Value::Typed(typed_val)) => {
+                    let access = typed_val.ty.get_current_access(ctx);
 
-            match ctx.instance_members(&typed_val.ty) {
-                Ok(members) => {
-                    for member in members {
-                        instance_member_to_completions(member, access, &mut entries);
+                    match ctx.instance_members(&typed_val.ty) {
+                        Ok(members) => {
+                            for member in members {
+                                instance_member_to_completions(member, access, &mut entries);
+                            }
+                        },
+
+                        Err(err) => {
+                            eprintln!("[resolve_completions] {}", err);
+                        },
                     }
                 },
 
-                Err(err) => {
-                    eprintln!("[resolve_completions] {}", err);
+                (Some(Operator::Period), Value::Type(ty, ..)) => {
+                    type_static_members_to_completions(ty, ctx, &mut entries);
+                },
+
+                (Some(Operator::Period), Value::Namespace(namespace, ..)) => {
+                    namespace_members_to_completions(namespace, ctx, &mut entries);
+                },
+
+                _ => {
+                    current_scope_to_completions(ctx, &mut entries);
                 },
             }
         },
 
-        (Some(Operator::Period), Value::Type(ty, ..)) => {
-            type_static_members_to_completions(ty, ctx, &mut entries);
+        CompletionHint::Blank(context) => {
+            current_scope_to_completions(context.context.as_ref(), &mut entries);
         },
-
-        (Some(Operator::Period), Value::Namespace(namespace, ..)) => {
-            namespace_members_to_completions(namespace, ctx, &mut entries);
-        },
-
-        _ => {},
     }
+
+    eprintln!(
+        "[resolve_completions] {} entries for this location",
+        entries.len()
+    );
 
     entries
 }
 
-fn namespace_members_to_completions(
+fn current_scope_to_completions(ctx: &Context, entries: &mut Vec<lsp::CompletionItem>) {
+    let current_path = ctx.current_scope();
+    let namespace = ctx.namespace();
+
+    scope_path_to_completions(ctx, &current_path, &namespace, entries);
+    
+    // include used items from the nearest namespace
+    for namespace_scope in current_path.rev() {
+        if let Environment::Namespace { .. } = namespace_scope.env() {
+            for used_ns in namespace_scope.use_namespaces() {
+                namespace_members_to_completions(used_ns, ctx, entries);
+            }
+            break;
+        }
+    }
+}
+
+fn scope_path_to_completions(
+    ctx: &Context,
+    path: &ScopePathRef,
+    namespace: &IdentPath,
+    entries: &mut Vec<lsp::CompletionItem>,
+) {
+    for scope in path.rev() {
+        scope_to_completions(scope, namespace, ctx, entries);
+    }
+}
+
+fn scope_to_completions(
+    scope: &Scope,
     namespace: &IdentPath,
     ctx: &Context,
-    entries: &mut Vec<lsp::CompletionItem>,
+    entries: &mut Vec<lsp::CompletionItem>
 ) {
     let is_local_ns = *namespace == ctx.namespace();
 
-    let Some(ScopeMemberRef::Scope { path, .. }) = ctx.find_path(namespace) else {
-        eprintln!("[resolve_completions] not a namespace path: {namespace}");
-        return;
-    };
-
-    for (ident, member) in path.top().members() {
+    for (ident, member) in scope.members() {
         match member {
             ScopeMember::Scope(..) => {
                 let name = ident.name.to_string();
-                let full_name = path.to_namespace().child(ident.clone());
+                let full_name = namespace.clone().child(ident.clone());
 
                 entries.push(lsp::CompletionItem {
                     sort_text: Some(format!("{NAMESPACE_ORDER}{name}")),
@@ -114,7 +153,7 @@ fn namespace_members_to_completions(
                             entries.push(lsp::CompletionItem {
                                 sort_text: Some(format!("{TYPE_ORDER}{label}")),
                                 label,
-                                label_details: Some(CompletionItemLabelDetails {
+                                label_details: Some(lsp::CompletionItemLabelDetails {
                                     detail: Some(format!(" = {aliased}")),
                                     description: Some("alias".to_string()),
                                 }),
@@ -128,11 +167,13 @@ fn namespace_members_to_completions(
                         entries.push(type_completion(label, ty));
                     },
 
-                    Decl::GlobalVariable { binding, .. } => {
+                    Decl::LocalVariable { binding }
+                    | Decl::GlobalVariable { binding, .. } => {
                         entries.push(binding_completion(label, binding))
                     },
 
-                    Decl::GlobalConst { ty, val, .. } => {
+                    Decl::LocalConst { ty, val, .. }
+                    | Decl::GlobalConst { ty, val, .. } => {
                         entries.push(const_completion(label, ty, val))
                     },
 
@@ -141,12 +182,23 @@ fn namespace_members_to_completions(
                             entries.push(function_completion(overload.decl(), false));
                         }
                     },
-
-                    _ => {},
                 }
             },
         }
     }
+}
+
+fn namespace_members_to_completions(
+    namespace: &IdentPath,
+    ctx: &Context,
+    entries: &mut Vec<lsp::CompletionItem>,
+) {
+    let Some(ScopeMemberRef::Scope { path, .. }) = ctx.find_path(namespace) else {
+        eprintln!("[resolve_completions] not a namespace path: {namespace}");
+        return;
+    };
+
+    scope_to_completions(path.top(), namespace, ctx, entries);
 }
 
 fn type_static_members_to_completions(

@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod ast;
 pub mod codegen;
 pub mod consts;

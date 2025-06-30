@@ -18,6 +18,10 @@ impl<'s> Clone for ScopePathRef<'s> {
 }
 
 impl<'s> ScopePathRef<'s> {
+    pub fn rev(&self) -> impl Iterator<Item=&'s Scope> + '_ {
+        self.scopes.iter().cloned().rev()
+    }
+    
     pub fn find(&self, key: &Ident) -> Option<ScopeMemberRef<'s>> {
         let mut current = self.scopes.len() - 1;
 
