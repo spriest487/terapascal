@@ -1,16 +1,17 @@
 mod builtin;
+mod diag;
 mod dyn_value;
 mod func;
 mod heap;
 mod marshal;
 mod ptr;
 pub mod result;
-mod stack;
-mod diag;
 mod rtti_map;
+mod stack;
 
 pub use self::dyn_value::*;
 pub use self::ptr::Pointer;
+
 use crate::diag::DiagnosticOutput;
 use crate::diag::DiagnosticWorker;
 use crate::func::BuiltinFn;
@@ -47,13 +48,13 @@ pub struct Interpreter {
     opts: InterpreterOpts,
 
     functions: BTreeMap<ir::FunctionID, FunctionInfo>,
-    
+
     diag_worker: Option<DiagnosticWorker>,
-    
+
     // cache of RTTI info by the names/IDs used to look them up from user code
     typeinfo_map: RttiMap<ir::TypeDefID>,
     funcinfo_map: RttiMap<ir::FunctionID>,
-    
+
     // all methods with a corresponding MethodInfo object - the impl pointer of each
     // MethodInfo is an index into this list
     runtime_methods: Vec<ir::RuntimeMethod>,
@@ -67,7 +68,7 @@ impl Interpreter {
         let metadata = Rc::new(ir::Metadata::default());
 
         let native_heap = NativeHeap::new(metadata.clone(), marshaller.clone(), opts.trace_heap);
-        
+
         let diag_worker = match opts.diag_port {
             0 => None,
             port => DiagnosticWorker::new(port),
@@ -83,14 +84,14 @@ impl Interpreter {
             marshaller,
 
             opts,
-            
+
             functions: BTreeMap::new(),
-            
+
             diag_worker,
-            
+
             typeinfo_map: RttiMap::new(),
             funcinfo_map: RttiMap::new(),
-            
+
             runtime_methods: Vec::new(),
         }
     }
@@ -110,9 +111,7 @@ impl Interpreter {
             .stack
             .iter()
             .rev()
-            .map(|s|
-                StackTraceFrame::new(s.name().to_string(), &s.debug_location())
-            );
+            .map(|s| StackTraceFrame::new(s.name().to_string(), &s.debug_location()));
 
         StackTrace::new(frames)
     }
@@ -170,16 +169,17 @@ impl Interpreter {
             ir::Type::F32 => DynValue::F32(f32::NAN),
 
             ir::Type::Struct(id) => DynValue::from(self.init_struct(*id)?),
-            
+
             ir::Type::Flags(repr_id, ..) => DynValue::from(self.init_struct(*repr_id)?),
 
-            ir::Type::RcPointer(class_id) 
-            | ir::Type::RcWeakPointer(class_id) => DynValue::Pointer(Pointer::nil(match class_id {
-                ir::VirtualTypeID::Class(struct_id) => ir::Type::Struct(*struct_id),
-                ir::VirtualTypeID::Closure(..)
-                | ir::VirtualTypeID::Any
-                | ir::VirtualTypeID::Interface(..) => ir::Type::Nothing,
-            })),
+            ir::Type::RcPointer(class_id) | ir::Type::RcWeakPointer(class_id) => {
+                DynValue::Pointer(Pointer::nil(match class_id {
+                    ir::VirtualTypeID::Class(struct_id) => ir::Type::Struct(*struct_id),
+                    ir::VirtualTypeID::Closure(..)
+                    | ir::VirtualTypeID::Any
+                    | ir::VirtualTypeID::Interface(..) => ir::Type::Nothing,
+                }))
+            },
 
             ir::Type::Pointer(target) => DynValue::Pointer(Pointer::nil((**target).clone())),
 
@@ -282,7 +282,8 @@ impl Interpreter {
             ir::Ref::Local(id) => self.store_local(*id, val),
 
             ir::Ref::Global(name) => {
-                let global=  self.globals
+                let global = self
+                    .globals
                     .get_mut(name)
                     .unwrap_or_else(|| panic!("global `{}` is not allocated", name));
 
@@ -290,17 +291,17 @@ impl Interpreter {
                     GlobalValue::Variable { value, .. } => {
                         let byte_count = self.marshaller.marshal(&val, value.as_mut())?;
                         assert_eq!(byte_count, value.len());
-                    }
+                    },
 
                     GlobalValue::Function(..) => {
                         let msg = "global function value cannot be assigned to";
-                        return Err(ExecError::illegal_state(msg))
-                    }
-                    
+                        return Err(ExecError::illegal_state(msg));
+                    },
+
                     GlobalValue::StaticTagArray(..) => {
                         let msg = "global tag array value cannot be assigned to";
-                        return Err(ExecError::illegal_state(msg))
-                    }
+                        return Err(ExecError::illegal_state(msg));
+                    },
                 }
 
                 Ok(())
@@ -328,23 +329,17 @@ impl Interpreter {
                 Err(ExecError::illegal_state(msg))
             },
 
-            ir::Ref::Local(id) => {
-                self.load_local(*id)
-            },
+            ir::Ref::Local(id) => self.load_local(*id),
 
             ir::Ref::Global(name) => match self.globals.get(name) {
-                Some(GlobalValue::Function(id)) => {
-                    Ok(DynValue::Function(*id))
-                }
+                Some(GlobalValue::Function(id)) => Ok(DynValue::Function(*id)),
 
-                Some(GlobalValue::Variable { value, ty}) => {
+                Some(GlobalValue::Variable { value, ty }) => {
                     let val = self.marshaller.unmarshal(value, ty)?;
                     Ok(val.value)
-                }
+                },
 
-                Some(GlobalValue::StaticTagArray(loc)) => {
-                    Ok(DynValue::from(loc.clone()))
-                }
+                Some(GlobalValue::StaticTagArray(loc)) => Ok(DynValue::from(loc.clone())),
 
                 None => {
                     let msg = format!("global val `{}` is not allocated", name);
@@ -474,7 +469,7 @@ impl Interpreter {
         out: Option<&ir::Ref>,
     ) -> ExecResult<()> {
         let result_val = self.call(id, args)?;
-        
+
         match (result_val, out) {
             (Some(v), Some(out_at)) => {
                 self.store(&out_at, v)?;
@@ -488,15 +483,11 @@ impl Interpreter {
             // ok, no output expected, ignore result if there is one
             (_, None) => {},
         }
-        
+
         Ok(())
     }
 
-    fn call(
-        &mut self,
-        id: ir::FunctionID,
-        args: &[DynValue],
-    ) -> ExecResult<Option<DynValue>> {
+    fn call(&mut self, id: ir::FunctionID, args: &[DynValue]) -> ExecResult<Option<DynValue>> {
         let func_info = self
             .functions
             .get(&id)
@@ -566,12 +557,10 @@ impl Interpreter {
     }
 
     fn invoke_dtor(&mut self, val: &DynValue, ty: &ir::Type) -> ExecResult<()> {
-        let dtor_func_id = ty
-            .def_id()
-            .and_then(|id|  self.metadata.find_dtor(id));
-        
+        let dtor_func_id = ty.def_id().and_then(|id| self.metadata.find_dtor(id));
+
         // eprintln!("trying to invoke dtor for {}... {:?}, {:?}: {:?}", self.metadata.pretty_ty_name(ty), ty.def_id(), ty.rc_resource_def_id(), dtor_func_id);
-        
+
         if let Some(func_id) = dtor_func_id {
             let func_desc = self
                 .metadata
@@ -589,42 +578,43 @@ impl Interpreter {
 
         Ok(())
     }
-    
+
     fn get_class_runtime_type_ref(&self, type_id: ir::TypeDefID) -> Option<ir::GlobalRef> {
         self.typeinfo_map.find_by_key(type_id).cloned()
     }
 
     fn find_runtime_type(&self, resource_ty: &ir::Type) -> ExecResult<Rc<ir::RuntimeType>> {
-        self.metadata
-            .get_runtime_type(&resource_ty)
-            .ok_or_else(|| {
-                let name = self.metadata.pretty_ty_name(&resource_ty);
-                let funcs = self
-                    .metadata
-                    .runtime_types()
-                    .map(|(ty, funcs)| {
-                        let ty_name = self.metadata.pretty_ty_name(ty);
-    
-                        let release_func = match funcs.release {
-                            Some(id) => id.to_string(),
-                            None => "None".to_string(),
-                        };
-    
-                        let retain_func = match funcs.retain {
-                            Some(id) => id.to_string(),
-                            None => "None".to_string(),
-                        };
-    
-                        format!("  {}: release={}, retain={}", ty_name, release_func, retain_func)
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-    
-                let msg = format!("missing rc boilerplate for {} in:\n{}", name, funcs);
-                ExecError::illegal_state(msg)
-            })
+        self.metadata.get_runtime_type(&resource_ty).ok_or_else(|| {
+            let name = self.metadata.pretty_ty_name(&resource_ty);
+            let funcs = self
+                .metadata
+                .runtime_types()
+                .map(|(ty, funcs)| {
+                    let ty_name = self.metadata.pretty_ty_name(ty);
+
+                    let release_func = match funcs.release {
+                        Some(id) => id.to_string(),
+                        None => "None".to_string(),
+                    };
+
+                    let retain_func = match funcs.retain {
+                        Some(id) => id.to_string(),
+                        None => "None".to_string(),
+                    };
+
+                    format!(
+                        "  {}: release={}, retain={}",
+                        ty_name, release_func, retain_func
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let msg = format!("missing rc boilerplate for {} in:\n{}", name, funcs);
+            ExecError::illegal_state(msg)
+        })
     }
-    
+
     // load a pointer, expected to point to an RC struct
     // guarantees that the struct value returned has some value for its rc field
     fn load_rc_struct_ptr(&self, ptr: &Pointer) -> ExecResult<(Box<StructValue>, RcState)> {
@@ -640,24 +630,22 @@ impl Interpreter {
             let msg = "unable to access rc state of released structure".to_string();
             ExecError::illegal_state(msg)
         })?;
-        
+
         Ok((struct_val, struct_rc))
     }
 
     fn release_dyn_val(&mut self, val: &DynValue, weak: bool) -> ExecResult<bool> {
-        let ptr = val
-            .as_pointer()
-            .ok_or_else(|| {
-                let msg = format!("released val was not a pointer, found: {:?}", val);
-                ExecError::illegal_state(msg)
-            })?;
+        let ptr = val.as_pointer().ok_or_else(|| {
+            let msg = format!("released val was not a pointer, found: {:?}", val);
+            ExecError::illegal_state(msg)
+        })?;
 
         // NULL is a valid release target because we release uninitialized local RC pointers
         // just do nothing
         if ptr.is_null() {
             return Ok(false);
         }
-        
+
         let (mut struct_val, mut struct_rc) = self.load_rc_struct_ptr(ptr)?;
 
         // release calls are totally ignored for immortal refs
@@ -674,7 +662,7 @@ impl Interpreter {
                     self.stack_trace_formatted(),
                 );
             }
-            
+
             struct_rc.weak_count -= 1;
         } else {
             if struct_rc.strong_count == 0 {
@@ -722,7 +710,7 @@ impl Interpreter {
                 self.struct_debug_string(&struct_val),
             )
         }
-        
+
         if struct_rc.strong_count == 0 && struct_rc.weak_count == 0 {
             // no more refs, free the object
             if self.opts.trace_rc {
@@ -734,7 +722,7 @@ impl Interpreter {
             }
 
             self.dynfree(ptr)?;
-            
+
             return Ok(true);
         }
 
@@ -747,10 +735,7 @@ impl Interpreter {
     fn retain_dyn_val(&mut self, val: &DynValue, weak: bool) -> ExecResult<()> {
         let ptr = val
             .as_pointer()
-            .ok_or_else(|| ExecError::illegal_state(format!(
-                "{:?} cannot be retained",
-                val
-            )))?;
+            .ok_or_else(|| ExecError::illegal_state(format!("{:?} cannot be retained", val)))?;
 
         // retain on null is valid and does nothing
         // it should never normally happen in user code, but with unsafe casting it's
@@ -760,7 +745,7 @@ impl Interpreter {
         }
 
         let (mut struct_val, mut struct_rc) = self.load_rc_struct_ptr(ptr)?;
-        
+
         // don't retain immortal refs
         if struct_rc.strong_count < 0 {
             return Ok(());
@@ -777,7 +762,7 @@ impl Interpreter {
                     self.stack_trace_formatted(),
                 );
             }
-            
+
             struct_rc.strong_count += 1;
         }
 
@@ -789,10 +774,10 @@ impl Interpreter {
                 struct_rc.weak_count
             );
         }
-        
+
         struct_val.rc = Some(struct_rc);
         self.store_indirect(ptr, DynValue::Structure(struct_val))?;
-        
+
         Ok(())
     }
 
@@ -847,16 +832,22 @@ impl Interpreter {
                             addr: value.as_ptr() as usize,
                             ty: ty.clone(),
                         };
-                        
+
                         Ok(ptr)
-                    }
+                    },
 
                     other => {
-                        assert!(other.is_none(), "should never store anything other than a variable with a variable key");
+                        assert!(
+                            other.is_none(),
+                            "should never store anything other than a variable with a variable key"
+                        );
 
-                        let msg = format!("missing global ref found in address instruction ({})", var_ref);
+                        let msg = format!(
+                            "missing global ref found in address instruction ({})",
+                            var_ref
+                        );
                         Err(ExecError::illegal_state(msg))
-                    }
+                    },
                 }
             },
 
@@ -878,12 +869,14 @@ impl Interpreter {
         let mut pc = 0;
         while pc < instructions.len() {
             if self.opts.trace_ir {
-                let indent = str::repeat("    ", self
-                    .current_frame()
-                    .map(|frame| frame.block_depth())
-                    .unwrap_or(0)
-                    .saturating_sub(2));
-                
+                let indent = str::repeat(
+                    "    ",
+                    self.current_frame()
+                        .map(|frame| frame.block_depth())
+                        .unwrap_or(0)
+                        .saturating_sub(2),
+                );
+
                 let mut instruction_str = String::new();
                 self.metadata
                     .format_instruction(&instructions[pc], &mut instruction_str)
@@ -898,7 +891,7 @@ impl Interpreter {
 
             self.exec_instruction(&instructions[pc], &mut pc, &labels)
                 .map_err(|err| self.add_stack_trace(err))?;
-            
+
             self.update_diagnostics();
 
             pc += 1;
@@ -933,9 +926,11 @@ impl Interpreter {
             ir::Instruction::LocalBegin => self.exec_local_begin()?,
             ir::Instruction::LocalEnd => self.exec_local_end()?,
 
-            ir::Instruction::RcNew { out, type_id, immortal } => {
-                self.exec_rc_new(out, *type_id, *immortal)?
-            },
+            ir::Instruction::RcNew {
+                out,
+                type_id,
+                immortal,
+            } => self.exec_rc_new(out, *type_id, *immortal)?,
 
             ir::Instruction::Add(op) => self.exec_add(op)?,
 
@@ -1063,7 +1058,12 @@ impl Interpreter {
         Ok(())
     }
 
-    fn exec_rc_new(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID, immortal: bool) -> ExecResult<()> {
+    fn exec_rc_new(
+        &mut self,
+        out: &ir::Ref,
+        struct_id: ir::TypeDefID,
+        immortal: bool,
+    ) -> ExecResult<()> {
         let struct_val = self.init_struct(struct_id)?;
         let rc_ptr = self.rc_alloc(struct_val, immortal)?;
 
@@ -1299,7 +1299,9 @@ impl Interpreter {
             // value addition
             (a_val, b_val) => match a_val.try_add(&b_val) {
                 Some(result) => Ok(result),
-                None => Err(ExecError::IllegalInstruction(ir::Instruction::Add(op.clone()))),
+                None => Err(ExecError::IllegalInstruction(ir::Instruction::Add(
+                    op.clone(),
+                ))),
             },
         }?;
 
@@ -1313,7 +1315,9 @@ impl Interpreter {
 
         match a_val.try_idiv(&b_val) {
             Some(result) => self.store(&op.out, result),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::IDiv(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::IDiv(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1323,7 +1327,9 @@ impl Interpreter {
 
         match a_val.try_fdiv(&b_val) {
             Some(result) => self.store(&op.out, result),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::IDiv(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::IDiv(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1333,7 +1339,9 @@ impl Interpreter {
 
         match a_val.try_mod(&b_val) {
             Some(result) => self.store(&op.out, result),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Mod(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Mod(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1343,7 +1351,9 @@ impl Interpreter {
 
         match a_val.try_mul(&b_val) {
             Some(result) => self.store(&op.out, result),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Mul(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Mul(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1363,7 +1373,9 @@ impl Interpreter {
             // value addition
             (a_val, b_val) => match a_val.try_sub(&b_val) {
                 Some(result) => Ok(result),
-                None => Err(ExecError::IllegalInstruction(ir::Instruction::Sub(op.clone()))),
+                None => Err(ExecError::IllegalInstruction(ir::Instruction::Sub(
+                    op.clone(),
+                ))),
             },
         }?;
 
@@ -1377,7 +1389,9 @@ impl Interpreter {
 
         match a_val.try_shl(&b_val) {
             Some(result) => self.store(&op.out, result),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Shl(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Shl(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1387,7 +1401,9 @@ impl Interpreter {
 
         match a_val.try_shr(&b_val) {
             Some(result) => self.store(&op.out, result),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Shr(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Shr(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1397,7 +1413,9 @@ impl Interpreter {
 
         match a_val.try_eq(&b_val) {
             Some(eq) => self.store(&op.out, DynValue::Bool(eq)),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Eq(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Eq(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1407,7 +1425,9 @@ impl Interpreter {
 
         match a_val.try_gt(&b_val) {
             Some(gt) => self.store(&op.out, DynValue::Bool(gt)),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Gt(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Gt(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1417,7 +1437,9 @@ impl Interpreter {
 
         match a_val.try_gte(&b_val) {
             Some(gt) => self.store(&op.out, DynValue::Bool(gt)),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Gte(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Gte(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1427,7 +1449,9 @@ impl Interpreter {
 
         match a_val.try_lt(&b_val) {
             Some(gt) => self.store(&op.out, DynValue::Bool(gt)),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Lt(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Lt(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1437,7 +1461,9 @@ impl Interpreter {
 
         match a_val.try_lte(&b_val) {
             Some(gt) => self.store(&op.out, DynValue::Bool(gt)),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Lte(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Lte(
+                op.clone(),
+            ))),
         }
     }
 
@@ -1446,18 +1472,22 @@ impl Interpreter {
 
         match a_val.try_not() {
             Some(not) => self.store(&op.out, DynValue::Bool(not)),
-            None => Err(ExecError::IllegalInstruction(ir::Instruction::Not(op.clone()))),
+            None => Err(ExecError::IllegalInstruction(ir::Instruction::Not(
+                op.clone(),
+            ))),
         }
     }
 
     fn exec_and(&mut self, op: &ir::BinOpInstruction) -> ExecResult<()> {
-        let a_val = self.evaluate(&op.a)?.as_bool().ok_or_else(|| {
-            ExecError::IllegalInstruction(ir::Instruction::And(op.clone()))
-        })?;
+        let a_val = self
+            .evaluate(&op.a)?
+            .as_bool()
+            .ok_or_else(|| ExecError::IllegalInstruction(ir::Instruction::And(op.clone())))?;
 
-        let b_val = self.evaluate(&op.b)?.as_bool().ok_or_else(|| {
-            ExecError::IllegalInstruction(ir::Instruction::And(op.clone()))
-        })?;
+        let b_val = self
+            .evaluate(&op.b)?
+            .as_bool()
+            .ok_or_else(|| ExecError::IllegalInstruction(ir::Instruction::And(op.clone())))?;
 
         self.store(&op.out, DynValue::Bool(a_val && b_val))?;
 
@@ -1465,57 +1495,64 @@ impl Interpreter {
     }
 
     fn exec_or(&mut self, op: &ir::BinOpInstruction) -> ExecResult<()> {
-        let a_val = self.evaluate(&op.a)?.as_bool().ok_or_else(|| {
-            ExecError::IllegalInstruction(ir::Instruction::Or(op.clone()))
-        })?;
+        let a_val = self
+            .evaluate(&op.a)?
+            .as_bool()
+            .ok_or_else(|| ExecError::IllegalInstruction(ir::Instruction::Or(op.clone())))?;
 
-        let b_val = self.evaluate(&op.b)?.as_bool().ok_or_else(|| {
-            ExecError::IllegalInstruction(ir::Instruction::Or(op.clone()))
-        })?;
+        let b_val = self
+            .evaluate(&op.b)?
+            .as_bool()
+            .ok_or_else(|| ExecError::IllegalInstruction(ir::Instruction::Or(op.clone())))?;
 
         self.store(&op.out, DynValue::Bool(a_val || b_val))?;
 
         Ok(())
     }
 
-    fn store_bitwise_result(&mut self, out: &ir::Ref, arg_cell: &DynValue, result: u64) -> ExecResult<()> {
-        self.store(
-            out,
-            match arg_cell {
-                DynValue::Pointer(ptr ) => DynValue::Pointer(Pointer {
-                    ty: ptr.ty.clone(),
-                    addr: result as usize,
-                }),
-                
-                DynValue::I8(_) => DynValue::I8(result.cast_signed() as i8),
-                DynValue::I16(_) => DynValue::I16(result.cast_signed() as i16),
-                DynValue::I32(_) => DynValue::I32(result.cast_signed() as i32),
-                DynValue::ISize(_) => DynValue::ISize(result.cast_signed() as isize),
-                DynValue::I64(_) => DynValue::I64(result.cast_signed()),
-                
-                DynValue::U8(_) => DynValue::U8(result as u8),
-                DynValue::U16(_) => DynValue::U16(result as u16),
-                DynValue::U32(_) => DynValue::U32(result as u32),
-                DynValue::USize(_) => DynValue::USize(result as usize),
-                DynValue::U64(_) => DynValue::U64(result),
-                _ => {
-                    let msg = format!("unsupported type for bitwise operation result: {}", arg_cell.value_type_category());
+    fn store_bitwise_result(
+        &mut self,
+        out: &ir::Ref,
+        arg_cell: &DynValue,
+        result: u64,
+    ) -> ExecResult<()> {
+        self.store(out, match arg_cell {
+            DynValue::Pointer(ptr) => DynValue::Pointer(Pointer {
+                ty: ptr.ty.clone(),
+                addr: result as usize,
+            }),
 
-                    return Err(ExecError::illegal_state(msg));
-                },
+            DynValue::I8(_) => DynValue::I8(result.cast_signed() as i8),
+            DynValue::I16(_) => DynValue::I16(result.cast_signed() as i16),
+            DynValue::I32(_) => DynValue::I32(result.cast_signed() as i32),
+            DynValue::ISize(_) => DynValue::ISize(result.cast_signed() as isize),
+            DynValue::I64(_) => DynValue::I64(result.cast_signed()),
+
+            DynValue::U8(_) => DynValue::U8(result as u8),
+            DynValue::U16(_) => DynValue::U16(result as u16),
+            DynValue::U32(_) => DynValue::U32(result as u32),
+            DynValue::USize(_) => DynValue::USize(result as usize),
+            DynValue::U64(_) => DynValue::U64(result),
+            _ => {
+                let msg = format!(
+                    "unsupported type for bitwise operation result: {}",
+                    arg_cell.value_type_category()
+                );
+
+                return Err(ExecError::illegal_state(msg));
             },
-        )
+        })
     }
 
     fn exec_bitwise<OpFn, ToInstructionFn>(
         &mut self,
         op: &ir::BinOpInstruction,
         op_fn: OpFn,
-        to_instruction: ToInstructionFn
+        to_instruction: ToInstructionFn,
     ) -> ExecResult<()>
     where
         OpFn: Fn(u64, u64) -> u64,
-        ToInstructionFn: Fn(ir::BinOpInstruction) -> ir::Instruction, 
+        ToInstructionFn: Fn(ir::BinOpInstruction) -> ir::Instruction,
     {
         let a_cell = self.evaluate(&op.a)?;
 
@@ -1534,10 +1571,7 @@ impl Interpreter {
         self.store_bitwise_result(&op.out, &a_cell, result)
     }
 
-    fn exec_bitwise_not(
-        &mut self,
-        op: &ir::UnaryOpInstruction,
-    ) -> ExecResult<()> {
+    fn exec_bitwise_not(&mut self, op: &ir::UnaryOpInstruction) -> ExecResult<()> {
         let a_cell = self.evaluate(&op.a)?;
         let a_val = a_cell
             .try_cast(&ir::Type::U64)
@@ -1612,7 +1646,7 @@ impl Interpreter {
             let msg = "argument a of ClassIs instruction must evaluate to a pointer";
             ExecError::illegal_state(msg)
         })?;
-        
+
         if a_ptr.is_null() {
             return self.store(out, DynValue::Bool(false));
         }
@@ -1624,7 +1658,7 @@ impl Interpreter {
                 Err(ExecError::illegal_state(msg))
             },
         }?;
-        
+
         if let Some(rc) = &a_val.rc {
             // zombie references never count as castable any type
             if rc.strong_count == 0 {
@@ -1663,8 +1697,8 @@ impl Interpreter {
         let field_ptr = match of_ty {
             ir::Type::Flags(repr_id, ..) => {
                 return self.exec_field(out, a, field, &ir::Type::Struct(*repr_id));
-            }
-            
+            },
+
             ir::Type::Struct(struct_id) => {
                 let struct_ptr = self.addr_of_ref(a)?;
 
@@ -1698,7 +1732,10 @@ impl Interpreter {
                 let struct_val = match &val {
                     DynValue::Structure(struct_val) => struct_val.as_ref(),
                     val => {
-                        let msg = format!("trying to read field pointer of rc type but target wasn't an rc value @ {} (target was: {:?}", a, val);
+                        let msg = format!(
+                            "trying to read field pointer of rc type but target wasn't an rc value @ {} (target was: {:?}",
+                            a, val
+                        );
                         return Err(ExecError::illegal_state(msg));
                     },
                 };
@@ -1782,15 +1819,13 @@ impl Interpreter {
     }
 
     fn init_stdlib_globals(&mut self) -> ExecResult<()> {
-        let system_funcs: Vec<_> = builtin::system_funcs(&self.metadata)
-            .into_iter()
-            .collect();
+        let system_funcs: Vec<_> = builtin::system_funcs(&self.metadata).into_iter().collect();
 
         for (ident, func, ret, params) in system_funcs {
             let name = ir::NamePath::new(vec!["System".to_string()], ident.to_string());
             self.define_builtin(name, func, ret, params)?;
         }
-        
+
         Ok(())
     }
 
@@ -1816,7 +1851,7 @@ impl Interpreter {
 
             def_result.map_err(|err| self.add_stack_trace(err.into()))?;
         }
-        
+
         for (set_id, set_ty_def) in lib.metadata.set_alias_defs() {
             marshaller.add_flags_type(set_ty_def.flags_struct, set_id, lib.metadata())?;
         }
@@ -1849,7 +1884,7 @@ impl Interpreter {
                 self.functions.insert(*func_id, FunctionInfo {
                     name: Rc::new(match func.debug_name() {
                         Some(name) => name.to_string(),
-                        None => format!("{}", func_id)
+                        None => format!("{}", func_id),
                     }),
                     func: Rc::new(func),
                 });
@@ -1858,27 +1893,25 @@ impl Interpreter {
 
         self.metadata = Rc::new(metadata);
         self.marshaller = Rc::new(marshaller);
-        self.native_heap.set_metadata(self.metadata.clone(), self.marshaller.clone());
+        self.native_heap
+            .set_metadata(self.metadata.clone(), self.marshaller.clone());
 
         let mut string_lit_values = HashMap::new();
 
         for (id, literal) in lib.metadata().strings() {
-            let str_val = self
-                .create_string(literal, true)
-                .map_err(|err| ExecError::WithStackTrace {
-                    err: err.into(),
-                    stack_trace: self.stack_trace(),
-                })?;
+            let str_val =
+                self.create_string(literal, true)
+                    .map_err(|err| ExecError::WithStackTrace {
+                        err: err.into(),
+                        stack_trace: self.stack_trace(),
+                    })?;
 
             let str_ref = ir::GlobalRef::StringLiteral(id);
 
-            self.globals.insert(
-                str_ref,
-                GlobalValue::Variable {
-                    value: self.marshaller.marshal_to_vec(&str_val)?.into_boxed_slice(),
-                    ty: ir::Type::RcPointer(ir::VirtualTypeID::Class(ir::STRING_ID)),
-                },
-            );
+            self.globals.insert(str_ref, GlobalValue::Variable {
+                value: self.marshaller.marshal_to_vec(&str_val)?.into_boxed_slice(),
+                ty: ir::Type::RcPointer(ir::VirtualTypeID::Class(ir::STRING_ID)),
+            });
 
             string_lit_values.insert(id, str_val);
         }
@@ -1886,9 +1919,7 @@ impl Interpreter {
         // allocate static arrays for runtime tag objects (must exist before RTTI init)
         for (tag_loc, tag_count) in lib.metadata.tag_counts() {
             let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
-            let elements = iter::repeat(nil_any)
-                .take(tag_count)
-                .collect();
+            let elements = iter::repeat(nil_any).take(tag_count).collect();
 
             let empty_tag_array = self.create_dyn_array(&ir::ANY_TYPE, elements, true)?;
 
@@ -1904,23 +1935,26 @@ impl Interpreter {
             let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
             let ptr_bytes = self.marshaller.marshal_to_vec(&typeinfo_ptr)?;
 
-            self.globals.insert(typeinfo_ref.clone(), GlobalValue::Variable {
-                value: ptr_bytes.into_boxed_slice(),
-                ty: ir::TYPEINFO_TYPE,
-            });
-            
+            self.globals
+                .insert(typeinfo_ref.clone(), GlobalValue::Variable {
+                    value: ptr_bytes.into_boxed_slice(),
+                    ty: ir::TYPEINFO_TYPE,
+                });
+
             let class_id = ty.rc_resource_def_id();
 
-            let runtime_name = runtime_type.name
+            let runtime_name = runtime_type
+                .name
                 .as_ref()
                 .and_then(|str_id| self.metadata.get_string(*str_id))
                 .cloned();
-            
+
             self.typeinfo_map.add(class_id, runtime_name, typeinfo_ref);
         }
-        
+
         for (func_id, func_decl) in lib.metadata.functions() {
-            let runtime_name = func_decl.runtime_name
+            let runtime_name = func_decl
+                .runtime_name
                 .as_ref()
                 .and_then(|str_id| self.metadata.get_string(*str_id))
                 .cloned();
@@ -1929,12 +1963,14 @@ impl Interpreter {
             let ptr_bytes = self.marshaller.marshal_to_vec(&funcinfo_ptr)?;
 
             let funcinfo_ref = ir::GlobalRef::StaticFuncInfo(func_id);
-            self.globals.insert(funcinfo_ref.clone(), GlobalValue::Variable {
-                value: ptr_bytes.into_boxed_slice(),
-                ty: ir::FUNCINFO_TYPE,
-            });
-            
-            self.funcinfo_map.add(Some(func_id), runtime_name, funcinfo_ref);
+            self.globals
+                .insert(funcinfo_ref.clone(), GlobalValue::Variable {
+                    value: ptr_bytes.into_boxed_slice(),
+                    ty: ir::FUNCINFO_TYPE,
+                });
+
+            self.funcinfo_map
+                .add(Some(func_id), runtime_name, funcinfo_ref);
         }
 
         // declare global variables
@@ -1943,21 +1979,23 @@ impl Interpreter {
             let marshal_ty = self.marshaller.get_ty(var_ty)?;
             let zero_val = vec![0u8; marshal_ty.size()];
 
-            self.globals.insert(ir::GlobalRef::Variable(*var_id), GlobalValue::Variable {
-                value: zero_val.into_boxed_slice(),
-                ty: var_ty.clone(),
-            });
+            self.globals
+                .insert(ir::GlobalRef::Variable(*var_id), GlobalValue::Variable {
+                    value: zero_val.into_boxed_slice(),
+                    ty: var_ty.clone(),
+                });
         }
-        
-        // declare (uninitialized) global vars for static closure pointers 
+
+        // declare (uninitialized) global vars for static closure pointers
         for static_closure in &lib.static_closures {
             let closure_ptr_ref = ir::GlobalRef::StaticClosure(static_closure.id);
-            let closure_ptr_ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(static_closure.func_ty_id));
-            
+            let closure_ptr_ty =
+                ir::Type::RcPointer(ir::VirtualTypeID::Closure(static_closure.func_ty_id));
+
             // we only need to set a null pointer here, init code will set the actual value
             let default_val = self.default_init_dyn_val(&closure_ptr_ty)?;
             let default_val_bytes = self.marshaller.marshal_to_vec(&default_val)?;
-            
+
             self.globals.insert(closure_ptr_ref, GlobalValue::Variable {
                 ty: closure_ptr_ty,
                 value: default_val_bytes.into_boxed_slice(),
@@ -1970,7 +2008,7 @@ impl Interpreter {
             .marshaller
             .stack_alloc_size(lib.init())
             .map_err(|err| self.add_stack_trace(err.into()))?;
-        
+
         if self.opts.verbose {
             println!("[vm] entering library init");
         }
@@ -1985,7 +2023,7 @@ impl Interpreter {
         if self.opts.verbose {
             println!("[vm] exiting library init");
         }
-        
+
         Ok(())
     }
 
@@ -2077,10 +2115,15 @@ impl Interpreter {
 
         Ok(chars.into_iter().collect())
     }
-    
+
     #[allow(unused)]
-    fn create_variant_tag(&self, variant: &ir::VariantDef, case_name: &str) -> ExecResult<DynValue> {
-        let case_index = variant.cases
+    fn create_variant_tag(
+        &self,
+        variant: &ir::VariantDef,
+        case_name: &str,
+    ) -> ExecResult<DynValue> {
+        let case_index = variant
+            .cases
             .iter()
             .position(|case| case.name == case_name)
             .ok_or_else(|| {
@@ -2091,20 +2134,27 @@ impl Interpreter {
         DynValue::USize(case_index)
             .try_cast(&variant.tag_type)
             .ok_or_else(|| {
-                let msg = format!("failed to cast tag value {} for {}.{} case", case_index, variant.name, case_name);
+                let msg = format!(
+                    "failed to cast tag value {} for {}.{} case",
+                    case_index, variant.name, case_name
+                );
                 ExecError::illegal_state(msg)
             })
     }
-    
-    fn create_dyn_array(&mut self,
+
+    fn create_dyn_array(
+        &mut self,
         element_ty: &ir::Type,
         elements: Vec<DynValue>,
-        immortal: bool
+        immortal: bool,
     ) -> ExecResult<Pointer> {
         let Some(array_id) = self.metadata.find_dyn_array_struct(element_ty) else {
             let ty_name = self.metadata.pretty_ty_name(&element_ty);
             return Err(ExecError::IllegalState {
-                msg: format!("can't create dynarray of type {}: not found in metadata", ty_name),
+                msg: format!(
+                    "can't create dynarray of type {}: not found in metadata",
+                    ty_name
+                ),
             });
         };
 
@@ -2122,73 +2172,75 @@ impl Interpreter {
         let array = StructValue {
             type_id: array_id,
             rc: Some(RcState::new(immortal)),
-            fields: vec![ 
-                DynValue::I32(array_len),
-                DynValue::Pointer(array_ptr),
-            ]
+            fields: vec![DynValue::I32(array_len), DynValue::Pointer(array_ptr)],
         };
-        
+
         let dynarray = self.rc_alloc(array, immortal)?;
         Ok(dynarray)
     }
-    
+
     fn read_dynarray(&self, ptr: &Pointer) -> ExecResult<Vec<DynValue>> {
         let (array_struct, _) = self.load_rc_struct_ptr(ptr)?;
 
-        let element_ty = self.metadata.dyn_array_element_ty(array_struct.type_id)
+        let element_ty = self
+            .metadata
+            .dyn_array_element_ty(array_struct.type_id)
             .ok_or_else(|| {
-                let msg = format!("loaded array of class {} but its metadata was missing", array_struct.type_id);
+                let msg = format!(
+                    "loaded array of class {} but its metadata was missing",
+                    array_struct.type_id
+                );
                 ExecError::illegal_state(msg)
             })?;
         let element_size = self.marshaller.get_ty(element_ty)?.size();
-        
-        let array_ptr = array_struct[ir::DYNARRAY_PTR_FIELD].as_pointer()
+
+        let array_ptr = array_struct[ir::DYNARRAY_PTR_FIELD]
+            .as_pointer()
             .expect("pointer field of dynarray instance must be a pointer");
-        let array_len = array_struct[ir::DYNARRAY_LEN_FIELD].as_i32()
+        let array_len = array_struct[ir::DYNARRAY_LEN_FIELD]
+            .as_i32()
             .expect("length field of dynarray instance must be i32");
-        
+
         let mut elements = Vec::with_capacity(array_len as usize);
         for i in 0..array_len as usize {
             let el_ptr = array_ptr.addr_add(element_size * i);
             let element = self.native_heap.load(&el_ptr)?;
-            
+
             elements.push(element);
         }
-        
+
         Ok(elements)
     }
-    
+
     fn get_tags_array_ptr(&self, loc: ir::TagLocation) -> Option<Pointer> {
         let tags_global = &ir::GlobalRef::StaticTagArray(loc);
-        
+
         let Some(GlobalValue::StaticTagArray(ptr)) = self.globals.get(tags_global) else {
             return None;
         };
 
         Some(ptr.clone())
     }
-    
+
     fn create_typeinfo(
         &mut self,
         ty: &ir::Type,
         rtti: &ir::RuntimeType,
-        string_lit_values: &HashMap<ir::StringID, DynValue>
+        string_lit_values: &HashMap<ir::StringID, DynValue>,
     ) -> ExecResult<DynValue> {
         let type_name_string = match &rtti.name {
             None => string_lit_values[&ir::EMPTY_STRING_ID].clone(),
             Some(name_id) => string_lit_values[name_id].clone(),
         };
-        
+
         let ty_tags_loc = match ty {
             ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id)) => {
                 Some(ir::TagLocation::Interface(*iface_id))
             },
-            
+
             ir::Type::RcPointer(ir::VirtualTypeID::Class(id))
             | ir::Type::Struct(id)
-            | ir::Type::Variant(id) => {
-                Some(ir::TagLocation::TypeDef(*id))
-            }
+            | ir::Type::Variant(id) => Some(ir::TagLocation::TypeDef(*id)),
 
             _ => None,
         };
@@ -2196,38 +2248,42 @@ impl Interpreter {
         let ty_tags_array_ptr = ty_tags_loc
             .and_then(|loc| self.get_tags_array_ptr(loc))
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
-        
+
         // allocate and store the typeinfo before populating methods, so we can easily
         // get a real heap pointer to use for the "owner" field
         let mut typeinfo_struct = StructValue::new(ir::TYPEINFO_ID, [
-            /* 0: name    */ type_name_string,
-            /* 1: methods */ DynValue::Pointer(Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))),
-            /* 2: tags    */ DynValue::Pointer(ty_tags_array_ptr),
+            // 0: name
+            type_name_string,
+            // 1: methods
+            DynValue::Pointer(Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))),
+            // 2: tags
+            DynValue::Pointer(ty_tags_array_ptr),
         ]);
-        
+
         let typeinfo_ptr = self.rc_alloc(typeinfo_struct.clone(), true)?;
-        
+
         // rc_alloc sets this on the copy it stores in memory, but we need to store it again later
         typeinfo_struct.rc = Some(RcState::immortal());
 
         // the metadata object has more method info than is stored in the actual MethodInfos
-        let method_func_ids: Vec<_> = self.metadata
+        let method_func_ids: Vec<_> = self
+            .metadata
             .get_runtime_methods(ty)
             .map(|method| method.function)
             .collect();
-        
+
         // these should be the same method in the same order!
         assert_eq!(method_func_ids.len(), rtti.methods.len());
 
         let mut method_info_ptrs = Vec::new();
         for method_index in 0..method_func_ids.len() {
             let rtti_method = &rtti.methods[method_index];
-            
+
             let method_tags_array_ptr = ty_tags_loc
                 .and_then(|loc| loc.method_loc(method_index))
                 .and_then(|loc| self.get_tags_array_ptr(loc))
                 .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
-            
+
             let global_method_index = self.runtime_methods.len();
             let impl_ptr = Pointer {
                 addr: global_method_index,
@@ -2236,15 +2292,19 @@ impl Interpreter {
 
             let name_val = string_lit_values[&rtti_method.name].clone();
             let method_info = StructValue::new(ir::METHODINFO_ID, [
-                /* 0: name  */ name_val,
-                /* 1: owner */ DynValue::Pointer(typeinfo_ptr.clone()),
-                /* 2: impl  */ DynValue::Pointer(impl_ptr),
-                /* 3: tags  */ DynValue::Pointer(method_tags_array_ptr),
+                // 0: name
+                name_val,
+                // 1: owner
+                DynValue::Pointer(typeinfo_ptr.clone()),
+                // 2: impl
+                DynValue::Pointer(impl_ptr),
+                // 3: tags
+                DynValue::Pointer(method_tags_array_ptr),
             ]);
-            
+
             let method_info_ptr = self.rc_alloc(method_info, true)?;
             method_info_ptrs.push(DynValue::Pointer(method_info_ptr));
-            
+
             self.runtime_methods.push(rtti_method.clone());
         }
 
@@ -2252,7 +2312,8 @@ impl Interpreter {
         typeinfo_struct[ir::TYPEINFO_METHODS_FIELD] = DynValue::from(method_array);
 
         // update the typeinfo instance in memory with the circular references set
-        self.native_heap.store(&typeinfo_ptr, DynValue::from(typeinfo_struct))?;
+        self.native_heap
+            .store(&typeinfo_ptr, DynValue::from(typeinfo_struct))?;
 
         Ok(DynValue::Pointer(typeinfo_ptr))
     }
@@ -2261,28 +2322,31 @@ impl Interpreter {
         &mut self,
         func_id: ir::FunctionID,
         decl: &ir::FunctionDecl,
-        string_lit_values: &HashMap<ir::StringID, DynValue>
+        string_lit_values: &HashMap<ir::StringID, DynValue>,
     ) -> ExecResult<DynValue> {
         let func_name_string = match &decl.runtime_name {
             None => string_lit_values[&ir::EMPTY_STRING_ID].clone(),
             Some(name_id) => string_lit_values[name_id].clone(),
         };
-        
+
         let tags_loc = ir::TagLocation::Function(func_id);
 
         let ty_tags_array_ptr = self
             .get_tags_array_ptr(tags_loc)
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
-        
+
         let impl_ptr = Pointer {
             addr: func_id.0,
             ty: ir::Type::Nothing,
         };
 
         let mut funcinfo_struct = StructValue::new(ir::FUNCINFO_ID, [
-            /* 0: name */ func_name_string,
-            /* 1: impl */ DynValue::Pointer(impl_ptr),
-            /* 2: tags */ DynValue::Pointer(ty_tags_array_ptr),
+            // 0: name
+            func_name_string,
+            // 1: impl
+            DynValue::Pointer(impl_ptr),
+            // 2: tags
+            DynValue::Pointer(ty_tags_array_ptr),
         ]);
         funcinfo_struct.rc = Some(RcState::immortal());
 
@@ -2306,9 +2370,8 @@ impl Interpreter {
         let mut call_arg_vals = Vec::new();
 
         if !instance_ptr.is_null() {
-            let instance_val = self.load_indirect(
-                &instance_ptr.reinterpret(instance_ty.clone())
-            )?;
+            let instance_val =
+                self.load_indirect(&instance_ptr.reinterpret(instance_ty.clone()))?;
 
             call_arg_vals.push(instance_val);
         }
@@ -2323,7 +2386,7 @@ impl Interpreter {
                 func_param_tys.len(),
                 func_name = match instance_ty {
                     ir::Type::Nothing => func_name.to_string(),
-                    _ => format!("{}.{}", instance_ty_name, func_name)
+                    _ => format!("{}.{}", instance_ty_name, func_name),
                 }
             )));
         }
@@ -2333,7 +2396,9 @@ impl Interpreter {
         for arg in arg_array {
             let arg_ptr = arg
                 .as_pointer()
-                .ok_or_else(|| ExecError::illegal_state("invoke arg array may only contain pointers"))?
+                .ok_or_else(|| {
+                    ExecError::illegal_state("invoke arg array may only contain pointers")
+                })?
                 .reinterpret(func_param_tys[param_index].clone());
 
             let arg_val = self.load_indirect(&arg_ptr)?;
@@ -2345,7 +2410,9 @@ impl Interpreter {
         let result_val = self.call(func_id, &call_arg_vals)?;
         if !result_ptr.is_null() {
             let Some(result_val) = result_val else {
-                return Err(ExecError::illegal_state("result pointer was provided but function did not return a value"));
+                return Err(ExecError::illegal_state(
+                    "result pointer was provided but function did not return a value",
+                ));
             };
 
             let result_ptr = result_ptr.reinterpret(result_ty.clone());
@@ -2354,7 +2421,7 @@ impl Interpreter {
 
         Ok(())
     }
-    
+
     fn update_diagnostics(&self) {
         if let Some(diag_worker) = &self.diag_worker {
             diag_worker.update(|| DiagnosticOutput {
@@ -2379,7 +2446,7 @@ impl Interpreter {
                 ir::Type::RcWeakPointer(..) => Some(false),
                 _ => None,
             };
-            
+
             let dyn_val = self.marshaller.unmarshal(&value, &ty)?;
 
             if let Some(weak) = ref_weak {
@@ -2392,7 +2459,7 @@ impl Interpreter {
         if self.opts.trace_heap {
             self.native_heap.print_trace();
         }
-        
+
         if let Some(worker) = self.diag_worker.take() {
             worker.shutdown();
         }
@@ -2400,7 +2467,6 @@ impl Interpreter {
         Ok(())
     }
 }
-
 
 #[derive(Debug, Clone)]
 struct FunctionInfo {
@@ -2415,7 +2481,7 @@ pub struct InterpreterOpts {
     pub trace_heap: bool,
     pub trace_rc: bool,
     pub trace_ir: bool,
-    
+
     pub diag_port: u16,
 
     pub verbose: bool,
@@ -2423,10 +2489,7 @@ pub struct InterpreterOpts {
 
 #[derive(Debug, Clone)]
 enum GlobalValue {
-    Variable {
-        value: Box<[u8]>,
-        ty: ir::Type,
-    },
+    Variable { value: Box<[u8]>, ty: ir::Type },
     Function(ir::FunctionID),
     StaticTagArray(Pointer),
 }
@@ -2445,13 +2508,10 @@ fn find_labels(instructions: &[ir::Instruction]) -> HashMap<ir::Label, LabelLoca
             ir::Instruction::LocalBegin => block_depth += 1,
             ir::Instruction::LocalEnd => block_depth -= 1,
             ir::Instruction::Label(label) => {
-                locations.insert(
-                    label.clone(),
-                    LabelLocation {
-                        block_depth,
-                        pc_offset,
-                    },
-                );
+                locations.insert(label.clone(), LabelLocation {
+                    block_depth,
+                    pc_offset,
+                });
             },
             _ => continue,
         }
