@@ -1,3 +1,5 @@
+mod task;
+
 use crate::ast;
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionName;
@@ -7,12 +9,12 @@ use crate::ast::StructKind;
 use crate::ast::UnitBindingItemInitializer;
 use crate::ast::UnitDeclSection;
 use crate::ast::Visibility;
+use crate::result::ErrorContinue;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::expr::expect_stmt_initialized;
 use crate::typ::ast::typecheck_alias;
 use crate::typ::ast::typecheck_enum_decl;
 use crate::typ::ast::typecheck_expr;
-use crate::typ::ast::typecheck_func_def;
 use crate::typ::ast::typecheck_iface;
 use crate::typ::ast::typecheck_stmt;
 use crate::typ::ast::typecheck_struct_decl;
@@ -41,11 +43,12 @@ use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use rayon::prelude::*;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use crate::result::ErrorContinue;
+use crate::typ::ast::unit::task::UnitDeclTask;
 
 pub type Unit = ast::Unit<Value>;
 pub type UnitDecl = ast::UnitDecl<Value>;
@@ -90,14 +93,16 @@ fn typecheck_unit_decl(
     decl: &ast::UnitDecl<Span>,
     ctx: &mut Context,
     visibility: Visibility,
-) -> TypeResult<UnitDecl> {
+) -> TypeResult<UnitDeclTask> {
     match decl {
         ast::UnitDecl::Uses { decl: uses } => {
             for use_item in &uses.units {
                 typecheck_unit_uses_decl(use_item, ctx)?;
             }
 
-            Ok(ast::UnitDecl::Uses { decl: uses.clone() })
+            let item = ast::UnitDecl::Uses { decl: uses.clone() };
+
+            Ok(UnitDeclTask::Done(item))
         },
 
         ast::UnitDecl::FunctionDef { def: func_def } => {
@@ -105,17 +110,22 @@ fn typecheck_unit_decl(
         },
 
         ast::UnitDecl::FunctionDecl { decl: func_decl } => {
-            typecheck_unit_func_decl(func_decl, visibility, ctx)
+            let item = typecheck_unit_func_decl(func_decl, visibility, ctx)?;
+
+            Ok(UnitDeclTask::Done(item))
         },
 
         ast::UnitDecl::Type { decl: type_decl } => {
-            typecheck_unit_type_decl(type_decl, visibility, ctx)
+            let item = typecheck_unit_type_decl(type_decl, visibility, ctx)?;
+
+            Ok(UnitDeclTask::Done(item))
         },
 
         ast::UnitDecl::Binding { decl } => {
             let decl = typecheck_global_binding(decl, visibility, ctx)?;
+            let item = ast::UnitDecl::Binding { decl };
 
-            Ok(ast::UnitDecl::Binding { decl })
+            Ok(UnitDeclTask::Done(item))
         },
     }
 }
@@ -156,7 +166,7 @@ fn typecheck_unit_func_def(
     func_def: &ast::FunctionDef<Span>,
     visibility: Visibility,
     ctx: &mut Context,
-) -> TypeResult<UnitDecl> {
+) -> TypeResult<UnitDeclTask> {
     let func_decl = FunctionDecl::typecheck(&func_def.decl, true, ctx);
     let func_name = &func_decl.name;
 
@@ -172,18 +182,13 @@ fn typecheck_unit_func_def(
         )?;
     }
 
-    let func_def = Arc::new(typecheck_func_def(func_decl.clone(), func_def, ctx)?);
-    match func_decl.method_declaring_type() {
-        Some(ty) => {
-            ctx.define_method(ty.clone(), func_def.clone())?;
-        },
+    let task = UnitDeclTask::DeferredFuncDef {
+        src_def: func_def.clone(),
+        body_ctx: ctx.branch(),
+        func_decl,
+    };
 
-        None => {
-            ctx.define_function(func_name.ident().clone(), func_def.clone())?;
-        },
-    }
-
-    Ok(UnitDecl::FunctionDef { def: func_def })
+    Ok(task)
 }
 
 fn typecheck_unit_func_decl(
@@ -666,13 +671,13 @@ fn typecheck_section(
     visibility: Visibility,
     ctx: &mut Context,
 ) -> Vec<UnitDecl> {
-    let mut decls = Vec::new();
+    let mut decl_tasks = Vec::with_capacity(src_decls.len());
 
     for decl in src_decls {
         if let Some(decl) = typecheck_unit_decl(decl, ctx, visibility).ok_or_continue(ctx) {
-            decls.push(decl);    
+            decl_tasks.push(decl);
         }
     }
-
-    decls
+    
+    UnitDeclTask::run_parallel(decl_tasks, ctx)
 }
