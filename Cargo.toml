@@ -27,3 +27,6 @@ members = [ "build",
     "terapascal_ls", 
     "test_runner",
 ]
+
+[profile.release]
+debug = true
