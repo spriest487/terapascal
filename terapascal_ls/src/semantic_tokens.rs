@@ -934,7 +934,10 @@ where
         if let Some(unsafe_kw) = &block.unsafe_kw {
             self.add_keyword(unsafe_kw);
         }
-        self.add_keyword(&block.begin);
+        
+        if let Some((begin, _)) = block.begin_end.as_ref() {
+            self.add_keyword(begin);
+        }
 
         for stmt in &block.stmts {
             self.add_stmt(stmt);
@@ -944,7 +947,9 @@ where
             self.add_expr(expr);
         }
 
-        self.add_keyword(&block.end);
+        if let Some((_, end)) = block.begin_end.as_ref() {
+            self.add_keyword(end);
+        }
     }
 
     fn add_tags(&mut self, tags: &[ast::tag::Tag<A>]) {

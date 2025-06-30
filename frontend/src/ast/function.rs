@@ -916,8 +916,7 @@ impl Parse for AnonymousFunctionDef<Span> {
 
             let body = Block {
                 annotation: body_expr.span().clone(),
-                begin: body_expr.span().clone(),
-                end: body_expr.span().clone(),
+                begin_end: None,
                 stmts: Vec::new(),
                 output: Some(body_expr),
                 unsafe_kw: None,

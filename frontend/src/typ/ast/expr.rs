@@ -214,7 +214,7 @@ pub fn handle_incomplete_expr(
     };
 
     if ctx.opts().lang_server {
-        ctx.completion(incomplete);
+        ctx.hint_completion(incomplete);
     }
 
     Err(TypeError::IncompleteExpr {

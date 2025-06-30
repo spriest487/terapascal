@@ -27,6 +27,7 @@ use crate::typ::TypeParamList;
 use crate::typ::TypeParamListItem;
 use std::fmt;
 use std::sync::Arc;
+use terapascal_common::CompileOpts;
 use terapascal_common::span::Span;
 
 fn test_span() -> Span {
@@ -126,7 +127,7 @@ fn specialized_func_decl_has_specialized_return_ty() {
     let return_ty = make_ty_param_ty(&ty_params, 0);
 
     let decl = make_decl(None, "A", ty_params, None, [], return_ty);
-    let ctx = Context::root();
+    let ctx = Context::root(CompileOpts::default());
 
     let args = TypeArgList::new([TypeName::inferred(Primitive::Int32)], test_span());
 
@@ -153,7 +154,7 @@ fn specialized_func_decl_has_specialized_param_tys() {
         [arg0_ty, arg1_ty],
         Type::Nothing,
     );
-    let ctx = Context::root();
+    let ctx = Context::root(CompileOpts::default());
 
     let args = TypeArgList::new(
         [TypeName::inferred(Primitive::Int32), TypeName::inferred(Primitive::Boolean)],
@@ -180,7 +181,7 @@ fn specialized_func_decl_checks_constraint() {
 
     let decl = make_decl(None, "A", ty_params, None, [], Type::Nothing);
 
-    let ctx = Context::root();
+    let ctx = Context::root(CompileOpts::default());
 
     // Any should implement no interfaces
     let args = TypeArgList::new([TypeName::inferred(Type::Any)], test_span());

@@ -42,7 +42,7 @@ use crate::typ::ast::SetDecl;
 use crate::typ::ast::StructDecl;
 use crate::typ::ast::VariantDecl;
 use crate::typ::ast::SELF_TY_NAME;
-use crate::typ::completion::CompletionHint;
+use crate::typ::completion::{CompletionContext, CompletionHint};
 use crate::typ::specialize_iface_def;
 use crate::typ::specialize_struct_def;
 use crate::typ::specialize_variant_def;
@@ -2163,12 +2163,36 @@ impl Context {
     pub fn errors(&self) -> &[TypeError] {
         &self.errors
     }
+    
+    pub fn hint_completion_range(&mut self, start: &impl Spanned, end: &impl Spanned) {
+        if !self.opts.lang_server {
+            return;
+        }
+        
+        let start = start.span();
+        let end = end.span();
+        
+        assert_eq!(start.file, end.file);
+        
+        let mut span = Span {
+            file: start.file.clone(),
+            start: start.end,
+            end: end.start,
+        };
+        
+        span.start.col += 1;
+        
+        let completion_ctx = CompletionContext::new(span, self);
+        let hint = CompletionHint::Blank(completion_ctx);
+        
+        self.hint_completion(hint);
+    }
 
-    pub fn completion(&mut self, hint: impl Into<CompletionHint>) {
+    pub fn hint_completion(&mut self, hint: impl Into<CompletionHint>) {
         self.completions.push(hint.into());
     }
 
-    pub fn completions(&self) -> &[CompletionHint] {
+    pub fn completion_hints(&self) -> &[CompletionHint] {
         &self.completions
     }
 }

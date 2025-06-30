@@ -214,15 +214,19 @@ impl Unit<Span> {
                         parser.error(TracedError::trace(ParseError::ExprIsIllegal(illegal)));
                     }
                     
+                    let (block_begin, block_end) = block.begin_end
+                        .as_ref()
+                        .expect("parsed block must have delimiters");
+                    
                     let end_kw = match parser.tokens().match_one_maybe(Operator::Period) {
-                        Some(tt) => block.end.span().to(tt.span()),
-                        None => block.end.clone(),
+                        Some(tt) => block_end.to(&tt),
+                        None => block_end.clone(),
                     };
 
                     unit.end_kw = Some(end_kw.clone());
 
                     unit.init = Some(InitBlock {
-                        keyword_span: block.begin.clone(),
+                        keyword_span: block_begin.clone(),
                         body: vec![Stmt::Block(Box::new(block))],
                         end_span: Some(end_kw),
                     });

@@ -12,6 +12,16 @@ use terapascal_common::TracedError;
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]
 pub struct Block<A: Annotation = Span> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub unsafe_kw: Option<Span>,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub begin_end: Option<(Span, Span)>,
+
     pub stmts: Vec<Stmt<A>>,
 
     #[derivative(Hash = "ignore")]
@@ -27,29 +37,13 @@ pub struct Block<A: Annotation = Span> {
     // type of the function, but we don't know that until typechecking. a value on its own, however,
     // would HAVE to be the block output to be valid!
     pub output: Option<Expr<A>>,
-
-    #[derivative(Hash = "ignore")]
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub unsafe_kw: Option<Span>,
-
-    #[derivative(Hash = "ignore")]
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub begin: Span,
-
-    #[derivative(Hash = "ignore")]
-    #[derivative(Debug = "ignore")]
-    #[derivative(PartialEq = "ignore")]
-    pub end: Span,
 }
 
 impl<A: Annotation> Block<A> {
     pub fn single_stmt(stmt: Stmt<A>) -> Self {
         Self {
             annotation: stmt.annotation().clone(),
-            begin: stmt.annotation().span().clone(),
-            end: stmt.annotation().span().clone(),
+            begin_end: None,
             stmts: vec![stmt],
             unsafe_kw: None,
             output: None,
@@ -81,8 +75,7 @@ impl Block {
 
             output: None,
 
-            begin,
-            end,
+            begin_end: Some((begin, end)),
 
             unsafe_kw,
         };
@@ -114,8 +107,7 @@ impl Block {
                 output: Some(output_expr),
                 annotation: self.annotation.clone(),
                 unsafe_kw: self.unsafe_kw.clone(),
-                begin: self.begin.clone(),
-                end: self.end.clone(),
+                begin_end: self.begin_end.clone(),
             });
         }
 

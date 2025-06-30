@@ -416,7 +416,7 @@ fn typecheck_member_op(
         let completion_span = bin_op.op_span.to(bin_op.rhs.span());
         let context = CompletionContext::new(completion_span, ctx);
 
-        ctx.completion(IncompleteExpr {
+        ctx.hint_completion(IncompleteExpr {
             target: Box::new(lhs.clone()),
             completion_op: Some(Operator::Period),
             context,

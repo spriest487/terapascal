@@ -1,3 +1,4 @@
+use terapascal_common::CompileOpts;
 use super::*;
 
 fn instructions_without_comments(actual: &[Instruction], count: usize) -> Vec<Instruction> {
@@ -14,7 +15,7 @@ fn instructions_without_comments(actual: &[Instruction], count: usize) -> Vec<In
 
 #[test]
 fn end_loop_scope_ends_at_right_scope_level() {
-    let ctx = typ::Context::root();
+    let ctx = typ::Context::root(CompileOpts::default());
     let mut library = LibraryBuilder::new(&ctx, Metadata::default(), CodegenOpts::default());
     let mut builder = Builder::new(&mut library);
 
@@ -30,7 +31,7 @@ fn end_loop_scope_ends_at_right_scope_level() {
 
 #[test]
 fn break_cleans_up_loop_locals() {
-    let ctx = typ::Context::root();
+    let ctx = typ::Context::root(CompileOpts::default());
     let mut library = LibraryBuilder::new(&ctx, Metadata::default(), CodegenOpts::default());
     let mut builder = Builder::new(&mut library);
 

@@ -151,7 +151,7 @@ impl Project {
                     .duration_since(typecheck_start_time)
                     .as_millis());
 
-                for completion in module.root_ctx.completions() {
+                for completion in module.root_ctx.completion_hints() {
                     self.add_completion(completion);
                 }
 
