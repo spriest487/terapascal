@@ -42,7 +42,7 @@ use crate::typ::ast::SetDecl;
 use crate::typ::ast::StructDecl;
 use crate::typ::ast::VariantDecl;
 use crate::typ::ast::SELF_TY_NAME;
-use crate::typ::completion::{CompletionContext, CompletionHint};
+use crate::typ::completion::{CompletionContext, CompletionHint, CompletionHintKind};
 use crate::typ::specialize_iface_def;
 use crate::typ::specialize_struct_def;
 use crate::typ::specialize_variant_def;
@@ -2164,11 +2164,15 @@ impl Context {
         &self.errors
     }
     
-    pub fn hint_completion_range(&mut self, start: &impl Spanned, end: &impl Spanned) {
+    pub fn hint_completion_range(&mut self,
+        start: &impl Spanned,
+        end: &impl Spanned,
+        kind: CompletionHintKind
+    ) {
         if !self.opts.lang_server {
             return;
         }
-        
+
         let start = start.span();
         let end = end.span();
         
@@ -2179,11 +2183,13 @@ impl Context {
             start: start.end,
             end: end.start,
         };
+
+        eprintln!("{kind:?} completion range: {}-{}", span.start, span.end);
         
         span.start.col += 1;
         
         let completion_ctx = CompletionContext::new(span, self);
-        let hint = CompletionHint::Blank(completion_ctx);
+        let hint = CompletionHint::Range(completion_ctx, kind);
         
         self.hint_completion(hint);
     }

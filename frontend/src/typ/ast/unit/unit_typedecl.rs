@@ -16,7 +16,9 @@ use crate::typ::ast::typecheck_enum_decl;
 use crate::typ::ast::typecheck_iface;
 use crate::typ::ast::typecheck_struct_decl;
 use crate::typ::ast::typecheck_variant;
+use crate::typ::completion::CompletionHintKind;
 use std::sync::Arc;
+use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 
 pub type TypeDecl = ast::TypeDecl<Value>;
@@ -30,6 +32,19 @@ impl ast::TypeDecl {
             let item = typecheck_type_decl_item(type_decl_item, visibility, ctx)?;
             items.push(item);
         }
+
+        // simple version of hinting for now: add completion for the whole range of the block
+        let end_loc = Location {
+            line: self.span.end.line,
+            col: self.span.end.col + 1,
+        };
+        let end_span = Span {
+            file: self.span.file.clone(),
+            start: end_loc,
+            end: end_loc,
+        };
+
+        ctx.hint_completion_range(&self.kw_span, &end_span, CompletionHintKind::Type);
 
         Ok(TypeDecl {
             kw_span: self.kw_span.clone(),

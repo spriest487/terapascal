@@ -15,6 +15,18 @@ pub struct CompletionContext {
     pub context: Arc<Context>,
 }
 
+#[derive(Clone, Debug)]
+pub enum CompletionHint {
+    Expr(IncompleteExpr<Value>),
+    Range(CompletionContext, CompletionHintKind),
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum CompletionHintKind {
+    Block,
+    Type,
+}
+
 impl CompletionContext {
     pub fn new(span: Span, ctx: &mut Context) -> Self {
         Self {
@@ -30,17 +42,11 @@ impl Spanned for CompletionContext {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum CompletionHint {
-    Expr(IncompleteExpr<Value>),
-    Blank(CompletionContext),
-}
-
 impl Spanned for CompletionHint {
     fn span(&self) -> &Span {
         match self {
             CompletionHint::Expr(expr) => &expr.context.span,
-            CompletionHint::Blank(context) => &context.span,
+            CompletionHint::Range(context, _kind) => &context.span,
         }
     }
 }
@@ -48,11 +54,5 @@ impl Spanned for CompletionHint {
 impl From<IncompleteExpr<Value>> for CompletionHint {
     fn from(expr: IncompleteExpr<Value>) -> Self {
         CompletionHint::Expr(expr)
-    }
-}
-
-impl From<CompletionContext> for CompletionHint {
-    fn from(context: CompletionContext) -> Self {
-        CompletionHint::Blank(context)
     }
 }

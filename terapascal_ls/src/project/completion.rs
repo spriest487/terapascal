@@ -5,7 +5,7 @@ use terapascal_frontend::ast::Visibility;
 use terapascal_frontend::typ::ast::FunctionDecl;
 use terapascal_frontend::typ::ast::Literal;
 use terapascal_frontend::typ::ast::OverloadCandidate;
-use terapascal_frontend::typ::completion::CompletionHint;
+use terapascal_frontend::typ::completion::{CompletionHint, CompletionHintKind};
 use terapascal_frontend::typ::{Context, Environment};
 use terapascal_frontend::typ::Decl;
 use terapascal_frontend::typ::InstanceMember;
@@ -26,6 +26,12 @@ const FUNCTION_ORDER: usize = 3;
 const TYPE_ORDER: usize = 3;
 const NAMESPACE_ORDER: usize = 3;
 
+const COMP_NAMESPACES_BIT: u32 = 1 << 0;
+const COMP_TYPES_BIT: u32 = 1 << 1;
+const COMP_BINDINGS_BIT: u32 = 1 << 2;
+const COMP_FUNCTIONS_BIT: u32 = 1 << 3;
+const COMP_ALL: u32 = COMP_NAMESPACES_BIT | COMP_TYPES_BIT | COMP_BINDINGS_BIT | COMP_FUNCTIONS_BIT;
+
 pub fn resolve_completions(hint: &CompletionHint) -> Vec<lsp::CompletionItem> {
     let mut entries = Vec::new();
 
@@ -42,31 +48,36 @@ pub fn resolve_completions(hint: &CompletionHint) -> Vec<lsp::CompletionItem> {
                             for member in members {
                                 instance_member_to_completions(member, access, &mut entries);
                             }
-                        },
+                        }
 
                         Err(err) => {
                             eprintln!("[resolve_completions] {}", err);
-                        },
+                        }
                     }
-                },
+                }
 
                 (Some(Operator::Period), Value::Type(ty, ..)) => {
                     type_static_members_to_completions(ty, ctx, &mut entries);
-                },
+                }
 
                 (Some(Operator::Period), Value::Namespace(namespace, ..)) => {
-                    namespace_members_to_completions(namespace, ctx, &mut entries);
-                },
+                    namespace_members_to_completions(namespace, COMP_ALL, ctx, &mut entries);
+                }
 
                 _ => {
-                    current_scope_to_completions(ctx, &mut entries);
-                },
+                    current_scope_to_completions(ctx, COMP_ALL, &mut entries);
+                }
             }
-        },
+        }
 
-        CompletionHint::Blank(context) => {
-            current_scope_to_completions(context.context.as_ref(), &mut entries);
-        },
+        CompletionHint::Range(context, kind) => {
+            let include = match kind {
+                CompletionHintKind::Block => COMP_ALL,
+                CompletionHintKind::Type => COMP_NAMESPACES_BIT | COMP_TYPES_BIT,
+            };
+
+            current_scope_to_completions(context.context.as_ref(), include, &mut entries);
+        }
     }
 
     eprintln!(
@@ -77,17 +88,21 @@ pub fn resolve_completions(hint: &CompletionHint) -> Vec<lsp::CompletionItem> {
     entries
 }
 
-fn current_scope_to_completions(ctx: &Context, entries: &mut Vec<lsp::CompletionItem>) {
+fn current_scope_to_completions(
+    ctx: &Context,
+    include_flags: u32,
+    entries: &mut Vec<lsp::CompletionItem>,
+) {
     let current_path = ctx.current_scope();
     let namespace = ctx.namespace();
 
-    scope_path_to_completions(ctx, &current_path, &namespace, entries);
-    
+    scope_path_to_completions(ctx, &current_path, include_flags, &namespace, entries);
+
     // include used items from the nearest namespace
     for namespace_scope in current_path.rev() {
         if let Environment::Namespace { .. } = namespace_scope.env() {
             for used_ns in namespace_scope.use_namespaces() {
-                namespace_members_to_completions(used_ns, ctx, entries);
+                namespace_members_to_completions(used_ns, include_flags, ctx, entries);
             }
             break;
         }
@@ -97,25 +112,31 @@ fn current_scope_to_completions(ctx: &Context, entries: &mut Vec<lsp::Completion
 fn scope_path_to_completions(
     ctx: &Context,
     path: &ScopePathRef,
+    include_flags: u32,
     namespace: &IdentPath,
     entries: &mut Vec<lsp::CompletionItem>,
 ) {
     for scope in path.rev() {
-        scope_to_completions(scope, namespace, ctx, entries);
+        scope_to_completions(scope, namespace, include_flags, ctx, entries);
     }
 }
 
 fn scope_to_completions(
     scope: &Scope,
     namespace: &IdentPath,
+    include_flags: u32,
     ctx: &Context,
-    entries: &mut Vec<lsp::CompletionItem>
+    entries: &mut Vec<lsp::CompletionItem>,
 ) {
     let is_local_ns = *namespace == ctx.namespace();
 
     for (ident, member) in scope.members() {
         match member {
             ScopeMember::Scope(..) => {
+                if include_flags & COMP_NAMESPACES_BIT == 0 {
+                    continue;
+                }
+
                 let name = ident.name.to_string();
                 let full_name = namespace.clone().child(ident.clone());
 
@@ -126,7 +147,7 @@ fn scope_to_completions(
                     kind: Some(lsp::CompletionItemKind::MODULE),
                     ..lsp::CompletionItem::default()
                 });
-            },
+            }
 
             ScopeMember::Decl(decl) => {
                 let visible = if is_local_ns {
@@ -145,6 +166,10 @@ fn scope_to_completions(
 
                 match decl {
                     Decl::Alias(aliased) => {
+                        if include_flags & COMP_TYPES_BIT == 0 {
+                            continue;
+                        }
+
                         if let Some(type_def) = ctx.find_type_def(aliased)
                             && let Some(ty) = type_def.defined_type(ctx)
                         {
@@ -161,35 +186,52 @@ fn scope_to_completions(
                                 ..lsp::CompletionItem::default()
                             })
                         }
-                    },
+                    }
 
                     Decl::Type { ty, .. } => {
+                        if include_flags & COMP_TYPES_BIT == 0 {
+                            continue;
+                        }
+
                         entries.push(type_completion(label, ty));
-                    },
+                    }
 
                     Decl::LocalVariable { binding }
                     | Decl::GlobalVariable { binding, .. } => {
+                        if include_flags & COMP_BINDINGS_BIT == 0 {
+                            continue;
+                        }
+
                         entries.push(binding_completion(label, binding))
-                    },
+                    }
 
                     Decl::LocalConst { ty, val, .. }
                     | Decl::GlobalConst { ty, val, .. } => {
+                        if include_flags & COMP_BINDINGS_BIT == 0 {
+                            continue;
+                        }
+
                         entries.push(const_completion(label, ty, val))
-                    },
+                    }
 
                     Decl::Function { overloads, .. } => {
+                        if include_flags & COMP_FUNCTIONS_BIT == 0 {
+                            continue;
+                        }
+
                         for overload in overloads {
                             entries.push(function_completion(overload.decl(), false));
                         }
-                    },
+                    }
                 }
-            },
+            }
         }
     }
 }
 
 fn namespace_members_to_completions(
     namespace: &IdentPath,
+    include_flags: u32,
     ctx: &Context,
     entries: &mut Vec<lsp::CompletionItem>,
 ) {
@@ -198,7 +240,7 @@ fn namespace_members_to_completions(
         return;
     };
 
-    scope_to_completions(path.top(), namespace, ctx, entries);
+    scope_to_completions(path.top(), namespace, include_flags, ctx, entries);
 }
 
 fn type_static_members_to_completions(
@@ -347,39 +389,41 @@ fn instance_member_to_completions(
             decl, decl_index, ..
         } if access >= decl.access => {
             let name = decl.idents[decl_index].name.clone();
-            let detail = format!("{} {}: {}", decl.access, name, decl.ty);
 
             entries.push(lsp::CompletionItem {
                 label: name.to_string(),
                 kind: Some(lsp::CompletionItemKind::FIELD),
                 sort_text: Some(format!("{FIELD_ORDER}{name}")),
-                detail: Some(detail),
+                label_details: Some(lsp::CompletionItemLabelDetails {
+                    detail: Some(format!(": {}", decl.ty)),
+                    description: Some("field".to_string()),
+                }),
                 ..lsp::CompletionItem::default()
             });
-        },
+        }
 
         InstanceMember::Method { method, .. }
-            if access >= method.access && !method.func_decl.kind.is_static_method() =>
-        {
-            entries.push(function_completion(&method.func_decl, false));
-        },
+        if access >= method.access && !method.func_decl.kind.is_static_method() =>
+            {
+                entries.push(function_completion(&method.func_decl, false));
+            }
 
         InstanceMember::UFCSCall { decl, .. } => {
             entries.push(function_completion(&decl, true));
-        },
+        }
 
         InstanceMember::Overloaded { candidates } => {
             for candidate in candidates {
                 let completion = match candidate {
                     OverloadCandidate::Method { decl, .. }
-                        if access >= decl.access && !decl.func_decl.kind.is_static_method() =>
-                    {
-                        Some(function_completion(&decl.func_decl, false))
-                    },
+                    if access >= decl.access && !decl.func_decl.kind.is_static_method() =>
+                        {
+                            Some(function_completion(&decl.func_decl, false))
+                        }
 
                     OverloadCandidate::Function { decl, .. } => {
                         Some(function_completion(&decl, true))
-                    },
+                    }
 
                     _ => None,
                 };
@@ -388,8 +432,8 @@ fn instance_member_to_completions(
                     entries.push(completion);
                 }
             }
-        },
+        }
 
-        _ => {},
+        _ => {}
     }
 }

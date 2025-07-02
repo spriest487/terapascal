@@ -13,6 +13,7 @@ use crate::typ::TypedValue;
 use crate::typ::Value;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::typ::completion::CompletionHintKind;
 
 pub type Block = ast::Block<Value>;
 
@@ -38,7 +39,7 @@ pub fn typecheck_block(
         for (i, stmt) in block.stmts.iter().enumerate() {
             let stmt_span = stmt.span().clone();
             if let Some(last_item_span) = &last_item_span {
-                ctx.hint_completion_range(last_item_span, &stmt_span);
+                ctx.hint_completion_range(last_item_span, &stmt_span, CompletionHintKind::Block);
             }
             last_item_span = Some(stmt_span);
             
@@ -107,7 +108,7 @@ pub fn typecheck_block(
 
             let expr_span = src_output_expr.span().clone();
             if let Some(last_item_span) = &last_item_span {
-                ctx.hint_completion_range(last_item_span, &expr_span);
+                ctx.hint_completion_range(last_item_span, &expr_span, CompletionHintKind::Block);
             }
             last_item_span = Some(expr_span);
 
@@ -126,7 +127,7 @@ pub fn typecheck_block(
         }
         
         if let (Some((_, end_span)), Some(last_span)) = (begin_end, last_item_span) {
-            ctx.hint_completion_range(&last_span, end_span);
+            ctx.hint_completion_range(&last_span, end_span, CompletionHintKind::Block);
         }
 
         if let Some(output_expr) = &output {

@@ -1,5 +1,4 @@
 # LS
-* use a hierarchical storage system for completions so we can create the hints once per block isntead of the stupid thing it currently does
 * cast value annotations
 * partial tokenization
 * partial typechecking
