@@ -263,6 +263,11 @@ impl Unit {
             let class = Class::translate(class_id, metadata, &mut module);
             module.classes.push(class);
         }
+        
+        for closure_id in metadata.closures() {
+            let class = Class::gen_closure_class(*closure_id);
+            module.classes.push(class);
+        } 
 
         for (iface_id, iface_def) in metadata.ifaces() {
             let iface = Interface::translate(iface_id, iface_def, &mut module);

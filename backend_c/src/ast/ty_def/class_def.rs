@@ -1,4 +1,3 @@
-use crate::ast::Expr;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionDef;
 use crate::ast::FunctionName;
@@ -7,6 +6,8 @@ use crate::ast::Statement;
 use crate::ast::Type;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
+use crate::ast::global_typeinfo_decl_name;
+use crate::ast::Expr;
 use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -116,6 +117,8 @@ pub struct Class {
     dyn_array_type_info: Option<ir::DynArrayRuntimeType>,
     
     comment: Option<String>,
+    
+    typeinfo_global_name: String,
 }
 
 impl Class {
@@ -191,6 +194,8 @@ impl Class {
             .get_name_string(metadata)
             .map(|name| name.clone())
             .unwrap_or_else(|| metadata.pretty_ty_name(&class_ty).to_string());
+        
+        let typeinfo_name = global_typeinfo_decl_name(&class_ty);
 
         Class {
             struct_id,
@@ -199,6 +204,21 @@ impl Class {
             release_func,
             dyn_array_type_info,
             comment: Some(comment),
+            typeinfo_global_name: typeinfo_name,
+        }
+    }
+    
+    pub fn gen_closure_class(closure_struct_id: ir::TypeDefID) -> Self {
+        let ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(closure_struct_id));
+        
+        Class {
+            struct_id: closure_struct_id,
+            comment: Some(format!("closure class {}", closure_struct_id)),
+            dtor: None,
+            impls: BTreeMap::new(),
+            release_func: None,
+            dyn_array_type_info: None,
+            typeinfo_global_name: global_typeinfo_decl_name(&ty),
         }
     }
 
@@ -347,7 +367,7 @@ impl Class {
             writeln!(class_init, "  .dtor = NULL,").unwrap();
         };
 
-        writeln!(class_init, "  .typeinfo = &TypeInfo_VType_Class_{},", self.struct_id).unwrap();        
+        writeln!(class_init, "  .typeinfo = &{},", self.typeinfo_global_name).unwrap();
         write!(class_init, "  .cleanup = (RcCleanupFunc) ").unwrap();
 
         match self.release_func {

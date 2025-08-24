@@ -65,55 +65,55 @@ impl fmt::Display for GlobalName {
 }
 
 pub fn write_global_typeinfo_decl_name(f: &mut fmt::Formatter, ty: &ir::Type) -> fmt::Result {
-    write!(f, "TypeInfo_")?;
-    write_global_typeinfo_decl_name_type(f, ty)
+    write!(f, "TypeInfo_{}", global_typeinfo_decl_name_type(ty))
 }
 
-fn write_global_typeinfo_decl_name_type(f: &mut fmt::Formatter, ty: &ir::Type) -> fmt::Result {
+pub fn global_typeinfo_decl_name(ty: &ir::Type) -> String {
+    format!("TypeInfo_{}", global_typeinfo_decl_name_type(ty))
+}
+
+fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
     match ty {
         // primitives
-        ir::Type::Bool => write!(f, "Bool"),
-        ir::Type::U8 => write!(f, "U8"),
-        ir::Type::I8 => write!(f, "I8"),
-        ir::Type::I16 => write!(f, "I16"),
-        ir::Type::U16 => write!(f, "U16"),
-        ir::Type::I32 => write!(f, "I32"),
-        ir::Type::U32 => write!(f, "U32"),
-        ir::Type::I64 => write!(f, "I64"),
-        ir::Type::U64 => write!(f, "U64"),
-        ir::Type::USize => write!(f, "USize"),
-        ir::Type::ISize => write!(f, "ISize"),
-        ir::Type::F32 => write!(f, "F32"),
+        ir::Type::Bool => String::from("Bool"),
+        ir::Type::U8 => String::from("U8"),
+        ir::Type::I8 => String::from("I8"),
+        ir::Type::I16 => String::from("I16"),
+        ir::Type::U16 => String::from("U16"),
+        ir::Type::I32 => String::from("I32"),
+        ir::Type::U32 => String::from("U32"),
+        ir::Type::I64 => String::from("I64"),
+        ir::Type::U64 => String::from("U64"),
+        ir::Type::USize => String::from("USize"),
+        ir::Type::ISize => String::from("ISize"),
+        ir::Type::F32 => String::from("F32"),
 
         // aggregates
-        ir::Type::Struct(id) => write!(f, "Struct_{id}"),
-        ir::Type::Variant(id) => write!(f, "Variant_{id}"),
-        ir::Type::Flags(_repr_id, set_id) => write!(f, "Flags_{set_id}"),
+        ir::Type::Struct(id) => format!("Struct_{id}"),
+        ir::Type::Variant(id) => format!("Variant_{id}"),
+        ir::Type::Flags(_repr_id, set_id) => format!("Flags_{set_id}"),
 
         // reference types
         ir::Type::RcPointer(id) | ir::Type::RcWeakPointer(id) => {
-            write!(f, "VType_")?;
             match id {
-                ir::VirtualTypeID::Any => write!(f, "Any"),
-                ir::VirtualTypeID::Class(id) => write!(f, "Class_{id}"),
-                ir::VirtualTypeID::Interface(id) => write!(f, "Interface_{id}"),
-                ir::VirtualTypeID::Closure(id) => write!(f, "Closure_{id}"),
+                ir::VirtualTypeID::Any => String::from("VType_Any"),
+                ir::VirtualTypeID::Class(id) => format!("VType_Class_{id}"),
+                ir::VirtualTypeID::Interface(id) => format!("VType_Interface_{id}"),
+                ir::VirtualTypeID::Closure(id) => format!("VType_Closure_{id}"),
             }
         },
 
-        ir::Type::Function(closure_id) => write!(f, "Closure_{closure_id}"),
+        ir::Type::Function(closure_id) => format!("Closure_{closure_id}"),
 
         // ???
-        ir::Type::Nothing => write!(f, "Nothing"),
-        
+        ir::Type::Nothing => String::from("Nothing"),
+
         // recursive types
         ir::Type::Pointer(ty) => {
-            write!(f, "Ptr_")?;
-            write_global_typeinfo_decl_name_type(f, ty)
+            format!("Ptr_{}", global_typeinfo_decl_name_type(ty))
         },
-        ir::Type::Array { element, dim } => {
-            write!(f, "Array{}_", dim)?;
-            write_global_typeinfo_decl_name_type(f, element)
+        ir::Type::Array { element, dim } => { 
+            format!("Array{}_{}", dim, global_typeinfo_decl_name_type(element))
         },
     }
 }

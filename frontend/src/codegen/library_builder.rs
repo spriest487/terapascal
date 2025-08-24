@@ -1193,9 +1193,10 @@ impl<'a> LibraryBuilder<'a> {
                 .map(|(elem_ty, struct_id)| (elem_ty.clone(), struct_id.clone())));
             
             populate_closures.extend(self.library.closure_types().skip(done_closures));
-        
+
             for closure_id in populate_closures.drain(0..) {
                 self.gen_runtime_type(&ir::Type::Struct(closure_id));
+                self.gen_runtime_type(&ir::Type::RcPointer(ir::VirtualTypeID::Closure(closure_id)));
                 done_closures += 1;
             }
 
