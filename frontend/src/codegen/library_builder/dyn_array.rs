@@ -262,7 +262,7 @@ fn gen_dyn_array_length_func(builder: &mut Builder, struct_id: ir::TypeDefID) {
     );
 }
 
-pub fn gen_dyn_array_rc_boilerplate(
+pub fn gen_dyn_array_runtime_type(
     lib: &mut LibraryBuilder,
     elem_ty: &ir::Type,
     struct_id: ir::TypeDefID,
@@ -390,4 +390,7 @@ pub fn gen_dyn_array_rc_boilerplate(
             body: releaser_body,
         }),
     );
+
+    let weak_ty = ir::Type::RcWeakPointer(ir::VirtualTypeID::Class(struct_id));
+    lib.gen_runtime_type(&weak_ty);
 }

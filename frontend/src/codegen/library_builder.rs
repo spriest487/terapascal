@@ -15,7 +15,7 @@ use crate::codegen::build_static_closure_impl;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::library_builder::dyn_array::gen_dyn_array_funcs;
-use crate::codegen::library_builder::dyn_array::gen_dyn_array_rc_boilerplate;
+use crate::codegen::library_builder::dyn_array::gen_dyn_array_runtime_type;
 use crate::codegen::library_builder::init::gen_tags_init;
 use crate::codegen::library_builder::rtti::gen_release_func;
 use crate::codegen::library_builder::rtti::gen_retain_func;
@@ -1179,7 +1179,7 @@ impl<'a> LibraryBuilder<'a> {
         let mut populate_closures = Vec::new();
         let mut populate_dynarrays = Vec::new();
 
-        loop {            
+        loop {
             populate_types.extend(self.type_cache
                 .iter()
                 .skip(done_types)
@@ -1197,11 +1197,12 @@ impl<'a> LibraryBuilder<'a> {
             for closure_id in populate_closures.drain(0..) {
                 self.gen_runtime_type(&ir::Type::Struct(closure_id));
                 self.gen_runtime_type(&ir::Type::RcPointer(ir::VirtualTypeID::Closure(closure_id)));
+                self.gen_runtime_type(&ir::Type::RcWeakPointer(ir::VirtualTypeID::Closure(closure_id)));
                 done_closures += 1;
             }
 
             for (elem_ty, struct_id) in populate_dynarrays.drain(0..) {
-                gen_dyn_array_rc_boilerplate(self, &elem_ty, struct_id);
+                gen_dyn_array_runtime_type(self, &elem_ty, struct_id);
                 gen_dyn_array_funcs(self, &elem_ty, struct_id);
 
                 done_dynarrays += 1;
@@ -1633,6 +1634,9 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
     let resource_ty = ir::Type::Struct(resource_struct);
     lib.gen_runtime_type(&resource_ty);
     lib.gen_runtime_type(&class_ty);
+
+    let weak_ty = ir::Type::RcWeakPointer(ir::VirtualTypeID::Class(resource_struct));
+    lib.gen_runtime_type(&weak_ty);
 }
 
 fn expect_no_unspec_args<T: fmt::Display>(target: &T, type_args: Option<&typ::TypeArgList>) {
