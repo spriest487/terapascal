@@ -100,7 +100,7 @@ impl Unit {
                 Type::Void.ptr()
             ]),
             ("RealToStr", BuiltinName::RealToStr, string_ty.clone(), vec![
-                Type::Float.ptr()
+                Type::Float
             ]),
             ("StrToInt", BuiltinName::StrToInt, Type::Int32, vec![
                 string_ty.clone()
@@ -662,7 +662,7 @@ impl Unit {
                 init_stmts.push(Statement::assign(
                     method_ptr_expr.clone().arrow(FieldName::ID(ir::METHODINFO_TAGS_FIELD)),
                     match tag_loc {
-                        Some(loc) => Expr::Global(GlobalName::StaticTagArray(loc)),
+                        Some(loc) => Expr::Global(GlobalName::StaticTagArray(loc)).addr_of(),
                         None => Expr::Null,
                     },
                 ));

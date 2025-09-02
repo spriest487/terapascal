@@ -94,14 +94,13 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
         ir::Type::Flags(_repr_id, set_id) => format!("Flags_{set_id}"),
 
         // reference types
-        ir::Type::RcPointer(id) | ir::Type::RcWeakPointer(id) => {
-            match id {
-                ir::VirtualTypeID::Any => String::from("VType_Any"),
-                ir::VirtualTypeID::Class(id) => format!("VType_Class_{id}"),
-                ir::VirtualTypeID::Interface(id) => format!("VType_Interface_{id}"),
-                ir::VirtualTypeID::Closure(id) => format!("VType_Closure_{id}"),
-            }
+        ir::Type::RcPointer(id) => {
+            vtype_typeinfo_name(*id)
         },
+        
+        ir::Type::RcWeakPointer(id) => {
+            format!("{}_Weak", vtype_typeinfo_name(*id))
+        }
 
         ir::Type::Function(closure_id) => format!("Closure_{closure_id}"),
 
@@ -118,6 +117,14 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
     }
 }
 
+fn vtype_typeinfo_name(id: ir::VirtualTypeID) -> String {
+    match id {
+        ir::VirtualTypeID::Any => String::from("VType_Any"),
+        ir::VirtualTypeID::Class(id) => format!("VType_Class_{id}"),
+        ir::VirtualTypeID::Interface(id) => format!("VType_Interface_{id}"),
+        ir::VirtualTypeID::Closure(id) => format!("VType_Closure_{id}"),
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum VariableID {
