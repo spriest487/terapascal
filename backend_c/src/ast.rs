@@ -422,18 +422,21 @@ impl Unit {
             match func {
                 ir::Function::Local(func_def) => {
                     let c_func = FunctionDef::translate(*id, func_def, self);
-                    let rtti_invoker = FunctionDef::invoker(*id, func_def, self);
+                    let invoker = FunctionDef::invoker(*id, &func_def.sig, self);
 
                     self.functions.push(c_func);
-                    self.functions.push(rtti_invoker);
+                    self.functions.push(invoker);
                 },
 
-                ir::Function::External(func_ref) if func_ref.src == ir::BUILTIN_SRC => {},
+                ir::Function::External(func_ref) if func_ref.src == ir::BUILTIN_SRC => {
+                },
 
                 ir::Function::External(func_ref) => {
                     let ffi_func = FfiFunction::translate(*id, func_ref, self);
+                    let invoker = FunctionDef::invoker(*id, &func_ref.sig, self);
 
                     self.ffi_funcs.push(ffi_func);
+                    self.functions.push(invoker);
                 },
             }
         }

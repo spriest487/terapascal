@@ -267,13 +267,13 @@ impl FunctionDef {
         }
     }
     
-    pub fn invoker(id: ir::FunctionID, func_def: &ir::FunctionDef, module: &mut Unit) -> Self {
-        let param_tys: Vec<_> = func_def.sig.param_tys
+    pub fn invoker(id: ir::FunctionID, sig: &ir::FunctionSig, module: &mut Unit) -> Self {
+        let param_tys: Vec<_> = sig.param_tys
             .iter()
             .map(|ir_ty| Type::from_metadata(ir_ty, module))
             .collect();
         
-        let return_ty = Type::from_metadata(&func_def.sig.return_ty, module);
+        let return_ty = Type::from_metadata(&sig.return_ty, module);
         
         Self::new_invoker(
             module,
