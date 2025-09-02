@@ -8,6 +8,7 @@ use serde::Serialize;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RuntimeType {
     pub name: Option<StringID>,
+    pub debug_name: Option<String>,
     
     pub methods: Vec<RuntimeMethod>,
 
@@ -19,11 +20,13 @@ impl RuntimeType {
     pub fn new(name: Option<StringID>) -> Self {
         Self {
             name,
+            debug_name: None,
             
             methods: Vec::new(),
 
             release: None,
             retain: None,
+            
         }
     }
 

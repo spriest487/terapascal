@@ -1161,6 +1161,10 @@ impl<'a> LibraryBuilder<'a> {
         rtti.retain = gen_retain_func(self, ty);
         rtti.release = gen_release_func(self, ty);
         
+        if self.opts.debug {
+            rtti.debug_name = Some(self.metadata().pretty_ty_name(&ty).into_owned());
+        }
+
         self.library.metadata.insert_runtime_type(ty.clone(), rtti)
     }
     
