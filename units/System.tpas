@@ -445,7 +445,7 @@ function Option[T].Get: T;
 begin
     match self of
         Option.Some value: value;
-        else raise 'called Get on an empty optional object';
+        else raise 'cannot get value of ' + typeinfo(Option[T]).Name + '.None';
     end;
 end;
 
@@ -461,7 +461,7 @@ function Result[T, E].Get: T;
 begin
     match self of
         Result.Ok value: value;
-        else raise 'called Get on a result object containing an error';
+        else raise 'cannot get value of ' + typeinfo(Result[T, E]).Name + '.Error';
     end;
 end;
 
