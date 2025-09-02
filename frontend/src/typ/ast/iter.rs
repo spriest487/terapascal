@@ -3,7 +3,6 @@ use crate::ast::SemanticHint;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_stmt;
-use crate::typ::seq::TypeSequenceError;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::typecheck_typename;
 use crate::typ::Binding;
@@ -133,7 +132,6 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
             };
 
             let mut seq_expr = evaluate_expr(&range.src_expr, &expect_src_ty, ctx)?;
-            let seq_span = seq_expr.span().clone();
 
             // either validate that the sequence can produce elements of the explicit binding type,
             // or infer that binding type from the elements produced by the sequence type
@@ -161,38 +159,12 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
 
                 (ty, inferred) => {
                     let element_ty = match TypeSequenceSupport::try_from_type(ty, ctx) {
-                        Err(TypeSequenceError::MethodNotFound) => {
+                        Err(err) => {
                             return Err(TypeError::InvalidLoopSeqType {
-                                seq_ty: ty.clone(),
+                                target_ty: ty.clone(),
                                 span: seq_expr.span().clone(),
+                                err,
                             })
-                        },
-
-                        Err(TypeSequenceError::MethodNotAccessible(ty, ident, access)) => {
-                            return Err(TypeError::TypeMemberInaccessible {
-                                ty,
-                                member: ident,
-                                access,
-                                span: seq_expr.span().clone(),
-                            })
-                        },
-
-                        Err(TypeSequenceError::Error(err)) => {
-                            return Err(TypeError::from_name_err(err, seq_span.clone()));
-                        },
-
-                        Err(TypeSequenceError::AmbiguousSequenceMethod(candidates)) => {
-                            return Err(TypeError::AmbiguousFunction {
-                                candidates,
-                                span: seq_span.clone(),
-                            });
-                        },
-
-                        Err(TypeSequenceError::AmbiguousNextMethod(candidates)) => {
-                            return Err(TypeError::AmbiguousFunction {
-                                candidates,
-                                span: seq_span.clone(),
-                            });
                         },
 
                         Ok(seq_support) => seq_support.item_type,
