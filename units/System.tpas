@@ -43,6 +43,16 @@ type
         function Then[TNext](f: function(T): Result[TNext, E]): Result[TNext, E];
     end;
     
+    ArraySequence[T] = record
+    private
+        arr: array of T;
+        pos: Integer;
+    public
+        function Next: Option[T];
+
+        constructor Create(arr: array of T);
+    end;
+    
     CharSequence = record
     private
         string: String;
@@ -81,6 +91,13 @@ type
         function ToString: String;
     end;
 
+    TagCollection = record
+    private
+        tags: array of Object;
+    public
+        function Sequence: ArraySequence[Object];
+    end;
+
     TypeInfo = class;
 
     FunctionInfo = class
@@ -100,6 +117,8 @@ type
 
         function FindTags(tagClass: TypeInfo): array of Object; overload;
         function FindTags[TTag]: array of TTag; overload;
+        
+        function Tags: TagCollection;
     end;
 
     MethodInfo = class
@@ -120,6 +139,8 @@ type
 
         function FindTags(tagClass: TypeInfo): array of Object; overload;
         function FindTags[TTag]: array of TTag; overload;
+        
+        function Tags: TagCollection;
     end;
     
     TypeInfo = class
@@ -138,7 +159,9 @@ type
 
         function FindTags(tagClass: TypeInfo): array of Object; overload;
         function FindTags[TTag]: array of TTag; overload;
-                
+
+        function Tags: TagCollection;
+
         class function LoadedTypes: array of TypeInfo;
         class function Find(typeName: String): Option[TypeInfo]; 
         class function Get(object: Object): TypeInfo;
@@ -343,6 +366,11 @@ begin
     tags
 end;
 
+function TypeInfo.Tags: TagCollection;
+begin
+    TagCollection(tags: self.tags);
+end;
+
 function TypeInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
 begin
     FindTagInArray[Object](self.tags, tagClass);
@@ -351,6 +379,11 @@ end;
 function TypeInfo.FindTag[TTag]: Option[TTag]; overload;
 begin
     FindTagInArray[TTag](self.tags, typeinfo(TTag));
+end;
+
+function MethodInfo.Tags: TagCollection;
+begin
+    TagCollection(tags: self.tags);
 end;
 
 function MethodInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
@@ -391,6 +424,11 @@ end;
 function FunctionInfo.Invoke(args: array of Pointer; resultPtr: Pointer);
 begin
     InvokeFunction(self, args, resultPtr);
+end;
+
+function FunctionInfo.Tags: TagCollection;
+begin
+    TagCollection(tags: self.tags);
 end;
 
 function FunctionInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
@@ -641,6 +679,30 @@ end;
 function String.Sequence: CharSequence;
 begin
     CharSequence(string: self; pos: 0);
+end;
+
+constructor ArraySequence[T].Create(arr: array of T);
+begin
+    ArraySequence(
+        arr: arr;
+        pos: 0;
+    );
+end;
+
+function ArraySequence[T].Next: Option[T];
+begin
+    if self.pos >= self.arr.Length then
+        exit Option.None;
+        
+    var next := self.arr[self.pos];
+    self.pos += 1;
+
+    Option.Some(next);
+end;
+
+function TagCollection.Sequence: ArraySequence[Object];
+begin
+    ArraySequence.Create(self.tags);
 end;
 
 function CharSequence.Next: Option[Byte];
