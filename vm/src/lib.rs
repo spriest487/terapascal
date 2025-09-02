@@ -1940,16 +1940,18 @@ impl Interpreter {
                     value: ptr_bytes.into_boxed_slice(),
                     ty: ir::TYPEINFO_TYPE,
                 });
+            
+            if !matches!(ty, ir::Type::RcWeakPointer(..)) {
+                let class_id = ty.rc_resource_def_id();
 
-            let class_id = ty.rc_resource_def_id();
+                let runtime_name = runtime_type
+                    .name
+                    .as_ref()
+                    .and_then(|str_id| self.metadata.get_string(*str_id))
+                    .cloned();
 
-            let runtime_name = runtime_type
-                .name
-                .as_ref()
-                .and_then(|str_id| self.metadata.get_string(*str_id))
-                .cloned();
-
-            self.typeinfo_map.add(class_id, runtime_name, typeinfo_ref);
+                self.typeinfo_map.add(class_id, runtime_name, typeinfo_ref);    
+            }
         }
 
         for (func_id, func_decl) in lib.metadata.functions() {
@@ -2350,9 +2352,9 @@ impl Interpreter {
         ]);
         funcinfo_struct.rc = Some(RcState::immortal());
 
-        let typeinfo_ptr = self.rc_alloc(funcinfo_struct.clone(), true)?;
+        let funcinfo_ptr = self.rc_alloc(funcinfo_struct.clone(), true)?;
 
-        Ok(DynValue::Pointer(typeinfo_ptr))
+        Ok(DynValue::Pointer(funcinfo_ptr))
     }
 
     pub fn runtime_invoke(

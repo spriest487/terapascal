@@ -3,6 +3,11 @@
 * partial tokenization
 * partial typechecking
 
+# RTTI
+* weak pointer target type info
+* type kind info
+* type/method unit name info
+
 # features
 * property syntax
 * numeric compiler error codes
