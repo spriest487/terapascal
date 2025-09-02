@@ -69,6 +69,23 @@ impl fmt::Display for TypeDefName {
 impl TypeDefName {
     pub fn build_decl_string(&self, left: &mut String, _right: &mut String) {
         match self {
+            // special case some builtins which have nicer names defined in macros
+            TypeDefName::Struct(ir::STRING_ID) => {
+                left.push_str("STRING_STRUCT");
+            }
+
+            TypeDefName::Struct(ir::TYPEINFO_ID) => {
+                left.push_str("TYPEINFO_STRUCT");
+            }
+
+            TypeDefName::Struct(ir::METHODINFO_ID) => {
+                left.push_str("METHODINFO_STRUCT");
+            }
+
+            TypeDefName::Struct(ir::FUNCINFO_ID) => {
+                left.push_str("FUNCINFO_STRUCT");
+            }
+            
             TypeDefName::Struct(..) | TypeDefName::Variant(..) | TypeDefName::StaticArray(..) => {
                 left.push_str(&format!("struct {}", self.to_string()));
             },

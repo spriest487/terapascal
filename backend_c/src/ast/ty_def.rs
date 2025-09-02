@@ -234,6 +234,10 @@ impl Type {
             Type::SizeType => "size_t".to_string(),
             Type::DefinedType(name) => match name {
                 TypeDefName::Alias(..) => name.to_string(),
+                TypeDefName::Struct(ir::STRING_ID) => String::from("STRING_STRUCT"),
+                TypeDefName::Struct(ir::TYPEINFO_ID) => String::from("TYPEINFO_STRUCT"),
+                TypeDefName::Struct(ir::METHODINFO_ID) => String::from("METHODINFO_STRUCT"),
+                TypeDefName::Struct(ir::FUNCINFO_ID) => String::from("FUNCINFO_STRUCT"),
                 _ => format!("struct {}", name),
             },
             Type::Rc => "struct Rc".to_string(),
