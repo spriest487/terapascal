@@ -13,9 +13,10 @@ use std::sync::Arc;
 pub const SEQUENCE_METHOD_NAME: &str = "Sequence";
 pub const SEQUENCE_NEXT_METHOD_NAME: &str = "Next";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypeSequenceError {
-    MethodNotFound,
+    SequenceMethodNotFound,
+    NextMethodNotFound(Type),
     MethodNotAccessible(Type, Ident, Access),
     AmbiguousSequenceMethod(Vec<OverloadCandidate>),
     AmbiguousNextMethod(Vec<OverloadCandidate>),
@@ -88,7 +89,7 @@ impl TypeSequenceSupport {
                     .as_ref()
                     .map(|args| &args.items[0]) else 
                 {
-                    return Err(TypeSequenceError::MethodNotFound);   
+                    return Err(TypeSequenceError::NextMethodNotFound(ty.clone()));
                 };
                 
                 
@@ -98,7 +99,7 @@ impl TypeSequenceSupport {
             
             // incompatible
             _ => {
-                Err(TypeSequenceError::MethodNotFound)
+                Err(TypeSequenceError::NextMethodNotFound(ty.clone()))
             }
         }
     }
@@ -150,25 +151,29 @@ where
     }
     
     methods.retain(|(_, m)| ty.get_current_access(ctx) >= m.access);
+    
+    match methods.len() {
+        0 => Err(TypeSequenceError::SequenceMethodNotFound),
 
-    if methods.is_empty() {
-        Err(TypeSequenceError::MethodNotFound)
-    } else if methods.len() > 1 {
-        let overloads = methods
-            .into_iter()
-            .map(|(index, decl)| {
-                OverloadCandidate::Method {
-                    index,
-                    decl,
-                    self_ty: ty.clone(),
-                    iface_ty: ty.clone(),
-                }
-            })
-            .collect();
-        
-        Err(to_ambig_err(overloads))
-    } else {
-        let (index, method) = methods.into_iter().next().unwrap();
-        Ok((index, method))
-    }
+        1 => {
+            let (index, method) = methods.into_iter().next().unwrap();
+            Ok((index, method))
+        }
+
+        2.. => {
+            let overloads = methods
+                .into_iter()
+                .map(|(index, decl)| {
+                    OverloadCandidate::Method {
+                        index,
+                        decl,
+                        self_ty: ty.clone(),
+                        iface_ty: ty.clone(),
+                    }
+                })
+                .collect();
+
+            Err(to_ambig_err(overloads))
+        }
+    }    
 }

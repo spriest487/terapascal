@@ -32,6 +32,7 @@ use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::Severity;
+use crate::typ::seq::{TypeSequenceError, SEQUENCE_METHOD_NAME, SEQUENCE_NEXT_METHOD_NAME};
 
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -367,7 +368,8 @@ pub enum TypeError {
         span: Span,
     },
     InvalidLoopSeqType {
-        seq_ty: Type,
+        target_ty: Type,
+        err: TypeSequenceError,
         span: Span,
     },
 
@@ -846,13 +848,9 @@ impl DiagnosticOutput for TypeError {
                     Some(span) => vec![message.with_label(DiagnosticLabel::new(span.clone()))],
                 }
             },
-            TypeError::AmbiguousFunction { candidates, .. } => candidates
-                .iter()
-                .map(|c| {
-                    DiagnosticMessage::info(format!("may refer to {}", c))
-                        .with_label(DiagnosticLabel::new(c.span().clone()))
-                })
-                .collect(),
+            TypeError::AmbiguousFunction { candidates, .. } => {
+                ambig_candidates_messages("may refer to", candidates)
+            },
 
             TypeError::InvalidMethodOverload { prev_decls, .. }
             | TypeError::InvalidFunctionOverload { prev_decls, .. } => prev_decls
@@ -901,6 +899,40 @@ impl DiagnosticOutput for TypeError {
                 }));
                 messages
             },
+            
+            TypeError::InvalidLoopSeqType { target_ty, err, span, .. } => {
+                match err {
+                    TypeSequenceError::SequenceMethodNotFound => {
+                        let msg = format!("type `{}` has no method named `{}`", target_ty, SEQUENCE_METHOD_NAME);
+                        vec![DiagnosticMessage::info(msg)]
+                    },
+                    
+                    TypeSequenceError::NextMethodNotFound(seq_ty) => {
+                        let msg = format!("type `{}` has no method named `{}`", seq_ty, SEQUENCE_NEXT_METHOD_NAME);
+                        vec![DiagnosticMessage::info(msg)]
+                    },
+                    
+                    TypeSequenceError::MethodNotAccessible(seq_ty, ident, access) => {
+                        let msg = format!("method `{}.{}` with {} access is not accessible in this context", seq_ty, ident.name, access);
+                        vec![DiagnosticMessage::info(msg)]
+                    }
+                    
+                    TypeSequenceError::AmbiguousSequenceMethod(candidates) => {
+                        let msg = format!("potential `{}` method", SEQUENCE_METHOD_NAME); 
+                        ambig_candidates_messages(&msg, candidates)
+                    }
+                    
+                    TypeSequenceError::AmbiguousNextMethod(candidates) => {
+                        let msg = format!("potential `{}` method", SEQUENCE_NEXT_METHOD_NAME);
+                        ambig_candidates_messages(&msg, candidates)
+                    }
+                    
+                    TypeSequenceError::Error(name_err) => {
+                        let inner_err = TypeError::from_name_err(name_err.clone(), span.clone());
+                        inner_err.to_messages()
+                    }
+                }
+            }
 
             _ => Vec::new(),
         }
@@ -909,6 +941,16 @@ impl DiagnosticOutput for TypeError {
     fn backtrace(&self) -> Option<&Backtrace> {
         None
     }
+}
+
+fn ambig_candidates_messages(msg: &str, candidates: &[OverloadCandidate]) -> Vec<DiagnosticMessage> {
+    candidates
+        .iter()
+        .map(|c| {
+            DiagnosticMessage::info(format!("{msg} {}", c))
+                .with_label(DiagnosticLabel::new(c.span().clone()))
+        })
+        .collect()
 }
 
 impl fmt::Display for TypeError {
@@ -1532,7 +1574,7 @@ impl fmt::Display for TypeError {
                 write!(f, "type `{}` cannot be used as a loop counter", counter_ty)
             },
 
-            TypeError::InvalidLoopSeqType { seq_ty, .. } => {
+            TypeError::InvalidLoopSeqType { target_ty: seq_ty, .. } => {
                 write!(f, "type `{}` cannot be used as a sequence", seq_ty)
             },
 
@@ -1612,6 +1654,11 @@ impl fmt::Display for InvalidOverloadKind {
             },
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum InvalidLoopSequenceTypeKind {
+    
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
