@@ -830,14 +830,15 @@ impl fmt::Display for Unit {
             writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;
 
             write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
-            match typeinfo.name.map(GlobalName::StringLiteral) {
-                Some(name) => writeln!(f, "&{},", name)?,
-                None => writeln!(f, "NULL,")?,
-            }
+            
+            let type_name_id = typeinfo.name.unwrap_or(ir::EMPTY_STRING_ID);
+            let type_name_str = GlobalName::StringLiteral(type_name_id);
+
+            writeln!(f, "&{},", type_name_str)?;
 
             // initialized at runtime for now
             writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
-            
+
             writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
 
             let tags_loc = ty
