@@ -1023,10 +1023,15 @@ impl<'a> LibraryBuilder<'a> {
             },
             
             typ::Type::Weak(weak_ty) => {
-                match self.translate_type(weak_ty, generic_ctx) {
+                let ty = match self.translate_type(weak_ty, generic_ctx) {
                     ir::Type::RcPointer(id) => ir::Type::RcWeakPointer(id),
                     other => unreachable!("only RC class types can be weak, found: {}", other),
-                }
+                };
+
+                self.type_cache.insert(src_ty.clone(), ty.clone());
+                self.cached_types.insert(ty.clone(), src_ty);
+                
+                ty
             }
 
             typ::Type::Interface(iface_sym) => {
