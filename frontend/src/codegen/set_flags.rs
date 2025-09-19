@@ -2,6 +2,7 @@ use crate::codegen::builder::Builder;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::ir;
 use crate::Operator;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub const WORD_TYPE: ir::Type = ir::Type::U64;
 const WORD_BITS: usize = u64::BITS as usize;

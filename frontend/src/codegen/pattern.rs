@@ -3,6 +3,7 @@ use crate::codegen::ir;
 use crate::codegen::Builder;
 use crate::typ;
 use crate::typ::{MatchPattern, Specializable};
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub struct PatternMatchBinding {
     pub name: String,
@@ -160,7 +161,7 @@ fn translate_is_variant(
     builder: &mut Builder,
 ) -> ir::Ref {
     let tag_ptr = builder.local_temp(ir::Type::I32.ptr());
-    builder.append(ir::Instruction::VariantTag {
+    builder.emit(ir::Instruction::VariantTag {
         out: tag_ptr.clone(),
         a: val,
         of_ty: variant_ty,

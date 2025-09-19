@@ -16,6 +16,7 @@ use crate::typ::system_option_type_of;
 use crate::typ::OPTION_NONE_CASE;
 use crate::typ::OPTION_SOME_CASE;
 use terapascal_common::span::Spanned;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
     builder.push_debug_context(stmt.annotation().span().clone());
@@ -214,7 +215,7 @@ where
         builder.add(counter_val.clone(), counter_val.clone(), inc_val);
 
         // return to top of loop
-        builder.append(ir::Instruction::Jump { dest: top_label });
+        builder.emit(ir::Instruction::Jump { dest: top_label });
     });
 
     if jmp_exists(&loop_instructions, break_label) {
@@ -497,7 +498,7 @@ pub fn translate_assignment(assignment: &typ::ast::Assignment, builder: &mut Bui
     let lhs_ty = builder.translate_type(&assignment.lhs.annotation().ty());
     builder.release(lhs.clone(), &lhs_ty);
 
-    builder.append(ir::Instruction::Move {
+    builder.emit(ir::Instruction::Move {
         out: lhs,
         new_val: rhs.into(),
     });
@@ -534,7 +535,7 @@ pub fn translate_compound_assignment(
         builder.retain(op_result.clone(), &lhs_ty);
         builder.release(lhs.clone(), &lhs_ty);
 
-        builder.append(ir::Instruction::Move {
+        builder.emit(ir::Instruction::Move {
             out: lhs,
             new_val: op_result.into(),
         });

@@ -17,9 +17,9 @@ use crate::typ as typ;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use std::borrow::Cow;
-use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Debug)]
 pub struct Builder<'m, 'l: 'm> {
@@ -35,6 +35,44 @@ pub struct Builder<'m, 'l: 'm> {
     next_label: Label,
 
     loop_stack: Vec<LoopScope>,
+}
+
+impl InstructionBuilder for Builder<'_, '_> {
+    fn emit(&mut self, instruction: Instruction) {
+        if instruction.should_discard() {
+            return;
+        }
+
+        self.instructions.push(instruction);
+    }
+
+    fn is_debug(&self) -> bool {
+        self.opts().debug
+    }
+
+    fn local_temp(&mut self, ty: Type) -> Ref {
+        assert_ne!(Type::Nothing, ty);
+
+        let id = self.next_local_id();
+        self.instructions
+            .push(Instruction::LocalAlloc(id, ty.clone()));
+
+        self.current_scope_mut().bind_temp(id);
+
+        Ref::Local(id)
+    }
+
+    fn local_new(&mut self, ty: Type, name: Option<String>) -> Ref {
+        assert_ne!(Type::Nothing, ty);
+
+        let id = self.next_local_id();
+        self.instructions
+            .push(Instruction::LocalAlloc(id, ty.clone()));
+
+        self.current_scope_mut().bind_new(id, name, ty);
+
+        Ref::Local(id)
+    }
 }
 
 impl<'m, 'l: 'm> Builder<'m, 'l> {
@@ -369,7 +407,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
         self.current_scope_mut().inc_debug_ctx_count();
 
-        self.append(Instruction::DebugPush(ctx));
+        self.emit(Instruction::DebugPush(ctx));
     }
 
     pub fn pop_debug_context(&mut self) {
@@ -379,412 +417,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
         self.current_scope_mut().dec_debug_ctx_count();
 
-        self.append(Instruction::DebugPop);
-    }
-
-    pub fn append(&mut self, instruction: Instruction) {
-        if instruction.should_discard() {
-            return;
-        }
-
-        self.instructions.push(instruction);
-    }
-
-    pub fn comment(&mut self, content: &(impl fmt::Display + ?Sized)) {
-        if !self.opts().debug {
-            return;
-        }
-
-        self.append(Instruction::Comment(content.to_string()));
-    }
-
-    pub fn mov(&mut self, out: impl Into<Ref>, val: impl Into<Value>) {
-        self.append(Instruction::Move {
-            out: out.into(),
-            new_val: val.into(),
-        });
-    }
-    
-    pub fn rc_new(&mut self, out: impl Into<Ref>, type_id: TypeDefID, immortal: bool) {
-        self.append(Instruction::RcNew { 
-            out: out.into(),
-            type_id,
-            immortal,
-        });
-    }
-
-    pub fn class_is(&mut self, out: impl Into<Ref>, a: impl Into<Value>, type_id: VirtualTypeID) {
-        self.append(Instruction::ClassIs {
-            out: out.into(),
-            a: a.into(),
-            class_id: type_id,
-        })
-    }
-    
-    pub fn add(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Add(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }));
-    }
-
-    pub fn sub(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Sub(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }));
-    }
-
-    pub fn sub_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>, as_type: &Type) -> Value {
-        let a = a.into();
-        let b = b.into();
-        
-        if let (Some(a_val), Some(b_val)) = (a.to_literal_val(), b.to_literal_val()) {
-            if let Some(result) = Value::from_literal_val(a_val - b_val, &as_type) {
-                return result;
-            }
-        }
-
-        let out = self.local_temp(as_type.clone());
-        self.sub(out.clone(), a, b);       
-        
-        Value::Ref(out)
-    }
-
-    pub fn mul(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Mul(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }));
-    }
-
-    pub fn idiv(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::IDiv(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }));
-    }
-
-    pub fn fdiv(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::FDiv(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }));
-    }
-
-    pub fn modulo(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Mod(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }));
-    }
-
-    pub fn shl(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Shl(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }));
-    }
-
-    pub fn shr(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Shr(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }));
-    }
-
-    pub fn and(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::And(BinOpInstruction {
-            a: a.into(),
-            b: b.into(),
-            out: out.into(),
-        }));
-    }
-
-    pub fn and_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
-        match (a.into(), b.into()) {
-            (Value::LiteralBool(a), Value::LiteralBool(b)) => Value::LiteralBool(a && b),
-
-            (a, b) => {
-                let result = self.local_temp(Type::Bool);
-                self.and(result.clone(), a, b);
-                Value::Ref(result)
-            },
-        }
-    }
-
-    pub fn not_to_val(&mut self, bool_val: impl Into<Value>) -> Value {
-        match bool_val.into() {
-            Value::LiteralBool(b) => Value::LiteralBool(!b),
-
-            other_val => {
-                let result = self.local_temp(Type::Bool);
-                self.not(result.clone(), other_val);
-                Value::Ref(result)
-            },
-        }
-    }
-
-    pub fn not(&mut self, out: impl Into<Ref>, bool_val: impl Into<Value>) {
-        self.append(Instruction::Not(UnaryOpInstruction {
-            a: bool_val.into(),
-            out: out.into(),
-        }));
-    }
-
-    pub fn or(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Or(BinOpInstruction {
-            a: a.into(),
-            b: b.into(),
-            out: out.into(),
-        }));
-    }
-
-    pub fn or_to_value(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
-        let a = a.into();
-        let b = b.into();
-
-        if let (Some(a_val), Some(b_val)) = (a.to_literal_bool(), b.to_literal_bool()) {
-            Value::LiteralBool(a_val || b_val)
-        } else {
-            let result = self.local_temp(Type::Bool);
-            self.or(result.clone(), a, b);
-            Value::Ref(result)
-        }
-    }
-
-    pub fn bit_and(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::BitAnd(BinOpInstruction {
-            a: a.into(),
-            b: b.into(),
-            out: out.into(),
-        }));
-    }
-
-    pub fn bit_not(&mut self, out: impl Into<Ref>, a: impl Into<Value>) {
-        self.append(Instruction::BitNot(UnaryOpInstruction {
-            a: a.into(),
-            out: out.into(),
-        }));
-    }
-
-    pub fn bit_or(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::BitOr(BinOpInstruction {
-            a: a.into(),
-            b: b.into(),
-            out: out.into(),
-        }));
-    }
-
-    pub fn bit_xor(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::BitXor(BinOpInstruction {
-            a: a.into(),
-            b: b.into(),
-            out: out.into(),
-        }));
-    }
-
-    pub fn eq(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Eq(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }))
-    }
-    
-    pub fn eq_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
-        let a = a.into();
-        let b = b.into();
-
-        if let (Some(a_val), Some(b_val)) = (a.to_literal_val(), b.to_literal_val()) {
-            Value::LiteralBool(a_val == b_val)
-        } else {
-            let result = self.local_temp(Type::Bool);
-            self.eq(result.clone(), a, b);
-            Value::Ref(result)
-        }
-    }
-
-    pub fn gt(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Gt(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }))
-    }
-
-    pub fn gt_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
-        let a = a.into();
-        let b = b.into();
-
-        if let (Some(a_val), Some(b_val)) = (a.to_literal_val(), b.to_literal_val()) {
-            Value::LiteralBool(a_val > b_val)
-        } else {
-            let result = self.local_temp(Type::Bool);
-            self.gt(result.clone(), a, b);
-            Value::Ref(result)
-        }
-    }
-
-    pub fn gte(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Gte(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }))
-    }
-
-    pub fn gte_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
-        let a = a.into();
-        let b = b.into();
-
-        if let (Some(a_val), Some(b_val)) = (a.to_literal_val(), b.to_literal_val()) {
-            Value::LiteralBool(a_val >= b_val)
-        } else {
-            let result = self.local_temp(Type::Bool);
-            self.gte(result.clone(), a, b);
-            Value::Ref(result)
-        }
-    }
-
-    pub fn lt(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Lt(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }))
-    }
-
-    pub fn lte(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
-        self.append(Instruction::Lte(BinOpInstruction {
-            out: out.into(),
-            a: a.into(),
-            b: b.into(),
-        }))
-    }
-
-    pub fn lt_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
-        let a = a.into();
-        let b = b.into();
-
-        if let (Some(a_val), Some(b_val)) = (a.to_literal_val(), b.to_literal_val()) {
-            Value::LiteralBool(a_val < b_val)
-        } else {
-            let result = self.local_temp(Type::Bool);
-            self.lt(result.clone(), a, b);
-            Value::Ref(result)
-        }
-    }
-
-    pub fn size_of(&mut self, out: impl Into<Ref>, ty: Type) {
-        self.mov(out, Value::SizeOf(ty));
-    }
-
-    pub fn field(
-        &mut self,
-        out: impl Into<Ref>,
-        base: impl Into<Ref>,
-        base_ty: impl Into<Type>,
-        field: FieldID,
-    ) {
-        self.append(Instruction::Field {
-            out: out.into(),
-            a: base.into(),
-            of_ty: base_ty.into(),
-            field,
-        })
-    }
-
-    pub fn field_val(
-        &mut self,
-        out: impl Into<Ref>,
-        base: impl Into<Ref>,
-        base_ty: impl Into<Type>,
-        field: FieldID,
-        field_ty: Type,
-    ) {
-        let field_ptr = self.local_temp(field_ty.ptr());
-        self.field(field_ptr.clone(), base, base_ty, field);
-
-        self.mov(out, field_ptr.to_deref());
-    }
-    
-    pub fn field_to_val(
-        &mut self,
-        base: impl Into<Ref>,
-        base_ty: impl Into<Type>,
-        field: FieldID,
-        field_ty: Type
-    ) -> Ref {
-        let result = self.local_temp(field_ty.clone());
-        self.field_val(result.clone(), base, base_ty, field, field_ty);
-        
-        result
-    }
-
-    pub fn assign_field(
-        &mut self,
-        base: impl Into<Ref>,
-        base_ty: impl Into<Type>,
-        field: FieldID,
-        field_ty: Type,
-        val: impl Into<Value>,
-    ) {
-        let field_ptr = self.local_temp(field_ty.ptr());
-        self.field(field_ptr.clone(), base, base_ty, field);
-
-        self.mov(field_ptr.to_deref(), val);
-    }
-    
-    pub fn element(
-        &mut self,
-        out: impl Into<Ref>,
-        a: impl Into<Ref>,
-        index: impl Into<Value>,
-        element_ty: impl Into<Type>,
-    ) {
-        self.append(Instruction::Element {
-            element: element_ty.into(),
-            out: out.into(),
-            a: a.into(),
-            index: index.into(),
-        });
-    }
-
-    pub fn element_val(
-        &mut self,
-        out: impl Into<Ref>,
-        a: impl Into<Ref>,
-        index: impl Into<Value>,
-        element_ty: impl Into<Type>,
-    ) {
-        let element_ty = element_ty.into();
-        let element_ptr = self.local_temp(element_ty.clone().ptr());
-
-        self.element(element_ptr.clone(), a, index, element_ty);
-        self.mov(out, element_ptr.to_deref());
-    }
-    
-    #[allow(unused)]
-    pub fn element_to_val(
-        &mut self,
-        a: impl Into<Ref>,
-        index: impl Into<Value>,
-        element_ty: impl Into<Type>,
-    ) -> Ref {
-        let element_ty = element_ty.into();
-        let result = self.local_temp(element_ty.clone());
-        self.element_val(result.clone(), a, index, element_ty);
-
-        result
+        self.emit(Instruction::DebugPop);
     }
     
     pub fn set_include(&mut self, set_ref: impl Into<Ref>, bit_val: impl Into<Value>, set_type: &typ::SetType) {
@@ -913,15 +546,15 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     }
 
     pub fn label(&mut self, label: Label) {
-        self.append(Instruction::Label(label))
+        self.emit(Instruction::Label(label))
     }
 
     pub fn jmp(&mut self, dest: Label) {
-        self.append(Instruction::Jump { dest })
+        self.emit(Instruction::Jump { dest })
     }
 
     pub fn jmpif(&mut self, dest: Label, cond: impl Into<Value>) {
-        self.append(Instruction::JumpIf {
+        self.emit(Instruction::JumpIf {
             dest,
             test: cond.into(),
         })
@@ -933,7 +566,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         args: impl IntoIterator<Item = Value>,
         out: Option<Ref>,
     ) {
-        self.append(Instruction::Call {
+        self.emit(Instruction::Call {
             function: function.into(),
             args: args.into_iter().collect(),
             out,
@@ -948,7 +581,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         rest_args: impl IntoIterator<Item=impl Into<Value>>,
         out: Option<Ref>,
     ) {
-        self.append(Instruction::VirtualCall {
+        self.emit(Instruction::VirtualCall {
             iface_id,
             method,
             self_arg: self_arg.into(),
@@ -968,14 +601,14 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     }
 
     pub fn addr_of(&mut self, out: impl Into<Ref>, a: impl Into<Ref>) {
-        self.append(Instruction::AddrOf {
+        self.emit(Instruction::AddrOf {
             out: out.into(),
             a: a.into(),
         })
     }
 
     pub fn cast(&mut self, out: impl Into<Ref>, val: impl Into<Value>, ty: Type) {
-        self.append(Instruction::Cast {
+        self.emit(Instruction::Cast {
             out: out.into(),
             a: val.into(),
             ty,
@@ -983,7 +616,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     }
 
     pub fn vartag(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_ty: Type) {
-        self.append(Instruction::VariantTag {
+        self.emit(Instruction::VariantTag {
             out: out.into(),
             a: a.into(),
             of_ty,
@@ -997,7 +630,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         of_ty: Type,
         tag: usize,
     ) {
-        self.append(Instruction::VariantData {
+        self.emit(Instruction::VariantData {
             out: out.into(),
             a: a.into(),
             of_ty,
@@ -1046,31 +679,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             .expect("scope must be active")
     }
 
-    pub fn local_temp(&mut self, ty: Type) -> Ref {
-        assert_ne!(Type::Nothing, ty);
-
-        let id = self.next_local_id();
-        self.instructions
-            .push(Instruction::LocalAlloc(id, ty.clone()));
-
-        self.current_scope_mut().bind_temp(id);
-
-        Ref::Local(id)
-    }
-
-    // creates a managed local with type `ty_def`
-    pub fn local_new(&mut self, ty: Type, name: Option<String>) -> Ref {
-        assert_ne!(Type::Nothing, ty);
-
-        let id = self.next_local_id();
-        self.instructions
-            .push(Instruction::LocalAlloc(id, ty.clone()));
-
-        self.current_scope_mut().bind_new(id, name, ty);
-
-        Ref::Local(id)
-    }
-
     pub fn find_local(&self, name: &str) -> Option<&Local> {
         self.scopes
             .iter()
@@ -1086,8 +694,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         assert_ne!(Type::Nothing, ty);
         let id = self.next_local_id();
 
-        self.instructions
-            .push(Instruction::LocalAlloc(id, ty.clone()));
+        self.emit(Instruction::LocalAlloc(id, ty.clone()));
 
         self.current_scope_mut().bind_param(id, name, ty, true);
 
@@ -1120,12 +727,9 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
                     // store the field pointer in a temp slot
                     let field_val = self.local_temp(field_ty.clone().ptr());
-                    self.append(Instruction::Field {
-                        out: field_val.clone(),
-                        a: at.clone(),
-                        of_ty: Type::Struct(*struct_id),
-                        field,
-                    });
+                    
+                    let of_ty = Type::Struct(*struct_id);
+                    self.field(field_val.clone(), at.clone(), of_ty, field);
 
                     result |= self.visit_deep(field_val.to_deref(), &field_ty, f);
                 }
@@ -1213,7 +817,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
                 let mut result = false;
 
                 for i in 0..*dim {
-                    self.append(Instruction::Element {
+                    self.emit(Instruction::Element {
                         out: element_ptr.clone(),
                         a: at.clone(),
                         element: (**element).clone(),
@@ -1242,12 +846,12 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
                 if let Some(retain) = rc_funcs.retain {
                     let at_ptr = self.local_temp(ty.clone().ptr());
-                    self.append(Instruction::AddrOf {
+                    self.emit(Instruction::AddrOf {
                         out: at_ptr.clone(),
                         a: at,
                     });
 
-                    self.append(Instruction::Call {
+                    self.emit(Instruction::Call {
                         function: Value::Ref(Ref::Global(GlobalRef::Function(retain))),
                         args: vec![Value::Ref(at_ptr)],
                         out: None,
@@ -1258,12 +862,12 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             },
 
             Type::RcPointer(..) => {
-                self.append(Instruction::Retain { at, weak: false });
+                self.emit(Instruction::Retain { at, weak: false });
                 true
             },
 
             Type::RcWeakPointer(..) => {
-                self.append(Instruction::Retain { at, weak: true });
+                self.emit(Instruction::Retain { at, weak: true });
                 true
             },
 
@@ -1307,12 +911,12 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             },
 
             Type::RcPointer(..) => {
-                self.append(Instruction::Release { at, weak: false });
+                self.emit(Instruction::Release { at, weak: false });
                 true
             },
 
             Type::RcWeakPointer(..) => {
-                self.append(Instruction::Release { at, weak: true });
+                self.emit(Instruction::Release { at, weak: true });
                 true
             },
 
@@ -1366,7 +970,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     }
 
     pub fn begin_scope(&mut self) {
-        self.append(Instruction::LocalBegin);
+        self.emit(Instruction::LocalBegin);
         self.scopes.push(Scope::new());
 
         if self.opts().debug {
@@ -1421,7 +1025,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
             for _ in 0..debug_pops {
                 // don't call the helper func to do this, we don't want to modify the scope here
-                self.append(Instruction::DebugPop);
+                self.emit(Instruction::DebugPop);
             }
         }
 
@@ -1475,7 +1079,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         }
 
         self.scopes.pop().unwrap();
-        self.append(Instruction::LocalEnd);
+        self.emit(Instruction::LocalEnd);
     }
 
     pub fn break_loop(&mut self) {
@@ -1491,7 +1095,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.cleanup_scope(break_scope);
 
         // jump to the label (presumably somewhere outside the broken scope!)
-        self.append(Instruction::Jump { dest: break_label });
+        self.emit(Instruction::Jump { dest: break_label });
     }
 
     pub fn continue_loop(&mut self) {
@@ -1504,7 +1108,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         };
 
         self.cleanup_scope(continue_scope);
-        self.append(Instruction::Jump {
+        self.emit(Instruction::Jump {
             dest: continue_label,
         });
     }
@@ -1526,7 +1130,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     pub fn exit_function(&mut self) {
         self.cleanup_scope(0);
 
-        self.append(Instruction::Jump { dest: EXIT_LABEL })
+        self.emit(Instruction::Jump { dest: EXIT_LABEL })
     }
 }
 

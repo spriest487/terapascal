@@ -1,3 +1,4 @@
+use terapascal_ir::instruction_builder::InstructionBuilder;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::library_builder::LibraryBuilder;

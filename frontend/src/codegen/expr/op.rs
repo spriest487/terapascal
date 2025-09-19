@@ -1,11 +1,12 @@
+use crate::ast;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr;
 use crate::codegen::expr::translate_expr;
 use crate::codegen::typ;
-use crate::ast;
+use crate::ir;
 use crate::IntConstant;
 use bigdecimal::BigDecimal;
-use crate::ir;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub fn translate_bin_op(
     bin_op: &typ::ast::BinOp,
@@ -320,7 +321,7 @@ pub fn translate_unary_op(
             let out_ty = builder.translate_type(out_ty);
             let out_val = builder.local_new(out_ty.clone(), None);
 
-            builder.append(ir::Instruction::AddrOf {
+            builder.emit(ir::Instruction::AddrOf {
                 out: out_val.clone(),
                 a: operand_ref,
             });

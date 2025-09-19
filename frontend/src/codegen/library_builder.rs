@@ -60,6 +60,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -1368,18 +1369,18 @@ impl<'a> LibraryBuilder<'a> {
         let gte_zero = builder.gte_to_val(index_val.clone(), ir::Value::LiteralI32(0));
         let lt_len = builder.lt_to_val(index_val, len_val);
         let bounds_check_ok = builder.and_to_val(gte_zero, lt_len);
-        builder.append(ir::Instruction::JumpIf {
+        builder.emit(ir::Instruction::JumpIf {
             dest: bounds_ok_label,
             test: bounds_check_ok,
         });
 
         // otherwise: raise
         let err_str = builder.find_or_insert_string("array index out of bounds");
-        builder.append(ir::Instruction::Raise {
+        builder.emit(ir::Instruction::Raise {
             val: ir::Ref::Global(ir::GlobalRef::StringLiteral(err_str)),
         });
 
-        builder.append(ir::Instruction::Label(bounds_ok_label));
+        builder.emit(ir::Instruction::Label(bounds_ok_label));
 
         let body = builder.finish();
 

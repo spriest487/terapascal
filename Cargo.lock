@@ -282,16 +282,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codespan"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e4b418d52c9206820a56fc1aa28db73d67e346ba8ba6aa90987e8d6becef7e4"
-dependencies = [
- "codespan-reporting",
- "serde",
-]
-
-[[package]]
 name = "codespan-reporting"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1518,9 +1508,7 @@ name = "terapascal"
 version = "0.3.0"
 dependencies = [
  "bincode",
- "codespan",
  "codespan-reporting",
- "linked-hash-map",
  "structopt",
  "terapascal-backend-c",
  "terapascal-build",
@@ -1528,7 +1516,6 @@ dependencies = [
  "terapascal-frontend",
  "terapascal-ir",
  "terapascal-vm",
- "topological-sort",
 ]
 
 [[package]]

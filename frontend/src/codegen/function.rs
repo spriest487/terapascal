@@ -9,6 +9,7 @@ use crate::codegen::ClosureInstance;
 use crate::ir::*;
 use std::iter;
 use std::sync::Arc;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Clone, Debug)]
 pub struct FunctionInstance {

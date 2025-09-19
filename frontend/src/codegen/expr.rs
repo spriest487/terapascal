@@ -15,6 +15,7 @@ use crate::typ::SYSTEM_UNIT_NAME;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::*;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
     match expr.annotation() {
@@ -142,7 +143,7 @@ fn translate_indexer(
 
             builder.bounds_check(&element_ty, len_val, index_val.clone());
 
-            builder.append(ir::Instruction::Element {
+            builder.emit(ir::Instruction::Element {
                 out: element_ptr.clone(),
                 a: base_ref,
                 index: index_val,
@@ -212,7 +213,7 @@ pub fn translate_if_cond_expr(
         let val = expr_to_val(branch, builder);
 
         if let Some(out_ref) = out_ref.cloned() {
-            builder.append(ir::Instruction::Move {
+            builder.emit(ir::Instruction::Move {
                 out: out_ref.clone(),
                 new_val: val.into(),
             });
@@ -492,7 +493,7 @@ fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &m
                     let ref_ty = builder.translate_type(&annotation.ty());
                     let ref_temp = builder.local_temp(ref_ty.ptr());
 
-                    builder.append(ir::Instruction::AddrOf {
+                    builder.emit(ir::Instruction::AddrOf {
                         out: ref_temp.clone(),
                         a: val_ref,
                     });
@@ -571,7 +572,7 @@ pub fn translate_exit(exit: &typ::ast::Exit, builder: &mut Builder) {
 pub fn translate_raise(raise: &typ::ast::Raise, builder: &mut Builder) -> ir::Ref {
     let val = translate_expr(&raise.value, builder);
 
-    builder.append(ir::Instruction::Raise { val: val.clone() });
+    builder.emit(ir::Instruction::Raise { val: val.clone() });
 
     ir::Ref::Discard
 }

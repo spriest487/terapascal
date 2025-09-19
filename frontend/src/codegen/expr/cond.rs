@@ -1,10 +1,11 @@
 use crate::codegen::builder::Builder;
 use crate::codegen::expr;
+use crate::codegen::ir;
 use crate::codegen::pattern::translate_pattern_match;
 use crate::codegen::pattern::PatternMatchOutput;
 use crate::codegen::stmt::build_case_block;
 use crate::codegen::typ;
-use crate::codegen::ir;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub fn translate_if_cond<B, BranchTranslateFn>(
     if_cond: &typ::ast::IfCond<B>,
@@ -170,7 +171,7 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Buil
         // we MUST have executed a branch!
         let err = "unhandled pattern in match expr";
         let err_str = builder.find_or_insert_string(err);
-        builder.append(ir::Instruction::Raise {
+        builder.emit(ir::Instruction::Raise {
             val: ir::Ref::Global(ir::GlobalRef::StringLiteral(err_str)),
         });
 

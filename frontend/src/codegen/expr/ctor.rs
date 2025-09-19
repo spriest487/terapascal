@@ -3,10 +3,11 @@ use crate::codegen::expr;
 use crate::codegen::expr::translate_expr;
 use crate::codegen::set_word_count;
 use crate::codegen::WORD_TYPE;
+use crate::ir;
 use crate::typ;
 use bigdecimal::BigDecimal;
 use bigdecimal::Zero;
-use crate::ir;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub fn build_object_ctor_invocation(
     object_ty: &typ::Type,
@@ -57,7 +58,7 @@ pub fn build_object_ctor_invocation(
             ));
 
             let field_ptr = builder.local_temp(field_def.ty.clone().ptr());
-            builder.append(ir::Instruction::Field {
+            builder.emit(ir::Instruction::Field {
                 out: field_ptr.clone(),
                 a: out_val.clone(),
                 of_ty: object_ty.clone(),
@@ -117,7 +118,7 @@ fn translate_static_array_ctor(
                 builder.scope(|builder| {
                     let index = i32::try_from(i).expect("invalid array index in array ctor");
 
-                    builder.append(ir::Instruction::Element {
+                    builder.emit(ir::Instruction::Element {
                         out: el_ptr.clone(),
                         a: arr.clone(),
                         index: ir::Value::LiteralI32(index),
@@ -158,7 +159,7 @@ fn translate_dyn_array_ctor(
 
         // get pointer to the length
         let len_ref = builder.local_temp(ir::Type::I32.ptr());
-        builder.append(ir::Instruction::Field {
+        builder.emit(ir::Instruction::Field {
             out: len_ref.clone(),
             of_ty: array_ty.clone(),
             field: ir::DYNARRAY_LEN_FIELD,
@@ -171,7 +172,7 @@ fn translate_dyn_array_ctor(
 
         // get pointer to storage pointer
         let arr_ptr = builder.local_temp(elem_ty.clone().ptr().ptr());
-        builder.append(ir::Instruction::Field {
+        builder.emit(ir::Instruction::Field {
             out: arr_ptr.clone(),
             of_ty: array_ty,
             field: ir::DYNARRAY_PTR_FIELD,

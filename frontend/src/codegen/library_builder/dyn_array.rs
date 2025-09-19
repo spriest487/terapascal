@@ -1,3 +1,4 @@
+use terapascal_ir::instruction_builder::InstructionBuilder;
 use crate::codegen::builder::Builder;
 use crate::codegen::ir;
 use crate::codegen::library_builder::LibraryBuilder;
@@ -362,7 +363,7 @@ pub fn gen_dyn_array_runtime_type(
     );
     builder.free_mem(arr_mem_ptr);
 
-    builder.append(ir::Instruction::Label(after_free));
+    builder.emit(ir::Instruction::Label(after_free));
 
     builder.mov(len_field_ptr.to_deref(), ir::Value::LiteralI32(0));
     builder.mov(arr_field_ptr.to_deref(), ir::Value::LiteralNull);
