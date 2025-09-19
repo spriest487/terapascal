@@ -1,6 +1,9 @@
-use crate::FieldID;
 use crate::BinOpInstruction;
+use crate::FieldID;
 use crate::Instruction;
+use crate::InterfaceID;
+use crate::Label;
+use crate::MethodID;
 use crate::Ref;
 use crate::Type;
 use crate::TypeDefID;
@@ -416,5 +419,88 @@ pub trait InstructionBuilder {
         self.element_val(result.clone(), a, index, element_ty);
 
         result
+    }
+
+    fn label(&mut self, label: Label) {
+        self.emit(Instruction::Label(label))
+    }
+
+    fn jmp(&mut self, dest: Label) {
+        self.emit(Instruction::Jump { dest })
+    }
+
+    fn jmpif(&mut self, dest: Label, cond: impl Into<Value>) {
+        self.emit(Instruction::JumpIf {
+            dest,
+            test: cond.into(),
+        })
+    }
+
+    fn call(
+        &mut self,
+        function: impl Into<Value>,
+        args: impl IntoIterator<Item = Value>,
+        out: Option<Ref>,
+    ) {
+        self.emit(Instruction::Call {
+            function: function.into(),
+            args: args.into_iter().collect(),
+            out,
+        })
+    }
+
+    fn vcall(
+        &mut self,
+        iface_id: InterfaceID,
+        method: MethodID,
+        self_arg: impl Into<Value>,
+        rest_args: impl IntoIterator<Item=impl Into<Value>>,
+        out: Option<Ref>,
+    ) {
+        self.emit(Instruction::VirtualCall {
+            iface_id,
+            method,
+            self_arg: self_arg.into(),
+            rest_args: rest_args.into_iter().map(|arg| arg.into()).collect(),
+            out,
+        })
+    }
+
+    fn addr_of(&mut self, out: impl Into<Ref>, a: impl Into<Ref>) {
+        self.emit(Instruction::AddrOf {
+            out: out.into(),
+            a: a.into(),
+        })
+    }
+
+    fn cast(&mut self, out: impl Into<Ref>, val: impl Into<Value>, ty: Type) {
+        self.emit(Instruction::Cast {
+            out: out.into(),
+            a: val.into(),
+            ty,
+        })
+    }
+
+    fn vartag(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_ty: Type) {
+        self.emit(Instruction::VariantTag {
+            out: out.into(),
+            a: a.into(),
+            of_ty,
+        })
+    }
+
+    fn vardata(
+        &mut self,
+        out: impl Into<Ref>,
+        a: impl Into<Ref>,
+        of_ty: Type,
+        tag: usize,
+    ) {
+        self.emit(Instruction::VariantData {
+            out: out.into(),
+            a: a.into(),
+            of_ty,
+            tag,
+        })
     }
 }

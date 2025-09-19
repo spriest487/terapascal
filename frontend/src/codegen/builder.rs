@@ -545,51 +545,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.set_bitwise_op(a, b, set_type, |i| i.bit_xor_func)
     }
 
-    pub fn label(&mut self, label: Label) {
-        self.emit(Instruction::Label(label))
-    }
-
-    pub fn jmp(&mut self, dest: Label) {
-        self.emit(Instruction::Jump { dest })
-    }
-
-    pub fn jmpif(&mut self, dest: Label, cond: impl Into<Value>) {
-        self.emit(Instruction::JumpIf {
-            dest,
-            test: cond.into(),
-        })
-    }
-
-    pub fn call(
-        &mut self,
-        function: impl Into<Value>,
-        args: impl IntoIterator<Item = Value>,
-        out: Option<Ref>,
-    ) {
-        self.emit(Instruction::Call {
-            function: function.into(),
-            args: args.into_iter().collect(),
-            out,
-        })
-    }
-
-    pub fn vcall(
-        &mut self,
-        iface_id: InterfaceID,
-        method: MethodID,
-        self_arg: impl Into<Value>,
-        rest_args: impl IntoIterator<Item=impl Into<Value>>,
-        out: Option<Ref>,
-    ) {
-        self.emit(Instruction::VirtualCall {
-            iface_id,
-            method,
-            self_arg: self_arg.into(),
-            rest_args: rest_args.into_iter().map(|arg| arg.into()).collect(),
-            out,
-        })
-    }
-
     pub fn get_mem(&mut self, count: impl Into<Value>, out: Ref) {
         let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_get_mem_func()));
         self.call(function_ref, [count.into()], Some(out));
@@ -598,44 +553,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     pub fn free_mem(&mut self, at: impl Into<Value>) {
         let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_free_mem_func()));
         self.call(function_ref, [at.into()], None);
-    }
-
-    pub fn addr_of(&mut self, out: impl Into<Ref>, a: impl Into<Ref>) {
-        self.emit(Instruction::AddrOf {
-            out: out.into(),
-            a: a.into(),
-        })
-    }
-
-    pub fn cast(&mut self, out: impl Into<Ref>, val: impl Into<Value>, ty: Type) {
-        self.emit(Instruction::Cast {
-            out: out.into(),
-            a: val.into(),
-            ty,
-        })
-    }
-
-    pub fn vartag(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_ty: Type) {
-        self.emit(Instruction::VariantTag {
-            out: out.into(),
-            a: a.into(),
-            of_ty,
-        })
-    }
-
-    pub fn vardata(
-        &mut self,
-        out: impl Into<Ref>,
-        a: impl Into<Ref>,
-        of_ty: Type,
-        tag: usize,
-    ) {
-        self.emit(Instruction::VariantData {
-            out: out.into(),
-            a: a.into(),
-            of_ty,
-            tag,
-        })
     }
 
     pub fn bind_param(&mut self, id: LocalID, ty: Type, name: impl Into<String>, by_ref: bool) {
