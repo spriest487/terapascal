@@ -2107,21 +2107,20 @@ impl Interpreter {
     }
 
     fn create_string(&mut self, content: &str, immortal: bool) -> ExecResult<DynValue> {
-        let chars: Vec<_> = content.chars().map(|c| DynValue::U8(c as u8)).collect();
+        let mut chars: Vec<_> = content.chars().map(|c| DynValue::U8(c as u8)).collect();
         let chars_len = cast::i32(chars.len()).map_err(|_| {
             let msg = format!("string length out of range: {}", chars.len());
             ExecError::illegal_state(msg)
         })?;
 
-        let chars_ptr = if chars_len > 0 {
-            let ptr = self.dynalloc_init(&ir::Type::U8, chars)?;
-            if immortal {
-                self.native_heap.forget(&ptr)?;
-            }
-            ptr
-        } else {
-            Pointer::nil(ir::Type::U8)
-        };
+        // add a null-terminator, not included in the char count
+        chars.push(DynValue::U8(0));
+
+        let chars_ptr = self.dynalloc_init(&ir::Type::U8, chars)?;
+
+        if immortal {
+            self.native_heap.forget(&chars_ptr)?;
+        }
 
         let mut string_struct = self.init_struct(ir::STRING_ID)?;
         string_struct[ir::STRING_LEN_FIELD] = DynValue::I32(chars_len);

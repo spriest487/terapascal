@@ -1,10 +1,10 @@
-use crate::metadata::StringID;
-use crate::ty::Type;
-use crate::ty_decl::TagLocation;
 use crate::FunctionID;
 use crate::IRFormatter;
 use crate::StaticClosureID;
 use crate::VariableID;
+use crate::metadata::StringID;
+use crate::ty::Type;
+use crate::ty_decl::TagLocation;
 use bigdecimal::BigDecimal;
 use bigdecimal::FromPrimitive;
 use bigdecimal::ToPrimitive;
@@ -26,11 +26,11 @@ impl Ref {
     pub fn to_deref(self) -> Self {
         Ref::Deref(Box::new(Value::Ref(self)))
     }
-    
+
     pub fn value(self) -> Value {
         Value::Ref(self)
     }
-    
+
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         let mut string = String::new();
         _ = formatter.format_ref(self, &mut string);
@@ -143,7 +143,7 @@ impl Value {
     pub fn deref(self) -> Ref {
         Ref::Deref(Box::new(self))
     }
-    
+
     pub fn to_literal_bool(&self) -> Option<bool> {
         match self {
             Value::LiteralBool(b) => Some(*b),
@@ -155,44 +155,45 @@ impl Value {
         match self {
             Value::LiteralU8(x) => Some(BigDecimal::from(*x)),
             Value::LiteralI8(x) => Some(BigDecimal::from(*x)),
-            
+
             Value::LiteralI16(x) => Some(BigDecimal::from(*x)),
             Value::LiteralU16(x) => Some(BigDecimal::from(*x)),
-            
+
             Value::LiteralI32(x) => Some(BigDecimal::from(*x)),
             Value::LiteralU32(x) => Some(BigDecimal::from(*x)),
-            
+
             Value::LiteralI64(x) => Some(BigDecimal::from(*x)),
             Value::LiteralU64(x) => Some(BigDecimal::from(*x)),
-            
+
             Value::LiteralISize(x) => Some(BigDecimal::from(*x as i64)),
             Value::LiteralUSize(x) => Some(BigDecimal::from(*x as u64)),
 
-            Value::LiteralF32(x) => Some(BigDecimal::from_f32(*x)
-                .expect("NaN/infinite constant values not supported yet")),
+            Value::LiteralF32(x) => Some(
+                BigDecimal::from_f32(*x).expect("NaN/infinite constant values not supported yet"),
+            ),
             _ => None,
         }
     }
-    
+
     pub fn from_literal_val(val: BigDecimal, as_type: &Type) -> Option<Self> {
         match as_type {
             Type::U8 => Some(Value::LiteralU8(val.to_u8()?)),
             Type::I8 => Some(Value::LiteralI8(val.to_i8()?)),
-            
+
             Type::U16 => Some(Value::LiteralU16(val.to_u16()?)),
             Type::I16 => Some(Value::LiteralI16(val.to_i16()?)),
 
             Type::U32 => Some(Value::LiteralU32(val.to_u32()?)),
             Type::I32 => Some(Value::LiteralI32(val.to_i32()?)),
-            
+
             Type::U64 => Some(Value::LiteralU64(val.to_u64()?)),
             Type::I64 => Some(Value::LiteralI64(val.to_i64()?)),
 
             Type::USize => Some(Value::LiteralUSize(val.to_usize()?)),
             Type::ISize => Some(Value::LiteralISize(val.to_isize()?)),
-            
+
             Type::F32 => Some(Value::LiteralF32(val.to_f32()?)),
-            
+
             _ => None,
         }
     }
