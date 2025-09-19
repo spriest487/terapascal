@@ -247,7 +247,7 @@ pub(super) fn set_length(state: &mut Interpreter) -> ExecResult<()> {
             ExecError::illegal_state(msg)
         })?;
 
-    let new_arr_struct = state.init_struct(array_type_id)?;
+    let new_arr_struct = state.default_struct(array_type_id)?;
 
     let old_arr = state.evaluate(&Value::Ref(array_arg_ref))?;
     let new_arr = state.rc_alloc(new_arr_struct, false)?;

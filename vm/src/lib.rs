@@ -143,7 +143,7 @@ impl Interpreter {
         }
     }
 
-    fn stack_trace(&self) -> StackTrace {
+    pub fn stack_trace(&self) -> StackTrace {
         let frames = self
             .stack
             .iter()
@@ -153,7 +153,7 @@ impl Interpreter {
         StackTrace::new(frames)
     }
 
-    fn stack_trace_formatted(&self) -> String {
+    pub fn stack_trace_formatted(&self) -> String {
         self.stack_trace()
             .into_iter()
             .map(|frame| format!("\t at {}", frame))
@@ -165,7 +165,7 @@ impl Interpreter {
         &self.marshaller
     }
 
-    fn init_struct(&self, id: ir::TypeDefID) -> ExecResult<StructValue> {
+    pub fn default_struct(&self, id: ir::TypeDefID) -> ExecResult<StructValue> {
         let struct_def = self.metadata.get_struct_def(id).cloned().ok_or_else(|| {
             let msg = format!("missing struct definition in metadata: {}", id);
             ExecError::illegal_state(msg)
@@ -177,7 +177,7 @@ impl Interpreter {
             if id.0 >= fields.len() {
                 fields.resize(id.0 + 1, DynValue::I32(-1));
             }
-            fields[id.0] = self.default_init_dyn_val(&field.ty)?;
+            fields[id.0] = self.default_val(&field.ty)?;
         }
 
         let struct_val = StructValue {
@@ -189,7 +189,7 @@ impl Interpreter {
         Ok(struct_val)
     }
 
-    fn default_init_dyn_val(&self, ty: &ir::Type) -> ExecResult<DynValue> {
+    pub fn default_val(&self, ty: &ir::Type) -> ExecResult<DynValue> {
         let val = match ty {
             ir::Type::I8 => DynValue::I8(i8::MIN),
             ir::Type::U8 => DynValue::U8(u8::MAX),
@@ -205,9 +205,9 @@ impl Interpreter {
             ir::Type::Bool => DynValue::Bool(false),
             ir::Type::F32 => DynValue::F32(f32::NAN),
 
-            ir::Type::Struct(id) => DynValue::from(self.init_struct(*id)?),
+            ir::Type::Struct(id) => DynValue::from(self.default_struct(*id)?),
 
-            ir::Type::Flags(repr_id, ..) => DynValue::from(self.init_struct(*repr_id)?),
+            ir::Type::Flags(repr_id, ..) => DynValue::from(self.default_struct(*repr_id)?),
 
             ir::Type::RcPointer(class_id) | ir::Type::RcWeakPointer(class_id) => {
                 DynValue::Pointer(Pointer::nil(match class_id {
@@ -222,7 +222,7 @@ impl Interpreter {
 
             ir::Type::Array { element, dim } => {
                 let mut elements = Vec::with_capacity(*dim);
-                let el = self.default_init_dyn_val(element.as_ref())?;
+                let el = self.default_val(element.as_ref())?;
 
                 for _ in 0..*dim {
                     elements.push(el.clone());
@@ -254,7 +254,7 @@ impl Interpreter {
                     .ty;
 
                 let default_val = match case_ty {
-                    Some(case_ty) => self.default_init_dyn_val(case_ty)?,
+                    Some(case_ty) => self.default_val(case_ty)?,
                     None => DynValue::Pointer(Pointer::nil(ir::Type::Nothing)),
                 };
 
@@ -276,18 +276,18 @@ impl Interpreter {
         Ok(val)
     }
 
-    fn load_indirect(&self, ptr: &Pointer) -> ExecResult<DynValue> {
+    pub fn load_indirect(&self, ptr: &Pointer) -> ExecResult<DynValue> {
         let val = self.native_heap.load(ptr)?;
         Ok(val)
     }
 
     /// dereference a pointer and set the value it points to
-    fn store_indirect(&mut self, ptr: &Pointer, val: DynValue) -> ExecResult<()> {
+    pub fn store_indirect(&mut self, ptr: &Pointer, val: DynValue) -> ExecResult<()> {
         self.native_heap.store(ptr, val)?;
         Ok(())
     }
 
-    fn store_local(&mut self, id: ir::LocalID, val: DynValue) -> ExecResult<()> {
+    pub fn store_local(&mut self, id: ir::LocalID, val: DynValue) -> ExecResult<()> {
         let current_frame = self.current_frame_mut()?;
         let local_ptr = current_frame
             .get_local_ptr(id)
@@ -298,7 +298,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn load_local(&self, id: ir::LocalID) -> ExecResult<DynValue> {
+    pub fn load_local(&self, id: ir::LocalID) -> ExecResult<DynValue> {
         let current_frame = self.current_frame()?;
         let local_ptr = current_frame
             .get_local_ptr(id)
@@ -309,7 +309,7 @@ impl Interpreter {
         Ok(value)
     }
 
-    fn store(&mut self, at: &ir::Ref, val: DynValue) -> ExecResult<()> {
+    pub fn store(&mut self, at: &ir::Ref, val: DynValue) -> ExecResult<()> {
         match at {
             ir::Ref::Discard => {
                 // do nothing with this value
@@ -359,7 +359,7 @@ impl Interpreter {
         }
     }
 
-    fn load(&self, at: &ir::Ref) -> ExecResult<DynValue> {
+    pub fn load(&self, at: &ir::Ref) -> ExecResult<DynValue> {
         match at {
             ir::Ref::Discard => {
                 let msg = "can't read value from discard ref";
@@ -397,7 +397,7 @@ impl Interpreter {
         }
     }
 
-    fn evaluate(&self, val: &ir::Value) -> ExecResult<DynValue> {
+    pub fn evaluate(&self, val: &ir::Value) -> ExecResult<DynValue> {
         match val {
             ir::Value::Ref(r) => {
                 let ref_val = self.load(r)?;
@@ -527,7 +527,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn call(&mut self, id: ir::FunctionID, args: &[DynValue]) -> ExecResult<Option<DynValue>> {
+    pub fn call(&mut self, id: ir::FunctionID, args: &[DynValue]) -> ExecResult<Option<DynValue>> {
         let func_info = self
             .functions
             .get(&id)
@@ -545,7 +545,7 @@ impl Interpreter {
         // store empty result at $0 if needed
         let return_ty = func.return_ty();
         let ret_id = if *return_ty != ir::Type::Nothing {
-            let result_val = self.default_init_dyn_val(return_ty)?;
+            let result_val = self.default_val(return_ty)?;
 
             let ret_id = self
                 .current_frame_mut()?
@@ -1071,7 +1071,7 @@ impl Interpreter {
     }
 
     fn exec_local_alloc(&mut self, id: ir::LocalID, pc: usize, ty: &ir::Type) -> ExecResult<()> {
-        let uninit_val = self.default_init_dyn_val(ty)?;
+        let uninit_val = self.default_val(ty)?;
 
         let current_frame = self.current_frame_mut()?;
         current_frame
@@ -1104,7 +1104,7 @@ impl Interpreter {
         struct_id: ir::TypeDefID,
         immortal: bool,
     ) -> ExecResult<()> {
-        let struct_val = self.init_struct(struct_id)?;
+        let struct_val = self.default_struct(struct_id)?;
         let rc_ptr = self.rc_alloc(struct_val, immortal)?;
 
         self.store(out, DynValue::Pointer(rc_ptr))?;
@@ -2009,7 +2009,7 @@ impl Interpreter {
                 ir::Type::RcPointer(ir::VirtualTypeID::Closure(static_closure.func_ty_id));
 
             // we only need to set a null pointer here, init code will set the actual value
-            let default_val = self.default_init_dyn_val(&closure_ptr_ty)?;
+            let default_val = self.default_val(&closure_ptr_ty)?;
             let default_val_bytes = self.marshaller.marshal_to_vec(&default_val)?;
 
             self.globals.insert(closure_ptr_ref, GlobalValue::Variable {
@@ -2122,7 +2122,7 @@ impl Interpreter {
             self.native_heap.forget(&chars_ptr)?;
         }
 
-        let mut string_struct = self.init_struct(ir::STRING_ID)?;
+        let mut string_struct = self.default_struct(ir::STRING_ID)?;
         string_struct[ir::STRING_LEN_FIELD] = DynValue::I32(chars_len);
         string_struct[ir::STRING_CHARS_FIELD] = DynValue::Pointer(chars_ptr);
 
