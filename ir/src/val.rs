@@ -2,6 +2,7 @@ use crate::metadata::StringID;
 use crate::ty::Type;
 use crate::ty_decl::TagLocation;
 use crate::FunctionID;
+use crate::IRFormatter;
 use crate::StaticClosureID;
 use crate::VariableID;
 use bigdecimal::BigDecimal;
@@ -28,6 +29,13 @@ impl Ref {
     
     pub fn value(self) -> Value {
         Value::Ref(self)
+    }
+    
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
+        let mut string = String::new();
+        _ = formatter.format_ref(self, &mut string);
+
+        string
     }
 }
 

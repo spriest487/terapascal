@@ -379,15 +379,18 @@ impl Interpreter {
                 Some(GlobalValue::StaticTagArray(loc)) => Ok(DynValue::from(loc.clone())),
 
                 None => {
-                    let msg = format!("global val `{}` is not allocated", name);
+                    let ref_name = at.to_pretty_string(self.metadata.as_ref());
+                    let msg = format!("global `{ref_name}` is not allocated");
                     Err(ExecError::illegal_state(msg))
                 },
             },
 
             ir::Ref::Deref(inner) => match self.evaluate(inner)? {
                 DynValue::Pointer(ptr) => self.load_indirect(&ptr),
+
                 x => {
-                    let msg = format!("can't dereference val {:?}", x);
+                    let ref_name = at.to_pretty_string(self.metadata.as_ref());
+                    let msg = format!("can't dereference `{ref_name}`: {x:?}");
                     Err(ExecError::illegal_state(msg))
                 },
             },
