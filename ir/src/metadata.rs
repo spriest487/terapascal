@@ -148,10 +148,7 @@ impl Metadata {
     pub fn extend(&mut self, other: &Metadata) {
         for (id, decl) in &other.type_decls {
             if let Some(conflict) = self.type_decls.get(id) {
-                panic!(
-                    "duplicate struct ID {} in metadata (new: {}, existing: {})",
-                    id, decl, conflict,
-                );
+                Self::check_conflict("type ID", id, conflict.name(), decl.name());
             };
 
             self.type_decls.insert(*id, decl.clone());
@@ -159,9 +156,7 @@ impl Metadata {
 
         for (id, string_lit) in &other.string_literals {
             if let Some(existing_str) = self.string_literals.get(id) {
-                if existing_str != string_lit {
-                    panic!("duplicate string ID {} in metadata", id);    
-                }
+                Self::check_conflict("string ID", id, Some(existing_str), Some(string_lit));
             }
 
             self.string_literals.insert(*id, string_lit.clone());
@@ -169,12 +164,7 @@ impl Metadata {
 
         for (id, iface_decl) in &other.ifaces {
             if let Some(conflict) = self.ifaces.get(id) {
-                panic!(
-                    "duplicate iface ID {} in metadata (new: {}, existing: {})",
-                    id,
-                    iface_decl.name(),
-                    conflict.name()
-                );
+                Self::check_conflict("interface ID", id, Some(conflict.name()), Some(iface_decl.name()));
             }
 
             self.ifaces.insert(*id, iface_decl.clone());
@@ -184,21 +174,7 @@ impl Metadata {
             if self.functions.contains_key(id) {
                 let existing = &self.functions[id];
 
-                let name = func_decl
-                    .global_name
-                    .as_ref()
-                    .map(NamePath::to_string)
-                    .unwrap_or_else(|| "<unnamed>".to_string());
-                let existing_name = existing
-                    .global_name
-                    .as_ref()
-                    .map(NamePath::to_string)
-                    .unwrap_or_else(|| "<unnamed>".to_string());
-
-                panic!(
-                    "duplicate function ID {} in metadata (new: {}, existing: {})",
-                    id, name, existing_name
-                );
+                Self::check_conflict("function ID", id, func_decl.global_name.as_ref(), existing.global_name.as_ref());
             }
             self.functions.insert(*id, func_decl.clone());
         }
@@ -244,6 +220,34 @@ impl Metadata {
         for (loc, count) in &other.tag_counts {
             if !self.tag_counts.contains_key(loc) {
                 self.tag_counts.insert(*loc, *count);
+            }
+        }
+    }
+
+    fn check_conflict<T>(
+        desc: &str,
+        target: impl fmt::Display + ToString,
+        old_name: Option<T>,
+        new_name: Option<T>,
+    )
+    where T: PartialEq + fmt::Display
+    {
+        match (&old_name, &new_name) {
+            (Some(old_name), Some(new_name)) if new_name == old_name => {
+                return;
+            }
+
+            _ => {
+                let a_name = old_name
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "<unnamed>".to_string());
+                let b_name = new_name
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "<unnamed>".to_string());
+
+                panic!("duplicate {desc} {target} in metadata (existing: {a_name}, new: {b_name})");
             }
         }
     }

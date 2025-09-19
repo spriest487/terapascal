@@ -38,7 +38,6 @@ use std::ops::BitOr;
 use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
-use terapascal_ir::StructIdentity;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -80,13 +79,12 @@ impl Interpreter {
 
         let builtin_structs: BTreeMap<_, _> = [
             (ir::STRING_ID, builtin_string_def()),
-            // (ir::STRING_ID, builtin_pointer_array_def()),
         ].into_iter().collect();
         
         for (id, builtin_def) in &builtin_structs {
             metadata.reserve_struct(*id);
             match &builtin_def.def.identity {
-                StructIdentity::Class(..) | StructIdentity::DynArray(..) => {
+                ir::StructIdentity::Class(..) | ir::StructIdentity::DynArray(..) => {
                     metadata.declare_struct(*id, &builtin_def.name, true)
                 }
                 _ => {

@@ -28,6 +28,7 @@ impl fmt::Display for BuildLogEntry {
     }
 }
 
+#[derive(Default)]
 pub struct BuildLog {
     pub entries: Vec<BuildLogEntry>,
 }

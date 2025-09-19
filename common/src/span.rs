@@ -241,6 +241,6 @@ impl MaybeSpanned for &Option<Span> {
 
 impl MaybeSpanned for Option<&Span> {
     fn get_span(&self) -> Option<&Span> {
-        self.clone()
+        *self
     }
 }
