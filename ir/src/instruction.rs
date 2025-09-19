@@ -1,4 +1,4 @@
-use crate::formatter::InstructionFormatter;
+use crate::formatter::IRFormatter;
 use crate::formatter::RawInstructionFormatter;
 use crate::metadata::MethodID;
 use crate::ty::FieldID;

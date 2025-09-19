@@ -5,7 +5,7 @@ use crate::Function;
 use crate::FunctionDef;
 use crate::FunctionID;
 use crate::Instruction;
-use crate::InstructionFormatter;
+use crate::IRFormatter;
 use crate::Metadata;
 use crate::StaticClosure;
 use crate::StructIdentity;

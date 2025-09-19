@@ -9,9 +9,13 @@ pub mod result;
 mod rtti_map;
 mod stack;
 
+#[cfg(test)]
+mod test;
+
 pub use self::dyn_value::*;
 pub use self::ptr::Pointer;
 
+use crate::builtin::{builtin_string_def, BuiltinStructDef};
 use crate::diag::DiagnosticOutput;
 use crate::diag::DiagnosticWorker;
 use crate::func::BuiltinFn;
@@ -25,7 +29,7 @@ use crate::rtti_map::RttiMap;
 use crate::stack::StackFrame;
 use crate::stack::StackTrace;
 use crate::stack::StackTraceFrame;
-use ir::InstructionFormatter as _;
+use ir::IRFormatter as _;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
@@ -34,6 +38,7 @@ use std::ops::BitOr;
 use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
+use terapascal_ir::StructIdentity;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -58,15 +63,45 @@ pub struct Interpreter {
     // all methods with a corresponding MethodInfo object - the impl pointer of each
     // MethodInfo is an index into this list
     runtime_methods: Vec<ir::RuntimeMethod>,
+    
+    // types in this set are required for basic operation, and so are always defined internally.
+    // a loaded library may add a definition for this type, but only one definition may be provided,
+    // and it must match the builtin definition exactly.
+    builtin_structs: BTreeMap<ir::TypeDefID, BuiltinStructDef>,
 }
 
 impl Interpreter {
     pub fn new(opts: InterpreterOpts) -> Self {
         let globals = HashMap::new();
 
-        let marshaller = Rc::new(Marshaller::new());
-        let metadata = Rc::new(ir::Metadata::default());
+        let mut marshaller = Marshaller::new();
+        
+        let mut metadata = ir::Metadata::default();
 
+        let builtin_structs: BTreeMap<_, _> = [
+            (ir::STRING_ID, builtin_string_def()),
+            // (ir::STRING_ID, builtin_pointer_array_def()),
+        ].into_iter().collect();
+        
+        for (id, builtin_def) in &builtin_structs {
+            metadata.reserve_struct(*id);
+            match &builtin_def.def.identity {
+                StructIdentity::Class(..) | StructIdentity::DynArray(..) => {
+                    metadata.declare_struct(*id, &builtin_def.name, true)
+                }
+                _ => {
+                    metadata.declare_struct(*id, &builtin_def.name, false)
+                }
+            }
+
+            metadata.define_struct(*id, builtin_def.def.clone());
+            marshaller.add_struct(*id, &builtin_def.def, &metadata)
+                .expect("builtin type definition raised a marshalling error");
+        }
+
+        let metadata = Rc::new(metadata);
+        let marshaller = Rc::new(marshaller);
+        
         let native_heap = NativeHeap::new(metadata.clone(), marshaller.clone(), opts.trace_heap);
 
         let diag_worker = match opts.diag_port {
@@ -93,6 +128,8 @@ impl Interpreter {
             funcinfo_map: RttiMap::new(),
 
             runtime_methods: Vec::new(),
+            
+            builtin_structs,
         }
     }
 
@@ -1819,7 +1856,7 @@ impl Interpreter {
     }
 
     fn init_stdlib_globals(&mut self) -> ExecResult<()> {
-        let system_funcs: Vec<_> = builtin::system_funcs(&self.metadata).into_iter().collect();
+        let system_funcs: Vec<_> = builtin::system_funcs().into_iter().collect();
 
         for (ident, func, ret, params) in system_funcs {
             let name = ir::NamePath::new(vec!["System".to_string()], ident.to_string());
@@ -1831,7 +1868,26 @@ impl Interpreter {
 
     pub fn load_lib(&mut self, lib: &ir::Library) -> ExecResult<()> {
         let mut metadata = (*self.metadata).clone();
-        metadata.extend(&lib.metadata());
+
+        // remove any redeclared builtins from the existing metadata
+        for (id, builtin_def) in &self.builtin_structs {
+            if metadata.get_struct_def(*id).is_some()
+                && let Some(new_def) = lib.metadata.get_struct_def(*id) 
+            {
+                if !new_def.is_equivalent_def(&builtin_def.def) {
+                    let msg = format!(
+                        "library definition of built-in type {} (redefined as {}) does not match the expected definition",
+                        builtin_def.def.identity.to_pretty_string(&metadata),
+                        new_def.identity.to_pretty_string(&lib.metadata)
+                    );
+                    return Err(ExecError::illegal_state(msg));
+                }
+
+                metadata.remove_type_def(*id);
+            }
+        }
+        
+        metadata.extend(&lib.metadata);
 
         let mut marshaller = (*self.marshaller).clone();
 
@@ -1927,53 +1983,8 @@ impl Interpreter {
             let array_value = GlobalValue::StaticTagArray(empty_tag_array);
             self.globals.insert(array_ref, array_value);
         }
-
-        // create runtime type info objects (TypeInfo and MethodInfo)
-        for (ty, runtime_type) in lib.metadata.runtime_types() {
-            let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
-
-            let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
-            let ptr_bytes = self.marshaller.marshal_to_vec(&typeinfo_ptr)?;
-
-            self.globals
-                .insert(typeinfo_ref.clone(), GlobalValue::Variable {
-                    value: ptr_bytes.into_boxed_slice(),
-                    ty: ir::TYPEINFO_TYPE,
-                });
-            
-            if !matches!(ty, ir::Type::RcWeakPointer(..)) {
-                let class_id = ty.rc_resource_def_id();
-
-                let runtime_name = runtime_type
-                    .name
-                    .as_ref()
-                    .and_then(|str_id| self.metadata.get_string(*str_id))
-                    .cloned();
-
-                self.typeinfo_map.add(class_id, runtime_name, typeinfo_ref);    
-            }
-        }
-
-        for (func_id, func_decl) in lib.metadata.functions() {
-            let runtime_name = func_decl
-                .runtime_name
-                .as_ref()
-                .and_then(|str_id| self.metadata.get_string(*str_id))
-                .cloned();
-
-            let funcinfo_ptr = self.create_funcinfo(func_id, func_decl, &string_lit_values)?;
-            let ptr_bytes = self.marshaller.marshal_to_vec(&funcinfo_ptr)?;
-
-            let funcinfo_ref = ir::GlobalRef::StaticFuncInfo(func_id);
-            self.globals
-                .insert(funcinfo_ref.clone(), GlobalValue::Variable {
-                    value: ptr_bytes.into_boxed_slice(),
-                    ty: ir::FUNCINFO_TYPE,
-                });
-
-            self.funcinfo_map
-                .add(Some(func_id), runtime_name, funcinfo_ref);
-        }
+        
+        self.init_rtti(lib, &string_lit_values)?;
 
         // declare global variables
         for (var_id, var_ty) in &lib.variables {
@@ -2016,8 +2027,7 @@ impl Interpreter {
         }
 
         self.push_stack(Rc::new("<init>".to_string()), init_stack_size);
-        // self.execute(lib.init())?;
-        // self.pop_stack()?;
+
         self.execute(lib.init())?;
 
         self.pop_stack()?;
@@ -2026,6 +2036,70 @@ impl Interpreter {
             println!("[vm] exiting library init");
         }
 
+        Ok(())
+    }
+    
+    fn init_rtti(&mut self,
+        lib: &ir::Library,
+        string_lit_values: &HashMap<ir::StringID, DynValue>
+    ) -> ExecResult<()> {
+        if self.metadata.get_struct_def(ir::TYPEINFO_ID).is_none() 
+            || self.metadata.get_struct_def(ir::FUNCINFO_ID).is_none() 
+            || self.metadata.get_struct_def(ir::METHODINFO_ID).is_none() 
+        {
+            if self.opts.verbose {
+                eprintln!("[vm] missing typeinfo class(es), runtime type info will not be populated");
+            }
+            return Ok(());
+        }
+
+        // create runtime type info objects (TypeInfo and MethodInfo)
+        for (ty, runtime_type) in lib.metadata.runtime_types() {
+            let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
+
+            let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
+            let ptr_bytes = self.marshaller.marshal_to_vec(&typeinfo_ptr)?;
+
+            self.globals
+                .insert(typeinfo_ref.clone(), GlobalValue::Variable {
+                    value: ptr_bytes.into_boxed_slice(),
+                    ty: ir::TYPEINFO_TYPE,
+                });
+
+            if !matches!(ty, ir::Type::RcWeakPointer(..)) {
+                let class_id = ty.rc_resource_def_id();
+
+                let runtime_name = runtime_type
+                    .name
+                    .as_ref()
+                    .and_then(|str_id| self.metadata.get_string(*str_id))
+                    .cloned();
+
+                self.typeinfo_map.add(class_id, runtime_name, typeinfo_ref);
+            }
+        }
+
+        for (func_id, func_decl) in lib.metadata.functions() {
+            let runtime_name = func_decl
+                .runtime_name
+                .as_ref()
+                .and_then(|str_id| self.metadata.get_string(*str_id))
+                .cloned();
+
+            let funcinfo_ptr = self.create_funcinfo(func_id, func_decl, &string_lit_values)?;
+            let ptr_bytes = self.marshaller.marshal_to_vec(&funcinfo_ptr)?;
+
+            let funcinfo_ref = ir::GlobalRef::StaticFuncInfo(func_id);
+            self.globals
+                .insert(funcinfo_ref.clone(), GlobalValue::Variable {
+                    value: ptr_bytes.into_boxed_slice(),
+                    ty: ir::FUNCINFO_TYPE,
+                });
+
+            self.funcinfo_map
+                .add(Some(func_id), runtime_name, funcinfo_ref);
+        }
+        
         Ok(())
     }
 
@@ -2181,6 +2255,7 @@ impl Interpreter {
         Ok(dynarray)
     }
 
+    #[allow(unused)]
     fn read_dynarray(&self, ptr: &Pointer) -> ExecResult<Vec<DynValue>> {
         let (array_struct, _) = self.load_rc_struct_ptr(ptr)?;
 
@@ -2363,7 +2438,8 @@ impl Interpreter {
         instance_ptr: &Pointer,
         instance_ty: &ir::Type,
         instance_ty_name: &str,
-        arg_array_ptr: Pointer,
+        args_ptr: Pointer,
+        arg_count: i32,
         func_name: &str,
         func_param_tys: &[ir::Type],
         result_ty: &ir::Type,
@@ -2377,26 +2453,23 @@ impl Interpreter {
 
             call_arg_vals.push(instance_val);
         }
+        
+        let arg_count = usize::try_from(arg_count).map_err(|_err| {
+            ExecError::illegal_state(format!("runtime_invoke bad arg count: {}", arg_count))
+        })?;
 
-        let arg_array = self.read_dynarray(&arg_array_ptr)?;
-        let total_arg_count = call_arg_vals.len() + arg_array.len();
+        let arg_stride = self.marshaller.get_ty(&ir::Type::Nothing.ptr())?.size();
 
-        if total_arg_count != func_param_tys.len() {
-            return Err(ExecError::illegal_state(format!(
-                "invoke arg array for {func_name} did not match expected size (got {}, expected {})",
-                total_arg_count,
-                func_param_tys.len(),
-                func_name = match instance_ty {
-                    ir::Type::Nothing => func_name.to_string(),
-                    _ => format!("{}.{}", instance_ty_name, func_name),
-                }
-            )));
-        }
-
+        // starts at 1 if we have a self argument for a method
         let mut param_index = call_arg_vals.len();
 
-        for arg in arg_array {
-            let arg_ptr = arg
+        for i in 0..arg_count {
+            let ptr_to_arg = args_ptr.addr_add(arg_stride * i);
+            
+            // args are passed as pointers to the actual values so we need to dereference them
+            let arg_ptr_val = self.load_indirect(&ptr_to_arg)?;
+            
+            let arg_ptr = arg_ptr_val
                 .as_pointer()
                 .ok_or_else(|| {
                     ExecError::illegal_state("invoke arg array may only contain pointers")
@@ -2407,6 +2480,18 @@ impl Interpreter {
 
             call_arg_vals.push(arg_val);
             param_index += 1;
+        }
+
+        if call_arg_vals.len() != func_param_tys.len() {
+            return Err(ExecError::illegal_state(format!(
+                "invoke arg array for {func_name} did not match expected size (got {}, expected {})",
+                call_arg_vals.len(),
+                func_param_tys.len(),
+                func_name = match instance_ty {
+                    ir::Type::Nothing => func_name.to_string(),
+                    _ => format!("{}.{}", instance_ty_name, func_name),
+                }
+            )));
         }
 
         let result_val = self.call(func_id, &call_arg_vals)?;
@@ -2487,6 +2572,19 @@ pub struct InterpreterOpts {
     pub diag_port: u16,
 
     pub verbose: bool,
+}
+
+impl Default for InterpreterOpts {
+    fn default() -> Self {
+        Self {
+            trace_heap: false,
+            trace_rc: false,
+            trace_ir: false,
+            
+            diag_port: 0,
+            verbose: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

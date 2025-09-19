@@ -4,7 +4,7 @@ use crate::marshal::MarshalError;
 use crate::stack::StackError;
 use crate::stack::StackTrace;
 use crate::Pointer;
-use ir::InstructionFormatter;
+use ir::IRFormatter;
 use ir::RawInstructionFormatter;
 use std::fmt;
 use terapascal_common::span::Span;
@@ -71,7 +71,7 @@ impl ExecError {
 
     pub fn fmt_pretty<Pretty>(&self, f: &mut fmt::Formatter, pretty: &Pretty) -> fmt:: Result
     where
-        Pretty: InstructionFormatter
+        Pretty: IRFormatter
     {
         match self {
             ExecError::WithStackTrace { err, stack_trace, .. } => {

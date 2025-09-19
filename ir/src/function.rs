@@ -1,4 +1,4 @@
-use crate::InstructionFormatter;
+use crate::IRFormatter;
 use crate::Label;
 use crate::LocalID;
 use crate::NamePath;
@@ -58,7 +58,7 @@ impl FunctionSig {
         }
     }
     
-    pub fn to_pretty_string(&self, formatter: &impl InstructionFormatter) -> String {
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         let mut result = String::from("function");
 
         if !self.param_tys.is_empty() {

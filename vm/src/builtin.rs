@@ -1,16 +1,16 @@
 use crate::func::BuiltinFn;
+use crate::ir::*;
 use crate::DynValue;
 use crate::ExecError;
 use crate::ExecResult;
 use crate::Interpreter;
 use crate::Pointer;
-use crate::ir::*;
 use rand::Rng;
 use std::env::consts::OS;
-use std::fmt;
 use std::io;
 use std::io::BufRead;
 use std::io::Write;
+use std::fmt;
 
 fn primitive_to_str<T, UnwrapFn>(state: &mut Interpreter, unwrap_fn: UnwrapFn) -> ExecResult<()>
 where
@@ -263,8 +263,9 @@ pub(super) fn set_length(state: &mut Interpreter) -> ExecResult<()> {
 fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
     let method_ptr = load_pointer(state, &Ref::Local(LocalID(0)))?;
     let instance_ptr = load_pointer(state, &Ref::Local(LocalID(1)))?;
-    let arg_array_ptr = load_pointer(state, &Ref::Local(LocalID(2)))?;
-    let result_ptr_arg = load_pointer(state, &Ref::Local(LocalID(3)))?;
+    let args_ptr = load_pointer(state, &Ref::Local(LocalID(2)))?;
+    let args_count = load_integer(state, &Ref::Local(LocalID(3)))?;
+    let result_ptr_arg = load_pointer(state, &Ref::Local(LocalID(4)))?;
 
     let (method_info_val,_) = state.load_rc_struct_ptr(&method_ptr)?;
 
@@ -310,7 +311,8 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
                 &instance_ptr,
                 &runtime_method.instance_ty,
                 &type_name,
-                arg_array_ptr,
+                args_ptr,
+                args_count,
                 &method_name,
                 &runtime_method.params,
                 &runtime_method.result_ty,
@@ -326,8 +328,9 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
 
 fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
     let func_ptr = load_pointer(state, &Ref::Local(LocalID(0)))?;
-    let arg_array_ptr = load_pointer(state, &Ref::Local(LocalID(1)))?;
-    let result_ptr_arg = load_pointer(state, &Ref::Local(LocalID(2)))?;
+    let args_ptr = load_pointer(state, &Ref::Local(LocalID(1)))?;
+    let args_count = load_integer(state, &Ref::Local(LocalID(2)))?;
+    let result_ptr_arg = load_pointer(state, &Ref::Local(LocalID(3)))?;
 
     let (func_info_val,_) = state.load_rc_struct_ptr(&func_ptr)?;
     let impl_val = func_info_val[FUNCINFO_IMPL_FIELD]
@@ -344,7 +347,8 @@ fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
         &Pointer::nil(Type::Nothing),
         &Type::Nothing,
         "",
-        arg_array_ptr,
+        args_ptr,
+        args_count,
         func_name,
         func.func.param_tys(),
         func.func.return_ty(),
@@ -589,13 +593,7 @@ pub(super) fn is_nan(state: &mut Interpreter) -> ExecResult<()> {
     state.store(&RETURN_REF, DynValue::Bool(val.is_nan()))
 }
 
-pub fn system_funcs(
-    metadata: &Metadata
-) -> impl IntoIterator<Item=(&'static str, BuiltinFn, Type, Vec<Type>)> {
-    let array_of_ptr = metadata
-        .find_dyn_array_struct(&Type::Nothing.ptr())
-        .expect("array of raw pointer type must exist in metadata");
-    
+pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, Type, Vec<Type>)> {    
     let items = [
         ("Int8ToStr", i8_to_str as BuiltinFn, Type::string_ptr(), vec![
             Type::I8
@@ -660,12 +658,14 @@ pub fn system_funcs(
         ("InvokeMethod", invoke_method, Type::Nothing, vec![
             METHODINFO_TYPE,
             Type::Nothing.ptr(),
-            Type::class_ptr(array_of_ptr),
+            Type::Nothing.ptr().ptr(),
+            Type::I32,
             Type::Nothing.ptr(),
         ]),
         ("InvokeFunction", invoke_func, Type::Nothing, vec![
             FUNCINFO_TYPE,
-            Type::class_ptr(array_of_ptr),
+            Type::Nothing.ptr().ptr(),
+            Type::I32,
             Type::Nothing.ptr(),
         ]),
         
@@ -719,4 +719,35 @@ pub fn system_funcs(
     ];
 
     items
+}
+
+#[derive(Debug)]
+pub struct BuiltinStructDef {
+    pub name: NamePath,
+    pub def: Struct,
+}
+
+pub fn builtin_string_def() -> BuiltinStructDef {
+    let name = NamePath::new(["System".to_string()], "String");
+    
+    let def = Struct {
+        identity: StructIdentity::Class(name.clone()),
+        fields: [
+            (STRING_CHARS_FIELD, StructFieldDef {
+                name: None,
+                ty: Type::U8.ptr(),
+                rc: false,
+            }),
+            (STRING_LEN_FIELD, StructFieldDef {
+                name: None,
+                ty: Type::I32,
+                rc: false,
+            }),
+        ].into_iter().collect()
+    };
+    
+    BuiltinStructDef {
+        name, 
+        def,
+    }
 }

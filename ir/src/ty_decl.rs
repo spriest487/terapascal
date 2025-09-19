@@ -3,17 +3,17 @@ mod variant;
 mod interface;
 mod tags;
 
-use crate::FunctionID;
 use crate::FunctionSig;
 use crate::NamePath;
 use crate::Type;
+use crate::{FunctionID, IRFormatter, RawInstructionFormatter};
 pub use interface::*;
 pub use r#struct::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::fmt;
 use std::fmt::Write;
+use std::fmt;
 pub use tags::*;
 pub use variant::*;
 
@@ -50,6 +50,37 @@ pub enum StructIdentity {
     
     // bitmask type for set flag collections. value is the number of bits
     SetFlags { bits: usize }
+}
+
+impl StructIdentity {    
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
+        let type_formatter = |ty: &Type| Cow::Owned(ty.to_pretty_string(formatter));
+
+        match self {
+            StructIdentity::Record(name) | StructIdentity::Class(name) => {
+                name.to_pretty_string(type_formatter)
+            },
+            StructIdentity::Array(element, size) => {
+                format!("{}[{}]", type_formatter(element), size)
+            },
+            StructIdentity::DynArray(element) => {
+                format!("{}[]", type_formatter(element))
+            },
+            StructIdentity::Closure(id) => {
+                let func_ty = Type::Function(id.virt_func_ty);
+                format!("closure ({})", type_formatter(&func_ty))
+            }
+            StructIdentity::SetFlags { bits } => {
+                format!("{bits}-bit set type")
+            },
+        }
+    }
+}
+
+impl fmt::Display for StructIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+       write!(f, "{}", self.to_pretty_string(&RawInstructionFormatter))
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]

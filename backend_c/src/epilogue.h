@@ -374,26 +374,22 @@ static bool System_IsNaN(float val) {
     return isnan(val);
 }
 
-static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, POINTERARRAY_STRUCT* args, void* outResult) {
+static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, void** args, int32_t arg_count, void* out_result) {
     Invoker invoker = METHODINFO_INVOKER(method);
     if (!invoker) {
         fatal("InvokeMethod called for abstract method");
     }
 
     if (instance) {
-        int args_len = DYNARRAY_LEN(args);
-
-        void** all_args = (void**) malloc(sizeof(void*) * (args_len + 1));
+        void** all_args = (void**) alloca(sizeof(void*) * (arg_count + 1));
         all_args[0] = instance;
 
-        memcpy(all_args + 1, DYNARRAY_PTR(args), args_len * sizeof(void*));
+        memcpy(all_args + 1, args, arg_count * sizeof(void*));
 
-        invoker(all_args, outResult);
-
-        free(all_args);
+        invoker(all_args, out_result);
     } else {
-        invoker(DYNARRAY_PTR(args), outResult);
-    }    
+        invoker(args, out_result);
+    }
 }
 
 static TYPEINFO_STRUCT* System_FindTypeInfo(STRING_STRUCT* type_name) {
@@ -476,11 +472,11 @@ static FUNCINFO_STRUCT* System_GetFunctionInfoByIndex(int32_t func_index) {
     return funcinfo_list[func_index];
 }
 
-static void InvokeFunction(FUNCINFO_STRUCT* func, POINTERARRAY_STRUCT* args, void* outResult) {
+static void InvokeFunction(FUNCINFO_STRUCT* func, void** args, int32_t arg_count, void* out_result) {
     Invoker invoker = FUNCINFO_INVOKER(func);
     if (!invoker) {
         fatal("InvokeFunction called for non-invokable func");
     }
 
-    invoker(DYNARRAY_PTR(args), outResult);
+    invoker(args, out_result);
 }

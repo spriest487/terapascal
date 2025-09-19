@@ -8,7 +8,7 @@ use crate::StructValue;
 use crate::VariantValue;
 use ::dlopen::raw as dlopen;
 use ::dlopen::Error as DlopenError;
-use ir::InstructionFormatter;
+use ir::IRFormatter;
 use ir::RawInstructionFormatter;
 use libffi::low::ffi_type;
 use libffi::middle::Builder as FfiBuilder;
@@ -66,7 +66,7 @@ impl fmt::Display for MarshalError {
 impl MarshalError {
     pub fn fmt_pretty<Fmt>(&self, f: &mut fmt::Formatter, format: &Fmt) -> fmt::Result
     where
-        Fmt: InstructionFormatter,
+        Fmt: IRFormatter,
     {
         match self {
             MarshalError::InvalidData => write!(f, "invalid data"),

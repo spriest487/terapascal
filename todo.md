@@ -7,8 +7,10 @@
 * weak pointer target type info
 * type kind info
 * type/method unit name info
+* can Invokers in the C backend store an arg count for validation
 
 # features
+* remove the NIL type
 * property syntax
 * numeric compiler error codes
 * compound assignment bitwise ops

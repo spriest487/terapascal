@@ -2,7 +2,7 @@ use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::SetAliasID;
 use crate::ty_decl::TypeDefID;
-use crate::TagLocation;
+use crate::{IRFormatter, TagLocation};
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -162,6 +162,12 @@ impl Type {
 
             | _ => None,
         }
+    }
+    
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
+        let mut result = String::new();
+        _ = formatter.format_type(self, &mut result);
+        result
     }
 }
 

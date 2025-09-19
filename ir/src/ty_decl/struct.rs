@@ -29,6 +29,24 @@ impl Struct {
     pub fn get_field(&self, id: FieldID) -> Option<&StructFieldDef> {
         self.fields.get(&id)
     }
+    
+    pub fn is_equivalent_def(&self, other: &Self) -> bool {
+        if self.identity != other.identity || self.fields.len() != other.fields.len() {
+            return false;
+        }
+        
+        for (field_id, field_def) in &self.fields {
+            let Some(other_field) = other.get_field(*field_id) else {
+                return false;
+            };
+
+            if field_def.ty != other_field.ty || field_def.rc != other_field.rc {
+                return false;
+            }
+        }
+
+        true
+    }
 
     pub fn new(identity: StructIdentity) -> Self {
         Self {

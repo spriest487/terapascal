@@ -44,7 +44,6 @@ pub struct Unit {
 
     type_infos: HashMap<ir::Type, Rc<ir::RuntimeType>>,
     methodinfo_array_class: ir::TypeDefID,
-    pointer_array_class: ir::TypeDefID,
     
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
 }
@@ -57,10 +56,6 @@ impl Unit {
         let methodinfo_array_class = metadata
             .find_dyn_array_struct(&ir::METHODINFO_TYPE)
             .expect("method info array type must exist");
-        
-        let pointer_array_class = metadata
-            .find_dyn_array_struct(&ir::Type::Nothing.ptr())
-            .expect("raw pointer array type must exist");
 
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
         let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
@@ -138,12 +133,14 @@ impl Unit {
             ("InvokeMethod", BuiltinName::InvokeMethod, Type::Void, vec![
                 Type::from_ir_struct(ir::METHODINFO_ID).ptr(),
                 Type::Void.ptr(),
-                Type::from_ir_struct(pointer_array_class).ptr(),
+                Type::Void.ptr().ptr(),
+                Type::Int32,
                 Type::Void.ptr(),
             ]),
             ("InvokeFunction", BuiltinName::InvokeFunc, Type::Void, vec![
                 Type::from_ir_struct(ir::FUNCINFO_ID).ptr(),
-                Type::from_ir_struct(pointer_array_class).ptr(),
+                Type::Void.ptr().ptr(),
+                Type::Int32,
                 Type::Void.ptr(),
             ]),
             ("RandomInteger", BuiltinName::RandomInteger, Type::Int32, vec![
@@ -251,7 +248,6 @@ impl Unit {
 
             type_infos,
             methodinfo_array_class,
-            pointer_array_class,
 
             runtime_funcinfos: func_infos,
             
@@ -713,8 +709,6 @@ impl fmt::Display for Unit {
         writeln!(f, "#define FUNCINFO_NAME(typeinfo) (typeinfo->{})", FieldName::ID(ir::FUNCINFO_NAME_FIELD))?;
         writeln!(f, "#define FUNCINFO_NAME_CHARS(typeinfo) STRING_CHARS(FUNCINFO_NAME(typeinfo))")?;
         writeln!(f, "#define FUNCINFO_INVOKER(func) ((Invoker) func->{})", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
-
-        writeln!(f, "#define POINTERARRAY_STRUCT struct {}", TypeDefName::Struct(self.pointer_array_class))?;
         
         writeln!(f, "#define DYNARRAY_PTR(arr) (arr->{})", FieldName::ID(ir::DYNARRAY_PTR_FIELD))?;
         writeln!(f, "#define DYNARRAY_LEN(arr) (arr->{})", FieldName::ID(ir::DYNARRAY_LEN_FIELD))?;

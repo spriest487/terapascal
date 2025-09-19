@@ -10,7 +10,7 @@ type
     Byte = UInt8;
     Word = UInt16;
     Cardinal = UInt32;
-    
+
     Single = Real32;
     
     String = class;
@@ -243,13 +243,15 @@ implementation
 function InvokeMethod(
     method: MethodInfo; 
     instance: Pointer; 
-    args: array of Pointer;
+    args: ^Pointer;
+    argCount: Integer;
     resultOut: Pointer;
 ); external 'rt';
 
 function InvokeFunction(
     func: FunctionInfo;
-    args: array of Pointer;
+    args: ^Pointer;
+    argCount: Integer;
     resultOut: Pointer;
 ); external 'rt';
 
@@ -423,7 +425,9 @@ end;
 
 function FunctionInfo.Invoke(args: array of Pointer; resultPtr: Pointer);
 begin
-    InvokeFunction(self, args, resultPtr);
+    var argsCount := args.Length;
+    var argsPtr: ^Pointer := if argsCount = 0 then nil else @args[0];
+    InvokeFunction(self, argsPtr, argsCount, resultPtr);
 end;
 
 function FunctionInfo.Tags: TagCollection;
@@ -922,7 +926,9 @@ end;
 
 function MethodInfo.Invoke(instance: Pointer; args: array of Pointer; resultOut: Pointer);
 begin
-    InvokeMethod(self, instance, args, resultOut);
+    var argsCount := args.Length;
+    var argsPtr: ^Pointer := if argsCount = 0 then nil else @args[0];
+    InvokeMethod(self, instance, argsPtr, argsCount, resultOut);
 end;
 
 function Int8.ToString: String;

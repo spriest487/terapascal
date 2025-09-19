@@ -14,7 +14,7 @@ use std::fmt;
 
 const IX_WIDTH: usize = 8;
 
-pub trait InstructionFormatter {
+pub trait IRFormatter {
     fn format_instruction<W: fmt::Write>(
         &self,
         instruction: &Instruction,
@@ -349,7 +349,7 @@ pub trait InstructionFormatter {
 
 pub struct RawInstructionFormatter;
 
-impl InstructionFormatter for RawInstructionFormatter {
+impl IRFormatter for RawInstructionFormatter {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
         write!(f, "{}", ty)
     }
@@ -385,13 +385,13 @@ impl InstructionFormatter for RawInstructionFormatter {
     }
 }
 
-pub struct StatefulIndentedFormatter<'f, F: InstructionFormatter> {
+pub struct StatefulIndentedFormatter<'f, F: IRFormatter> {
     wrapped: &'f F,
     tabs: Cell<usize>,
     tab_width: usize,
 }
 
-impl<'f, F: InstructionFormatter> StatefulIndentedFormatter<'f, F> {
+impl<'f, F: IRFormatter> StatefulIndentedFormatter<'f, F> {
     pub fn new(wrapped: &'f F, tab_width: usize) -> Self {
         Self {
             wrapped,
@@ -401,7 +401,7 @@ impl<'f, F: InstructionFormatter> StatefulIndentedFormatter<'f, F> {
     }
 }
 
-impl<'f, F: InstructionFormatter> InstructionFormatter for StatefulIndentedFormatter<'f, F> {
+impl<'f, F: IRFormatter> IRFormatter for StatefulIndentedFormatter<'f, F> {
     fn format_instruction<W: fmt::Write>(
         &self,
         instruction: &Instruction,

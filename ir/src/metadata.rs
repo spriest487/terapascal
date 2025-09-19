@@ -8,7 +8,7 @@ use crate::FunctionDecl;
 use crate::FunctionID;
 use crate::FunctionSig;
 use crate::GlobalRef;
-use crate::InstructionFormatter;
+use crate::IRFormatter;
 use crate::Interface;
 use crate::InterfaceDecl;
 use crate::InterfaceID;
@@ -284,6 +284,13 @@ impl Metadata {
 
             TypeDecl::Def(..) => None,
         }
+    }
+
+    pub fn remove_type_def(&mut self, id: TypeDefID) -> bool {
+        let removed = self.type_decls.remove(&id).is_some();
+        self.class_ids.remove(&id);
+        
+        removed
     }
 
     pub fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
@@ -1007,7 +1014,7 @@ impl Metadata {
     }
 }
 
-impl InstructionFormatter for Metadata {
+impl IRFormatter for Metadata {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
         write!(f, "{}", self.pretty_ty_name(ty))
     }
