@@ -1771,7 +1771,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn define_builtin(
+    pub fn define_builtin(
         &mut self,
         name: ir::NamePath,
         func: BuiltinFn,
