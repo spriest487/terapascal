@@ -6,21 +6,22 @@ use std::io;
 use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
+use std::path::Path;
 use std::path::PathBuf;
 
 pub trait Filesystem {
-    fn read_source(&self, path: &PathBuf) -> io::Result<Cow<str>>;
+    fn read_source(&self, path: &Path) -> io::Result<Cow<str>>;
 
-    fn exists(&self, path: &PathBuf) -> bool;
-    fn is_dir(&self, path: &PathBuf) -> bool;
+    fn exists(&self, path: &Path) -> bool;
+    fn is_dir(&self, path: &Path) -> bool;
 
-    fn canonicalize(&self, path: &PathBuf) -> io::Result<PathBuf>;
+    fn canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
 }
 
 pub struct DefaultFilesystem;
 
 impl Filesystem for DefaultFilesystem {
-    fn read_source(&self, path: &PathBuf) -> io::Result<Cow<str>> {
+    fn read_source(&self, path: &Path) -> io::Result<Cow<str>> {
         let mut file = File::open(path)?;
 
         let end_pos = file.seek(SeekFrom::End(0))?;
@@ -44,15 +45,15 @@ impl Filesystem for DefaultFilesystem {
         Ok(Cow::Owned(src_str.into_owned()))
     }
 
-    fn exists(&self, path: &PathBuf) -> bool {
+    fn exists(&self, path: &Path) -> bool {
         path.exists()
     }
 
-    fn is_dir(&self, path: &PathBuf) -> bool {
+    fn is_dir(&self, path: &Path) -> bool {
         path.is_dir()
     }
 
-    fn canonicalize(&self, path: &PathBuf) -> io::Result<PathBuf> {
+    fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
         dunce::canonicalize(path)
     }
 }

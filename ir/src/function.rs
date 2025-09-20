@@ -62,7 +62,7 @@ impl FunctionSig {
         let mut result = String::from("function");
 
         if !self.param_tys.is_empty() {
-            result.push_str("(");
+            result.push('(');
 
             for (i, param_ty) in self.param_tys.iter().enumerate() {
                 if i > 0 {
@@ -72,7 +72,7 @@ impl FunctionSig {
                 formatter.format_type(param_ty, &mut result).unwrap();
             }
 
-            result.push_str(")");
+            result.push(')');
         }
 
         if self.return_ty != Type::Nothing {

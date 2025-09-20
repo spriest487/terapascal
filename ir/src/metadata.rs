@@ -180,7 +180,7 @@ impl Metadata {
         }
 
         for (owning_ty_id, dtor_func) in &other.dtors {
-            if self.dtors.contains_key(&owning_ty_id) {
+            if self.dtors.contains_key(owning_ty_id) {
                 panic!("duplicate destructor definition for type {owning_ty_id}");
             }
             self.dtors.insert(*owning_ty_id, *dtor_func);
@@ -212,7 +212,7 @@ impl Metadata {
         }
         
         for (id, def) in &other.set_aliases {
-            if !self.set_aliases.contains_key(&id) {
+            if !self.set_aliases.contains_key(id) {
                 self.set_aliases.insert(*id, def.clone());
             }
         }
@@ -234,7 +234,6 @@ impl Metadata {
     {
         match (&old_name, &new_name) {
             (Some(old_name), Some(new_name)) if new_name == old_name => {
-                return;
             }
 
             _ => {
@@ -338,7 +337,7 @@ impl Metadata {
     fn next_set_id(&mut self) -> SetAliasID {
         let id = self.set_aliases
             .iter()
-            .last()
+            .next_back()
             .map(|(id, _)| id.0)
             .unwrap_or(0);
 
