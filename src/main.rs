@@ -1,10 +1,8 @@
 mod args;
 mod compile_error;
-mod reporting;
 
 use crate::args::*;
 use crate::compile_error::*;
-use crate::reporting::report_err;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
@@ -36,6 +34,7 @@ use terapascal_common::span::*;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::IR_LIB_EXT;
+use terapascal_common::reporting::report_err;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
 use terapascal_vm::Interpreter;

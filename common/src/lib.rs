@@ -3,6 +3,7 @@ pub mod span;
 pub mod build_log;
 pub mod fs;
 pub mod aggregate_err;
+pub mod reporting;
 
 use crate::span::*;
 pub use backtrace::Backtrace;

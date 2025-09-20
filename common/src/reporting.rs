@@ -1,3 +1,9 @@
+use crate::fs::DefaultFilesystem;
+use crate::fs::Filesystem;
+use crate::DiagnosticLabel;
+use crate::DiagnosticMessage;
+use crate::DiagnosticOutput;
+use crate::Severity;
 use codespan_reporting::diagnostic::Diagnostic;
 use codespan_reporting::diagnostic::Label;
 use codespan_reporting::diagnostic::LabelStyle;
@@ -10,11 +16,6 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::iter::once;
 use std::path::Path;
-use terapascal_common::fs::DefaultFilesystem;
-use terapascal_common::fs::Filesystem;
-use terapascal_common::{DiagnosticLabel, Severity};
-use terapascal_common::DiagnosticMessage;
-use terapascal_common::DiagnosticOutput;
 
 type CodeMap = SimpleFiles<String, String>;
 
