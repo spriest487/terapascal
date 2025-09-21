@@ -2104,7 +2104,7 @@ impl Interpreter {
         Ok(())
     }
 
-    fn create_string(&mut self, content: &str, immortal: bool) -> ExecResult<DynValue> {
+    pub fn create_string(&mut self, content: &str, immortal: bool) -> ExecResult<DynValue> {
         let mut chars: Vec<_> = content.chars().map(|c| DynValue::U8(c as u8)).collect();
         let chars_len = cast::i32(chars.len()).map_err(|_| {
             let msg = format!("string length out of range: {}", chars.len());
@@ -2129,13 +2129,13 @@ impl Interpreter {
         Ok(DynValue::Pointer(str_ptr))
     }
 
-    fn read_string_indirect(&self, str_ptr: &Pointer) -> ExecResult<String> {
+    pub fn read_string_indirect(&self, str_ptr: &Pointer) -> ExecResult<String> {
         let (str_struct, _) = self.load_rc_struct_ptr(str_ptr)?;
         self.read_string_struct(str_struct.as_ref())
     }
 
     // reads the string value stored in the string object that `str_ref` is a pointer to
-    fn read_string(&self, str_ref: &ir::Ref) -> ExecResult<String> {
+    pub fn read_string(&self, str_ref: &ir::Ref) -> ExecResult<String> {
         let str_val = self.load(&str_ref.clone().to_deref())?;
 
         let str_struct = match str_val.as_struct(ir::STRING_ID) {
@@ -2255,8 +2255,7 @@ impl Interpreter {
         Ok(dynarray)
     }
 
-    #[allow(unused)]
-    fn read_dynarray(&self, ptr: &Pointer) -> ExecResult<Vec<DynValue>> {
+    pub fn read_dynarray(&self, ptr: &Pointer) -> ExecResult<Vec<DynValue>> {
         let (array_struct, _) = self.load_rc_struct_ptr(ptr)?;
 
         let element_ty = self
