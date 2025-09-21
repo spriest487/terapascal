@@ -63,6 +63,22 @@ pub trait InstructionBuilder {
         }));
     }
 
+    fn add_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>, as_type: &Type) -> Value {
+        let a = a.into();
+        let b = b.into();
+
+        if let (Some(a_val), Some(b_val)) = (a.to_literal_val(), b.to_literal_val()) {
+            if let Some(result) = Value::from_literal_val(a_val + b_val, &as_type) {
+                return result;
+            }
+        }
+
+        let out = self.local_temp(as_type.clone());
+        self.add(out.clone(), a, b);
+
+        Value::Ref(out)
+    }
+
     fn sub(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
         self.emit(Instruction::Sub(BinOpInstruction {
             out: out.into(),
@@ -93,6 +109,22 @@ pub trait InstructionBuilder {
             a: a.into(),
             b: b.into(),
         }));
+    }
+
+    fn mul_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>, as_type: &Type) -> Value {
+        let a = a.into();
+        let b = b.into();
+
+        if let (Some(a_val), Some(b_val)) = (a.to_literal_val(), b.to_literal_val()) {
+            if let Some(result) = Value::from_literal_val(a_val * b_val, &as_type) {
+                return result;
+            }
+        }
+
+        let out = self.local_temp(as_type.clone());
+        self.mul(out.clone(), a, b);
+
+        Value::Ref(out)
     }
 
     fn idiv(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
