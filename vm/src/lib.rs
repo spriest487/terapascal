@@ -659,13 +659,13 @@ impl Interpreter {
         let struct_val = match self.load_indirect(&ptr)? {
             DynValue::Structure(struct_val) => struct_val,
             other => {
-                let msg = format!("released val was not a structure, found: {:?}", other);
+                let msg = format!("loaded val was not a structure, found: {:?}", other);
                 return Err(ExecError::illegal_state(msg));
             },
         };
 
         let struct_rc = struct_val.rc.as_ref().cloned().ok_or_else(|| {
-            let msg = "unable to access rc state of released structure".to_string();
+            let msg = "unable to access rc state of loaded structure".to_string();
             ExecError::illegal_state(msg)
         })?;
 
