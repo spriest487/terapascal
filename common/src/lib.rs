@@ -373,7 +373,19 @@ impl fmt::Display for LanguageMode {
 
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct SharedStringKey(Arc<String>);
+pub struct SharedStringKey(pub Arc<String>);
+
+impl From<String> for SharedStringKey {
+    fn from(value: String) -> Self {
+        Self(Arc::new(value))
+    }
+}
+
+impl From<Arc<String>> for SharedStringKey {
+    fn from(value: Arc<String>) -> Self {
+        Self(value)
+    }
+}
 
 impl Borrow<str> for SharedStringKey {
     fn borrow(&self) -> &str {
