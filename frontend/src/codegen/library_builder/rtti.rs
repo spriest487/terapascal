@@ -1,6 +1,7 @@
 use crate::codegen::builder::Builder;
 use crate::codegen::ir;
 use crate::codegen::library_builder::LibraryBuilder;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub fn gen_release_func(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<ir::FunctionID> {
     let body = gen_release_body(lib, ty)?;
@@ -22,9 +23,7 @@ fn gen_release_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<Vec<ir::I
         release_builder.bind_param(ir::LocalID(0), ty.clone().ptr(), "target", true);
         let target_ref = ir::Ref::Local(ir::LocalID(0)).to_deref();
 
-        let released_any = release_builder.visit_deep(target_ref, ty, |builder, el_ty, el_ref| {
-            builder.release(el_ref, el_ty)
-        });
+        let released_any = release_builder.release_deep(target_ref, ty);
 
         let body = release_builder.finish();
         if released_any && !body.is_empty() {
@@ -55,9 +54,7 @@ fn gen_retain_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<Vec<ir::In
         retain_builder.bind_param(ir::LocalID(0), ty.clone().ptr(), "target", true);
         let target_ref = ir::Ref::Local(ir::LocalID(0)).to_deref();
 
-        let retained_any = retain_builder.visit_deep(target_ref, ty, |builder, el_ty, el_ref| {
-            builder.retain(el_ref, el_ty)
-        });
+        let retained_any = retain_builder.retain_deep(target_ref, ty);
 
         let body = retain_builder.finish();
         if retained_any && !body.is_empty() {

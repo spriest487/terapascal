@@ -1,5 +1,4 @@
 pub mod scope;
-pub mod ext;
 
 #[cfg(test)]
 mod test;
@@ -47,8 +46,16 @@ impl InstructionBuilder for Builder<'_, '_> {
         self.instructions.push(instruction);
     }
 
+    fn metadata(&self) -> &Metadata {
+        self.library.metadata()
+    }
+
     fn is_debug(&self) -> bool {
         self.opts().debug
+    }
+
+    fn ir_formatter(&self) -> &impl IRFormatter {
+        self.library.metadata()
     }
 
     fn local_temp(&mut self, ty: Type) -> Ref {
@@ -61,6 +68,28 @@ impl InstructionBuilder for Builder<'_, '_> {
         self.current_scope_mut().bind_temp(id);
 
         Ref::Local(id)
+    }
+
+    fn next_label(&mut self) -> Label {
+        let label = self.next_label;
+        self.next_label = Label(self.next_label.0 + 1);
+        label
+    }
+
+    fn release(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        match ty {
+            Type::RcPointer(..) => {
+                self.emit(Instruction::Release { at: at.into(), weak: false });
+                true
+            }
+
+            Type::RcWeakPointer(..) => {
+                self.emit(Instruction::Release { at: at.into(), weak: true });
+                true
+            }
+
+            _ => self.call_release(at.into(), ty),
+        }
     }
 }
 
@@ -384,7 +413,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         }
     }
 
-    pub fn finish(mut self) -> Vec<Instruction> {        
+    pub fn finish(mut self) -> Vec<Instruction> {
         while !self.scopes.is_empty() {
             self.end_scope();
         }
@@ -583,12 +612,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             .unwrap_or(LocalID(0))
     }
 
-    pub fn next_label(&mut self) -> Label {
-        let label = self.next_label;
-        self.next_label = Label(self.next_label.0 + 1);
-        label
-    }
-
     fn current_scope_mut(&mut self) -> &mut Scope {
         self.scopes
             .iter_mut()
@@ -619,138 +642,17 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         Ref::Local(id)
     }
 
-    /// call `f` for every structural member of the object of type `ty_def` found at the `at`
-    /// reference.
-    ///
-    /// returns `true` if calling `f` for any of the members (or members of members) returns `true`
-    pub fn visit_deep<Visitor>(&mut self, at: Ref, ty: &Type, f: Visitor) -> bool
-    where
-        Visitor: Fn(&mut Builder, &Type, Ref) -> bool + Copy,
-    {
-        match ty {
-            Type::Struct(struct_id) => {
-                let struct_def = self.library.metadata().get_struct_def(*struct_id).unwrap();
+    fn call_release(&mut self, at: Ref, ty: &Type) -> bool {
+        let rc_funcs = self.library.gen_runtime_type(ty);
+        let Some(release) = rc_funcs.release else {
+            return false; 
+        };
 
-                let fields: Vec<_> = struct_def
-                    .fields
-                    .iter()
-                    .map(|(field_id, field)| (*field_id, field.ty.clone()))
-                    .collect();
+        let at_ptr = self.local_temp(ty.clone().ptr());
+        self.addr_of(at_ptr.clone(), at);
+        self.call(release, [Value::from(at_ptr)], None);
 
-                let mut result = false;
-                for (field, field_ty) in fields {
-                    if !(field_ty.is_rc() || field_ty.is_complex()) {
-                        continue;
-                    }
-
-                    // store the field pointer in a temp slot
-                    let field_val = self.local_temp(field_ty.clone().ptr());
-                    
-                    let of_ty = Type::Struct(*struct_id);
-                    self.field(field_val.clone(), at.clone(), of_ty, field);
-
-                    result |= self.visit_deep(field_val.to_deref(), &field_ty, f);
-                }
-
-                result
-            },
-
-            Type::Variant(id) => {
-                let cases = &self
-                    .library
-                    .metadata()
-                    .get_variant_def(*id)
-                    .unwrap_or_else(|| panic!("missing variant def {}", id))
-                    .cases
-                    .to_vec();
-
-                let tag_ptr = self.local_temp(Type::I32.ptr());
-                let is_not_case = self.local_temp(Type::Bool);
-
-                // get the tag
-                self.vartag(tag_ptr.clone(), at.clone(), Type::Variant(*id));
-
-                // jump out of the search loop if we find the matching case
-                let break_label = self.next_label();
-
-                let mut result = false;
-
-                // for each case, check if the tag matches and jump past it if not
-
-                for (tag, case) in cases.iter().enumerate() {
-                    if self.opts().debug {
-                        self.comment(&format!("testing for variant case {} ({})", tag, case.name));
-                    }
-
-                    if let Some(data_ty) = &case.ty {
-                        if !(data_ty.is_rc() || data_ty.is_complex()) {
-                            continue;
-                        }
-
-                        let skip_case_label = self.next_label();
-
-                        // is_not_case := tag_ptr^ != tag
-                        let tag_val = Value::LiteralI32(tag as i32);
-                        self.eq(is_not_case.clone(), tag_ptr.clone().to_deref(), tag_val);
-                        self.not(is_not_case.clone(), is_not_case.clone());
-
-                        self.jmpif(skip_case_label, is_not_case.clone());
-
-                        // get ptr into case data and visit it
-
-                        // only one of these allocations will occur depending on which case is
-                        // active, so a scope is needed here to stop the local counter being
-                        // incremented once per case
-                        self.scope(|builder| {
-                            let data_ptr = builder.local_temp(data_ty.clone().ptr());
-                            builder.vardata(
-                                data_ptr.clone(),
-                                at.clone(),
-                                Type::Variant(*id),
-                                tag,
-                            );
-
-                            result |= builder.visit_deep(data_ptr.to_deref(), &data_ty, f);
-                        });
-
-                        // break after any case executes
-                        self.jmp(break_label);
-
-                        // jump to here if this case isn't active
-                        self.label(skip_case_label);
-                    }
-                }
-
-                self.label(break_label);
-
-                result
-            },
-
-            Type::Array { element, dim } => {
-                if !element.is_rc() && !element.is_complex() {
-                    return false;
-                }
-
-                let element_ptr = self.local_temp((**element).clone().ptr());
-                let mut result = false;
-
-                for i in 0..*dim {
-                    self.emit(Instruction::Element {
-                        out: element_ptr.clone(),
-                        a: at.clone(),
-                        element: (**element).clone(),
-                        index: Value::LiteralI32(i as i32), // todo: real usize type,
-                    });
-
-                    result |= self.visit_deep(element_ptr.clone().to_deref(), element, f);
-                }
-
-                result
-            },
-
-            // field or element
-            _ => f(self, ty, at),
-        }
+        true
     }
 
     pub fn retain(&mut self, at: Ref, ty: &Type) -> bool {
@@ -786,55 +688,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
             Type::RcWeakPointer(..) => {
                 self.emit(Instruction::Retain { at, weak: true });
-                true
-            },
-
-            _ => {
-                // not an RC type, nor a complex type containing RC types
-                false
-            },
-        }
-    }
-    
-    fn call_release(&mut self, at: Ref, ty: &Type) {
-        let rc_funcs = self.library.gen_runtime_type(ty);
-
-        if let Some(release) = rc_funcs.release {
-            let at_ptr = self.local_temp(ty.clone().ptr());
-            self.addr_of(at_ptr.clone(), at);
-            self.call(release, [Value::from(at_ptr)], None);
-        }
-    }
-
-    pub fn release(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        let at = at.into();
-
-        if self.opts().annotate_rc {
-            self.comment(&format!("release: {}", self.pretty_ty_name(ty)));
-        }
-
-        match ty {
-            Type::Array { .. } => {
-                self.call_release(at, ty);
-                true
-            }
-            
-            Type::Struct(_id) | Type::Variant(_id) => {
-                // if let Some(dtor) = self.library.metadata().find_dtor(*id) {
-                //     self.call(dtor, [Value::from(at.clone())], None);
-                // }
-                
-                self.call_release(at, ty);
-                true
-            },
-
-            Type::RcPointer(..) => {
-                self.emit(Instruction::Release { at, weak: false });
-                true
-            },
-
-            Type::RcWeakPointer(..) => {
-                self.emit(Instruction::Release { at, weak: true });
                 true
             },
 

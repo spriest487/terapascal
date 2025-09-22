@@ -1,4 +1,4 @@
-use crate::BinOpInstruction;
+use crate::{BinOpInstruction, IRFormatter, Metadata};
 use crate::FieldID;
 use crate::Instruction;
 use crate::InterfaceID;
@@ -15,11 +15,16 @@ use std::fmt;
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
     
+    fn metadata(&self) -> &Metadata;
+    
     // if false, all comment instructions are skipped
     fn is_debug(&self) -> bool;
+    
+    fn ir_formatter(&self) -> &impl IRFormatter;
 
     // creates an anonymous unmanaged local of this type
     fn local_temp(&mut self, ty: Type) -> Ref;
+    fn next_label(&mut self) -> Label;
 
     fn comment(&mut self, content: &(impl fmt::Display + ?Sized)) {
         if !self.is_debug() {
@@ -531,5 +536,255 @@ pub trait InstructionBuilder {
             of_ty,
             tag,
         })
+    }
+
+    fn release(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        let at = at.into();
+
+        self.comment(&format!("release: {}", ty.to_pretty_string(self.ir_formatter())));
+
+        self.release_deep(at, ty)
+    }
+    
+    fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        self.visit_deep(at, ty, |builder, element_ty, element_ref| {
+            match element_ty {
+                Type::RcPointer(..) => {
+                    builder.emit(Instruction::Release { at: element_ref, weak: false });
+                    true
+                }
+
+                Type::RcWeakPointer(..) => {
+                    builder.emit(Instruction::Release { at: element_ref, weak: true });
+                    true
+                }
+                
+                _ => false,
+            }
+        })
+    }
+
+    fn retain(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        let at = at.into();
+
+        self.comment(&format!("retain: {}", ty.to_pretty_string(self.ir_formatter())));
+
+        self.retain_deep(at, ty)
+    }
+    
+    fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        self.visit_deep(at, ty, |builder, element_ty, element_ref| {
+            match element_ty {
+                Type::RcPointer(..) => {
+                    builder.emit(Instruction::Retain { at: element_ref, weak: false });
+                    true
+                }
+
+                Type::RcWeakPointer(..) => {
+                    builder.emit(Instruction::Retain { at: element_ref, weak: true });
+                    true
+                }
+
+                _ => false,
+            }
+        })
+    }
+    
+    fn if_then<Branch>(&mut self, cond: impl Into<crate::Value>, then_branch: Branch)
+    where
+        Branch: FnOnce(&mut Self),
+    {
+        let then_label = self.next_label();
+        let break_label = self.next_label();
+
+        self.jmpif(then_label, cond);
+        self.jmp(break_label);
+
+        self.label(then_label);
+        then_branch(self);
+
+        self.label(break_label);
+    }
+
+    fn if_then_else<Branch>(&mut self,
+        cond: impl Into<crate::Value>,
+        then_branch: Branch,
+        else_branch: Branch,
+    )
+    where
+        Branch: FnOnce(&mut Self)
+    {
+        let then_label = self.next_label();
+        let else_label = self.next_label();
+        let break_label = self.next_label();
+
+        self.jmpif(then_label, cond);
+        self.jmp(else_label);
+
+        self.label(then_label);
+        then_branch(self);
+        self.jmp(break_label);
+
+        self.label(else_label);
+        else_branch(self);
+
+        self.label(break_label);
+    }
+
+    fn counter_loop<F>(
+        &mut self,
+        counter: impl Into<crate::Ref>,
+        inc_val: impl Into<crate::Value>,
+        high_val: impl Into<crate::Value>,
+        f: F,
+    )
+    where F: Fn(&mut Self)
+    {
+        let break_label = self.next_label();
+        let loop_label = self.next_label();
+        let done = self.local_temp(crate::Type::Bool);
+
+        let counter = counter.into();
+
+        self.label(loop_label);
+        self.gte(done.clone(), counter.clone(), high_val);
+        self.jmpif(break_label, done);
+
+        f(self);
+
+        self.add(counter.clone(), counter, inc_val);
+        self.jmp(loop_label);
+        self.label(break_label);
+    }
+
+    /// call `f` for every structural member of the object of type `ty_def` found at the `at`
+    /// reference.
+    ///
+    /// returns `true` if calling `f` for any of the members (or members of members) returns `true`
+    fn visit_deep<Visitor>(&mut self, at: impl Into<Ref>, ty: &Type, f: Visitor) -> bool
+    where
+        Visitor: Fn(&mut Self, &Type, Ref) -> bool + Copy,
+    {
+        let at = at.into();
+        
+        match ty {
+            Type::Struct(struct_id) => {
+                let struct_def = self.metadata().get_struct_def(*struct_id).unwrap();
+
+                let fields: Vec<_> = struct_def
+                    .fields
+                    .iter()
+                    .map(|(field_id, field)| (*field_id, field.ty.clone()))
+                    .collect();
+
+                let mut result = false;
+                for (field, field_ty) in fields {
+                    if !(field_ty.is_rc() || field_ty.is_complex()) {
+                        continue;
+                    }
+
+                    // store the field pointer in a temp slot
+                    let field_val = self.local_temp(field_ty.clone().ptr());
+
+                    let of_ty = Type::Struct(*struct_id);
+                    self.field(field_val.clone(), at.clone(), of_ty, field);
+
+                    result |= self.visit_deep(field_val.to_deref(), &field_ty, f);
+                }
+
+                result
+            },
+
+            Type::Variant(id) => {
+                let cases = &self
+                    .metadata()
+                    .get_variant_def(*id)
+                    .unwrap_or_else(|| panic!("missing variant def {}", id))
+                    .cases
+                    .to_vec();
+
+                let tag_ptr = self.local_temp(Type::I32.ptr());
+                let is_not_case = self.local_temp(Type::Bool);
+
+                // get the tag
+                self.vartag(tag_ptr.clone(), at.clone(), Type::Variant(*id));
+
+                // jump out of the search loop if we find the matching case
+                let break_label = self.next_label();
+
+                let mut result = false;
+
+                // for each case, check if the tag matches and jump past it if not
+
+                for (tag, case) in cases.iter().enumerate() {
+                    self.comment(&format!("testing for variant case {} ({})", tag, case.name));
+
+                    if let Some(data_ty) = &case.ty {
+                        if !(data_ty.is_rc() || data_ty.is_complex()) {
+                            continue;
+                        }
+
+                        let skip_case_label = self.next_label();
+
+                        // is_not_case := tag_ptr^ != tag
+                        let tag_val = Value::LiteralI32(tag as i32);
+                        self.eq(is_not_case.clone(), tag_ptr.clone().to_deref(), tag_val);
+                        self.not(is_not_case.clone(), is_not_case.clone());
+
+                        self.jmpif(skip_case_label, is_not_case.clone());
+
+                        // get ptr into case data and visit it
+
+                        // only one data_ptr local will be allocated depending on which case is
+                        // active, so a scope is needed here to stop the local counter being
+                        // incremented once per case
+                        self.emit(Instruction::LocalBegin);
+                        let data_ptr = self.local_temp(data_ty.clone().ptr());
+                            
+                        self.vardata(
+                            data_ptr.clone(),
+                            at.clone(),
+                            Type::Variant(*id),
+                            tag,
+                        );
+
+                        result |= self.visit_deep(data_ptr.to_deref(), &data_ty, f);
+                        self.emit(Instruction::LocalEnd);
+
+                        // break after any case executes
+                        self.jmp(break_label);
+
+                        // jump to here if this case isn't active
+                        self.label(skip_case_label);
+                    }
+                }
+
+                self.label(break_label);
+
+                result
+            },
+
+            Type::Array { element, dim } => {
+                if !element.is_rc() && !element.is_complex() {
+                    return false;
+                }
+
+                let element_ty = (**element).clone();
+                let element_ptr = self.local_temp(element_ty.clone().ptr());
+                let mut result = false;
+
+                for i in 0..*dim {
+                    let index = Value::LiteralI32(i as i32);
+                    self.element(element_ptr.clone(), at.clone(), index, element_ty.clone());
+
+                    result |= self.visit_deep(element_ptr.clone().to_deref(), element, f);
+                }
+
+                result
+            },
+
+            // field or element
+            _ => f(self, ty, at),
+        }
     }
 }
