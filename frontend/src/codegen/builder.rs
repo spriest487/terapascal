@@ -31,7 +31,7 @@ pub struct Builder<'m, 'l: 'm> {
     generic_context: typ::GenericContext,
 
     instructions: Vec<Instruction>,
-    scopes: Vec<Scope>,
+    scopes: Vec<LocalScope>,
     next_label: Label,
 
     loop_stack: Vec<LoopScope>,
@@ -58,16 +58,13 @@ impl InstructionBuilder for Builder<'_, '_> {
         self.library.metadata()
     }
 
-    fn local_temp(&mut self, ty: Type) -> Ref {
+    fn local_temp(&mut self, ty: Type) -> LocalID {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.next_local_id();
-        self.instructions
-            .push(Instruction::LocalAlloc(id, ty.clone()));
+        let id = self.current_scope_mut().bind_temp();
+        self.instructions.push(Instruction::LocalAlloc(id, ty.clone()));
 
-        self.current_scope_mut().bind_temp(id);
-
-        Ref::Local(id)
+        id
     }
 
     fn next_label(&mut self) -> Label {
@@ -91,6 +88,22 @@ impl InstructionBuilder for Builder<'_, '_> {
             _ => self.call_release(at.into(), ty),
         }
     }
+
+    fn retain(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        match ty {
+            Type::RcPointer(..) => {
+                self.emit(Instruction::Retain { at: at.into(), weak: false });
+                true
+            }
+
+            Type::RcWeakPointer(..) => {
+                self.emit(Instruction::Retain { at: at.into(), weak: true });
+                true
+            }
+
+            _ => self.call_retain(at.into(), ty),
+        }
+    }
 }
 
 impl<'m, 'l: 'm> Builder<'m, 'l> {
@@ -105,7 +118,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
             // the EXIT label is always reserved, so start one after that
             next_label: Label(EXIT_LABEL.0 + 1),
-            scopes: vec![Scope::new()],
+            scopes: vec![LocalScope::new(0)],
 
             loop_stack: Vec::new(),
 
@@ -126,16 +139,13 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         &self.generic_context
     }
 
-    pub fn local_new(&mut self, ty: Type, name: Option<String>) -> Ref {
+    pub fn local_new(&mut self, ty: Type, name: Option<String>) -> LocalID {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.next_local_id();
-        self.instructions
-            .push(Instruction::LocalAlloc(id, ty.clone()));
+        let id = self.current_scope_mut().bind_new(name.map(Arc::new), ty.clone());
+        self.emit(Instruction::LocalAlloc(id, ty));
 
-        self.current_scope_mut().bind_new(id, name, ty);
-
-        Ref::Local(id)
+        id
     }
 
     pub fn translate_variant_case<'ty>(
@@ -265,12 +275,12 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             let closure_struct_ptr_ty = closure_struct_ty.clone().ptr();
 
             // downcast virtual closure ptr to the concrete closure struct
-            let closure_struct_ref = builder.local_temp(closure_struct_ptr_ty.clone());
+            let closure_struct_ref = Ref::from(builder.local_temp(closure_struct_ptr_ty.clone()));
             builder.cast(closure_struct_ref.clone(), closure_ref.clone(), closure_struct_ptr_ty.clone());
 
             let func_ptr_ty = closure_def.fields[&CLOSURE_PTR_FIELD].ty.clone();
 
-            let func_field_ptr = builder.local_new(func_ptr_ty.clone().ptr(), None);
+            let func_field_ptr = builder.local_new(func_ptr_ty.clone().ptr(), None).to_ref();
             builder.field(
                 func_field_ptr.clone(),
                 closure_struct_ref.clone().to_deref(),
@@ -296,7 +306,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
                     Some(name) => name,
                 };
 
-                let capture_field_ptr = builder.local_temp(field_def.ty.clone().ptr());
+                let capture_field_ptr = Ref::from(builder.local_temp(field_def.ty.clone().ptr()));
                 builder.field(
                     capture_field_ptr.clone(),
                     closure_struct_ref.clone().to_deref(),
@@ -313,7 +323,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             }
         });
 
-        closure_ref
+        closure_ref.to_ref()
     }
     
     pub fn get_method(&self, self_ty: &typ::Type, index: usize) -> typ::ast::MethodDecl {
@@ -575,9 +585,9 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.set_bitwise_op(a, b, set_type, |i| i.bit_xor_func)
     }
 
-    pub fn get_mem(&mut self, count: impl Into<Value>, out: Ref) {
+    pub fn get_mem(&mut self, count: impl Into<Value>, out: impl Into<Ref>) {
         let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_get_mem_func()));
-        self.call(function_ref, [count.into()], Some(out));
+        self.call(function_ref, [count.into()], Some(out.into()));
     }
 
     pub fn free_mem(&mut self, at: impl Into<Value>) {
@@ -585,8 +595,8 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.call(function_ref, [at.into()], None);
     }
 
-    pub fn bind_param(&mut self, id: LocalID, ty: Type, name: impl Into<String>, by_ref: bool) {
-        self.current_scope_mut().bind_param(id, name, ty, by_ref);
+    pub fn bind_param(&mut self, ty: Type, name: impl Into<String>, by_ref: bool) -> LocalID {
+        self.current_scope_mut().bind_param(Some(Arc::new(name.into())), ty, by_ref)
     }
 
     // binds an anonymous return local in %0 with the indicated type
@@ -596,23 +606,18 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
     // binds an anonymous local binding for the closure pointer of a function
     pub fn bind_closure_ptr(&mut self) -> LocalID {
-        let id = self.next_local_id();
-        self.current_scope_mut().bind_temp(id);
-
-        id
+        self.current_scope_mut().bind_temp()
     }
 
-    pub fn next_local_id(&self) -> LocalID {
+    fn current_scope(&mut self) -> &LocalScope {
         self.scopes
             .iter()
-            .flat_map(|scope| scope.locals().iter())
-            .map(Local::id)
-            .max_by_key(|id| id.0)
-            .map(|id| LocalID(id.0 + 1))
-            .unwrap_or(LocalID(0))
+            .rev()
+            .next()
+            .expect("scope must be active")
     }
 
-    fn current_scope_mut(&mut self) -> &mut Scope {
+    fn current_scope_mut(&mut self) -> &mut LocalScope {
         self.scopes
             .iter_mut()
             .rev()
@@ -624,7 +629,8 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.scopes
             .iter()
             .rev()
-            .find_map(|scope| scope.local_by_name(name))
+            .find_map(|scope| scope.local_by_name(name)
+                .and_then(|id| scope.local_by_id(id)))
     }
     
     pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {
@@ -633,11 +639,9 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
     pub fn local_closure_capture(&mut self, ty: Type, name: String) -> Ref {
         assert_ne!(Type::Nothing, ty);
-        let id = self.next_local_id();
 
+        let id = self.current_scope_mut().bind_param(Some(Arc::new(name)), ty.clone(), true);
         self.emit(Instruction::LocalAlloc(id, ty.clone()));
-
-        self.current_scope_mut().bind_param(id, name, ty, true);
 
         Ref::Local(id)
     }
@@ -654,48 +658,19 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
         true
     }
+    
+    fn call_retain(&mut self, at: Ref, ty: &Type) -> bool {
+        let rc_funcs = self.library.gen_runtime_type(ty);
 
-    pub fn retain(&mut self, at: Ref, ty: &Type) -> bool {
-        if self.opts().annotate_rc {
-            self.comment(&format!("retain: {}", self.pretty_ty_name(ty)));
-        }
+        let Some(retain) = rc_funcs.retain else {
+            return false;
+        };
 
-        match ty {
-            Type::Array { .. } | Type::Struct(..) | Type::Variant(..) => {
-                let rc_funcs = self.library.gen_runtime_type(ty);
-
-                if let Some(retain) = rc_funcs.retain {
-                    let at_ptr = self.local_temp(ty.clone().ptr());
-                    self.emit(Instruction::AddrOf {
-                        out: at_ptr.clone(),
-                        a: at,
-                    });
-
-                    self.emit(Instruction::Call {
-                        function: Value::Ref(Ref::Global(GlobalRef::Function(retain))),
-                        args: vec![Value::Ref(at_ptr)],
-                        out: None,
-                    });
-                }
-
-                true
-            },
-
-            Type::RcPointer(..) => {
-                self.emit(Instruction::Retain { at, weak: false });
-                true
-            },
-
-            Type::RcWeakPointer(..) => {
-                self.emit(Instruction::Retain { at, weak: true });
-                true
-            },
-
-            _ => {
-                // not an RC type, nor a complex type containing RC types
-                false
-            },
-        }
+        let at_ptr = self.local_temp(ty.clone().ptr());
+        self.addr_of(at_ptr.clone(), at);
+        self.call(retain, [Value::Ref(Ref::from(at_ptr))], None);
+        
+        true
     }
 
     pub fn begin_loop_body_scope(&mut self, continue_label: Label, break_label: Label) {
@@ -742,7 +717,9 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
     pub fn begin_scope(&mut self) {
         self.emit(Instruction::LocalBegin);
-        self.scopes.push(Scope::new());
+
+        let scope = self.current_scope().new_child();
+        self.scopes.push(scope);
 
         self.comment(&format!("begin scope {}", self.scopes.len()));
     }

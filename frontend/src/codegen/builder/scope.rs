@@ -1,12 +1,14 @@
-use terapascal_ir as ir;
 use crate::codegen::builder::Builder;
+use std::collections::HashMap;
+use std::sync::Arc;
+use terapascal_common::SharedStringKey;
+use terapascal_ir as ir;
 
 #[derive(Clone, Debug)]
 pub enum Local {
     // the builder created this local allocation and must track its lifetime to drop it
     New {
         id: ir::LocalID,
-        name: Option<String>,
         ty: ir::Type,
     },
 
@@ -21,7 +23,6 @@ pub enum Local {
     // by-value parameter. value is copied into the local by the caller
     Param {
         id: ir::LocalID,
-        name: String,
         ty: ir::Type,
 
         // by-ref parameter?
@@ -44,14 +45,6 @@ impl Local {
         }
     }
 
-    pub fn name(&self) -> Option<&String> {
-        match self {
-            Local::New { name, .. } => name.as_ref(),
-            Local::Param { name, .. } => Some(&name),
-            Local::Temp { .. } | Local::Return { .. } => None,
-        }
-    }
-
     /// if a local is by-ref, it's treated in pascal syntax like a value of this type but in the IR
     /// it's actually a pointer. if this returns true, it's necessary to wrap Ref::Local values
     /// that reference this local in a Ref::Deref to achieve the same effect as the pascal syntax
@@ -64,20 +57,31 @@ impl Local {
 }
 
 #[derive(Debug)]
-pub(super) struct Scope {
+pub(super) struct LocalScope {
     locals: Vec<Local>,
+    named_locals: HashMap<SharedStringKey, ir::LocalID>,
 
     // debug context pushes belonging to this scope - when cleaning up this scope, any un-popped
     // entries in the debug context stack that were pushed during this scope also need to be popped
     debug_ctx_depth: usize,
+
+    next_local: usize,
 }
 
-impl Scope {
-    pub fn new() -> Self {
+impl LocalScope {
+    pub fn new(next_local: usize) -> Self {
         Self {
             locals: Vec::new(),
+            named_locals: HashMap::new(),
+
             debug_ctx_depth: 0,
+
+            next_local,
         }
+    }
+
+    pub fn new_child(&self) -> Self {
+        Self::new(self.next_local)
     }
 
     pub fn debug_ctx_count(&self) -> usize {
@@ -97,16 +101,19 @@ impl Scope {
     }
 
     pub fn local_by_id(&self, id: ir::LocalID) -> Option<&Local> {
-        self.locals().iter().find(|l| l.id() == id)
+        self.locals.iter().find(|l| l.id() == id)
     }
 
-    pub fn local_by_name(&self, name: &str) -> Option<&Local> {
-        self.locals().iter().find(|l| l.name().map(String::as_str) == Some(name))
+    pub fn local_by_name(&self, name: &str) -> Option<ir::LocalID> {
+        self.named_locals.get(name).cloned()
     }
 
-    pub fn bind_param(&mut self, id: ir::LocalID, name: impl Into<String>, ty: ir::Type, by_ref: bool) {
-        let name = name.into();
-
+    pub fn bind_param(
+        &mut self,
+        name: Option<impl Into<Arc<String>>>,
+        ty: ir::Type,
+        by_ref: bool,
+    ) -> ir::LocalID {
         if by_ref {
             let is_ptr = match &ty {
                 ir::Type::Pointer(..) => true,
@@ -115,48 +122,75 @@ impl Scope {
             assert!(is_ptr, "by-ref parameters must have pointer type");
         }
 
+        let id = ir::LocalID(self.next_local);
+
         assert!(
             self.local_by_id(id).is_none(),
             "scope must not already have a binding for {}: {:?}",
             ir::Ref::Local(id),
             self
         );
-        assert!(
-            self.local_by_name(&name).is_none(),
-            "scope must not already have a binding named {}: {:?}",
-            name,
-            self
-        );
 
-        self.locals.push(Local::Param { id, name, ty, by_ref });
+        self.locals.push(Local::Param { id, ty, by_ref });
+
+        let name = name.map(Into::into);
+        if let Some(name) = name {
+            if self.named_locals.insert(SharedStringKey(name.clone()), id).is_some() {
+                panic!("scope must not already have a binding named {}", name);
+            }
+        }
+
+        self.next_local += 1;
+
+        id
     }
 
-    pub fn bind_return(&mut self) {
-        let slot_free = self.local_by_id(ir::LocalID(0)).is_none();
+    pub fn bind_return(&mut self) -> ir::Ref {
+        assert_eq!(ir::RETURN_LOCAL.0, self.next_local, "return local must be bound first");
+
+        let slot_free = self.local_by_id(ir::RETURN_LOCAL).is_none();
         assert!(slot_free, "%0 must not already be bound in bind_return");
 
         self.locals.push(Local::Return);
+        self.next_local += 1;
+
+        ir::RETURN_REF
     }
 
-    pub fn bind_temp(&mut self, id: ir::LocalID) {
+    pub fn bind_temp(&mut self) -> ir::LocalID {
+        let id = ir::LocalID(self.next_local);
+
         assert!(
             self.local_by_id(id).is_none(),
-            "scope must not already have a binding for {}: {:?}",
+            "scope must not already have a binding for {}",
             ir::Ref::Local(id),
-            self
         );
 
         self.locals.push(Local::Temp { id });
+        self.next_local += 1;
+
+        id
     }
 
-    pub fn bind_new(&mut self, id: ir::LocalID, name: Option<String>, ty: ir::Type) {
+    pub fn bind_new(&mut self, name: Option<Arc<String>>, ty: ir::Type) -> ir::LocalID {
+        let id = ir::LocalID(self.next_local);
+
         assert_ne!(ir::Type::Nothing, ty);
+
+        if let Some(name) = &name {
+            if self.named_locals.insert(SharedStringKey(name.clone()), id).is_some() {
+                panic!("scope must not already have a binding for {}", name);
+            }
+        }
 
         self.locals.push(Local::New {
             id,
-            name,
             ty: ty.clone(),
-        })
+        });
+
+        self.next_local += 1;
+
+        id
     }
 }
 

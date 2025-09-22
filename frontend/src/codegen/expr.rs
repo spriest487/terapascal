@@ -74,7 +74,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
                         Some(output_expr) => builder.translate_type(&output_expr.annotation().ty()),
                         None => panic!("block used in expr must have a type"),
                     };
-                    let out_ref = builder.local_new(out_ty, None);
+                    let out_ref = builder.local_new(out_ty, None).to_ref();
                     translate_block(block, out_ref.clone(), builder);
 
                     out_ref
@@ -133,7 +133,7 @@ fn translate_indexer(
 ) -> ir::Ref {
     match base_ty {
         typ::Type::Array(array_ty) => {
-            let element_ptr = builder.local_temp(val_ty.clone().ptr());
+            let element_ptr = builder.local_temp(val_ty.clone().ptr()).to_ref();
 
             builder.begin_scope();
 
@@ -161,8 +161,8 @@ fn translate_indexer(
 
             builder.begin_scope();
 
-            let arr_field_ptr = builder.local_temp(val_ty.clone().ptr().ptr());
-            let len_field_ptr = builder.local_temp(ir::Type::I32.ptr());
+            let arr_field_ptr = builder.local_temp(val_ty.clone().ptr().ptr()).to_ref();
+            let len_field_ptr = builder.local_temp(ir::Type::I32.ptr()).to_ref();
 
             let array_struct = builder.translate_dyn_array_struct(&element);
             let array_class = ir::VirtualTypeID::Class(array_struct);
@@ -190,7 +190,7 @@ fn translate_indexer(
 
             builder.end_scope();
 
-            element_ptr
+            element_ptr.to_ref()
         },
 
         typ::Type::Pointer(_) => {
@@ -198,7 +198,7 @@ fn translate_indexer(
 
             builder.add(result_ptr.clone(), base_ref, index_val);
 
-            result_ptr
+            result_ptr.to_ref()
         },
 
         unimpl => unimplemented!("IR for indexing into {}", unimpl),
@@ -392,7 +392,7 @@ pub fn literal_to_val(
                 | ir::Type::Array { .. }
                 | ir::Type::Nothing => {
                     let size_expr = ir::Value::SizeOf(ir_ty.clone());
-                    let temp_ref = builder.local_temp(ir_ty.clone());
+                    let temp_ref = builder.local_temp(ir_ty.clone()).to_ref();
                     
                     gen_fill_byte(temp_ref.clone(), ir_ty, size_expr, ir::Value::LiteralU8(0), builder);
                     
@@ -414,7 +414,7 @@ pub fn translate_literal(
     let val = literal_to_val(lit, ty, builder);
     builder.mov(out.clone(), val);
 
-    out
+    out.to_ref()
 }
 
 // inline IR for FillByte-style memory set procedure
@@ -427,7 +427,7 @@ fn gen_fill_byte(at: ir::Ref, at_ty: ir::Type, count: ir::Value, byte_val: ir::V
     let at_addr = builder.local_temp(at_ty.ptr());
     builder.addr_of(at_addr.clone(), at);
 
-    let dst_ptr = builder.local_temp(byte_ptr_ty.clone());
+    let dst_ptr = builder.local_temp(byte_ptr_ty.clone()).to_ref();
     builder.cast(dst_ptr.clone(), at_addr, byte_ptr_ty.clone());
     
     // end_ptr := dst_ptr + count 
@@ -491,7 +491,7 @@ fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &m
                 // in a scope at least as wide as the current one
                 typ::ValueKind::Immutable | typ::ValueKind::Mutable | typ::ValueKind::Uninitialized => {
                     let ref_ty = builder.translate_type(&annotation.ty());
-                    let ref_temp = builder.local_temp(ref_ty.ptr());
+                    let ref_temp = builder.local_temp(ref_ty.ptr()).to_ref();
 
                     builder.emit(ir::Instruction::AddrOf {
                         out: ref_temp.clone(),
@@ -584,5 +584,5 @@ fn translate_cast_expr(cast: &typ::ast::Cast, builder: &mut Builder) -> ir::Ref 
 
     builder.cast(out_ref.clone(), val, ty);
 
-    out_ref
+    out_ref.to_ref()
 }

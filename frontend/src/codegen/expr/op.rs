@@ -23,12 +23,12 @@ pub fn translate_bin_op(
     // the functions to translate IR and member operators return pointers to the value
     let (out_val, out_is_ptr) = match bin_op.op {
         ast::Operator::Period | ast::Operator::Index => {
-            let out_val = builder.local_new(result_ty.clone().ptr(), None);
+            let out_val = builder.local_new(result_ty.clone().ptr(), None).to_ref();
             (out_val, true)
         },
 
         _ => {
-            let out_val = builder.local_new(result_ty.clone(), None);
+            let out_val = builder.local_new(result_ty.clone(), None).to_ref();
             (out_val, false)
         },
     };
@@ -319,7 +319,7 @@ pub fn translate_unary_op(
     match unary_op.op {
         ast::Operator::AddressOf => {
             let out_ty = builder.translate_type(out_ty);
-            let out_val = builder.local_new(out_ty.clone(), None);
+            let out_val = builder.local_new(out_ty.clone(), None).to_ref();
 
             builder.emit(ir::Instruction::AddrOf {
                 out: out_val.clone(),
@@ -355,7 +355,7 @@ pub fn translate_unary_op(
 
             builder.sub(out_val.clone(), zero_val, operand_ref);
 
-            out_val
+            out_val.to_ref()
         },
 
         ast::Operator::Add => {
@@ -364,7 +364,7 @@ pub fn translate_unary_op(
             let out_val = builder.local_new(out_ty.clone(), None);
             builder.mov(out_val.clone(), operand_ref);
 
-            out_val
+            out_val.to_ref()
         },
 
         ast::Operator::Not => {
@@ -372,7 +372,7 @@ pub fn translate_unary_op(
 
             builder.not(out_val.clone(), operand_ref);
 
-            out_val
+            out_val.to_ref()
         },
         
         ast::Operator::BitNot => {
@@ -390,7 +390,7 @@ pub fn translate_unary_op(
                 }
             }
             
-            result_val
+            result_val.to_ref()
         }
 
         op => unimplemented!("IR translation of unary operator {}", op),

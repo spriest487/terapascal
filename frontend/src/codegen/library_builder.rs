@@ -1355,8 +1355,8 @@ impl<'a> LibraryBuilder<'a> {
         };
 
         let mut builder = Builder::new(self);
-        builder.bind_param(ir::LocalID(0), ir::Type::I32, "len", false);
-        builder.bind_param(ir::LocalID(1), ir::Type::I32, "index", false);
+        builder.bind_param(ir::Type::I32, "len", false);
+        builder.bind_param(ir::Type::I32, "index", false);
         
         let len_val = ir::Value::from(ir::Ref::Local(ir::LocalID(0)));
         let index_val = ir::Value::from(ir::Ref::Local(ir::LocalID(1)));

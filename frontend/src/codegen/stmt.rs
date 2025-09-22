@@ -98,7 +98,7 @@ pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
 fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut Builder) {
     let bound_ty = builder.translate_type(&binding.ty);
 
-    let binding_ref = builder.local_new(bound_ty.clone(), Some(binding.name.to_string()));
+    let binding_ref = builder.local_new(bound_ty.clone(), Some(binding.name.to_string())).to_ref();
 
     if let Some(init_expr) = &binding.val {
         builder.scope(|builder| {
@@ -142,7 +142,7 @@ fn build_for_loop_up_to(
                 let counter_binding_name = name.to_string();
                 let counter_ty = builder.translate_type(ty.ty());
 
-                let counter_val = builder.local_new(counter_ty.clone(), Some(counter_binding_name));
+                let counter_val = builder.local_new(counter_ty.clone(), Some(counter_binding_name)).to_ref();
                 let init_val = expr_to_val(&init, builder);
 
                 (counter_val, init_val, counter_ty)
@@ -233,9 +233,9 @@ fn build_for_loop_sequence(
 
         let binding_ty = builder.translate_type(range.binding_ty.ty());
         let binding_name = range.binding_name.to_string();
-        let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
+        let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name)).to_ref();
 
-        let counter_ref = builder.local_temp(ir::Type::I32);
+        let counter_ref = builder.local_temp(ir::Type::I32).to_ref();
 
         match &range.src_expr.annotation().ty().as_ref() {
             typ::Type::Array(array_ty) => {
@@ -291,7 +291,7 @@ fn build_for_loop_sequence(
                     body,
                     builder,
                     |builder| {
-                        let element_ptr = builder.local_temp(array_ty);
+                        let element_ptr = builder.local_temp(array_ty).to_ref();
                         builder.add(element_ptr.clone(), array_ptr, counter_ref.clone());
 
                         element_ptr.to_deref().value()
@@ -322,13 +322,13 @@ fn build_for_loop_sequence(
                 let src_ty = builder.translate_type(src_ty);
 
                 let seq_ty = builder.translate_type(&seq_support.sequence_type);
-                let seq_ref = builder.local_new(seq_ty.clone(), None);
+                let seq_ref = builder.local_new(seq_ty.clone(), None).to_ref();
 
                 // call Sequence with a pointer to the source if it's a value type
                 let src_self_arg_ref = if src_ty.is_rc() {
                     src_ref.clone()
                 } else {
-                    let src_ref_ptr = builder.local_temp(src_ty.ptr());
+                    let src_ref_ptr = builder.local_temp(src_ty.ptr()).to_ref();
                     builder.addr_of(src_ref_ptr.clone(), src_ref);
                     src_ref_ptr
                 };
@@ -337,7 +337,7 @@ fn build_for_loop_sequence(
                 let seq_self_arg_ref = if seq_ty.is_rc() {
                     seq_ref.clone()
                 } else {
-                    let seq_ref_ptr = builder.local_temp(seq_ty.ptr());
+                    let seq_ref_ptr = builder.local_temp(seq_ty.ptr()).to_ref();
                     builder.addr_of(seq_ref_ptr.clone(), seq_ref.clone());
                     seq_ref_ptr
                 };
@@ -346,7 +346,7 @@ fn build_for_loop_sequence(
                 let item_option_ty = builder.translate_type(&typ::Type::variant(next_result_ty));
                 
                 // vardata gives us a pointer so we can't copy the value straight into the binding   
-                let item_option_data_ref = builder.local_temp(binding_ty.clone().ptr());
+                let item_option_data_ref = builder.local_temp(binding_ty.clone().ptr()).to_ref();
 
                 // seq_ref := src_ref.Sequence();
                 builder.call(seq_method.id, [src_self_arg_ref.value()], Some(seq_ref.clone()));
@@ -354,8 +354,8 @@ fn build_for_loop_sequence(
                 // stores the option resulting from calling Next. don't need to RC this,
                 // it'll either return an item and be stored in the binding local and retained there,
                 // or return None and will never need retaining in that case
-                let next_item_option_ref = builder.local_temp(item_option_ty.clone());
-                let next_item_tag_ptr_ref = builder.local_temp(ir::Type::I32.ptr());
+                let next_item_option_ref = builder.local_temp(item_option_ty.clone()).to_ref();
+                let next_item_tag_ptr_ref = builder.local_temp(ir::Type::I32.ptr()).to_ref();
                 
                 let continue_label = builder.next_label();
                 let break_label = builder.next_label();
@@ -515,7 +515,7 @@ pub fn translate_compound_assignment(
         // result type must be the same as the lhs ty_def, that's where we're storing it
         let lhs_ty = builder.translate_type(&assignment.lhs.annotation().ty());
 
-        let op_result = builder.local_temp(lhs_ty.clone());
+        let op_result = builder.local_temp(lhs_ty.clone()).to_ref();
         match assignment.op {
             ast::CompoundAssignmentOperator::AddAssign => {
                 builder.add(op_result.clone(), lhs.clone(), rhs.clone())

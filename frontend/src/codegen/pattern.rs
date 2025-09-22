@@ -21,7 +21,7 @@ impl PatternMatchBinding {
             builder.pretty_ty_name(&self.ty)
         ));
 
-        let local = builder.local_new(self.ty.clone(), Some(self.name.clone()));
+        let local = builder.local_new(self.ty.clone(), Some(self.name.clone())).to_ref();
         builder.mov(local.clone(), self.binding_ref.clone());
         builder.retain(local, &self.ty);
     }
@@ -63,10 +63,10 @@ pub fn translate_pattern_match(
                     // this needs to create a cast, even for static non-ref types - the binding
                     // will be of the supposed type even if the check will always fail, and the
                     // instructions that follow must be valid
-                    let binding_val_ptr = builder.local_temp(ir::Type::Nothing.ptr());
+                    let binding_val_ptr = builder.local_temp(ir::Type::Nothing.ptr()).to_ref();
                     builder.addr_of(binding_val_ptr.clone(), target_val.clone());
 
-                    let binding_ref_ptr = builder.local_temp(is_ty.clone().ptr());
+                    let binding_ref_ptr = builder.local_temp(is_ty.clone().ptr()).to_ref();
                     builder.cast(binding_ref_ptr.clone(), binding_val_ptr.clone(), is_ty.clone().ptr());
 
                     let binding_ref = binding_ref_ptr.to_deref();
@@ -104,7 +104,7 @@ pub fn translate_pattern_match(
                         .cloned()
                         .expect("variant pattern with binding must refer to a case with data");
 
-                    let data_ptr = builder.local_temp(case_ty.clone().ptr());
+                    let data_ptr = builder.local_temp(case_ty.clone().ptr()).to_ref();
                     builder.vardata(data_ptr.clone(), target_val.clone(), variant_ty.clone(), case_index);
 
                     vec![PatternMatchBinding {
@@ -142,7 +142,7 @@ pub fn translate_is_ty(
     if let ir::Type::RcPointer(class_id) = ty {
         // casting strong or weak RC type to strong RC type: do a dynamic check
         if val_ty.is_rc() {
-            let result = builder.local_temp(ir::Type::Bool);
+            let result = builder.local_temp(ir::Type::Bool).to_ref();
             builder.class_is(result.clone(), val, *class_id);
 
             return ir::Value::Ref(result);
@@ -161,16 +161,12 @@ fn translate_is_variant(
     builder: &mut Builder,
 ) -> ir::Ref {
     let tag_ptr = builder.local_temp(ir::Type::I32.ptr());
-    builder.emit(ir::Instruction::VariantTag {
-        out: tag_ptr.clone(),
-        a: val,
-        of_ty: variant_ty,
-    });
+    builder.vartag(tag_ptr.clone(), val, variant_ty);
     
     let tag_val = ir::Value::LiteralI32(case_index as i32);
 
-    let is = builder.local_temp(ir::Type::Bool);
-    builder.eq(is.clone(), tag_ptr.to_deref(), tag_val);
+    let is = builder.local_temp(ir::Type::Bool).to_ref();
+    builder.eq(is.clone(), tag_ptr.to_ref().to_deref(), tag_val);
 
     is
 }

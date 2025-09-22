@@ -202,7 +202,7 @@ pub fn build_closure_function_def(
 
         body_builder.field(
             capture_val_ptr_ref.clone(),
-            closure_ptr_ref.clone().to_deref(),
+            closure_ptr_ref.clone().to_ref().to_deref(),
             closure_struct_ty.clone(),
             *field_id,
         );
@@ -302,10 +302,8 @@ fn bind_function_params(
             is_self = false;
         }
         
-        let id = builder.next_local_id();
-
+        let id = builder.bind_param(param_ty.clone(), &param.name, by_ref);
         builder.comment(&format!("{} = {}", id, builder.pretty_ty_name(&param.ty)));
-        builder.bind_param(id, param_ty.clone(), &param.name, by_ref);
 
         bound_params.push((id, param_ty));
     }

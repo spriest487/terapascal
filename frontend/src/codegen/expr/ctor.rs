@@ -31,7 +31,7 @@ pub fn build_object_ctor_invocation(
 
     // either local struct of the correct type for value types, or a rc pointer to the struct
     // type for rc class types
-    let out_val = builder.local_new(object_ty.clone(), None);
+    let out_val = builder.local_new(object_ty.clone(), None).to_ref();
 
     if object_ty.is_rc() {
         // allocate class struct at out pointer
@@ -57,7 +57,7 @@ pub fn build_object_ctor_invocation(
                 member.ident, member.value, field_def.ty
             ));
 
-            let field_ptr = builder.local_temp(field_def.ty.clone().ptr());
+            let field_ptr = builder.local_temp(field_def.ty.clone().ptr()).to_ref();
             builder.emit(ir::Instruction::Field {
                 out: field_ptr.clone(),
                 a: out_val.clone(),
@@ -108,11 +108,11 @@ fn translate_static_array_ctor(
     let el_ty = builder.translate_type(element);
 
     let array_ty = el_ty.clone().array(dim);
-    let arr = builder.local_new(array_ty.clone(), None);
+    let arr = builder.local_new(array_ty.clone(), None).to_ref();
 
     if dim > 0 {
         builder.scope(|builder| {
-            let el_ptr = builder.local_temp(el_ty.clone().ptr());
+            let el_ptr = builder.local_temp(el_ty.clone().ptr()).to_ref();
 
             for (i, el) in ctor.elements.iter().enumerate() {
                 builder.scope(|builder| {
@@ -151,14 +151,14 @@ fn translate_dyn_array_ctor(
         _ => unreachable!("dynamic array must have an rc class type"),
     };
 
-    let arr = builder.local_new(array_ty.clone(), None);
+    let arr = builder.local_new(array_ty.clone(), None).to_ref();
 
     // allocate the array object itself
     builder.scope(|builder| {
         builder.rc_new(arr.clone(), struct_id, false);
 
         // get pointer to the length
-        let len_ref = builder.local_temp(ir::Type::I32.ptr());
+        let len_ref = builder.local_temp(ir::Type::I32.ptr()).to_ref();
         builder.emit(ir::Instruction::Field {
             out: len_ref.clone(),
             of_ty: array_ty.clone(),
@@ -171,7 +171,7 @@ fn translate_dyn_array_ctor(
         builder.mov(len_ref.clone().to_deref(), ir::Value::LiteralI32(len));
 
         // get pointer to storage pointer
-        let arr_ptr = builder.local_temp(elem_ty.clone().ptr().ptr());
+        let arr_ptr = builder.local_temp(elem_ty.clone().ptr().ptr()).to_ref();
         builder.emit(ir::Instruction::Field {
             out: arr_ptr.clone(),
             of_ty: array_ty,
@@ -181,14 +181,14 @@ fn translate_dyn_array_ctor(
 
         // allocate array storage
         if len > 0 {
-            let alloc_size = builder.local_temp(ir::Type::I32);
+            let alloc_size = builder.local_temp(ir::Type::I32).to_ref();
             builder.mul(alloc_size.clone(), ir::Value::SizeOf(elem_ty.clone()), ir::Value::LiteralI32(len));
 
-            let elements_mem = builder.local_temp(ir::Type::U8.ptr());
+            let elements_mem = builder.local_temp(ir::Type::U8.ptr()).to_ref();
             builder.get_mem(alloc_size, elements_mem.clone());
             builder.cast(arr_ptr.clone().to_deref(), elements_mem, elem_ty.clone().ptr());
 
-            let el_ptr = builder.local_temp(elem_ty.clone().ptr());
+            let el_ptr = builder.local_temp(elem_ty.clone().ptr()).to_ref();
 
             for (i, el) in ctor.elements.iter().enumerate() {
                 builder.scope(|builder| {
@@ -225,7 +225,7 @@ fn translate_set_ctor(
     let set_result = builder.local_temp(flags_type.clone());
 
     // zero-init the value
-    let word_ptr = builder.local_temp(WORD_TYPE.ptr());
+    let word_ptr = builder.local_temp(WORD_TYPE.ptr()).to_ref();
     let zero_word = ir::Value::from_literal_val(BigDecimal::zero(), &WORD_TYPE).unwrap();
 
     for word in 0..set_word_count(set_type.flags_type_bits()) {
@@ -250,5 +250,5 @@ fn translate_set_ctor(
         builder.set_include(set_result.clone(), bit.clone(), set_type);
     }
 
-    set_result
+    set_result.to_ref()
 }

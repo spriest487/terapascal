@@ -72,13 +72,13 @@ fn gen_create_tags(
 
         // deref the field to get the array pointer, offset it to get the item pointer
         // tag_ptr := (tags_array_ptr_field_ptr^) + (i * sizeof(Any)
-        builder.add(tag_ptr.clone(), tags_array_ptr_field_ptr.clone().to_deref(), ir::Value::LiteralI32(i as i32));
+        builder.add(tag_ptr, tags_array_ptr_field_ptr.to_ref().to_deref(), ir::Value::LiteralI32(i as i32));
 
         let tag_instance = builder.local_temp(tag_class.clone());
-        builder.rc_new(tag_instance.clone(), tag_ty, true);
+        builder.rc_new(tag_instance, tag_ty, true);
 
         // instantiate the tag class
-        builder.mov(tag_ptr.clone().to_deref(), tag_instance.clone());
+        builder.mov(tag_ptr.to_ref().to_deref(), tag_instance);
 
         for arg in tag_item.args.members.iter() {
             let Some(field_id) = tag_struct_def.find_field(arg.ident.as_str()) else {
@@ -87,10 +87,10 @@ fn gen_create_tags(
 
             let field_ty = &tag_struct_def.fields[&field_id].ty;
             let field_ptr = builder.local_temp(field_ty.clone().ptr());
-            builder.field(field_ptr.clone(), tag_instance.clone(), tag_class.clone(), field_id);
+            builder.field(field_ptr, tag_instance.clone(), tag_class.clone(), field_id);
 
             let arg_val = expr_to_val(&arg.value, builder);
-            builder.mov(field_ptr.to_deref(), arg_val);
+            builder.mov(field_ptr.to_ref().to_deref(), arg_val);
         }
     }
 }

@@ -63,19 +63,10 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
     let el_ptr_ty = elem_ty.clone().ptr();
 
     builder.comment("bind params");
-    let arr_arg = ir::LocalID(0);
-    let len_arg = ir::LocalID(1);
-    let src_arr_arg = ir::LocalID(2);
-    let default_val_arg = ir::LocalID(3);
-    builder.bind_param(arr_arg, ir::Type::any(), "arr_ptr", false);
-    builder.bind_param(len_arg, ir::Type::I32, "len", false);
-    builder.bind_param(src_arr_arg, ir::Type::any(), "src_arr_ptr", false);
-    builder.bind_param(
-        default_val_arg,
-        ir::Type::Nothing.ptr(),
-        "default_val",
-        false,
-    );
+    let _arr_arg = builder.bind_param(ir::Type::any(), "arr_ptr", false);
+    let len_arg = builder.bind_param(ir::Type::I32, "len", false);
+    let _src_arr_arg = builder.bind_param(ir::Type::any(), "src_arr_ptr", false);
+    let default_val_arg = builder.bind_param(ir::Type::Nothing.ptr(), "default_val", false);
 
     builder.comment("retain the refs to the array params");
     builder.retain(ir::Ref::Local(ir::LocalID(0)), &ir::Type::any());
@@ -108,13 +99,13 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
 
     builder.comment("data = GetMem(data_len) as ^elem_ty");
     let data_mem = builder.local_temp(ir::Type::U8.ptr());
-    builder.get_mem(data_len, data_mem.clone());
+    builder.get_mem(data_len, data_mem);
     let data = builder.local_temp(el_ptr_ty.clone());
-    builder.cast(data.clone(), data_mem, el_ptr_ty.clone());
+    builder.cast(data, data_mem, el_ptr_ty.clone());
 
     builder.comment("iteration counter for initializing elements");
     let counter = builder.local_temp(ir::Type::I32);
-    builder.mov(counter.clone(), ir::Value::LiteralI32(0));
+    builder.mov(counter, ir::Value::LiteralI32(0));
 
     builder.comment("loop break flag we use in a couple of places later");
     let done = builder.local_temp(ir::Type::Bool);
@@ -129,8 +120,8 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
     builder.comment("copy_len := copy_from->length");
     let src_len = builder.local_temp(ir::Type::I32);
     builder.field_val(
-        src_len.clone(),
-        src_arr.clone(),
+        src_len,
+        src_arr,
         array_ref_ty.clone(),
         ir::DYNARRAY_LEN_FIELD,
         ir::Type::I32,
@@ -141,7 +132,7 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
         let copy_count_ok = builder.local_temp(ir::Type::Bool);
 
         builder.comment("copy_count := src_len");
-        builder.mov(copy_count.clone(), src_len.clone());
+        builder.mov(copy_count, src_len.clone());
 
         builder.comment(
             "if there are more elements in the source than we want, copy `len` elements instead",
@@ -149,11 +140,11 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
         let copy_count_ok_label = builder.next_label();
 
         builder.comment("copy_count_ok := copy_count <= len");
-        builder.lte(copy_count_ok.clone(), copy_count.clone(), len_arg);
+        builder.lte(copy_count_ok, copy_count.clone(), len_arg);
 
         builder.comment("if not copy_count_ok then copy_count := len");
         builder.jmpif(copy_count_ok_label, copy_count_ok);
-        builder.mov(copy_count.clone(), len_arg);
+        builder.mov(copy_count, len_arg);
         builder.label(copy_count_ok_label);
 
         builder.comment(
@@ -166,30 +157,30 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
 
         builder.comment("done := counter = copy_count");
         builder.comment("if done then break");
-        builder.eq(done.clone(), counter.clone(), copy_count.clone());
-        builder.jmpif(copy_break_label, done.clone());
+        builder.eq(done, counter, copy_count);
+        builder.jmpif(copy_break_label, done);
 
         builder.scope(|builder| {
             let copy_dst = builder.local_temp(el_ptr_ty.clone());
             let copy_src = builder.local_temp(el_ptr_ty.clone());
 
             builder.comment("copy_dst := data + counter");
-            builder.add(copy_dst.clone(), data.clone(), counter.clone());
+            builder.add(copy_dst, data, counter);
 
             builder.comment("copy_src := src_arr->ptr + counter");
             builder.field_val(
-                copy_src.clone(),
-                src_arr.clone(),
+                copy_src,
+                src_arr,
                 array_ref_ty.clone(),
                 ir::DYNARRAY_PTR_FIELD,
                 el_ptr_ty.clone(),
             );
-            builder.add(copy_src.clone(), copy_src.clone(), counter.clone());
+            builder.add(copy_src, copy_src, counter);
 
             builder.comment("copy_dst^ := copy_src^");
-            builder.mov(copy_dst.clone().to_deref(), copy_src.to_deref());
+            builder.mov(copy_dst.to_ref().to_deref(), copy_src.to_ref().to_deref());
 
-            builder.retain(copy_dst.to_deref(), elem_ty);
+            builder.retain(copy_dst.to_ref().to_deref(), elem_ty);
         });
 
         builder.comment("counter += 1");
@@ -215,10 +206,10 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
     builder.scope(|builder| {
         builder.comment("data[counter] := default_val_ptr^");
         let el_ptr = builder.local_temp(el_ptr_ty.clone());
-        builder.add(el_ptr.clone(), data.clone(), counter.clone());
-        builder.mov(el_ptr.clone().to_deref(), default_el_ptr.clone().to_deref());
+        builder.add(el_ptr, data, counter);
+        builder.mov(el_ptr.to_ref().to_deref(), default_el_ptr.to_ref().to_deref());
 
-        builder.retain(el_ptr.to_deref(), elem_ty);
+        builder.retain(el_ptr.to_ref().to_deref(), elem_ty);
     });
 
     builder.comment("counter += 1");
@@ -242,8 +233,8 @@ fn gen_dyn_array_length_func(builder: &mut Builder, struct_id: ir::TypeDefID) {
 
     builder.comment("bind and retain params");
     builder.bind_return();
-    builder.bind_param(ir::LocalID(1), ir::Type::any(), "arr_ptr", false);
-    builder.retain(ir::Ref::Local(ir::LocalID(1)), &ir::Type::any());
+    let arr_ptr = builder.bind_param(ir::Type::any(), "arr_ptr", false);
+    builder.retain(arr_ptr, &ir::Type::any());
 
     builder.comment("cast pointer down to this array type");
     let arr = builder.local_temp(array_ref_ty.clone());
@@ -279,7 +270,7 @@ pub fn gen_dyn_array_runtime_type(
     let mut builder = Builder::new(lib);
 
     builder.comment("%0 is the self arg, the pointer to the inner struct");
-    builder.bind_param(ir::LocalID(0), array_struct_ty.clone().ptr(), "self", true);
+    builder.bind_param(array_struct_ty.clone().ptr(), "self", true);
     let self_arg = ir::Ref::Local(ir::LocalID(0)).to_deref();
 
     builder.comment("pointer to the length field of the dynarray object");
@@ -305,29 +296,29 @@ pub fn gen_dyn_array_runtime_type(
     let after_free = builder.next_label();
 
     builder.field(
-        len_field_ptr.clone(),
+        len_field_ptr,
         self_arg.clone(),
         array_struct_ty.clone(),
         ir::DYNARRAY_LEN_FIELD,
     );
     builder.field(
-        arr_field_ptr.clone(),
+        arr_field_ptr,
         self_arg,
         array_struct_ty.clone(),
         ir::DYNARRAY_PTR_FIELD,
     );
 
     builder.comment("release every element");
-    builder.mov(counter.clone(), ir::Value::LiteralI32(0));
+    builder.mov(counter, ir::Value::LiteralI32(0));
 
     builder.label(start_loop_label);
 
     builder.comment("has_more := counter < array.length");
 
     builder.lt(
-        has_more.clone(),
-        counter.clone(),
-        len_field_ptr.clone().to_deref(),
+        has_more,
+        counter,
+        len_field_ptr.to_ref().to_deref(),
     );
 
     builder.comment("if not has_more then break");
@@ -337,10 +328,10 @@ pub fn gen_dyn_array_runtime_type(
     builder.comment("release arr[counter]");
     builder.add(
         el_ptr.clone(),
-        arr_field_ptr.clone().to_deref(),
+        arr_field_ptr.to_ref().to_deref(),
         counter.clone(),
     );
-    builder.release(el_ptr.to_deref(), &elem_ty);
+    builder.release(el_ptr.to_ref().to_deref(), &elem_ty);
 
     builder.comment("counter := counter + 1");
     builder.add(counter.clone(), counter, ir::Value::LiteralI32(1));
@@ -351,22 +342,22 @@ pub fn gen_dyn_array_runtime_type(
     builder.comment("free the dynamic-allocated buffer - if len > 0");
     builder.eq(
         zero_elements.clone(),
-        len_field_ptr.clone().to_deref(),
+        len_field_ptr.to_ref().to_deref(),
         ir::Value::LiteralI32(0),
     );
     builder.jmpif(after_free, zero_elements);
 
     builder.cast(
         arr_mem_ptr.clone(),
-        arr_field_ptr.clone().to_deref(),
+        arr_field_ptr.to_ref().to_deref(),
         ir::Type::U8.ptr(),
     );
     builder.free_mem(arr_mem_ptr);
 
     builder.emit(ir::Instruction::Label(after_free));
 
-    builder.mov(len_field_ptr.to_deref(), ir::Value::LiteralI32(0));
-    builder.mov(arr_field_ptr.to_deref(), ir::Value::LiteralNull);
+    builder.mov(len_field_ptr.to_ref().to_deref(), ir::Value::LiteralI32(0));
+    builder.mov(arr_field_ptr.to_ref().to_deref(), ir::Value::LiteralNull);
 
     let releaser_body = builder.finish();
 

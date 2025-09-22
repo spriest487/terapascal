@@ -232,3 +232,9 @@ impl fmt::Display for LocalID {
         write!(f, "%{}", self.0)
     }
 }
+
+impl LocalID {
+    pub fn to_ref(self) -> Ref {
+        Ref::Local(self)
+    }
+}

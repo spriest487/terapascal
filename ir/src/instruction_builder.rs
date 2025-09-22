@@ -1,4 +1,4 @@
-use crate::{BinOpInstruction, IRFormatter, Metadata};
+use crate::{BinOpInstruction, IRFormatter, LocalID, Metadata};
 use crate::FieldID;
 use crate::Instruction;
 use crate::InterfaceID;
@@ -23,7 +23,7 @@ pub trait InstructionBuilder {
     fn ir_formatter(&self) -> &impl IRFormatter;
 
     // creates an anonymous unmanaged local of this type
-    fn local_temp(&mut self, ty: Type) -> Ref;
+    fn local_temp(&mut self, ty: Type) -> LocalID;
     fn next_label(&mut self) -> Label;
 
     fn comment(&mut self, content: &(impl fmt::Display + ?Sized)) {
@@ -78,7 +78,7 @@ pub trait InstructionBuilder {
         let out = self.local_temp(as_type.clone());
         self.add(out.clone(), a, b);
 
-        Value::Ref(out)
+        Value::from(out)
     }
 
     fn sub(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
@@ -102,7 +102,7 @@ pub trait InstructionBuilder {
         let out = self.local_temp(as_type.clone());
         self.sub(out.clone(), a, b);
 
-        Value::Ref(out)
+        Value::from(out)
     }
 
     fn mul(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
@@ -126,7 +126,7 @@ pub trait InstructionBuilder {
         let out = self.local_temp(as_type.clone());
         self.mul(out.clone(), a, b);
 
-        Value::Ref(out)
+        Value::from(out)
     }
 
     fn idiv(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
@@ -184,7 +184,7 @@ pub trait InstructionBuilder {
             (a, b) => {
                 let result = self.local_temp(Type::Bool);
                 self.and(result.clone(), a, b);
-                Value::Ref(result)
+                Value::from(result)
             },
         }
     }
@@ -196,7 +196,7 @@ pub trait InstructionBuilder {
             other_val => {
                 let result = self.local_temp(Type::Bool);
                 self.not(result.clone(), other_val);
-                Value::Ref(result)
+                Value::from(result)
             },
         }
     }
@@ -225,7 +225,7 @@ pub trait InstructionBuilder {
         } else {
             let result = self.local_temp(Type::Bool);
             self.or(result.clone(), a, b);
-            Value::Ref(result)
+            Value::from(result)
         }
     }
 
@@ -277,7 +277,7 @@ pub trait InstructionBuilder {
         } else {
             let result = self.local_temp(Type::Bool);
             self.eq(result.clone(), a, b);
-            Value::Ref(result)
+            Value::from(result)
         }
     }
 
@@ -298,7 +298,7 @@ pub trait InstructionBuilder {
         } else {
             let result = self.local_temp(Type::Bool);
             self.gt(result.clone(), a, b);
-            Value::Ref(result)
+            Value::from(result)
         }
     }
 
@@ -319,7 +319,7 @@ pub trait InstructionBuilder {
         } else {
             let result = self.local_temp(Type::Bool);
             self.gte(result.clone(), a, b);
-            Value::Ref(result)
+            Value::from(result)
         }
     }
 
@@ -348,7 +348,7 @@ pub trait InstructionBuilder {
         } else {
             let result = self.local_temp(Type::Bool);
             self.lt(result.clone(), a, b);
-            Value::Ref(result)
+            Value::from(result)
         }
     }
 
@@ -382,7 +382,7 @@ pub trait InstructionBuilder {
         let field_ptr = self.local_temp(field_ty.ptr());
         self.field(field_ptr.clone(), base, base_ty, field);
 
-        self.mov(out, field_ptr.to_deref());
+        self.mov(out, Ref::from(field_ptr).to_deref());
     }
 
     fn field_to_val(
@@ -395,7 +395,7 @@ pub trait InstructionBuilder {
         let result = self.local_temp(field_ty.clone());
         self.field_val(result.clone(), base, base_ty, field, field_ty);
 
-        result
+        Ref::Local(result)
     }
 
     fn assign_field(
@@ -409,7 +409,7 @@ pub trait InstructionBuilder {
         let field_ptr = self.local_temp(field_ty.ptr());
         self.field(field_ptr.clone(), base, base_ty, field);
 
-        self.mov(field_ptr.to_deref(), val);
+        self.mov(Ref::Local(field_ptr).to_deref(), val);
     }
 
     fn element(
@@ -438,7 +438,7 @@ pub trait InstructionBuilder {
         let element_ptr = self.local_temp(element_ty.clone().ptr());
 
         self.element(element_ptr.clone(), a, index, element_ty);
-        self.mov(out, element_ptr.to_deref());
+        self.mov(out, Ref::Local(element_ptr).to_deref());
     }
 
     #[allow(unused)]
@@ -452,7 +452,7 @@ pub trait InstructionBuilder {
         let result = self.local_temp(element_ty.clone());
         self.element_val(result.clone(), a, index, element_ty);
 
-        result
+        Ref::Local(result)
     }
 
     fn label(&mut self, label: Label) {
@@ -684,7 +684,7 @@ pub trait InstructionBuilder {
                     }
 
                     // store the field pointer in a temp slot
-                    let field_val = self.local_temp(field_ty.clone().ptr());
+                    let field_val = Ref::Local(self.local_temp(field_ty.clone().ptr()));
 
                     let of_ty = Type::Struct(*struct_id);
                     self.field(field_val.clone(), at.clone(), of_ty, field);
@@ -703,8 +703,8 @@ pub trait InstructionBuilder {
                     .cases
                     .to_vec();
 
-                let tag_ptr = self.local_temp(Type::I32.ptr());
-                let is_not_case = self.local_temp(Type::Bool);
+                let tag_ptr = Ref::Local(self.local_temp(Type::I32.ptr()));
+                let is_not_case = Ref::Local(self.local_temp(Type::Bool));
 
                 // get the tag
                 self.vartag(tag_ptr.clone(), at.clone(), Type::Variant(*id));
@@ -739,7 +739,7 @@ pub trait InstructionBuilder {
                         // active, so a scope is needed here to stop the local counter being
                         // incremented once per case
                         self.emit(Instruction::LocalBegin);
-                        let data_ptr = self.local_temp(data_ty.clone().ptr());
+                        let data_ptr = Ref::Local(self.local_temp(data_ty.clone().ptr()));
                             
                         self.vardata(
                             data_ptr.clone(),
@@ -770,7 +770,7 @@ pub trait InstructionBuilder {
                 }
 
                 let element_ty = (**element).clone();
-                let element_ptr = self.local_temp(element_ty.clone().ptr());
+                let element_ptr = Ref::Local(self.local_temp(element_ty.clone().ptr()));
                 let mut result = false;
 
                 for i in 0..*dim {

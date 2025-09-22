@@ -32,7 +32,7 @@ fn translate_args(
             let arg_ptr = builder.local_temp(arg_ty.ptr());
             builder.addr_of(arg_ptr.clone(), arg_ref);
 
-            arg_ptr
+            ir::Ref::from(arg_ptr)
         } else {
             arg_ref
         };
@@ -53,7 +53,7 @@ fn translate_call_with_args(
         typ::Type::Nothing => None,
         return_ty => {
             let out_ty = builder.translate_type(return_ty);
-            let out_val = builder.local_new(out_ty.clone(), None);
+            let out_val = builder.local_new(out_ty.clone(), None).to_ref();
             Some(out_val)
         },
     };
@@ -151,7 +151,7 @@ fn build_func_val_invocation(
     let func_ty_id = builder.translate_func_ty(&func_sig);
 
     // retrieve the actual function value
-    let func_field_ptr = builder.local_temp(ir::Type::Function(func_ty_id).ptr());
+    let func_field_ptr = ir::Ref::Local(builder.local_temp(ir::Type::Function(func_ty_id).ptr()));
 
     builder.scope(|builder| {
         let closure_ptr_ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(func_ty_id));
@@ -258,11 +258,11 @@ fn build_variant_ctor_call(
     let variant_name = variant_ty.as_variant().unwrap();
 
     let out_ty = builder.translate_type(&variant_ty);
-    let out = builder.local_new(out_ty.clone(), None);
+    let out = builder.local_new(out_ty.clone(), None).to_ref();
 
     builder.begin_scope();
 
-    let tag_ptr = builder.local_temp(ir::Type::I32.ptr());
+    let tag_ptr = builder.local_temp(ir::Type::I32.ptr()).to_ref();
     builder.vartag(tag_ptr.clone(), out.clone(), out_ty.clone());
 
     let (_, case_index, _) = builder.translate_variant_case(variant_name, &case_name);
@@ -274,7 +274,7 @@ fn build_variant_ctor_call(
         let arg_val = expr::expr_to_val(arg, builder);
 
         let arg_ty = builder.translate_type(&arg.annotation().ty());
-        let field_ptr = builder.local_temp(arg_ty.clone().ptr());
+        let field_ptr = builder.local_temp(arg_ty.clone().ptr()).to_ref();
 
         builder.vardata(field_ptr.clone(), out.clone(), out_ty.clone(), case_index);
         builder.mov(field_ptr.clone().to_deref(), arg_val);
