@@ -21,8 +21,8 @@ fn end_loop_scope_ends_at_right_scope_level() {
 
     let initial_scope = builder.scopes.len();
 
-    let continue_label = builder.alloc_label();
-    let break_label = builder.alloc_label();
+    let continue_label = builder.next_label();
+    let break_label = builder.next_label();
     builder.begin_loop_body_scope(continue_label, break_label);
     builder.end_loop_body_scope();
 
@@ -35,8 +35,8 @@ fn break_cleans_up_loop_locals() {
     let mut library = LibraryBuilder::new(&ctx, Metadata::default(), CodegenOpts::default());
     let mut builder = Builder::new(&mut library);
 
-    let continue_label = builder.alloc_label();
-    let break_label = builder.alloc_label();
+    let continue_label = builder.next_label();
+    let break_label = builder.next_label();
 
     builder.begin_loop_body_scope(continue_label, break_label);
     builder.local_new(

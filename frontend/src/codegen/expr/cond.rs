@@ -25,9 +25,9 @@ where
     };
 
     builder.scope(|builder| {
-        let then_label = builder.alloc_label();
-        let end_label = builder.alloc_label();
-        let else_label = if_cond.else_branch.as_ref().map(|_| builder.alloc_label());
+        let then_label = builder.next_label();
+        let end_label = builder.next_label();
+        let else_label = if_cond.else_branch.as_ref().map(|_| builder.next_label());
 
         let cond_ty = builder.translate_type(&if_cond.cond.annotation().ty());
 
@@ -109,10 +109,10 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Buil
         let cond_expr = expr::translate_expr(&match_expr.cond_expr, builder);
         let cond_ty = builder.translate_type(&match_expr.cond_expr.annotation().ty());
 
-        let break_label = builder.alloc_label();
+        let break_label = builder.next_label();
 
         let else_label = if match_expr.else_branch.is_some() {
-            Some(builder.alloc_label())
+            Some(builder.next_label())
         } else {
             None
         };
@@ -121,7 +121,7 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Buil
 
         for branch in &match_expr.branches {
             // label to skip this branch if it isn't a match
-            let skip_label = builder.alloc_label();
+            let skip_label = builder.next_label();
 
             builder.scope(|builder| {
                 let pattern_match = translate_pattern_match(

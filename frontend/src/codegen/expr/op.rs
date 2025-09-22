@@ -161,8 +161,8 @@ pub fn translate_bin_op(
         },
 
         ast::Operator::And => {
-            let short_circuit = builder.alloc_label();
-            let exit = builder.alloc_label();
+            let short_circuit = builder.next_label();
+            let exit = builder.next_label();
 
             // if lhs is false, short circuit
             let is_short_circuit = builder.not_to_val(lhs_val.clone());
@@ -181,8 +181,8 @@ pub fn translate_bin_op(
         },
 
         ast::Operator::Or => {
-            let short_circuit = builder.alloc_label();
-            let exit = builder.alloc_label();
+            let short_circuit = builder.next_label();
+            let exit = builder.next_label();
             
             // if lhs is true, short circuit
             builder.jmpif(short_circuit, lhs_val.clone());
@@ -245,8 +245,8 @@ pub fn translate_bin_op(
         },
         
         ast::Operator::In => {
-            let break_label = builder.alloc_label();
-            let fail_label = builder.alloc_label();
+            let break_label = builder.next_label();
+            let fail_label = builder.next_label();
             
             let item = expr::expr_to_val(&bin_op.lhs, builder);
             

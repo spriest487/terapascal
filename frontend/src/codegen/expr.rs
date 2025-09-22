@@ -434,8 +434,8 @@ fn gen_fill_byte(at: ir::Ref, at_ty: ir::Type, count: ir::Value, byte_val: ir::V
     let end_ptr = builder.local_temp(byte_ptr_ty.clone());
     builder.add(end_ptr.clone(), dst_ptr.clone(), count);
     
-    let continue_label = builder.alloc_label();
-    let break_label = builder.alloc_label();
+    let continue_label = builder.next_label();
+    let break_label = builder.next_label();
     
     builder.label(continue_label);
     

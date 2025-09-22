@@ -1363,7 +1363,7 @@ impl<'a> LibraryBuilder<'a> {
 
         builder.comment(&format!("bounds check for index={}, len={}", index_val, len_val));
 
-        let bounds_ok_label = builder.alloc_label();
+        let bounds_ok_label = builder.next_label();
 
         // if index >= 0 and index < arr.len then goto "bounds_ok"
         let gte_zero = builder.gte_to_val(index_val.clone(), ir::Value::LiteralI32(0));

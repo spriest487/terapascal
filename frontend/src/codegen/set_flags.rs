@@ -335,14 +335,14 @@ impl SetFlagsType {
         let self_ptr_arg = ir::Ref::Local(ir::LocalID(first_arg));
         let bit_arg = ir::Ref::Local(ir::LocalID(first_arg + 1));
         
-        let break_label = builder.alloc_label();
+        let break_label = builder.next_label();
         
         let word_bit = builder.local_temp(ir::Type::U8);
 
         // this doesn't have to be super smart for now
         for word in 0..word_count {
             let skip_label = if word < word_count - 1 {
-                let skip_label = builder.alloc_label();
+                let skip_label = builder.next_label();
                 let next_word_start = ir::Value::LiteralU8(((word + 1) * WORD_BITS) as u8);
 
                 builder.gte(skip_flag.clone(), bit_arg.clone(), next_word_start.clone());

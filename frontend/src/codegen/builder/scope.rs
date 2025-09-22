@@ -1,4 +1,5 @@
-use crate::codegen::ir;
+use terapascal_ir as ir;
+use crate::codegen::builder::Builder;
 
 #[derive(Clone, Debug)]
 pub enum Local {
@@ -165,4 +166,8 @@ pub struct LoopScope {
     pub break_label: ir::Label,
 
     pub block_level: usize,
+}
+
+impl<'m, 'l: 'm> Builder<'m, 'l> {
+    
 }

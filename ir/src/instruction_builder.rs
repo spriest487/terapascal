@@ -21,9 +21,6 @@ pub trait InstructionBuilder {
     // creates an anonymous unmanaged local of this type
     fn local_temp(&mut self, ty: Type) -> Ref;
 
-    // creates a GC-managed local of this type, with an optional name
-    fn local_new(&mut self, ty: Type, name: Option<String>) -> Ref;
-
     fn comment(&mut self, content: &(impl fmt::Display + ?Sized)) {
         if !self.is_debug() {
             return;

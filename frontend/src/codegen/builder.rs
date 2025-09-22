@@ -1,4 +1,5 @@
 pub mod scope;
+pub mod ext;
 
 #[cfg(test)]
 mod test;
@@ -61,18 +62,6 @@ impl InstructionBuilder for Builder<'_, '_> {
 
         Ref::Local(id)
     }
-
-    fn local_new(&mut self, ty: Type, name: Option<String>) -> Ref {
-        assert_ne!(Type::Nothing, ty);
-
-        let id = self.next_local_id();
-        self.instructions
-            .push(Instruction::LocalAlloc(id, ty.clone()));
-
-        self.current_scope_mut().bind_new(id, name, ty);
-
-        Ref::Local(id)
-    }
 }
 
 impl<'m, 'l: 'm> Builder<'m, 'l> {
@@ -106,6 +95,18 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     
     pub fn generic_context(&self) -> &typ::GenericContext {
         &self.generic_context
+    }
+
+    pub fn local_new(&mut self, ty: Type, name: Option<String>) -> Ref {
+        assert_ne!(Type::Nothing, ty);
+
+        let id = self.next_local_id();
+        self.instructions
+            .push(Instruction::LocalAlloc(id, ty.clone()));
+
+        self.current_scope_mut().bind_new(id, name, ty);
+
+        Ref::Local(id)
     }
 
     pub fn translate_variant_case<'ty>(
@@ -582,7 +583,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             .unwrap_or(LocalID(0))
     }
 
-    pub fn alloc_label(&mut self) -> Label {
+    pub fn next_label(&mut self) -> Label {
         let label = self.next_label;
         self.next_label = Label(self.next_label.0 + 1);
         label
@@ -670,7 +671,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
                 self.vartag(tag_ptr.clone(), at.clone(), Type::Variant(*id));
 
                 // jump out of the search loop if we find the matching case
-                let break_label = self.alloc_label();
+                let break_label = self.next_label();
 
                 let mut result = false;
 
@@ -686,7 +687,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
                             continue;
                         }
 
-                        let skip_case_label = self.alloc_label();
+                        let skip_case_label = self.next_label();
 
                         // is_not_case := tag_ptr^ != tag
                         let tag_val = Value::LiteralI32(tag as i32);
@@ -890,9 +891,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.emit(Instruction::LocalBegin);
         self.scopes.push(Scope::new());
 
-        if self.opts().debug {
-            self.comment(&format!("begin scope {}", self.scopes.len()));
-        }
+        self.comment(&format!("begin scope {}", self.scopes.len()));
     }
 
     pub fn scope<F>(&mut self, f: F) -> &[Instruction]
@@ -991,11 +990,12 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     pub fn end_scope(&mut self) {
         self.cleanup_scope(self.scopes.len() - 1);
 
-        if self.opts().debug {
-            self.comment(&format!("end scope {}", self.scopes.len()));
+        self.comment(&format!("end scope {}", self.scopes.len()));
+
+        if self.scopes.pop().is_none() {
+            panic!("mismatched begin/end scope calls, no scope to pop");
         }
 
-        self.scopes.pop().unwrap();
         self.emit(Instruction::LocalEnd);
     }
 

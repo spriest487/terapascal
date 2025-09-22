@@ -121,7 +121,7 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
 
     builder.comment("copy elements from copied array");
 
-    let skip_copy_label = builder.alloc_label();
+    let skip_copy_label = builder.next_label();
     builder.comment("skip copying from source if copy_from is null");
     let src_is_null = builder.eq_to_val(src_arr.clone(), ir::Value::LiteralNull);
     builder.jmpif(skip_copy_label, src_is_null);
@@ -146,7 +146,7 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
         builder.comment(
             "if there are more elements in the source than we want, copy `len` elements instead",
         );
-        let copy_count_ok_label = builder.alloc_label();
+        let copy_count_ok_label = builder.next_label();
 
         builder.comment("copy_count_ok := copy_count <= len");
         builder.lte(copy_count_ok.clone(), copy_count.clone(), len_arg);
@@ -159,8 +159,8 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
         builder.comment(
             "for `copy_count` iterations, copy the value at copy_src[counter] to copy_dst[counter]",
         );
-        let copy_loop_label = builder.alloc_label();
-        let copy_break_label = builder.alloc_label();
+        let copy_loop_label = builder.next_label();
+        let copy_break_label = builder.next_label();
 
         builder.label(copy_loop_label);
 
@@ -202,8 +202,8 @@ fn gen_dyn_array_alloc_func(builder: &mut Builder, elem_ty: &ir::Type, struct_id
     builder.label(skip_copy_label);
 
     builder.comment("while counter < len, default init next element");
-    let init_break_label = builder.alloc_label();
-    let init_loop_label = builder.alloc_label();
+    let init_break_label = builder.next_label();
+    let init_loop_label = builder.next_label();
 
     builder.label(init_loop_label);
 
@@ -299,10 +299,10 @@ pub fn gen_dyn_array_runtime_type(
     let zero_elements = builder.local_temp(ir::Type::Bool);
 
     builder.comment("jump to loop end if counter == array len");
-    let start_loop_label = builder.alloc_label();
-    let end_loop_label = builder.alloc_label();
+    let start_loop_label = builder.next_label();
+    let end_loop_label = builder.next_label();
 
-    let after_free = builder.alloc_label();
+    let after_free = builder.next_label();
 
     builder.field(
         len_field_ptr.clone(),

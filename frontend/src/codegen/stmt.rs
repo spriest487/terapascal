@@ -187,9 +187,9 @@ fn build_for_loop_with_counter<BodyFn>(
 where
     BodyFn: FnOnce(&mut Builder)
 {
-    let top_label = builder.alloc_label();
-    let continue_label = builder.alloc_label();
-    let break_label = builder.alloc_label();
+    let top_label = builder.next_label();
+    let continue_label = builder.next_label();
+    let break_label = builder.next_label();
     
     let loop_instructions = builder.scope(|builder| {
         // temp value to store the result of evaluating the break condition
@@ -357,9 +357,9 @@ fn build_for_loop_sequence(
                 let next_item_option_ref = builder.local_temp(item_option_ty.clone());
                 let next_item_tag_ptr_ref = builder.local_temp(ir::Type::I32.ptr());
                 
-                let continue_label = builder.alloc_label();
-                let break_label = builder.alloc_label();
-                let top_label = builder.alloc_label();
+                let continue_label = builder.next_label();
+                let break_label = builder.next_label();
+                let top_label = builder.next_label();
 
                 let loop_instructions = builder.scope(|builder| {
                     builder.label(top_label);
@@ -418,7 +418,7 @@ fn build_array_sequence_loop<ElementFn>(
         high_val.into(),
         builder,
         |builder| {
-            let skip_release_label = builder.alloc_label();
+            let skip_release_label = builder.next_label();
             builder.scope(|builder| {
                 let first_iter = builder.eq_to_val(counter_ref.clone(), ir::Value::LiteralI32(0));
                 builder.jmpif(skip_release_label, first_iter);
@@ -440,9 +440,9 @@ fn build_array_sequence_loop<ElementFn>(
 }
 
 pub fn translate_while_loop(while_loop: &typ::ast::WhileLoop, builder: &mut Builder) {
-    let top_label = builder.alloc_label();
-    let continue_label = builder.alloc_label();
-    let break_label = builder.alloc_label();
+    let top_label = builder.next_label();
+    let continue_label = builder.next_label();
+    let break_label = builder.next_label();
 
     let loop_instructions = builder.scope(|builder| {
         let not_cond = builder.local_temp(ir::Type::Bool);
@@ -556,15 +556,15 @@ pub fn build_case_block<Item, ItemFn>(
     builder.scope(|builder| {
         let cond_expr_val = expr_to_val(&case.cond_expr, builder);
 
-        let break_label = builder.alloc_label();
+        let break_label = builder.next_label();
 
         let mut branch_labels = Vec::new();
         for _ in 0..case.branches.len() {
-            branch_labels.push(builder.alloc_label());
+            branch_labels.push(builder.next_label());
         }
 
         let else_label = match &case.else_branch {
-            Some(_) => Some(builder.alloc_label()),
+            Some(_) => Some(builder.next_label()),
             _ => None,
         };
 
@@ -615,10 +615,10 @@ fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut Builder)
         let cond_expr = translate_expr(&match_stmt.cond_expr, builder);
         let cond_ty = builder.translate_type(&match_stmt.cond_expr.annotation().ty());
 
-        let break_label = builder.alloc_label();
+        let break_label = builder.next_label();
 
         let else_label = if match_stmt.else_branch.is_some() {
-            Some(builder.alloc_label())
+            Some(builder.next_label())
         } else {
             None
         };
@@ -628,7 +628,7 @@ fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut Builder)
         for branch in &match_stmt.branches {
             builder.scope(|builder| {
                 // label to skip this branch if it isn't a match
-                let skip_label = builder.alloc_label();
+                let skip_label = builder.next_label();
 
                 let pattern_match = translate_pattern_match(
                     &branch.pattern,

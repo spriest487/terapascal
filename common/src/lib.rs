@@ -5,6 +5,7 @@ pub mod fs;
 pub mod aggregate_err;
 pub mod reporting;
 
+use std::borrow::Borrow;
 use crate::span::*;
 pub use backtrace::Backtrace;
 use std::cmp::Ordering;
@@ -12,6 +13,7 @@ use std::collections::hash_map::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 use std::ops::Deref;
+use std::sync::Arc;
 
 pub const IR_LIB_EXT: &str = "lib";
 pub const SRC_FILE_DEFAULT_EXT: &str = "tpas";
@@ -368,3 +370,25 @@ impl fmt::Display for LanguageMode {
 //         .and_then(|cwd| path.strip_prefix(cwd).ok())
 //         .unwrap_or(path)
 // }
+
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct SharedStringKey(Arc<String>);
+
+impl Borrow<str> for SharedStringKey {
+    fn borrow(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl Borrow<Arc<String>> for SharedStringKey {
+    fn borrow(&self) -> &Arc<String> {
+        &self.0
+    }
+}
+
+impl Borrow<String> for SharedStringKey {
+    fn borrow(&self) -> &String {
+        self.0.as_ref()
+    }
+}
