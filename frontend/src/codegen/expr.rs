@@ -135,7 +135,7 @@ fn translate_indexer(
         typ::Type::Array(array_ty) => {
             let element_ptr = builder.local_temp(val_ty.clone().ptr()).to_ref();
 
-            builder.begin_scope();
+            builder.local_begin();
 
             let element_ty = builder.translate_type(&array_ty.element_ty);
             let len = cast::i32(array_ty.dim).expect("array dim must be within range of i32");
@@ -150,7 +150,7 @@ fn translate_indexer(
                 element: element_ty,
             });
 
-            builder.end_scope();
+            builder.local_end();
 
             element_ptr
         },
@@ -159,7 +159,7 @@ fn translate_indexer(
             let element_type = builder.translate_type(element);
             let element_ptr = builder.local_temp(val_ty.clone().ptr());
 
-            builder.begin_scope();
+            builder.local_begin();
 
             let arr_field_ptr = builder.local_temp(val_ty.clone().ptr().ptr()).to_ref();
             let len_field_ptr = builder.local_temp(ir::Type::I32.ptr()).to_ref();
@@ -188,7 +188,7 @@ fn translate_indexer(
             let array_ptr = arr_field_ptr.to_deref();
             builder.add(element_ptr.clone(), array_ptr, index_val);
 
-            builder.end_scope();
+            builder.local_end();
 
             element_ptr.to_ref()
         },
@@ -537,7 +537,7 @@ pub fn translate_block(block: &typ::ast::Block, out_ref: ir::Ref, builder: &mut 
         None => ir::Type::Nothing,
     };
 
-    builder.begin_scope();
+    builder.local_begin();
 
     for stmt in &block.stmts {
         translate_stmt(stmt, builder);
@@ -549,7 +549,7 @@ pub fn translate_block(block: &typ::ast::Block, out_ref: ir::Ref, builder: &mut 
         builder.retain(result_val, &out_ty);
     }
 
-    builder.end_scope();
+    builder.local_end();
 }
 
 pub fn translate_exit(exit: &typ::ast::Exit, builder: &mut Builder) {

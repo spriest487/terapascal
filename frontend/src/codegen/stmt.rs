@@ -1,5 +1,4 @@
 use crate::ast;
-use crate::codegen::builder::jmp_exists;
 use crate::codegen::expr::call;
 use crate::codegen::expr::call::translate_invocation;
 use crate::codegen::expr::expr_to_val;
@@ -16,6 +15,7 @@ use crate::typ::system_option_type_of;
 use crate::typ::OPTION_NONE_CASE;
 use crate::typ::OPTION_SOME_CASE;
 use terapascal_common::span::Spanned;
+use terapascal_ir::instruction_builder::jmp_exists;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {

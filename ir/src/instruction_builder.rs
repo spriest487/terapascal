@@ -796,3 +796,60 @@ pub trait InstructionBuilder {
         }
     }
 }
+
+pub fn remove_empty_blocks(instructions: &mut Vec<Instruction>) {
+    let mut pc = 0;
+
+    // stack of instruction indices at which the current empty scope begins
+    let mut empty = vec![Some(pc)];
+
+    while pc < instructions.len() {
+        let block_empty = empty.last_mut().unwrap();
+
+        match &instructions[pc] {
+            Instruction::LocalBegin => {
+                empty.push(Some(pc));
+                pc += 1;
+            }
+
+            // end the scope
+            Instruction::LocalEnd => {
+                if let Some(empty_start) = *block_empty {
+                    // it's still empty, remove all the empty statements
+                    let remove_count = (pc + 1) - empty_start;
+                    pc = empty_start;
+                    for _ in 0..remove_count {
+                        instructions.remove(pc);
+                    }
+
+                    empty.pop();
+                } else {
+                    empty.pop();
+
+                    // containing scope is no longer empty
+                    *empty.last_mut().unwrap() = None;
+
+                    pc += 1;
+                }
+            }
+
+            Instruction::DebugPop
+            | Instruction::DebugPush(..)
+            | Instruction::Comment(..) => {
+                pc += 1;
+            }
+
+            _ => {
+                *block_empty = None;
+                pc += 1;
+            }
+        }
+    }
+}
+
+pub fn jmp_exists(instructions: &[Instruction], to_label: Label) -> bool {
+    instructions.iter().any(|i| match i {
+        Instruction::Jump { dest } | Instruction::JumpIf { dest, .. } => *dest == to_label,
+        _ => false,
+    })
+}

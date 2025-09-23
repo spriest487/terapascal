@@ -33,7 +33,7 @@ pub fn translate_bin_op(
         },
     };
 
-    builder.begin_scope();
+    builder.local_begin();
     let lhs_val = expr::translate_expr(&bin_op.lhs, builder);
 
     match &bin_op.op {
@@ -289,7 +289,7 @@ pub fn translate_bin_op(
         builder.retain(out_val.clone(), &result_ty);
     }
 
-    builder.end_scope();
+    builder.local_end();
 
     if out_is_ptr {
         out_val.to_deref()

@@ -78,9 +78,9 @@ where
         if let Some(else_branch) = &if_cond.else_branch {
             builder.label(else_label.unwrap());
 
-            builder.begin_scope();
+            builder.local_begin();
             branch_translate(&else_branch.item, out_val.as_ref(), &out_ty, builder);
-            builder.end_scope();
+            builder.local_end();
         }
 
         builder.label(end_label);

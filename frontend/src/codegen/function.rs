@@ -1,5 +1,4 @@
 use crate::ast;
-use crate::codegen::builder::jmp_exists;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::translate_block;
 use crate::codegen::translate_literal;
@@ -9,6 +8,7 @@ use crate::codegen::ClosureInstance;
 use crate::ir::*;
 use std::iter;
 use std::sync::Arc;
+use terapascal_ir::instruction_builder::jmp_exists;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Clone, Debug)]

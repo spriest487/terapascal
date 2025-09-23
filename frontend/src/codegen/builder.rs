@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_ir::instruction_builder::scope::{LocalBinding, LocalScope, LoopScope};
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::instruction_builder::{remove_empty_blocks, InstructionBuilder};
 
 #[derive(Debug)]
 pub struct Builder<'m, 'l: 'm> {
@@ -378,63 +378,13 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     pub fn find_type_seq_support(&self, src_ty: &typ::Type) -> Option<TypeSequenceSupport> {
         self.library.find_type_seq_support(src_ty)
     }
-    
-    fn remove_empty_blocks(&mut self) {
-        let mut pc = 0;
-
-        // stack of instruction indices at which the current empty scope begins
-        let mut empty = vec![Some(pc)];
-
-        while pc < self.instructions.len() {
-            let block_empty = empty.last_mut().unwrap();
-
-            match &self.instructions[pc] {
-                Instruction::LocalBegin => {
-                    empty.push(Some(pc));
-                    pc += 1;
-                }
-
-                // end the scope
-                Instruction::LocalEnd => {
-                    if let Some(empty_start) = *block_empty {
-                        // it's still empty, remove all the empty statements
-                        let remove_count = (pc + 1) - empty_start;
-                        pc = empty_start;
-                        for _ in 0..remove_count {
-                            self.instructions.remove(pc);
-                        }
-
-                        empty.pop();
-                    } else {
-                        empty.pop();
-                        
-                        // containing scope is no longer empty
-                        *empty.last_mut().unwrap() = None;
-
-                        pc += 1;
-                    }
-                }
-                
-                Instruction::DebugPop
-                | Instruction::DebugPush(..)
-                | Instruction::Comment(..) => {
-                    pc += 1;
-                }
-                
-                _ => {
-                    *block_empty = None;
-                    pc += 1;
-                }
-            }
-        }
-    }
 
     pub fn finish(mut self) -> Vec<Instruction> {
         while !self.scopes.is_empty() {
             self.end_scope();
         }
 
-        self.remove_empty_blocks();
+        remove_empty_blocks(&mut self.instructions);
 
         if matches!(self.instructions.as_slice(), [
             Instruction::DebugPush(..),
@@ -885,11 +835,4 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
         self.emit(Instruction::Jump { dest: EXIT_LABEL })
     }
-}
-
-pub fn jmp_exists(instructions: &[Instruction], to_label: Label) -> bool {
-    instructions.iter().any(|i| match i {
-        Instruction::Jump { dest } | Instruction::JumpIf { dest, .. } => *dest == to_label,
-        _ => false,
-    })
 }

@@ -58,7 +58,7 @@ fn translate_call_with_args(
         },
     };
 
-    builder.begin_scope();
+    builder.local_begin();
 
     let is_instance_method = matches!(call_target, CallTarget::InstanceMethod(..));
 
@@ -99,7 +99,7 @@ fn translate_call_with_args(
 
     // no need to retain, the result of a function must be retained as part of its body
 
-    builder.end_scope();
+    builder.local_end();
 
     out_val
 }
@@ -260,7 +260,7 @@ fn build_variant_ctor_call(
     let out_ty = builder.translate_type(&variant_ty);
     let out = builder.local_new(out_ty.clone(), None).to_ref();
 
-    builder.begin_scope();
+    builder.local_begin();
 
     let tag_ptr = builder.local_temp(ir::Type::I32.ptr()).to_ref();
     builder.vartag(tag_ptr.clone(), out.clone(), out_ty.clone());
@@ -281,7 +281,7 @@ fn build_variant_ctor_call(
         builder.retain(field_ptr.to_deref(), &arg_ty);
     }
 
-    builder.end_scope();
+    builder.local_end();
     Some(out)
 }
 
