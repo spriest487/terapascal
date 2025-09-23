@@ -176,6 +176,37 @@ pub trait InstructionBuilder {
         }
     }
 
+    fn break_loop(&mut self) {
+        let (break_label, break_scope) = {
+            let current_loop = self
+                .local_stack()
+                .current_loop()
+                .expect("break stmt must appear in a loop");
+
+            (current_loop.break_label, current_loop.block_level)
+        };
+
+        // write cleanup code for the broken scope and its children
+        self.cleanup_scope(break_scope);
+
+        // jump to the label (presumably somewhere outside the broken scope!)
+        self.jmp(break_label);
+    }
+
+    fn continue_loop(&mut self) {
+        let (continue_label, continue_scope) = {
+            let current_loop = self
+                .local_stack()
+                .current_loop()
+                .expect("continue stmt must appear in a loop");
+
+            (current_loop.continue_label, current_loop.block_level)
+        };
+
+        self.cleanup_scope(continue_scope);
+        self.jmp(continue_label);
+    }
+
     fn comment(&mut self, content: &(impl fmt::Display + ?Sized)) {
         if !self.is_debug() {
             return;

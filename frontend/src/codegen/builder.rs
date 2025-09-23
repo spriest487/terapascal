@@ -16,7 +16,7 @@ use crate::typ::Symbol;
 use std::borrow::Cow;
 use std::sync::Arc;
 use terapascal_ir::instruction_builder::remove_empty_blocks;
-use terapascal_ir::instruction_builder::scope::{LocalStack, LoopScope};
+use terapascal_ir::instruction_builder::scope::LocalStack;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Debug)]
@@ -30,10 +30,8 @@ pub struct Builder<'m, 'l: 'm> {
 
     instructions: Vec<Instruction>,
     next_label: Label,
-
     
     local_stack: LocalStack,
-    loop_stack: Vec<LoopScope>,
 }
 
 impl InstructionBuilder for Builder<'_, '_> {
@@ -116,9 +114,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
             // the EXIT label is always reserved, so start one after that
             next_label: Label(EXIT_LABEL.0 + 1),
-
-            loop_stack: Vec::new(),
-
             local_stack: LocalStack::new(),
             generic_context: typ::GenericContext::empty(),
         }
@@ -578,21 +573,13 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     }
 
     pub fn begin_loop_body_scope(&mut self, continue_label: Label, break_label: Label) {
-        self.loop_stack.push(LoopScope {
-            continue_label,
-            break_label,
-            block_level: self.local_stack.len(),
-        });
-
-        self.begin_scope();
+        self.local_stack_mut().push_loop(continue_label, break_label);
+        self.local_begin();
     }
 
     pub fn end_loop_body_scope(&mut self) {
         self.local_end();
-
-        self.loop_stack
-            .pop()
-            .expect("end_loop called without an active loop");
+        self.local_stack_mut().pop_loop();
     }
 
     pub fn loop_body_scope<F>(
@@ -615,18 +602,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         &self.instructions[start_instruction..]
     }
 
-    pub fn current_loop(&self) -> Option<&LoopScope> {
-        self.loop_stack.last()
-    }
-
-    pub fn begin_scope(&mut self) {
-        self.emit(Instruction::LocalBegin);
-
-        self.local_stack.begin();
-
-        self.comment(&format!("begin scope {}", self.local_stack.len()));
-    }
-
     pub fn scope<F>(&mut self, f: F) -> &[Instruction]
     where
         F: FnOnce(&mut Self),
@@ -638,37 +613,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.local_end();
 
         &self.instructions[start_index..]
-    }
-
-    pub fn break_loop(&mut self) {
-        let (break_label, break_scope) = {
-            let current_loop = self
-                .current_loop()
-                .expect("break stmt must appear in a loop");
-
-            (current_loop.break_label, current_loop.block_level)
-        };
-
-        // write cleanup code for the broken scope and its children
-        self.cleanup_scope(break_scope);
-
-        // jump to the label (presumably somewhere outside the broken scope!)
-        self.emit(Instruction::Jump { dest: break_label });
-    }
-
-    pub fn continue_loop(&mut self) {
-        let (continue_label, continue_scope) = {
-            let current_loop = self
-                .current_loop()
-                .expect("continue stmt must appear in a loop");
-
-            (current_loop.continue_label, current_loop.block_level)
-        };
-
-        self.cleanup_scope(continue_scope);
-        self.emit(Instruction::Jump {
-            dest: continue_label,
-        });
     }
     
     pub fn bounds_check(&mut self,

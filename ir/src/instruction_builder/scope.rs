@@ -92,13 +92,9 @@ impl LocalStack {
             break_label,
             block_level: self.scopes.len(),
         });
-
-        self.begin();
     }
     
     pub fn pop_loop(&mut self) {
-        self.end();
-
         self.loops
             .pop()
             .expect("end_loop called without an active loop");
