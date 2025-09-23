@@ -1,5 +1,3 @@
-pub mod scope;
-
 #[cfg(test)]
 mod test;
 
