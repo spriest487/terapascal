@@ -15,7 +15,7 @@ pub fn translate_bin_op(
 ) -> ir::Ref {
     if bin_op.lhs.annotation().is_namespace() {
         // there's nothing to actually translate on the lhs, it's just for name resolution
-        return expr::translate_expr(&bin_op.rhs, builder);
+        return translate_expr(&bin_op.rhs, builder);
     }
 
     let result_ty = builder.translate_type(out_ty);
