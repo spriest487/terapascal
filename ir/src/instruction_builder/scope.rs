@@ -70,7 +70,7 @@ impl LocalStack {
         }
     }
 
-    pub fn current_scope(&mut self) -> &LocalScope {
+    pub fn current_scope(&self) -> &LocalScope {
         self.scopes
             .iter()
             .rev()
