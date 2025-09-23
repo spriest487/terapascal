@@ -51,12 +51,12 @@ pub trait InstructionBuilder {
         id
     }
 
-    fn local_new(&mut self, ty: Type, name: Option<String>) -> LocalID {
+    fn local_new(&mut self, ty: Type, name: Option<Arc<String>>) -> LocalID {
         assert_ne!(Type::Nothing, ty);
 
         let id = self.local_stack_mut()
             .current_scope_mut()
-            .bind_new(name.map(Arc::new), ty.clone());
+            .bind_new(name, ty.clone());
 
         self.emit(Instruction::LocalAlloc(id, ty));
 

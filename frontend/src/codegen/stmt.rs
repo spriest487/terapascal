@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::ast;
 use crate::codegen::expr::call;
 use crate::codegen::expr::call::translate_invocation;
@@ -98,7 +99,7 @@ pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
 fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut Builder) {
     let bound_ty = builder.translate_type(&binding.ty);
 
-    let binding_ref = builder.local_new(bound_ty.clone(), Some(binding.name.to_string())).to_ref();
+    let binding_ref = builder.local_new(bound_ty.clone(), Some(Arc::new(binding.name.to_string()))).to_ref();
 
     if let Some(init_expr) = &binding.val {
         builder.scope(|builder| {
@@ -139,7 +140,7 @@ fn build_for_loop_up_to(
             }
 
             ast::ForLoopCounterInit::Binding { name, init, ty, .. } => {
-                let counter_binding_name = name.to_string();
+                let counter_binding_name = Arc::new(name.to_string());
                 let counter_ty = builder.translate_type(ty.ty());
 
                 let counter_val = builder.local_new(counter_ty.clone(), Some(counter_binding_name)).to_ref();
@@ -232,7 +233,7 @@ fn build_for_loop_sequence(
         let src_ref = translate_expr(&range.src_expr, builder);
 
         let binding_ty = builder.translate_type(range.binding_ty.ty());
-        let binding_name = range.binding_name.to_string();
+        let binding_name = Arc::new(range.binding_name.to_string());
         let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name)).to_ref();
 
         let counter_ref = builder.local_temp(ir::Type::I32).to_ref();

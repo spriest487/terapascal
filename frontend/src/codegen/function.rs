@@ -320,7 +320,8 @@ fn init_function_locals(locals: &[typ::ast::FunctionLocalBinding], builder: &mut
         if local.kind == ast::BindingDeclKind::Var {
             let ty = builder.translate_type(&local.ty);
 
-            let local_ref = builder.local_new(ty, Some(local.ident.name.to_string()));
+            let local_name = Arc::new(local.ident.name.to_string());
+            let local_ref = builder.local_new(ty, Some(local_name));
 
             if let Some(initial_val) = &local.initial_val {
                 let init_val = translate_literal(initial_val, &local.ty, builder);

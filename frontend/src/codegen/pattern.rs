@@ -3,6 +3,7 @@ use crate::codegen::ir;
 use crate::codegen::Builder;
 use crate::typ;
 use crate::typ::{MatchPattern, Specializable};
+use std::sync::Arc;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub struct PatternMatchBinding {
@@ -21,7 +22,7 @@ impl PatternMatchBinding {
             builder.pretty_ty_name(&self.ty)
         ));
 
-        let local = builder.local_new(self.ty.clone(), Some(self.name.clone())).to_ref();
+        let local = builder.local_new(self.ty.clone(), Some(Arc::new(self.name.clone()))).to_ref();
         builder.mov(local.clone(), self.binding_ref.clone());
         builder.retain(local, &self.ty);
     }
