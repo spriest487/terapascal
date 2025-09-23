@@ -1,8 +1,13 @@
-use crate::{BinOpInstruction, IRFormatter, LocalID, Metadata};
+pub mod scope;
+
+use crate::BinOpInstruction;
 use crate::FieldID;
+use crate::IRFormatter;
 use crate::Instruction;
 use crate::InterfaceID;
 use crate::Label;
+use crate::LocalID;
+use crate::Metadata;
 use crate::MethodID;
 use crate::Ref;
 use crate::Type;

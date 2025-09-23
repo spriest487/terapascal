@@ -3,7 +3,6 @@ pub mod scope;
 #[cfg(test)]
 mod test;
 
-use self::scope::*;
 use crate::ast as ast;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::FunctionDefKey;
@@ -19,6 +18,7 @@ use crate::typ::Symbol;
 use std::borrow::Cow;
 use std::sync::Arc;
 use terapascal_common::span::Span;
+use terapascal_ir::instruction_builder::scope::{LocalBinding, LocalScope, LoopScope};
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Debug)]
@@ -633,7 +633,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             .expect("scope must be active")
     }
 
-    pub fn find_local(&self, name: &str) -> Option<&Local> {
+    pub fn find_local(&self, name: &str) -> Option<&LocalBinding> {
         self.scopes
             .iter()
             .rev()
@@ -802,21 +802,21 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             }
 
             match local {
-                Local::Param { id, ty, by_ref, .. } => {
+                LocalBinding::Param { id, ty, by_ref, .. } => {
                     if !by_ref {
                         self.release(id, &ty);
                     }
                 },
 
-                Local::New { id, ty, .. } => {
+                LocalBinding::New { id, ty, .. } => {
                     self.release(Ref::Local(id), &ty);
                 },
 
-                Local::Temp { .. } => {
+                LocalBinding::Temp { .. } => {
                     // no cleanup required
                 },
 
-                Local::Return { .. } => {
+                LocalBinding::Return { .. } => {
                     if self.opts().annotate_rc {
                         self.comment("expire return slot");
                     }
