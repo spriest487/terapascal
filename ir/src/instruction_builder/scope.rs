@@ -5,8 +5,109 @@ use crate::Type;
 use crate::RETURN_LOCAL;
 use crate::RETURN_REF;
 use std::collections::HashMap;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 use terapascal_common::SharedStringKey;
+
+#[derive(Debug)]
+pub struct LocalStack {
+    scopes: Vec<LocalScope>,
+
+    loops: Vec<LoopScope>,
+}
+
+impl LocalStack {
+    pub fn new() -> Self {
+        Self {
+            scopes: vec![LocalScope::new(0)],
+
+            loops: Vec::new(),
+        }
+    }
+    
+    pub fn len(&self) -> usize {
+        self.scopes.len()
+    }
+
+    pub fn find_local(&self, name: &str) -> Option<&LocalBinding> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.local_by_name(name)
+                .and_then(|id| scope.local_by_id(id)))
+    }
+
+    // locals from all scopes up to the target scope, in order of deepest->shallowest,
+    // then in reverse allocation order
+    pub fn all_locals(&self, range: impl Into<RangeInclusive<usize>>) -> impl Iterator<Item=&LocalBinding> {
+        self.scopes[range.into()]
+            .iter()
+            .rev()
+            .flat_map(|scope| scope.locals().iter().rev())
+    }
+    
+    pub fn debug_ctx_count(&self, range: impl Into<RangeInclusive<usize>>) -> usize {
+        self.scopes[range.into()]
+            .iter()
+            .map(|scope| scope.debug_ctx_count())
+            .sum()
+    }
+    
+    pub fn begin(&mut self) {
+        let scope = self.current_scope().new_child();
+        self.scopes.push(scope);
+    }
+    
+    pub fn end(&mut self) {
+        if self.scopes.pop().is_none() {
+            panic!("mismatched begin/end scope calls, no scope to pop");
+        }
+    }
+    
+    pub fn finish(mut self) {
+        while !self.scopes.is_empty() {
+            self.end();
+        }
+    }
+
+    pub fn current_scope(&mut self) -> &LocalScope {
+        self.scopes
+            .iter()
+            .rev()
+            .next()
+            .expect("scope must be active")
+    }
+
+    pub fn current_scope_mut(&mut self) -> &mut LocalScope {
+        self.scopes
+            .iter_mut()
+            .rev()
+            .next()
+            .expect("scope must be active")
+    }
+    
+    pub fn push_loop(&mut self, continue_label: Label, break_label: Label) {
+        self.loops.push(LoopScope {
+            continue_label,
+            break_label,
+            block_level: self.scopes.len(),
+        });
+
+        self.begin();
+    }
+    
+    pub fn pop_loop(&mut self) {
+        self.end();
+
+        self.loops
+            .pop()
+            .expect("end_loop called without an active loop");
+    }
+
+    pub fn current_loop(&self) -> Option<&LoopScope> {
+        self.loops.last()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum LocalBinding {

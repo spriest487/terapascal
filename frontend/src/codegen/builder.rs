@@ -15,11 +15,8 @@ use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use std::borrow::Cow;
 use std::sync::Arc;
-use terapascal_common::span::Span;
 use terapascal_ir::instruction_builder::remove_empty_blocks;
-use terapascal_ir::instruction_builder::scope::LocalBinding;
-use terapascal_ir::instruction_builder::scope::LocalScope;
-use terapascal_ir::instruction_builder::scope::LoopScope;
+use terapascal_ir::instruction_builder::scope::{LocalStack, LoopScope};
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Debug)]
@@ -32,9 +29,10 @@ pub struct Builder<'m, 'l: 'm> {
     generic_context: typ::GenericContext,
 
     instructions: Vec<Instruction>,
-    scopes: Vec<LocalScope>,
     next_label: Label,
 
+    
+    local_stack: LocalStack,
     loop_stack: Vec<LoopScope>,
 }
 
@@ -51,29 +49,20 @@ impl InstructionBuilder for Builder<'_, '_> {
         self.library.metadata()
     }
 
+    fn local_stack(&self) -> &LocalStack {
+        &self.local_stack
+    }
+
+    fn local_stack_mut(&mut self) -> &mut LocalStack {
+        &mut self.local_stack
+    }
+
     fn is_debug(&self) -> bool {
         self.opts().debug
     }
 
     fn ir_formatter(&self) -> &impl IRFormatter {
         self.library.metadata()
-    }
-
-    fn local_temp(&mut self, ty: Type) -> LocalID {
-        assert_ne!(Type::Nothing, ty);
-
-        let id = self.current_scope_mut().bind_temp();
-        self.instructions.push(Instruction::LocalAlloc(id, ty.clone()));
-
-        id
-    }
-
-    fn local_begin(&mut self) {
-        self.begin_scope();
-    }
-
-    fn local_end(&mut self) {
-        self.end_scope();
     }
 
     fn next_label(&mut self) -> Label {
@@ -127,10 +116,10 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
             // the EXIT label is always reserved, so start one after that
             next_label: Label(EXIT_LABEL.0 + 1),
-            scopes: vec![LocalScope::new(0)],
 
             loop_stack: Vec::new(),
 
+            local_stack: LocalStack::new(),
             generic_context: typ::GenericContext::empty(),
         }
     }
@@ -146,15 +135,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     
     pub fn generic_context(&self) -> &typ::GenericContext {
         &self.generic_context
-    }
-
-    pub fn local_new(&mut self, ty: Type, name: Option<String>) -> LocalID {
-        assert_ne!(Type::Nothing, ty);
-
-        let id = self.current_scope_mut().bind_new(name.map(Arc::new), ty.clone());
-        self.emit(Instruction::LocalAlloc(id, ty));
-
-        id
     }
 
     pub fn translate_variant_case<'ty>(
@@ -383,8 +363,8 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     }
 
     pub fn finish(mut self) -> Vec<Instruction> {
-        while !self.scopes.is_empty() {
-            self.end_scope();
+        while self.local_stack.len() > 0 {
+            self.local_end();
         }
 
         remove_empty_blocks(&mut self.instructions);
@@ -397,26 +377,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         }
 
         self.instructions
-    }
-
-    pub fn push_debug_context(&mut self, ctx: Span) {
-        if !self.opts().debug {
-            return;
-        }
-
-        self.current_scope_mut().inc_debug_ctx_count();
-
-        self.emit(Instruction::DebugPush(ctx));
-    }
-
-    pub fn pop_debug_context(&mut self) {
-        if !self.opts().debug {
-            return;
-        }
-
-        self.current_scope_mut().dec_debug_ctx_count();
-
-        self.emit(Instruction::DebugPop);
     }
     
     pub fn set_include(&mut self, set_ref: impl Into<Ref>, bit_val: impl Into<Value>, set_type: &typ::SetType) {
@@ -555,43 +515,25 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     }
 
     pub fn bind_param(&mut self, ty: Type, name: impl Into<String>, by_ref: bool) -> LocalID {
-        self.current_scope_mut().bind_param(Some(Arc::new(name.into())), ty, by_ref)
+        self.local_stack_mut()
+            .current_scope_mut()
+            .bind_param(Some(Arc::new(name.into())), ty, by_ref)
     }
 
     // binds an anonymous return local in %0 with the indicated type
     pub fn bind_return(&mut self) {
-        self.current_scope_mut().bind_return();
+        self.local_stack_mut()
+            .current_scope_mut()
+            .bind_return();
     }
 
     // binds an anonymous local binding for the closure pointer of a function
     pub fn bind_closure_ptr(&mut self) -> LocalID {
-        self.current_scope_mut().bind_temp()
+        self.local_stack_mut()
+            .current_scope_mut()
+            .bind_temp()
     }
 
-    fn current_scope(&mut self) -> &LocalScope {
-        self.scopes
-            .iter()
-            .rev()
-            .next()
-            .expect("scope must be active")
-    }
-
-    fn current_scope_mut(&mut self) -> &mut LocalScope {
-        self.scopes
-            .iter_mut()
-            .rev()
-            .next()
-            .expect("scope must be active")
-    }
-
-    pub fn find_local(&self, name: &str) -> Option<&LocalBinding> {
-        self.scopes
-            .iter()
-            .rev()
-            .find_map(|scope| scope.local_by_name(name)
-                .and_then(|id| scope.local_by_id(id)))
-    }
-    
     pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {
         self.library.find_global_var(name_path)
     }
@@ -599,7 +541,10 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     pub fn local_closure_capture(&mut self, ty: Type, name: String) -> Ref {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.current_scope_mut().bind_param(Some(Arc::new(name)), ty.clone(), true);
+        let id = self.local_stack_mut()
+            .current_scope_mut()
+            .bind_param(Some(Arc::new(name)), ty.clone(), true);
+
         self.emit(Instruction::LocalAlloc(id, ty.clone()));
 
         Ref::Local(id)
@@ -636,14 +581,14 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.loop_stack.push(LoopScope {
             continue_label,
             break_label,
-            block_level: self.scopes.len(),
+            block_level: self.local_stack.len(),
         });
 
         self.begin_scope();
     }
 
     pub fn end_loop_body_scope(&mut self) {
-        self.end_scope();
+        self.local_end();
 
         self.loop_stack
             .pop()
@@ -677,10 +622,9 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     pub fn begin_scope(&mut self) {
         self.emit(Instruction::LocalBegin);
 
-        let scope = self.current_scope().new_child();
-        self.scopes.push(scope);
+        self.local_stack.begin();
 
-        self.comment(&format!("begin scope {}", self.scopes.len()));
+        self.comment(&format!("begin scope {}", self.local_stack.len()));
     }
 
     pub fn scope<F>(&mut self, f: F) -> &[Instruction]
@@ -689,99 +633,11 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     {
         let start_index = self.instructions.len();
 
-        self.begin_scope();
+        self.local_begin();
         f(self);
-        self.end_scope();
+        self.local_end();
 
         &self.instructions[start_index..]
-    }
-
-    /// release locals in all scopes after the position indicated by
-    /// `to_scope` in the scope stack
-    /// this should be used when jumping out a scope, or before popping one
-    fn cleanup_scope(&mut self, to_scope: usize) {
-        assert!(
-            self.scopes.len() > to_scope,
-            "reset_scope index out of range: {}",
-            to_scope
-        );
-
-        let last_scope = self.scopes.len() - 1;
-
-        if self.opts().debug {
-            if to_scope == last_scope {
-                self.comment(&format!("cleanup scope {}", to_scope + 1));
-            } else {
-                self.comment(&format!(
-                    "cleanup scopes {}..{}",
-                    to_scope + 1,
-                    self.scopes.len()
-                ));
-            }
-        }
-
-        let cleanup_range = to_scope..=last_scope;
-
-        if self.opts().debug {
-            let debug_pops: usize = self.scopes[cleanup_range.clone()]
-                .iter()
-                .map(|scope| scope.debug_ctx_count())
-                .sum();
-
-            for _ in 0..debug_pops {
-                // don't call the helper func to do this, we don't want to modify the scope here
-                self.emit(Instruction::DebugPop);
-            }
-        }
-
-        // locals from all scopes up to the target scope, in order of deepest->shallowest,
-        // then in reverse allocation order
-        let locals: Vec<_> = self.scopes[cleanup_range]
-            .iter()
-            .rev()
-            .flat_map(|scope| scope.locals().iter().rev().cloned())
-            .collect();
-
-        // release local bindings that will be lost when the current scope is popped.
-        // of course. releasing a ref should either insert a release instruction directly
-        // (for an RC pointer) or insert a call to a structural release function (for
-        // complex types containing RC pointers), so should never introduce new locals
-        // in the scope being popped
-        for local in locals {
-            self.comment(&format!("expire {}", local.id()));
-
-            match local {
-                LocalBinding::Param { id, ty, by_ref, .. } => {
-                    if !by_ref {
-                        self.release(id, &ty);
-                    }
-                },
-
-                LocalBinding::New { id, ty, .. } => {
-                    self.release(Ref::Local(id), &ty);
-                },
-
-                LocalBinding::Temp { .. } => {
-                    // no cleanup required
-                },
-
-                LocalBinding::Return { .. } => {
-                    self.comment("expire return slot");
-                },
-            }
-        }
-    }
-
-    pub fn end_scope(&mut self) {
-        self.cleanup_scope(self.scopes.len() - 1);
-
-        self.comment(&format!("end scope {}", self.scopes.len()));
-
-        if self.scopes.pop().is_none() {
-            panic!("mismatched begin/end scope calls, no scope to pop");
-        }
-
-        self.emit(Instruction::LocalEnd);
     }
 
     pub fn break_loop(&mut self) {

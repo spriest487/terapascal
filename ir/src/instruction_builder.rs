@@ -1,5 +1,7 @@
 pub mod scope;
 
+use crate::instruction_builder::scope::LocalBinding;
+use crate::instruction_builder::scope::LocalStack;
 use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::IRFormatter;
@@ -16,23 +18,163 @@ use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VirtualTypeID;
 use std::fmt;
+use std::sync::Arc;
+use terapascal_common::span::Span;
 
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
     
     fn metadata(&self) -> &Metadata;
+
+    fn local_stack(&self) -> &LocalStack;
+    fn local_stack_mut(&mut self) -> &mut LocalStack;
     
     // if false, all comment instructions are skipped
     fn is_debug(&self) -> bool;
     
     fn ir_formatter(&self) -> &impl IRFormatter;
 
+    fn find_local(&self, name: &str) -> Option<&LocalBinding> {
+        self.local_stack().find_local(name)
+    }
+
     // creates an anonymous unmanaged local of this type
-    fn local_temp(&mut self, ty: Type) -> LocalID;
+    fn local_temp(&mut self, ty: Type) -> LocalID {
+        assert_ne!(Type::Nothing, ty);
+
+        let id = self.local_stack_mut()
+            .current_scope_mut()
+            .bind_temp();
+
+        self.emit(Instruction::LocalAlloc(id, ty.clone()));
+
+        id
+    }
+
+    fn local_new(&mut self, ty: Type, name: Option<String>) -> LocalID {
+        assert_ne!(Type::Nothing, ty);
+
+        let id = self.local_stack_mut()
+            .current_scope_mut()
+            .bind_new(name.map(Arc::new), ty.clone());
+
+        self.emit(Instruction::LocalAlloc(id, ty));
+
+        id
+    }
+
     fn next_label(&mut self) -> Label;
     
-    fn local_begin(&mut self);
-    fn local_end(&mut self);
+    fn local_begin(&mut self) {
+        let stack = self.local_stack_mut();
+        
+        stack.begin();
+        let stack_len = stack.len();
+
+        self.comment(&format!("begin scope {}", stack_len));
+        
+        self.emit(Instruction::LocalBegin);
+    }
+
+    fn local_end(&mut self) {
+        let top_scope = self.local_stack().len() - 1;
+        self.cleanup_scope(top_scope);
+
+        self.comment(&format!("end scope {}", top_scope));
+
+        self.local_stack_mut().end();
+
+        self.emit(Instruction::LocalEnd);
+    }
+
+    fn push_debug_context(&mut self, ctx: Span) {
+        if !self.is_debug() {
+            return;
+        }
+
+        self.local_stack_mut().current_scope_mut().inc_debug_ctx_count();
+
+        self.emit(Instruction::DebugPush(ctx));
+    }
+
+    fn pop_debug_context(&mut self) {
+        if !self.is_debug() {
+            return;
+        }
+
+        self.local_stack_mut().current_scope_mut().dec_debug_ctx_count();
+
+        self.emit(Instruction::DebugPop);
+    }
+
+    /// release locals in all scopes after the position indicated by
+    /// `to_scope` in the scope stack
+    /// this should be used when jumping out a scope, or before popping one
+    fn cleanup_scope(&mut self, to_scope: usize) {
+        let last_scope = self.local_stack().len() - 1;
+        assert!(
+            to_scope <= last_scope,
+            "cleanup_scope: index out of range: {}",
+            to_scope
+        );
+
+        if self.is_debug() {
+            if to_scope == last_scope {
+                self.comment(&format!("cleanup scope {}", to_scope + 1));
+            } else {
+                self.comment(&format!(
+                    "cleanup scopes {}..{}",
+                    to_scope + 1,
+                    last_scope + 1,
+                ));
+            }
+        }
+
+        let cleanup_range = to_scope..=last_scope;
+
+        if self.is_debug() {
+            let debug_pops: usize = self.local_stack().debug_ctx_count(cleanup_range.clone());
+
+            for _ in 0..debug_pops {
+                // don't call the helper func to do this, we don't want to modify the scope here
+                self.emit(Instruction::DebugPop);
+            }
+        }
+
+        let locals: Vec<_> = self.local_stack()
+            .all_locals(cleanup_range)
+            .cloned()
+            .collect();
+
+        // release local bindings that will be lost when the current scope is popped.
+        // of course. releasing a ref should either insert a release instruction directly
+        // (for an RC pointer) or insert a call to a structural release function (for
+        // complex types containing RC pointers), so should never introduce new locals
+        // in the scope being popped
+        for local in locals {
+            self.comment(&format!("expire {}", local.id()));
+
+            match local {
+                LocalBinding::Param { id, ty, by_ref, .. } => {
+                    if !by_ref {
+                        self.release(id, &ty);
+                    }
+                },
+
+                LocalBinding::New { id, ty, .. } => {
+                    self.release(Ref::Local(id), &ty);
+                },
+
+                LocalBinding::Temp { .. } => {
+                    // no cleanup required
+                },
+
+                LocalBinding::Return { .. } => {
+                    self.comment("expire return slot");
+                },
+            }
+        }
+    }
 
     fn comment(&mut self, content: &(impl fmt::Display + ?Sized)) {
         if !self.is_debug() {
