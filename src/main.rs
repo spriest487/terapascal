@@ -51,7 +51,6 @@ fn compile(args: &Args) -> Result<(), RunError> {
     compile_opts.lang_mode = args.lang_mode;
 
     let codegen_opts = CodegenOpts {
-        annotate_rc: args.trace_rc,
         debug: args.debug,
     };
 

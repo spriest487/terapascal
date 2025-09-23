@@ -16,8 +16,11 @@ use crate::typ::Symbol;
 use std::borrow::Cow;
 use std::sync::Arc;
 use terapascal_common::span::Span;
-use terapascal_ir::instruction_builder::scope::{LocalBinding, LocalScope, LoopScope};
-use terapascal_ir::instruction_builder::{remove_empty_blocks, InstructionBuilder};
+use terapascal_ir::instruction_builder::remove_empty_blocks;
+use terapascal_ir::instruction_builder::scope::LocalBinding;
+use terapascal_ir::instruction_builder::scope::LocalScope;
+use terapascal_ir::instruction_builder::scope::LoopScope;
+use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Debug)]
 pub struct Builder<'m, 'l: 'm> {
@@ -745,9 +748,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         // complex types containing RC pointers), so should never introduce new locals
         // in the scope being popped
         for local in locals {
-            if self.opts().annotate_rc {
-                self.comment(&format!("expire {}", local.id()));
-            }
+            self.comment(&format!("expire {}", local.id()));
 
             match local {
                 LocalBinding::Param { id, ty, by_ref, .. } => {
@@ -765,9 +766,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
                 },
 
                 LocalBinding::Return { .. } => {
-                    if self.opts().annotate_rc {
-                        self.comment("expire return slot");
-                    }
+                    self.comment("expire return slot");
                 },
             }
         }

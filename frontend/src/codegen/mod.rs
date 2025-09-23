@@ -20,9 +20,6 @@ use crate::typ as typ;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct CodegenOpts {
-    // insert IR comments indicating RC release/retain operations
-    pub annotate_rc: bool,
-
     // insert source spans for statements and expressions for improved error messaging in the
     // translation/vm stage
     pub debug: bool,
@@ -31,8 +28,6 @@ pub struct CodegenOpts {
 impl Default for CodegenOpts {
     fn default() -> Self {
         Self {
-            annotate_rc: false,
-
             debug: true,
         }
     }
