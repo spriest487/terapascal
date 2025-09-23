@@ -67,6 +67,14 @@ impl InstructionBuilder for Builder<'_, '_> {
         id
     }
 
+    fn local_begin(&mut self) {
+        self.begin_scope();
+    }
+
+    fn local_end(&mut self) {
+        self.end_scope();
+    }
+
     fn next_label(&mut self) -> Label {
         let label = self.next_label;
         self.next_label = Label(self.next_label.0 + 1);

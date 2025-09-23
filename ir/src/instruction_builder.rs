@@ -25,6 +25,9 @@ pub trait InstructionBuilder {
     // creates an anonymous unmanaged local of this type
     fn local_temp(&mut self, ty: Type) -> LocalID;
     fn next_label(&mut self) -> Label;
+    
+    fn local_begin(&mut self);
+    fn local_end(&mut self);
 
     fn comment(&mut self, content: &(impl fmt::Display + ?Sized)) {
         if !self.is_debug() {
@@ -738,8 +741,8 @@ pub trait InstructionBuilder {
                         // only one data_ptr local will be allocated depending on which case is
                         // active, so a scope is needed here to stop the local counter being
                         // incremented once per case
-                        self.emit(Instruction::LocalBegin);
-                        let data_ptr = Ref::Local(self.local_temp(data_ty.clone().ptr()));
+                        self.local_begin();
+                        let data_ptr = self.local_temp(data_ty.clone().ptr());
                             
                         self.vardata(
                             data_ptr.clone(),
@@ -748,8 +751,8 @@ pub trait InstructionBuilder {
                             tag,
                         );
 
-                        result |= self.visit_deep(data_ptr.to_deref(), &data_ty, f);
-                        self.emit(Instruction::LocalEnd);
+                        result |= self.visit_deep(data_ptr.to_ref().to_deref(), &data_ty, f);
+                        self.local_end();
 
                         // break after any case executes
                         self.jmp(break_label);
