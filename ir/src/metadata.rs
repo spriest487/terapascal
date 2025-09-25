@@ -147,11 +147,48 @@ impl Metadata {
 
     pub fn extend(&mut self, other: &Metadata) {
         for (id, decl) in &other.type_decls {
-            if let Some(conflict) = self.type_decls.get(id) {
-                Self::check_conflict("type ID", id, conflict.name(), decl.name());
-            };
+            match (self.type_decls.get(id), decl) {
+                // any decl replaces an existing reserved ID
+                (Some(TypeDecl::Reserved), new_decl) => {
+                    self.type_decls.insert(*id, new_decl.clone());
+                }
 
-            self.type_decls.insert(*id, decl.clone());
+                // reserved ID does not replace any existing decl
+                (Some(..), TypeDecl::Reserved) => {
+                }
+                
+                // forward def replaced by a full def of the same name 
+                (Some(TypeDecl::Forward(forward_name)), TypeDecl::Def(new_def)) 
+                if new_def.name() == Some(forward_name) => {
+                    self.type_decls.insert(*id, TypeDecl::Def(new_def.clone()));
+                }
+                
+                // forward def does not replace a full def of the same name    
+                (Some(TypeDecl::Def(old_def)), TypeDecl::Forward(new_name)) 
+                if old_def.name() == Some(new_name) => {
+                }
+
+                // error if forward def doesn't match actual def in either direction 
+                (Some(TypeDecl::Forward(forward_name)), TypeDecl::Def(def))
+                | (Some(TypeDecl::Def(def)), TypeDecl::Forward(forward_name))
+                if def.name() != Some(forward_name) => {
+                    let def_name = def.name()
+                        .map(|path| path.to_pretty_string(|ty| Cow::Owned(ty.to_pretty_string(self))))
+                        .unwrap_or_else(|| "<unnamed>".to_string());
+
+                    panic!("mismatched forward type decl {id} in metadata (forward: {forward_name}, def: {def_name})");
+                }
+
+                (Some(conflict), decl) => {
+                    Self::check_conflict("type ID", id, conflict.name(), decl.name());
+                    self.type_decls.insert(*id, decl.clone());
+                }
+
+                // adding a new item
+                (None, _) => {
+                    self.type_decls.insert(*id, decl.clone());
+                }
+            }
         }
 
         for (id, string_lit) in &other.string_literals {
