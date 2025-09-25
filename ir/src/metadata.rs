@@ -661,21 +661,31 @@ impl Metadata {
     }
 
     pub fn define_struct(&mut self, id: TypeDefID, struct_def: Struct) {
-        match &self.type_decls[&id] {
-            TypeDecl::Forward(name) => {
+        match self.type_decls.get(&id) {
+            Some(TypeDecl::Forward(name)) => {
                 assert_eq!(Some(name), struct_def.name());
                 let type_def = TypeDecl::Def(TypeDef::Struct(struct_def));
                 self.type_decls.insert(id, type_def);
             },
 
-            TypeDecl::Reserved => {
+            Some(TypeDecl::Reserved) => {
                 let type_def = TypeDecl::Def(TypeDef::Struct(struct_def));
                 self.type_decls.insert(id, type_def);
             }
+            
+            None => {
+                let is_class = matches!(&struct_def.identity, StructIdentity::Class(..));
+                
+                self.type_decls.insert(id, TypeDecl::Def(TypeDef::Struct(struct_def)));
 
-            _other => {
-                panic!("expected named declaration to exist when defining {}", struct_def);
-            },
+                if is_class {
+                    self.class_ids.insert(id);
+                }
+            }
+
+            Some(TypeDecl::Def(..)) => {
+                panic!("already defined: {}", struct_def);
+            }
         }
     }
 
