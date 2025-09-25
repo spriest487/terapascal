@@ -545,33 +545,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         Ref::Local(id)
     }
 
-    fn call_release(&mut self, at: Ref, ty: &Type) -> bool {
-        let rc_funcs = self.library.gen_runtime_type(ty);
-        let Some(release) = rc_funcs.release else {
-            return false; 
-        };
-
-        let at_ptr = self.local_temp(ty.clone().ptr());
-        self.addr_of(at_ptr.clone(), at);
-        self.call(release, [Value::from(at_ptr)], None);
-
-        true
-    }
-    
-    fn call_retain(&mut self, at: Ref, ty: &Type) -> bool {
-        let rc_funcs = self.library.gen_runtime_type(ty);
-
-        let Some(retain) = rc_funcs.retain else {
-            return false;
-        };
-
-        let at_ptr = self.local_temp(ty.clone().ptr());
-        self.addr_of(at_ptr.clone(), at);
-        self.call(retain, [Value::Ref(Ref::from(at_ptr))], None);
-        
-        true
-    }
-
     pub fn begin_loop_body_scope(&mut self, continue_label: Label, break_label: Label) {
         self.local_stack_mut().push_loop(continue_label, break_label);
         self.local_begin();

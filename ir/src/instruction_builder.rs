@@ -724,7 +724,27 @@ pub trait InstructionBuilder {
 
         self.comment(&format!("release: {}", ty.to_pretty_string(self.ir_formatter())));
 
-        self.release_deep(at, ty)
+        if self.call_release(at.clone(), ty) {
+            true
+        } else {
+            self.release_deep(at, ty)
+        }
+    }
+
+    fn call_release(&mut self, at: Ref, ty: &Type) -> bool {
+        let Some(rtti) = self.metadata().get_runtime_type(ty)else {
+            return false;
+        };
+
+        let Some(release) = rtti.release else {
+            return false;
+        };
+
+        let at_ptr = self.local_temp(ty.clone().ptr());
+        self.addr_of(at_ptr.clone(), at);
+        self.call(release, [Value::from(at_ptr)], None);
+
+        true
     }
     
     fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
@@ -750,7 +770,27 @@ pub trait InstructionBuilder {
 
         self.comment(&format!("retain: {}", ty.to_pretty_string(self.ir_formatter())));
 
-        self.retain_deep(at, ty)
+        if self.call_retain(at.clone(), ty) {
+            true
+        } else {
+            self.retain_deep(at, ty)
+        }
+    }
+
+    fn call_retain(&mut self, at: Ref, ty: &Type) -> bool {
+        let Some(rtti) = self.metadata().get_runtime_type(ty)else {
+            return false;
+        };
+
+        let Some(retain) = rtti.retain else {
+            return false;
+        };
+
+        let at_ptr = self.local_temp(ty.clone().ptr());
+        self.addr_of(at_ptr.clone(), at);
+        self.call(retain, [Value::Ref(Ref::from(at_ptr))], None);
+
+        true
     }
     
     fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
