@@ -15,7 +15,6 @@ mod test;
 pub use self::dyn_value::*;
 pub use self::ptr::Pointer;
 
-use crate::builtin::{builtin_string_def, BuiltinStructDef};
 use crate::diag::DiagnosticOutput;
 use crate::diag::DiagnosticWorker;
 use crate::func::BuiltinFn;
@@ -38,6 +37,7 @@ use std::ops::BitOr;
 use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
+use terapascal_ir::builtin::string_def;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -66,7 +66,7 @@ pub struct Interpreter {
     // types in this set are required for basic operation, and so are always defined internally.
     // a loaded library may add a definition for this type, but only one definition may be provided,
     // and it must match the builtin definition exactly.
-    builtin_structs: BTreeMap<ir::TypeDefID, BuiltinStructDef>,
+    builtin_structs: BTreeMap<ir::TypeDefID, ir::Struct>,
 }
 
 impl Interpreter {
@@ -78,22 +78,23 @@ impl Interpreter {
         let mut metadata = ir::Metadata::default();
 
         let builtin_structs: BTreeMap<_, _> = [
-            (ir::STRING_ID, builtin_string_def()),
+            (ir::STRING_ID, string_def()),
         ].into_iter().collect();
         
-        for (id, builtin_def) in &builtin_structs {
+        for (id, struct_def) in &builtin_structs {
             metadata.reserve_struct(*id);
-            match &builtin_def.def.identity {
-                ir::StructIdentity::Class(..) | ir::StructIdentity::DynArray(..) => {
-                    metadata.declare_struct(*id, &builtin_def.name, true)
+            match &struct_def.identity {
+                ir::StructIdentity::Class(name) => {
+                    metadata.declare_struct(*id, name, true)
                 }
-                _ => {
-                    metadata.declare_struct(*id, &builtin_def.name, false)
+                ir::StructIdentity::Record(name) => {
+                    metadata.declare_struct(*id, name, false)
                 }
+                _ => {}
             }
 
-            metadata.define_struct(*id, builtin_def.def.clone());
-            marshaller.add_struct(*id, &builtin_def.def, &metadata)
+            metadata.define_struct(*id, struct_def.clone());
+            marshaller.add_struct(*id, struct_def, &metadata)
                 .expect("builtin type definition raised a marshalling error");
         }
 
@@ -1875,10 +1876,10 @@ impl Interpreter {
             if metadata.get_struct_def(*id).is_some()
                 && let Some(new_def) = lib.metadata.get_struct_def(*id) 
             {
-                if !new_def.is_equivalent_def(&builtin_def.def) {
+                if !new_def.is_equivalent_def(&builtin_def) {
                     let msg = format!(
                         "library definition of built-in type {} (redefined as {}) does not match the expected definition",
-                        builtin_def.def.identity.to_pretty_string(&metadata),
+                        builtin_def.identity.to_pretty_string(&metadata),
                         new_def.identity.to_pretty_string(&lib.metadata)
                     );
                     return Err(ExecError::illegal_state(msg));

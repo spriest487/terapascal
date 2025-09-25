@@ -720,34 +720,3 @@ pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, Type, 
 
     items
 }
-
-#[derive(Debug)]
-pub struct BuiltinStructDef {
-    pub name: NamePath,
-    pub def: Struct,
-}
-
-pub fn builtin_string_def() -> BuiltinStructDef {
-    let name = NamePath::new(["System".to_string()], "String");
-    
-    let def = Struct {
-        identity: StructIdentity::Class(name.clone()),
-        fields: [
-            (STRING_CHARS_FIELD, StructFieldDef {
-                name: None,
-                ty: Type::U8.ptr(),
-                rc: false,
-            }),
-            (STRING_LEN_FIELD, StructFieldDef {
-                name: None,
-                ty: Type::I32,
-                rc: false,
-            }),
-        ].into_iter().collect()
-    };
-    
-    BuiltinStructDef {
-        name, 
-        def,
-    }
-}

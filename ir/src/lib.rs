@@ -9,6 +9,7 @@ mod library;
 pub mod dep_sort;
 pub mod rtti;
 pub mod instruction_builder;
+pub mod builtin;
 
 pub use formatter::*;
 pub use function::*;
