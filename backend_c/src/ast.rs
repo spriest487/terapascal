@@ -43,7 +43,7 @@ pub struct Unit {
     opts: Options,
 
     type_infos: HashMap<ir::Type, Rc<ir::RuntimeType>>,
-    methodinfo_array_class: ir::TypeDefID,
+    methodinfo_array_class: Option<ir::TypeDefID>,
     
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
 }
@@ -54,8 +54,7 @@ impl Unit {
 
         // array types referenced in the system unit required for reflection to work
         let methodinfo_array_class = metadata
-            .find_dyn_array_struct(&ir::METHODINFO_TYPE)
-            .expect("method info array type must exist");
+            .find_dyn_array_struct(&ir::METHODINFO_TYPE);
 
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
         let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
@@ -502,7 +501,7 @@ impl Unit {
     fn gen_rtti_init(&self, init_stmts: &mut Vec<Statement>) {
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
         let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
-        
+
         let typeinfo_count = i32::try_from(self.type_infos.len()).unwrap_or(i32::MAX);
         let funcinfo_count = i32::try_from(self.runtime_funcinfos.len()).unwrap_or(i32::MAX);
 
@@ -536,11 +535,15 @@ impl Unit {
                 )])
                 .cast(funcinfo_ty.ptr()),
         ));
+
+        let Some(methodinfo_array_class) = self.methodinfo_array_class else {
+            return;
+        };
         
         // initialize type info fields that can't be statically initialized
         const METHODS_ARRAY_NAME: &str = "methods_array";
         init_stmts.push(Statement::VariableDecl {
-            ty: Type::from_ir_struct(self.methodinfo_array_class).ptr(),
+            ty: Type::from_ir_struct(methodinfo_array_class).ptr(),
             id: VariableID::Named(Box::new(METHODS_ARRAY_NAME.to_string())),
             null_init: false,
         });
@@ -559,7 +562,7 @@ impl Unit {
             null_init: true,
         });
 
-        let method_array_class_ptr = Expr::Global(GlobalName::ClassInstance(self.methodinfo_array_class))
+        let method_array_class_ptr = Expr::Global(GlobalName::ClassInstance(methodinfo_array_class))
             .addr_of()
             .cast(Type::Class.ptr());
         let method_class_ptr = Expr::Global(GlobalName::ClassInstance(ir::METHODINFO_ID))
@@ -571,16 +574,16 @@ impl Unit {
         ]);
 
         let mut typeinfo_index = 0i128;
-        
+
         for (ty, typeinfo) in &self.type_infos {
             // allocate the method dynarray instance for this typeinfo 
             init_stmts.push(Statement::Expr(Expr::assign(
                 Expr::named_var(METHODS_ARRAY_NAME),
-                call_array_rcalloc.clone()
+                call_array_rcalloc.clone(),
             )));
 
             // allocate the method array memory
-            let array_realloc = Expr::Class(self.methodinfo_array_class)
+            let array_realloc = Expr::Class(methodinfo_array_class)
                 .field(FieldName::DynArrayAlloc);
             init_stmts.push(Statement::Expr(array_realloc.call([
                 Expr::named_var(METHODS_ARRAY_NAME),
@@ -608,7 +611,7 @@ impl Unit {
                             .arrow(FieldName::ID(ir::DYNARRAY_PTR_FIELD)),
                         InfixOp::Add,
                         Expr::LitInt(method_index as i128),
-                    )
+                    ),
                 )));
 
                 let method_ptr_expr = Expr::named_var(METHODINFO_NAME).deref();
@@ -670,11 +673,11 @@ impl Unit {
                 Expr::named_var(METHODS_ARRAY_NAME),
             )));
         }
-        
+
         for funcinfo_index in 0..self.runtime_funcinfos.len() {
-            let func_id = self.runtime_funcinfos[funcinfo_index].id; 
+            let func_id = self.runtime_funcinfos[funcinfo_index].id;
             let func_info_expr = Expr::Global(GlobalName::StaticFuncInfo(func_id));
-            
+
             init_stmts.push(Statement::Expr(Expr::assign(
                 Expr::Global(GlobalName::FuncInfoList).index(Expr::LitInt(funcinfo_index as i128)),
                 func_info_expr.clone().addr_of(),
