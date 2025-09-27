@@ -510,7 +510,7 @@ impl Metadata {
             .unwrap_or_else(|| format!("interface({})", iface_id))
     }
 
-    pub fn pretty_ty_name(&self, ty: &Type) -> Cow<str> {
+    pub fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
         match ty {
             Type::Struct(id) | Type::Variant(id) => match self.type_decls.get(id) {
                 Some(TypeDecl::Forward(name)) => {
@@ -552,7 +552,7 @@ impl Metadata {
         }
     }
     
-    fn pretty_virtual_type_name(&self, id: VirtualTypeID) -> Cow<str> {
+    fn pretty_virtual_type_name(&self, id: VirtualTypeID) -> Cow<'_, str> {
         match id {
             VirtualTypeID::Any => Cow::Borrowed("any"),
 
@@ -677,7 +677,7 @@ impl Metadata {
                 let is_class = matches!(&struct_def.identity, StructIdentity::Class(..));
                 
                 self.type_decls.insert(id, TypeDecl::Def(TypeDef::Struct(struct_def)));
-
+    
                 if is_class {
                     self.class_ids.insert(id);
                 }

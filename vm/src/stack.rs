@@ -175,7 +175,7 @@ impl StackFrame {
         &self.name
     }
     
-    pub fn debug_location(&self) -> Cow<Span> {
+    pub fn debug_location(&self) -> Cow<'_, Span> {
         self.debug_ctx_stack.last()
             .map(|span| Cow::Borrowed(span))
             .unwrap_or_else(|| Cow::Owned(Span::zero("<unknown>")))

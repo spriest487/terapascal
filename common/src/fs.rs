@@ -10,7 +10,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 pub trait Filesystem {
-    fn read_source(&self, path: &Path) -> io::Result<Cow<str>>;
+    fn read_source(&self, path: &Path) -> io::Result<Cow<'_, str>>;
 
     fn exists(&self, path: &Path) -> bool;
     fn is_dir(&self, path: &Path) -> bool;
@@ -21,7 +21,7 @@ pub trait Filesystem {
 pub struct DefaultFilesystem;
 
 impl Filesystem for DefaultFilesystem {
-    fn read_source(&self, path: &Path) -> io::Result<Cow<str>> {
+    fn read_source(&self, path: &Path) -> io::Result<Cow<'_, str>> {
         let mut file = File::open(path)?;
 
         let end_pos = file.seek(SeekFrom::End(0))?;
