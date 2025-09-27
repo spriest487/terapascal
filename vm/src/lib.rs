@@ -2024,18 +2024,20 @@ impl Interpreter {
             .stack_alloc_size(lib.init())
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
-        if self.opts.verbose {
-            println!("[vm] entering library init");
-        }
+        if !lib.init.is_empty() {
+            if self.opts.verbose {
+                println!("[vm] entering library init");
+            }
 
-        self.push_stack(Rc::new("<init>".to_string()), init_stack_size);
+            self.push_stack(Rc::new("<init>".to_string()), init_stack_size);
 
-        self.execute(lib.init())?;
+            self.execute(&lib.init)?;
 
-        self.pop_stack()?;
+            self.pop_stack()?;
 
-        if self.opts.verbose {
-            println!("[vm] exiting library init");
+            if self.opts.verbose {
+                println!("[vm] exiting library init");
+            }
         }
 
         Ok(())
