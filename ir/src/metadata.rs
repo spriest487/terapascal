@@ -145,7 +145,7 @@ impl Metadata {
         metadata
     }
 
-    pub fn extend(&mut self, other: &Metadata) {
+    pub fn merge_from(&mut self, other: &Metadata) {
         for (id, decl) in &other.type_decls {
             match (self.type_decls.get(id), decl) {
                 // any decl replaces an existing reserved ID

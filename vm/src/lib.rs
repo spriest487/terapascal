@@ -1889,7 +1889,7 @@ impl Interpreter {
             }
         }
         
-        metadata.extend(&lib.metadata);
+        metadata.merge_from(&lib.metadata);
 
         let mut marshaller = (*self.marshaller).clone();
 
