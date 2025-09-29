@@ -173,8 +173,8 @@ impl Type {
         }
     }
 
-    pub fn full_name(&self) -> Option<Cow<Symbol>> {
-        fn builtin_sym(name: &str) -> Option<Cow<Symbol>> {
+    pub fn full_name(&self) -> Option<Cow<'_, Symbol>> {
+        fn builtin_sym(name: &str) -> Option<Cow<'_, Symbol>> {
             Some(Cow::Owned(Symbol::from(builtin_unit_path(name))))
         }
 
@@ -205,7 +205,7 @@ impl Type {
         }
     }
 
-    pub fn full_path(&self) -> Option<Cow<IdentPath>> {
+    pub fn full_path(&self) -> Option<Cow<'_, IdentPath>> {
         match self {
             Type::Nothing => Some(Cow::Owned(builtin_unit_path(NOTHING_TYPE_NAME))),
             Type::Any => Some(Cow::Owned(builtin_unit_path(ANY_TYPE_NAME))),
@@ -510,7 +510,7 @@ impl Type {
     /// get the type args this type is specialized with
     /// e.g. for the type `Box[Integer]`, the type list contains `Integer`
     /// returns `None` for non-generic types and unspecialized generic types
-    pub fn type_args(&self) -> TypeArgsResult {
+    pub fn type_args(&self) -> TypeArgsResult<'_> {
         match self {
             Type::Variant(name) | Type::Class(name) | Type::Record(name) => {
                 match (&name.type_params, &name.type_args) {
@@ -646,7 +646,7 @@ impl Type {
         }
     }
 
-    pub fn arithmetic_op_result(&self, op: Operator, rhs: &Self) -> Option<Cow<Self>> {
+    pub fn arithmetic_op_result(&self, op: Operator, rhs: &Self) -> Option<Cow<'_, Self>> {
         match (self, op, rhs) {
             // pointer-pointer subtraction - returns an isize offset
             (
@@ -1584,7 +1584,7 @@ impl Specializable for Type {
         }
     }
 
-    fn name(&self) -> Cow<IdentPath> {
+    fn name(&self) -> Cow<'_, IdentPath> {
         self.full_path().expect("only types with full paths can be specialized")
     }
 
@@ -1623,7 +1623,7 @@ impl Specializable for TypeName {
         self.ty().is_unspecialized_generic()
     }
 
-    fn name(&self) -> Cow<Self::GenericID> {
+    fn name(&self) -> Cow<'_, Self::GenericID> {
         self.ty().name()
     }
 

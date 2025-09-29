@@ -563,7 +563,7 @@ impl Value {
         }
     }
 
-    pub fn ty(&self) -> Cow<Type> {
+    pub fn ty(&self) -> Cow<'_, Type> {
         match self {
             Value::Namespace(_, _)
             | Value::Untyped(_)
@@ -582,7 +582,7 @@ impl Value {
         }
     }
 
-    pub fn decl(&self) -> Option<Cow<IdentPath>> {
+    pub fn decl(&self) -> Option<Cow<'_, IdentPath>> {
         match self {
             Value::Type(..) => None,
             Value::Function { .. } => None,     // TODO

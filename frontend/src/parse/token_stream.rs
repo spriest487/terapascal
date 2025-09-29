@@ -105,7 +105,7 @@ impl TokenStream {
             .collect::<Result<Vec<_>, _>>()
     }
 
-    pub fn look_ahead(&mut self) -> LookAheadTokenStream {
+    pub fn look_ahead(&mut self) -> LookAheadTokenStream<'_> {
         LookAheadTokenStream {
             tokens: self,
             offset: 0,

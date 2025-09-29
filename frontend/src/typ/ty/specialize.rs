@@ -32,7 +32,7 @@ pub trait Specializable {
     type GenericID: PartialEq + Clone;
 
     fn is_unspecialized_generic(&self) -> bool;
-    fn name(&self) -> Cow<Self::GenericID>;
+    fn name(&self) -> Cow<'_, Self::GenericID>;
 
     fn infer_specialized_from_hint<'a, 'b>(&'a self, hint: &'a Self) -> Option<&'b Self>
     where 'a: 'b

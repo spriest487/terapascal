@@ -298,16 +298,16 @@ impl Context {
         }
     }
 
-    pub fn find_name(&self, name: &Ident) -> Option<ScopeMemberRef> {
+    pub fn find_name(&self, name: &Ident) -> Option<ScopeMemberRef<'_>> {
         self.find_path(&IdentPath::from_parts([name.clone()]))
     }
 
-    pub fn find_path(&self, path: &IdentPath) -> Option<ScopeMemberRef> {
+    pub fn find_path(&self, path: &IdentPath) -> Option<ScopeMemberRef<'_>> {
         // start by assuming any path we are searching for might be relative
         self.find_path_rec(path, true)
     }
 
-    fn find_path_rec(&self, path: &IdentPath, path_is_relative: bool) -> Option<ScopeMemberRef> {
+    fn find_path_rec(&self, path: &IdentPath, path_is_relative: bool) -> Option<ScopeMemberRef<'_>> {
         match self.scopes.resolve_path(path) {
             // found an alias - resolve using its real name
             Some(ScopeMemberRef::Decl {
@@ -346,7 +346,7 @@ impl Context {
         }
     }
 
-    fn find_path_in_used_units(&self, path: &IdentPath) -> Option<ScopeMemberRef> {
+    fn find_path_in_used_units(&self, path: &IdentPath) -> Option<ScopeMemberRef<'_>> {
         let current_path = self.scopes.current_path();
 
         // try it as a qualified name in a used namespaces
@@ -1004,7 +1004,7 @@ impl Context {
         Some(&method)
     }
     
-    pub fn current_scope(&self) -> ScopePathRef {
+    pub fn current_scope(&self) -> ScopePathRef<'_> {
         self.scopes.current_path()
     }
 

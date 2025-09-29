@@ -777,7 +777,7 @@ impl SetDecl {
         })
     }
     
-    pub fn value_type(&self) -> Cow<Type> {
+    pub fn value_type(&self) -> Cow<'_, Type> {
         match self.range.as_ref() {
             SetDeclRange::Type { ty, .. } => Cow::Borrowed(ty),
             SetDeclRange::Range { from, .. } => from.annotation().ty(),

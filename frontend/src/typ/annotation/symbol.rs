@@ -243,7 +243,7 @@ impl Specializable for Symbol {
         self.type_args.is_none()
     }
 
-    fn name(&self) -> Cow<IdentPath> {
+    fn name(&self) -> Cow<'_, IdentPath> {
         Cow::Borrowed(&self.full_path)
     }
 

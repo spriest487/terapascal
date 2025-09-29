@@ -238,7 +238,7 @@ impl<'s> ScopeMemberRef<'s> {
         }
     }
     
-    pub fn as_scope(&self) -> Option<&'s ScopePathRef> {
+    pub fn as_scope(&self) -> Option<&'s ScopePathRef<'_>> {
         match self {
             ScopeMemberRef::Decl { .. } => None,
             ScopeMemberRef::Scope { path } => Some(path),

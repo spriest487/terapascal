@@ -14,7 +14,7 @@ pub enum FunctionDeclKey {
 }
 
 impl FunctionDeclKey {
-    pub fn namespace(&self) -> Cow<IdentPath> {
+    pub fn namespace(&self) -> Cow<'_, IdentPath> {
         match self {
             FunctionDeclKey::Function { name, .. } => name
                 .parent()

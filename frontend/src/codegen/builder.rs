@@ -336,7 +336,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.library.find_method_index(self_ty, method_name, &impl_sig)
     }
 
-    pub fn pretty_ty_name(&self, ty: &Type) -> Cow<str> {
+    pub fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
         self.library.metadata().pretty_ty_name(ty)
     }
 

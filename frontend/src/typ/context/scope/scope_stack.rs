@@ -100,7 +100,7 @@ impl ScopeStack {
         self.scopes.iter()
     }
 
-    pub fn current_path(&self) -> ScopePathRef {
+    pub fn current_path(&self) -> ScopePathRef<'_> {
         ScopePathRef {
             scopes: self.scopes.iter().collect(),
         }
@@ -112,7 +112,7 @@ impl ScopeStack {
         self.scopes.iter_mut()
     }
 
-    pub fn current_path_mut(&mut self) -> ScopePathRefMut {
+    pub fn current_path_mut(&mut self) -> ScopePathRefMut<'_> {
         ScopePathRefMut {
             namespaces: self.scopes.iter_mut().collect(),
         }
@@ -126,7 +126,7 @@ impl ScopeStack {
         self.scopes.last_mut().unwrap()
     }
 
-    pub fn resolve_path(&self, path: &IdentPath) -> Option<ScopeMemberRef> {
+    pub fn resolve_path(&self, path: &IdentPath) -> Option<ScopeMemberRef<'_>> {
         let current_path = self.current_path();
 
         let mut next_path = current_path.clone();

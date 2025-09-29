@@ -279,7 +279,7 @@ impl Unit {
         module
     }
 
-    pub fn pretty_type(&self, ir_ty: &ir::Type) -> Cow<str> {
+    pub fn pretty_type(&self, ir_ty: &ir::Type) -> Cow<'_, str> {
         match self.type_infos.get(ir_ty).and_then(|typeinfo| typeinfo.name) {
             Some(name_id) => {
                 let name = &self.string_literals[&name_id];
