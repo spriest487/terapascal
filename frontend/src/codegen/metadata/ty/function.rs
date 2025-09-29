@@ -40,7 +40,7 @@ pub fn translate_closure_struct(
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::TypeDefID {
-    let id = lib.metadata_mut().reserve_new_struct();
+    let id = lib.metadata_mut().new_type();
 
     let mut fields = LinkedHashMap::new();
     fields.insert(

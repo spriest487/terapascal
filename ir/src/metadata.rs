@@ -1,4 +1,5 @@
-use crate::dep_sort::sort_defs;
+mod builder;
+
 use crate::rtti::DynArrayRuntimeType;
 use crate::rtti::RuntimeType;
 use crate::ty::FieldID;
@@ -21,8 +22,6 @@ use crate::SetAliasDef;
 use crate::SetAliasID;
 use crate::StaticClosureID;
 use crate::Struct;
-use crate::StructFieldDef;
-use crate::StructIdentity;
 use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
@@ -38,6 +37,8 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+
+pub use builder::MetadataBuilder;
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct StringID(pub usize);
@@ -108,26 +109,28 @@ pub const BUILTIN_TYPE_DEFS: [Type; 2] = [
     TYPEINFO_TYPE,
 ];
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
     type_decls: LinkedHashMap<TypeDefID, TypeDecl>,
     string_literals: LinkedHashMap<StringID, String>,
     ifaces: LinkedHashMap<InterfaceID, InterfaceDecl>,
 
+    variables: BTreeMap<VariableID, Type>,
+
     dtors: BTreeMap<TypeDefID, FunctionID>,
     
     class_ids: BTreeSet<TypeDefID>,
-
-    dyn_array_structs: LinkedHashMap<Type, TypeDefID>,
+    set_aliases: LinkedHashMap<SetAliasID, SetAliasDef>,
 
     functions: LinkedHashMap<FunctionID, Rc<FunctionDecl>>,
-    set_aliases: LinkedHashMap<SetAliasID, SetAliasDef>,
 
     closures: Vec<TypeDefID>,
     function_static_closures: HashMap<FunctionID, StaticClosureID>,
 
-    runtime_types: HashMap<Type, Rc<RuntimeType>>,
+    dyn_array_structs: LinkedHashMap<Type, TypeDefID>,
     dyn_array_runtime_types: HashMap<Type, DynArrayRuntimeType>,
+
+    runtime_types: HashMap<Type, Rc<RuntimeType>>,
     
     bounds_check_functions: HashMap<Type, FunctionID>,
 
@@ -137,7 +140,30 @@ pub struct Metadata {
 impl Metadata {
     pub fn new() -> Self {
         let mut metadata = Self {
-            ..Default::default()
+            type_decls: LinkedHashMap::new(),
+            string_literals: LinkedHashMap::new(),
+            ifaces: LinkedHashMap::new(),
+            
+            variables: BTreeMap::new(),
+            
+            dtors: BTreeMap::new(),
+            
+            class_ids: BTreeSet::new(),
+            set_aliases: LinkedHashMap::new(),
+
+            bounds_check_functions: HashMap::new(),
+            
+            functions: LinkedHashMap::new(),
+            
+            closures: Vec::new(),
+            function_static_closures: HashMap::new(),
+
+            runtime_types: HashMap::new(),
+
+            dyn_array_structs: LinkedHashMap::new(),
+            dyn_array_runtime_types: HashMap::new(),
+
+            tag_counts: HashMap::new(),
         };
         
         metadata.string_literals.insert(EMPTY_STRING_ID, String::new());
@@ -349,82 +375,9 @@ impl Metadata {
             InterfaceDecl::Forward(..) => None,
         }
     }
-
-    fn next_type_def_id(&mut self) -> TypeDefID {
-        (1..)
-            .map(TypeDefID)
-            .find(|id| !self.type_decls.contains_key(id) && *id != STRING_ID)
-            .unwrap()
-    }
-
-    fn next_iface_id(&mut self) -> InterfaceID {
-        (1..)
-            .map(InterfaceID)
-            .find(|id| !self.ifaces.contains_key(id))
-            .unwrap()
-    }
-
-    fn next_function_id(&mut self) -> FunctionID {
-        (1..)
-            .map(FunctionID)
-            .find(|id| !self.functions.contains_key(id))
-            .unwrap()
-    }
-
-    fn next_set_id(&mut self) -> SetAliasID {
-        let id = self.set_aliases
-            .iter()
-            .next_back()
-            .map(|(id, _)| id.0)
-            .unwrap_or(0);
-
-        SetAliasID(id + 1)
-    }
-
-    pub fn insert_func(&mut self, global_name: Option<NamePath>) -> FunctionID {
-        let id = self.next_function_id();
-        
-        let runtime_name = global_name
-            .as_ref()
-            .cloned()
-            .map(|name_path| {
-                let name = name_path.to_string();
-                
-                self.find_or_insert_string(&name)
-            });
-
-        let decl = FunctionDecl { global_name, runtime_name };
-        self.functions.insert(id, Rc::new(decl));
-
-        id
-    }
     
     pub fn get_bounds_check_func(&self, type_id: &Type) -> Option<FunctionID> {
         self.bounds_check_functions.get(type_id).cloned()
-    }
-
-    pub fn insert_runtime_type(&mut self, ty: Type, runtime_type: RuntimeType) -> Rc<RuntimeType> {
-        let runtime_type = Rc::new(runtime_type);
-
-        // it's valid to replace existing entries
-        // getting the runtime type info right is the responsibility of the frontend 
-        self.runtime_types.insert(ty, runtime_type.clone());
-        
-        runtime_type
-    }
-
-    pub fn declare_dynarray_runtime_type(&mut self, element_ty: &Type) -> DynArrayRuntimeType {
-        if self.dyn_array_runtime_types.contains_key(element_ty) {
-            panic!("duplicate rc boilerplate declaration for type {}", self.pretty_ty_name(element_ty));
-        }
-
-        let runtime_type = DynArrayRuntimeType {
-            alloc: self.insert_func(None),
-            length: self.insert_func(None),
-        };
-
-        self.dyn_array_runtime_types.insert(element_ty.clone(), runtime_type.clone());
-        runtime_type
     }
 
     pub fn get_runtime_type(&self, ty: &Type) -> Option<Rc<RuntimeType>> {
@@ -502,6 +455,16 @@ impl Metadata {
                     })
                 })
             })
+    }
+    
+    pub fn variables(&self) -> impl Iterator<Item=(VariableID, &Type)> {
+        self.variables
+            .iter()
+            .map(|(var_id, var_ty)| (*var_id, var_ty))
+    }
+
+    pub fn get_variable_type(&self, id: VariableID) -> Option<&Type> {
+        self.variables.get(&id)
     }
 
     pub fn iface_name(&self, iface_id: InterfaceID) -> String {
@@ -592,52 +555,6 @@ impl Metadata {
         pretty
     }
 
-    pub fn reserve_new_struct(&mut self) -> TypeDefID {
-        let id = self.next_type_def_id();
-        self.type_decls.insert(id, TypeDecl::Reserved);
-        id
-    }
-
-    pub fn reserve_struct(&mut self, id: TypeDefID) {
-        if self.type_decls.contains_key(&id) {
-            panic!("reserving existing struct ID {}", id);
-        }
-
-        self.type_decls.insert(id, TypeDecl::Reserved);
-    }
-
-    // turn a reserved struct ID into a forward decl by name
-    pub fn declare_struct(&mut self, id: TypeDefID, name: &NamePath, is_class: bool) {
-        if is_class && self.class_ids.contains(&id) {
-            panic!("class {id} is already declared (new declaration: {name})");
-        }
-        
-        match &mut self.type_decls[&id] {
-            reserved @ TypeDecl::Reserved => {
-                *reserved = TypeDecl::Forward(name.clone());
-            },
-
-            TypeDecl::Forward(prev_name) => {
-                assert_eq!(
-                    prev_name, name,
-                    "can't declare same struct multiple times with different names"
-                );
-            },
-
-            TypeDecl::Def(def) => {
-                assert_eq!(
-                    def.name(),
-                    Some(name),
-                    "can't declare same struct multiple times with different names"
-                );
-            },
-        }
-        
-        if is_class {
-            self.class_ids.insert(id);
-        }
-    }
-
     pub fn is_defined(&self, ty: &Type) -> bool {
         let id = match ty {
             Type::Struct(id)
@@ -660,65 +577,8 @@ impl Metadata {
         !self.type_decls[&id].is_forward()
     }
 
-    pub fn define_struct(&mut self, id: TypeDefID, struct_def: Struct) {
-        match self.type_decls.get(&id) {
-            Some(TypeDecl::Forward(name)) => {
-                assert_eq!(Some(name), struct_def.name());
-                let type_def = TypeDecl::Def(TypeDef::Struct(struct_def));
-                self.type_decls.insert(id, type_def);
-            },
-
-            Some(TypeDecl::Reserved) => {
-                let type_def = TypeDecl::Def(TypeDef::Struct(struct_def));
-                self.type_decls.insert(id, type_def);
-            }
-            
-            None => {
-                let is_class = matches!(&struct_def.identity, StructIdentity::Class(..));
-                
-                self.type_decls.insert(id, TypeDecl::Def(TypeDef::Struct(struct_def)));
-    
-                if is_class {
-                    self.class_ids.insert(id);
-                }
-            }
-
-            Some(TypeDecl::Def(..)) => {
-                panic!("already defined: {}", struct_def);
-            }
-        }
-    }
-
-    pub fn define_variant(&mut self, id: TypeDefID, variant_def: VariantDef) {
-        match &mut self.type_decls[&id] {
-            TypeDecl::Forward(name) => {
-                assert_eq!(*name, variant_def.name);
-
-                self.type_decls
-                    .insert(id, TypeDecl::Def(TypeDef::Variant(variant_def)));
-            },
-
-            _other => {
-                panic!(
-                    "expected named declaration to exist when defining {}",
-                    variant_def.name
-                );
-            },
-        }
-    }
-    
-    pub fn insert_static_closure(&mut self, func_id: FunctionID, closure: StaticClosureID) {
-        let replaced = self.function_static_closures.insert(func_id, closure);
-        assert!(replaced.is_none(), "static closure for function {func_id} must not have been inserted already");
-    }
-
     pub fn get_static_closure(&self, p0: FunctionID) -> Option<StaticClosureID> {
         self.function_static_closures.get(&p0).cloned()
-    }
-
-    pub fn define_closure_ty(&mut self, id: TypeDefID, closure_def: Struct) {
-        self.define_struct(id, closure_def);
-        self.closures.push(id);
     }
 
     pub fn get_func_ptr_ty(&self, id: TypeDefID) -> Option<&FunctionSig> {
@@ -728,15 +588,6 @@ impl Metadata {
         })
     }
 
-    pub fn insert_type_decl(&mut self, decl: TypeDecl) -> TypeDefID {
-        let id = self.next_type_def_id();
-
-        let replaced = self.type_decls.insert(id, decl);
-        assert!(replaced.is_none());
-
-        id
-    }
-
     pub fn ifaces(&self) -> impl Iterator<Item = (InterfaceID, &Interface)> {
         self.ifaces
             .iter()
@@ -744,60 +595,6 @@ impl Metadata {
                 InterfaceDecl::Def(iface_def) => Some((*id, iface_def)),
                 InterfaceDecl::Forward(..) => None,
             })
-    }
-
-    pub fn declare_iface(&mut self, name: &NamePath) -> InterfaceID {
-        let existing = self.ifaces.iter().find_map(|(id, decl)| match decl {
-            InterfaceDecl::Forward(decl_name) if decl_name == name => Some(*id),
-            InterfaceDecl::Def(iface) if iface.name == *name => Some(*id),
-            _ => None,
-        });
-
-        if let Some(existing) = existing {
-            return existing;
-        }
-
-        let id = self.next_iface_id();
-        self.ifaces.insert(id, InterfaceDecl::Forward(name.clone()));
-        id
-    }
-
-    pub fn define_iface(&mut self, iface_def: Interface) -> InterfaceID {
-        let id = self.declare_iface(&iface_def.name);
-
-        self.ifaces.insert(id, InterfaceDecl::Def(iface_def));
-
-        id
-    }
-
-    pub fn impl_method(
-        &mut self,
-        iface_id: InterfaceID,
-        for_ty: Type,
-        method_name: impl Into<String>,
-        func_id: FunctionID,
-    ) {
-        let method_name = method_name.into();
-
-        match self.ifaces.get_mut(&iface_id) {
-            Some(InterfaceDecl::Def(iface_def)) => {
-                let index = iface_def
-                    .method_index(&method_name)
-                    .unwrap_or_else(|| panic!("expected {} to contain method {}", iface_def.name, method_name));
-
-                iface_def.add_impl(for_ty, index, func_id);
-            },
-
-            Some(InterfaceDecl::Forward(name)) => panic!(
-                "trying to impl method {} for interface {} which isn't defined yet",
-                method_name, name
-            ),
-
-            None => panic!(
-                "trying to impl method {} for interface {} which doesn't exist",
-                method_name, iface_id
-            ),
-        }
     }
 
     /// Find the method instance that implements the given interface method for `ty`
@@ -840,68 +637,12 @@ impl Metadata {
             .collect()
     }
     
-    pub fn insert_dtor(&mut self, owning_type: TypeDefID, dtor_func: FunctionID) {
-        self.dtors.insert(owning_type, dtor_func);
-    }
-    
     pub fn find_dtor(&self, owning_type: TypeDefID) -> Option<FunctionID> {
         self.dtors.get(&owning_type).cloned()
     }
 
     pub fn find_dyn_array_struct(&self, element: &Type) -> Option<TypeDefID> {
         self.dyn_array_structs.get(element).cloned()
-    }
-
-    pub fn define_dyn_array_struct(&mut self, element: Type) -> TypeDefID {
-        assert!(
-            !self.dyn_array_structs.contains_key(&element),
-            "duplicate IR struct definition for dynamic array with element {}",
-            element
-        );
-
-        let mut fields = LinkedHashMap::new();
-        fields.insert(
-            DYNARRAY_LEN_FIELD,
-            StructFieldDef {
-                name: Some("len".to_string()),
-                ty: Type::I32,
-                rc: false,
-            },
-        );
-        fields.insert(
-            DYNARRAY_PTR_FIELD,
-            StructFieldDef {
-                name: Some("ptr".to_string()),
-                ty: element.clone().ptr(),
-                rc: false,
-            },
-        );
-
-        let struct_id = self.next_type_def_id();
-        self.type_decls.insert(
-            struct_id,
-            TypeDecl::Def(TypeDef::Struct(Struct {
-                identity: StructIdentity::DynArray(element.clone()),
-                fields,
-            })),
-        );
-        
-        self.class_ids.insert(struct_id);
-
-        self.dyn_array_structs.insert(element.clone(), struct_id);
-
-        // the rc boilerplate impls for a dynarray should be empty
-        // dyn array structs are heap-allocated and don't need structural ref-counting
-        // (but they do need custom finalization to clean up references they hold)
-        let release_id = self.insert_func(None);
-
-        let mut rtt = RuntimeType::new(None);
-        rtt.release = Some(release_id);
-        
-        self.insert_runtime_type(Type::Struct(struct_id), rtt);
-        self.declare_dynarray_runtime_type(&element);
-
-        struct_id
     }
 
     pub fn dyn_array_structs(&self) -> &LinkedHashMap<Type, TypeDefID> {
@@ -969,38 +710,6 @@ impl Metadata {
                 }
             })
     }
-    
-    pub fn define_set_type(&mut self, name: Option<NamePath>, flags_struct: TypeDefID) -> SetAliasID {
-        let set_id = self.next_set_id();
-        
-        self.set_aliases.insert(set_id, SetAliasDef {
-            name,
-            flags_struct,
-        });
-        
-        set_id
-    }
-
-    pub fn find_or_insert_string(&mut self, s: &str) -> StringID {
-        let existing =
-            self.string_literals
-                .iter()
-                .find_map(|(id, literal)| if literal == s { Some(*id) } else { None });
-
-        match existing {
-            Some(id) => id,
-            None => {
-                let next_id = self
-                    .string_literals
-                    .keys()
-                    .max_by_key(|id| id.0)
-                    .map(|id| StringID(id.0 + 1))
-                    .unwrap_or(StringID(0));
-                self.string_literals.insert(next_id, s.to_string());
-                next_id
-            },
-        }
-    }
 
     pub fn find_string_id(&self, string: &str) -> Option<StringID> {
         self.string_literals.iter().find_map(|(id, string_lit)| {
@@ -1018,43 +727,6 @@ impl Metadata {
 
     pub fn strings(&self) -> impl Iterator<Item = (StringID, &str)> + '_ {
         self.string_literals.iter().map(|(id, s)| (*id, s.as_str()))
-    }
-
-    // hack: we don't always end up with types properly ordered by structural dependencies
-    // as a result of the order we encounter types in, so this gets called to sort them before
-    // finishing the module (assuming backends expect the types to be ordered e.g. like in C)
-    pub fn sort_type_defs_by_deps(&mut self) {
-        let mut unsorted = self.type_decls.clone();
-
-        // remove all defs into a separate collection
-        let mut defs = Vec::new();
-        let mut decls = LinkedHashMap::new();
-
-        while let Some((id, decl)) = unsorted.pop_front() {
-            match decl {
-                TypeDecl::Reserved => {
-                    decls.insert(id, TypeDecl::Reserved);
-                },
-                TypeDecl::Forward(name) => {
-                    decls.insert(id, TypeDecl::Forward(name));
-                },
-
-                TypeDecl::Def(def) => {
-                    defs.push((id, def));
-                },
-            }
-        }
-
-        let sorted_defs = sort_defs(defs, self);
-
-        self.type_decls = decls;
-        for (id, def) in sorted_defs {
-            self.type_decls.insert(id, TypeDecl::Def(def));
-        }
-    }
-
-    pub fn alloc_tag_array(&mut self, loc: TagLocation, len: usize) {
-        self.tag_counts.insert(loc, len);
     }
     
     pub fn tag_counts(&self) -> impl Iterator<Item=(TagLocation, usize)> + use<'_> {

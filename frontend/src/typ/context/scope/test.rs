@@ -45,7 +45,7 @@ fn const_decl(val: i32) -> Decl {
     }
 }
 
-fn resolve_path<'a>(namespaces: &ScopeStack, path: impl IntoIterator<Item=&'a str>) -> ScopeMemberRef {
+fn resolve_path<'a>(namespaces: &ScopeStack, path: impl IntoIterator<Item=&'a str>) -> ScopeMemberRef<'_> {
     let path_parts = path.into_iter()
         .map(ident);
 

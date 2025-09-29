@@ -55,7 +55,7 @@ impl SetFlagsType {
                 .collect(),
         };
 
-        let struct_id = lib.metadata_mut().reserve_new_struct();
+        let struct_id = lib.metadata_mut().new_type();
         lib.metadata_mut().define_struct(struct_id, set_flags_struct);
         
         let include_func = Self::define_include(struct_id, word_count, lib);

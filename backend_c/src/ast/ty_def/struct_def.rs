@@ -69,7 +69,7 @@ impl StructDef {
 
         // fields should be written in the numerical order of their field IDs in the IR
         let mut sorted_fields: Vec<_> = ir_struct.fields.iter().collect();
-        sorted_fields.sort_by_key(|(id, _)| (id.0));
+        sorted_fields.sort_by_key(|(id, _)| id.0);
 
         for (id, field) in sorted_fields {
             let ty = Type::from_metadata(&field.ty, module);

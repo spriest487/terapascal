@@ -74,21 +74,21 @@ impl Interpreter {
         let globals = HashMap::new();
 
         let mut marshaller = Marshaller::new();
-        
-        let mut metadata = ir::Metadata::default();
 
         let builtin_structs: BTreeMap<_, _> = [
             (ir::STRING_ID, string_def()),
         ].into_iter().collect();
         
+        let mut metadata = ir::MetadataBuilder::new(); 
+        
         for (id, struct_def) in &builtin_structs {
-            metadata.reserve_struct(*id);
+            metadata.reserve_type(*id);
             match &struct_def.identity {
                 ir::StructIdentity::Class(name) => {
-                    metadata.declare_struct(*id, name, true)
+                    metadata.declare_type(*id, name, true)
                 }
                 ir::StructIdentity::Record(name) => {
-                    metadata.declare_struct(*id, name, false)
+                    metadata.declare_type(*id, name, false)
                 }
                 _ => {}
             }
@@ -98,7 +98,7 @@ impl Interpreter {
                 .expect("builtin type definition raised a marshalling error");
         }
 
-        let metadata = Rc::new(metadata);
+        let metadata = Rc::new(metadata.build());
         let marshaller = Rc::new(marshaller);
         
         let native_heap = NativeHeap::new(metadata.clone(), marshaller.clone(), opts.trace_heap);

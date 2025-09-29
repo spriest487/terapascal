@@ -47,10 +47,6 @@ impl Library {
         }
     }
 
-    pub fn closure_types(&self) -> impl Iterator<Item = TypeDefID> + '_ {
-        self.metadata.closures().iter().cloned()
-    }
-
     pub fn static_closures(&self) -> &[StaticClosure] {
         &self.static_closures
     }

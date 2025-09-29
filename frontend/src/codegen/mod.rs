@@ -34,8 +34,7 @@ impl Default for CodegenOpts {
 }
 
 pub fn gen_lib(module: &typ::Module, opts: CodegenOpts) -> ir::Library {
-    let metadata = ir::Metadata::new();
-    let mut lib = LibraryBuilder::new(module.root_ctx.as_ref(), metadata, opts);
+    let mut lib = LibraryBuilder::new(module.root_ctx.as_ref(), [], opts);
 
     translate_builtin_class(&module, &mut lib, &typ::builtin_string_name(), ir::STRING_ID);
     translate_builtin_class(&module, &mut lib, &typ::builtin_typeinfo_name(), ir::TYPEINFO_ID);
@@ -65,7 +64,7 @@ fn translate_builtin_class(
 
     let name = translate_name(name, &generic_ctx, lib);
 
-    lib.metadata_mut().declare_struct(id, &name, true);
+    lib.metadata_mut().declare_type(id, &name, true);
 
     let resource_ty = translate_struct_def(class_def.as_ref(), &generic_ctx, lib);
 
