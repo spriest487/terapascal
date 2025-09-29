@@ -174,6 +174,7 @@ impl MetadataBuilder {
             ),
         }
     }
+
     pub fn define_dyn_array_struct(&mut self, element: Type) -> TypeDefID {
         assert!(
             !self.dyn_array_structs.contains_key(&element),
@@ -234,6 +235,8 @@ impl MetadataBuilder {
             name,
             flags_struct,
         });
+        
+        self.next_set_id.0 += 1;
 
         set_id
     }
