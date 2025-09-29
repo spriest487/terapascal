@@ -1,10 +1,10 @@
-use crate::FunctionDecl;
 use crate::FunctionID;
 use crate::MetadataBuilder;
 use crate::NamePath;
 use crate::StaticClosureID;
 use crate::Struct;
 use crate::TypeDefID;
+use crate::FunctionDecl;
 use std::rc::Rc;
 
 impl MetadataBuilder {
@@ -32,6 +32,10 @@ impl MetadataBuilder {
         self.metadata.dtors.insert(owning_type, dtor_func);
     }
 
+    pub fn find_dtor(&self, type_id: TypeDefID) -> Option<FunctionID> {
+        self.find_in_self_or_refs(|metadata| metadata.find_dtor(type_id))
+    }
+
     pub fn insert_static_closure(&mut self, func_id: FunctionID, closure: StaticClosureID) {
         let replaced = self.metadata.function_static_closures.insert(func_id, closure);
         assert!(replaced.is_none(), "static closure for function {func_id} must not have been inserted already");
@@ -40,5 +44,9 @@ impl MetadataBuilder {
     pub fn define_closure_ty(&mut self, id: TypeDefID, closure_def: Struct) {
         self.define_struct(id, closure_def);
         self.metadata.closures.push(id);
+    }
+    
+    pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {
+        self.find_in_self_or_refs(|metadata| metadata.find_function(name))
     }
 }

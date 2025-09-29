@@ -2,18 +2,28 @@ mod types;
 mod functions;
 mod rtti;
 
-use std::iter;
-use std::ops::Deref;
-use std::sync::Arc;
 use crate::dep_sort::sort_defs;
-use crate::{FunctionID, InterfaceID, SetAliasID, RESERVED_STRINGS, RESERVED_TYPES};
-use crate::StringID;
+use crate::FieldID;
+use crate::FunctionID;
+use crate::IRFormatter;
+use crate::InterfaceID;
 use crate::Metadata;
+use crate::MethodID;
+use crate::Ref;
+use crate::SetAliasID;
+use crate::StringID;
 use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDefID;
+use crate::Value;
 use crate::VariableID;
+use crate::RESERVED_STRINGS;
+use crate::RESERVED_TYPES;
 use linked_hash_map::LinkedHashMap;
+use std::borrow::Cow;
+use std::fmt;
+use std::iter;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct MetadataBuilder {
@@ -91,10 +101,18 @@ impl MetadataBuilder {
         }
     }
     
+    pub fn metadata(&self) -> &Metadata {
+        &self.metadata
+    }
+
+    pub fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
+        self.metadata.pretty_ty_name(ty)
+    }
+    
     pub fn new_variable(&mut self, ty: Type) -> VariableID {
         let id = self.next_variable_id;
 
-        while let Some(..) = self.variables.get(&self.next_variable_id) {
+        while let Some(..) = self.metadata.variables.get(&self.next_variable_id) {
             self.next_variable_id.0 += 1;
         }
         self.metadata.variables.insert(id, ty);
@@ -108,6 +126,39 @@ impl MetadataBuilder {
         self.sort_type_defs_by_deps();
         
         self.metadata
+    }
+
+    fn find_in_self_or_refs<'a, T, F>(&'a self, f: F) -> Option<T>
+    where
+        F: Fn(&'a Metadata) -> Option<T>,
+        T: 'a
+    {
+        if let Some(result) = f(&self.metadata) {
+            return Some(result);
+        }
+
+        for ref_metadata in &self.refs {
+            if let Some(result) = f(ref_metadata.as_ref()) {
+                return Some(result);
+            }
+        }
+
+        None
+    }
+
+    fn iter_in_self_or_refs<'a, T, F, Iter>(&'a self, f: F) -> impl Iterator<Item=T>
+    where
+        F: Fn(&'a Metadata) -> Iter + 'a,
+        Iter: Iterator<Item=T> + 'a, 
+        T: 'a
+    {
+        let self_results = f(&self.metadata);
+
+        let dep_results = self.refs
+            .iter()
+            .flat_map(move |ref_metadata| f(ref_metadata));
+
+        self_results.chain(dep_results)
     }
 
     // hack: we don't always end up with types properly ordered by structural dependencies
@@ -135,7 +186,7 @@ impl MetadataBuilder {
             }
         }
 
-        let sorted_defs = sort_defs(defs, self.as_ref());
+        let sorted_defs = sort_defs(defs, &self.metadata);
 
         self.metadata.type_decls = decls;
         for (id, def) in sorted_defs {
@@ -162,16 +213,29 @@ impl MetadataBuilder {
     }
 }
 
-impl AsRef<Metadata> for MetadataBuilder {
-    fn as_ref(&self) -> &Metadata {
-        &self.metadata
+
+impl IRFormatter for MetadataBuilder {
+    fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
+        self.metadata.format_type(ty, f)
     }
-}
 
-impl Deref for MetadataBuilder {
-    type Target = Metadata;
+    fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result {
+        self.metadata.format_val(val, f)
+    }
 
-    fn deref(&self) -> &Self::Target {
-        &self.metadata
+    fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result {
+        self.metadata.format_ref(r, f)
+    }
+
+    fn format_field(&self, of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result {
+        self.metadata.format_field(of_ty, field, f)
+    }
+
+    fn format_method(&self, iface: InterfaceID, method: MethodID, f: &mut dyn fmt::Write) -> fmt::Result {
+        self.metadata.format_method(iface, method, f)
+    }
+
+    fn format_variant_case(&self, of_ty: &Type, tag: usize, f: &mut dyn fmt::Write) -> fmt::Result {
+        self.metadata.format_variant_case(of_ty, tag, f)
     }
 }

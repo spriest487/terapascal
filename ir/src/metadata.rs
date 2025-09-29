@@ -261,7 +261,7 @@ impl Metadata {
 
         for (ty, funcs) in &other.runtime_types {
             if self.runtime_types.contains_key(ty) {
-                panic!("duplicate rc boilerplate definitions for type {}", ty);
+                panic!("duplicate RTTI definitions for type {}", self.pretty_ty_name(ty));
             }
 
             self.runtime_types.insert(ty.clone(), funcs.clone());

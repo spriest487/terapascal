@@ -94,7 +94,7 @@ impl Interpreter {
             }
 
             metadata.define_struct(*id, struct_def.clone());
-            marshaller.add_struct(*id, struct_def, &metadata)
+            marshaller.add_struct(*id, struct_def, metadata.metadata())
                 .expect("builtin type definition raised a marshalling error");
         }
 
@@ -1888,7 +1888,7 @@ impl Interpreter {
                 metadata.remove_type_def(*id);
             }
         }
-        
+
         metadata.merge_from(&lib.metadata);
 
         let mut marshaller = (*self.marshaller).clone();

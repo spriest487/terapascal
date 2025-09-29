@@ -121,6 +121,10 @@ impl MetadataBuilder {
             }
         }
     }
+    
+    pub fn get_struct_def(&self, id: TypeDefID) -> Option<&Struct> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_struct_def(id))
+    }
 
     pub fn define_variant(&mut self, id: TypeDefID, variant_def: VariantDef) {
         match &mut self.metadata.type_decls[&id] {
@@ -139,8 +143,13 @@ impl MetadataBuilder {
             },
         }
     }
+
+    pub fn get_variant_def(&self, id: TypeDefID) -> Option<&VariantDef> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_variant_def(id))
+    }
+
     pub fn declare_iface(&mut self, name: &NamePath) -> InterfaceID {
-        let existing = self.ifaces.iter().find_map(|(id, decl)| match decl {
+        let existing = self.metadata.ifaces.iter().find_map(|(id, decl)| match decl {
             InterfaceDecl::Forward(decl_name) if decl_name == name => Some(*id),
             InterfaceDecl::Def(iface) if iface.name == *name => Some(*id),
             _ => None,
@@ -162,6 +171,10 @@ impl MetadataBuilder {
         self.metadata.ifaces.insert(id, InterfaceDecl::Def(iface_def));
 
         id
+    }
+
+    pub fn get_iface_def(&self, id: InterfaceID) -> Option<&Interface> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_iface_def(id))
     }
 
     pub fn impl_method(
@@ -196,7 +209,7 @@ impl MetadataBuilder {
 
     pub fn define_dyn_array_struct(&mut self, element: Type) -> TypeDefID {
         assert!(
-            !self.dyn_array_structs.contains_key(&element),
+            !self.metadata.dyn_array_structs.contains_key(&element),
             "duplicate IR struct definition for dynamic array with element {}",
             element
         );
@@ -258,5 +271,9 @@ impl MetadataBuilder {
         self.next_set_id.0 += 1;
 
         set_id
+    }
+    
+    pub fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.type_defs())
     }
 }

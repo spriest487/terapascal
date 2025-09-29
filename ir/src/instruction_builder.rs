@@ -2,14 +2,12 @@ pub mod scope;
 
 use crate::instruction_builder::scope::LocalBinding;
 use crate::instruction_builder::scope::LocalStack;
-use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::InterfaceID;
 use crate::Label;
 use crate::LocalID;
-use crate::Metadata;
 use crate::MethodID;
 use crate::Ref;
 use crate::Type;
@@ -17,6 +15,8 @@ use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VirtualTypeID;
+use crate::BinOpInstruction;
+use crate::MetadataBuilder;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -24,7 +24,7 @@ use terapascal_common::span::Span;
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
     
-    fn metadata(&self) -> &Metadata;
+    fn metadata(&self) -> &MetadataBuilder;
 
     fn local_stack(&self) -> &LocalStack;
     fn local_stack_mut(&mut self) -> &mut LocalStack;
@@ -732,7 +732,7 @@ pub trait InstructionBuilder {
     }
 
     fn call_release(&mut self, at: Ref, ty: &Type) -> bool {
-        let Some(rtti) = self.metadata().get_runtime_type(ty)else {
+        let Some(rtti) = self.metadata().get_runtime_type(ty) else {
             return false;
         };
 
