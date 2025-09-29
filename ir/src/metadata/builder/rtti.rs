@@ -1,8 +1,9 @@
-use std::rc::Rc;
-use crate::{MetadataBuilder, TagLocation};
 use crate::DynArrayRuntimeType;
+use crate::MetadataBuilder;
 use crate::RuntimeType;
+use crate::TagLocation;
 use crate::Type;
+use std::rc::Rc;
 
 impl MetadataBuilder {
     pub fn insert_runtime_type(&mut self, ty: Type, runtime_type: RuntimeType) -> Rc<RuntimeType> {

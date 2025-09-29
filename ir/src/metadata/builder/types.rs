@@ -1,12 +1,24 @@
-use linked_hash_map::LinkedHashMap;
-use crate::{FunctionID, Interface, InterfaceDecl, InterfaceID, MetadataBuilder, RuntimeType, SetAliasDef, SetAliasID, StructFieldDef, Type, DYNARRAY_LEN_FIELD, DYNARRAY_PTR_FIELD};
+use crate::FunctionID;
+use crate::Interface;
+use crate::InterfaceDecl;
+use crate::InterfaceID;
+use crate::MetadataBuilder;
 use crate::NamePath;
+use crate::RuntimeType;
+use crate::SetAliasDef;
+use crate::SetAliasID;
 use crate::Struct;
+use crate::StructFieldDef;
 use crate::StructIdentity;
+use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
 use crate::TypeDefID;
 use crate::VariantDef;
+use crate::DYNARRAY_LEN_FIELD;
+use crate::DYNARRAY_PTR_FIELD;
+use linked_hash_map::Entry;
+use linked_hash_map::LinkedHashMap;
 
 impl MetadataBuilder {
     pub fn insert_type_decl(&mut self, decl: TypeDecl) -> TypeDefID {
@@ -29,11 +41,18 @@ impl MetadataBuilder {
     }
 
     pub fn reserve_type(&mut self, id: TypeDefID) {
-        if self.metadata.type_decls.contains_key(&id) {
-            panic!("reserving existing type ID {}", id);
-        }
+        match self.metadata.type_decls.entry(id) {
+            Entry::Occupied(entry) => {
+                let existing = entry.get(); 
+                if !matches!(existing, TypeDecl::Reserved) {
+                    panic!("reserving existing type ID {} which is already in use ({})", id, existing);
+                }
+            }
 
-        self.metadata.type_decls.insert(id, TypeDecl::Reserved);
+            Entry::Vacant(entry) => {
+                entry.insert(TypeDecl::Reserved);
+            }
+        }
 
         self.next_type_id.0 = usize::max(self.next_type_id.0, id.0 + 1);
     }

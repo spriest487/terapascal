@@ -1,5 +1,11 @@
+use crate::FunctionDecl;
+use crate::FunctionID;
+use crate::MetadataBuilder;
+use crate::NamePath;
+use crate::StaticClosureID;
+use crate::Struct;
+use crate::TypeDefID;
 use std::rc::Rc;
-use crate::{FunctionDecl, FunctionID, MetadataBuilder, NamePath, StaticClosureID, Struct, TypeDefID};
 
 impl MetadataBuilder {
     pub fn insert_func(&mut self, global_name: Option<NamePath>) -> FunctionID {

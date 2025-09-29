@@ -6,7 +6,7 @@ use std::iter;
 use std::ops::Deref;
 use std::sync::Arc;
 use crate::dep_sort::sort_defs;
-use crate::{FunctionID, InterfaceID, SetAliasID};
+use crate::{FunctionID, InterfaceID, SetAliasID, RESERVED_STRINGS, RESERVED_TYPES};
 use crate::StringID;
 use crate::Metadata;
 use crate::Type;
@@ -37,11 +37,23 @@ impl MetadataBuilder {
     pub fn with_refs(refs: impl IntoIterator<Item=Arc<Metadata>>) -> Self {
         let refs: Vec<_> = refs.into_iter().collect();
         
-        let mut next_type_id = TypeDefID(1);
+        let first_user_type = RESERVED_TYPES
+            .iter()
+            .max()
+            .map(|id| id.0 + 1)
+            .unwrap_or(1);
+
+        let first_user_string = RESERVED_STRINGS
+            .iter()
+            .max()
+            .map(|id| id.0 + 1)
+            .unwrap_or(1);
+        
+        let mut next_type_id = TypeDefID(first_user_type);
         let mut next_iface_id = InterfaceID(1);
         let mut next_variable_id = VariableID(1);
         let mut next_function_id = FunctionID(1);
-        let mut next_string_id = StringID(1);
+        let mut next_string_id = StringID(first_user_string);
         let mut next_set_id = SetAliasID(1);
         
         for ref_metadata in &refs {

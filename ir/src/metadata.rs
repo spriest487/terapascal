@@ -104,9 +104,15 @@ pub const FUNCINFO_TAGS_FIELD: FieldID = FieldID(2);
 
 pub const ANY_TYPE: Type = Type::RcPointer(VirtualTypeID::Any);
 
-pub const BUILTIN_TYPE_DEFS: [Type; 2] = [
-    STRING_TYPE,
-    TYPEINFO_TYPE,
+pub const RESERVED_TYPES: [TypeDefID; 4] = [
+    STRING_ID,
+    TYPEINFO_ID,
+    METHODINFO_ID,
+    FUNCINFO_ID,
+];
+
+pub const RESERVED_STRINGS: [StringID; 1] = [
+    EMPTY_STRING_ID,
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,6 +173,10 @@ impl Metadata {
         };
         
         metadata.string_literals.insert(EMPTY_STRING_ID, String::new());
+
+        for reserved_id in RESERVED_TYPES {
+            metadata.type_decls.insert(reserved_id, TypeDecl::Reserved);
+        }
 
         metadata
     }
