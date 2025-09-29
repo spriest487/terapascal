@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::path::Path;
 use std::path::PathBuf;
 use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::fs::Filesystem;
@@ -40,7 +41,7 @@ impl WorkspaceFilesystem {
 }
 
 impl Filesystem for WorkspaceFilesystem {
-    fn read_source(&self, path: &PathBuf) -> std::io::Result<Cow<str>> {
+    fn read_source(&self, path: &Path) -> std::io::Result<Cow<'_, str>> {
         if let Some(file_entry) = self.files.get(path) {
             Ok(Cow::Borrowed(file_entry.source.as_str()))
         } else {
@@ -48,7 +49,7 @@ impl Filesystem for WorkspaceFilesystem {
         }
     }
 
-    fn exists(&self, path: &PathBuf) -> bool {
+    fn exists(&self, path: &Path) -> bool {
         if self.files.contains_key(path) {
             true
         } else {
@@ -56,11 +57,11 @@ impl Filesystem for WorkspaceFilesystem {
         }
     }
 
-    fn is_dir(&self, path: &PathBuf) -> bool {
+    fn is_dir(&self, path: &Path) -> bool {
         self.default_fs.is_dir(path)
     }
 
-    fn canonicalize(&self, path: &PathBuf) -> std::io::Result<PathBuf> {
+    fn canonicalize(&self, path: &Path) -> std::io::Result<PathBuf> {
         self.default_fs.canonicalize(path)
     }
 }
