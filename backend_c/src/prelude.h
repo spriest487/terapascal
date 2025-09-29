@@ -100,8 +100,8 @@ static void RcRelease(void* instance, bool weak);
 
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 
-static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, void** args, int32_t arg_count void* out_result);
-static void InvokeFunction(FUNCINFO_STRUCT* func, void** args, int32_t arg_count void* out_result);
+static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, void** args, int32_t arg_count, void* out_result);
+static void InvokeFunction(FUNCINFO_STRUCT* func, void** args, int32_t arg_count, void* out_result);
 
 static TYPEINFO_STRUCT** typeinfo_list;
 static int32_t typeinfo_count;

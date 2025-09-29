@@ -126,7 +126,7 @@ impl Class {
         struct_id: ir::TypeDefID,
         metadata: &ir::Metadata,
         module: &mut Unit,
-    ) -> Self {        
+    ) -> Self {
         let class_ty = ir::Type::RcPointer(ir::VirtualTypeID::Class(struct_id));
 
         let mut impls = BTreeMap::new();
@@ -291,7 +291,7 @@ impl Class {
         decls
     }
 
-    pub fn to_def_string(&self) -> String {
+    pub fn to_def_string(&self, enable_rtti: bool) -> String {
         let mut def = String::new();
         
         if let Some(comment) = &self.comment {
@@ -367,7 +367,9 @@ impl Class {
             writeln!(class_init, "  .dtor = NULL,").unwrap();
         };
 
-        writeln!(class_init, "  .typeinfo = &{},", self.typeinfo_global_name).unwrap();
+        if enable_rtti {
+            writeln!(class_init, "  .typeinfo = &{},", self.typeinfo_global_name).unwrap();
+        }
         write!(class_init, "  .cleanup = (RcCleanupFunc) ").unwrap();
 
         match self.release_func {

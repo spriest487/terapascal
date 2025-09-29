@@ -5,8 +5,17 @@
 #if _WIN32
 #   define WIN32_LEAN_AND_MEAN
 #   include <windows.h>
+#   define STACKALLOC(size) (_malloca(size))
 #else
 #   include <dlfcn.h>
+#   include <alloca.h>
+#   define STACKALLOC(size) (alloca(size))
+#endif
+
+#ifdef DISABLE_RTTI
+#define OBJECT_DISPLAY(instance) "object"
+#else
+#define OBJECT_DISPLAY(instance) TYPEINFO_NAME_CHARS(((struct Rc*) instance)->class->typeinfo)
 #endif
 
 _Noreturn static void fatal(const char* msg, ...) {
@@ -156,7 +165,7 @@ static void RcRetain(void* instance, bool weak) {
 #if TRACE_RC
     // safe to use the name chars ptr as a C string here, we null-terminate string literals
     printf("rc: retain %s @ 0x%p (%d+%d refs)\n", 
-        TYPEINFO_NAME_CHARS(rc->class->typeinfo), 
+        OBJECT_DISPLAY(instance), 
         instance, 
         rc->strong_count, 
         rc->weak_count);
@@ -182,7 +191,7 @@ static void RcRelease(void* instance, bool weak) {
         }
 
 #if TRACE_RC
-        printf("rc: release %s @ 0x%p (%d+%d remain)\n", TYPEINFO_NAME_CHARS(rc->class->typeinfo), instance, rc->strong_count, rc->weak_count - 1);
+        printf("rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(instance), instance, rc->strong_count, rc->weak_count - 1);
 #endif
         
         rc->weak_count -= 1;
@@ -192,14 +201,14 @@ static void RcRelease(void* instance, bool weak) {
         }
 
 #if TRACE_RC
-        printf("rc: release %s @ 0x%p (%d+%d remain)\n", TYPEINFO_NAME_CHARS(rc->class->typeinfo), instance, rc->strong_count - 1, rc->weak_count);
+        printf("rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(instance), instance, rc->strong_count - 1, rc->weak_count);
 #endif
 
         // call the dtor before decrementing the ref count, because it must still be a live reference
         // while the function is executing
         if (rc->strong_count == 1 && rc->class->dtor) {
 #if TRACE_RC
-            printf("rc: \tdisposing %s @ 0x%p\n", TYPEINFO_NAME_CHARS(rc->class->typeinfo), instance);
+            printf("rc: \tdisposing %s @ 0x%p\n", OBJECT_DISPLAY(instance), instance);
 #endif
             rc->class->dtor(instance);
             
@@ -210,7 +219,7 @@ static void RcRelease(void* instance, bool weak) {
             rc->class = NULL;
 
             if (rc->strong_count != 1) {
-                fprintf(stderr, "destructor for %s modified the reference count of the destroyed instance\n", TYPEINFO_NAME_CHARS(rc->class->typeinfo));
+                fprintf(stderr, "destructor for %s modified the reference count of the destroyed instance\n", OBJECT_DISPLAY(instance));
                 fflush(stderr);
                 abort();
             }
@@ -381,7 +390,7 @@ static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, void** args,
     }
 
     if (instance) {
-        void** all_args = (void**) alloca(sizeof(void*) * (arg_count + 1));
+        void** all_args = (void**) STACKALLOC(sizeof(void*) * (arg_count + 1));
         all_args[0] = instance;
 
         memcpy(all_args + 1, args, arg_count * sizeof(void*));

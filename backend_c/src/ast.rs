@@ -46,6 +46,8 @@ pub struct Unit {
     methodinfo_array_class: Option<ir::TypeDefID>,
     
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
+    
+    enable_rtti: bool,
 }
 
 impl Unit {
@@ -58,6 +60,10 @@ impl Unit {
 
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
         let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
+        
+        let enable_rtti = metadata.get_struct_def(ir::TYPEINFO_ID).is_some()
+            && metadata.get_struct_def(ir::METHODINFO_ID).is_some()
+            && metadata.get_struct_def(ir::FUNCINFO_ID).is_some();
 
         let system_funcs = &[
             ("Int8ToStr", BuiltinName::Int8ToStr, string_ty.clone(), vec![
@@ -252,6 +258,8 @@ impl Unit {
             
             tag_arrays,
             tag_array_class,
+
+            enable_rtti,
         };
 
         for (class_id, _class_def) in metadata.class_defs() {
@@ -499,6 +507,14 @@ impl Unit {
     }
     
     fn gen_rtti_init(&self, init_stmts: &mut Vec<Statement>) {
+        let Some(methodinfo_array_class) = self.methodinfo_array_class else {
+            return;
+        };
+        
+        if !self.enable_rtti {
+            return;
+        }
+        
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
         let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
 
@@ -535,10 +551,6 @@ impl Unit {
                 )])
                 .cast(funcinfo_ty.ptr()),
         ));
-
-        let Some(methodinfo_array_class) = self.methodinfo_array_class else {
-            return;
-        };
         
         // initialize type info fields that can't be statically initialized
         const METHODS_ARRAY_NAME: &str = "methods_array";
@@ -695,6 +707,10 @@ impl fmt::Display for Unit {
         if self.opts.trace_rc {
             writeln!(f, "#define TRACE_RC 1")?;
         }
+        
+        if !self.enable_rtti {
+            writeln!(f, "#define DISABLE_RTTI")?;
+        }
 
         writeln!(f, "#define STRING_STRUCT struct {}", TypeDefName::Struct(ir::STRING_ID))?;
         writeln!(f, "#define STRING_CLASS {}", GlobalName::ClassInstance(ir::STRING_ID))?;
@@ -810,84 +826,86 @@ impl fmt::Display for Unit {
         let typeinfo_struct_name = TypeDefName::Struct(ir::TYPEINFO_ID);
         let typeinfo_class = GlobalName::ClassInstance(ir::TYPEINFO_ID);
 
-        for (ty, typeinfo) in &self.type_infos {
-            if self.opts.debug {
-                let debug_name = typeinfo.name
-                    .and_then(|id| self.get_string_lit(id))
-                    .map(str::to_string)
-                    .unwrap_or_else(|| ty.to_string());
+        if self.enable_rtti {
+            for (ty, typeinfo) in &self.type_infos {
+                if self.opts.debug {
+                    let debug_name = typeinfo.name
+                        .and_then(|id| self.get_string_lit(id))
+                        .map(str::to_string)
+                        .unwrap_or_else(|| ty.to_string());
 
-                writeln!(f, "/** static TypeInfo of {} */", debug_name)?;
+                    writeln!(f, "/** static TypeInfo of {} */", debug_name)?;
+                }
+
+                write!(f, "static struct {} ", typeinfo_struct_name)?;
+                write_global_typeinfo_decl_name(f, ty)?;
+                writeln!(f, " = {{")?;
+
+                writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;
+
+                write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
+
+                let type_name_id = typeinfo.name.unwrap_or(ir::EMPTY_STRING_ID);
+                let type_name_str = GlobalName::StringLiteral(type_name_id);
+
+                writeln!(f, "&{},", type_name_str)?;
+
+                // initialized at runtime for now
+                writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
+
+                writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
+
+                let tags_loc = ty
+                    .tags_loc()
+                    .and_then(|loc| {
+                        if *self.tag_arrays.get(&loc)? > 0 {
+                            Some(loc)
+                        } else {
+                            None
+                        }
+                    });
+
+                match tags_loc {
+                    Some(loc) => write!(f, "&{}", GlobalName::StaticTagArray(loc))?,
+                    None => write!(f, "NULL,")?,
+                }
+
+                writeln!(f, "}};")?;
             }
 
-            write!(f, "static struct {} ", typeinfo_struct_name)?;
-            write_global_typeinfo_decl_name(f, ty)?;
-            writeln!(f, " = {{")?;
+            let funcinfo_class = GlobalName::ClassInstance(ir::FUNCINFO_ID);
+            let funcinfo_struct_name = TypeDefName::Struct(ir::FUNCINFO_ID);
 
-            writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;
+            for func in &self.runtime_funcinfos {
+                let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
 
-            write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
-            
-            let type_name_id = typeinfo.name.unwrap_or(ir::EMPTY_STRING_ID);
-            let type_name_str = GlobalName::StringLiteral(type_name_id);
+                if self.opts.debug {
+                    let debug_name = self.get_string_lit(func.name)
+                        .map(str::to_string)
+                        .unwrap_or_else(|| func.id.to_string());
+                    writeln!(f, "/** static FunctionInfo of {} */", debug_name)?;
+                }
 
-            writeln!(f, "&{},", type_name_str)?;
+                writeln!(f, "static struct {} {} = {{", funcinfo_struct_name, funcinfo_name)?;
+                writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
 
-            // initialized at runtime for now
-            writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
+                let name_str = GlobalName::StringLiteral(func.name);
+                let invoker = FunctionName::Invoker(func.id);
 
-            writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
+                writeln!(f, "  .{} = &{},", FieldName::ID(ir::FUNCINFO_NAME_FIELD), name_str)?;
+                writeln!(f, "  .{} = &{invoker},", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
 
-            let tags_loc = ty
-                .tags_loc()
-                .and_then(|loc| {
-                    if *self.tag_arrays.get(&loc)? > 0 {
-                        Some(loc)
-                    } else {
-                        None
-                    }
-                });
-            
-            match tags_loc {
-                Some(loc) => write!(f, "&{}", GlobalName::StaticTagArray(loc))?,
-                None => write!(f, "NULL,")?,
+                writeln!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_TAGS_FIELD))?;
+
+                let tags_loc = ir::TagLocation::Function(func.id);
+                if self.tag_arrays.get(&tags_loc).is_some() {
+                    write!(f, "&{}", GlobalName::StaticTagArray(tags_loc))?;
+                } else {
+                    write!(f, "NULL")?;
+                };
+
+                writeln!(f, "}};")?;
             }
-
-            writeln!(f, "}};")?;
-        }
-
-        let funcinfo_class = GlobalName::ClassInstance(ir::FUNCINFO_ID);
-        let funcinfo_struct_name = TypeDefName::Struct(ir::FUNCINFO_ID);
-
-        for func in &self.runtime_funcinfos {
-            let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
-            
-            if self.opts.debug {
-                let debug_name = self.get_string_lit(func.name)
-                    .map(str::to_string)
-                    .unwrap_or_else(|| func.id.to_string());
-                writeln!(f, "/** static FunctionInfo of {} */", debug_name)?;
-            }
-
-            writeln!(f, "static struct {} {} = {{", funcinfo_struct_name, funcinfo_name)?;
-            writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
-
-            let name_str = GlobalName::StringLiteral(func.name);
-            let invoker = FunctionName::Invoker(func.id);
-
-            writeln!(f, "  .{} = &{},", FieldName::ID(ir::FUNCINFO_NAME_FIELD), name_str)?;
-            writeln!(f, "  .{} = &{invoker},", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
-
-            writeln!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_TAGS_FIELD))?;
-
-            let tags_loc = ir::TagLocation::Function(func.id);
-            if self.tag_arrays.get(&tags_loc).is_some() {
-                write!(f, "&{}", GlobalName::StaticTagArray(tags_loc))?;
-            } else {
-                write!(f, "NULL")?;
-            };
-            
-            writeln!(f, "}};")?;
         }
 
         for iface in &self.ifaces {
@@ -897,7 +915,7 @@ impl fmt::Display for Unit {
 
         for class in &self.classes {
             writeln!(f, "{}", class.to_decl_string())?;
-            writeln!(f, "{}", class.to_def_string())?;
+            writeln!(f, "{}", class.to_def_string(self.enable_rtti))?;
             writeln!(f)?;
         }
 
