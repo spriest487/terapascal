@@ -11,6 +11,8 @@ pub struct Options {
     pub trace_ir: bool,
     
     pub debug: bool,
+    
+    pub enable_rtti: bool,
 }
 
 pub fn translate(lib: &ir::Library, opts: Options) -> c::Unit {

@@ -383,6 +383,8 @@ static bool System_IsNaN(float val) {
     return isnan(val);
 }
 
+#ifndef DISABLE_RTTI
+
 static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, void** args, int32_t arg_count, void* out_result) {
     Invoker invoker = METHODINFO_INVOKER(method);
     if (!invoker) {
@@ -489,3 +491,5 @@ static void InvokeFunction(FUNCINFO_STRUCT* func, void** args, int32_t arg_count
 
     invoker(args, out_result);
 }
+
+#endif // DISABLE_RTTI

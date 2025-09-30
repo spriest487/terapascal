@@ -197,6 +197,13 @@ impl TypeDef {
             }
         }
     }
+    
+    pub fn is_class(&self) -> bool {
+        match self {
+            TypeDef::Struct(struct_def) => struct_def.is_class(),
+            _ => false,
+        }
+    }
 }
 
 // sets aren't normal types because they share an underlying type based on their bit width

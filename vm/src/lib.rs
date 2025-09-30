@@ -29,6 +29,7 @@ use crate::stack::StackFrame;
 use crate::stack::StackTrace;
 use crate::stack::StackTraceFrame;
 use ir::IRFormatter as _;
+use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::iter;
@@ -62,11 +63,6 @@ pub struct Interpreter {
     // all methods with a corresponding MethodInfo object - the impl pointer of each
     // MethodInfo is an index into this list
     runtime_methods: Vec<ir::RuntimeMethod>,
-    
-    // types in this set are required for basic operation, and so are always defined internally.
-    // a loaded library may add a definition for this type, but only one definition may be provided,
-    // and it must match the builtin definition exactly.
-    builtin_structs: BTreeMap<ir::TypeDefID, ir::Struct>,
 }
 
 impl Interpreter {
@@ -85,10 +81,10 @@ impl Interpreter {
             metadata.reserve_type(*id);
             match &struct_def.identity {
                 ir::StructIdentity::Class(name) => {
-                    metadata.declare_type(*id, name, true)
+                    metadata.declare_type(*id, name)
                 }
                 ir::StructIdentity::Record(name) => {
-                    metadata.declare_type(*id, name, false)
+                    metadata.declare_type(*id, name)
                 }
                 _ => {}
             }
@@ -127,8 +123,6 @@ impl Interpreter {
             funcinfo_map: RttiMap::new(),
 
             runtime_methods: Vec::new(),
-            
-            builtin_structs,
         }
     }
 
@@ -318,10 +312,9 @@ impl Interpreter {
             ir::Ref::Local(id) => self.store_local(*id, val),
 
             ir::Ref::Global(name) => {
-                let global = self
-                    .globals
-                    .get_mut(name)
-                    .unwrap_or_else(|| panic!("global `{}` is not allocated", name));
+                let Some(global) = self.globals.get_mut(name) else {
+                    return Err(ExecError::illegal_state(format!("global `{name}` is not allocated")));
+                };
 
                 match global {
                     GlobalValue::Variable { value, .. } => {
@@ -1816,15 +1809,23 @@ impl Interpreter {
         func: BuiltinFn,
         ret: ir::Type,
         params: Vec<ir::Type>,
-    ) -> ExecResult<()> {
+    ) {
+        // current metadata does not contain this function yet, so we don't have an ID to load it at
         let Some(func_id) = self.metadata.find_function(&name) else {
-            return Ok(());
+            return;
         };
 
-        self.globals.insert(
-            ir::GlobalRef::Function(func_id),
-            GlobalValue::Function(func_id),
-        );
+        match self.globals.entry(ir::GlobalRef::Function(func_id)) {
+            Entry::Occupied(..) => {
+                // we already created a definition for this
+                // assume this means it's already been loaded
+                return;
+            }
+
+            Entry::Vacant(entry) => {
+                entry.insert(GlobalValue::Function(func_id));
+            }
+        }
 
         let func = Function::Builtin(BuiltinFunction {
             func,
@@ -1837,8 +1838,6 @@ impl Interpreter {
             func: Rc::new(func),
             name: Rc::new(name.to_string()),
         });
-
-        Ok(())
     }
 
     fn rc_alloc(&mut self, mut value: StructValue, immortal: bool) -> ExecResult<Pointer> {
@@ -1857,39 +1856,24 @@ impl Interpreter {
         Ok(res_ptr)
     }
 
-    fn init_stdlib_globals(&mut self) -> ExecResult<()> {
+    fn init_stdlib_globals(&mut self) {
         let system_funcs: Vec<_> = builtin::system_funcs().into_iter().collect();
 
         for (ident, func, ret, params) in system_funcs {
             let name = ir::NamePath::new(vec!["System".to_string()], ident.to_string());
-            self.define_builtin(name, func, ret, params)?;
+            self.define_builtin(name, func, ret, params);
         }
-
-        Ok(())
     }
 
     pub fn load_lib(&mut self, lib: &ir::Library) -> ExecResult<()> {
         let mut metadata = (*self.metadata).clone();
 
-        // remove any redeclared builtins from the existing metadata
-        for (id, builtin_def) in &self.builtin_structs {
-            if metadata.get_struct_def(*id).is_some()
-                && let Some(new_def) = lib.metadata.get_struct_def(*id) 
-            {
-                if !new_def.is_equivalent_def(&builtin_def) {
-                    let msg = format!(
-                        "library definition of built-in type {} (redefined as {}) does not match the expected definition",
-                        builtin_def.identity.to_pretty_string(&metadata),
-                        new_def.identity.to_pretty_string(&lib.metadata)
-                    );
-                    return Err(ExecError::illegal_state(msg));
-                }
-
-                metadata.remove_type_def(*id);
-            }
-        }
-
         metadata.merge_from(&lib.metadata);
+        
+        // eprintln!("importing lib");
+        // for (id, func) in &lib.functions {
+        //     eprintln!("importing {} ({})", id, func.debug_name().map(|x| x.to_string()).unwrap_or_else(|| "unnamed".to_string()));
+        // }
 
         let mut marshaller = (*self.marshaller).clone();
 
@@ -1954,6 +1938,10 @@ impl Interpreter {
         self.native_heap
             .set_metadata(self.metadata.clone(), self.marshaller.clone());
 
+        // we need to check again after loading a new lib, which might have declared some IDs for
+        // builtin functions that can now be stored as globals
+        self.init_stdlib_globals();
+
         let mut string_lit_values = HashMap::new();
 
         for (id, literal) in lib.metadata().strings() {
@@ -2016,8 +2004,6 @@ impl Interpreter {
                 value: default_val_bytes.into_boxed_slice(),
             });
         }
-
-        self.init_stdlib_globals()?;
 
         let init_stack_size = self
             .marshaller

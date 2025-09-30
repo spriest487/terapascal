@@ -20,7 +20,7 @@ impl MetadataBuilder {
                 self.find_or_insert_string(&name)
             });
 
-        let decl = FunctionDecl { global_name, runtime_name };
+        let decl = FunctionDecl { global_name: global_name.clone(), runtime_name };
         self.metadata.functions.insert(id, Rc::new(decl));
         
         self.next_function_id.0 += 1;
@@ -45,7 +45,7 @@ impl MetadataBuilder {
         self.define_struct(id, closure_def);
         self.metadata.closures.push(id);
     }
-    
+
     pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {
         self.find_in_self_or_refs(|metadata| metadata.find_function(name))
     }

@@ -46,8 +46,6 @@ pub struct Unit {
     methodinfo_array_class: Option<ir::TypeDefID>,
     
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
-    
-    enable_rtti: bool,
 }
 
 impl Unit {
@@ -258,8 +256,6 @@ impl Unit {
             
             tag_arrays,
             tag_array_class,
-
-            enable_rtti,
         };
 
         for (class_id, _class_def) in metadata.class_defs() {
@@ -277,10 +273,12 @@ impl Unit {
             module.ifaces.push(iface);
         }
 
-        for (_pas_name, c_name, return_ty, params) in system_funcs {
-            if let Some(id) = builtin_func_ids.get(c_name) {
-                let invoker = FunctionDef::invoker_builtin(*c_name, *id, params, return_ty, &mut module);
-                module.functions.push(invoker);
+        if enable_rtti {
+            for (_pas_name, c_name, return_ty, params) in system_funcs {
+                if let Some(id) = builtin_func_ids.get(c_name) {
+                    let invoker = FunctionDef::invoker_builtin(*c_name, *id, params, return_ty, &mut module);
+                    module.functions.push(invoker);
+                }
             }
         }
 
@@ -425,10 +423,12 @@ impl Unit {
             match func {
                 ir::Function::Local(func_def) => {
                     let c_func = FunctionDef::translate(*id, func_def, self);
-                    let invoker = FunctionDef::invoker(*id, &func_def.sig, self);
-
                     self.functions.push(c_func);
-                    self.functions.push(invoker);
+
+                    if self.opts.enable_rtti {
+                        let invoker = FunctionDef::invoker(*id, &func_def.sig, self);
+                        self.functions.push(invoker);
+                    }
                 },
 
                 ir::Function::External(func_ref) if func_ref.src == ir::BUILTIN_SRC => {
@@ -436,10 +436,12 @@ impl Unit {
 
                 ir::Function::External(func_ref) => {
                     let ffi_func = FfiFunction::translate(*id, func_ref, self);
-                    let invoker = FunctionDef::invoker(*id, &func_ref.sig, self);
-
                     self.ffi_funcs.push(ffi_func);
-                    self.functions.push(invoker);
+
+                    if self.opts.enable_rtti {
+                        let invoker = FunctionDef::invoker(*id, &func_ref.sig, self);
+                        self.functions.push(invoker);
+                    }
                 },
             }
         }
@@ -507,14 +509,14 @@ impl Unit {
     }
     
     fn gen_rtti_init(&self, init_stmts: &mut Vec<Statement>) {
-        let Some(methodinfo_array_class) = self.methodinfo_array_class else {
-            return;
-        };
-        
-        if !self.enable_rtti {
+        if !self.opts.enable_rtti {
             return;
         }
-        
+
+        let Some(methodinfo_array_class) = self.methodinfo_array_class else {
+            panic!("missing RTTI metadata! disable RTTI if it's not supported by the frontend");
+        };
+
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
         let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
 
@@ -708,7 +710,7 @@ impl fmt::Display for Unit {
             writeln!(f, "#define TRACE_RC 1")?;
         }
         
-        if !self.enable_rtti {
+        if !self.opts.enable_rtti {
             writeln!(f, "#define DISABLE_RTTI")?;
         }
 
@@ -826,7 +828,7 @@ impl fmt::Display for Unit {
         let typeinfo_struct_name = TypeDefName::Struct(ir::TYPEINFO_ID);
         let typeinfo_class = GlobalName::ClassInstance(ir::TYPEINFO_ID);
 
-        if self.enable_rtti {
+        if self.opts.enable_rtti {
             for (ty, typeinfo) in &self.type_infos {
                 if self.opts.debug {
                     let debug_name = typeinfo.name
@@ -915,7 +917,7 @@ impl fmt::Display for Unit {
 
         for class in &self.classes {
             writeln!(f, "{}", class.to_decl_string())?;
-            writeln!(f, "{}", class.to_def_string(self.enable_rtti))?;
+            writeln!(f, "{}", class.to_def_string(self.opts.enable_rtti))?;
             writeln!(f)?;
         }
 

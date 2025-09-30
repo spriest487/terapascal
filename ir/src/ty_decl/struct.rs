@@ -30,6 +30,10 @@ impl Struct {
         self.fields.get(&id)
     }
     
+    pub fn is_class(&self) -> bool {
+        matches!(self.identity, StructIdentity::Class(..))
+    }
+    
     pub fn is_equivalent_def(&self, other: &Self) -> bool {
         if self.identity != other.identity || self.fields.len() != other.fields.len() {
             return false;

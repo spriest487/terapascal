@@ -58,11 +58,7 @@ impl MetadataBuilder {
     }
 
     // turn a reserved ID into a forward decl by name
-    pub fn declare_type(&mut self, id: TypeDefID, name: &NamePath, is_class: bool) {
-        if is_class && self.metadata.class_ids.contains(&id) {
-            panic!("class {id} is already declared (new declaration: {name})");
-        }
-
+    pub fn declare_type(&mut self, id: TypeDefID, name: &NamePath) {
         match &mut self.metadata.type_decls[&id] {
             reserved @ TypeDecl::Reserved => {
                 *reserved = TypeDecl::Forward(name.clone());
@@ -83,10 +79,12 @@ impl MetadataBuilder {
                 );
             },
         }
+    }
 
-        if is_class {
-            self.metadata.class_ids.insert(id);
-        }
+    pub fn remove_type_def(&mut self, id: TypeDefID) -> bool {
+        let removed = self.metadata.type_decls.remove(&id).is_some();
+
+        removed
     }
 
     pub fn define_struct(&mut self, id: TypeDefID, struct_def: Struct) {
@@ -103,17 +101,11 @@ impl MetadataBuilder {
             }
 
             None => {
-                let is_class = matches!(&struct_def.identity, StructIdentity::Class(..));
-                
                 if id < self.next_type_id {
                     panic!("ID {id} is unavailable for type {struct_def}");
                 }
 
                 self.metadata.type_decls.insert(id, TypeDecl::Def(TypeDef::Struct(struct_def)));
-
-                if is_class {
-                    self.metadata.class_ids.insert(id);
-                }
             }
 
             Some(TypeDecl::Def(..)) => {
@@ -241,7 +233,6 @@ impl MetadataBuilder {
             })),
         );
 
-        self.metadata.class_ids.insert(struct_id);
         self.next_type_id.0 += 1;
         
         self.metadata.dyn_array_structs.insert(element.clone(), struct_id);

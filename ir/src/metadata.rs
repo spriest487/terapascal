@@ -33,7 +33,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
@@ -124,8 +123,7 @@ pub struct Metadata {
     variables: BTreeMap<VariableID, Type>,
 
     dtors: BTreeMap<TypeDefID, FunctionID>,
-    
-    class_ids: BTreeSet<TypeDefID>,
+
     set_aliases: LinkedHashMap<SetAliasID, SetAliasDef>,
 
     functions: LinkedHashMap<FunctionID, Rc<FunctionDecl>>,
@@ -153,14 +151,13 @@ impl Metadata {
             variables: BTreeMap::new(),
             
             dtors: BTreeMap::new(),
-            
-            class_ids: BTreeSet::new(),
+
             set_aliases: LinkedHashMap::new(),
 
             bounds_check_functions: HashMap::new(),
-            
+
             functions: LinkedHashMap::new(),
-            
+
             closures: Vec::new(),
             function_static_closures: HashMap::new(),
 
@@ -190,19 +187,17 @@ impl Metadata {
                 }
 
                 // reserved ID does not replace any existing decl
-                (Some(..), TypeDecl::Reserved) => {
-                }
-                
+                (Some(..), TypeDecl::Reserved) => {}
+
                 // forward def replaced by a full def of the same name 
-                (Some(TypeDecl::Forward(forward_name)), TypeDecl::Def(new_def)) 
+                (Some(TypeDecl::Forward(forward_name)), TypeDecl::Def(new_def))
                 if new_def.name() == Some(forward_name) => {
                     self.type_decls.insert(*id, TypeDecl::Def(new_def.clone()));
                 }
-                
+
                 // forward def does not replace a full def of the same name    
-                (Some(TypeDecl::Def(old_def)), TypeDecl::Forward(new_name)) 
-                if old_def.name() == Some(new_name) => {
-                }
+                (Some(TypeDecl::Def(old_def)), TypeDecl::Forward(new_name))
+                if old_def.name() == Some(new_name) => {}
 
                 // error if forward def doesn't match actual def in either direction 
                 (Some(TypeDecl::Forward(forward_name)), TypeDecl::Def(def))
@@ -334,13 +329,30 @@ impl Metadata {
             })
     }
 
-    pub fn class_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)> {
-        self.class_ids
-            .iter()
-            .filter_map(|id| match self.type_decls.get(id)? {
-                TypeDecl::Def(def) => Some((*id, def)),
+    pub fn get_class_def(&self, id: TypeDefID) -> Option<&Struct> {
+        let decl = self.type_decls.get(&id)?;
 
-                TypeDecl::Reserved | TypeDecl::Forward(..) => None,
+        if let TypeDecl::Def(def) = decl
+            && let TypeDef::Struct(struct_def) = def
+            && struct_def.is_class()
+        {
+            Some(struct_def)
+        } else {
+            None
+        }
+    }
+
+    pub fn class_defs(&self) -> impl Iterator<Item = (TypeDefID, &Struct)> {
+        self.type_decls.iter()
+            .filter_map(|(id, decl)| {
+                if let TypeDecl::Def(def) = decl 
+                    && let TypeDef::Struct(struct_def) = def
+                    && struct_def.is_class() 
+                {
+                    Some((*id, struct_def))
+                } else {
+                    None
+                }
             })
     }
     
@@ -360,13 +372,6 @@ impl Metadata {
 
             TypeDecl::Def(..) => None,
         }
-    }
-
-    pub fn remove_type_def(&mut self, id: TypeDefID) -> bool {
-        let removed = self.type_decls.remove(&id).is_some();
-        self.class_ids.remove(&id);
-        
-        removed
     }
 
     pub fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
@@ -432,10 +437,19 @@ impl Metadata {
     }
 
     pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {
+        // do a linear search for now because we don't want to store a redundant map of names,
+        // and a user can always make a hashmap themselves if looking up names this way is too slow.
+        // this should probabl
         self.functions
             .iter()
-            .find(|(_id, func)| func.global_name.as_ref() == Some(name))
-            .map(|(id, _func)| *id)
+            .find_map(|(id, func)| {
+                let func_name = func.global_name.as_ref()?;
+                if func_name == name {
+                    Some(*id)
+                } else {
+                    None
+                }
+            })
     }
 
     pub fn get_function(&self, id: FunctionID) -> Option<&Rc<FunctionDecl>> {

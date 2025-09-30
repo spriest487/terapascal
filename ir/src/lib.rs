@@ -53,6 +53,10 @@ impl NamePath {
             type_args: Some(args.into_iter().collect()),
         }
     }
+    
+    pub fn name(&self) -> &String {
+        &self.path[self.path.len() - 1]
+    }
 
     pub fn to_pretty_string<'a, TyFormat>(&self, ty_format: TyFormat) -> String
     where TyFormat: Fn(&Type) -> Cow<'a, str>,

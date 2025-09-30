@@ -150,6 +150,11 @@ impl Type {
             _ => None,
         }
     }
+
+    pub fn rc_resource_def_type(&self) -> Option<Type> {
+        let id = self.rc_resource_def_id()?;
+        Some(Type::Struct(id))
+    }
     
     pub fn tags_loc(&self) -> Option<TagLocation> {
         match self {
