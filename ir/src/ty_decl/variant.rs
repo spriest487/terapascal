@@ -1,5 +1,5 @@
-use crate::NamePath;
 use crate::Type;
+use crate::NamePath;
 use serde::Deserialize;
 use serde::Serialize;
 

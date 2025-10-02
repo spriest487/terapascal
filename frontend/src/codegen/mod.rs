@@ -64,7 +64,7 @@ fn translate_builtin_class(
 
     let name = translate_name(name, &generic_ctx, lib);
 
-    lib.metadata_mut().declare_type(id, &name, true);
+    lib.metadata_mut().declare_type(id, &name);
 
     let resource_ty = translate_struct_def(class_def.as_ref(), &generic_ctx, lib);
 

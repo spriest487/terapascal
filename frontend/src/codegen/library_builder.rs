@@ -208,8 +208,8 @@ impl<'a> LibraryBuilder<'a> {
         &self.opts
     }
 
-    pub fn metadata(&self) -> &ir::Metadata {
-        self.metadata.as_ref()
+    pub fn metadata(&self) -> &ir::MetadataBuilder {
+        &self.metadata
     }    
     
     pub fn metadata_mut(&mut self) -> &mut ir::MetadataBuilder {
@@ -1000,7 +1000,7 @@ impl<'a> LibraryBuilder<'a> {
                 self.cached_types.insert(ty.clone(), src_ty.clone());
 
                 let name_path = translate_name(&variant, generic_ctx, self);
-                self.metadata.declare_type(id, &name_path, false);
+                self.metadata.declare_type(id, &name_path);
 
                 let variant_meta = translate_variant_def(&variant_def, generic_ctx, self);
                 self.metadata.define_variant(id, variant_meta);
@@ -1030,7 +1030,7 @@ impl<'a> LibraryBuilder<'a> {
                 self.cached_types.insert(ty.clone(), src_ty.clone());
 
                 let name_path = translate_name(&name, generic_ctx, self);
-                self.metadata.declare_type(id, &name_path, kind == StructKind::Class);
+                self.metadata.declare_type(id, &name_path);
 
                 let struct_meta = translate_struct_def(&def, generic_ctx, self);
                 self.metadata.define_struct(id, struct_meta);
@@ -1217,11 +1217,10 @@ impl<'a> LibraryBuilder<'a> {
             populate_dynarrays.extend(self
                 .metadata()
                 .dyn_array_structs()
-                .iter()
                 .skip(done_dynarrays.clone())
                 .map(|(elem_ty, struct_id)| (elem_ty.clone(), struct_id.clone())));
             
-            let closure_types = self.metadata.closures().iter().cloned();
+            let closure_types = self.metadata.closures();
             populate_closures.extend(closure_types.skip(done_closures));
 
             for closure_id in populate_closures.drain(0..) {

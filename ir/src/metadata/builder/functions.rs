@@ -8,6 +8,10 @@ use crate::FunctionDecl;
 use std::rc::Rc;
 
 impl MetadataBuilder {
+    pub fn get_function(&self, id: FunctionID) -> Option<&Rc<FunctionDecl>> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_function(id))
+    }
+    
     pub fn insert_func(&mut self, global_name: Option<NamePath>) -> FunctionID {
         let id = self.next_function_id;
 
@@ -34,6 +38,14 @@ impl MetadataBuilder {
 
     pub fn find_dtor(&self, type_id: TypeDefID) -> Option<FunctionID> {
         self.find_in_self_or_refs(|metadata| metadata.find_dtor(type_id))
+    }
+    
+    pub fn closures(&self) -> impl Iterator<Item=TypeDefID> {
+        self.iter_in_self_or_refs(move |metadata| metadata.closures().iter().cloned())
+    }
+    
+    pub fn get_static_closure(&self, func_id: FunctionID) -> Option<StaticClosureID> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_static_closure(func_id))
     }
 
     pub fn insert_static_closure(&mut self, func_id: FunctionID, closure: StaticClosureID) {

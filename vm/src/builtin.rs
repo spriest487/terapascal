@@ -213,7 +213,7 @@ pub(super) fn array_length(state: &mut Interpreter) -> ExecResult<()> {
 
     let len_func = state.metadata.dyn_array_element_ty(array_type_id)
         .and_then(|elem_ty| {
-            let rtti = state.metadata.get_dynarray_runtime_type(elem_ty)?;
+            let rtti = state.metadata.get_dyn_array_runtime_type(elem_ty)?;
             Some(rtti.length)
         })
         .ok_or_else(|| {
@@ -239,7 +239,7 @@ pub(super) fn set_length(state: &mut Interpreter) -> ExecResult<()> {
 
     let alloc_func = state.metadata.dyn_array_element_ty(array_type_id)
         .and_then(|elem_ty| {
-            let rtti = state.metadata.get_dynarray_runtime_type(elem_ty)?;
+            let rtti = state.metadata.get_dyn_array_runtime_type(elem_ty)?;
             Some(rtti.alloc)
         })
         .ok_or_else(|| {

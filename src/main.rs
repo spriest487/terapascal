@@ -255,6 +255,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
 
 fn translate_c(module: &ir::Library, args: &Args) -> c::Unit {
     let c_opts = backend_c::Options {
+        enable_rtti: true,
         trace_heap: args.trace_heap,
         trace_rc: args.trace_rc,
         trace_ir: args.trace_ir,

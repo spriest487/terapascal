@@ -399,7 +399,7 @@ impl Metadata {
         self.runtime_types.get(ty).cloned()
     }
 
-    pub fn get_dynarray_runtime_type(&self, elem_ty: &Type) -> Option<DynArrayRuntimeType> {
+    pub fn get_dyn_array_runtime_type(&self, elem_ty: &Type) -> Option<DynArrayRuntimeType> {
         self.dyn_array_runtime_types.get(elem_ty).cloned()
     }
 
@@ -601,8 +601,8 @@ impl Metadata {
         !self.type_decls[&id].is_forward()
     }
 
-    pub fn get_static_closure(&self, p0: FunctionID) -> Option<StaticClosureID> {
-        self.function_static_closures.get(&p0).cloned()
+    pub fn get_static_closure(&self, func_id: FunctionID) -> Option<StaticClosureID> {
+        self.function_static_closures.get(&func_id).cloned()
     }
 
     pub fn get_func_ptr_ty(&self, id: TypeDefID) -> Option<&FunctionSig> {

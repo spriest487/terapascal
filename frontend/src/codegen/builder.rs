@@ -43,7 +43,7 @@ impl InstructionBuilder for Builder<'_, '_> {
         self.instructions.push(instruction);
     }
 
-    fn metadata(&self) -> &Metadata {
+    fn metadata(&self) -> &MetadataBuilder {
         self.library.metadata()
     }
 

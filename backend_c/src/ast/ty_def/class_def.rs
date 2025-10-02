@@ -183,7 +183,7 @@ impl Class {
             .iter()
             .filter_map(|(el_ty, arr_struct_id)| {
                 if *arr_struct_id == struct_id {
-                    metadata.get_dynarray_runtime_type(el_ty)
+                    metadata.get_dyn_array_runtime_type(el_ty)
                 } else {
                     None
                 }

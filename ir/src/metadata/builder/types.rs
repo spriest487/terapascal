@@ -1,4 +1,4 @@
-use crate::FunctionID;
+use crate::{DynArrayRuntimeType, FunctionID};
 use crate::Interface;
 use crate::InterfaceDecl;
 use crate::InterfaceID;
@@ -21,6 +21,15 @@ use linked_hash_map::Entry;
 use linked_hash_map::LinkedHashMap;
 
 impl MetadataBuilder {
+    pub fn is_defined(&self, ty: &Type) -> bool {
+        self.find_in_self_or_refs(move |metadata| Some(metadata.is_defined(ty)))
+            .unwrap_or(false)
+    }
+    
+    pub fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_type_decl(name))
+    }
+    
     pub fn insert_type_decl(&mut self, decl: TypeDecl) -> TypeDefID {
         let id = self.next_type_id;
 
@@ -135,6 +144,10 @@ impl MetadataBuilder {
             },
         }
     }
+    
+    pub fn find_variant_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &VariantDef)> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_variant_def(name_path))
+    }
 
     pub fn get_variant_def(&self, id: TypeDefID) -> Option<&VariantDef> {
         self.find_in_self_or_refs(move |metadata| metadata.get_variant_def(id))
@@ -155,6 +168,10 @@ impl MetadataBuilder {
         self.metadata.ifaces.insert(id, InterfaceDecl::Forward(name.clone()));
         self.next_iface_id.0 += 1;
         id
+    }
+
+    pub fn ifaces(&self) -> impl Iterator<Item=(InterfaceID, &Interface)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.ifaces())
     }
 
     pub fn define_iface(&mut self, iface_def: Interface) -> InterfaceID {
@@ -249,6 +266,29 @@ impl MetadataBuilder {
         self.declare_dynarray_runtime_type(&element);
 
         struct_id
+    }
+
+    pub fn get_dyn_array_runtime_type(&self, elem_ty: &Type) -> Option<DynArrayRuntimeType> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_dyn_array_runtime_type(elem_ty))
+    }
+    
+    pub fn dyn_array_structs(&self) -> impl Iterator<Item=(&Type, TypeDefID)> {
+        self.iter_in_self_or_refs(move |metadata| metadata
+            .dyn_array_structs()
+            .iter()
+            .map(|(el_ty, id)| (el_ty, *id)))
+    }
+
+    pub fn find_dyn_array_struct(&self, elem_ty: &Type) -> Option<TypeDefID> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_dyn_array_struct(elem_ty))
+    }
+
+    pub fn get_bounds_check_func(&self, type_id: &Type) -> Option<FunctionID> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_bounds_check_func(type_id))
+    }
+
+    pub fn find_set_def(&self, name: &NamePath) -> Option<(SetAliasID, &SetAliasDef)> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_set_def(name))
     }
 
     pub fn define_set_type(&mut self, name: Option<NamePath>, flags_struct: TypeDefID) -> SetAliasID {
