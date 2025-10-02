@@ -49,7 +49,7 @@ impl ExecError {
         match self {
             ExecError::Raised { msg } => Some(msg.clone()),
             ExecError::ExternSymbolLoadFailed { msg, .. } => Some(msg.clone()),
-            ExecError::MarshalError(err) => Some(err.to_string()),
+            ExecError::MarshalError(_err) => None,
             ExecError::IllegalDereference { ptr } => Some(format!("failed to dereference pointer: {}", ptr)),
             ExecError::IllegalState { msg } => Some(msg.clone()),
             ExecError::NativeHeapError(err) => Some(err.to_string()),
