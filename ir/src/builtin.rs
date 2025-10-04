@@ -15,12 +15,10 @@ pub fn string_def() -> Struct {
             (STRING_CHARS_FIELD, StructFieldDef {
                 name: None,
                 ty: Type::U8.ptr(),
-                rc: false,
             }),
             (STRING_LEN_FIELD, StructFieldDef {
                 name: None,
                 ty: Type::I32,
-                rc: false,
             }),
         ].into_iter().collect()
     }

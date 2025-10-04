@@ -44,7 +44,7 @@ impl Struct {
                 return false;
             };
 
-            if field_def.ty != other_field.ty || field_def.rc != other_field.rc {
+            if field_def.ty != other_field.ty {
                 return false;
             }
         }
@@ -71,7 +71,7 @@ impl Struct {
         }
     }
 
-    pub fn with_field(mut self, name: impl Into<String>, ty: Type, rc: bool) -> Self {
+    pub fn with_field(mut self, name: impl Into<String>, ty: Type) -> Self {
         let id = self
             .fields
             .keys()
@@ -84,7 +84,6 @@ impl Struct {
             StructFieldDef {
                 name: Some(name.into()),
                 ty,
-                rc,
             },
         );
 
@@ -117,5 +116,4 @@ impl fmt::Display for Struct {
 pub struct StructFieldDef {
     pub name: Option<String>,
     pub ty: Type,
-    pub rc: bool,
 }

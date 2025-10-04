@@ -229,7 +229,6 @@ impl MetadataBuilder {
             StructFieldDef {
                 name: Some("len".to_string()),
                 ty: Type::I32,
-                rc: false,
             },
         );
         fields.insert(
@@ -237,7 +236,6 @@ impl MetadataBuilder {
             StructFieldDef {
                 name: Some("ptr".to_string()),
                 ty: element.clone().ptr(),
-                rc: false,
             },
         );
 
