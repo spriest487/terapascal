@@ -211,7 +211,7 @@ impl LocalScope {
 
     pub fn bind_param(
         &mut self,
-        name: Option<impl Into<Arc<String>>>,
+        name: Option<Arc<String>>,
         ty: Type,
         by_ref: bool,
     ) -> LocalID {
@@ -234,7 +234,6 @@ impl LocalScope {
 
         self.locals.push(LocalBinding::Param { id, ty, by_ref });
 
-        let name = name.map(Into::into);
         if let Some(name) = name {
             if self.named_locals.insert(SharedStringKey(name.clone()), id).is_some() {
                 panic!("scope must not already have a binding named {}", name);
