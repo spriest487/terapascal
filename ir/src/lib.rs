@@ -58,6 +58,11 @@ impl NamePath {
         &self.path[self.path.len() - 1]
     }
 
+    pub fn name_mut (&mut self) -> &mut String {
+        let index = self.path.len() - 1;
+        &mut self.path[index]
+    }
+
     pub fn to_pretty_string<'a, TyFormat>(&self, ty_format: TyFormat) -> String
     where TyFormat: Fn(&Type) -> Cow<'a, str>,
     {
