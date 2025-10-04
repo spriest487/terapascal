@@ -21,7 +21,6 @@ pub fn translate_struct_def(
                 if pad_run > 0 {
                     fields.insert(next_id, ir::StructFieldDef {
                         name: None,
-                        rc: false,
                         ty: ir::Type::U8.array(pad_run),
                     });
                     pad_run = 0;
@@ -30,8 +29,7 @@ pub fn translate_struct_def(
 
                 let name = member.idents[decl_index].to_string();
                 let ty = lib.translate_type(&member.ty, generic_ctx);
-                let rc = member.ty.is_strong_rc_reference();
-                fields.insert(next_id, ir::StructFieldDef { name: Some(name), ty, rc });
+                fields.insert(next_id, ir::StructFieldDef { name: Some(name), ty });
                 next_id.0 += 1;
             }
 
@@ -43,7 +41,7 @@ pub fn translate_struct_def(
 
     if pad_run > 0 {
         let pad_ty = ir::Type::U8.array(pad_run);
-        fields.insert(next_id, ir::StructFieldDef { name: None, rc: false, ty: pad_ty });
+        fields.insert(next_id, ir::StructFieldDef { name: None, ty: pad_ty });
     }
 
     let identity = match struct_def.kind {

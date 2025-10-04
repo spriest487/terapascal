@@ -50,7 +50,6 @@ impl SetFlagsType {
                 .map(|id| (ir::FieldID(id), ir::StructFieldDef {
                     name: None,
                     ty: WORD_TYPE,
-                    rc: false,
                 }))
                 .collect(),
         };

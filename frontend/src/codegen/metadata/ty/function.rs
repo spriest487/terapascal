@@ -47,7 +47,6 @@ pub fn translate_closure_struct(
         ir::CLOSURE_PTR_FIELD,
         ir::StructFieldDef {
             name: None,
-            rc: false,
             ty: ir::Type::Function(identity.virt_func_ty),
         },
     );
@@ -62,7 +61,6 @@ pub fn translate_closure_struct(
             ir::StructFieldDef {
                 name: Some((*capture_name.name).clone()),
                 ty,
-                rc: capture_ty.is_strong_rc_reference(),
             },
         );
 
