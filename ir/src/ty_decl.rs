@@ -20,6 +20,20 @@ pub use variant::*;
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct TypeDefID(pub usize);
 
+impl TypeDefID {
+    pub fn to_class_ptr_type(self) -> Type {
+        Type::class_ptr(self)
+    }
+
+    pub fn to_struct_type(self) -> Type {
+        Type::Struct(self)
+    }
+
+    pub fn to_function_type(self) -> Type {
+        Type::Function(self)
+    }
+}
+
 impl fmt::Display for TypeDefID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
