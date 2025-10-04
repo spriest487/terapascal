@@ -32,7 +32,9 @@ pub trait InstructionBuilder {
     // if false, all comment instructions are skipped
     fn is_debug(&self) -> bool;
     
-    fn ir_formatter(&self) -> &impl IRFormatter;
+    fn ir_formatter(&self) -> &impl IRFormatter {
+        self.metadata()
+    }
 
     fn find_local(&self, name: &str) -> Option<&LocalBinding> {
         self.local_stack().find_local(name)
