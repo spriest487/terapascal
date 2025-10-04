@@ -200,7 +200,7 @@ impl fmt::Display for Library {
         
         writeln!(f, "* String literals")?;
         for (id, lit) in self.metadata.strings() {
-            writeln!(f, "{}: '{}'", id.0, lit)?;
+            writeln!(f, "{}: '{}'", id.0, lit.escape_default())?;
         }
         writeln!(f)?;
 

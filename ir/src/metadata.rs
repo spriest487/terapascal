@@ -778,7 +778,7 @@ impl IRFormatter for Metadata {
     fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result {
         match r {
             Ref::Global(GlobalRef::StringLiteral(string_id)) => match self.get_string(*string_id) {
-                Some(string_lit) => write!(f, "'{}'", string_lit),
+                Some(string_lit) => write!(f, "'{}'", string_lit.escape_default()),
                 None => write!(f, "{}", r),
             },
 
