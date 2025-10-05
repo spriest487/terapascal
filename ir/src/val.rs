@@ -247,4 +247,8 @@ impl LocalID {
     pub fn to_deref(self) -> Ref {
         self.to_ref().to_deref()
     }
+    
+    pub fn value(self) -> Value {
+        self.to_ref().value()
+    }
 }
