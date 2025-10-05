@@ -1,8 +1,12 @@
+mod dyn_array;
 pub mod scope;
 
+use crate::instruction_builder::dyn_array::gen_dyn_array_alloc_body;
+use crate::instruction_builder::dyn_array::gen_dyn_array_length_body;
+use crate::instruction_builder::dyn_array::gen_dyn_array_release_body;
+use crate::instruction_builder::dyn_array::new_dyn_array;
 use crate::instruction_builder::scope::LocalBinding;
 use crate::instruction_builder::scope::LocalStack;
-use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::IRFormatter;
 use crate::Instruction;
@@ -17,21 +21,22 @@ use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VirtualTypeID;
+use crate::{BinOpInstruction, FunctionID};
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
-    
+
     fn metadata(&self) -> &MetadataBuilder;
 
     fn local_stack(&self) -> &LocalStack;
     fn local_stack_mut(&mut self) -> &mut LocalStack;
-    
+
     // if false, all comment instructions are skipped
     fn is_debug(&self) -> bool;
-    
+
     fn ir_formatter(&self) -> &impl IRFormatter {
         self.metadata()
     }
@@ -44,9 +49,7 @@ pub trait InstructionBuilder {
     fn local_temp(&mut self, ty: Type) -> LocalID {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.local_stack_mut()
-            .current_scope_mut()
-            .bind_temp();
+        let id = self.local_stack_mut().current_scope_mut().bind_temp();
 
         self.emit(Instruction::LocalAlloc(id, ty.clone()));
 
@@ -56,7 +59,8 @@ pub trait InstructionBuilder {
     fn local_new(&mut self, ty: Type, name: Option<Arc<String>>) -> LocalID {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.local_stack_mut()
+        let id = self
+            .local_stack_mut()
             .current_scope_mut()
             .bind_new(name, ty.clone());
 
@@ -66,15 +70,15 @@ pub trait InstructionBuilder {
     }
 
     fn next_label(&mut self) -> Label;
-    
+
     fn local_begin(&mut self) {
         let stack = self.local_stack_mut();
-        
+
         stack.begin();
         let stack_len = stack.len();
 
         self.comment(&format!("begin scope {}", stack_len));
-        
+
         self.emit(Instruction::LocalBegin);
     }
 
@@ -94,7 +98,9 @@ pub trait InstructionBuilder {
             return;
         }
 
-        self.local_stack_mut().current_scope_mut().inc_debug_ctx_count();
+        self.local_stack_mut()
+            .current_scope_mut()
+            .inc_debug_ctx_count();
 
         self.emit(Instruction::DebugPush(ctx));
     }
@@ -104,7 +110,9 @@ pub trait InstructionBuilder {
             return;
         }
 
-        self.local_stack_mut().current_scope_mut().dec_debug_ctx_count();
+        self.local_stack_mut()
+            .current_scope_mut()
+            .dec_debug_ctx_count();
 
         self.emit(Instruction::DebugPop);
     }
@@ -143,7 +151,8 @@ pub trait InstructionBuilder {
             }
         }
 
-        let locals: Vec<_> = self.local_stack()
+        let locals: Vec<_> = self
+            .local_stack()
             .all_locals(cleanup_range)
             .cloned()
             .collect();
@@ -573,7 +582,7 @@ pub trait InstructionBuilder {
         base: impl Into<Ref>,
         base_ty: impl Into<Type>,
         field: FieldID,
-        field_ty: Type
+        field_ty: Type,
     ) -> Ref {
         let result = self.local_temp(field_ty.clone());
         self.field_val(result.clone(), base, base_ty, field, field_ty);
@@ -671,7 +680,7 @@ pub trait InstructionBuilder {
         iface_id: InterfaceID,
         method: MethodID,
         self_arg: impl Into<Value>,
-        rest_args: impl IntoIterator<Item=impl Into<Value>>,
+        rest_args: impl IntoIterator<Item = impl Into<Value>>,
         out: Option<Ref>,
     ) {
         self.emit(Instruction::VirtualCall {
@@ -706,13 +715,7 @@ pub trait InstructionBuilder {
         })
     }
 
-    fn vardata(
-        &mut self,
-        out: impl Into<Ref>,
-        a: impl Into<Ref>,
-        of_ty: Type,
-        tag: usize,
-    ) {
+    fn vardata(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_ty: Type, tag: usize) {
         self.emit(Instruction::VariantData {
             out: out.into(),
             a: a.into(),
@@ -724,7 +727,10 @@ pub trait InstructionBuilder {
     fn release(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         let at = at.into();
 
-        self.comment(&format!("release: {}", ty.to_pretty_string(self.ir_formatter())));
+        self.comment(&format!(
+            "release: {}",
+            ty.to_pretty_string(self.ir_formatter())
+        ));
 
         if self.call_release(at.clone(), ty) {
             true
@@ -748,29 +754,40 @@ pub trait InstructionBuilder {
 
         true
     }
-    
+
     fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        self.visit_deep(at, ty, |builder, element_ty, element_ref| {
-            match element_ty {
+        self.visit_deep(
+            at,
+            ty,
+            |builder, element_ty, element_ref| match element_ty {
                 Type::RcPointer(..) => {
-                    builder.emit(Instruction::Release { at: element_ref, weak: false });
+                    builder.emit(Instruction::Release {
+                        at: element_ref,
+                        weak: false,
+                    });
                     true
-                }
+                },
 
                 Type::RcWeakPointer(..) => {
-                    builder.emit(Instruction::Release { at: element_ref, weak: true });
+                    builder.emit(Instruction::Release {
+                        at: element_ref,
+                        weak: true,
+                    });
                     true
-                }
-                
+                },
+
                 _ => false,
-            }
-        })
+            },
+        )
     }
 
     fn retain(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         let at = at.into();
 
-        self.comment(&format!("retain: {}", ty.to_pretty_string(self.ir_formatter())));
+        self.comment(&format!(
+            "retain: {}",
+            ty.to_pretty_string(self.ir_formatter())
+        ));
 
         if self.call_retain(at.clone(), ty) {
             true
@@ -780,7 +797,7 @@ pub trait InstructionBuilder {
     }
 
     fn call_retain(&mut self, at: Ref, ty: &Type) -> bool {
-        let Some(rtti) = self.metadata().get_runtime_type(ty)else {
+        let Some(rtti) = self.metadata().get_runtime_type(ty) else {
             return false;
         };
 
@@ -794,25 +811,75 @@ pub trait InstructionBuilder {
 
         true
     }
-    
+
     fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        self.visit_deep(at, ty, |builder, element_ty, element_ref| {
-            match element_ty {
+        self.visit_deep(
+            at,
+            ty,
+            |builder, element_ty, element_ref| match element_ty {
                 Type::RcPointer(..) => {
-                    builder.emit(Instruction::Retain { at: element_ref, weak: false });
+                    builder.emit(Instruction::Retain {
+                        at: element_ref,
+                        weak: false,
+                    });
                     true
-                }
+                },
 
                 Type::RcWeakPointer(..) => {
-                    builder.emit(Instruction::Retain { at: element_ref, weak: true });
+                    builder.emit(Instruction::Retain {
+                        at: element_ref,
+                        weak: true,
+                    });
                     true
-                }
+                },
 
                 _ => false,
-            }
-        })
+            },
+        )
     }
-    
+
+    fn gen_dyn_array_length_body(&mut self, array_class_id: TypeDefID)
+    where
+        Self: Sized,
+    {
+        gen_dyn_array_length_body(self, array_class_id)
+    }
+
+    fn gen_dyn_array_alloc_body(
+        &mut self,
+        element_type: &Type,
+        array_class_id: TypeDefID,
+        get_mem_id: FunctionID,
+    ) where
+        Self: Sized,
+    {
+        gen_dyn_array_alloc_body(self, element_type, array_class_id, get_mem_id)
+    }
+
+    fn gen_dyn_array_release_body(
+        &mut self,
+        element_type: &Type,
+        array_class_id: TypeDefID,
+        free_mem_id: FunctionID,
+    ) where
+        Self: Sized,
+    {
+        gen_dyn_array_release_body(self, element_type, array_class_id, free_mem_id)
+    }
+
+    fn new_dyn_array(
+        &mut self,
+        array_class_id: TypeDefID,
+        elements: impl IntoIterator<Item = Value>,
+        element_type: &Type,
+        get_mem_id: FunctionID,
+    ) -> Ref
+    where
+        Self: Sized,
+    {
+        new_dyn_array(self, array_class_id, elements, element_type, get_mem_id)
+    }
+
     fn if_then<Branch>(&mut self, cond: impl Into<crate::Value>, then_branch: Branch)
     where
         Branch: FnOnce(&mut Self),
@@ -829,12 +896,12 @@ pub trait InstructionBuilder {
         self.label(break_label);
     }
 
-    fn if_then_else<IfBranch, ElseBranch>(&mut self,
+    fn if_then_else<IfBranch, ElseBranch>(
+        &mut self,
         cond: impl Into<Value>,
         then_branch: IfBranch,
         else_branch: ElseBranch,
-    )
-    where
+    ) where
         IfBranch: FnOnce(&mut Self),
         ElseBranch: FnOnce(&mut Self),
     {
@@ -861,8 +928,8 @@ pub trait InstructionBuilder {
         inc_val: impl Into<crate::Value>,
         high_val: impl Into<crate::Value>,
         f: F,
-    )
-    where F: Fn(&mut Self)
+    ) where
+        F: Fn(&mut Self),
     {
         let break_label = self.next_label();
         let loop_label = self.next_label();
@@ -890,7 +957,7 @@ pub trait InstructionBuilder {
         Visitor: Fn(&mut Self, &Type, Ref) -> bool + Copy,
     {
         let at = at.into();
-        
+
         match ty {
             Type::Struct(struct_id) => {
                 let struct_def = self.metadata().get_struct_def(*struct_id).unwrap();
@@ -964,13 +1031,8 @@ pub trait InstructionBuilder {
                         // incremented once per case
                         self.local_begin();
                         let data_ptr = self.local_temp(data_ty.clone().ptr());
-                            
-                        self.vardata(
-                            data_ptr.clone(),
-                            at.clone(),
-                            Type::Variant(*id),
-                            tag,
-                        );
+
+                        self.vardata(data_ptr.clone(), at.clone(), Type::Variant(*id), tag);
 
                         result |= self.visit_deep(data_ptr.to_ref().to_deref(), &data_ty, f);
                         self.local_end();
@@ -1026,7 +1088,7 @@ pub fn remove_empty_blocks(instructions: &mut Vec<Instruction>) {
             Instruction::LocalBegin => {
                 empty.push(Some(pc));
                 pc += 1;
-            }
+            },
 
             // end the scope
             Instruction::LocalEnd => {
@@ -1047,18 +1109,16 @@ pub fn remove_empty_blocks(instructions: &mut Vec<Instruction>) {
 
                     pc += 1;
                 }
-            }
+            },
 
-            Instruction::DebugPop
-            | Instruction::DebugPush(..)
-            | Instruction::Comment(..) => {
+            Instruction::DebugPop | Instruction::DebugPush(..) | Instruction::Comment(..) => {
                 pc += 1;
-            }
+            },
 
             _ => {
                 *block_empty = None;
                 pc += 1;
-            }
+            },
         }
     }
 }

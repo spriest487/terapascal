@@ -499,11 +499,17 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.set_bitwise_op(a, b, set_type, |i| i.bit_xor_func)
     }
 
+    #[allow(unused)]
     pub fn get_mem(&mut self, count: impl Into<Value>, out: impl Into<Ref>) {
         let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_get_mem_func()));
         self.call(function_ref, [count.into()], Some(out.into()));
     }
 
+    pub fn get_mem_id(&mut self) -> FunctionID {
+        self.library.instantiate_get_mem_func()
+    }
+
+    #[allow(unused)]
     pub fn free_mem(&mut self, at: impl Into<Value>) {
         let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_free_mem_func()));
         self.call(function_ref, [at.into()], None);

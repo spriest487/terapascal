@@ -146,74 +146,21 @@ fn translate_dyn_array_ctor(
 
     // should be a class rc-ptr to the unique class for this dyn array element type
     let array_ty = builder.translate_type(&ctor.annotation.ty());
-    let struct_id = match &array_ty {
-        ir::Type::RcPointer(ir::VirtualTypeID::Class(struct_id)) => *struct_id,
+
+    let array_class_id = match &array_ty {
+        ir::Type::RcPointer(ir::VirtualTypeID::Class(array_class_id)) => *array_class_id,
         _ => unreachable!("dynamic array must have an rc class type"),
     };
+    
+    let mut elements = Vec::with_capacity(ctor.elements.len());
 
-    let arr = builder.local_new(array_ty.clone(), None).to_ref();
+    for element in &ctor.elements {
+        let element_val = translate_expr(&element.value, builder);
+        elements.push(element_val.value());
+    }
 
-    // allocate the array object itself
-    builder.scope(|builder| {
-        builder.rc_new(arr.clone(), struct_id, false);
-
-        // get pointer to the length
-        let len_ref = builder.local_temp(ir::Type::I32.ptr()).to_ref();
-        builder.emit(ir::Instruction::Field {
-            out: len_ref.clone(),
-            of_ty: array_ty.clone(),
-            field: ir::DYNARRAY_LEN_FIELD,
-            a: arr.clone(),
-        });
-
-        // set length
-        let len = i32::try_from(ctor.elements.len()).expect("invalid dynamic array ctor length");
-        builder.mov(len_ref.clone().to_deref(), ir::Value::LiteralI32(len));
-
-        // get pointer to storage pointer
-        let arr_ptr = builder.local_temp(elem_ty.clone().ptr().ptr()).to_ref();
-        builder.emit(ir::Instruction::Field {
-            out: arr_ptr.clone(),
-            of_ty: array_ty,
-            field: ir::DYNARRAY_PTR_FIELD,
-            a: arr.clone(),
-        });
-
-        // allocate array storage
-        if len > 0 {
-            let alloc_size = builder.local_temp(ir::Type::I32).to_ref();
-            builder.mul(alloc_size.clone(), ir::Value::SizeOf(elem_ty.clone()), ir::Value::LiteralI32(len));
-
-            let elements_mem = builder.local_temp(ir::Type::U8.ptr()).to_ref();
-            builder.get_mem(alloc_size, elements_mem.clone());
-            builder.cast(arr_ptr.clone().to_deref(), elements_mem, elem_ty.clone().ptr());
-
-            let el_ptr = builder.local_temp(elem_ty.clone().ptr()).to_ref();
-
-            for (i, el) in ctor.elements.iter().enumerate() {
-                builder.scope(|builder| {
-                    // we know this cast is OK because we check the length is in range of i32 previously
-                    let index = ir::Value::LiteralI32(i as i32);
-
-                    // el_ptr := arr_ptr^ + i
-                    builder.add(el_ptr.clone(), arr_ptr.clone().to_deref(), index);
-
-                    // el_ptr^ := el
-                    let el = expr::translate_expr(&el.value, builder);
-                    builder.mov(el_ptr.clone().to_deref(), el);
-
-                    // retain each element. we don't do this for static arrays because retaining
-                    // a static array retains all its elements - for dynamic arrays, retaining
-                    // the array object itself does not retain the elements
-                    builder.retain(el_ptr.clone().to_deref(), &elem_ty);
-                });
-            }
-        } else {
-            builder.mov(arr_ptr.to_deref(), ir::Value::LiteralNull);
-        }
-    });
-
-    arr
+    let get_mem_id = builder.get_mem_id();
+    builder.new_dyn_array(array_class_id, elements, &elem_ty, get_mem_id)
 }
 
 fn translate_set_ctor(
