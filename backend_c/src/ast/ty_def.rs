@@ -67,7 +67,7 @@ impl Type {
             | ir::Type::RcWeakPointer(ir::VirtualTypeID::Class(id)) => {
                 Type::DefinedType(TypeDefName::Struct(*id)).ptr()
             },
-            ir::Type::RcPointer(..) | ir::Type::RcWeakPointer(..) => Type::Void.ptr(),
+            ir::Type::RcPointer(..) | ir::Type::RcWeakPointer(..) => Type::Rc.ptr(),
             ir::Type::Struct(id) => Type::from_ir_struct(*id),
             ir::Type::Variant(id) => Type::from_ir_variant(*id),
             ir::Type::Flags(repr_id, _set_id) => Type::from_ir_struct(*repr_id),
