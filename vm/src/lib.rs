@@ -39,6 +39,7 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
+use terapascal_ir::Label;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -1058,7 +1059,7 @@ impl Interpreter {
                 // noop
             },
 
-            ir::Instruction::Jump { dest } => self.exec_jump(pc, &labels[dest])?,
+            ir::Instruction::Jump { dest } => self.exec_jump(pc, *dest, labels)?,
             ir::Instruction::JumpIf { dest, test } => self.exec_jmpif(pc, &labels, *dest, test)?,
 
             ir::Instruction::Release { at, weak } => self.exec_release(at, *weak)?,
@@ -1226,7 +1227,7 @@ impl Interpreter {
     ) -> ExecResult<()> {
         let cond_val = self.evaluate(cond)?;
         match cond_val {
-            DynValue::Bool(true) => self.exec_jump(pc, &labels[&dest]),
+            DynValue::Bool(true) => self.exec_jump(pc, dest, labels),
             DynValue::Bool(false) => Ok(()),
             _ => Err(ExecError::illegal_state(
                 "JumpIf instruction testing non-boolean value",
@@ -1814,11 +1815,15 @@ impl Interpreter {
         Ok(())
     }
 
-    fn exec_jump(&mut self, pc: &mut usize, label: &LabelLocation) -> ExecResult<()> {
-        *pc = label.pc_offset;
+    fn exec_jump(&mut self, pc: &mut usize, label: Label, labels: &HashMap<Label, LabelLocation>) -> ExecResult<()> {
+        let location = labels
+            .get(&label)
+            .ok_or_else(|| ExecError::illegal_state(format!("reference to missing label {label}")))?;
+
+        *pc = location.pc_offset;
 
         // assume all jumps are either upwards or to the same level
-        self.current_frame_mut()?.pop_block_to(label.block_depth)?;
+        self.current_frame_mut()?.pop_block_to(location.block_depth)?;
 
         Ok(())
     }
