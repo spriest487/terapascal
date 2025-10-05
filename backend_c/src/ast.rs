@@ -600,7 +600,7 @@ impl Unit {
             let array_realloc = Expr::Class(methodinfo_array_class)
                 .field(FieldName::DynArrayAlloc);
             init_stmts.push(Statement::Expr(array_realloc.call([
-                Expr::named_var(METHODS_ARRAY_NAME),
+                Expr::named_var(METHODS_ARRAY_NAME).cast(Type::Rc.ptr()),
                 Expr::LitInt(typeinfo.methods.len() as i128),
                 Expr::Null,
                 Expr::named_var(METHODNULL_NAME).addr_of(),

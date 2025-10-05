@@ -53,8 +53,8 @@ struct Rc {
 
 typedef void (*Invoker)(void** args, void* resultOut);
 
-typedef void (*DynArrayAlloc)(void* arr, int32_t len, void* copy_from, void* default_val);
-typedef int32_t (*DynArrayLength)(void* arr);
+typedef void (*DynArrayAlloc)(struct Rc* arr, int32_t len, struct Rc* copy_from, void* default_val);
+typedef int32_t (*DynArrayLength)(struct Rc* arr);
 
 struct DynArrayClass {
     struct Class base;

@@ -66,10 +66,6 @@ impl Type {
         Type::RcWeakPointer(class)
     }
 
-    pub const fn rc_ptr_any() -> Self {
-        Type::RcPointer(VirtualTypeID::Any)
-    }
-
     pub const fn string_ptr() -> Self {
         Type::rc_ptr_to(VirtualTypeID::Class(STRING_ID))
     }

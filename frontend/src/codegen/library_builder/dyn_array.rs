@@ -25,7 +25,7 @@ pub fn gen_dyn_array_funcs(lib: &mut LibraryBuilder, elem_ty: &ir::Type, struct_
         ir::Function::Local(ir::FunctionDef {
             debug_name: alloc_debug_name,
             sig: ir::FunctionSig {
-                param_tys: vec![ir::Type::any(), ir::Type::I32, ir::Type::any(), ir::Type::any()],
+                param_tys: vec![ir::Type::any(), ir::Type::I32, ir::Type::any(), ir::Type::Nothing.ptr()],
                 return_ty: ir::Type::Nothing,
             },
             body: alloc_body,
