@@ -381,9 +381,6 @@ impl Unit {
 
                     let mut param_tys = Vec::new();
 
-                    // any function-type object needs a closure param
-                    param_tys.push(Type::Void.ptr());
-
                     for param_ty in &func_def.param_tys {
                         let param_ty = Type::from_metadata(param_ty, self);
                         param_ty.collect_type_def_deps(&mut member_deps);
