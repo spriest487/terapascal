@@ -15,8 +15,8 @@ use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Ref {
+    /// write-only ref that doesn't result in mov instructions when written to
     Discard,
-    // write-only ref that doesn't result in mov instructions when written to
     Local(LocalID),
     Global(GlobalRef),
     Deref(Box<Value>),
@@ -54,6 +54,12 @@ impl From<LocalID> for Ref {
 impl From<FunctionID> for Ref {
     fn from(id: FunctionID) -> Self {
         Ref::Global(GlobalRef::Function(id))
+    }
+}
+
+impl From<VariableID> for Ref {
+    fn from(id: VariableID) -> Self {
+        Ref::Global(GlobalRef::Variable(id))
     }
 }
 
