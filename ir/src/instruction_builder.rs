@@ -2,12 +2,14 @@ pub mod scope;
 
 use crate::instruction_builder::scope::LocalBinding;
 use crate::instruction_builder::scope::LocalStack;
+use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::InterfaceID;
 use crate::Label;
 use crate::LocalID;
+use crate::MetadataBuilder;
 use crate::MethodID;
 use crate::Ref;
 use crate::Type;
@@ -15,8 +17,6 @@ use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VirtualTypeID;
-use crate::BinOpInstruction;
-use crate::MetadataBuilder;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -829,13 +829,14 @@ pub trait InstructionBuilder {
         self.label(break_label);
     }
 
-    fn if_then_else<Branch>(&mut self,
-        cond: impl Into<crate::Value>,
-        then_branch: Branch,
-        else_branch: Branch,
+    fn if_then_else<IfBranch, ElseBranch>(&mut self,
+        cond: impl Into<Value>,
+        then_branch: IfBranch,
+        else_branch: ElseBranch,
     )
     where
-        Branch: FnOnce(&mut Self)
+        IfBranch: FnOnce(&mut Self),
+        ElseBranch: FnOnce(&mut Self),
     {
         let then_label = self.next_label();
         let else_label = self.next_label();
