@@ -4,6 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _MSC_VER
+#include <malloc.h>
+#endif
+
 // forward decl of builtin types
 STRING_STRUCT;
 TYPEINFO_STRUCT;
