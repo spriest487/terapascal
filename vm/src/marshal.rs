@@ -515,9 +515,13 @@ impl Marshaller {
         let struct_marshal_ty = self.get_ty(&ir::Type::Struct(type_id))?;
 
         let fields = self.struct_field_types.get(&type_id)
-            .ok_or_else(|| MarshalError::UnsupportedType(ir::Type::Struct(type_id)))?;
+            .ok_or_else(|| {
+                MarshalError::UnsupportedType(ir::Type::Struct(type_id))
+            })?;
         let field_ty = fields.get(field.0)
-            .ok_or_else(|| MarshalError::FieldOutOfRange { struct_id: type_id, field })?
+            .ok_or_else(|| {
+                MarshalError::FieldOutOfRange { struct_id: type_id, field }
+            })?
             .clone();
 
         let field_index = if self.ref_types.contains(&type_id) {
