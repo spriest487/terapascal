@@ -1097,13 +1097,7 @@ impl<'a> LibraryBuilder<'a> {
             },
 
             typ::Type::Function(func_sig) => {
-                if let Some(id) = self.find_func_ty(&func_sig) {
-                    return ir::Type::Function(id);
-                }
-
-                let ir_sig = translate_sig(&func_sig, generic_ctx, self);
-                let func_ty_id = self.define_func_ty((**func_sig).clone(), ir_sig);
-
+                let func_ty_id = self.translate_func_ty(func_sig, generic_ctx);
                 let ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(func_ty_id));
 
                 self.type_cache.insert(src_ty.clone(), ty.clone());
@@ -1445,7 +1439,12 @@ impl<'a> LibraryBuilder<'a> {
         let func_ty_id = match self.find_func_ty(&func_sig) {
             Some(id) => id,
             None => {
-                let ir_sig = translate_sig(func_sig, generic_ctx, self);
+                let mut ir_sig = translate_sig(&func_sig, generic_ctx, self);
+
+                // any reference to a function value creates a closure, which has an extra param
+                // for the reference to itself
+                ir_sig.param_tys.insert(0, ir::Type::any());
+
                 self.define_func_ty(func_sig.clone(), ir_sig)
             },
         };
