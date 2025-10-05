@@ -831,7 +831,7 @@ impl Interpreter {
         }
     }
 
-    fn addr_of_ref(&self, target: &ir::Ref) -> ExecResult<Pointer> {
+    fn addr_of_ref(&self, target: &ir::Ref) -> ExecResult<DynValue> {
         match target {
             ir::Ref::Discard => {
                 let msg = "can't take address of discard ref";
@@ -842,7 +842,7 @@ impl Interpreter {
             // let intPtr := @int;
             // @(intPtr^) -> address of int behind intPtr
             ir::Ref::Deref(val) => match self.evaluate(val)? {
-                DynValue::Pointer(ptr) => Ok(ptr.clone()),
+                DynValue::Pointer(ptr) => Ok(DynValue::Pointer(ptr.clone())),
 
                 _ => {
                     let msg = format!("deref of non-pointer value @ {}", val);
@@ -852,10 +852,16 @@ impl Interpreter {
 
             // let int := 1;
             // @int -> stack address of int val
-            ir::Ref::Local(id) => self.current_frame()?.get_local_ptr(*id).map_err(|err| {
-                let msg = err.to_string();
-                ExecError::illegal_state(msg)
-            }),
+            ir::Ref::Local(id) => {
+                let ptr = self.current_frame()?
+                    .get_local_ptr(*id)
+                    .map_err(|err| {
+                        let msg = err.to_string();
+                        ExecError::illegal_state(msg)
+                    })?;
+                
+                Ok(DynValue::Pointer(ptr))
+            },
 
             ir::Ref::Global(var_ref @ ir::GlobalRef::Variable(..)) => {
                 match self.globals.get(var_ref) {
@@ -865,7 +871,7 @@ impl Interpreter {
                             ty: ty.clone(),
                         };
 
-                        Ok(ptr)
+                        Ok(DynValue::Pointer(ptr))
                     },
 
                     other => {
@@ -881,6 +887,10 @@ impl Interpreter {
                         Err(ExecError::illegal_state(msg))
                     },
                 }
+            },
+
+            ir::Ref::Global(ir::GlobalRef::Function(id)) => {
+                Ok(DynValue::Function(*id))
             },
 
             ir::Ref::Global(global_ref) => {
@@ -1017,7 +1027,7 @@ impl Interpreter {
 
             ir::Instruction::AddrOf { out, a } => {
                 let a_ptr = self.addr_of_ref(a)?;
-                self.store(out, DynValue::Pointer(a_ptr))?;
+                self.store(out, a_ptr)?;
             },
 
             ir::Instruction::Field {
@@ -1242,7 +1252,9 @@ impl Interpreter {
             },
         };
 
-        let a_ptr = self.addr_of_ref(a)?;
+        let DynValue::Pointer(a_ptr) = self.addr_of_ref(a)? else {
+            return Err(ExecError::illegal_state("address of reference to variant must be a pointer"));
+        };
 
         let case_def = self
             .metadata
@@ -1277,7 +1289,7 @@ impl Interpreter {
         // output a pointer to the variant
         let tag_ptr = self.addr_of_ref(a)?;
 
-        self.store(out, DynValue::Pointer(tag_ptr))?;
+        self.store(out, tag_ptr)?;
 
         Ok(())
     }
@@ -1289,7 +1301,9 @@ impl Interpreter {
         index: &ir::Value,
         element: &ir::Type,
     ) -> ExecResult<()> {
-        let array_ptr = self.addr_of_ref(a)?;
+        let DynValue::Pointer(array_ptr) = self.addr_of_ref(a)? else {
+            return Err(ExecError::illegal_state("address of reference to array must be a pointer"));
+        };
 
         let el_marshal_ty = self.marshaller.get_ty(element)?;
 
@@ -1732,7 +1746,9 @@ impl Interpreter {
             },
 
             ir::Type::Struct(struct_id) => {
-                let struct_ptr = self.addr_of_ref(a)?;
+                let DynValue::Pointer(struct_ptr) = self.addr_of_ref(a)? else {
+                    return Err(ExecError::illegal_state("address of reference to struct must be a pointer"));
+                };
 
                 let field_info = self.marshaller.get_field_info(*struct_id, *field)?;
 
@@ -1745,7 +1761,9 @@ impl Interpreter {
             // assume the statically-provided type ID is correct, no need to load the actual value
             // and check dynamically
             ir::Type::RcPointer(ir::VirtualTypeID::Class(type_id)) => {
-                let val_ptr = self.addr_of_ref(&a.clone().to_deref())?;
+                let DynValue::Pointer(val_ptr) = self.addr_of_ref(&a.clone().to_deref())? else {
+                    return Err(ExecError::illegal_state("address of reference to object must be a pointer"));
+                };
 
                 let field_info = self.marshaller.get_field_info(*type_id, *field)?;
 
@@ -1758,7 +1776,9 @@ impl Interpreter {
             // virtual reference, we need to load the actual value behind the pointer to get the
             // concrete type ID
             ir::Type::RcPointer(..) => {
-                let val_ptr = self.addr_of_ref(&a.clone().to_deref())?;
+                let DynValue::Pointer(val_ptr) = self.addr_of_ref(&a.clone().to_deref())? else {
+                    return Err(ExecError::illegal_state("address of reference to interface must be a pointer"));
+                };
 
                 let val = self.load_indirect(&val_ptr)?;
                 let struct_val = match &val {

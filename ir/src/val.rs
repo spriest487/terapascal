@@ -243,4 +243,8 @@ impl LocalID {
     pub fn to_ref(self) -> Ref {
         Ref::Local(self)
     }
+
+    pub fn to_deref(self) -> Ref {
+        self.to_ref().to_deref()
+    }
 }

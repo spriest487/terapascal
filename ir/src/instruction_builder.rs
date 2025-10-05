@@ -780,7 +780,7 @@ pub trait InstructionBuilder {
     }
 
     fn call_retain(&mut self, at: Ref, ty: &Type) -> bool {
-        let Some(rtti) = self.metadata().get_runtime_type(ty)else {
+        let Some(rtti) = self.metadata().get_runtime_type(ty) else {
             return false;
         };
 
