@@ -48,6 +48,10 @@ pub enum Type {
         return_ty: Box<Type>,
         params: Vec<Type>,
     },
+    
+    // struct with a layout matching any closure object's initial fields, used to access
+    // the function pointe in closures when we don't know the real type
+    AnonymousClosure,
 }
 
 impl Type {
@@ -182,6 +186,10 @@ impl Type {
             Type::Class => {
                 left.push_str("struct Class");
             },
+            
+            Type::AnonymousClosure => {
+                left.push_str("struct AnonymousClosure");
+            }
         }
     }
 
@@ -258,6 +266,8 @@ impl Type {
                 name.push(')');
                 name
             },
+            
+            Type::AnonymousClosure => "struct AnonymousClosure".to_string(),
         }
     }
 }

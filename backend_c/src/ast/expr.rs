@@ -301,16 +301,15 @@ impl Expr {
             ir::Type::RcPointer(class_id) => {
                 // pointer to RC containing pointer to class resource
                 match class_id {
-                    // HACK: closures are of unknown type, but we don't need a real vtable to call
-                    // them. every closure struct starts with a Rc struct followed by a pointer
-                    // to the closure's function, so we can get the function pointer by applying
-                    // the offset manually
+                    // cast closures are of unknown type, but we don't need a real vtable to call
+                    // them. cast to the AnonymousClosure struct which is guaranteed to have the
+                    // same layout as the first two fields of any closure struct
                     ir::VirtualTypeID::Closure(func_ty_id) if field_id == ir::CLOSURE_PTR_FIELD => {
-                        let size_of_rc = Expr::SizeOf(Type::Rc);
-                        let offset_ptr = Expr::infix_op(a_expr, InfixOp::Add, size_of_rc);
+                        let cast_to_anon_closure = a_expr.cast(Type::AnonymousClosure.ptr());
+                        let func_ptr = cast_to_anon_closure.arrow(FieldName::ClosureFunctionPointer).addr_of();
 
                         let func_ptr_ty = Type::DefinedType(TypeDefName::Alias(*func_ty_id));
-                        offset_ptr.cast(func_ptr_ty.ptr())
+                        func_ptr.cast(func_ptr_ty.ptr())
                     },
 
                     // normal class: it's just a field accessed through this pointer

@@ -79,6 +79,13 @@ static bool IsImpl(struct Class* class, size_t iface) {
     return false;
 }
 
+// closure types aren't known by their callers, but all follow this layout so
+// we can cast pointers to this to access the function pointer
+struct AnonymousClosure {
+    struct Rc rc;
+    void (*func_ptr)(void*);
+};
+
 // internal memory allocation
 
 #ifdef TRACE_HEAP

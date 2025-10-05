@@ -156,6 +156,9 @@ pub enum FieldName {
     VariantTag,
     VariantData,
     VariantDataCase(usize),
+    
+    // the function pointer field of the AnonymousClosure struct
+    ClosureFunctionPointer,
 }
 
 impl fmt::Display for FieldName {
@@ -171,6 +174,7 @@ impl fmt::Display for FieldName {
             FieldName::VariantTag => write!(f, "tag"),
             FieldName::VariantData => write!(f, "data"),
             FieldName::VariantDataCase(case) => write!(f, "data_{}", case),
+            FieldName::ClosureFunctionPointer => write!(f, "func_ptr"),
         }
     }
 }
