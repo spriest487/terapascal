@@ -103,7 +103,7 @@ pub trait IRFormatter {
             }
 
             Instruction::Not(op) => {
-                self.format_prefix_op_instruction(f, "not", op, "not")
+                self.format_prefix_op_instruction(f, "not", op, "not ")
             }
 
             Instruction::And(op) => {
