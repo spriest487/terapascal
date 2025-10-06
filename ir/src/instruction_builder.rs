@@ -1105,7 +1105,9 @@ pub fn remove_empty_blocks(instructions: &mut Vec<Instruction>) {
                     empty.pop();
 
                     // containing scope is no longer empty
-                    *empty.last_mut().unwrap() = None;
+                    if let Some(last) = empty.last_mut() {
+                        *last = None;
+                    }
 
                     pc += 1;
                 }
