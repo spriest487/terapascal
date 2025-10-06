@@ -2,7 +2,9 @@ use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::SetAliasID;
 use crate::ty_decl::TypeDefID;
-use crate::{IRFormatter, TagLocation};
+use crate::IRFormatter;
+use crate::TagLocation;
+use crate::Value;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -169,6 +171,38 @@ impl Type {
         let mut result = String::new();
         _ = formatter.format_type(self, &mut result);
         result
+    }
+    
+    pub fn default_literal(&self) -> Option<Value> {
+        match self {
+            Type::Pointer(_)
+            | Type::RcPointer(_)
+            | Type::RcWeakPointer(_)
+            | Type::Function(_) => {
+                Some(Value::LiteralNull)
+            },
+
+            Type::Bool => Some(Value::LiteralBool(false)),
+            Type::U8 => Some(Value::LiteralU8(0)),
+            Type::I8 => Some(Value::LiteralI8(0)),
+            Type::I16 => Some(Value::LiteralI16(0)),
+            Type::U16 => Some(Value::LiteralU16(0)),
+            Type::I32 => Some(Value::LiteralI32(0)),
+            Type::U32 => Some(Value::LiteralU32(0)),
+            Type::I64 => Some(Value::LiteralI64(0)),
+            Type::U64 => Some(Value::LiteralU64(0)),
+            Type::USize => Some(Value::LiteralUSize(0)),
+            Type::ISize => Some(Value::LiteralISize(0)),
+            Type::F32 => Some(Value::LiteralF32(0.0)),
+
+            Type::Struct(..)
+            | Type::Flags(..)
+            | Type::Variant(..)
+            | Type::Array { .. }
+            | Type::Nothing => {
+                None
+            }
+        }
     }
 }
 

@@ -373,37 +373,14 @@ pub fn literal_to_val(
 
         ast::Literal::DefaultValue(ty) => {
             let ir_ty = builder.translate_type(ty);
-            match ir_ty {
-                ir::Type::Pointer(_)
-                | ir::Type::RcPointer(_)
-                | ir::Type::RcWeakPointer(_)
-                | ir::Type::Function(_) => {
-                    ir::Value::LiteralNull
-                },
-
-                ir::Type::Bool => ir::Value::LiteralBool(false),
-                ir::Type::U8 => ir::Value::LiteralU8(0),
-                ir::Type::I8 => ir::Value::LiteralI8(0),
-                ir::Type::I16 => ir::Value::LiteralI16(0),
-                ir::Type::U16 => ir::Value::LiteralU16(0),
-                ir::Type::I32 => ir::Value::LiteralI32(0),
-                ir::Type::U32 => ir::Value::LiteralU32(0),
-                ir::Type::I64 => ir::Value::LiteralI64(0),
-                ir::Type::U64 => ir::Value::LiteralU64(0),
-                ir::Type::USize => ir::Value::LiteralUSize(0),
-                ir::Type::ISize => ir::Value::LiteralISize(0),
-                ir::Type::F32 => ir::Value::LiteralF32(0.0),
-                
-                ir::Type::Struct(..)
-                | ir::Type::Flags(..)
-                | ir::Type::Variant(..)
-                | ir::Type::Array { .. }
-                | ir::Type::Nothing => {
+            match ir_ty.default_literal() {
+                Some(lit) => lit,
+                None => {
                     let size_expr = ir::Value::SizeOf(ir_ty.clone());
                     let temp_ref = builder.local_temp(ir_ty.clone()).to_ref();
-                    
+
                     gen_fill_byte(temp_ref.clone(), ir_ty, size_expr, ir::Value::LiteralU8(0), builder);
-                    
+
                     ir::Value::Ref(temp_ref)
                 }
             }
