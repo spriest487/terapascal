@@ -460,6 +460,13 @@ pub trait InstructionBuilder {
         }))
     }
 
+    fn neq(&mut self, out: impl Into<Ref>, a: impl Into<Value>, b: impl Into<Value>) {
+        let out = out.into();
+        
+        self.eq(out.clone(), a, b);
+        self.not(out.clone(), out);
+    }
+
     fn eq_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
         let a = a.into();
         let b = b.into();
@@ -469,6 +476,19 @@ pub trait InstructionBuilder {
         } else {
             let result = self.local_temp(Type::Bool);
             self.eq(result.clone(), a, b);
+            Value::from(result)
+        }
+    }
+
+    fn neq_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
+        let a = a.into();
+        let b = b.into();
+
+        if let (Some(a_val), Some(b_val)) = (a.to_literal_val(), b.to_literal_val()) {
+            Value::LiteralBool(a_val != b_val)
+        } else {
+            let result = self.local_temp(Type::Bool);
+            self.neq(result.clone(), a, b);
             Value::from(result)
         }
     }
