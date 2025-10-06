@@ -244,7 +244,7 @@ pub struct Marshaller {
     types: HashMap<ir::Type, ForeignType>,
     libs: HashMap<String, Rc<dlopen::Library>>,
 
-    struct_field_types: BTreeMap<ir::TypeDefID, Vec<ir::Type>>,
+    struct_field_types: BTreeMap<ir::TypeDefID, Vec<(ir::FieldID, ir::Type)>>,
     variant_case_types: BTreeMap<ir::TypeDefID, Vec<Option<ir::Type>>>,
 
     // structure types that need refcounting fields and type info for virtual calls
@@ -298,7 +298,7 @@ impl Marshaller {
         def_fields.sort_by_key(|(f_id, _)| **f_id);
         let def_field_tys: Vec<_> = def_fields
             .into_iter()
-            .map(|(_, field)| field.ty.clone())
+            .map(|(id, field)| (*id, field.ty.clone()))
             .collect();
 
         let mut field_ffi_tys = Vec::with_capacity(def_field_tys.len());
@@ -311,7 +311,7 @@ impl Marshaller {
             self.ref_types.insert(id);
         }
 
-        for def_field_ty in &def_field_tys {
+        for (_, def_field_ty) in &def_field_tys {
             field_ffi_tys.push(self.build_marshalled_type(def_field_ty, metadata)?);
         }
 
@@ -518,7 +518,7 @@ impl Marshaller {
             .ok_or_else(|| {
                 MarshalError::UnsupportedType(ir::Type::Struct(type_id))
             })?;
-        let field_ty = fields.get(field.0)
+        let (_, field_ty) = fields.get(field.0)
             .ok_or_else(|| {
                 MarshalError::FieldOutOfRange { struct_id: type_id, field }
             })?
@@ -666,8 +666,9 @@ impl Marshaller {
         }
 
         let marshal_ty = self.get_ty(&into_ptr.ty)?;
+        let type_size = marshal_ty.size();
 
-        let mem_slice = slice_from_raw_parts_mut(into_ptr.addr as *mut u8, marshal_ty.size());
+        let mem_slice = slice_from_raw_parts_mut(into_ptr.addr as *mut u8, type_size);
         let size = unsafe { self.marshal(val, mem_slice.as_mut().unwrap())? };
 
         Ok(size)
@@ -822,9 +823,24 @@ impl Marshaller {
             offset += marshal_bytes(&rc_state.strong_count.to_ne_bytes(), &mut out_bytes[offset..]);
             offset += marshal_bytes(&rc_state.weak_count.to_ne_bytes(), &mut out_bytes[offset..]);
         }
+        
+        let Some(fields) = self.struct_field_types.get(&struct_val.type_id) else {
+            // struct type is not in metadata
+            return Err(MarshalError::UnsupportedType(struct_val.type_id.to_struct_type()));
+        };
 
-        for field in &struct_val.fields {
-            offset += self.marshal(field, &mut out_bytes[offset..])?;
+        for (field_id, field_ty) in fields {
+            match struct_val.fields.get(field_id.0) {
+                Some(field_val) => {
+                    offset += self.marshal(field_val, &mut out_bytes[offset..])?;
+                }
+                
+                // skip this field
+                None => {
+                    let field_foreign_ty = self.get_ty(&field_ty)?;
+                    offset += field_foreign_ty.size();
+                }
+            };
         }
 
         Ok(offset)
@@ -857,7 +873,7 @@ impl Marshaller {
 
         let mut fields = Vec::new();
 
-        for field_ty in field_tys {
+        for (_, field_ty) in field_tys {
             let field_val = self.unmarshal(&in_bytes[offset..], field_ty)?;
             offset += field_val.byte_count;
             fields.push(field_val.value);
