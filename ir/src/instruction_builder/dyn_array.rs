@@ -30,10 +30,6 @@ pub(super) fn gen_dyn_array_alloc_body(
     let len_arg = LocalID(1);
     let default_val_arg = LocalID(3);
 
-    builder.comment("retain the refs to the array params");
-    builder.retain(Ref::Local(LocalID(0)), &Type::any());
-    builder.retain(Ref::Local(LocalID(2)), &Type::any());
-
     builder.comment("cast the array params to this array type");
     let arr = builder.local_temp(array_ref_ty.clone());
     let src_arr = builder.local_temp(array_ref_ty.clone());
@@ -327,7 +323,7 @@ pub(super) fn new_dyn_array(
     get_mem_id: FunctionID,
 ) -> Ref {
     let array_ty = array_class_id.to_class_ptr_type();
-    let arr = builder.local_new(array_ty.clone(), None).to_ref();
+    let arr = builder.local_new(array_ty.clone(), None);
 
     let elements: Vec<_> = elements.into_iter().collect();
 
@@ -337,26 +333,16 @@ pub(super) fn new_dyn_array(
         builder.rc_new(arr.clone(), array_class_id, false);
 
         // get pointer to the length
-        let len_ref = builder.local_temp(Type::I32.ptr()).to_ref();
-        builder.emit(Instruction::Field {
-            out: len_ref.clone(),
-            of_ty: array_ty.clone(),
-            field: DYNARRAY_LEN_FIELD,
-            a: arr.clone(),
-        });
+        let len_ref = builder.local_temp(Type::I32.ptr());
+        builder.field(len_ref, arr, array_ty.clone(), DYNARRAY_LEN_FIELD);
 
         // set length
         let len = i32::try_from(elements.len()).expect("invalid dynamic array ctor length");
-        builder.mov(len_ref.clone().to_deref(), Value::LiteralI32(len));
+        builder.mov(len_ref.to_deref(), Value::LiteralI32(len));
 
         // get pointer to storage pointer
-        let arr_ptr = builder.local_temp(element_type.clone().ptr().ptr()).to_ref();
-        builder.emit(Instruction::Field {
-            out: arr_ptr.clone(),
-            of_ty: array_ty,
-            field: DYNARRAY_PTR_FIELD,
-            a: arr.clone(),
-        });
+        let arr_ptr = builder.local_temp(element_type.clone().ptr().ptr());
+        builder.field(arr_ptr, arr, array_ty.clone(), DYNARRAY_PTR_FIELD);
 
         // allocate array storage
         if len > 0 {
@@ -365,9 +351,9 @@ pub(super) fn new_dyn_array(
 
             let elements_mem = builder.local_temp(Type::U8.ptr());
             builder.call(get_mem_id, [alloc_size.value()], Some(elements_mem.to_ref()));
-            builder.cast(arr_ptr.clone().to_deref(), elements_mem, element_type.clone().ptr());
+            builder.cast(arr_ptr.to_deref(), elements_mem, element_type.clone().ptr());
 
-            let el_ptr = builder.local_temp(element_type.clone().ptr()).to_ref();
+            let el_ptr = builder.local_temp(element_type.clone().ptr());
 
             for (i, el) in elements.into_iter().enumerate() {
                 builder.local_begin();
@@ -376,15 +362,15 @@ pub(super) fn new_dyn_array(
                     let index = Value::LiteralI32(i as i32);
 
                     // el_ptr := arr_ptr^ + i
-                    builder.add(el_ptr.clone(), arr_ptr.clone().to_deref(), index);
+                    builder.add(el_ptr, arr_ptr.to_deref(), index);
 
                     // el_ptr^ := el
-                    builder.mov(el_ptr.clone().to_deref(), el);
+                    builder.mov(el_ptr.to_deref(), el);
 
                     // retain each element. we don't do this for static arrays because retaining
                     // a static array retains all its elements - for dynamic arrays, retaining
                     // the array object itself does not retain the elements
-                    builder.retain(el_ptr.clone().to_deref(), &element_type);
+                    builder.retain(el_ptr.to_deref(), &element_type);
                 }
                 builder.local_end();
             }
@@ -393,6 +379,6 @@ pub(super) fn new_dyn_array(
         }
     }
     builder.local_end();
-
-    arr
+    
+    arr.to_ref()
 }

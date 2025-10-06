@@ -3,17 +3,19 @@ mod variant;
 mod interface;
 mod tags;
 
+use crate::FunctionID;
 use crate::FunctionSig;
+use crate::IRFormatter;
 use crate::NamePath;
+use crate::RawInstructionFormatter;
 use crate::Type;
-use crate::{FunctionID, IRFormatter, RawInstructionFormatter};
 pub use interface::*;
 pub use r#struct::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::fmt::Write;
 use std::fmt;
+use std::fmt::Write;
 pub use tags::*;
 pub use variant::*;
 
