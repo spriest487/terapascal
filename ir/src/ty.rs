@@ -52,7 +52,7 @@ impl Type {
         Type::Pointer(Rc::new(self))
     }
 
-    pub fn any() -> Self {
+    pub const fn any() -> Self {
         Type::RcPointer(VirtualTypeID::Any)
     }
 
