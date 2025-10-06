@@ -393,6 +393,7 @@ pub(super) fn new_dyn_array(
             builder.mov(arr_ptr.to_deref(), Value::LiteralNull);
         }
     }
+    builder.local_end();
 
     arr
 }
