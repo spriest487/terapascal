@@ -27,6 +27,8 @@ use std::ptr::slice_from_raw_parts;
 use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
 
+const RC_ELEMENT_COUNT: usize = 3;
+
 #[derive(Clone, Debug)]
 pub enum MarshalError {
     InvalidData,
@@ -233,6 +235,12 @@ impl ForeignType {
 }
 
 #[derive(Debug, Clone)]
+struct StructFieldInfo {
+    ty: ir::Type,
+    index: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct ForeignFieldInfo {
     pub offset: usize,
     pub ty: ir::Type,
@@ -244,7 +252,7 @@ pub struct Marshaller {
     types: HashMap<ir::Type, ForeignType>,
     libs: HashMap<String, Rc<dlopen::Library>>,
 
-    struct_field_types: BTreeMap<ir::TypeDefID, Vec<(ir::FieldID, ir::Type)>>,
+    struct_field_types: BTreeMap<ir::TypeDefID, BTreeMap<ir::FieldID, StructFieldInfo>>,
     variant_case_types: BTreeMap<ir::TypeDefID, Vec<Option<ir::Type>>>,
 
     // structure types that need refcounting fields and type info for virtual calls
@@ -294,12 +302,27 @@ impl Marshaller {
             return Ok(cached.clone());
         }
 
-        let mut def_fields: Vec<_> = def.fields.iter().collect();
-        def_fields.sort_by_key(|(f_id, _)| **f_id);
-        let def_field_tys: Vec<_> = def_fields
-            .into_iter()
-            .map(|(id, field)| (*id, field.ty.clone()))
-            .collect();
+        let def_fields: Vec<_> = def.fields.iter().collect();
+        
+        // definitions may have gaps in their field lists, in which case we need to remember
+        // the element index of each field so we can find it without expecting the field ID to match
+
+        let mut def_field_tys = BTreeMap::new();
+
+        let mut index = if def.identity.is_ref_type() {
+            RC_ELEMENT_COUNT
+        } else {
+            0
+        };
+
+        for (field_id, field_def) in def_fields {
+            def_field_tys.insert(*field_id, StructFieldInfo {
+                index,
+                ty: field_def.ty.clone(),
+            });
+            
+            index += 1;
+        }
 
         let mut field_ffi_tys = Vec::with_capacity(def_field_tys.len());
 
@@ -312,7 +335,7 @@ impl Marshaller {
         }
 
         for (_, def_field_ty) in &def_field_tys {
-            field_ffi_tys.push(self.build_marshalled_type(def_field_ty, metadata)?);
+            field_ffi_tys.push(self.build_marshalled_type(&def_field_ty.ty, metadata)?);
         }
 
         let struct_ffi_ty = ForeignType::structure(field_ffi_tys.iter().cloned());
@@ -518,29 +541,23 @@ impl Marshaller {
             .ok_or_else(|| {
                 MarshalError::UnsupportedType(ir::Type::Struct(type_id))
             })?;
-        let (_, field_ty) = fields.get(field.0)
+        let field_info = fields.get(&field)
             .ok_or_else(|| {
                 MarshalError::FieldOutOfRange { struct_id: type_id, field }
             })?
             .clone();
 
-        let field_index = if self.ref_types.contains(&type_id) {
-            field.0 + 3
-        } else {
-            field.0
-        };
-
         let struct_elements = struct_marshal_ty.elements();
         let field_offset = struct_elements
             .iter()
-            .take(field_index)
+            .take(field_info.index)
             .map(|field_ty| field_ty.size())
             .sum();
-        let ffi_ty = struct_elements[field_index].clone();
+        let ffi_ty = struct_elements[field_info.index].clone();
 
         Ok(ForeignFieldInfo {
             offset: field_offset,
-            ty: field_ty,
+            ty: field_info.ty,
             foreign_ty: ffi_ty,
         })
     }
@@ -829,7 +846,7 @@ impl Marshaller {
             return Err(MarshalError::UnsupportedType(struct_val.type_id.to_struct_type()));
         };
 
-        for (field_id, field_ty) in fields {
+        for (field_id, field_info) in fields {
             match struct_val.fields.get(field_id.0) {
                 Some(field_val) => {
                     offset += self.marshal(field_val, &mut out_bytes[offset..])?;
@@ -837,7 +854,7 @@ impl Marshaller {
                 
                 // skip this field
                 None => {
-                    let field_foreign_ty = self.get_ty(&field_ty)?;
+                    let field_foreign_ty = self.get_ty(&field_info.ty)?;
                     offset += field_foreign_ty.size();
                 }
             };
@@ -873,8 +890,8 @@ impl Marshaller {
 
         let mut fields = Vec::new();
 
-        for (_, field_ty) in field_tys {
-            let field_val = self.unmarshal(&in_bytes[offset..], field_ty)?;
+        for (_, field_info) in field_tys {
+            let field_val = self.unmarshal(&in_bytes[offset..], &field_info.ty)?;
             offset += field_val.byte_count;
             fields.push(field_val.value);
         }
