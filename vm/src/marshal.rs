@@ -98,7 +98,7 @@ impl MarshalError {
             MarshalError::FieldOutOfRange { struct_id, field } => write!(
                 f,
                 "field {} for struct {} was out of range",
-                struct_id, field
+                field, struct_id
             ),
             MarshalError::InvalidRefCountValue(val) => {
                 write!(f, "value is not a valid ref count: {:?}", val)
