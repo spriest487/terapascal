@@ -1,6 +1,6 @@
 mod builder;
 
-use crate::rtti::DynArrayRuntimeType;
+use crate::rtti::DynArrayClass;
 use crate::rtti::RuntimeType;
 use crate::ty::FieldID;
 use crate::ty::VirtualTypeID;
@@ -132,7 +132,7 @@ pub struct Metadata {
     function_static_closures: HashMap<FunctionID, StaticClosureID>,
 
     dyn_array_structs: LinkedHashMap<Type, TypeDefID>,
-    dyn_array_runtime_types: HashMap<Type, DynArrayRuntimeType>,
+    dyn_array_classes: HashMap<Type, DynArrayClass>,
 
     runtime_types: HashMap<Type, Rc<RuntimeType>>,
     
@@ -164,7 +164,7 @@ impl Metadata {
             runtime_types: HashMap::new(),
 
             dyn_array_structs: LinkedHashMap::new(),
-            dyn_array_runtime_types: HashMap::new(),
+            dyn_array_classes: HashMap::new(),
 
             tag_counts: HashMap::new(),
         };
@@ -267,9 +267,9 @@ impl Metadata {
                 self.dyn_array_structs.insert(el_ty.clone(), *struct_id);
             }
         }
-        for (el_ty, runtime_ty) in &other.dyn_array_runtime_types {
-            if !self.dyn_array_runtime_types.contains_key(el_ty) {
-                self.dyn_array_runtime_types.insert(el_ty.clone(), runtime_ty.clone());
+        for (el_ty, runtime_ty) in &other.dyn_array_classes {
+            if !self.dyn_array_classes.contains_key(el_ty) {
+                self.dyn_array_classes.insert(el_ty.clone(), runtime_ty.clone());
             }
         }
         
@@ -399,8 +399,8 @@ impl Metadata {
         self.runtime_types.get(ty).cloned()
     }
 
-    pub fn get_dyn_array_runtime_type(&self, elem_ty: &Type) -> Option<DynArrayRuntimeType> {
-        self.dyn_array_runtime_types.get(elem_ty).cloned()
+    pub fn get_dyn_array_runtime_type(&self, elem_ty: &Type) -> Option<DynArrayClass> {
+        self.dyn_array_classes.get(elem_ty).cloned()
     }
 
     pub fn runtime_types(&self) -> impl Iterator<Item = (&Type, &Rc<RuntimeType>)> {

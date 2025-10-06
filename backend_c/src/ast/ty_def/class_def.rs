@@ -114,7 +114,7 @@ pub struct Class {
     release_func: Option<FunctionName>,
 
     // if this class is a dyn array, the RTTI for it
-    dyn_array_type_info: Option<ir::DynArrayRuntimeType>,
+    dyn_array_type_info: Option<ir::DynArrayClass>,
     
     comment: Option<String>,
     

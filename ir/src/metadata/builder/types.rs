@@ -1,4 +1,4 @@
-use crate::{DynArrayRuntimeType, FunctionID};
+use crate::{DynArrayClass, FunctionID};
 use crate::Interface;
 use crate::InterfaceDecl;
 use crate::InterfaceID;
@@ -261,12 +261,12 @@ impl MetadataBuilder {
         rtt.release = Some(release_id);
 
         self.insert_runtime_type(Type::Struct(struct_id), rtt);
-        self.declare_dynarray_runtime_type(&element);
+        self.declare_dyn_array_class(&element);
 
         struct_id
     }
 
-    pub fn get_dyn_array_runtime_type(&self, elem_ty: &Type) -> Option<DynArrayRuntimeType> {
+    pub fn get_dyn_array_runtime_type(&self, elem_ty: &Type) -> Option<DynArrayClass> {
         self.find_in_self_or_refs(move |metadata| metadata.get_dyn_array_runtime_type(elem_ty))
     }
     

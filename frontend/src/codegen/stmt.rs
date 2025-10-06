@@ -99,13 +99,14 @@ pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
 fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut Builder) {
     let bound_ty = builder.translate_type(&binding.ty);
 
-    let binding_ref = builder.local_new(bound_ty.clone(), Some(Arc::new(binding.name.to_string()))).to_ref();
+    let binding_name = Some(Arc::new(binding.name.to_string()));
+    let binding_ref = builder.local_new(bound_ty.clone(), binding_name);
 
     if let Some(init_expr) = &binding.val {
         builder.scope(|builder| {
             let val = expr_to_val(init_expr, builder);
 
-            builder.mov(binding_ref.clone(), val);
+            builder.mov(binding_ref, val);
             builder.retain(binding_ref, &bound_ty);
         });
     };

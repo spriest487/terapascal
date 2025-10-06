@@ -23,7 +23,9 @@ pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
             literal_to_val(&const_val.value, &const_val.ty, builder)
         }
 
-        _ => ir::Value::Ref(translate_expr(expr, builder)),
+        _ => {
+            translate_expr(expr, builder).value()
+        },
     }
 }
 
@@ -55,16 +57,22 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
                     op::translate_unary_op(unary_op, &unary_op.annotation.ty(), builder)
                 },
 
-                ast::Expr::Ident(ident, annotation) => translate_ident_expr(ident, annotation, builder),
+                ast::Expr::Ident(ident, annotation) => {
+                    translate_ident_expr(ident, annotation, builder)
+                },
 
                 ast::Expr::Call(call) => {
                     // eprintln!("translating call @ {}", call.span());
                     call::build_call(call, builder).expect("call used in expr must have a return value")
                 },
 
-                ast::Expr::ObjectCtor(ctor) => ctor::translate_object_ctor(ctor, builder),
+                ast::Expr::ObjectCtor(ctor) => {
+                    ctor::translate_object_ctor(ctor, builder)
+                },
 
-                ast::Expr::CollectionCtor(ctor) => ctor::translate_collection_ctor(ctor, builder),
+                ast::Expr::CollectionCtor(ctor) => {
+                    ctor::translate_collection_ctor(ctor, builder)
+                },
 
                 ast::Expr::IfCond(if_cond) => translate_if_cond_expr(if_cond, builder)
                     .expect("conditional used in expr must have a type"),

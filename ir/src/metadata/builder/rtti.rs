@@ -1,4 +1,4 @@
-use crate::DynArrayRuntimeType;
+use crate::DynArrayClass;
 use crate::MetadataBuilder;
 use crate::RuntimeType;
 use crate::TagLocation;
@@ -20,17 +20,17 @@ impl MetadataBuilder {
         self.find_in_self_or_refs(move |metadata| metadata.get_runtime_type(ty))
     }
 
-    pub fn declare_dynarray_runtime_type(&mut self, element_ty: &Type) -> DynArrayRuntimeType {
-        if self.metadata.dyn_array_runtime_types.contains_key(element_ty) {
-            panic!("duplicate rc boilerplate declaration for type {}", self.metadata.pretty_ty_name(element_ty));
+    pub fn declare_dyn_array_class(&mut self, element_ty: &Type) -> DynArrayClass {
+        if self.metadata.dyn_array_classes.contains_key(element_ty) {
+            panic!("duplicate array class declaration for type {}", self.metadata.pretty_ty_name(element_ty));
         }
 
-        let runtime_type = DynArrayRuntimeType {
+        let runtime_type = DynArrayClass {
             alloc: self.insert_func(None),
             length: self.insert_func(None),
         };
 
-        self.metadata.dyn_array_runtime_types.insert(element_ty.clone(), runtime_type.clone());
+        self.metadata.dyn_array_classes.insert(element_ty.clone(), runtime_type.clone());
         runtime_type
     }
 

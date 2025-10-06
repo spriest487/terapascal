@@ -197,25 +197,24 @@ pub(super) fn gen_dyn_array_alloc_body(
     builder.assign_field(arr, array_ref_ty, DYNARRAY_PTR_FIELD, el_ptr_ty, data);
 }
 
-pub(super) fn gen_dyn_array_length_body(builder: &mut impl InstructionBuilder, struct_id: TypeDefID) {
-    let array_ref_ty = Type::RcPointer(VirtualTypeID::Class(struct_id));
-
-    let arr_ptr = LocalID(1);
-    builder.retain(arr_ptr, &Type::any());
-
+pub(super) fn gen_dyn_array_length_body(
+    builder: &mut impl InstructionBuilder,
+    array_class_id: TypeDefID,
+) {
     builder.comment("cast pointer down to this array type");
-    let arr = builder.local_temp(array_ref_ty.clone());
+    let arr = builder.local_temp(array_class_id.to_class_ptr_type());
+    
     builder.cast(
         arr.clone(),
         Ref::Local(LocalID(1)),
-        array_ref_ty.clone(),
+        array_class_id.to_class_ptr_type(),
     );
 
     builder.comment("evaluate length field into return ref");
     builder.field_val(
         RETURN_REF,
         arr,
-        array_ref_ty,
+        array_class_id.to_class_ptr_type(),
         DYNARRAY_LEN_FIELD,
         Type::I32,
     );
