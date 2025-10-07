@@ -235,13 +235,7 @@ impl ForeignType {
 }
 
 #[derive(Debug, Clone)]
-struct StructFieldInfo {
-    ty: ir::Type,
-    index: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct ForeignFieldInfo {
+pub struct StructFieldInfo {
     pub offset: usize,
     pub ty: ir::Type,
     pub foreign_ty: ForeignType,
@@ -252,7 +246,7 @@ pub struct Marshaller {
     types: HashMap<ir::Type, ForeignType>,
     libs: HashMap<String, Rc<dlopen::Library>>,
 
-    struct_field_types: BTreeMap<ir::TypeDefID, BTreeMap<ir::FieldID, StructFieldInfo>>,
+    struct_field_maps: BTreeMap<ir::TypeDefID, BTreeMap<ir::FieldID, StructFieldInfo>>,
     variant_case_types: BTreeMap<ir::TypeDefID, Vec<Option<ir::Type>>>,
 
     // structure types that need refcounting fields and type info for virtual calls
@@ -265,7 +259,7 @@ impl Marshaller {
             types: HashMap::new(),
             libs: HashMap::new(),
 
-            struct_field_types: BTreeMap::new(),
+            struct_field_maps: BTreeMap::new(),
             variant_case_types: BTreeMap::new(),
 
             ref_types: BTreeSet::new(),
@@ -302,29 +296,19 @@ impl Marshaller {
             return Ok(cached.clone());
         }
 
-        let def_fields: Vec<_> = def.fields.iter().collect();
+        let mut def_fields: Vec<_> = def.fields.iter().collect();
+        def_fields.sort_by_key(|(id, _)| **id);
         
         // definitions may have gaps in their field lists, in which case we need to remember
         // the element index of each field so we can find it without expecting the field ID to match
-
-        let mut def_field_tys = BTreeMap::new();
-
-        let mut index = if def.identity.is_ref_type() {
-            RC_ELEMENT_COUNT
-        } else {
-            0
-        };
-
-        for (field_id, field_def) in def_fields {
-            def_field_tys.insert(*field_id, StructFieldInfo {
-                index,
-                ty: field_def.ty.clone(),
-            });
-            
-            index += 1;
+        
+        let mut element_count = def_fields.len();
+        if def.identity.is_ref_type() {
+            element_count += RC_ELEMENT_COUNT;
         }
 
-        let mut field_ffi_tys = Vec::with_capacity(def_field_tys.len());
+        let mut field_ffi_tys = Vec::with_capacity(element_count);
+        let mut def_field_tys = BTreeMap::new();
 
         if def.identity.is_ref_type() {
             field_ffi_tys.push(ForeignType::usize()); // type ID
@@ -333,15 +317,30 @@ impl Marshaller {
 
             self.ref_types.insert(id);
         }
+        
+        let mut offset = field_ffi_tys.iter()
+            .map(|ty| ty.size())
+            .sum::<usize>();
 
-        for (_, def_field_ty) in &def_field_tys {
-            field_ffi_tys.push(self.build_marshalled_type(&def_field_ty.ty, metadata)?);
+        for (field_id, field_def) in def_fields {
+            let foreign_ty = self.build_marshalled_type(&field_def.ty, metadata)?;
+            field_ffi_tys.push(foreign_ty.clone());
+            
+            let size = foreign_ty.size();
+
+            def_field_tys.insert(*field_id, StructFieldInfo {
+                offset,
+                ty: field_def.ty.clone(),
+                foreign_ty,
+            });
+
+            offset += size;
         }
 
-        let struct_ffi_ty = ForeignType::structure(field_ffi_tys.iter().cloned());
+        let struct_ffi_ty = ForeignType::structure(field_ffi_tys);
 
         self.types.insert(struct_ty, struct_ffi_ty.clone());
-        self.struct_field_types.insert(id, def_field_tys);
+        self.struct_field_maps.insert(id, def_field_tys);
 
         Ok(struct_ffi_ty)
     }
@@ -534,32 +533,20 @@ impl Marshaller {
         }
     }
 
-    pub fn get_field_info(&self, type_id: ir::TypeDefID, field: ir::FieldID) -> MarshalResult<ForeignFieldInfo> {
-        let struct_marshal_ty = self.get_ty(&ir::Type::Struct(type_id))?;
-
-        let fields = self.struct_field_types.get(&type_id)
+    pub fn get_field_info(&self, type_id: ir::TypeDefID, field: ir::FieldID) -> MarshalResult<&StructFieldInfo> {
+        let fields = self.struct_field_maps
+            .get(&type_id)
             .ok_or_else(|| {
                 MarshalError::UnsupportedType(ir::Type::Struct(type_id))
             })?;
-        let field_info = fields.get(&field)
+
+        let field_info = fields
+            .get(&field)
             .ok_or_else(|| {
                 MarshalError::FieldOutOfRange { struct_id: type_id, field }
-            })?
-            .clone();
+            })?;
 
-        let struct_elements = struct_marshal_ty.elements();
-        let field_offset = struct_elements
-            .iter()
-            .take(field_info.index)
-            .map(|field_ty| field_ty.size())
-            .sum();
-        let ffi_ty = struct_elements[field_info.index].clone();
-
-        Ok(ForeignFieldInfo {
-            offset: field_offset,
-            ty: field_info.ty,
-            foreign_ty: ffi_ty,
-        })
+        Ok(field_info)
     }
 
     pub fn marshal(&self, val: &DynValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
@@ -841,7 +828,7 @@ impl Marshaller {
             offset += marshal_bytes(&rc_state.weak_count.to_ne_bytes(), &mut out_bytes[offset..]);
         }
         
-        let Some(fields) = self.struct_field_types.get(&struct_val.type_id) else {
+        let Some(fields) = self.struct_field_maps.get(&struct_val.type_id) else {
             // struct type is not in metadata
             return Err(MarshalError::UnsupportedType(struct_val.type_id.to_struct_type()));
         };
@@ -867,8 +854,10 @@ impl Marshaller {
         let mut offset = 0;
 
         let rc = if self.ref_types.contains(&struct_id) {
-            // rc types start with a type ID we can skip
-            offset += size_of::<usize>();
+            let actual_id = unmarshal_from_ne_bytes(&in_bytes[offset..], usize::from_ne_bytes)?;
+            assert_eq!(actual_id.value, struct_id.0);
+            offset += actual_id.byte_count;
+
             let strong_count_val = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
             offset += strong_count_val.byte_count;
 
@@ -883,14 +872,12 @@ impl Marshaller {
             None
         };
 
-        let field_tys = self
-            .struct_field_types
+        let field_map = self.struct_field_maps
             .get(&struct_id)
             .ok_or_else(|| MarshalError::UnsupportedType(ir::Type::Struct(struct_id)))?;
 
-        let mut fields = Vec::new();
-
-        for (_, field_info) in field_tys {
+        let mut fields = Vec::with_capacity(field_map.len());
+        for (_id, field_info) in field_map {
             let field_val = self.unmarshal(&in_bytes[offset..], &field_info.ty)?;
             offset += field_val.byte_count;
             fields.push(field_val.value);

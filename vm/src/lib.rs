@@ -1738,7 +1738,7 @@ impl Interpreter {
                 let field_info = self.marshaller.get_field_info(*struct_id, *field)?;
 
                 Pointer {
-                    ty: field_info.ty,
+                    ty: field_info.ty.clone(),
                     addr: struct_ptr.addr + field_info.offset,
                 }
             },
@@ -1751,7 +1751,7 @@ impl Interpreter {
                 let field_info = self.marshaller.get_field_info(*type_id, *field)?;
 
                 Pointer {
-                    ty: field_info.ty,
+                    ty: field_info.ty.clone(),
                     addr: val_ptr.addr + field_info.offset,
                 }
             },
@@ -1776,7 +1776,7 @@ impl Interpreter {
                 let field_info = self.marshaller.get_field_info(struct_val.type_id, *field)?;
 
                 Pointer {
-                    ty: field_info.ty,
+                    ty: field_info.ty.clone(),
                     addr: val_ptr.addr + field_info.offset,
                 }
             },

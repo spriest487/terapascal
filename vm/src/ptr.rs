@@ -9,15 +9,21 @@ use std::mem::size_of;
 pub const POINTER_FMT_WIDTH: usize = size_of::<usize>() * 2;
 
 /// pointer to native memory that is marshalled to/from value cells when accessed
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone, Eq)]
 pub struct Pointer {
     pub addr: usize,
     pub ty: ir::Type,
 }
 
+impl fmt::Debug for Pointer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Pointer({} @ 0x{:0width$X})", self.ty, self.addr, width = POINTER_FMT_WIDTH)
+    }
+}
+
 impl fmt::Display for Pointer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "0x{:0width$x} ({})", self.addr, self.ty, width = POINTER_FMT_WIDTH)
+        write!(f, "0x{:0width$X} ({})", self.addr, self.ty, width = POINTER_FMT_WIDTH)
     }
 }
 
