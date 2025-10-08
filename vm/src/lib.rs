@@ -39,7 +39,6 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
-use terapascal_ir::Label;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -1795,7 +1794,11 @@ impl Interpreter {
         Ok(())
     }
 
-    fn exec_jump(&mut self, pc: &mut usize, label: Label, labels: &HashMap<Label, LabelLocation>) -> ExecResult<()> {
+    fn exec_jump(&mut self,
+        pc: &mut usize,
+        label: ir::Label,
+        labels: &HashMap<ir::Label, LabelLocation>,
+    ) -> ExecResult<()> {
         let location = labels
             .get(&label)
             .ok_or_else(|| ExecError::illegal_state(format!("reference to missing label {label}")))?;
