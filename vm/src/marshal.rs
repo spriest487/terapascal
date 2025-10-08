@@ -874,13 +874,22 @@ impl Marshaller {
 
         let field_map = self.struct_field_maps
             .get(&struct_id)
-            .ok_or_else(|| MarshalError::UnsupportedType(ir::Type::Struct(struct_id)))?;
+            .ok_or_else(|| {
+                MarshalError::UnsupportedType(ir::Type::Struct(struct_id))
+            })?;
 
-        let mut fields = Vec::with_capacity(field_map.len());
-        for (_id, field_info) in field_map {
+        let fields_len = field_map.keys()
+            .map(|id| id.0)
+            .max()
+            .map(|max_id| max_id + 1)
+            .unwrap_or(0);
+
+        let mut fields = vec![DynValue::I32(-1); fields_len];
+
+        for (id, field_info) in field_map {
             let field_val = self.unmarshal(&in_bytes[offset..], &field_info.ty)?;
             offset += field_val.byte_count;
-            fields.push(field_val.value);
+            fields[id.0] = field_val.value;
         }
 
         Ok(UnmarshalledValue {
