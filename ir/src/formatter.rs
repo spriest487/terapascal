@@ -265,10 +265,14 @@ pub trait IRFormatter {
 
             Instruction::Release { at, weak, released_out } => {
                 write!(f, "{:>width$} ", "release", width = IX_WIDTH)?;
-                self.format_ref(released_out, f)?;
+                
+                if *released_out != Ref::Discard {
+                    self.format_ref(released_out, f)?;
+                    write!(f, " := ")?;
+                }
 
                 let ref_kind = if *weak { "weak" } else { "strong" };
-                write!(f, " := {} (-{})", at, ref_kind)?;
+                write!(f, "{} (-{})", at, ref_kind)?;
 
                 Ok(())
             }
