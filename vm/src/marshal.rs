@@ -716,17 +716,11 @@ impl Marshaller {
             ir::Type::RcPointer(class_id)
             | ir::Type::RcWeakPointer(class_id) => {
                 let raw_ptr_val = self.unmarshal_ptr(ir::Type::Nothing, in_bytes)?;
-
-                // null rcpointers can exist - e.g. uninitialized stack values
-                let ptr_ty = if raw_ptr_val.value.is_null() {
-                    // if we have an expected concrete type, we can reinterpret the null pointer
-                    // as that type as a minor optimization for later
-                    if let ir::VirtualTypeID::Class(type_id) = class_id {
-                        ir::Type::Struct(*type_id)
-                    } else {
-                        ir::Type::Nothing
-                    }
-                } else {
+                
+                // if we have an expected type, assume the pointer is of that type
+                let ptr_ty = if let ir::VirtualTypeID::Class(type_id) = class_id {
+                    ir::Type::Struct(*type_id)
+                } else if !raw_ptr_val.value.is_null() {
                     // the struct ID is the first field so we can just access it directly here
                     let struct_id_bytes = unsafe {
                         slice_from_raw_parts(raw_ptr_val.value.addr as *const u8, size_of::<usize>())
@@ -736,6 +730,8 @@ impl Marshaller {
                     let struct_id = usize::from_ne_bytes(unmarshal_bytes(&struct_id_bytes)?);
 
                     ir::Type::Struct(ir::TypeDefID(struct_id))
+                } else {
+                    ir::Type::Nothing
                 };
 
                 raw_ptr_val.map(|raw_ptr| {
