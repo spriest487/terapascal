@@ -21,7 +21,8 @@ use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VirtualTypeID;
-use crate::{BinOpInstruction, FunctionID};
+use crate::BinOpInstruction;
+use crate::FunctionID;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -49,9 +50,9 @@ pub trait InstructionBuilder {
     fn local_temp(&mut self, ty: Type) -> LocalID {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.local_stack_mut().current_scope_mut().bind_temp();
+        let id = self.local_stack_mut().current_scope_mut().bind_temp(ty.clone());
 
-        self.emit(Instruction::LocalAlloc(id, ty.clone()));
+        self.emit(Instruction::LocalAlloc(id, ty));
 
         id
     }
@@ -167,23 +168,27 @@ pub trait InstructionBuilder {
 
             match local {
                 LocalBinding::Param { id, ty, by_ref, .. } => {
-                    if !by_ref {
-                        self.release(id, &ty);
-                    }
+                    self.expire_local(id, &ty, !by_ref);
                 },
 
                 LocalBinding::New { id, ty, .. } => {
-                    self.release(Ref::Local(id), &ty);
+                    self.expire_local(id, &ty, true);
                 },
 
-                LocalBinding::Temp { .. } => {
-                    // no cleanup required
+                LocalBinding::Temp { id, ty } => {
+                    self.expire_local(id, &ty, false);
                 },
 
                 LocalBinding::Return { .. } => {
                     self.comment("expire return slot");
                 },
             }
+        }
+    }
+
+    fn expire_local(&mut self, id: LocalID, ty: &Type, retained: bool) {
+        if retained {
+            self.release(id, &ty);
         }
     }
 
@@ -908,7 +913,7 @@ pub trait InstructionBuilder {
         new_dyn_array(self, array_class_id, elements, element_type, get_mem_id)
     }
 
-    fn if_then<Branch>(&mut self, cond: impl Into<crate::Value>, then_branch: Branch)
+    fn if_then<Branch>(&mut self, cond: impl Into<Value>, then_branch: Branch)
     where
         Branch: FnOnce(&mut Self),
     {
@@ -952,16 +957,16 @@ pub trait InstructionBuilder {
 
     fn counter_loop<F>(
         &mut self,
-        counter: impl Into<crate::Ref>,
-        inc_val: impl Into<crate::Value>,
-        high_val: impl Into<crate::Value>,
+        counter: impl Into<Ref>,
+        inc_val: impl Into<Value>,
+        high_val: impl Into<Value>,
         f: F,
     ) where
         F: Fn(&mut Self),
     {
         let break_label = self.next_label();
         let loop_label = self.next_label();
-        let done = self.local_temp(crate::Type::Bool);
+        let done = self.local_temp(Type::Bool);
 
         let counter = counter.into();
 

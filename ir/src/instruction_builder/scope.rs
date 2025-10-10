@@ -115,7 +115,8 @@ pub enum LocalBinding {
 
     // the builder created this local allocation but we don't want to track its lifetime
     Temp {
-        id: LocalID
+        id: LocalID,
+        ty: Type,
     },
 
     // function parameter slots as established by the calling convention - %1.. if the function
@@ -257,7 +258,7 @@ impl LocalScope {
         RETURN_REF
     }
 
-    pub fn bind_temp(&mut self) -> LocalID {
+    pub fn bind_temp(&mut self, ty: Type) -> LocalID {
         let id = LocalID(self.next_local);
 
         assert!(
@@ -266,7 +267,7 @@ impl LocalScope {
             Ref::Local(id),
         );
 
-        self.locals.push(LocalBinding::Temp { id });
+        self.locals.push(LocalBinding::Temp { id, ty });
         self.next_local += 1;
 
         id
