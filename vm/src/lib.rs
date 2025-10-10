@@ -671,7 +671,7 @@ impl Interpreter {
             let msg = format!("released val was not a pointer, found: {:?}", val);
             ExecError::illegal_state(msg)
         })?;
-
+        
         // NULL is a valid release target because we release uninitialized local RC pointers
         // just do nothing
         if ptr.is_null() {
@@ -1200,7 +1200,7 @@ impl Interpreter {
                 at,
                 DynValue::Pointer(Pointer {
                     ty: ir::Type::Nothing,
-                    addr: usize::MAX,
+                    addr: 0xDEAD,
                 }),
             )?;
         }
