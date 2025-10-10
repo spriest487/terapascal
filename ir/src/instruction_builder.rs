@@ -981,6 +981,38 @@ pub trait InstructionBuilder {
         self.label(break_label);
     }
 
+    fn while_do<CondFn, DoFn>(&mut self, cond_fn: CondFn, do_fn: DoFn)
+    where
+        CondFn: Fn(&mut Self, Ref),
+        DoFn: Fn(&mut Self, Label, Label),
+    {
+        let continue_label = self.next_label();
+        let break_label = self.next_label();
+        
+        let cond_val = self.local_temp(Type::Bool);
+
+        self.label(continue_label);
+
+        self.local_begin();
+        {
+            cond_fn(self, cond_val.to_ref());
+        }
+        self.local_end();
+
+        self.not(cond_val, cond_val);
+        self.jmpif(break_label, cond_val);
+
+        self.local_begin();
+        {
+            do_fn(self, continue_label, break_label);
+        }
+        self.local_end();
+
+        self.jmp(continue_label);
+
+        self.label(break_label);
+    }
+
     /// call `f` for every structural member of the object of type `ty_def` found at the `at`
     /// reference.
     ///
