@@ -107,7 +107,7 @@ static void Free(void* mem);
 
 static void* RcAlloc(struct Class* class, bool immortal);
 static void RcRetain(void* instance, bool weak);
-static void RcRelease(void* instance, bool weak);
+static bool RcRelease(void* instance, bool weak);
 
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 

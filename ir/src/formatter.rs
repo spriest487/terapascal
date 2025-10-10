@@ -263,14 +263,19 @@ pub trait IRFormatter {
                 Ok(())
             }
 
-            Instruction::Release { at, weak } => {
+            Instruction::Release { at, weak, released_out } => {
+                write!(f, "{:>width$} ", "release", width = IX_WIDTH)?;
+                self.format_ref(released_out, f)?;
+
                 let ref_kind = if *weak { "weak" } else { "strong" };
-                write!(f, "{:>width$} {} ({})", "release", at, ref_kind, width = IX_WIDTH)
+                write!(f, " := {} (-{})", at, ref_kind)?;
+
+                Ok(())
             }
 
             Instruction::Retain { at, weak } => {
                 let ref_kind = if *weak { "weak" } else { "strong" };
-                write!(f, "{:>width$} {} ({})", "retain", at, ref_kind, width = IX_WIDTH)
+                write!(f, "{:>width$} {} (+{})", "retain", at, ref_kind, width = IX_WIDTH)
             }
 
             Instruction::Raise { val } => {

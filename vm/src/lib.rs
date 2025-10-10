@@ -1051,7 +1051,7 @@ impl Interpreter {
             ir::Instruction::Jump { dest } => self.exec_jump(pc, *dest, labels)?,
             ir::Instruction::JumpIf { dest, test } => self.exec_jmpif(pc, &labels, *dest, test)?,
 
-            ir::Instruction::Release { at, weak } => self.exec_release(at, *weak)?,
+            ir::Instruction::Release { at, weak, released_out } => self.exec_release(at, *weak, released_out)?,
             ir::Instruction::Retain { at, weak } => self.exec_retain(at, *weak)?,
 
             ir::Instruction::Raise { val } => self.exec_raise(&val)?,
@@ -1189,11 +1189,13 @@ impl Interpreter {
         Ok(())
     }
 
-    fn exec_release(&mut self, at: &ir::Ref, weak: bool) -> ExecResult<()> {
+    fn exec_release(&mut self, at: &ir::Ref, weak: bool, released_out: &ir::Ref) -> ExecResult<()> {
         let val = self.load(at)?;
 
         // to aid with debugging, set freed RC pointers to a recognizable value
-        if self.release_dyn_val(&val, weak)? {
+        let released = self.release_dyn_val(&val, weak)?;
+
+        if released {
             self.store(
                 at,
                 DynValue::Pointer(Pointer {
@@ -1202,6 +1204,8 @@ impl Interpreter {
                 }),
             )?;
         }
+
+        self.store(released_out, DynValue::Bool(released))?;
 
         Ok(())
     }

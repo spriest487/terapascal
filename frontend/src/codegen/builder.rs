@@ -68,38 +68,6 @@ impl InstructionBuilder for Builder<'_, '_> {
         self.next_label = Label(self.next_label.0 + 1);
         label
     }
-
-    fn release(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        match ty {
-            Type::RcPointer(..) => {
-                self.emit(Instruction::Release { at: at.into(), weak: false });
-                true
-            }
-
-            Type::RcWeakPointer(..) => {
-                self.emit(Instruction::Release { at: at.into(), weak: true });
-                true
-            }
-
-            _ => self.call_release(at.into(), ty),
-        }
-    }
-
-    fn retain(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        match ty {
-            Type::RcPointer(..) => {
-                self.emit(Instruction::Retain { at: at.into(), weak: false });
-                true
-            }
-
-            Type::RcWeakPointer(..) => {
-                self.emit(Instruction::Retain { at: at.into(), weak: true });
-                true
-            }
-
-            _ => self.call_retain(at.into(), ty),
-        }
-    }
 }
 
 impl<'m, 'l: 'm> Builder<'m, 'l> {
