@@ -128,6 +128,10 @@ impl Type {
         }
     }
     
+    pub fn is_weak(&self) -> bool {
+        matches!(self, Type::RcWeakPointer(..))
+    }
+    
     pub fn def_id(&self) -> Option<TypeDefID> {
         match self {
             Type::Variant(id)
