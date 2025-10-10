@@ -197,6 +197,7 @@ impl Interpreter {
 
             ir::Type::Bool => DynValue::Bool(false),
             ir::Type::F32 => DynValue::F32(f32::NAN),
+            ir::Type::F64 => DynValue::F64(f64::NAN),
 
             ir::Type::Struct(id) => DynValue::from(self.default_struct(*id)?),
 

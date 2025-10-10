@@ -49,7 +49,7 @@ impl DynValue {
             DynValue::Array(_) => "array",
         }
     }
-    
+
     pub fn nil(ty: ir::Type) -> Self {
         DynValue::Pointer(Pointer::nil(ty))
     }
@@ -68,26 +68,18 @@ impl DynValue {
             ir::Type::USize => self.to_bigint().map(|x| x as usize).map(DynValue::USize),
             ir::Type::Bool => self.to_bigint().map(|i| DynValue::Bool(i != 0)),
 
-            ir::Type::F32 => {
-                match self {
-                    DynValue::F32(..) => Some(self.clone()),
-                    DynValue::F64(float) => Some(DynValue::F32(*float as f32)),
+            ir::Type::F32 => match self {
+                DynValue::F32(..) => Some(self.clone()),
+                DynValue::F64(float) => Some(DynValue::F32(*float as f32)),
 
-                    _ => {
-                        self.to_bigint().map(|x| x as f32).map(DynValue::F32)
-                    }
-                }
+                _ => self.to_bigint().map(|x| x as f32).map(DynValue::F32),
             },
 
-            ir::Type::F64 => {
-                match self {
-                    DynValue::F64(..) => Some(self.clone()),
-                    DynValue::F32(float) => Some(DynValue::F64(*float as f64)),
+            ir::Type::F64 => match self {
+                DynValue::F64(..) => Some(self.clone()),
+                DynValue::F32(float) => Some(DynValue::F64(*float as f64)),
 
-                    _ => {
-                        self.to_bigint().map(|x| x as f64).map(DynValue::F64)
-                    }
-                }
+                _ => self.to_bigint().map(|x| x as f64).map(DynValue::F64),
             },
 
             ir::Type::Pointer(deref_ty) => {
@@ -113,9 +105,9 @@ impl DynValue {
                         // Any, interfaces and closure pointers only have virtual types so we
                         // can't include any type info about the concrete type here - it's up to
                         // the language to have the right info when it uses this pointer value
-                        ir::VirtualTypeID::Any | ir::VirtualTypeID::Interface(..) | ir::VirtualTypeID::Closure(..) => {
-                            ir::Type::Nothing
-                        },
+                        ir::VirtualTypeID::Any
+                        | ir::VirtualTypeID::Interface(..)
+                        | ir::VirtualTypeID::Closure(..) => ir::Type::Nothing,
                     },
                 };
                 Some(DynValue::Pointer(ptr))
@@ -162,6 +154,7 @@ impl DynValue {
             (DynValue::USize(a), DynValue::USize(b)) => Some(a == b),
 
             (DynValue::F32(a), DynValue::F32(b)) => Some(a == b),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(a == b),
 
             (DynValue::Pointer(a), DynValue::Pointer(b)) => Some(a == b),
             (DynValue::Structure(a), DynValue::Structure(b)) => Some(a == b),
@@ -200,6 +193,7 @@ impl DynValue {
             },
 
             (DynValue::F32(a), DynValue::F32(b)) => Some(DynValue::F32(a + b)),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(DynValue::F64(a + b)),
 
             _ => None,
         }
@@ -229,6 +223,7 @@ impl DynValue {
             },
 
             (DynValue::F32(a), DynValue::F32(b)) => Some(DynValue::F32(a - b)),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(DynValue::F64(a - b)),
 
             _ => None,
         }
@@ -251,6 +246,7 @@ impl DynValue {
             },
 
             (DynValue::F32(a), DynValue::F32(b)) => Some(DynValue::F32(a * b)),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(DynValue::F64(a * b)),
 
             _ => None,
         }
@@ -276,6 +272,10 @@ impl DynValue {
                 let rounded = f32::round(a / b);
                 Some(DynValue::F32(rounded))
             },
+            (DynValue::F64(a), DynValue::F64(b)) => {
+                let rounded = f64::round(a / b);
+                Some(DynValue::F64(rounded))
+            },
 
             _ => None,
         }
@@ -284,6 +284,7 @@ impl DynValue {
     pub fn try_fdiv(&self, other: &Self) -> Option<Self> {
         match (self, other) {
             (DynValue::F32(a), DynValue::F32(b)) => Some(DynValue::F32(a / b)),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(DynValue::F64(a / b)),
 
             _ => None,
         }
@@ -303,6 +304,7 @@ impl DynValue {
             (DynValue::USize(a), DynValue::USize(b)) => Some(DynValue::USize(a.wrapping_rem(*b))),
 
             (DynValue::F32(a), DynValue::F32(b)) => Some(DynValue::F32(a % b)),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(DynValue::F64(a % b)),
 
             _ => None,
         }
@@ -359,11 +361,10 @@ impl DynValue {
             (DynValue::I64(a), DynValue::I64(b)) => Some(a > b),
             (DynValue::U64(a), DynValue::U64(b)) => Some(a > b),
             (DynValue::F32(a), DynValue::F32(b)) => Some(a > b),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(a > b),
             (DynValue::ISize(a), DynValue::ISize(b)) => Some(a > b),
             (DynValue::USize(a), DynValue::USize(b)) => Some(a > b),
-            (DynValue::Pointer(a), DynValue::Pointer(b)) => {
-                Some(a.addr > b.addr)
-            },
+            (DynValue::Pointer(a), DynValue::Pointer(b)) => Some(a.addr > b.addr),
 
             _ => None,
         }
@@ -380,11 +381,10 @@ impl DynValue {
             (DynValue::I64(a), DynValue::I64(b)) => Some(a >= b),
             (DynValue::U64(a), DynValue::U64(b)) => Some(a >= b),
             (DynValue::F32(a), DynValue::F32(b)) => Some(a >= b),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(a >= b),
             (DynValue::ISize(a), DynValue::ISize(b)) => Some(a >= b),
             (DynValue::USize(a), DynValue::USize(b)) => Some(a >= b),
-            (DynValue::Pointer(a), DynValue::Pointer(b)) => {
-                Some(a.addr >= b.addr)
-            },
+            (DynValue::Pointer(a), DynValue::Pointer(b)) => Some(a.addr >= b.addr),
 
             _ => None,
         }
@@ -401,11 +401,10 @@ impl DynValue {
             (DynValue::I64(a), DynValue::I64(b)) => Some(a < b),
             (DynValue::U64(a), DynValue::U64(b)) => Some(a < b),
             (DynValue::F32(a), DynValue::F32(b)) => Some(a < b),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(a < b),
             (DynValue::ISize(a), DynValue::ISize(b)) => Some(a < b),
             (DynValue::USize(a), DynValue::USize(b)) => Some(a < b),
-            (DynValue::Pointer(a), DynValue::Pointer(b)) => {
-                Some(a.addr < b.addr)
-            },
+            (DynValue::Pointer(a), DynValue::Pointer(b)) => Some(a.addr < b.addr),
 
             _ => None,
         }
@@ -422,15 +421,14 @@ impl DynValue {
             (DynValue::I64(a), DynValue::I64(b)) => Some(a <= b),
             (DynValue::U64(a), DynValue::U64(b)) => Some(a <= b),
             (DynValue::F32(a), DynValue::F32(b)) => Some(a <= b),
+            (DynValue::F64(a), DynValue::F64(b)) => Some(a <= b),
             (DynValue::ISize(a), DynValue::ISize(b)) => Some(a <= b),
             (DynValue::USize(a), DynValue::USize(b)) => Some(a <= b),
-            (DynValue::Pointer(a), DynValue::Pointer(b)) => {
-                Some(a.addr <= b.addr)
-            },
+            (DynValue::Pointer(a), DynValue::Pointer(b)) => Some(a.addr <= b.addr),
 
             _ => None,
         }
-    }    
+    }
 
     pub fn as_function(&self) -> Option<ir::FunctionID> {
         match self {
@@ -452,7 +450,7 @@ impl DynValue {
             _ => None,
         }
     }
-    
+
     pub fn as_any_struct(&self) -> Option<&StructValue> {
         match self {
             DynValue::Structure(struct_val) => Some(struct_val),
@@ -550,7 +548,7 @@ impl DynValue {
             _ => None,
         }
     }
-    
+
     pub fn as_f32(&self) -> Option<f32> {
         match self {
             DynValue::F32(f) => Some(*f),
@@ -583,6 +581,7 @@ impl DynValue {
             DynValue::Bool(true) => Some(1),
             DynValue::Bool(false) => Some(0),
             DynValue::F32(f) => i128(*f).ok(),
+            DynValue::F64(f) => i128(*f).ok(),
             _ => None,
         }
     }
@@ -621,7 +620,7 @@ pub struct StructValue {
 }
 
 impl StructValue {
-    pub fn new(id: ir::TypeDefID, fields: impl IntoIterator<Item=DynValue>) -> Self {
+    pub fn new(id: ir::TypeDefID, fields: impl IntoIterator<Item = DynValue>) -> Self {
         Self {
             type_id: id,
             fields: fields.into_iter().collect(),
@@ -630,7 +629,7 @@ impl StructValue {
             rc: None,
         }
     }
-    
+
     pub fn struct_ty(&self) -> ir::Type {
         ir::Type::Struct(self.type_id)
     }
@@ -679,7 +678,7 @@ impl RcState {
             weak_count: 0,
         }
     }
-    
+
     pub fn new(immortal: bool) -> Self {
         Self {
             strong_count: if immortal { -1 } else { 1 },

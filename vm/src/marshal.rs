@@ -196,6 +196,10 @@ impl ForeignType {
         Self(FfiType::f32())
     }
 
+    pub fn f64() -> Self {
+        Self(FfiType::f64())
+    }
+
     pub fn size(&self) -> usize {
         let raw_ty = self.0.as_raw_ptr();
 
@@ -276,6 +280,7 @@ impl Marshaller {
         marshaller.types.insert(ir::Type::ISize, ForeignType::isize());
         marshaller.types.insert(ir::Type::USize, ForeignType::usize());
         marshaller.types.insert(ir::Type::F32, ForeignType::f32());
+        marshaller.types.insert(ir::Type::F64, ForeignType::f64());
         marshaller.types.insert(ir::Type::Bool, ForeignType::u8());
 
         marshaller
@@ -701,6 +706,7 @@ impl Marshaller {
             },
 
             ir::Type::F32 => unmarshal_from_ne_bytes(in_bytes, f32::from_ne_bytes)?.map(DynValue::F32),
+            ir::Type::F64 => unmarshal_from_ne_bytes(in_bytes, f64::from_ne_bytes)?.map(DynValue::F64),
 
             ir::Type::Bool => {
                 if in_bytes.len() == 0 {
