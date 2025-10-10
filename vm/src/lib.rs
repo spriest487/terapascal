@@ -1158,8 +1158,7 @@ impl Interpreter {
         let marshal_ty = self.marshaller.get_ty(&ty)?;
         let marshal_size = marshal_ty.size();
 
-        let alloc_len = marshal_size * values.len();
-        let alloc_ptr = self.dynalloc(ty, alloc_len)?;
+        let alloc_ptr = self.dynalloc(ty, values.len())?;
 
         for (i, value) in values.enumerate() {
             let element_offset = i * marshal_size;
