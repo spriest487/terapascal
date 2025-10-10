@@ -18,6 +18,7 @@ pub enum DynValue {
     ISize(isize),
     USize(usize),
     F32(f32),
+    F64(f64),
     Function(ir::FunctionID),
     Structure(Box<StructValue>),
     Variant(Box<VariantValue>),
@@ -40,6 +41,7 @@ impl DynValue {
             DynValue::ISize(_) => "isize",
             DynValue::USize(_) => "usize",
             DynValue::F32(_) => "f32",
+            DynValue::F64(_) => "f64",
             DynValue::Function(_) => "function",
             DynValue::Structure(_) => "structure",
             DynValue::Variant(_) => "variant",
@@ -67,11 +69,25 @@ impl DynValue {
             ir::Type::Bool => self.to_bigint().map(|i| DynValue::Bool(i != 0)),
 
             ir::Type::F32 => {
-                if let DynValue::F32(..) = self {
-                    return Some(self.clone());
-                }
+                match self {
+                    DynValue::F32(..) => Some(self.clone()),
+                    DynValue::F64(float) => Some(DynValue::F32(*float as f32)),
 
-                self.to_bigint().map(|x| x as f32).map(DynValue::F32)
+                    _ => {
+                        self.to_bigint().map(|x| x as f32).map(DynValue::F32)
+                    }
+                }
+            },
+
+            ir::Type::F64 => {
+                match self {
+                    DynValue::F64(..) => Some(self.clone()),
+                    DynValue::F32(float) => Some(DynValue::F64(*float as f64)),
+
+                    _ => {
+                        self.to_bigint().map(|x| x as f64).map(DynValue::F64)
+                    }
+                }
             },
 
             ir::Type::Pointer(deref_ty) => {
@@ -538,6 +554,13 @@ impl DynValue {
     pub fn as_f32(&self) -> Option<f32> {
         match self {
             DynValue::F32(f) => Some(*f),
+            _ => None,
+        }
+    }
+
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            DynValue::F64(f) => Some(*f),
             _ => None,
         }
     }

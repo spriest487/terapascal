@@ -88,6 +88,7 @@ pub enum Value {
     LiteralI64(i64),
     LiteralU64(u64),
     LiteralF32(f32),
+    LiteralF64(f64),
     LiteralISize(isize),
     LiteralUSize(usize),
     SizeOf(Type),
@@ -109,6 +110,7 @@ impl fmt::Display for Value {
             Value::LiteralUSize(i) => write!(f, "{}usize", i),
             Value::LiteralBool(b) => write!(f, "{}", b),
             Value::LiteralF32(x) => write!(f, "{:.6}", x),
+            Value::LiteralF64(x) => write!(f, "{:.15}", x),
             Value::LiteralNull => write!(f, "NULL"),
             Value::SizeOf(ty) => write!(f, "SizeOf({ty})"),
         }
@@ -176,6 +178,9 @@ impl Value {
 
             Value::LiteralF32(x) => Some(
                 BigDecimal::from_f32(*x).expect("NaN/infinite constant values not supported yet"),
+            ),
+            Value::LiteralF64(x) => Some(
+                BigDecimal::from_f64(*x).expect("NaN/infinite constant values not supported yet"),
             ),
             _ => None,
         }

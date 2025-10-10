@@ -45,6 +45,7 @@ pub enum Type {
     USize,
     ISize,
     F32,
+    F64,
 }
 
 impl Type {
@@ -198,6 +199,7 @@ impl Type {
             Type::USize => Some(Value::LiteralUSize(0)),
             Type::ISize => Some(Value::LiteralISize(0)),
             Type::F32 => Some(Value::LiteralF32(0.0)),
+            Type::F64 => Some(Value::LiteralF64(0.0)),
 
             Type::Struct(..)
             | Type::Flags(..)
@@ -215,6 +217,7 @@ impl fmt::Display for Type {
         match self {
             Type::Nothing => write!(f, "none"),
             Type::F32 => write!(f, "f32"),
+            Type::F64 => write!(f, "f64"),
             Type::Bool => write!(f, "bool"),
             Type::U8 => write!(f, "u8"),
             Type::I8 => write!(f, "i8"),

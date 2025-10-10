@@ -87,6 +87,7 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
         ir::Type::USize => String::from("USize"),
         ir::Type::ISize => String::from("ISize"),
         ir::Type::F32 => String::from("F32"),
+        ir::Type::F64 => String::from("F64"),
 
         // aggregates
         ir::Type::Struct(id) => format!("Struct_{id}"),

@@ -562,6 +562,7 @@ impl Marshaller {
             DynValue::ISize(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
             DynValue::USize(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
             DynValue::F32(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
+            DynValue::F64(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
             DynValue::Bool(x) => {
                 out_bytes[0] = if *x { 1 } else { 0 };
                 1
@@ -602,7 +603,7 @@ impl Marshaller {
             DynValue::I8(..) | DynValue::U8(..) => 1,
             DynValue::I16(..) | DynValue::U16(..) => 2,
             DynValue::I32(..) | DynValue::U32(..) | DynValue::F32(..) => 4,
-            DynValue::I64(..) | DynValue::U64(..) => 8,
+            DynValue::I64(..) | DynValue::U64(..) | DynValue::F64(..) => 8,
 
             DynValue::Pointer(..) 
             | DynValue::Function(..)

@@ -27,6 +27,7 @@ pub enum Type {
     SizeType,
     Bool,
     Float,
+    Double,
     UChar,
     SChar,
     Pointer(Box<Type>),
@@ -79,6 +80,7 @@ impl Type {
             ir::Type::Nothing => Type::Void,
             ir::Type::Bool => Type::Bool,
             ir::Type::F32 => Type::Float,
+            ir::Type::F64 => Type::Double,
             ir::Type::I8 => Type::SChar,
             ir::Type::U8 => Type::UChar,
             ir::Type::I16 => Type::Int16,
@@ -140,6 +142,9 @@ impl Type {
             },
             Type::Float => {
                 left.push_str("float");
+            },
+            Type::Double => {
+                left.push_str("double");
             },
             Type::UChar => {
                 left.push_str("unsigned char");
@@ -253,6 +258,7 @@ impl Type {
             Type::SizedArray(ty, ..) | Type::Pointer(ty) => format!("{}*", ty.typename()),
             Type::Bool => "bool".to_string(),
             Type::Float => "float".to_string(),
+            Type::Double => "double".to_string(),
             Type::UChar => "unsigned char".to_string(),
             Type::SChar => "signed char".to_string(),
             Type::FunctionPointer { return_ty, params } => {
