@@ -532,13 +532,18 @@ impl<'a> Builder<'a> {
                 self.stmts.push(Statement::Expr(call_retain));
             },
 
-            ir::Instruction::Release { at, weak } => {
+            ir::Instruction::Release { at, weak, released_out } => {
                 let release = Expr::Function(FunctionName::Builtin(BuiltinName::RcRelease));
 
                 let rc_ptr = Expr::translate_ref(at, self.module);
                 let call_release = release.call([rc_ptr, Expr::LitBool(*weak)]);
-
-                self.stmts.push(Statement::Expr(call_release));
+                
+                if *released_out != ir::Ref::Discard {
+                    let lhs = Expr::translate_ref(released_out, self.module);
+                    self.stmts.push(Statement::assign(lhs, call_release));
+                } else {
+                    self.stmts.push(Statement::Expr(call_release));
+                }
             },
 
             ir::Instruction::VirtualCall {

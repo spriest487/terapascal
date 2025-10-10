@@ -743,6 +743,29 @@ pub trait InstructionBuilder {
             tag,
         })
     }
+    
+    fn rc_release(&mut self, at: impl Into<Ref>, ty: &Type, released_out: impl Into<Ref>) {
+        match ty {
+            Type::RcPointer(..) => {
+                self.emit(Instruction::Release {
+                    at: at.into(),
+                    weak: false,
+                    released_out: released_out.into(),
+                });
+            },
+
+            Type::RcWeakPointer(..) => {
+                self.emit(Instruction::Release {
+                    at: at.into(),
+                    weak: true,
+                    released_out: released_out.into(),
+                });
+            },
+
+            _ => {
+            },
+        }
+    }
 
     fn release(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         let at = at.into();
@@ -779,24 +802,9 @@ pub trait InstructionBuilder {
         self.visit_deep(
             at,
             ty,
-            |builder, element_ty, element_ref| match element_ty {
-                Type::RcPointer(..) => {
-                    builder.emit(Instruction::Release {
-                        at: element_ref,
-                        weak: false,
-                    });
-                    true
-                },
-
-                Type::RcWeakPointer(..) => {
-                    builder.emit(Instruction::Release {
-                        at: element_ref,
-                        weak: true,
-                    });
-                    true
-                },
-
-                _ => false,
+            |builder, element_ty, element_ref| {
+                builder.rc_release(element_ref, element_ty, Ref::Discard);
+                true
             },
         )
     }

@@ -172,17 +172,17 @@ static void RcRetain(void* instance, bool weak) {
 #endif
 }
 
-static void RcRelease(void* instance, bool weak) {
+static bool RcRelease(void* instance, bool weak) {
     if (!instance) {
         // releasing NULL should be ignored
-        return;
+        return false;
     }
 
     struct Rc* rc = (struct Rc*)instance;
 
     if (rc->strong_count < 0) {
         // immortal
-        return;
+        return false;
     }
    
     if (weak) {
@@ -231,7 +231,10 @@ static void RcRelease(void* instance, bool weak) {
     if (rc->strong_count == 0 && rc->weak_count == 0) {
         // free memory
         Free(instance);
+        return true;
     }
+    
+    return false;
 }
 
 static unsigned char* System_GetMem(int32_t len) {

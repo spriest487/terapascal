@@ -128,6 +128,7 @@ pub enum Instruction {
     Release {
         at: Ref,
         weak: bool,
+        released_out: Ref,
     },
     Retain {
         at: Ref,
