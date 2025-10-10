@@ -7,10 +7,12 @@ use crate::Interpreter;
 use crate::Pointer;
 use rand::Rng;
 use std::env::consts::OS;
+use std::fmt;
 use std::io;
 use std::io::BufRead;
 use std::io::Write;
-use std::fmt;
+use std::time::Duration;
+use std::time::SystemTime;
 
 fn primitive_to_str<T, UnwrapFn>(state: &mut Interpreter, unwrap_fn: UnwrapFn) -> ExecResult<()>
 where
@@ -526,6 +528,14 @@ pub(super) fn random_single(state: &mut Interpreter) -> ExecResult<()> {
     state.store(&RETURN_REF, DynValue::F32(val))
 }
 
+pub(super) fn time(state: &mut Interpreter) -> ExecResult<()> {
+    let since_epoch = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO);
+
+    state.store(&RETURN_REF, DynValue::F64(since_epoch.as_secs_f64()))
+}
+
 pub(super) fn pow(state: &mut Interpreter) -> ExecResult<()> {
     let val = load_single(state, &Ref::Local(LocalID(1)))?;
     let power = load_single(state, &Ref::Local(LocalID(2)))?;
@@ -684,6 +694,7 @@ pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, Type, 
         ("RandomSingle", random_single, Type::F32, vec![
             Type::F32, Type::F32
         ]),
+        ("Time", time, Type::F64, vec![]),
         ("Pow", pow, Type::F32, vec![
             Type::F32, Type::F32
         ]),

@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include <math.h>
 #include <float.h>
+#include <time.h>
 
 #if _WIN32
 #   define WIN32_LEAN_AND_MEAN
@@ -336,6 +337,15 @@ static float System_RandomSingle(float from, float to) {
     range *= (to - from);
 
     return from + range;
+}
+
+static double System_Time(void) {
+    struct timespec current_time = {};
+    if (timespec_get(&current_time, TIME_UTC) != TIME_UTC) {
+        return 0.0;
+    }
+
+    return (double)current_time.tv_sec + (current_time.tv_nsec / 1000000000.0);
 }
 
 static float System_Pow(float val, float pow) {

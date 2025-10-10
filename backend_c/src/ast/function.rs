@@ -94,6 +94,8 @@ pub enum BuiltinName {
     RandomInteger,
     RandomSingle,
 
+    Time,
+
     Pow,
     Sqrt,
     Sin,
@@ -154,6 +156,8 @@ impl fmt::Display for BuiltinName {
 
             BuiltinName::RandomInteger => write!(f, "System_RandomInteger"),
             BuiltinName::RandomSingle => write!(f, "System_RandomSingle"),
+
+            BuiltinName::Time => write!(f, "System_Time"),
 
             BuiltinName::Pow => write!(f, "System_Pow"),
             BuiltinName::Sqrt => write!(f, "System_Sqrt"),

@@ -157,6 +157,8 @@ static void* System_ArraySetLengthInternal(void* arr, int32_t new_len, void* def
 static int32_t System_RandomInteger(int32_t from, int32_t to);
 static float System_RandomSingle(float from, float to);
 
+static double System_Time(void);
+
 static float System_Pow(float val, float pow);
 static float System_Sqrt(float val);
 static float System_Sin(float val);

@@ -153,6 +153,7 @@ impl Unit {
                 Type::Float, 
                 Type::Float
             ]),
+            ("Time", BuiltinName::RandomSingle, Type::Double, vec![]),
             ("Pow", BuiltinName::Pow, Type::Float, vec![
                 Type::Float, Type::Float
             ]),
