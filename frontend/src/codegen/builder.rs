@@ -500,7 +500,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
     pub fn bind_closure_ptr(&mut self) -> LocalID {
         self.local_stack_mut()
             .current_scope_mut()
-            .bind_temp()
+            .bind_temp(Type::any())
     }
 
     pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {
