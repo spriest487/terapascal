@@ -21,7 +21,7 @@ pub fn gen_dyn_array_funcs(lib: &mut LibraryBuilder, elem_ty: &ir::Type, array_c
     let alloc_body = alloc_builder.finish();
 
     let dyn_array_rtti =
-        lib.metadata().get_dyn_array_runtime_type(elem_ty).expect("missing dynarray rtti for type");
+        lib.metadata().get_dyn_array_class(elem_ty).expect("missing dynarray rtti for type");
 
     let alloc_debug_name = if lib.opts.debug {
         Some(format!(

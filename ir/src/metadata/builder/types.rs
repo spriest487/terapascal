@@ -266,7 +266,7 @@ impl MetadataBuilder {
         struct_id
     }
 
-    pub fn get_dyn_array_runtime_type(&self, elem_ty: &Type) -> Option<DynArrayClass> {
+    pub fn get_dyn_array_class(&self, elem_ty: &Type) -> Option<DynArrayClass> {
         self.find_in_self_or_refs(move |metadata| metadata.get_dyn_array_runtime_type(elem_ty))
     }
     
