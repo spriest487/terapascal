@@ -1,25 +1,39 @@
-use std::fmt;
 use std::io;
 use terapascal_build::error::BuildError;
 use terapascal_common::span::Span;
-use terapascal_common::{Backtrace, Severity};
+use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::Severity;
 use terapascal_common::TracedError;
 use terapascal_frontend::parse::ParseError;
 use terapascal_frontend::pp::error::PreprocessorError;
 use terapascal_frontend::typ::TypeError;
 use terapascal_frontend::TokenizeError;
 use terapascal_vm::result::ExecError;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum RunError {
+    #[error(transparent)]
     BuildError(BuildError),
+
+    #[error(transparent)]
     ExecError(ExecError),
+
+    #[error("writing to file {} failed: {}", .0.file.display(), .1)]
     OutputFailed(Span, io::Error),
+
+    #[error("internal compiler error")]
     InternalError(String),
+
+    #[error("unknown output format")]
     UnknownOutputFormat(String),
+
+    #[error("clang invocation failed")]
     ClangBuildFailed(io::Error),
+
+    #[error("invalid arguments")]
     InvalidArguments(String),
 }
 
@@ -142,22 +156,6 @@ impl DiagnosticOutput for RunError {
         match self {
             RunError::BuildError(err) => err.backtrace(),
             _ => None,
-        }
-    }
-}
-
-impl fmt::Display for RunError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            RunError::BuildError(err) => write!(f, "{}", err),
-            RunError::OutputFailed(span, err) => {
-                write!(f, "writing to file {} failed: {}", span.file.display(), err)
-            }
-            RunError::ExecError(err) => write!(f, "{}", err),
-            RunError::InternalError(..) => write!(f, "internal compiler error"),
-            RunError::UnknownOutputFormat(..) => write!(f, "unknown output format"),
-            RunError::ClangBuildFailed(..) => write!(f, "clang build failed"),
-            RunError::InvalidArguments(..) => write!(f, "invalid arguments"),
         }
     }
 }

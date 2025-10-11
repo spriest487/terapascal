@@ -10,3 +10,4 @@ encoding_rs = "0.8.35"
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 dunce = { version = "1.0.5" }
 codespan-reporting = "0.12.0"
+thiserror = "2.0.16"

@@ -5,12 +5,13 @@ pub mod fs;
 pub mod aggregate_err;
 pub mod reporting;
 
-use std::borrow::Borrow;
 use crate::span::*;
 pub use backtrace::Backtrace;
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::hash_map::HashMap;
 use std::collections::HashSet;
+use std::error::Error;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -195,6 +196,9 @@ impl fmt::Display for DiagnosticMessage {
 pub struct TracedError<T> {
     pub err: T,
     pub bt: Backtrace,
+}
+
+impl<T: fmt::Debug + fmt::Display> Error for TracedError<T> {
 }
 
 impl<T> TracedError<T> {

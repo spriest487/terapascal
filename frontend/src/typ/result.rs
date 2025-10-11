@@ -15,6 +15,9 @@ use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::Stmt;
 use crate::typ::ast::VariantDecl;
 use crate::typ::context::NameError;
+use crate::typ::seq::TypeSequenceError;
+use crate::typ::seq::SEQUENCE_METHOD_NAME;
+use crate::typ::seq::SEQUENCE_NEXT_METHOD_NAME;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::GenericError;
@@ -32,9 +35,9 @@ use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::Severity;
-use crate::typ::seq::{TypeSequenceError, SEQUENCE_METHOD_NAME, SEQUENCE_NEXT_METHOD_NAME};
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum TypeError {
     NameError {
         err: NameError,

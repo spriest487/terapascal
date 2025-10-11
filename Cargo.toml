@@ -12,6 +12,7 @@ terapascal-backend-c = { path = "backend_c" }
 terapascal-ir = { path = "ir" }
 terapascal-build = { path = "build" }
 
+thiserror = "2.0.16"
 bincode = { version = "2.0.1", features = ["serde"] }
 structopt = "0.3.26"
 codespan-reporting = "0.12.0"
@@ -21,7 +22,8 @@ members = [
     "build",
     "common",
     "frontend",
-    "ir",
+    "ir", 
+    "backend_c",
     "terapascal_ls",
     "test_runner",
     "vm"

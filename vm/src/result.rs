@@ -7,17 +7,18 @@ use crate::Pointer;
 use ir::IRFormatter;
 use ir::RawInstructionFormatter;
 use std::fmt;
+use thiserror::Error;
 use terapascal_common::span::Span;
 use terapascal_common::{DiagnosticLabel, Severity};
 use terapascal_common::DiagnosticOutput;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ExecError {
     Raised {
         msg: String,
     },
-    MarshalError(MarshalError),
-    StackError(StackError),
+    MarshalError(#[from] MarshalError),
+    StackError(#[from] StackError),
     ExternSymbolLoadFailed {
         msg: String,
         lib: String,
@@ -30,7 +31,7 @@ pub enum ExecError {
     IllegalState {
         msg: String,
     },
-    NativeHeapError(NativeHeapError),
+    NativeHeapError(#[from] NativeHeapError),
     ZeroLengthAllocation,
     WithStackTrace {
         err: Box<ExecError>,
@@ -143,22 +144,6 @@ impl DiagnosticOutput for ExecError {
             _ => self.label_text().map(|text| vec![text]).unwrap_or_else(Vec::new),
         }
     }
-}
-
-impl From<NativeHeapError> for ExecError {
-    fn from(err: NativeHeapError) -> Self {
-        ExecError::NativeHeapError(err)
-    }
-}
-
-impl From<MarshalError> for ExecError {
-    fn from(err: MarshalError) -> Self {
-        ExecError::MarshalError(err)
-    }
-}
-
-impl From<StackError> for ExecError {
-    fn from(err: StackError) -> Self { ExecError::StackError(err) }
 }
 
 pub type ExecResult<T> = Result<T, ExecError>;

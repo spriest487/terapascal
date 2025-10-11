@@ -1,6 +1,4 @@
-use std::{
-    path::PathBuf,
-};
+use std::path::PathBuf;
 use structopt::*;
 use terapascal_build::BuildStage;
 use terapascal_common::LanguageMode;

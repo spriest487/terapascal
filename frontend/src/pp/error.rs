@@ -1,46 +1,34 @@
-use terapascal_common::{span::{Span, Spanned}, DiagnosticLabel, DiagnosticOutput, Severity};
-use std::fmt;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
+use terapascal_common::DiagnosticLabel;
+use terapascal_common::DiagnosticOutput;
+use terapascal_common::Severity;
+use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum PreprocessorError {
+    #[error("Unrecognized directive `{directive}`")]
     IllegalDirective {
         directive: String,
         at: Span,
     },
+
+    #[error("{err}")]
     IncludeError {
         filename: String,
         err: String,
         at: Span,
     },
+
+    
+    #[error("else or endif without matching ifdef or ifndef")]
     UnexpectedEndIf(Span),
+
+    #[error("Unterminated conditional block")]
     UnterminatedCondition(Span),
+
+    #[error("Unterminated comment")]
     UnterminatedComment(Span),
-}
-
-impl fmt::Display for PreprocessorError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PreprocessorError::IllegalDirective { directive, .. } => {
-                write!(f, "unrecognized directive `{}`", directive)
-            },
-
-            PreprocessorError::UnexpectedEndIf(_) => {
-                write!(f, "else or endif without matching ifdef or ifndef")
-            },
-
-            PreprocessorError::UnterminatedCondition(_) => {
-                write!(f, "unterminated conditional block")
-            },
-
-            PreprocessorError::UnterminatedComment(_) => {
-                write!(f, "unterminated comment")
-            },
-
-            PreprocessorError::IncludeError { err, .. } => {
-                write!(f, "{}", err)
-            },
-        }
-    }
 }
 
 impl Spanned for PreprocessorError {

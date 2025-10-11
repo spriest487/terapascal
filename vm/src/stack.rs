@@ -12,6 +12,7 @@ use std::convert::TryInto;
 use std::fmt;
 use std::mem::size_of;
 use std::rc::Rc;
+use thiserror::Error;
 use terapascal_common::span::Span;
 
 const SENTINEL: usize = 12345678;
@@ -265,7 +266,7 @@ impl StackFrame {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum StackError {
     LocalNotAllocated(ir::LocalID),
     DuplicateLocalAlloc {

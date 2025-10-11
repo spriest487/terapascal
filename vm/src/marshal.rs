@@ -26,10 +26,11 @@ use std::mem::transmute;
 use std::ptr::slice_from_raw_parts;
 use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
+use thiserror::Error;
 
 const RC_ELEMENT_COUNT: usize = 3;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum MarshalError {
     InvalidData,
 

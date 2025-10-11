@@ -6,30 +6,26 @@ use crate::DynValue;
 use crate::Pointer;
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::fmt;
 use std::mem::forget;
 use std::rc::Rc;
+use thiserror::Error;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum NativeHeapError {
+    #[error(transparent)]
     MarshallingError(MarshalError),
+
+    #[error("null pointer dereference")]
     NullPointerDeref,
+
+    #[error("freeing value at {0} which wasn't allocated on this heap")]
     BadFree(Pointer),
+
+    #[error("zero-sized allocation of {count} element(s) of type {ty}")]
     ZeroSizedAllocation {
         ty: ir::Type,
         count: usize,
     },
-}
-
-impl fmt::Display for NativeHeapError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            NativeHeapError::MarshallingError(err) => write!(f, "{}", err),
-            NativeHeapError::NullPointerDeref => write!(f, "null pointer dereference"),
-            NativeHeapError::BadFree(ptr) => write!(f, "freeing value at {} which wasn't allocated on this heap", ptr),
-            NativeHeapError::ZeroSizedAllocation { ty, count } => write!(f, "zero-sized allocation of {} elements of type {}", count, ty),
-        }
-    }
 }
 
 impl From<MarshalError> for NativeHeapError {
