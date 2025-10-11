@@ -786,6 +786,18 @@ pub trait InstructionBuilder {
             self.release_deep(at, ty)
         }
     }
+    
+    fn ref_to_ptr_val(&mut self, at: impl Into<Ref>, ty: &Type) -> Value {
+        let at = at.into();
+
+        if let Ref::Deref(at_ptr) = &at {
+            return (**at_ptr).clone();
+        }
+        
+        let temp_at_ptr = self.local_temp(ty.clone().ptr());
+        self.addr_of(temp_at_ptr.clone(), at);
+        temp_at_ptr.value()
+    }
 
     fn call_release(&mut self, at: Ref, ty: &Type) -> bool {
         let Some(rtti) = self.metadata().get_runtime_type(ty) else {
@@ -796,9 +808,8 @@ pub trait InstructionBuilder {
             return false;
         };
 
-        let at_ptr = self.local_temp(ty.clone().ptr());
-        self.addr_of(at_ptr.clone(), at);
-        self.call(release, [Value::from(at_ptr)], None);
+        let at_ptr = self.ref_to_ptr_val(at, ty);
+        self.call(release, [at_ptr], None);
 
         true
     }
@@ -829,7 +840,9 @@ pub trait InstructionBuilder {
         }
     }
 
-    fn call_retain(&mut self, at: Ref, ty: &Type) -> bool {
+    fn call_retain(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        let at = at.into();
+        
         let Some(rtti) = self.metadata().get_runtime_type(ty) else {
             return false;
         };
@@ -837,10 +850,11 @@ pub trait InstructionBuilder {
         let Some(retain) = rtti.retain else {
             return false;
         };
-
-        let at_ptr = self.local_temp(ty.clone().ptr());
-        self.addr_of(at_ptr.clone(), at);
-        self.call(retain, [Value::Ref(Ref::from(at_ptr))], None);
+        
+        // TODO this is a hazard for suspendable functions
+        // we can't create a temp local (field) while releasing another
+        let at_ptr = self.ref_to_ptr_val(at, ty);
+        self.call(retain, [at_ptr], None);
 
         true
     }
