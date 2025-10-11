@@ -146,7 +146,8 @@ fn translate_indexer(
             builder.local_begin();
 
             let element_ty = builder.translate_type(&array_ty.element_ty);
-            let len = cast::i32(array_ty.dim).expect("array dim must be within range of i32");
+            let len = i32::try_from(array_ty.dim)
+                .expect("array dim must be within range of i32");
             let len_val = ir::Value::LiteralI32(len);
 
             builder.bounds_check(&element_ty, len_val, index_val.clone());
