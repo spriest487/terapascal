@@ -9,3 +9,6 @@
 vscode-extension/terapascal/dist
 *.vsix
 flamegraph.svg
+backend_cil/terapascal2cil/bin
+backend_cil/terapascal2cil/obj
+*.DotSettings.user
