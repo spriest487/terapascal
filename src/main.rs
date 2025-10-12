@@ -21,6 +21,8 @@ use terapascal_backend_c as backend_c;
 use terapascal_backend_c::c;
 use terapascal_build::bincode_config;
 use terapascal_build::build;
+use terapascal_build::decode_lib;
+use terapascal_build::encode_lib;
 use terapascal_build::error::BuildError;
 use terapascal_build::error::BuildResult;
 use terapascal_build::BuildArtifact;
@@ -30,11 +32,11 @@ use terapascal_build::BuildStage;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::build_log::BuildLogEntry;
 use terapascal_common::fs::DefaultFilesystem;
+use terapascal_common::reporting::report_err;
 use terapascal_common::span::*;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::IR_LIB_EXT;
-use terapascal_common::reporting::report_err;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
 use terapascal_vm::Interpreter;
@@ -106,14 +108,7 @@ fn load_lib(path: &Path) -> BuildResult<ir::Library> {
             }
         })?;
 
-    let module: ir::Library = bincode::serde::decode_from_slice(&module_bytes, bincode_config())
-        .map_err(|err| {
-            BuildError::ReadSourceFileFailed {
-                msg: err.to_string(),
-                path: path.to_path_buf(),
-            }
-        })
-        .map(|result| result.0)?;
+    let module: ir::Library = decode_lib(&module_bytes)?;
 
     Ok(module)
 }
@@ -216,7 +211,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     Ok(())
                 } else if output_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
                     // the IR object is the output
-                    let module_bytes = bincode::serde::encode_to_vec(&lib, bincode_config())?;
+                    let module_bytes = encode_lib(&lib)?;
 
                     print_output(args.output.as_ref(), |dst| {
                         dst.write_all(&module_bytes)
