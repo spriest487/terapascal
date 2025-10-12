@@ -7,7 +7,6 @@ use serde::Serialize;
 pub struct VariantCase {
     pub name: String,
     pub ty: Option<Type>,
-    pub rc: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

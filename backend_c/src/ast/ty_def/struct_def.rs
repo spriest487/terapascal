@@ -54,7 +54,7 @@ impl Hash for StructDef {
 impl StructDef {
     pub fn translate(
         id: ir::TypeDefID,
-        ir_struct: &ir::Struct,
+        ir_struct: &ir::StructDef,
         module: &mut Unit,
     ) -> Self {
         let mut members = Vec::new();

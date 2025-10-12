@@ -10,7 +10,7 @@ use crate::FunctionID;
 use crate::FunctionSig;
 use crate::GlobalRef;
 use crate::IRFormatter;
-use crate::Interface;
+use crate::InterfaceDef;
 use crate::InterfaceDecl;
 use crate::InterfaceID;
 use crate::InterfaceImpl;
@@ -21,7 +21,7 @@ use crate::RuntimeMethod;
 use crate::SetAliasDef;
 use crate::SetAliasID;
 use crate::StaticClosureID;
-use crate::Struct;
+use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
@@ -329,7 +329,7 @@ impl Metadata {
             })
     }
 
-    pub fn get_class_def(&self, id: TypeDefID) -> Option<&Struct> {
+    pub fn get_class_def(&self, id: TypeDefID) -> Option<&StructDef> {
         let decl = self.type_decls.get(&id)?;
 
         if let TypeDecl::Def(def) = decl
@@ -342,7 +342,7 @@ impl Metadata {
         }
     }
 
-    pub fn class_defs(&self) -> impl Iterator<Item = (TypeDefID, &Struct)> {
+    pub fn class_defs(&self) -> impl Iterator<Item = (TypeDefID, &StructDef)> {
         self.type_decls.iter()
             .filter_map(|(id, decl)| {
                 if let TypeDecl::Def(def) = decl 
@@ -364,7 +364,7 @@ impl Metadata {
             })
     }
 
-    pub fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&Struct> {
+    pub fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
         match self.type_decls.get(&struct_id)? {
             TypeDecl::Reserved | TypeDecl::Forward(..) => None,
 
@@ -384,7 +384,7 @@ impl Metadata {
         }
     }
 
-    pub fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&Interface> {
+    pub fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
         match self.ifaces.get(&iface_id)? {
             InterfaceDecl::Def(def) => Some(def),
             InterfaceDecl::Forward(..) => None,
@@ -612,7 +612,7 @@ impl Metadata {
         })
     }
 
-    pub fn ifaces(&self) -> impl Iterator<Item = (InterfaceID, &Interface)> {
+    pub fn ifaces(&self) -> impl Iterator<Item = (InterfaceID, &InterfaceDef)> {
         self.ifaces
             .iter()
             .filter_map(|(id, iface_decl)| match iface_decl {
@@ -703,7 +703,7 @@ impl Metadata {
 
     // find the declared ID and definition of a struct. if the struct is only forward-declared
     // when this call is made, the definition part of the result will be None
-    pub fn find_struct_def(&self, name: &NamePath) -> Option<(TypeDefID, &Struct)> {
+    pub fn find_struct_def(&self, name: &NamePath) -> Option<(TypeDefID, &StructDef)> {
         self.type_decls.iter().find_map(|(id, def)| match def {
             TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) =>
                 {

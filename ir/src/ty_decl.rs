@@ -155,7 +155,7 @@ impl fmt::Display for TypeDecl {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TypeDef {
-    Struct(Struct),
+    Struct(StructDef),
     Variant(VariantDef),
     Function(FunctionSig),
 }

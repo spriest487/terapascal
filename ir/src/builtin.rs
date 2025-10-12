@@ -1,15 +1,15 @@
 use crate::NamePath;
-use crate::Struct;
+use crate::StructDef;
 use crate::StructFieldDef;
 use crate::StructIdentity;
 use crate::Type;
 use crate::STRING_CHARS_FIELD;
 use crate::STRING_LEN_FIELD;
 
-pub fn string_def() -> Struct {
+pub fn string_def() -> StructDef {
     let name = NamePath::new(["System".to_string()], "String");
 
-    Struct {
+    StructDef {
         identity: StructIdentity::Class(name.clone()),
         fields: [
             (STRING_CHARS_FIELD, StructFieldDef {

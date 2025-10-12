@@ -1,6 +1,6 @@
 use crate::metadata::Metadata;
 use crate::FunctionSig;
-use crate::Struct;
+use crate::StructDef;
 use crate::Type;
 use crate::TypeDef;
 use crate::TypeDefID;
@@ -65,7 +65,7 @@ pub fn find_deps(def: &TypeDef, metadata: &Metadata) -> HashSet<TypeDefID> {
     deps
 }
 
-fn add_struct_deps(struct_def: &Struct, deps: &mut HashSet<TypeDefID>, metadata: &Metadata) {
+fn add_struct_deps(struct_def: &StructDef, deps: &mut HashSet<TypeDefID>, metadata: &Metadata) {
     for (_, field) in &struct_def.fields {
         add_dep(&field.ty, deps, metadata);
     }

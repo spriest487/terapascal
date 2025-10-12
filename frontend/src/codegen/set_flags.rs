@@ -44,7 +44,7 @@ impl SetFlagsType {
     pub fn define_new(lib: &mut LibraryBuilder, bit_count: usize) -> Self {        
         let word_count = set_word_count(bit_count);
 
-        let set_flags_struct = ir::Struct {
+        let set_flags_struct = ir::StructDef {
             identity: ir::StructIdentity::SetFlags { bits: bit_count },
             fields: (0..word_count)
                 .map(|id| (ir::FieldID(id), ir::StructFieldDef {

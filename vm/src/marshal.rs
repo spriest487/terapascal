@@ -294,7 +294,7 @@ impl Marshaller {
     pub fn add_struct(
         &mut self,
         id: ir::TypeDefID,
-        def: &ir::Struct,
+        def: &ir::StructDef,
         metadata: &ir::Metadata,
     ) -> MarshalResult<ForeignType> {
         let struct_ty = ir::Type::Struct(id);

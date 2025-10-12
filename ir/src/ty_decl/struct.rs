@@ -9,12 +9,12 @@ use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct Struct {
+pub struct StructDef {
     pub identity: StructIdentity,
     pub fields: LinkedHashMap<FieldID, StructFieldDef>,
 }
 
-impl Struct {
+impl StructDef {
     pub fn find_field(&self, name: &str) -> Option<FieldID> {
         self.fields.iter().find_map(|(id, field)| {
             let field_name = field.name.as_ref()?;
@@ -96,7 +96,7 @@ impl Struct {
     }
 }
 
-impl fmt::Display for Struct {
+impl fmt::Display for StructDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.identity {
             StructIdentity::Array(ty, dim) => write!(f, "array[{}] of {}", dim, ty),

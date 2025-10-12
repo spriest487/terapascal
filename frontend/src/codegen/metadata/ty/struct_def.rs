@@ -9,7 +9,7 @@ pub fn translate_struct_def(
     struct_def: &typ::ast::StructDecl,
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
-) -> ir::Struct {    
+) -> ir::StructDef {    
     let name_path = translate_name(&struct_def.name, generic_ctx, lib);
 
     let mut fields = HashMap::new();
@@ -49,5 +49,5 @@ pub fn translate_struct_def(
         ast::StructKind::Record => ir::StructIdentity::Record(name_path),
     };
 
-    ir::Struct::new(identity).with_fields(fields)
+    ir::StructDef::new(identity).with_fields(fields)
 }

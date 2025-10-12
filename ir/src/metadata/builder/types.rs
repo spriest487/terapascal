@@ -1,5 +1,5 @@
 use crate::{DynArrayClass, FunctionID};
-use crate::Interface;
+use crate::InterfaceDef;
 use crate::InterfaceDecl;
 use crate::InterfaceID;
 use crate::MetadataBuilder;
@@ -7,7 +7,7 @@ use crate::NamePath;
 use crate::RuntimeType;
 use crate::SetAliasDef;
 use crate::SetAliasID;
-use crate::Struct;
+use crate::StructDef;
 use crate::StructFieldDef;
 use crate::StructIdentity;
 use crate::Type;
@@ -96,7 +96,7 @@ impl MetadataBuilder {
         removed
     }
 
-    pub fn define_struct(&mut self, id: TypeDefID, struct_def: Struct) {
+    pub fn define_struct(&mut self, id: TypeDefID, struct_def: StructDef) {
         match self.metadata.type_decls.get(&id) {
             Some(TypeDecl::Forward(name)) => {
                 assert_eq!(Some(name), struct_def.name());
@@ -123,7 +123,7 @@ impl MetadataBuilder {
         }
     }
     
-    pub fn get_struct_def(&self, id: TypeDefID) -> Option<&Struct> {
+    pub fn get_struct_def(&self, id: TypeDefID) -> Option<&StructDef> {
         self.find_in_self_or_refs(move |metadata| metadata.get_struct_def(id))
     }
 
@@ -170,11 +170,11 @@ impl MetadataBuilder {
         id
     }
 
-    pub fn ifaces(&self) -> impl Iterator<Item=(InterfaceID, &Interface)> {
+    pub fn ifaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
         self.iter_in_self_or_refs(move |metadata| metadata.ifaces())
     }
 
-    pub fn define_iface(&mut self, iface_def: Interface) -> InterfaceID {
+    pub fn define_iface(&mut self, iface_def: InterfaceDef) -> InterfaceID {
         let id = self.declare_iface(&iface_def.name);
 
         self.metadata.ifaces.insert(id, InterfaceDecl::Def(iface_def));
@@ -182,7 +182,7 @@ impl MetadataBuilder {
         id
     }
 
-    pub fn get_iface_def(&self, id: InterfaceID) -> Option<&Interface> {
+    pub fn get_iface_def(&self, id: InterfaceID) -> Option<&InterfaceDef> {
         self.find_in_self_or_refs(move |metadata| metadata.get_iface_def(id))
     }
 
@@ -242,7 +242,7 @@ impl MetadataBuilder {
         let struct_id = self.next_type_id;
         self.metadata.type_decls.insert(
             struct_id,
-            TypeDecl::Def(TypeDef::Struct(Struct {
+            TypeDecl::Def(TypeDef::Struct(StructDef {
                 identity: StructIdentity::DynArray(element.clone()),
                 fields,
             })),

@@ -429,7 +429,7 @@ pub struct Interface {
 impl Interface {
     pub fn translate(
         iface_id: ir::InterfaceID,
-        iface: &ir::Interface,
+        iface: &ir::InterfaceDef,
         module: &mut Unit,
     ) -> Self {
         let methods = iface

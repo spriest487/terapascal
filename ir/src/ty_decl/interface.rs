@@ -14,13 +14,13 @@ pub struct Method {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Interface {
+pub struct InterfaceDef {
     pub name: NamePath,
     pub methods: Vec<Method>,
     pub impls: HashMap<Type, InterfaceImpl>,
 }
 
-impl Interface {
+impl InterfaceDef {
     pub fn new(name: impl Into<NamePath>, methods: impl Into<Vec<Method>>) -> Self {
         Self {
             name: name.into(),
@@ -84,7 +84,7 @@ impl InterfaceImpl {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InterfaceDecl {
     Forward(NamePath),
-    Def(Interface),
+    Def(InterfaceDef),
 }
 
 impl InterfaceDecl {

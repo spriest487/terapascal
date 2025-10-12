@@ -7,7 +7,7 @@ pub fn translate_iface(
     iface_def: &typ::ast::InterfaceDecl,
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
-) -> ir::Interface {
+) -> ir::InterfaceDef {
     let name = translate_name(&iface_def.name, generic_ctx, lib);
 
     // it needs to be declared to reference its own ID in the Self type
@@ -37,5 +37,5 @@ pub fn translate_iface(
         })
         .collect();
 
-    ir::Interface::new(name, methods)
+    ir::InterfaceDef::new(name, methods)
 }

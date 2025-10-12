@@ -127,7 +127,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         translate_name(name, &self.generic_context, self.library)
     }
 
-    pub fn translate_iface(&mut self, iface_def: &typ::ast::InterfaceDecl) -> Interface {
+    pub fn translate_iface(&mut self, iface_def: &typ::ast::InterfaceDecl) -> InterfaceDef {
         translate_iface(iface_def, &self.generic_context, self.library)
     }
 
@@ -312,12 +312,12 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.library.metadata_mut().find_or_insert_string(s)
     }
 
-    pub fn get_struct(&self, id: TypeDefID) -> Option<&Struct> {
+    pub fn get_struct(&self, id: TypeDefID) -> Option<&StructDef> {
         self.library.metadata().get_struct_def(id)
     }
 
     #[allow(unused)]
-    pub fn get_iface(&self, id: InterfaceID) -> Option<&Interface> {
+    pub fn get_iface(&self, id: InterfaceID) -> Option<&InterfaceDef> {
         self.library.metadata().get_iface_def(id)
     }
     

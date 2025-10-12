@@ -2,7 +2,7 @@ use crate::FunctionID;
 use crate::MetadataBuilder;
 use crate::NamePath;
 use crate::StaticClosureID;
-use crate::Struct;
+use crate::StructDef;
 use crate::TypeDefID;
 use crate::FunctionDecl;
 use std::rc::Rc;
@@ -53,7 +53,7 @@ impl MetadataBuilder {
         assert!(replaced.is_none(), "static closure for function {func_id} must not have been inserted already");
     }
 
-    pub fn define_closure_ty(&mut self, id: TypeDefID, closure_def: Struct) {
+    pub fn define_closure_ty(&mut self, id: TypeDefID, closure_def: StructDef) {
         self.define_struct(id, closure_def);
         self.metadata.closures.push(id);
     }
