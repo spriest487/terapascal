@@ -1,0 +1,9 @@
+[package]
+name = "terapascal-backend-cil"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+terapascal-ir = { path = "../ir" }
+terapascal-build = { path = "../build" }
+thiserror = "2.0.16"

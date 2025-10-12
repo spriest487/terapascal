@@ -19,6 +19,7 @@ use std::time::Duration;
 use structopt::StructOpt;
 use terapascal_backend_c as backend_c;
 use terapascal_backend_c::c;
+use terapascal_backend_cil as backend_cil;
 use terapascal_build::build;
 use terapascal_build::decode_lib;
 use terapascal_build::encode_lib;
@@ -35,6 +36,7 @@ use terapascal_common::reporting::report_err;
 use terapascal_common::span::*;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::CIL_LIB_EXT;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
@@ -232,6 +234,12 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
 
                     try_clang_format(output_arg);
                     
+                    Ok(())
+                } else if output_ext.eq_ignore_ascii_case(CIL_LIB_EXT) && args.arch == TargetArch::Cil {
+                    let lib_name = output_arg.with_extension("").to_string_lossy().to_string();
+                    
+                    backend_cil::build_assembly(lib_name, &lib, output_arg.as_path())?;
+
                     Ok(())
                 } else {
                     return Err(RunError::UnknownOutputFormat(output_ext))

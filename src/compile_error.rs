@@ -35,6 +35,9 @@ pub enum RunError {
 
     #[error("invalid arguments")]
     InvalidArguments(String),
+
+    #[error(transparent)]
+    CilBuildError(#[from] terapascal_backend_cil::BuildError),
 }
 
 impl From<TracedError<TokenizeError>> for RunError {
@@ -124,6 +127,12 @@ impl DiagnosticOutput for RunError {
                 label: None,
             },
             RunError::InvalidArguments(err) => DiagnosticMessage {
+                severity,
+                title: err.to_string(),
+                notes: Vec::new(),
+                label: None,
+            },
+            RunError::CilBuildError(err) => DiagnosticMessage {
                 severity,
                 title: err.to_string(),
                 notes: Vec::new(),

@@ -16,6 +16,14 @@ pub struct Args {
     #[structopt(name = "OUTPUT", short = "o", parse(from_os_str))]
     pub output: Option<PathBuf>,
 
+    #[structopt(
+        name = "arch",
+        short = "a",
+        default_value = "native",
+        parse(try_from_str = parse_target_arch),
+    )]
+    pub arch: TargetArch,
+
     #[structopt(long="define", short = "d")]
     pub define_syms: Vec<String>,
 
@@ -66,6 +74,20 @@ pub struct Args {
     
     #[structopt(long = "diag-port", default_value = "0")]
     pub diag_port: u16,
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum TargetArch {
+    Native,
+    Cil,
+}
+
+fn parse_target_arch(s: &str) -> Result<TargetArch, String> {
+    match s {
+        "cil" => Ok(TargetArch::Cil),
+        "native" => Ok(TargetArch::Native),
+        _ => Err(format!("invalid architecture name: {}", s)),
+    }
 }
 
 fn parse_build_stage_arg(s: &str) -> Result<BuildStage, String> {

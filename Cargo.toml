@@ -9,6 +9,7 @@ terapascal-common = { path = "common" }
 terapascal-frontend = { path = "frontend" }
 terapascal-vm = { path = "vm" }
 terapascal-backend-c = { path = "backend_c" }
+terapascal-backend-cil = { path = "backend_cil" }
 terapascal-ir = { path = "ir" }
 terapascal-build = { path = "build" }
 thiserror = "2.0.16"
@@ -20,6 +21,7 @@ members = [
     "common",
     "frontend",
     "ir", 
+    "backend_cil",
     "backend_c",
     "terapascal_ls",
     "test_runner",

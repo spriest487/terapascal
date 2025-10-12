@@ -1500,6 +1500,7 @@ version = "0.3.0"
 dependencies = [
  "structopt",
  "terapascal-backend-c",
+ "terapascal-backend-cil",
  "terapascal-build",
  "terapascal-common",
  "terapascal-frontend",
@@ -1514,6 +1515,15 @@ version = "0.1.0"
 dependencies = [
  "terapascal-ir",
  "topological-sort",
+]
+
+[[package]]
+name = "terapascal-backend-cil"
+version = "0.1.0"
+dependencies = [
+ "terapascal-build",
+ "terapascal-ir",
+ "thiserror",
 ]
 
 [[package]]

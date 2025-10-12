@@ -17,6 +17,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 pub const IR_LIB_EXT: &str = "lib";
+pub const CIL_LIB_EXT: &str = "dll";
 pub const SRC_FILE_DEFAULT_EXT: &str = "tpas";
 
 pub trait DiagnosticOutput: fmt::Display {
