@@ -187,7 +187,7 @@ public record FieldInstruction : IInstruction {
     }
 
     [Key("of_ty")]
-    public required IType VariantType { 
+    public required IType BaseType { 
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -199,6 +199,7 @@ public record FieldInstruction : IInstruction {
 [MessagePackObject]
 public record CallInstruction : IInstruction {
     [Key("out")]
+    [MessagePackFormatter(typeof(NullableRefFormatter))]
     public required IRef? Out { get; init; }
     
     [Key("function")]
@@ -208,7 +209,7 @@ public record CallInstruction : IInstruction {
     }
     
     [Key("args")]
-    public required IReadOnlyList<IValue>? Args { 
+    public required IReadOnlyList<IValue> Args { 
         get;
         init => field = value.ToArrayNonNull();
     }
@@ -217,6 +218,7 @@ public record CallInstruction : IInstruction {
 [MessagePackObject]
 public record VirtualCallInstruction : IInstruction {
     [Key("out")]
+    [MessagePackFormatter(typeof(NullableRefFormatter))]
     public required IRef? Out { get; init; }
 
     [Key("iface_id")]

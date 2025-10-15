@@ -4,11 +4,15 @@ using CommandLine;
 namespace Terapascal.CIL;
 
 public record Args {
-    [Option("assembly-name", Default = false, Required = true)]
+    [Option("assembly-name", Required = true)]
     public required string AssemblyName { get; init; }
 
+    [Option("assembly-version", Required = false)]
+    public Version? Version { get; init; }
+        
     [Option("output-path", Default = false, Required = true)]
     public required string OutputPath { get; init; }
+    
     
     [Value(0, Required = false)]
     public string? LibPath { get; init; }

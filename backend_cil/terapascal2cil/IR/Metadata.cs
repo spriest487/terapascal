@@ -66,6 +66,20 @@ public class Metadata {
         get;
         init => field = value!.ToDictionaryNonNull();
     }
+
+    public TypeDefID? FindFunctionType(FunctionSig withSig) {
+        foreach (var (id, typeDecl) in this.TypeDecls) {
+            if (typeDecl is not DefTypeDecl(FunctionTypeDef(var sig))) {
+                continue;
+            }
+
+            if (sig.Equals(withSig)) {
+                return id;
+            }
+        }
+
+        return null;
+    }
 }
 
 [MessagePackObject]

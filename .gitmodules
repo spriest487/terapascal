@@ -1,0 +1,3 @@
+[submodule "backend_cil/cecilifier"]
+	path = backend_cil/cecilifier
+	url = https://github.com/adrianoc/cecilifier.git

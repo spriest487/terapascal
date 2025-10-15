@@ -42,7 +42,6 @@ public class FunctionFormatter : IMessagePackFormatter<IFunction> {
     }
 }
 
-
 [MessagePackObject]
 public record ExternalFunctionRef {
     [Key("symbol")]
@@ -53,6 +52,12 @@ public record ExternalFunctionRef {
     
     [Key("src")]
     public required string Source { 
+        get;
+        init => field = value ?? throw new ArgumentException(nameof(value));
+    }
+
+    [Key("sig")]
+    public required FunctionSig Signature {
         get;
         init => field = value ?? throw new ArgumentException(nameof(value));
     }
@@ -77,7 +82,7 @@ public record FunctionDef {
 }
 
 [MessagePackObject]
-public class FunctionSig {
+public class FunctionSig : IEquatable<FunctionSig> {
     [Key("return_ty")]
     public required IType ReturnType {
         get;
@@ -89,6 +94,33 @@ public class FunctionSig {
         get;
         init => field = value ?? [];
     }
+
+    public bool Equals(FunctionSig? other) {
+        if (other == null) {
+            return false;
+        }
+
+        return this.ReturnType.Equals(other.ReturnType) && this.ParameterTypes.SequenceEqual(other.ParameterTypes);
+    }
+
+    public override bool Equals(object? obj) {
+        if (obj is not FunctionSig other) {
+            return false;
+        }
+
+        return this.Equals(other);
+    }
+
+    public override int GetHashCode() {
+        var hashCode = 54321;
+
+        foreach (var part in this.ParameterTypes) {
+            hashCode ^= part.GetHashCode();
+        }
+
+        hashCode ^= this.ReturnType.GetHashCode();
+        return hashCode;
+    }
 }
 
 [MessagePackObject]
@@ -98,4 +130,16 @@ public record FunctionDecl {
     
     [Key("global_name")]
     public required NamePath? GlobalName { get; init; }
+}
+
+public static class FunctionExt {
+    extension(IFunction function) {
+        public FunctionSig Signature() {
+            return function switch {
+                ExternalFunction(var funcRef) => funcRef.Signature,
+                LocalFunction(var funcDef)=> funcDef.Signature,
+                _ => throw new ArgumentOutOfRangeException(nameof(function)),
+            };
+        }
+    }
 }

@@ -1,14 +1,14 @@
 ﻿using MessagePack;
 using MessagePack.Formatters;
 
-namespace Terapascal.IR;
+namespace Terapascal.CIL;
 
-public class CustomCollectionsResolver : IFormatterResolver {
+internal class CustomCollectionsResolver : IFormatterResolver {
     public static CustomCollectionsResolver Instance { get; } = new CustomCollectionsResolver();
 
     private readonly Dictionary<(Type, Type), IMessagePackFormatter> cache = new Dictionary<(Type, Type), IMessagePackFormatter>();
     
-    private class OrderedDictionaryFormatter<TKey, TVal> : IMessagePackFormatter<OrderedDictionary<TKey, TVal>>
+    internal class OrderedDictionaryFormatter<TKey, TVal> : IMessagePackFormatter<OrderedDictionary<TKey, TVal>>
         where TKey : notnull
     {
         public void Serialize(ref MessagePackWriter writer, OrderedDictionary<TKey, TVal> value, MessagePackSerializerOptions options) {

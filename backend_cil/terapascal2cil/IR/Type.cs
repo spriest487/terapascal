@@ -3,7 +3,12 @@ using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
-public readonly record struct TypeDefID(ulong ID);
+public readonly record struct TypeDefID(ulong ID) {
+    public static TypeDefID String => new TypeDefID(1);
+    public static TypeDefID TypeInfo => new TypeDefID(2);
+    public static TypeDefID MethodInfo => new TypeDefID(3);
+    public static TypeDefID FunctionInfo => new TypeDefID(4);
+}
 
 public class TypeDefIDFormatter : IMessagePackFormatter<TypeDefID> {
     public void Serialize(ref MessagePackWriter writer, TypeDefID value, MessagePackSerializerOptions options) {
@@ -68,31 +73,37 @@ public class MethodIDFormatter : IMessagePackFormatter<MethodID> {
     }
 }
 
-public interface IType;
-public record NothingType : IType;
-public record PointerType(IType Inner) : IType;
-public record StructType(TypeDefID ID) : IType;
-public record VariantType(TypeDefID ID) : IType;
-public record FlagsType(TypeDefID ID, SetAliasID AliasID) : IType;
+public interface IType {
+    static IType String => new RcPointerType(ClassVirtualTypeID.String);
+    static IType TypeInfo => new RcPointerType(ClassVirtualTypeID.TypeInfo);
+    static IType MethodInfo => new RcPointerType(ClassVirtualTypeID.MethodInfo);
+    static IType FunctionInfo => new RcPointerType(ClassVirtualTypeID.FunctionInfo);
+    static IType Any => new RcPointerType(new AnyVirtualTypeID());
+}
 
-public record FunctionType(FunctionID ID) : IType;
+public sealed record NothingType : IType;
+public sealed record PointerType(IType Inner) : IType;
+public sealed record StructType(TypeDefID ID) : IType;
+public sealed record VariantType(TypeDefID ID) : IType;
+public sealed record FlagsType(TypeDefID ID, SetAliasID AliasID) : IType;
+public sealed record FunctionType(TypeDefID ID) : IType;
 
-public record BoolType : IType;
-public record U8Type : IType;
-public record I8Type : IType;
-public record U16Type : IType;
-public record I16Type : IType;
-public record U32Type : IType;
-public record I32Type : IType;
-public record U64Type : IType;
-public record I64Type : IType;
-public record USizeType : IType;
-public record ISizeType : IType;
-public record F32Type : IType;
-public record F64Type : IType;
+public sealed record BoolType : IType;
+public sealed record U8Type : IType;
+public sealed record I8Type : IType;
+public sealed record U16Type : IType;
+public sealed record I16Type : IType;
+public sealed record U32Type : IType;
+public sealed record I32Type : IType;
+public sealed record U64Type : IType;
+public sealed record I64Type : IType;
+public sealed record USizeType : IType;
+public sealed record ISizeType : IType;
+public sealed record F32Type : IType;
+public sealed record F64Type : IType;
 
 [MessagePackObject]
-public record ArrayType : IType {
+public sealed record ArrayType : IType {
     [Key("element")]
     public required IType Element { 
         get;
@@ -103,8 +114,20 @@ public record ArrayType : IType {
     public required ulong Length { get; init; }
 }
 
-public record RcPointerType(IVirtualTypeID ID) : IType;
-public record RcWeakPointerType(IVirtualTypeID ID) : IType;
+public static class TypeExt {
+    extension(IType type) {
+        public bool IsClass() {
+            return type switch {
+                RcPointerType => true,
+                RcWeakPointerType => true,
+                _ => false,
+            };
+        }
+    }
+}
+
+public sealed record RcPointerType(IVirtualTypeID ID) : IType;
+public sealed record RcWeakPointerType(IVirtualTypeID ID) : IType;
 
 public class NullableTypeFormatter : IMessagePackFormatter<IType?> {
     private readonly TypeFormatter typeFormatter = new TypeFormatter();
@@ -180,7 +203,7 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
             
             case "Function": {
                 var id = reader.ReadUInt64();
-                return new FunctionType(new FunctionID(id));
+                return new FunctionType(new TypeDefID(id));
             }
             
             case "Bool": return new BoolType();
@@ -205,11 +228,17 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
 }
 
 public interface IVirtualTypeID;
+public sealed record AnyVirtualTypeID : IVirtualTypeID;
 
-public record AnyVirtualTypeID : IVirtualTypeID;
-public record ClassVirtualTypeID(TypeDefID ID) : IVirtualTypeID;
-public record InterfaceVirtualTypeID(InterfaceID ID) : IVirtualTypeID;
-public record ClosureVirtualTypeID(TypeDefID ID) : IVirtualTypeID;
+public sealed record ClassVirtualTypeID(TypeDefID ID) : IVirtualTypeID {
+    public static ClassVirtualTypeID String => new ClassVirtualTypeID(TypeDefID.String);
+    public static ClassVirtualTypeID TypeInfo => new ClassVirtualTypeID(TypeDefID.TypeInfo);
+    public static ClassVirtualTypeID MethodInfo => new ClassVirtualTypeID(TypeDefID.MethodInfo);
+    public static ClassVirtualTypeID FunctionInfo => new ClassVirtualTypeID(TypeDefID.FunctionInfo);
+}
+
+public sealed record InterfaceVirtualTypeID(InterfaceID ID) : IVirtualTypeID;
+public sealed record ClosureVirtualTypeID(TypeDefID ID) : IVirtualTypeID;
 
 public class VirtualTypeIDFormatter : IMessagePackFormatter<IVirtualTypeID> {
     public void Serialize(ref MessagePackWriter writer, IVirtualTypeID value, MessagePackSerializerOptions options) {
