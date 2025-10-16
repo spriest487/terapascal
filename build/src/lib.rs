@@ -7,6 +7,7 @@ use crate::sources::SourceCollection;
 use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::io;
 use std::path::PathBuf;
 use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
@@ -386,10 +387,6 @@ fn build_with_log(fs: &impl Filesystem, input: BuildInput, log: &mut BuildLog) -
     Ok(BuildArtifact::Library(library))
 }
 
-pub fn bincode_config() -> bincode::config::Configuration {
-    bincode::config::Configuration::default()
-}
-
 fn preprocess(fs: &impl Filesystem, filename: &PathBuf, opts: CompileOpts) -> Result<PreprocessedUnit, BuildError> {
     let src = fs.read_source(filename).map_err(|err| BuildError::ReadSourceFileFailed {
         path: filename.to_path_buf(),
@@ -398,4 +395,16 @@ fn preprocess(fs: &impl Filesystem, filename: &PathBuf, opts: CompileOpts) -> Re
 
     let preprocessed = terapascal_frontend::preprocess(fs, filename, &src, opts)?;
     Ok(preprocessed)
+}
+
+pub fn encode_lib(lib: &ir::Library) -> Result<Vec<u8>, io::Error> {
+    let data = rmp_serde::encode::to_vec_named(&lib)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))?;
+    
+    Ok(data)
+}
+
+pub fn decode_lib(data: &[u8]) -> Result<ir::Library, io::Error> {
+    rmp_serde::decode::from_slice(data)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))
 }

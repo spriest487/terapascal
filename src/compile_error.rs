@@ -73,18 +73,6 @@ impl From<ExecError> for RunError {
     }
 }
 
-impl From<bincode::error::EncodeError> for RunError {
-    fn from(value: bincode::error::EncodeError) -> Self {
-        RunError::InternalError(value.to_string())
-    }
-}
-
-impl From<bincode::error::DecodeError> for RunError {
-    fn from(value: bincode::error::DecodeError) -> Self {
-        RunError::InternalError(value.to_string())
-    }
-}
-
 impl From<io::Error> for RunError {
     fn from(err: io::Error) -> Self {
         RunError::InternalError(err.to_string())

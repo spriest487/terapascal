@@ -19,7 +19,6 @@ use std::time::Duration;
 use structopt::StructOpt;
 use terapascal_backend_c as backend_c;
 use terapascal_backend_c::c;
-use terapascal_build::bincode_config;
 use terapascal_build::build;
 use terapascal_build::decode_lib;
 use terapascal_build::encode_lib;

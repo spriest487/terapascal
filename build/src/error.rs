@@ -1,11 +1,13 @@
-use std::path::PathBuf;
 use std::fmt;
+use std::io;
+use std::path::PathBuf;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_common::{Backtrace, Severity};
+use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::Severity;
 use terapascal_common::TracedError;
 use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::UnitKind;
@@ -13,16 +15,17 @@ use terapascal_frontend::parse::ParseError;
 use terapascal_frontend::pp::error::PreprocessorError;
 use terapascal_frontend::typ::TypeError;
 use terapascal_frontend::TokenizeError;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum BuildError {
     /// The build ran to completion but there were one or more errors in the build log
     CompletedWithErrors,
 
-    TokenizeError(TracedError<TokenizeError>),
-    ParseError(TracedError<ParseError>),
-    TypecheckError(TypeError),
-    PreprocessorError(PreprocessorError),
+    TokenizeError(#[from] TracedError<TokenizeError>),
+    ParseError(#[from] TracedError<ParseError>),
+    TypecheckError(#[from] TypeError),
+    PreprocessorError(#[from] PreprocessorError),
     FileNotFound(PathBuf, Option<Span>),
     ReadSourceFileFailed {
         path: PathBuf,
@@ -46,30 +49,7 @@ pub enum BuildError {
     UnitNotLoaded {
         unit_name: IdentPath,
     },
-}
-
-impl From<TracedError<TokenizeError>> for BuildError {
-    fn from(err: TracedError<TokenizeError>) -> Self {
-        Self::TokenizeError(err)
-    }
-}
-
-impl From<TracedError<ParseError>> for BuildError {
-    fn from(err: TracedError<ParseError>) -> Self {
-        Self::ParseError(err)
-    }
-}
-
-impl From<TypeError> for BuildError {
-    fn from(err: TypeError) -> Self {
-        Self::TypecheckError(err)
-    }
-}
-
-impl From<PreprocessorError> for BuildError {
-    fn from(err: PreprocessorError) -> Self {
-        Self::PreprocessorError(err)
-    }
+    IOError(#[from] io::Error),
 }
 
 impl DiagnosticOutput for BuildError {
@@ -148,6 +128,10 @@ impl DiagnosticOutput for BuildError {
                     .with_label(DiagnosticLabel::new(unit_name.path_span().clone()))
                     .with_note(format!("unit `{}` is not loaded", unit_name))
             },
+            
+            Self::IOError(..) => {
+                DiagnosticMessage::new(Severity::Error, "IO error")
+            }
         }
     }
 
@@ -184,6 +168,7 @@ impl fmt::Display for BuildError {
             Self::CircularDependency { .. } => write!(f, "circular unit reference"),
             Self::UnexpectedMainUnit { .. } => write!(f, "unexpected main unit"),
             Self::UnitNotLoaded { .. } => write!(f, "unit not loaded"),
+            Self::IOError(err) => write!(f, "{}", err),
         }
     }
 }
