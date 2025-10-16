@@ -2,19 +2,14 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using Terapascal.IR;
-using Terapascal.Runtime;
-using ArrayType = Terapascal.IR.ArrayType;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodAttributes = Mono.Cecil.MethodAttributes;
-using PointerType = Terapascal.IR.PointerType;
 using TypeAttributes = Mono.Cecil.TypeAttributes;
-using VariantType = Terapascal.IR.VariantType;
 
 namespace Terapascal.CIL;
 
 internal class StructFieldRefs {
-    internal required Dictionary<FieldID, FieldReference> FieldRefs { get; init; }
+    internal required Dictionary<IR.FieldID, FieldReference> FieldRefs { get; init; }
 }
 
 internal class VariantFieldRefs {
@@ -23,38 +18,42 @@ internal class VariantFieldRefs {
 }
 
 public class TypeBuilder {
-    private readonly TerapascalAssemblyBuilder assemblyBuilder;
+    private readonly AssemblyBuilder assemblyBuilder;
     public const string VariantDiscriminatorName = "Discriminator";
 
     public const int PointerSize = 8;
     
-    private readonly record struct ArraySig(IType Element, ulong Size);
+    private readonly record struct ArraySig(IR.IType Element, ulong Size);
     
-    private readonly Dictionary<IType, TypeReference> cache;
+    private readonly Dictionary<IR.IType, TypeReference> cache;
 
     private readonly Dictionary<ArraySig, TypeReference> staticArrayTypes;
 
-    private readonly Dictionary<TypeDefID, FunctionPointerType> funcPointerTypes;
+    private readonly Dictionary<IR.TypeDefID, FunctionPointerType> funcPointerTypes;
 
-    private readonly Dictionary<TypeDefID, StructFieldRefs> structFields;
-    private readonly Dictionary<TypeDefID, VariantFieldRefs> variantFields;
+    private readonly Dictionary<IR.TypeDefID, StructFieldRefs> structFields;
+    private readonly Dictionary<IR.TypeDefID, VariantFieldRefs> variantFields;
 
     private readonly TypeReference valueType;
     private readonly TypeReference exceptionType;
-    private readonly TypeReference stringType;
+    private readonly TypeReference clrStringType;
+    private readonly TypeReference rtStringType;
+    private readonly TypeReference rtTypeInfoType;
+    private readonly TypeReference rtMethodInfoType;
+    private readonly TypeReference rtFunctionInfoType;
 
     public TypeReference ExceptionType => this.exceptionType;
-    public TypeReference StringType => this.stringType;
+    public TypeReference CLRStringType => this.clrStringType;
 
-    public TypeBuilder(TerapascalAssemblyBuilder assemblyBuilder) {
+    public TypeBuilder(AssemblyBuilder assemblyBuilder) {
         this.assemblyBuilder = assemblyBuilder;
 
-        this.cache = new Dictionary<IType, TypeReference>();
+        this.cache = new Dictionary<IR.IType, TypeReference>();
         this.staticArrayTypes = new Dictionary<ArraySig, TypeReference>();
-        this.funcPointerTypes = new Dictionary<TypeDefID, FunctionPointerType>();
+        this.funcPointerTypes = new Dictionary<IR.TypeDefID, FunctionPointerType>();
 
-        this.structFields = new Dictionary<TypeDefID, StructFieldRefs>();
-        this.variantFields = new Dictionary<TypeDefID, VariantFieldRefs>();
+        this.structFields = new Dictionary<IR.TypeDefID, StructFieldRefs>();
+        this.variantFields = new Dictionary<IR.TypeDefID, VariantFieldRefs>();
 
         var module = this.assemblyBuilder.Module;
         var coreLib = this.assemblyBuilder.CoreLibrary;
@@ -65,11 +64,18 @@ public class TypeBuilder {
         var exceptionTypeRef = new TypeReference("System", "Exception", module, coreLib.Name);
         this.exceptionType = this.ImportCoreReference(exceptionTypeRef);
 
-        var stringType = new TypeReference("System", "String", module, coreLib.Name);
-        this.stringType = this.ImportCoreReference(stringType);
+        var clrStringType = new TypeReference("System", "String", module, coreLib.Name);
+        this.clrStringType = this.ImportCoreReference(clrStringType);
+
+        this.rtStringType = this.assemblyBuilder.GetSystemTypeRef(nameof(Runtime.String), false);
+        this.rtTypeInfoType = this.assemblyBuilder.GetSystemTypeRef(nameof(Runtime.TypeInfo), false);
+        this.rtMethodInfoType = this.assemblyBuilder.GetSystemTypeRef(nameof(Runtime.MethodInfo), false);
+        this.rtFunctionInfoType = this.assemblyBuilder.GetSystemTypeRef(nameof(Runtime.FunctionInfo), false);
+        
+        this.cache.Add(IR.IType.String, this.rtStringType);
     }
 
-    public TypeReference BuildTypeRef(IType type) {
+    public TypeReference BuildTypeRef(IR.IType type) {
         if (this.cache.TryGetValue(type, out var typeRef)) {
             return typeRef;
         }
@@ -77,29 +83,29 @@ public class TypeBuilder {
         var typeSystem = this.assemblyBuilder.TypeSystem;
 
         typeRef = type switch {
-            NothingType => typeSystem.Void,
-            BoolType => typeSystem.Boolean,
-            U8Type => typeSystem.Byte,
-            I8Type => typeSystem.SByte,
-            U16Type => typeSystem.UInt16,
-            I16Type => typeSystem.Int16,
-            U32Type => typeSystem.UInt32,
-            I32Type => typeSystem.Int32,
-            U64Type => typeSystem.UInt64,
-            I64Type => typeSystem.Int64,
-            USizeType => typeSystem.UIntPtr,
-            ISizeType => typeSystem.IntPtr,
-            F32Type => typeSystem.Single,
-            F64Type => typeSystem.Double,
-            ArrayType { Element: var element, Length: var length } => 
+            IR.NothingType => typeSystem.Void,
+            IR.BoolType => typeSystem.Boolean,
+            IR.U8Type => typeSystem.Byte,
+            IR.I8Type => typeSystem.SByte,
+            IR.U16Type => typeSystem.UInt16,
+            IR.I16Type => typeSystem.Int16,
+            IR.U32Type => typeSystem.UInt32,
+            IR.I32Type => typeSystem.Int32,
+            IR.U64Type => typeSystem.UInt64,
+            IR.I64Type => typeSystem.Int64,
+            IR.USizeType => typeSystem.UIntPtr,
+            IR.ISizeType => typeSystem.IntPtr,
+            IR.F32Type => typeSystem.Single,
+            IR.F64Type => typeSystem.Double,
+            IR.ArrayType { Element: var element, Length: var length } => 
                 this.BuildArrayTypeRef(element, length),
-            StructType(var id) => this.BuildStructTypeRef(id, isValueType: true),
-            VariantType(var id) => this.BuildStructTypeRef(id, isValueType: true),
-            FunctionType(var id) => this.BuildFunctionTypeRef(id),
-            FlagsType(var id, _) => this.BuildStructTypeRef(id, isValueType: true),
-            PointerType(var inner) => this.BuildPointerType(inner),
-            RcPointerType(var id) => this.BuildClassTypeRef(id),
-            RcWeakPointerType(var id) => this.BuildClassTypeRef(id),
+            IR.StructType(var id) => this.BuildStructTypeRef(id, isValueType: true),
+            IR.VariantType(var id) => this.BuildStructTypeRef(id, isValueType: true),
+            IR.FunctionType(var id) => this.BuildFunctionTypeRef(id),
+            IR.FlagsType(var id, _) => this.BuildStructTypeRef(id, isValueType: true),
+            IR.PointerType(var inner) => this.BuildPointerType(inner),
+            IR.RcPointerType(var id) => this.BuildClassTypeRef(id),
+            IR.RcWeakPointerType(var id) => this.BuildClassTypeRef(id),
             _ => throw new ArgumentException($"unhandled IR type: {type}"),
         };
 
@@ -107,7 +113,7 @@ public class TypeBuilder {
         return typeRef;
     }
 
-    private TypeReference BuildArrayTypeRef(IType element, ulong length) {
+    private TypeReference BuildArrayTypeRef(IR.IType element, ulong length) {
         var arraySig = new ArraySig(element, length);
 
         if (this.staticArrayTypes.TryGetValue(arraySig, out var arrayTypeRef)) {
@@ -119,7 +125,7 @@ public class TypeBuilder {
 
         var elementTypeRef = this.BuildTypeRef(element);
 
-        var systemTypesNamespace = typeof(SystemFunctions).Namespace;
+        var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
 
         var typeAttributes = TypeAttributes.NotPublic | TypeAttributes.Sealed;
         var typeDef = new TypeDefinition(systemTypesNamespace, typeName, typeAttributes, this.valueType);
@@ -137,48 +143,48 @@ public class TypeBuilder {
         return typeDef;
     }
 
-    private TypeReference BuildPointerType(IType inner) {
+    private TypeReference BuildPointerType(IR.IType inner) {
         var innerTypeRef = this.BuildTypeRef(inner);
         return innerTypeRef.MakePointerType();
     }
 
-    public static string GetTypeName(TypeDefID id) {
+    public static string GetTypeName(IR.TypeDefID id) {
         return string.Intern($"Struct_{id.ID}");
     }
 
-    private TypeReference BuildStructTypeRef(TypeDefID id, bool isValueType) {
+    private TypeReference BuildStructTypeRef(IR.TypeDefID id, bool isValueType) {
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
 
         return new TypeReference(ns, GetTypeName(id), module, module, isValueType);
     }
     
-    public static string GetTypeName(InterfaceID id) {
+    public static string GetTypeName(IR.InterfaceID id) {
         return string.Intern($"Struct_{id.ID}");
     }
 
-    private TypeReference BuildInterfaceTypeRef(InterfaceID id) {
+    private TypeReference BuildInterfaceTypeRef(IR.InterfaceID id) {
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
         return new TypeReference(ns, GetTypeName(id), module, module, valueType: false);
     }
 
-    private TypeReference BuildClassTypeRef(IVirtualTypeID id) {
+    private TypeReference BuildClassTypeRef(IR.IVirtualTypeID id) {
         return id switch {
-            AnyVirtualTypeID => this.assemblyBuilder.Module.TypeSystem.Object,
+            IR.AnyVirtualTypeID => this.assemblyBuilder.Module.TypeSystem.Object,
             // in this backend, struct refs are automatically reference types if they're a class
-            ClassVirtualTypeID(var classID) => this.BuildStructTypeRef(classID, false),
-            InterfaceVirtualTypeID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
-            ClosureVirtualTypeID(var closureID) => this.BuildStructTypeRef(closureID, false),
+            IR.ClassVirtualTypeID(var classID) => this.BuildStructTypeRef(classID, false),
+            IR.InterfaceVirtualTypeID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
+            IR.ClosureVirtualTypeID(var closureID) => this.BuildStructTypeRef(closureID, false),
             _ => throw new ArgumentException($"invalid virtual type ID: {id}"),
         };
     }
 
-    public static string GetFunctionTypeName(TypeDefID id) {
+    public static string GetFunctionTypeName(IR.TypeDefID id) {
         return string.Intern($"Delegate_{id.ID}");
     }
     
-    private TypeReference BuildFunctionTypeRef(TypeDefID id) {
+    private TypeReference BuildFunctionTypeRef(IR.TypeDefID id) {
         if (!this.funcPointerTypes.TryGetValue(id, out var typeRef)) {
             throw new InvalidOperationException("function pointer types must be populated before any types that reference them");
         }
@@ -186,12 +192,12 @@ public class TypeBuilder {
         return typeRef;
     }
 
-    public static string GetFieldName(FieldID id) {
+    public static string GetFieldName(IR.FieldID id) {
         return string.Intern($"Field_{id.ID}");
     }
 
-    public void BuildStructDef(TypeDefID id, StructDef structDef) {
-        var isClass = structDef.Identity is ClassStructIdentity or DynArrayStructIdentity;
+    public void BuildStructDef(IR.TypeDefID id, IR.StructDef structDef) {
+        var isClass = structDef.Identity is IR.ClassStructIdentity or IR.DynArrayStructIdentity;
         
         var typeRef = this.BuildStructTypeRef(id, !isClass);
 
@@ -208,7 +214,7 @@ public class TypeBuilder {
         
         Debug.Assert(isClass != typeDef.IsValueType);
 
-        var fieldRefs = new Dictionary<FieldID, FieldReference>();
+        var fieldRefs = new Dictionary<IR.FieldID, FieldReference>();
 
         // TODO: assumes packing works the same as other targets.
         // TODO: we shouldn't calculate a size for class types, they should be unsized
@@ -255,7 +261,7 @@ public class TypeBuilder {
         this.assemblyBuilder.Module.Types.Add(typeDef);
     }
 
-    public void BuildVariantDef(TypeDefID id, VariantDef def) {
+    public void BuildVariantDef(IR.TypeDefID id, IR.VariantDef def) {
         var typeRef = this.BuildStructTypeRef(id, isValueType: false);
 
         var typeDef = new TypeDefinition(typeRef.Namespace,
@@ -264,7 +270,7 @@ public class TypeBuilder {
             this.valueType
         );
 
-        var discTypeRef = this.BuildTypeRef(new I32Type());
+        var discTypeRef = this.BuildTypeRef(new IR.I32Type());
         var discField = new FieldDefinition(VariantDiscriminatorName, FieldAttributes.Assembly, discTypeRef) {
             Offset = 0,
         };
@@ -278,7 +284,7 @@ public class TypeBuilder {
         var caseTypeRefs = new TypeReference?[def.Cases.Count];
         for (var i = 0; i < def.Cases.Count; i += 1) {
             var dataType = def.Cases[i].Type;
-            if (dataType is null or NothingType) {
+            if (dataType is null or IR.NothingType) {
                 continue;
             }
             
@@ -333,7 +339,7 @@ public class TypeBuilder {
         };
     }
 
-    public void BuildFunctionTypeDef(TypeDefID id, FunctionSig sig) {
+    public void BuildFunctionTypeDef(IR.TypeDefID id, IR.FunctionSig sig) {
         var pointerType = new FunctionPointerType {
             ReturnType = this.BuildTypeRef(sig.ReturnType),
         };
@@ -346,7 +352,7 @@ public class TypeBuilder {
         this.funcPointerTypes.Add(id, pointerType);
     }
 
-    public void BuildInterfaceDef(InterfaceID id, InterfaceDef def) {
+    public void BuildInterfaceDef(IR.InterfaceID id, IR.InterfaceDef def) {
         // throw new NotImplementedException();
     }
 
@@ -373,10 +379,10 @@ public class TypeBuilder {
         typeDef.Methods.Add(methodDef);
     }
 
-    public FieldReference GetFieldRef(IType baseType, FieldID fieldID) {
+    public FieldReference GetFieldRef(IR.IType baseType, IR.FieldID fieldID) {
         var structID = baseType switch {
-            StructType(var id) => id,
-            RcPointerType(ClassVirtualTypeID(var id)) => id,
+            IR.StructType(var id) => id,
+            IR.RcPointerType(IR.ClassVirtualTypeID(var id)) => id,
 
             _ => throw new ArgumentException($"type {baseType} does not have struct fields"),
         };
@@ -389,9 +395,9 @@ public class TypeBuilder {
         return fieldRef;
     }
     
-    public FieldReference GetVariantDiscriminatorFieldRef(IType baseType) {
+    public FieldReference GetVariantDiscriminatorFieldRef(IR.IType baseType) {
         var structID = baseType switch {
-            VariantType(var id) => id,
+            IR.VariantType(var id) => id,
 
             _ => throw new ArgumentException($"type {baseType} is not a variant type"),
         };
@@ -403,9 +409,9 @@ public class TypeBuilder {
         return variantRefs.DiscriminatorFieldRef;
     }
     
-    public FieldReference GetVariantDataFieldRef(IType baseType, ulong tag) {
+    public FieldReference GetVariantDataFieldRef(IR.IType baseType, ulong tag) {
         var structID = baseType switch {
-            VariantType(var id) => id,
+            IR.VariantType(var id) => id,
 
             _ => throw new ArgumentException($"type {baseType} is not a variant type"),
         };

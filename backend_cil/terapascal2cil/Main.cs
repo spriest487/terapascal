@@ -21,43 +21,11 @@ await using (var input = OpenInputStream(parsedArgs.LibPath)) {
 var assemblyName = parsedArgs.AssemblyName;
 var assemblyVersion = parsedArgs.Version ?? new Version(1, 0, 0, 0);
 
-var assemblyBuilder = await TerapascalAssemblyBuilder.Create(assemblyName, assemblyVersion);
+var refLibPath = await SDKUtils.FindReferenceLibPath();
 
-assemblyBuilder.BuildGlobals(library);
+var assemblyBuilder = new AssemblyBuilder(assemblyName, assemblyVersion, refLibPath);
 
-var typeBuilder = new TypeBuilder(assemblyBuilder);
-var funcBuilder = new FunctionBuilder(typeBuilder, assemblyBuilder);
-
-foreach (var (id, typeDecl) in library.Metadata.TypeDecls) {
-    switch (typeDecl) {
-        case IR.DefTypeDecl { Def: var def }: {
-            switch (def) {
-                case IR.StructTypeDef { Def: var structDef }: {
-                    typeBuilder.BuildStructDef(id, structDef);
-                    break;
-                }
-                case IR.VariantTypeDef { Def: var variantDef }: {
-                    typeBuilder.BuildVariantDef(id, variantDef);
-                    break;
-                }
-                case IR.FunctionTypeDef { Sig: var sig }: {
-                    typeBuilder.BuildFunctionTypeDef(id, sig);
-                    break;
-                }
-            }
-
-            break;
-        }
-    }
-}
-
-foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
-    if (ifaceDecl is IR.DefInterfaceDecl(var def)) {
-        typeBuilder.BuildInterfaceDef(id, def);
-    }
-}
-
-funcBuilder.BuildFunctions(library);
+assemblyBuilder.BuildLibrary(library);
 
 // remove any remaining refs to private libs that aren't explicitly referenced
 // var assemblyRefs = assembly.MainModule.AssemblyReferences;

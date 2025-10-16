@@ -1,20 +1,15 @@
-﻿using Mono.Cecil;
-using Terapascal.Runtime;
+﻿using System.Diagnostics;
+using Mono.Cecil;
 
 namespace Terapascal.CIL;
 
 public class FunctionBuilder {
     
-    private readonly TerapascalAssemblyBuilder assemblyBuilder;
-    private readonly TypeBuilder typeBuilder;
+    private readonly AssemblyBuilder assemblyBuilder;
 
     private readonly Dictionary<IR.FunctionID, MethodReference> functionMethods;
 
-    public FunctionBuilder(
-        TypeBuilder typeBuilder,
-        TerapascalAssemblyBuilder assemblyBuilder
-    ) {
-        this.typeBuilder = typeBuilder;
+    public FunctionBuilder(AssemblyBuilder assemblyBuilder) {
         this.assemblyBuilder = assemblyBuilder;
 
         this.functionMethods = new Dictionary<IR.FunctionID, MethodReference>();
@@ -43,7 +38,11 @@ public class FunctionBuilder {
         }
 
         foreach (var (method, def) in definedFuncs) {
-            this.BuildFunctionBody(lib, method, def);
+            try {
+                this.BuildFunctionBody(lib, method, def);
+            } catch (Exception e) {
+                Console.Error.WriteLine($"Failed to build function body of {method.Name}: {e}");
+            }
         }
     }
 
@@ -58,7 +57,7 @@ public class FunctionBuilder {
     }
 
     private void BuildFunctionBody(IR.Library lib, MethodDefinition method, IR.FunctionDef def) {
-        var builder = new InstructionBuilder(lib, this.assemblyBuilder, method, this.typeBuilder, this);
+        var builder = new InstructionBuilder(this.assemblyBuilder, lib, method);
         builder.BeginFunction(def);
         builder.AddInstructions(def.Body);
         builder.Return();

@@ -4,13 +4,16 @@ using Mono.Cecil.Rocks;
 
 namespace Terapascal.CIL;
 
-public class TerapascalAssemblyBuilder {
+public class AssemblyBuilder {
     public const string GlobalsClassName = "Globals";
 
-    public required AssemblyDefinition CoreLibrary { get; init; }
-    public required AssemblyDefinition StandardLibrary { get; init; }
-    public required AssemblyDefinition RuntimeLibrary { get; init; }
-    public required AssemblyDefinition Assembly { get; init; }
+    public AssemblyDefinition CoreLibrary { get; }
+    public AssemblyDefinition StandardLibrary { get; }
+    public AssemblyDefinition RuntimeLibrary { get; }
+    public AssemblyDefinition Assembly { get; }
+    
+    public TypeBuilder TypeBuilder { get; }
+    public FunctionBuilder FunctionBuilder { get; }
 
     public ModuleDefinition Module => this.Assembly.MainModule;
     public TypeSystem TypeSystem => this.Assembly.MainModule.TypeSystem;
@@ -18,10 +21,14 @@ public class TerapascalAssemblyBuilder {
     private TypeDefinition? globalsClass;
     private TypeDefinition? systemFuncsClass;
 
-    private Dictionary<IR.StringID, FieldDefinition> stringLitFields = new Dictionary<IR.StringID, FieldDefinition>();
+    private readonly Dictionary<IR.StringID, FieldDefinition> stringLitFields =
+        new Dictionary<IR.StringID, FieldDefinition>();
 
-    public static async Task<TerapascalAssemblyBuilder> Create(string assemblyName, Version assemblyVersion) {
-        var assembly = AssemblyDefinition.CreateAssembly(
+    private readonly Dictionary<IR.VariableID, FieldDefinition> globalVarFields =
+        new Dictionary<IR.VariableID, FieldDefinition>();
+
+    public AssemblyBuilder(string assemblyName, Version assemblyVersion, string refLibPath) {
+        this.Assembly = AssemblyDefinition.CreateAssembly(
             new AssemblyNameDefinition(assemblyName, assemblyVersion),
             assemblyName,
             new ModuleParameters {
@@ -29,21 +36,16 @@ public class TerapascalAssemblyBuilder {
                 Runtime = TargetRuntime.Net_2_0,
             });
 
-        var refLibPath = await SDKUtils.FindReferenceLibPath();
-        var mscorlib = AssemblyDefinition.ReadAssembly(Path.Join(refLibPath, "mscorlib.dll"));
-        var netstandard = AssemblyDefinition.ReadAssembly(Path.Join(refLibPath, "netstandard.dll"));
+        this.CoreLibrary = AssemblyDefinition.ReadAssembly(Path.Join(refLibPath, "mscorlib.dll"));
+        this.StandardLibrary = AssemblyDefinition.ReadAssembly(Path.Join(refLibPath, "netstandard.dll"));
 
-        assembly.MainModule.AssemblyReferences.Add(mscorlib.Name);
-        assembly.MainModule.AssemblyReferences.Add(netstandard.Name);
+        this.Assembly.MainModule.AssemblyReferences.Add(this.CoreLibrary.Name);
+        this.Assembly.MainModule.AssemblyReferences.Add(this.StandardLibrary.Name);
 
-        var rtLib = AssemblyDefinition.ReadAssembly("Terapascal.Runtime.dll");
+        this.RuntimeLibrary = AssemblyDefinition.ReadAssembly("Terapascal.Runtime.dll");
 
-        return new TerapascalAssemblyBuilder {
-            Assembly = assembly,
-            CoreLibrary = mscorlib,
-            StandardLibrary = netstandard,
-            RuntimeLibrary = rtLib,
-        };
+        this.TypeBuilder = new TypeBuilder(this);
+        this.FunctionBuilder = new FunctionBuilder(this);
     }
 
     public TypeDefinition GetGlobalsClass() {
@@ -120,8 +122,12 @@ public class TerapascalAssemblyBuilder {
     public FieldReference GetStringLiteralRef(IR.StringID id) {
         return this.stringLitFields[id];
     }
+    
+    public FieldReference GetGlobalVariableRef(IR.VariableID id) {
+        return this.globalVarFields[id];
+    }
 
-    public void BuildGlobals(IR.Library library) {
+    public void BuildLibrary(IR.Library library) {
         // TODO: native strings
         // we have to copy the string literals into pascal strings for now
 
@@ -131,19 +137,61 @@ public class TerapascalAssemblyBuilder {
         var createStringMethod = this.FindRuntimeMethod(nameof(Runtime.SystemFunctions.CreateString));
 
         var globalsInit = this.GetGlobalsCCtor().Body.GetILProcessor();
-        
+
         foreach (var (id, stringLit) in library.Metadata.StringLiterals) {
-            var attrs = FieldAttributes.Assembly | FieldAttributes.InitOnly | FieldAttributes.Static;
-            var field = new FieldDefinition($"String_{id.ID}", attrs, stringTypeRef);
+            var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.InitOnly | FieldAttributes.Static;
+            var fieldDef = new FieldDefinition($"String_{id.ID}", fieldAttrs, stringTypeRef);
 
-            globals.Fields.Add(field);
+            globals.Fields.Add(fieldDef);
 
-            this.stringLitFields.Add(id, field);
+            this.stringLitFields.Add(id, fieldDef);
             
             globalsInit.Emit(OpCodes.Ldstr, stringLit);
             globalsInit.Emit(OpCodes.Call, createStringMethod);
-            globalsInit.Emit(OpCodes.Stsfld, field);
+            globalsInit.Emit(OpCodes.Stsfld, fieldDef);
         }
+
+        foreach (var (id, varType) in library.Variables) {
+            var typeRef = this.TypeBuilder.BuildTypeRef(varType);
+            
+            var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
+            var fieldDef = new FieldDefinition($"Variable_{id.ID}", fieldAttrs, typeRef);
+            
+            globals.Fields.Add(fieldDef);
+            
+            this.globalVarFields.Add(id, fieldDef);
+        }
+        
+        foreach (var (id, typeDecl) in library.Metadata.TypeDecls) {
+            switch (typeDecl) {
+                case IR.DefTypeDecl { Def: var def }: {
+                    switch (def) {
+                        case IR.StructTypeDef { Def: var structDef }: {
+                            this.TypeBuilder.BuildStructDef(id, structDef);
+                            break;
+                        }
+                        case IR.VariantTypeDef { Def: var variantDef }: {
+                            this.TypeBuilder.BuildVariantDef(id, variantDef);
+                            break;
+                        }
+                        case IR.FunctionTypeDef { Sig: var sig }: {
+                            this.TypeBuilder.BuildFunctionTypeDef(id, sig);
+                            break;
+                        }
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
+            if (ifaceDecl is IR.DefInterfaceDecl(var def)) {
+                this.TypeBuilder.BuildInterfaceDef(id, def);
+            }
+        }
+
+        this.FunctionBuilder.BuildFunctions(library);
     }
 
     public void Finish() {
