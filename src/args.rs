@@ -22,6 +22,10 @@ pub struct Args {
     #[structopt(long="mode", short="m", default_value = "default", parse(try_from_str = parse_lang_mode))]
     pub lang_mode: LanguageMode,
 
+    /// if false, runtime type information objects will not be generated
+    #[structopt(long="rtti", default_value = "true", parse(try_from_str = parse_bool))]
+    pub rtti: bool,
+
     /// additional units to compile
     #[structopt(long = "units", short = "u")]
     pub units: Vec<PathBuf>,
@@ -80,5 +84,13 @@ fn parse_lang_mode(s: &str) -> Result<LanguageMode, String> {
         "fpc" | "FPC" => Ok(LanguageMode::Fpc),
         "default" | "Default" => Ok(LanguageMode::Default),
         _ => Err(format!("invalid language mode: {}", s)),
+    }
+}
+
+fn parse_bool(s: &str) -> Result<bool, String> {
+    match s {
+        "true" | "on" => Ok(true),
+        "false" | "off" => Ok(false),
+        _ => Err(format!("invalid boolean value: {s}")),
     }
 }

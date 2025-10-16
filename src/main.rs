@@ -50,9 +50,20 @@ fn compile(args: &Args) -> Result<(), RunError> {
     let mut compile_opts = CompileOpts::default();
     compile_opts.verbose = args.verbose;
     compile_opts.lang_mode = args.lang_mode;
+    
+    if args.rtti {
+        compile_opts.define("RTTI");
+    }
+    
+    if args.debug {
+        compile_opts.define("DEBUG");
+    }
+    
+    compile_opts.define(env::consts::OS.to_ascii_uppercase());
 
     let codegen_opts = CodegenOpts {
         debug: args.debug,
+        rtti: args.rtti,
     };
 
     for define_sym in &args.define_syms {
@@ -249,7 +260,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
 
 fn translate_c(module: &ir::Library, args: &Args) -> c::Unit {
     let c_opts = backend_c::Options {
-        enable_rtti: true,
+        enable_rtti: args.rtti,
         trace_heap: args.trace_heap,
         trace_rc: args.trace_rc,
         trace_ir: args.trace_ir,

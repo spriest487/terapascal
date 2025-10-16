@@ -91,6 +91,7 @@ type
         function ToString: String;
     end;
 
+{$IFDEF RTTI}
     TagCollection = record
     private
         tags: array of Object;
@@ -166,6 +167,7 @@ type
         class function Find(typeName: String): Option[TypeInfo]; 
         class function Get(object: Object): TypeInfo;
     end;
+{$ENDIF}
 
 function GetMem(count: Int32): ^Byte; external 'rt';
 function FreeMem(mem: ^Byte); external 'rt';
@@ -240,6 +242,8 @@ const
 
 implementation
 
+{$IFDEF RTTI}
+
 function InvokeMethod(
     method: MethodInfo; 
     instance: Pointer; 
@@ -255,8 +259,12 @@ function InvokeFunction(
     resultOut: Pointer;
 ); external 'rt';
 
+{$ENDIF}
+
 function ArrayLengthInternal(arr: Object): Int32; external 'rt';
 function ArraySetLengthInternal(arr: Object; len: Integer; defaultVal: Pointer): Object; external 'rt';
+
+{$IFDEF RTTI}
 
 function GetTypeInfoCount: Integer; external 'rt';
 function GetTypeInfoByIndex(typeIndex: Integer): TypeInfo; external 'rt';
@@ -455,6 +463,56 @@ begin
     FindTagsInArray[TTag](self.tags, typeinfo(TTag));
 end;
 
+class function TypeInfo.Get(obj: Object): TypeInfo;
+begin
+    GetObjectTypeInfo(obj);
+end;
+
+function TypeInfo.Name: String;
+begin
+    self.name
+end;
+
+function TypeInfo.Methods: array of MethodInfo;
+begin
+    self.methods
+end;
+
+function TypeInfo.FindMethod(methodName: String): Option[MethodInfo];
+begin
+    for var method in self.methods do
+    begin
+        if method.Name.Compare(methodName) = 0 then
+            exit Option.Some(method);
+    end;
+    
+    Option.None
+end;
+
+function MethodInfo.Name: String;
+begin
+    self.name
+end;
+
+function MethodInfo.Owner: TypeInfo;
+begin
+    self.owner
+end;
+
+function MethodInfo.Invoke(instance: Pointer; args: array of Pointer; resultOut: Pointer);
+begin
+    var argsCount := args.Length;
+    var argsPtr: ^Pointer := if argsCount = 0 then nil else @args[0];
+    InvokeMethod(self, instance, argsPtr, argsCount, resultOut);
+end;
+
+function TagCollection.Sequence: ArraySequence[Object];
+begin
+    ArraySequence.Create(self.tags);
+end;
+
+{$ENDIF}
+
 function CreateArray[T](item: T; length: Integer): array of T;
 begin
     var arr: array of T := [];
@@ -487,7 +545,13 @@ function Option[T].Get: T;
 begin
     match self of
         Option.Some value: value;
-        else raise 'cannot get value of ' + typeinfo(Option[T]).Name + '.None';
+        
+        else raise 'cannot get value of ' + 
+{$IFDEF RTTI}
+            typeinfo(Option[T]).Name + '.None';
+{$ELSE}
+            'Option.None';
+{$ENDIF}
     end;
 end;
 
@@ -503,7 +567,12 @@ function Result[T, E].Get: T;
 begin
     match self of
         Result.Ok value: value;
-        else raise 'cannot get value of ' + typeinfo(Result[T, E]).Name + '.Error';
+        else raise 'cannot get value of ' + 
+{$IFDEF RTTI}
+            typeinfo(Result[T, E]).Name + '.Error';
+{$ELSE}
+            'Result.Error';
+{$ENDIF}
     end;
 end;
 
@@ -704,11 +773,6 @@ begin
     Option.Some(next);
 end;
 
-function TagCollection.Sequence: ArraySequence[Object];
-begin
-    ArraySequence.Create(self.tags);
-end;
-
 function CharSequence.Next: Option[Byte];
 begin
     if self.pos >= self.string.Length then
@@ -893,44 +957,6 @@ begin
     self.chars[at]
 end;
 
-function TypeInfo.Name: String;
-begin
-    self.name
-end;
-
-function TypeInfo.Methods: array of MethodInfo;
-begin
-    self.methods
-end;
-
-function TypeInfo.FindMethod(methodName: String): Option[MethodInfo];
-begin
-    for var method in self.methods do
-    begin
-        if method.Name.Compare(methodName) = 0 then
-            exit Option.Some(method);
-    end;
-    
-    Option.None
-end;
-
-function MethodInfo.Name: String;
-begin
-    self.name
-end;
-
-function MethodInfo.Owner: TypeInfo;
-begin
-    self.owner
-end;
-
-function MethodInfo.Invoke(instance: Pointer; args: array of Pointer; resultOut: Pointer);
-begin
-    var argsCount := args.Length;
-    var argsPtr: ^Pointer := if argsCount = 0 then nil else @args[0];
-    InvokeMethod(self, instance, argsPtr, argsCount, resultOut);
-end;
-
 function Int8.ToString: String;
 begin
     Int8ToStr(self)
@@ -1064,11 +1090,6 @@ begin
         Option.Some(target) 
     else 
         Option.None; 
-end;
-
-class function TypeInfo.Get(obj: Object): TypeInfo;
-begin
-    GetObjectTypeInfo(obj);
 end;
 
 end.

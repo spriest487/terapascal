@@ -321,8 +321,8 @@ impl CompileOpts {
         self.pp_symbols.contains(pp_symbol)
     }
 
-    pub fn define(&mut self, pp_symbol: String) {
-        self.pp_symbols.insert(pp_symbol);
+    pub fn define(&mut self, pp_symbol: impl Into<String>) {
+        self.pp_symbols.insert(pp_symbol.into());
     }
 
     pub fn undef(&mut self, sym: &str) -> bool {

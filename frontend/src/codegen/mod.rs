@@ -18,17 +18,20 @@ use crate::codegen::stmt::*;
 use crate::ir;
 use crate::typ as typ;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct CodegenOpts {
     // insert source spans for statements and expressions for improved error messaging in the
     // translation/vm stage
     pub debug: bool,
+    
+    pub rtti: bool,
 }
 
 impl Default for CodegenOpts {
     fn default() -> Self {
         Self {
             debug: true,
+            rtti: true,
         }
     }
 }
@@ -37,10 +40,13 @@ pub fn gen_lib(module: &typ::Module, opts: CodegenOpts) -> ir::Library {
     let mut lib = LibraryBuilder::new(module.root_ctx.as_ref(), [], opts);
 
     translate_builtin_class(&module, &mut lib, &typ::builtin_string_name(), ir::STRING_ID);
-    translate_builtin_class(&module, &mut lib, &typ::builtin_typeinfo_name(), ir::TYPEINFO_ID);
-    translate_builtin_class(&module, &mut lib, &typ::builtin_methodinfo_name(), ir::METHODINFO_ID);
-    translate_builtin_class(&module, &mut lib, &typ::builtin_funcinfo_name(), ir::FUNCINFO_ID);
 
+    if opts.rtti {
+        translate_builtin_class(&module, &mut lib, &typ::builtin_typeinfo_name(), ir::TYPEINFO_ID);
+        translate_builtin_class(&module, &mut lib, &typ::builtin_methodinfo_name(), ir::METHODINFO_ID);
+        translate_builtin_class(&module, &mut lib, &typ::builtin_funcinfo_name(), ir::FUNCINFO_ID);
+    }
+        
     for unit in &module.units {
         lib.translate_unit(&unit.unit);
     }

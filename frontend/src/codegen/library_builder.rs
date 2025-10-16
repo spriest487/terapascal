@@ -95,12 +95,19 @@ pub struct LibraryBuilder<'a> {
     metadata: ir::MetadataBuilder,
 }
 
+#[derive(Clone, Debug)]
+struct BuiltinClassInfo {
+    name: typ::Symbol,
+    id: ir::TypeDefID,
+    rtti: bool,
+}
+
 thread_local! {
-    pub static BUILTIN_CLASS_NAMES: [(typ::Symbol, ir::TypeDefID); 4] = [
-        (builtin_string_name(), ir::STRING_ID),
-        (builtin_typeinfo_name(), ir::TYPEINFO_ID),
-        (builtin_methodinfo_name(), ir::METHODINFO_ID),
-        (builtin_funcinfo_name(), ir::FUNCINFO_ID),
+    pub static BUILTIN_CLASS_INFO: [BuiltinClassInfo; 4] = [
+        BuiltinClassInfo { name: builtin_string_name(), id: ir::STRING_ID, rtti: false },
+        BuiltinClassInfo { name: builtin_typeinfo_name(), id: ir::TYPEINFO_ID, rtti: true },
+        BuiltinClassInfo { name: builtin_methodinfo_name(), id: ir::METHODINFO_ID, rtti: true },
+        BuiltinClassInfo { name: builtin_funcinfo_name(), id: ir::FUNCINFO_ID, rtti: true },
     ];
 }
 
@@ -110,22 +117,26 @@ impl<'a> LibraryBuilder<'a> {
         metadata_refs: impl IntoIterator<Item=Arc<ir::Metadata>>,
         opts: CodegenOpts
     ) -> Self {
-        let builtin_classes = BUILTIN_CLASS_NAMES.with(|names| names.to_vec());
+        let builtin_classes = BUILTIN_CLASS_INFO.with(|class_infos| class_infos.to_vec());
 
         let mut metadata = ir::MetadataBuilder::with_refs(metadata_refs);
 
-        for (_, builtin_class_id) in &builtin_classes {
-            metadata.reserve_type(*builtin_class_id);
+        for class_info in &builtin_classes {
+            metadata.reserve_type(class_info.id);
         }
-        
-        let cached_types = builtin_classes
-            .iter()
-            .map(|(name, id)| (ir::Type::class_ptr(*id), typ::Type::class(name.clone())))
-            .collect();
 
-        let type_cache = builtin_classes
-            .into_iter()
-            .map(|(name, id)| (typ::Type::class(name), ir::Type::class_ptr(id)))
+        let type_cache: LinkedHashMap<_, _> = builtin_classes
+            .iter()
+            .filter(|class_info| !class_info.rtti || opts.rtti)
+            .map(|class_info| (
+                typ::Type::class(class_info.name.clone()), 
+                ir::Type::class_ptr(class_info.id)
+            ))
+            .collect();
+        
+        let cached_types = type_cache
+            .iter()
+            .map(|(src_ty, ty)| (ty.clone(), src_ty.clone()))
             .collect();
 
         let builder = LibraryBuilder {
@@ -186,10 +197,12 @@ impl<'a> LibraryBuilder<'a> {
         // builtin classes are added manually to the type cache but their methods (and therefore 
         // any destructors) are expected to be defined in code, so we need to find those in the
         // source if they exist
-        for (src_name, id) in BUILTIN_CLASS_NAMES.with(|names| names.to_vec()) {
-            if let Ok(def) = self.src_metadata.instantiate_struct_def(&src_name, StructKind::Class) {
-                let src_ty = typ::Type::class(src_name);
-                self.insert_type_dtor(id, src_ty, def.as_ref());
+        for class_info in BUILTIN_CLASS_INFO.with(|names| names.to_vec()) {
+            let class_name = &class_info.name;
+
+            if let Ok(def) = self.src_metadata.instantiate_struct_def(class_name, StructKind::Class) {
+                let src_ty = typ::Type::class(class_name.clone());
+                self.insert_type_dtor(class_info.id, src_ty, def.as_ref());
             }
         }
 
@@ -995,7 +1008,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 let id = self.metadata.new_type();
                 let ty = ir::Type::Variant(id);
-                
+
                 self.type_cache.insert(src_ty.clone(), ty.clone());
                 self.cached_types.insert(ty.clone(), src_ty.clone());
 
@@ -1660,6 +1673,7 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
         .expect("resource class of translated class type was not a struct");
 
     let resource_ty = ir::Type::Struct(resource_struct);
+
     lib.gen_runtime_type(&resource_ty);
     lib.gen_runtime_type(&class_ty);
 
