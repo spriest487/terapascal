@@ -151,8 +151,8 @@ static void System_FreeMem(unsigned char* mem);
 static void System_Write(STRING_STRUCT* str);
 static void System_WriteLn(STRING_STRUCT* str);
 static STRING_STRUCT* System_ReadLn(void);
-static int32_t System_ArrayLengthInternal(void* arr);
-static void* System_ArraySetLengthInternal(void* arr, int32_t new_len, void* default_val);
+static int32_t System_ArrayLengthInternal(struct Rc* arr);
+static void* System_ArraySetLengthInternal(struct Rc* arr, int32_t new_len, void* default_val);
 
 static int32_t System_RandomInteger(int32_t from, int32_t to);
 static float System_RandomSingle(float from, float to);

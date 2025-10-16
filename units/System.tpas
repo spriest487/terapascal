@@ -722,7 +722,7 @@ end;
 
 function Length[T](arr: array of T): Integer;
 unsafe begin
-    arr.ArrayLengthInternal
+    (arr as Object).ArrayLengthInternal
 end;
 
 function Unbox[T](b: Box[T]): T;
