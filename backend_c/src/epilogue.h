@@ -278,7 +278,7 @@ static STRING_STRUCT* System_ReadLn(void) {
     return str;
 }
 
-static int32_t System_ArrayLengthInternal(void* arr) {
+static int32_t System_ArrayLengthInternal(struct Rc* arr) {
     struct Rc* arr_rc = (struct Rc*) arr;
     if (!arr_rc || arr_rc->strong_count == 0) {
         fatal("called Length for an invalid array pointer");
@@ -290,7 +290,7 @@ static int32_t System_ArrayLengthInternal(void* arr) {
 }
 
 static void* System_ArraySetLengthInternal(
-    void* arr,
+    struct Rc* arr,
     int32_t new_len,
     void* default_val
 ) {

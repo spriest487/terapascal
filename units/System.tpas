@@ -255,7 +255,7 @@ function InvokeFunction(
     resultOut: Pointer;
 ); external 'rt';
 
-function ArrayLengthInternal(arr: Pointer): Int32; external 'rt';
+function ArrayLengthInternal(arr: Object): Int32; external 'rt';
 function ArraySetLengthInternal(arr: Object; len: Integer; defaultVal: Pointer): Object; external 'rt';
 
 function GetTypeInfoCount: Integer; external 'rt';
@@ -722,7 +722,7 @@ end;
 
 function Length[T](arr: array of T): Integer;
 unsafe begin
-    (arr as Pointer).ArrayLengthInternal
+    arr.ArrayLengthInternal
 end;
 
 function Unbox[T](b: Box[T]): T;

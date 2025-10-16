@@ -117,12 +117,12 @@ impl Unit {
             ]),
             ("ReadLn", BuiltinName::ReadLn, string_ty.clone(), vec![]),
             ("ArrayLengthInternal", BuiltinName::ArrayLengthInternal, Type::Int32, vec![
-                Type::Void.ptr()
+                Type::Rc.ptr(),
             ]),
             ("ArraySetLengthInternal", BuiltinName::ArraySetLengthInternal, Type::Void.ptr(), vec![
-                Type::Void.ptr(), 
+                Type::Rc.ptr(), 
                 Type::Int32, 
-                Type::Void.ptr()
+                Type::Void.ptr(),
             ]),
             
             ("FindTypeInfo", BuiltinName::FindTypeInfo, typeinfo_ty.clone(), vec![string_ty.clone()]),
