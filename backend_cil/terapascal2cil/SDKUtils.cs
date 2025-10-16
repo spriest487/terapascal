@@ -5,7 +5,7 @@ using Mono.Cecil;
 namespace Terapascal.CIL;
 
 public static class SDKUtils {
-    public static async Task<string> FindLibPath() {
+    public static async Task<string> FindReferenceLibPath() {
         var dotnetCommand = Process.Start(new ProcessStartInfo {
             FileName = "dotnet",
             Arguments = "--list-sdks",

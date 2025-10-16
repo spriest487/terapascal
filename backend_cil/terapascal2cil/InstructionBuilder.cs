@@ -20,7 +20,7 @@ public class InstructionBuilder {
 
     private readonly IR.Library library;
 
-    private readonly ModuleDefinition module;
+    private readonly TerapascalAssemblyBuilder assemblyBuilder;
 
     private readonly MethodDefinition method;
     private readonly TypeBuilder typeBuilder;
@@ -39,13 +39,13 @@ public class InstructionBuilder {
 
     public InstructionBuilder(
         IR.Library library,
-        ModuleDefinition module,
+        TerapascalAssemblyBuilder assemblyBuilder,
         MethodDefinition method,
         TypeBuilder typeBuilder,
         FunctionBuilder functionBuilder
     ) {
         this.library = library;
-        this.module = module;
+        this.assemblyBuilder = assemblyBuilder;
         this.method = method;
         this.typeBuilder = typeBuilder;
         this.functionBuilder = functionBuilder;

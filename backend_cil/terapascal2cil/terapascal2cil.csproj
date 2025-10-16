@@ -4,20 +4,20 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <OutputType>Exe</OutputType>
     <LangVersion>14</LangVersion>
     <AssemblyVersion>0.1.0</AssemblyVersion>
     <FileVersion>0.1.0</FileVersion>
     <RootNamespace>Terapascal.CIL</RootNamespace>
     <Company>spriest487</Company>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
-    <OutputPath>..\..\target\debug\terapascal2cil</OutputPath>
+    <OutputPath>..\..\target\debug\cil</OutputPath>
   </PropertyGroup>
 
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
-    <OutputPath>..\..\target\release\terapascal2cil</OutputPath>
+    <OutputPath>..\..\target\release\cil</OutputPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -30,6 +30,10 @@
     </PackageReference>
     <PackageReference Include="Mono.Cecil" Version="0.11.6" />
     <PackageReference Include="Newtonsoft.Json.Bson" Version="1.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\rt\Terapascal.Runtime.csproj" />
   </ItemGroup>
 
 </Project>

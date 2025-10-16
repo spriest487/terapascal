@@ -6,13 +6,14 @@ public unsafe class String {
 }
 
 public class TypeInfo {
-    
 }
 
 public class MethodInfo {
-    
 }
 
 public class FunctionInfo {
-    
+}
+
+public abstract class ArrayBase {
+    internal int len;
 }

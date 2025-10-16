@@ -2,7 +2,6 @@
 using MessagePack.Resolvers;
 using Terapascal.CIL;
 using IR = Terapascal.IR;
-using Mono.Cecil;
 
 if (!Args.Parse(args, out var parsedArgs)) {
     return 1;
@@ -22,23 +21,10 @@ await using (var input = OpenInputStream(parsedArgs.LibPath)) {
 var assemblyName = parsedArgs.AssemblyName;
 var assemblyVersion = parsedArgs.Version ?? new Version(1, 0, 0, 0);
 
-var assembly = AssemblyDefinition.CreateAssembly(
-    new AssemblyNameDefinition(assemblyName, assemblyVersion),
-    assemblyName, 
-    new ModuleParameters {
-        Kind = ModuleKind.Dll,
-        Runtime = TargetRuntime.Net_2_0,
-    });
+var assemblyBuilder = await TerapascalAssemblyBuilder.Create(assemblyName, assemblyVersion);
 
-var libPath = await SDKUtils.FindLibPath();
-var mscorlib = AssemblyDefinition.ReadAssembly(Path.Join(libPath, "mscorlib.dll"));
-var netstandard = AssemblyDefinition.ReadAssembly(Path.Join(libPath, "netstandard.dll"));
-
-assembly.MainModule.AssemblyReferences.Add(mscorlib.Name);
-assembly.MainModule.AssemblyReferences.Add(netstandard.Name);
-
-var typeBuilder = new TypeBuilder(mscorlib, netstandard, assembly.MainModule);
-var funcBuilder = new FunctionBuilder(library, typeBuilder, assembly.MainModule);
+var typeBuilder = new TypeBuilder(assemblyBuilder);
+var funcBuilder = new FunctionBuilder(library, typeBuilder, assemblyBuilder);
 
 foreach (var (id, typeDecl) in library.Metadata.TypeDecls) {
     switch (typeDecl) {
@@ -84,7 +70,7 @@ foreach (var (id, function) in library.Functions) {
 // }
 
 await using (var output = File.Create(parsedArgs.OutputPath)) {
-    assembly.Write(output);
+    assemblyBuilder.Assembly.Write(output);
 }
 
 return 0;

@@ -173,7 +173,11 @@ public static class SystemFunctions {
         throw new NotImplementedException();
     }
 
-    public static unsafe int ArrayLengthInternal(object array) {
-        
+    public static int ArrayLengthInternal(object array) {
+        return ((ArrayBase)array).len;
+    }
+    
+    public static unsafe object ArraySetLengthInternal(object array, int len, void* defaultVal) {
+        throw new NotImplementedException();
     }
 }

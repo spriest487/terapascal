@@ -6,15 +6,15 @@ public class FunctionBuilder {
     public const string FunctionsClassName = "Functions";
     
     private readonly IR.Library library;
-    private readonly ModuleDefinition module;
+    private readonly TerapascalAssemblyBuilder assemblyBuilder;
     private readonly TypeBuilder typeBuilder;
 
     private TypeDefinition? functionsClass;
 
-    public FunctionBuilder(IR.Library library, TypeBuilder typeBuilder, ModuleDefinition module) {
+    public FunctionBuilder(IR.Library library, TypeBuilder typeBuilder, TerapascalAssemblyBuilder assemblyBuilder) {
         this.library = library;
         this.typeBuilder = typeBuilder;
-        this.module = module;
+        this.assemblyBuilder = assemblyBuilder;
     }
 
     public TypeDefinition GetFreeFunctionClass() {
@@ -22,7 +22,7 @@ public class FunctionBuilder {
             return this.functionsClass;
         }
 
-        var objectType = this.module.TypeSystem.Object;
+        var objectType = this.assemblyBuilder.Module.TypeSystem.Object;
         this.functionsClass = new TypeDefinition(
             "", 
             FunctionsClassName,
@@ -30,7 +30,7 @@ public class FunctionBuilder {
             objectType
         );
 
-        this.module.Types.Add(this.functionsClass);
+        this.assemblyBuilder.Module.Types.Add(this.functionsClass);
 
         return this.functionsClass;
     }
@@ -40,9 +40,9 @@ public class FunctionBuilder {
 
         var attrs = MethodAttributes.Static | MethodAttributes.Private;
 
-        var method = new MethodDefinition(FunctionMethodName(id), attrs, this.module.TypeSystem.Void);
+        var method = new MethodDefinition(FunctionMethodName(id), attrs, this.assemblyBuilder.TypeSystem.Void);
 
-        var builder = new InstructionBuilder(this.library, this.module, method, this.typeBuilder, this);
+        var builder = new InstructionBuilder(this.library, this.assemblyBuilder, method, this.typeBuilder, this);
         builder.BeginFunction(def);
         builder.AddInstructions(def.Body);
         builder.Return();
