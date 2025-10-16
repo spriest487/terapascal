@@ -23,8 +23,10 @@ var assemblyVersion = parsedArgs.Version ?? new Version(1, 0, 0, 0);
 
 var assemblyBuilder = await TerapascalAssemblyBuilder.Create(assemblyName, assemblyVersion);
 
+assemblyBuilder.BuildGlobals(library);
+
 var typeBuilder = new TypeBuilder(assemblyBuilder);
-var funcBuilder = new FunctionBuilder(library, typeBuilder, assemblyBuilder);
+var funcBuilder = new FunctionBuilder(typeBuilder, assemblyBuilder);
 
 foreach (var (id, typeDecl) in library.Metadata.TypeDecls) {
     switch (typeDecl) {
@@ -55,11 +57,7 @@ foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
     }
 }
 
-foreach (var (id, function) in library.Functions) {
-    if (function is IR.LocalFunction localFunc) {
-        funcBuilder.TranslateFunction(id, localFunc.Def);
-    }
-}
+funcBuilder.BuildFunctions(library);
 
 // remove any remaining refs to private libs that aren't explicitly referenced
 // var assemblyRefs = assembly.MainModule.AssemblyReferences;
@@ -69,8 +67,22 @@ foreach (var (id, function) in library.Functions) {
 //     }
 // }
 
-await using (var output = File.Create(parsedArgs.OutputPath)) {
+assemblyBuilder.Finish();
+
+var outputPath = Path.GetFullPath(parsedArgs.OutputPath);
+await using (var output = File.Create(outputPath)) {
     assemblyBuilder.Assembly.Write(output);
+}
+Console.WriteLine($"output assembly written to {outputPath}");
+
+// copy the runtime DLL next to the output file
+if (Path.GetDirectoryName(parsedArgs.OutputPath) is {} outputDir) {
+    var rtOutputPath = Path.Join(outputDir, assemblyBuilder.RuntimeLibrary.Name.Name + ".dll");
+    rtOutputPath = Path.GetFullPath(rtOutputPath);
+
+    assemblyBuilder.RuntimeLibrary.Write(rtOutputPath);
+    
+    Console.WriteLine($"RT assembly written to {rtOutputPath}");
 }
 
 return 0;

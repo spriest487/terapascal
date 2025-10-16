@@ -6,7 +6,7 @@ namespace Terapascal.Runtime;
 public static class SystemFunctions {
     private static readonly Random random = new Random();
     
-    private static unsafe string ReadString(String s) {
+    public static unsafe string ReadString(String s) {
         if (s.len == 0) {
             return "";
         }
@@ -14,7 +14,7 @@ public static class SystemFunctions {
         return Marshal.PtrToStringAnsi((IntPtr)s.chars, s.len);
     }
 
-    private static unsafe String CreateString(string s) {
+    public static unsafe String CreateString(string s) {
         var byteCount = Encoding.UTF8.GetByteCount(s);
         var bytes = GetMem(byteCount + 1);
 
@@ -46,47 +46,47 @@ public static class SystemFunctions {
         Console.Write(ReadString(message));
     }
 
-    public static String Int8ToString(sbyte i) {
+    public static String Int8ToStr(sbyte i) {
         return CreateString(i.ToString());
     }
 
-    public static String UInt8ToString(byte i) {
+    public static String UInt8ToStr(byte i) {
         return CreateString(i.ToString());
     }
 
-    public static String Int16ToString(short i) {
+    public static String Int16ToStr(short i) {
         return CreateString(i.ToString());
     }
 
-    public static String UInt16ToString(ushort i) {
+    public static String UInt16ToStr(ushort i) {
         return CreateString(i.ToString());
     }
 
-    public static String Int32ToString(int i) {
+    public static String Int32ToStr(int i) {
         return CreateString(i.ToString());
     }
 
-    public static String UInt32ToString(uint i) {
+    public static String UInt32ToStr(uint i) {
         return CreateString(i.ToString());
     }
 
-    public static String Int64ToString(long i) {
+    public static String Int64ToStr(long i) {
         return CreateString(i.ToString());
     }
 
-    public static String UInt64ToString(ulong i) {
+    public static String UInt64ToStr(ulong i) {
         return CreateString(i.ToString());
     }
 
-    public static String NativeIntToString(nint i) {
+    public static String NativeIntToStr(nint i) {
         return CreateString(i.ToString());
     }
 
-    public static String NativeUIntToString(nuint i) {
+    public static String NativeUIntToStr(nuint i) {
         return CreateString(i.ToString());
     }
 
-    public static unsafe String PointerToString(void* p) {
+    public static unsafe String PointerToStr(void* p) {
         return CreateString(Environment.Is64BitProcess ? $"0x{(ulong)p,16}" : $"0x{(ulong)p,8}");
     }
 
@@ -161,7 +161,7 @@ public static class SystemFunctions {
         int argCount,
         void* resultOut
     ) {
-        throw new NotImplementedException();
+        throw new NotImplementedException("RTTI");
     }
     
     public static unsafe void InvokeFunction(
@@ -170,14 +170,42 @@ public static class SystemFunctions {
         int argCount,
         void* resultOut
     ) {
-        throw new NotImplementedException();
+        throw new NotImplementedException("RTTI");
+    }
+    
+    public static int GetTypeInfoCount() {
+        throw new NotImplementedException("RTTI");
+    }
+    
+    public static int GetTypeInfoByIndex(int index) {
+        throw new NotImplementedException("RTTI");
+    }
+    
+    public static int FindTypeInfo(string typeName) {
+        throw new NotImplementedException("RTTI");
+    }
+    
+    public static TypeInfo GetObjectTypeInfo(object obj) {
+        throw new NotImplementedException("RTTI");
+    }
+
+    public static FunctionInfo FindFunctionInfo(string name) {
+        throw new NotImplementedException("RTTI");
+    }
+    
+    public static int GetFunctionInfoCount() {
+        throw new NotImplementedException("RTTI");
+    }
+    
+    public static int GetFunctionInfoByIndex(int index) {
+        throw new NotImplementedException("RTTI");
     }
 
     public static int ArrayLengthInternal(object array) {
-        return ((ArrayBase)array).len;
+        throw new NotImplementedException("dynamic arrays");
     }
     
     public static unsafe object ArraySetLengthInternal(object array, int len, void* defaultVal) {
-        throw new NotImplementedException();
+        throw new NotImplementedException("dynamic arrays");
     }
 }

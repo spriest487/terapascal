@@ -32,5 +32,6 @@ public readonly record struct VariantCase {
     }
 
     [Key("ty")]
+    [MessagePackFormatter(typeof(NullableTypeFormatter))]
     public required IType? Type { get; init; }
 }

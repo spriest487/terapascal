@@ -3,6 +3,7 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using Terapascal.IR;
+using Terapascal.Runtime;
 using ArrayType = Terapascal.IR.ArrayType;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodAttributes = Mono.Cecil.MethodAttributes;
@@ -118,8 +119,10 @@ public class TypeBuilder {
 
         var elementTypeRef = this.BuildTypeRef(element);
 
+        var systemTypesNamespace = typeof(SystemFunctions).Namespace;
+
         var typeAttributes = TypeAttributes.NotPublic | TypeAttributes.Sealed;
-        var typeDef = new TypeDefinition("", typeName, typeAttributes, this.valueType);
+        var typeDef = new TypeDefinition(systemTypesNamespace, typeName, typeAttributes, this.valueType);
         for (var i = 0UL; i < length; i += 1) {
             var elementField = new FieldDefinition($"Element_{i}", FieldAttributes.Assembly, elementTypeRef);
             typeDef.Fields.Add(elementField);
@@ -145,7 +148,9 @@ public class TypeBuilder {
 
     private TypeReference BuildStructTypeRef(TypeDefID id, bool isValueType) {
         var module = this.assemblyBuilder.Module;
-        return new TypeReference("", GetTypeName(id), module, module, isValueType);
+        var ns = this.assemblyBuilder.Assembly.Name.Name;
+
+        return new TypeReference(ns, GetTypeName(id), module, module, isValueType);
     }
     
     public static string GetTypeName(InterfaceID id) {
@@ -154,7 +159,8 @@ public class TypeBuilder {
 
     private TypeReference BuildInterfaceTypeRef(InterfaceID id) {
         var module = this.assemblyBuilder.Module;
-        return new TypeReference("", GetTypeName(id), module, module, valueType: false);
+        var ns = this.assemblyBuilder.Assembly.Name.Name;
+        return new TypeReference(ns, GetTypeName(id), module, module, valueType: false);
     }
 
     private TypeReference BuildClassTypeRef(IVirtualTypeID id) {

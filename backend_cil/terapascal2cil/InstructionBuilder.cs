@@ -24,7 +24,7 @@ public class InstructionBuilder {
 
     private readonly MethodDefinition method;
     private readonly TypeBuilder typeBuilder;
-    private readonly FunctionBuilder functionBuilder;
+    private readonly FunctionBuilder functionBuilder; 
 
     private readonly Stack<LocalScope> scopes;
 
@@ -34,6 +34,8 @@ public class InstructionBuilder {
 
     private readonly Dictionary<IR.Label, Instruction> labelInstructions;
     private readonly Dictionary<IR.Label, List<Instruction>> unresolvedJmps;
+
+    private MethodReference? readStringMethod;
 
     private bool hasReturn;
 
@@ -396,9 +398,9 @@ public class InstructionBuilder {
         var classTypeDef = classTypeRef.Resolve();
 
         var defaultCtor = classTypeDef.GetConstructors()
-                              .SingleOrDefault(ctor => ctor.Parameters.Count == 0)
-                          ?? throw new InvalidOperationException(
-                              $"invalid instruction: type {classTypeRef} cannot be constructed");
+                .SingleOrDefault(ctor => ctor.Parameters.Count == 0)
+            ?? throw new InvalidOperationException(
+                $"invalid instruction: type {classTypeRef} cannot be constructed");
 
         this.body.Emit(OpCodes.Newobj, defaultCtor);
         this.StoreRef(outRef);
@@ -412,8 +414,21 @@ public class InstructionBuilder {
                 => ctor.Parameters.Count == 1
                    && ctor.Parameters[0].ParameterType.FullName == this.typeBuilder.StringType.FullName);
         ctor = this.typeBuilder.ImportCoreReference(ctor);
+        
+        // TODO: native strings
+        // as an optimization, if the value is a string literal, we can supply that directly rather than
+        // converting the pascal string back to a CLR one
+        if (val is IR.GlobalRef(IR.StringLiteralGlobalRef(var stringID))) {
+            var stringLit = this.library.Metadata.StringLiterals[stringID];
+            this.body.Emit(OpCodes.Ldstr, stringLit);
+        } else {
+            this.LoadRef(val);
 
-        this.LoadRef(val);
+            // convert string
+            this.readStringMethod ??= this.assemblyBuilder.FindRuntimeMethod(nameof(Runtime.SystemFunctions.ReadString));
+            this.body.Emit(OpCodes.Call, this.readStringMethod);
+        }
+
         this.body.Emit(OpCodes.Newobj, ctor);
         this.body.Emit(OpCodes.Throw);
     }
@@ -442,14 +457,8 @@ public class InstructionBuilder {
             _ => throw new NotImplementedException("call to non-function value"),
         };
 
-        var sig = this.library.Functions[funcID].Signature();
-        var returnTypeRef = this.typeBuilder.BuildTypeRef(sig.ReturnType);
-
-        var funcClass = this.functionBuilder.GetFreeFunctionClass();
-        var methodName = FunctionBuilder.FunctionMethodName(funcID);
-        var funcRef = new MethodReference(methodName, returnTypeRef, funcClass) {
-            HasThis = false,
-        };
+        var funcRef = this.functionBuilder.FindFunctionMethod(funcID)
+            ?? throw new InvalidDataException($"invalid instruction: couldn't find function {funcID.ID}");
 
         this.body.Emit(OpCodes.Call, funcRef);
         if (outRef != null) {
@@ -690,6 +699,11 @@ public class InstructionBuilder {
                     this.body.Emit(OpCodes.Ldarg, ~varIndex);
                 }
 
+                break;
+            }
+            
+            case IR.GlobalRef(IR.StringLiteralGlobalRef(var id)): {
+                this.body.Emit(OpCodes.Ldfld, this.assemblyBuilder.GetStringLiteralRef(id));
                 break;
             }
 
