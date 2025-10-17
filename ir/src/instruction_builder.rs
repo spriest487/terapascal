@@ -1027,10 +1027,13 @@ pub trait InstructionBuilder {
         self.label(break_label);
     }
 
-    /// call `f` for every structural member of the object of type `ty_def` found at the `at`
+    /// Call `f` for every structural member of the object of type `ty_def` found at the `at`
     /// reference.
     ///
-    /// returns `true` if calling `f` for any of the members (or members of members) returns `true`
+    /// Each call to the visitor should return a value indicating whether the reference 
+    /// was used. If the visitor did nothing, we can prune the field local used to access it.
+    /// This assumes that false indicates that no new instructions were added and may misbehave
+    /// otherwise.
     fn visit_deep<Visitor>(&mut self, at: impl Into<Ref>, ty: &Type, f: Visitor) -> bool
     where
         Visitor: Fn(&mut Self, &Type, Ref) -> bool + Copy,

@@ -321,7 +321,8 @@ public record ReleaseInstruction : IInstruction {
     public required bool Weak { get; init; }
 
     [Key("released_out")]
-    public required IRef ReleasedOut { 
+    [MessagePackFormatter(typeof(NullableRefFormatter))]
+    public required IRef? ReleasedOut { 
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }

@@ -34,6 +34,8 @@ public class InstructionBuilder {
     private readonly Dictionary<IR.Label, List<Instruction>> unresolvedJmps;
 
     private MethodReference? readStringMethod;
+    private MethodReference? rcRetainMethod;
+    private MethodReference? rcReleaseMethod;
 
     private bool hasReturn;
 
@@ -110,8 +112,31 @@ public class InstructionBuilder {
                     break;
                 }
 
-                case IR.RetainInstruction or IR.ReleaseInstruction: {
-                    // RC: ignored?
+                case IR.RetainInstruction { At: var atRef, Weak: var weak }: {
+                    const string methodName = nameof(Runtime.SystemFunctions.RcRetain);
+                    this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeMethod(methodName);
+                    
+                    this.LoadRef(atRef);
+                    this.body.Emit(OpCodes.Ldc_I4, weak ? 1 : 0);
+                    
+                    this.body.Emit(OpCodes.Call, this.rcRetainMethod);
+                    break;
+                }
+
+                case IR.ReleaseInstruction { At: var atRef, Weak: var weak, ReleasedOut: var outRef }: {
+                    const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
+                    this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeMethod(methodName);
+                    
+                    this.LoadRef(atRef);
+                    this.body.Emit(OpCodes.Ldc_I4, weak ? 1 : 0);
+                    
+                    this.body.Emit(OpCodes.Call, this.rcReleaseMethod);
+                    if (outRef != null) {
+                        this.StoreRef(outRef);
+                    } else {
+                        this.body.Emit(OpCodes.Pop);
+                    }
+                    
                     break;
                 }
 
@@ -555,8 +580,7 @@ public class InstructionBuilder {
 
                 var varType = this.GetRefType(ofRef);
                 if (varType.IsClass()) {
-                    var varTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(varType);
-                    this.body.Emit(OpCodes.Mkrefany, varTypeRef);
+                    this.body.Emit(OpCodes.Ldind_Ref);
                 }
 
                 break;
@@ -754,11 +778,15 @@ public class InstructionBuilder {
 
                 break;
             }
+            
+            case IR.GlobalRef(IR.VariableGlobalRef(var varID)): {
+                var field = this.assemblyBuilder.GetGlobalVariableRef(varID);
+                this.body.Emit(OpCodes.Stsfld, field);
+                break;
+            }
 
             case IR.GlobalRef(var globalRef): {
-                // not implemented
-                this.body.Emit(OpCodes.Pop);
-                break;
+                throw new InvalidDataException($"invalid instruction: {globalRef} is not writeable");
             }
 
             case IR.Deref(var atRef): {
