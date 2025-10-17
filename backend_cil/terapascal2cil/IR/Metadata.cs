@@ -80,6 +80,16 @@ public class Metadata {
 
         return null;
     }
+
+    public IType? GetDynArrayTypeElement(TypeDefID arrayClassID) {
+        foreach (var (type, id) in this.DynArrayStructs) {
+            if (id.Equals(arrayClassID)) {
+                return type;
+            }
+        }
+
+        return null;
+    }
 }
 
 [MessagePackObject]

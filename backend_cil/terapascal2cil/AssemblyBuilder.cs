@@ -7,6 +7,8 @@ namespace Terapascal.CIL;
 public class AssemblyBuilder {
     public const string GlobalsClassName = "Globals";
 
+    public IReadOnlyList<IR.Library> IRLibraries => this.libraries;
+
     public AssemblyDefinition CoreLibrary { get; }
     public AssemblyDefinition StandardLibrary { get; }
     public AssemblyDefinition RuntimeLibrary { get; }
@@ -14,6 +16,8 @@ public class AssemblyBuilder {
     
     public TypeBuilder TypeBuilder { get; }
     public FunctionBuilder FunctionBuilder { get; }
+
+    private readonly List<IR.Library> libraries;
 
     public ModuleDefinition Module => this.Assembly.MainModule;
     public TypeSystem TypeSystem => this.Assembly.MainModule.TypeSystem;
@@ -27,7 +31,13 @@ public class AssemblyBuilder {
     private readonly Dictionary<IR.VariableID, FieldDefinition> globalVarFields =
         new Dictionary<IR.VariableID, FieldDefinition>();
 
-    public AssemblyBuilder(string assemblyName, Version assemblyVersion, string refLibPath) {
+    public AssemblyBuilder(
+        string assemblyName,
+        Version assemblyVersion,
+        string refLibPath
+    ) {
+        this.libraries = new List<IR.Library>(1);
+
         this.Assembly = AssemblyDefinition.CreateAssembly(
             new AssemblyNameDefinition(assemblyName, assemblyVersion),
             assemblyName,
@@ -127,7 +137,9 @@ public class AssemblyBuilder {
         return this.globalVarFields[id];
     }
 
-    public void BuildLibrary(IR.Library library) {
+    public void AddLibrary(IR.Library library) {
+        this.libraries.Add(library);
+        
         // TODO: native strings
         // we have to copy the string literals into pascal strings for now
 

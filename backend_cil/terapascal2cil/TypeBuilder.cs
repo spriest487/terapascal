@@ -5,6 +5,7 @@ using Mono.Cecil.Rocks;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodAttributes = Mono.Cecil.MethodAttributes;
 using TypeAttributes = Mono.Cecil.TypeAttributes;
+using static Terapascal.IR.TypeExt;
 
 namespace Terapascal.CIL;
 
@@ -18,13 +19,14 @@ internal class VariantFieldRefs {
 }
 
 public class TypeBuilder {
-    private readonly AssemblyBuilder assemblyBuilder;
     public const string VariantDiscriminatorName = "Discriminator";
 
     public const int PointerSize = 8;
     
     private readonly record struct ArraySig(IR.IType Element, ulong Size);
-    
+
+    private readonly AssemblyBuilder assemblyBuilder;
+
     private readonly Dictionary<IR.IType, TypeReference> cache;
 
     private readonly Dictionary<ArraySig, TypeReference> staticArrayTypes;
@@ -73,6 +75,9 @@ public class TypeBuilder {
         this.rtFunctionInfoType = this.assemblyBuilder.GetSystemTypeRef(nameof(Runtime.FunctionInfo), false);
         
         this.cache.Add(IR.IType.String, this.rtStringType);
+        this.cache.Add(IR.IType.TypeInfo, this.rtTypeInfoType);
+        this.cache.Add(IR.IType.MethodInfo, this.rtMethodInfoType);
+        this.cache.Add(IR.IType.FunctionInfo, this.rtFunctionInfoType);
     }
 
     public TypeReference BuildTypeRef(IR.IType type) {
@@ -145,6 +150,10 @@ public class TypeBuilder {
 
     private TypeReference BuildPointerType(IR.IType inner) {
         var innerTypeRef = this.BuildTypeRef(inner);
+        if (inner.IsClass()) {
+            return innerTypeRef.MakeByReferenceType();
+        }
+
         return innerTypeRef.MakePointerType();
     }
 
@@ -153,6 +162,14 @@ public class TypeBuilder {
     }
 
     private TypeReference BuildStructTypeRef(IR.TypeDefID id, bool isValueType) {
+        // use native CLR arrays to replace any references to Pascal dynarrays
+        foreach (var lib in this.assemblyBuilder.IRLibraries) {
+            if (lib.Metadata.GetDynArrayTypeElement(id) is {} elementType) {
+                var elementTypeRef = this.BuildTypeRef(elementType);
+                return elementTypeRef.MakeArrayType();
+            }
+        }
+        
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
 
@@ -197,8 +214,12 @@ public class TypeBuilder {
     }
 
     public void BuildStructDef(IR.TypeDefID id, IR.StructDef structDef) {
-        var isClass = structDef.Identity is IR.ClassStructIdentity or IR.DynArrayStructIdentity;
-        
+        // dynarrays are translated to CLR arrays and don't need a definition
+        if (structDef.Identity is IR.DynArrayStructIdentity) {
+            return;
+        }
+
+        var isClass = structDef.Identity is IR.ClassStructIdentity;
         var typeRef = this.BuildStructTypeRef(id, !isClass);
 
         var attrs = TypeAttributes.Sealed | TypeAttributes.NotPublic;

@@ -25,7 +25,7 @@ var refLibPath = await SDKUtils.FindReferenceLibPath();
 
 var assemblyBuilder = new AssemblyBuilder(assemblyName, assemblyVersion, refLibPath);
 
-assemblyBuilder.BuildLibrary(library);
+assemblyBuilder.AddLibrary(library);
 
 // remove any remaining refs to private libs that aren't explicitly referenced
 // var assemblyRefs = assembly.MainModule.AssemblyReferences;

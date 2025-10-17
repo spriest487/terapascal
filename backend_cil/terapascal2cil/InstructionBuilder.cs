@@ -442,9 +442,6 @@ public class InstructionBuilder {
     }
 
     private void BuildCall(IR.IRef? outRef, IR.IValue funcVal, IReadOnlyList<IR.IValue> argVals) {
-        // calling a static function
-        this.body.Emit(OpCodes.Ldnull);
-        
         foreach (var argVal in argVals) {
             this.LoadValue(argVal);
         }
@@ -554,6 +551,12 @@ public class InstructionBuilder {
                     this.body.Emit(OpCodes.Ldloca, varIndex);
                 } else {
                     this.body.Emit(OpCodes.Ldarga, ~varIndex);
+                }
+
+                var varType = this.GetRefType(ofRef);
+                if (varType.IsClass()) {
+                    var varTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(varType);
+                    this.body.Emit(OpCodes.Mkrefany, varTypeRef);
                 }
 
                 break;
