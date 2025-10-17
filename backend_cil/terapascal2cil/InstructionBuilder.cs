@@ -442,6 +442,9 @@ public class InstructionBuilder {
     }
 
     private void BuildCall(IR.IRef? outRef, IR.IValue funcVal, IReadOnlyList<IR.IValue> argVals) {
+        // calling a static function
+        this.body.Emit(OpCodes.Ldnull);
+        
         foreach (var argVal in argVals) {
             this.LoadValue(argVal);
         }
@@ -697,11 +700,13 @@ public class InstructionBuilder {
             }
             
             case IR.GlobalRef(IR.StringLiteralGlobalRef(var id)): {
+                this.body.Emit(OpCodes.Ldnull);
                 this.body.Emit(OpCodes.Ldfld, this.assemblyBuilder.GetStringLiteralRef(id));
                 break;
             }
             
             case IR.GlobalRef(IR.VariableGlobalRef(var id)): {
+                this.body.Emit(OpCodes.Ldnull);
                 this.body.Emit(OpCodes.Ldfld, this.assemblyBuilder.GetGlobalVariableRef(id));
                 break;
             }

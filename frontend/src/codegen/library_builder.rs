@@ -213,7 +213,7 @@ impl<'a> LibraryBuilder<'a> {
         lib.functions = self.functions;
         lib.static_closures = self.static_closures;
         lib.init = self.init_code;
-        
+
         lib
     }
     
