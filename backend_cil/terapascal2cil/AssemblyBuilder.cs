@@ -9,7 +9,6 @@ public class AssemblyBuilder : IDisposable {
 
     public IReadOnlyList<IR.Library> IRLibraries => this.libraries;
 
-    public AssemblyDefinition CoreLibrary { get; }
     public AssemblyDefinition StandardLibrary { get; }
     public AssemblyDefinition RuntimeLibrary { get; }
     public AssemblyDefinition Assembly { get; }
@@ -48,10 +47,7 @@ public class AssemblyBuilder : IDisposable {
                 Runtime = TargetRuntime.Net_4_0,
             });
 
-        this.CoreLibrary = AssemblyDefinition.ReadAssembly(Path.Join(refLibPath, "mscorlib.dll"));
         this.StandardLibrary = AssemblyDefinition.ReadAssembly(Path.Join(refLibPath, "netstandard.dll"));
-
-
         this.RuntimeLibrary = AssemblyDefinition.ReadAssembly(rtLibPath);
 
         this.TypeBuilder = new TypeBuilder(this);
@@ -64,8 +60,8 @@ public class AssemblyBuilder : IDisposable {
         this.RuntimeLibrary.Dispose();
 
         this.StandardLibrary.Dispose();
-        this.CoreLibrary.Dispose();
     }
+
     public TypeDefinition GetGlobalsClass() {
         if (this.globalsClass != null) {
             return this.globalsClass;
@@ -77,7 +73,7 @@ public class AssemblyBuilder : IDisposable {
         this.globalsClass = new TypeDefinition(
             ns,
             GlobalsClassName,
-            TypeAttributes.Sealed | TypeAttributes.Class,
+            TypeAttributes.Sealed | TypeAttributes.Class | TypeAttributes.Public,
             objectType
         );
         
