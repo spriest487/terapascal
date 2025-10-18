@@ -39,10 +39,6 @@ public class TypeBuilder {
     private readonly TypeReference valueType;
     private readonly TypeReference exceptionType;
     private readonly TypeReference clrStringType;
-    private readonly TypeReference rtStringType;
-    private readonly TypeReference rtTypeInfoType;
-    private readonly TypeReference rtMethodInfoType;
-    private readonly TypeReference rtFunctionInfoType;
 
     public TypeReference ExceptionType => this.exceptionType;
     public TypeReference CLRStringType => this.clrStringType;
@@ -57,27 +53,19 @@ public class TypeBuilder {
         this.structFields = new Dictionary<IR.TypeDefID, StructFieldRefs>();
         this.variantFields = new Dictionary<IR.TypeDefID, VariantFieldRefs>();
 
-        var module = this.assemblyBuilder.Module;
-        var coreLib = this.assemblyBuilder.CoreLibrary;
+        this.valueType = this.ImportCoreReference("System", "ValueType");
+        this.exceptionType = this.ImportCoreReference("System", "Exception");
+        this.clrStringType = this.ImportCoreReference("System", "String");
 
-        var valueTypeRef = new TypeReference("System", "ValueType", module, coreLib.Name);
-        this.valueType = this.ImportCoreReference(valueTypeRef);
-
-        var exceptionTypeRef = new TypeReference("System", "Exception", module, coreLib.Name);
-        this.exceptionType = this.ImportCoreReference(exceptionTypeRef);
-
-        var clrStringType = new TypeReference("System", "String", module, coreLib.Name);
-        this.clrStringType = this.ImportCoreReference(clrStringType);
-
-        this.rtStringType = this.assemblyBuilder.GetSystemTypeRef(nameof(Runtime.String), false);
-        this.rtTypeInfoType = this.assemblyBuilder.GetSystemTypeRef(nameof(Runtime.TypeInfo), false);
-        this.rtMethodInfoType = this.assemblyBuilder.GetSystemTypeRef(nameof(Runtime.MethodInfo), false);
-        this.rtFunctionInfoType = this.assemblyBuilder.GetSystemTypeRef(nameof(Runtime.FunctionInfo), false);
+        var rtStringType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.String), false);
+        var rtTypeInfoType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.TypeInfo), false);
+        var rtMethodInfoType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.MethodInfo), false);
+        var rtFunctionInfoType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.FunctionInfo), false);
         
-        this.cache.Add(IR.IType.String, this.rtStringType);
-        this.cache.Add(IR.IType.TypeInfo, this.rtTypeInfoType);
-        this.cache.Add(IR.IType.MethodInfo, this.rtMethodInfoType);
-        this.cache.Add(IR.IType.FunctionInfo, this.rtFunctionInfoType);
+        this.cache.Add(IR.IType.String, rtStringType);
+        this.cache.Add(IR.IType.TypeInfo, rtTypeInfoType);
+        this.cache.Add(IR.IType.MethodInfo, rtMethodInfoType);
+        this.cache.Add(IR.IType.FunctionInfo, rtFunctionInfoType);
     }
 
     public TypeReference BuildTypeRef(IR.IType type) {
@@ -378,7 +366,7 @@ public class TypeBuilder {
     }
 
     private void BuildDefaultConstructor(TypeDefinition typeDef) {
-        var voidType = this.assemblyBuilder.CoreLibrary.MainModule.TypeSystem.Void;
+        var voidType = this.assemblyBuilder.TypeSystem.Void;
         var methodDef = new MethodDefinition(
             ".ctor",
             MethodAttributes.Assembly | MethodAttributes.HideBySig | MethodAttributes.RTSpecialName |
@@ -445,24 +433,21 @@ public class TypeBuilder {
             ?? throw new ArgumentException($"invalid tag {tag} for variant type {baseType}");
     }
 
-    public TypeReference ImportCoreReference(TypeReference reference) {
-        reference = this.assemblyBuilder.CoreLibrary.MainModule.ImportReference(reference);
-        reference = this.assemblyBuilder.Module.ImportReference(reference);
+    public TypeReference ImportCoreReference(string ns, string name) {
+        var coreLib = this.assemblyBuilder.StandardLibrary;
+        var typeRef = new TypeReference(ns, name, coreLib.MainModule, coreLib.Name);
+        typeRef = coreLib.MainModule.ImportReference(typeRef);
+        typeRef = this.assemblyBuilder.Module.ImportReference(typeRef);
 
-        return reference;
+        return typeRef;
     }
     
     public TypeDefinition? ResolveCore(TypeReference reference) {
-        var libs = (ReadOnlySpan<AssemblyDefinition>)[
-            this.assemblyBuilder.CoreLibrary, 
-            this.assemblyBuilder.StandardLibrary
-        ];
+        var stdlib = this.assemblyBuilder.StandardLibrary;
 
-        foreach (var lib in libs) {
-            foreach (var def in lib.MainModule.Types) {
-                if (def.FullName == reference.FullName) {
-                    return def;
-                }
+        foreach (var def in stdlib.MainModule.Types) {
+            if (def.FullName == reference.FullName) {
+                return def;
             }
         }
 
@@ -470,9 +455,8 @@ public class TypeBuilder {
     }
 
     public MethodReference ImportCoreReference(MethodReference reference) {
-        reference = this.assemblyBuilder.CoreLibrary.MainModule.ImportReference(reference);
-        reference = this.assemblyBuilder.Module.ImportReference(reference);
+        var coreRef = this.assemblyBuilder.StandardLibrary.MainModule.MetadataResolver.Resolve(reference);
 
-        return reference;
+        return this.assemblyBuilder.Module.ImportReference(coreRef);
     }
 }

@@ -4,7 +4,7 @@ using Mono.Cecil.Rocks;
 
 namespace Terapascal.CIL;
 
-public class AssemblyBuilder {
+public class AssemblyBuilder : IDisposable {
     public const string GlobalsClassName = "Globals";
 
     public IReadOnlyList<IR.Library> IRLibraries => this.libraries;
@@ -34,6 +34,8 @@ public class AssemblyBuilder {
     public AssemblyBuilder(
         string assemblyName,
         Version assemblyVersion,
+        ModuleKind moduleKind,
+        string rtLibPath,
         string refLibPath
     ) {
         this.libraries = new List<IR.Library>(1);
@@ -42,22 +44,28 @@ public class AssemblyBuilder {
             new AssemblyNameDefinition(assemblyName, assemblyVersion),
             assemblyName,
             new ModuleParameters {
-                Kind = ModuleKind.Dll,
-                Runtime = TargetRuntime.Net_2_0,
+                Kind = moduleKind,
+                Runtime = TargetRuntime.Net_4_0,
             });
 
         this.CoreLibrary = AssemblyDefinition.ReadAssembly(Path.Join(refLibPath, "mscorlib.dll"));
         this.StandardLibrary = AssemblyDefinition.ReadAssembly(Path.Join(refLibPath, "netstandard.dll"));
 
-        this.Assembly.MainModule.AssemblyReferences.Add(this.CoreLibrary.Name);
-        this.Assembly.MainModule.AssemblyReferences.Add(this.StandardLibrary.Name);
 
-        this.RuntimeLibrary = AssemblyDefinition.ReadAssembly("Terapascal.Runtime.dll");
+        this.RuntimeLibrary = AssemblyDefinition.ReadAssembly(rtLibPath);
 
         this.TypeBuilder = new TypeBuilder(this);
         this.FunctionBuilder = new FunctionBuilder(this);
     }
 
+    public void Dispose() {
+        this.Assembly.Dispose();
+        
+        this.RuntimeLibrary.Dispose();
+
+        this.StandardLibrary.Dispose();
+        this.CoreLibrary.Dispose();
+    }
     public TypeDefinition GetGlobalsClass() {
         if (this.globalsClass != null) {
             return this.globalsClass;
@@ -78,26 +86,43 @@ public class AssemblyBuilder {
         return this.globalsClass;
     }
 
-    private MethodDefinition GetGlobalsCCtor() {
+    private MethodDefinition GetInitFunction() {
         var globalsClass = this.GetGlobalsClass();
-        var cctor = globalsClass.GetStaticConstructor();
-        if (cctor != null) {
-            return cctor;
-        }
 
-        var methodDef = new MethodDefinition(
-            ".cctor",
-            MethodAttributes.Private
-            | MethodAttributes.Static
-            | MethodAttributes.HideBySig
-            | MethodAttributes.RTSpecialName
-            | MethodAttributes.SpecialName,
-            this.TypeSystem.Void
-        );
+        if (this.Module.Kind is ModuleKind.Windows or ModuleKind.Console) {
+            var mainMethod = globalsClass.Methods.FirstOrDefault(m => m.Name == "Main");
+            if (mainMethod != null) {
+                return mainMethod;
+            }
+
+            var attrs = MethodAttributes.Public | MethodAttributes.Static;
+
+            var methodDef = new MethodDefinition("Main", attrs, this.TypeSystem.Void);
+
+            globalsClass.Methods.Add(methodDef);
+            return methodDef;
+        } else {
+            var cctor = globalsClass.GetStaticConstructor();
+            if (cctor != null) {
+                return cctor;
+            }
+
+            var attrs = MethodAttributes.Assembly
+                | MethodAttributes.Static
+                | MethodAttributes.HideBySig
+                | MethodAttributes.RTSpecialName
+                | MethodAttributes.SpecialName;
+
+            var methodDef = new MethodDefinition(
+                ".cctor",
+                attrs,
+                this.TypeSystem.Void
+            );
         
-        globalsClass.Methods.Add(methodDef);
+            globalsClass.Methods.Add(methodDef);
 
-        return methodDef;
+            return methodDef;
+        }
     }
         
     public MethodReference FindRuntimeMethod(string name) {
@@ -118,7 +143,7 @@ public class AssemblyBuilder {
         return this.Module.ImportReference(methodDef);
     }
     
-    public TypeReference GetSystemTypeRef(string name, bool valueType) {
+    public TypeReference GetRuntimeTypeRef(string name, bool valueType) {
         var typeRef = new TypeReference("Terapascal.Runtime",
             name,
             this.RuntimeLibrary.MainModule,
@@ -144,11 +169,11 @@ public class AssemblyBuilder {
         // we have to copy the string literals into pascal strings for now
 
         var globals = this.GetGlobalsClass();
-        var stringTypeRef = this.GetSystemTypeRef(nameof(Runtime.String), false);
+        var stringTypeRef = this.GetRuntimeTypeRef(nameof(Runtime.String), false);
 
         var createStringMethod = this.FindRuntimeMethod(nameof(Runtime.SystemFunctions.CreateString));
 
-        var globalsInit = this.GetGlobalsCCtor().Body.GetILProcessor();
+        var globalsInit = this.GetInitFunction().Body.GetILProcessor();
 
         foreach (var (id, stringLit) in library.Metadata.StringLiterals) {
             var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.InitOnly | FieldAttributes.Static;
@@ -207,6 +232,13 @@ public class AssemblyBuilder {
     }
 
     public void Finish() {
-        this.GetGlobalsCCtor().Body.GetILProcessor().Emit(OpCodes.Ret);
+        var initFunction = this.GetInitFunction();
+        var globalsInit = initFunction.Body.GetILProcessor();
+
+        globalsInit.Emit(OpCodes.Ret);
+
+        if (this.Assembly.MainModule.Kind is ModuleKind.Console or ModuleKind.Windows) {
+            this.Assembly.EntryPoint = initFunction;
+        }
     }
 }
