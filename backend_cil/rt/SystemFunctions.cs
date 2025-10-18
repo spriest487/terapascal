@@ -5,9 +5,9 @@ namespace Terapascal.Runtime;
 
 public static class SystemFunctions {
     private static readonly Random random = new Random();
-    
+
     public static unsafe string ReadString(String s) {
-        if (s.len == 0) {
+        if (s == null! || s.len == 0 || s.chars == null) {
             return "";
         }
 
@@ -15,10 +15,17 @@ public static class SystemFunctions {
     }
 
     public static unsafe String CreateString(string s) {
+        if (string.IsNullOrEmpty(s)) {
+            return new String {
+                chars = null,
+                len = 0,
+            };
+        }
+        
         var byteCount = Encoding.UTF8.GetByteCount(s);
         var bytes = GetMem(byteCount + 1);
 
-        fixed (char* chars = s.AsSpan()) {
+        fixed (char* chars = s) {
             Encoding.UTF8.GetBytes(chars, s.Length, bytes, byteCount);
         }
 
@@ -78,11 +85,11 @@ public static class SystemFunctions {
         return CreateString(i.ToString());
     }
 
-    public static String NativeIntToStr(nint i) {
+    public static String NativeIntToStr(IntPtr i) {
         return CreateString(i.ToString());
     }
 
-    public static String NativeUIntToStr(nuint i) {
+    public static String NativeUIntToStr(UIntPtr i) {
         return CreateString(i.ToString());
     }
 
