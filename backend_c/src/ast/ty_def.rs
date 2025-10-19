@@ -34,6 +34,7 @@ pub enum Type {
 
     // internal struct for class vtable etc
     Class,
+    DynArrayClass,
 
     // rc state struct for ref types
     Rc,
@@ -191,6 +192,10 @@ impl Type {
             Type::Class => {
                 left.push_str("struct Class");
             },
+
+            Type::DynArrayClass => {
+                left.push_str("struct DynArrayClass");
+            },
             
             Type::AnonymousClosure => {
                 left.push_str("struct AnonymousClosure");
@@ -255,6 +260,7 @@ impl Type {
             },
             Type::Rc => "struct Rc".to_string(),
             Type::Class => "struct Class".to_string(),
+            Type::DynArrayClass => "struct DynArrayClass".to_string(),
             Type::SizedArray(ty, ..) | Type::Pointer(ty) => format!("{}*", ty.typename()),
             Type::Bool => "bool".to_string(),
             Type::Float => "float".to_string(),

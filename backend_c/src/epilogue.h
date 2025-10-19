@@ -290,10 +290,9 @@ static OBJECT_PTR System_ArraySetLengthInternal(
         fatal("called SetLength for an invalid array pointer");
     }
 
-    struct DynArrayClass* array_class = (struct DynArrayClass*) arr_rc->class;
     struct DynArrayClass* array_class = (struct DynArrayClass*) arr->class;
 
-    void* new_arr = RcAlloc(arr_rc->class, false);
+    OBJECT_PTR new_arr = RcNewArray(arr_rc->class, new_len, default_val, false);
     array_class->alloc(new_arr, new_len, arr_rc, default_val);
 
     return new_arr;

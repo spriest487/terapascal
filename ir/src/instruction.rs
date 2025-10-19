@@ -124,6 +124,15 @@ pub enum Instruction {
         type_id: TypeDefID,
         immortal: bool,
     },
+    RcNewArray {
+        out: Ref,
+        element_type: Type,
+
+        count: Value,
+        init_value: Ref,
+
+        immortal: bool,
+    },
 
     Release {
         at: Ref,
@@ -206,6 +215,7 @@ impl Instruction {
             | Instruction::Field { out, .. }
             | Instruction::ClassIs { out, .. }
             | Instruction::RcNew { out, .. }
+            | Instruction::RcNewArray { out, .. }
             | Instruction::Cast { out, .. } => *out == Ref::Discard,
         }
     }

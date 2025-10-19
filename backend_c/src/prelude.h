@@ -110,6 +110,7 @@ static void Free(void* mem);
 static void RcRetain(OBJECT_PTR instance, bool weak);
 static bool RcRelease(OBJECT_PTR instance, bool weak);
 static struct OBJECT_PTR RcNew(struct Class* class, bool immortal);
+static struct OBJECT_PTR RcNewArray(struct DynArrayClass* class, int count, void* initVal, bool immortal);
 
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 

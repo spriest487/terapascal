@@ -37,13 +37,16 @@ pub struct Unit {
     string_literals: HashMap<ir::StringID, StringLiteral>,
     static_closures: Vec<ir::StaticClosure>,
     
+    dynarrays_by_element: HashMap<ir::Type, ir::TypeDefID>,
+
     tag_arrays: HashMap<ir::TagLocation, usize>,
     tag_array_class: ir::TypeDefID,
 
     opts: Options,
-
+    
     type_infos: HashMap<ir::Type, Rc<ir::RuntimeType>>,
     methodinfo_array_class: Option<ir::TypeDefID>,
+    
     
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
 }
@@ -229,6 +232,12 @@ impl Unit {
         let tag_array_class = metadata
             .find_dyn_array_struct(&ir::ANY_TYPE)
             .expect("object array type must exist");
+        
+        let dynarrays_by_element = metadata
+            .dyn_array_structs()
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
 
         let mut module = Unit {
             functions: Vec::new(),
@@ -249,6 +258,8 @@ impl Unit {
             ifaces: Vec::new(),
 
             opts,
+
+            dynarrays_by_element,
 
             type_infos,
             methodinfo_array_class,
@@ -580,7 +591,7 @@ impl Unit {
         let method_class_ptr = Expr::Global(GlobalName::ClassInstance(ir::METHODINFO_ID))
             .addr_of();
 
-        let call_array_rcalloc = Expr::Function(FunctionName::Builtin(BuiltinName::RcAlloc)).call([
+        let new_call = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew)).call([
             method_array_class_ptr,
             Expr::LitBool(true),
         ]);
@@ -591,7 +602,7 @@ impl Unit {
             // allocate the method dynarray instance for this typeinfo 
             init_stmts.push(Statement::Expr(Expr::assign(
                 Expr::named_var(METHODS_ARRAY_NAME),
-                call_array_rcalloc.clone(),
+                new_call.clone(),
             )));
 
             // allocate the method array memory
@@ -631,7 +642,7 @@ impl Unit {
                 // *methodinfo = RcAlloc(..method info class, immortal: true)
                 init_stmts.push(Statement::Expr(Expr::assign(
                     method_ptr_expr.clone(),
-                    Expr::Function(FunctionName::Builtin(BuiltinName::RcAlloc)).call([
+                    Expr::Function(FunctionName::Builtin(BuiltinName::RcNew)).call([
                         method_class_ptr.clone(),
                         Expr::LitBool(true),
                     ]),

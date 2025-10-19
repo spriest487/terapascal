@@ -256,10 +256,34 @@ pub trait IRFormatter {
             Instruction::RcNew { out, type_id, immortal } => {
                 write!(f, "{:>width$} ", "rcnew", width = IX_WIDTH)?;
                 self.format_type(&Type::Struct(*type_id), f)?;
-                write!(f, " at {}", out)?;
+                
+                write!(f, " at ")?;
+                self.format_ref(out, f)?;
+                
                 if *immortal {
                     write!(f, " (immortal)")?;
                 }
+                Ok(())
+            }
+            
+            Instruction::RcNewArray { out, element_type, count, init_value, immortal } => {
+                write!(f, "{:>width$} ", "rcnewarray", width = IX_WIDTH)?;
+                
+                write!(f, " at ")?;
+                self.format_ref(out, f)?;
+                
+                write!(f, " [")?;
+                self.format_type(element_type, f)?;
+                write!(f, ", ")?;
+                self.format_ref(init_value, f)?;
+                write!(f, ", ")?;
+                self.format_val(count, f)?;
+                write!(f, " ]")?;
+
+                if *immortal {
+                    write!(f, " (immortal)")?;
+                }
+                
                 Ok(())
             }
 

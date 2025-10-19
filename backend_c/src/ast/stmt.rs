@@ -457,6 +457,10 @@ impl<'a> Builder<'a> {
                 self.translate_rc_new(out, *type_id, *immortal);
             }
 
+            ir::Instruction::RcNewArray { out, element_type, count, init_value: init_from, immortal } => {
+                self.translate_rc_new_array(out, element_type, count, init_from, *immortal);
+            }
+
             ir::Instruction::Gt(ir::BinOpInstruction { out, a, b }) => {
                 let gt = Expr::translate_infix_op(a, InfixOp::Gt, b, self.module);
                 self.stmts.push(Statement::Expr(Expr::translate_assign(
@@ -692,6 +696,39 @@ impl<'a> Builder<'a> {
         self.stmts.push(Statement::Expr(Expr::translate_assign(
             out,
             new_rc,
+            self.module,
+        )))
+    }
+
+    fn translate_rc_new_array(&mut self,
+        out: &ir::Ref,
+        element_type: &ir::Type,
+        count: &ir::Value,
+        init_from: &ir::Ref,
+        immortal: bool
+    ) {
+        let dynarray_class_id = self.module.dynarrays_by_element[element_type];
+        
+        let init_val = Expr::translate_ref(init_from, self.module);
+        let init_val_ptr = init_val.addr_of();
+
+        let count_val = Expr::translate_val(count, self.module);
+
+        let array_class_ptr = Expr::class_ptr(dynarray_class_id)
+            .cast(Type::DynArrayClass.ptr());
+
+        let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNewArray));
+
+        let call = new_function.call([
+            array_class_ptr,
+            count_val,
+            init_val_ptr,
+            Expr::LitBool(immortal),
+        ]);
+
+        self.stmts.push(Statement::Expr(Expr::translate_assign(
+            out,
+            call,
             self.module,
         )))
     }

@@ -957,14 +957,30 @@ impl Interpreter {
                 self.exec_local_alloc(*id, *pc, ty)?;
             },
 
-            ir::Instruction::LocalBegin => self.exec_local_begin()?,
-            ir::Instruction::LocalEnd => self.exec_local_end()?,
+            ir::Instruction::LocalBegin => {
+                self.exec_local_begin()?
+            },
+            ir::Instruction::LocalEnd => {
+                self.exec_local_end()?
+            },
 
             ir::Instruction::RcNew {
                 out,
                 type_id,
                 immortal,
-            } => self.exec_rc_new(out, *type_id, *immortal)?,
+            } => {
+                self.exec_rc_new(out, *type_id, *immortal)?
+            },
+
+            ir::Instruction::RcNewArray {
+                out,
+                element_type,
+                count,
+                init_value,
+                immortal,
+            } => {
+                self.exec_rc_new_array(out, element_type, count, init_value, *immortal)?
+            },
 
             ir::Instruction::Add(op) => self.exec_add(op)?,
 
@@ -1102,6 +1118,31 @@ impl Interpreter {
         let rc_ptr = self.rc_alloc(struct_val, immortal)?;
 
         self.store(out, DynValue::Pointer(rc_ptr))?;
+
+        Ok(())
+    }
+
+    fn exec_rc_new_array(
+        &mut self,
+        out: &ir::Ref,
+        element_type: &ir::Type,
+        count: &ir::Value,
+        init_from: &ir::Ref,
+        immortal: bool,
+    ) -> ExecResult<()> {
+        let Some(count) = self.evaluate(count)?.as_i32() else {
+            return Err(ExecError::illegal_state("exec_rc_new_array: count value is not i32"));
+        };
+
+        let Some(count) = usize::try_from(count).ok() else {
+            return Err(ExecError::illegal_state(format!("exec_rc_new_array: count value {count} is a valid size")));
+        };
+
+        let init_val = self.load(init_from)?;
+        let elements = iter::repeat(init_val).take(count).collect();
+
+        let array_ptr = self.create_dyn_array(element_type, elements, immortal)?;
+        self.store(out, DynValue::Pointer(array_ptr))?;
 
         Ok(())
     }
