@@ -831,7 +831,7 @@ public class InstructionBuilder {
         this.StoreRef(binOp.Out);
     }
 
-    public void Return() {
+    public void Finish() {
         if (this.unresolvedJmps.Count != 0) {
             var msg = new StringBuilder("illegal instructions: body contains unresolved jumps to labels: ");
             msg.AppendJoin(", ", this.unresolvedJmps.Keys);

@@ -30,6 +30,8 @@ public class AssemblyBuilder : IDisposable {
     private readonly Dictionary<IR.VariableID, FieldDefinition> globalVarFields =
         new Dictionary<IR.VariableID, FieldDefinition>();
 
+    private readonly List<MethodDefinition> initMethods;
+
     public AssemblyBuilder(
         string assemblyName,
         Version assemblyVersion,
@@ -52,6 +54,8 @@ public class AssemblyBuilder : IDisposable {
 
         this.TypeBuilder = new TypeBuilder(this);
         this.FunctionBuilder = new FunctionBuilder(this);
+
+        this.initMethods = new List<MethodDefinition>(1);
     }
 
     public void Dispose() {
@@ -82,7 +86,7 @@ public class AssemblyBuilder : IDisposable {
         return this.globalsClass;
     }
 
-    private MethodDefinition GetInitFunction() {
+    private MethodDefinition GetInitMethodBuilder() {
         var globalsClass = this.GetGlobalsClass();
 
         if (this.Module.Kind is ModuleKind.Windows or ModuleKind.Console) {
@@ -169,7 +173,7 @@ public class AssemblyBuilder : IDisposable {
 
         var createStringMethod = this.FindRuntimeMethod(nameof(Runtime.SystemFunctions.CreateString));
 
-        var globalsInit = this.GetInitFunction().Body.GetILProcessor();
+        var globalsInit = this.GetInitMethodBuilder().Body.GetILProcessor();
 
         foreach (var (id, stringLit) in library.Metadata.StringLiterals) {
             var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.InitOnly | FieldAttributes.Static;
@@ -225,10 +229,24 @@ public class AssemblyBuilder : IDisposable {
         }
 
         this.FunctionBuilder.BuildFunctions(library);
+
+        if (library.Initialization.Count > 0) {
+            var initAttrs = MethodAttributes.Private | MethodAttributes.Static;
+            var initMethod = new MethodDefinition($"Init_{this.initMethods.Count}", initAttrs, this.TypeSystem.Void);
+            
+            this.initMethods.Add(initMethod);
+            globals.Methods.Add(initMethod);
+
+            var initBuilder = new InstructionBuilder(this, library, initMethod);
+            initBuilder.AddInstructions(library.Initialization);
+            initBuilder.Finish();
+            
+            globalsInit.Emit(OpCodes.Call, initMethod);
+        }
     }
 
     public void Finish() {
-        var initFunction = this.GetInitFunction();
+        var initFunction = this.GetInitMethodBuilder();
         var globalsInit = initFunction.Body.GetILProcessor();
 
         globalsInit.Emit(OpCodes.Ret);

@@ -60,7 +60,7 @@ public class FunctionBuilder {
         var builder = new InstructionBuilder(this.assemblyBuilder, lib, method);
         builder.BeginFunction(def);
         builder.AddInstructions(def.Body);
-        builder.Return();
+        builder.Finish();
     }
 
     private MethodDefinition CreateFunctionMethod(IR.FunctionID id) {
