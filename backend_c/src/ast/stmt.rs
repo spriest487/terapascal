@@ -681,14 +681,13 @@ impl<'a> Builder<'a> {
 
     fn translate_rc_new(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID, immortal: bool) {
         let ty_class_ptr = Expr::class_ptr(struct_id);
+        
+        let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
 
-        let new_rc = Expr::Call {
-            func: Box::new(Expr::Function(FunctionName::Builtin(BuiltinName::RcAlloc))),
-            args: vec![
-                ty_class_ptr,
-                Expr::LitBool(immortal),
-            ],
-        };
+        let new_rc = new_function.call([
+            ty_class_ptr,
+            Expr::LitBool(immortal),
+        ]);
 
         self.stmts.push(Statement::Expr(Expr::translate_assign(
             out,

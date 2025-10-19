@@ -51,7 +51,7 @@ impl fmt::Display for FunctionName {
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub enum BuiltinName {
-    RcAlloc,
+    RcNew,
     RcRetain,
     RcRelease,
     IsImpl,
@@ -115,6 +115,7 @@ impl fmt::Display for BuiltinName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             BuiltinName::RcAlloc => write!(f, "RcAlloc"),
+            BuiltinName::RcNew => write!(f, "RcNew"),
             BuiltinName::RcRetain => write!(f, "RcRetain"),
             BuiltinName::RcRelease => write!(f, "RcRelease"),
             BuiltinName::IsImpl => write!(f, "IsImpl"),

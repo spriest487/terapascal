@@ -16,7 +16,7 @@
 #ifdef DISABLE_RTTI
 #define OBJECT_DISPLAY(instance) "object"
 #else
-#define OBJECT_DISPLAY(instance) TYPEINFO_NAME_CHARS(((struct Rc*) instance)->class->typeinfo)
+#define OBJECT_DISPLAY(instance) TYPEINFO_NAME_CHARS(((OBJECT_PTR) instance)->class->typeinfo)
 #endif
 
 _Noreturn static void fatal(const char* msg, ...) {
@@ -63,7 +63,7 @@ static STRING_STRUCT* FuncName(DataType i) { \
     unsigned char* chars = Alloc(len); \
     memcpy(chars, buf, len); \
     \
-    STRING_STRUCT* str = (STRING_STRUCT*) RcAlloc(&STRING_CLASS, false); \
+    STRING_STRUCT* str = (STRING_STRUCT*) RcNew(&STRING_CLASS, false); \
     STRING_LEN(str) = len; \
     STRING_CHARS(str) = chars; \
     \
@@ -125,42 +125,37 @@ static void Free(void* mem) {
 
 // RC runtime functions
 
-static void* RcAlloc(struct Class* class, bool immortal) {
+static OBJECT_PTR RcNew(struct Class* class, bool immortal) {
     if (!class) {
         abort();
     }
 
-    void* instance = Alloc(class->size);
-
-    // the rc field should be the first member of any rc type
-    struct Rc* rc = (struct Rc*)instance;
-    rc->class = class;
-    rc->strong_count = 1;
-    rc->weak_count = 0;
+    OBJECT_PTR instance = (OBJECT_PTR) Alloc(class->size);
+    instance->class = class;
+    instance->strong_count = 1;
+    instance->weak_count = 0;
 
     return rc;
 }
 
-static void RcRetain(void* instance, bool weak) {
+static void RcRetain(OBJECT_PTR instance, bool weak) {
     if (!instance) {
         return;
     }
-
-    struct Rc* rc = (struct Rc*)instance;
     
     // don't retain immortal refs
-    if (rc->strong_count < 0) {
+    if (instance->strong_count < 0) {
         return;
     }
     
     if (weak) {
-        rc->weak_count += 1;
+        instance->weak_count += 1;
     } else {
         if (rc->strong_count == 0) {
-            fatal("resurrecting with 0 strong refs pointer @ 0x%p (+ %d weak refs remain)", instance, rc->weak_count);
+            fatal("resurrecting with 0 strong refs pointer @ 0x%p (+ %d weak refs remain)", instance, instance->weak_count);
         }
     
-        rc->strong_count += 1;
+        instance->strong_count += 1;
     }
 
 #if TRACE_RC
@@ -168,20 +163,18 @@ static void RcRetain(void* instance, bool weak) {
     printf("rc: retain %s @ 0x%p (%d+%d refs)\n", 
         OBJECT_DISPLAY(instance), 
         instance, 
-        rc->strong_count, 
-        rc->weak_count);
+        instance->strong_count, 
+        instance->weak_count);
 #endif
 }
 
-static bool RcRelease(void* instance, bool weak) {
+static bool RcRelease(OBJECT_PTR instance, bool weak) {
     if (!instance) {
         // releasing NULL should be ignored
         return false;
     }
 
-    struct Rc* rc = (struct Rc*)instance;
-
-    if (rc->strong_count < 0) {
+    if (instance->strong_count < 0) {
         // immortal
         return false;
     }
@@ -192,44 +185,44 @@ static bool RcRelease(void* instance, bool weak) {
         }
 
 #if TRACE_RC
-        printf("rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(instance), instance, rc->strong_count, rc->weak_count - 1);
+        printf("rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(instance), instance, instance->strong_count, instance->weak_count - 1);
 #endif
         
-        rc->weak_count -= 1;
+        instance->weak_count -= 1;
     } else {
-        if (rc->strong_count == 0) {
+        if (instance->strong_count == 0) {
             fatal("releasing with 0 strong refs remaining @ 0x%p", instance);
         }
 
 #if TRACE_RC
-        printf("rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(instance), instance, rc->strong_count - 1, rc->weak_count);
+        printf("rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(instance), instance, instance->strong_count - 1, instance->weak_count);
 #endif
 
         // call the dtor before decrementing the ref count, because it must still be a live reference
         // while the function is executing
-        if (rc->strong_count == 1 && rc->class->dtor) {
+        if (instance->strong_count == 1 && instance->class->dtor) {
 #if TRACE_RC
             printf("rc: \tdisposing %s @ 0x%p\n", OBJECT_DISPLAY(instance), instance);
 #endif
-            rc->class->dtor(instance);
+            instance->class->dtor(instance);
             
             // invoke structural release to release struct fields
-            if (rc->class->cleanup) {
-                rc->class->cleanup(instance);
+            if (instance->class->cleanup) {
+                instance->class->cleanup(instance);
             }
-            rc->class = NULL;
+            instance->class = NULL;
 
-            if (rc->strong_count != 1) {
+            if (instance->strong_count != 1) {
                 fprintf(stderr, "destructor for %s modified the reference count of the destroyed instance\n", OBJECT_DISPLAY(instance));
                 fflush(stderr);
                 abort();
             }
         }
   
-        rc->strong_count -= 1;
+        instance->strong_count -= 1;
     }
 
-    if (rc->strong_count == 0 && rc->weak_count == 0) {
+    if (instance->strong_count == 0 && instance->weak_count == 0) {
         // free memory
         Free(instance);
         return true;
@@ -270,7 +263,7 @@ static STRING_STRUCT* System_ReadLn(void) {
     }
 
     size_t len = strlen(buf);
-    STRING_STRUCT* str = (STRING_STRUCT*) RcAlloc(&STRING_CLASS, false);
+    STRING_STRUCT* str = (STRING_STRUCT*) RcNew(&STRING_CLASS, false);
     STRING_LEN(str) = (int32_t) len;
     STRING_CHARS(str) = System_GetMem(len);
     memcpy(STRING_CHARS(str), buf, len);
@@ -278,28 +271,27 @@ static STRING_STRUCT* System_ReadLn(void) {
     return str;
 }
 
-static int32_t System_ArrayLengthInternal(struct Rc* arr) {
-    struct Rc* arr_rc = (struct Rc*) arr;
-    if (!arr_rc || arr_rc->strong_count == 0) {
+static int32_t System_ArrayLengthInternal(OBJECT_PTR arr) {
+    if (!arr || arr->strong_count == 0) {
         fatal("called Length for an invalid array pointer");
     }
 
-    struct DynArrayClass* array_class = (struct DynArrayClass*) arr_rc->class;
+    struct DynArrayClass* array_class = (struct DynArrayClass*) arr->class;
 
-    return array_class->length(arr_rc);
+    return array_class->length(arr);
 }
 
-static void* System_ArraySetLengthInternal(
-    struct Rc* arr,
+static OBJECT_PTR System_ArraySetLengthInternal(
+    OBJECT_PTR arr,
     int32_t new_len,
     void* default_val
 ) {
-    struct Rc* arr_rc = (struct Rc*) arr;
-    if (!arr_rc || arr_rc->strong_count == 0) {
+    if (!arr || arr->strong_count == 0) {
         fatal("called SetLength for an invalid array pointer");
     }
 
     struct DynArrayClass* array_class = (struct DynArrayClass*) arr_rc->class;
+    struct DynArrayClass* array_class = (struct DynArrayClass*) arr->class;
 
     void* new_arr = RcAlloc(arr_rc->class, false);
     array_class->alloc(new_arr, new_len, arr_rc, default_val);
@@ -454,7 +446,7 @@ static TYPEINFO_STRUCT* System_GetTypeInfoByIndex(int32_t type_index) {
     return typeinfo_list[type_index];
 }
 
-static TYPEINFO_STRUCT* System_GetObjectTypeInfo(struct Rc* object) {
+static TYPEINFO_STRUCT* System_GetObjectTypeInfo(OBJECT_PTR object) {
     return object->class->typeinfo;
 }
 
