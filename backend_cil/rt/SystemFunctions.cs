@@ -44,6 +44,10 @@ public static class SystemFunctions {
     public static unsafe void FreeMem(byte* mem) {
         Marshal.FreeHGlobal((IntPtr)mem);
     }
+    
+    public static String ReadLn() {
+        return CreateString(Console.ReadLine() ?? "");
+    }
 
     public static void WriteLn(String message) {
         Console.WriteLine(ReadString(message));
