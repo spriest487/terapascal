@@ -476,14 +476,19 @@ public class InstructionBuilder {
             _ => throw new NotImplementedException("call to non-function value"),
         };
 
+        var hasReturn = this.library.Functions[funcID].Signature().ReturnType is not IR.NothingType;
+        
         var funcRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcID)
             ?? throw new InvalidDataException($"invalid instruction: couldn't find function {funcID.ID}");
 
         this.body.Emit(OpCodes.Call, funcRef);
-        if (outRef != null) {
-            this.StoreRef(outRef);
-        } else {
-            this.body.Emit(OpCodes.Pop);
+
+        if (hasReturn) {
+            if (outRef != null) {
+                this.StoreRef(outRef);
+            } else {
+                this.body.Emit(OpCodes.Pop);
+            }
         }
     }
 
