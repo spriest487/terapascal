@@ -25,6 +25,12 @@ pub enum FunctionName {
     DestructorInvoker(ir::TypeDefID),
     MethodWrapper(ir::InterfaceID, ir::MethodID, ir::TypeDefID),
 
+    // generated function for fetching dynarray elements of a particular dynarray type
+    DynArrayGetElement(ir::TypeDefID),
+    
+    // helper function for runtime bounds checking
+    DynArrayBoundsCheck,
+
     Builtin(BuiltinName),
 }
 
@@ -39,10 +45,18 @@ impl fmt::Display for FunctionName {
             FunctionName::Invoker(id) => write!(f, "Invoker_{}", id.0),
             FunctionName::DestructorInvoker(id) => write!(f, "Destructor_{}", id.0),
 
-            FunctionName::Method(iface, method) => write!(f, "Method_{}_{}", iface, method.0),
+            FunctionName::Method(iface, method) => {
+                write!(f, "Method_{}_{}", iface, method.0)
+            },
             FunctionName::MethodWrapper(iface, method, self_ty) => {
                 write!(f, "Method_{}_{}_Wrapper_{}", iface, method.0, self_ty)
             },
+
+            FunctionName::DynArrayGetElement(id) => {
+                write!(f, "DynArrayGetElement_{}", id.0)
+            }
+
+            FunctionName::DynArrayBoundsCheck => write!(f, "DynArrayBoundsCheck"),
 
             FunctionName::Builtin(name) => write!(f, "{}", name),
         }
@@ -51,7 +65,8 @@ impl fmt::Display for FunctionName {
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub enum BuiltinName {
-    RcAlloc,
+    RcNew,
+    RcNewArray,
     RcRetain,
     RcRelease,
     IsImpl,
@@ -114,7 +129,8 @@ pub enum BuiltinName {
 impl fmt::Display for BuiltinName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            BuiltinName::RcAlloc => write!(f, "RcAlloc"),
+            BuiltinName::RcNew => write!(f, "RcNew"),
+            BuiltinName::RcNewArray => write!(f, "RcNewArray"),
             BuiltinName::RcRetain => write!(f, "RcRetain"),
             BuiltinName::RcRelease => write!(f, "RcRelease"),
             BuiltinName::IsImpl => write!(f, "IsImpl"),

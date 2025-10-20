@@ -467,17 +467,18 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.set_bitwise_op(a, b, set_type, |i| i.bit_xor_func)
     }
 
-    #[allow(unused)]
+    #[expect(unused)]
     pub fn get_mem(&mut self, count: impl Into<Value>, out: impl Into<Ref>) {
         let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_get_mem_func()));
         self.call(function_ref, [count.into()], Some(out.into()));
     }
 
+    #[expect(unused)]
     pub fn get_mem_id(&mut self) -> FunctionID {
         self.library.instantiate_get_mem_func()
     }
 
-    #[allow(unused)]
+    #[expect(unused)]
     pub fn free_mem(&mut self, at: impl Into<Value>) {
         let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_free_mem_func()));
         self.call(function_ref, [at.into()], None);
@@ -561,19 +562,31 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
         &self.instructions[start_index..]
     }
-    
-    pub fn bounds_check(&mut self,
-        element_ty: &Type,
+
+    pub fn array_bounds_check(&mut self,
         length: impl Into<Value>,
         index: impl Into<Value>
     ) {
-        let bounds_check_func = self.library.gen_bounds_check(element_ty);
-        let func_ref = Value::Ref(Ref::Global(GlobalRef::Function(bounds_check_func)));
+        self.comment("array bounds check");
 
-        self.call(func_ref, [
-            length.into(),
-            index.into(),
-        ], None);
+        let index_val = index.into();
+        let length_val = length.into();
+        let bounds_ok_label = self.next_label();
+
+        // if index >= 0 and index < arr.len then goto "bounds_ok"
+        let gte_zero = self.gte_to_val(index_val.clone(), Value::LiteralI32(0));
+        let lt_len = self.lt_to_val(index_val, length_val);
+        let bounds_check_ok = self.and_to_val(gte_zero, lt_len);
+
+        self.jmpif(bounds_ok_label, bounds_check_ok);
+
+        // otherwise: raise
+        let err_str = self.find_or_insert_string("array index out of bounds");
+        self.emit(Instruction::Raise {
+            val: Ref::Global(GlobalRef::StringLiteral(err_str)),
+        });
+
+        self.label(bounds_ok_label);
     }
 
     pub fn exit_function(&mut self) {

@@ -37,13 +37,16 @@ pub struct Unit {
     string_literals: HashMap<ir::StringID, StringLiteral>,
     static_closures: Vec<ir::StaticClosure>,
     
+    dynarrays_by_element: HashMap<ir::Type, ir::TypeDefID>,
+
     tag_arrays: HashMap<ir::TagLocation, usize>,
     tag_array_class: ir::TypeDefID,
 
     opts: Options,
-
+    
     type_infos: HashMap<ir::Type, Rc<ir::RuntimeType>>,
     methodinfo_array_class: Option<ir::TypeDefID>,
+    
     
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
 }
@@ -229,6 +232,12 @@ impl Unit {
         let tag_array_class = metadata
             .find_dyn_array_struct(&ir::ANY_TYPE)
             .expect("object array type must exist");
+        
+        let dynarrays_by_element = metadata
+            .dyn_array_structs()
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect();
 
         let mut module = Unit {
             functions: Vec::new(),
@@ -249,6 +258,8 @@ impl Unit {
             ifaces: Vec::new(),
 
             opts,
+
+            dynarrays_by_element,
 
             type_infos,
             methodinfo_array_class,
@@ -556,53 +567,39 @@ impl Unit {
         const METHODS_ARRAY_NAME: &str = "methods_array";
         init_stmts.push(Statement::VariableDecl {
             ty: Type::from_ir_struct(methodinfo_array_class).ptr(),
-            id: VariableID::Named(Box::new(METHODS_ARRAY_NAME.to_string())),
+            id: VariableID::named(METHODS_ARRAY_NAME),
             null_init: false,
         });
 
         const METHODINFO_NAME: &str = "methodinfo";
         init_stmts.push(Statement::VariableDecl {
             ty: Type::from_ir_struct(ir::METHODINFO_ID).ptr().ptr(),
-            id: VariableID::Named(Box::new(METHODINFO_NAME.to_string())),
+            id: VariableID::named(METHODINFO_NAME),
             null_init: false,
         });
 
         const METHODNULL_NAME: &str = "method_null";
         init_stmts.push(Statement::VariableDecl {
             ty: Type::from_ir_struct(ir::METHODINFO_ID).ptr(),
-            id: VariableID::Named(Box::new(METHODNULL_NAME.to_string())),
+            id: VariableID::named(METHODNULL_NAME),
             null_init: true,
         });
-
-        let method_array_class_ptr = Expr::Global(GlobalName::ClassInstance(methodinfo_array_class))
-            .addr_of()
-            .cast(Type::Class.ptr());
-        let method_class_ptr = Expr::Global(GlobalName::ClassInstance(ir::METHODINFO_ID))
-            .addr_of();
-
-        let call_array_rcalloc = Expr::Function(FunctionName::Builtin(BuiltinName::RcAlloc)).call([
-            method_array_class_ptr,
-            Expr::LitBool(true),
-        ]);
 
         let mut typeinfo_index = 0i128;
 
         for (ty, typeinfo) in &self.type_infos {
             // allocate the method dynarray instance for this typeinfo 
-            init_stmts.push(Statement::Expr(Expr::assign(
-                Expr::named_var(METHODS_ARRAY_NAME),
-                call_array_rcalloc.clone(),
-            )));
+            let method_array_class_ptr = Expr::class(methodinfo_array_class).addr_of();
+            let methods_array_var = Expr::named_var(METHODS_ARRAY_NAME);
 
-            // allocate the method array memory
-            let array_realloc = Expr::Class(methodinfo_array_class)
-                .field(FieldName::DynArrayAlloc);
-            init_stmts.push(Statement::Expr(array_realloc.call([
-                Expr::named_var(METHODS_ARRAY_NAME).cast(Type::Rc.ptr()),
-                Expr::LitInt(typeinfo.methods.len() as i128),
-                Expr::Null,
-                Expr::named_var(METHODNULL_NAME).addr_of(),
-            ])));
+            init_stmts.push(Statement::Expr(Expr::assign(
+                methods_array_var.clone(),
+                Expr::call_newarray(
+                    methodinfo_array_class, 
+                    Expr::LitInt(typeinfo.methods.len() as i128), 
+                    true
+                )
+            )));
 
             let type_info_expr = Expr::Global(GlobalName::StaticTypeInfo(Rc::new(ty.clone())));
 
@@ -615,36 +612,32 @@ impl Unit {
             typeinfo_index += 1;
 
             for method_index in 0..typeinfo.methods.len() {
-                // methodinfo = methods_array->ptr + method_index
                 init_stmts.push(Statement::Expr(Expr::assign(
-                    Expr::named_var(METHODINFO_NAME),
-                    Expr::infix_op(
-                        Expr::named_var(METHODS_ARRAY_NAME)
-                            .arrow(FieldName::ID(ir::DYNARRAY_PTR_FIELD)),
-                        InfixOp::Add,
-                        Expr::LitInt(method_index as i128),
-                    ),
+                    Expr::named_var(METHODINFO_NAME), 
+                    method_array_class_ptr
+                        .clone()
+                        .arrow(FieldName::DynArrayElement)
+                        .call([
+                            methods_array_var.clone().cast(Type::object_ptr()),
+                            Expr::LitInt(method_index as i128)
+                        ])
+                        .cast(Type::class_instance_ptr(ir::METHODINFO_ID).ptr())
                 )));
-
-                let method_ptr_expr = Expr::named_var(METHODINFO_NAME).deref();
-
-                // *methodinfo = RcAlloc(..method info class, immortal: true)
-                init_stmts.push(Statement::Expr(Expr::assign(
-                    method_ptr_expr.clone(),
-                    Expr::Function(FunctionName::Builtin(BuiltinName::RcAlloc)).call([
-                        method_class_ptr.clone(),
-                        Expr::LitBool(true),
-                    ]),
-                )));
+                
+                // *methodinfo = RcNew(..method info class, immortal: true)
+                let method_info = Expr::named_var(METHODINFO_NAME).deref();
+                init_stmts.push(Statement::Expr(
+                    method_info.clone().assign_from(Expr::call_new(ir::METHODINFO_ID, true)))
+                );
 
                 let method = &typeinfo.methods[method_index];
                 init_stmts.push(Statement::Expr(Expr::assign(
-                    method_ptr_expr.clone().arrow(FieldName::ID(ir::METHODINFO_NAME_FIELD)),
+                    method_info.clone().clone().arrow(FieldName::ID(ir::METHODINFO_NAME_FIELD)),
                     Expr::Global(GlobalName::StringLiteral(method.name)).addr_of(),
                 )));
 
                 init_stmts.push(Statement::Expr(Expr::assign(
-                    method_ptr_expr.clone().arrow(FieldName::ID(ir::METHODINFO_OWNER_FIELD)),
+                    method_info.clone().arrow(FieldName::ID(ir::METHODINFO_OWNER_FIELD)),
                     type_info_expr.clone().addr_of(),
                 )));
 
@@ -654,7 +647,7 @@ impl Unit {
                 };
 
                 init_stmts.push(Statement::Expr(Expr::assign(
-                    method_ptr_expr.clone().arrow(FieldName::ID(ir::METHODINFO_IMPL_FIELD)),
+                    method_info.clone().arrow(FieldName::ID(ir::METHODINFO_IMPL_FIELD)),
                     impl_ptr_expr,
                 )));
 
@@ -671,7 +664,7 @@ impl Unit {
                     });
 
                 init_stmts.push(Statement::assign(
-                    method_ptr_expr.clone().arrow(FieldName::ID(ir::METHODINFO_TAGS_FIELD)),
+                    method_info.clone().clone().arrow(FieldName::ID(ir::METHODINFO_TAGS_FIELD)),
                     match tag_loc {
                         Some(loc) => Expr::Global(GlobalName::StaticTagArray(loc)).addr_of(),
                         None => Expr::Null,
@@ -682,7 +675,7 @@ impl Unit {
             // typeinfo.methods = methods_array
             init_stmts.push(Statement::Expr(Expr::assign(
                 type_info_expr.field(FieldName::ID(ir::TYPEINFO_METHODS_FIELD)),
-                Expr::named_var(METHODS_ARRAY_NAME),
+                methods_array_var.clone(),
             )));
         }
 

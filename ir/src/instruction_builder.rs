@@ -2,12 +2,14 @@ mod dyn_array;
 pub mod scope;
 
 use crate::instruction_builder::dyn_array::gen_dyn_array_alloc_body;
+use crate::instruction_builder::dyn_array::gen_dyn_array_dtor_body;
 use crate::instruction_builder::dyn_array::gen_dyn_array_length_body;
-use crate::instruction_builder::dyn_array::gen_dyn_array_release_body;
 use crate::instruction_builder::dyn_array::new_dyn_array;
 use crate::instruction_builder::scope::LocalBinding;
 use crate::instruction_builder::scope::LocalStack;
+use crate::BinOpInstruction;
 use crate::FieldID;
+use crate::FunctionID;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::InterfaceID;
@@ -21,8 +23,6 @@ use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VirtualTypeID;
-use crate::BinOpInstruction;
-use crate::FunctionID;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -242,6 +242,20 @@ pub trait InstructionBuilder {
         self.emit(Instruction::RcNew {
             out: out.into(),
             type_id,
+            immortal,
+        });
+    }
+
+    fn rc_new_array(&mut self,
+        out: impl Into<Ref>,
+        element_type: Type,
+        count: impl Into<Value>,
+        immortal: bool,
+    ) {
+        self.emit(Instruction::RcNewArray {
+            out: out.into(),
+            element_type,
+            count: count.into(),
             immortal,
         });
     }
@@ -635,12 +649,14 @@ pub trait InstructionBuilder {
         a: impl Into<Ref>,
         index: impl Into<Value>,
         element_ty: impl Into<Type>,
+        of_type: impl Into<Type>,
     ) {
         self.emit(Instruction::Element {
             element: element_ty.into(),
             out: out.into(),
             a: a.into(),
             index: index.into(),
+            of_type: of_type.into(),
         });
     }
 
@@ -650,26 +666,42 @@ pub trait InstructionBuilder {
         a: impl Into<Ref>,
         index: impl Into<Value>,
         element_ty: impl Into<Type>,
+        of_type: impl Into<Type>,
     ) {
         let element_ty = element_ty.into();
         let element_ptr = self.local_temp(element_ty.clone().ptr());
 
-        self.element(element_ptr.clone(), a, index, element_ty);
+        self.element(element_ptr.clone(), a, index, element_ty, of_type);
         self.mov(out, Ref::Local(element_ptr).to_deref());
     }
 
-    #[allow(unused)]
     fn element_to_val(
         &mut self,
         a: impl Into<Ref>,
         index: impl Into<Value>,
         element_ty: impl Into<Type>,
+        of_type: impl Into<Type>,
     ) -> Ref {
         let element_ty = element_ty.into();
         let result = self.local_temp(element_ty.clone());
-        self.element_val(result.clone(), a, index, element_ty);
+        self.element_val(result.clone(), a, index, element_ty, of_type);
 
         Ref::Local(result)
+    }
+
+    fn length(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_type: impl Into<Type>) {
+        self.emit(Instruction::Length {
+            out: out.into(),
+            a: a.into(),
+            of_type: of_type.into(),
+        });
+    }
+
+    fn length_to_val(&mut self, a: impl Into<Ref>, of_type: impl Into<Type>) -> Value {
+        let length_var = self.local_temp(Type::I32);
+        self.length(length_var, a, of_type);
+
+        length_var.value()
     }
 
     fn label(&mut self, label: Label) {
@@ -903,7 +935,7 @@ pub trait InstructionBuilder {
         gen_dyn_array_alloc_body(self, element_type, array_class_id, get_mem_id)
     }
 
-    fn gen_dyn_array_release_body(
+    fn gen_dyn_array_dtor_body(
         &mut self,
         element_type: &Type,
         array_class_id: TypeDefID,
@@ -911,7 +943,7 @@ pub trait InstructionBuilder {
     ) where
         Self: Sized,
     {
-        gen_dyn_array_release_body(self, element_type, array_class_id, free_mem_id)
+        gen_dyn_array_dtor_body(self, element_type, array_class_id, free_mem_id)
     }
 
     fn new_dyn_array(
@@ -919,12 +951,11 @@ pub trait InstructionBuilder {
         array_class_id: TypeDefID,
         elements: impl IntoIterator<Item = Value>,
         element_type: &Type,
-        get_mem_id: FunctionID,
     ) -> Ref
     where
         Self: Sized,
     {
-        new_dyn_array(self, array_class_id, elements, element_type, get_mem_id)
+        new_dyn_array(self, array_class_id, elements, element_type)
     }
 
     fn if_then<Branch>(&mut self, cond: impl Into<Value>, then_branch: Branch)
@@ -985,13 +1016,69 @@ pub trait InstructionBuilder {
         let counter = counter.into();
 
         self.label(loop_label);
-        self.gte(done.clone(), counter.clone(), high_val);
+        self.gt(done.clone(), counter.clone(), high_val);
         self.jmpif(break_label, done);
 
+        self.local_begin();
         f(self);
+        self.local_end();
 
         self.add(counter.clone(), counter, inc_val);
         self.jmp(loop_label);
+        self.label(break_label);
+    }
+    
+    fn gen_default_init(&mut self, at: impl Into<Ref>, ty: &Type) {
+        match ty.default_literal() {
+            Some(lit) => {
+                self.mov(at, lit);
+            },
+
+            None => {
+                let at = at.into();
+                self.gen_fill_byte(at, Value::SizeOf(ty.clone()), Value::LiteralU8(0));
+            }
+        }
+    }
+
+    // inline IR for FillByte-style memory set procedure
+    fn gen_fill_byte(&mut self, at: Ref, count: Value, byte_val: Value) {
+        self.comment(&format!("fill_byte: {}, count={}, value {}", at, count, byte_val));
+
+        let byte_ptr_ty = Type::U8.ptr();
+
+        // dst_ptr := @at as ^UInt8
+        let at_addr = self.local_temp(Type::Nothing.ptr());
+        self.addr_of(at_addr.clone(), at);
+
+        let dst_ptr = self.local_temp(byte_ptr_ty.clone()).to_ref();
+        self.cast(dst_ptr.clone(), at_addr, byte_ptr_ty.clone());
+
+        // end_ptr := dst_ptr + count 
+        let end_ptr = self.local_temp(byte_ptr_ty.clone());
+        self.add(end_ptr.clone(), dst_ptr.clone(), count);
+
+        let continue_label = self.next_label();
+        let break_label = self.next_label();
+
+        self.label(continue_label);
+
+        // at_end := dst_ptr = end_ptr
+        let at_end = self.local_temp(Type::Bool);
+        self.eq(at_end.clone(), dst_ptr.clone(), end_ptr);
+
+        // if at_end then break
+        self.jmpif(break_label, at_end);
+
+        // else dst_ptr^ := byte_val
+        self.mov(dst_ptr.clone().to_deref(), byte_val.clone());
+
+        // dst_ptr += 1;
+        self.add(dst_ptr.clone(), dst_ptr.clone(), Value::LiteralISize(1));
+
+        // continue
+        self.jmp(continue_label);
+
         self.label(break_label);
     }
 
@@ -1143,7 +1230,7 @@ pub trait InstructionBuilder {
 
                 for i in 0..*dim {
                     let index = Value::LiteralI32(i as i32);
-                    self.element(element_ptr.clone(), at.clone(), index, element_ty.clone());
+                    self.element(element_ptr.clone(), at.clone(), index, element_ty.clone(), ty.clone());
 
                     result |= self.visit_deep(element_ptr.clone().to_deref(), element, f);
                 }

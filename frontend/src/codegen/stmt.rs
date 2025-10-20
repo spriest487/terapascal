@@ -235,12 +235,16 @@ fn build_for_loop_sequence(
 
         let binding_ty = builder.translate_type(range.binding_ty.ty());
         let binding_name = Arc::new(range.binding_name.to_string());
-        let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name)).to_ref();
+        let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
 
-        let counter_ref = builder.local_temp(ir::Type::I32).to_ref();
+        let counter_ref = builder.local_temp(ir::Type::I32);
 
-        match &range.src_expr.annotation().ty().as_ref() {
+        let base_type = range.src_expr.annotation().ty();
+        match base_type.as_ref() {
             typ::Type::Array(array_ty) => {
+                let base_type = builder.translate_type(&base_type);
+                let element_ty = builder.translate_type(&array_ty.element_ty);
+
                 let high_index = i32::try_from(array_ty.dim)
                     .expect("array dimension is out of range for i32");
 
@@ -250,8 +254,6 @@ fn build_for_loop_sequence(
                 
                 let high_val = ir::Value::LiteralI32(high_index - 1);
 
-                let element_ty = builder.translate_type(&array_ty.element_ty);
-
                 build_array_sequence_loop(
                     counter_ref.clone(),
                     high_val,
@@ -260,7 +262,7 @@ fn build_for_loop_sequence(
                     body,
                     builder,
                     |builder| {
-                        builder.element_to_val(src_ref, counter_ref, element_ty).value()
+                        builder.element_to_val(src_ref, counter_ref, element_ty, base_type).value()
                     }
                 );
             },
@@ -271,19 +273,10 @@ fn build_for_loop_sequence(
                 
                 // high := seq_val.length
                 let high_index_ref = builder.local_temp(ir::Type::I32);
-                builder.field_val(
-                    high_index_ref.clone(),
-                    src_ref.clone(),
-                    dynarray_ty.clone(),
-                    ir::DYNARRAY_LEN_FIELD,
-                    ir::Type::I32
-                );
+                builder.length(high_index_ref, src_ref.clone(), dynarray_ty.clone());
                 
                 // high -= 1;
-                builder.sub(high_index_ref.clone(), high_index_ref.clone(), ir::Value::LiteralI32(1));
-
-                let array_ty = element_ty.clone().ptr();
-                let array_ptr = builder.field_to_val(src_ref, dynarray_ty, ir::DYNARRAY_PTR_FIELD, array_ty.clone());
+                builder.sub(high_index_ref, high_index_ref, ir::Value::LiteralI32(1));
 
                 build_array_sequence_loop(
                     counter_ref.clone(),
@@ -293,10 +286,12 @@ fn build_for_loop_sequence(
                     body,
                     builder,
                     |builder| {
-                        let element_ptr = builder.local_temp(array_ty).to_ref();
-                        builder.add(element_ptr.clone(), array_ptr, counter_ref.clone());
-
-                        element_ptr.to_deref().value()
+                        builder.element_to_val(
+                            src_ref.clone(),
+                            counter_ref,
+                            element_ty.clone(),
+                            dynarray_ty,
+                        ).value()
                     }
                 );
             },
@@ -310,7 +305,7 @@ fn build_for_loop_sequence(
                     });
 
                 let seq_method = builder.translate_method(
-                    (**src_ty).clone(),
+                    src_ty.clone(),
                     seq_support.sequence_method_index,
                     None
                 );
@@ -403,9 +398,9 @@ fn build_for_loop_sequence(
 }
 
 fn build_array_sequence_loop<ElementFn>(
-    counter_ref: ir::Ref,
+    counter_ref: impl Into<ir::Ref>,
     high_val: impl Into<ir::Value>,
-    binding_ref: ir::Ref,
+    binding_ref: impl Into<ir::Ref>,
     binding_ty: ir::Type,
     body: &typ::ast::Stmt,
     builder: &mut Builder,
@@ -413,6 +408,9 @@ fn build_array_sequence_loop<ElementFn>(
 ) 
     where ElementFn: FnOnce(&mut Builder) -> ir::Value
 {
+    let counter_ref = counter_ref.into();
+    let binding_ref = binding_ref.into();
+
     build_for_loop_with_counter(
         counter_ref.clone(),
         ir::Value::LiteralI32(0),
@@ -425,7 +423,7 @@ fn build_array_sequence_loop<ElementFn>(
                 let first_iter = builder.eq_to_val(counter_ref.clone(), ir::Value::LiteralI32(0));
                 builder.jmpif(skip_release_label, first_iter);
 
-                builder.release(binding_ref.clone(), &binding_ty);    
+                builder.release(binding_ref.clone(), &binding_ty);
             });
             
             builder.label(skip_release_label);

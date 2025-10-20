@@ -1,3 +1,5 @@
+use crate::ast::global_typeinfo_decl_name;
+use crate::ast::Expr;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionDef;
 use crate::ast::FunctionName;
@@ -6,8 +8,7 @@ use crate::ast::Statement;
 use crate::ast::Type;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
-use crate::ast::global_typeinfo_decl_name;
-use crate::ast::Expr;
+use crate::c::FieldName;
 use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -106,6 +107,13 @@ pub struct InterfaceImpl {
 }
 
 #[derive(Clone, Debug)]
+pub struct DynArrayClass {
+    alloc_func: FunctionName,
+    length_func: FunctionName,
+    element_func: FunctionName,
+}
+
+#[derive(Clone, Debug)]
 pub struct Class {
     struct_id: ir::TypeDefID,
     impls: BTreeMap<ir::InterfaceID, InterfaceImpl>,
@@ -114,7 +122,7 @@ pub struct Class {
     release_func: Option<FunctionName>,
 
     // if this class is a dyn array, the RTTI for it
-    dyn_array_type_info: Option<ir::DynArrayClass>,
+    dyn_array_class: Option<DynArrayClass>,
     
     comment: Option<String>,
     
@@ -161,7 +169,8 @@ impl Class {
 
         let dtor = metadata.find_dtor(struct_id);
         
-        let runtime_type = metadata.get_runtime_type(&class_ty)
+        let runtime_type = metadata
+            .get_runtime_type(&class_ty)
             .unwrap_or_else(|| {
                 panic!("missing runtime type for class {}", metadata.pretty_ty_name(&class_ty))
             });
@@ -178,7 +187,7 @@ impl Class {
 
         let release_func = res_runtime_type.release.map(FunctionName::ID);
 
-        let dyn_array_type_info = metadata
+        let dyn_array_class = metadata
             .dyn_array_structs()
             .iter()
             .filter_map(|(el_ty, arr_struct_id)| {
@@ -188,7 +197,10 @@ impl Class {
                     None
                 }
             })
-            .next();
+            .next()
+            .map(|type_info| {
+                Self::build_dyn_array_class(module, struct_id, &type_info)
+            });
 
         let comment = runtime_type
             .get_name_string(metadata)
@@ -202,7 +214,7 @@ impl Class {
             impls,
             dtor,
             release_func,
-            dyn_array_type_info,
+            dyn_array_class,
             comment: Some(comment),
             typeinfo_global_name: typeinfo_name,
         }
@@ -217,8 +229,52 @@ impl Class {
             dtor: None,
             impls: BTreeMap::new(),
             release_func: None,
-            dyn_array_type_info: None,
+            dyn_array_class: None,
             typeinfo_global_name: global_typeinfo_decl_name(&ty),
+        }
+    }
+    
+    fn build_dyn_array_class(
+        unit: &mut Unit,
+        class_id: ir::TypeDefID,
+        dyn_array_class: &ir::DynArrayClass,
+    ) -> DynArrayClass {
+        let array_ptr_ty = Type::DefinedType(TypeDefName::Struct(class_id)).ptr();
+
+        let element_func_name = FunctionName::DynArrayGetElement(class_id);
+
+        let arr_arg = Expr::local_var(ir::LocalID(1));
+        let index_arg = Expr::local_var(ir::LocalID(2));
+
+        let element_func_body = vec![
+            Statement::Expr(Expr::Function(FunctionName::DynArrayBoundsCheck)
+                .call([
+                    arr_arg.clone(),
+                    index_arg.clone(),
+                ])),
+            Statement::ReturnValue(
+                arr_arg
+                    .cast(array_ptr_ty)
+                    .arrow(FieldName::ID(ir::DYNARRAY_PTR_FIELD))
+                    .index(index_arg.cast(Type::SizeType))
+                    .addr_of()
+            ),
+        ];
+        
+        unit.functions.push(FunctionDef {
+            decl: FunctionDecl {
+                name: element_func_name,
+                comment: Some(format!("generated dynarray element function for class {}", class_id)),
+                params: vec![Type::Rc.ptr(), Type::Int32],
+                return_ty: Type::Void.ptr(),
+            },
+            body: element_func_body,
+        });
+
+        DynArrayClass {
+            alloc_func: FunctionName::ID(dyn_array_class.alloc),
+            length_func: FunctionName::ID(dyn_array_class.length),
+            element_func: element_func_name,
         }
     }
 
@@ -269,7 +325,7 @@ impl Class {
                 .unwrap();
         }
 
-        match self.dyn_array_type_info {
+        match self.dyn_array_class {
             Some(..) => {
                 writeln!(
                     decls,
@@ -390,20 +446,24 @@ impl Class {
 
         class_init.push_str("}");
 
-        match &self.dyn_array_type_info {
-            Some(dyn_array_ty_info) => {
+        match &self.dyn_array_class {
+            Some(dyn_array_class) => {
                 writeln!(
                     def,
                     r#"
                 struct DynArrayClass {class_name} = {{
                     .base = {class_init},
-                    .alloc = {alloc_func},
+                    .{alloc_name} = {alloc_func},
                     .length = {len_func},
+                    .{element_name} = {get_element},
                 }};"#,
                     class_name = GlobalName::ClassInstance(self.struct_id),
                     class_init = class_init,
-                    alloc_func = FunctionName::ID(dyn_array_ty_info.alloc),
-                    len_func = FunctionName::ID(dyn_array_ty_info.length),
+                    alloc_name = FieldName::DynArrayAlloc,
+                    alloc_func = dyn_array_class.alloc_func,
+                    len_func = dyn_array_class.length_func,
+                    element_name = FieldName::DynArrayElement,
+                    get_element = dyn_array_class.element_func,
                 ).unwrap();
             },
 

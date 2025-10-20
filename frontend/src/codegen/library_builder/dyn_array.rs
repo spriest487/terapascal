@@ -80,42 +80,39 @@ pub fn gen_dyn_array_runtime_type(
     array_class_id: ir::TypeDefID,
 ) {
     let array_ref_ty = array_class_id.to_class_ptr_type();
-    let array_struct_ty = array_class_id.to_struct_type();
 
-    let runtime_type = lib
-        .metadata()
-        .get_runtime_type(&array_struct_ty)
-        .expect("rtti function ids for dynarray inner struct must exist");
+    let dtor_id = lib.metadata_mut().insert_func(None);
+    lib.metadata_mut().insert_dtor(array_class_id, dtor_id);
 
     let free_mem_id = lib.instantiate_free_mem_func();
+    
+    let sig = ir::FunctionSig {
+        return_ty: ir::Type::Nothing,
+        param_tys: vec![array_class_id.to_class_ptr_type()],
+    };
 
-    let mut builder = Builder::new(lib);
-    builder.bind_param(array_struct_ty.clone().ptr(), "self", true);
-    builder.gen_dyn_array_release_body(elem_type, array_class_id, free_mem_id);
-
-    let releaser_body = builder.finish();
-
-    let debug_name = if lib.opts.debug {
+    let dtor_name = if lib.opts.debug {
         let array_ref_ty_name = lib.metadata().pretty_ty_name(&array_ref_ty).into_owned();
-        Some(format!(
-            "<generated dynarray releaser for {}>",
+        let dtor_name = format!(
+            "<generated dynarray dtor for {}>",
             array_ref_ty_name
-        ))
+        );
+
+        Some(dtor_name)
     } else {
         None
     };
 
-    lib.insert_func(
-        runtime_type.release.expect("dynarray class object must have a release func id allocated"),
-        ir::Function::Local(ir::FunctionDef {
-            debug_name,
-            sig: ir::FunctionSig {
-                return_ty: ir::Type::Nothing,
-                param_tys: vec![array_struct_ty.clone().ptr()],
-            },
-            body: releaser_body,
-        }),
-    );
+    let mut dtor_builder = Builder::new(lib);
+    dtor_builder.bind_param(array_class_id.to_class_ptr_type(), "self", false);
+    dtor_builder.gen_dyn_array_dtor_body(elem_type, array_class_id, free_mem_id);
+    let dtor_body = dtor_builder.finish();
+
+    lib.insert_func(dtor_id, ir::Function::Local(ir::FunctionDef {
+        debug_name: dtor_name,
+        sig: sig.clone(),
+        body: dtor_body,
+    }));
 
     let weak_ty = ir::Type::RcWeakPointer(ir::VirtualTypeID::Class(array_class_id));
     lib.gen_runtime_type(&weak_ty);

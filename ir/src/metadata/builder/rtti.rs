@@ -28,6 +28,7 @@ impl MetadataBuilder {
         let runtime_type = DynArrayClass {
             alloc: self.insert_func(None),
             length: self.insert_func(None),
+            element_type: element_ty.clone(),
         };
 
         self.metadata.dyn_array_classes.insert(element_ty.clone(), runtime_type.clone());

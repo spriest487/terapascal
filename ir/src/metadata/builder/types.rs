@@ -253,12 +253,8 @@ impl MetadataBuilder {
         self.metadata.dyn_array_structs.insert(element.clone(), struct_id);
 
         // the rc boilerplate impls for a dynarray should be empty
-        // dyn array structs are heap-allocated and don't need structural ref-counting
-        // (but they do need custom finalization to clean up references they hold)
-        let release_id = self.insert_func(None);
-
-        let mut rtt = RuntimeType::new(None);
-        rtt.release = Some(release_id);
+        // the dtor releases the elements
+        let rtt = RuntimeType::new(None);
 
         self.insert_runtime_type(Type::Struct(struct_id), rtt);
         self.declare_dyn_array_class(&element);
@@ -279,10 +275,6 @@ impl MetadataBuilder {
 
     pub fn find_dyn_array_struct(&self, elem_ty: &Type) -> Option<TypeDefID> {
         self.find_in_self_or_refs(move |metadata| metadata.find_dyn_array_struct(elem_ty))
-    }
-
-    pub fn get_bounds_check_func(&self, type_id: &Type) -> Option<FunctionID> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_bounds_check_func(type_id))
     }
 
     pub fn find_set_def(&self, name: &NamePath) -> Option<(SetAliasID, &SetAliasDef)> {

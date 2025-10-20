@@ -55,17 +55,23 @@ struct Rc {
     .weak_count = weak\
 }
 
+#define OBJECT_PTR struct Rc*
+
 typedef void (*Invoker)(void** args, void* resultOut);
 
-typedef void (*DynArrayAlloc)(struct Rc* arr, int32_t len, struct Rc* copy_from, void* default_val);
-typedef int32_t (*DynArrayLength)(struct Rc* arr);
+typedef void (*DynArrayAlloc)(OBJECT_PTR arr, int32_t len, OBJECT_PTR copy_from, void* default_val);
+typedef int32_t (*DynArrayLength)(OBJECT_PTR arr);
+typedef void* (*DynArrayGetElement)(OBJECT_PTR arr, int32_t index);
 
 struct DynArrayClass {
     struct Class base;
 
     DynArrayAlloc alloc;
     DynArrayLength length;
+    DynArrayGetElement get_element;
 };
+
+static void DynArrayBoundsCheck(OBJECT_PTR arr, int32_t index); 
 
 static bool IsImpl(struct Class* class, size_t iface) {
     struct MethodTable* next = class->iface_methods;
@@ -105,9 +111,10 @@ static void Free(void* mem);
 
 // RC runtime functions
 
-static void* RcAlloc(struct Class* class, bool immortal);
-static void RcRetain(void* instance, bool weak);
-static bool RcRelease(void* instance, bool weak);
+static void RcRetain(OBJECT_PTR instance, bool weak);
+static bool RcRelease(OBJECT_PTR instance, bool weak);
+static OBJECT_PTR RcNew(struct Class* class, bool immortal);
+static OBJECT_PTR RcNewArray(struct DynArrayClass* class, int count, bool immortal);
 
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 
@@ -120,7 +127,7 @@ static int32_t typeinfo_count;
 static TYPEINFO_STRUCT* System_FindTypeInfo(STRING_STRUCT* type_name);
 static int System_GetTypeInfoCount(void);
 static TYPEINFO_STRUCT* System_GetTypeInfoByIndex(int type_index);
-static TYPEINFO_STRUCT* System_GetObjectTypeInfo(struct Rc* obj);
+static TYPEINFO_STRUCT* System_GetObjectTypeInfo(OBJECT_PTR obj);
 
 static FUNCINFO_STRUCT** funcinfo_list;
 static int32_t funcinfo_count;
@@ -151,8 +158,8 @@ static void System_FreeMem(unsigned char* mem);
 static void System_Write(STRING_STRUCT* str);
 static void System_WriteLn(STRING_STRUCT* str);
 static STRING_STRUCT* System_ReadLn(void);
-static int32_t System_ArrayLengthInternal(struct Rc* arr);
-static void* System_ArraySetLengthInternal(struct Rc* arr, int32_t new_len, void* default_val);
+static int32_t System_ArrayLengthInternal(OBJECT_PTR arr);
+static OBJECT_PTR System_ArraySetLengthInternal(OBJECT_PTR arr, int32_t new_len, void* default_val);
 
 static int32_t System_RandomInteger(int32_t from, int32_t to);
 static float System_RandomSingle(float from, float to);

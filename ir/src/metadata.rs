@@ -135,8 +135,6 @@ pub struct Metadata {
     dyn_array_classes: HashMap<Type, DynArrayClass>,
 
     runtime_types: HashMap<Type, Rc<RuntimeType>>,
-    
-    bounds_check_functions: HashMap<Type, FunctionID>,
 
     tag_counts: HashMap<TagLocation, usize>,
 }
@@ -153,8 +151,6 @@ impl Metadata {
             dtors: BTreeMap::new(),
 
             set_aliases: LinkedHashMap::new(),
-
-            bounds_check_functions: HashMap::new(),
 
             functions: LinkedHashMap::new(),
 
@@ -273,12 +269,6 @@ impl Metadata {
             }
         }
         
-        for (element_ty, func_id) in &other.bounds_check_functions {
-            if !self.bounds_check_functions.contains_key(element_ty) {
-                self.bounds_check_functions.insert(element_ty.clone(), *func_id);
-            }
-        }
-        
         for (id, def) in &other.set_aliases {
             if !self.set_aliases.contains_key(id) {
                 self.set_aliases.insert(*id, def.clone());
@@ -389,10 +379,6 @@ impl Metadata {
             InterfaceDecl::Def(def) => Some(def),
             InterfaceDecl::Forward(..) => None,
         }
-    }
-    
-    pub fn get_bounds_check_func(&self, type_id: &Type) -> Option<FunctionID> {
-        self.bounds_check_functions.get(type_id).cloned()
     }
 
     pub fn get_runtime_type(&self, ty: &Type) -> Option<Rc<RuntimeType>> {

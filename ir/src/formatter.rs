@@ -189,19 +189,36 @@ pub trait IRFormatter {
             Instruction::Element {
                 out,
                 a,
-                element,
                 index,
+                of_type,
+                ..
             } => {
                 write!(f, "{:>width$} ", "el", width = IX_WIDTH)?;
 
                 self.format_ref(out, f)?;
                 write!(f, " := @(")?;
+
                 self.format_ref(a, f)?;
-                write!(f, " as array of ")?;
-                self.format_type(element, f)?;
+                write!(f, " as ")?;
+                self.format_type(of_type, f)?;
+
                 write!(f, ")[")?;
                 self.format_val(index, f)?;
                 write!(f, "]")
+            }
+            
+            Instruction::Length {
+                out,
+                a,
+                of_type,
+            } => {
+                write!(f, "{:>width$} ", "length", width = IX_WIDTH)?;
+                self.format_ref(out, f)?;
+                write!(f, " := length of ")?;
+
+                self.format_ref(a, f)?;
+                write!(f, " as ")?;
+                self.format_type(of_type, f)
             }
 
             Instruction::Field {
@@ -254,12 +271,33 @@ pub trait IRFormatter {
             }
 
             Instruction::RcNew { out, type_id, immortal } => {
-                write!(f, "{:>width$} ", "rcnew", width = IX_WIDTH)?;
+                write!(f, "{:>width$} ", "new", width = IX_WIDTH)?;
                 self.format_type(&Type::Struct(*type_id), f)?;
-                write!(f, " at {}", out)?;
+                
+                write!(f, " at ")?;
+                self.format_ref(out, f)?;
+                
                 if *immortal {
                     write!(f, " (immortal)")?;
                 }
+                Ok(())
+            }
+            
+            Instruction::RcNewArray { out, element_type, count, immortal } => {
+                write!(f, "{:>width$} ", "newa", width = IX_WIDTH)?;
+                
+                self.format_ref(out, f)?;
+
+                write!(f, " := [")?;
+                self.format_type(element_type, f)?;
+                write!(f, ", ")?;
+                self.format_val(count, f)?;
+                write!(f, "]")?;
+
+                if *immortal {
+                    write!(f, " (immortal)")?;
+                }
+                
                 Ok(())
             }
 
