@@ -3,11 +3,15 @@ using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
-public readonly record struct TypeDefID(ulong ID) {
+public readonly record struct TypeDefID(ulong ID) : IComparable<TypeDefID> {
     public static TypeDefID String => new TypeDefID(1);
     public static TypeDefID TypeInfo => new TypeDefID(2);
     public static TypeDefID MethodInfo => new TypeDefID(3);
     public static TypeDefID FunctionInfo => new TypeDefID(4);
+
+    public int CompareTo(TypeDefID other) {
+        return this.ID.CompareTo(other.ID);
+    }
 }
 
 public class TypeDefIDFormatter : IMessagePackFormatter<TypeDefID> {
@@ -21,7 +25,11 @@ public class TypeDefIDFormatter : IMessagePackFormatter<TypeDefID> {
     }
 }
 
-public readonly record struct InterfaceID(ulong ID);
+public readonly record struct InterfaceID(ulong ID) : IComparable<InterfaceID> {
+    public int CompareTo(InterfaceID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+}
 
 public class InterfaceIDFormatter : IMessagePackFormatter<InterfaceID> {
     public void Serialize(ref MessagePackWriter writer, InterfaceID value, MessagePackSerializerOptions options) {
@@ -34,7 +42,11 @@ public class InterfaceIDFormatter : IMessagePackFormatter<InterfaceID> {
     }
 }
 
-public readonly record struct SetAliasID(ulong ID);
+public readonly record struct SetAliasID(ulong ID) : IComparable<SetAliasID> {
+    public int CompareTo(SetAliasID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+}
 
 public class SetAliasIDFormatter : IMessagePackFormatter<SetAliasID> {
     public void Serialize(ref MessagePackWriter writer, SetAliasID value, MessagePackSerializerOptions options) {
@@ -47,7 +59,11 @@ public class SetAliasIDFormatter : IMessagePackFormatter<SetAliasID> {
     }
 }
 
-public readonly record struct FieldID(ulong ID);
+public readonly record struct FieldID(ulong ID) : IComparable<FieldID> {
+    public int CompareTo(FieldID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+}
 
 public class FieldIDFormatter : IMessagePackFormatter<FieldID> {
     public void Serialize(ref MessagePackWriter writer, FieldID value, MessagePackSerializerOptions options) {
@@ -60,7 +76,11 @@ public class FieldIDFormatter : IMessagePackFormatter<FieldID> {
     }
 }
 
-public readonly record struct MethodID(ulong ID);
+public readonly record struct MethodID(ulong ID) : IComparable<MethodID> {
+    public int CompareTo(MethodID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+}
 
 public class MethodIDFormatter : IMessagePackFormatter<MethodID> {
     public void Serialize(ref MessagePackWriter writer, MethodID value, MessagePackSerializerOptions options) {

@@ -3,11 +3,35 @@ using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
-public readonly record struct LocalID(ulong ID);
-public readonly record struct FunctionID(ulong ID);
-public readonly record struct VariableID(ulong ID);
-public readonly record struct StringID(ulong ID);
-public readonly record struct StaticClosureID(ulong ID);
+public readonly record struct LocalID(ulong ID) : IComparable<LocalID> {
+    public int CompareTo(LocalID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+}
+
+public readonly record struct FunctionID(ulong ID) : IComparable<FunctionID> {
+    public int CompareTo(FunctionID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+}
+
+public readonly record struct VariableID(ulong ID) : IComparable<VariableID> {
+    public int CompareTo(VariableID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+}
+
+public readonly record struct StringID(ulong ID) : IComparable<StringID> {
+    public int CompareTo(StringID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+}
+
+public readonly record struct StaticClosureID(ulong ID) : IComparable<StaticClosureID> {
+    public int CompareTo(StaticClosureID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+}
 
 public class LocalIDFormatter : IMessagePackFormatter<LocalID> {
     public void Serialize(ref MessagePackWriter writer, LocalID value, MessagePackSerializerOptions options) {

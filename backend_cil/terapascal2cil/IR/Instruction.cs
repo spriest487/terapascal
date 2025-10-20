@@ -102,7 +102,8 @@ public record AddrOfInstruction : IInstruction {
 }
 
 [MessagePackObject]
-public record ElementInstruction : IInstruction {[Key("out")]
+public record ElementInstruction : IInstruction {
+    [Key("out")]
     public required IRef Out { 
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
@@ -120,8 +121,29 @@ public record ElementInstruction : IInstruction {[Key("out")]
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
     
-    [Key("element")]
-    public required IType ElementType { 
+    [Key("of_type")]
+    public required IType ArrayType { 
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+}
+
+[MessagePackObject]
+public record LengthInstruction : IInstruction {
+    [Key("out")]
+    public required IRef Out { 
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("a")]
+    public required IRef Arg {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+    
+    [Key("of_type")]
+    public required IType ArrayType { 
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -500,6 +522,10 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
 
             case "Element": {
                 return MessagePackSerializer.Deserialize<ElementInstruction>(ref reader, options);
+            }
+            
+            case "Length": {
+                return MessagePackSerializer.Deserialize<LengthInstruction>(ref reader, options);
             }
             
             case "VariantTag": {

@@ -187,24 +187,58 @@ public class InstructionBuilder {
                     Out: var outRef,
                     Arg: var arrRef,
                     Index: var indexVal,
-                    ElementType: var elementType,
+                    ArrayType: var arrayType,
                 }: {
-                    // TODO: fix element instruction to provide array struct type instead?
-                    var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType)
-                        .Resolve();
-                    var elementSize = elementTypeRef?.ClassSize ?? TypeBuilder.PointerSize;
+                    if (arrayType is IR.ArrayType staticArrayType) {
+                        // fixed length static array
+                        var elementTypeRef = this.assemblyBuilder.TypeBuilder
+                            .BuildTypeRef(staticArrayType.Element)
+                            .Resolve();
+                        var elementSize = elementTypeRef?.ClassSize ?? TypeBuilder.PointerSize;
 
-                    this.LoadRefAddr(arrRef);
-                    this.body.Emit(OpCodes.Conv_U);
+                        this.LoadRefAddr(arrRef);
+                        this.body.Emit(OpCodes.Conv_U);
 
-                    this.body.Emit(OpCodes.Ldc_I4, elementSize);
-                    this.LoadValue(indexVal);
-                    this.body.Emit(OpCodes.Mul);
+                        this.body.Emit(OpCodes.Ldc_I4, elementSize);
+                        this.LoadValue(indexVal);
+                        this.body.Emit(OpCodes.Mul);
 
-                    this.body.Emit(OpCodes.Add);
+                        this.body.Emit(OpCodes.Add);
+                    } else {
+                        // must be a dynarray
+                        var arrayClassID = ((IR.ClassVirtualTypeID)((IR.RcPointerType)arrayType).ID).ID;
+
+                        var elementType = this.library.Metadata.GetDynArrayTypeElement(arrayClassID)
+                            ?? throw new InvalidDataException($"illegal instruction - array class {arrayClassID} not found in metadata");
+                        var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType);
+
+                        this.LoadRef(arrRef);
+                        this.LoadValue(indexVal);
+                        this.body.Emit(OpCodes.Ldelem_Any, elementTypeRef);
+                    }
 
                     this.StoreRef(outRef);
 
+                    break;
+                }
+
+                case IR.LengthInstruction {
+                    Out: var outRef,
+                    Arg: var argRef,
+                    ArrayType: var arrayType,
+                }: {
+                    if (arrayType is IR.ArrayType staticArrayType) {
+                        this.body.Emit(OpCodes.Ldc_I4, (int)staticArrayType.Length);
+                    } else if (arrayType is IR.RcPointerType) {
+                        // must be a dynarray
+                        this.LoadRef(argRef);
+                        this.body.Emit(OpCodes.Ldlen);
+                    } else {
+                        this.body.Emit(OpCodes.Ldc_I4, 1);
+                    }
+                    
+                    this.StoreRef(outRef);
+                    
                     break;
                 }
 
