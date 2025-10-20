@@ -265,13 +265,18 @@ pub(super) fn gen_dyn_array_dtor_body(
     });
 
     builder.comment("pointer to the pointer field of the dynarray object");
-    let arr_field_ptr = builder.local_temp(elem_ty.clone().ptr().ptr());
+    let arr_ptr = builder.field_to_val(
+        self_arg,
+        class_type,
+        DYNARRAY_PTR_FIELD,
+        elem_ty.clone().ptr(),
+    );
 
     builder.comment("u8 pointer var, to cast the array memory pointer before calling FreeMem");
     let arr_mem_ptr = builder.local_temp(Type::U8.ptr());
 
     // FreeMem(instance.array as Byte^)
-    builder.cast(arr_mem_ptr, arr_field_ptr, Type::U8.ptr());
+    builder.cast(arr_mem_ptr, arr_ptr, Type::U8.ptr());
     builder.call(free_mem_id, [arr_mem_ptr.value()], None);
 }
 
