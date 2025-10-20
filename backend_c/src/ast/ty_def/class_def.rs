@@ -243,25 +243,33 @@ impl Class {
 
         let element_func_name = FunctionName::DynArrayGetElement(class_id);
 
-        let element_func = FunctionDef {
+        let arr_arg = Expr::local_var(ir::LocalID(1));
+        let index_arg = Expr::local_var(ir::LocalID(2));
+
+        let element_func_body = vec![
+            Statement::Expr(Expr::Function(FunctionName::DynArrayBoundsCheck)
+                .call([
+                    arr_arg.clone(),
+                    index_arg.clone(),
+                ])),
+            Statement::ReturnValue(
+                arr_arg
+                    .cast(array_ptr_ty)
+                    .arrow(FieldName::ID(ir::DYNARRAY_PTR_FIELD))
+                    .index(index_arg.cast(Type::SizeType))
+                    .addr_of()
+            ),
+        ];
+        
+        unit.functions.push(FunctionDef {
             decl: FunctionDecl {
                 name: element_func_name,
                 comment: Some(format!("generated dynarray element function for class {}", class_id)),
                 params: vec![Type::Rc.ptr(), Type::Int32],
                 return_ty: Type::Void.ptr(),
             },
-            body: vec![
-                Statement::ReturnValue(
-                    Expr::local_var(ir::LocalID(1))
-                        .cast(array_ptr_ty)
-                        .arrow(FieldName::ID(ir::DYNARRAY_PTR_FIELD))
-                        .index(Expr::local_var(ir::LocalID(2)).cast(Type::SizeType))
-                        .addr_of()
-                ),
-            ]
-        };
-        
-        unit.functions.push(element_func);
+            body: element_func_body,
+        });
 
         DynArrayClass {
             alloc_func: FunctionName::ID(dyn_array_class.alloc),

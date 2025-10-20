@@ -27,6 +27,9 @@ pub enum FunctionName {
 
     // generated function for fetching dynarray elements of a particular dynarray type
     DynArrayGetElement(ir::TypeDefID),
+    
+    // helper function for runtime bounds checking
+    DynArrayBoundsCheck,
 
     Builtin(BuiltinName),
 }
@@ -48,10 +51,12 @@ impl fmt::Display for FunctionName {
             FunctionName::MethodWrapper(iface, method, self_ty) => {
                 write!(f, "Method_{}_{}_Wrapper_{}", iface, method.0, self_ty)
             },
-            
+
             FunctionName::DynArrayGetElement(id) => {
                 write!(f, "DynArrayGetElement_{}", id.0)
             }
+
+            FunctionName::DynArrayBoundsCheck => write!(f, "DynArrayBoundsCheck"),
 
             FunctionName::Builtin(name) => write!(f, "{}", name),
         }

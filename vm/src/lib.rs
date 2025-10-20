@@ -39,7 +39,7 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
-use terapascal_ir::DYNARRAY_PTR_FIELD;
+use terapascal_ir::{DYNARRAY_LEN_FIELD, DYNARRAY_PTR_FIELD};
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -1355,15 +1355,13 @@ impl Interpreter {
         let index_value = self
             .evaluate(index)?
             .as_i32()
-            .map(|i| i as usize)
             .ok_or_else(|| {
                 let msg = "element instruction has non-integer illegal index value";
                 ExecError::illegal_state(msg)
             })?;
 
         let el_marshal_ty = self.marshaller.get_ty(element_type)?;
-        let index_offset = el_marshal_ty.size() * index_value;
-        
+
         // assume any object pointer is a dynarray
         let array_ptr = if of_type.is_rc() {
             let DynValue::Pointer(array_ptr) = self.load(a)? else {
@@ -1371,6 +1369,17 @@ impl Interpreter {
             };
             
             let (array, _) = self.load_rc_struct_ptr(&array_ptr)?;
+
+            // dynarray access isn't statically bounds checked
+            let array_len = array.fields
+                .get(DYNARRAY_LEN_FIELD.0)
+                .and_then(|field_val| field_val.as_i32())
+                .ok_or_else(|| ExecError::illegal_state("expected array struct to have a length field"))?;
+            if index_value < 0 || index_value >= array_len {
+                return Err(ExecError::Raised {
+                    msg: "array index out of bounds".to_string()
+                });
+            }
             
             array.fields
                 .get(DYNARRAY_PTR_FIELD.0)
@@ -1382,15 +1391,15 @@ impl Interpreter {
             self.addr_of_ref(a)?
         };
 
-        self.store(
-            out,
-            DynValue::Pointer(Pointer {
-                addr: array_ptr.addr + index_offset,
-                ty: element_type.clone(),
-            }),
-        )?;
+        let elements_pointer = Pointer {
+            addr: array_ptr.addr,
+            ty: element_type.clone(),
+        };
 
-        Ok(())
+        let index_offset = el_marshal_ty.size() * (index_value as usize);
+        let element_pointer = elements_pointer.addr_add(index_offset);
+
+        self.store(out, DynValue::Pointer(element_pointer))
     }
 
     fn exec_add(&mut self, op: &ir::BinOpInstruction) -> ExecResult<()> {

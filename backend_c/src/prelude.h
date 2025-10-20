@@ -71,6 +71,8 @@ struct DynArrayClass {
     DynArrayGetElement get_element;
 };
 
+static void DynArrayBoundsCheck(OBJECT_PTR arr, int32_t index); 
+
 static bool IsImpl(struct Class* class, size_t iface) {
     struct MethodTable* next = class->iface_methods;
     while (next) {

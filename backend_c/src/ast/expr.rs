@@ -309,21 +309,23 @@ impl Expr {
         let index_expr = Expr::translate_val(index, module);
         
         match of_type {
-            ir::Type::RcPointer(ir::VirtualTypeID::Class(array_class_id)) => {
-                Expr::Global(GlobalName::ClassInstance(*array_class_id))
-                    .addr_of()
-                    .cast(Type::DynArrayClass.ptr())
-                    .arrow(FieldName::DynArrayElement)
-                    .call([array_expr.cast(Type::object_ptr()), index_expr])
-            }
+            ir::Type::RcPointer(type_id) => {
+                let arr_obj = array_expr.cast(Type::object_ptr());
 
-            ir::Type::RcPointer(..) => {
-                array_expr
-                    .clone()
-                    .arrow(FieldName::RcClass)
-                    .cast(Type::DynArrayClass)
+                let class_ptr = match type_id {
+                    ir::VirtualTypeID::Class(array_class_id) => {
+                        Expr::Global(GlobalName::ClassInstance(*array_class_id)).addr_of()
+                    }
+                    
+                    _ => {
+                        let obj_class_ptr = arr_obj.clone().arrow(FieldName::RcClass);
+                        obj_class_ptr.cast(Type::DynArrayClass.ptr())
+                    },
+                };
+
+                class_ptr
                     .arrow(FieldName::DynArrayElement)
-                    .call([array_expr.cast(Type::object_ptr()), index_expr])
+                    .call([arr_obj, index_expr])
             }
 
             _ => {

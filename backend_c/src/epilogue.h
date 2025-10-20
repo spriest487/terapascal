@@ -43,6 +43,20 @@ _Noreturn static void Raise(STRING_STRUCT* msg_str) {
     abort();
 }
 
+static void DynArrayBoundsCheck(OBJECT_PTR arr, int32_t index) {
+    const char* message = "array index out of bounds"; 
+    if (index < 0 || !arr) {
+        fatal(message);
+    }
+    
+    struct DynArrayClass* arr_class = (struct DynArrayClass*) arr->class;
+    int arr_len = arr_class->length(arr);
+    
+    if (index >= arr_len) {
+        fatal(message);
+    } 
+}
+
 static int32_t System_StrToInt(STRING_STRUCT* str) {
     if (!str || str->rc.strong_count == 0) {
         fprintf(stderr, "called StrToInt for an invalid string pointer\n");
