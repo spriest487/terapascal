@@ -239,8 +239,12 @@ fn build_for_loop_sequence(
 
         let counter_ref = builder.local_temp(ir::Type::I32).to_ref();
 
-        match &range.src_expr.annotation().ty().as_ref() {
+        let base_type = range.src_expr.annotation().ty();
+        match base_type.as_ref() {
             typ::Type::Array(array_ty) => {
+                let base_type = builder.translate_type(&base_type);
+                let element_ty = builder.translate_type(&array_ty.element_ty);
+
                 let high_index = i32::try_from(array_ty.dim)
                     .expect("array dimension is out of range for i32");
 
@@ -250,8 +254,6 @@ fn build_for_loop_sequence(
                 
                 let high_val = ir::Value::LiteralI32(high_index - 1);
 
-                let element_ty = builder.translate_type(&array_ty.element_ty);
-
                 build_array_sequence_loop(
                     counter_ref.clone(),
                     high_val,
@@ -260,7 +262,7 @@ fn build_for_loop_sequence(
                     body,
                     builder,
                     |builder| {
-                        builder.element_to_val(src_ref, counter_ref, element_ty).value()
+                        builder.element_to_val(src_ref, counter_ref, element_ty, base_type).value()
                     }
                 );
             },
@@ -310,7 +312,7 @@ fn build_for_loop_sequence(
                     });
 
                 let seq_method = builder.translate_method(
-                    (**src_ty).clone(),
+                    src_ty.clone(),
                     seq_support.sequence_method_index,
                     None
                 );

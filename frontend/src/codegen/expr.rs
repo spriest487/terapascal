@@ -141,63 +141,27 @@ fn translate_indexer(
 ) -> ir::Ref {
     match base_ty {
         typ::Type::Array(array_ty) => {
-            let element_ptr = builder.local_temp(val_ty.clone().ptr()).to_ref();
-
-            builder.local_begin();
-
+            let element_ptr = builder.local_temp(val_ty.clone().ptr());
+            
+            let base_ty = builder.translate_type(base_ty);
             let element_ty = builder.translate_type(&array_ty.element_ty);
             let len = i32::try_from(array_ty.dim)
                 .expect("array dim must be within range of i32");
             let len_val = ir::Value::LiteralI32(len);
 
-            builder.bounds_check(&element_ty, len_val, index_val.clone());
+            builder.array_bounds_check(len_val, index_val.clone());
+            builder.element(element_ptr, base_ref, index_val, element_ty, base_ty.clone());
 
-            builder.emit(ir::Instruction::Element {
-                out: element_ptr.clone(),
-                a: base_ref,
-                index: index_val,
-                element: element_ty,
-            });
-
-            builder.local_end();
-
-            element_ptr
+            element_ptr.to_ref()
         },
 
         typ::Type::DynArray { element } => {
-            let element_type = builder.translate_type(element);
             let element_ptr = builder.local_temp(val_ty.clone().ptr());
 
-            builder.local_begin();
+            let base_ty = builder.translate_type(base_ty);
+            let element_ty = builder.translate_type(element);
 
-            let arr_field_ptr = builder.local_temp(val_ty.clone().ptr().ptr()).to_ref();
-            let len_field_ptr = builder.local_temp(ir::Type::I32.ptr()).to_ref();
-
-            let array_struct = builder.translate_dyn_array_struct(&element);
-            let array_class = ir::VirtualTypeID::Class(array_struct);
-            let array_class_ty = ir::Type::RcPointer(array_class);
-
-            builder.field(
-                len_field_ptr.clone(),
-                base_ref.clone(),
-                array_class_ty.clone(),
-                ir::DYNARRAY_LEN_FIELD,
-            );
-            builder.field(
-                arr_field_ptr.clone(),
-                base_ref.clone(),
-                array_class_ty,
-                ir::DYNARRAY_PTR_FIELD,
-            );
-
-            builder.bounds_check(&element_type, len_field_ptr.to_deref(), index_val.clone());
-
-            // array_ptr := (array_field_ptr)^
-            // element_ptr := array_ptr + index
-            let array_ptr = arr_field_ptr.to_deref();
-            builder.add(element_ptr.clone(), array_ptr, index_val);
-
-            builder.local_end();
+            builder.element(element_ptr, base_ref, index_val, element_ty, base_ty.clone());
 
             element_ptr.to_ref()
         },
@@ -380,7 +344,7 @@ pub fn literal_to_val(
                     let size_expr = ir::Value::SizeOf(ir_ty.clone());
                     let temp_ref = builder.local_temp(ir_ty.clone()).to_ref();
 
-                    gen_fill_byte(temp_ref.clone(), ir_ty, size_expr, ir::Value::LiteralU8(0), builder);
+                    builder.gen_fill_byte(temp_ref.clone(), size_expr, ir::Value::LiteralU8(0));
 
                     ir::Value::Ref(temp_ref)
                 }
@@ -401,47 +365,6 @@ pub fn translate_literal(
     builder.mov(out.clone(), val);
 
     out.to_ref()
-}
-
-// inline IR for FillByte-style memory set procedure
-fn gen_fill_byte(at: ir::Ref, at_ty: ir::Type, count: ir::Value, byte_val: ir::Value, builder: &mut Builder) {
-    builder.comment(&format!("fill_byte: {}, count={}, value {}", at, count, byte_val));
-    
-    let byte_ptr_ty = ir::Type::U8.ptr();
-    
-    // dst_ptr := @at as ^UInt8
-    let at_addr = builder.local_temp(at_ty.ptr());
-    builder.addr_of(at_addr.clone(), at);
-
-    let dst_ptr = builder.local_temp(byte_ptr_ty.clone()).to_ref();
-    builder.cast(dst_ptr.clone(), at_addr, byte_ptr_ty.clone());
-    
-    // end_ptr := dst_ptr + count 
-    let end_ptr = builder.local_temp(byte_ptr_ty.clone());
-    builder.add(end_ptr.clone(), dst_ptr.clone(), count);
-    
-    let continue_label = builder.next_label();
-    let break_label = builder.next_label();
-    
-    builder.label(continue_label);
-    
-    // at_end := dst_ptr = end_ptr
-    let at_end = builder.local_temp(ir::Type::Bool);
-    builder.eq(at_end.clone(), dst_ptr.clone(), end_ptr);
-    
-    // if at_end then break
-    builder.jmpif(break_label, at_end);
-    
-    // else dst_ptr^ := byte_val
-    builder.mov(dst_ptr.clone().to_deref(), byte_val.clone());
-
-    // dst_ptr += 1;
-    builder.add(dst_ptr.clone(), dst_ptr.clone(), ir::Value::LiteralISize(1));
-    
-    // continue
-    builder.jmp(continue_label);
-
-    builder.label(break_label);
 }
 
 fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &mut Builder) -> ir::Ref {

@@ -29,6 +29,29 @@ pub(super) fn gen_dyn_array_alloc_body(
 
     let len_arg = LocalID(1);
     let default_val_arg = LocalID(3);
+    
+    // var default_el_ptr := L3 (default val param)
+    let default_el_ptr = builder.local_temp(el_ptr_ty.clone());
+    builder.cast(default_el_ptr, default_val_arg, el_ptr_ty.clone());
+    
+    // if the default value arg is not provided, create a default/zero-initialized value
+    // var default_el: T;
+    // if default_el_ptr = nil then 
+    //   default_el := default(T);
+    //   default_el_ptr := @default_el
+    let has_default_label = builder.next_label();
+    let default_el = builder.local_temp(elem_ty.clone());
+    
+    let has_default_val = builder.neq_to_val(default_el_ptr, Value::LiteralNull);
+    builder.jmpif(has_default_label, has_default_val);
+    builder.local_begin();
+    {
+        builder.gen_default_init(default_el, elem_ty);
+        builder.addr_of(default_el_ptr, default_el);
+    }
+    builder.local_end();
+    
+    builder.label(has_default_label);
 
     builder.comment("cast the array params to this array type");
     let arr = builder.local_temp(array_ref_ty.clone());
@@ -43,9 +66,6 @@ pub(super) fn gen_dyn_array_alloc_body(
         Ref::Local(LocalID(2)),
         array_ref_ty.clone(),
     );
-
-    let default_el_ptr = builder.local_temp(el_ptr_ty.clone());
-    builder.cast(default_el_ptr.clone(), default_val_arg, el_ptr_ty.clone());
 
     builder.comment("el_len := sizeof(elem_ty)");
     let el_len = builder.local_temp(Type::I32);
@@ -320,62 +340,31 @@ pub(super) fn new_dyn_array(
     array_class_id: TypeDefID,
     elements: impl IntoIterator<Item=Value>,
     element_type: &Type,
-    get_mem_id: FunctionID,
 ) -> Ref {
     let array_ty = array_class_id.to_class_ptr_type();
     let arr = builder.local_new(array_ty.clone(), None);
 
     let elements: Vec<_> = elements.into_iter().collect();
+    let len = i32::try_from(elements.len()).expect("invalid dynamic array ctor length");
 
     // allocate the array object itself
     builder.local_begin();
     {
-        builder.rc_new(arr.clone(), array_class_id, false);
+        builder.rc_new_array(arr, element_type.clone(), Value::LiteralI32(len), false);
 
-        // get pointer to the length
-        let len_ref = builder.local_temp(Type::I32.ptr());
-        builder.field(len_ref, arr, array_ty.clone(), DYNARRAY_LEN_FIELD);
-
-        // set length
-        let len = i32::try_from(elements.len()).expect("invalid dynamic array ctor length");
-        builder.mov(len_ref.to_deref(), Value::LiteralI32(len));
-
-        // get pointer to storage pointer
-        let arr_ptr = builder.local_temp(element_type.clone().ptr().ptr());
-        builder.field(arr_ptr, arr, array_ty.clone(), DYNARRAY_PTR_FIELD);
-
-        // allocate array storage
+        // assign elements
         if len > 0 {
-            let alloc_size = builder.local_temp(Type::I32);
-            builder.mul(alloc_size.clone(), Value::SizeOf(element_type.clone()), Value::LiteralI32(len));
-
-            let elements_mem = builder.local_temp(Type::U8.ptr());
-            builder.call(get_mem_id, [alloc_size.value()], Some(elements_mem.to_ref()));
-            builder.cast(arr_ptr.to_deref(), elements_mem, element_type.clone().ptr());
-
             let el_ptr = builder.local_temp(element_type.clone().ptr());
 
             for (i, el) in elements.into_iter().enumerate() {
-                builder.local_begin();
-                {
-                    // we know this cast is OK because we check the length is in range of i32 previously
-                    let index = Value::LiteralI32(i as i32);
+                builder.element(el_ptr, arr, Value::LiteralI32(i as i32), element_type.clone(), array_ty.clone());
+                builder.mov(el_ptr.to_deref(), el);
 
-                    // el_ptr := arr_ptr^ + i
-                    builder.add(el_ptr, arr_ptr.to_deref(), index);
-
-                    // el_ptr^ := el
-                    builder.mov(el_ptr.to_deref(), el);
-
-                    // retain each element. we don't do this for static arrays because retaining
-                    // a static array retains all its elements - for dynamic arrays, retaining
-                    // the array object itself does not retain the elements
-                    builder.retain(el_ptr.to_deref(), &element_type);
-                }
-                builder.local_end();
+                // retain each element. we don't do this for static arrays because retaining
+                // a static array retains all its elements - for dynamic arrays, retaining
+                // the array object itself does not retain the elements
+                builder.retain(el_ptr.to_deref(), &element_type);
             }
-        } else {
-            builder.mov(arr_ptr.to_deref(), Value::LiteralNull);
         }
     }
     builder.local_end();

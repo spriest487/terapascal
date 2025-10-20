@@ -55,18 +55,20 @@ struct Rc {
     .weak_count = weak\
 }
 
-#define OBJECT_PTR struct Rc*;
+#define OBJECT_PTR struct Rc*
 
 typedef void (*Invoker)(void** args, void* resultOut);
 
 typedef void (*DynArrayAlloc)(OBJECT_PTR arr, int32_t len, OBJECT_PTR copy_from, void* default_val);
 typedef int32_t (*DynArrayLength)(OBJECT_PTR arr);
+typedef void* (*DynArrayGetElement)(OBJECT_PTR arr, int32_t index);
 
 struct DynArrayClass {
     struct Class base;
 
     DynArrayAlloc alloc;
     DynArrayLength length;
+    DynArrayGetElement get_element;
 };
 
 static bool IsImpl(struct Class* class, size_t iface) {
@@ -109,8 +111,8 @@ static void Free(void* mem);
 
 static void RcRetain(OBJECT_PTR instance, bool weak);
 static bool RcRelease(OBJECT_PTR instance, bool weak);
-static struct OBJECT_PTR RcNew(struct Class* class, bool immortal);
-static struct OBJECT_PTR RcNewArray(struct DynArrayClass* class, int count, void* initVal, bool immortal);
+static OBJECT_PTR RcNew(struct Class* class, bool immortal);
+static OBJECT_PTR RcNewArray(struct DynArrayClass* class, int count, bool immortal);
 
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 

@@ -39,6 +39,7 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
+use terapascal_ir::DYNARRAY_PTR_FIELD;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -976,10 +977,9 @@ impl Interpreter {
                 out,
                 element_type,
                 count,
-                init_value,
                 immortal,
             } => {
-                self.exec_rc_new_array(out, element_type, count, init_value, *immortal)?
+                self.exec_rc_new_array(out, element_type, count, *immortal)?
             },
 
             ir::Instruction::Add(op) => self.exec_add(op)?,
@@ -1050,11 +1050,12 @@ impl Interpreter {
                 a,
                 // not used because the vm doesn't need to know element type to
                 // calculate the pointer offset
-                element,
                 index,
+                of_type,
+                ..
             } => {
-                self.exec_element(out, a, index, element)?;
-            },
+                self.exec_element(out, a, index, of_type)?;
+            }
 
             ir::Instruction::VariantTag { out, a, .. } => self.exec_variant_tag(out, a)?,
 
@@ -1127,7 +1128,6 @@ impl Interpreter {
         out: &ir::Ref,
         element_type: &ir::Type,
         count: &ir::Value,
-        init_from: &ir::Ref,
         immortal: bool,
     ) -> ExecResult<()> {
         let Some(count) = self.evaluate(count)?.as_i32() else {
@@ -1138,8 +1138,8 @@ impl Interpreter {
             return Err(ExecError::illegal_state(format!("exec_rc_new_array: count value {count} is a valid size")));
         };
 
-        let init_val = self.load(init_from)?;
-        let elements = iter::repeat(init_val).take(count).collect();
+        let default_val = self.default_val(element_type)?;
+        let elements = iter::repeat(default_val).take(count).collect();
 
         let array_ptr = self.create_dyn_array(element_type, elements, immortal)?;
         self.store(out, DynValue::Pointer(array_ptr))?;
@@ -1327,17 +1327,30 @@ impl Interpreter {
 
         Ok(())
     }
+    
+    fn find_element_type<'a, 'b: 'a>(&'a self, of_type: &'b ir::Type) -> Option<&'a ir::Type> {
+        match of_type {
+            ir::Type::Array { element, .. } => Some(element.as_ref()),
+            
+            ir::Type::RcPointer(ir::VirtualTypeID::Class(class_id)) => {
+                self.metadata.dyn_array_element_ty(*class_id)
+            }
+
+            _ => None,
+        }
+    }
 
     fn exec_element(
         &mut self,
         out: &ir::Ref,
         a: &ir::Ref,
         index: &ir::Value,
-        element: &ir::Type,
+        of_type: &ir::Type,
     ) -> ExecResult<()> {
-        let array_ptr = self.addr_of_ref(a)?;
-
-        let el_marshal_ty = self.marshaller.get_ty(element)?;
+        
+        let Some(element_type) = self.find_element_type(of_type) else {
+            return Err(ExecError::illegal_state(&format!("type {} is not an array type", of_type)));  
+        };
 
         let index_value = self
             .evaluate(index)?
@@ -1348,13 +1361,32 @@ impl Interpreter {
                 ExecError::illegal_state(msg)
             })?;
 
+        let el_marshal_ty = self.marshaller.get_ty(element_type)?;
         let index_offset = el_marshal_ty.size() * index_value;
+        
+        // assume any object pointer is a dynarray
+        let array_ptr = if of_type.is_rc() {
+            let DynValue::Pointer(array_ptr) = self.load(a)? else {
+                return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
+            };
+            
+            let (array, _) = self.load_rc_struct_ptr(&array_ptr)?;
+            
+            array.fields
+                .get(DYNARRAY_PTR_FIELD.0)
+                .and_then(|field_val| field_val.as_pointer())
+                .cloned()
+                .ok_or_else(|| ExecError::illegal_state("expected array struct to have an elements pointer field"))?
+        } else {
+            // static array element pointers are just offsets from the object itself
+            self.addr_of_ref(a)?
+        };
 
         self.store(
             out,
             DynValue::Pointer(Pointer {
                 addr: array_ptr.addr + index_offset,
-                ty: element.clone(),
+                ty: element_type.clone(),
             }),
         )?;
 

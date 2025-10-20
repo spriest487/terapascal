@@ -25,6 +25,9 @@ pub enum FunctionName {
     DestructorInvoker(ir::TypeDefID),
     MethodWrapper(ir::InterfaceID, ir::MethodID, ir::TypeDefID),
 
+    // generated function for fetching dynarray elements of a particular dynarray type
+    DynArrayGetElement(ir::TypeDefID),
+
     Builtin(BuiltinName),
 }
 
@@ -39,10 +42,16 @@ impl fmt::Display for FunctionName {
             FunctionName::Invoker(id) => write!(f, "Invoker_{}", id.0),
             FunctionName::DestructorInvoker(id) => write!(f, "Destructor_{}", id.0),
 
-            FunctionName::Method(iface, method) => write!(f, "Method_{}_{}", iface, method.0),
+            FunctionName::Method(iface, method) => {
+                write!(f, "Method_{}_{}", iface, method.0)
+            },
             FunctionName::MethodWrapper(iface, method, self_ty) => {
                 write!(f, "Method_{}_{}_Wrapper_{}", iface, method.0, self_ty)
             },
+            
+            FunctionName::DynArrayGetElement(id) => {
+                write!(f, "DynArrayGetElement_{}", id.0)
+            }
 
             FunctionName::Builtin(name) => write!(f, "{}", name),
         }

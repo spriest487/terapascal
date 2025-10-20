@@ -281,10 +281,6 @@ impl MetadataBuilder {
         self.find_in_self_or_refs(move |metadata| metadata.find_dyn_array_struct(elem_ty))
     }
 
-    pub fn get_bounds_check_func(&self, type_id: &Type) -> Option<FunctionID> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_bounds_check_func(type_id))
-    }
-
     pub fn find_set_def(&self, name: &NamePath) -> Option<(SetAliasID, &SetAliasDef)> {
         self.find_in_self_or_refs(move |metadata| metadata.find_set_def(name))
     }

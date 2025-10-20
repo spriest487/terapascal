@@ -1,12 +1,13 @@
 use crate::ast::FieldName;
 use crate::ast::FunctionName;
 use crate::ast::GlobalName;
-use crate::ast::Unit;
 use crate::ast::Type;
 use crate::ast::TypeDefName;
+use crate::ast::Unit;
+use crate::c::BuiltinName;
+use crate::c::VariableID;
 use crate::ir;
 use std::fmt;
-use crate::c::VariableID;
 
 #[allow(unused)]
 #[derive(Clone, PartialEq, Debug)]
@@ -76,7 +77,6 @@ impl fmt::Display for PrefixOp {
 pub enum Expr {
     Variable(VariableID),
     Function(FunctionName),
-    Class(ir::TypeDefID),
     Deref(Box<Expr>),
     Global(GlobalName), // global value
     LitCString(String), // C string literal
@@ -102,10 +102,6 @@ pub enum Expr {
         args: Vec<Expr>,
     },
     AddrOf(Box<Expr>),
-    Element {
-        base: Box<Expr>,
-        index: Box<Expr>,
-    },
     Field {
         base: Box<Expr>,
         field: FieldName,
@@ -148,7 +144,7 @@ impl Expr {
             ir::Ref::Discard => {
                 panic!("can't translate a discard ref, it should only be used in assignments")
             },
-            ir::Ref::Local(local_id) => Expr::Variable(VariableID::Local(*local_id)),
+            ir::Ref::Local(local_id) => VariableID::local(*local_id).to_expr(),
             ir::Ref::Deref(inner) => Expr::translate_val(inner.as_ref(), module).deref(),
             ir::Ref::Global(ir::GlobalRef::Function(id)) => {
                 let name = module.function_name(*id);
@@ -194,6 +190,31 @@ impl Expr {
             func: Box::new(self),
             args: args.into_iter().collect(),
         }
+    }
+
+    pub fn call_new(class_id: ir::TypeDefID, immortal: bool) -> Self {
+        let new = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
+        let class_ptr = Expr::class_ptr(class_id);
+
+        let instance = new.call([
+            class_ptr, 
+            Expr::LitBool(immortal),
+        ]);
+
+        instance.cast(Type::class_instance_ptr(class_id))
+    }
+
+    pub fn call_newarray(class_id: ir::TypeDefID, len: impl Into<Expr>, immortal: bool) -> Self {
+        let new = Expr::Function(FunctionName::Builtin(BuiltinName::RcNewArray));
+        let array_class_ptr = Expr::class(class_id).addr_of();
+
+        let instance = new.call([
+            array_class_ptr, 
+            len.into(), 
+            Expr::LitBool(immortal),
+        ]);
+        
+        instance.cast(Type::class_instance_ptr(class_id))
     }
 
     pub fn deref(self) -> Self {
@@ -244,6 +265,10 @@ impl Expr {
             rhs: rhs.into(),
         }
     }
+
+    pub fn assign_from(self, rhs: impl Into<Box<Self>>) -> Self {
+        Expr::assign(self, rhs)
+    }
     
     pub fn not(self) -> Self {
         Expr::PrefixOp {
@@ -274,20 +299,43 @@ impl Expr {
         }
     }
 
-    pub fn translate_element(arr: &ir::Ref, index: &ir::Value, module: &mut Unit) -> Self {
+    pub fn translate_element(
+        arr: &ir::Ref,
+        index: &ir::Value,
+        of_type: &ir::Type,
+        module: &mut Unit,
+    ) -> Self {
         let array_expr = Expr::translate_ref(arr, module);
-        let elements_expr = Expr::Field {
-            base: Box::new(array_expr),
-            field: FieldName::StaticArrayElements,
-        };
-
         let index_expr = Expr::translate_val(index, module);
-        let element = Expr::Element {
-            base: Box::new(elements_expr),
-            index: Box::new(index_expr),
-        };
+        
+        match of_type {
+            ir::Type::RcPointer(ir::VirtualTypeID::Class(array_class_id)) => {
+                Expr::Global(GlobalName::ClassInstance(*array_class_id))
+                    .addr_of()
+                    .cast(Type::DynArrayClass.ptr())
+                    .arrow(FieldName::DynArrayElement)
+                    .call([array_expr.cast(Type::object_ptr()), index_expr])
+            }
 
-        element.addr_of()
+            ir::Type::RcPointer(..) => {
+                array_expr
+                    .clone()
+                    .arrow(FieldName::RcClass)
+                    .cast(Type::DynArrayClass)
+                    .arrow(FieldName::DynArrayElement)
+                    .call([array_expr.cast(Type::object_ptr()), index_expr])
+            }
+
+            _ => {
+                // static array
+                let elements_expr = array_expr.field(FieldName::StaticArrayElements);
+
+                // the field is already an array, so the size info is encoded in the type
+                elements_expr
+                    .index(index_expr)
+                    .addr_of()
+            }
+        }
     }
 
     pub fn translate_field(
@@ -337,8 +385,12 @@ impl Expr {
         }
     }
 
-    pub fn class_ptr(struct_id: ir::TypeDefID) -> Self {
-        Expr::Class(struct_id).addr_of().cast(Type::Class.ptr())
+    pub fn class_ptr(class_id: ir::TypeDefID) -> Self {
+        Expr::class(class_id).addr_of().cast(Type::Class.ptr())
+    }
+    
+    pub fn class(class_id: ir::TypeDefID) -> Self {
+        Expr::Global(GlobalName::ClassInstance(class_id))
     }
 }
 
@@ -368,12 +420,10 @@ impl fmt::Display for Expr {
                 }
                 write!(f, ")")
             },
-            Expr::Element { base, index } => write!(f, "({})[{}]", base, index),
             Expr::Field { base, field } => write!(f, "({}).{}", base, field),
             Expr::Arrow { base, field } => write!(f, "({})->{}", base, field),
             Expr::Cast(value, ty) => write!(f, "(({}){})", ty.typename(), value),
             Expr::SizeOf(ty) => write!(f, "sizeof({})", ty.typename()),
-            Expr::Class(struct_id) => write!(f, "{}", GlobalName::ClassInstance(*struct_id)),
         }
     }
 }

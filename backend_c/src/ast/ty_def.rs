@@ -103,6 +103,14 @@ impl Type {
     pub fn ptr(self) -> Self {
         Type::Pointer(Box::new(self))
     }
+    
+    pub fn object_ptr() -> Type {
+        Type::Rc.ptr()
+    }
+
+    pub fn class_instance_ptr(class_id: ir::TypeDefID) -> Type {
+        Type::from_ir_struct(class_id).ptr()
+    }
 
     pub fn sized_array(self, size: usize) -> Self {
         Type::SizedArray(Box::new(self), size)
@@ -261,6 +269,9 @@ impl Type {
             Type::Rc => "struct Rc".to_string(),
             Type::Class => "struct Class".to_string(),
             Type::DynArrayClass => "struct DynArrayClass".to_string(),
+            Type::Pointer(inner) if **inner == Type::Rc => {
+                "OBJECT_PTR".to_string()
+            }
             Type::SizedArray(ty, ..) | Type::Pointer(ty) => format!("{}*", ty.typename()),
             Type::Bool => "bool".to_string(),
             Type::Float => "float".to_string(),

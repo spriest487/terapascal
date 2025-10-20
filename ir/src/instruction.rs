@@ -66,6 +66,7 @@ pub enum Instruction {
         a: Ref,
         index: Value,
         element: Type,
+        of_type: Type,
     },
 
     /// stores a pointer to the tag of a variant at `a` into `out`
@@ -127,10 +128,7 @@ pub enum Instruction {
     RcNewArray {
         out: Ref,
         element_type: Type,
-
         count: Value,
-        init_value: Ref,
-
         immortal: bool,
     },
 

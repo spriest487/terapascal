@@ -133,6 +133,20 @@ pub enum VariableID {
     Named(Box<String>),
 }
 
+impl VariableID {
+    pub fn local(id: ir::LocalID) -> Self {
+        Self::Local(id)
+    }
+    
+    pub fn named(name: impl Into<String>) -> Self {
+        Self::Named(Box::new(name.into()))
+    }
+    
+    pub fn to_expr(&self) -> Expr {
+        Expr::Variable(self.clone())
+    }
+}
+
 impl fmt::Display for VariableID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "L")?;
@@ -276,7 +290,7 @@ impl<'a> Builder<'a> {
                 let ty = Type::from_metadata(ty, self.module);
                 self.stmts.push(Statement::VariableDecl {
                     ty,
-                    id: VariableID::Local(*id),
+                    id: VariableID::local(*id),
                     null_init,
                 });
             },
@@ -391,8 +405,8 @@ impl<'a> Builder<'a> {
                 )))
             },
 
-            ir::Instruction::Element { out, a, index, .. } => {
-                let element = Expr::translate_element(a, index, self.module);
+            ir::Instruction::Element { out, a, index, of_type: of_ty, .. } => {
+                let element = Expr::translate_element(a, index, of_ty, self.module);
                 self.stmts.push(Statement::Expr(Expr::translate_assign(
                     out,
                     element,
@@ -457,8 +471,8 @@ impl<'a> Builder<'a> {
                 self.translate_rc_new(out, *type_id, *immortal);
             }
 
-            ir::Instruction::RcNewArray { out, element_type, count, init_value: init_from, immortal } => {
-                self.translate_rc_new_array(out, element_type, count, init_from, *immortal);
+            ir::Instruction::RcNewArray { out, element_type, count, immortal } => {
+                self.translate_rc_new_array(out, element_type, count, *immortal);
             }
 
             ir::Instruction::Gt(ir::BinOpInstruction { out, a, b }) => {
@@ -531,7 +545,7 @@ impl<'a> Builder<'a> {
             ir::Instruction::Retain { at, weak } => {
                 let retain = Expr::Function(FunctionName::Builtin(BuiltinName::RcRetain));
 
-                let rc_ptr = Expr::translate_ref(at, self.module);
+                let rc_ptr = Expr::translate_ref(at, self.module).cast(Type::object_ptr());
                 let call_retain = retain.call([rc_ptr, Expr::LitBool(*weak)]);
 
                 self.stmts.push(Statement::Expr(call_retain));
@@ -540,7 +554,7 @@ impl<'a> Builder<'a> {
             ir::Instruction::Release { at, weak, released_out } => {
                 let release = Expr::Function(FunctionName::Builtin(BuiltinName::RcRelease));
 
-                let rc_ptr = Expr::translate_ref(at, self.module);
+                let rc_ptr = Expr::translate_ref(at, self.module).cast(Type::object_ptr());
                 let call_release = release.call([rc_ptr, Expr::LitBool(*weak)]);
                 
                 if *released_out != ir::Ref::Discard {
@@ -688,14 +702,14 @@ impl<'a> Builder<'a> {
         
         let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
 
-        let new_rc = new_function.call([
+        let new_object = new_function.call([
             ty_class_ptr,
             Expr::LitBool(immortal),
         ]);
 
         self.stmts.push(Statement::Expr(Expr::translate_assign(
             out,
-            new_rc,
+            new_object.cast(Type::from_ir_struct(struct_id).ptr()),
             self.module,
         )))
     }
@@ -704,31 +718,27 @@ impl<'a> Builder<'a> {
         out: &ir::Ref,
         element_type: &ir::Type,
         count: &ir::Value,
-        init_from: &ir::Ref,
-        immortal: bool
+        immortal: bool,
     ) {
-        let dynarray_class_id = self.module.dynarrays_by_element[element_type];
-        
-        let init_val = Expr::translate_ref(init_from, self.module);
-        let init_val_ptr = init_val.addr_of();
+        let array_class_id = self.module.dynarrays_by_element[element_type];
 
         let count_val = Expr::translate_val(count, self.module);
 
-        let array_class_ptr = Expr::class_ptr(dynarray_class_id)
-            .cast(Type::DynArrayClass.ptr());
+        let array_class_ptr = Expr::class(array_class_id).addr_of();
 
         let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNewArray));
 
-        let call = new_function.call([
+        let object_ptr = new_function.call([
             array_class_ptr,
             count_val,
-            init_val_ptr,
             Expr::LitBool(immortal),
         ]);
+        
+        let array_ptr = object_ptr.cast(Type::from_ir_struct(array_class_id).ptr());
 
         self.stmts.push(Statement::Expr(Expr::translate_assign(
             out,
-            call,
+            array_ptr,
             self.module,
         )))
     }
