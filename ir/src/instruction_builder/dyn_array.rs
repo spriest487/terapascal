@@ -236,7 +236,7 @@ pub(super) fn gen_dyn_array_length_body(
     );
 }
 
-pub(super) fn gen_dyn_array_release_body(
+pub(super) fn gen_dyn_array_dtor_body(
     builder: &mut impl InstructionBuilder,
     elem_ty: &Type,
     struct_id: TypeDefID,

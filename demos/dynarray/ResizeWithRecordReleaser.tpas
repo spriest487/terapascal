@@ -8,6 +8,6 @@ end;
 initialization
     var arrayOfA: array of A := [];
     
-    var a := A(value: 'hello');
+    var a := A(value: 'hello'.Concat(', world'));
     SetLength(arrayOfA, 1, a);
 end

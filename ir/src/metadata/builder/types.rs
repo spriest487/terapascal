@@ -252,15 +252,7 @@ impl MetadataBuilder {
         
         self.metadata.dyn_array_structs.insert(element.clone(), struct_id);
 
-        // the rc boilerplate impls for a dynarray should be empty
-        // dyn array structs are heap-allocated and don't need structural ref-counting
-        // (but they do need custom finalization to clean up references they hold)
-        let release_id = self.insert_func(None);
-
-        let mut rtt = RuntimeType::new(None);
-        rtt.release = Some(release_id);
-
-        self.insert_runtime_type(Type::Struct(struct_id), rtt);
+        self.insert_runtime_type(Type::Struct(struct_id), RuntimeType::new(None));
         self.declare_dyn_array_class(&element);
 
         struct_id
