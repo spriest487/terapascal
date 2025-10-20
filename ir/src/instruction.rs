@@ -69,6 +69,15 @@ pub enum Instruction {
         of_type: Type,
     },
 
+    /// Get the length (number of elements) contained in the value at `a` of the given type,
+    /// storing the result into `out`.
+    /// If the type is not an array, the result is 1.
+    Length {
+        out: Ref,
+        a: Ref,
+        of_type: Type,
+    },
+
     /// stores a pointer to the tag of a variant at `a` into `out`
     VariantTag {
         out: Ref,
@@ -208,6 +217,7 @@ impl Instruction {
             | Instruction::BitNot(UnaryOpInstruction { out, .. })
             | Instruction::AddrOf { out, .. }
             | Instruction::Element { out, .. }
+            | Instruction::Length { out, .. }
             | Instruction::VariantTag { out, .. }
             | Instruction::VariantData { out, .. }
             | Instruction::Field { out, .. }

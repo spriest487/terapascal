@@ -307,7 +307,7 @@ impl<'a> Builder<'a> {
 
             ir::Instruction::Label(label) => {
                 self.stmts.push(Statement::Label(*label));
-                // this might be at end end of a block, which C doesn't allow,
+                // this might be at end of a block, which C doesn't allow,
                 // so insert an empty block too so there's something to label
                 self.stmts.push(Statement::BeginBlock);
                 self.stmts.push(Statement::EndBlock);
@@ -407,6 +407,15 @@ impl<'a> Builder<'a> {
 
             ir::Instruction::Element { out, a, index, of_type: of_ty, .. } => {
                 let element = Expr::translate_element(a, index, of_ty, self.module);
+                self.stmts.push(Statement::Expr(Expr::translate_assign(
+                    out,
+                    element,
+                    self.module,
+                )));
+            },
+
+            ir::Instruction::Length { out, a, of_type: of_ty, .. } => {
+                let element = Expr::translate_length(a, of_ty, self.module);
                 self.stmts.push(Statement::Expr(Expr::translate_assign(
                     out,
                     element,

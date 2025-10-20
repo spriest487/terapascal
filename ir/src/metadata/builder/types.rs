@@ -252,7 +252,11 @@ impl MetadataBuilder {
         
         self.metadata.dyn_array_structs.insert(element.clone(), struct_id);
 
-        self.insert_runtime_type(Type::Struct(struct_id), RuntimeType::new(None));
+        // the rc boilerplate impls for a dynarray should be empty
+        // the dtor releases the elements
+        let rtt = RuntimeType::new(None);
+
+        self.insert_runtime_type(Type::Struct(struct_id), rtt);
         self.declare_dyn_array_class(&element);
 
         struct_id

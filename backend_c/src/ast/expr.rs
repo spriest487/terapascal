@@ -298,6 +298,19 @@ impl Expr {
             },
         }
     }
+    
+    fn array_class_ptr(arr_obj: &Expr, v_id: &ir::VirtualTypeID) -> Expr {
+        match v_id {
+            ir::VirtualTypeID::Class(array_class_id) => {
+                Expr::Global(GlobalName::ClassInstance(*array_class_id)).addr_of()
+            }
+
+            _ => {
+                let obj_class_ptr = arr_obj.clone().arrow(FieldName::RcClass);
+                obj_class_ptr.cast(Type::DynArrayClass.ptr())
+            },
+        }
+    }
 
     pub fn translate_element(
         arr: &ir::Ref,
@@ -311,17 +324,7 @@ impl Expr {
         match of_type {
             ir::Type::RcPointer(type_id) => {
                 let arr_obj = array_expr.cast(Type::object_ptr());
-
-                let class_ptr = match type_id {
-                    ir::VirtualTypeID::Class(array_class_id) => {
-                        Expr::Global(GlobalName::ClassInstance(*array_class_id)).addr_of()
-                    }
-                    
-                    _ => {
-                        let obj_class_ptr = arr_obj.clone().arrow(FieldName::RcClass);
-                        obj_class_ptr.cast(Type::DynArrayClass.ptr())
-                    },
-                };
+                let class_ptr = Self::array_class_ptr(&arr_obj, type_id);
 
                 class_ptr
                     .arrow(FieldName::DynArrayElement)
@@ -336,6 +339,35 @@ impl Expr {
                 elements_expr
                     .index(index_expr)
                     .addr_of()
+            }
+        }
+    }
+
+    pub fn translate_length(
+        arr: &ir::Ref,
+        of_type: &ir::Type,
+        module: &mut Unit,
+    ) -> Self {
+        let array_expr = Expr::translate_ref(arr, module);
+
+        match of_type {
+            ir::Type::RcPointer(type_id) => {
+                let arr_obj = array_expr.cast(Type::object_ptr());
+                let class_ptr = Self::array_class_ptr(&arr_obj, type_id);
+
+                class_ptr
+                    .arrow(FieldName::DynArrayLength)
+                    .call([arr_obj])
+            }
+
+            ir::Type::Array { dim, .. } => {
+                i128::try_from(*dim)
+                    .map(Expr::LitInt)
+                    .expect("array size couldn't be converted to literal")
+            }
+            
+            _ => {
+                Expr::LitInt(1)
             }
         }
     }

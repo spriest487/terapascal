@@ -206,6 +206,20 @@ pub trait IRFormatter {
                 self.format_val(index, f)?;
                 write!(f, "]")
             }
+            
+            Instruction::Length {
+                out,
+                a,
+                of_type,
+            } => {
+                write!(f, "{:>width$} ", "length", width = IX_WIDTH)?;
+                self.format_ref(out, f)?;
+                write!(f, " := length of ")?;
+
+                self.format_ref(a, f)?;
+                write!(f, " as ")?;
+                self.format_type(of_type, f)
+            }
 
             Instruction::Field {
                 out,

@@ -1,6 +1,5 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
 use crate::FunctionID;
-use crate::Instruction;
 use crate::LocalID;
 use crate::Ref;
 use crate::Type;
@@ -239,100 +238,41 @@ pub(super) fn gen_dyn_array_length_body(
 pub(super) fn gen_dyn_array_dtor_body(
     builder: &mut impl InstructionBuilder,
     elem_ty: &Type,
-    struct_id: TypeDefID,
+    array_class_id: TypeDefID,
     free_mem_id: FunctionID,
 ) {
-    let array_struct_ty = Type::Struct(struct_id);
+    let class_type = array_class_id.to_class_ptr_type();
 
-    builder.comment("%0 is the self arg, the pointer to the inner struct");
+    let self_arg = LocalID(0);
+    builder.retain(self_arg, &class_type);
 
-    let self_arg = Ref::Local(LocalID(0)).to_deref();
+    builder.comment("iteration counter");
+    let counter = builder.local_temp(Type::I32);
+    builder.mov(counter, Value::LiteralI32(0));
 
-    builder.comment("pointer to the length field of the dynarray object");
-    let len_field_ptr = builder.local_temp(Type::I32.ptr());
+    // arr_high := arr.length - 1
+    let arr_high = builder.local_temp(Type::I32);
+    builder.length(arr_high, self_arg, class_type.clone());
+    builder.sub(arr_high, arr_high, Value::LiteralI32(1));
+
+    let el_ptr = builder.local_temp(elem_ty.clone().ptr());
+
+    builder.comment("release every element");
+    builder.counter_loop(counter, Value::LiteralI32(1), arr_high, |builder| {
+        builder.element(el_ptr, self_arg, counter, elem_ty.clone(), class_type.clone());
+
+        builder.release(el_ptr.to_deref(), &elem_ty);
+    });
 
     builder.comment("pointer to the pointer field of the dynarray object");
     let arr_field_ptr = builder.local_temp(elem_ty.clone().ptr().ptr());
 
-    builder.comment("u8 pointer type field to cast the array memory into to call FreeMem");
+    builder.comment("u8 pointer var, to cast the array memory pointer before calling FreeMem");
     let arr_mem_ptr = builder.local_temp(Type::U8.ptr());
 
-    builder.comment("iteration vars");
-    let counter = builder.local_temp(Type::I32);
-    let has_more = builder.local_temp(Type::Bool);
-    let el_ptr = builder.local_temp(elem_ty.clone().ptr());
-
-    let zero_elements = builder.local_temp(Type::Bool);
-
-    builder.comment("jump to loop end if counter == array len");
-    let start_loop_label = builder.next_label();
-    let end_loop_label = builder.next_label();
-
-    let after_free = builder.next_label();
-
-    builder.field(
-        len_field_ptr,
-        self_arg.clone(),
-        array_struct_ty.clone(),
-        DYNARRAY_LEN_FIELD,
-    );
-    builder.field(
-        arr_field_ptr,
-        self_arg,
-        array_struct_ty.clone(),
-        DYNARRAY_PTR_FIELD,
-    );
-
-    builder.comment("release every element");
-    builder.mov(counter, Value::LiteralI32(0));
-
-    builder.label(start_loop_label);
-
-    builder.comment("has_more := counter < array.length");
-
-    builder.lt(
-        has_more,
-        counter,
-        len_field_ptr.to_deref(),
-    );
-
-    builder.comment("if not has_more then break");
-    let at_end = builder.not_to_val(has_more);
-    builder.jmpif(end_loop_label, at_end);
-
-    builder.comment("release arr[counter]");
-    builder.add(
-        el_ptr.clone(),
-        arr_field_ptr.to_deref(),
-        counter.clone(),
-    );
-    builder.release(el_ptr.to_deref(), &elem_ty);
-
-    builder.comment("counter := counter + 1");
-    builder.add(counter.clone(), counter, Value::LiteralI32(1));
-
-    builder.jmp(start_loop_label);
-    builder.label(end_loop_label);
-
-    builder.comment("free the dynamic-allocated buffer - if len > 0");
-    builder.eq(
-        zero_elements.clone(),
-        len_field_ptr.to_deref(),
-        Value::LiteralI32(0),
-    );
-    builder.jmpif(after_free, zero_elements);
-
-    builder.cast(
-        arr_mem_ptr.clone(),
-        arr_field_ptr.to_deref(),
-        Type::U8.ptr(),
-    );
+    // FreeMem(instance.array as Byte^)
+    builder.cast(arr_mem_ptr, arr_field_ptr, Type::U8.ptr());
     builder.call(free_mem_id, [arr_mem_ptr.value()], None);
-
-    builder.emit(Instruction::Label(after_free));
-
-    builder.mov(len_field_ptr.to_deref(), Value::LiteralI32(0));
-    builder.mov(arr_field_ptr.to_deref(), Value::LiteralNull);
 }
 
 pub(super) fn new_dyn_array(

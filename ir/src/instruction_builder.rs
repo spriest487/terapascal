@@ -2,12 +2,14 @@ mod dyn_array;
 pub mod scope;
 
 use crate::instruction_builder::dyn_array::gen_dyn_array_alloc_body;
-use crate::instruction_builder::dyn_array::gen_dyn_array_length_body;
 use crate::instruction_builder::dyn_array::gen_dyn_array_dtor_body;
+use crate::instruction_builder::dyn_array::gen_dyn_array_length_body;
 use crate::instruction_builder::dyn_array::new_dyn_array;
 use crate::instruction_builder::scope::LocalBinding;
 use crate::instruction_builder::scope::LocalStack;
+use crate::BinOpInstruction;
 use crate::FieldID;
+use crate::FunctionID;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::InterfaceID;
@@ -21,8 +23,6 @@ use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VirtualTypeID;
-use crate::BinOpInstruction;
-use crate::FunctionID;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -687,6 +687,21 @@ pub trait InstructionBuilder {
         self.element_val(result.clone(), a, index, element_ty, of_type);
 
         Ref::Local(result)
+    }
+
+    fn length(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_type: impl Into<Type>) {
+        self.emit(Instruction::Length {
+            out: out.into(),
+            a: a.into(),
+            of_type: of_type.into(),
+        });
+    }
+
+    fn length_to_val(&mut self, a: impl Into<Ref>, of_type: impl Into<Type>) -> Value {
+        let length_var = self.local_temp(Type::I32);
+        self.length(length_var, a, of_type);
+
+        length_var.value()
     }
 
     fn label(&mut self, label: Label) {

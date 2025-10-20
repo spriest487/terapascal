@@ -1056,6 +1056,14 @@ impl Interpreter {
             } => {
                 self.exec_element(out, a, index, of_type)?;
             }
+            
+            ir::Instruction::Length {
+                out,
+                a,
+                of_type,
+            } => {
+                self.exec_length(out, a, of_type)?;
+            }
 
             ir::Instruction::VariantTag { out, a, .. } => self.exec_variant_tag(out, a)?,
 
@@ -1347,7 +1355,6 @@ impl Interpreter {
         index: &ir::Value,
         of_type: &ir::Type,
     ) -> ExecResult<()> {
-        
         let Some(element_type) = self.find_element_type(of_type) else {
             return Err(ExecError::illegal_state(&format!("type {} is not an array type", of_type)));  
         };
@@ -1400,6 +1407,41 @@ impl Interpreter {
         let element_pointer = elements_pointer.addr_add(index_offset);
 
         self.store(out, DynValue::Pointer(element_pointer))
+    }
+
+    fn exec_length(
+        &mut self,
+        out: &ir::Ref,
+        a: &ir::Ref,
+        of_type: &ir::Type,
+    ) -> ExecResult<()> {
+        let length = match of_type {
+            // assume any object pointer is a dynarray
+            ir::Type::RcPointer(..) => {
+                let DynValue::Pointer(array_ptr) = self.load(a)? else {
+                    return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
+                };
+
+                let (array, _) = self.load_rc_struct_ptr(&array_ptr)?;
+
+                array.fields
+                    .get(DYNARRAY_LEN_FIELD.0)
+                    .and_then(|field_val| field_val.as_i32())
+                    .ok_or_else(|| ExecError::illegal_state("expected array struct to have a length field"))?
+            }
+            
+            ir::Type::Array { dim, .. } => {
+                let Ok(val) = i32::try_from(*dim) else {
+                    return Err(ExecError::illegal_state("couldn't convert array size {dim} to a length literal"));  
+                };
+                
+                val
+            }
+            
+            _ => 1,
+        };
+
+        self.store(out, DynValue::I32(length))
     }
 
     fn exec_add(&mut self, op: &ir::BinOpInstruction) -> ExecResult<()> {

@@ -150,6 +150,7 @@ pub enum FieldName {
     // members of the DynArrayClass struct
     DynArrayAlloc,
     DynArrayElement,
+    DynArrayLength,
 
     // builtin name: static array inner array
     StaticArrayElements,
@@ -173,6 +174,7 @@ impl fmt::Display for FieldName {
             FieldName::StaticArrayElements => write!(f, "elements"),
             FieldName::DynArrayAlloc => write!(f, "alloc"),
             FieldName::DynArrayElement => write!(f, "get_element"),
+            FieldName::DynArrayLength => write!(f, "length"),
             FieldName::VariantTag => write!(f, "tag"),
             FieldName::VariantData => write!(f, "data"),
             FieldName::VariantDataCase(case) => write!(f, "data_{}", case),
