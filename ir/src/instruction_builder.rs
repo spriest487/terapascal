@@ -1016,10 +1016,12 @@ pub trait InstructionBuilder {
         let counter = counter.into();
 
         self.label(loop_label);
-        self.gte(done.clone(), counter.clone(), high_val);
+        self.gt(done.clone(), counter.clone(), high_val);
         self.jmpif(break_label, done);
 
+        self.local_begin();
         f(self);
+        self.local_end();
 
         self.add(counter.clone(), counter, inc_val);
         self.jmp(loop_label);
