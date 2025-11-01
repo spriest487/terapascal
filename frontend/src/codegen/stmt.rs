@@ -319,40 +319,40 @@ fn build_for_loop_sequence(
                 let src_ty = builder.translate_type(src_ty);
 
                 let seq_ty = builder.translate_type(&seq_support.sequence_type);
-                let seq_ref = builder.local_new(seq_ty.clone(), None).to_ref();
+                let seq_var = builder.local_new(seq_ty.clone(), None);
 
                 // call Sequence with a pointer to the source if it's a value type
                 let src_self_arg_ref = if src_ty.is_rc() {
                     src_ref.clone()
                 } else {
-                    let src_ref_ptr = builder.local_temp(src_ty.ptr()).to_ref();
-                    builder.addr_of(src_ref_ptr.clone(), src_ref);
-                    src_ref_ptr
+                    let src_ref_ptr = builder.local_temp(src_ty.ptr());
+                    builder.addr_of(src_ref_ptr, src_ref);
+                    src_ref_ptr.to_ref()
                 };
 
                 // call Next with a pointer to the sequence if it's a value type
-                let seq_self_arg_ref = if seq_ty.is_rc() {
-                    seq_ref.clone()
+                let seq_self_arg_var = if seq_ty.is_rc() {
+                    seq_var
                 } else {
-                    let seq_ref_ptr = builder.local_temp(seq_ty.ptr()).to_ref();
-                    builder.addr_of(seq_ref_ptr.clone(), seq_ref.clone());
+                    let seq_ref_ptr = builder.local_temp(seq_ty.ptr());
+                    builder.addr_of(seq_ref_ptr, seq_var);
                     seq_ref_ptr
                 };
                 
                 let next_result_ty = system_option_type_of(seq_support.item_type.clone());
                 let item_option_ty = builder.translate_type(&typ::Type::variant(next_result_ty));
                 
-                // vardata gives us a pointer so we can't copy the value straight into the binding   
-                let item_option_data_ref = builder.local_temp(binding_ty.clone().ptr()).to_ref();
+                // vardata gives us a ref so we can't copy the value straight into the binding
+                let item_option_data_ref = builder.local_temp(binding_ty.clone().temp_ref());
 
                 // seq_ref := src_ref.Sequence();
-                builder.call(seq_method.id, [src_self_arg_ref.value()], Some(seq_ref.clone()));
+                builder.call(seq_method.id, [src_self_arg_ref.value()], Some(seq_var.to_ref()));
 
                 // stores the option resulting from calling Next. don't need to RC this,
                 // it'll either return an item and be stored in the binding local and retained there,
                 // or return None and will never need retaining in that case
-                let next_item_option_ref = builder.local_temp(item_option_ty.clone()).to_ref();
-                let next_item_tag_ptr_ref = builder.local_temp(ir::Type::I32.ptr()).to_ref();
+                let next_item_option_ref = builder.local_temp(item_option_ty.clone());
+                let next_item_tag_ptr_ref = builder.local_temp(ir::Type::I32.temp_ref());
                 
                 let continue_label = builder.next_label();
                 let break_label = builder.next_label();
@@ -363,19 +363,20 @@ fn build_for_loop_sequence(
 
                     // next item in the sequence
                     // next_item_option_ref := sequence.Next();
-                    builder.call(next_method.id, [seq_self_arg_ref.value()], Some(next_item_option_ref.clone()));
+                    builder.call(next_method.id, [seq_self_arg_var.value()], Some(next_item_option_ref.to_ref()));
 
                     // if the case is None, break
                     // next_item_tag_ref := next_item_option_ref.tag
-                    builder.vartag(next_item_tag_ptr_ref.clone(), next_item_option_ref.clone(), item_option_ty.clone());
+                    builder.vartag(next_item_tag_ptr_ref, next_item_option_ref, item_option_ty.clone());
 
-                    let is_end_val = builder.eq_to_val(next_item_tag_ptr_ref.to_deref(), ir::Value::LiteralI32(OPTION_NONE_CASE as i32));
+                    let none_case_val = ir::Value::LiteralI32(OPTION_NONE_CASE as i32);
+                    let is_end_val = builder.eq_to_val(next_item_tag_ptr_ref.to_deref(), none_case_val);
                     builder.jmpif(break_label, is_end_val);
 
                     // binding_ref := next_item_option_ref.Get()
-                    builder.release(binding_ref.clone(), &binding_ty);
-                    builder.vardata(item_option_data_ref.clone(), next_item_option_ref, item_option_ty.clone(), OPTION_SOME_CASE);
-                    builder.mov(binding_ref.clone(), item_option_data_ref.to_deref());
+                    builder.release(binding_ref, &binding_ty);
+                    builder.vardata(item_option_data_ref, next_item_option_ref, item_option_ty.clone(), OPTION_SOME_CASE);
+                    builder.mov(binding_ref, item_option_data_ref);
 
                     let body_instructions = builder.loop_body_scope(continue_label, break_label, |builder| {
                         translate_stmt(&body, builder);

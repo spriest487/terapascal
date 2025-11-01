@@ -258,31 +258,32 @@ fn build_variant_ctor_call(
     let variant_name = variant_ty.as_variant().unwrap();
 
     let out_ty = builder.translate_type(&variant_ty);
-    let out = builder.local_new(out_ty.clone(), None).to_ref();
+    let out = builder.local_new(out_ty.clone(), None);
 
     builder.local_begin();
+    {
+        let tag_ref = builder.local_temp(ir::Type::I32.temp_ref());
+        builder.vartag(tag_ref, out, out_ty.clone());
 
-    let tag_ptr = builder.local_temp(ir::Type::I32.ptr()).to_ref();
-    builder.vartag(tag_ptr.clone(), out.clone(), out_ty.clone());
+        let (_, case_index, _) = builder.translate_variant_case(variant_name, &case_name);
 
-    let (_, case_index, _) = builder.translate_variant_case(variant_name, &case_name);
+        // todo: proper index type
+        builder.mov(tag_ref.to_deref(), ir::Value::LiteralI32(case_index as i32));
 
-    // todo: proper index type
-    builder.mov(tag_ptr.to_deref(), ir::Value::LiteralI32(case_index as i32));
+        if let Some(arg) = arg {
+            let arg_val = expr::expr_to_val(arg, builder);
 
-    if let Some(arg) = arg {
-        let arg_val = expr::expr_to_val(arg, builder);
+            let arg_ty = builder.translate_type(&arg.annotation().ty());
+            let data_ref = builder.local_temp(arg_ty.clone().temp_ref());
 
-        let arg_ty = builder.translate_type(&arg.annotation().ty());
-        let field_ptr = builder.local_temp(arg_ty.clone().ptr()).to_ref();
-
-        builder.vardata(field_ptr.clone(), out.clone(), out_ty.clone(), case_index);
-        builder.mov(field_ptr.clone().to_deref(), arg_val);
-        builder.retain(field_ptr.to_deref(), &arg_ty);
+            builder.vardata(data_ref, out, out_ty.clone(), case_index);
+            builder.mov(data_ref.to_deref(), arg_val);
+            builder.retain(data_ref.to_deref(), &arg_ty);
+        }
     }
-
     builder.local_end();
-    Some(out)
+
+    Some(out.to_ref())
 }
 
 pub fn translate_invocation(

@@ -1163,11 +1163,11 @@ pub trait InstructionBuilder {
                     .cases
                     .to_vec();
 
-                let tag_ptr = Ref::Local(self.local_temp(Type::I32.ptr()));
-                let is_not_case = Ref::Local(self.local_temp(Type::Bool));
+                let tag_ref = self.local_temp(Type::I32.temp_ref());
+                let is_not_case = self.local_temp(Type::Bool);
 
                 // get the tag
-                self.vartag(tag_ptr.clone(), at.clone(), Type::Variant(*id));
+                self.vartag(tag_ref, at.clone(), Type::Variant(*id));
 
                 // jump out of the search loop if we find the matching case
                 let break_label = self.next_label();
@@ -1188,9 +1188,7 @@ pub trait InstructionBuilder {
 
                         // is_not_case := tag_ptr^ != tag
                         let tag_val = Value::LiteralI32(tag as i32);
-                        self.eq(is_not_case.clone(), tag_ptr.clone().to_deref(), tag_val);
-                        self.not(is_not_case.clone(), is_not_case.clone());
-
+                        self.neq(is_not_case, tag_ref.to_deref(), tag_val);
                         self.jmpif(skip_case_label, is_not_case.clone());
 
                         // get ptr into case data and visit it
@@ -1199,11 +1197,13 @@ pub trait InstructionBuilder {
                         // active, so a scope is needed here to stop the local counter being
                         // incremented once per case
                         self.local_begin();
-                        let data_ptr = self.local_temp(data_ty.clone().ptr());
+                        {
+                            let data_ref = self.local_temp(data_ty.clone().temp_ref());
 
-                        self.vardata(data_ptr.clone(), at.clone(), Type::Variant(*id), tag);
+                            self.vardata(data_ref, at.clone(), Type::Variant(*id), tag);
 
-                        result |= self.visit_deep(data_ptr.to_ref().to_deref(), &data_ty, f);
+                            result |= self.visit_deep(data_ref.to_deref(), &data_ty, f);
+                        }
                         self.local_end();
 
                         // break after any case executes

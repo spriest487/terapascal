@@ -105,12 +105,12 @@ pub fn translate_pattern_match(
                         .cloned()
                         .expect("variant pattern with binding must refer to a case with data");
 
-                    let data_ptr = builder.local_temp(case_ty.clone().ptr()).to_ref();
-                    builder.vardata(data_ptr.clone(), target_val.clone(), variant_ty.clone(), case_index);
+                    let data_ref = builder.local_temp(case_ty.clone().temp_ref());
+                    builder.vardata(data_ref, target_val.clone(), variant_ty.clone(), case_index);
 
                     vec![PatternMatchBinding {
                         name: binding_name,
-                        binding_ref: data_ptr.to_deref(),
+                        binding_ref: data_ref.to_deref(),
                         ty: case_ty,
                     }]
                 },
@@ -161,13 +161,13 @@ fn translate_is_variant(
     case_index: usize,
     builder: &mut Builder,
 ) -> ir::Ref {
-    let tag_ptr = builder.local_temp(ir::Type::I32.ptr());
-    builder.vartag(tag_ptr.clone(), val, variant_ty);
+    let tag_ptr = builder.local_temp(ir::Type::I32.temp_ref());
+    builder.vartag(tag_ptr, val, variant_ty);
     
     let tag_val = ir::Value::LiteralI32(case_index as i32);
 
-    let is = builder.local_temp(ir::Type::Bool).to_ref();
-    builder.eq(is.clone(), tag_ptr.to_ref().to_deref(), tag_val);
+    let is = builder.local_temp(ir::Type::Bool);
+    builder.eq(is, tag_ptr.to_deref(), tag_val);
 
-    is
+    is.to_ref()
 }
