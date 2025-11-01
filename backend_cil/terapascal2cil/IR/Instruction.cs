@@ -6,17 +6,21 @@ namespace Terapascal.IR;
 public interface IInstruction;
 
 public record CommentInstruction(string Text) : IInstruction;
+
 public record DebugPushInstruction(Span Context) : IInstruction;
+
 public record DebugPopInstruction : IInstruction;
 
 public record LocalAllocInstruction(LocalID At, IType Type) : IInstruction;
+
 public record LocalBeginInstruction : IInstruction;
+
 public record LocalEndInstruction : IInstruction;
 
 [MessagePackObject]
 public record MoveInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -29,58 +33,76 @@ public record MoveInstruction : IInstruction {
 }
 
 public record AddInstruction(BinOpInstruction Op) : IInstruction;
+
 public record SubInstruction(BinOpInstruction Op) : IInstruction;
+
 public record MulInstruction(BinOpInstruction Op) : IInstruction;
+
 public record IDivInstruction(BinOpInstruction Op) : IInstruction;
+
 public record FDivInstruction(BinOpInstruction Op) : IInstruction;
+
 public record ModInstruction(BinOpInstruction Op) : IInstruction;
+
 public record ShlInstruction(BinOpInstruction Op) : IInstruction;
+
 public record ShrInstruction(BinOpInstruction Op) : IInstruction;
+
 public record BitAndInstruction(BinOpInstruction Op) : IInstruction;
+
 public record BitOrInstruction(BinOpInstruction Op) : IInstruction;
+
 public record BitXorInstruction(BinOpInstruction Op) : IInstruction;
+
 public record EqInstruction(BinOpInstruction Op) : IInstruction;
+
 public record GtInstruction(BinOpInstruction Op) : IInstruction;
+
 public record LtInstruction(BinOpInstruction Op) : IInstruction;
+
 public record LteInstruction(BinOpInstruction Op) : IInstruction;
+
 public record GteInstruction(BinOpInstruction Op) : IInstruction;
+
 public record AndInstruction(BinOpInstruction Op) : IInstruction;
+
 public record OrInstruction(BinOpInstruction Op) : IInstruction;
 
 [MessagePackObject]
 public record BinOpInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("a")]
-    public required IValue ArgA { 
+    public required IValue ArgA {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("b")]
-    public required IValue ArgB { 
+    public required IValue ArgB {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 }
 
 public record NotInstruction(UnaryOpInstruction Op) : IInstruction;
+
 public record BitNotInstruction(UnaryOpInstruction Op) : IInstruction;
 
 [MessagePackObject]
 public sealed record UnaryOpInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("a")]
-    public required IValue Arg { 
+    public required IValue Arg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -89,13 +111,13 @@ public sealed record UnaryOpInstruction : IInstruction {
 [MessagePackObject]
 public record AddrOfInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("a")]
-    public required IRef Arg { 
+    public required IRef Arg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -104,7 +126,7 @@ public record AddrOfInstruction : IInstruction {
 [MessagePackObject]
 public record ElementInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -116,13 +138,13 @@ public record ElementInstruction : IInstruction {
     }
 
     [Key("index")]
-    public required IValue Index { 
+    public required IValue Index {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
-    
+
     [Key("of_type")]
-    public required IType ArrayType { 
+    public required IType ArrayType {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -131,7 +153,7 @@ public record ElementInstruction : IInstruction {
 [MessagePackObject]
 public record LengthInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -141,9 +163,9 @@ public record LengthInstruction : IInstruction {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
-    
+
     [Key("of_type")]
-    public required IType ArrayType { 
+    public required IType ArrayType {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -152,19 +174,19 @@ public record LengthInstruction : IInstruction {
 [MessagePackObject]
 public record VariantTagInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("a")]
-    public required IRef Arg { 
+    public required IRef Arg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
-    
+
     [Key("of_ty")]
-    public required IType VariantType { 
+    public required IType VariantType {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -173,23 +195,23 @@ public record VariantTagInstruction : IInstruction {
 [MessagePackObject]
 public record VariantDataInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("a")]
-    public required IRef Arg { 
+    public required IRef Arg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("of_ty")]
-    public required IType VariantType { 
+    public required IType VariantType {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
-    
+
     [Key("tag")]
     public required ulong Tag { get; init; }
 }
@@ -197,23 +219,23 @@ public record VariantDataInstruction : IInstruction {
 [MessagePackObject]
 public record FieldInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("a")]
-    public required IRef Arg { 
+    public required IRef Arg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("of_ty")]
-    public required IType BaseType { 
+    public required IType BaseType {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
-    
+
     [Key("field")]
     public required FieldID Field { get; init; }
 }
@@ -223,15 +245,15 @@ public record CallInstruction : IInstruction {
     [Key("out")]
     [MessagePackFormatter(typeof(NullableRefFormatter))]
     public required IRef? Out { get; init; }
-    
+
     [Key("function")]
-    public required IValue Function { 
+    public required IValue Function {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
-    
+
     [Key("args")]
-    public required IReadOnlyList<IValue> Args { 
+    public required IReadOnlyList<IValue> Args {
         get;
         init => field = value.ToArrayNonNull();
     }
@@ -245,18 +267,18 @@ public record VirtualCallInstruction : IInstruction {
 
     [Key("iface_id")]
     public required InterfaceID InterfaceID { get; init; }
-    
+
     [Key("method")]
     public required MethodID MethodID { get; init; }
-    
+
     [Key("self_arg")]
-    public required IValue SelfArg { 
+    public required IValue SelfArg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
-    
+
     [Key("rest_args")]
-    public required IReadOnlyList<IValue>? RestArgs { 
+    public required IReadOnlyList<IValue>? RestArgs {
         get;
         init => field = value.ToArrayNonNull();
     }
@@ -265,19 +287,19 @@ public record VirtualCallInstruction : IInstruction {
 [MessagePackObject]
 public record ClassIsInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("a")]
-    public required IValue Arg { 
+    public required IValue Arg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("class_id")]
-    public required IVirtualTypeID ClassID { 
+    public required IVirtualTypeID ClassID {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -308,25 +330,43 @@ public record JumpInstruction : IInstruction {
 public record JumpIfInstruction : IInstruction {
     [Key("dest")]
     public required Label Destination { get; init; }
-    
+
     [Key("test")]
-    public required IValue Condition { 
+    public required IValue Condition {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 }
 
 [MessagePackObject]
-public record RcNewInstruction : IInstruction {
+public record NewInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("type_id")]
     public required TypeDefID TypeID { get; init; }
-    
+
+    [Key("immortal")]
+    public required bool Immortal { get; init; }
+}
+
+[MessagePackObject]
+public record NewArrayInstruction : IInstruction {
+    [Key("out")]
+    public required IRef Out {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("element_type")]
+    public required IType ElementType { get; init; }
+
+    [Key("count")]
+    public required IValue Count { get; init; }
+
     [Key("immortal")]
     public required bool Immortal { get; init; }
 }
@@ -334,7 +374,7 @@ public record RcNewInstruction : IInstruction {
 [MessagePackObject]
 public record ReleaseInstruction : IInstruction {
     [Key("at")]
-    public required IRef At { 
+    public required IRef At {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -344,7 +384,7 @@ public record ReleaseInstruction : IInstruction {
 
     [Key("released_out")]
     [MessagePackFormatter(typeof(NullableRefFormatter))]
-    public required IRef? ReleasedOut { 
+    public required IRef? ReleasedOut {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -353,7 +393,7 @@ public record ReleaseInstruction : IInstruction {
 [MessagePackObject]
 public record RetainInstruction : IInstruction {
     [Key("at")]
-    public required IRef At { 
+    public required IRef At {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -365,7 +405,7 @@ public record RetainInstruction : IInstruction {
 [MessagePackObject]
 public record RaiseInstruction : IInstruction {
     [Key("val")]
-    public required IRef Value { 
+    public required IRef Value {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -374,19 +414,19 @@ public record RaiseInstruction : IInstruction {
 [MessagePackObject]
 public record CastInstruction : IInstruction {
     [Key("out")]
-    public required IRef Out { 
+    public required IRef Out {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("ty")]
-    public required IType Type { 
+    public required IType Type {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("a")]
-    public required IValue Value { 
+    public required IValue Value {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -430,7 +470,7 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
                 var (at, type) = reader.ReadPair<LocalID, IType>(options);
                 return new LocalAllocInstruction(at, type);
             }
-            
+
             case "Move": {
                 return MessagePackSerializer.Deserialize<MoveInstruction>(ref reader, options);
             }
@@ -515,7 +555,7 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
                 var op = MessagePackSerializer.Deserialize<UnaryOpInstruction>(ref reader, options);
                 return new BitNotInstruction(op);
             }
-            
+
             case "AddrOf": {
                 return MessagePackSerializer.Deserialize<AddrOfInstruction>(ref reader, options);
             }
@@ -523,64 +563,68 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
             case "Element": {
                 return MessagePackSerializer.Deserialize<ElementInstruction>(ref reader, options);
             }
-            
+
             case "Length": {
                 return MessagePackSerializer.Deserialize<LengthInstruction>(ref reader, options);
             }
-            
+
             case "VariantTag": {
                 return MessagePackSerializer.Deserialize<VariantTagInstruction>(ref reader, options);
             }
-            
+
             case "VariantData": {
                 return MessagePackSerializer.Deserialize<VariantDataInstruction>(ref reader, options);
             }
-            
+
             case "Field": {
                 return MessagePackSerializer.Deserialize<FieldInstruction>(ref reader, options);
             }
-            
+
             case "Call": {
                 return MessagePackSerializer.Deserialize<CallInstruction>(ref reader, options);
             }
-            
+
             case "VirtualCall": {
                 return MessagePackSerializer.Deserialize<VirtualCallInstruction>(ref reader, options);
             }
-            
+
             case "ClassIs": {
                 return MessagePackSerializer.Deserialize<ClassIsInstruction>(ref reader, options);
             }
-            
+
             case "Label": {
                 var label = MessagePackSerializer.Deserialize<Label>(ref reader, options);
                 return new LabelInstruction(label);
             }
-            
+
             case "Jump": {
                 return MessagePackSerializer.Deserialize<JumpInstruction>(ref reader, options);
             }
-            
+
             case "JumpIf": {
                 return MessagePackSerializer.Deserialize<JumpIfInstruction>(ref reader, options);
             }
-            
+
             case "RcNew": {
-                return MessagePackSerializer.Deserialize<RcNewInstruction>(ref reader, options);
+                return MessagePackSerializer.Deserialize<NewInstruction>(ref reader, options);
             }
-            
+
+            case "RcNewArray": {
+                return MessagePackSerializer.Deserialize<NewArrayInstruction>(ref reader, options);
+            }
+
             case "Release": {
                 return MessagePackSerializer.Deserialize<ReleaseInstruction>(ref reader, options);
             }
-            
+
             case "Retain": {
                 return MessagePackSerializer.Deserialize<RetainInstruction>(ref reader, options);
             }
-            
+
             case "Raise": {
                 return MessagePackSerializer.Deserialize<RaiseInstruction>(ref reader, options);
             }
-            
+
             case "Cast": {
                 return MessagePackSerializer.Deserialize<CastInstruction>(ref reader, options);
             }

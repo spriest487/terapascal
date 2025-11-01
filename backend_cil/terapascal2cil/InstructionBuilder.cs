@@ -274,12 +274,21 @@ public class InstructionBuilder {
                     break;
                 }
 
-                case IR.RcNewInstruction {
+                case IR.NewInstruction {
                     Out: var outRef,
                     TypeID: var typeID,
                 }: {
                     this.BuildRcNew(outRef, typeID);
 
+                    break;
+                }
+
+                case IR.NewArrayInstruction {
+                    Out: var outRef,
+                    ElementType: var elementType,
+                    Count: var countVal,
+                }: {
+                    this.BuildRcNewArray(outRef, countVal, elementType);
                     break;
                 }
 
@@ -456,6 +465,15 @@ public class InstructionBuilder {
                 $"invalid instruction: type {classTypeRef} cannot be constructed");
 
         this.body.Emit(OpCodes.Newobj, this.assemblyBuilder.Module.ImportReference(defaultCtor));
+        this.StoreRef(outRef);
+    }
+
+    private void BuildRcNewArray(IR.IRef outRef, IR.IValue countVal, IR.IType elementType) {
+        this.LoadValue(countVal);
+        
+        var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType);
+
+        this.body.Emit(OpCodes.Newarr, elementTypeRef);
         this.StoreRef(outRef);
     }
 

@@ -1,0 +1,7 @@
+unit StringConcat;
+implementation
+
+initialization
+    var message := String.Concat('hello, ', 'world!');
+    WriteLn(message);
+end.
