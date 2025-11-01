@@ -127,8 +127,14 @@ impl FunctionName {
     pub fn to_debug_string(&self, type_args: Option<&TypeArgList>) -> String {
         let mut string = String::new();
 
-        if let FunctionDeclContext::MethodDef { declaring_type: self_ty, .. } = &self.context {
-            string.push_str(&format!("{}.", self_ty));
+        match &self.context {
+            FunctionDeclContext::MethodDecl { enclosing_type } => {
+                string.push_str(&format!("{}.", enclosing_type));
+            }
+            FunctionDeclContext::MethodDef { declaring_type } => {
+                string.push_str(&format!("{}.", declaring_type));
+            }
+            FunctionDeclContext::FreeFunction => {}
         }
 
         string.push_str(&self.ident.as_str());

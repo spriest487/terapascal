@@ -120,7 +120,7 @@ impl Scope {
         }
     }
 
-    #[allow(unused)]
+    #[expect(unused)]
     pub fn to_debug_string(&self) -> Result<String, fmt::Error> {
         let mut output = String::new();
         self.to_debug_string_rec(0, &mut output)?;

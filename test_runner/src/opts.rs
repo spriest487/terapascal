@@ -12,6 +12,9 @@ pub struct Opts {
 
     #[structopt(long, short, parse(from_os_str))]
     pub compiler: PathBuf,
+    
+    #[structopt(long)]
+    pub debug: bool,
 
     #[structopt(long)]
     pub clean: bool,

@@ -85,10 +85,16 @@ impl TestCase {
         
         let module_path = target_file_path(&self.path, opts, "lib")?;
         if is_target_outdated(&module_path, &self.path, opts) {
+            let mut build_command = Command::new(&opts.compiler);
+            build_command.arg(&self.path);
+            build_command.arg("-o").arg(&module_path);
+            
+            if opts.debug {
+                build_command.arg("--debug");
+            }
+            
             let build_status = try_run_command(
-                Command::new(&opts.compiler)
-                    .arg(&self.path)
-                    .arg("-o").arg(&module_path),
+                &mut build_command,
                 &mut build_stdout,
                 &mut build_stderr
             )?;
@@ -102,11 +108,17 @@ impl TestCase {
                 return Ok(build_status);
             }
         }
+        
+        let mut run_command = Command::new(&opts.compiler);
+        run_command.arg(module_path.canonicalize()?)
+            .current_dir(self.working_dir());
+        
+        if opts.debug {
+            run_command.arg("--debug");
+        }
 
         try_run_interactive(
-            Command::new(&opts.compiler)
-                .arg(module_path.canonicalize()?)
-                .current_dir(self.working_dir()),
+            &mut run_command,
             |stdin, stdout, stderr| {
                 let mut stdout = ConcatReader::new(build_stdout.as_slice(), stdout);
                 let mut stderr = ConcatReader::new(build_stderr.as_slice(), stderr);
@@ -130,11 +142,17 @@ impl TestCase {
         
         let mut c_file_path = exe_path.clone();
         c_file_path.set_extension("c");
+        
+        let mut compile_command = Command::new(&opts.compiler);
+        compile_command.arg(&self.path);
+        compile_command.arg("-o").arg(&c_file_path);
+        
+        if opts.debug {
+            compile_command.arg("--debug");
+        }
 
         let compile_status = try_run_command(
-            Command::new(&opts.compiler)
-                .arg(&self.path)
-                .arg("-o").arg(&c_file_path),
+            &mut compile_command,
             build_stdout,
             build_stderr
         )?;
