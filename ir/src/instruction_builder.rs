@@ -757,7 +757,7 @@ pub trait InstructionBuilder {
     }
 
     fn make_ref(&mut self, out: impl Into<Ref>, a: impl Into<Ref>) {
-        self.emit(Instruction::AddrOf {
+        self.emit(Instruction::MakeRef {
             out: out.into(),
             a: a.into(),
         })

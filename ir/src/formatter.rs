@@ -185,6 +185,13 @@ pub trait IRFormatter {
                 write!(f, " := @")?;
                 self.format_ref(a, f)
             }
+            Instruction::MakeRef { out, a } => {
+                write!(f, "{:>width$} ", "makeref", width = IX_WIDTH)?;
+
+                self.format_ref(out, f)?;
+                write!(f, " := &")?;
+                self.format_ref(a, f)
+            }
 
             Instruction::Element {
                 out,

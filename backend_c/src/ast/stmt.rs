@@ -329,7 +329,7 @@ impl<'a> Builder<'a> {
                 self.stmts.push(Statement::Comment(safe_text));
             },
 
-            ir::Instruction::AddrOf { out, a } => {
+            ir::Instruction::AddrOf { out, a } | ir::Instruction::MakeRef { out, a } => {
                 let addr = Expr::translate_ref(a, self.module).addr_of();
                 self.stmts.push(Statement::Expr(Expr::translate_assign(
                     out,

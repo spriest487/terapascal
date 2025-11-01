@@ -59,6 +59,11 @@ pub enum Instruction {
         out: Ref,
         a: Ref,
     },
+    // Stores a temporary reference to `a` into `out`
+    MakeRef {
+        out: Ref,
+        a: Ref,
+    },
 
     /// Stores the address of an array element from array at `a` into `out`
     Element {
@@ -216,6 +221,7 @@ impl Instruction {
             | Instruction::BitXor(BinOpInstruction { out, .. })
             | Instruction::BitNot(UnaryOpInstruction { out, .. })
             | Instruction::AddrOf { out, .. }
+            | Instruction::MakeRef { out, .. }
             | Instruction::Element { out, .. }
             | Instruction::Length { out, .. }
             | Instruction::VariantTag { out, .. }

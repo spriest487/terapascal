@@ -1036,7 +1036,7 @@ impl Interpreter {
                 self.exec_class_is(out, a, class_id)?
             },
 
-            ir::Instruction::AddrOf { out, a } => {
+            ir::Instruction::AddrOf { out, a } | ir::Instruction::MakeRef { out, a } => {
                 let a_ptr = self.addr_of_ref(a)?;
                 self.store(out, DynValue::Pointer(a_ptr))?;
             },
