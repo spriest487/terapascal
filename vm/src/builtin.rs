@@ -224,7 +224,7 @@ pub(super) fn array_length(state: &mut Interpreter) -> ExecResult<()> {
         })?;
 
     let arr_arg = state.evaluate(&Value::Ref(array_arg_ref))?;
-    state.call_store(len_func, &[arr_arg], Some(&RETURN_REF))?;
+    state.call_and_store(len_func, &[arr_arg], Some(&RETURN_REF))?;
 
     Ok(())
 }
@@ -255,7 +255,7 @@ pub(super) fn set_length(state: &mut Interpreter) -> ExecResult<()> {
     let new_arr = state.rc_alloc(new_arr_struct, false)?;
     let new_arr_val = DynValue::Pointer(new_arr);
 
-    state.call_store(alloc_func, &[new_arr_val.clone(), new_len, old_arr, default_val_ptr], None)?;
+    state.call_and_store(alloc_func, &[new_arr_val.clone(), new_len, old_arr, default_val_ptr], None)?;
 
     state.store(&RETURN_REF, new_arr_val)?;
 

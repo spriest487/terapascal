@@ -500,7 +500,7 @@ impl Interpreter {
             })
     }
 
-    fn call_store(
+    fn call_and_store(
         &mut self,
         id: ir::FunctionID,
         args: &[DynValue],
@@ -609,7 +609,7 @@ impl Interpreter {
                 eprintln!("[rc] invoking dtor {}", func_desc);
             }
 
-            self.call_store(func_id, &[val.clone()], None)?;
+            self.call_and_store(func_id, &[val.clone()], None)?;
         } else if self.opts.trace_rc {
             eprintln!("[rc] no dtor for {}", self.metadata.pretty_ty_name(ty));
         }
@@ -732,7 +732,7 @@ impl Interpreter {
                 // Now release the fields of the struct as if it was a normal record
                 let type_info = self.find_runtime_type(&struct_ty)?;
                 if let Some(release_func) = type_info.release {
-                    self.call_store(release_func, &[val.clone()], None)?;
+                    self.call_and_store(release_func, &[val.clone()], None)?;
                 }
             }
 
@@ -1758,7 +1758,9 @@ impl Interpreter {
             .collect::<ExecResult<_>>()?;
 
         match self.evaluate(function)? {
-            DynValue::Function(function) => self.call_store(function, &arg_vals, out.as_ref())?,
+            DynValue::Function(function) => {
+                self.call_and_store(function, &arg_vals, out.as_ref())?
+            },
 
             _ => {
                 let msg = format!("{} does not reference a function", function);
@@ -1795,7 +1797,7 @@ impl Interpreter {
             },
         };
 
-        self.call_store(func, &arg_vals, out)?;
+        self.call_and_store(func, &arg_vals, out)?;
 
         Ok(())
     }
