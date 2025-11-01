@@ -394,24 +394,7 @@ fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &m
                     )
                 });
 
-            match val.value_kind {
-                // ident lvalues are evaluated as pointers to the original values. they don't need
-                // to be refcounted separately, because if they have a name, they must exist
-                // in a scope at least as wide as the current one
-                typ::ValueKind::Immutable | typ::ValueKind::Mutable | typ::ValueKind::Uninitialized => {
-                    let ref_ty = builder.translate_type(&annotation.ty());
-                    let ref_temp = builder.local_temp(ref_ty.ptr()).to_ref();
-
-                    builder.emit(ir::Instruction::AddrOf {
-                        out: ref_temp.clone(),
-                        a: val_ref,
-                    });
-                    ref_temp.to_deref()
-                },
-
-                // ident rvalue - just evaluate it
-                typ::ValueKind::Temporary => val_ref,
-            }
+            val_ref
         },
 
         _ => panic!("wrong kind of node annotation for ident: {:?}", ident),
