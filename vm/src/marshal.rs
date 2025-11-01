@@ -916,7 +916,9 @@ impl Marshaller {
         let case_tys = self
             .variant_case_types
             .get(&variant_val.type_id)
-            .ok_or_else(|| MarshalError::UnsupportedType(ir::Type::Variant(variant_val.type_id)))?;
+            .ok_or_else(|| {
+                MarshalError::UnsupportedType(ir::Type::Variant(variant_val.type_id))
+            })?;
 
         let tag = variant_val
             .tag
@@ -975,7 +977,9 @@ impl Marshaller {
         let case_tys = self
             .variant_case_types
             .get(&variant_id)
-            .ok_or_else(|| MarshalError::UnsupportedType(ir::Type::Variant(variant_id)))?;
+            .ok_or_else(|| {
+                MarshalError::UnsupportedType(ir::Type::Variant(variant_id))
+            })?;
 
         let case_ty = case_tys
             .get(case_index)
