@@ -135,8 +135,8 @@ impl SetFlagsType {
         let struct_ty = ir::Type::Struct(struct_id);
 
         let mut builder = Builder::new(lib);
-        builder.bind_param(struct_ty.clone().ptr(), "flags", false);
-        builder.bind_param(ir::Type::U8, "bit", false);
+        builder.bind_param(struct_ty.clone().ptr(), "flags");
+        builder.bind_param(ir::Type::U8, "bit");
 
         let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 0, word_count, struct_ty.clone());
 
@@ -160,8 +160,8 @@ impl SetFlagsType {
         let struct_ty = ir::Type::Struct(struct_id);
 
         let mut builder = Builder::new(lib);
-        builder.bind_param(struct_ty.clone().ptr(), "flags", false);
-        builder.bind_param(ir::Type::U8, "bit", false);
+        builder.bind_param(struct_ty.clone().ptr(), "flags");
+        builder.bind_param(ir::Type::U8, "bit");
 
         let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 0, word_count, struct_ty.clone());
 
@@ -187,8 +187,8 @@ impl SetFlagsType {
 
         let mut builder = Builder::new(lib);
         builder.bind_return();
-        builder.bind_param(struct_ty.clone().ptr(), "flags", false);
-        builder.bind_param(ir::Type::U8, "bit", false);
+        builder.bind_param(struct_ty.clone().ptr(), "flags");
+        builder.bind_param(ir::Type::U8, "bit");
         
         let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 1, word_count, struct_ty.clone());
 
@@ -223,25 +223,24 @@ impl SetFlagsType {
         let struct_ty = ir::Type::Struct(struct_id);
 
         let mut builder = Builder::new(lib);
-        builder.bind_param(struct_ty.clone().ptr(), "flags", false);
-        builder.bind_param(struct_ty.clone().ptr(), "other", false);
+        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
+        builder.bind_param(struct_ty.clone().temp_ref(), "other");
 
-        let flags_ref = ir::LocalID(0).to_ref().to_deref();
-        let other_ref = ir::LocalID(1).to_ref().to_deref();
+        let flags_ref = ir::LocalID(0).to_deref();
+        let other_ref = ir::LocalID(1).to_deref();
         
-        let word_field = builder.local_temp(WORD_TYPE.ptr()).to_ref();
-        let other_word_field = builder.local_temp(WORD_TYPE.ptr()).to_ref();
+        let word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
+        let other_word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
 
         for word in 0..word_count {
             let field_id = ir::FieldID(word);
-            builder.field(word_field.clone(), flags_ref.clone(), struct_ty.clone(), field_id);
-            builder.field(other_word_field.clone(), other_ref.clone(), struct_ty.clone(), field_id);
+            builder.field(word_field_ref, flags_ref.clone(), struct_ty.clone(), field_id);
+            builder.field(other_word_field_ref, other_ref.clone(), struct_ty.clone(), field_id);
             
-            let word_ref = word_field.clone().to_deref();
-            let word_val = ir::Value::from(word_ref.clone());
-            let other_word_val = ir::Value::from(other_word_field.clone().to_deref());
+            let word_val = word_field_ref.to_deref().value();
+            let other_word_val = other_word_field_ref.to_deref().value();
 
-            build_op(&mut builder, word_ref, word_val, other_word_val);
+            build_op(&mut builder, word_field_ref.to_deref(), word_val, other_word_val);
         }
 
         let name = format!("operator {} ({}-bit flags)", op, word_count * WORD_BITS);
@@ -257,17 +256,15 @@ impl SetFlagsType {
         let struct_ty = ir::Type::Struct(struct_id);
 
         let mut builder = Builder::new(lib);
-        builder.bind_param(struct_ty.clone().ptr(), "flags", false);
+        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
 
         let flags_ref = ir::Ref::Local(ir::LocalID(0)).to_deref();
         
-        let word_field = builder.local_temp(WORD_TYPE.ptr()).to_ref();
+        let word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
         for word in 0..word_count {
             let field_id = ir::FieldID(word);
-            builder.field(word_field.clone(), flags_ref.clone(), struct_ty.clone(), field_id);
-            
-            let word_ref = word_field.clone().to_deref();
-            builder.bit_not(word_ref.clone(), word_ref);
+            builder.field(word_field_ref, flags_ref.clone(), struct_ty.clone(), field_id);
+            builder.bit_not(word_field_ref.to_deref(), word_field_ref.to_deref());
         }
         
         let name = format!("operator ~ ({}-bit flags)", word_count * WORD_BITS);
@@ -283,30 +280,27 @@ impl SetFlagsType {
         
         let mut builder = Builder::new(lib);
         builder.bind_return();
-        builder.bind_param(struct_ty.clone().ptr(), "flags", false);
-        builder.bind_param(struct_ty.clone().ptr(), "other", false);
+        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
+        builder.bind_param(struct_ty.clone().temp_ref(), "other");
 
-        let flags_ref = ir::LocalID(1).to_ref().to_deref();
-        let other_ref = ir::LocalID(2).to_ref().to_deref();
+        let flags_arg = ir::LocalID(1);
+        let other_arg = ir::LocalID(2);
 
-        let word_field = builder.local_temp(WORD_TYPE.ptr()).to_ref();
-        let other_word_field = builder.local_temp(WORD_TYPE.ptr()).to_ref();
+        let word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
+        let other_word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
 
         builder.mov(ir::RETURN_REF, ir::Value::LiteralBool(true));
-        
+
         let word_eq_var = builder.local_temp(ir::Type::Bool);
 
         for word in 0..word_count {
             let field_id = ir::FieldID(word);
-            builder.field(word_field.clone(), flags_ref.clone(), struct_ty.clone(), field_id);
-            builder.field(other_word_field.clone(), other_ref.clone(), struct_ty.clone(), field_id);
-
-            let word_ref = word_field.clone().to_deref();
-            let other_word_ref = other_word_field.clone().to_deref();
+            builder.field(word_field_ref, flags_arg.to_deref(), struct_ty.clone(), field_id);
+            builder.field(other_word_field_ref, other_arg.to_deref(), struct_ty.clone(), field_id);
 
             // result := result and (word = other_word)
-            builder.eq(word_eq_var.clone(), word_ref, other_word_ref);
-            builder.and(ir::RETURN_REF, ir::RETURN_REF, word_eq_var.clone());
+            builder.eq(word_eq_var, word_field_ref.to_deref(), other_word_field_ref.to_deref());
+            builder.and(ir::RETURN_REF, ir::RETURN_REF, word_eq_var);
         }
         
         let name = format!("operator = ({}-bit flags)", word_count * WORD_BITS);
@@ -328,11 +322,11 @@ impl SetFlagsType {
         word_count: usize,
         struct_ty: ir::Type
     ) -> (ir::Ref, ir::Value) {
-        let result = builder.local_temp(WORD_TYPE.ptr());
+        let result = builder.local_temp(WORD_TYPE.temp_ref());
         let skip_flag = builder.local_temp(ir::Type::Bool);
         
-        let self_ptr_arg = ir::Ref::Local(ir::LocalID(first_arg));
-        let bit_arg = ir::Ref::Local(ir::LocalID(first_arg + 1));
+        let self_ptr_arg = ir::LocalID(first_arg);
+        let bit_arg = ir::LocalID(first_arg + 1);
         
         let break_label = builder.next_label();
         
@@ -344,23 +338,23 @@ impl SetFlagsType {
                 let skip_label = builder.next_label();
                 let next_word_start = ir::Value::LiteralU8(((word + 1) * WORD_BITS) as u8);
 
-                builder.gte(skip_flag.clone(), bit_arg.clone(), next_word_start.clone());
-                builder.jmpif(skip_label, skip_flag.clone());
+                builder.gte(skip_flag, bit_arg, next_word_start);
+                builder.jmpif(skip_label, skip_flag);
                 Some(skip_label)
             } else {
                 None
             };
             
-            let self_ref = self_ptr_arg.clone().to_deref(); 
+            let self_ref = self_ptr_arg.to_deref();
             let field_id = ir::FieldID(word);
 
-            builder.field(result.clone(), self_ref, struct_ty.clone(), field_id);
+            builder.field(result, self_ref, struct_ty.clone(), field_id);
             
             if word > 0 {
                 let word_start = ir::Value::LiteralU8((word * WORD_BITS) as u8);
-                builder.sub(word_bit.clone(), bit_arg.clone(), word_start);
+                builder.sub(word_bit, bit_arg, word_start);
             } else {
-                builder.mov(word_bit.clone(), bit_arg.clone());
+                builder.mov(word_bit, bit_arg);
             }
 
             builder.jmp(break_label);
@@ -372,6 +366,6 @@ impl SetFlagsType {
         
         builder.label(break_label);
 
-        (result.to_ref().to_deref(), ir::Value::from(word_bit))
+        (result.to_deref(), ir::Value::from(word_bit))
     }
 }

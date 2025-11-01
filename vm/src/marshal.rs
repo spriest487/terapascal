@@ -493,6 +493,7 @@ impl Marshaller {
             ir::Type::RcPointer(..) 
             | ir::Type::RcWeakPointer(..) 
             | ir::Type::Pointer(..) 
+            | ir::Type::TempRef(..) 
             | ir::Type::Function(..) => Ok(ForeignType::pointer()),
 
             ir::Type::Array { element, dim } => {
@@ -528,6 +529,7 @@ impl Marshaller {
             },
 
             ir::Type::Pointer(..) 
+            | ir::Type::TempRef(..) 
             | ir::Type::RcPointer(..) 
             | ir::Type::RcWeakPointer(..) 
             | ir::Type::Function(..) => Ok(ForeignType::pointer()),
@@ -748,7 +750,7 @@ impl Marshaller {
                 })
             },
 
-            ir::Type::Pointer(deref_ty) => {
+            ir::Type::Pointer(deref_ty) | ir::Type::TempRef(deref_ty) => {
                 self.unmarshal_ptr((**deref_ty).clone(), in_bytes)?
                     .map(DynValue::Pointer)
             },

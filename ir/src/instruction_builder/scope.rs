@@ -218,10 +218,10 @@ impl LocalScope {
     ) -> LocalID {
         if by_ref {
             let is_ptr = match &ty {
-                Type::Pointer(..) => true,
+                Type::TempRef(..) => true,
                 _ => false,
             };
-            assert!(is_ptr, "by-ref parameters must have pointer type");
+            assert!(is_ptr, "by-ref parameters must have reference type");
         }
 
         let id = LocalID(self.next_local);

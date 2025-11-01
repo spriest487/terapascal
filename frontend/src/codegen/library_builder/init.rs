@@ -49,8 +49,8 @@ fn gen_create_tags(
     }
 
     // get the ptr field of the tags array (pointer to field of type Object^)
-    let tags_array_ptr_field_ptr = builder.local_temp(ir::ANY_TYPE.ptr().ptr());
-    builder.field(tags_array_ptr_field_ptr.clone(), tag_array, tag_array_ty.clone(), ir::DYNARRAY_PTR_FIELD);
+    let tags_array_ptr_field_ref = builder.local_temp(ir::ANY_TYPE.ptr().temp_ref());
+    builder.field(tags_array_ptr_field_ref, tag_array, tag_array_ty.clone(), ir::DYNARRAY_PTR_FIELD);
 
     let tag_ptr = builder.local_temp(ir::ANY_TYPE.ptr());
 
@@ -63,7 +63,7 @@ fn gen_create_tags(
             .rc_resource_def_id()
             .expect("tags must be classes!");
 
-        let tag_class = ir::Type::class_ptr(tag_ty);
+        let tag_class = tag_ty.to_class_ptr_type();
 
         let tag_struct_def = builder
             .get_struct(tag_ty)
@@ -72,13 +72,13 @@ fn gen_create_tags(
 
         // deref the field to get the array pointer, offset it to get the item pointer
         // tag_ptr := (tags_array_ptr_field_ptr^) + (i * sizeof(Any)
-        builder.add(tag_ptr, tags_array_ptr_field_ptr.to_ref().to_deref(), ir::Value::LiteralI32(i as i32));
+        builder.add(tag_ptr, tags_array_ptr_field_ref.to_deref(), ir::Value::LiteralI32(i as i32));
 
         let tag_instance = builder.local_temp(tag_class.clone());
         builder.rc_new(tag_instance, tag_ty, true);
 
         // instantiate the tag class
-        builder.mov(tag_ptr.to_ref().to_deref(), tag_instance);
+        builder.mov(tag_ptr.to_deref(), tag_instance);
 
         for arg in tag_item.args.members.iter() {
             let Some(field_id) = tag_struct_def.find_field(arg.ident.as_str()) else {
@@ -86,11 +86,11 @@ fn gen_create_tags(
             };
 
             let field_ty = &tag_struct_def.fields[&field_id].ty;
-            let field_ptr = builder.local_temp(field_ty.clone().ptr());
-            builder.field(field_ptr, tag_instance.clone(), tag_class.clone(), field_id);
+            let field_ref = builder.local_temp(field_ty.clone().temp_ref());
+            builder.field(field_ref, tag_instance, tag_class.clone(), field_id);
 
             let arg_val = expr_to_val(&arg.value, builder);
-            builder.mov(field_ptr.to_ref().to_deref(), arg_val);
+            builder.mov(field_ref.to_deref(), arg_val);
         }
     }
 }

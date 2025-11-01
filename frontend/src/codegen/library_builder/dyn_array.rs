@@ -10,10 +10,10 @@ pub fn gen_dyn_array_funcs(lib: &mut LibraryBuilder, elem_ty: &ir::Type, array_c
     let mut alloc_builder = Builder::new(lib);
 
     alloc_builder.comment("bind params");
-    alloc_builder.bind_param(ir::Type::any(), "arr_ptr", false);
-    alloc_builder.bind_param(ir::Type::I32, "len", false);
-    alloc_builder.bind_param(ir::Type::any(), "src_arr_ptr", false);
-    alloc_builder.bind_param(ir::Type::Nothing.ptr(), "default_val", false);
+    alloc_builder.bind_param(ir::Type::any(), "arr_ptr");
+    alloc_builder.bind_param(ir::Type::I32, "len");
+    alloc_builder.bind_param(ir::Type::any(), "src_arr_ptr");
+    alloc_builder.bind_param(ir::Type::Nothing.ptr(), "default_val");
     alloc_builder.retain(ir::LocalID(0), &array_ty);
     alloc_builder.retain(ir::LocalID(2), &array_ty);
 
@@ -46,7 +46,7 @@ pub fn gen_dyn_array_funcs(lib: &mut LibraryBuilder, elem_ty: &ir::Type, array_c
 
     let mut length_builder = Builder::new(lib);
     length_builder.bind_return();
-    length_builder.bind_param(ir::Type::any(), "arr_ptr", false);
+    length_builder.bind_param(ir::Type::any(), "arr_ptr");
     length_builder.retain(ir::LocalID(1), &array_ty);
     length_builder.gen_dyn_array_length_body(array_class_id);
 
@@ -104,7 +104,7 @@ pub fn gen_dyn_array_runtime_type(
     };
 
     let mut dtor_builder = Builder::new(lib);
-    dtor_builder.bind_param(array_class_id.to_class_ptr_type(), "self", false);
+    dtor_builder.bind_param(array_class_id.to_class_ptr_type(), "self");
     dtor_builder.gen_dyn_array_dtor_body(elem_type, array_class_id, free_mem_id);
     let dtor_body = dtor_builder.finish();
 

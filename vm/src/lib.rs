@@ -213,7 +213,9 @@ impl Interpreter {
                 }))
             },
 
-            ir::Type::Pointer(target) => DynValue::Pointer(Pointer::nil((**target).clone())),
+            ir::Type::Pointer(target) | ir::Type::TempRef(target) => {
+                DynValue::Pointer(Pointer::nil((**target).clone()))
+            },
 
             ir::Type::Array { element, dim } => {
                 let mut elements = Vec::with_capacity(*dim);
@@ -263,7 +265,8 @@ impl Interpreter {
             ir::Type::Function(..) => DynValue::Function(ir::FunctionID(usize::MAX)),
 
             _ => {
-                let msg = format!("can't initialize default value of type `{:?}`", ty);
+                let pretty_type = self.metadata.pretty_ty_name(ty);
+                let msg = format!("can't initialize default value of type {pretty_type}");
                 return Err(ExecError::illegal_state(msg));
             },
         };

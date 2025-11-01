@@ -610,7 +610,7 @@ pub trait InstructionBuilder {
         field: FieldID,
         field_ty: Type,
     ) {
-        let field_ptr = self.local_temp(field_ty.ptr());
+        let field_ptr = self.local_temp(field_ty.temp_ref());
         self.field(field_ptr.clone(), base, base_ty, field);
 
         self.mov(out, Ref::from(field_ptr).to_deref());
@@ -637,10 +637,10 @@ pub trait InstructionBuilder {
         field_ty: Type,
         val: impl Into<Value>,
     ) {
-        let field_ptr = self.local_temp(field_ty.ptr());
-        self.field(field_ptr.clone(), base, base_ty, field);
+        let field_ref = self.local_temp(field_ty.temp_ref());
 
-        self.mov(Ref::Local(field_ptr).to_deref(), val);
+        self.field(field_ref.clone(), base, base_ty, field);
+        self.mov(field_ref.to_deref(), val);
     }
 
     fn element(
@@ -669,10 +669,10 @@ pub trait InstructionBuilder {
         of_type: impl Into<Type>,
     ) {
         let element_ty = element_ty.into();
-        let element_ptr = self.local_temp(element_ty.clone().ptr());
+        let element_ref = self.local_temp(element_ty.clone().temp_ref());
 
-        self.element(element_ptr.clone(), a, index, element_ty, of_type);
-        self.mov(out, Ref::Local(element_ptr).to_deref());
+        self.element(element_ref, a, index, element_ty, of_type);
+        self.mov(out, Ref::Local(element_ref).to_deref());
     }
 
     fn element_to_val(

@@ -67,7 +67,9 @@ impl Type {
     
     pub fn from_metadata(ty: &ir::Type, module: &mut Unit) -> Type {
         match ty {
-            ir::Type::Pointer(target) => Type::from_metadata(target.as_ref(), module).ptr(),
+            ir::Type::Pointer(target) | ir::Type::TempRef(target) => {
+                Type::from_metadata(target.as_ref(), module).ptr()
+            },
             ir::Type::Function(id) => Type::DefinedType(TypeDefName::Alias(*id)),
             ir::Type::RcPointer(ir::VirtualTypeID::Class(id))
             | ir::Type::RcWeakPointer(ir::VirtualTypeID::Class(id)) => {

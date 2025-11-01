@@ -16,6 +16,8 @@ pub enum Type {
     Nothing,
 
     Pointer(Rc<Type>),
+    TempRef(Rc<Type>),
+
     Struct(TypeDefID),
     Variant(TypeDefID),
     Flags(TypeDefID, SetAliasID),
@@ -52,6 +54,10 @@ impl Type {
     pub fn ptr(self) -> Self {
         Type::Pointer(Rc::new(self))
     }
+    
+    pub fn temp_ref(self) -> Self {
+        Type::TempRef(Rc::new(self))
+    }
 
     pub const fn any() -> Self {
         Type::RcPointer(VirtualTypeID::Any)
@@ -76,6 +82,7 @@ impl Type {
     pub fn deref_ty(&self) -> Option<&Self> {
         match self {
             Type::Pointer(target) => Some(target),
+            Type::TempRef(target) => Some(target),
             _ => None,
         }
     }
@@ -202,6 +209,7 @@ impl Type {
             Type::F64 => Some(Value::LiteralF64(0.0)),
 
             Type::Struct(..)
+            | Type::TempRef(..)
             | Type::Flags(..)
             | Type::Variant(..)
             | Type::Array { .. }
@@ -230,6 +238,7 @@ impl fmt::Display for Type {
             Type::ISize => write!(f, "isize"),
             Type::USize => write!(f, "usize"),
             Type::Pointer(target) => write!(f, "^{}", target),
+            Type::TempRef(target) => write!(f, "&{}", target),
             Type::Struct(id) => write!(f, "{{struct {}}}", id),
             Type::Variant(id) => write!(f, "{{variant {}}}", id),
             Type::Flags(_repr_id, set_id) => write!(f, "{{flags {}}}", set_id),

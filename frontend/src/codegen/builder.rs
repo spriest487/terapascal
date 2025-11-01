@@ -227,15 +227,15 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             let closure_struct_ptr_ty = closure_struct_ty.clone().ptr();
 
             // downcast virtual closure ptr to the concrete closure struct
-            let closure_struct_ref = Ref::from(builder.local_temp(closure_struct_ptr_ty.clone()));
+            let closure_struct_ref = builder.local_temp(closure_struct_ptr_ty.clone());
             builder.cast(closure_struct_ref.clone(), closure_ref.clone(), closure_struct_ptr_ty.clone());
 
             let func_ptr_ty = closure_def.fields[&CLOSURE_PTR_FIELD].ty.clone();
 
-            let func_field_ptr = builder.local_new(func_ptr_ty.clone().ptr(), None).to_ref();
+            let func_field_ref = builder.local_temp(func_ptr_ty.clone().temp_ref());
             builder.field(
-                func_field_ptr.clone(),
-                closure_struct_ref.clone().to_deref(),
+                func_field_ref,
+                closure_struct_ref.to_deref(),
                 closure_struct_ty.clone(),
                 CLOSURE_PTR_FIELD,
             );
@@ -243,7 +243,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             // initialize closure reference to function
             let func_ref = Ref::Global(GlobalRef::Function(closure.func_instance.id));
             // builder.cast(func_field_ptr.clone().to_deref(), func_ref, func_ptr_ty.clone());
-            builder.mov(func_field_ptr.clone().to_deref(), func_ref);
+            builder.mov(func_field_ref.to_deref(), func_ref);
             
             // initialize closure capture fields - copy from local scope into closure object
             for (field_id, field_def) in closure_def.fields.iter() {
@@ -258,20 +258,17 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
                     Some(name) => name,
                 };
 
-                let capture_field_ptr = Ref::from(builder.local_temp(field_def.ty.clone().ptr()));
+                let capture_field_ref = builder.local_temp(field_def.ty.clone().temp_ref());
                 builder.field(
-                    capture_field_ptr.clone(),
-                    closure_struct_ref.clone().to_deref(),
+                    capture_field_ref,
+                    closure_struct_ref.to_deref(),
                     closure_struct_ty.clone(),
                     *field_id,
                 );
 
-                let capture_field = capture_field_ptr.to_deref();
-
                 let captured_local_id = builder.find_local(field_name).unwrap().id();
-                builder.mov(capture_field.clone(), captured_local_id);
-
-                builder.retain(capture_field.clone(), &field_def.ty);
+                builder.mov(capture_field_ref.to_deref(), captured_local_id);
+                builder.retain(capture_field_ref.to_deref(), &field_def.ty);
             }
         });
 
@@ -484,10 +481,21 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.call(function_ref, [at.into()], None);
     }
 
-    pub fn bind_param(&mut self, ty: Type, name: impl Into<String>, by_ref: bool) -> LocalID {
+    pub fn bind_param(&mut self, ty: Type, name: impl Into<String>) -> LocalID {
+        let name = Some(Arc::new(name.into()));
+
         self.local_stack_mut()
             .current_scope_mut()
-            .bind_param(Some(Arc::new(name.into())), ty, by_ref)
+            .bind_param(name, ty, false)
+    }
+
+    pub fn bind_ref_param(&mut self, ty: Type, name: impl Into<String>) -> LocalID {
+        let ref_ty = ty.temp_ref();
+        let name = Some(Arc::new(name.into()));
+
+        self.local_stack_mut()
+            .current_scope_mut()
+            .bind_param(name, ref_ty, true)
     }
 
     // binds an anonymous return local in %0 with the indicated type

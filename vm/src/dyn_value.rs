@@ -92,6 +92,7 @@ impl DynValue {
             },
 
             ir::Type::Nothing => None,
+            ir::Type::TempRef(..) => None,
 
             ir::Type::RcPointer(class_id) | ir::Type::RcWeakPointer(class_id) => {
                 // assume self is a pointer-compatible type, its int value be the address

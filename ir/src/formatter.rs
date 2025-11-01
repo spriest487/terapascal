@@ -196,7 +196,7 @@ pub trait IRFormatter {
                 write!(f, "{:>width$} ", "el", width = IX_WIDTH)?;
 
                 self.format_ref(out, f)?;
-                write!(f, " := @(")?;
+                write!(f, " := &(")?;
 
                 self.format_ref(a, f)?;
                 write!(f, " as ")?;
@@ -230,7 +230,7 @@ pub trait IRFormatter {
                 write!(f, "{:>width$} ", "field", width = IX_WIDTH)?;
 
                 self.format_ref(out, f)?;
-                write!(f, " := @(")?;
+                write!(f, " := &(")?;
                 self.format_ref(a, f)?;
                 write!(f, " as ")?;
                 self.format_type(of_ty, f)?;
@@ -241,7 +241,7 @@ pub trait IRFormatter {
             Instruction::VariantTag { out, a, of_ty } => {
                 write!(f, "{:>width$} ", "vartag", width = IX_WIDTH)?;
                 self.format_ref(out, f)?;
-                write!(f, " := @(")?;
+                write!(f, " := &(")?;
                 self.format_ref(a, f)?;
                 write!(f, " as ")?;
                 self.format_type(of_ty, f)?;
@@ -251,7 +251,7 @@ pub trait IRFormatter {
             Instruction::VariantData { out, a, of_ty, tag } => {
                 write!(f, "{:>width$} ", "vardata", width = IX_WIDTH)?;
                 self.format_ref(out, f)?;
-                write!(f, " := @(")?;
+                write!(f, " := &(")?;
                 self.format_ref(a, f)?;
                 write!(f, " as ")?;
                 self.format_type(of_ty, f)?;

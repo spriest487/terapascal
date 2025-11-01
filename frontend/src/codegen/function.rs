@@ -196,12 +196,12 @@ pub fn build_closure_function_def(
             Some(name) => name,
         };
 
-        let capture_val_ptr_ty = field_def.ty.clone().ptr();
-        let capture_val_ptr_ref =
+        let capture_val_ptr_ty = field_def.ty.clone().temp_ref();
+        let capture_val_ptr_field_ref =
             body_builder.local_closure_capture(capture_val_ptr_ty, field_name.clone());
 
         body_builder.field(
-            capture_val_ptr_ref.clone(),
+            capture_val_ptr_field_ref.clone(),
             closure_ptr_ref.clone().to_ref().to_deref(),
             closure_struct_ty.clone(),
             *field_id,
@@ -259,7 +259,7 @@ impl FunctionParam {
         
         let (param_ty, by_ref) = match param.get_modifier() {
             Some(ast::FunctionParamMod::Var) | Some(ast::FunctionParamMod::Out) => {
-                (builder.translate_type(&param.ty).ptr(), true)
+                (builder.translate_type(&param.ty), true)
             },
 
             None => (builder.translate_type(&param.ty), false),
@@ -286,30 +286,38 @@ fn bind_function_params(
 ) -> Vec<(LocalID, Type)> {
     let mut bound_params = Vec::new();
 
-    let mut is_self = is_instance_method;
+    // for instance methods, the first arg is the self pointer or ref
+    let mut is_self_param = is_instance_method;
 
     for param in params.into_iter() {
         let mut by_ref = param.by_ref;
-        let mut param_ty = param.ty.clone();
 
-        // pass the self parameter as a pointer for non-reference types
-        if is_self {
+        // pass the self parameter as a ref for value types
+        if is_self_param {
             if !param.ty.is_rc() {
                 assert!(!by_ref, "self param should not already be by-ref");
                 by_ref = true;
-                param_ty = param_ty.ptr();
             }
-            is_self = false;
+
+            is_self_param = false;
         }
         
-        let id = builder.bind_param(param_ty.clone(), &param.name, by_ref);
-        builder.comment(&format!("{} = {}", id, builder.pretty_ty_name(&param.ty)));
+        let (id, bound_ty) = if by_ref {
+            let ref_ty = param.ty.clone().temp_ref();
+            let id = builder.bind_ref_param(param.ty, &param.name);
+            (id, ref_ty)
+        } else {
+            let bound_ty = param.ty.clone();
+            let id = builder.bind_param(param.ty, &param.name);
+            (id, bound_ty)
+        };
 
-        bound_params.push((id, param_ty));
+        builder.comment(&format!("param: {} = {}", id, builder.pretty_ty_name(&bound_ty)));
+        bound_params.push((id, bound_ty));
     }
 
-    for (id, ty) in &bound_params {
-        builder.retain(Ref::Local(*id), ty);
+    for (param_local, ty) in &bound_params {
+        builder.retain(*param_local, ty);
     }
 
     bound_params

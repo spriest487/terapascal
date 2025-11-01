@@ -299,16 +299,16 @@ pub(super) fn new_dyn_array(
 
         // assign elements
         if len > 0 {
-            let el_ptr = builder.local_temp(element_type.clone().ptr());
+            let element_ref = builder.local_temp(element_type.clone().temp_ref());
 
             for (i, el) in elements.into_iter().enumerate() {
-                builder.element(el_ptr, arr, Value::LiteralI32(i as i32), element_type.clone(), array_ty.clone());
-                builder.mov(el_ptr.to_deref(), el);
+                builder.element(element_ref, arr, Value::LiteralI32(i as i32), element_type.clone(), array_ty.clone());
+                builder.mov(element_ref.to_deref(), el);
 
                 // retain each element. we don't do this for static arrays because retaining
                 // a static array retains all its elements - for dynamic arrays, retaining
                 // the array object itself does not retain the elements
-                builder.retain(el_ptr.to_deref(), &element_type);
+                builder.retain(element_ref.to_deref(), &element_type);
             }
         }
     }

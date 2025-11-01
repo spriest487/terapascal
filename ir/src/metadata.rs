@@ -520,6 +520,7 @@ impl Metadata {
             }
 
             Type::Pointer(ty) => Cow::Owned(format!("^{}", self.pretty_ty_name(ty))),
+            Type::TempRef(ty) => Cow::Owned(format!("&{}", self.pretty_ty_name(ty))),
 
             ty => Cow::Owned(ty.to_string()),
         }

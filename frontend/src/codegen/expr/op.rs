@@ -1,7 +1,6 @@
 use crate::ast;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr;
-use crate::codegen::expr::translate_expr;
 use crate::codegen::typ;
 use crate::ir;
 use crate::IntConstant;
@@ -15,20 +14,20 @@ pub fn translate_bin_op(
 ) -> ir::Ref {
     if bin_op.lhs.annotation().is_namespace() {
         // there's nothing to actually translate on the lhs, it's just for name resolution
-        return translate_expr(&bin_op.rhs, builder);
+        return expr::translate_expr(&bin_op.rhs, builder);
     }
 
     let result_ty = builder.translate_type(out_ty);
 
     // the functions to translate IR and member operators return pointers to the value
-    let (out_val, out_is_ptr) = match bin_op.op {
+    let (out_val, out_is_ref) = match bin_op.op {
         ast::Operator::Period | ast::Operator::Index => {
-            let out_val = builder.local_new(result_ty.clone().ptr(), None).to_ref();
+            let out_val = builder.local_new(result_ty.clone().temp_ref(), None);
             (out_val, true)
         },
 
         _ => {
-            let out_val = builder.local_new(result_ty.clone(), None).to_ref();
+            let out_val = builder.local_new(result_ty.clone(), None);
             (out_val, false)
         },
     };
@@ -64,7 +63,7 @@ pub fn translate_bin_op(
                 .find_field(&member_name)
                 .expect("referenced field must exist");
 
-            builder.field(out_val.clone(), lhs_val, of_ty, field);
+            builder.field(out_val, lhs_val, of_ty, field);
         },
 
         ast::Operator::Index => {
@@ -77,87 +76,87 @@ pub fn translate_bin_op(
                 builder,
             );
 
-            builder.mov(out_val.clone(), element_val);
+            builder.mov(out_val, element_val);
         },
 
         ast::Operator::NotEquals => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.eq(out_val.clone(), lhs_val, b);
-            builder.not(out_val.clone(), out_val.clone());
+            builder.eq(out_val, lhs_val, b);
+            builder.not(out_val, out_val);
         },
 
         ast::Operator::Equals => {
             match out_ty {
                 typ::Type::Set(set_type) => {
-                    let b = translate_expr(&bin_op.rhs, builder);
-                    builder.set_eq(out_val.clone(), lhs_val, b, set_type.as_ref())
+                    let b = expr::translate_expr(&bin_op.rhs, builder);
+                    builder.set_eq(out_val, lhs_val, b, set_type.as_ref())
                 }
                 
                 _ => {
                     let b = expr::expr_to_val(&bin_op.rhs, builder);
-                    builder.eq(out_val.clone(), lhs_val, b);
+                    builder.eq(out_val, lhs_val, b);
                 }
             }
         },
 
         ast::Operator::Add => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.add(out_val.clone(), lhs_val, b);
+            builder.add(out_val, lhs_val, b);
         },
 
         ast::Operator::Mul => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.mul(out_val.clone(), lhs_val, b);
+            builder.mul(out_val, lhs_val, b);
         }
 
         ast::Operator::Mod => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.modulo(out_val.clone(), lhs_val, b);
+            builder.modulo(out_val, lhs_val, b);
         }
 
         ast::Operator::FDiv => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.fdiv(out_val.clone(), lhs_val, b);
+            builder.fdiv(out_val, lhs_val, b);
         }
 
         ast::Operator::IDiv => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.idiv(out_val.clone(), lhs_val, b);
+            builder.idiv(out_val, lhs_val, b);
         }
 
         ast::Operator::Gt => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.gt(out_val.clone(), lhs_val, b);
+            builder.gt(out_val, lhs_val, b);
         },
 
         ast::Operator::Gte => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.gte(out_val.clone(), lhs_val, b);
+            builder.gte(out_val, lhs_val, b);
         },
 
         ast::Operator::Lt => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.lt(out_val.clone(), lhs_val, b);
+            builder.lt(out_val, lhs_val, b);
         },
 
         ast::Operator::Lte => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.lte(out_val.clone(), lhs_val, b);
+            builder.lte(out_val, lhs_val, b);
         },
 
         ast::Operator::Sub => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.sub(out_val.clone(), lhs_val, b);
+            builder.sub(out_val, lhs_val, b);
         },
 
         ast::Operator::Shl => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.shl(out_val.clone(), lhs_val, b);
+            builder.shl(out_val, lhs_val, b);
         },
 
         ast::Operator::Shr => {
             let b = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.shr(out_val.clone(), lhs_val, b);
+            builder.shr(out_val, lhs_val, b);
         },
 
         ast::Operator::And => {
@@ -170,12 +169,12 @@ pub fn translate_bin_op(
 
             // eval both sides
             let rhs = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.and(out_val.clone(), lhs_val, rhs);
+            builder.and(out_val, lhs_val, rhs);
             builder.jmp(exit);
             
             // short circuit: out := false
             builder.label(short_circuit);
-            builder.mov(out_val.clone(), false);
+            builder.mov(out_val, false);
             
             builder.label(exit);
         },
@@ -189,12 +188,12 @@ pub fn translate_bin_op(
 
             // eval both sides
             let rhs = expr::expr_to_val(&bin_op.rhs, builder);
-            builder.or(out_val.clone(), lhs_val, rhs);
+            builder.or(out_val, lhs_val, rhs);
             builder.jmp(exit);
 
             // short circuit: out := true
             builder.label(short_circuit);
-            builder.mov(out_val.clone(), true);
+            builder.mov(out_val, true);
             
             builder.label(exit);
         },
@@ -202,14 +201,14 @@ pub fn translate_bin_op(
         ast::Operator::BitAnd => {
             match out_ty {
                 typ::Type::Set(set_type) => {
-                    let b = translate_expr(&bin_op.rhs, builder);
-                    builder.mov(out_val.clone(), lhs_val);
-                    builder.set_bit_and(out_val.clone(), b, set_type.as_ref());
+                    let b = expr::translate_expr(&bin_op.rhs, builder);
+                    builder.mov(out_val, lhs_val);
+                    builder.set_bit_and(out_val, b, set_type.as_ref());
                 }
 
                 _ => {
                     let b = expr::expr_to_val(&bin_op.rhs, builder);
-                    builder.bit_and(out_val.clone(), lhs_val, b);
+                    builder.bit_and(out_val, lhs_val, b);
                 }
             }
         },
@@ -217,14 +216,14 @@ pub fn translate_bin_op(
         ast::Operator::BitOr => {
             match out_ty {
                 typ::Type::Set(set_type) => {
-                    let b = translate_expr(&bin_op.rhs, builder);
-                    builder.mov(out_val.clone(), lhs_val);
-                    builder.set_bit_or(out_val.clone(), b, set_type.as_ref());
+                    let b = expr::translate_expr(&bin_op.rhs, builder);
+                    builder.mov(out_val, lhs_val);
+                    builder.set_bit_or(out_val, b, set_type.as_ref());
                 }
 
                 _ => {
                     let b = expr::expr_to_val(&bin_op.rhs, builder);
-                    builder.bit_or(out_val.clone(), lhs_val, b);
+                    builder.bit_or(out_val, lhs_val, b);
                 }
             }
         },
@@ -232,14 +231,14 @@ pub fn translate_bin_op(
         ast::Operator::Caret => {
             match out_ty {
                 typ::Type::Set(set_type) => {
-                    let b = translate_expr(&bin_op.rhs, builder);
-                    builder.mov(out_val.clone(), lhs_val);
-                    builder.set_bit_xor(out_val.clone(), b, set_type.as_ref());
+                    let b = expr::translate_expr(&bin_op.rhs, builder);
+                    builder.mov(out_val, lhs_val);
+                    builder.set_bit_xor(out_val, b, set_type.as_ref());
                 }
 
                 _ => {
                     let b = expr::expr_to_val(&bin_op.rhs, builder);
-                    builder.bit_xor(out_val.clone(), lhs_val, b);
+                    builder.bit_xor(out_val, lhs_val, b);
                 }
             }
         },
@@ -250,7 +249,7 @@ pub fn translate_bin_op(
             
             let item = expr::expr_to_val(&bin_op.lhs, builder);
             
-            let set_val = translate_expr(&bin_op.rhs, builder);
+            let set_val = expr::translate_expr(&bin_op.rhs, builder);
             let rhs_type = bin_op.rhs.annotation().ty();
 
             let set_type = rhs_type
@@ -273,11 +272,11 @@ pub fn translate_bin_op(
             let bit_num_byte = builder.local_temp(ir::Type::U8);
             builder.cast(bit_num_byte.clone(), bit_num, ir::Type::U8);
             
-            builder.set_contains(out_val.clone(), set_val, bit_num_byte, set_type.as_ref());
+            builder.set_contains(out_val, set_val, bit_num_byte, set_type.as_ref());
             builder.jmp(break_label);
 
             builder.label(fail_label);
-            builder.mov(out_val.clone(), ir::Value::LiteralBool(false));
+            builder.mov(out_val, ir::Value::LiteralBool(false));
 
             builder.label(break_label);
         }
@@ -285,16 +284,16 @@ pub fn translate_bin_op(
         _ => unimplemented!("IR for op {}", bin_op.op),
     };
 
-    if !out_is_ptr {
-        builder.retain(out_val.clone(), &result_ty);
+    if !out_is_ref {
+        builder.retain(out_val, &result_ty);
     }
 
     builder.local_end();
 
-    if out_is_ptr {
+    if out_is_ref {
         out_val.to_deref()
     } else {
-        out_val
+        out_val.to_ref()
     }
 }
 

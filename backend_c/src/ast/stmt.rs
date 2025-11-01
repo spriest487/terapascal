@@ -112,6 +112,9 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
         ir::Type::Pointer(ty) => {
             format!("Ptr_{}", global_typeinfo_decl_name_type(ty))
         },
+        ir::Type::TempRef(ty) => {
+            format!("Ref_{}", global_typeinfo_decl_name_type(ty))
+        },
         ir::Type::Array { element, dim } => { 
             format!("Array{}_{}", dim, global_typeinfo_decl_name_type(element))
         },

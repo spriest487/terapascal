@@ -20,8 +20,9 @@ pub fn gen_release_func(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<ir::F
 fn gen_release_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<Vec<ir::Instruction>> {
     if !ty.is_rc() {
         let mut release_builder = Builder::new(lib);
-        release_builder.bind_param(ty.clone().ptr(), "target", true);
-        let target_ref = ir::LocalID(0).to_ref().to_deref();
+        release_builder.bind_ref_param(ty.clone(), "target");
+
+        let target_ref = ir::LocalID(0).to_deref();
 
         let released_any = release_builder.release_deep(target_ref, ty);
 
@@ -51,7 +52,7 @@ pub fn gen_retain_func(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<ir::Fu
 fn gen_retain_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Option<Vec<ir::Instruction>> {
     if !ty.is_rc() {
         let mut retain_builder = Builder::new(lib);
-        retain_builder.bind_param(ty.clone().ptr(), "target", true);
+        retain_builder.bind_ref_param(ty.clone(), "target");
 
         let target_ref = ir::Ref::Local(ir::LocalID(0)).to_deref();
 

@@ -141,7 +141,7 @@ fn translate_indexer(
 ) -> ir::Ref {
     match base_ty {
         typ::Type::Array(array_ty) => {
-            let element_ptr = builder.local_temp(val_ty.clone().ptr());
+            let element_ref = builder.local_temp(val_ty.clone().temp_ref());
             
             let base_ty = builder.translate_type(base_ty);
             let element_ty = builder.translate_type(&array_ty.element_ty);
@@ -150,28 +150,28 @@ fn translate_indexer(
             let len_val = ir::Value::LiteralI32(len);
 
             builder.array_bounds_check(len_val, index_val.clone());
-            builder.element(element_ptr, base_ref, index_val, element_ty, base_ty.clone());
+            builder.element(element_ref, base_ref, index_val, element_ty, base_ty.clone());
 
-            element_ptr.to_ref()
+            element_ref.to_ref()
         },
 
         typ::Type::DynArray { element } => {
-            let element_ptr = builder.local_temp(val_ty.clone().ptr());
+            let element_ref = builder.local_temp(val_ty.clone().temp_ref());
 
             let base_ty = builder.translate_type(base_ty);
             let element_ty = builder.translate_type(element);
 
-            builder.element(element_ptr, base_ref, index_val, element_ty, base_ty.clone());
+            builder.element(element_ref, base_ref, index_val, element_ty, base_ty.clone());
 
-            element_ptr.to_ref()
+            element_ref.to_ref()
         },
 
         typ::Type::Pointer(_) => {
-            let result_ptr = builder.local_temp(val_ty.clone().ptr());
+            let result_ref = builder.local_temp(val_ty.clone().temp_ref());
 
-            builder.add(result_ptr.clone(), base_ref, index_val);
+            builder.add(result_ref.clone(), base_ref, index_val);
 
-            result_ptr.to_ref()
+            result_ref.to_ref()
         },
 
         unimpl => unimplemented!("IR for indexing into {}", unimpl),

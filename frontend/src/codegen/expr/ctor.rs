@@ -57,16 +57,11 @@ pub fn build_object_ctor_invocation(
                 member.ident, member.value, field_def.ty
             ));
 
-            let field_ptr = builder.local_temp(field_def.ty.clone().ptr()).to_ref();
-            builder.emit(ir::Instruction::Field {
-                out: field_ptr.clone(),
-                a: out_val.clone(),
-                of_ty: object_ty.clone(),
-                field: field_id,
-            });
+            let field_ref = builder.local_temp(field_def.ty.clone().temp_ref());
+            builder.field(field_ref, out_val.clone(), object_ty.clone(), field_id);
 
-            builder.mov(field_ptr.clone().to_deref(), member_val);
-            builder.retain(field_ptr.to_deref(), &field_def.ty);
+            builder.mov(field_ref.to_deref(), member_val);
+            builder.retain(field_ref.to_deref(), &field_def.ty);
         }
     });
 
@@ -112,19 +107,19 @@ fn translate_static_array_ctor(
 
     if dim > 0 {
         builder.scope(|builder| {
-            let el_ptr = builder.local_temp(el_ty.clone().ptr());
+            let element_ref = builder.local_temp(el_ty.clone().temp_ref());
 
             for (i, el) in ctor.elements.iter().enumerate() {
                 builder.scope(|builder| {
                     let index = i32::try_from(i).expect("invalid array index in array ctor");
                     let index_val = ir::Value::LiteralI32(index);
 
-                    builder.element(el_ptr, arr, index_val, el_ty.clone(), array_ty.clone());
+                    builder.element(element_ref, arr, index_val, el_ty.clone(), array_ty.clone());
 
                     let el_init = translate_expr(&el.value, builder);
 
-                    builder.mov(el_ptr.to_deref(), el_init);
-                    builder.retain(el_ptr.to_deref(), &el_ty);
+                    builder.mov(element_ref.to_deref(), el_init);
+                    builder.retain(element_ref.to_deref(), &el_ty);
                 });
             }
         });
@@ -167,12 +162,12 @@ fn translate_set_ctor(
     let set_result = builder.local_temp(flags_type.clone());
 
     // zero-init the value
-    let word_ptr = builder.local_temp(WORD_TYPE.ptr());
+    let word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
     let zero_word = ir::Value::from_literal_val(BigDecimal::zero(), &WORD_TYPE).unwrap();
 
     for word in 0..set_word_count(set_type.flags_type_bits()) {
-        builder.field(word_ptr, set_result, flags_type.clone(), ir::FieldID(word));
-        builder.mov(word_ptr.to_deref(), zero_word.clone());
+        builder.field(word_field_ref, set_result, flags_type.clone(), ir::FieldID(word));
+        builder.mov(word_field_ref.to_deref(), zero_word.clone());
     }
     
     let item_type = builder.translate_type(&set_type.item_type);
