@@ -23,16 +23,18 @@ fn translate_args(
 
         // for value types (any non RC), the self parameter of an instance method is invisibly
         // turned into a pointer to the type, so we need to pass it by its address here
-        let is_value_type_method_self_arg =
-            arg_index == 0 && is_instance_method && !sig.params[0].ty.is_strong_rc_reference();
+        let is_value_type_method_self_arg = arg_index == 0 
+            && is_instance_method 
+            && !sig.params[0].ty.is_strong_rc_reference();
 
         let arg_expr = if is_value_type_method_self_arg || param.is_by_ref() {
             let arg_ty = builder.translate_type(&arg.annotation().ty());
 
-            let arg_ptr = builder.local_temp(arg_ty.ptr());
-            builder.addr_of(arg_ptr.clone(), arg_ref);
+            builder.comment(&format!("by-ref param ({})", param.ty));
+            let arg_ref_var = builder.local_temp(arg_ty.temp_ref());
+            builder.make_ref(arg_ref_var, arg_ref);
 
-            ir::Ref::from(arg_ptr)
+            arg_ref_var.to_ref()
         } else {
             arg_ref
         };

@@ -756,6 +756,13 @@ pub trait InstructionBuilder {
         })
     }
 
+    fn make_ref(&mut self, out: impl Into<Ref>, a: impl Into<Ref>) {
+        self.emit(Instruction::AddrOf {
+            out: out.into(),
+            a: a.into(),
+        })
+    }
+
     fn cast(&mut self, out: impl Into<Ref>, val: impl Into<Value>, ty: Type) {
         self.emit(Instruction::Cast {
             out: out.into(),
@@ -826,8 +833,8 @@ pub trait InstructionBuilder {
             return (**at_ptr).clone();
         }
         
-        let temp_at_ptr = self.local_temp(ty.clone().ptr());
-        self.addr_of(temp_at_ptr.clone(), at);
+        let temp_at_ptr = self.local_temp(ty.clone().temp_ref());
+        self.make_ref(temp_at_ptr.clone(), at);
         temp_at_ptr.value()
     }
 

@@ -343,11 +343,11 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Struct(flags_type_info.struct_id);
         
-        let flags_ptr = self.local_temp(flags_type.ptr());
-        self.addr_of(flags_ptr.clone(), set_ref);
+        let flags_ptr = self.local_temp(flags_type.temp_ref());
+        self.make_ref(flags_ptr, set_ref);
 
         self.call(flags_type_info.include_func, [
-            Value::from(flags_ptr),
+            flags_ptr.value(),
             bit_val.into(),
         ], None);
     }
@@ -358,11 +358,11 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Struct(flags_type_info.struct_id);
 
-        let flags_ptr = self.local_temp(flags_type.ptr());
-        self.addr_of(flags_ptr.clone(), set_ref);
+        let flags_ptr = self.local_temp(flags_type.temp_ref());
+        self.make_ref(flags_ptr, set_ref);
 
         self.call(flags_type_info.exclude_func, [
-            Value::from(flags_ptr),
+            flags_ptr.value(),
             bit_val.into(),
         ], None);
     }
@@ -376,11 +376,11 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Struct(flags_type_info.struct_id);
 
-        let flags_ptr = self.local_temp(flags_type.ptr());
-        self.addr_of(flags_ptr.clone(), set_ref);
+        let flags_ptr = self.local_temp(flags_type.temp_ref());
+        self.make_ref(flags_ptr, set_ref);
 
         self.call(flags_type_info.contains_func, [
-            Value::from(flags_ptr),
+            flags_ptr.value(),
             bit_val.into(),
         ], Some(out.into()));
     }
@@ -394,14 +394,14 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Struct(flags_type_info.struct_id);
 
-        let a_ptr = self.local_temp(flags_type.clone().ptr());
-        let b_ptr = self.local_temp(flags_type.ptr());
-        self.addr_of(a_ptr.clone(), a);
-        self.addr_of(b_ptr.clone(), b);
+        let a_ptr = self.local_temp(flags_type.clone().temp_ref());
+        let b_ptr = self.local_temp(flags_type.temp_ref());
+        self.make_ref(a_ptr, a);
+        self.make_ref(b_ptr, b);
 
         self.call(flags_type_info.eq_func, [
-            Value::from(a_ptr),
-            Value::from(b_ptr),
+            a_ptr.value(),
+            b_ptr.value(),
         ], Some(out.into()));
     }
 
@@ -412,11 +412,11 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Struct(flags_type_info.struct_id);
 
-        let a_ptr = self.local_temp(flags_type.clone().ptr());
-        self.addr_of(a_ptr.clone(), a);
+        let a_ptr = self.local_temp(flags_type.clone().temp_ref());
+        self.make_ref(a_ptr, a);
 
         self.call(flags_type_info.bit_not_func, [
-            Value::from(a_ptr),
+            a_ptr.value(),
         ], None);
     }
 
@@ -429,14 +429,14 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Struct(flags_type_info.struct_id);
 
-        let a_ptr = self.local_temp(flags_type.clone().ptr());
-        let b_ptr = self.local_temp(flags_type.ptr());
-        self.addr_of(a_ptr.clone(), a);
-        self.addr_of(b_ptr.clone(), b);
+        let a_ptr = self.local_temp(flags_type.clone().temp_ref());
+        let b_ptr = self.local_temp(flags_type.temp_ref());
+        self.make_ref(a_ptr, a);
+        self.make_ref(b_ptr, b);
 
         self.call(get_func_id(&flags_type_info), [
-            Value::from(a_ptr),
-            Value::from(b_ptr),
+            a_ptr.value(),
+            b_ptr.value(),
         ], None);
     }
 

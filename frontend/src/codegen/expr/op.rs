@@ -318,15 +318,16 @@ pub fn translate_unary_op(
     match unary_op.op {
         ast::Operator::AddressOf => {
             let out_ty = builder.translate_type(out_ty);
-            let out_val = builder.local_new(out_ty.clone(), None).to_ref();
+            assert!(matches!(out_ty, ir::Type::Pointer(..)), "address-of expression must result in a pointer type");
+            
+            let out_val = builder.local_new(out_ty.clone(), None);
 
-            builder.emit(ir::Instruction::AddrOf {
-                out: out_val.clone(),
-                a: operand_ref,
-            });
-            builder.retain(out_val.clone(), &out_ty);
+            builder.addr_of(out_val, operand_ref);
+            
+            // todo: should never do anything since pointers don't affect RC
+            builder.retain(out_val, &out_ty);
 
-            out_val
+            out_val.to_ref()
         },
 
         ast::Operator::Caret => operand_ref.to_deref(),

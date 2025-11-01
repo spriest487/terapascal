@@ -321,12 +321,12 @@ fn build_for_loop_sequence(
                 let seq_ty = builder.translate_type(&seq_support.sequence_type);
                 let seq_var = builder.local_new(seq_ty.clone(), None);
 
-                // call Sequence with a pointer to the source if it's a value type
+                // call Sequence with a ref to the source if it's a value type
                 let src_self_arg_ref = if src_ty.is_rc() {
                     src_ref.clone()
                 } else {
-                    let src_ref_ptr = builder.local_temp(src_ty.ptr());
-                    builder.addr_of(src_ref_ptr, src_ref);
+                    let src_ref_ptr = builder.local_temp(src_ty.temp_ref());
+                    builder.make_ref(src_ref_ptr, src_ref);
                     src_ref_ptr.to_ref()
                 };
 
@@ -334,8 +334,8 @@ fn build_for_loop_sequence(
                 let seq_self_arg_var = if seq_ty.is_rc() {
                     seq_var
                 } else {
-                    let seq_ref_ptr = builder.local_temp(seq_ty.ptr());
-                    builder.addr_of(seq_ref_ptr, seq_var);
+                    let seq_ref_ptr = builder.local_temp(seq_ty.temp_ref());
+                    builder.make_ref(seq_ref_ptr, seq_var);
                     seq_ref_ptr
                 };
                 
