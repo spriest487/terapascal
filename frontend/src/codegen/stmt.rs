@@ -376,7 +376,7 @@ fn build_for_loop_sequence(
                     // binding_ref := next_item_option_ref.Get()
                     builder.release(binding_ref, &binding_ty);
                     builder.vardata(item_option_data_ref, next_item_option_ref, item_option_ty.clone(), OPTION_SOME_CASE);
-                    builder.mov(binding_ref, item_option_data_ref);
+                    builder.mov(binding_ref, item_option_data_ref.to_deref());
 
                     let body_instructions = builder.loop_body_scope(continue_label, break_label, |builder| {
                         translate_stmt(&body, builder);
