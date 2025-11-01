@@ -82,7 +82,8 @@ impl DynValue {
                 _ => self.to_bigint().map(|x| x as f64).map(DynValue::F64),
             },
 
-            ir::Type::Pointer(deref_ty) => {
+            ir::Type::TempRef(deref_ty)
+            | ir::Type::Pointer(deref_ty) => {
                 let addr = cast::usize(self.to_bigint()?).ok()?;
                 let ptr = Pointer {
                     ty: (**deref_ty).clone(),
@@ -92,7 +93,6 @@ impl DynValue {
             },
 
             ir::Type::Nothing => None,
-            ir::Type::TempRef(..) => None,
 
             ir::Type::RcPointer(class_id) | ir::Type::RcWeakPointer(class_id) => {
                 // assume self is a pointer-compatible type, its int value be the address
