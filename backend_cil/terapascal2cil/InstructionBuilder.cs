@@ -213,7 +213,7 @@ public class InstructionBuilder {
 
                         this.LoadRef(arrRef);
                         this.LoadValue(indexVal);
-                        this.body.Emit(OpCodes.Ldelem_Any, elementTypeRef);
+                        this.body.Emit(OpCodes.Ldelema, elementTypeRef);
                     }
 
                     this.StoreRef(outRef);
