@@ -13,7 +13,3 @@ public class MethodInfo {
 
 public class FunctionInfo {
 }
-
-public abstract class ArrayBase {
-    internal int len;
-}
