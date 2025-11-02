@@ -2,7 +2,6 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using static Terapascal.IR.RefExt;
 using static Terapascal.IR.TypeExt;
 using static Terapascal.IR.FunctionExt;
 
@@ -128,7 +127,7 @@ public class InstructionBuilder {
                     const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
                     this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeMethod(methodName);
                     
-                    this.StoreRef(outRef.OrDiscard(), () => {
+                    this.StoreRef(outRef, () => {
                         this.LoadRef(atRef);
                         this.body.Emit(OpCodes.Ldc_I4, weak ? 1 : 0);
 
@@ -537,23 +536,22 @@ public class InstructionBuilder {
             _ => throw new NotImplementedException("call to non-function value"),
         };
 
-        var hasReturn = this.library.Functions[funcID].Signature().ReturnType is not IR.NothingType;
+        if (this.library.Functions[funcID].Signature().ReturnType is not IR.NothingType) {
+            this.StoreRef(outRef, EmitCall);
+        } else {
+            EmitCall();
+        }
 
-        var emitCall = () => {
+        return;
+
+        void EmitCall() {
             foreach (var argVal in argVals) {
                 this.LoadValue(argVal);
             }
-        
-            var funcRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcID)
-                ?? throw new InvalidDataException($"invalid instruction: couldn't find function {funcID.ID}");
+
+            var funcRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcID) ?? throw new InvalidDataException($"invalid instruction: couldn't find function {funcID.ID}");
 
             this.body.Emit(OpCodes.Call, funcRef);
-        };
-
-        if (hasReturn) {
-            this.StoreRef(outRef.OrDiscard(), emitCall);
-        } else {
-            emitCall();
         }
     }
 
@@ -841,7 +839,7 @@ public class InstructionBuilder {
         }
     }
 
-    private void StoreRef(IR.IRef storeRef, Action loadValue) {
+    private void StoreRef(IR.IRef? storeRef, Action loadValue) {
         switch (storeRef) {
             case IR.LocalRef localRef: {
                 loadValue();
@@ -889,7 +887,7 @@ public class InstructionBuilder {
                 break;
             }
 
-            case IR.DiscardRef: {
+            case IR.DiscardRef or null: {
                 loadValue();
                 // nothing to do 
                 this.body.Emit(OpCodes.Pop);

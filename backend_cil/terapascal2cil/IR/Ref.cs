@@ -154,14 +154,6 @@ public class RefFormatter : IMessagePackFormatter<IRef> {
     }
 }
 
-public static class RefExt {
-    extension(IRef? @ref) {
-        public IRef OrDiscard() {
-            return @ref ?? new DiscardRef();
-        }
-    }
-}
-
 public interface IGlobalRef;
 public record FunctionGlobalRef(FunctionID ID) : IGlobalRef;
 public record StringLiteralGlobalRef(StringID ID) : IGlobalRef;
