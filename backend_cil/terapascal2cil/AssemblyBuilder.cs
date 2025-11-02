@@ -202,6 +202,14 @@ public class AssemblyBuilder : IDisposable {
         foreach (var (id, typeDecl) in library.Metadata.TypeDecls) {
             switch (typeDecl) {
                 case IR.DefTypeDecl { Def: var def }: {
+                    if (id == IR.TypeDefID.String 
+                        || id == IR.TypeDefID.TypeInfo 
+                        || id == IR.TypeDefID.MethodInfo 
+                        || id == IR.TypeDefID.FunctionInfo) {
+                        // skip classes defined in the runtime DLL
+                        continue;
+                    }
+                    
                     switch (def) {
                         case IR.StructTypeDef { Def: var structDef }: {
                             this.TypeBuilder.BuildStructDef(id, structDef);

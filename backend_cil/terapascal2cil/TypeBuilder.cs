@@ -2,10 +2,7 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using FieldAttributes = Mono.Cecil.FieldAttributes;
-using MethodAttributes = Mono.Cecil.MethodAttributes;
-using TypeAttributes = Mono.Cecil.TypeAttributes;
-using static Terapascal.IR.TypeExt;
+using Terapascal.Runtime;
 
 namespace Terapascal.CIL;
 
@@ -53,19 +50,36 @@ public class TypeBuilder {
         this.structFields = new Dictionary<IR.TypeDefID, StructFieldRefs>();
         this.variantFields = new Dictionary<IR.TypeDefID, VariantFieldRefs>();
 
-        this.valueType = this.ImportCoreReference("System", "ValueType");
-        this.exceptionType = this.ImportCoreReference("System", "Exception");
-        this.clrStringType = this.ImportCoreReference("System", "String");
+        this.valueType = this.ImportCoreReference("System", "ValueType", true);
+        this.exceptionType = this.ImportCoreReference("System", "Exception", false);
+        this.clrStringType = this.ImportCoreReference("System", "String", false);
 
-        var rtStringType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.String), false);
-        var rtTypeInfoType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.TypeInfo), false);
-        var rtMethodInfoType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.MethodInfo), false);
-        var rtFunctionInfoType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.FunctionInfo), false);
-        
-        this.cache.Add(IR.IType.String, rtStringType);
-        this.cache.Add(IR.IType.TypeInfo, rtTypeInfoType);
-        this.cache.Add(IR.IType.MethodInfo, rtMethodInfoType);
-        this.cache.Add(IR.IType.FunctionInfo, rtFunctionInfoType);
+        var builtinClasses = (Span<(IR.TypeDefID, string)>)[
+            (IR.TypeDefID.String, nameof(Runtime.String)),
+            (IR.TypeDefID.TypeInfo, nameof(TypeInfo)),
+            (IR.TypeDefID.MethodInfo, nameof(MethodInfo)), 
+            (IR.TypeDefID.FunctionInfo, nameof(FunctionInfo)),
+        ];
+
+        foreach (var (id, name) in builtinClasses) {
+            var typeRef = this.assemblyBuilder.GetRuntimeTypeRef(name, false);
+            
+            this.cache.Add(id.ToClassType(), typeRef);
+
+            var typeDef = typeRef.Resolve();
+            var fieldRefs = new Dictionary<IR.FieldID, FieldReference>();
+            
+            // assume fields in runtime classes are sequential with no padding or ID gaps
+            var fieldID = 0UL;
+            foreach (var field in typeDef.Fields) {
+                fieldRefs.Add(new IR.FieldID(fieldID), this.assemblyBuilder.Module.ImportReference(field));
+                fieldID += 1;
+            }
+
+            this.structFields.Add(id, new StructFieldRefs {
+                FieldRefs = fieldRefs,
+            });
+        }
     }
 
     public TypeReference BuildTypeRef(IR.IType type) {
@@ -119,9 +133,9 @@ public class TypeBuilder {
 
         var elementTypeRef = this.BuildTypeRef(element);
 
-        var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
+        var systemTypesNamespace = typeof(SystemFunctions).Namespace;
 
-        var typeAttributes = TypeAttributes.NotPublic | TypeAttributes.Sealed;
+        var typeAttributes = TypeAttributes.NotPublic | TypeAttributes.Sealed | TypeAttributes.SequentialLayout | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit;
         var typeDef = new TypeDefinition(systemTypesNamespace, typeName, typeAttributes, this.valueType);
         for (var i = 0UL; i < length; i += 1) {
             var elementField = new FieldDefinition($"Element_{i}", FieldAttributes.Assembly, elementTypeRef);
@@ -202,7 +216,7 @@ public class TypeBuilder {
         var isClass = structDef.Identity is IR.ClassStructIdentity;
         var typeRef = this.BuildStructTypeRef(id, !isClass);
 
-        var attrs = TypeAttributes.Sealed | TypeAttributes.NotPublic;
+        var attrs = TypeAttributes.Sealed | TypeAttributes.NotPublic | TypeAttributes.SequentialLayout | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit;
         if (isClass) {
             attrs |= TypeAttributes.Class;
         }
@@ -212,7 +226,7 @@ public class TypeBuilder {
             : this.valueType;
 
         var typeDef = new TypeDefinition(typeRef.Namespace, typeRef.Name, attrs, baseType);
-        
+
         Debug.Assert(isClass != typeDef.IsValueType);
 
         var fieldRefs = new Dictionary<IR.FieldID, FieldReference>();
@@ -425,9 +439,9 @@ public class TypeBuilder {
             ?? throw new ArgumentException($"invalid tag {tag} for variant type {baseType}");
     }
 
-    public TypeReference ImportCoreReference(string ns, string name) {
+    public TypeReference ImportCoreReference(string ns, string name, bool isValueType) {
         var coreLib = this.assemblyBuilder.StandardLibrary;
-        var typeRef = new TypeReference(ns, name, coreLib.MainModule, coreLib.Name);
+        var typeRef = new TypeReference(ns, name, coreLib.MainModule, coreLib.Name, isValueType);
         typeRef = coreLib.MainModule.ImportReference(typeRef);
         typeRef = this.assemblyBuilder.Module.ImportReference(typeRef);
 

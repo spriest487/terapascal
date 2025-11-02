@@ -12,6 +12,10 @@ public readonly record struct TypeDefID(ulong ID) : IComparable<TypeDefID> {
     public int CompareTo(TypeDefID other) {
         return this.ID.CompareTo(other.ID);
     }
+
+    public IType ToClassType() {
+        return new RcPointerType(new ClassVirtualTypeID(this));
+    }
 }
 
 public class TypeDefIDFormatter : IMessagePackFormatter<TypeDefID> {
