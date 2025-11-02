@@ -96,7 +96,8 @@ public class TypeBuilder {
             IR.VariantType(var id) => this.BuildStructTypeRef(id, isValueType: true),
             IR.FunctionType(var id) => this.BuildFunctionTypeRef(id),
             IR.FlagsType(var id, _) => this.BuildStructTypeRef(id, isValueType: true),
-            IR.PointerType(var inner) => this.BuildPointerType(inner),
+            IR.PointerType(var inner) => this.BuildTypeRef(inner).MakePointerType(),
+            IR.TempRefType(var inner) => this.BuildTypeRef(inner).MakeByReferenceType(),
             IR.RcPointerType(var id) => this.BuildClassTypeRef(id),
             IR.RcWeakPointerType(var id) => this.BuildClassTypeRef(id),
             _ => throw new ArgumentException($"unhandled IR type: {type}"),
@@ -134,15 +135,6 @@ public class TypeBuilder {
         this.assemblyBuilder.Module.Types.Add(typeDef);
 
         return typeDef;
-    }
-
-    private TypeReference BuildPointerType(IR.IType inner) {
-        var innerTypeRef = this.BuildTypeRef(inner);
-        if (inner.IsClass()) {
-            return innerTypeRef.MakeByReferenceType();
-        }
-
-        return innerTypeRef.MakePointerType();
     }
 
     public static string GetTypeName(IR.TypeDefID id) {

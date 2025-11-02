@@ -9,7 +9,7 @@ public record StructDef {
     public required IStructIdentity Identity { get; init; }
     
     [Key("fields")]
-    public required OrderedDictionary<FieldID, StructFieldDef> Fields { get; init; }
+    public required SortedDictionary<FieldID, StructFieldDef> Fields { get; init; }
 }
 
 [MessagePackObject]

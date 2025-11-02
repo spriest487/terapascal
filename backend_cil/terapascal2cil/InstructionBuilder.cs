@@ -335,6 +335,19 @@ public class InstructionBuilder {
                     this.StoreRef(outRef);
                     break;
                 }
+                
+                case IR.MakeRefInstruction {
+                    Out: var outRef,
+                    Arg: var argRef,
+                }: {
+                    this.LoadRefAddr(argRef);
+    
+                    var instanceType = this.assemblyBuilder.TypeBuilder.BuildTypeRef(this.GetRefType(argRef));
+                    this.body.Emit(OpCodes.Mkrefany, instanceType);
+    
+                    this.StoreRef(outRef);
+                    break;
+                }
 
                 case IR.EqInstruction(var op): {
                     this.BuildBinOp(op, OpCodes.Ceq);
@@ -801,11 +814,11 @@ public class InstructionBuilder {
 
             case IR.Deref(var atRef): {
                 if (atRef is not IR.RefValue(var targetRef) 
-                    || this.GetRefType(targetRef) is not IR.PointerType(var inner)) {
+                    || this.GetRefType(targetRef).GetDerefType() is not {} derefType) {
                     throw new InvalidDataException($"invalid value for dereference instruction: {atRef}");
                 }
 
-                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(inner);
+                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType);
                 
                 this.LoadValue(atRef);
                 this.body.Emit(OpCodes.Ldobj, targetTypeRef);
@@ -847,12 +860,12 @@ public class InstructionBuilder {
             }
 
             case IR.Deref(var atRef): {
-                if (atRef is not IR.RefValue(var targetRef) 
-                    || this.GetRefType(targetRef) is not IR.PointerType(var inner)) {
+                if (atRef is not IR.RefValue(var targetRef)
+                    || this.GetRefType(targetRef).GetDerefType() is not { } derefType) {
                     throw new InvalidDataException($"invalid value for dereference instruction: {atRef}");
                 }
 
-                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(inner);
+                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType);
                 
                 this.LoadValue(atRef);
                 this.body.Emit(OpCodes.Stobj, targetTypeRef);

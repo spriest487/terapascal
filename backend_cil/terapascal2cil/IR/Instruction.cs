@@ -124,6 +124,21 @@ public record AddrOfInstruction : IInstruction {
 }
 
 [MessagePackObject]
+public record MakeRefInstruction : IInstruction {
+    [Key("out")]
+    public required IRef Out {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("a")]
+    public required IRef Arg {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+}
+
+[MessagePackObject]
 public record ElementInstruction : IInstruction {
     [Key("out")]
     public required IRef Out {
@@ -558,6 +573,10 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
 
             case "AddrOf": {
                 return MessagePackSerializer.Deserialize<AddrOfInstruction>(ref reader, options);
+            }
+            
+            case "MakeRef": {
+                return MessagePackSerializer.Deserialize<MakeRefInstruction>(ref reader, options);
             }
 
             case "Element": {

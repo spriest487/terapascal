@@ -103,6 +103,7 @@ public interface IType {
 
 public sealed record NothingType : IType;
 public sealed record PointerType(IType Inner) : IType;
+public sealed record TempRefType(IType Inner) : IType;
 public sealed record StructType(TypeDefID ID) : IType;
 public sealed record VariantType(TypeDefID ID) : IType;
 public sealed record FlagsType(TypeDefID ID, SetAliasID AliasID) : IType;
@@ -141,6 +142,14 @@ public static class TypeExt {
                 RcPointerType => true,
                 RcWeakPointerType => true,
                 _ => false,
+            };
+        }
+
+        public IType? GetDerefType() {
+            return type switch {
+                PointerType(var inner) => inner,
+                TempRefType(var inner) => inner,
+                _ => null,
             };
         }
     }
@@ -190,6 +199,13 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
                     ?? throw new MessagePackSerializationException("expected inner type for pointer");
 
                 return new PointerType(inner);
+            }
+            
+            case "TempRef": {
+                var inner = MessagePackSerializer.Deserialize<IType>(ref reader, options) 
+                    ?? throw new MessagePackSerializationException("expected inner type for pointer");
+
+                return new TempRefType(inner);
             }
 
             case "Struct": {
