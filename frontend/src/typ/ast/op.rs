@@ -196,7 +196,7 @@ fn typecheck_equality(
     let rhs = evaluate_expr(&bin_op.rhs, &lhs.annotation().ty(), ctx)?;
     rhs.annotation().expect_any_value()?;
 
-    if !lhs.annotation().ty().equatable(&rhs.annotation().ty(), ctx.allow_unsafe()) {
+    if !lhs.annotation().ty().equatable(&rhs.annotation().ty()) {
         return Err(invalid_bin_op(bin_op, &lhs, &rhs));
     }
 
@@ -742,7 +742,7 @@ pub fn typecheck_unary_op(
             };
 
             let val = match (kind_addressable, ty.as_ref()) {
-                (false, _) | (true, Type::Nothing | Type::Nil | Type::Function(..)) => {
+                (false, _) | (true, Type::Nothing | Type::Function(..)) => {
                     Err(TypeError::NotAddressable {
                         ty: ty.into_owned(),
                         value_kind,

@@ -48,7 +48,6 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::ANY_TYPE_NAME;
-use crate::typ::NIL_NAME;
 use crate::typ::NOTHING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
 use crate::Keyword;
@@ -68,7 +67,6 @@ use terapascal_common::span::Spanned;
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum Type {
     Nothing,
-    Nil,
     Primitive(Primitive),
     Pointer(Arc<Type>),
     Function(Arc<FunctionSig>),
@@ -224,7 +222,6 @@ impl Type {
     pub fn is_by_ref(&self) -> bool {
         match self {
             Type::Nothing => false,
-            Type::Nil => false,
             Type::Primitive(_) => false,
             Type::Pointer(_) => false,
             Type::Function(_) => false,
@@ -292,7 +289,6 @@ impl Type {
 
             Type::Array(array_ty) => array_ty.element_ty.has_default(ctx)?,
 
-            Type::Nil => true,
             Type::Primitive(..) => true,
             Type::Pointer(..) => true,
 
@@ -617,22 +613,14 @@ impl Type {
             | Type::Primitive(..)
             | Type::Enum(..)
             | Type::Set(..)
-            | Type::Nil
             | Type::Class(..)
             | Type::Any
             | Type::Interface(..) => true,
         }
     }
 
-    pub fn equatable(&self, other: &Self, allow_unsafe: bool) -> bool {
+    pub fn equatable(&self, other: &Self) -> bool {
         match (self, other) {
-            (Type::Nil, Type::Pointer(..) | Type::Primitive(Primitive::Pointer)) => true,
-            (Type::Pointer(..) | Type::Primitive(Primitive::Pointer), Type::Nil) => true,
-
-            // weak and strong rc ptrs can be compared to null in an unsafe context
-            (a, Type::Nil) | (Type::Nil, a) if a.is_strong_rc_reference() => allow_unsafe,
-            (Type::Weak(..), Type::Nil) | (Type::Nil, Type::Weak(..)) => allow_unsafe,
-
             (a, b) if a == b => a.self_equatable(),
             _ => false,
         }
@@ -1064,7 +1052,7 @@ impl Type {
 
     pub fn is_matchable(&self) -> bool {
         match self {
-            Type::Nothing | Type::Nil => false,
+            Type::Nothing => false,
             _ => true,
         }
     }
@@ -1234,7 +1222,6 @@ impl Type {
             | Type::Enum(..)
             | Type::Set(..)
             | Type::Nothing
-            | Type::Nil
             | Type::Primitive(_)
             | Type::MethodSelf
             | Type::Any => {},
@@ -1301,7 +1288,6 @@ impl Type {
             Type::Nothing
             | Type::Enum(..)
             | Type::Set(..)
-            | Type::Nil
             | Type::Primitive(_)
             | Type::MethodSelf
             | Type::Any => {},
@@ -1313,7 +1299,6 @@ impl Type {
     pub fn kind_description(&self) -> String {
         match self {
             Type::Nothing => "nothing".to_string(),
-            Type::Nil => "nil".to_string(),
             Type::Primitive(..) => "primitive".to_string(),
             Type::Pointer(ty) => format!("pointer to {}", ty.kind_description()),
             Type::Function(..) => "function".to_string(),
@@ -1338,8 +1323,6 @@ impl Type {
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Type::Nil => write!(f, "{NIL_NAME}"),
-
             Type::Class(name) | Type::Record(name) => write!(f, "{}", name),
 
             Type::Enum(name) => write!(f, "{}", name),

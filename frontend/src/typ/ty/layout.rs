@@ -26,7 +26,6 @@ impl StructLayout {
 
             StructLayout::Auto => match ty {
                 Type::Nothing
-                | Type::Nil
                 | Type::Pointer(..)
                 | Type::Function(..)
                 | Type::DynArray { .. }
@@ -86,7 +85,6 @@ impl StructLayout {
     pub fn size_of(self, ty: &Type, ctx: &Context) -> NameResult<usize> {
         let size = match ty {
             Type::Nothing
-            | Type::Nil
             | Type::Pointer(..)
             | Type::Function(..)
             | Type::DynArray { .. }

@@ -300,12 +300,22 @@ pub fn typecheck_literal(
         }
 
         ast::Literal::Nil => {
-            let ty = match expect_ty {
-                ptr @ Type::Pointer(..) => ptr.clone(),
-                _ => Type::Nil,
+            let has_nil_ty = if ctx.allow_unsafe() {
+                // in unsafe contexts, nil literals can be assigned/compared directly to object
+                // pointers, and should act like a nil pointer of that type
+                expect_ty.is_pointer() || expect_ty.is_by_ref()
+            } else {
+                // otherwise, nil can only have a pointer type when treated as a raw pointer
+                expect_ty.is_pointer()
+            };
+            
+            let nil_ty = if has_nil_ty {
+               expect_ty.clone() 
+            } else {
+                Type::Nothing.ptr()
             };
 
-            let value = TypedValue::literal(ty, span.clone());
+            let value = TypedValue::literal(nil_ty, span.clone());
 
             Ok(Expr::literal(Literal::Nil, value))
         }

@@ -627,7 +627,7 @@ end;
 function StringConcat(a, b: String): String;
 begin
     unsafe begin
-        if a as Pointer = nil or b as Pointer = nil then 
+        if a = nil or b = nil then 
             raise 'string pointer was nil';
     end;
 

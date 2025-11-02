@@ -362,7 +362,7 @@ pub fn translate_literal(
     let out = builder.local_temp(out_ty);
 
     let val = literal_to_val(lit, ty, builder);
-    builder.mov(out.clone(), val);
+    builder.mov(out, val);
 
     out.to_ref()
 }

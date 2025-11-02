@@ -55,8 +55,6 @@ pub fn check_implicit_conversion(
 
     let conversion = match to {
         Type::Primitive(primitive_ty) => match primitive_ty {
-            Primitive::Pointer if *from == Type::Nil => Conversion::Blittable,
-
             Primitive::Pointer if from.is_strong_rc_reference() => Conversion::UnsafeBlittable,
             Primitive::Pointer if from.is_pointer() => Conversion::UnsafeBlittable,
 
@@ -69,7 +67,7 @@ pub fn check_implicit_conversion(
             Conversion::UnsafeBlittable
         },
 
-        Type::Pointer(_) if *to == *from || *from == Type::Nil => Conversion::Blittable,
+        Type::Pointer(_) if *to == *from => Conversion::Blittable,
 
         Type::Weak(weak_ty) if weak_ty.as_ref() == from => Conversion::Blittable,
 
@@ -117,9 +115,9 @@ pub fn check_explicit_cast(from: &Type, to: &Type, span: &Span, ctx: &Context) -
         | (a, b) if a == b => Ok(()),
 
         | (Type::Primitive(..), Type::Primitive(..))
-        | (Type::Pointer(..) | Type::Nil, Type::Pointer(..) | Type::Nil)
-        | (Type::Pointer(..) | Type::Nil, Type::Primitive(..))
-        | (Type::Primitive(..), Type::Pointer(..) | Type::Nil) => Ok(()),
+        | (Type::Pointer(..), Type::Pointer(..))
+        | (Type::Pointer(..), Type::Primitive(..))
+        | (Type::Primitive(..), Type::Pointer(..)) => Ok(()),
 
         | (Type::Enum(..), Type::Primitive(p)) if p.is_integer() => Ok(()),
 

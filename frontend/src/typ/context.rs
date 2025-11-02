@@ -1648,7 +1648,6 @@ impl Context {
             | Type::Interface(..)
             | Type::Pointer(..)
             | Type::Primitive(..)
-            | Type::Nil
             | Type::Function(..)
             | Type::DynArray { .. }
             | Type::Enum(..)

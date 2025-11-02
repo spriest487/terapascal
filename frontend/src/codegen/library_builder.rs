@@ -837,7 +837,6 @@ impl<'a> LibraryBuilder<'a> {
     pub fn find_type(&mut self, src_ty: &typ::Type) -> ir::Type {
         match src_ty {
             typ::Type::Nothing => ir::Type::Nothing,
-            typ::Type::Nil => ir::Type::Nothing.ptr(),
 
             typ::Type::Primitive(typ::Primitive::Boolean) => ir::Type::Bool,
 
