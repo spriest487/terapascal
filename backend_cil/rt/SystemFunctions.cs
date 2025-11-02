@@ -165,10 +165,10 @@ public static class SystemFunctions {
         return float.IsNaN(f);
     }
 
-    public static void RcRetain(object obj, bool weak) {
+    public static void RcRetain(object? obj, bool weak) {
     }
 
-    public static bool RcRelease(object obj, bool weak) {
+    public static bool RcRelease(object? obj, bool weak) {
         return false;
     }
     
