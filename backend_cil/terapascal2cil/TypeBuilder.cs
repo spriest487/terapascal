@@ -169,8 +169,8 @@ public class TypeBuilder {
 
         return new TypeReference(ns, GetTypeName(id), module, module, isValueType);
     }
-    
-    public static string GetTypeName(IR.InterfaceID id) {
+
+    private static string GetTypeName(IR.InterfaceID id) {
         return string.Intern($"Struct_{id.ID}");
     }
 
@@ -203,7 +203,7 @@ public class TypeBuilder {
         return typeRef;
     }
 
-    public static string GetFieldName(IR.FieldID id) {
+    private static string GetFieldName(IR.FieldID id) {
         return string.Intern($"Field_{id.ID}");
     }
 
@@ -447,7 +447,7 @@ public class TypeBuilder {
 
         return typeRef;
     }
-    
+
     public TypeDefinition? ResolveCore(TypeReference reference) {
         var stdlib = this.assemblyBuilder.StandardLibrary;
 

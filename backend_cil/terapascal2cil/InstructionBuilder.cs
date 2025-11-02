@@ -2,6 +2,7 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using static Terapascal.IR.RefExt;
 using static Terapascal.IR.TypeExt;
 using static Terapascal.IR.FunctionExt;
 
@@ -127,15 +128,12 @@ public class InstructionBuilder {
                     const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
                     this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeMethod(methodName);
                     
-                    this.LoadRef(atRef);
-                    this.body.Emit(OpCodes.Ldc_I4, weak ? 1 : 0);
-                    
-                    this.body.Emit(OpCodes.Call, this.rcReleaseMethod);
-                    if (outRef != null) {
-                        this.StoreRef(outRef);
-                    } else {
-                        this.body.Emit(OpCodes.Pop);
-                    }
+                    this.StoreRef(outRef.OrDiscard(), () => {
+                        this.LoadRef(atRef);
+                        this.body.Emit(OpCodes.Ldc_I4, weak ? 1 : 0);
+
+                        this.body.Emit(OpCodes.Call, this.rcReleaseMethod);
+                    });
                     
                     break;
                 }
@@ -161,8 +159,9 @@ public class InstructionBuilder {
                 }
 
                 case IR.MoveInstruction { Out: var outRef, NewValue: var newVal }: {
-                    this.LoadValue(newVal);
-                    this.StoreRef(outRef);
+                    this.StoreRef(outRef, () => {
+                        this.LoadValue(newVal);
+                    });
                     break;
                 }
 
@@ -172,13 +171,12 @@ public class InstructionBuilder {
                     Field: var fieldID,
                     BaseType: var baseType,
                 }: {
-                    this.LoadRefAddr(argRef);
-
                     var fieldRef = this.assemblyBuilder.TypeBuilder.GetFieldRef(baseType, fieldID);
 
-                    this.body.Emit(OpCodes.Ldflda, fieldRef);
-                    
-                    this.StoreRef(outRef);
+                    this.StoreRef(outRef, () => {
+                        this.LoadRefAddr(argRef);
+                        this.body.Emit(OpCodes.Ldflda, fieldRef);
+                    });
 
                     break;
                 }
@@ -189,34 +187,34 @@ public class InstructionBuilder {
                     Index: var indexVal,
                     ArrayType: var arrayType,
                 }: {
-                    if (arrayType is IR.ArrayType staticArrayType) {
-                        // fixed length static array
-                        var elementTypeRef = this.assemblyBuilder.TypeBuilder
-                            .BuildTypeRef(staticArrayType.Element)
-                            .Resolve();
-                        var elementSize = elementTypeRef?.ClassSize ?? TypeBuilder.PointerSize;
+                    this.StoreRef(outRef, () => {
+                        if (arrayType is IR.ArrayType staticArrayType) {
+                            // fixed length static array
+                            var elementTypeRef = this.assemblyBuilder.TypeBuilder
+                                .BuildTypeRef(staticArrayType.Element)
+                                .Resolve();
+                            var elementSize = elementTypeRef?.ClassSize ?? TypeBuilder.PointerSize;
 
-                        this.LoadRefAddr(arrRef);
+                            this.LoadRefAddr(arrRef);
 
-                        this.body.Emit(OpCodes.Ldc_I4, elementSize);
-                        this.LoadValue(indexVal);
-                        this.body.Emit(OpCodes.Mul);
+                            this.body.Emit(OpCodes.Ldc_I4, elementSize);
+                            this.LoadValue(indexVal);
+                            this.body.Emit(OpCodes.Mul);
 
-                        this.body.Emit(OpCodes.Add);
-                    } else {
-                        // must be a dynarray
-                        var arrayClassID = ((IR.ClassVirtualTypeID)((IR.RcPointerType)arrayType).ID).ID;
+                            this.body.Emit(OpCodes.Add);
+                        } else {
+                            // must be a dynarray
+                            var arrayClassID = ((IR.ClassVirtualTypeID)((IR.RcPointerType)arrayType).ID).ID;
 
-                        var elementType = this.library.Metadata.GetDynArrayTypeElement(arrayClassID)
-                            ?? throw new InvalidDataException($"illegal instruction - array class {arrayClassID} not found in metadata");
-                        var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType);
+                            var elementType = this.library.Metadata.GetDynArrayTypeElement(arrayClassID)
+                                ?? throw new InvalidDataException($"illegal instruction - array class {arrayClassID} not found in metadata");
+                            var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType);
 
-                        this.LoadRef(arrRef);
-                        this.LoadValue(indexVal);
-                        this.body.Emit(OpCodes.Ldelema, elementTypeRef);
-                    }
-
-                    this.StoreRef(outRef);
+                            this.LoadRef(arrRef);
+                            this.LoadValue(indexVal);
+                            this.body.Emit(OpCodes.Ldelema, elementTypeRef);
+                        }
+                    });
 
                     break;
                 }
@@ -226,17 +224,17 @@ public class InstructionBuilder {
                     Arg: var argRef,
                     ArrayType: var arrayType,
                 }: {
-                    if (arrayType is IR.ArrayType staticArrayType) {
-                        this.body.Emit(OpCodes.Ldc_I4, (int)staticArrayType.Length);
-                    } else if (arrayType is IR.RcPointerType) {
-                        // must be a dynarray
-                        this.LoadRef(argRef);
-                        this.body.Emit(OpCodes.Ldlen);
-                    } else {
-                        this.body.Emit(OpCodes.Ldc_I4, 1);
-                    }
-                    
-                    this.StoreRef(outRef);
+                    this.StoreRef(outRef, () => {
+                        if (arrayType is IR.ArrayType staticArrayType) {
+                            this.body.Emit(OpCodes.Ldc_I4, (int)staticArrayType.Length);
+                        } else if (arrayType is IR.RcPointerType) {
+                            // must be a dynarray
+                            this.LoadRef(argRef);
+                            this.body.Emit(OpCodes.Ldlen);
+                        } else {
+                            this.body.Emit(OpCodes.Ldc_I4, 1);
+                        }
+                    });
                     
                     break;
                 }
@@ -246,12 +244,12 @@ public class InstructionBuilder {
                     Arg: var argRef,
                     VariantType: var variantType,
                 }: {
-                    this.LoadRef(argRef);
-
                     var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDiscriminatorFieldRef(variantType);
-
-                    this.body.Emit(OpCodes.Ldfld, fieldRef);
-                    this.StoreRef(outRef);
+                    
+                    this.StoreRef(outRef, () => {
+                        this.LoadRef(argRef);
+                        this.body.Emit(OpCodes.Ldfld, fieldRef);    
+                    });
 
                     break;
                 }
@@ -262,13 +260,12 @@ public class InstructionBuilder {
                     VariantType: var variantType,
                     Tag: var tag,
                 }: {
-                    this.LoadRefAddr(argRef);
-
                     var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(variantType, tag);
 
-                    this.body.Emit(OpCodes.Ldflda, fieldRef);
-
-                    this.StoreRef(outRef);
+                    this.StoreRef(outRef, () => {
+                        this.LoadRefAddr(argRef);
+                        this.body.Emit(OpCodes.Ldflda, fieldRef);
+                    });
 
                     break;
                 }
@@ -296,14 +293,14 @@ public class InstructionBuilder {
                     Value: var val,
                     Type: var castToType,
                 }: {
-                    this.LoadValue(val);
+                    this.StoreRef(outRef, () => {
+                        this.LoadValue(val);
 
-                    if (castToType.IsClass()) {
-                        var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(castToType);
-                        this.body.Emit(OpCodes.Castclass, typeRef);
-                    }
-
-                    this.StoreRef(outRef);
+                        if (castToType.IsClass()) {
+                            var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(castToType);
+                            this.body.Emit(OpCodes.Castclass, typeRef);
+                        }
+                    });
                     break;
                 }
 
@@ -314,9 +311,10 @@ public class InstructionBuilder {
                 }: {
                     var classTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(new IR.RcPointerType(classID));
 
-                    this.LoadValue(argVal);
-                    this.body.Emit(OpCodes.Isinst, classTypeRef);
-                    this.StoreRef(outRef);
+                    this.StoreRef(outRef, () => {
+                        this.LoadValue(argVal);
+                        this.body.Emit(OpCodes.Isinst, classTypeRef);    
+                    });
 
                     break;
                 }
@@ -330,8 +328,9 @@ public class InstructionBuilder {
                     Out: var outRef,
                     Arg: var argRef,
                 }: {
-                    this.LoadRefAddr(argRef);
-                    this.StoreRef(outRef);
+                    this.StoreRef(outRef, () => {
+                        this.LoadRefAddr(argRef);
+                    });
                     break;
                 }
                 
@@ -339,12 +338,12 @@ public class InstructionBuilder {
                     Out: var outRef,
                     Arg: var argRef,
                 }: {
-                    this.LoadRefAddr(argRef);
-    
-                    var instanceType = this.assemblyBuilder.TypeBuilder.BuildTypeRef(this.GetRefType(argRef));
-                    this.body.Emit(OpCodes.Mkrefany, instanceType);
-    
-                    this.StoreRef(outRef);
+                    this.StoreRef(outRef, () => {
+                        this.LoadRefAddr(argRef);
+
+                        var instanceType = this.assemblyBuilder.TypeBuilder.BuildTypeRef(this.GetRefType(argRef));
+                        this.body.Emit(OpCodes.Mkrefany, instanceType);    
+                    });
                     break;
                 }
 
@@ -388,10 +387,11 @@ public class InstructionBuilder {
                 }
 
                 case IR.NotInstruction(var op): {
-                    this.LoadValue(op.Arg);
-                    this.body.Emit(OpCodes.Ldc_I4_0);
-                    this.body.Emit(OpCodes.Ceq);
-                    this.StoreRef(op.Out);
+                    this.StoreRef(op.Out, () => {
+                        this.LoadValue(op.Arg);
+                        this.body.Emit(OpCodes.Ldc_I4_0);
+                        this.body.Emit(OpCodes.Ceq);    
+                    });
                     break;
                 }
 
@@ -476,17 +476,18 @@ public class InstructionBuilder {
             ?? throw new InvalidOperationException(
                 $"invalid instruction: type {classTypeRef} cannot be constructed");
 
-        this.body.Emit(OpCodes.Newobj, this.assemblyBuilder.Module.ImportReference(defaultCtor));
-        this.StoreRef(outRef);
+        this.StoreRef(outRef, () => {
+            this.body.Emit(OpCodes.Newobj, this.assemblyBuilder.Module.ImportReference(defaultCtor));    
+        });
     }
 
     private void BuildRcNewArray(IR.IRef outRef, IR.IValue countVal, IR.IType elementType) {
-        this.LoadValue(countVal);
-        
         var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType);
-
-        this.body.Emit(OpCodes.Newarr, elementTypeRef);
-        this.StoreRef(outRef);
+        
+        this.StoreRef(outRef, () => {
+            this.LoadValue(countVal);
+            this.body.Emit(OpCodes.Newarr, elementTypeRef);
+        });
     }
 
     private void BuildRaise(IR.IRef val) {
@@ -531,28 +532,28 @@ public class InstructionBuilder {
     }
 
     private void BuildCall(IR.IRef? outRef, IR.IValue funcVal, IReadOnlyList<IR.IValue> argVals) {
-        foreach (var argVal in argVals) {
-            this.LoadValue(argVal);
-        }
-
         var funcID = funcVal switch {
             IR.RefValue(IR.GlobalRef(IR.FunctionGlobalRef(var id))) => id,
             _ => throw new NotImplementedException("call to non-function value"),
         };
 
         var hasReturn = this.library.Functions[funcID].Signature().ReturnType is not IR.NothingType;
-        
-        var funcRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcID)
-            ?? throw new InvalidDataException($"invalid instruction: couldn't find function {funcID.ID}");
 
-        this.body.Emit(OpCodes.Call, funcRef);
+        var emitCall = () => {
+            foreach (var argVal in argVals) {
+                this.LoadValue(argVal);
+            }
+        
+            var funcRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcID)
+                ?? throw new InvalidDataException($"invalid instruction: couldn't find function {funcID.ID}");
+
+            this.body.Emit(OpCodes.Call, funcRef);
+        };
 
         if (hasReturn) {
-            if (outRef != null) {
-                this.StoreRef(outRef);
-            } else {
-                this.body.Emit(OpCodes.Pop);
-            }
+            this.StoreRef(outRef.OrDiscard(), emitCall);
+        } else {
+            emitCall();
         }
     }
 
@@ -656,8 +657,13 @@ public class InstructionBuilder {
             }
 
             case IR.Deref(var targetVal): {
-                // we can assume the value is a pointer (to be dereferenced), so just load that
+                if (targetVal is not IR.RefValue(var targetRef)) {
+                    throw new InvalidDataException($"invalid value for dereference instruction: {targetVal}");
+                }
+
+                // we can assume the value is a pointer or ref (to be dereferenced), so just load that
                 this.LoadValue(targetVal);
+
                 break;
             }
 
@@ -835,9 +841,11 @@ public class InstructionBuilder {
         }
     }
 
-    private void StoreRef(IR.IRef storeRef) {
+    private void StoreRef(IR.IRef storeRef, Action loadValue) {
         switch (storeRef) {
             case IR.LocalRef localRef: {
+                loadValue();
+                
                 var varIndex = this.GetVariableIndex(localRef.ID);
                 if (varIndex >= 0) {
                     this.body.Emit(OpCodes.Stloc, varIndex);
@@ -849,6 +857,8 @@ public class InstructionBuilder {
             }
             
             case IR.GlobalRef(IR.VariableGlobalRef(var varID)): {
+                loadValue();
+
                 var field = this.assemblyBuilder.GetGlobalVariableRef(varID);
                 this.body.Emit(OpCodes.Stsfld, field);
                 break;
@@ -859,19 +869,28 @@ public class InstructionBuilder {
             }
 
             case IR.Deref(var atRef): {
-                if (atRef is not IR.RefValue(var targetRef)
-                    || this.GetRefType(targetRef).GetDerefType() is not { } derefType) {
+                if (atRef is not IR.RefValue(var targetRef)) {
                     throw new InvalidDataException($"invalid value for dereference instruction: {atRef}");
                 }
 
-                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType);
+                var refType = this.GetRefType(targetRef);
+                if (refType.GetDerefType() is not { } derefType) {
+                    throw new InvalidDataException($"invalid ref type for dereference instruction: {refType}");
+                }
                 
+                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType);
+
                 this.LoadValue(atRef);
+                
+                loadValue();
+
                 this.body.Emit(OpCodes.Stobj, targetTypeRef);
+
                 break;
             }
 
             case IR.DiscardRef: {
+                loadValue();
                 // nothing to do 
                 this.body.Emit(OpCodes.Pop);
                 break;
@@ -894,10 +913,11 @@ public class InstructionBuilder {
     }
 
     private void BuildBinOp(IR.BinOpInstruction binOp, OpCode op) {
-        this.LoadValue(binOp.ArgA);
-        this.LoadValue(binOp.ArgB);
-        this.body.Emit(op);
-        this.StoreRef(binOp.Out);
+        this.StoreRef(binOp.Out, () => {
+            this.LoadValue(binOp.ArgA);
+            this.LoadValue(binOp.ArgB);
+            this.body.Emit(op);
+        });
     }
 
     public void Finish() {
