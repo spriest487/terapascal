@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use crate::ir;
 use crate::ast;
 use crate::codegen::library_builder::LibraryBuilder;
@@ -42,7 +43,7 @@ pub fn translate_closure_struct(
 ) -> ir::TypeDefID {
     let id = lib.metadata_mut().new_type();
 
-    let mut fields = LinkedHashMap::new();
+    let mut fields = BTreeMap::new();
     fields.insert(
         ir::CLOSURE_PTR_FIELD,
         ir::StructFieldDef {

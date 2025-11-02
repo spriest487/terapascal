@@ -1,6 +1,7 @@
-use crate::{DynArrayClass, FunctionID};
-use crate::InterfaceDef;
+use crate::DynArrayClass;
+use crate::FunctionID;
 use crate::InterfaceDecl;
+use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::MetadataBuilder;
 use crate::NamePath;
@@ -18,7 +19,7 @@ use crate::VariantDef;
 use crate::DYNARRAY_LEN_FIELD;
 use crate::DYNARRAY_PTR_FIELD;
 use linked_hash_map::Entry;
-use linked_hash_map::LinkedHashMap;
+use std::collections::BTreeMap;
 
 impl MetadataBuilder {
     pub fn is_defined(&self, ty: &Type) -> bool {
@@ -223,7 +224,7 @@ impl MetadataBuilder {
             element
         );
 
-        let mut fields = LinkedHashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             DYNARRAY_LEN_FIELD,
             StructFieldDef {

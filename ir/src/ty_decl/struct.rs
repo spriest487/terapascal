@@ -2,16 +2,16 @@ use crate::FieldID;
 use crate::NamePath;
 use crate::StructIdentity;
 use crate::Type;
-use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct StructDef {
     pub identity: StructIdentity,
-    pub fields: LinkedHashMap<FieldID, StructFieldDef>,
+    pub fields: BTreeMap<FieldID, StructFieldDef>,
 }
 
 impl StructDef {
@@ -55,7 +55,7 @@ impl StructDef {
     pub fn new(identity: StructIdentity) -> Self {
         Self {
             identity,
-            fields: LinkedHashMap::new(),
+            fields: BTreeMap::new(),
         }
     }
 
