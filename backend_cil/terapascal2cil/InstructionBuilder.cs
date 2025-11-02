@@ -177,7 +177,7 @@ public class InstructionBuilder {
                     var fieldRef = this.assemblyBuilder.TypeBuilder.GetFieldRef(baseType, fieldID);
 
                     this.body.Emit(OpCodes.Ldflda, fieldRef);
-                    this.body.Emit(OpCodes.Conv_U);
+                    
                     this.StoreRef(outRef);
 
                     break;
@@ -197,7 +197,6 @@ public class InstructionBuilder {
                         var elementSize = elementTypeRef?.ClassSize ?? TypeBuilder.PointerSize;
 
                         this.LoadRefAddr(arrRef);
-                        this.body.Emit(OpCodes.Conv_U);
 
                         this.body.Emit(OpCodes.Ldc_I4, elementSize);
                         this.LoadValue(indexVal);
@@ -268,7 +267,7 @@ public class InstructionBuilder {
                     var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(variantType, tag);
 
                     this.body.Emit(OpCodes.Ldflda, fieldRef);
-                    this.body.Emit(OpCodes.Conv_U);
+
                     this.StoreRef(outRef);
 
                     break;
