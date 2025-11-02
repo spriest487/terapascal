@@ -31,8 +31,10 @@ internal class CustomCollectionsResolver : IFormatterResolver {
     }
 
     public IMessagePackFormatter<T>? GetFormatter<T>() {
+        var type = typeof(T);
         var orderedDictType = typeof(OrderedDictionary<,>);
-        if (typeof(T).GetGenericTypeDefinition() != orderedDictType) {
+
+        if (!type.IsConstructedGenericType || type.GetGenericTypeDefinition() != orderedDictType) {
             return null;
         }
 
