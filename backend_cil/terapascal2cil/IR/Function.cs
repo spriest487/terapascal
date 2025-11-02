@@ -12,11 +12,7 @@ public class FunctionFormatter : IMessagePackFormatter<IFunction> {
         throw new NotImplementedException();
     }
 
-    public IFunction? Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
-        if (reader.TryReadNil()) {
-            return null;
-        }
-        
+    public IFunction Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
         var count = reader.ReadMapHeader();
         if (count != 1) {
             throw new MessagePackSerializationException($"unexpected function element count: {count}");
