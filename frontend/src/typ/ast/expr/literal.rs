@@ -4,6 +4,7 @@ use crate::typ::builtin_string_type;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::string_to_char_lit;
 use crate::typ::typecheck_typename;
+use crate::typ::ConstValue;
 use crate::typ::Context;
 use crate::typ::Primitive;
 use crate::typ::Type;
@@ -314,8 +315,15 @@ pub fn typecheck_literal(
             } else {
                 Type::Nothing.ptr()
             };
-
-            let value = TypedValue::literal(nil_ty, span.clone());
+            
+            let value = ConstValue {
+                decl: None,
+                ty: nil_ty,
+                
+                value: Literal::Nil,
+                
+                span: span.clone(),
+            };
 
             Ok(Expr::literal(Literal::Nil, value))
         }
