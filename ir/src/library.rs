@@ -1,11 +1,10 @@
 use crate::write_instruction_list;
 use crate::ExternalFunctionRef;
-use crate::FieldID;
 use crate::Function;
 use crate::FunctionDef;
 use crate::FunctionID;
-use crate::Instruction;
 use crate::IRFormatter;
+use crate::Instruction;
 use crate::Metadata;
 use crate::StaticClosure;
 use crate::StructIdentity;
@@ -118,13 +117,7 @@ impl fmt::Display for Library {
 
                     writeln!(f)?;
 
-                    let max_field_id = s.fields.keys().max().cloned().unwrap_or(FieldID(0));
-                    let fields = (0..=max_field_id.0).filter_map(|id| {
-                        let field = s.fields.get(&FieldID(id))?;
-                        Some((id, field))
-                    });
-
-                    for (id, field) in fields {
+                    for (id, field) in &s.fields {
                         write!(f, "  {:8>}: ", id)?;
                         self.metadata.format_type(&field.ty, f)?;
 
