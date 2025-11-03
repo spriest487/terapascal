@@ -339,9 +339,6 @@ public class InstructionBuilder {
                 }: {
                     this.StoreRef(outRef, () => {
                         this.LoadRefAddr(argRef);
-
-                        var instanceType = this.assemblyBuilder.TypeBuilder.BuildTypeRef(this.GetRefType(argRef));
-                        this.body.Emit(OpCodes.Mkrefany, instanceType);    
                     });
                     break;
                 }
