@@ -925,11 +925,14 @@ begin
     if at = 0 and len = self.len then
         exit self;
 
-    var buf := GetMem(len);
+    var buf := GetMem(len + 1);
     for var i := 0 to len - 1 do 
     begin
         buf[i] := self.chars[at + i];
     end;
+
+    // we don't use null-terminators, but including them makes interop easier 
+    buf[len] := 0;
 
     String(chars: buf; len: len)
 end;
