@@ -52,12 +52,16 @@ pub fn build_assembly(
             Ok(parent.join("cil"))
         })
         .map_err(BuildError::FindDirFailed)?;
-    
-    let output_path = out_path.canonicalize()?;
+
+    let mut out_path = out_path.to_path_buf();
+    if !out_path.is_absolute() {
+        let cwd = env::current_dir()?;
+        out_path = cwd.join(out_path);
+    }
     
     if verbose {
         println!("terapascal2cil tool directory: {}", tool_dir.display());
-        println!("terapascal2cil output path: {}", output_path.display());
+        println!("terapascal2cil output path: {}", out_path.display());
     }
     
     let mut tool_command = Command::new(tool_dir.join("terapascal2cil"));
@@ -65,7 +69,7 @@ pub fn build_assembly(
     tool_command.current_dir(tool_dir);
     tool_command.arg("--assembly-name").arg(lib_name);
     tool_command.arg("--module-kind").arg("Console");
-    tool_command.arg("--output-path").arg(output_path);
+    tool_command.arg("--output-path").arg(out_path);
     
     if verbose {
         tool_command.arg("--verbose");
