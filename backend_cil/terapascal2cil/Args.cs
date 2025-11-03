@@ -15,7 +15,9 @@ public record Args {
         
     [Option("output-path", Default = false, Required = true)]
     public required string OutputPath { get; init; }
-    
+
+    [Option("verbose", Default = false, Required = false)]
+    public bool Verbose { get; init; }
     
     [Value(0, Required = false)]
     public string? LibPath { get; init; }

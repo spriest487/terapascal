@@ -27,6 +27,10 @@ if (!Enum.TryParse(parsedArgs.ModuleKind, out ModuleKind moduleKind)) {
     moduleKind = ModuleKind.Dll;
 }
 
+if (parsedArgs.Verbose) {
+    Console.WriteLine($"generating assembly: {assemblyName} {assemblyVersion} ({moduleKind})");
+}
+
 var refLibPath = SDKUtils.FindReferenceLibPath(null);
 
 using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
@@ -43,16 +47,25 @@ using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
         assemblyBuilder.Assembly.Write(output);
     }
 
-    Console.WriteLine($"output assembly written to {outputPath}");
+    if (parsedArgs.Verbose) {
+        Console.WriteLine($"output assembly written to {outputPath}");
+    }
 
     // copy the runtime DLL next to the output file
     if (Path.GetDirectoryName(parsedArgs.OutputPath) is { } outputDir) {
+        if (parsedArgs.Verbose) {
+            Console.WriteLine($"output directory: {outputDir}");
+        }
+        
         var rtOutputPath = Path.Join(outputDir, assemblyBuilder.RuntimeLibrary.Name.Name + ".dll");
         rtOutputPath = Path.GetFullPath(rtOutputPath);
 
         assemblyBuilder.RuntimeLibrary.Write(rtOutputPath);
 
-        Console.WriteLine($"RT assembly written to {rtOutputPath}");
+        if (parsedArgs.Verbose) {
+            Console.WriteLine($"RT assembly written to {rtOutputPath}");
+        }
+
         if (moduleKind is ModuleKind.Console or ModuleKind.Windows) {
             // for now assume all DLLs are runnable and output a runtime config file too
             var runtimeConfigTemplate = Assembly.GetExecutingAssembly()
@@ -62,6 +75,10 @@ using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
             var runtimeConfigPath = Path.Join(outputDir, $"{assemblyName}.runtimeconfig.json");
             await using (var runtimeConfigFile = File.Create(runtimeConfigPath)) {
                 await runtimeConfigTemplate.CopyToAsync(runtimeConfigFile);
+            }
+
+            if (parsedArgs.Verbose) {
+                Console.WriteLine($"runtimeconfig file written to {runtimeConfigPath}");
             }
         }
     }

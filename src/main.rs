@@ -43,7 +43,7 @@ use terapascal_ir as ir;
 use terapascal_vm::Interpreter;
 use terapascal_vm::InterpreterOpts;
 
-fn compile(args: &Args) -> Result<(), RunError> {
+fn compile(mut args: Args) -> Result<(), RunError> {
     if args.output.is_some() && args.print_stage.is_some() {
         let msg = "output file and print stage arguments are mutually exclusive".to_string();
         return Err(RunError::InvalidArguments(msg));
@@ -54,13 +54,19 @@ fn compile(args: &Args) -> Result<(), RunError> {
     compile_opts.lang_mode = args.lang_mode;
     
     if args.rtti {
-        compile_opts.define("RTTI");
+        if args.arch == TargetArch::Cil {
+            // TODO: cil backend RTTI implementation
+            eprintln!("RTTI is not supported on the CIL backend yet");
+            args.rtti = false;
+        } else {
+            compile_opts.define("RTTI");
+        }
     }
     
     if args.debug {
         compile_opts.define("DEBUG");
     }
-    
+
     compile_opts.define(env::consts::OS.to_ascii_uppercase());
 
     let codegen_opts = CodegenOpts {
@@ -85,7 +91,7 @@ fn compile(args: &Args) -> Result<(), RunError> {
         return handle_output(BuildOutput {
             artifact,
             log,
-        }, args);
+        }, &args);
     }
     
     let mut units = args.units.clone();
@@ -103,7 +109,7 @@ fn compile(args: &Args) -> Result<(), RunError> {
     
     let output = build(&DefaultFilesystem, input);
     
-    handle_output(output, args)
+    handle_output(output, &args)
 }
 
 fn load_lib(path: &Path) -> BuildResult<ir::Library> {
@@ -204,7 +210,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
             if let Some(BuildStage::Codegen) = args.print_stage {
                 return print_output(args.output.as_ref(), |dst| write!(dst, "{}", lib));
             }
-            
+
             if let Some(output_arg) = args.output.as_ref() {
                 let output_ext = args.output.as_ref()
                     .map(|out_path| get_extension(out_path))
@@ -236,9 +242,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     
                     Ok(())
                 } else if output_ext.eq_ignore_ascii_case(CIL_LIB_EXT) && args.arch == TargetArch::Cil {
-                    let lib_name = output_arg.with_extension("").to_string_lossy().to_string();
-                    
-                    backend_cil::build_assembly(lib_name, &lib, output_arg.as_path())?;
+                    backend_cil::build_assembly(&lib, output_arg.as_path(), args.verbose)?;
 
                     Ok(())
                 } else {
@@ -370,7 +374,7 @@ fn main() {
 
     let print_bt = args.backtrace;
 
-    if let Err(err) = compile(&args) {
+    if let Err(err) = compile(args) {
         if let Err(output_err) = report_err(&err) {
             eprintln!("error: {}", err);
             eprintln!("error reporting output: {}", output_err);
