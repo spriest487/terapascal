@@ -357,9 +357,7 @@ public class InstructionBuilder {
                 }
 
                 case IR.GteInstruction(var op): {
-                    this.BuildBinOp(op, OpCodes.Cgt);
-                    this.BuildBinOp(op, OpCodes.Ceq);
-                    this.body.Emit(OpCodes.Or);
+                    this.BuildCompareOrEqualOperation(op, OpCodes.Clt);
                     break;
                 }
 
@@ -369,9 +367,7 @@ public class InstructionBuilder {
                 }
 
                 case IR.LteInstruction(var op): {
-                    this.BuildBinOp(op, OpCodes.Clt);
-                    this.BuildBinOp(op, OpCodes.Ceq);
-                    this.body.Emit(OpCodes.Or);
+                    this.BuildCompareOrEqualOperation(op, OpCodes.Cgt);
                     break;
                 }
 
@@ -915,6 +911,18 @@ public class InstructionBuilder {
             this.LoadValue(binOp.ArgA);
             this.LoadValue(binOp.ArgB);
             this.body.Emit(op);
+        });
+    }
+
+    private void BuildCompareOrEqualOperation(IR.BinOpInstruction binOp, OpCode invCompareOp) {
+        this.StoreRef(binOp.Out, () => {
+            this.LoadValue(binOp.ArgA);
+            this.LoadValue(binOp.ArgB);
+            this.body.Emit(invCompareOp);
+            
+            // go to false label if comparison is false (0)
+            this.body.Emit(OpCodes.Ldc_I4_0);
+            this.body.Emit(OpCodes.Ceq);
         });
     }
 
