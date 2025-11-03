@@ -30,7 +30,7 @@ impl<'fs, Fs: Filesystem> SourceCollection<'fs, Fs> {
             .chain({
                 let mut unit_dirs = Vec::with_capacity(4);
                 if let Ok(units_var) = env::var("TERAPASCAL_UNITS") {
-                    unit_dirs.extend(units_var.split(";").map(PathBuf::from));
+                    unit_dirs.extend(env::split_paths(&units_var).map(PathBuf::from));
                 }
 
                 if let Ok(cwd) = env::current_dir() {
