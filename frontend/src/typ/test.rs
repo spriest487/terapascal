@@ -7,6 +7,7 @@ use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::TypeError;
 use std::collections::HashMap;
+use std::env;
 use std::fmt;
 use std::iter;
 use std::path::PathBuf;
@@ -35,7 +36,10 @@ where
     let mut units = Vec::new();
 
     // always include the system unit from the configure unit path
-    let unit_path = PathBuf::from(env!("TERAPASCAL_UNITS"));
+    let units_var = env::var("TERAPASCAL_UNITS")
+        .expect("TERAPASCAL_UNITS environment variable must be set");
+    let unit_path = PathBuf::from(units_var);
+
     let system_src = DefaultFilesystem
         .read_source(&unit_path.join("System.tpas"))
         .unwrap()
