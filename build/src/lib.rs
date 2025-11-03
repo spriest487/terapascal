@@ -64,7 +64,11 @@ pub struct ParseOutput {
     pub units: LinkedHashMap<PathBuf, ast::Unit>,
 }
 
-pub fn create_source_collection<'fs, Fs: Filesystem>(fs: &'fs Fs, input: &BuildInput, log: &mut BuildLog) -> BuildResult<SourceCollection<'fs, Fs>> {
+pub fn create_source_collection<'fs, Fs: Filesystem>(
+    fs: &'fs Fs,
+    input: &BuildInput,
+    log: &mut BuildLog,
+) -> BuildResult<SourceCollection<'fs, Fs>> {
     let mut sources = SourceCollection::new(fs, &input.search_dirs, input.compile_opts.verbose)?;
 
     // add extra referenced units

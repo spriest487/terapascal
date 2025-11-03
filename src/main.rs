@@ -271,6 +271,7 @@ fn clang_compile(module: &ir::Library, args: &Args, out_path: &OsStr) -> io::Res
         .arg("-Wno-unused-parameter")
         .arg("-Wno-unused-variable")
         .arg("-Wno-unused-label")
+        .arg("-Wno-address-of-packed-member")
         .arg("-x").arg("c")
         .arg("-o").arg(out_path);
     

@@ -2,7 +2,9 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
+#include <stdarg.h>
 
 #ifdef _MSC_VER
 #include <malloc.h>
