@@ -21,8 +21,8 @@ use terapascal_common::TracedError;
 /// Delimited list of types used for declaring and using generics
 /// e.g. the part in square brackets of the following:
 ///
-/// * `let y := MakeANewBox[Integer](123);`
-/// * `let x: Box[Integer] := y;`
+/// * `var y := MakeANewBox[Integer](123);`
+/// * `var x: Box[Integer] := y;`
 ///
 /// Generic because items may be type names (when they refer to real types in expressions)
 /// or idents only (when they are declaring type parameter names in type/function declarations)

@@ -35,6 +35,7 @@ pub struct Opts {
 #[derive(Debug, Copy, Clone)]
 pub enum ExecutionMethod {
     Interpret,
+    Dotnet,
     Clang,
 }
 
@@ -45,6 +46,7 @@ impl FromStr for ExecutionMethod {
         match s {
             "clang" => Ok(ExecutionMethod::Clang),
             "interpret" => Ok(ExecutionMethod::Interpret),
+            "dotnet" => Ok(ExecutionMethod::Dotnet),
             _ => Err(s.to_string())
         }
     }

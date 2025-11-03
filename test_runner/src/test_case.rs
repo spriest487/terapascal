@@ -77,6 +77,17 @@ impl TestCase {
             .unwrap_or_default()
     }
     
+    // run the test on the output of a failed build
+    // (a failure might be OK, we need to verify some build errors log correctly)
+    fn run_after_build_err<RunFn>(stdout: &mut Vec<u8>, stderr: &mut Vec<u8>, run: RunFn)
+        where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
+    {
+        let mut no_write = Vec::new();
+        run(&mut no_write, &mut stdout.as_slice(), &mut stderr.as_slice());
+
+        dump_output_buffers(&stdout, &stderr);
+    }
+    
     fn run_interpreted<RunFn>(&self, opts: &Opts, run: RunFn) -> io::Result<ExitStatus> 
         where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
     {        
@@ -100,11 +111,7 @@ impl TestCase {
             )?;
 
             if !build_status.success() {
-                let mut no_write = Vec::new();
-                run(&mut no_write, &mut build_stdout.as_slice(), &mut build_stderr.as_slice());
-
-                dump_output_buffers(&build_stdout, &build_stderr);
-
+                Self::run_after_build_err(&mut build_stdout, &mut build_stderr, run);
                 return Ok(build_status);
             }
         }
@@ -125,7 +132,49 @@ impl TestCase {
                 run(stdin, &mut stdout, &mut stderr)
             })
     }
-    
+
+    fn run_dotnet<RunFn>(&self, opts: &Opts, run: RunFn) -> io::Result<ExitStatus>
+        where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
+    {
+        let mut build_stdout = Vec::new();
+        let mut build_stderr = Vec::new();
+
+        let dll_path = target_file_path(&self.path, opts, "dll")?;
+        if is_target_outdated(&dll_path, &self.path, opts) {
+            let mut build_command = Command::new(&opts.compiler);
+            build_command.arg(&self.path);
+            build_command.arg("-o").arg(&dll_path);
+            build_command.arg("-a").arg("cil");
+
+            if opts.debug {
+                build_command.arg("--debug");
+            }
+
+            let build_status = try_run_command(
+                &mut build_command,
+                &mut build_stdout,
+                &mut build_stderr
+            )?;
+
+            if !build_status.success() {
+                Self::run_after_build_err(&mut build_stdout, &mut build_stderr, run);
+                return Ok(build_status);
+            }
+        }
+
+        let mut run_command = Command::new("dotnet");
+        run_command.arg(dll_path.canonicalize()?)
+            .current_dir(self.working_dir());
+
+        try_run_interactive(
+            &mut run_command,
+            |stdin, stdout, stderr| {
+                let mut stdout = ConcatReader::new(build_stdout.as_slice(), stdout);
+                let mut stderr = ConcatReader::new(build_stderr.as_slice(), stderr);
+                run(stdin, &mut stdout, &mut stderr)
+            })
+    }
+
     fn working_dir(&self) -> &Path {
         self.path.parent().expect("source file must have a parent directory")
     }
@@ -223,6 +272,7 @@ impl TestCase {
         
         let runner = match opts.exec {
             ExecutionMethod::Interpret => Self::run_interpreted,
+            ExecutionMethod::Dotnet => Self::run_dotnet,
             ExecutionMethod::Clang => Self::run_clang,
         };
         
