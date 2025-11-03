@@ -20,12 +20,12 @@ members = [
     "build",
     "common",
     "frontend",
-    "ir", 
+    "ir",
     "backend_cil",
     "backend_c",
     "terapascal_ls",
-    "test_runner",
-    "vm"
+    "demo_runner",
+    "vm",
 ]
 
 [features]
