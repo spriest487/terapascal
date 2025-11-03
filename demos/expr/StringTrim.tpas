@@ -1,0 +1,7 @@
+unit StringTrim;
+implementation
+
+initialization
+    var message := String.Trim('      hello, world!  ');
+    WriteLn(message);
+end.
