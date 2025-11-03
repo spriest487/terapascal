@@ -36,4 +36,9 @@
     <ProjectReference Include="..\rt\Terapascal.Runtime.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="template.runtimeconfig.json" />
+    <EmbeddedResource Include="template.runtimeconfig.json" />
+  </ItemGroup>
+
 </Project>

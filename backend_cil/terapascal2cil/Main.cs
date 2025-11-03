@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Reflection;
+using MessagePack;
 using MessagePack.Resolvers;
 using Mono.Cecil;
 using Terapascal.CIL;
@@ -52,6 +53,17 @@ using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
         assemblyBuilder.RuntimeLibrary.Write(rtOutputPath);
 
         Console.WriteLine($"RT assembly written to {rtOutputPath}");
+        if (moduleKind is ModuleKind.Console or ModuleKind.Windows) {
+            // for now assume all DLLs are runnable and output a runtime config file too
+            var runtimeConfigTemplate = Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream(typeof(AssemblyBuilder), "template.runtimeconfig.json")
+                ?? throw new FileNotFoundException("missing runtimeconfig template resource");
+
+            var runtimeConfigPath = Path.Join(outputDir, $"{assemblyName}.runtimeconfig.json");
+            await using (var runtimeConfigFile = File.Create(runtimeConfigPath)) {
+                await runtimeConfigTemplate.CopyToAsync(runtimeConfigFile);
+            }
+        }
     }
 }
 

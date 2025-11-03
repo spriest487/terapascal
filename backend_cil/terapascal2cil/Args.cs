@@ -9,8 +9,8 @@ public record Args {
 
     [Option("assembly-version", Required = false)]
     public Version? Version { get; init; }
-    
-    [Option("module-kind", Required = false)]
+
+    [Option("module-kind", Default = "Dll", Required = false)]
     public string? ModuleKind { get; init; }
         
     [Option("output-path", Default = false, Required = true)]
