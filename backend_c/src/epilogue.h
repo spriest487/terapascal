@@ -19,6 +19,9 @@
 #define OBJECT_DISPLAY(instance) TYPEINFO_NAME_CHARS(((OBJECT_PTR) instance)->class->typeinfo)
 #endif
 
+#define MIN(a, b) (a > b ? b : a)
+#define MAX(a, b) (a > b ? a : b)
+
 _Noreturn static void fatal(const char* msg, ...) {
     va_list args;
     va_start(args, msg);
@@ -71,7 +74,7 @@ static int32_t System_StrToInt(STRING_STRUCT* str) {
 #define INT_TO_STR_IMPL(FuncName, DataType, FormatString, BufSize) \
 static STRING_STRUCT* FuncName(DataType i) { \
     char buf[(BufSize)]; \
-    sprintf_s(buf, (BufSize), "%" FormatString, i); \
+    snprintf(buf, (BufSize), "%" FormatString, i); \
     \
     size_t len = strlen(buf); \
     unsigned char* chars = Alloc(len); \
@@ -454,7 +457,7 @@ static TYPEINFO_STRUCT* System_FindTypeInfo(STRING_STRUCT* type_name) {
         
         const char* item_name_cstr = (const char*) STRING_CHARS(TYPEINFO_NAME(item));
 
-        size_t cmp_len = (size_t)(min(STRING_LEN(type_name), STRING_LEN(TYPEINFO_NAME(item))));
+        size_t cmp_len = (size_t)(MIN(STRING_LEN(type_name), STRING_LEN(TYPEINFO_NAME(item))));
         if (strncmp(type_name_cstr, item_name_cstr, cmp_len) == 0) {
             return item;
         }
@@ -496,7 +499,7 @@ static FUNCINFO_STRUCT* System_FindFunctionInfo(STRING_STRUCT* func_name) {
         
         const char* item_name_cstr = (const char*) STRING_CHARS(FUNCINFO_NAME(item));
 
-        size_t cmp_len = (size_t)(min(STRING_LEN(func_name), STRING_LEN(FUNCINFO_NAME(item))));
+        size_t cmp_len = (size_t)(MIN(STRING_LEN(func_name), STRING_LEN(FUNCINFO_NAME(item))));
         if (strncmp(func_name_cstr, item_name_cstr, cmp_len) == 0) {
             return item;
         }

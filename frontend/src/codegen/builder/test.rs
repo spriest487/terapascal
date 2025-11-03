@@ -65,10 +65,12 @@ fn break_cleans_up_loop_locals() {
         Instruction::Release {
             at: Ref::Local(LocalID(1)),
             weak: false,
+            released_out: Ref::Discard,
         },
         Instruction::Release {
             at: Ref::Local(LocalID(0)),
             weak: false,
+            released_out: Ref::Discard,
         },
         // and the final jmp for the break
         Instruction::Jump { dest: break_label },
