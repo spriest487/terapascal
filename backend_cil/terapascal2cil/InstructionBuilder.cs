@@ -672,7 +672,7 @@ public class InstructionBuilder {
             }
 
             default: {
-                throw new ArgumentOutOfRangeException(nameof(loadValue));
+                throw new ArgumentOutOfRangeException(nameof(loadValue), loadValue.ToString());
             }
         }
     }
