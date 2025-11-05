@@ -116,7 +116,7 @@ public class InstructionBuilder {
 
                 case IR.RetainInstruction { At: var atRef, Weak: var weak }: {
                     const string methodName = nameof(Runtime.SystemFunctions.RcRetain);
-                    this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeMethod(methodName);
+                    this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
                     
                     this.LoadRef(atRef);
                     this.body.Emit(OpCodes.Ldc_I4, weak ? 1 : 0);
@@ -127,7 +127,7 @@ public class InstructionBuilder {
 
                 case IR.ReleaseInstruction { At: var atRef, Weak: var weak, ReleasedOut: var outRef }: {
                     const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
-                    this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeMethod(methodName);
+                    this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
                     
                     this.StoreRef(outRef, () => {
                         this.LoadRef(atRef);
@@ -503,7 +503,7 @@ public class InstructionBuilder {
             this.LoadRef(val);
 
             // convert string
-            this.readStringMethod ??= this.assemblyBuilder.FindRuntimeMethod(nameof(Runtime.SystemFunctions.ReadString));
+            this.readStringMethod ??= this.assemblyBuilder.FindRuntimeFunction(nameof(Runtime.SystemFunctions.ReadString));
             this.body.Emit(OpCodes.Call, this.readStringMethod);
         }
 

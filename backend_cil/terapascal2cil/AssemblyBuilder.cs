@@ -129,7 +129,7 @@ public class AssemblyBuilder : IDisposable {
         }
     }
         
-    public MethodReference FindRuntimeMethod(string name) {
+    public MethodReference FindRuntimeFunction(string name) {
         var systemFuncsName = typeof(Runtime.SystemFunctions).FullName;
 
         this.systemFuncsClass ??= this.RuntimeLibrary.MainModule.Types
@@ -176,7 +176,7 @@ public class AssemblyBuilder : IDisposable {
         var globals = this.GetGlobalsClass();
         var stringTypeRef = this.GetRuntimeTypeRef(nameof(Runtime.String), false);
 
-        var createStringMethod = this.FindRuntimeMethod(nameof(Runtime.SystemFunctions.CreateString));
+        var createStringMethod = this.FindRuntimeFunction(nameof(Runtime.SystemFunctions.CreateString));
 
         var globalsInit = this.GetInitMethodBuilder().Body.GetILProcessor();
 

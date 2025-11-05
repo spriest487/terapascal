@@ -50,7 +50,7 @@ public class FunctionBuilder {
             throw new NotImplementedException("loading external libraries");
         }
 
-        var methodRef = this.assemblyBuilder.FindRuntimeMethod(externRef.Symbol);
+        var methodRef = this.assemblyBuilder.FindRuntimeFunction(externRef.Symbol);
 
         this.functionMethods.Add(id, methodRef);
     }
