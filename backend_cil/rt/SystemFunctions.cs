@@ -49,12 +49,15 @@ public static class SystemFunctions {
         return CreateString(Console.ReadLine() ?? "");
     }
 
-    public static void WriteLn(String message) {
-        Console.WriteLine(ReadString(message));
+    public static unsafe void WriteLn(String message) {
+        var messageBytes = new Span<byte>(message.chars, message.len);
+        Console.OpenStandardOutput().Write(messageBytes);
+        Console.Out.Write(Environment.NewLine);
     }
 
-    public static void Write(String message) {
-        Console.Write(ReadString(message));
+    public static unsafe void Write(String message) {
+        var messageBytes = new Span<byte>(message.chars, message.len);
+        Console.OpenStandardOutput().Write(messageBytes);
     }
 
     public static String Int8ToStr(sbyte i) {

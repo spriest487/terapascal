@@ -115,9 +115,9 @@ pub fn build_func_static_closure_def(
     let closure_ptr_local_id = body_builder.bind_closure_ptr();
 
     // this method needs to be compatible with the type-erased function pointer stored in a
-    // closure struct, which has the sig "(Pointer, ...actual params)"
+    // closure struct, which has the sig "(Object, ...actual params)"
     let mut bound_params = bind_function_params(params, false, &mut body_builder);
-    bound_params.insert(0, (closure_ptr_local_id, Type::Nothing.ptr()));
+    bound_params.insert(0, (closure_ptr_local_id, Type::any()));
 
     let func_global = Ref::Global(GlobalRef::Function(target_func.id));
     let func_args = bound_params

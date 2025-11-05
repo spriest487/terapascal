@@ -1,17 +1,18 @@
 ﻿namespace Terapascal.Runtime;
 
-public unsafe class String {
+public sealed unsafe class String {
     public byte* chars;
     public int len;
 }
 
-public class TypeInfo {
+public sealed class TypeInfo {
 }
 
-public class MethodInfo {
+public sealed class MethodInfo {
 }
 
-public class FunctionInfo {
+public sealed class FunctionInfo {
+}
 
 public class ClosureBase { 
     public IntPtr functionPointer;
