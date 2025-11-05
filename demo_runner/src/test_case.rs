@@ -7,6 +7,7 @@ use regex::Regex;
 use std::env;
 use std::ffi::OsStr;
 use std::ffi::OsString;
+use std::fs;
 use std::fs::DirEntry;
 use std::io;
 use std::io::BufRead;
@@ -141,10 +142,15 @@ impl TestCase {
 
         let dll_path = target_file_path(&self.path, opts, "dll")?;
         if is_target_outdated(&dll_path, &self.path, opts) {
+            if dll_path.exists() {
+                fs::remove_file(&dll_path)?;
+            }
+
             let mut build_command = Command::new(&opts.compiler);
             build_command.arg(&self.path);
             build_command.arg("-o").arg(&dll_path);
             build_command.arg("-a").arg("cil");
+            build_command.arg("--rtti").arg("false");
 
             if opts.debug {
                 build_command.arg("--debug");
@@ -156,7 +162,7 @@ impl TestCase {
                 &mut build_stderr
             )?;
 
-            if !build_status.success() {
+            if !build_status.success() || !dll_path.exists() {
                 Self::run_after_build_err(&mut build_stdout, &mut build_stderr, run);
                 return Ok(build_status);
             }
