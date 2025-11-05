@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Terapascal.Runtime;
@@ -98,6 +99,10 @@ public static class SystemFunctions {
 
     public static String NativeUIntToStr(UIntPtr i) {
         return CreateString(i.ToString());
+    }
+
+    public static String RealToStr(float f) {
+        return CreateString(f.ToString(CultureInfo.InvariantCulture));
     }
 
     public static unsafe String PointerToStr(void* p) {
