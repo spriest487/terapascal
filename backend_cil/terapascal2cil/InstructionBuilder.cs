@@ -989,7 +989,6 @@ public class InstructionBuilder {
             this.LoadValue(binOp.ArgB);
             this.body.Emit(invCompareOp);
             
-            // go to false label if comparison is false (0)
             this.body.Emit(OpCodes.Ldc_I4_0);
             this.body.Emit(OpCodes.Ceq);
         });
