@@ -43,6 +43,14 @@ using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
     assemblyBuilder.Finish();
 
     var outputPath = Path.GetFullPath(parsedArgs.OutputPath);
+
+    var outputDir = Path.GetDirectoryName(outputPath);
+    if (outputDir == null) {
+        throw new DirectoryNotFoundException($"couldn't find output directory from path {outputPath}");
+    }
+
+    Directory.CreateDirectory(outputDir);
+
     await using (var output = File.Create(outputPath)) {
         assemblyBuilder.Assembly.Write(output);
     }
@@ -52,34 +60,32 @@ using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
     }
 
     // copy the runtime DLL next to the output file
-    if (Path.GetDirectoryName(parsedArgs.OutputPath) is { } outputDir) {
-        if (parsedArgs.Verbose) {
-            Console.WriteLine($"output directory: {outputDir}");
-        }
+    if (parsedArgs.Verbose) {
+        Console.WriteLine($"output directory: {outputDir}");
+    }
         
-        var rtOutputPath = Path.Join(outputDir, assemblyBuilder.RuntimeLibrary.Name.Name + ".dll");
-        rtOutputPath = Path.GetFullPath(rtOutputPath);
+    var rtOutputPath = Path.Join(outputDir, assemblyBuilder.RuntimeLibrary.Name.Name + ".dll");
+    rtOutputPath = Path.GetFullPath(rtOutputPath);
 
-        assemblyBuilder.RuntimeLibrary.Write(rtOutputPath);
+    assemblyBuilder.RuntimeLibrary.Write(rtOutputPath);
 
-        if (parsedArgs.Verbose) {
-            Console.WriteLine($"RT assembly written to {rtOutputPath}");
+    if (parsedArgs.Verbose) {
+        Console.WriteLine($"RT assembly written to {rtOutputPath}");
+    }
+
+    if (moduleKind is ModuleKind.Console or ModuleKind.Windows) {
+        // for now assume all DLLs are runnable and output a runtime config file too
+        var runtimeConfigTemplate = Assembly.GetExecutingAssembly()
+                .GetManifestResourceStream(typeof(AssemblyBuilder), "template.runtimeconfig.json")
+            ?? throw new FileNotFoundException("missing runtimeconfig template resource");
+
+        var runtimeConfigPath = Path.Join(outputDir, $"{assemblyName}.runtimeconfig.json");
+        await using (var runtimeConfigFile = File.Create(runtimeConfigPath)) {
+            await runtimeConfigTemplate.CopyToAsync(runtimeConfigFile);
         }
 
-        if (moduleKind is ModuleKind.Console or ModuleKind.Windows) {
-            // for now assume all DLLs are runnable and output a runtime config file too
-            var runtimeConfigTemplate = Assembly.GetExecutingAssembly()
-                    .GetManifestResourceStream(typeof(AssemblyBuilder), "template.runtimeconfig.json")
-                ?? throw new FileNotFoundException("missing runtimeconfig template resource");
-
-            var runtimeConfigPath = Path.Join(outputDir, $"{assemblyName}.runtimeconfig.json");
-            await using (var runtimeConfigFile = File.Create(runtimeConfigPath)) {
-                await runtimeConfigTemplate.CopyToAsync(runtimeConfigFile);
-            }
-
-            if (parsedArgs.Verbose) {
-                Console.WriteLine($"runtimeconfig file written to {runtimeConfigPath}");
-            }
+        if (parsedArgs.Verbose) {
+            Console.WriteLine($"runtimeconfig file written to {runtimeConfigPath}");
         }
     }
 }
