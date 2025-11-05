@@ -103,7 +103,9 @@ public class InstructionBuilder {
     }
 
     public void AddInstructions(IReadOnlyList<IR.IInstruction> instructions) {
-        foreach (var instruction in instructions) {
+        for (var pc = 0; pc < instructions.Count; pc += 1) {
+            var instruction = instructions[pc];
+
             switch (instruction) {
                 case IR.CommentInstruction:
                 case IR.DebugPushInstruction:
@@ -524,27 +526,66 @@ public class InstructionBuilder {
     }
 
     private void BuildCall(IR.IRef? outRef, IR.IValue funcVal, IReadOnlyList<IR.IValue> argVals) {
-        var funcID = funcVal switch {
-            IR.RefValue(IR.GlobalRef(IR.FunctionGlobalRef(var id))) => id,
-            _ => throw new NotImplementedException("call to non-function value"),
-        };
-
-        if (this.library.Functions[funcID].Signature().ReturnType is not IR.NothingType) {
-            this.StoreRef(outRef, EmitCall);
+        if (funcVal is not IR.RefValue(var funcRef)) {
+            throw new InvalidDataException("illegal instruction: call target value may only be a ref");
+        }
+        
+        if (funcRef is IR.GlobalRef(IR.FunctionGlobalRef(var funcID))) {
+            if (this.library.Functions[funcID].Signature().ReturnType is not IR.NothingType) {
+                this.StoreRef(outRef, () => EmitCall(funcID));
+            } else {
+                EmitCall(funcID);
+            }    
         } else {
-            EmitCall();
+            if (this.GetRefType(funcRef) is not IR.FunctionType(var funcTypeID)) {
+                throw new InvalidDataException($"illegal instruction: call target value {funcRef} is not a function value");
+            }
+
+            var sig = this.assemblyBuilder.GetFunctionPointerType(funcTypeID)
+                ?? throw new InvalidDataException($"function pointer type not found for type ID {funcTypeID}");
+            var funcTypeRef = this.assemblyBuilder.TypeBuilder.GetFunctionPointerType(funcTypeID);
+            
+            foreach (var argVal in argVals) {
+                this.LoadValue(argVal);
+            }
+            
+            // must be a value referencing a function pointer
+            this.LoadValue(funcVal);
+
+            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(sig.ReturnType);
+            var callSite = new CallSite(returnTypeRef) {
+                HasThis = false,
+                ExplicitThis = false,
+                CallingConvention = MethodCallingConvention.Default,
+            };
+
+            foreach (var paramType in sig.ParameterTypes) {
+                var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType);
+                callSite.Parameters.Add(new ParameterDefinition(paramTypeRef));
+            }
+
+            if (sig.ReturnType is not IR.NothingType) {
+                this.StoreRef(outRef, () => { this.body.Emit(OpCodes.Calli, callSite); });
+            } else {
+                this.body.Emit(OpCodes.Calli, callSite);
+            }
         }
 
         return;
 
-        void EmitCall() {
+        void EmitCall(IR.FunctionID id) {
+            LoadArgs();
+
+            var funcRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(id) 
+                ?? throw new InvalidDataException($"invalid instruction: couldn't find function {id.ID}");
+
+            this.body.Emit(OpCodes.Call, funcRef);
+        }
+
+        void LoadArgs() {
             foreach (var argVal in argVals) {
                 this.LoadValue(argVal);
             }
-
-            var funcRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcID) ?? throw new InvalidDataException($"invalid instruction: couldn't find function {funcID.ID}");
-
-            this.body.Emit(OpCodes.Call, funcRef);
         }
     }
 
@@ -728,6 +769,16 @@ public class InstructionBuilder {
                 break;
             }
 
+            case IR.Deref(IR.RefValue(var targetRef)): {
+                var targetType = this.GetRefType(targetRef);
+                var derefType = targetType.GetDerefType(); 
+                if (derefType == null) {
+                    break;
+                }
+
+                return derefType;
+            }
+
             case IR.GlobalRef(IR.FunctionGlobalRef(var funcID)): {
                 if (this.library.Functions.TryGetValue(funcID, out var func)) {
                     var typeID = this.library.Metadata.FindFunctionType(func.Signature());
@@ -791,16 +842,27 @@ public class InstructionBuilder {
 
                 break;
             }
-            
+
+            case IR.GlobalRef(IR.StaticClosureGlobalRef(var closureID)): {
+                this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStaticClosureFieldRef(closureID));
+                break;
+            }
+
             case IR.GlobalRef(IR.StringLiteralGlobalRef(var id)): {
-                this.body.Emit(OpCodes.Ldnull);
-                this.body.Emit(OpCodes.Ldfld, this.assemblyBuilder.GetStringLiteralRef(id));
+                this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStringLiteralRef(id));
                 break;
             }
             
             case IR.GlobalRef(IR.VariableGlobalRef(var id)): {
-                this.body.Emit(OpCodes.Ldnull);
-                this.body.Emit(OpCodes.Ldfld, this.assemblyBuilder.GetGlobalVariableRef(id));
+                this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetGlobalVariableRef(id));
+                break;
+            }
+            
+            case IR.GlobalRef(IR.FunctionGlobalRef(var id)): {
+                var methodRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(id)
+                    ?? throw new InvalidDataException($"ref to global function {id.ID} which hasn't been translated");
+
+                this.body.Emit(OpCodes.Ldftn, methodRef);
                 break;
             }
 
@@ -841,7 +903,8 @@ public class InstructionBuilder {
                 if (varIndex >= 0) {
                     this.body.Emit(OpCodes.Stloc, varIndex);
                 } else {
-                    this.body.Emit(OpCodes.Starg, -varIndex);
+                    var argIndex = ~varIndex;
+                    this.body.Emit(OpCodes.Starg, argIndex);
                 }
 
                 break;
@@ -852,6 +915,15 @@ public class InstructionBuilder {
 
                 var field = this.assemblyBuilder.GetGlobalVariableRef(varID);
                 this.body.Emit(OpCodes.Stsfld, field);
+                break;
+            }
+            
+            case IR.GlobalRef(IR.StaticClosureGlobalRef(var closureID)): {
+                loadValue();
+
+                var field = this.assemblyBuilder.GetStaticClosureFieldRef(closureID);
+                this.body.Emit(OpCodes.Stsfld, field);
+
                 break;
             }
 

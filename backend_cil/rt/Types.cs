@@ -12,4 +12,7 @@ public class MethodInfo {
 }
 
 public class FunctionInfo {
+
+public class ClosureBase { 
+    public IntPtr functionPointer;
 }

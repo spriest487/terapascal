@@ -2,7 +2,7 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using Terapascal.Runtime;
+using Terapascal.IR;
 
 namespace Terapascal.CIL;
 
@@ -36,9 +36,14 @@ public class TypeBuilder {
     private readonly TypeReference valueType;
     private readonly TypeReference exceptionType;
     private readonly TypeReference clrStringType;
+    private readonly TypeReference closureBaseType;
+
+    private readonly FieldReference closurePointerField;
 
     public TypeReference ExceptionType => this.exceptionType;
     public TypeReference CLRStringType => this.clrStringType;
+    
+    public TypeReference ClosureBaseType => this.closureBaseType;
 
     public TypeBuilder(AssemblyBuilder assemblyBuilder) {
         this.assemblyBuilder = assemblyBuilder;
@@ -56,9 +61,9 @@ public class TypeBuilder {
 
         var builtinClasses = (Span<(IR.TypeDefID, string)>)[
             (IR.TypeDefID.String, nameof(Runtime.String)),
-            (IR.TypeDefID.TypeInfo, nameof(TypeInfo)),
-            (IR.TypeDefID.MethodInfo, nameof(MethodInfo)), 
-            (IR.TypeDefID.FunctionInfo, nameof(FunctionInfo)),
+            (IR.TypeDefID.TypeInfo, nameof(Runtime.TypeInfo)),
+            (IR.TypeDefID.MethodInfo, nameof(Runtime.MethodInfo)), 
+            (IR.TypeDefID.FunctionInfo, nameof(Runtime.FunctionInfo)),
         ];
 
         foreach (var (id, name) in builtinClasses) {
@@ -80,6 +85,13 @@ public class TypeBuilder {
                 FieldRefs = fieldRefs,
             });
         }
+
+        this.closureBaseType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ClosureBase), false);
+        var closureTypeDef = this.closureBaseType.Resolve();
+
+        this.closurePointerField = closureTypeDef.Fields
+            .Single(f => f.Name == nameof(Runtime.ClosureBase.functionPointer));
+        this.closurePointerField = this.assemblyBuilder.Module.ImportReference(this.closurePointerField);
     }
 
     public TypeReference BuildTypeRef(IR.IType type) {
@@ -133,7 +145,7 @@ public class TypeBuilder {
 
         var elementTypeRef = this.BuildTypeRef(element);
 
-        var systemTypesNamespace = typeof(SystemFunctions).Namespace;
+        var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
 
         var typeAttributes = TypeAttributes.NotPublic | TypeAttributes.Sealed | TypeAttributes.SequentialLayout | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit;
         var typeDef = new TypeDefinition(systemTypesNamespace, typeName, typeAttributes, this.valueType);
@@ -186,13 +198,9 @@ public class TypeBuilder {
             // in this backend, struct refs are automatically reference types if they're a class
             IR.ClassVirtualTypeID(var classID) => this.BuildStructTypeRef(classID, false),
             IR.InterfaceVirtualTypeID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
-            IR.ClosureVirtualTypeID(var closureID) => this.BuildStructTypeRef(closureID, false),
+            IR.ClosureVirtualTypeID(var closureID) => this.closureBaseType,
             _ => throw new ArgumentException($"invalid virtual type ID: {id}"),
         };
-    }
-
-    public static string GetFunctionTypeName(IR.TypeDefID id) {
-        return string.Intern($"Delegate_{id.ID}");
     }
     
     private TypeReference BuildFunctionTypeRef(IR.TypeDefID id) {
@@ -213,32 +221,49 @@ public class TypeBuilder {
             return;
         }
 
+        var isClosure = structDef.Identity is IR.ClosureStructIdentity;
         var isClass = structDef.Identity is IR.ClassStructIdentity;
-        var typeRef = this.BuildStructTypeRef(id, !isClass);
+        var isValueType = !isClass && !isClosure;
 
-        var attrs = TypeAttributes.Sealed | TypeAttributes.NotPublic | TypeAttributes.SequentialLayout | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit;
-        if (isClass) {
+        var typeRef = this.BuildStructTypeRef(id, isValueType);
+
+        var attrs = TypeAttributes.Sealed | TypeAttributes.NotPublic | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit;
+        if (!isValueType) {
             attrs |= TypeAttributes.Class;
+        } else {
+            attrs |= TypeAttributes.SequentialLayout;
         }
 
-        var baseType = isClass
-            ? this.assemblyBuilder.Module.TypeSystem.Object
-            : this.valueType;
+        TypeReference baseType;
+        if (isClass) {
+            baseType = this.assemblyBuilder.Module.TypeSystem.Object;
+        } else if (isClosure) {
+            baseType = this.closureBaseType;
+        } else {
+            baseType = this.valueType;
+        }
 
         var typeDef = new TypeDefinition(typeRef.Namespace, typeRef.Name, attrs, baseType);
 
-        Debug.Assert(isClass != typeDef.IsValueType);
+        Debug.Assert(isValueType == typeDef.IsValueType);
 
         var fieldRefs = new Dictionary<IR.FieldID, FieldReference>();
 
         // TODO: assumes packing works the same as other targets.
         // TODO: we shouldn't calculate a size for class types, they should be unsized
         // array codegen currently requires sized refs so that needs fixing
-        var totalSize = isClass ? PointerSize : 0;
+        var totalSize = isValueType ? 0 : PointerSize;
         var maxElementSize = PointerSize;
         
         foreach (var (fieldID, structFieldDef) in structDef.Fields) {
             var fieldName = GetFieldName(fieldID);
+
+            if (isClosure && fieldID.Equals(IR.FieldID.ClosurePointerField)) {
+                // the actual pointer field is declared as an IntPtr in the base class
+                Debug.Assert(structFieldDef.Type is IR.FunctionType);
+                continue;
+            }
+
             var fieldType = this.BuildTypeRef(structFieldDef.Type);
 
             var fieldAttrs = FieldAttributes.Assembly;
@@ -248,7 +273,7 @@ public class TypeBuilder {
 
             fieldRefs.Add(fieldID, fieldDef);
 
-            if (totalSize != -1 && !isClass) {
+            if (totalSize != -1 && isValueType) {
                 if (!fieldType.IsValueType) {
                     totalSize += PointerSize;
                 } else if (fieldType.Resolve() is not { ClassSize: not -1 } sizedTypeDef) {
@@ -264,14 +289,9 @@ public class TypeBuilder {
             FieldRefs = fieldRefs,
         };
 
-        if (isClass) {
+        if (!isValueType) {
             this.BuildDefaultConstructor(typeDef);
         }
-
-        // if (!isClass) {
-            // typeDef.ClassSize = totalSize;
-            // typeDef.PackingSize = (short)Math.Min(maxElementSize, totalSize);
-        // }
 
         this.assemblyBuilder.Module.Types.Add(typeDef);
     }
@@ -367,6 +387,10 @@ public class TypeBuilder {
         this.funcPointerTypes.Add(id, pointerType);
     }
 
+    public FunctionPointerType GetFunctionPointerType(IR.TypeDefID id) {
+        return this.funcPointerTypes[id];
+    }
+
     public void BuildInterfaceDef(IR.InterfaceID id, IR.InterfaceDef def) {
         // throw new NotImplementedException();
     }
@@ -380,7 +404,7 @@ public class TypeBuilder {
             voidType
         );
 
-        var baseType = this.ResolveCore(typeDef.BaseType);
+        var baseType = typeDef.BaseType.Resolve();
         var baseCtor = baseType.GetConstructors()
             .Single(ctor => ctor.Parameters.Count == 0);
 
@@ -395,11 +419,22 @@ public class TypeBuilder {
     }
 
     public FieldReference GetFieldRef(IR.IType baseType, IR.FieldID fieldID) {
+        // the closure field pointer can be accessed either through a closure object pointer
+        // (accessing the pointer of an unknown closure type to call it) or directly as a member of a
+        // specific closure class (setting the pointer during construction)
+        if (fieldID.Equals(IR.FieldID.ClosurePointerField)) {
+            if (baseType is IR.RcPointerType(IR.ClosureVirtualTypeID)
+                || (baseType is IR.StructType(var closureStructID)
+                    && this.assemblyBuilder.IsClosureStruct(closureStructID))) {
+                return this.closurePointerField;
+            }
+        }
+
         var structID = baseType switch {
             IR.StructType(var id) => id,
             IR.RcPointerType(IR.ClassVirtualTypeID(var id)) => id,
 
-            _ => throw new ArgumentException($"type {baseType} does not have struct fields"),
+            _ => throw new ArgumentException($"type {baseType} does not have struct fields (accessing field {fieldID.ID})"),
         };
 
         if (!this.structFields.TryGetValue(structID, out var structFieldRefs)

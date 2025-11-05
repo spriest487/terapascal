@@ -2,9 +2,9 @@ use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::SetAliasID;
 use crate::ty_decl::TypeDefID;
-use crate::IRFormatter;
 use crate::TagLocation;
 use crate::Value;
+use crate::IRFormatter;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -152,18 +152,12 @@ impl Type {
             _ => None,
         }
     }
-    
+
     pub fn rc_resource_def_id(&self) -> Option<TypeDefID> {
         match self.rc_resource_class_id()? {
-            VirtualTypeID::Class(id)
-            | VirtualTypeID::Closure(id) => Some(id),
+            VirtualTypeID::Class(id) => Some(id),
             _ => None,
         }
-    }
-
-    pub fn rc_resource_def_type(&self) -> Option<Type> {
-        let id = self.rc_resource_def_id()?;
-        Some(Type::Struct(id))
     }
     
     pub fn tags_loc(&self) -> Option<TagLocation> {

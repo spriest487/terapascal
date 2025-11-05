@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using Mono.Cecil;
+﻿using Mono.Cecil;
 
 namespace Terapascal.CIL;
 

@@ -64,6 +64,10 @@ public class SetAliasIDFormatter : IMessagePackFormatter<SetAliasID> {
 }
 
 public readonly record struct FieldID(ulong ID) : IComparable<FieldID> {
+    // magic field used to access the function pointer of any closure instance
+    // this is the only field ID it's legal to use with a Field instruction pointing at a closure object type
+    public static FieldID ClosurePointerField => new FieldID(0);
+    
     public int CompareTo(FieldID other) {
         return this.ID.CompareTo(other.ID);
     }
@@ -278,7 +282,7 @@ public sealed record ClassVirtualTypeID(TypeDefID ID) : IVirtualTypeID {
 }
 
 public sealed record InterfaceVirtualTypeID(InterfaceID ID) : IVirtualTypeID;
-public sealed record ClosureVirtualTypeID(TypeDefID ID) : IVirtualTypeID;
+public sealed record ClosureVirtualTypeID(TypeDefID FunctionTypeID) : IVirtualTypeID;
 
 public class VirtualTypeIDFormatter : IMessagePackFormatter<IVirtualTypeID> {
     public void Serialize(ref MessagePackWriter writer, IVirtualTypeID value, MessagePackSerializerOptions options) {

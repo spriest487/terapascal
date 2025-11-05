@@ -24,11 +24,10 @@ public class AssemblyBuilder : IDisposable {
     private TypeDefinition? globalsClass;
     private TypeDefinition? systemFuncsClass;
 
-    private readonly Dictionary<IR.StringID, FieldDefinition> stringLitFields =
-        new Dictionary<IR.StringID, FieldDefinition>();
+    private readonly Dictionary<IR.StringID, FieldDefinition> stringLitFields;
+    private readonly Dictionary<IR.VariableID, FieldDefinition> globalVarFields;
 
-    private readonly Dictionary<IR.VariableID, FieldDefinition> globalVarFields =
-        new Dictionary<IR.VariableID, FieldDefinition>();
+    private readonly Dictionary<IR.StaticClosureID, FieldDefinition> staticClosureFields;
 
     private readonly List<MethodDefinition> initMethods;
 
@@ -54,6 +53,11 @@ public class AssemblyBuilder : IDisposable {
 
         this.TypeBuilder = new TypeBuilder(this);
         this.FunctionBuilder = new FunctionBuilder(this);
+
+        this.stringLitFields = new Dictionary<IR.StringID, FieldDefinition>();
+        this.globalVarFields = new Dictionary<IR.VariableID, FieldDefinition>();
+
+        this.staticClosureFields = new Dictionary<IR.StaticClosureID, FieldDefinition>();
 
         this.initMethods = new List<MethodDefinition>(1);
     }
@@ -142,6 +146,7 @@ public class AssemblyBuilder : IDisposable {
 
         return this.Module.ImportReference(methodDef);
     }
+
     
     public TypeReference GetRuntimeTypeRef(string name, bool valueType) {
         var typeRef = new TypeReference("Terapascal.Runtime",
@@ -236,6 +241,16 @@ public class AssemblyBuilder : IDisposable {
             }
         }
 
+        foreach (var staticClosure in library.StaticClosures) {
+            var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
+            var fieldName = $"StaticClosure_{staticClosure.ID.ID}";
+            var fieldDef = new FieldDefinition(fieldName, fieldAttrs, this.TypeBuilder.ClosureBaseType);
+            
+            globals.Fields.Add(fieldDef);
+            
+            this.staticClosureFields.Add(staticClosure.ID, fieldDef);
+        }
+
         this.FunctionBuilder.BuildFunctions(library);
 
         if (library.Initialization.Count > 0) {
@@ -251,6 +266,28 @@ public class AssemblyBuilder : IDisposable {
             
             globalsInit.Emit(OpCodes.Call, initMethod);
         }
+    }
+
+    public IR.FunctionSig? GetFunctionPointerType(IR.TypeDefID id) {
+        foreach (var lib in this.libraries) {
+            if (!lib.Metadata.TypeDecls.TryGetValue(id, out var decl)) {
+                continue;
+            }
+
+            if (decl is IR.DefTypeDecl(IR.FunctionTypeDef(var sig))) {
+                return sig;
+            } 
+        }
+
+        return null;
+    }
+
+    public FieldDefinition GetStaticClosureFieldRef(IR.StaticClosureID id) {
+        return this.staticClosureFields[id];
+    }
+
+    public bool IsClosureStruct(IR.TypeDefID closureStructID) {
+        return this.libraries.Any(lib => lib.Metadata.Closures.Contains(closureStructID));
     }
 
     public void Finish() {
