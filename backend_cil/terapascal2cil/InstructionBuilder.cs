@@ -632,14 +632,21 @@ public class InstructionBuilder {
                 break;
             }
             case IR.LiteralValue<nint>(var val): {
-                this.body.Emit(OpCodes.Ldind_I, val);
+                this.body.Emit(OpCodes.Ldc_I8, val);
                 break;
             }
             case IR.LiteralValue<nuint>(var val): {
-                this.body.Emit(OpCodes.Ldind_I, (long)val);
+                this.body.Emit(OpCodes.Ldc_I8, (long)val);
                 break;
             }
-
+            case IR.LiteralValue<float>(var val): {
+                this.body.Emit(OpCodes.Ldc_R4, val);
+                break;
+            }
+            case IR.LiteralValue<double>(var val): {
+                this.body.Emit(OpCodes.Ldc_R8, val);
+                break;
+            }
             case IR.RefValue(var loadRef): {
                 this.LoadRef(loadRef);
                 break;
