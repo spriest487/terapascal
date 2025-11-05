@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::ExitStatus;
 use std::process::Stdio;
 use terapascal_build::encode_lib;
 use terapascal_ir as ir;
@@ -25,6 +26,9 @@ pub enum BuildError {
 
     #[error(transparent)]
     IOError(#[from] io::Error),
+    
+    #[error("build failed with status {0}")]
+    BuildFailed(ExitStatus),
 }
 
 pub fn build_assembly(
@@ -90,7 +94,10 @@ pub fn build_assembly(
     input.write_all(&encoded_data)?;
     drop(input);
 
-    process.wait()?;
-
-    Ok(())
+    let status = process.wait()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(BuildError::BuildFailed(status))
+    }
 }
