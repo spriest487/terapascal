@@ -61,7 +61,7 @@ struct Rc {
 
 typedef void (*Invoker)(void** args, void* resultOut);
 
-typedef void (*DynArrayAlloc)(OBJECT_PTR arr, int32_t len, OBJECT_PTR copy_from, void* default_val);
+typedef void (*DynArrayAlloc)(OBJECT_PTR arr, int32_t len);
 typedef int32_t (*DynArrayLength)(OBJECT_PTR arr);
 typedef void* (*DynArrayGetElement)(OBJECT_PTR arr, int32_t index);
 
@@ -161,7 +161,7 @@ static void System_Write(STRING_STRUCT* str);
 static void System_WriteLn(STRING_STRUCT* str);
 static STRING_STRUCT* System_ReadLn(void);
 static int32_t System_ArrayLengthInternal(OBJECT_PTR arr);
-static OBJECT_PTR System_ArraySetLengthInternal(OBJECT_PTR arr, int32_t new_len, void* default_val);
+static void System_ArrayCreateInternal(OBJECT_PTR* arr, int32_t len);
 
 static int32_t System_RandomInteger(int32_t from, int32_t to);
 static float System_RandomSingle(float from, float to);

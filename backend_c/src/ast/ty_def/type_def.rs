@@ -2,6 +2,8 @@ use crate::ast::FuncAliasDef;
 use crate::ast::StructDef;
 use crate::ast::TypeDecl;
 use crate::ast::VariantDef;
+use crate::c::ArrayTypeID;
+use crate::c::DynArrayTypeID;
 use crate::ir;
 use std::fmt;
 
@@ -40,7 +42,7 @@ impl fmt::Display for TypeDef {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum TypeDefName {
     // struct from class def ID
     Struct(ir::TypeDefID),
@@ -52,7 +54,10 @@ pub enum TypeDefName {
     Alias(ir::TypeDefID),
 
     // struct for a fixed-size array with a generated unique ID
-    StaticArray(usize),
+    StaticArray(ArrayTypeID),
+
+    // TODO: this shouldn't be in here, move it up to Type
+    DynArray(DynArrayTypeID),
 }
 
 impl fmt::Display for TypeDefName {
@@ -60,7 +65,8 @@ impl fmt::Display for TypeDefName {
         match self {
             TypeDefName::Struct(id) => write!(f, "Struct_{}", id.0),
             TypeDefName::Variant(id) => write!(f, "Variant_{}", id.0),
-            TypeDefName::StaticArray(i) => write!(f, "StaticArray_{}", i),
+            TypeDefName::StaticArray(id) => write!(f, "StaticArray_{}", id.0),
+            TypeDefName::DynArray(id) => write!(f, "DynArray_{}", id.0),
             TypeDefName::Alias(id) => write!(f, "FuncAlias_{}", id.0),
         }
     }
@@ -85,8 +91,11 @@ impl TypeDefName {
             TypeDefName::Struct(ir::FUNCINFO_ID) => {
                 left.push_str("FUNCINFO_STRUCT");
             }
-            
-            TypeDefName::Struct(..) | TypeDefName::Variant(..) | TypeDefName::StaticArray(..) => {
+
+            TypeDefName::Struct(..)
+            | TypeDefName::Variant(..)
+            | TypeDefName::StaticArray(..)
+            | TypeDefName::DynArray(..) => {
                 left.push_str(&format!("struct {}", self.to_string()));
             },
 

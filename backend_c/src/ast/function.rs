@@ -1,12 +1,15 @@
-use crate::ast::{Builder, VariableID};
+use crate::ast::Builder;
+use crate::ast::DynArrayTypeID;
 use crate::ast::Expr;
 use crate::ast::InfixOp;
 use crate::ast::Statement;
 use crate::ast::Type;
 use crate::ast::TypeDecl;
+use crate::ast::TypeDefName;
 use crate::ast::Unit;
-use terapascal_ir as ir;
+use crate::ast::VariableID;
 use std::fmt;
+use terapascal_ir as ir;
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub enum FunctionName {
@@ -22,11 +25,13 @@ pub enum FunctionName {
     ID(ir::FunctionID),
     Invoker(ir::FunctionID),
     Method(ir::InterfaceID, ir::MethodID),
-    DestructorInvoker(ir::TypeDefID),
-    MethodWrapper(ir::InterfaceID, ir::MethodID, ir::TypeDefID),
+    DestructorInvoker(TypeDefName),
+    MethodWrapper(ir::InterfaceID, ir::MethodID, TypeDefName),
 
-    // generated function for fetching dynarray elements of a particular dynarray type
-    DynArrayGetElement(ir::TypeDefID),
+    // generated dynarray methods
+    DynArrayGetElement(DynArrayTypeID),
+    DynArrayAlloc(DynArrayTypeID),
+    DynArrayLength(DynArrayTypeID),
     
     // helper function for runtime bounds checking
     DynArrayBoundsCheck,
@@ -43,7 +48,7 @@ impl fmt::Display for FunctionName {
 
             FunctionName::ID(id) => write!(f, "Function_{}", id.0),
             FunctionName::Invoker(id) => write!(f, "Invoker_{}", id.0),
-            FunctionName::DestructorInvoker(id) => write!(f, "Destructor_{}", id.0),
+            FunctionName::DestructorInvoker(name) => write!(f, "Destructor_{}", name),
 
             FunctionName::Method(iface, method) => {
                 write!(f, "Method_{}_{}", iface, method.0)
@@ -54,6 +59,12 @@ impl fmt::Display for FunctionName {
 
             FunctionName::DynArrayGetElement(id) => {
                 write!(f, "DynArrayGetElement_{}", id.0)
+            }
+            FunctionName::DynArrayLength(id) => {
+                write!(f, "DynArrayLength_{}", id.0)
+            }
+            FunctionName::DynArrayAlloc(id) => {
+                write!(f, "DynArrayAlloc_{}", id.0)
             }
 
             FunctionName::DynArrayBoundsCheck => write!(f, "DynArrayBoundsCheck"),
@@ -104,7 +115,7 @@ pub enum BuiltinName {
     FreeMem,
 
     ArrayLengthInternal,
-    ArraySetLengthInternal,
+    ArrayCreateInternal,
 
     RandomInteger,
     RandomSingle,
@@ -168,7 +179,7 @@ impl fmt::Display for BuiltinName {
             BuiltinName::RealToStr => write!(f, "System_RealToStr"),
 
             BuiltinName::ArrayLengthInternal => write!(f, "System_ArrayLengthInternal"),
-            BuiltinName::ArraySetLengthInternal => write!(f, "System_ArraySetLengthInternal"),
+            BuiltinName::ArrayCreateInternal => write!(f, "System_ArrayCreateInternal"),
 
             BuiltinName::RandomInteger => write!(f, "System_RandomInteger"),
             BuiltinName::RandomSingle => write!(f, "System_RandomSingle"),

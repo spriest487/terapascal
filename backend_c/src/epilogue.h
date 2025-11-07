@@ -313,22 +313,17 @@ static int32_t System_ArrayLengthInternal(OBJECT_PTR arr) {
     return array_class->length(arr);
 }
 
-static OBJECT_PTR System_ArraySetLengthInternal(
-    OBJECT_PTR arr,
-    int32_t new_len,
-    void* default_val
+static void System_ArrayCreateInternal(
+    OBJECT_PTR* arr,
+    int32_t new_len
 ) {
-    if (!arr || arr->strong_count <= 0) {
+    if (!arr || !(*arr) || (*arr)->strong_count <= 0) {
         // note that it's illegal to resize an immortal array
         fatal("called SetLength for an invalid array pointer");
     }
 
-    struct DynArrayClass* array_class = (struct DynArrayClass*) arr->class;
-
-    OBJECT_PTR new_arr = RcNewArray(array_class, new_len, false);
-    array_class->alloc(new_arr, new_len, (OBJECT_PTR) arr, default_val);
-
-    return new_arr;
+    struct DynArrayClass* array_class = (struct DynArrayClass*) (*arr)->class;
+    array_class->alloc(arr, new_len, NULL, NULL);
 }
 
 static void* LoadSymbol(const char* src, const char* sym) {

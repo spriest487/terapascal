@@ -2,10 +2,10 @@ use crate::ast::expr::Expr;
 use crate::ast::expr::InfixOp;
 use crate::ast::expr::PrefixOp;
 use crate::ast::ty_def::FieldName;
-use crate::ast::BuiltinName;
 use crate::ast::FunctionName;
-use crate::ast::Unit;
 use crate::ast::Type;
+use crate::ast::Unit;
+use crate::ast::{BuiltinName, DynArrayTypeID};
 use crate::ir;
 use std::fmt;
 use std::rc::Rc;
@@ -13,6 +13,7 @@ use std::rc::Rc;
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
     ClassInstance(ir::TypeDefID),
+    DynArrayClassInstance(DynArrayTypeID),
 
     StringLiteral(ir::StringID),
 
@@ -35,6 +36,7 @@ impl fmt::Display for GlobalName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             GlobalName::ClassInstance(id) => write!(f, "Class_{}", id.0),
+            GlobalName::DynArrayClassInstance(id) => write!(f, "Class_{}", id.0),
             GlobalName::StringLiteral(id) => write!(f, "String_{}", id.0),
             GlobalName::StaticClosure(id) => write!(f, "StaticClosure_{}", id.0),
             GlobalName::StaticTagArray(loc) => {
@@ -96,11 +98,11 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
 
         // reference types
         ir::Type::RcPointer(id) => {
-            vtype_typeinfo_name(*id)
+            vtype_typeinfo_name(id)
         },
         
         ir::Type::RcWeakPointer(id) => {
-            format!("{}_Weak", vtype_typeinfo_name(*id))
+            format!("{}_Weak", vtype_typeinfo_name(id))
         }
 
         ir::Type::Function(closure_id) => format!("Closure_{closure_id}"),
@@ -121,12 +123,15 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
     }
 }
 
-fn vtype_typeinfo_name(id: ir::VirtualTypeID) -> String {
+fn vtype_typeinfo_name(id: &ir::VirtualTypeID) -> String {
     match id {
         ir::VirtualTypeID::Any => String::from("VType_Any"),
         ir::VirtualTypeID::Class(id) => format!("VType_Class_{id}"),
         ir::VirtualTypeID::Interface(id) => format!("VType_Interface_{id}"),
         ir::VirtualTypeID::Closure(id) => format!("VType_Closure_{id}"),
+        ir::VirtualTypeID::Array(element) => {
+            format!("DynArray_{}", global_typeinfo_decl_name_type(&element))
+        }
     }
 }
 
@@ -602,7 +607,7 @@ impl<'a> Builder<'a> {
             },
 
             ir::Instruction::ClassIs { out, a, class_id } => {
-                self.translate_class_is(out, a, *class_id);
+                self.translate_class_is(out, a, class_id);
             },
 
             ir::Instruction::Raise { val } => {
@@ -641,7 +646,7 @@ impl<'a> Builder<'a> {
         )))
     }
 
-    fn translate_class_is(&mut self, out: &ir::Ref, a: &ir::Value, class_id: ir::VirtualTypeID) {
+    fn translate_class_is(&mut self, out: &ir::Ref, a: &ir::Value, class_id: &ir::VirtualTypeID) {
         let actual_expr = Expr::translate_val(a, self.module);
 
         // get class ptr from rc
@@ -662,9 +667,17 @@ impl<'a> Builder<'a> {
         ], [{
             let is = match class_id {
                 ir::VirtualTypeID::Class(struct_id) => {
-                    let is_class_ptr = Expr::class_ptr(struct_id);
+                    let is_class_ptr = Expr::class_ptr(*struct_id);
+                    
                     Expr::infix_op(actual_class_ptr, InfixOp::Eq, is_class_ptr)
                 },
+
+                ir::VirtualTypeID::Array(element) => {
+                    let array_id = self.module.get_dyn_array_type(element);
+                    let is_class_ptr = Expr::dyn_array_class(array_id);
+                    
+                    Expr::infix_op(actual_class_ptr, InfixOp::Eq, is_class_ptr)
+                }
 
                 ir::VirtualTypeID::Any => {
                     // `is Any` is true for anything!
@@ -675,7 +688,7 @@ impl<'a> Builder<'a> {
                     // TODO - can you use `is` on a function type?
                     Expr::LitBool(false)
                 },
-
+                
                 ir::VirtualTypeID::Interface(iface_id) => {
                     let is_impl_func = Expr::Function(FunctionName::Builtin(BuiltinName::IsImpl));
 
@@ -726,17 +739,17 @@ impl<'a> Builder<'a> {
         )))
     }
 
-    fn translate_rc_new_array(&mut self,
+    fn translate_rc_new_array(
+        &mut self,
         out: &ir::Ref,
         element_type: &ir::Type,
         count: &ir::Value,
         immortal: bool,
     ) {
-        let array_class_id = self.module.dynarrays_by_element[element_type];
-
+        let array_id = self.module.get_dyn_array_type(element_type);
         let count_val = Expr::translate_val(count, self.module);
 
-        let array_class_ptr = Expr::class(array_class_id).addr_of();
+        let array_class_ptr = Expr::dyn_array_class(array_id).addr_of();
 
         let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNewArray));
 
@@ -746,7 +759,7 @@ impl<'a> Builder<'a> {
             Expr::LitBool(immortal),
         ]);
         
-        let array_ptr = object_ptr.cast(Type::from_ir_struct(array_class_id).ptr());
+        let array_ptr = object_ptr.cast(Type::dyn_array_ptr(array_id));
 
         self.stmts.push(Statement::Expr(Expr::translate_assign(
             out,

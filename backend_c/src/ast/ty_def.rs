@@ -7,6 +7,7 @@ pub use self::class_def::*;
 pub use self::struct_def::*;
 pub use self::type_def::*;
 pub use self::variant_def::*;
+use crate::ast::DynArrayTypeID;
 use crate::ast::Unit;
 use crate::ir;
 use std::fmt;
@@ -42,7 +43,7 @@ pub enum Type {
     // custom type defined in source language
     DefinedType(TypeDefName),
 
-    // fixed-size array type
+    // fixed-size C array type
     SizedArray(Box<Type>, usize),
 
     // literal function pointer (mostly for internal use)
@@ -71,11 +72,20 @@ impl Type {
                 Type::from_metadata(target.as_ref(), module).ptr()
             },
             ir::Type::Function(id) => Type::DefinedType(TypeDefName::Alias(*id)),
+            
             ir::Type::RcPointer(ir::VirtualTypeID::Class(id))
             | ir::Type::RcWeakPointer(ir::VirtualTypeID::Class(id)) => {
                 Type::DefinedType(TypeDefName::Struct(*id)).ptr()
             },
+
+            ir::Type::RcPointer(ir::VirtualTypeID::Array(element))
+            | ir::Type::RcWeakPointer(ir::VirtualTypeID::Array(element)) => {
+                let array_id = module.get_dyn_array_type(element);
+                Type::dyn_array_ptr(array_id)
+            }
+            
             ir::Type::RcPointer(..) | ir::Type::RcWeakPointer(..) => Type::Rc.ptr(),
+            
             ir::Type::Struct(id) => Type::from_ir_struct(*id),
             ir::Type::Variant(id) => Type::from_ir_variant(*id),
             ir::Type::Flags(repr_id, _set_id) => Type::from_ir_struct(*repr_id),
@@ -114,6 +124,10 @@ impl Type {
         Type::from_ir_struct(class_id).ptr()
     }
 
+    pub fn dyn_array_ptr(array_id: DynArrayTypeID) -> Type {
+        Type::DefinedType(TypeDefName::DynArray(array_id)).ptr()
+    }
+    
     pub fn sized_array(self, size: usize) -> Self {
         Type::SizedArray(Box::new(self), size)
     }

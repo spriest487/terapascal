@@ -3,11 +3,13 @@ mod stmt;
 mod expr;
 mod string_lit;
 mod ty_def;
+mod array;
 
 pub use self::expr::*;
 pub use self::function::*;
 pub use self::stmt::*;
 pub use self::ty_def::*;
+pub use self::array::*;
 use crate::ast::string_lit::StringLiteral;
 use crate::ir;
 use crate::rtti::RuntimeFuncInfo;
@@ -27,6 +29,8 @@ pub struct Unit {
     global_vars: Vec<GlobalVar>,
 
     static_array_types: HashMap<ArraySig, Type>,
+    
+    dyn_array_types_by_element: HashMap<ir::Type, DynArrayTypeID>,
 
     type_defs: HashMap<TypeDefName, TypeDef>,
     type_defs_order: TopologicalSort<TypeDefName>,
@@ -36,17 +40,14 @@ pub struct Unit {
 
     string_literals: HashMap<ir::StringID, StringLiteral>,
     static_closures: Vec<ir::StaticClosure>,
-    
-    dynarrays_by_element: HashMap<ir::Type, ir::TypeDefID>,
 
     tag_arrays: HashMap<ir::TagLocation, usize>,
-    tag_array_class: ir::TypeDefID,
+    
+    object_array_id: DynArrayTypeID,
 
     opts: Options,
     
     type_infos: HashMap<ir::Type, Rc<ir::RuntimeType>>,
-    methodinfo_array_class: Option<ir::TypeDefID>,
-    
     
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
 }
@@ -54,10 +55,6 @@ pub struct Unit {
 impl Unit {
     pub fn new(metadata: &ir::Metadata, opts: Options) -> Self {
         let string_ty = Type::DefinedType(TypeDefName::Struct(ir::STRING_ID)).ptr();
-
-        // array types referenced in the system unit required for reflection to work
-        let methodinfo_array_class = metadata
-            .find_dyn_array_struct(&ir::METHODINFO_TYPE);
 
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
         let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
@@ -122,10 +119,9 @@ impl Unit {
             ("ArrayLengthInternal", BuiltinName::ArrayLengthInternal, Type::Int32, vec![
                 Type::Rc.ptr(),
             ]),
-            ("ArraySetLengthInternal", BuiltinName::ArraySetLengthInternal, Type::Void.ptr(), vec![
-                Type::Rc.ptr(), 
-                Type::Int32, 
-                Type::Void.ptr(),
+            ("ArrayCreateInternal", BuiltinName::ArrayCreateInternal, Type::Void, vec![
+                Type::Rc.ptr().ptr(),
+                Type::Int32,
             ]),
             
             ("FindTypeInfo", BuiltinName::FindTypeInfo, typeinfo_ty.clone(), vec![string_ty.clone()]),
@@ -229,16 +225,6 @@ impl Unit {
             .tag_counts()
             .collect();
 
-        let tag_array_class = metadata
-            .find_dyn_array_struct(&ir::ANY_TYPE)
-            .expect("object array type must exist");
-        
-        let dynarrays_by_element = metadata
-            .dyn_array_structs()
-            .iter()
-            .map(|(k, v)| (k.clone(), *v))
-            .collect();
-
         let mut module = Unit {
             functions: Vec::new(),
             ffi_funcs: Vec::new(),
@@ -248,6 +234,8 @@ impl Unit {
             type_defs_order: TopologicalSort::new(),
 
             static_array_types: HashMap::new(),
+            
+            dyn_array_types_by_element: HashMap::new(),
             
             global_vars: Vec::new(),
 
@@ -259,16 +247,17 @@ impl Unit {
 
             opts,
 
-            dynarrays_by_element,
-
             type_infos,
-            methodinfo_array_class,
 
             runtime_funcinfos: func_infos,
             
             tag_arrays,
-            tag_array_class,
+            
+            // temp value we're about to replace
+            object_array_id: DynArrayTypeID(usize::MAX),
         };
+
+        module.object_array_id = module.get_dyn_array_type(&ir::ANY_TYPE);
 
         for (class_id, _class_def) in metadata.class_defs() {
             let class = Class::translate(class_id, metadata, &mut module);
@@ -324,7 +313,7 @@ impl Unit {
             Entry::Occupied(entry) => entry.get().clone(),
 
             Entry::Vacant(entry) => {
-                let name = TypeDefName::StaticArray(next_id);
+                let name = TypeDefName::StaticArray(ArrayTypeID(next_id));
                 let array_struct = StructDef {
                     decl: TypeDecl { name: name.clone() },
                     packed: false,
@@ -517,14 +506,10 @@ impl Unit {
             .map(|s| s.0.as_str())
     }
     
-    fn gen_rtti_init(&self, init_stmts: &mut Vec<Statement>) {
+    fn gen_rtti_init(&mut self, init_stmts: &mut Vec<Statement>) {
         if !self.opts.enable_rtti {
             return;
         }
-
-        let Some(methodinfo_array_class) = self.methodinfo_array_class else {
-            panic!("missing RTTI metadata! disable RTTI if it's not supported by the frontend");
-        };
 
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
         let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
@@ -563,10 +548,13 @@ impl Unit {
                 .cast(funcinfo_ty.ptr()),
         ));
         
+        let method_info_class_type = ir::METHODINFO_ID.to_class_ptr_type();
+        let method_info_array_id = self.get_dyn_array_type(&method_info_class_type);
+
         // initialize type info fields that can't be statically initialized
         const METHODS_ARRAY_NAME: &str = "methods_array";
         init_stmts.push(Statement::VariableDecl {
-            ty: Type::from_ir_struct(methodinfo_array_class).ptr(),
+            ty: Type::dyn_array_ptr(method_info_array_id),
             id: VariableID::named(METHODS_ARRAY_NAME),
             null_init: false,
         });
@@ -589,13 +577,13 @@ impl Unit {
 
         for (ty, typeinfo) in &self.type_infos {
             // allocate the method dynarray instance for this typeinfo 
-            let method_array_class_ptr = Expr::class(methodinfo_array_class).addr_of();
+            let method_array_class_ptr = Expr::dyn_array_class(method_info_array_id).addr_of();
             let methods_array_var = Expr::named_var(METHODS_ARRAY_NAME);
 
             init_stmts.push(Statement::Expr(Expr::assign(
                 methods_array_var.clone(),
                 Expr::call_newarray(
-                    methodinfo_array_class, 
+                    method_info_array_id, 
                     Expr::LitInt(typeinfo.methods.len() as i128), 
                     true
                 )
@@ -781,7 +769,7 @@ impl fmt::Display for Unit {
         for str_id in self.string_literals.keys() {
             let lit_name = GlobalName::StringLiteral(*str_id);
             write!(f, "static struct {} {};", string_name, lit_name)?;
-        }
+        } 
         
         for (tag_loc, tag_array_len) in &self.tag_arrays {
             let static_array_name = GlobalName::StaticTagArray(*tag_loc);
@@ -796,12 +784,12 @@ impl fmt::Display for Unit {
             }
 
             // write object
-            let tag_array_struct_ty = Type::DefinedType(TypeDefName::Struct(self.tag_array_class));
+            let tag_array_struct_ty = Type::DefinedType(TypeDefName::DynArray(self.object_array_id));
 
             let tag_array_decl_string = tag_array_struct_ty.to_decl_string(&static_array_name);
             writeln!(f, "static {} = {{", tag_array_decl_string)?;
 
-            write_immortal_rc_member(f, self.tag_array_class)?;
+            write_immortal_rc_member(f, ClassIdentity::DynArrayClass(self.object_array_id))?;
             writeln!(f, ",")?;
 
             writeln!(f, "  .{len} = {tag_array_len},", len = FieldName::ID(ir::DYNARRAY_LEN_FIELD))?;
@@ -956,7 +944,7 @@ pub struct GlobalVar {
     pub ty: Type,
 }
 
-fn write_immortal_rc_member(f: &mut fmt::Formatter, class_id: ir::TypeDefID) -> fmt::Result {
-    let class_name = GlobalName::ClassInstance(class_id);
+fn write_immortal_rc_member(f: &mut fmt::Formatter, class_id: ClassIdentity) -> fmt::Result {
+    let class_name = class_id.class_global_name();
     write!(f, ".rc = MAKE_RC({}, -1, 0)", class_name)
 }

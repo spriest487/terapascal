@@ -1,4 +1,5 @@
 use crate::ast::global_typeinfo_decl_name;
+use crate::ast::DynArrayTypeID;
 use crate::ast::Expr;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionDef;
@@ -8,9 +9,9 @@ use crate::ast::Statement;
 use crate::ast::Type;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
-use crate::c::FieldName;
 use crate::ir;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fmt::Write;
 
 #[derive(Clone, Debug)]
@@ -23,18 +24,17 @@ struct MethodImplFunc {
 impl MethodImplFunc {
     fn new(
         iface_id: ir::InterfaceID,
-        self_ty_id: ir::TypeDefID,
+        self_class: ClassIdentity,
         method_id: ir::MethodID,
         iface_method: &ir::Method,
         impl_func_id: ir::FunctionID,
         metadata: &ir::Metadata,
         module: &mut Unit,
     ) -> Self {
-        let class_ty = ir::Type::RcPointer(ir::VirtualTypeID::Class(self_ty_id));
         let iface_ty = ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id));
 
         let impl_func_name = FunctionName::ID(impl_func_id);
-        let vcall_wrapper_name = FunctionName::MethodWrapper(iface_id, method_id, self_ty_id);
+        let vcall_wrapper_name = FunctionName::MethodWrapper(iface_id, method_id, self_class.to_def_name());
 
         // generate virtual call wrapper with the param types of the virtually called iface method
         let wrapper_param_tys: Vec<_> = iface_method
@@ -51,7 +51,7 @@ impl MethodImplFunc {
                     "virtual call wrapper impl of {}.{} for {}",
                     metadata.pretty_ty_name(&iface_ty),
                     iface_method.name,
-                    metadata.pretty_ty_name(&class_ty),
+                    metadata.pretty_ty_name(&self_class.to_ir_type(module)),
                 )),
                 name: vcall_wrapper_name,
                 params: wrapper_param_tys,
@@ -107,25 +107,63 @@ pub struct InterfaceImpl {
 }
 
 #[derive(Clone, Debug)]
-pub struct DynArrayClass {
-    alloc_func: FunctionName,
-    length_func: FunctionName,
-    element_func: FunctionName,
+pub enum ClassIdentity {
+    Class(ir::TypeDefID),
+    DynArrayClass(DynArrayTypeID)
+}
+
+impl fmt::Display for ClassIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ClassIdentity::Class(id) => write!(f, "Class_{}", id.0),
+            ClassIdentity::DynArrayClass(id) => write!(f, "DynArrayClass_{}", id.0),
+        }
+    }
+}
+
+impl ClassIdentity {
+    pub fn to_def_name(&self) -> TypeDefName {
+        match self {
+            ClassIdentity::Class(id) => TypeDefName::Struct(*id),
+            ClassIdentity::DynArrayClass(id) => TypeDefName::DynArray(*id),
+        }
+    }
+    
+    pub fn to_ir_type(&self, unit: &Unit) -> ir::Type {
+        match self {
+            ClassIdentity::Class(id) => id.to_class_ptr_type(),
+            ClassIdentity::DynArrayClass(id) => {
+                let element = unit.dyn_array_types_by_element.iter()
+                    .find_map(|(element, element_array_id)| {
+                        (*element_array_id == *id).then(|| {
+                            element.clone()
+                        })
+                    })
+                    .unwrap_or_else(|| panic!("missing array type for ID {}", id.0));
+                
+                element.dyn_array()
+            }
+        }
+    }
+    
+    pub fn class_global_name(&self) -> GlobalName {
+        match self {
+            ClassIdentity::Class(id) => GlobalName::ClassInstance(*id),
+            ClassIdentity::DynArrayClass(id) => GlobalName::DynArrayClassInstance(*id),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct Class {
-    struct_id: ir::TypeDefID,
+    identity: ClassIdentity,
     impls: BTreeMap<ir::InterfaceID, InterfaceImpl>,
 
     dtor: Option<ir::FunctionID>,
     release_func: Option<FunctionName>,
 
-    // if this class is a dyn array, the RTTI for it
-    dyn_array_class: Option<DynArrayClass>,
-    
     comment: Option<String>,
-    
+
     typeinfo_global_name: String,
 }
 
@@ -149,7 +187,7 @@ impl Class {
 
                 let impl_func = MethodImplFunc::new(
                     iface_id,
-                    struct_id,
+                    ClassIdentity::Class(struct_id),
                     *method_id,
                     method_def,
                     *impl_func_id,
@@ -187,21 +225,6 @@ impl Class {
 
         let release_func = res_runtime_type.release.map(FunctionName::ID);
 
-        let dyn_array_class = metadata
-            .dyn_array_structs()
-            .iter()
-            .filter_map(|(el_ty, arr_struct_id)| {
-                if *arr_struct_id == struct_id {
-                    metadata.get_dyn_array_runtime_type(el_ty)
-                } else {
-                    None
-                }
-            })
-            .next()
-            .map(|type_info| {
-                Self::build_dyn_array_class(module, struct_id, &type_info)
-            });
-
         let comment = runtime_type
             .get_name_string(metadata)
             .map(|name| name.clone())
@@ -210,13 +233,28 @@ impl Class {
         let typeinfo_name = global_typeinfo_decl_name(&class_ty);
 
         Class {
-            struct_id,
+            identity: ClassIdentity::Class(struct_id),
             impls,
             dtor,
             release_func,
-            dyn_array_class,
             comment: Some(comment),
             typeinfo_global_name: typeinfo_name,
+        }
+    }
+    
+    pub fn gen_dyn_array_class(
+        id: DynArrayTypeID,
+        element_type: ir::Type,
+    ) -> Self {
+        let array_type = element_type.clone().dyn_array();
+        
+        Class {
+            identity: ClassIdentity::DynArrayClass(id),
+            impls: BTreeMap::new(),
+            dtor: None,
+            release_func: None,
+            comment: Some(format!("generated dynarray class (array of {element_type})")),
+            typeinfo_global_name: global_typeinfo_decl_name(&array_type),
         }
     }
     
@@ -224,57 +262,12 @@ impl Class {
         let ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(closure_struct_id));
         
         Class {
-            struct_id: closure_struct_id,
+            identity: ClassIdentity::Class(closure_struct_id),
             comment: Some(format!("closure class {}", closure_struct_id)),
             dtor: None,
             impls: BTreeMap::new(),
             release_func: None,
-            dyn_array_class: None,
             typeinfo_global_name: global_typeinfo_decl_name(&ty),
-        }
-    }
-    
-    fn build_dyn_array_class(
-        unit: &mut Unit,
-        class_id: ir::TypeDefID,
-        dyn_array_class: &ir::DynArrayClass,
-    ) -> DynArrayClass {
-        let array_ptr_ty = Type::DefinedType(TypeDefName::Struct(class_id)).ptr();
-
-        let element_func_name = FunctionName::DynArrayGetElement(class_id);
-
-        let arr_arg = Expr::local_var(ir::LocalID(1));
-        let index_arg = Expr::local_var(ir::LocalID(2));
-
-        let element_func_body = vec![
-            Statement::Expr(Expr::Function(FunctionName::DynArrayBoundsCheck)
-                .call([
-                    arr_arg.clone(),
-                    index_arg.clone(),
-                ])),
-            Statement::ReturnValue(
-                arr_arg
-                    .cast(array_ptr_ty)
-                    .arrow(FieldName::ID(ir::DYNARRAY_PTR_FIELD))
-                    .index(index_arg.cast(Type::SizeType))
-                    .addr_of()
-            ),
-        ];
-        
-        unit.functions.push(FunctionDef {
-            decl: FunctionDecl {
-                name: element_func_name,
-                comment: Some(format!("generated dynarray element function for class {}", class_id)),
-                params: vec![Type::Rc.ptr(), Type::Int32],
-                return_ty: Type::Void.ptr(),
-            },
-            body: element_func_body,
-        });
-
-        DynArrayClass {
-            alloc_func: FunctionName::ID(dyn_array_class.alloc),
-            length_func: FunctionName::ID(dyn_array_class.length),
-            element_func: element_func_name,
         }
     }
 
@@ -294,11 +287,12 @@ impl Class {
             return None;
         };
         
-        let self_ty = Type::DefinedType(TypeDefName::Struct(self.struct_id));
-        
+        let def_name = self.identity.to_def_name();
+        let self_ty = Type::DefinedType(def_name);
+
         let def = FunctionDef {
             decl: FunctionDecl {
-                name: FunctionName::DestructorInvoker(self.struct_id),
+                name: FunctionName::DestructorInvoker(def_name),
                 params: vec![Type::Void.ptr()],
                 comment: None,
                 return_ty: Type::Void,
@@ -316,33 +310,20 @@ impl Class {
 
     pub fn to_decl_string(&self) -> String {
         let mut decls = String::new();
+
         for (iface_id, _) in &self.impls {
-            decls
-                .write_fmt(format_args!(
-                    "struct MethodTable_{} ImplTable_{}_{};\n",
-                    iface_id.0, self.struct_id.0, iface_id.0
-                ))
-                .unwrap();
+            decls.write_fmt(format_args!(
+                "struct MethodTable_{} ImplTable_{}_{};\n",
+                iface_id.0, self.identity, iface_id.0
+            )).unwrap();
         }
 
-        match self.dyn_array_class {
-            Some(..) => {
-                writeln!(
-                    decls,
-                    "struct DynArrayClass {};",
-                    GlobalName::ClassInstance(self.struct_id)
-                )
-                .unwrap();
-            },
-            None => {
-                writeln!(
-                    decls,
-                    "struct Class {};",
-                    GlobalName::ClassInstance(self.struct_id)
-                )
-                .unwrap();
-            },
-        }
+        let class_instance_name = match &self.identity {
+            ClassIdentity::Class(id) => GlobalName::ClassInstance(*id),
+            ClassIdentity::DynArrayClass(id) => GlobalName::DynArrayClassInstance(*id),
+        };
+
+        writeln!(decls, "struct Class {};", class_instance_name, ).unwrap();
 
         decls
     }
@@ -362,7 +343,7 @@ impl Class {
         for (i, (iface_id, iface_impl)) in &impls {
             def.push_str(&format!(
                 "struct MethodTable_{} ImplTable_{}_{} = {{\n",
-                iface_id.0, self.struct_id.0, iface_id.0
+                iface_id.0, self.identity, iface_id.0
             ));
 
             def.push_str("  .base = {\n");
@@ -376,7 +357,7 @@ impl Class {
                 Some((_, (next_impl_id, _))) => {
                     def.push_str(&format!(
                         "&ImplTable_{}_{}.base",
-                        self.struct_id, next_impl_id
+                        self.identity, next_impl_id
                     ));
                 },
                 None => def.push_str("NULL"),
@@ -394,7 +375,7 @@ impl Class {
                 let wrapper_name = FunctionName::MethodWrapper(
                     **iface_id,
                     *method_id,
-                    self.struct_id
+                    self.identity.to_def_name(),
                 );
 
                 def.push_str("  .method_");
@@ -413,11 +394,11 @@ impl Class {
         writeln!(
             class_init,
             "  .size = {},",
-            Expr::SizeOf(Type::DefinedType(TypeDefName::Struct(self.struct_id)))
+            Expr::SizeOf(Type::DefinedType(self.identity.to_def_name()))
         ).unwrap();
 
         if self.dtor.is_some() {
-            let dtor_name = FunctionName::DestructorInvoker(self.struct_id);
+            let dtor_name = FunctionName::DestructorInvoker(self.identity.to_def_name());
             writeln!(class_init, "  .dtor = &{},", dtor_name).unwrap();
         } else {
             writeln!(class_init, "  .dtor = NULL,").unwrap();
@@ -437,7 +418,7 @@ impl Class {
             writeln!(
                 class_init,
                 "  .iface_methods = (struct MethodTable*) &ImplTable_{}_{},",
-                self.struct_id, first_iface_id
+                self.identity, first_iface_id
             )
             .unwrap();
         } else {
@@ -446,36 +427,12 @@ impl Class {
 
         class_init.push_str("}");
 
-        match &self.dyn_array_class {
-            Some(dyn_array_class) => {
-                writeln!(
-                    def,
-                    r#"
-                struct DynArrayClass {class_name} = {{
-                    .base = {class_init},
-                    .{alloc_name} = {alloc_func},
-                    .length = {len_func},
-                    .{element_name} = {get_element},
-                }};"#,
-                    class_name = GlobalName::ClassInstance(self.struct_id),
-                    class_init = class_init,
-                    alloc_name = FieldName::DynArrayAlloc,
-                    alloc_func = dyn_array_class.alloc_func,
-                    len_func = dyn_array_class.length_func,
-                    element_name = FieldName::DynArrayElement,
-                    get_element = dyn_array_class.element_func,
-                ).unwrap();
-            },
-
-            None => {
-                writeln!(
-                    def,
-                    "struct Class Class_{} = {};",
-                    self.struct_id, class_init,
-                )
-                .unwrap();
-            },
-        }
+        writeln!(
+            def,
+            "struct Class {} = {};",
+            self.identity, 
+            class_init,
+        ).unwrap();
 
         def
     }

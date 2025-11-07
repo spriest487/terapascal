@@ -1,4 +1,4 @@
-use crate::ast::FieldName;
+use crate::ast::{DynArrayTypeID, FieldName};
 use crate::ast::FunctionName;
 use crate::ast::GlobalName;
 use crate::ast::Type;
@@ -204,9 +204,9 @@ impl Expr {
         instance.cast(Type::class_instance_ptr(class_id))
     }
 
-    pub fn call_newarray(class_id: ir::TypeDefID, len: impl Into<Expr>, immortal: bool) -> Self {
+    pub fn call_newarray(array_id: DynArrayTypeID, len: impl Into<Expr>, immortal: bool) -> Self {
         let new = Expr::Function(FunctionName::Builtin(BuiltinName::RcNewArray));
-        let array_class_ptr = Expr::class(class_id).addr_of();
+        let array_class_ptr = Expr::dyn_array_class(array_id).addr_of();
 
         let instance = new.call([
             array_class_ptr, 
@@ -214,7 +214,7 @@ impl Expr {
             Expr::LitBool(immortal),
         ]);
         
-        instance.cast(Type::class_instance_ptr(class_id))
+        instance.cast(Type::dyn_array_ptr(array_id))
     }
 
     pub fn deref(self) -> Self {
@@ -425,6 +425,10 @@ impl Expr {
     
     pub fn class(class_id: ir::TypeDefID) -> Self {
         Expr::Global(GlobalName::ClassInstance(class_id))
+    }
+
+    pub fn dyn_array_class(array_id: DynArrayTypeID) -> Self {
+        Expr::Global(GlobalName::DynArrayClassInstance(array_id))
     }
 }
 
