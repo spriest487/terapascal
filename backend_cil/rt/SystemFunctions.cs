@@ -228,10 +228,13 @@ public static class SystemFunctions {
     }
 
     public static int ArrayLengthInternal(object array) {
-        throw new NotImplementedException("dynamic arrays");
+        var asArray = (Array)array;
+        return asArray.Length;
     }
-    
-    public static unsafe object ArraySetLengthInternal(object array, int len, void* defaultVal) {
-        throw new NotImplementedException("dynamic arrays");
+
+    public static void ArrayCreateInternal(ref object array, int len) {
+        var asArray = (Array)array;
+        var elementType = asArray.GetType().GetElementType()!;
+        array = Array.CreateInstance(elementType, len);
     }
 }
