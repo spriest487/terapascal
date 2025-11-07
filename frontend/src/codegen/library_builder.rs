@@ -15,7 +15,6 @@ use crate::codegen::build_func_static_closure_def;
 use crate::codegen::build_static_closure_impl;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr::expr_to_val;
-use crate::codegen::library_builder::dyn_array::gen_dyn_array_funcs;
 use crate::codegen::library_builder::dyn_array::gen_dyn_array_runtime_type;
 use crate::codegen::library_builder::init::gen_tags_init;
 use crate::codegen::library_builder::rtti::gen_release_func;
@@ -892,25 +891,11 @@ impl<'a> LibraryBuilder<'a> {
             },
 
             typ::Type::Array(array_ty) => {
-                let element = self.find_type(&array_ty.element_ty);
-                ir::Type::Array {
-                    element: Rc::new(element),
-                    dim: array_ty.dim,
-                }
+                self.find_type(&array_ty.element_ty).array(array_ty.dim)
             },
 
             typ::Type::DynArray { element } => {
-                let element = self.find_type(element.as_ref());
-
-                let array_struct = match self.metadata().find_dyn_array_struct(&element) {
-                    Some(id) => id,
-                    None => panic!(
-                        "missing dyn array IR struct definition for element type {}",
-                        element
-                    ),
-                };
-
-                ir::Type::RcPointer(ir::VirtualTypeID::Class(array_struct))
+                self.find_type(element.as_ref()).dyn_array()
             },
 
             typ::Type::Variant(variant) => {
@@ -1087,10 +1072,7 @@ impl<'a> LibraryBuilder<'a> {
 
             typ::Type::Array(array_ty) => {
                 let elem_ty = self.translate_type(&array_ty.element_ty, generic_ctx);
-                let ty = ir::Type::Array {
-                    element: Rc::new(elem_ty),
-                    dim: array_ty.dim,
-                };
+                let ty = elem_ty.array(array_ty.dim);
 
                 self.type_cache.insert(src_ty.clone(), ty.clone());
                 self.cached_types.insert(ty.clone(), src_ty);
@@ -1208,23 +1190,15 @@ impl<'a> LibraryBuilder<'a> {
         // cause the type cache to expand, so repeat until it stops growing
         let mut done_types = 0;
         let mut done_closures = 0;
-        let mut done_dynarrays = 0;
 
         let mut populate_types = Vec::new();
         let mut populate_closures = Vec::new();
-        let mut populate_dynarrays = Vec::new();
 
         loop {
             populate_types.extend(self.type_cache
                 .iter()
                 .skip(done_types)
                 .map(|(src_ty, ty)| (src_ty.clone(), ty.clone())));
-
-            populate_dynarrays.extend(self
-                .metadata()
-                .dyn_array_structs()
-                .skip(done_dynarrays.clone())
-                .map(|(elem_ty, struct_id)| (elem_ty.clone(), struct_id.clone())));
             
             let closure_types = self.metadata.closures();
             populate_closures.extend(closure_types.skip(done_closures));
@@ -1238,7 +1212,6 @@ impl<'a> LibraryBuilder<'a> {
 
             for (elem_ty, struct_id) in populate_dynarrays.drain(0..) {
                 gen_dyn_array_runtime_type(self, &elem_ty, struct_id);
-                gen_dyn_array_funcs(self, &elem_ty, struct_id);
 
                 done_dynarrays += 1;
             }
@@ -1254,7 +1227,10 @@ impl<'a> LibraryBuilder<'a> {
 
                 self.gen_iface_impls(&src_ty);
 
-                self.populate_runtime_type_info(src_ty, ty);
+                self.populate_runtime_type_info(src_ty, ty.clone());
+
+                gen_dyn_array_runtime_type(self, ty, struct_id);
+                
                 done_types += 1;
             }
 

@@ -1,9 +1,7 @@
 mod dyn_array;
 pub mod scope;
 
-use crate::instruction_builder::dyn_array::gen_dyn_array_alloc_body;
 use crate::instruction_builder::dyn_array::gen_dyn_array_dtor_body;
-use crate::instruction_builder::dyn_array::gen_dyn_array_length_body;
 use crate::instruction_builder::dyn_array::new_dyn_array;
 use crate::instruction_builder::scope::LocalBinding;
 use crate::instruction_builder::scope::LocalStack;
@@ -922,24 +920,6 @@ pub trait InstructionBuilder {
                 _ => false,
             },
         )
-    }
-
-    fn gen_dyn_array_length_body(&mut self, array_class_id: TypeDefID)
-    where
-        Self: Sized,
-    {
-        gen_dyn_array_length_body(self, array_class_id)
-    }
-
-    fn gen_dyn_array_alloc_body(
-        &mut self,
-        element_type: &Type,
-        array_class_id: TypeDefID,
-        get_mem_id: FunctionID,
-    ) where
-        Self: Sized,
-    {
-        gen_dyn_array_alloc_body(self, element_type, array_class_id, get_mem_id)
     }
 
     fn gen_dyn_array_dtor_body(

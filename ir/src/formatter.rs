@@ -175,7 +175,7 @@ pub trait IRFormatter {
                 write!(f, " := ")?;
                 self.format_val(a, f)?;
                 write!(f, " is ")?;
-                self.format_type(&Type::RcPointer(*class_id), f)
+                self.format_type(&Type::RcPointer(class_id.clone()), f)
             }
 
             Instruction::AddrOf { out, a } => {

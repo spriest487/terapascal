@@ -37,14 +37,6 @@ impl RuntimeType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct DynArrayClass {
-    pub alloc: FunctionID,
-    pub length: FunctionID,
-    
-    pub element_type: Type,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RuntimeMethod {
     pub name: StringID,
     

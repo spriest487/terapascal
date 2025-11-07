@@ -94,6 +94,14 @@ impl Type {
         }
     }
 
+    pub fn dyn_array(self) -> Self {
+        Type::RcPointer(VirtualTypeID::Array(Rc::new(self)))
+    }
+
+    pub fn weak_dyn_array(self) -> Self {
+        Type::RcWeakPointer(VirtualTypeID::Array(Rc::new(self)))
+    }
+
     pub fn as_struct(&self) -> Option<TypeDefID> {
         match self {
             Type::Struct(struct_id) => Some(*struct_id),
@@ -128,10 +136,10 @@ impl Type {
         matches!(self, Type::Variant(..) | Type::Array { .. } | Type::Struct(..))
     }
 
-    pub fn rc_resource_class_id(&self) -> Option<VirtualTypeID> {
+    pub fn rc_resource_class_id(&self) -> Option<&VirtualTypeID> {
         match self {
-            Type::RcPointer(class_id) => Some(*class_id),
-            Type::RcWeakPointer(class_id) => Some(*class_id),
+            Type::RcPointer(class_id) => Some(class_id),
+            Type::RcWeakPointer(class_id) => Some(class_id),
             _ => None,
         }
     }
@@ -155,7 +163,7 @@ impl Type {
 
     pub fn rc_resource_def_id(&self) -> Option<TypeDefID> {
         match self.rc_resource_class_id()? {
-            VirtualTypeID::Class(id) => Some(id),
+            VirtualTypeID::Class(id) => Some(*id),
             _ => None,
         }
     }
@@ -241,12 +249,14 @@ impl fmt::Display for Type {
                 VirtualTypeID::Class(id) => write!(f, "class {}", id),
                 VirtualTypeID::Interface(id) => write!(f, "iface {}", id),
                 VirtualTypeID::Closure(id) => write!(f, "closure {}", id),
+                VirtualTypeID::Array(element) => write!(f, "array of {}", element),
             },
             Type::RcWeakPointer(id) => match id {
                 VirtualTypeID::Any => write!(f, "weak any"),
                 VirtualTypeID::Class(id) => write!(f, "weak class {}", id),
                 VirtualTypeID::Interface(id) => write!(f, "weak iface {}", id),
                 VirtualTypeID::Closure(id) => write!(f, "weak closure {}", id),
+                VirtualTypeID::Array(element) => write!(f, "weak array of {}", element),
             },
             Type::Array { element, dim } => write!(f, "{}[{}]", element, dim),
             Type::Function(id) => write!(f, "function {}", id),
@@ -255,7 +265,7 @@ impl fmt::Display for Type {
 }
 
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum VirtualTypeID {
     // unknown type - may refer to any class type, only known at runtime
     Any,
@@ -268,14 +278,17 @@ pub enum VirtualTypeID {
 
     // closure of an unknown structure that calls the function type with this typedef ID
     Closure(TypeDefID),
+
+    Array(Rc<Type>),
 }
 
 impl VirtualTypeID {
     pub fn as_class(&self) -> Option<TypeDefID> {
-        match self {
-            VirtualTypeID::Class(id) => Some(*id),
-            VirtualTypeID::Any | VirtualTypeID::Interface(..) | VirtualTypeID::Closure(..) => None,
-        }
+        let VirtualTypeID::Class(class_id) = self else {
+            return None;  
+        };
+        
+        Some(*class_id)
     }
 }
 
@@ -286,6 +299,7 @@ impl fmt::Display for VirtualTypeID {
             VirtualTypeID::Class(struct_id) => write!(f, "{}", struct_id),
             VirtualTypeID::Interface(iface_id) => write!(f, "{}", iface_id),
             VirtualTypeID::Closure(closure_id) => write!(f, "{}", closure_id),
+            VirtualTypeID::Array(element_type) => write!(f, "array of {}", element_type),
         }
     }
 }

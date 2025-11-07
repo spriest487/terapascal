@@ -1,4 +1,3 @@
-use crate::DynArrayClass;
 use crate::MetadataBuilder;
 use crate::RuntimeType;
 use crate::TagLocation;
@@ -18,21 +17,6 @@ impl MetadataBuilder {
 
     pub fn get_runtime_type(&self, ty: &Type) -> Option<Rc<RuntimeType>> {
         self.find_in_self_or_refs(move |metadata| metadata.get_runtime_type(ty))
-    }
-
-    pub fn declare_dyn_array_class(&mut self, element_ty: &Type) -> DynArrayClass {
-        if self.metadata.dyn_array_classes.contains_key(element_ty) {
-            panic!("duplicate array class declaration for type {}", self.metadata.pretty_ty_name(element_ty));
-        }
-
-        let runtime_type = DynArrayClass {
-            alloc: self.insert_func(None),
-            length: self.insert_func(None),
-            element_type: element_ty.clone(),
-        };
-
-        self.metadata.dyn_array_classes.insert(element_ty.clone(), runtime_type.clone());
-        runtime_type
     }
 
     pub fn alloc_tag_array(&mut self, loc: TagLocation, len: usize) {

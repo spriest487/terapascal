@@ -1,6 +1,5 @@
 mod builder;
 
-use crate::rtti::DynArrayClass;
 use crate::rtti::RuntimeType;
 use crate::ty::FieldID;
 use crate::ty::VirtualTypeID;
@@ -131,9 +130,6 @@ pub struct Metadata {
     closures: Vec<TypeDefID>,
     function_static_closures: HashMap<FunctionID, StaticClosureID>,
 
-    dyn_array_structs: LinkedHashMap<Type, TypeDefID>,
-    dyn_array_classes: HashMap<Type, DynArrayClass>,
-
     runtime_types: HashMap<Type, Rc<RuntimeType>>,
 
     tag_counts: HashMap<TagLocation, usize>,
@@ -158,9 +154,6 @@ impl Metadata {
             function_static_closures: HashMap::new(),
 
             runtime_types: HashMap::new(),
-
-            dyn_array_structs: LinkedHashMap::new(),
-            dyn_array_classes: HashMap::new(),
 
             tag_counts: HashMap::new(),
         };
@@ -256,17 +249,6 @@ impl Metadata {
             }
 
             self.runtime_types.insert(ty.clone(), funcs.clone());
-        }
-
-        for (el_ty, struct_id) in &other.dyn_array_structs {
-            if !self.dyn_array_structs.contains_key(el_ty) {
-                self.dyn_array_structs.insert(el_ty.clone(), *struct_id);
-            }
-        }
-        for (el_ty, runtime_ty) in &other.dyn_array_classes {
-            if !self.dyn_array_classes.contains_key(el_ty) {
-                self.dyn_array_classes.insert(el_ty.clone(), runtime_ty.clone());
-            }
         }
         
         for (id, def) in &other.set_aliases {
@@ -385,10 +367,6 @@ impl Metadata {
         self.runtime_types.get(ty).cloned()
     }
 
-    pub fn get_dyn_array_runtime_type(&self, elem_ty: &Type) -> Option<DynArrayClass> {
-        self.dyn_array_classes.get(elem_ty).cloned()
-    }
-
     pub fn runtime_types(&self) -> impl Iterator<Item = (&Type, &Rc<RuntimeType>)> {
         self.runtime_types.iter()
     }
@@ -503,12 +481,12 @@ impl Metadata {
             },
             
             Type::RcWeakPointer(class_id) => {
-                let resource_name = self.pretty_virtual_type_name(*class_id);
+                let resource_name = self.pretty_virtual_type_name(class_id);
                 Cow::Owned(format!("*weak {}", resource_name))
             }
 
             Type::RcPointer(class_id) => {
-                let resource_name = self.pretty_virtual_type_name(*class_id);
+                let resource_name = self.pretty_virtual_type_name(class_id);
                 Cow::Owned(format!("*{}", resource_name))
             },
 
@@ -526,24 +504,28 @@ impl Metadata {
         }
     }
     
-    fn pretty_virtual_type_name(&self, id: VirtualTypeID) -> Cow<'_, str> {
+    fn pretty_virtual_type_name(&self, id: &VirtualTypeID) -> Cow<'_, str> {
         match id {
             VirtualTypeID::Any => Cow::Borrowed("any"),
 
             VirtualTypeID::Interface(iface_id) => {
-                Cow::Owned(self.iface_name(iface_id))
+                Cow::Owned(self.iface_name(*iface_id))
             },
 
             VirtualTypeID::Closure(func_ty_id) => {
-                Cow::Owned(match self.get_func_ptr_ty(func_ty_id) {
+                Cow::Owned(match self.get_func_ptr_ty(*func_ty_id) {
                     Some(sig) => format!("closure of {}", self.pretty_func_sig(sig)),
                     None => format!("closure of {}", func_ty_id),
                 })
             }
 
             VirtualTypeID::Class(struct_id) => {
-                self.pretty_ty_name(&Type::Struct(struct_id))
+                self.pretty_ty_name(&Type::Struct(*struct_id))
             },
+            
+            VirtualTypeID::Array(element_type) => {
+                Cow::Owned(format!("array of {}", self.pretty_ty_name(element_type)))
+            }
         }
     }
 
@@ -577,8 +559,14 @@ impl Metadata {
                 match virt_id {
                     VirtualTypeID::Class(id)
                     | VirtualTypeID::Closure(id) => *id,
-                    VirtualTypeID::Interface(id) => return self.ifaces.contains_key(id),
-                    VirtualTypeID::Any => return true,
+                    
+                    VirtualTypeID::Interface(id) => {
+                        return self.ifaces.contains_key(id);
+                    },
+
+                    VirtualTypeID::Any | VirtualTypeID::Array(..) => {
+                        return true;
+                    }
                 }
             },
 
@@ -650,23 +638,6 @@ impl Metadata {
     
     pub fn find_dtor(&self, owning_type: TypeDefID) -> Option<FunctionID> {
         self.dtors.get(&owning_type).cloned()
-    }
-
-    pub fn find_dyn_array_struct(&self, element: &Type) -> Option<TypeDefID> {
-        self.dyn_array_structs.get(element).cloned()
-    }
-
-    pub fn dyn_array_structs(&self) -> &LinkedHashMap<Type, TypeDefID> {
-        &self.dyn_array_structs
-    }
-
-    pub fn dyn_array_element_ty(&self, array_class_id: TypeDefID) -> Option<&Type> {
-        let (el_ty, _) = self
-            .dyn_array_structs()
-            .iter()
-            .find(|(_el_ty, struct_id)| array_class_id == **struct_id)?;
-
-        Some(el_ty)
     }
 
     pub fn closures(&self) -> &[TypeDefID] {
@@ -814,7 +785,7 @@ impl IRFormatter for Metadata {
         let field_name = of_ty
             .as_struct()
             .or_else(|| match of_ty.rc_resource_class_id()? {
-                VirtualTypeID::Class(struct_id) => Some(struct_id),
+                VirtualTypeID::Class(struct_id) => Some(*struct_id),
                 _ => None,
             })
             .and_then(|struct_id| self.get_struct_def(struct_id))

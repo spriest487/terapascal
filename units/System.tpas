@@ -262,7 +262,13 @@ function InvokeFunction(
 {$ENDIF}
 
 function ArrayLengthInternal(arr: Object): Int32; external 'rt';
-function ArraySetLengthInternal(arr: Object; len: Integer; defaultVal: Pointer): Object; external 'rt';
+
+{
+    Creates the internal storage for an empty array. Each new element will contain the default value
+    of the element type.
+    The implementation may either replace or update the provided array in place.
+}
+function ArrayCreateInternal(var arr: Object; len: Integer); external 'rt';
 
 {$IFDEF RTTI}
 
@@ -1049,14 +1055,15 @@ begin
     var oldLen: Integer := arr.Length;
     if oldLen = len then exit;
 
-    // must put this in a mutable local variable to take its address (can't address immutable vars)
-    var defaultValVar := defaultVal;
+    var newArr: array of T := [];
+    ArrayCreateInternal(newArr, len);
 
-    unsafe begin
-        var defaultValPtr: Pointer := @defaultValVar;
-        var newArr := ArraySetLengthInternal(arr, len, defaultValPtr);
-        arr := Downcast[array of T](newArr).Get;
+    for var i := oldLen to len - 1 do 
+    begin
+        newArr[i] := defaultVal;
     end;
+
+    arr := newArr;
 end;
 
 function BinarySearch[T](values: array of T; item: T): Integer

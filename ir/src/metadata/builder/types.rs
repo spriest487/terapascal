@@ -1,25 +1,18 @@
-use crate::DynArrayClass;
 use crate::FunctionID;
 use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::MetadataBuilder;
 use crate::NamePath;
-use crate::RuntimeType;
 use crate::SetAliasDef;
 use crate::SetAliasID;
 use crate::StructDef;
-use crate::StructFieldDef;
-use crate::StructIdentity;
 use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
 use crate::TypeDefID;
 use crate::VariantDef;
-use crate::DYNARRAY_LEN_FIELD;
-use crate::DYNARRAY_PTR_FIELD;
 use linked_hash_map::Entry;
-use std::collections::BTreeMap;
 
 impl MetadataBuilder {
     pub fn is_defined(&self, ty: &Type) -> bool {
@@ -215,67 +208,6 @@ impl MetadataBuilder {
                 method_name, iface_id
             ),
         }
-    }
-
-    pub fn define_dyn_array_struct(&mut self, element: Type) -> TypeDefID {
-        assert!(
-            !self.metadata.dyn_array_structs.contains_key(&element),
-            "duplicate IR struct definition for dynamic array with element {}",
-            element
-        );
-
-        let mut fields = BTreeMap::new();
-        fields.insert(
-            DYNARRAY_LEN_FIELD,
-            StructFieldDef {
-                name: Some("len".to_string()),
-                ty: Type::I32,
-            },
-        );
-        fields.insert(
-            DYNARRAY_PTR_FIELD,
-            StructFieldDef {
-                name: Some("ptr".to_string()),
-                ty: element.clone().ptr(),
-            },
-        );
-
-        let struct_id = self.next_type_id;
-        self.metadata.type_decls.insert(
-            struct_id,
-            TypeDecl::Def(TypeDef::Struct(StructDef {
-                identity: StructIdentity::DynArray(element.clone()),
-                fields,
-            })),
-        );
-
-        self.next_type_id.0 += 1;
-        
-        self.metadata.dyn_array_structs.insert(element.clone(), struct_id);
-
-        // the rc boilerplate impls for a dynarray should be empty
-        // the dtor releases the elements
-        let rtt = RuntimeType::new(None);
-
-        self.insert_runtime_type(Type::Struct(struct_id), rtt);
-        self.declare_dyn_array_class(&element);
-
-        struct_id
-    }
-
-    pub fn get_dyn_array_class(&self, elem_ty: &Type) -> Option<DynArrayClass> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_dyn_array_runtime_type(elem_ty))
-    }
-    
-    pub fn dyn_array_structs(&self) -> impl Iterator<Item=(&Type, TypeDefID)> {
-        self.iter_in_self_or_refs(move |metadata| metadata
-            .dyn_array_structs()
-            .iter()
-            .map(|(el_ty, id)| (el_ty, *id)))
-    }
-
-    pub fn find_dyn_array_struct(&self, elem_ty: &Type) -> Option<TypeDefID> {
-        self.find_in_self_or_refs(move |metadata| metadata.find_dyn_array_struct(elem_ty))
     }
 
     pub fn find_set_def(&self, name: &NamePath) -> Option<(SetAliasID, &SetAliasDef)> {

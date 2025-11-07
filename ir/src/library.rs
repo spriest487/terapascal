@@ -10,7 +10,6 @@ use crate::StaticClosure;
 use crate::StructIdentity;
 use crate::Type;
 use crate::TypeDef;
-use crate::TypeDefID;
 use crate::VariableID;
 use crate::VirtualTypeID;
 use serde::Deserialize;
@@ -48,10 +47,6 @@ impl Library {
 
     pub fn static_closures(&self) -> &[StaticClosure] {
         &self.static_closures
-    }
-
-    pub fn find_dyn_array_struct(&self, elem_ty: &Type) -> Option<TypeDefID> {
-        self.metadata.find_dyn_array_struct(elem_ty)
     }
 
     pub fn init(&self) -> &[Instruction] {
