@@ -148,8 +148,11 @@ pub enum FieldName {
     RcClass,
     
     // members of the DynArrayClass struct
-    DynArrayAlloc,
-    DynArrayElement,
+    DynArrayClassAlloc,
+    DynArrayClassElement,
+    DynArrayClassLength,
+
+    DynArrayElements,
     DynArrayLength,
 
     // builtin name: static array inner array
@@ -172,9 +175,11 @@ impl fmt::Display for FieldName {
             FieldName::RcWeakCount => write!(f, "weak_count"),
             FieldName::RcClass => write!(f, "class"),
             FieldName::StaticArrayElements => write!(f, "elements"),
-            FieldName::DynArrayAlloc => write!(f, "alloc"),
-            FieldName::DynArrayElement => write!(f, "get_element"),
+            FieldName::DynArrayClassAlloc => write!(f, "alloc"),
+            FieldName::DynArrayClassElement => write!(f, "get_element"),
+            FieldName::DynArrayClassLength => write!(f, "length"),
             FieldName::DynArrayLength => write!(f, "length"),
+            FieldName::DynArrayElements => write!(f, "elements"),
             FieldName::VariantTag => write!(f, "tag"),
             FieldName::VariantData => write!(f, "data"),
             FieldName::VariantDataCase(case) => write!(f, "data_{}", case),

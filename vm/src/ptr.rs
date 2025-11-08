@@ -5,6 +5,7 @@ use crate::Interpreter;
 use std::cmp::Ordering;
 use std::fmt;
 use std::mem::size_of;
+use std::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 
 pub const POINTER_FMT_WIDTH: usize = size_of::<usize>() * 2;
 
@@ -78,6 +79,22 @@ impl Pointer {
         let ty_pretty_name = metadata.pretty_ty_name(&self.ty);
 
         format!("0x{:0width$x} ({})", self.addr, ty_pretty_name, width = size_of::<usize>() * 2)
+    }
+    
+    pub unsafe fn as_slice(&self, len: usize) -> &[u8] {
+        unsafe {
+            slice_from_raw_parts(self.addr as *const u8, len)
+                .as_ref()
+                .expect("as_slice: pointer must not be null")
+        }
+    }
+
+    pub unsafe fn as_slice_mut(&self, len: usize) -> &mut [u8] {
+        unsafe {
+            slice_from_raw_parts_mut(self.addr as *mut u8, len)
+                .as_mut()
+                .expect("as_slice: pointer must not be null")
+        }
     }
 }
 

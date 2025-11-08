@@ -135,10 +135,6 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
         self.library.translate_type(src_ty, &self.generic_context)
     }
 
-    pub fn translate_dyn_array_struct(&mut self, element_ty: &typ::Type) -> TypeDefID {
-        self.library.translate_dyn_array_struct(element_ty, &self.generic_context)
-    }
-
     pub fn translate_method(
         &mut self,
         self_ty: typ::Type,

@@ -135,14 +135,6 @@ fn translate_dyn_array_ctor(
 ) -> ir::Ref {
     let elem_ty = builder.translate_type(element);
 
-    // should be a class rc-ptr to the unique class for this dyn array element type
-    let array_ty = builder.translate_type(&ctor.annotation.ty());
-
-    let array_class_id = match &array_ty {
-        ir::Type::RcPointer(ir::VirtualTypeID::Class(array_class_id)) => *array_class_id,
-        _ => unreachable!("dynamic array must have an rc class type"),
-    };
-    
     let mut elements = Vec::with_capacity(ctor.elements.len());
 
     for element in &ctor.elements {
@@ -150,7 +142,7 @@ fn translate_dyn_array_ctor(
         elements.push(element_val.value());
     }
 
-    builder.new_dyn_array(array_class_id, elements, &elem_ty)
+    builder.new_dyn_array(elements, &elem_ty)
 }
 
 fn translate_set_ctor(

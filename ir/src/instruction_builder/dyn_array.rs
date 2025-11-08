@@ -1,17 +1,14 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
-use crate::FunctionID;
 use crate::LocalID;
 use crate::Ref;
 use crate::Type;
 use crate::TypeDefID;
 use crate::Value;
-use crate::DYNARRAY_PTR_FIELD;
 
 pub(super) fn gen_dyn_array_dtor_body(
     builder: &mut impl InstructionBuilder,
     elem_ty: &Type,
     array_class_id: TypeDefID,
-    free_mem_id: FunctionID,
 ) {
     let class_type = array_class_id.to_class_ptr_type();
 
@@ -35,30 +32,14 @@ pub(super) fn gen_dyn_array_dtor_body(
 
         builder.release(el_ptr.to_deref(), &elem_ty);
     });
-
-    builder.comment("pointer to the pointer field of the dynarray object");
-    let arr_ptr = builder.field_to_val(
-        self_arg,
-        class_type,
-        DYNARRAY_PTR_FIELD,
-        elem_ty.clone().ptr(),
-    );
-
-    builder.comment("u8 pointer var, to cast the array memory pointer before calling FreeMem");
-    let arr_mem_ptr = builder.local_temp(Type::U8.ptr());
-
-    // FreeMem(instance.array as Byte^)
-    builder.cast(arr_mem_ptr, arr_ptr, Type::U8.ptr());
-    builder.call(free_mem_id, [arr_mem_ptr.value()], None);
 }
 
 pub(super) fn new_dyn_array(
     builder: &mut impl InstructionBuilder,
-    array_class_id: TypeDefID,
     elements: impl IntoIterator<Item=Value>,
     element_type: &Type,
 ) -> Ref {
-    let array_ty = array_class_id.to_class_ptr_type();
+    let array_ty = element_type.clone().dyn_array();
     let arr = builder.local_new(array_ty.clone(), None);
 
     let elements: Vec<_> = elements.into_iter().collect();

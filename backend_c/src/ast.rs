@@ -604,7 +604,7 @@ impl Unit {
                     Expr::named_var(METHODINFO_NAME), 
                     method_array_class_ptr
                         .clone()
-                        .arrow(FieldName::DynArrayElement)
+                        .arrow(FieldName::DynArrayClassElement)
                         .call([
                             methods_array_var.clone().cast(Type::object_ptr()),
                             Expr::LitInt(method_index as i128)
@@ -710,8 +710,8 @@ impl fmt::Display for Unit {
         writeln!(f, "#define FUNCINFO_NAME_CHARS(typeinfo) STRING_CHARS(FUNCINFO_NAME(typeinfo))")?;
         writeln!(f, "#define FUNCINFO_INVOKER(func) ((Invoker) func->{})", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
         
-        writeln!(f, "#define DYNARRAY_PTR(arr) (arr->{})", FieldName::ID(ir::DYNARRAY_PTR_FIELD))?;
-        writeln!(f, "#define DYNARRAY_LEN(arr) (arr->{})", FieldName::ID(ir::DYNARRAY_LEN_FIELD))?;
+        writeln!(f, "#define DYNARRAY_PTR(arr) (arr->{})", FieldName::DynArrayElements)?;
+        writeln!(f, "#define DYNARRAY_LEN(arr) (arr->{})", FieldName::DynArrayLength)?;
 
         writeln!(f, "{}", include_str!("prelude.h"))?;
 
@@ -792,9 +792,9 @@ impl fmt::Display for Unit {
             write_immortal_rc_member(f, ClassIdentity::DynArrayClass(self.object_array_id))?;
             writeln!(f, ",")?;
 
-            writeln!(f, "  .{len} = {tag_array_len},", len = FieldName::ID(ir::DYNARRAY_LEN_FIELD))?;
+            writeln!(f, "  .{len} = {tag_array_len},", len = FieldName::DynArrayLength)?;
 
-            write!(f, "  .{ptr} = ", ptr = FieldName::ID(ir::DYNARRAY_PTR_FIELD))?;
+            write!(f, "  .{ptr} = ", ptr = FieldName::DynArrayElements)?;
             if *tag_array_len > 0 {
                 writeln!(f, "{data_name}")?;
             } else {

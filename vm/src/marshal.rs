@@ -3,9 +3,10 @@ use crate::ir;
 use crate::ArrayValue;
 use crate::DynValue;
 use crate::Pointer;
-use crate::RcState;
+use crate::ObjectHeader;
 use crate::StructValue;
 use crate::VariantValue;
+use bimap::BiHashMap;
 use ::dlopen::raw as dlopen;
 use ::dlopen::Error as DlopenError;
 use ir::IRFormatter;
@@ -45,6 +46,9 @@ pub enum MarshalError {
         struct_id: ir::TypeDefID,
         field: ir::FieldID,
     },
+    InvalidTypeIndex {
+        type_index: u64,
+    },
 
     InvalidStructID {
         expected: ir::TypeDefID,
@@ -80,6 +84,9 @@ impl MarshalError {
                 format.format_type(&ir::Type::Struct(*actual), f)?;
                 Ok(())
             },
+            MarshalError::InvalidTypeIndex { type_index: id }  => {
+                write!(f, "unknown type ID in array: {}", id)
+            }
             MarshalError::UnsupportedValue(val) => {
                 write!(f, "unable to marshal value: {:?}", val)
             },
@@ -134,6 +141,14 @@ impl<T> UnmarshalledValue<T> {
             byte_count: self.byte_count,
         }
     }
+}
+
+// dynamic array values in memory are marshalled as a set of header fields followed by a variably
+// sized sequence of elements
+#[derive(Clone, Debug)]
+pub struct DynArrayHeader {
+    pub rc: ObjectHeader,
+    pub len: i32,
 }
 
 #[repr(transparent)]
@@ -256,6 +271,10 @@ pub struct Marshaller {
 
     // structure types that need refcounting fields and type info for virtual calls
     ref_types: BTreeSet<ir::TypeDefID>,
+    
+    // map of known types to serializable type indices
+    next_type_index: u64,
+    type_indices: BiHashMap<u64, ir::Type>,
 }
 
 impl Marshaller {
@@ -266,29 +285,61 @@ impl Marshaller {
 
             struct_field_maps: BTreeMap::new(),
             variant_case_types: BTreeMap::new(),
+            
+            next_type_index: 0,
+            type_indices: BiHashMap::new(),
 
             ref_types: BTreeSet::new(),
         };
 
-        marshaller.types.insert(ir::Type::I8, ForeignType::i8());
-        marshaller.types.insert(ir::Type::U8, ForeignType::u8());
-        marshaller.types.insert(ir::Type::I16, ForeignType::i16());
-        marshaller.types.insert(ir::Type::U16, ForeignType::u16());
-        marshaller.types.insert(ir::Type::I32, ForeignType::i32());
-        marshaller.types.insert(ir::Type::U32, ForeignType::u32());
-        marshaller.types.insert(ir::Type::I64, ForeignType::i64());
-        marshaller.types.insert(ir::Type::U64, ForeignType::u64());
-        marshaller.types.insert(ir::Type::ISize, ForeignType::isize());
-        marshaller.types.insert(ir::Type::USize, ForeignType::usize());
-        marshaller.types.insert(ir::Type::F32, ForeignType::f32());
-        marshaller.types.insert(ir::Type::F64, ForeignType::f64());
-        marshaller.types.insert(ir::Type::Bool, ForeignType::u8());
+        let primitive_types = [
+            (ir::Type::Nothing.ptr(), ForeignType::pointer()),
+            (ir::Type::I8, ForeignType::i8()),
+            (ir::Type::U8, ForeignType::u8()),
+            (ir::Type::I16, ForeignType::i16()),
+            (ir::Type::U16, ForeignType::u16()),
+            (ir::Type::I32, ForeignType::i32()),
+            (ir::Type::U32, ForeignType::u32()),
+            (ir::Type::I64, ForeignType::i64()),
+            (ir::Type::U64, ForeignType::u64()),
+            (ir::Type::ISize, ForeignType::isize()),
+            (ir::Type::USize, ForeignType::usize()),
+            (ir::Type::F32, ForeignType::f32()),
+            (ir::Type::F64, ForeignType::f64()),
+            (ir::Type::Bool, ForeignType::u8()),
+            (ir::Type::any(), ForeignType::pointer()),
+        ];
+
+        for (primitive_type, ffi_type) in primitive_types {
+            marshaller.add_type_index(primitive_type.clone(), ffi_type.clone());
+            marshaller.add_type_index(primitive_type.clone().ptr(), ForeignType::pointer());
+            
+            marshaller.add_dyn_array_type(primitive_type);
+        }
 
         marshaller
     }
 
     pub fn variant_tag_type(&self) -> ForeignType {
         ForeignType::i32()
+    }
+    
+    fn add_type_index(&mut self, ty: ir::Type, ffi_ty: ForeignType) {
+        if self.type_indices.contains_right(&ty) {
+            return;
+        }
+
+        self.types.insert(ty.clone(), ffi_ty);
+        self.type_indices.insert(self.next_type_index, ty);
+        
+        self.next_type_index += 1;
+    }
+    
+    fn add_dyn_array_type(&mut self, element_type: ir::Type) {
+        self.add_type_index(element_type.clone().dyn_array(), ForeignType::pointer());
+
+        // this will never be marshalled directly, but is used to tag dynamic array objects
+        self.add_type_index(element_type.array(0), ForeignType(FfiType::void()));
     }
 
     pub fn add_struct(
@@ -343,10 +394,16 @@ impl Marshaller {
             offset += size;
         }
 
-        let struct_ffi_ty = ForeignType::structure(field_ffi_tys);
-
-        self.types.insert(struct_ty, struct_ffi_ty.clone());
         self.struct_field_maps.insert(id, def_field_tys);
+
+        if def.is_class() {
+            self.add_dyn_array_type(id.to_class_ptr_type());
+        } else {
+            self.add_dyn_array_type(struct_ty.clone());
+        }
+
+        let struct_ffi_ty = ForeignType::structure(field_ffi_tys);
+        self.add_type_index(struct_ty, struct_ffi_ty.clone());
 
         Ok(struct_ffi_ty)
     }
@@ -383,7 +440,8 @@ impl Marshaller {
 
         let variant_ffi_ty = ForeignType::structure(variant_layout);
 
-        self.types.insert(variant_ty, variant_ffi_ty.clone());
+        self.add_dyn_array_type(variant_ty.clone());
+        self.add_type_index(variant_ty, variant_ffi_ty.clone());
 
         self.variant_case_types.insert(id, case_tys);
 
@@ -400,7 +458,9 @@ impl Marshaller {
         let repr_ffi_ty = self.build_marshalled_type(&repr_struct_ty, metadata)?;
 
         let flags_type = ir::Type::Flags(repr_ty_id, set_id);
-        self.types.insert(flags_type, repr_ffi_ty.clone());
+        
+        self.add_dyn_array_type(flags_type.clone());
+        self.add_type_index(flags_type, repr_ffi_ty.clone());
         
         Ok(repr_ffi_ty)
     }
@@ -494,21 +554,35 @@ impl Marshaller {
             | ir::Type::RcWeakPointer(..) 
             | ir::Type::Pointer(..) 
             | ir::Type::TempRef(..) 
-            | ir::Type::Function(..) => Ok(ForeignType::pointer()),
+            | ir::Type::Function(..) => {
+                let pointer_type = ForeignType::pointer();
+                
+                self.add_dyn_array_type(ty.clone());
+                self.add_type_index(ty.clone(), pointer_type.clone());
+                
+                Ok(pointer_type)
+            },
 
             ir::Type::Array { element, dim } => {
                 let el_ty = self.build_marshalled_type(&element, metadata)?;
                 let el_tys = vec![el_ty; *dim];
+                
+                let array_struct = ForeignType::structure(el_tys);
 
-                Ok(ForeignType::structure(el_tys))
+                self.add_dyn_array_type(ty.clone());
+                self.add_type_index(ty.clone(), array_struct.clone());
+
+                Ok(array_struct)
             },
 
             ir::Type::Flags(ty_id, set_id) => {
-                self.add_flags_type(*ty_id, *set_id, metadata)
+                Ok(self.add_flags_type(*ty_id, *set_id, metadata)?)
             }
 
             // all primitives/builtins should be in the cache already
-            _ => Err(MarshalError::UnsupportedType(ty.clone())),
+            _ => {
+                Err(MarshalError::UnsupportedType(ty.clone()))
+            },
         }
     }
 
@@ -629,7 +703,7 @@ impl Marshaller {
             }
 
             DynValue::Array(array) => {
-                let el_size = self.get_ty(&array.el_ty)?.size();
+                let el_size = self.get_ty(&array.element_type)?.size();
                 array.elements.len() * el_size
             }
         };
@@ -660,20 +734,38 @@ impl Marshaller {
         })
     }
 
-    pub fn unmarshal_from_ptr(&self, into_ptr: &Pointer) -> MarshalResult<DynValue> {
-        if into_ptr.addr == 0 {
+    pub fn unmarshal_dyn_array_header_at(&self, pointer: &Pointer) -> MarshalResult<DynArrayHeader> {
+        if pointer.addr == 0 {
             return Err(MarshalError::InvalidData);
         }
 
-        let marshal_ty = self.get_ty(&into_ptr.ty)?;
+        let mem_slice = slice_from_raw_parts(
+            pointer.addr as *const u8,
+            Self::array_header_size(),
+        );
 
-        let mem_slice = slice_from_raw_parts(into_ptr.addr as *const u8, marshal_ty.size());
-        let result = unsafe { self.unmarshal(mem_slice.as_ref().unwrap(), &into_ptr.ty)? };
+        let result = self.unmarshal_dyn_array_header(unsafe {
+            mem_slice.as_ref().unwrap()
+        })?;
 
         Ok(result.value)
     }
 
-    pub fn marshal_into(&self, val: &DynValue, into_ptr: &Pointer) -> MarshalResult<usize> {
+    pub fn unmarshal_at(&self, pointer: &Pointer) -> MarshalResult<DynValue> {
+        if pointer.addr == 0 {
+            return Err(MarshalError::InvalidData);
+        }
+
+        let marshal_ty = self.get_ty(&pointer.ty)?;
+
+        let result = self.unmarshal(unsafe {
+            pointer.as_slice(marshal_ty.size())
+        }, &pointer.ty)?;
+
+        Ok(result.value)
+    }
+
+    pub fn marshal_at(&self, val: &DynValue, into_ptr: &Pointer) -> MarshalResult<usize> {
         if into_ptr.addr == 0 {
             return Err(MarshalError::InvalidData);
         }
@@ -726,22 +818,17 @@ impl Marshaller {
             ir::Type::RcPointer(class_id)
             | ir::Type::RcWeakPointer(class_id) => {
                 let raw_ptr_val = self.unmarshal_ptr(ir::Type::Nothing, in_bytes)?;
-                
-                // if we have an expected type, assume the pointer is of that type
-                let ptr_ty = if let ir::VirtualTypeID::Class(type_id) = class_id {
-                    ir::Type::Struct(*type_id)
-                } else if !raw_ptr_val.value.is_null() {
-                    // the struct ID is the first field so we can just access it directly here
-                    let struct_id_bytes = unsafe {
-                        slice_from_raw_parts(raw_ptr_val.value.addr as *const u8, size_of::<usize>())
-                            .as_ref()
-                            .unwrap()
-                    };
-                    let struct_id = usize::from_ne_bytes(unmarshal_bytes(&struct_id_bytes)?);
 
-                    ir::Type::Struct(ir::TypeDefID(struct_id))
-                } else {
-                    ir::Type::Nothing
+                // if we have an expected type, assume the pointer is of that type
+                let ptr_ty = match class_id {
+                    ir::VirtualTypeID::Class(type_id) => ir::Type::Struct(*type_id),
+
+                    ir::VirtualTypeID::Array(element_type) => ir::Type::Array { 
+                        element: element_type.clone(),
+                        dim: 0,
+                    },
+
+                    _ => ir::Type::Nothing,
                 };
 
                 raw_ptr_val.map(|raw_ptr| {
@@ -764,21 +851,8 @@ impl Marshaller {
             }
 
             ir::Type::Array { element, dim } => {
-                let mut offset = 0;
-                let mut elements = Vec::with_capacity(*dim);
-                for _ in 0..*dim {
-                    let el_val = self.unmarshal(&in_bytes[offset..], &element)?;
-                    offset += el_val.byte_count;
-                    elements.push(el_val.value);
-                }
-
-                UnmarshalledValue {
-                    byte_count: offset,
-                    value: DynValue::Array(Box::new(ArrayValue {
-                        el_ty: (**element).clone(),
-                        elements,
-                    })),
-                }
+                self.unmarshal_static_array(element, *dim, in_bytes)?
+                    .map(|array| DynValue::Array(Box::new(array)))
             },
 
             // these need field offset/tag type info from the ffi cache so marshal/unmarshal should
@@ -823,15 +897,146 @@ impl Marshaller {
         Ok(size_sum)
     }
 
+    fn marshal_object_header(&self, rc: &ObjectHeader, out_bytes: &mut [u8]) -> MarshalResult<usize> {
+        let type_index = self.type_indices.get_by_right(&rc.object_type)
+            .ok_or_else(|| {
+                MarshalError::UnsupportedType(rc.object_type.clone())
+            })?;
+        
+        let mut offset = 0;
+        offset += marshal_bytes(&type_index.to_ne_bytes(), &mut out_bytes[offset..]);
+        offset += marshal_bytes(&rc.strong_count.to_ne_bytes(), &mut out_bytes[offset..]);
+        offset += marshal_bytes(&rc.weak_count.to_ne_bytes(), &mut out_bytes[offset..]);
+
+        Ok(offset)
+    }
+
+    fn unmarshal_object_header(&self, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<ObjectHeader>> {
+        let mut offset = 0;
+
+        let type_index = unmarshal_from_ne_bytes(&in_bytes[offset..], u64::from_ne_bytes)?;
+        offset += type_index.byte_count;
+
+        let strong_count = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
+        offset += strong_count.byte_count;
+
+        let weak_count = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
+        offset += weak_count.byte_count;
+        
+        let object_type = self.type_indices.get_by_left(&type_index.value)
+            .ok_or_else(|| {
+                MarshalError::InvalidTypeIndex { type_index: type_index.value }
+            })?;
+
+        Ok(UnmarshalledValue {
+            value: ObjectHeader {
+                object_type: object_type.clone(),
+                strong_count: strong_count.value,
+                weak_count: weak_count.value,
+            },
+            byte_count: offset,
+        })
+    }
+
+    pub fn unmarshal_object_header_at(&self, pointer: &Pointer) -> MarshalResult<ObjectHeader> {
+        let rc = self.unmarshal_object_header(unsafe {
+            pointer.as_slice(Self::object_header_size())
+        })?;
+
+        Ok(rc.value)
+    }
+
+    pub fn marshal_object_header_at(&self, rc: &ObjectHeader, pointer: &Pointer) -> MarshalResult<()> {
+        self.marshal_object_header(rc, unsafe {
+            pointer.as_slice_mut(Self::object_header_size())
+        })?;
+        
+        Ok(())
+    }
+
+    pub fn object_header_size() -> usize {
+        ForeignType::u64().size() // type index
+            + ForeignType::i32().size() // strong ref count
+            + ForeignType::i32().size() // weak ref count
+    }
+    
+    // the array header is the region of memory preceding the elements of a dynamic array
+    pub fn array_header_size() -> usize {
+        let header_size = Self::object_header_size()
+            + ForeignType::i32().size(); // element count
+        
+        header_size
+    }
+
+    pub(crate) fn marshal_array(&self, array_value: &ArrayValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
+        let mut offset = 0;
+
+        if let Some(rc) = &array_value.rc {
+            offset += self.marshal_object_header(rc, &mut out_bytes[offset..])?;
+            
+            let len = i32::try_from(array_value.elements.len())
+                .map_err(|_| {
+                    // length can't be converted to i32
+                    MarshalError::UnsupportedValue(DynValue::Array(Box::new(array_value.clone())))
+                })?;
+            
+            offset += marshal_bytes(&len.to_ne_bytes(), &mut out_bytes[offset..]);
+        }
+        
+        for element in &array_value.elements {
+            offset += self.marshal(element, &mut out_bytes[offset..])?;
+        }
+        
+        Ok(offset)
+    }
+    
+    fn unmarshal_dyn_array_header(&self, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<DynArrayHeader>> {
+        let mut offset = 0;
+
+        // non-static arrays must be RC objects
+        let rc = self.unmarshal_object_header(&in_bytes[offset..])?;
+        offset += rc.byte_count;
+
+        assert!(matches!(rc.value.object_type, ir::Type::Array { dim: 0, .. }));
+
+        let size_int = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
+        offset += size_int.byte_count;
+        
+        Ok(UnmarshalledValue {
+            value: DynArrayHeader {
+                rc: rc.value,
+                len: size_int.value,
+            },
+            byte_count: offset,
+        })
+    }
+    
+    fn unmarshal_static_array(&self, element_type: &ir::Type, size: usize, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<ArrayValue>> {
+        let mut offset = 0;
+        
+        let mut elements = Vec::with_capacity(size);
+        
+        for _ in 0..size {
+            let element = self.unmarshal(&in_bytes[offset..], element_type)?;
+            
+            elements.push(element.value);
+            offset += element.byte_count;
+        }
+
+        Ok(UnmarshalledValue {
+            byte_count: offset,
+            value: ArrayValue {
+                element_type: element_type.clone(),
+                elements,
+                rc: None,
+            },
+        })
+    }
+
     fn marshal_struct(&self, struct_val: &StructValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
         let mut offset = 0;
         if let Some(rc_state) = struct_val.rc.as_ref() {
-            assert!(self.ref_types.contains(&struct_val.type_id));
-
-            offset += marshal_bytes(&struct_val.type_id.0.to_ne_bytes(), &mut out_bytes[offset..]);
-
-            offset += marshal_bytes(&rc_state.strong_count.to_ne_bytes(), &mut out_bytes[offset..]);
-            offset += marshal_bytes(&rc_state.weak_count.to_ne_bytes(), &mut out_bytes[offset..]);
+            offset += self.marshal_object_header(rc_state, &mut out_bytes[offset..])?;
         }
         
         let Some(fields) = self.struct_field_maps.get(&struct_val.type_id) else {
@@ -860,20 +1065,12 @@ impl Marshaller {
         let mut offset = 0;
 
         let rc = if self.ref_types.contains(&struct_id) {
-            let actual_id = unmarshal_from_ne_bytes(&in_bytes[offset..], usize::from_ne_bytes)?;
-            assert_eq!(actual_id.value, struct_id.0);
-            offset += actual_id.byte_count;
+            let rc = self.unmarshal_object_header(in_bytes)?;
+            offset += rc.byte_count;
 
-            let strong_count_val = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
-            offset += strong_count_val.byte_count;
+            assert_eq!(struct_id.to_struct_type(), rc.value.object_type);
 
-            let weak_count_val = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
-            offset += weak_count_val.byte_count;
-
-            Some(RcState {
-                strong_count: strong_count_val.value,
-                weak_count: weak_count_val.value,
-            })
+            Some(rc.value)
         } else {
             None
         };

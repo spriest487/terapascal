@@ -7,7 +7,6 @@ use crate::instruction_builder::scope::LocalBinding;
 use crate::instruction_builder::scope::LocalStack;
 use crate::BinOpInstruction;
 use crate::FieldID;
-use crate::FunctionID;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::InterfaceID;
@@ -926,23 +925,21 @@ pub trait InstructionBuilder {
         &mut self,
         element_type: &Type,
         array_class_id: TypeDefID,
-        free_mem_id: FunctionID,
     ) where
         Self: Sized,
     {
-        gen_dyn_array_dtor_body(self, element_type, array_class_id, free_mem_id)
+        gen_dyn_array_dtor_body(self, element_type, array_class_id)
     }
 
     fn new_dyn_array(
         &mut self,
-        array_class_id: TypeDefID,
         elements: impl IntoIterator<Item = Value>,
         element_type: &Type,
     ) -> Ref
     where
         Self: Sized,
     {
-        new_dyn_array(self, array_class_id, elements, element_type)
+        new_dyn_array(self, elements, element_type)
     }
 
     fn if_then<Branch>(&mut self, cond: impl Into<Value>, then_branch: Branch)

@@ -143,10 +143,10 @@ pub fn translate_is_ty(
     if let ir::Type::RcPointer(class_id) = ty {
         // casting strong or weak RC type to strong RC type: do a dynamic check
         if val_ty.is_rc() {
-            let result = builder.local_temp(ir::Type::Bool).to_ref();
-            builder.class_is(result.clone(), val, *class_id);
+            let result = builder.local_temp(ir::Type::Bool);
+            builder.class_is(result, val, class_id.clone());
 
-            return ir::Value::Ref(result);
+            return result.value();
         }
     }
 

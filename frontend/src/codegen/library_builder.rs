@@ -1,6 +1,5 @@
 mod rtti;
 mod init;
-mod dyn_array;
 mod function;
 
 use crate::ast::Access::Published;
@@ -15,7 +14,6 @@ use crate::codegen::build_func_static_closure_def;
 use crate::codegen::build_static_closure_impl;
 use crate::codegen::builder::Builder;
 use crate::codegen::expr::expr_to_val;
-use crate::codegen::library_builder::dyn_array::gen_dyn_array_runtime_type;
 use crate::codegen::library_builder::init::gen_tags_init;
 use crate::codegen::library_builder::rtti::gen_release_func;
 use crate::codegen::library_builder::rtti::gen_retain_func;
@@ -1080,9 +1078,7 @@ impl<'a> LibraryBuilder<'a> {
             },
 
             typ::Type::DynArray { element } => {
-                let id = self.translate_dyn_array_struct(&element, generic_ctx);
-
-                let ty = ir::Type::RcPointer(ir::VirtualTypeID::Class(id));
+                let ty = self.translate_type(element, generic_ctx).dyn_array();
 
                 self.type_cache.insert(src_ty.clone(), ty.clone());
                 self.cached_types.insert(ty.clone(), src_ty);
@@ -1210,12 +1206,6 @@ impl<'a> LibraryBuilder<'a> {
                 done_closures += 1;
             }
 
-            for (elem_ty, struct_id) in populate_dynarrays.drain(0..) {
-                gen_dyn_array_runtime_type(self, &elem_ty, struct_id);
-
-                done_dynarrays += 1;
-            }
-
             for (src_ty, ty) in populate_types.drain(0..) {
                 if src_ty.as_class().is_ok() {
                     gen_class_runtime_type(self, &ty);
@@ -1228,8 +1218,6 @@ impl<'a> LibraryBuilder<'a> {
                 self.gen_iface_impls(&src_ty);
 
                 self.populate_runtime_type_info(src_ty, ty.clone());
-
-                gen_dyn_array_runtime_type(self, ty, struct_id);
                 
                 done_types += 1;
             }
@@ -1325,22 +1313,6 @@ impl<'a> LibraryBuilder<'a> {
             name: method_name_id,
             params,
             result_ty: self.translate_type(&decl.result_ty, &generic_ctx),
-        }
-    }
-
-    pub fn translate_dyn_array_struct(
-        &mut self,
-        src_element_ty: &typ::Type,
-        generic_ctx: &typ::GenericContext,
-    ) -> ir::TypeDefID {
-        let element_ty = self.translate_type(src_element_ty, generic_ctx);
-
-        match self.metadata.find_dyn_array_struct(&element_ty) {
-            Some(id) => id,
-
-            None => {
-                self.metadata.define_dyn_array_struct(element_ty)
-            }
         }
     }
 

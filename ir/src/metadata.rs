@@ -73,9 +73,6 @@ pub const STRING_TYPE: Type = Type::RcPointer(STRING_VTYPE_ID);
 pub const STRING_CHARS_FIELD: FieldID = FieldID(0);
 pub const STRING_LEN_FIELD: FieldID = FieldID(1);
 
-pub const DYNARRAY_LEN_FIELD: FieldID = FieldID(0);
-pub const DYNARRAY_PTR_FIELD: FieldID = FieldID(1);
-
 pub const CLOSURE_PTR_FIELD: FieldID = FieldID(0);
 
 pub const TYPEINFO_ID: TypeDefID = TypeDefID(2);

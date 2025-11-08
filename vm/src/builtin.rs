@@ -7,7 +7,7 @@ use crate::Interpreter;
 use crate::Pointer;
 use rand::Rng;
 use std::env::consts::OS;
-use std::fmt;
+use std::{fmt, iter};
 use std::io;
 use std::io::BufRead;
 use std::io::Write;
@@ -193,71 +193,48 @@ pub(super) fn free_mem(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-fn get_ref_type_id(state: &Interpreter, at: &Ref) -> ExecResult<TypeDefID> {
-    let ptr = state.load(at)?
-        .as_pointer()
-        .cloned()
-        .ok_or_else(|| ExecError::illegal_state("get_ref_type_id: argument val must be pointer"))?;
-
-    match state.load_indirect(&ptr)? {
-        DynValue::Structure(struct_val) => Ok(struct_val.type_id),
-
-        _ => Err(ExecError::illegal_state(
-            "value pointed to by dynarray pointer is not a dynarray",
-        )),
-    }
-}
-
 /// %1: <any dyn array ref> -> %0: Integer
 pub(super) fn array_length(state: &mut Interpreter) -> ExecResult<()> {
-    let array_arg_ref = Ref::Local(LocalID(1));
-    let array_type_id = get_ref_type_id(state, &array_arg_ref)?;
-
-    let len_func = state.metadata.dyn_array_element_ty(array_type_id)
-        .and_then(|elem_ty| {
-            let rtti = state.metadata.get_dyn_array_runtime_type(elem_ty)?;
-            Some(rtti.length)
-        })
-        .ok_or_else(|| {
-            let msg = format!("missing dynarray length generated function for type ID {}", array_type_id);
-            ExecError::illegal_state(msg)
-        })?;
-
-    let arr_arg = state.evaluate(&Value::Ref(array_arg_ref))?;
-    state.call_and_store(len_func, &[arr_arg], Some(&RETURN_REF))?;
+    let array_arg = LocalID(1);
+    
+    let array_ptr = load_pointer(state, &array_arg.to_ref())?;
+    let array_header = state.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
+    
+    let len = i32::try_from(array_header.len)
+        .map_err(|_| ExecError::illegal_state("length of array was not an i32"))?;
+    
+    state.store(&RETURN_REF, DynValue::I32(len))?;
 
     Ok(())
 }
 
-/// %1: <any dyn array ref>; %2: Integer; %3: ^Element; -> %0: <dyn array ref of same type>
-pub(super) fn set_length(state: &mut Interpreter) -> ExecResult<()> {
-    let array_arg_ref = Ref::Local(LocalID(1));
-    let new_len_arg = Ref::Local(LocalID(2));
-    let default_val_arg = Ref::Local(LocalID(3));
+/// %0: &Any <any dyn array ref>; %1: I32;
+pub(super) fn array_create(state: &mut Interpreter) -> ExecResult<()> {
+    let array_ref_arg = LocalID(0);
+    let new_len_arg = LocalID(1);
 
-    let array_type_id = get_ref_type_id(state, &array_arg_ref)?;
-    let new_len = state.evaluate(&Value::Ref(new_len_arg))?;
-    let default_val_ptr = state.evaluate(&Value::Ref(default_val_arg))?;
+    let new_len = load_integer(state, &new_len_arg.to_ref())?;
 
-    let alloc_func = state.metadata.dyn_array_element_ty(array_type_id)
-        .and_then(|elem_ty| {
-            let rtti = state.metadata.get_dyn_array_runtime_type(elem_ty)?;
-            Some(rtti.alloc)
-        })
-        .ok_or_else(|| {
-            let msg = format!("missing dynarray length generated function for type ID {}", array_type_id);
-            ExecError::illegal_state(msg)
-        })?;
+    let mut array_ptr = load_pointer(state, &array_ref_arg.to_deref())?;
+    let array_header = state.marshaller().unmarshal_dyn_array_header_at(&array_ptr)?;
+    
+    if array_header.rc.is_immortal() {
+        return Err(ExecError::illegal_state("array_create: array is immortal and cannot be resized"));
+    }
+    
+    let Type::Array { element: element_type, dim: 0 } = &array_header.rc.object_type else {
+        return Err(ExecError::illegal_state("array_create: array pointer points to an invalid array object"));
+    };
 
-    let new_arr_struct = state.default_struct(array_type_id)?;
+    let default_val = state.default_val(element_type)?;
+    let elements = iter::repeat(default_val).take(new_len as usize).collect();
 
-    let old_arr = state.evaluate(&Value::Ref(array_arg_ref))?;
-    let new_arr = state.rc_alloc(new_arr_struct, false)?;
-    let new_arr_val = DynValue::Pointer(new_arr);
+    state.release_dyn_val(&DynValue::Pointer(array_ptr.clone()), false)?;
 
-    state.call_and_store(alloc_func, &[new_arr_val.clone(), new_len, old_arr, default_val_ptr], None)?;
-
-    state.store(&RETURN_REF, new_arr_val)?;
+    // keep the exact same RC state
+    array_ptr = state.new_dyn_array_with_header(&element_type, elements, array_header.rc.clone())?;
+    
+    state.store(&array_ref_arg.to_deref(), DynValue::Pointer(array_ptr))?;
 
     Ok(())
 }
@@ -472,12 +449,12 @@ fn get_func_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 fn load_pointer(state: &mut Interpreter, at: &Ref) -> ExecResult<Pointer> {
-    state
-        .load(at)?
-        .as_pointer()
+    let val = state.load(at)?;
+
+    val.as_pointer()
         .cloned()
         .ok_or_else(|| {
-            let msg = format!("bad type: expected pointer at {at}");
+            let msg = format!("bad type: expected pointer at {at} (was: {})", val.value_type_category());
             ExecError::illegal_state(msg)
         })
 }
@@ -660,10 +637,9 @@ pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, Type, 
         ("ArrayLengthInternal", array_length, Type::I32, vec![
             Type::any()
         ]),
-        ("ArraySetLengthInternal", set_length, Type::any(), vec![
-            Type::any(), 
+        ("ArrayCreateInternal", array_create, Type::Nothing, vec![
+            Type::any().temp_ref(), 
             Type::I32, 
-            Type::any()
         ]),
         ("InvokeMethod", invoke_method, Type::Nothing, vec![
             METHODINFO_TYPE,

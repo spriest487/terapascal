@@ -1,4 +1,4 @@
-use crate::ast::Class;
+use crate::ast::{Class, StructDef, StructMember, TypeDecl, TypeDef};
 use crate::ast::Expr;
 use crate::ast::FieldName;
 use crate::ast::FunctionDecl;
@@ -31,6 +31,30 @@ impl Unit {
 
         self.classes.push(class);
         
+        let elements_field_ty = Type::from_metadata(&element_type.clone().ptr(), self);
+        
+        let struct_def = StructDef {
+            decl: TypeDecl {
+                name: TypeDefName::DynArray(id),
+            },
+            comment: Some(format!("array of {}", self.pretty_type(element_type))),
+            members: vec![
+                StructMember {
+                    name: FieldName::DynArrayElements,
+                    ty: elements_field_ty,
+                    comment: None,
+                },
+                StructMember {
+                    name: FieldName::DynArrayLength,
+                    ty: Type::Int32,
+                    comment: None,
+                }
+            ],
+            packed: false,
+        };
+        
+        self.type_defs.insert(struct_def.decl.name, TypeDef::Struct(struct_def));
+        
         self.dyn_array_types_by_element.insert(element_type.clone(), id);
 
         id
@@ -53,7 +77,7 @@ impl Unit {
             Statement::ReturnValue(
                 arr_arg
                     .cast(array_ptr_ty)
-                    .arrow(FieldName::ID(ir::DYNARRAY_PTR_FIELD))
+                    .arrow(FieldName::DynArrayElements)
                     .index(index_arg.cast(Type::SizeType))
                     .addr_of()
             ),

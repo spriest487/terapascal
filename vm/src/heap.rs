@@ -94,7 +94,6 @@ impl NativeHeap {
                 .map(|(_, mem)| mem.len())
                 .sum())
         }
-        
 
         Ok(Pointer { addr, ty })
     }
@@ -131,22 +130,22 @@ impl NativeHeap {
         Ok(())
     }
 
-    pub fn load(&self, addr: &Pointer) -> NativeHeapResult<DynValue> {
-        if addr.addr == 0 {
+    pub fn load(&self, pointer: &Pointer) -> NativeHeapResult<DynValue> {
+        if pointer.addr == 0 {
             return Err(NativeHeapError::NullPointerDeref);
         }
 
-        let val = self.marshaller.unmarshal_from_ptr(addr)?;
+        let val = self.marshaller.unmarshal_at(pointer)?;
 
         Ok(val)
     }
 
-    pub fn store(&mut self, addr: &Pointer, val: DynValue) -> NativeHeapResult<()> {
-        if addr.addr == 0 {
+    pub fn store(&mut self, pointer: &Pointer, val: DynValue) -> NativeHeapResult<()> {
+        if pointer.addr == 0 {
             return Err(NativeHeapError::NullPointerDeref);
         }
 
-        self.marshaller.marshal_into(&val, addr)?;
+        self.marshaller.marshal_at(&val, pointer)?;
 
         Ok(())
     }

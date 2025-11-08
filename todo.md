@@ -1,7 +1,5 @@
-# LS
-* cast value annotations
-* partial tokenization
-* partial typechecking
+# array rework
+* C implementation could use variable sized structs instead of 2 allocations per array 
 
 # RTTI
 * weak pointer target type info
@@ -17,6 +15,11 @@
 * IsAbstract property for TypeInfo/MethodInfo
 * move RTTI stuff into its own unit??
 * overload support for MethodInfo/FunctionInfo
+
+# LS
+* cast value annotations
+* partial tokenization
+* partial typechecking
 
 # bugs
 * parser: newlines/escape chars in string literals

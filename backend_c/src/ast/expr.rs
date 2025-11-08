@@ -327,7 +327,7 @@ impl Expr {
                 let class_ptr = Self::array_class_ptr(&arr_obj, type_id);
 
                 class_ptr
-                    .arrow(FieldName::DynArrayElement)
+                    .arrow(FieldName::DynArrayClassElement)
                     .call([arr_obj, index_expr])
             }
 
@@ -356,7 +356,7 @@ impl Expr {
                 let class_ptr = Self::array_class_ptr(&arr_obj, type_id);
 
                 class_ptr
-                    .arrow(FieldName::DynArrayLength)
+                    .arrow(FieldName::DynArrayClassLength)
                     .call([arr_obj])
             }
 

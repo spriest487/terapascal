@@ -102,6 +102,11 @@ impl DynValue {
                     addr,
                     ty: match class_id {
                         ir::VirtualTypeID::Class(struct_id) => ir::Type::Struct(*struct_id),
+                        
+                        ir::VirtualTypeID::Array(element_ty) => ir::Type::Array {
+                            element: element_ty.clone(),
+                            dim: 0
+                        },
 
                         // Any, interfaces and closure pointers only have virtual types so we
                         // can't include any type info about the concrete type here - it's up to
@@ -125,7 +130,7 @@ impl DynValue {
             },
 
             ir::Type::Array { element, dim } => match self {
-                DynValue::Array(arr) if arr.el_ty == **element && arr.elements.len() == *dim => {
+                DynValue::Array(arr) if arr.element_type == **element && arr.elements.len() == *dim => {
                     Some(self.clone())
                 },
                 _ => None,
@@ -461,7 +466,7 @@ impl DynValue {
 
     pub fn as_array(&self, el_ty: &ir::Type) -> Option<&[DynValue]> {
         match self {
-            DynValue::Array(arr) if arr.el_ty == *el_ty => Some(&arr.elements),
+            DynValue::Array(arr) if arr.element_type == *el_ty => Some(&arr.elements),
             _ => None,
         }
     }
@@ -616,7 +621,7 @@ impl From<Pointer> for DynValue {
 #[derive(Debug, Clone)]
 pub struct StructValue {
     pub type_id: ir::TypeDefID,
-    pub rc: Option<RcState>,
+    pub rc: Option<ObjectHeader>,
     pub fields: Vec<DynValue>,
 }
 
@@ -667,24 +672,34 @@ impl PartialEq<Self> for StructValue {
 }
 
 #[derive(Debug, Clone)]
-pub struct RcState {
+pub struct ObjectHeader {
+    pub object_type: ir::Type,
+    
     pub strong_count: i32,
     pub weak_count: i32,
 }
 
-impl RcState {
-    pub fn immortal() -> Self {
+impl ObjectHeader {
+    pub fn immortal(object_type: ir::Type) -> Self {
         Self {
+            object_type,
+
             strong_count: -1,
             weak_count: 0,
         }
     }
 
-    pub fn new(immortal: bool) -> Self {
+    pub fn new(object_type: ir::Type, immortal: bool) -> Self {
         Self {
+            object_type,
+            
             strong_count: if immortal { -1 } else { 1 },
             weak_count: 0,
         }
+    }
+
+    pub fn is_immortal(&self) -> bool {
+        self.strong_count < 0
     }
 }
 
@@ -703,8 +718,10 @@ impl VariantValue {
 
 #[derive(Debug, Clone)]
 pub struct ArrayValue {
-    pub el_ty: ir::Type,
+    pub element_type: ir::Type,
     pub elements: Vec<DynValue>,
+    
+    pub rc: Option<ObjectHeader>,
 }
 
 impl ArrayValue {
@@ -721,6 +738,6 @@ impl ArrayValue {
     }
 
     pub fn array_ty(&self) -> ir::Type {
-        self.el_ty.clone().array(self.elements.len())
+        self.element_type.clone().array(self.elements.len())
     }
 }
