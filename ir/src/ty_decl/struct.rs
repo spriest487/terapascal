@@ -31,7 +31,7 @@ impl StructDef {
     }
     
     pub fn is_class(&self) -> bool {
-        matches!(self.identity, StructIdentity::Class(..) | StructIdentity::Closure(..))
+        matches!(self.identity, StructIdentity::Class(..))
     }
     
     pub fn is_equivalent_def(&self, other: &Self) -> bool {
