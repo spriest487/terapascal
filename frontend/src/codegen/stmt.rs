@@ -21,7 +21,7 @@ use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
     builder.push_debug_context(stmt.annotation().span().clone());
-    builder.comment(stmt);
+    builder.comment(stmt.to_string());
     
     match stmt {
         ast::Stmt::Ident(..) | ast::Stmt::Member(..) => {
@@ -235,13 +235,15 @@ fn build_for_loop_sequence(
 
         let binding_ty = builder.translate_type(range.binding_ty.ty());
         let binding_name = Arc::new(range.binding_name.to_string());
-        let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
-
-        let counter_ref = builder.local_temp(ir::Type::I32);
 
         let base_type = range.src_expr.annotation().ty();
         match base_type.as_ref() {
             typ::Type::Array(array_ty) => {
+                builder.comment("loop counter");
+                let counter_ref = builder.local_temp(ir::Type::I32);
+                builder.comment("loop binding");
+                let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
+                
                 let base_type = builder.translate_type(&base_type);
                 let element_ty = builder.translate_type(&array_ty.element_ty);
 
@@ -268,6 +270,11 @@ fn build_for_loop_sequence(
             },
             
             typ::Type::DynArray { element } => {
+                builder.comment("loop counter");
+                let counter_ref = builder.local_temp(ir::Type::I32);
+                builder.comment("loop binding");
+                let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
+
                 let element_ty = builder.translate_type(element);
                 let dynarray_ty = builder.translate_type(&range.src_expr.annotation().ty());
                 
@@ -319,12 +326,15 @@ fn build_for_loop_sequence(
                 let src_ty = builder.translate_type(src_ty);
 
                 let seq_ty = builder.translate_type(&seq_support.sequence_type);
+                
+                builder.comment("sequence object");
                 let seq_var = builder.local_new(seq_ty.clone(), None);
 
                 // call Sequence with a ref to the source if it's a value type
                 let src_self_arg_ref = if src_ty.is_rc() {
                     src_ref.clone()
                 } else {
+                    builder.comment(format!("source ref (source is a value type: {})", builder.pretty_ty_name(&src_ty)));
                     let src_ref_ptr = builder.local_temp(src_ty.temp_ref());
                     builder.make_ref(src_ref_ptr, src_ref);
                     src_ref_ptr.to_ref()
@@ -334,6 +344,7 @@ fn build_for_loop_sequence(
                 let seq_self_arg_var = if seq_ty.is_rc() {
                     seq_var
                 } else {
+                    builder.comment(format!("sequence ref (sequence is a value type: {})", builder.pretty_ty_name(&seq_ty)));
                     let seq_ref_ptr = builder.local_temp(seq_ty.temp_ref());
                     builder.make_ref(seq_ref_ptr, seq_var);
                     seq_ref_ptr
@@ -351,7 +362,9 @@ fn build_for_loop_sequence(
                 // stores the option resulting from calling Next. don't need to RC this,
                 // it'll either return an item and be stored in the binding local and retained there,
                 // or return None and will never need retaining in that case
+                builder.comment("next item option");
                 let next_item_option_ref = builder.local_temp(item_option_ty.clone());
+                builder.comment("next item tag");
                 let next_item_tag_ptr_ref = builder.local_temp(ir::Type::I32.temp_ref());
                 
                 let continue_label = builder.next_label();
@@ -373,8 +386,10 @@ fn build_for_loop_sequence(
                     let is_end_val = builder.eq_to_val(next_item_tag_ptr_ref.to_deref(), none_case_val);
                     builder.jmpif(break_label, is_end_val);
 
+                    builder.comment("loop variable binding");
+                    let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
+
                     // binding_ref := next_item_option_ref.Get()
-                    builder.release(binding_ref, &binding_ty);
                     builder.vardata(item_option_data_ref, next_item_option_ref, item_option_ty.clone(), OPTION_SOME_CASE);
                     builder.mov(binding_ref, item_option_data_ref.to_deref());
 
