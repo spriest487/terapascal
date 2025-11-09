@@ -235,6 +235,25 @@ impl Metadata {
             self.functions.insert(*id, func_decl.clone());
         }
 
+        for (func_type_id, other_closure_ids) in &other.closures {
+            let func_closures = self.closures.entry(*func_type_id)
+                .or_insert_with(Vec::new);
+            
+            for id in other_closure_ids {
+                if !func_closures.contains(id) {
+                    func_closures.push(*id);
+                }
+            }
+        }
+        
+        for (func_id, static_closure) in &other.function_static_closures {
+            if self.function_static_closures.contains_key(func_id) {
+                panic!("duplicate static closure ID for function {func_id}");
+            }
+
+            self.function_static_closures.insert(*func_id, *static_closure);
+        }
+
         for (owning_ty_id, dtor_func) in &other.dtors {
             if self.dtors.contains_key(owning_ty_id) {
                 panic!("duplicate destructor definition for type {owning_ty_id}");
@@ -642,7 +661,7 @@ impl Metadata {
     pub fn insert_closure(&mut self, func_type_id: TypeDefID, closure_id: TypeDefID) {
         let closures = self.closures
             .entry(func_type_id)
-            .or_insert_with_key(|_key| Vec::new());
+            .or_insert_with(Vec::new);
         
         closures.push(closure_id);
     }
