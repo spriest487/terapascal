@@ -1,11 +1,11 @@
 implementation
 uses System;
 
-type Animal = interface
+type IAnimal = interface
     function Speak();
 end;
 
-type Cat = class of Animal
+type Cat = class of IAnimal
     function Speak();
 end;
 
@@ -14,7 +14,7 @@ begin
     WriteLn('nya');
 end;
 
-type Dog = class of Animal
+type Dog = class of IAnimal
     function Speak();
     function Fetch();
 end;
@@ -30,17 +30,17 @@ begin
 end;
 
 initialization
-    var cat: Animal := Cat();
+    var cat: IAnimal := Cat();
     if cat is Cat then cat.Speak();
     
-    var dog: Animal := Dog();
+    var dog: IAnimal := Dog();
     if dog is not Cat then dog.Speak();
     
     if dog is Dog d then d.Fetch();
     
-    if dog is Animal then 
+    if dog is IAnimal then 
         WriteLn('yes, a dog is an animal');
     
-    if dog is not Animal then 
-        raise 'a dog is an animal!';
+    if dog is not IAnimal then 
+        raise 'incorrect, a dog is an animal!';
 end
