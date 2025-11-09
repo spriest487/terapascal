@@ -206,7 +206,7 @@ impl Expr {
 
     pub fn call_newarray(array_id: DynArrayTypeID, len: impl Into<Expr>, immortal: bool) -> Self {
         let new = Expr::Function(FunctionName::Builtin(BuiltinName::RcNewArray));
-        let array_class_ptr = Expr::dyn_array_class(array_id).addr_of();
+        let array_class_ptr = Expr::dyn_array_class_ptr(array_id);
 
         let instance = new.call([
             array_class_ptr, 
@@ -239,9 +239,9 @@ impl Expr {
         }
     }
 
-    pub fn infix_op(lhs: Self, op: InfixOp, rhs: Self) -> Self {
+    pub fn infix_op(self, op: InfixOp, rhs: Self) -> Self {
         Expr::InfixOp {
-            lhs: Box::new(lhs),
+            lhs: Box::new(self),
             op,
             rhs: Box::new(rhs),
         }
@@ -420,6 +420,7 @@ impl Expr {
     }
 
     pub fn class_ptr(class_id: ir::TypeDefID) -> Self {
+        // dyn arrays use a different class type, but it's castable to the normal Class struct
         Expr::class(class_id).addr_of().cast(Type::Class.ptr())
     }
     
@@ -429,6 +430,10 @@ impl Expr {
 
     pub fn dyn_array_class(array_id: DynArrayTypeID) -> Self {
         Expr::Global(GlobalName::DynArrayClassInstance(array_id))
+    }
+
+    pub fn dyn_array_class_ptr(array_id: DynArrayTypeID) -> Self {
+        Expr::Global(GlobalName::DynArrayClassInstance(array_id)).addr_of()
     }
 }
 

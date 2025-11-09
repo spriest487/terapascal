@@ -5,11 +5,11 @@ mod string_lit;
 mod ty_def;
 mod array;
 
+pub use self::array::*;
 pub use self::expr::*;
 pub use self::function::*;
 pub use self::stmt::*;
 pub use self::ty_def::*;
-pub use self::array::*;
 use crate::ast::string_lit::StringLiteral;
 use crate::ir;
 use crate::rtti::RuntimeFuncInfo;
@@ -17,12 +17,17 @@ use crate::Options;
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 use topological_sort::TopologicalSort;
 
-pub struct Unit {
+pub struct Unit<'a> {
+    metadata: &'a ir::Metadata,
+    
     functions: Vec<FunctionDef>,
+    function_types: BTreeMap<ir::FunctionID, ir::TypeDefID>,
+    
     ffi_funcs: Vec<FfiFunction>,
     builtin_funcs: HashMap<ir::FunctionID, BuiltinName>,
 
@@ -52,8 +57,8 @@ pub struct Unit {
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
 }
 
-impl Unit {
-    pub fn new(metadata: &ir::Metadata, opts: Options) -> Self {
+impl<'a> Unit<'a> {
+    pub fn new(metadata: &'a ir::Metadata, opts: Options) -> Self {
         let string_ty = Type::DefinedType(TypeDefName::Struct(ir::STRING_ID)).ptr();
 
         let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
@@ -226,7 +231,11 @@ impl Unit {
             .collect();
 
         let mut module = Unit {
+            metadata,
+
             functions: Vec::new(),
+            function_types: BTreeMap::new(),
+
             ffi_funcs: Vec::new(),
             builtin_funcs,
 
@@ -310,32 +319,30 @@ impl Unit {
         let next_id = self.static_array_types.len();
 
         match self.static_array_types.entry(sig) {
-            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Occupied(entry) => {
+                entry.get().clone()
+            },
 
             Entry::Vacant(entry) => {
-                let name = TypeDefName::StaticArray(ArrayTypeID(next_id));
-                let array_struct = StructDef {
-                    decl: TypeDecl { name: name.clone() },
-                    packed: false,
-                    members: vec![StructMember {
+                let array_name = TypeDefName::StaticArray(ArrayTypeID(next_id));
+                
+                let array_struct = StructDef::new(array_name, false)
+                    .with_comment(format!("array[{}] of {}", dim, element.typename()))
+                    .with_member(StructMember {
                         name: FieldName::StaticArrayElements,
                         ty: element.clone().sized_array(dim),
                         comment: None,
-                    }],
-                    comment: Some(format!("array[{}] of {}", dim, element.typename())),
-                };
+                    });
 
-                self.type_defs
-                    .insert(name.clone(), TypeDef::Struct(array_struct));
-
-                let array_struct_ty = Type::DefinedType(name.clone());
-                entry.insert(array_struct_ty.clone());
-
-                self.type_defs_order.insert(name.clone());
+                self.type_defs.insert(array_name, TypeDef::Struct(array_struct));
+                self.type_defs_order.insert(array_name);
+                
                 for element_dep in element.type_def_deps() {
-                    self.type_defs_order
-                        .add_dependency(element_dep, name.clone());
+                    self.type_defs_order.add_dependency(element_dep, array_name);
                 }
+
+                let array_struct_ty = Type::DefinedType(array_name);
+                entry.insert(array_struct_ty.clone());
 
                 array_struct_ty
             },
@@ -350,8 +357,6 @@ impl Unit {
     }
 
     pub fn add_lib(&mut self, library: &ir::Library) {
-        let mut module_type_defs = Vec::new();
-
         for (id, type_def) in library.metadata().type_defs() {
             let mut member_deps = Vec::new();
 
@@ -401,15 +406,12 @@ impl Unit {
                 },
             };
 
-            let c_def_name = c_type_def.decl().name.clone();
-
-            module_type_defs.push(c_type_def.clone());
-            self.type_defs.insert(c_def_name.clone(), c_type_def);
-
-            self.type_defs_order.insert(c_def_name.clone());
+            let c_def_name = c_type_def.decl().name;
+            self.type_defs.insert(c_def_name, c_type_def);
+            self.type_defs_order.insert(c_def_name);
+            
             for member_dep in member_deps {
-                self.type_defs_order
-                    .add_dependency(member_dep, c_def_name.clone());
+                self.type_defs_order.add_dependency(member_dep, c_def_name);
             }
         }
 
@@ -417,14 +419,14 @@ impl Unit {
             self.static_closures.push(static_closure.clone());
         }
 
-        for (id, func) in library.functions() {
+        for (func_id, func) in library.functions() {
             match func {
                 ir::Function::Local(func_def) => {
-                    let c_func = FunctionDef::translate(*id, func_def, self);
+                    let c_func = FunctionDef::translate(*func_id, func_def, self);
                     self.functions.push(c_func);
 
                     if self.opts.enable_rtti {
-                        let invoker = FunctionDef::invoker(*id, &func_def.sig, self);
+                        let invoker = FunctionDef::invoker(*func_id, &func_def.sig, self);
                         self.functions.push(invoker);
                     }
                 },
@@ -433,14 +435,28 @@ impl Unit {
                 },
 
                 ir::Function::External(func_ref) => {
-                    let ffi_func = FfiFunction::translate(*id, func_ref, self);
+                    let ffi_func = FfiFunction::translate(*func_id, func_ref, self);
                     self.ffi_funcs.push(ffi_func);
 
                     if self.opts.enable_rtti {
-                        let invoker = FunctionDef::invoker(*id, &func_ref.sig, self);
+                        let invoker = FunctionDef::invoker(*func_id, &func_ref.sig, self);
                         self.functions.push(invoker);
                     }
                 },
+            }
+            
+            let sig = func.sig();
+            let func_type_id = self.metadata.type_defs()
+                .find_map(|(def_id, type_def)| {
+                    let ir::TypeDef::Function(def_sig) = type_def else {
+                        return None;
+                    };
+
+                    (*def_sig == *sig).then_some(def_id)
+                });
+            
+            if let Some(id) = func_type_id {
+                self.function_types.insert(*func_id, id);
             }
         }
 
@@ -679,7 +695,7 @@ impl Unit {
     }
 }
 
-impl fmt::Display for Unit {
+impl<'a> fmt::Display for Unit<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.opts.trace_heap {
             writeln!(f, "#define TRACE_HEAP 1")?;
@@ -945,6 +961,6 @@ pub struct GlobalVar {
 }
 
 fn write_immortal_rc_member(f: &mut fmt::Formatter, class_id: ClassIdentity) -> fmt::Result {
-    let class_name = class_id.class_global_name();
+    let class_name = class_id.class_instance_name();
     write!(f, ".rc = MAKE_RC({}, -1, 0)", class_name)
 }

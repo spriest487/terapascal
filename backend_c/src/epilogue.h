@@ -165,7 +165,7 @@ static OBJECT_PTR RcNew(struct Class* class, bool immortal) {
 static OBJECT_PTR RcNewArray(struct DynArrayClass* array_class, int count, bool immortal) {
     OBJECT_PTR instance = RcNew(&array_class->base, immortal);
 
-    array_class->alloc(instance, count, NULL, NULL);
+    array_class->alloc(instance, count);
 
     return instance;
 }
@@ -271,6 +271,12 @@ static void System_FreeMem(unsigned char* mem) {
     Free(mem);
 }
 
+static void System_ZeroMemory(unsigned char* mem, size_t count) {
+    for (size_t i = 0; i < count; i += 1) {
+        mem[i] = 0;
+    }
+}
+
 static void System_Write(STRING_STRUCT* str) {
     if (!str || str->rc.strong_count == 0) {
         fatal("called Write for an invalid string pointer");
@@ -321,9 +327,9 @@ static void System_ArrayCreateInternal(
         // note that it's illegal to resize an immortal array
         fatal("called SetLength for an invalid array pointer");
     }
-
+ 
     struct DynArrayClass* array_class = (struct DynArrayClass*) (*arr)->class;
-    array_class->alloc(arr, new_len, NULL, NULL);
+    array_class->alloc(*arr, new_len);
 }
 
 static void* LoadSymbol(const char* src, const char* sym) {

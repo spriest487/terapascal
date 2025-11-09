@@ -113,6 +113,7 @@ pub enum BuiltinName {
     ReadLn,
     GetMem,
     FreeMem,
+    ZeroMemory,
 
     ArrayLengthInternal,
     ArrayCreateInternal,
@@ -164,6 +165,7 @@ impl fmt::Display for BuiltinName {
             BuiltinName::StrToInt => write!(f, "System_StrToInt"),
             BuiltinName::GetMem => write!(f, "System_GetMem"),
             BuiltinName::FreeMem => write!(f, "System_FreeMem"),
+            BuiltinName::ZeroMemory => write!(f, "System_ZeroMemory"),
 
             BuiltinName::Int8ToStr => write!(f, "System_Int8ToStr"),
             BuiltinName::ByteToStr => write!(f, "System_ByteToStr"),

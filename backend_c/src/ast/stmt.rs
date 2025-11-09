@@ -7,11 +7,15 @@ use crate::ast::Type;
 use crate::ast::Unit;
 use crate::ast::{BuiltinName, DynArrayTypeID};
 use crate::ir;
+use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
+    ClassType,
+    DynArrayClassType,
+    
     ClassInstance(ir::TypeDefID),
     DynArrayClassInstance(DynArrayTypeID),
 
@@ -35,8 +39,11 @@ pub enum GlobalName {
 impl fmt::Display for GlobalName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            GlobalName::ClassType => write!(f, "Class"),
+            GlobalName::DynArrayClassType => write!(f, "DynArrayClass"),
+            
             GlobalName::ClassInstance(id) => write!(f, "Class_{}", id.0),
-            GlobalName::DynArrayClassInstance(id) => write!(f, "Class_{}", id.0),
+            GlobalName::DynArrayClassInstance(id) => write!(f, "DynArrayClass_{}", id.0),
             GlobalName::StringLiteral(id) => write!(f, "String_{}", id.0),
             GlobalName::StaticClosure(id) => write!(f, "StaticClosure_{}", id.0),
             GlobalName::StaticTagArray(loc) => {
@@ -264,16 +271,24 @@ impl fmt::Display for Statement {
     }
 }
 
-pub struct Builder<'a> {
-    module: &'a mut Unit,
-    pub stmts: Vec<Statement>,
+#[derive(Default)]
+struct LocalScope {
+    variable_types: BTreeMap<ir::LocalID, ir::Type>,
 }
 
-impl<'a> Builder<'a> {
-    pub fn new(module: &'a mut Unit) -> Self {
+pub struct Builder<'a, 'b> {
+    module: &'a mut Unit<'b>,
+    pub stmts: Vec<Statement>,
+    
+    local_stack: Vec<LocalScope>,
+}
+
+impl<'a, 'b> Builder<'a, 'b> {
+    pub fn new(module: &'a mut Unit<'b>) -> Self {
         Self {
             module,
             stmts: Vec::new(),
+            local_stack: vec![LocalScope::default()]
         }
     }
     
@@ -295,12 +310,16 @@ impl<'a> Builder<'a> {
         match instruction {
             ir::Instruction::LocalAlloc(id, ty) => {
                 let null_init = ty.is_rc();
-                let ty = Type::from_metadata(ty, self.module);
+                let c_type = Type::from_metadata(ty, self.module);
+
                 self.stmts.push(Statement::VariableDecl {
-                    ty,
+                    ty: c_type,
                     id: VariableID::local(*id),
                     null_init,
                 });
+                
+                let current_scope = self.local_stack.last_mut().unwrap();
+                current_scope.variable_types.insert(*id, ty.clone());
             },
 
             ir::Instruction::DebugPush(ctx) => self
@@ -310,8 +329,14 @@ impl<'a> Builder<'a> {
                 // no-op
             },
 
-            ir::Instruction::LocalBegin => self.stmts.push(Statement::BeginBlock),
-            ir::Instruction::LocalEnd => self.stmts.push(Statement::EndBlock),
+            ir::Instruction::LocalBegin => {
+                self.stmts.push(Statement::BeginBlock);
+                self.local_stack.push(LocalScope::default());
+            },
+            ir::Instruction::LocalEnd => {
+                self.local_stack.pop();
+                self.stmts.push(Statement::EndBlock)
+            },
 
             ir::Instruction::Label(label) => {
                 self.stmts.push(Statement::Label(*label));
@@ -674,7 +699,8 @@ impl<'a> Builder<'a> {
 
                 ir::VirtualTypeID::Array(element) => {
                     let array_id = self.module.get_dyn_array_type(element);
-                    let is_class_ptr = Expr::dyn_array_class(array_id);
+                    let is_class_ptr = Expr::dyn_array_class_ptr(array_id)
+                        .cast(Type::Class.ptr());
                     
                     Expr::infix_op(actual_class_ptr, InfixOp::Eq, is_class_ptr)
                 }
@@ -705,6 +731,69 @@ impl<'a> Builder<'a> {
                 self.module,
             ))
         }]));
+    }
+    
+    #[allow(unused)]
+    fn find_ref_type(&self, at: &ir::Ref) -> Option<ir::Type> {
+        match at {
+            ir::Ref::Local(id) => {
+                let mut local_type = None;
+                for scope in self.local_stack.iter().rev() {
+                    if let Some(ty) = scope.variable_types.get(id) {
+                        local_type = Some(ty.clone());
+                        break;
+                    }
+                }
+                
+                local_type
+            }
+
+            ir::Ref::Global(ir::GlobalRef::Variable(var_id)) => {
+                let var_type = self.module.metadata.get_variable_type(*var_id)?;
+                
+                Some(var_type.clone())
+            }
+
+            ir::Ref::Global(ir::GlobalRef::StaticClosure(static_closure_id)) => {
+                self.module.static_closures.iter()
+                    .find_map(|closure| {
+                        (closure.id == *static_closure_id)
+                            .then(|| closure.func_ty_id)
+                            .map(ir::Type::Function)
+                    })
+            }
+            
+            ir::Ref::Global(ir::GlobalRef::StaticTagArray(..)) => {
+                Some(ir::Type::any().dyn_array())
+            }
+
+            ir::Ref::Global(ir::GlobalRef::Function(func_id)) => {
+                let func_ty = self.module.function_types.get(func_id)?;
+                Some(ir::Type::Function(*func_ty))
+            }
+
+            ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(..)) => {
+                Some(ir::TYPEINFO_TYPE)
+            }
+
+            ir::Ref::Global(ir::GlobalRef::StaticFuncInfo(..)) => {
+                Some(ir::FUNCINFO_TYPE)
+            }
+
+            ir::Ref::Global(ir::GlobalRef::StringLiteral(..)) => {
+                Some(ir::STRING_TYPE)
+            }
+
+            ir::Ref::Deref(deref_val) => {
+                if let ir::Value::Ref(deref) = deref_val.as_ref() {
+                    self.find_ref_type(deref)
+                } else {
+                    None
+                }
+            }
+
+            _ => None,
+        }
     }
 
     fn translate_call(&mut self, out: Option<&ir::Ref>, function: &ir::Value, args: &[ir::Value]) {

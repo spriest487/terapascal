@@ -38,6 +38,27 @@ pub struct StructDef {
     pub comment: Option<String>,
 }
 
+impl StructDef {
+    pub fn new(name: TypeDefName, packed: bool) -> Self {
+        StructDef {
+            decl: TypeDecl { name },
+            packed,
+            members: Vec::new(),
+            comment: None,
+        }
+    }
+    
+    pub fn with_member(mut self, member: StructMember) -> Self {
+        self.members.push(member);
+        self
+    }
+
+    pub fn with_comment(mut self, comment: impl Into<String>) -> Self {
+        self.comment = Some(comment.into());
+        self
+    }
+}
+
 impl PartialEq for StructDef {
     fn eq(&self, other: &Self) -> bool {
         self.decl == other.decl && self.members == other.members

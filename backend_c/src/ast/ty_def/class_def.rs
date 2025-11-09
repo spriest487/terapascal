@@ -1,4 +1,4 @@
-use crate::ast::global_typeinfo_decl_name;
+use crate::ast::{global_typeinfo_decl_name, FieldName};
 use crate::ast::DynArrayTypeID;
 use crate::ast::Expr;
 use crate::ast::FunctionDecl;
@@ -112,7 +112,7 @@ pub enum ClassIdentity {
     DynArrayClass(DynArrayTypeID)
 }
 
-impl fmt::Display for ClassIdentity {
+impl fmt::Display for ClassIdentity {    
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ClassIdentity::Class(id) => write!(f, "Class_{}", id.0),
@@ -128,7 +128,7 @@ impl ClassIdentity {
             ClassIdentity::DynArrayClass(id) => TypeDefName::DynArray(*id),
         }
     }
-    
+
     pub fn to_ir_type(&self, unit: &Unit) -> ir::Type {
         match self {
             ClassIdentity::Class(id) => id.to_class_ptr_type(),
@@ -145,8 +145,15 @@ impl ClassIdentity {
             }
         }
     }
+
+    fn class_type_name(&self) -> GlobalName {
+        match self {
+            ClassIdentity::Class(_) => GlobalName::ClassType,
+            ClassIdentity::DynArrayClass(_) => GlobalName::DynArrayClassType,
+        }
+    }
     
-    pub fn class_global_name(&self) -> GlobalName {
+    pub fn class_instance_name(&self) -> GlobalName {
         match self {
             ClassIdentity::Class(id) => GlobalName::ClassInstance(*id),
             ClassIdentity::DynArrayClass(id) => GlobalName::DynArrayClassInstance(*id),
@@ -247,7 +254,7 @@ impl Class {
         element_type: ir::Type,
     ) -> Self {
         let array_type = element_type.clone().dyn_array();
-        
+
         Class {
             identity: ClassIdentity::DynArrayClass(id),
             impls: BTreeMap::new(),
@@ -318,17 +325,20 @@ impl Class {
             )).unwrap();
         }
 
-        let class_instance_name = match &self.identity {
-            ClassIdentity::Class(id) => GlobalName::ClassInstance(*id),
-            ClassIdentity::DynArrayClass(id) => GlobalName::DynArrayClassInstance(*id),
-        };
+        let class_type_name = self.identity.class_type_name();
+        let class_instance_name = self.identity.class_instance_name();
 
-        writeln!(decls, "struct Class {};", class_instance_name, ).unwrap();
+        writeln!(decls, "struct {class_type_name} {class_instance_name};").unwrap();
 
         decls
     }
 
     pub fn to_def_string(&self, enable_rtti: bool) -> String {
+        let array_id = match &self.identity {
+            ClassIdentity::DynArrayClass(id) => Some(*id),
+            ClassIdentity::Class(..) => None,
+        };
+
         let mut def = String::new();
         
         if let Some(comment) = &self.comment {
@@ -391,6 +401,12 @@ impl Class {
 
         let mut class_init = String::new();
         writeln!(class_init, "{{").unwrap();
+
+        // for dyn arrays, the regular class fields belong to the "base" field
+        if array_id.is_some() {
+            class_init.push_str("  .base = {\n");
+        }
+
         writeln!(
             class_init,
             "  .size = {},",
@@ -424,12 +440,32 @@ impl Class {
         } else {
             writeln!(class_init, "  .iface_methods = NULL,").unwrap();
         }
+        
+        // add dyn array fields if we have them
+        if let Some(array_id) = array_id {
+            class_init.push_str("  },");
+            
+            let get_element_name = FieldName::DynArrayClassElement;
+            let get_element_func = FunctionName::DynArrayGetElement(array_id);
+            writeln!(class_init, "  .{} = {},", get_element_name, get_element_func).unwrap();
+
+            let alloc_name = FieldName::DynArrayClassAlloc;
+            let alloc_func = FunctionName::DynArrayAlloc(array_id);
+            writeln!(class_init, "  .{} = {},", alloc_name, alloc_func).unwrap();
+
+            let length_name = FieldName::DynArrayClassLength;
+            let length_func = FunctionName::DynArrayLength(array_id);
+            writeln!(class_init, "  .{} = {},", length_name, length_func).unwrap();
+        }
+
+        class_init.truncate(class_init.trim_end_matches(',').len());
 
         class_init.push_str("}");
 
         writeln!(
             def,
-            "struct Class {} = {};",
+            "struct {} {} = {};",
+            self.identity.class_type_name(),
             self.identity, 
             class_init,
         ).unwrap();

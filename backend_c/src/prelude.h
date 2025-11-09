@@ -157,6 +157,8 @@ static STRING_STRUCT* System_RealToStr(float f);
 
 static unsigned char* System_GetMem(int32_t len);
 static void System_FreeMem(unsigned char* mem);
+static void System_ZeroMemory(unsigned char* mem, size_t count);
+
 static void System_Write(STRING_STRUCT* str);
 static void System_WriteLn(STRING_STRUCT* str);
 static STRING_STRUCT* System_ReadLn(void);
