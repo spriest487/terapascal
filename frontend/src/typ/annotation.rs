@@ -618,8 +618,31 @@ impl Value {
 
     pub fn is_namespace(&self) -> bool {
         match self {
-            Value::Namespace(_, _) => true,
+            Value::Namespace(..) => true,
             _ => false,
+        }
+    }
+    
+    fn is_func_with_sig(&self, sig: &FunctionSig) -> bool {
+        match self {
+            Value::Type(..)
+            | Value::Namespace(..)
+            | Value::VariantCase(..)
+            | Value::Untyped(..) => false,
+
+            Value::Function(func_val) => *func_val.sig == *sig,
+            Value::UfcsFunction(ufcs_val) => *ufcs_val.sig == *sig,
+            
+            Value::Method(method_val) => *method_val.sig == *sig,
+            Value::Overload(overload) => match overload.sig.as_ref() {
+                Some(overload_sig) => **overload_sig == *sig,
+                _ => false,
+            }
+            
+            Value::Invocation(invocation) => invocation.result_type().is_func_with_sig(sig),
+
+            | Value::Typed(val) => val.ty.is_func_with_sig(sig),
+            | Value::Const(val) => val.ty.is_func_with_sig(sig),
         }
     }
 
@@ -639,6 +662,13 @@ impl Value {
     /// does nothing, and a Type value node has no possible value, so we should leave it alone
     /// and allow the expression to fail typechecking.  
     pub fn evaluate(&mut self, expect_ty: &Type, ctx: &mut Context) -> TypeResult<()> {
+        if let Type::Function(expect_sig) = expect_ty {
+            // if the expected type is a function matching this sig, don't evaluate any further
+            if self.is_func_with_sig(expect_sig) {
+                return Ok(())
+            }
+        }
+        
         match self {
             // can't be evaluated
             Value::Untyped(..)
@@ -652,6 +682,10 @@ impl Value {
 
             // references to functions become no-args invocations when evaluated
             Value::Function(func) => {
+                if !func.should_call_noargs_in_expr(expect_ty) {
+                    return Ok(());
+                }
+                
                 let args = specialize_call_args(
                     &func.decl,
                     &[],
@@ -675,12 +709,20 @@ impl Value {
             }
 
             Value::UfcsFunction(ufcs) => {
+                if !ufcs.should_call_noargs_in_expr(expect_ty) {
+                    return Ok(());
+                }
+                
                 let invocation = ufcs.create_zero_args_invocation(expect_ty, &ufcs.span, ctx)?;
                 *self = Value::from(invocation);
                 Ok(())
             }
 
             Value::Method(method) => {
+                if !method.should_call_noargs_in_expr(expect_ty) {
+                    return Ok(());
+                }
+                
                 let args = specialize_call_args(
                     &method.decl.func_decl,
                     &[],

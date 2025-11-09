@@ -7,6 +7,7 @@ use crate::ast;
 use crate::ast::Visibility;
 use crate::typ::annotation::UfcsValue;
 use crate::typ::ast::cast::implicit_conversion;
+use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
 use crate::typ::function::FunctionValue;
@@ -90,7 +91,7 @@ pub(crate) fn build_args_for_params(
     for (expected_param, arg) in rest_params_or_none.zip(src_args.iter()) {
         match expected_param {
             Some(param) => {
-                let mut arg_expr = typecheck_expr(arg, &param.ty, ctx)?;
+                let mut arg_expr = evaluate_expr(arg, &param.ty, ctx)?;
                 
                 if param.is_by_ref() && *arg_expr.annotation().ty() != param.ty {
                     // by-ref params must match the type exactly

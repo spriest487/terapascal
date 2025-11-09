@@ -71,8 +71,13 @@ impl MethodValue {
         Type::Function(Arc::new(self.decl.func_decl.sig()))
     }
 
-    pub fn should_call_noargs_in_expr(&self, expect_ty: &Type, self_arg: &Type) -> bool {
-        self.decl.func_decl.sig().should_call_noargs_in_expr(expect_ty, self_arg)
+    pub fn should_call_noargs_in_expr(&self, expect_ty: &Type) -> bool {
+        let self_arg_ty = self.self_arg.as_ref()
+            .map(|arg_expr| arg_expr.annotation().ty());
+
+        self.decl.func_decl.sig().should_call_noargs_in_expr(expect_ty, self_arg_ty
+            .map(Cow::as_ref)
+            .unwrap_or(&Type::Nothing))
     }
 
     pub fn create_invocation(

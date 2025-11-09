@@ -81,6 +81,10 @@ impl OverloadValue {
             None => Type::Nothing,
         }
     }
+    
+    pub fn should_call(&self, expect_ty: &Type) -> bool {
+        resolve_overload(&self.candidates, args, type_args, self_arg, span, ctx)?;
+    }
 
     pub fn create_invocation(
         &self,

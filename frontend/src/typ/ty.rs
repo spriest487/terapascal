@@ -581,6 +581,13 @@ impl Type {
 
         Ok(())
     }
+    
+    pub fn is_func_with_sig(&self, sig: &FunctionSig) -> bool {
+        match self {
+            Type::Function(ty_sig) => **ty_sig == *sig,
+            _ => false,
+        }
+    }
 
     pub fn deref_ty(&self) -> Option<&Type> {
         match self {
