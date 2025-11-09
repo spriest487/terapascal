@@ -20,7 +20,6 @@ use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VirtualTypeID;
-use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 
@@ -220,12 +219,12 @@ pub trait InstructionBuilder {
         self.jmp(continue_label);
     }
 
-    fn comment(&mut self, content: &(impl fmt::Display + ?Sized)) {
+    fn comment(&mut self, content: impl Into<String>) {
         if !self.is_debug() {
             return;
         }
 
-        self.emit(Instruction::Comment(content.to_string()));
+        self.emit(Instruction::Comment(content.into()));
     }
 
     fn mov(&mut self, out: impl Into<Ref>, val: impl Into<Value>) {
