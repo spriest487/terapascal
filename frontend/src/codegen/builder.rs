@@ -184,9 +184,17 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             .build_closure_instance(func, &self.generic_context);
 
         if func.captures.len() == 0 {
-            let static_closure = self.library.build_static_closure_instance(closure);
+            let static_closure = self.library
+                .build_static_closure_instance(closure);
+            let static_closure_ref = Ref::Global(GlobalRef::StaticClosure(static_closure.id));
 
-            Ref::Global(GlobalRef::StaticClosure(static_closure.id))
+            // closure objects have a specific type, but refs to closures are type erased so
+            // we need to cast to Object. we know static closures are immortal, so this can be
+            // a temp ref
+            let closure_obj = self.local_temp(ANY_TYPE);
+            self.cast(closure_obj, static_closure_ref, ANY_TYPE);
+            
+            closure_obj.to_ref()
         } else {
             self.build_closure_instance(closure)
         }
@@ -208,7 +216,8 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
             .cloned()
             .unwrap();
 
-        let closure_ptr_ty = closure.closure_ptr_ty();
+        // this is a *specific* closure class, not a virtual (function typed) pointer
+        let closure_ptr_ty = closure.closure_id.to_class_ptr_type();
 
         // virtual pointer to the closure
         let closure_ref = self.local_new(closure_ptr_ty.clone(), None);

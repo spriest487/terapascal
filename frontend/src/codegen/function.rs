@@ -212,7 +212,7 @@ pub fn build_closure_function_def(
 
     // the 0th parameter of the function is always a type-erased pointer, which we must
     // cast to the actual closure struct type in the body
-    let actual_params = iter::once(Type::Nothing.ptr())
+    let actual_params = iter::once(Type::any())
         .chain(bound_params.into_iter().map(|(_, param_ty)| param_ty))
         .collect();
 
