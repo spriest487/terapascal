@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="JAVA_MODULE" version="4">
+  <component name="NewModuleRootManager" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_pp/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_pp/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_pp/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_pp/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_typecheck/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_typecheck/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_typecheck/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_typecheck/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/backend_c/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/backend_c/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/backend_c/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/backend_c/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/common/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/frontend/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/frontend/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/frontend/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/frontend/src/common/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/frontend/src/common/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/frontend/src/common/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/frontend/src/common/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/frontend/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/intermediate/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/intermediate/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/intermediate/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/intermediate/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_backend_c/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_common/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_ir/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/pas_syn/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/ir/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/terapascal_ls/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vm/benches" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/vm/examples" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vm/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/vm/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/build/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/backend_cil/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/demo_runner/src" isTestSource="false" />
+      <excludeFolder url="file://$MODULE_DIR$/pas_pp/target" />
+      <excludeFolder url="file://$MODULE_DIR$/pas_typecheck/target" />
+      <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/backend_c/target" />
+      <excludeFolder url="file://$MODULE_DIR$/frontend/src/common/target" />
+      <excludeFolder url="file://$MODULE_DIR$/frontend/target" />
+      <excludeFolder url="file://$MODULE_DIR$/intermediate/target" />
+      <excludeFolder url="file://$MODULE_DIR$/vm/target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+  </component>
+</module>
