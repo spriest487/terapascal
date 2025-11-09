@@ -1821,7 +1821,16 @@ impl Interpreter {
             },
 
             ir::VirtualTypeID::Interface(iface_id) => {
-                self.metadata.is_impl(&object_header.object_type, *iface_id)
+                match &object_header.object_type {
+                    // out of all the types a struct might represent, only a class can
+                    // implement any interfaces
+                    ir::Type::Struct(class_id) => {
+                        let class_type = class_id.to_class_ptr_type();
+                        self.metadata.is_impl(&class_type, *iface_id)
+                    },
+
+                    _ => false,
+                }
             },
 
             ir::VirtualTypeID::Closure(func_type_id) => {
