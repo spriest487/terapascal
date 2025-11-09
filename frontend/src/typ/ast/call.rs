@@ -88,16 +88,32 @@ pub(crate) fn build_args_for_params(
 
     // typecheck each arg (don't do conversions yet, we haven't figured out the self type yet)
     for (expected_param, arg) in rest_params_or_none.zip(src_args.iter()) {
-        // keep checking the provided arguments even when there aren't parameters for them,
-        // so we can show a complete error message. this will also make any errors checking the 
-        // args themselves take precedence over the invalid args error
-        let param_expect_ty = match expected_param {
-            Some(param) => &param.ty,
-            None => &Type::Nothing,
-        };
-        
-        let arg_expr = typecheck_expr(arg, param_expect_ty, ctx)?;
-        checked_args.push(arg_expr);
+        match expected_param {
+            Some(param) => {
+                let mut arg_expr = typecheck_expr(arg, &param.ty, ctx)?;
+                
+                if param.is_by_ref() && *arg_expr.annotation().ty() != param.ty {
+                    // by-ref params must match the type exactly
+                    return Err(TypeError::TypeMismatch {
+                        expected: param.ty.clone(),
+                        actual: arg_expr.annotation().ty().into_owned(),
+                        span: arg_expr.span().clone(),
+                    });
+                } else {
+                    arg_expr = implicit_conversion(arg_expr, &param.ty, ctx)?;
+                }
+
+                checked_args.push(arg_expr);
+            }
+
+            None => {
+                // keep checking the provided arguments even when there aren't parameters for them,
+                // so we can show a complete error message. this will also make any errors checking the 
+                // args themselves take precedence over the invalid args error
+                let arg_expr = typecheck_expr(arg, &Type::Nothing, ctx)?;
+                checked_args.push(arg_expr);
+            }
+        }
     }
 
     // does arg count match expected arg count?

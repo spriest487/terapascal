@@ -61,46 +61,46 @@ fn translate_call_with_args(
     };
 
     builder.local_begin();
+    {
+        let is_instance_method = matches!(call_target, CallTarget::InstanceMethod(..));
 
-    let is_instance_method = matches!(call_target, CallTarget::InstanceMethod(..));
+        let mut arg_vals = translate_args(args, sig, is_instance_method, builder);
 
-    let mut arg_vals = translate_args(args, sig, is_instance_method, builder);
+        if let CallTarget::Closure { closure_ptr, .. } = &call_target {
+            arg_vals.insert(0, closure_ptr.clone());
+        }
 
-    if let CallTarget::Closure { closure_ptr, .. } = &call_target {
-        arg_vals.insert(0, closure_ptr.clone());
-    }
+        match call_target {
+            | CallTarget::Function(function)
+            | CallTarget::InstanceMethod(function) => {
+                builder.call(function, arg_vals.clone(), out_val.clone());
+            },
 
-    match call_target {
-        | CallTarget::Function(function)
-        | CallTarget::InstanceMethod(function) => {
-            builder.call(function, arg_vals.clone(), out_val.clone());
-        },
-        
-        CallTarget::Closure { function, .. } => {
-            builder.call(function, arg_vals.clone(), out_val.clone());
-        },
+            CallTarget::Closure { function, .. } => {
+                builder.call(function, arg_vals.clone(), out_val.clone());
+            },
 
-        CallTarget::Virtual {
-            iface_id,
-            iface_method_id,
-        } => {
-            let self_arg = arg_vals[0].clone();
-            let rest_args = arg_vals[1..].to_vec();
-
-            // eprintln!("({sig}) => building vcall: {iface_id}.{} vs for type {self_ty}/{iface_ty}", iface_method_id.0);
-
-            builder.vcall(
+            CallTarget::Virtual {
                 iface_id,
                 iface_method_id,
-                self_arg,
-                rest_args,
-                out_val.clone(),
-            );
-        },
+            } => {
+                let self_arg = arg_vals[0].clone();
+                let rest_args = arg_vals[1..].to_vec();
+
+                // eprintln!("({sig}) => building vcall: {iface_id}.{} vs for type {self_ty}/{iface_ty}", iface_method_id.0);
+
+                builder.vcall(
+                    iface_id,
+                    iface_method_id,
+                    self_arg,
+                    rest_args,
+                    out_val.clone(),
+                );
+            },
+        }
+
+        // no need to retain, the result of a function must be retained as part of its body
     }
-
-    // no need to retain, the result of a function must be retained as part of its body
-
     builder.local_end();
 
     out_val
