@@ -249,7 +249,7 @@ public class InstructionBuilder {
                     
                     this.StoreRef(outRef, () => {
                         this.LoadRef(argRef);
-                        this.body.Emit(OpCodes.Ldfld, fieldRef);    
+                        this.body.Emit(OpCodes.Ldflda, fieldRef);
                     });
 
                     break;
