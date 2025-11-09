@@ -64,18 +64,13 @@ pub fn translate_pattern_match(
                     // this needs to create a cast, even for static non-ref types - the binding
                     // will be of the supposed type even if the check will always fail, and the
                     // instructions that follow must be valid
-                    let ref_type = is_ty.clone().temp_ref();
-
-                    let binding_val_ref = builder.local_temp(ir::Type::Nothing.temp_ref());
-                    let binding_ref = builder.local_temp(ref_type.clone());
-
-                    builder.make_ref(binding_val_ref, target_val.clone());
-                    builder.cast(binding_ref, binding_val_ref, ref_type);
+                    let bound_val = builder.local_temp(is_ty.clone());
+                    builder.cast(bound_val, target_val.clone(), is_ty.clone());
 
                     vec![PatternMatchBinding {
                         name: binding_name,
                         ty: is_ty,
-                        binding_ref: binding_ref.to_deref(),
+                        binding_ref: bound_val.to_ref(),
                     }]
                 },
 
