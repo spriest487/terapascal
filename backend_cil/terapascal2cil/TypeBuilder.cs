@@ -404,7 +404,8 @@ public class TypeBuilder {
             voidType
         );
 
-        var baseType = typeDef.BaseType.Resolve();
+        var baseType = this.ResolveCore(typeDef.BaseType) ?? typeDef.BaseType.Resolve();
+
         var baseCtor = baseType.GetConstructors()
             .Single(ctor => ctor.Parameters.Count == 0);
 
