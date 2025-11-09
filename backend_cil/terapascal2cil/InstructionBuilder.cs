@@ -687,11 +687,6 @@ public class InstructionBuilder {
                     this.body.Emit(OpCodes.Ldarga, ~varIndex);
                 }
 
-                var varType = this.GetRefType(ofRef);
-                if (varType.IsClass()) {
-                    this.body.Emit(OpCodes.Ldind_Ref);
-                }
-
                 break;
             }
 
@@ -811,11 +806,11 @@ public class InstructionBuilder {
             case IR.GlobalRef(IR.StaticFuncInfoGlobalRef): {
                 return IR.IType.FunctionInfo;
             }
-            
+
             case IR.GlobalRef(IR.StaticTypeInfoGlobalRef): {
                 return IR.IType.TypeInfo;
             }
-            
+
             case IR.GlobalRef(IR.StaticTagArrayGlobalRef): {
                 if (this.library.Metadata.DynArrayStructs.TryGetValue(IR.IType.Any, out var classID)) {
                     return new IR.RcPointerType(new IR.ClassVirtualTypeID(classID));
