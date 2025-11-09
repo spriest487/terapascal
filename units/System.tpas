@@ -1056,7 +1056,12 @@ begin
     if oldLen = len then exit;
 
     var newArr: array of T := [];
-    ArrayCreateInternal(newArr, len);
+
+    // ArrayCreateInternal is type erased 
+    var newArrObj := newArr as Object; 
+
+    ArrayCreateInternal(newArrObj, len);
+    newArr := newArrObj.Downcast[array of T]().Get;
 
     for var i := 0 to Min(oldLen, len) - 1 do
     begin
