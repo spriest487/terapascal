@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use crate::ast;
 use crate::ast::SemanticHint;
 use crate::typ::annotation::function::FunctionValue;
@@ -82,8 +83,30 @@ impl OverloadValue {
         }
     }
     
-    pub fn should_call(&self, expect_ty: &Type) -> bool {
-        resolve_overload(&self.candidates, args, type_args, self_arg, span, ctx)?;
+    // a reference to an overloaded function can be evaluated as a no-args call if:
+    // a) it can be resolved successfully with no arguments
+    // b) the resolved sig is also callable this way and results in the expected type
+    pub fn should_call_noargs_in_expr(&self, expect_ty: &Type, ctx: &Context) -> bool {
+        let mut temp_ctx = ctx.clone();
+
+        let overload_result = resolve_overload(
+            &self.candidates,
+            &[],
+            None,
+            self.self_arg.as_ref().map(Box::as_ref),
+            &self.span,
+            &mut temp_ctx
+        );
+        let Ok(overload) = overload_result else {
+            return false;
+        };
+
+        let self_arg_ty = self.self_arg.as_ref()
+            .map(|arg_expr| arg_expr.annotation().ty())
+            .unwrap_or(Cow::Owned(Type::Nothing));
+        let sig = &self.candidates[overload.selected_sig].decl().sig();
+        
+        sig.should_call_noargs_in_expr(expect_ty, self_arg_ty.as_ref())
     }
 
     pub fn create_invocation(

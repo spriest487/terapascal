@@ -76,6 +76,7 @@ impl MethodValue {
             .map(|arg_expr| arg_expr.annotation().ty());
 
         self.decl.func_decl.sig().should_call_noargs_in_expr(expect_ty, self_arg_ty
+            .as_ref()
             .map(Cow::as_ref)
             .unwrap_or(&Type::Nothing))
     }

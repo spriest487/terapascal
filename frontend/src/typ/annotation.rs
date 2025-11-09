@@ -757,6 +757,10 @@ impl Value {
             }
 
             Value::Overload(overload_val) => {
+                if !overload_val.should_call_noargs_in_expr(expect_ty, ctx) {
+                    
+                }
+                
                 let invocation = overload_val.create_invocation(&[], None, None, &overload_val.span, ctx)?;
                 *self = Value::from(invocation);
                 Ok(())
