@@ -1,9 +1,10 @@
-use crate::ast::{Class, VariableID};
+use crate::ast::Class;
 use crate::ast::Expr;
 use crate::ast::FieldName;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionDef;
 use crate::ast::FunctionName;
+use crate::ast::GlobalName;
 use crate::ast::Statement;
 use crate::ast::StructDef;
 use crate::ast::StructMember;
@@ -11,7 +12,9 @@ use crate::ast::Type;
 use crate::ast::TypeDef;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
-use crate::c::{BuiltinName, InfixOp};
+use crate::ast::VariableID;
+use crate::c::BuiltinName;
+use crate::c::InfixOp;
 use crate::ir;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -19,6 +22,12 @@ pub struct ArrayTypeID(pub usize);
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct DynArrayTypeID(pub usize);
+
+impl DynArrayTypeID {
+    pub fn class_ptr(&self) -> Expr {
+        Expr::Global(GlobalName::DynArrayClassInstance(*self)).addr_of()
+    }
+}
 
 impl<'a> Unit<'a> {
     pub fn get_dyn_array_type(&mut self, element_type: &ir::Type) -> DynArrayTypeID {

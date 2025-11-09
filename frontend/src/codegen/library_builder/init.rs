@@ -63,10 +63,13 @@ fn gen_create_tags(
             .get_struct(tag_ty)
             .expect("tag class struct must exist")
             .clone();
+
+        let tag_instance = builder.local_temp(tag_class.clone());
+        builder.rc_new(tag_instance, tag_ty, true);
         
         let index_val = ir::Value::LiteralI32(i as i32);
         builder.element(element_ref, tag_array.clone(), index_val, ir::ANY_TYPE, tag_array_ty.clone());
-        builder.rc_new(element_ref.to_deref(), tag_ty, true);
+        builder.cast(element_ref.to_deref(), tag_instance, ir::ANY_TYPE);
 
         for arg in tag_item.args.members.iter() {
             let Some(field_id) = tag_struct_def.find_field(arg.ident.as_str()) else {
@@ -75,7 +78,7 @@ fn gen_create_tags(
 
             let field_ty = &tag_struct_def.fields[&field_id].ty;
             let field_ref = builder.local_temp(field_ty.clone().temp_ref());
-            builder.field(field_ref, element_ref.to_deref(), tag_class.clone(), field_id);
+            builder.field(field_ref, tag_instance, tag_class.clone(), field_id);
 
             let arg_val = expr_to_val(&arg.value, builder);
             builder.mov(field_ref.to_deref(), arg_val);

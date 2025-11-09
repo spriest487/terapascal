@@ -676,7 +676,7 @@ impl<'a, 'b> Builder<'a, 'b> {
 
         // get class ptr from rc
         let rc_ptr = actual_expr.cast(Type::Rc.ptr());
-        let actual_class_ptr = rc_ptr.clone().arrow(FieldName::RcClass);
+        let actual_class_ptr = rc_ptr.clone().arrow(FieldName::ObjectClass);
         
         let is_null = rc_ptr.clone().not();
 

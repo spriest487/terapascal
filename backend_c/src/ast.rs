@@ -791,7 +791,7 @@ impl<'a> fmt::Display for Unit<'a> {
             let static_array_name = GlobalName::StaticTagArray(*tag_loc);
 
             // write data array
-            let tag_ptr_ty = Type::Void.ptr();
+            let tag_ptr_ty = Type::object_ptr();
             let data_name = format!("{}_data", static_array_name);
 
             if *tag_array_len > 0 {

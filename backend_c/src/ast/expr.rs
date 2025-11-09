@@ -299,14 +299,15 @@ impl Expr {
         }
     }
     
-    fn array_class_ptr(arr_obj: &Expr, v_id: &ir::VirtualTypeID) -> Expr {
+    fn array_class_ptr(arr_obj: &Expr, v_id: &ir::VirtualTypeID, unit: &mut Unit) -> Expr {
         match v_id {
-            ir::VirtualTypeID::Class(array_class_id) => {
-                Expr::Global(GlobalName::ClassInstance(*array_class_id)).addr_of()
+            ir::VirtualTypeID::Array(element_ty) => {
+                let dyn_array_id = unit.get_dyn_array_type(element_ty);
+                dyn_array_id.class_ptr()
             }
 
             _ => {
-                let obj_class_ptr = arr_obj.clone().arrow(FieldName::RcClass);
+                let obj_class_ptr = arr_obj.clone().arrow(FieldName::ObjectClass);
                 obj_class_ptr.cast(Type::DynArrayClass.ptr())
             },
         }
@@ -322,16 +323,19 @@ impl Expr {
         let index_expr = Expr::translate_val(index, module);
         
         match of_type {
-            ir::Type::RcPointer(type_id) => {
+            ir::Type::RcPointer(ir::VirtualTypeID::Array(element_type)) => {
+                let arr_id = module.get_dyn_array_type(element_type);
                 let arr_obj = array_expr.cast(Type::object_ptr());
-                let class_ptr = Self::array_class_ptr(&arr_obj, type_id);
+                
+                let ptr_type = Type::from_metadata(&(**element_type).clone().ptr(), module);
 
-                class_ptr
+                arr_id.class_ptr()
                     .arrow(FieldName::DynArrayClassElement)
                     .call([arr_obj, index_expr])
+                    .cast(ptr_type)
             }
-
-            _ => {
+            
+            ir::Type::Array { .. } => {
                 // static array
                 let elements_expr = array_expr.field(FieldName::StaticArrayElements);
 
@@ -339,6 +343,10 @@ impl Expr {
                 elements_expr
                     .index(index_expr)
                     .addr_of()
+            }
+            
+            _ => {
+                panic!("translate_element: invalid base type for element instruction ({of_type})")
             }
         }
     }
@@ -353,7 +361,7 @@ impl Expr {
         match of_type {
             ir::Type::RcPointer(type_id) => {
                 let arr_obj = array_expr.cast(Type::object_ptr());
-                let class_ptr = Self::array_class_ptr(&arr_obj, type_id);
+                let class_ptr = Self::array_class_ptr(&arr_obj, type_id, module);
 
                 class_ptr
                     .arrow(FieldName::DynArrayClassLength)

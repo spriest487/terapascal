@@ -166,7 +166,7 @@ pub enum FieldName {
     RcWeakCount,
 
     // builtin name: class info pointer field of RC internal struct
-    RcClass,
+    ObjectClass,
     
     // members of the DynArrayClass struct
     DynArrayClassAlloc,
@@ -194,7 +194,7 @@ impl fmt::Display for FieldName {
             FieldName::Rc => write!(f, "rc"),
             FieldName::RcStrongCount => write!(f, "strong_count"),
             FieldName::RcWeakCount => write!(f, "weak_count"),
-            FieldName::RcClass => write!(f, "class"),
+            FieldName::ObjectClass => write!(f, "class"),
             FieldName::StaticArrayElements => write!(f, "elements"),
             FieldName::DynArrayClassAlloc => write!(f, "alloc"),
             FieldName::DynArrayClassElement => write!(f, "get_element"),
