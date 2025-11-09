@@ -41,9 +41,10 @@ fn main() -> Result<(), i32> {
     let test_files = TestCase::find_at_path(&opts.search_path);
     println!("found {} tests...", test_files.len());
 
-    let test_count = test_files.len();
     let mut ok_count = 0;
     let mut error_count = 0;
+    
+    let mut failed_files = Vec::new();
 
     let test_count = test_files.len();
     for (i, test_file) in test_files.into_iter().enumerate() {
@@ -54,6 +55,8 @@ fn main() -> Result<(), i32> {
             if !opts.error_continue {
                 break;
             }
+            
+            failed_files.push(test_file.path);
         } else {
             ok_count += 1;
         }
@@ -61,6 +64,13 @@ fn main() -> Result<(), i32> {
     
     let skipped_count = test_count - (ok_count + error_count);
         println!("OK: {ok_count}, ERRORS: {error_count}, SKIPPED: {skipped_count}");
+    
+    if !failed_files.is_empty() {
+        println!("FAILURES:");
+        for path in failed_files {
+            println!("{}", path.display());
+        }
+    }
     
     Ok(())
 }
