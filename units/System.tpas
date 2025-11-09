@@ -1058,6 +1058,11 @@ begin
     var newArr: array of T := [];
     ArrayCreateInternal(newArr, len);
 
+    for var i := 0 to Min(oldLen, len) - 1 do
+    begin
+        newArr[i] := arr[i];
+    end;
+
     for var i := oldLen to len - 1 do 
     begin
         newArr[i] := defaultVal;
