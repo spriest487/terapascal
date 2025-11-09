@@ -205,11 +205,8 @@ public class InstructionBuilder {
                             this.body.Emit(OpCodes.Add);
                         } else {
                             // must be a dynarray
-                            var arrayClassID = ((IR.ClassVirtualTypeID)((IR.RcPointerType)arrayType).ID).ID;
-
-                            var elementType = this.library.Metadata.GetDynArrayTypeElement(arrayClassID)
-                                ?? throw new InvalidDataException($"illegal instruction - array class {arrayClassID} not found in metadata");
-                            var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType);
+                            var arrayElementType = ((IR.ArrayVirtualTypeID)((IR.RcPointerType)arrayType).ID).Element;
+                            var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(arrayElementType);
 
                             this.LoadRef(arrRef);
                             this.LoadValue(indexVal);
@@ -812,11 +809,7 @@ public class InstructionBuilder {
             }
 
             case IR.GlobalRef(IR.StaticTagArrayGlobalRef): {
-                if (this.library.Metadata.DynArrayStructs.TryGetValue(IR.IType.Any, out var classID)) {
-                    return new IR.RcPointerType(new IR.ClassVirtualTypeID(classID));
-                }
-
-                break;
+                return IR.IType.Any.MakeDynArray();
             }
 
             case IR.GlobalRef(IR.StaticClosureGlobalRef(var id)): {

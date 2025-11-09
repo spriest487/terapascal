@@ -168,14 +168,6 @@ public class TypeBuilder {
     }
 
     private TypeReference BuildStructTypeRef(IR.TypeDefID id, bool isValueType) {
-        // use native CLR arrays to replace any references to Pascal dynarrays
-        foreach (var lib in this.assemblyBuilder.IRLibraries) {
-            if (lib.Metadata.GetDynArrayTypeElement(id) is {} elementType) {
-                var elementTypeRef = this.BuildTypeRef(elementType);
-                return elementTypeRef.MakeArrayType();
-            }
-        }
-        
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
 
@@ -198,8 +190,9 @@ public class TypeBuilder {
             // in this backend, struct refs are automatically reference types if they're a class
             IR.ClassVirtualTypeID(var classID) => this.BuildStructTypeRef(classID, false),
             IR.InterfaceVirtualTypeID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
-            IR.ClosureVirtualTypeID(var closureID) => this.closureBaseType,
-            _ => throw new ArgumentException($"invalid virtual type ID: {id}"),
+            IR.ClosureVirtualTypeID => this.closureBaseType,
+            IR.ArrayVirtualTypeID(var arrayElement) => this.BuildTypeRef(arrayElement).MakeArrayType(),
+            _ => throw new NotImplementedException($"unsupported virtual type ID: {id}"),
         };
     }
     

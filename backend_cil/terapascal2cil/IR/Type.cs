@@ -160,6 +160,10 @@ public static class TypeExt {
                 _ => null,
             };
         }
+
+        public IType MakeDynArray() {
+            return new RcPointerType(new ArrayVirtualTypeID(type));
+        }
     }
 }
 
@@ -283,6 +287,7 @@ public sealed record ClassVirtualTypeID(TypeDefID ID) : IVirtualTypeID {
 
 public sealed record InterfaceVirtualTypeID(InterfaceID ID) : IVirtualTypeID;
 public sealed record ClosureVirtualTypeID(TypeDefID FunctionTypeID) : IVirtualTypeID;
+public sealed record ArrayVirtualTypeID(IType Element) : IVirtualTypeID;
 
 public class VirtualTypeIDFormatter : IMessagePackFormatter<IVirtualTypeID> {
     public void Serialize(ref MessagePackWriter writer, IVirtualTypeID value, MessagePackSerializerOptions options) {
@@ -317,6 +322,11 @@ public class VirtualTypeIDFormatter : IMessagePackFormatter<IVirtualTypeID> {
             case "Closure": {
                 var id = reader.ReadUInt64();
                 return new ClosureVirtualTypeID(new TypeDefID(id));
+            }
+            
+            case "Array": {
+                var element = MessagePackSerializer.Deserialize<IType>(ref reader, options);
+                return new ArrayVirtualTypeID(element);
             }
 
             default: {

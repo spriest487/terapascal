@@ -287,7 +287,8 @@ public class AssemblyBuilder : IDisposable {
     }
 
     public bool IsClosureStruct(IR.TypeDefID closureStructID) {
-        return this.libraries.Any(lib => lib.Metadata.Closures.Contains(closureStructID));
+        return this.libraries.Any(lib => lib.Metadata.Closures
+            .Any(funcClosures => funcClosures.Value.Contains(closureStructID)));
     }
 
     public void Finish() {

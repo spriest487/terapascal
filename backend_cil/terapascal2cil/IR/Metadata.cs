@@ -30,22 +30,13 @@ public class Metadata {
     public required OrderedDictionary<FunctionID, FunctionDecl> Functions { get; init; }
 
     [Key("closures")]
-    public required IReadOnlyList<TypeDefID> Closures {
-        get;
-        init => field = value!.ToArrayNonNull();
-    }
-
-    [Key("function_static_closures")]
-    public required IReadOnlyDictionary<FunctionID, StaticClosureID> FunctionStaticClosures {
+    public required SortedDictionary<TypeDefID, List<TypeDefID>> Closures {
         get;
         init => field = value!.ToDictionaryNonNull();
     }
 
-    [Key("dyn_array_structs")]
-    public required OrderedDictionary<IType, TypeDefID> DynArrayStructs { get; init; }
-
-    [Key("dyn_array_classes")]
-    public required Dictionary<IType, DynArrayClass> DynArrayClasses {
+    [Key("function_static_closures")]
+    public required IReadOnlyDictionary<FunctionID, StaticClosureID> FunctionStaticClosures {
         get;
         init => field = value!.ToDictionaryNonNull();
     }
@@ -110,16 +101,6 @@ public class Metadata {
 
         def = declDef;
         return true;
-    }
-
-    public IType? GetDynArrayTypeElement(TypeDefID arrayClassID) {
-        foreach (var (type, id) in this.DynArrayStructs) {
-            if (id.Equals(arrayClassID)) {
-                return type;
-            }
-        }
-
-        return null;
     }
 }
 
