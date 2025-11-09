@@ -314,7 +314,9 @@ public class InstructionBuilder {
 
                     this.StoreRef(outRef, () => {
                         this.LoadValue(argVal);
-                        this.body.Emit(OpCodes.Isinst, classTypeRef);    
+                        this.body.Emit(OpCodes.Isinst, classTypeRef);
+                        this.body.Emit(OpCodes.Ldnull);
+                        this.body.Emit(OpCodes.Cgt);
                     });
 
                     break;
