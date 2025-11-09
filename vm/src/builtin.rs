@@ -246,7 +246,7 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
     let args_count = load_integer(state, &Ref::Local(LocalID(3)))?;
     let result_ptr_arg = load_pointer(state, &Ref::Local(LocalID(4)))?;
 
-    let (method_info_val,_) = state.load_rc_struct_ptr(&method_ptr)?;
+    let (method_info_val,_) = state.load_object(&method_ptr)?;
 
     let method_global_index = method_info_val[METHODINFO_IMPL_FIELD]
         .as_pointer()
@@ -267,7 +267,7 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
                     ExecError::illegal_state(msg)
                 })?;
 
-            let (type_info_val, _) = state.load_rc_struct_ptr(&type_info_ptr)?;
+            let (type_info_val, _) = state.load_object(&type_info_ptr)?;
             let type_name_ptr = type_info_val[TYPEINFO_NAME_FIELD]
                 .as_pointer()
                 .ok_or_else(|| {
@@ -311,7 +311,7 @@ fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
     let args_count = load_integer(state, &Ref::Local(LocalID(2)))?;
     let result_ptr_arg = load_pointer(state, &Ref::Local(LocalID(3)))?;
 
-    let (func_info_val,_) = state.load_rc_struct_ptr(&func_ptr)?;
+    let (func_info_val,_) = state.load_object(&func_ptr)?;
     let impl_val = func_info_val[FUNCINFO_IMPL_FIELD]
         .as_pointer()
         .ok_or_else(|| ExecError::illegal_state("impl field must be a pointer"))?
@@ -381,26 +381,32 @@ fn get_type_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
-    let obj_param = Ref::Local(LocalID(1));
+    let obj_ptr_arg = LocalID(1);
+    let obj_ptr = load_pointer(state, &Ref::Local(obj_ptr_arg))?;
+    
+    let obj_header = state.load_object_header(&obj_ptr)?;
+    
+    match &obj_header.object_type {
+        Type::Struct(class_id) => {
+            let type_info_ref = state
+                .get_class_runtime_type_ref(*class_id)
+                .ok_or_else(|| {
+                    let message = format!("missing runtime type info for class struct {class_id}");
+                    ExecError::illegal_state(message)
+                })?;
 
-    let type_id = state
-        .load(&obj_param.to_deref())?
-        .as_any_struct()
-        .ok_or_else(|| {
-            ExecError::illegal_state("object pointer must refer to a struct value")
-        })?
-        .type_id;
-    
-    let type_info_ref = state
-        .get_class_runtime_type_ref(type_id)
-        .ok_or_else(|| {
-            ExecError::illegal_state(format!("missing runtime type info for class struct {type_id}"))
-        })?;
-    
-    let type_info_ptr = state.load(&Ref::Global(type_info_ref))?;
-    state.store(&RETURN_REF, type_info_ptr)?;
-    
-    Ok(())
+            let type_info_ptr = state.load(&Ref::Global(type_info_ref))?;
+            state.store(&RETURN_REF, type_info_ptr)?;
+            
+            Ok(())
+        }
+        
+        _ => {
+            let type_name = state.metadata.pretty_ty_name(&obj_header.object_type);
+            let message = format!("missing runtime type info for object type {}", type_name);
+            Err(ExecError::illegal_state(message))
+        }
+    }
 }
 
 fn find_func_info(state: &mut Interpreter) -> ExecResult<()> {

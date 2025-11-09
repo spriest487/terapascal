@@ -101,10 +101,6 @@ impl fmt::Display for Library {
                             )?;
                         },
 
-                        StructIdentity::DynArray(element) => {
-                            write!(f, "array of {}", self.metadata.pretty_ty_name(element))?;
-                        },
-
                         StructIdentity::SetFlags { bits } => {
                             write!(f, "set<{}>", bits)?;
                         }

@@ -1,0 +1,8 @@
+{
+  "steps": [
+    { "output": "this animal is a DynamicType.Cat" },
+    { "output": "this animal is a DynamicType.Dog" },
+    { "output": "woof!" },
+    { "output": "this animal is a DynamicType.Cat" }
+  ]
+}

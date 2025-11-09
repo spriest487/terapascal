@@ -1,10 +1,11 @@
+use crate::FunctionDecl;
 use crate::FunctionID;
 use crate::MetadataBuilder;
 use crate::NamePath;
 use crate::StaticClosureID;
 use crate::StructDef;
+use crate::StructIdentity;
 use crate::TypeDefID;
-use crate::FunctionDecl;
 use std::rc::Rc;
 
 impl MetadataBuilder {
@@ -39,9 +40,18 @@ impl MetadataBuilder {
     pub fn find_dtor(&self, type_id: TypeDefID) -> Option<FunctionID> {
         self.find_in_self_or_refs(|metadata| metadata.find_dtor(type_id))
     }
-    
+
     pub fn closures(&self) -> impl Iterator<Item=TypeDefID> {
-        self.iter_in_self_or_refs(move |metadata| metadata.closures().iter().cloned())
+        self.iter_in_self_or_refs(move |metadata| metadata.closures())
+    }
+
+    pub fn closures_by_function(&self) -> impl Iterator<Item=(TypeDefID, &[TypeDefID])> {
+        self.iter_in_self_or_refs(move |metadata| metadata.closures_by_function()
+            .iter()
+            .map(|(func_type_id, closure_ids)| {
+                (*func_type_id, closure_ids.as_slice())
+            })
+        )
     }
     
     pub fn get_static_closure(&self, func_id: FunctionID) -> Option<StaticClosureID> {
@@ -54,8 +64,12 @@ impl MetadataBuilder {
     }
 
     pub fn define_closure_ty(&mut self, id: TypeDefID, closure_def: StructDef) {
+        let StructIdentity::Closure(identity) = &closure_def.identity else {
+            panic!("define_closure_ty: definition struct did not have a closure identity");
+        };
+
+        self.metadata.insert_closure(identity.virt_func_ty, id);
         self.define_struct(id, closure_def);
-        self.metadata.closures.push(id);
     }
 
     pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {

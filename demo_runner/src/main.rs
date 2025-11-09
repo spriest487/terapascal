@@ -45,10 +45,13 @@ fn main() -> Result<(), i32> {
     let mut ok_count = 0;
     let mut error_count = 0;
 
-    for test_file in test_files {
+    let test_count = test_files.len();
+    for (i, test_file) in test_files.into_iter().enumerate() {
+        println!("RUNNING: {} ({}/{})", test_file.path.display(), i + 1, test_count);
+
         if !test_file.run(&opts) {
             error_count += 1;
-            if !opts.error_continue {  
+            if !opts.error_continue {
                 break;
             }
         } else {

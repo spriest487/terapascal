@@ -271,8 +271,6 @@ impl TestCase {
     }
     
     fn try_run(&self, opts: &Opts) -> io::Result<bool> {
-        println!("RUNNING: {}", self.path.display());
-
         let mut io_error = false;
         let mut step_failed = false;
         

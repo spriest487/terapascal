@@ -9,6 +9,7 @@ use crate::IRFormatter;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Type;
+use crate::VirtualTypeID;
 pub use interface::*;
 pub use r#struct::*;
 use serde::Deserialize;
@@ -45,6 +46,12 @@ impl fmt::Display for TypeDefID {
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct InterfaceID(pub usize);
 
+impl InterfaceID {
+    pub fn to_interface_ptr_type(self) -> Type {
+        Type::RcPointer(VirtualTypeID::Interface(self))
+    }
+}
+
 // key used for distinguishing unique set types, which are implemented using the same underlying
 // struct type but can have different RTTI
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
@@ -61,7 +68,6 @@ pub enum StructIdentity {
     Record(NamePath),
     Class(NamePath),
     Array(Type, usize),
-    DynArray(Type),
     Closure(ClosureIdentity),
     
     // bitmask type for set flag collections. value is the number of bits
@@ -78,9 +84,6 @@ impl StructIdentity {
             },
             StructIdentity::Array(element, size) => {
                 format!("{}[{}]", type_formatter(element), size)
-            },
-            StructIdentity::DynArray(element) => {
-                format!("{}[]", type_formatter(element))
             },
             StructIdentity::Closure(id) => {
                 let func_ty = Type::Function(id.virt_func_ty);
@@ -108,6 +111,12 @@ pub struct ClosureIdentity {
     pub id: FunctionID,
 }
 
+impl ClosureIdentity {
+    pub fn to_closure_ptr_type(&self) -> Type {
+        Type::RcPointer(VirtualTypeID::Closure(self.virt_func_ty))
+    }
+}
+
 impl StructIdentity {
     pub fn is_ref_type(&self) -> bool {
         match self {
@@ -116,7 +125,6 @@ impl StructIdentity {
             | StructIdentity::SetFlags { .. } => false,
 
             StructIdentity::Class(..)
-            | StructIdentity::DynArray(..)
             | StructIdentity::Closure(..) => true,
         }
     }
@@ -185,10 +193,6 @@ impl TypeDef {
                 StructIdentity::Array(ty, dim) => {
                     let ty_name = ty_format(ty);
                     format!("array[{}] of {}", dim, ty_name)
-                }
-                StructIdentity::DynArray(ty) => {
-                    let ty_name = ty_format(ty);
-                    format!("array of {}", ty_name)
                 }
                 StructIdentity::SetFlags { bits } => {
                     format!("set<{bits}>")

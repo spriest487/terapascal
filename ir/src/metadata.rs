@@ -4,13 +4,12 @@ use crate::rtti::RuntimeType;
 use crate::ty::FieldID;
 use crate::ty::VirtualTypeID;
 use crate::ty_decl::TagLocation;
-use crate::FunctionDecl;
 use crate::FunctionID;
 use crate::FunctionSig;
 use crate::GlobalRef;
 use crate::IRFormatter;
-use crate::InterfaceDef;
 use crate::InterfaceDecl;
+use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::InterfaceImpl;
 use crate::NamePath;
@@ -27,6 +26,7 @@ use crate::TypeDef;
 use crate::TypeDefID;
 use crate::Value;
 use crate::VariantDef;
+use crate::FunctionDecl;
 use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 use serde::Serialize;
@@ -124,7 +124,9 @@ pub struct Metadata {
 
     functions: LinkedHashMap<FunctionID, Rc<FunctionDecl>>,
 
-    closures: Vec<TypeDefID>,
+    // function pointer type ID -> closure class IDs
+    closures: BTreeMap<TypeDefID, Vec<TypeDefID>>,
+
     function_static_closures: HashMap<FunctionID, StaticClosureID>,
 
     runtime_types: HashMap<Type, Rc<RuntimeType>>,
@@ -147,7 +149,7 @@ impl Metadata {
 
             functions: LinkedHashMap::new(),
 
-            closures: Vec::new(),
+            closures: BTreeMap::new(),
             function_static_closures: HashMap::new(),
 
             runtime_types: HashMap::new(),
@@ -636,9 +638,23 @@ impl Metadata {
     pub fn find_dtor(&self, owning_type: TypeDefID) -> Option<FunctionID> {
         self.dtors.get(&owning_type).cloned()
     }
+    
+    pub fn insert_closure(&mut self, func_type_id: TypeDefID, closure_id: TypeDefID) {
+        let closures = self.closures
+            .entry(func_type_id)
+            .or_insert_with_key(|_key| Vec::new());
+        
+        closures.push(closure_id);
+    }
 
-    pub fn closures(&self) -> &[TypeDefID] {
+    pub fn closures_by_function(&self) -> &BTreeMap<TypeDefID, Vec<TypeDefID>> {
         &self.closures
+    }
+
+    pub fn closures(&self) -> impl Iterator<Item=TypeDefID> {
+        self.closures
+            .values()
+            .flat_map(|ids| ids.iter().cloned())
     }
 
     pub fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {

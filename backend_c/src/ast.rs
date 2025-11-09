@@ -265,7 +265,7 @@ impl Unit {
         }
         
         for closure_id in metadata.closures() {
-            let class = Class::gen_closure_class(*closure_id);
+            let class = Class::gen_closure_class(closure_id);
             module.classes.push(class);
         } 
 

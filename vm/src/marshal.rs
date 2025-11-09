@@ -396,10 +396,22 @@ impl Marshaller {
 
         self.struct_field_maps.insert(id, def_field_tys);
 
-        if def.is_class() {
-            self.add_dyn_array_type(id.to_class_ptr_type());
-        } else {
-            self.add_dyn_array_type(struct_ty.clone());
+        match &def.identity {
+            // value types: array contains this type directly as an element
+            ir::StructIdentity::Record(..) 
+            | ir::StructIdentity::SetFlags { .. } 
+            | ir::StructIdentity::Array(..) => {
+                self.add_dyn_array_type(struct_ty.clone());
+            }
+            
+            // class types: array contains object pointers
+            ir::StructIdentity::Class(..) => {
+                self.add_dyn_array_type(id.to_class_ptr_type());
+            }
+            
+            ir::StructIdentity::Closure(identity) => {
+                self.add_dyn_array_type(identity.to_closure_ptr_type());
+            }
         }
 
         let struct_ffi_ty = ForeignType::structure(field_ffi_tys);
@@ -446,6 +458,12 @@ impl Marshaller {
         self.variant_case_types.insert(id, case_tys);
 
         Ok(variant_ffi_ty)
+    }
+
+    pub fn add_iface(&mut self, id: ir::InterfaceID) {
+        let iface_ty = id.to_interface_ptr_type();
+        
+        self.add_dyn_array_type(iface_ty)
     }
     
     pub fn add_flags_type(
@@ -897,21 +915,21 @@ impl Marshaller {
         Ok(size_sum)
     }
 
-    fn marshal_object_header(&self, rc: &ObjectHeader, out_bytes: &mut [u8]) -> MarshalResult<usize> {
-        let type_index = self.type_indices.get_by_right(&rc.object_type)
+    pub fn marshal_object_header(&self, header: &ObjectHeader, out_bytes: &mut [u8]) -> MarshalResult<usize> {
+        let type_index = self.type_indices.get_by_right(&header.object_type)
             .ok_or_else(|| {
-                MarshalError::UnsupportedType(rc.object_type.clone())
+                MarshalError::UnsupportedType(header.object_type.clone())
             })?;
         
         let mut offset = 0;
         offset += marshal_bytes(&type_index.to_ne_bytes(), &mut out_bytes[offset..]);
-        offset += marshal_bytes(&rc.strong_count.to_ne_bytes(), &mut out_bytes[offset..]);
-        offset += marshal_bytes(&rc.weak_count.to_ne_bytes(), &mut out_bytes[offset..]);
+        offset += marshal_bytes(&header.strong_count.to_ne_bytes(), &mut out_bytes[offset..]);
+        offset += marshal_bytes(&header.weak_count.to_ne_bytes(), &mut out_bytes[offset..]);
 
         Ok(offset)
     }
 
-    fn unmarshal_object_header(&self, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<ObjectHeader>> {
+    pub fn unmarshal_object_header(&self, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<ObjectHeader>> {
         let mut offset = 0;
 
         let type_index = unmarshal_from_ne_bytes(&in_bytes[offset..], u64::from_ne_bytes)?;
@@ -936,22 +954,6 @@ impl Marshaller {
             },
             byte_count: offset,
         })
-    }
-
-    pub fn unmarshal_object_header_at(&self, pointer: &Pointer) -> MarshalResult<ObjectHeader> {
-        let rc = self.unmarshal_object_header(unsafe {
-            pointer.as_slice(Self::object_header_size())
-        })?;
-
-        Ok(rc.value)
-    }
-
-    pub fn marshal_object_header_at(&self, rc: &ObjectHeader, pointer: &Pointer) -> MarshalResult<()> {
-        self.marshal_object_header(rc, unsafe {
-            pointer.as_slice_mut(Self::object_header_size())
-        })?;
-        
-        Ok(())
     }
 
     pub fn object_header_size() -> usize {

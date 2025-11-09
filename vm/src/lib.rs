@@ -475,7 +475,10 @@ impl Interpreter {
             ExecError::illegal_state(msg)
         })?;
 
-        let self_val = self.load_indirect(self_ptr)?;
+        let header = self.load_object_header(self_ptr)?;
+        let object_ptr = self_ptr.clone().reinterpret(header.object_type);
+
+        let self_val = self.load_indirect(&object_ptr)?;
         let self_class_id = match &self_val {
             DynValue::Structure(struct_val) => Ok(struct_val.type_id),
             _ => {
@@ -626,38 +629,6 @@ impl Interpreter {
         self.typeinfo_map.find_by_key(type_id).cloned()
     }
 
-    fn find_runtime_type(&self, resource_ty: &ir::Type) -> ExecResult<Rc<ir::RuntimeType>> {
-        self.metadata.get_runtime_type(&resource_ty).ok_or_else(|| {
-            let name = self.metadata.pretty_ty_name(&resource_ty);
-            let funcs = self
-                .metadata
-                .runtime_types()
-                .map(|(ty, funcs)| {
-                    let ty_name = self.metadata.pretty_ty_name(ty);
-
-                    let release_func = match funcs.release {
-                        Some(id) => id.to_string(),
-                        None => "None".to_string(),
-                    };
-
-                    let retain_func = match funcs.retain {
-                        Some(id) => id.to_string(),
-                        None => "None".to_string(),
-                    };
-
-                    format!(
-                        "  {}: release={}, retain={}",
-                        ty_name, release_func, retain_func
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            let msg = format!("missing rc boilerplate for {} in:\n{}", name, funcs);
-            ExecError::illegal_state(msg)
-        })
-    }
-
     // load a pointer, expected to point to an RC struct
     // guarantees that the struct value returned has some value for its rc field
     fn load_dyn_array_ptr(&self, ptr: &Pointer) -> ExecResult<(Box<ArrayValue>, ObjectHeader)> {
@@ -687,11 +658,30 @@ impl Interpreter {
         elements_array.rc = Some(array_header.rc.clone());
         Ok((elements_array, array_header.rc))
     }
+    
+    fn load_object_header(&self, ptr: &Pointer) -> ExecResult<ObjectHeader> {
+        let rc = self.marshaller.unmarshal_object_header(unsafe {
+            ptr.as_slice(Marshaller::object_header_size())
+        })?;
+
+        Ok(rc.value)
+    }
+    
+    fn store_object_header(&self, header: &ObjectHeader, ptr: &Pointer) -> ExecResult<()> {
+        self.marshaller.marshal_object_header(header, unsafe {
+            ptr.as_slice_mut(Marshaller::object_header_size())
+        })?;
+
+        Ok(())
+    }
 
     // load a pointer, expected to point to an RC struct
     // guarantees that the struct value returned has some value for its rc field
-    fn load_rc_struct_ptr(&self, ptr: &Pointer) -> ExecResult<(Box<StructValue>, ObjectHeader)> {
-        let struct_val = match self.load_indirect(&ptr)? {
+    fn load_object(&self, ptr: &Pointer) -> ExecResult<(Box<StructValue>, ObjectHeader)> {
+        let header = self.load_object_header(ptr)?;
+        let object_ptr = ptr.reinterpret(header.object_type);
+
+        let struct_val = match self.load_indirect(&object_ptr)? {
             DynValue::Structure(struct_val) => struct_val,
             other => {
                 let msg = format!("loaded val was not a structure, found: {:?}", other);
@@ -719,7 +709,7 @@ impl Interpreter {
             return Ok(false);
         }
         
-        let mut rc = self.marshaller.unmarshal_object_header_at(ptr)?;
+        let mut rc = self.load_object_header(ptr)?;
 
         // release calls are totally ignored for immortal refs
         if rc.strong_count < 0 {
@@ -763,11 +753,10 @@ impl Interpreter {
                 self.invoke_dtor(&val, &rc.object_type)?;
 
                 // if the type is a user-defined class, try to call its releaser
-                if rc.object_type.rc_resource_def_id().is_some() {
-                    let type_info = self.find_runtime_type(&rc.object_type)?;
-                    if let Some(release_func) = type_info.release {
-                        self.call_and_store(release_func, &[val.clone()], None)?;
-                    }
+                if let Some(type_info) = self.metadata.get_runtime_type(&rc.object_type)
+                    && let Some(release_func) = type_info.release
+                {
+                    self.call_and_store(release_func, &[val.clone()], None)?;
                 }
             }
 
@@ -794,7 +783,7 @@ impl Interpreter {
             return Ok(true);
         }
 
-        self.marshaller.marshal_object_header_at(&rc, &ptr)?;
+        self.store_object_header(&rc, &ptr)?;
 
         Ok(false)
     }
@@ -811,7 +800,7 @@ impl Interpreter {
             return Ok(());
         }
 
-        let mut rc = self.marshaller.unmarshal_object_header_at(ptr)?;
+        let mut rc = self.load_object_header(ptr)?;
 
         // don't retain immortal refs
         if rc.strong_count < 0 {
@@ -842,7 +831,7 @@ impl Interpreter {
             );
         }
 
-        self.marshaller.marshal_object_header_at(&rc, ptr)?;
+        self.store_object_header(&rc, ptr)?;
 
         Ok(())
     }
@@ -1260,13 +1249,10 @@ impl Interpreter {
         let released = self.release_dyn_val(&val, weak)?;
 
         if released {
-            self.store(
-                at,
-                DynValue::Pointer(Pointer {
-                    ty: ir::Type::Nothing,
-                    addr: 0xDEAD,
-                }),
-            )?;
+            self.store(at, DynValue::Pointer(Pointer {
+                ty: ir::Type::Nothing,
+                addr: 0xDEAD,
+            }))?;
         }
 
         self.store(released_out, DynValue::Bool(released))?;
@@ -1818,62 +1804,46 @@ impl Interpreter {
             return self.store(out, DynValue::Bool(false));
         }
 
-        let (is, rc) = match class_id {
-            ir::VirtualTypeID::Any => {
-                let rc = match self.load_indirect(&a_ptr)? {
-                    DynValue::Structure(struct_val) => struct_val.rc,
-                    DynValue::Array(array_val) => array_val.rc,
+        let object_header = self.load_object_header(&a_ptr)?;
 
-                    _ => {
-                        let msg = "pointer target of ClassIs instruction must point to an object";
-                        return Err(ExecError::illegal_state(msg));
-                    }
-                };
-                
-                (true, rc)
+        if object_header.strong_count == 0 {
+            // zombie references never count as castable to any type 
+            // and "is" ops always return false
+            self.store(out, DynValue::Bool(false))?;
+            return Ok(())
+        }
+        
+        let is = match class_id {
+            ir::VirtualTypeID::Any => true,
+
+            ir::VirtualTypeID::Class(class_id) => {
+                object_header.object_type == ir::Type::Struct(*class_id)
             },
-
-            ir::VirtualTypeID::Class(type_id) => {
-                let DynValue::Structure(struct_val) = self.load_indirect(&a_ptr)? else {
-                    let msg = "pointer target of ClassIs instruction must point to a class object";
-                    return Err(ExecError::illegal_state(msg));
-                };
-
-                (struct_val.type_id == *type_id, struct_val.rc)
-            },
-            
-            ir::VirtualTypeID::Array(element_type) => {
-                let DynValue::Array(array_val) = self.load_indirect(&a_ptr)? else {
-                    let msg = "pointer target of ClassIs instruction must point to an array object";
-                    return Err(ExecError::illegal_state(msg));
-                };
-
-                (array_val.element_type == **element_type, array_val.rc)
-            }
 
             ir::VirtualTypeID::Interface(iface_id) => {
-                if let DynValue::Structure(struct_val) = self.load_indirect(&a_ptr)? {
-                    let resource_id = ir::VirtualTypeID::Class(struct_val.type_id);
-                    let actual_ty = ir::Type::RcPointer(resource_id);
-
-                    let is = self.metadata.is_impl(&actual_ty, *iface_id);
-
-                    (is, struct_val.rc)
-                } else {
-                    (false, None)
-                }
+                self.metadata.is_impl(&object_header.object_type, *iface_id)
             },
 
-            // todo: can `is` be used with closures?
-            ir::VirtualTypeID::Closure(..) => (false, None)
-        };
-
-        if let Some(rc) = rc {
-            // zombie references never count as castable any type
-            if rc.strong_count == 0 {
-                return self.store(out, DynValue::Bool(false));
+            ir::VirtualTypeID::Closure(func_type_id) => {
+                match object_header.object_type {
+                    ir::Type::Struct(struct_id) => {
+                        self.metadata
+                            .closures_by_function()
+                            .get(&func_type_id)
+                            .map(|func_closures| {
+                                func_closures.contains(&struct_id)
+                            })
+                            .unwrap_or(false)
+                    }
+                    
+                    _ => false,
+                }
             }
-        }
+
+            ir::VirtualTypeID::Array(element_type) => {
+                object_header.object_type == element_type.as_ref().clone().array(0)
+            }
+        };
 
         self.store(out, DynValue::Bool(is))?;
 
@@ -1921,7 +1891,7 @@ impl Interpreter {
             ir::Type::RcPointer(..) => {
                 let val_ptr = self.addr_of_ref(&a.clone().to_deref())?;
                 
-                let header = self.marshaller.unmarshal_object_header_at(&val_ptr)?;
+                let header = self.load_object_header(&val_ptr)?;
                 let object_ptr = val_ptr.reinterpret(header.object_type);
 
                 let val = self.load_indirect(&object_ptr)?;
@@ -2052,12 +2022,16 @@ impl Interpreter {
 
         for (id, type_def) in lib.metadata().type_defs() {
             let def_result = match type_def {
-                ir::TypeDef::Struct(struct_def) => marshaller
-                    .add_struct(id, struct_def, lib.metadata())
-                    .map(Some),
-                ir::TypeDef::Variant(variant_def) => marshaller
-                    .add_variant(id, variant_def, lib.metadata())
-                    .map(Some),
+                ir::TypeDef::Struct(struct_def) => {
+                    marshaller
+                        .add_struct(id, struct_def, lib.metadata())
+                        .map(Some)
+                }
+                ir::TypeDef::Variant(variant_def) => {
+                    marshaller
+                        .add_variant(id, variant_def, lib.metadata())
+                        .map(Some)
+                },
                 ir::TypeDef::Function(_func_def) => {
                     // functions don't need special marshalling, we only marshal pointers to them
                     Ok(None)
@@ -2065,6 +2039,10 @@ impl Interpreter {
             };
 
             def_result.map_err(|err| self.add_stack_trace(err.into()))?;
+        }
+        
+        for (iface_id, _) in lib.metadata.ifaces() {
+            marshaller.add_iface(iface_id)
         }
 
         for (set_id, set_ty_def) in lib.metadata.set_alias_defs() {
@@ -2292,7 +2270,7 @@ impl Interpreter {
     }
 
     pub fn read_string_indirect(&self, str_ptr: &Pointer) -> ExecResult<String> {
-        let (str_struct, _) = self.load_rc_struct_ptr(str_ptr)?;
+        let (str_struct, _) = self.load_object(str_ptr)?;
         self.read_string_struct(str_struct.as_ref())
     }
 

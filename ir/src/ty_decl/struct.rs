@@ -31,7 +31,7 @@ impl StructDef {
     }
     
     pub fn is_class(&self) -> bool {
-        matches!(self.identity, StructIdentity::Class(..) | StructIdentity::DynArray(..))
+        matches!(self.identity, StructIdentity::Class(..) | StructIdentity::Closure(..))
     }
     
     pub fn is_equivalent_def(&self, other: &Self) -> bool {
@@ -66,7 +66,6 @@ impl StructDef {
             
             StructIdentity::Closure(..) 
             | StructIdentity::Array(..) 
-            | StructIdentity::DynArray(..) 
             | StructIdentity::SetFlags { .. } => None,
         }
     }
@@ -100,7 +99,6 @@ impl fmt::Display for StructDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.identity {
             StructIdentity::Array(ty, dim) => write!(f, "array[{}] of {}", dim, ty),
-            StructIdentity::DynArray(ty) => write!(f, "array of {}", ty),
             StructIdentity::Class(name) | StructIdentity::Record(name) => write!(f, "{}", name),
             StructIdentity::SetFlags { bits, .. } => write!(f, "set<{bits}>"),
             StructIdentity::Closure(identity) => write!(
