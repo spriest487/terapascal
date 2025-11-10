@@ -252,7 +252,7 @@ public class InstructionBuilder {
                     var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDiscriminatorFieldRef(variantType);
                     
                     this.StoreRef(outRef, () => {
-                        this.LoadRef(argRef);
+                        this.LoadRefAddr(argRef);
                         this.body.Emit(OpCodes.Ldflda, fieldRef);
                     });
 
@@ -320,7 +320,7 @@ public class InstructionBuilder {
                         this.LoadValue(argVal);
                         this.body.Emit(OpCodes.Isinst, classTypeRef);
                         this.body.Emit(OpCodes.Ldnull);
-                        this.body.Emit(OpCodes.Cgt);
+                        this.body.Emit(OpCodes.Cgt_Un);
                     });
 
                     break;
