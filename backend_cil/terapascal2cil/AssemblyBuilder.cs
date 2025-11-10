@@ -221,7 +221,7 @@ public class AssemblyBuilder : IDisposable {
                             break;
                         }
                         case IR.VariantTypeDef { Def: var variantDef }: {
-                            this.TypeBuilder.BuildVariantDef(id, variantDef);
+                            this.TypeBuilder.BuildVariantDef(id, variantDef, library);
                             break;
                         }
                         case IR.FunctionTypeDef { Sig: var sig }: {

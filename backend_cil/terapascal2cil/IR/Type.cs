@@ -145,7 +145,7 @@ public sealed record ArrayType : IType {
 
 public static class TypeExt {
     extension(IType type) {
-        public bool IsClass() {
+        public bool IsObjectType() {
             return type switch {
                 RcPointerType => true,
                 RcWeakPointerType => true,

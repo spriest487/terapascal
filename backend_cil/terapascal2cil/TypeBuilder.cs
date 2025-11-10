@@ -2,7 +2,7 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using Terapascal.IR;
+using static Terapascal.IR.TypeExt;
 
 namespace Terapascal.CIL;
 
@@ -296,7 +296,114 @@ public class TypeBuilder {
         this.assemblyBuilder.Module.Types.Add(typeDef);
     }
 
-    public void BuildVariantDef(IR.TypeDefID id, IR.VariantDef def) {
+    private int GetValueLayoutSize(IR.IType type, IR.Library library) {
+        switch (type) {
+            case IR.ArrayType arrayType: {
+                var elementSize = this.GetValueLayoutSize(arrayType.Element, library);
+                return elementSize * (int)arrayType.Length;
+            }
+
+            case IR.U8Type:
+            case IR.I8Type:
+            case IR.BoolType: {
+                return 1;
+            }
+
+            case IR.I16Type:
+            case IR.U16Type: {
+                return 2;
+            }
+
+            case IR.U32Type:
+            case IR.I32Type:
+            case IR.F32Type: {
+                return 4;
+            }
+
+            case IR.U64Type:
+            case IR.I64Type:
+            case IR.USizeType:
+            case IR.ISizeType:
+            case IR.F64Type: {
+                return 8;
+            }
+
+            case IR.FlagsType(var defID, _): {
+                return this.GetStructLayoutSize(defID, library);
+                break;
+            }
+            case IR.NothingType: {
+                return 0;
+            }
+            
+            case IR.RcPointerType:
+            case IR.RcWeakPointerType:
+            case IR.FunctionType:
+            case IR.PointerType:
+            case IR.TempRefType: {
+                return PointerSize;
+            }
+
+            case IR.StructType(var id): {
+                return this.GetStructLayoutSize(id, library);
+            }
+
+            case IR.VariantType(var id): {
+                return this.GetVariantLayoutSize(id, library);
+            }
+
+            default: {
+                throw new NotImplementedException($"IR type: {type}");
+            }
+        }
+    }
+
+    private int GetStructLayoutSize(IR.TypeDefID id, IR.Library library) {
+        if (!library.Metadata.FindStructDef(id, out var structDef)) {
+            throw new InvalidDataException($"type def not found in metadata: variant {id.ID}");
+        }
+
+        // assume structs are tightly packed + padding is handled by the compiler
+        var dataSize = 0;
+        foreach (var (_, fieldDef) in structDef.Fields) {
+            dataSize += this.GetValueLayoutSize(fieldDef.Type, library);
+        }
+
+        return dataSize;
+    }
+
+    private int GetVariantLayoutSize(IR.TypeDefID id, IR.Library library) {
+        if (!library.Metadata.FindVariantDef(id, out var variantDef)) {
+            throw new InvalidDataException($"type def not found in metadata: variant {id.ID}");
+        }
+
+        return this.GetVariantLayoutSize(variantDef, library);
+    }
+    
+    private int GetVariantLayoutSize(IR.VariantDef variantDef, IR.Library library) {
+        var hasObjectData = false;
+        var maxDataSize = 0;
+        foreach (var caseDef in variantDef.Cases) {
+            if (caseDef.Type == null) {
+                continue;
+            }
+
+            if (caseDef.Type.IsObjectType()) {
+                hasObjectData = true;
+            } else {
+                maxDataSize += this.GetValueLayoutSize(caseDef.Type, library);
+            }
+        }
+
+        var totalSize = PointerSize + maxDataSize;
+        if (hasObjectData) {
+            totalSize += PointerSize;
+        }
+
+        return totalSize;
+    }
+
+    public void BuildVariantDef(IR.TypeDefID id, IR.VariantDef def, IR.Library library) {
         var typeRef = this.BuildStructTypeRef(id, isValueType: false);
 
         var typeDef = new TypeDefinition(typeRef.Namespace,
@@ -312,8 +419,6 @@ public class TypeBuilder {
 
         typeDef.Fields.Add(discField);
 
-        var totalSize = sizeof(int);
-
         var caseFieldRefs = new List<FieldReference?>(def.Cases.Count);
 
         var caseTypeRefs = new TypeReference?[def.Cases.Count];
@@ -326,12 +431,12 @@ public class TypeBuilder {
             caseTypeRefs[i] = this.BuildTypeRef(dataType);
         }
 
+        // it's safe to overlap object references of different types in a union, as long as we use them correctly,
+        // which should be enforced by the source language. if there are any object references cases, store them
+        // all at the same offset and offset everything else 
         var hasObjectMembers = caseTypeRefs.Any(r => r is { IsValueType: false });
 
-        var objectPtrOffset = PointerSize;
-        var valueDataOffset = hasObjectMembers ? (objectPtrOffset + PointerSize) : objectPtrOffset;
-
-        var maxDataSize = PointerSize;
+        var valueDataOffset = hasObjectMembers ? (PointerSize * 2) : PointerSize;
 
         for (var i = 0; i < def.Cases.Count; i++) {
             var dataTypeRef = caseTypeRefs[i];
@@ -342,27 +447,16 @@ public class TypeBuilder {
 
             var dataFieldName = $"Case_{i}";
             var dataField = new FieldDefinition(dataFieldName, FieldAttributes.Assembly, dataTypeRef) {
-                Offset = dataTypeRef.IsValueType ? valueDataOffset : objectPtrOffset,
+                Offset = dataTypeRef.IsValueType ? valueDataOffset : PointerSize,
             };
 
             typeDef.Fields.Add(dataField);
-
-            if (totalSize != -1) {
-                if (!dataTypeRef.IsValueType) {
-                    totalSize += PointerSize;
-                } else if (dataTypeRef.Resolve() is not { ClassSize: not -1 } sizedTypeDef) {
-                    totalSize = -1;
-                } else {
-                    totalSize += sizedTypeDef.ClassSize;
-                    maxDataSize = Math.Max(sizedTypeDef.ClassSize, maxDataSize);
-                }
-            }
-
             caseFieldRefs.Add(dataField);
         }
 
-        typeDef.ClassSize = totalSize;
-        typeDef.PackingSize = (short)Math.Min(maxDataSize, totalSize);
+        // discriminator (pointer sized) + any value members
+        typeDef.ClassSize = this.GetVariantLayoutSize(def, library);
+        typeDef.PackingSize = 0;
         
         // this.BuildDefaultConstructor(typeDef);
 

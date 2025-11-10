@@ -297,7 +297,7 @@ public class InstructionBuilder {
                     this.StoreRef(outRef, () => {
                         this.LoadValue(val);
 
-                        if (castToType.IsClass()) {
+                        if (castToType.IsObjectType()) {
                             var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(castToType);
                             this.body.Emit(OpCodes.Castclass, typeRef);
                         }
@@ -784,11 +784,9 @@ public class InstructionBuilder {
             }
 
             case IR.GlobalRef(IR.FunctionGlobalRef(var funcID)): {
-                if (this.library.Functions.TryGetValue(funcID, out var func)) {
-                    var typeID = this.library.Metadata.FindFunctionType(func.Signature());
-                    if (typeID != null) {
-                        return new IR.FunctionType(typeID.Value);
-                    } 
+                if (this.library.Functions.TryGetValue(funcID, out var func) 
+                    && this.library.Metadata.FindFunctionType(func.Signature(), out var typeID)) {
+                    return new IR.FunctionType(typeID);
                 }
 
                 break;

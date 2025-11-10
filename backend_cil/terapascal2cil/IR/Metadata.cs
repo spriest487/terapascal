@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Diagnostics.CodeAnalysis;
+using MessagePack;
 
 namespace Terapascal.IR;
 
@@ -67,18 +68,48 @@ public class Metadata {
         init => field = value!.ToDictionaryNonNull();
     }
 
-    public TypeDefID? FindFunctionType(FunctionSig withSig) {
-        foreach (var (id, typeDecl) in this.TypeDecls) {
+    public bool FindFunctionType(FunctionSig withSig, out TypeDefID id) {
+        foreach (var (declID, typeDecl) in this.TypeDecls) {
             if (typeDecl is not DefTypeDecl(FunctionTypeDef(var sig))) {
                 continue;
             }
 
             if (sig.Equals(withSig)) {
-                return id;
+                id = declID;
+                return true;
             }
         }
 
-        return null;
+        id = default;
+        return false;
+    }
+
+    public bool FindVariantDef(TypeDefID id, [NotNullWhen(true)] out VariantDef? def) {
+        def = null;
+        if (!this.TypeDecls.TryGetValue(id, out var typeDecl)) {
+            return false;
+        }
+
+        if (typeDecl is not DefTypeDecl(VariantTypeDef(var declDef))) {
+            return false;
+        }
+
+        def = declDef;
+        return true;
+    }
+    
+    public bool FindStructDef(TypeDefID id, [NotNullWhen(true)] out StructDef? def) {
+        def = null;
+        if (!this.TypeDecls.TryGetValue(id, out var typeDecl)) {
+            return false;
+        }
+
+        if (typeDecl is not DefTypeDecl(StructTypeDef(var declDef))) {
+            return false;
+        }
+
+        def = declDef;
+        return true;
     }
 
     public IType? GetDynArrayTypeElement(TypeDefID arrayClassID) {
