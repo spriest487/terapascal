@@ -477,7 +477,7 @@ public class InstructionBuilder {
                 $"invalid instruction: type {classTypeRef} cannot be constructed");
 
         this.StoreRef(outRef, () => {
-            this.body.Emit(OpCodes.Newobj, this.assemblyBuilder.Module.ImportReference(defaultCtor));    
+            this.body.Emit(OpCodes.Newobj, this.assemblyBuilder.Module.ImportReference(defaultCtor));
         });
     }
 
@@ -518,9 +518,9 @@ public class InstructionBuilder {
     }
 
     private void BuildLocalAlloc(IR.LocalID at, IR.IType type) {
+        var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type);
+        
         if (!this.varPool.TryGetValue(type, out var pool) || !pool.TryDequeue(out var index)) {
-            var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type);
-
             var newVar = new VariableDefinition(typeRef);
             this.method.Body.Variables.Add(newVar);
 
@@ -529,6 +529,9 @@ public class InstructionBuilder {
 
         var scope = this.scopes.Peek();
         scope.LocalMappings.Add(at, new LocalMapping(type, index));
+
+        this.body.Emit(OpCodes.Ldloca, index);
+        this.body.Emit(OpCodes.Initobj, typeRef);
     }
 
     private void BuildCall(IR.IRef? outRef, IR.IValue funcVal, IReadOnlyList<IR.IValue> argVals) {
