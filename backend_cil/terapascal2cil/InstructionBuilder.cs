@@ -175,7 +175,14 @@ public class InstructionBuilder {
                     var fieldRef = this.assemblyBuilder.TypeBuilder.GetFieldRef(baseType, fieldID);
 
                     this.StoreRef(outRef, () => {
-                        this.LoadRefAddr(argRef);
+                        // for object types Ldfld(a) expects an object ref on the stack so load it directly, but for
+                        // value types we need to load a reference (address) to the object
+                        if (baseType.IsObjectType()) {
+                            this.LoadRef(argRef);
+                        } else {
+                            this.LoadRefAddr(argRef);
+                        }
+                        
                         this.body.Emit(OpCodes.Ldflda, fieldRef);
                     });
 
@@ -803,11 +810,11 @@ public class InstructionBuilder {
             case IR.GlobalRef(IR.StaticFuncInfoGlobalRef): {
                 return IR.IType.FunctionInfo;
             }
-
+            
             case IR.GlobalRef(IR.StaticTypeInfoGlobalRef): {
                 return IR.IType.TypeInfo;
             }
-
+            
             case IR.GlobalRef(IR.StaticTagArrayGlobalRef): {
                 return IR.IType.Any.MakeDynArray();
             }
