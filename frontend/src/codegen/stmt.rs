@@ -1,11 +1,9 @@
-use std::sync::Arc;
 use crate::ast;
 use crate::codegen::expr::call;
 use crate::codegen::expr::call::translate_invocation;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::expr::translate_raise;
 use crate::codegen::ir;
-use crate::codegen::pattern::translate_pattern_match;
 use crate::codegen::translate_block;
 use crate::codegen::translate_exit;
 use crate::codegen::translate_expr;
@@ -15,9 +13,11 @@ use crate::codegen::Builder;
 use crate::typ::system_option_type_of;
 use crate::typ::OPTION_NONE_CASE;
 use crate::typ::OPTION_SOME_CASE;
+use std::sync::Arc;
 use terapascal_common::span::Spanned;
 use terapascal_ir::instruction_builder::jmp_exists;
 use terapascal_ir::instruction_builder::InstructionBuilder;
+use crate::codegen::pattern::{translate_pattern_match_bindings, translate_pattern_match_is};
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
     builder.push_debug_context(stmt.annotation().span().clone());
@@ -646,7 +646,7 @@ fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut Builder)
                 // label to skip this branch if it isn't a match
                 let skip_label = builder.next_label();
 
-                let pattern_match = translate_pattern_match(
+                let is_match = translate_pattern_match_is(
                     &branch.pattern,
                     branch.binding.as_ref(),
                     &cond_expr,
@@ -655,12 +655,19 @@ fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut Builder)
                 );
 
                 // jump to skip label if pattern match return false
-                builder.not(is_skip.clone(), pattern_match.is_match.clone());
+                builder.not(is_skip.clone(), is_match.clone());
                 builder.jmpif(skip_label, is_skip.clone());
 
                 // code to run if we didn't skip - the actual branch
                 builder.scope(|builder| {
-                    for binding in pattern_match.bindings {
+                    let pattern_bindings = translate_pattern_match_bindings(
+                        &branch.pattern,
+                        branch.binding.as_ref(),
+                        &cond_expr,
+                        builder
+                    );
+                    
+                    for binding in pattern_bindings {
                         binding.bind_local(builder);
                     }
 

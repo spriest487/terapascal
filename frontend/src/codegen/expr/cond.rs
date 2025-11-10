@@ -1,11 +1,10 @@
 use crate::codegen::builder::Builder;
 use crate::codegen::expr;
 use crate::codegen::ir;
-use crate::codegen::pattern::translate_pattern_match;
-use crate::codegen::pattern::PatternMatchOutput;
 use crate::codegen::stmt::build_case_block;
 use crate::codegen::typ;
 use terapascal_ir::instruction_builder::InstructionBuilder;
+use crate::codegen::pattern::{translate_pattern_match_bindings, translate_pattern_match_is};
 
 pub fn translate_if_cond<B, BranchTranslateFn>(
     if_cond: &typ::ast::IfCond<B>,
@@ -31,30 +30,29 @@ where
 
         let cond_ty = builder.translate_type(&if_cond.cond.annotation().ty());
 
-        let pattern_match = match &if_cond.is_pattern {
+        let (cond_val, matched_pattern) = match &if_cond.is_pattern {
             // match the cond val against the type pattern that follows it
             Some(is_pattern) => {
                 let cond_ref = expr::translate_expr(&if_cond.cond, builder);
-                translate_pattern_match(
+                let is_match = translate_pattern_match_is(
                     &is_pattern.pattern,
                     is_pattern.binding.as_ref(),
                     &cond_ref,
                     &cond_ty,
-                    builder
-                )
+                    builder,
+                );
+
+                (is_match, Some((is_pattern, cond_ref)))
             }
 
             // no pattern, the cond val must be a boolean and we're just testing that
             None => {
                 let cond_val = expr::expr_to_val(&if_cond.cond, builder);
-                PatternMatchOutput {
-                    is_match: cond_val,
-                    bindings: Vec::new(),
-                }
+                (cond_val, None)
             }
         };
 
-        builder.jmpif(then_label, pattern_match.is_match.clone());
+        builder.jmpif(then_label, cond_val.clone());
 
         if let Some(else_label) = else_label {
             builder.jmp(else_label);
@@ -65,9 +63,18 @@ where
         builder.label(then_label);
 
         builder.scope(|builder| {
-            // bind pattern locals to names and retain them
-            for pattern_binding in &pattern_match.bindings {
-                pattern_binding.bind_local(builder);
+            if let Some((is_pattern, matched_ref)) = matched_pattern {
+                let pattern_bindings = translate_pattern_match_bindings(
+                    &is_pattern.pattern,
+                    is_pattern.binding.as_ref(),
+                    &matched_ref,
+                    builder
+                );
+
+                // bind pattern locals to names and retain them
+                for pattern_binding in pattern_bindings {
+                    pattern_binding.bind_local(builder);
+                }
             }
 
             branch_translate(&if_cond.then_branch, out_val.as_ref(), &out_ty, builder);
@@ -124,7 +131,7 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Buil
             let skip_label = builder.next_label();
 
             builder.scope(|builder| {
-                let pattern_match = translate_pattern_match(
+                let is_match = translate_pattern_match_is(
                     &branch.pattern,
                     branch.binding.as_ref(),
                     &cond_expr,
@@ -133,12 +140,19 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Buil
                 );
 
                 // jump to skip label if pattern match return false
-                builder.not(is_skip.clone(), pattern_match.is_match.clone());
+                builder.not(is_skip.clone(), is_match.clone());
                 builder.jmpif(skip_label, is_skip.clone());
 
                 builder.scope(|builder| {
+                    let pattern_bindings = translate_pattern_match_bindings(
+                        &branch.pattern,
+                        branch.binding.as_ref(),
+                        &cond_expr,
+                        builder,
+                    );
+                    
                     // code to run if we didn't skip - the actual branch
-                    for binding in pattern_match.bindings {
+                    for binding in pattern_bindings {
                         binding.bind_local(builder);
                     }
 
