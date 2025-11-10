@@ -172,7 +172,7 @@ public class InstructionBuilder {
                     Field: var fieldID,
                     BaseType: var baseType,
                 }: {
-                    var fieldRef = this.assemblyBuilder.TypeBuilder.GetFieldRef(baseType, fieldID);
+                    var fieldRef = this.assemblyBuilder.TypeBuilder.GetFieldRef(baseType, fieldID, this.library);
 
                     this.StoreRef(outRef, () => {
                         // for object types Ldfld(a) expects an object ref on the stack so load it directly, but for
@@ -398,6 +398,31 @@ public class InstructionBuilder {
                 case IR.BitNotInstruction(var op): {
                     this.LoadValue(op.Arg);
                     this.body.Emit(OpCodes.Not);
+                    break;
+                }
+                
+                case IR.BitOrInstruction(var op): {
+                    this.BuildBinOp(op, OpCodes.Or);
+                    break;
+                }
+
+                case IR.BitXorInstruction(var op): {
+                    this.BuildBinOp(op, OpCodes.Xor);
+                    break;
+                }
+
+                case IR.BitAndInstruction(var op): {
+                    this.BuildBinOp(op, OpCodes.And);
+                    break;
+                }
+
+                case IR.ShlInstruction(var op): {
+                    this.BuildBinOp(op, OpCodes.Shl);
+                    break;
+                }
+
+                case IR.ShrInstruction(var op): {
+                    this.BuildBinOp(op, OpCodes.Shr);
                     break;
                 }
 

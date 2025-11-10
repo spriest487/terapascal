@@ -506,7 +506,7 @@ public class TypeBuilder {
         typeDef.Methods.Add(methodDef);
     }
 
-    public FieldReference GetFieldRef(IR.IType baseType, IR.FieldID fieldID) {
+    public FieldReference GetFieldRef(IR.IType baseType, IR.FieldID fieldID, IR.Library library) {
         // the closure field pointer can be accessed either through a closure object pointer
         // (accessing the pointer of an unknown closure type to call it) or directly as a member of a
         // specific closure class (setting the pointer during construction)
@@ -520,6 +520,7 @@ public class TypeBuilder {
 
         var structID = baseType switch {
             IR.StructType(var id) => id,
+            IR.FlagsType(_, var setAliasID) => library.Metadata.SetAliases[setAliasID].FlagsStruct,
             IR.RcPointerType(IR.ClassVirtualTypeID(var id)) => id,
 
             _ => throw new ArgumentException($"type {baseType} does not have struct fields (accessing field {fieldID.ID})"),
