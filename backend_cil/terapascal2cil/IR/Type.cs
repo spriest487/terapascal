@@ -145,13 +145,19 @@ public sealed record ArrayType : IType {
 
 public static class TypeExt {
     extension(IType type) {
-        public bool IsObjectType() {
-            return type switch {
-                RcPointerType => true,
-                RcWeakPointerType => true,
-                _ => false,
-            };
-        }
+        public bool IsObjectType() => type switch {
+            RcPointerType => true,
+            RcWeakPointerType => true,
+            _ => false,
+        };
+
+        public bool IsComplex() => type switch {
+            StructType => true,
+            VariantType => true,
+            ArrayType => true,
+            FlagsType => true,
+            _ => false,
+        };
 
         public IType? GetDerefType() {
             return type switch {

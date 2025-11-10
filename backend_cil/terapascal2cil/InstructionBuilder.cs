@@ -530,8 +530,12 @@ public class InstructionBuilder {
         var scope = this.scopes.Peek();
         scope.LocalMappings.Add(at, new LocalMapping(type, index));
 
-        this.body.Emit(OpCodes.Ldloca, index);
-        this.body.Emit(OpCodes.Initobj, typeRef);
+        // for complex types, we need to zero-initialize them immediately because we might generate code
+        // that creates references to their elements without initializing them, which the CLR will not like
+        if (type.IsComplex()) {
+            this.body.Emit(OpCodes.Ldloca, index);
+            this.body.Emit(OpCodes.Initobj, typeRef);
+        }
     }
 
     private void BuildCall(IR.IRef? outRef, IR.IValue funcVal, IReadOnlyList<IR.IValue> argVals) {
