@@ -1,11 +1,29 @@
 implementation
 uses System;
 
+type
+    Greeting = record
+        Message: String;
+    end;
+
 initialization
     var vals := [1, 44];
     
     var v0 := @vals[0];
     v0 := v0 + 1;
+    var val := v0^;
     
-    if v0^ <> 44 then raise 'invalid value';
+    WriteLn('actual value is: ' + val);
+
+    if val <> 44 then raise 'but it should be 44';
+
+    var greets := [
+        Greeting(Message: 'hello'), 
+        Greeting(Message: 'world')
+    ];
+
+    var greet := @greets[0];
+    greet := (greet + 1) as ^Greeting;
+    
+    WriteLn('hello, ' + greet^.Message);
 end

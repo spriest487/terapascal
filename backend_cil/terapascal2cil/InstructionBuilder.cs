@@ -74,7 +74,7 @@ public class InstructionBuilder {
 
         // create a variable to hold the result variable %0 if there's a return type
         if (this.hasReturn) {
-            this.method.ReturnType = this.assemblyBuilder.TypeBuilder.BuildTypeRef(returnType);
+            this.method.ReturnType = this.assemblyBuilder.TypeBuilder.BuildTypeRef(returnType, this.library);
             
             var returnVar = new VariableDefinition(this.method.ReturnType);
             this.method.Body.Variables.Add(returnVar);
@@ -93,7 +93,7 @@ public class InstructionBuilder {
             var paramLocal = new IR.LocalID(firstLocal + (ulong)i);
             var paramType = paramTypes[i];
 
-            var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType);
+            var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType, this.library);
             this.method.Parameters.Add(new ParameterDefinition(paramTypeRef));
 
             // use negative "variable" indices to indicate arg positions
@@ -103,6 +103,8 @@ public class InstructionBuilder {
     }
 
     public void AddInstructions(IReadOnlyList<IR.IInstruction> instructions) {
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
+
         for (var pc = 0; pc < instructions.Count; pc += 1) {
             var instruction = instructions[pc];
 
@@ -172,7 +174,7 @@ public class InstructionBuilder {
                     Field: var fieldID,
                     BaseType: var baseType,
                 }: {
-                    var fieldRef = this.assemblyBuilder.TypeBuilder.GetFieldRef(baseType, fieldID, this.library);
+                    var fieldRef = typeBuilder.GetFieldRef(baseType, fieldID, this.library);
 
                     this.StoreRef(outRef, () => {
                         // for object types Ldfld(a) expects an object ref on the stack so load it directly, but for
@@ -197,23 +199,19 @@ public class InstructionBuilder {
                 }: {
                     this.StoreRef(outRef, () => {
                         if (arrayType is IR.ArrayType staticArrayType) {
-                            // fixed length static array
-                            var elementTypeRef = this.assemblyBuilder.TypeBuilder
-                                .BuildTypeRef(staticArrayType.Element)
-                                .Resolve();
-                            var elementSize = elementTypeRef?.ClassSize ?? TypeBuilder.PointerSize;
-
                             this.LoadRefAddr(arrRef);
-
-                            this.body.Emit(OpCodes.Ldc_I4, elementSize);
                             this.LoadValue(indexVal);
-                            this.body.Emit(OpCodes.Mul);
-
-                            this.body.Emit(OpCodes.Add);
+                            
+                            var elementMethod = this.assemblyBuilder.TypeBuilder.GetStaticArrayElementMethodRef(
+                                staticArrayType.Element, 
+                                staticArrayType.Length
+                            );
+                            
+                            this.body.Emit(OpCodes.Call, elementMethod);
                         } else {
                             // must be a dynarray
                             var arrayElementType = ((IR.ArrayVirtualTypeID)((IR.RcPointerType)arrayType).ID).Element;
-                            var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(arrayElementType);
+                            var elementTypeRef = typeBuilder.BuildTypeRef(arrayElementType, this.library);
 
                             this.LoadRef(arrRef);
                             this.LoadValue(indexVal);
@@ -249,7 +247,7 @@ public class InstructionBuilder {
                     Arg: var argRef,
                     VariantType: var variantType,
                 }: {
-                    var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDiscriminatorFieldRef(variantType);
+                    var fieldRef = typeBuilder.GetVariantDiscriminatorFieldRef(variantType);
                     
                     this.StoreRef(outRef, () => {
                         this.LoadRefAddr(argRef);
@@ -265,7 +263,7 @@ public class InstructionBuilder {
                     VariantType: var variantType,
                     Tag: var tag,
                 }: {
-                    var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(variantType, tag);
+                    var fieldRef = typeBuilder.GetVariantDataFieldRef(variantType, tag);
 
                     this.StoreRef(outRef, () => {
                         this.LoadRefAddr(argRef);
@@ -302,7 +300,7 @@ public class InstructionBuilder {
                         this.LoadValue(val);
 
                         if (castToType.IsObjectType()) {
-                            var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(castToType);
+                            var typeRef = typeBuilder.BuildTypeRef(castToType, this.library);
                             this.body.Emit(OpCodes.Castclass, typeRef);
                         }
                     });
@@ -314,7 +312,7 @@ public class InstructionBuilder {
                     Arg: var argVal,
                     ClassID: var classID,
                 }: {
-                    var classTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(new IR.RcPointerType(classID));
+                    var classTypeRef = typeBuilder.BuildTypeRef(new IR.RcPointerType(classID), this.library);
 
                     this.StoreRef(outRef, () => {
                         this.LoadValue(argVal);
@@ -427,12 +425,12 @@ public class InstructionBuilder {
                 }
 
                 case IR.AddInstruction(var op): {
-                    this.BuildBinOp(op, OpCodes.Add);
+                    this.BuildAdd(op);
                     break;
                 }
 
                 case IR.SubInstruction(var op): {
-                    this.BuildBinOp(op, OpCodes.Sub);
+                    this.BuildSubtract(op);
                     break;
                 }
 
@@ -491,9 +489,77 @@ public class InstructionBuilder {
         }
     }
 
+    private void BuildAdd(IR.BinOpInstruction op) {
+        this.body.Emit(OpCodes.Nop);
+        this.body.Emit(OpCodes.Nop);
+        this.body.Emit(OpCodes.Nop);
+        
+        var aType = this.GetValueType(op.ArgA);
+        var bType = this.GetValueType(op.ArgB);
+
+        this.StoreRef(op.Out, () => {
+            // pointer addition: if either side is a pointer and the other is an integer, the integer is
+            // an offset and the value to be added should be the integer multiplied by the deref type size
+            if (aType.GetDerefType() is { } aValueType
+                && bType.IsInteger()) {
+                this.LoadValue(op.ArgA);
+
+                this.LoadValue(op.ArgB);
+                this.body.Emit(OpCodes.Conv_I);
+
+                this.EmitSizeOf(aValueType);
+                this.body.Emit(OpCodes.Mul);
+            } else if (aType.IsInteger()
+                && bType.GetDerefType() is { } bValueType) {
+                this.LoadValue(op.ArgA);
+                this.body.Emit(OpCodes.Conv_I);
+
+                this.EmitSizeOf(bValueType);
+                this.body.Emit(OpCodes.Mul);
+
+                this.LoadValue(op.ArgB);
+            } else {
+                this.LoadValue(op.ArgA);
+                this.LoadValue(op.ArgB);
+            }
+
+            this.body.Emit(OpCodes.Add);
+        });
+        
+        this.body.Emit(OpCodes.Nop);
+        this.body.Emit(OpCodes.Nop);
+        this.body.Emit(OpCodes.Nop);
+    }
+
+    private void BuildSubtract(IR.BinOpInstruction op) {
+        var aType = this.GetValueType(op.ArgA);
+        var bType = this.GetValueType(op.ArgB);
+
+        this.StoreRef(op.Out, () => {
+            // pointer subtraction: if the lhs is a pointer and the rhs is an integer, the integer is
+            // a negative offset and the value to be subtracted should be the integer multiplied
+            // by the deref type size
+            if (aType.GetDerefType() is { } aValueType
+                && bType.IsInteger()) {
+                this.LoadValue(op.ArgA);
+
+                this.LoadValue(op.ArgB);
+                this.body.Emit(OpCodes.Conv_I);
+
+                this.EmitSizeOf(aValueType);
+                this.body.Emit(OpCodes.Mul);
+            } else {
+                this.LoadValue(op.ArgA);
+                this.LoadValue(op.ArgB);
+            }
+
+            this.body.Emit(OpCodes.Sub);
+        });
+    }
+
     private void BuildRcNew(IR.IRef outRef, IR.TypeDefID typeID) {
         var classID = new IR.ClassVirtualTypeID(typeID);
-        var classTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(new IR.RcPointerType(classID));
+        var classTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(new IR.RcPointerType(classID), this.library);
         var classTypeDef = classTypeRef.Resolve();
 
         var defaultCtor = classTypeDef.GetConstructors()
@@ -507,7 +573,7 @@ public class InstructionBuilder {
     }
 
     private void BuildRcNewArray(IR.IRef outRef, IR.IValue countVal, IR.IType elementType) {
-        var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType);
+        var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType, this.library);
         
         this.StoreRef(outRef, () => {
             this.LoadValue(countVal);
@@ -517,11 +583,11 @@ public class InstructionBuilder {
 
     private void BuildRaise(IR.IRef val) {
         var exceptionType = this.assemblyBuilder.TypeBuilder.ResolveCore(this.assemblyBuilder.TypeBuilder.ExceptionType);
+        var stringTypeName = this.assemblyBuilder.TypeBuilder.CLRStringType.FullName;
         var ctor = (MethodReference)exceptionType
             .GetConstructors()
-            .Single(ctor
-                => ctor.Parameters.Count == 1
-                   && ctor.Parameters[0].ParameterType.FullName == this.assemblyBuilder.TypeBuilder.CLRStringType.FullName);
+            .Single(ctor => ctor.Parameters.Count == 1
+                && ctor.Parameters[0].ParameterType.FullName == stringTypeName);
         ctor = this.assemblyBuilder.TypeBuilder.ImportCoreReference(ctor);
         
         // TODO: native strings
@@ -542,8 +608,18 @@ public class InstructionBuilder {
         this.body.Emit(OpCodes.Throw);
     }
 
+    private void EmitSizeOf(IR.IType type) {
+        var intrinsicSize = type.IntrinsicSize();
+        if (intrinsicSize == null) {
+            var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
+            this.body.Emit(OpCodes.Sizeof, typeRef);
+        } else {
+            this.body.Emit(OpCodes.Ldc_I4, intrinsicSize.Value);
+        }
+    }
+
     private void BuildLocalAlloc(IR.LocalID at, IR.IType type) {
-        var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type);
+        var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
         
         if (!this.varPool.TryGetValue(type, out var pool) || !pool.TryDequeue(out var index)) {
             var newVar = new VariableDefinition(typeRef);
@@ -581,7 +657,6 @@ public class InstructionBuilder {
 
             var sig = this.assemblyBuilder.GetFunctionPointerType(funcTypeID)
                 ?? throw new InvalidDataException($"function pointer type not found for type ID {funcTypeID}");
-            var funcTypeRef = this.assemblyBuilder.TypeBuilder.GetFunctionPointerType(funcTypeID);
             
             foreach (var argVal in argVals) {
                 this.LoadValue(argVal);
@@ -590,7 +665,7 @@ public class InstructionBuilder {
             // must be a value referencing a function pointer
             this.LoadValue(funcVal);
 
-            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(sig.ReturnType);
+            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(sig.ReturnType, this.library);
             var callSite = new CallSite(returnTypeRef) {
                 HasThis = false,
                 ExplicitThis = false,
@@ -598,7 +673,7 @@ public class InstructionBuilder {
             };
 
             foreach (var paramType in sig.ParameterTypes) {
-                var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType);
+                var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType, this.library);
                 callSite.Parameters.Add(new ParameterDefinition(paramTypeRef));
             }
 
@@ -691,7 +766,7 @@ public class InstructionBuilder {
             }
 
             case IR.SizeOfValue(var type): {
-                var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type);
+                var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
 
                 var typeDef = typeRef.Resolve();
                 if (typeDef == null) {
@@ -864,6 +939,28 @@ public class InstructionBuilder {
         throw new InvalidDataException($"invalid instruction - type of {@ref} could not be determined this context");
     }
 
+    public IR.IType GetValueType(IR.IValue val) {
+        return val switch {
+            IR.LiteralNullValue => IR.IType.Nothing.MakePointer(),
+            IR.LiteralValue<bool> => IR.IType.Bool,
+            IR.LiteralValue<sbyte> => IR.IType.I8,
+            IR.LiteralValue<byte> => IR.IType.U8,
+            IR.LiteralValue<short> => IR.IType.I16,
+            IR.LiteralValue<ushort> => IR.IType.U16,
+            IR.LiteralValue<int> => IR.IType.I32,
+            IR.LiteralValue<uint> => IR.IType.U32,
+            IR.LiteralValue<long> => IR.IType.I64,
+            IR.LiteralValue<ulong> => IR.IType.U64,
+            IR.LiteralValue<float> => IR.IType.F32,
+            IR.LiteralValue<double> => IR.IType.F64,
+            IR.LiteralValue<nint> => IR.IType.ISize,
+            IR.LiteralValue<nuint> => IR.IType.USize,
+            IR.RefValue(var @ref) => this.GetRefType(@ref),
+            IR.SizeOfValue => IR.IType.I32,
+            _ => throw new NotImplementedException($"value {val}"),
+        };
+    } 
+
     private void LoadRef(IR.IRef loadRef) {
         switch (loadRef) {
             case IR.LocalRef localRef: {
@@ -910,7 +1007,7 @@ public class InstructionBuilder {
                     throw new InvalidDataException($"invalid value for dereference instruction: {atRef}");
                 }
 
-                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType);
+                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType, this.library);
                 
                 this.LoadValue(atRef);
                 this.body.Emit(OpCodes.Ldobj, targetTypeRef);
@@ -975,7 +1072,7 @@ public class InstructionBuilder {
                     throw new InvalidDataException($"invalid ref type for dereference instruction: {refType}");
                 }
                 
-                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType);
+                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType, this.library);
 
                 this.LoadValue(atRef);
                 

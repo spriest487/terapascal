@@ -3,6 +3,10 @@
 public sealed unsafe class String {
     public byte* chars;
     public int len;
+
+    public override string ToString() {
+        return SystemFunctions.ReadString(this);
+    }
 }
 
 public sealed class TypeInfo {

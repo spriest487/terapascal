@@ -194,7 +194,7 @@ public class AssemblyBuilder : IDisposable {
         }
 
         foreach (var (id, varType) in library.Variables) {
-            var typeRef = this.TypeBuilder.BuildTypeRef(varType);
+            var typeRef = this.TypeBuilder.BuildTypeRef(varType, library);
             
             var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
             var fieldDef = new FieldDefinition($"Variable_{id.ID}", fieldAttrs, typeRef);
@@ -217,7 +217,7 @@ public class AssemblyBuilder : IDisposable {
                     
                     switch (def) {
                         case IR.StructTypeDef { Def: var structDef }: {
-                            this.TypeBuilder.BuildStructDef(id, structDef);
+                            this.TypeBuilder.BuildStructDef(id, structDef, library);
                             break;
                         }
                         case IR.VariantTypeDef { Def: var variantDef }: {
@@ -225,7 +225,7 @@ public class AssemblyBuilder : IDisposable {
                             break;
                         }
                         case IR.FunctionTypeDef { Sig: var sig }: {
-                            this.TypeBuilder.BuildFunctionTypeDef(id, sig);
+                            this.TypeBuilder.BuildFunctionTypeDef(id, sig, library);
                             break;
                         }
                     }
