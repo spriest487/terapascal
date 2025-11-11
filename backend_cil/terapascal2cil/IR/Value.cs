@@ -3,11 +3,23 @@ using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
-public interface IValue;
-public record RefValue(IRef Ref) : IValue;
-public record LiteralNullValue : IValue;
-public record LiteralValue<T>(T Value) : IValue;
-public record SizeOfValue(IType Type) : IValue;
+public interface IValue {
+    bool IsLiteral => false;
+}
+
+public record RefValue(IRef Ref) : IValue {}
+
+public record LiteralNullValue : IValue {
+    public bool IsLiteral => true;
+}
+
+public record LiteralValue<T>(T Value) : IValue {
+    public bool IsLiteral => true;
+}
+
+public record SizeOfValue(IType Type) : IValue {
+    public bool IsLiteral => true;
+}
 
 public class NullableValueFormatter : IMessagePackFormatter<IValue?> {
     private readonly ValueFormatter valueFormatter = new ValueFormatter();

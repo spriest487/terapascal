@@ -82,7 +82,7 @@ public class FunctionSig : IEquatable<FunctionSig> {
     [Key("return_ty")]
     public required IType ReturnType {
         get;
-        init => field = value ?? new NothingType();
+        init => field = value ?? IType.Nothing;
     }
     
     [Key("param_tys")]

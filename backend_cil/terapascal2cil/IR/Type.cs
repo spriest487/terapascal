@@ -106,7 +106,23 @@ public interface IType {
     static IType TypeInfo => new RcPointerType(ClassVirtualTypeID.TypeInfo);
     static IType MethodInfo => new RcPointerType(ClassVirtualTypeID.MethodInfo);
     static IType FunctionInfo => new RcPointerType(ClassVirtualTypeID.FunctionInfo);
-    static IType Any => new RcPointerType(new AnyVirtualTypeID());
+    
+    static IType Any { get; } = new RcPointerType(new AnyVirtualTypeID());
+    static IType Nothing { get; } = new NothingType();
+
+    static IType Bool { get; } = new BoolType();
+    static IType U8 { get; } = new U8Type();
+    static IType I8 { get; } = new I8Type();
+    static IType U16 { get; } = new U16Type();
+    static IType I16 { get; } = new I16Type();
+    static IType U32 { get; } = new U32Type();
+    static IType I32 { get; } = new I32Type();
+    static IType U64 { get; } = new U64Type();
+    static IType I64 { get; } = new I64Type();
+    static IType USize { get; } = new USizeType();
+    static IType ISize { get; } = new ISizeType();
+    static IType F32 { get; } = new F32Type();
+    static IType F64 { get; } = new F64Type();
 }
 
 public sealed record NothingType : IType;
@@ -158,6 +174,22 @@ public static class TypeExt {
             FlagsType => true,
             _ => false,
         };
+        
+        public bool IsInteger() => type switch {
+            F32Type or
+            F64Type or
+            I16Type or
+            I32Type or
+            I64Type or
+            I8Type or
+            ISizeType or
+            U16Type or
+            U32Type or
+            U64Type or
+            U8Type or
+            USizeType => true,
+            _ => false,
+        };
 
         public IType? GetDerefType() {
             return type switch {
@@ -170,6 +202,18 @@ public static class TypeExt {
         public IType MakeDynArray() {
             return new RcPointerType(new ArrayVirtualTypeID(type));
         }
+
+        public IType MakePointer() {
+            return new PointerType(type);
+        }
+
+        public int? IntrinsicSize() => type switch {
+            BoolType or U8Type or I8Type => 1,
+            I16Type or U16Type => 2,
+            F32Type or U32Type or I32Type => 4,
+            F64Type or U64Type or I64Type => 8,
+            _ => null,
+        };
     }
 }
 
@@ -209,7 +253,7 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
 
         switch (key) {
             case "Nothing": {
-                return new NothingType();
+                return IType.Nothing;
             }
 
             case "Pointer": {
@@ -260,19 +304,19 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
                 return new FunctionType(new TypeDefID(id));
             }
             
-            case "Bool": return new BoolType();
-            case "U8": return new U8Type();
-            case "I8": return new I8Type();
-            case "U16": return new U16Type();
-            case "I16": return new I16Type();
-            case "U32": return new U32Type();
-            case "I32": return new I32Type();
-            case "U64": return new U64Type();
-            case "I64": return new I64Type();
-            case "USize": return new USizeType();
-            case "ISize": return new ISizeType();
-            case "F32": return new F32Type();
-            case "F64": return new F64Type();
+            case "Bool": return IType.Bool;
+            case "U8": return IType.U8;
+            case "I8": return IType.I8;
+            case "U16": return IType.U16;
+            case "I16": return IType.I16;
+            case "U32": return IType.U32;
+            case "I32": return IType.I32;
+            case "U64": return IType.U64;
+            case "I64": return IType.I64;
+            case "USize": return IType.USize;
+            case "ISize": return IType.ISize;
+            case "F32": return IType.F32;
+            case "F64": return IType.F64;
 
             default: {
                 throw new MessagePackSerializationException($"illegal type discriminator: {key}");
