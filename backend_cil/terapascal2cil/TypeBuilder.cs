@@ -38,7 +38,9 @@ public class TypeBuilder {
     private readonly TypeReference exceptionType;
     private readonly TypeReference clrStringType;
     private readonly TypeReference typeType;
+    
     private readonly TypeReference closureBaseType;
+    private readonly TypeReference errorType;
 
     private readonly FieldReference closurePointerField;
 
@@ -48,6 +50,7 @@ public class TypeBuilder {
     public TypeReference CLRStringType => this.clrStringType;
     public TypeReference ValueType => this.valueType;
     public TypeReference TypeType => this.typeType;
+    public TypeReference ErrorType => this.errorType;
     
     public TypeReference ClosureBaseType => this.closureBaseType;
 
@@ -94,6 +97,8 @@ public class TypeBuilder {
 
         this.closureBaseType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ClosureBase), false);
         var closureTypeDef = this.closureBaseType.Resolve();
+
+        this.errorType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.Error), false);
 
         this.closurePointerField = closureTypeDef.Fields
             .Single(f => f.Name == nameof(Runtime.ClosureBase.functionPointer));

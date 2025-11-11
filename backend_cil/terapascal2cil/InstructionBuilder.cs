@@ -582,20 +582,20 @@ public class InstructionBuilder {
     }
 
     private void BuildRaise(IR.IRef val) {
-        var exceptionType = this.assemblyBuilder.TypeBuilder.ResolveCore(this.assemblyBuilder.TypeBuilder.ExceptionType);
+        var exceptionType = this.assemblyBuilder.TypeBuilder.ErrorType;
         var stringTypeName = this.assemblyBuilder.TypeBuilder.CLRStringType.FullName;
-        var ctor = (MethodReference)exceptionType
+        var ctor = (MethodReference)exceptionType.Resolve()
             .GetConstructors()
             .Single(ctor => ctor.Parameters.Count == 1
                 && ctor.Parameters[0].ParameterType.FullName == stringTypeName);
-        ctor = this.assemblyBuilder.TypeBuilder.ImportCoreReference(ctor);
+        ctor = this.assemblyBuilder.Module.ImportReference(ctor);
         
         // TODO: native strings
         // as an optimization, if the value is a string literal, we can supply that directly rather than
         // converting the pascal string back to a CLR one
         if (val is IR.GlobalRef(IR.StringLiteralGlobalRef(var stringID))) {
             var stringLit = this.library.Metadata.StringLiterals[stringID];
-            this.body.Emit(OpCodes.Ldstr, stringLit);
+            this.body.Emit(OpCodes.Ldstr, "Runtime error raised: " + stringLit);
         } else {
             this.LoadRef(val);
 
@@ -609,6 +609,11 @@ public class InstructionBuilder {
     }
 
     private void EmitSizeOf(IR.IType type) {
+        if (type.IsObjectType()) {
+            this.body.Emit(OpCodes.Sizeof, this.assemblyBuilder.TypeSystem.IntPtr);
+            return;
+        }
+
         var intrinsicSize = type.IntrinsicSize();
         if (intrinsicSize == null) {
             var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
@@ -766,21 +771,7 @@ public class InstructionBuilder {
             }
 
             case IR.SizeOfValue(var type): {
-                var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
-
-                var typeDef = typeRef.Resolve();
-                if (typeDef == null) {
-                    throw new InvalidOperationException($"invalid SizeOf instruction: references unresolvable type {type}");
-                }
-
-                var size = typeDef.ClassSize;
-                if (size < 0) {
-                    size = 0;
-                    // TODO: should be enforced by the frontend if needed? might need array instructions
-                    // throw new InvalidOperationException($"invalid SizeOf instruction: type {type} does not have a fixed size");
-                }
-                
-                this.body.Emit(OpCodes.Ldc_I4, size);
+                this.EmitSizeOf(type);
                 break;
             }
 
