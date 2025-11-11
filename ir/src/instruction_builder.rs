@@ -1127,7 +1127,7 @@ pub trait InstructionBuilder {
                     }
 
                     // store the field pointer in a temp slot
-                    let field_val = Ref::Local(self.local_temp(field_ty.clone().ptr()));
+                    let field_val = Ref::Local(self.local_temp(field_ty.clone().temp_ref()));
 
                     let of_ty = Type::Struct(*struct_id);
                     self.field(field_val.clone(), at.clone(), of_ty, field);
@@ -1208,7 +1208,7 @@ pub trait InstructionBuilder {
                 }
 
                 let element_ty = (**element).clone();
-                let element_ptr = Ref::Local(self.local_temp(element_ty.clone().ptr()));
+                let element_ptr = Ref::Local(self.local_temp(element_ty.clone().temp_ref()));
                 let mut result = false;
 
                 for i in 0..*dim {
