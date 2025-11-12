@@ -394,8 +394,10 @@ public class InstructionBuilder {
                 }
 
                 case IR.BitNotInstruction(var op): {
-                    this.LoadValue(op.Arg);
-                    this.body.Emit(OpCodes.Not);
+                    this.StoreRef(op.Out, () => {
+                        this.LoadValue(op.Arg);
+                        this.body.Emit(OpCodes.Not);
+                    });
                     break;
                 }
                 
