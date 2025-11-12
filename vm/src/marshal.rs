@@ -2,8 +2,8 @@ use crate::func::ffi::FfiInvoker;
 use crate::ir;
 use crate::ArrayValue;
 use crate::DynValue;
-use crate::Pointer;
 use crate::ObjectHeader;
+use crate::Pointer;
 use crate::StructValue;
 use crate::VariantValue;
 use bimap::BiHashMap;
@@ -20,13 +20,14 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::fmt;
 use std::iter;
 use std::mem::size_of;
 use std::mem::transmute;
 use std::ptr::slice_from_raw_parts;
 use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
+use std::env;
+use std::fmt;
 use thiserror::Error;
 
 const RC_ELEMENT_COUNT: usize = 3;
@@ -516,7 +517,9 @@ impl Marshaller {
         let lib = match self.libs.get(&func_ref.src) {
             Some(lib_rc) => lib_rc.clone(),
             None => {
-                let lib = dlopen::Library::open(&func_ref.src).map_err(sym_load_err)?;
+                let lib_filename = format!("{}{}{}", env::consts::DLL_PREFIX, func_ref.src, env::consts::DLL_SUFFIX);
+                let lib = dlopen::Library::open(lib_filename)
+                    .map_err(sym_load_err)?;
 
                 let lib_rc = Rc::new(lib);
                 self.libs.insert(func_ref.src.clone(), lib_rc.clone());

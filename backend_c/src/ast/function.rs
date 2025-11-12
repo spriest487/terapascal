@@ -9,6 +9,7 @@ use crate::ast::TypeDefName;
 use crate::ast::Unit;
 use crate::ast::VariableID;
 use std::fmt;
+use std::env;
 use terapascal_ir as ir;
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
@@ -454,18 +455,16 @@ impl FfiFunction {
     }
 
     pub fn init_statement(&self) -> Statement {
-        Statement::Expr(Expr::InfixOp {
-            lhs: Expr::Function(self.decl.name).into(),
-            op: InfixOp::Assign,
-            rhs: Expr::Call {
-                func: Expr::Function(FunctionName::LoadSymbol).into(),
-                args: vec![
-                    Expr::LitCString(self.src.clone()),
+        let lib_filename = format!("{}{}{}", env::consts::DLL_PREFIX, self.src, env::consts::DLL_SUFFIX);
+
+        Statement::Expr(
+            Expr::Function(self.decl.name).assign_from(
+                Expr::Function(FunctionName::LoadSymbol).call([
+                    Expr::LitCString(lib_filename),
                     Expr::LitCString(self.symbol.clone()),
-                ],
-            }
-            .into(),
-        })
+                ])
+            )
+        )
     }
 
     pub fn func_ptr_decl(&self) -> String {

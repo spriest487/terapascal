@@ -1,7 +1,7 @@
 implementation
 uses System;
 
-const ExternFuncsLib: String = 'ExternFuncs.dll';
+const ExternFuncsLib: String = 'ExternFuncs';
 
 function X(); external ExternFuncsLib;
 function Y(val: Integer); external ExternFuncsLib;
