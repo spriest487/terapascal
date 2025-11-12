@@ -37,7 +37,7 @@ public class InstructionBuilder {
     private MethodReference? rcRetainMethod;
     private MethodReference? rcReleaseMethod;
 
-    private bool hasReturn;
+    private bool HasReturnValue => !this.method.ReturnType.Equals(this.assemblyBuilder.TypeSystem.Void);
 
     public InstructionBuilder(
         AssemblyBuilder assemblyBuilder,
@@ -70,21 +70,16 @@ public class InstructionBuilder {
 
         var returnType = function.Signature.ReturnType;
 
-        this.hasReturn = returnType is not IR.NothingType;
-
         // create a variable to hold the result variable %0 if there's a return type
-        if (this.hasReturn) {
-            this.method.ReturnType = this.assemblyBuilder.TypeBuilder.BuildTypeRef(returnType, this.library);
-            
+        if (this.HasReturnValue) {
             var returnVar = new VariableDefinition(this.method.ReturnType);
             this.method.Body.Variables.Add(returnVar);
 
             var mapping = new LocalMapping(returnType, returnVar.Index);
-            
             currentScope.LocalMappings.Add(new IR.LocalID(0), mapping);
         }
 
-        var firstLocal = this.hasReturn ? 1UL : 0UL;
+        var firstLocal = this.HasReturnValue ? 1UL : 0UL;
         
         var paramTypes = function.Signature.ParameterTypes;
 
@@ -92,9 +87,6 @@ public class InstructionBuilder {
         for (var i = 0; i < paramTypes.Count; i += 1) {
             var paramLocal = new IR.LocalID(firstLocal + (ulong)i);
             var paramType = paramTypes[i];
-
-            var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType, this.library);
-            this.method.Parameters.Add(new ParameterDefinition(paramTypeRef));
 
             // use negative "variable" indices to indicate arg positions
             var mapping = new LocalMapping(paramType, ~i);
@@ -1126,7 +1118,7 @@ public class InstructionBuilder {
             throw new InvalidDataException(msg.ToString());
         }
         
-        if (this.hasReturn) {
+        if (this.HasReturnValue) {
             this.body.Emit(OpCodes.Ldloc, 0);
         }
 
