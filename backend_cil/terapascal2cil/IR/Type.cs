@@ -33,6 +33,10 @@ public readonly record struct InterfaceID(ulong ID) : IComparable<InterfaceID> {
     public int CompareTo(InterfaceID other) {
         return this.ID.CompareTo(other.ID);
     }
+
+    public IType InterfacePointerType() {
+        return new RcPointerType(new InterfaceVirtualTypeID(this));
+    }
 }
 
 public class InterfaceIDFormatter : IMessagePackFormatter<InterfaceID> {

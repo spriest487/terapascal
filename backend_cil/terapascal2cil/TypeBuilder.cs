@@ -2,6 +2,7 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using Mono.Collections.Generic;
 using static Terapascal.IR.TypeExt;
 
 namespace Terapascal.CIL;
@@ -34,6 +35,8 @@ public class TypeBuilder {
     private readonly Dictionary<IR.TypeDefID, StructFieldRefs> structFields;
     private readonly Dictionary<IR.TypeDefID, VariantFieldRefs> variantFields;
 
+    private readonly Dictionary<(IR.InterfaceID, IR.MethodID), MethodReference> interfaceMethods;
+
     private readonly TypeReference valueType;
     private readonly TypeReference exceptionType;
     private readonly TypeReference clrStringType;
@@ -62,6 +65,8 @@ public class TypeBuilder {
 
         this.structFields = new Dictionary<IR.TypeDefID, StructFieldRefs>();
         this.variantFields = new Dictionary<IR.TypeDefID, VariantFieldRefs>();
+        
+        this.interfaceMethods = new Dictionary<(IR.InterfaceID, IR.MethodID), MethodReference>();
 
         this.valueType = this.ImportCoreReference("System", "ValueType", true);
         this.exceptionType = this.ImportCoreReference("System", "Exception", false);
@@ -133,10 +138,10 @@ public class TypeBuilder {
             IR.F64Type => typeSystem.Double,
             IR.ArrayType { Element: var element, Length: var length } => 
                 this.BuildArrayTypeRef(element, length, library),
-            IR.StructType(var id) => this.BuildStructTypeRef(id, isValueType: true),
-            IR.VariantType(var id) => this.BuildStructTypeRef(id, isValueType: true),
+            IR.StructType(var id) => this.CreateTypeRef(id, isValueType: true),
+            IR.VariantType(var id) => this.CreateTypeRef(id, isValueType: true),
             IR.FunctionType(var id) => this.BuildFunctionTypeRef(id),
-            IR.FlagsType(var id, _) => this.BuildStructTypeRef(id, isValueType: true),
+            IR.FlagsType(var id, _) => this.CreateTypeRef(id, isValueType: true),
             IR.PointerType(var inner) => this.BuildTypeRef(inner, library).MakePointerType(),
             IR.TempRefType(var inner) => this.BuildTypeRef(inner, library).MakeByReferenceType(),
             IR.RcPointerType(var id) => this.BuildClassTypeRef(id, library),
@@ -189,7 +194,7 @@ public class TypeBuilder {
         return string.Intern($"Struct_{id.ID}");
     }
 
-    private TypeReference BuildStructTypeRef(IR.TypeDefID id, bool isValueType) {
+    private TypeReference CreateTypeRef(IR.TypeDefID id, bool isValueType) {
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
 
@@ -197,7 +202,7 @@ public class TypeBuilder {
     }
 
     private static string GetTypeName(IR.InterfaceID id) {
-        return string.Intern($"Interface_{id.ID}");
+        return string.Intern($"IInterface_{id.ID}");
     }
 
     private TypeReference BuildInterfaceTypeRef(IR.InterfaceID id) {
@@ -210,7 +215,7 @@ public class TypeBuilder {
         return id switch {
             IR.AnyVirtualTypeID => this.assemblyBuilder.Module.TypeSystem.Object,
             // in this backend, struct refs are automatically reference types if they're a class
-            IR.ClassVirtualTypeID(var classID) => this.BuildStructTypeRef(classID, false),
+            IR.ClassVirtualTypeID(var classID) => this.CreateTypeRef(classID, false),
             IR.InterfaceVirtualTypeID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
             IR.ClosureVirtualTypeID => this.closureBaseType,
             IR.ArrayVirtualTypeID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
@@ -240,11 +245,14 @@ public class TypeBuilder {
         var isClass = structDef.Identity is IR.ClassStructIdentity;
         var isValueType = !isClass && !isClosure;
 
-        var typeRef = this.BuildStructTypeRef(id, isValueType);
+        var typeRef = this.CreateTypeRef(id, isValueType);
 
-        var attrs = TypeAttributes.Sealed | TypeAttributes.NotPublic | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit;
+        var attrs = TypeAttributes.Sealed 
+            | TypeAttributes.NotPublic
+            | TypeAttributes.AnsiClass
+            | TypeAttributes.BeforeFieldInit;
         if (!isValueType) {
-            attrs |= TypeAttributes.Class;
+            attrs |= TypeAttributes.Class | TypeAttributes.AutoLayout;
         } else {
             attrs |= TypeAttributes.SequentialLayout;
         }
@@ -419,7 +427,7 @@ public class TypeBuilder {
     }
 
     public void BuildVariantDef(IR.TypeDefID id, IR.VariantDef def, IR.Library library) {
-        var typeRef = this.BuildStructTypeRef(id, isValueType: false);
+        var typeRef = this.CreateTypeRef(id, isValueType: false);
 
         var typeDef = new TypeDefinition(typeRef.Namespace,
             typeRef.Name,
@@ -500,8 +508,56 @@ public class TypeBuilder {
         return this.funcPointerTypes[id];
     }
 
-    public void BuildInterfaceDef(IR.InterfaceID id, IR.InterfaceDef def) {
-        // throw new NotImplementedException();
+    public void BuildInterfaceDef(IR.InterfaceID id, IR.InterfaceDef def, IR.Library library) {
+        var module = this.assemblyBuilder.Module;
+        var ns = this.assemblyBuilder.Assembly.Name.Name;
+
+        const TypeAttributes attrs = TypeAttributes.NotPublic
+            | TypeAttributes.Interface
+            | TypeAttributes.Abstract
+            | TypeAttributes.AutoLayout
+            | TypeAttributes.BeforeFieldInit;
+
+        var ifaceDef = new TypeDefinition(ns, GetTypeName(id), attrs);
+        var ifaceSelfType = new IR.RcPointerType(new IR.InterfaceVirtualTypeID(id));
+
+        for (var methodIndex = 0; methodIndex < def.Methods.Count; methodIndex += 1) {
+            var ifaceMethod = def.Methods[methodIndex];
+
+            var methodAttrs = MethodAttributes.Public 
+                | MethodAttributes.HideBySig 
+                | MethodAttributes.Abstract
+                | MethodAttributes.Virtual
+                | MethodAttributes.NewSlot;
+
+            if (!ifaceSelfType.Equals(ifaceMethod.Parameters.FirstOrDefault())) {
+                methodAttrs |= MethodAttributes.Static;
+            }
+
+            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(ifaceMethod.ReturnType, library);
+            var methodDef = new MethodDefinition(ifaceMethod.Name, methodAttrs, returnTypeRef);
+            methodDef.HasThis = true;
+            
+            // if the method isn't static, the params list implicitly includes the self-type 
+            var restParams = !methodDef.IsStatic 
+                ? ifaceMethod.Parameters.Skip(1) 
+                : ifaceMethod.Parameters; 
+
+            foreach (var paramType in restParams) {
+                var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType, library);
+                methodDef.Parameters.Add(new ParameterDefinition(paramTypeRef));
+            }
+
+            ifaceDef.Methods.Add(methodDef);
+
+            this.interfaceMethods.Add((id, new IR.MethodID((ulong)methodIndex)), methodDef);
+        }
+
+        module.Types.Add(ifaceDef);
+    }
+
+    public MethodReference GetInterfaceMethod(IR.InterfaceID ifaceID, IR.MethodID methodID) {
+        return this.interfaceMethods[(ifaceID, methodID)];
     }
 
     private void BuildDefaultConstructor(TypeDefinition typeDef) {

@@ -459,6 +459,17 @@ public class InstructionBuilder {
                     break;
                 }
 
+                case IR.VirtualCallInstruction {
+                    Out: var outRef,
+                    SelfArg: var selfArg,
+                    RestArgs: var restArgs,
+                    InterfaceID: var ifaceID,
+                    MethodID: var methodID,
+                }: {
+                    this.BuildVirtualCall(outRef, selfArg, restArgs, ifaceID, methodID);
+                    break;
+                }
+
                 case IR.JumpInstruction { Destination: var dest }: {
                     this.InsertJmp(dest, OpCodes.Br);
                     break;
@@ -686,18 +697,45 @@ public class InstructionBuilder {
         return;
 
         void EmitCall(IR.FunctionID id) {
-            LoadArgs();
+            foreach (var argVal in argVals) {
+                this.LoadValue(argVal);
+            }
 
             var funcRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(id) 
                 ?? throw new InvalidDataException($"invalid instruction: couldn't find function {id.ID}");
 
             this.body.Emit(OpCodes.Call, funcRef);
         }
+    }
 
-        void LoadArgs() {
-            foreach (var argVal in argVals) {
-                this.LoadValue(argVal);
+    private void BuildVirtualCall(
+        IR.IRef? outRef,
+        IR.IValue selfArg,
+        IReadOnlyList<IR.IValue>? restArgs,
+        IR.InterfaceID ifaceID,
+        IR.MethodID methodID
+    ) {
+        var ifaceDef = ((IR.DefInterfaceDecl)this.library.Metadata.Interfaces[ifaceID]).Def;
+        var ifaceMethod = ifaceDef.Methods[(int)methodID.ID];
+
+        var methodRef = this.assemblyBuilder.TypeBuilder.GetInterfaceMethod(ifaceID, methodID);
+
+        if (ifaceMethod.ReturnType is IR.NothingType) {
+            EmitCall();
+        } else {
+            this.StoreRef(outRef, EmitCall);
+        }
+
+        void EmitCall() {
+            this.LoadValue(selfArg);
+
+            if (restArgs != null) {
+                foreach (var argVal in restArgs) {
+                    this.LoadValue(argVal);
+                }
             }
+
+            this.body.Emit(OpCodes.Callvirt, methodRef);
         }
     }
 

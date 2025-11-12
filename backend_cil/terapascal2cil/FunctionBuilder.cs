@@ -1,5 +1,4 @@
-﻿using System.Runtime.InteropServices;
-using Mono.Cecil;
+﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
 
 namespace Terapascal.CIL;
@@ -45,6 +44,81 @@ public class FunctionBuilder {
                 Console.Error.WriteLine($"Failed to build function body of {method.Name}: {e}");
             }
         }
+
+        foreach (var (ifaceID, ifaceDecl) in lib.Metadata.Interfaces) {
+            if (ifaceDecl is not IR.DefInterfaceDecl(var ifaceDef)) {
+                continue;
+            }
+
+            var ifaceSelfType = ifaceID.InterfacePointerType();
+            var ifaceTypeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(ifaceSelfType, lib).Resolve();
+
+            foreach (var (implType, impls) in ifaceDef.Implementations) {
+                var implTypeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(implType, lib).Resolve();
+
+                foreach (var (methodID, implID) in impls.Methods) {
+                    this.BuildInterfaceMethodImpl(ifaceDef, methodID, implID, implTypeDef, ifaceTypeDef, lib);
+                }
+
+                implTypeDef.Interfaces.Add(new InterfaceImplementation(ifaceTypeDef));
+            }
+        }
+    }
+
+    interface IA {
+        int GetNumber();
+    }
+
+    class B : IA {
+        public int GetNumber() => 123;
+    }
+
+    private void BuildInterfaceMethodImpl(
+        IR.InterfaceDef ifaceDef,
+        IR.MethodID methodID,
+        IR.FunctionID implID,
+        TypeDefinition implTypeDef,
+        TypeDefinition ifaceTypeDef,
+        IR.Library lib
+    ) {
+        var method = ifaceDef.Methods[(int)methodID.ID];
+        var implFuncRef = this.FindFunctionMethod(implID)
+            ?? throw new InvalidDataException($"missing function {implID.ID} in metadata");
+
+        var implAttrs = MethodAttributes.Public 
+            | MethodAttributes.HideBySig 
+            | MethodAttributes.Virtual 
+            | MethodAttributes.NewSlot 
+            | MethodAttributes.Final;
+
+        var implParams = new List<IR.IType>(method.Parameters.Count - 1);
+        
+        // impl methods' parameter lists implicitly include an initial self arg, which we skip here
+        implParams.AddRange(method.Parameters.Skip(1));
+
+        var methodSig = new IR.FunctionSig {
+            ReturnType = method.ReturnType,
+            ParameterTypes = implParams,
+        };
+
+        var implMethodDef = this.CreateMethodWithSig(method.Name, implAttrs, methodSig, lib);
+        implMethodDef.HasThis = true;
+
+        implTypeDef.Methods.Add(implMethodDef);
+
+        implMethodDef.Overrides.Add(ifaceTypeDef.Methods[(int)methodID.ID]);
+
+        implMethodDef.Body = new MethodBody(implMethodDef);
+        var implBody = implMethodDef.Body.GetILProcessor();
+
+        implBody.Emit(OpCodes.Ldarg_0);
+        for (var i = 0; i < implMethodDef.Parameters.Count; i += 1) {
+            implBody.Emit(OpCodes.Ldarg, i + 1);
+        }
+
+        // implBody.Emit(OpCodes.Tail);
+        implBody.Emit(OpCodes.Call, implFuncRef);
+        implBody.Emit(OpCodes.Ret);
     }
 
     private void ResolveExternalRef(IR.FunctionID id, IR.ExternalFunctionRef externRef, IR.Library library) {
@@ -104,7 +178,7 @@ public class FunctionBuilder {
     }
 
     private MethodDefinition CreateFunctionMethod(IR.FunctionID id, IR.FunctionSig sig, IR.Library library) {
-        const MethodAttributes attrs = MethodAttributes.Static | MethodAttributes.Private;
+        const MethodAttributes attrs = MethodAttributes.Static | MethodAttributes.Assembly;
 
         var typeDef = this.assemblyBuilder.GetGlobalsClass();
 

@@ -51,7 +51,7 @@ public record Method {
 
 [MessagePackObject]
 public record InterfaceImpl {
-    [Key("params")]
+    [Key("methods")]
     public required IReadOnlyDictionary<MethodID, FunctionID> Methods { 
         get;
         init => field = value!.ToDictionaryNonNull();

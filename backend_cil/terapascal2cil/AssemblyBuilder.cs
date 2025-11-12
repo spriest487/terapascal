@@ -235,12 +235,6 @@ public class AssemblyBuilder : IDisposable {
             }
         }
 
-        foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
-            if (ifaceDecl is IR.DefInterfaceDecl(var def)) {
-                this.TypeBuilder.BuildInterfaceDef(id, def);
-            }
-        }
-
         foreach (var staticClosure in library.StaticClosures) {
             var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
             var fieldName = $"StaticClosure_{staticClosure.ID.ID}";
@@ -249,6 +243,12 @@ public class AssemblyBuilder : IDisposable {
             globals.Fields.Add(fieldDef);
             
             this.staticClosureFields.Add(staticClosure.ID, fieldDef);
+        }
+
+        foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
+            if (ifaceDecl is IR.DefInterfaceDecl(var ifaceDef)) {
+                this.TypeBuilder.BuildInterfaceDef(id, ifaceDef, library);
+            }
         }
 
         this.FunctionBuilder.BuildFunctions(library);

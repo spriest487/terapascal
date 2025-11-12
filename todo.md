@@ -7,8 +7,12 @@
 * type/method unit name info
 * can Invokers in the C backend store an arg count for validation
 
+# IR
+* remove forward types from metadata
+* undefined symbol checking can probably be moved to IR codegen rather than during typechecking
+* make IR function src spans optional?? some builtins don't have them
+
 # features
-* remove the NIL type
 * property syntax
 * numeric compiler error codes
 * compound assignment bitwise ops
@@ -29,8 +33,5 @@
 # improvements
 * use tags instead of pascal-style modifiers for external etc
 * add a named type case to typ::Type for all the things that use full_path, full_name etc
-* undefined symbol checking can probably be moved to IR codegen rather than during typechecking 
 * type cache so we don't need to construct/pass around type objects all the time in the typechecker (This is really slow)
-* make IR function src spans optional?? some builtins don't have them
-* reimplement dynarrays so they don't use a separate allocation for items
 * named matchers e.g. "expected start of type name (one of: ...)"
