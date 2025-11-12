@@ -2,6 +2,12 @@
   "steps": [
     { "output": "native call to X()" },
     { "output": "native call to Y(1)" },
-    { "output": "123456" }
+    { "output": "native call to Z" },
+    { "output": "123456" },
+    { "output": "native call to ReturnsIntPtr" },
+    { "output": "native call to PrintIntPtr(7654321)" },
+    { "output": "printing value of intPtr^: 7654321" },
+    { "output": "native call to PrintIntPtr(1)" },
+    { "output": "native call to PrintIntPtr(999888777)" }
   ]
 }

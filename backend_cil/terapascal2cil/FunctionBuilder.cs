@@ -1,4 +1,6 @@
-﻿using Mono.Cecil;
+﻿using System.Runtime.InteropServices;
+using Mono.Cecil;
+using Mono.Cecil.Cil;
 
 namespace Terapascal.CIL;
 
@@ -20,12 +22,12 @@ public class FunctionBuilder {
         foreach (var (id, func) in lib.Functions) {
             switch (func) {
                 case IR.ExternalFunction(var externRef): {
-                    this.ResolveExternalRef(id, externRef);
+                    this.ResolveExternalRef(id, externRef, lib);
                     break;
                 }
 
                 case IR.LocalFunction(var def): {
-                    var methodDef = this.CreateFunctionMethod(id);
+                    var methodDef = this.CreateFunctionMethod(id, def.Signature, lib);
                     definedFuncs.Add((methodDef, def));
                     break;
                 }
@@ -45,14 +47,34 @@ public class FunctionBuilder {
         }
     }
 
-    private void ResolveExternalRef(IR.FunctionID id, IR.ExternalFunctionRef externRef) {
-        if (externRef.Source != "rt") {
-            throw new NotImplementedException("loading external libraries");
+    private void ResolveExternalRef(IR.FunctionID id, IR.ExternalFunctionRef externRef, IR.Library library) {
+        if (externRef.Source == "rt") {
+            var methodRef = this.assemblyBuilder.FindRuntimeFunction(externRef.Symbol);
+
+            this.functionMethods.Add(id, methodRef);
+            return;
         }
 
-        var methodRef = this.assemblyBuilder.FindRuntimeFunction(externRef.Symbol);
+        var externMethod = this.CreateFunctionMethod(id, externRef.Signature, library);
+        externMethod.Attributes |= MethodAttributes.PInvokeImpl;
+        externMethod.ImplAttributes |= MethodImplAttributes.PreserveSig;
 
-        this.functionMethods.Add(id, methodRef);
+        const PInvokeAttributes pInvokeAttrs = PInvokeAttributes.CallConvCdecl 
+            | PInvokeAttributes.BestFitDisabled 
+            | PInvokeAttributes.CharSetAnsi 
+            | PInvokeAttributes.NoMangle;
+
+        var moduleRefs = this.assemblyBuilder.Module.ModuleReferences;
+
+        var moduleRef = moduleRefs.FirstOrDefault(x => x.Name == externRef.Source); 
+        if (moduleRef == null) {
+            moduleRef = new ModuleReference(externRef.Source);
+            this.assemblyBuilder.Module.ModuleReferences.Add(moduleRef);
+        }
+
+        externMethod.PInvokeInfo = new PInvokeInfo(pInvokeAttrs, externRef.Symbol, moduleRef);
+
+        externMethod.Body = null;
     }
 
     private void BuildFunctionBody(IR.Library lib, MethodDefinition method, IR.FunctionDef def) {
@@ -62,24 +84,43 @@ public class FunctionBuilder {
         builder.Finish();
     }
 
-    private MethodDefinition CreateFunctionMethod(IR.FunctionID id) {
+    private MethodDefinition CreateMethodWithSig(
+        string name,
+        MethodAttributes attrs,
+        IR.FunctionSig sig,
+        IR.Library library
+    ) {
+        var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(sig.ReturnType, library);
+        
+        var methodDef = new MethodDefinition(name, attrs, returnTypeRef);
+
+        foreach (var paramType in sig.ParameterTypes) {
+            var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType, library);
+
+            methodDef.Parameters.Add(new ParameterDefinition(paramTypeRef));
+        }
+
+        return methodDef;
+    }
+
+    private MethodDefinition CreateFunctionMethod(IR.FunctionID id, IR.FunctionSig sig, IR.Library library) {
+        const MethodAttributes attrs = MethodAttributes.Static | MethodAttributes.Private;
+
         var typeDef = this.assemblyBuilder.GetGlobalsClass();
 
-        var attrs = MethodAttributes.Static | MethodAttributes.Private;
+        var methodDef = this.CreateMethodWithSig(FunctionMethodName(id), attrs, sig, library);
 
-        var method = new MethodDefinition(FunctionMethodName(id), attrs, this.assemblyBuilder.TypeSystem.Void);
+        typeDef.Methods.Add(methodDef);
 
-        typeDef.Methods.Add(method);
-
-        this.functionMethods.Add(id, method);
-        return method;
+        this.functionMethods.Add(id, methodDef);
+        return methodDef;
     }
 
     public MethodReference? FindFunctionMethod(IR.FunctionID id) {
         return this.functionMethods.GetValueOrDefault(id);
     }
 
-    public static string FunctionMethodName(IR.FunctionID id) {
+    private static string FunctionMethodName(IR.FunctionID id) {
         return $"Function_{id.ID}";
     }
 }
