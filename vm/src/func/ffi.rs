@@ -67,15 +67,17 @@ impl FfiInvoker {
 
             assert_eq!(bytes_copied, param_size);
 
-            args_ptrs[i] =
-                unsafe { (args.as_mut_ptr() as *mut c_void).offset(arg_offset as isize) };
+            args_ptrs[i] = unsafe { 
+                (args.as_mut_ptr() as *mut c_void).offset(arg_offset as isize) 
+            };
             arg_offset += param_size;
         }
 
-        let mut result_buf: Vec<u8> = if self.return_ty != ir::Type::Nothing {
-            vec![0; self.ffi_return_ty.size()]
+        const RETURN_BUF_SIZE: usize = 64;
+        let mut result_buf: SmallVec<[u8; RETURN_BUF_SIZE]> = if self.return_ty != ir::Type::Nothing {
+            SmallVec::from_elem(0, self.ffi_return_ty.size())
         } else {
-            Vec::new()
+            SmallVec::new()
         };
 
         unsafe {

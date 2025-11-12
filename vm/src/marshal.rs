@@ -12,22 +12,22 @@ use ::dlopen::Error as DlopenError;
 use ir::IRFormatter;
 use ir::RawInstructionFormatter;
 use libffi::low::ffi_type;
-use libffi::middle::Builder as FfiBuilder;
 use libffi::middle::Type as FfiType;
+use libffi::middle::Builder as FfiBuilder;
 use libffi::raw::FFI_TYPE_STRUCT;
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::env;
+use std::fmt;
 use std::iter;
 use std::mem::size_of;
 use std::mem::transmute;
 use std::ptr::slice_from_raw_parts;
 use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
-use std::env;
-use std::fmt;
 use thiserror::Error;
 
 const RC_ELEMENT_COUNT: usize = 3;
@@ -221,7 +221,7 @@ impl ForeignType {
         let raw_ty = self.0.as_raw_ptr();
 
         unsafe {
-            if (*raw_ty).type_ as u32 == FFI_TYPE_STRUCT {
+            if (*raw_ty).type_ == FFI_TYPE_STRUCT {
                 let elements = self.elements();
                 let mut total = 0;
                 for element in elements {
