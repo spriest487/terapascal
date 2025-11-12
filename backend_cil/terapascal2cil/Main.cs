@@ -79,7 +79,9 @@ using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
                 .GetManifestResourceStream(typeof(AssemblyBuilder), "template.runtimeconfig.json")
             ?? throw new FileNotFoundException("missing runtimeconfig template resource");
 
-        var runtimeConfigPath = Path.Join(outputDir, $"{assemblyName}.runtimeconfig.json");
+        var assemblyFilename = Path.GetFileNameWithoutExtension(outputPath);
+
+        var runtimeConfigPath = Path.Join(outputDir, $"{assemblyFilename}.runtimeconfig.json");
         await using (var runtimeConfigFile = File.Create(runtimeConfigPath)) {
             await runtimeConfigTemplate.CopyToAsync(runtimeConfigFile);
         }
