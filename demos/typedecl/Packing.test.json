@@ -1,15 +1,15 @@
 {
   "steps": [
-    { "output": "offset of b.member1: 0" },
-    { "output": "offset of b.member2: 1" },
-    { "output": "offset of b.member3: 4" },
-    { "output": "offset of b.member4: 8" },
-    { "output": "size of B: 12" },
+    { "output": "offset of padRec.member1: 0" },
+    { "output": "offset of padRec.member2: 1" },
+    { "output": "offset of padRec.member3: 4" },
+    { "output": "offset of padRec.member4: 8" },
+    { "output": "size of PaddedRecord: 12" },
     { "output": "" },
-    { "output": "offset of c.member1: 0" },
-    { "output": "offset of c.member2: 1" },
-    { "output": "offset of c.member3: 2" },
-    { "output": "offset of c.member4: 6" },
-    { "output": "size of C: 7" }
+    { "output": "offset of packedRec.member1: 0" },
+    { "output": "offset of packedRec.member2: 1" },
+    { "output": "offset of packedRec.member3: 2" },
+    { "output": "offset of packedRec.member4: 6" },
+    { "output": "size of PackedRecord: 7" }
   ]
 }

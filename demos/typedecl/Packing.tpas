@@ -37,7 +37,7 @@ unsafe begin
     WriteOffset('padRec.member2', @padRec, @padRec.member2);
     WriteOffset('padRec.member3', @padRec, @padRec.member3);
     WriteOffset('padRec.member4', @padRec, @padRec.member4);
-    WriteLn('size of padRec: ' + sizeof(PaddedRecord));
+    WriteLn('size of PaddedRecord: ' + sizeof(PaddedRecord));
     WriteLn('');
 
     var packedRec := PackedRecord(member1: 1; member2: 2; member3: 3; member4: 4);
