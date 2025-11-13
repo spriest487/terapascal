@@ -1,10 +1,10 @@
-use crate::ast::expression::explicit_spec::ExplicitSpecExpr;
 use crate::ast::expression::parse::CompoundExpressionPart;
 use crate::ast::type_name::TypeName;
 use crate::ast::ArgList;
 use crate::ast::BinOp;
 use crate::ast::Call;
 use crate::ast::Cast;
+use crate::ast::ExplicitSpecExpr;
 use crate::ast::Expr;
 use crate::ast::ObjectCtor;
 use crate::ast::ObjectCtorArgs;
@@ -16,7 +16,8 @@ use crate::parse::ParseResult;
 use crate::Operator;
 use crate::Position;
 use std::cmp::Ordering;
-use terapascal_common::span::{MaybeSpanned, Span};
+use terapascal_common::span::MaybeSpanned;
+use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
 

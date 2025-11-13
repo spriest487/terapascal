@@ -42,6 +42,7 @@ pub use literal::*;
 use terapascal_common::span::*;
 
 pub type Expr = ast::Expr<Value>;
+pub type ExplicitSpecExpr = ast::ExplicitSpecExpr<Value>;
 
 impl Expr {
     // where a typed value is expected, convert an expression that might refer to some non-value
