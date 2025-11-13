@@ -16,6 +16,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::*;
 use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::Value;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
     match expr.annotation() {
@@ -35,18 +36,18 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
 
     let result_ref = match expr.annotation() {
         typ::Value::Const(const_val) => {
-            translate_literal(&const_val.value, &const_val.ty, builder)
+            translate_literal_expr(&const_val.value, &const_val.ty, builder)
         }
 
         typ::Value::Invocation(invocation) => {
             translate_invocation(invocation, builder)
                 .expect("invocation used as an expression must have a value")
         }
-        
+
         typ::Value::Typed(..) => {
             match expr {
                 ast::Expr::Literal(lit) => {
-                    translate_literal(&lit.literal, &lit.annotation.ty(), builder)
+                    translate_literal_expr(&lit.literal, &lit.annotation.ty(), builder)
                 },
 
                 ast::Expr::BinOp(bin_op) => {
@@ -353,18 +354,22 @@ pub fn literal_to_val(
     }
 }
 
-pub fn translate_literal(
+pub fn translate_literal_expr(
     lit: &typ::ast::Literal,
     ty: &typ::Type,
     builder: &mut Builder,
 ) -> ir::Ref {
-    let out_ty = builder.translate_type(ty);
-    let out = builder.local_temp(out_ty);
+    match literal_to_val(lit, ty, builder) {
+        Value::Ref(lit_ref) => lit_ref,
+        val => {
+            let out_ty = builder.translate_type(ty);
+            let out = builder.local_temp(out_ty);
 
-    let val = literal_to_val(lit, ty, builder);
-    builder.mov(out, val);
-
-    out.to_ref()
+            builder.mov(out, val);
+            
+            out.to_ref()
+        }
+    }
 }
 
 fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &mut Builder) -> ir::Ref {

@@ -33,6 +33,7 @@ pub fn translate_bin_op(
     };
 
     builder.local_begin();
+
     let lhs_val = expr::translate_expr(&bin_op.lhs, builder);
 
     match &bin_op.op {

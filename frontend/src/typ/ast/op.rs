@@ -112,12 +112,12 @@ pub fn typecheck_bin_op(
 
             // if one operand is a string, and the other can be converted using ToString, do that
             if lhs_string && !rhs_string {
-                if let Some(rhs_to_string) = desugar_to_string(&rhs, &span, ctx) {
+                if let Some(rhs_to_string) = typecheck_implicit_tostring(&rhs, &span, ctx) {
                     rhs = rhs_to_string;
                     rhs_string = true;
                 }
             } else if !lhs_string && lhs_string {
-                if let Some(lhs_to_string) = desugar_to_string(&lhs, &span, ctx) {
+                if let Some(lhs_to_string) = typecheck_implicit_tostring(&lhs, &span, ctx) {
                     lhs = lhs_to_string;
                     lhs_string = true;
                 }
@@ -153,7 +153,7 @@ pub fn typecheck_bin_op(
             };
 
             if is_string_concat {
-                desugar_string_concat(bin_op, &string_ty, ctx)
+                typecheck_string_concat(bin_op, &string_ty, ctx)
             } else {
                 Ok(Expr::from(bin_op))
             }
@@ -282,7 +282,7 @@ fn typecheck_bitwise_op(
 // turn value `x` that implements the displayable (IToString) interface into a call to 
 // the `ToString(x)` method of that interface, when `x` is evaluated in a context where 
 // a string is expected e.g. string concat
-fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
+fn typecheck_implicit_tostring(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
     let src_ty = expr.annotation().ty();
 
     let to_string_ident = Ident::new(DISPLAYABLE_TOSTRING_METHOD, span.clone());
@@ -340,7 +340,7 @@ fn desugar_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
 }
 
 // desugar a binary + operation on two strings into a call to System.StringConcat
-fn desugar_string_concat(
+fn typecheck_string_concat(
     mut bin_op: BinOp,
     string_ty: &Type,
     ctx: &Context,
