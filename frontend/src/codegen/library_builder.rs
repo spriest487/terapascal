@@ -229,9 +229,10 @@ impl<'a> LibraryBuilder<'a> {
     pub fn translate_unit(&mut self, unit: &typ::ast::Unit) {
         for (_, var) in unit.var_decl_items() {
             let var_ty = self.translate_type(&var.ty, &GenericContext::empty());
-            let id = self.metadata.new_variable(var_ty.clone());
 
             for ident in &var.idents {
+                let id = self.metadata.new_variable(var_ty.clone());
+
                 let var_name = unit.ident.clone().child(ident.clone());
 
                 self.variables_by_name.insert(var_name, id);
