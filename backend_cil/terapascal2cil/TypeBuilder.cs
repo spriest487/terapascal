@@ -272,11 +272,7 @@ public class TypeBuilder {
 
         var fieldRefs = new Dictionary<IR.FieldID, FieldReference>();
 
-        // TODO: assumes packing works the same as other targets.
-        // TODO: we shouldn't calculate a size for class types, they should be unsized
-        // array codegen currently requires sized refs so that needs fixing
-        var totalSize = isValueType ? 0 : PointerSize;
-        var maxElementSize = PointerSize;
+        var valueSize = 0;
         
         foreach (var (fieldID, structFieldDef) in structDef.Fields) {
             var fieldName = GetFieldName(fieldID);
@@ -296,15 +292,8 @@ public class TypeBuilder {
 
             fieldRefs.Add(fieldID, fieldDef);
 
-            if (totalSize != -1 && isValueType) {
-                if (!fieldType.IsValueType) {
-                    totalSize += PointerSize;
-                } else if (fieldType.Resolve() is not { ClassSize: not -1 } sizedTypeDef) {
-                    totalSize = -1;
-                } else {
-                    totalSize += sizedTypeDef.ClassSize;
-                    maxElementSize = Math.Max(sizedTypeDef.ClassSize, maxElementSize);
-                }
+            if (isValueType) {
+                valueSize += this.GetValueLayoutSize(structFieldDef.Type, library);
             }
         }
 
@@ -314,6 +303,11 @@ public class TypeBuilder {
 
         if (!isValueType) {
             this.BuildDefaultConstructor(typeDef);
+        } else {
+            // value types should be tightly packed by default because it should be up to the 
+            // frontend to add the correct padding bytes and decide the layout
+            typeDef.PackingSize = 1;
+            typeDef.ClassSize = valueSize;
         }
 
         this.assemblyBuilder.Module.Types.Add(typeDef);
@@ -353,7 +347,6 @@ public class TypeBuilder {
 
             case IR.FlagsType(var defID, _): {
                 return this.GetStructLayoutSize(defID, library);
-                break;
             }
             case IR.NothingType: {
                 return 0;

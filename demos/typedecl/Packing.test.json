@@ -1,10 +1,5 @@
 {
   "steps": [
-    { "output": "offset of a.member1: 16" },
-    { "output": "offset of a.member2: 17" },
-    { "output": "offset of a.member3: 20" },
-    { "output": "offset of a.member4: 24" },
-    { "output": "" },
     { "output": "offset of b.member1: 0" },
     { "output": "offset of b.member2: 1" },
     { "output": "offset of b.member3: 4" },
