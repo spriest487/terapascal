@@ -851,7 +851,7 @@ public class InstructionBuilder {
             
             case IR.GlobalRef(IR.VariableGlobalRef(var id)): {
                 var fieldRef = this.assemblyBuilder.GetGlobalVariableRef(id);
-                this.body.Emit(OpCodes.Ldflda, fieldRef);
+                this.body.Emit(OpCodes.Ldsflda, fieldRef);
                 break;
             }
             
