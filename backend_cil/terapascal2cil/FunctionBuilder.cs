@@ -1,5 +1,6 @@
 ﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
+using static Terapascal.IR.TypeExt;
 
 namespace Terapascal.CIL;
 
@@ -54,33 +55,23 @@ public class FunctionBuilder {
             var ifaceTypeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(ifaceSelfType, lib).Resolve();
 
             foreach (var (implType, impls) in ifaceDef.Implementations) {
-                var implTypeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(implType, lib).Resolve();
-
                 foreach (var (methodID, implID) in impls.Methods) {
-                    this.BuildInterfaceMethodImpl(ifaceDef, methodID, implID, implTypeDef, ifaceTypeDef, lib);
+                    this.BuildInterfaceMethodImpl(ifaceDef, ifaceTypeDef, methodID, implID, implType, lib);
                 }
-
-                implTypeDef.Interfaces.Add(new InterfaceImplementation(ifaceTypeDef));
             }
         }
     }
 
-    interface IA {
-        int GetNumber();
-    }
-
-    class B : IA {
-        public int GetNumber() => 123;
-    }
-
     private void BuildInterfaceMethodImpl(
         IR.InterfaceDef ifaceDef,
+        TypeDefinition ifaceTypeDef,
         IR.MethodID methodID,
         IR.FunctionID implID,
-        TypeDefinition implTypeDef,
-        TypeDefinition ifaceTypeDef,
+        IR.IType implType,
         IR.Library lib
     ) {
+        var implTypeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(implType, lib).Resolve();
+        
         var method = ifaceDef.Methods[(int)methodID.ID];
         var implFuncRef = this.FindFunctionMethod(implID)
             ?? throw new InvalidDataException($"missing function {implID.ID} in metadata");
@@ -111,7 +102,13 @@ public class FunctionBuilder {
         implMethodDef.Body = new MethodBody(implMethodDef);
         var implBody = implMethodDef.Body.GetILProcessor();
 
-        implBody.Emit(OpCodes.Ldarg_0);
+        // if self is a value type, the implementing function's self arg will be implicitly by-ref
+        if (!implType.IsObjectType()) {
+            implBody.Emit(OpCodes.Ldarg_0);
+        } else {
+            implBody.Emit(OpCodes.Ldarga, 0);
+        }
+        
         for (var i = 0; i < implMethodDef.Parameters.Count; i += 1) {
             implBody.Emit(OpCodes.Ldarg, i + 1);
         }
@@ -119,6 +116,8 @@ public class FunctionBuilder {
         // implBody.Emit(OpCodes.Tail);
         implBody.Emit(OpCodes.Call, implFuncRef);
         implBody.Emit(OpCodes.Ret);
+
+        implTypeDef.Interfaces.Add(new InterfaceImplementation(ifaceTypeDef));
     }
 
     private void ResolveExternalRef(IR.FunctionID id, IR.ExternalFunctionRef externRef, IR.Library library) {
