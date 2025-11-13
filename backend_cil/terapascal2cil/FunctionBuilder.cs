@@ -103,7 +103,7 @@ public class FunctionBuilder {
         var implBody = implMethodDef.Body.GetILProcessor();
 
         // if self is a value type, the implementing function's self arg will be implicitly by-ref
-        if (!implType.IsObjectType()) {
+        if (implType.IsObjectType()) {
             implBody.Emit(OpCodes.Ldarg_0);
         } else {
             implBody.Emit(OpCodes.Ldarga, 0);
