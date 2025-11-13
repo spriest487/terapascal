@@ -11,9 +11,9 @@ begin
     id.Identity
 end;
 
-function Void[T];
+function Void[T](msg: String);
 begin
-    WriteLn('void! ' + typeinfo(T).Name);
+    WriteLn('void! ' + msg);
 end;
 
 initialization
@@ -25,7 +25,7 @@ initialization
     var t := Identity2[Boolean](true);
     WriteLn('t is: ' + t);
     
-    Void[array of Integer]();
+    Void[array of Integer]('array of Integer');
     
     // the syntax of explicit type args could be ambiguous when calling a value returned
     // from an indexable object, e.g. an array of functions. in this case, we should always
