@@ -1,3 +1,16 @@
+# CIL gen
+demos\generics\GenericFunction.tpas
+demos\rc\WeakRef.tpas
+demos\rtti\DynamicType.tpas
+demos\rtti\FuncInvoke.tpas
+demos\rtti\FunctionTags.tpas
+demos\rtti\MethodTags.tpas
+demos\rtti\ModuleTypes.tpas
+demos\rtti\Tags.tpas
+demos\rtti\TypeMethods.tpas
+demos\rtti\TypeName.tpas
+demos\typedecl\Packing.tpas
+
 # array rework
 * C implementation could use variable sized structs instead of 2 allocations per array 
 
@@ -13,6 +26,7 @@
 * make IR function src spans optional?? some builtins don't have them
 
 # features
+* "or" and "and" in patterns
 * property syntax
 * numeric compiler error codes
 * compound assignment bitwise ops

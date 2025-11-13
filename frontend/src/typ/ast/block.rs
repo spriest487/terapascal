@@ -22,8 +22,14 @@ pub fn typecheck_block(
     expect_ty: &Type,
     ctx: &mut Context,
 ) -> Block {
+    if let Some(span) = &block.unsafe_kw && !ctx.opts().allow_unsafe {
+        ctx.error(TypeError::UnsafeDisabled {
+            span: span.clone()
+        });
+    }
+    
     let block_env = Environment::Block {
-        allow_unsafe: block.unsafe_kw.is_some(),
+        allow_unsafe: block.unsafe_kw.is_some() && ctx.opts().allow_unsafe,
     };
 
     ctx.scope(block_env, |ctx| {

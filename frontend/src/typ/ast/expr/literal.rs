@@ -365,6 +365,12 @@ pub fn typecheck_literal(
         }
 
         ast::Literal::TypeInfo(typename) => {
+            if !ctx.opts().rtti {
+                return Err(TypeError::RTTIDisabled { 
+                    span: span.clone(),
+                });
+            }
+            
             let ty = typecheck_typename(typename, ctx)?; 
             
             let typeinfo_type = Type::Class(Arc::new(builtin_typeinfo_name()));

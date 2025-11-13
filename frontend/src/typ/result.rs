@@ -340,6 +340,14 @@ pub enum TypeError {
         ty: Type,
         span: Span,
     },
+    UnsafeDisabled {
+        span: Span,
+    },
+    
+    RTTIDisabled {
+        span: Span,
+    },
+    
     InvalidConstExpr {
         expr: Box<Expr>,
     },
@@ -576,9 +584,13 @@ impl Spanned for TypeError {
             TypeError::InvalidBaseType { span, .. } => span,
             TypeError::NameNotVisible { span, .. } => span,
             TypeError::TypeMemberInaccessible { span, .. } => span,
-
+            
             TypeError::UnsafeConversionNotAllowed { span, .. } => span,
             TypeError::UnsafeAddressOfNotAllowed { span, .. } => span,
+
+            TypeError::UnsafeDisabled { span } => span,
+            TypeError::RTTIDisabled { span } => span,
+            
             TypeError::InvalidConstExpr { expr } => expr.span(),
             TypeError::InvalidCaseExprBlock { span } => span,
             TypeError::InvalidCast { span, .. } => span,
@@ -729,6 +741,14 @@ impl DiagnosticOutput for TypeError {
             TypeError::UnsafeAddressOfNotAllowed { .. } => {
                 "Address operator not allowed on this type in a safe context"
             },
+            
+            TypeError::UnsafeDisabled { .. } => {
+                "Unsafe code is not enabled in this module"
+            }
+
+            TypeError::RTTIDisabled { .. } => {
+                "RTTI features are not enabled in this module"
+            }
 
             TypeError::InvalidConstExpr { .. } => "Invalid constant expression",
 
@@ -1519,6 +1539,14 @@ impl fmt::Display for TypeError {
                     ty
                 )
             },
+
+            TypeError::UnsafeDisabled { .. } => {
+                write!(f, "unsafe code used here")
+            }
+
+            TypeError::RTTIDisabled { .. } => {
+                write!(f, "RTTI features used here")
+            }
 
             TypeError::InvalidConstExpr { expr } => {
                 write!(f, "expr `{}` is not a constant value", expr)

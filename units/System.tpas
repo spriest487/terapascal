@@ -211,7 +211,7 @@ function Min[T](a, b: T): T where T is IComparable;
 function Length[T](arr: array of T): Integer;
 function SetLength[T](var arr: array of T; len: Integer; defaultVal: T);
 
-function CreateArray[T](item: T; length: Integer): array of T;
+function CreateArray[T](item: T; element: Integer): array of T;
 function BinarySearch[T](arr: array of T; item: T): Integer
     where T is IComparable;
 
@@ -264,11 +264,39 @@ function InvokeFunction(
 function ArrayLengthInternal(arr: Object): Int32; external 'rt';
 
 {
-    Creates the internal storage for an empty array. Each new element will contain the default value
-    of the element type.
+    Creates the internal storage for an empty array.
+    Each new element will contain the default value of the element type.
     The implementation may either replace or update the provided array in place.
 }
 function ArrayCreateInternal(var arr: Object; len: Integer); external 'rt';
+
+{
+    Generic wrapper for ArrayCreateInternal intended only for internal use. 
+    The array elements will be zeroed and so creating arrays with nil elements is unsafe.
+    
+    TODO
+    This could be exposed in the interface if functions can be tagged as unsafe
+}
+function CreateArrayDefault[T](length: Integer): array of T;
+begin
+    var arr: array of T := [];
+    var arrRef := arr as Object;
+    
+    ArrayCreateInternal(arrRef, length);
+
+    exit Downcast[array of T](arrRef).Get;
+end;
+
+function CreateArray[T](element: T; length: Integer): array of T;
+begin
+    var arr := CreateArrayDefault[T](length);
+    for var i := 0 to length - 1 do 
+    begin
+        arr[i] := element;
+    end;
+    
+    arr
+end;
 
 {$IFDEF RTTI}
 
@@ -285,8 +313,8 @@ class function FunctionInfo.LoadedFunctions: array of FunctionInfo;
 begin
     var count := GetFunctionInfoCount;
 
-    unsafe begin // nil object
-        var funcInfos := CreateArray[FunctionInfo](default, count);
+    begin
+        var funcInfos := CreateArrayDefault[FunctionInfo](count);
         
         for var i := 0 to count - 1 do begin
             funcInfos[i] := GetFunctionInfoByIndex(i);
@@ -300,8 +328,8 @@ class function TypeInfo.LoadedTypes: array of TypeInfo;
 begin
     var count := GetTypeInfoCount;
 
-    unsafe begin // nil object
-        var typeInfos := CreateArray[TypeInfo](default, count);
+    begin
+        var typeInfos := CreateArrayDefault[TypeInfo](count);
         
         for var i := 0 to count - 1 do begin
             typeInfos[i] := GetTypeInfoByIndex(i);
@@ -312,19 +340,19 @@ begin
 end;
 
 class function FunctionInfo.Find(funcName: String): Option[FunctionInfo];
-unsafe begin
+begin
     var obj := FindFunctionInfo(funcName);
-    if obj <> nil then
-        Option.Some(obj)
+    if obj is FunctionInfo result then
+        Option.Some(result)
     else
         Option.None;
 end;
 
 class function TypeInfo.Find(typeName: String): Option[TypeInfo];
-unsafe begin
+begin
     var obj := FindTypeInfo(typeName);
-    if obj <> nil then
-        Option.Some(obj)
+    if obj is TypeInfo result then
+        Option.Some(result)
     else
         Option.None;
 end;
@@ -363,14 +391,10 @@ begin
         end;
     end;
 
-    var tags: array of TTag := [];
-
-    unsafe begin // nil tag
-        tags.SetLength(count, default(TTag));
-    end;
+    var tags := CreateArrayDefault[TTag](count);
 
     count := 0;
-    for var tag in allTags do 
+    for var tag in allTags do
     begin
          if TypeInfo.Get(tag) = tagClass then
          begin
@@ -519,14 +543,6 @@ end;
 
 {$ENDIF}
 
-function CreateArray[T](item: T; length: Integer): array of T;
-begin
-    var arr: array of T := [];
-    arr.SetLength(length, item);
-    
-    arr
-end;
-
 function ByteToStr(i: Byte): String;
 begin
     UInt8ToStr(i)
@@ -632,9 +648,10 @@ end;
 
 function StringConcat(a, b: String): String;
 begin
-    unsafe begin
-        if a = nil or b = nil then 
-            raise 'string pointer was nil';
+    begin
+        // TODO: or patterns
+        if a is not String then raise 'string pointer was nil';
+        if b is not String then raise 'string pointer was nil';
     end;
 
     if a.len = 0 and b.len = 0 then exit '';
@@ -791,8 +808,8 @@ begin
 end;
 
 function Length[T](arr: array of T): Integer;
-unsafe begin
-    (arr as Object).ArrayLengthInternal
+begin
+    ArrayLengthInternal(arr as Object)
 end;
 
 function Unbox[T](b: Box[T]): T;

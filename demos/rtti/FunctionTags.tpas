@@ -31,9 +31,12 @@ begin
     var funcInfo := FunctionInfo.Find('FunctionTags.A').Get;
     
     for var funcTag in funcInfo.Tags do
-    unsafe begin
+    begin
         var tagType := TypeInfo.Get(funcTag);
-        WriteLn('A has tag: ' + if tagType <> nil then tagType.Name else 'MISSING TYPE');
+        var typeName := if tagType is TypeInfo typeInfo 
+            then typeInfo.Name 
+            else 'MISSING TYPE';
+        WriteLn('A has tag: ' + typeName);
     end;
 
     var myTag1 := funcInfo.FindTag[MyTag1]().Get;

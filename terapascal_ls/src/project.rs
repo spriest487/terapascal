@@ -116,6 +116,8 @@ impl Project {
         let mut opts = CompileOpts::default();
         opts.lang_server = true;
         opts.verbose = true;
+        opts.allow_unsafe = true;
+        opts.rtti = true;
 
         // todo: make search dirs and compiler options configurable
         let input = BuildInput {

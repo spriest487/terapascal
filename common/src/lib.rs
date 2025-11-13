@@ -300,6 +300,9 @@ pub struct CompileOpts {
     
     pub lang_server: bool,
 
+    pub rtti: bool,
+    pub allow_unsafe: bool,
+
     pp_symbols: HashSet<String>,
     switches: HashMap<String, bool>,
 }
@@ -307,12 +310,18 @@ pub struct CompileOpts {
 impl Default for CompileOpts {
     fn default() -> Self {
         CompileOpts {
-            verbose: false,
             case_sensitive: true,
             lang_mode: LanguageMode::Default,
+
+            verbose: false,
+            
             lang_server: false,
+            
             pp_symbols: HashSet::new(),
             switches: HashMap::new(),
+            
+            allow_unsafe: false,
+            rtti: true,
         }
     }
 }

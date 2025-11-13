@@ -52,6 +52,7 @@ fn compile(mut args: Args) -> Result<(), RunError> {
     let mut compile_opts = CompileOpts::default();
     compile_opts.verbose = args.verbose;
     compile_opts.lang_mode = args.lang_mode;
+    compile_opts.allow_unsafe = args.allow_unsafe;
     
     if args.rtti {
         if args.arch == TargetArch::Cil {

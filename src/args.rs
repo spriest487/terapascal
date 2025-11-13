@@ -34,6 +34,9 @@ pub struct Args {
     #[structopt(long="rtti", default_value = "true", parse(try_from_str = parse_bool))]
     pub rtti: bool,
 
+    #[structopt(long="unsafe", default_value = "true", parse(try_from_str = parse_bool))]
+    pub allow_unsafe: bool,
+
     /// additional units to compile
     #[structopt(long = "units", short = "u")]
     pub units: Vec<PathBuf>,
