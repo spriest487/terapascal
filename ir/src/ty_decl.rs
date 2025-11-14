@@ -28,6 +28,10 @@ impl TypeDefID {
         Type::class_ptr(self)
     }
 
+    pub fn to_class_weak_type(self) -> Type {
+        Type::RcWeakPointer(VirtualTypeID::Class(self))
+    }
+
     pub fn to_struct_type(self) -> Type {
         Type::Struct(self)
     }

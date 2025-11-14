@@ -1,4 +1,4 @@
-use crate::codegen::builder::Builder;
+use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr;
 use crate::codegen::ir;
 use crate::codegen::stmt::build_case_block;
@@ -8,11 +8,11 @@ use crate::codegen::pattern::{translate_pattern_match_bindings, translate_patter
 
 pub fn translate_if_cond<B, BranchTranslateFn>(
     if_cond: &typ::ast::IfCond<B>,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
     branch_translate: BranchTranslateFn,
 ) -> Option<ir::Ref>
 where
-    BranchTranslateFn: Fn(&B, Option<&ir::Ref>, &ir::Type, &mut Builder),
+    BranchTranslateFn: Fn(&B, Option<&ir::Ref>, &ir::Type, &mut IRBuilder),
 {
     let (out_val, out_ty) = match if_cond.annotation.ty().as_ref() {
         typ::Type::Nothing => (None, ir::Type::Nothing),
@@ -96,7 +96,7 @@ where
     out_val
 }
 
-pub fn translate_case_expr(case: &typ::ast::CaseExpr, builder: &mut Builder) -> ir::Ref {
+pub fn translate_case_expr(case: &typ::ast::CaseExpr, builder: &mut IRBuilder) -> ir::Ref {
     let out_ty = builder.translate_type(&case.annotation.ty());
     let out = builder.local_temp(out_ty);
 
@@ -108,7 +108,7 @@ pub fn translate_case_expr(case: &typ::ast::CaseExpr, builder: &mut Builder) -> 
     out.to_ref()
 }
 
-pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Builder) -> ir::Ref {
+pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut IRBuilder) -> ir::Ref {
     let out_ty = builder.translate_type(&match_expr.annotation.ty());
     let out_ref = builder.local_new(out_ty.clone(), None).to_ref();
 
@@ -159,7 +159,7 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Buil
                     let branch_val = expr::expr_to_val(&branch.item, builder);
 
                     builder.mov(out_ref.clone(), branch_val);
-                    builder.retain(out_ref.clone(), &out_ty);
+                    builder.retain_deep(out_ref.clone(), &out_ty);
                 });
 
                 // only one branch must run so break out of the block now
@@ -176,7 +176,7 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut Buil
 
                 let else_val = expr::expr_to_val(&else_branch.item, builder);
                 builder.mov(out_ref.clone(), else_val);
-                builder.retain(out_ref.clone(), &out_ty);
+                builder.retain_deep(out_ref.clone(), &out_ty);
             });
 
             builder.jmp(break_label);

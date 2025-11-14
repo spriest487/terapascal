@@ -11,9 +11,6 @@ pub struct RuntimeType {
     pub debug_name: Option<String>,
     
     pub methods: Vec<RuntimeMethod>,
-
-    pub release: Option<FunctionID>,
-    pub retain: Option<FunctionID>,
 }
 
 impl RuntimeType {
@@ -23,9 +20,6 @@ impl RuntimeType {
             debug_name: None,
             
             methods: Vec::new(),
-
-            release: None,
-            retain: None,
             
         }
     }

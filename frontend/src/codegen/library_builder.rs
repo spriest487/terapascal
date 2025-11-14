@@ -1,6 +1,6 @@
-mod rtti;
 mod init;
 mod function;
+mod rc_methods;
 
 use crate::ast::Access::Published;
 use crate::ast::FunctionParamMod;
@@ -12,11 +12,9 @@ use crate::codegen::build_closure_function_def;
 use crate::codegen::build_func_def;
 use crate::codegen::build_func_static_closure_def;
 use crate::codegen::build_static_closure_impl;
-use crate::codegen::builder::Builder;
+use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::library_builder::init::gen_tags_init;
-use crate::codegen::library_builder::rtti::gen_release_func;
-use crate::codegen::library_builder::rtti::gen_retain_func;
 use crate::codegen::metadata::translate_closure_struct;
 use crate::codegen::metadata::translate_iface;
 use crate::codegen::metadata::translate_name;
@@ -58,6 +56,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_ir::instruction_builder::InstructionBuilder;
+use crate::codegen::library_builder::rc_methods::RcMethodInfo;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -86,6 +85,9 @@ pub struct LibraryBuilder<'a> {
     // looked up on first use
     free_mem_func: Option<ir::FunctionID>,
     get_mem_func: Option<ir::FunctionID>,
+    
+    // generated funcs for retain/release operations
+    rc_methods: BTreeMap<ir::TypeDefID, RcMethodInfo>,
 
     init_code: Vec<ir::Instruction>,
     
@@ -158,6 +160,8 @@ impl<'a> LibraryBuilder<'a> {
             variables_by_name: HashMap::new(),
             
             static_closures: Vec::new(),
+            
+            rc_methods: BTreeMap::new(),
             
             // placeholders
             free_mem_func: None,
@@ -238,7 +242,7 @@ impl<'a> LibraryBuilder<'a> {
                 self.variables_by_name.insert(var_name, id);
                 self.variables.insert(id, var_ty.clone());
                 if let Some(var_init) = &var.init {
-                    let mut var_init_builder = Builder::new(self);
+                    let mut var_init_builder = IRBuilder::new(self);
 
                     let expr = expr_to_val(&var_init.expr, &mut var_init_builder);
                     var_init_builder.mov(ir::GlobalRef::Variable(id), expr);
@@ -250,7 +254,7 @@ impl<'a> LibraryBuilder<'a> {
         }
         
         if let Some(init_block) = &unit.init {
-            let mut init_builder = Builder::new(self);
+            let mut init_builder = IRBuilder::new(self);
             
             for stmt in &init_block.body {
                 translate_stmt(stmt, &mut init_builder);
@@ -688,7 +692,7 @@ impl<'a> LibraryBuilder<'a> {
                         iface_ty_name,
                     ));
 
-                let mut builder = Builder::new(self);
+                let mut builder = IRBuilder::new(self);
                 let iface_meta = builder.translate_iface(&src_iface_def);
                 self.metadata.define_iface(iface_meta)
             });
@@ -1155,6 +1159,21 @@ impl<'a> LibraryBuilder<'a> {
     pub fn find_global_var(&self, name_path: &IdentPath) -> Option<ir::VariableID> {
         self.variables_by_name.get(name_path).cloned()
     }
+    
+    pub fn get_rc_method_info(&mut self, ty: &ir::Type) -> RcMethodInfo {
+        let Some(type_id) = ty.def_id() else {
+            return RcMethodInfo::none();
+        };
+        
+        if let Some(method_info) = self.rc_methods.get(&type_id) {
+            return *method_info;
+        }
+
+        let method_info = RcMethodInfo::gen_for_type(self, ty);
+        self.rc_methods.insert(type_id, method_info);
+        
+        method_info
+    }
 
     // get or generate runtime type for a given type, which contains the function IDs etc
     // used for RC operations at runtime. the rest of the RTTI info will be filled in later 
@@ -1168,8 +1187,6 @@ impl<'a> LibraryBuilder<'a> {
 
         // type names and methods will be added after codegen
         let mut rtti = ir::RuntimeType::new(None);
-        rtti.retain = gen_retain_func(self, ty);
-        rtti.release = gen_release_func(self, ty);
         
         if self.opts.debug {
             rtti.debug_name = Some(self.metadata().pretty_ty_name(&ty).into_owned());
@@ -1201,9 +1218,9 @@ impl<'a> LibraryBuilder<'a> {
             populate_closures.extend(closure_types.skip(done_closures));
 
             for closure_id in populate_closures.drain(0..) {
-                self.gen_runtime_type(&ir::Type::Struct(closure_id));
-                self.gen_runtime_type(&ir::Type::RcPointer(ir::VirtualTypeID::Closure(closure_id)));
-                self.gen_runtime_type(&ir::Type::RcWeakPointer(ir::VirtualTypeID::Closure(closure_id)));
+                self.gen_runtime_type(&closure_id.to_struct_type());
+                self.gen_runtime_type(&closure_id.to_class_ptr_type());
+                self.gen_runtime_type(&closure_id.to_class_weak_type());
                 done_closures += 1;
             }
 
@@ -1241,8 +1258,11 @@ impl<'a> LibraryBuilder<'a> {
                     .unwrap();
 
                 for (method_index, method) in def.methods().enumerate() {
-                    if method.access >= Published && method.func_decl.name.type_params.is_none() {
-                        rtti.methods.push(self.create_runtime_method(ty.clone(), &src_ty, method_index, false, &method.func_decl));
+                    let method_decl = &method.func_decl;
+
+                    if method.access >= Published && method_decl.name.type_params.is_none() {
+                        let method_info = self.create_runtime_method(ty.clone(), &src_ty, method_index, false, method_decl);
+                        rtti.methods.push(method_info);
                     }
                 }
             }
@@ -1253,8 +1273,11 @@ impl<'a> LibraryBuilder<'a> {
                     .unwrap();
 
                 for (method_index, method) in def.methods.iter().enumerate() {
-                    if method.decl.name.type_params.is_none() {
-                        rtti.methods.push(self.create_runtime_method(ty.clone(), &src_ty, method_index, true, &method.decl));
+                    let method_decl = &method.decl;
+
+                    if method_decl.name.type_params.is_none() {
+                        let method_info = self.create_runtime_method(ty.clone(), &src_ty, method_index, true, method_decl);
+                        rtti.methods.push(method_info);
                     }
                 }
             }
@@ -1527,6 +1550,7 @@ fn gen_iface_virtual_method_info(lib: &mut LibraryBuilder, iface_ty: &typ::Type)
     let iface_methods = iface_ty
         .methods(&lib.src_metadata)
         .unwrap();
+
     let iface_id = lib.find_iface_decl(iface_ty.full_name().unwrap().as_ref()).unwrap();
     
     for method_index in 0..iface_methods.len() {
@@ -1550,18 +1574,17 @@ fn gen_iface_virtual_method_info(lib: &mut LibraryBuilder, iface_ty: &typ::Type)
 // at which point rc instructions must discover the actual class type
 // dynamically from the rc cell's class pointer/class ID
 fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
-    let resource_struct = class_ty
+    let class_id = class_ty
         .rc_resource_class_id()
         .and_then(|class_id| class_id.as_class())
         .expect("resource class of translated class type was not a struct");
 
-    let resource_ty = ir::Type::Struct(resource_struct);
-
+    let resource_ty = ir::Type::Struct(class_id);
     lib.gen_runtime_type(&resource_ty);
+
     lib.gen_runtime_type(&class_ty);
 
-    let weak_ty = ir::Type::RcWeakPointer(ir::VirtualTypeID::Class(resource_struct));
-    lib.gen_runtime_type(&weak_ty);
+    lib.gen_runtime_type(&class_id.to_class_weak_type());
 }
 
 fn expect_no_unspec_args<T: fmt::Display>(target: &T, type_args: Option<&typ::TypeArgList>) {

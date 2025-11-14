@@ -1,4 +1,4 @@
-use crate::codegen::builder::Builder;
+use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr;
 use crate::codegen::expr::translate_expr;
 use crate::codegen::set_word_count;
@@ -12,7 +12,7 @@ use terapascal_ir::instruction_builder::InstructionBuilder;
 pub fn build_object_ctor_invocation(
     object_ty: &typ::Type,
     members: &[typ::ast::ObjectCtorMember],
-    builder: &mut Builder
+    builder: &mut IRBuilder
 ) -> ir::Ref {
     let object_ty = builder.translate_type(object_ty);
 
@@ -61,20 +61,20 @@ pub fn build_object_ctor_invocation(
             builder.field(field_ref, out_val.clone(), object_ty.clone(), field_id);
 
             builder.mov(field_ref.to_deref(), member_val);
-            builder.retain(field_ref.to_deref(), &field_def.ty);
+            builder.retain_deep(field_ref.to_deref(), &field_def.ty);
         }
     });
 
     out_val
 }
 
-pub fn translate_object_ctor(ctor: &typ::ast::ObjectCtor, builder: &mut Builder) -> ir::Ref {
+pub fn translate_object_ctor(ctor: &typ::ast::ObjectCtor, builder: &mut IRBuilder) -> ir::Ref {
     let object_ty = ctor.annotation.ty();
     
     build_object_ctor_invocation(object_ty.as_ref(), &ctor.args.members, builder)
 }
 
-pub fn translate_collection_ctor(ctor: &typ::ast::CollectionCtor, builder: &mut Builder) -> ir::Ref {
+pub fn translate_collection_ctor(ctor: &typ::ast::CollectionCtor, builder: &mut IRBuilder) -> ir::Ref {
     let ctor_ty = ctor.annotation.ty();
     match ctor_ty.as_ref() {
         typ::Type::Array(array_ty) => {
@@ -98,7 +98,7 @@ fn translate_static_array_ctor(
     ctor: &typ::ast::CollectionCtor,
     element: &typ::Type,
     dim: usize,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> ir::Ref {
     let el_ty = builder.translate_type(element);
 
@@ -119,7 +119,7 @@ fn translate_static_array_ctor(
                     let el_init = translate_expr(&el.value, builder);
 
                     builder.mov(element_ref.to_deref(), el_init);
-                    builder.retain(element_ref.to_deref(), &el_ty);
+                    builder.retain_deep(element_ref.to_deref(), &el_ty);
                 });
             }
         });
@@ -131,7 +131,7 @@ fn translate_static_array_ctor(
 fn translate_dyn_array_ctor(
     ctor: &typ::ast::CollectionCtor,
     element: &typ::Type,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> ir::Ref {
     let elem_ty = builder.translate_type(element);
 
@@ -149,7 +149,7 @@ fn translate_set_ctor(
     ctor: &typ::ast::CollectionCtor,
     set_type: &typ::SetType,
     flags_type: ir::Type,
-    builder: &mut Builder
+    builder: &mut IRBuilder
 ) -> ir::Ref {    
     let set_result = builder.local_temp(flags_type.clone());
 

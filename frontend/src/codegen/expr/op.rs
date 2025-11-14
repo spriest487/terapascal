@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::codegen::builder::Builder;
+use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr;
 use crate::codegen::typ;
 use crate::ir;
@@ -10,7 +10,7 @@ use terapascal_ir::instruction_builder::InstructionBuilder;
 pub fn translate_bin_op(
     bin_op: &typ::ast::BinOp,
     out_ty: &typ::Type,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> ir::Ref {
     if bin_op.lhs.annotation().is_namespace() {
         // there's nothing to actually translate on the lhs, it's just for name resolution
@@ -286,7 +286,7 @@ pub fn translate_bin_op(
     };
 
     if !out_is_ref {
-        builder.retain(out_val, &result_ty);
+        builder.retain_deep(out_val, &result_ty);
     }
 
     builder.local_end();
@@ -312,7 +312,7 @@ fn set_bound_to_literal(value: IntConstant, value_type: &ir::Type) -> ir::Value 
 pub fn translate_unary_op(
     unary_op: &typ::ast::UnaryOp,
     out_ty: &typ::Type,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> ir::Ref {
     let operand_ref = expr::translate_expr(&unary_op.operand, builder);
 
@@ -326,7 +326,7 @@ pub fn translate_unary_op(
             builder.addr_of(out_val, operand_ref);
             
             // todo: should never do anything since pointers don't affect RC
-            builder.retain(out_val, &out_ty);
+            builder.retain_deep(out_val, &out_ty);
 
             out_val.to_ref()
         },

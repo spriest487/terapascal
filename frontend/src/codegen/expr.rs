@@ -8,7 +8,7 @@ use crate::codegen::expr::call::translate_invocation;
 use crate::codegen::ir;
 use crate::codegen::translate_stmt;
 use crate::codegen::typ;
-use crate::codegen::Builder;
+use crate::codegen::IRBuilder;
 use crate::typ::TypedValue;
 use crate::typ::STRING_TYPE_NAME;
 use crate::typ::SYSTEM_UNIT_NAME;
@@ -18,7 +18,7 @@ use terapascal_common::span::*;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 use terapascal_ir::Value;
 
-pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
+pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Value {
     match expr.annotation() {
         typ::Value::Const(const_val) => {
             literal_to_val(&const_val.value, &const_val.ty, builder)
@@ -30,7 +30,7 @@ pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Value {
     }
 }
 
-pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut Builder) -> ir::Ref {
+pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Ref {
     builder.comment(expr.to_string());
     builder.push_debug_context(expr.annotation().span().clone());
 
@@ -138,7 +138,7 @@ fn translate_indexer(
     base_ref: ir::Ref,
     index_val: ir::Value,
     base_ty: &typ::Type,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> ir::Ref {
     match base_ty {
         typ::Type::Array(array_ty) => {
@@ -181,7 +181,7 @@ fn translate_indexer(
 
 pub fn translate_if_cond_expr(
     if_cond: &typ::ast::IfCondExpr,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
     cond::translate_if_cond(if_cond, builder, |branch, out_ref, out_ty, builder| {
         let val = expr_to_val(branch, builder);
@@ -191,14 +191,14 @@ pub fn translate_if_cond_expr(
                 out: out_ref.clone(),
                 new_val: val.into(),
             });
-            builder.retain(out_ref, &out_ty);
+            builder.retain_deep(out_ref, &out_ty);
         }
     })
 }
 
 pub fn translate_if_cond_stmt(
     if_cond: &typ::ast::IfCondStmt,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
     cond::translate_if_cond(if_cond, builder, |branch, out_ref, _out_ty, builder| {
         assert!(
@@ -219,7 +219,7 @@ fn is_string_class(class: &typ::Symbol) -> bool {
 pub fn literal_to_val(
     lit: &typ::ast::Literal,
     ty: &typ::Type,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> ir::Value {
     match lit {
         ast::Literal::Nil => ir::Value::LiteralNull,
@@ -357,7 +357,7 @@ pub fn literal_to_val(
 pub fn translate_literal_expr(
     lit: &typ::ast::Literal,
     ty: &typ::Type,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> ir::Ref {
     match literal_to_val(lit, ty, builder) {
         Value::Ref(lit_ref) => lit_ref,
@@ -372,7 +372,7 @@ pub fn translate_literal_expr(
     }
 }
 
-fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &mut Builder) -> ir::Ref {
+fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &mut IRBuilder) -> ir::Ref {
     match annotation {
         typ::Value::Function(func) => {
             let func = builder.translate_func(&func.name, &func.sig, None);
@@ -406,7 +406,7 @@ fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &m
     }
 }
 
-fn find_local_ref(ident: &ast::Ident, builder: &Builder) -> Option<ir::Ref> {
+fn find_local_ref(ident: &ast::Ident, builder: &IRBuilder) -> Option<ir::Ref> {
     let local = builder.find_local(ident.name.as_str())?;
     
     let value_ref = ir::Ref::Local(local.id());
@@ -417,7 +417,7 @@ fn find_local_ref(ident: &ast::Ident, builder: &Builder) -> Option<ir::Ref> {
     }
 }
 
-fn find_global_ref(value: &TypedValue, builder: &Builder) -> Option<ir::Ref> {
+fn find_global_ref(value: &TypedValue, builder: &IRBuilder) -> Option<ir::Ref> {
     // direct references to global variables by their ident will have the qualified name stored
     // in their "decl" property
     let decl_path = value.decl.as_ref()?;
@@ -428,7 +428,7 @@ fn find_global_ref(value: &TypedValue, builder: &Builder) -> Option<ir::Ref> {
     Some(global_ref)
 }
 
-pub fn translate_block(block: &typ::ast::Block, out_ref: ir::Ref, builder: &mut Builder) {
+pub fn translate_block(block: &typ::ast::Block, out_ref: ir::Ref, builder: &mut IRBuilder) {
     let out_ty = match &block.output {
         Some(out_expr) => builder.translate_type(&out_expr.annotation().ty()),
         None => ir::Type::Nothing,
@@ -443,13 +443,13 @@ pub fn translate_block(block: &typ::ast::Block, out_ref: ir::Ref, builder: &mut 
     if let Some(out) = &block.output {
         let result_val = translate_expr(out, builder);
         builder.mov(out_ref, result_val.clone());
-        builder.retain(result_val, &out_ty);
+        builder.retain_deep(result_val, &out_ty);
     }
 
     builder.local_end();
 }
 
-pub fn translate_exit(exit: &typ::ast::Exit, builder: &mut Builder) {
+pub fn translate_exit(exit: &typ::ast::Exit, builder: &mut IRBuilder) {
     if let ast::Exit::WithValue { value_expr, .. } = exit {
         let value_ty = builder.translate_type(&value_expr.annotation().ty());
         let value_val = translate_expr(value_expr, builder);
@@ -460,13 +460,13 @@ pub fn translate_exit(exit: &typ::ast::Exit, builder: &mut Builder) {
 
         // we are effectively reassigning the return ref, so like a normal assignment, we need
         // retain the new value to make it outlive the scope the exit expr appears in
-        builder.retain(ir::RETURN_REF.clone(), &value_ty);
+        builder.retain_deep(ir::RETURN_REF, &value_ty);
     }
 
     builder.exit_function();
 }
 
-pub fn translate_raise(raise: &typ::ast::Raise, builder: &mut Builder) -> ir::Ref {
+pub fn translate_raise(raise: &typ::ast::Raise, builder: &mut IRBuilder) -> ir::Ref {
     let val = translate_expr(&raise.value, builder);
 
     builder.emit(ir::Instruction::Raise { val: val.clone() });
@@ -474,7 +474,7 @@ pub fn translate_raise(raise: &typ::ast::Raise, builder: &mut Builder) -> ir::Re
     ir::Ref::Discard
 }
 
-fn translate_cast_expr(cast: &typ::ast::Cast, builder: &mut Builder) -> ir::Ref {
+fn translate_cast_expr(cast: &typ::ast::Cast, builder: &mut IRBuilder) -> ir::Ref {
     let val = translate_expr(&cast.expr, builder);
     let ty = builder.translate_type(&cast.as_type);
     let out_ref = builder.local_temp(ty.clone());

@@ -10,7 +10,7 @@ mod set_flags;
 pub use self::function::*;
 pub use self::set_flags::*;
 use crate::ast::StructKind;
-use crate::codegen::builder::Builder;
+use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::*;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::*;

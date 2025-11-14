@@ -167,7 +167,6 @@ pub struct Class {
     impls: BTreeMap<ir::InterfaceID, InterfaceImpl>,
 
     dtor: Option<ir::FunctionID>,
-    release_func: Option<FunctionName>,
 
     comment: Option<String>,
 
@@ -220,18 +219,6 @@ impl Class {
                 panic!("missing runtime type for class {}", metadata.pretty_ty_name(&class_ty))
             });
 
-        let resource_ty = ir::Type::Struct(struct_id);
-        let res_runtime_type = metadata
-            .get_runtime_type(&resource_ty)
-            .unwrap_or_else(|| {
-                panic!(
-                    "missing runtime type for resource struct of class {}",
-                    metadata.pretty_ty_name(&resource_ty),
-                )
-            });
-
-        let release_func = res_runtime_type.release.map(FunctionName::ID);
-
         let comment = runtime_type
             .get_name_string(metadata)
             .map(|name| name.clone())
@@ -243,7 +230,6 @@ impl Class {
             identity: ClassIdentity::Class(struct_id),
             impls,
             dtor,
-            release_func,
             comment: Some(comment),
             typeinfo_global_name: typeinfo_name,
         }
@@ -259,7 +245,6 @@ impl Class {
             identity: ClassIdentity::DynArrayClass(id),
             impls: BTreeMap::new(),
             dtor: None,
-            release_func: None,
             comment: Some(format!("generated dynarray class (array of {element_type})")),
             typeinfo_global_name: global_typeinfo_decl_name(&array_type),
         }
@@ -273,7 +258,6 @@ impl Class {
             comment: Some(format!("closure class {}", closure_struct_id)),
             dtor: None,
             impls: BTreeMap::new(),
-            release_func: None,
             typeinfo_global_name: global_typeinfo_decl_name(&ty),
         }
     }
@@ -422,12 +406,6 @@ impl Class {
 
         if enable_rtti {
             writeln!(class_init, "  .typeinfo = &{},", self.typeinfo_global_name).unwrap();
-        }
-        write!(class_init, "  .cleanup = (RcCleanupFunc) ").unwrap();
-
-        match self.release_func {
-            Some(name) => writeln!(class_init, "&{},", name).unwrap(),
-            None => writeln!(class_init, "NULL,").unwrap(),
         }
 
         if let Some((_, (first_iface_id, _))) = impls.get(0) {

@@ -20,7 +20,7 @@ use terapascal_ir::instruction_builder::scope::LocalStack;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Debug)]
-pub struct Builder<'m, 'l: 'm> {
+pub struct IRBuilder<'m, 'l: 'm> {
     library: &'m mut LibraryBuilder<'l>,
 
     // positional list of type args that can be used to reify types in the current context
@@ -34,7 +34,7 @@ pub struct Builder<'m, 'l: 'm> {
     local_stack: LocalStack,
 }
 
-impl InstructionBuilder for Builder<'_, '_> {
+impl InstructionBuilder for IRBuilder<'_, '_> {
     fn emit(&mut self, instruction: Instruction) {
         if instruction.should_discard() {
             return;
@@ -68,9 +68,41 @@ impl InstructionBuilder for Builder<'_, '_> {
         self.next_label = Label(self.next_label.0 + 1);
         label
     }
+
+    fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        if ty.is_rc() {
+            self.release(at, ty.is_weak(), Ref::Discard);
+            return true;
+        }
+
+        let rc_method_info = self.library.get_rc_method_info(ty);
+        let Some(func_id) = rc_method_info.release else {
+            return false;
+        };
+
+        let at_ref = self.make_ref_local(at, ty);
+        self.call(func_id, [at_ref.value()], None);
+        true
+    }
+
+    fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        if ty.is_rc() {
+            self.retain(at, ty.is_weak());
+            return true;
+        }
+
+        let rc_method_info = self.library.get_rc_method_info(ty);
+        let Some(func_id) = rc_method_info.retain else {
+            return false;
+        };
+
+        let at_ref = self.make_ref_local(at, ty);
+        self.call(func_id, [at_ref.value()], None);
+        true
+    }
 }
 
-impl<'m, 'l: 'm> Builder<'m, 'l> {
+impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn new(lib: &'m mut LibraryBuilder<'l>) -> Self {
         let mut instructions = Vec::new();
         instructions.push(Instruction::LocalBegin);
@@ -273,7 +305,7 @@ impl<'m, 'l: 'm> Builder<'m, 'l> {
 
                 let captured_local_id = builder.find_local(field_name).unwrap().id();
                 builder.mov(capture_field_ref.to_deref(), captured_local_id);
-                builder.retain(capture_field_ref.to_deref(), &field_def.ty);
+                builder.retain_deep(capture_field_ref.to_deref(), &field_def.ty);
             }
         });
 

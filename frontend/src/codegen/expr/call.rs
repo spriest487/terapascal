@@ -1,4 +1,4 @@
-use crate::codegen::builder::Builder;
+use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr;
 use crate::codegen::expr::ctor::build_object_ctor_invocation;
 use crate::codegen::typ;
@@ -14,7 +14,7 @@ fn translate_args(
     args: &[typ::ast::Expr],
     sig: &typ::FunctionSig,
     is_instance_method: bool,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> Vec<ir::Value> {
     let mut arg_vals = Vec::with_capacity(args.len());
 
@@ -49,7 +49,7 @@ fn translate_call_with_args(
     call_target: CallTarget,
     args: &[typ::ast::Expr],
     sig: &typ::FunctionSig,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
     let out_val = match &sig.result_ty {
         typ::Type::Nothing => None,
@@ -119,7 +119,7 @@ enum CallTarget {
     },
 }
 
-pub fn build_call(call: &typ::ast::Call, builder: &mut Builder) -> Option<ir::Ref> {
+pub fn build_call(call: &typ::ast::Call, builder: &mut IRBuilder) -> Option<ir::Ref> {
     // eprintln!("build_call: {} @ {}", call, call.span());
 
     let Value::Invocation(invocation) = &call.annotation else {
@@ -138,7 +138,7 @@ fn build_func_val_invocation(
     func_ty: &typ::Type,
     args: &[typ::ast::Expr],
     call_ty_args: Option<typ::TypeArgList>,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
     // it's impossible to invoke a closure with type args, so the typechecker should
     // ensure this never happens
@@ -179,7 +179,7 @@ pub fn build_method_invocation(
     method_index: usize,
     args: &[typ::ast::Expr],
     ty_args: Option<typ::TypeArgList>,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
     let iface_ty = builder.generic_context().apply_to_type(iface_ty);
     let self_ty = builder.generic_context().apply_to_type(self_ty);
@@ -252,7 +252,7 @@ fn build_variant_ctor_call(
     variant_ty: &typ::Type,
     case_name: &str,
     arg: Option<&typ::ast::Expr>,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
     let variant_ty =
         variant_ty.clone().apply_type_args(builder.generic_context(), builder.generic_context());
@@ -280,7 +280,7 @@ fn build_variant_ctor_call(
 
             builder.vardata(data_ref, out, out_ty.clone(), case_index);
             builder.mov(data_ref.to_deref(), arg_val);
-            builder.retain(data_ref.to_deref(), &arg_ty);
+            builder.retain_deep(data_ref.to_deref(), &arg_ty);
         }
     }
     builder.local_end();
@@ -290,7 +290,7 @@ fn build_variant_ctor_call(
 
 pub fn translate_invocation(
     invocation: &Invocation,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
     match invocation {
         Invocation::Function {

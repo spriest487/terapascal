@@ -751,13 +751,6 @@ impl Interpreter {
 
                 // call dtor on the inner resource
                 self.invoke_dtor(&val, &rc.object_type)?;
-
-                // if the type is a user-defined class, try to call its releaser
-                if let Some(type_info) = self.metadata.get_runtime_type(&rc.object_type)
-                    && let Some(release_func) = type_info.release
-                {
-                    self.call_and_store(release_func, &[val.clone()], None)?;
-                }
             }
 
             rc.strong_count -= 1;

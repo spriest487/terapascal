@@ -13,7 +13,7 @@ pub(super) fn gen_dyn_array_dtor_body(
     let class_type = array_class_id.to_class_ptr_type();
 
     let self_arg = LocalID(0);
-    builder.retain(self_arg, &class_type);
+    builder.retain(self_arg, false);
 
     builder.comment("iteration counter");
     let counter = builder.local_temp(Type::I32);
@@ -30,7 +30,7 @@ pub(super) fn gen_dyn_array_dtor_body(
     builder.counter_loop(counter, Value::LiteralI32(1), arr_high, |builder| {
         builder.element(el_ptr, self_arg, counter, elem_ty.clone(), class_type.clone());
 
-        builder.release(el_ptr.to_deref(), &elem_ty);
+        builder.release_deep(el_ptr.to_deref(), &elem_ty);
     });
 }
 
@@ -48,7 +48,7 @@ pub(super) fn new_dyn_array(
     // allocate the array object itself
     builder.local_begin();
     {
-        builder.rc_new_array(arr, element_type.clone(), Value::LiteralI32(len), false);
+        builder.new_array(arr, element_type.clone(), Value::LiteralI32(len), false);
 
         // assign elements
         if len > 0 {
@@ -61,7 +61,7 @@ pub(super) fn new_dyn_array(
                 // retain each element. we don't do this for static arrays because retaining
                 // a static array retains all its elements - for dynamic arrays, retaining
                 // the array object itself does not retain the elements
-                builder.retain(element_ref.to_deref(), &element_type);
+                builder.retain_deep(element_ref.to_deref(), &element_type);
             }
         }
     }

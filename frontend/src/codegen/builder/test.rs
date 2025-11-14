@@ -17,7 +17,7 @@ fn instructions_without_comments(actual: &[Instruction], count: usize) -> Vec<In
 fn end_loop_scope_ends_at_right_scope_level() {
     let ctx = typ::Context::root(CompileOpts::default());
     let mut library = LibraryBuilder::new(&ctx, [], CodegenOpts::default());
-    let mut builder = Builder::new(&mut library);
+    let mut builder = IRBuilder::new(&mut library);
 
     let initial_scope = builder.local_stack.len();
 
@@ -33,7 +33,7 @@ fn end_loop_scope_ends_at_right_scope_level() {
 fn break_cleans_up_loop_locals() {
     let ctx = typ::Context::root(CompileOpts::default());
     let mut library = LibraryBuilder::new(&ctx, [], CodegenOpts::default());
-    let mut builder = Builder::new(&mut library);
+    let mut builder = IRBuilder::new(&mut library);
 
     let continue_label = builder.next_label();
     let break_label = builder.next_label();

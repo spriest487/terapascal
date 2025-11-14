@@ -3,7 +3,7 @@ use crate::codegen::expr::literal_to_val;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::translate_block;
 use crate::codegen::typ;
-use crate::codegen::Builder;
+use crate::codegen::IRBuilder;
 use crate::codegen::ClosureInstance;
 use crate::ir::*;
 use std::iter;
@@ -21,7 +21,7 @@ fn create_function_body_builder<'m, 'l: 'm>(
     lib: &'m mut LibraryBuilder<'l>,
     generic_ctx: typ::GenericContext,
     debug_name: Option<String>,
-) -> Builder<'m, 'l> {
+) -> IRBuilder<'m, 'l> {
     let debug_comment = debug_name.map(|name| {
         let mut comment = format!("function def body of {}", name);
         if !generic_ctx.is_empty() {
@@ -31,7 +31,7 @@ fn create_function_body_builder<'m, 'l: 'm>(
         comment
     });
 
-    let mut builder = Builder::new(lib)
+    let mut builder = IRBuilder::new(lib)
         .with_generic_ctx(generic_ctx);
     
     if let Some(comment) = debug_comment {
@@ -226,7 +226,7 @@ pub fn build_closure_function_def(
     }
 }
 
-fn bind_function_return(return_ty: &typ::Type, builder: &mut Builder) -> Type {
+fn bind_function_return(return_ty: &typ::Type, builder: &mut IRBuilder) -> Type {
     match return_ty {
         typ::Type::Nothing => Type::Nothing,
         
@@ -254,7 +254,7 @@ struct FunctionParam {
 }
 
 impl FunctionParam {
-    fn from_ast(param: &typ::ast::FunctionParamGroup, builder: &mut Builder) -> Vec<Self> {
+    fn from_ast(param: &typ::ast::FunctionParamGroup, builder: &mut IRBuilder) -> Vec<Self> {
         let mut params = Vec::new();
         
         let (param_ty, by_ref) = match param.get_modifier() {
@@ -282,7 +282,7 @@ impl FunctionParam {
 fn bind_function_params(
     params: impl IntoIterator<Item=FunctionParam>,
     is_instance_method: bool,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> Vec<(LocalID, Type)> {
     let mut bound_params = Vec::new();
 
@@ -317,13 +317,13 @@ fn bind_function_params(
     }
 
     for (param_local, ty) in &bound_params {
-        builder.retain(*param_local, ty);
+        builder.retain_deep(*param_local, ty);
     }
 
     bound_params
 }
 
-fn init_function_locals(locals: &[typ::ast::FunctionLocalBinding], builder: &mut Builder) {
+fn init_function_locals(locals: &[typ::ast::FunctionLocalBinding], builder: &mut IRBuilder) {
     for local in locals {
         if local.kind == ast::BindingDeclKind::Var {
             let ty = builder.translate_type(&local.ty);
@@ -342,7 +342,7 @@ fn init_function_locals(locals: &[typ::ast::FunctionLocalBinding], builder: &mut
 fn build_func_body(
     body: &typ::ast::Block,
     return_ty: &Type,
-    mut builder: Builder,
+    mut builder: IRBuilder,
 ) -> Vec<Instruction> {
     let body_block_out_ref = match return_ty {
         Type::Nothing => Ref::Discard,
@@ -368,12 +368,12 @@ pub fn build_static_closure_impl(
     id: StaticClosureID,
     library: &mut LibraryBuilder,
 ) -> StaticClosure {
-    let mut init_builder = Builder::new(library);
+    let mut init_builder = IRBuilder::new(library);
 
     let static_closure_ptr_ref = Ref::Global(GlobalRef::StaticClosure(id));
 
     let closure_ref = init_builder.build_closure_instance(closure.clone());
-    init_builder.retain(closure_ref.clone(), &closure.closure_ptr_ty());
+    init_builder.retain_deep(closure_ref.clone(), &closure.closure_ptr_ty());
     init_builder.mov(static_closure_ptr_ref, closure_ref);
 
     let init_body = init_builder.finish();

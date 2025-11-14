@@ -1,6 +1,6 @@
 use crate::ast::Ident;
 use crate::codegen::ir;
-use crate::codegen::Builder;
+use crate::codegen::IRBuilder;
 use crate::typ;
 use crate::typ::MatchPattern;
 use crate::typ::Specializable;
@@ -16,7 +16,7 @@ pub struct PatternMatchBinding {
 impl PatternMatchBinding {
     // allocate a new local in the builder with the name and type of this binding and copy + retain
     // the binding value into it
-    pub fn bind_local(&self, builder: &mut Builder) {
+    pub fn bind_local(&self, builder: &mut IRBuilder) {
         builder.comment(&format!(
             "pattern binding {}: {}",
             self.name,
@@ -25,7 +25,7 @@ impl PatternMatchBinding {
 
         let local = builder.local_new(self.ty.clone(), Some(Arc::new(self.name.clone()))).to_ref();
         builder.mov(local.clone(), self.binding_ref.clone());
-        builder.retain(local, &self.ty);
+        builder.retain_deep(local, &self.ty);
     }
 }
 
@@ -34,7 +34,7 @@ pub fn translate_pattern_match_is(
     binding: Option<&Ident>,
     target_val: &ir::Ref,
     target_ty: &ir::Type,
-    builder: &mut Builder
+    builder: &mut IRBuilder
 ) -> ir::Value {
     match pattern {
         MatchPattern::Not { pattern, .. } => {
@@ -73,7 +73,7 @@ pub fn translate_pattern_match_bindings(
     pattern: &MatchPattern,
     binding: Option<&Ident>,
     target_val: &ir::Ref,
-    builder: &mut Builder
+    builder: &mut IRBuilder
 ) -> Vec<PatternMatchBinding> {
     match pattern {
         MatchPattern::Not { .. } => {
@@ -148,7 +148,7 @@ pub fn translate_is_ty(
     val: ir::Ref,
     val_ty: &ir::Type,
     ty: &ir::Type,
-    builder: &mut Builder
+    builder: &mut IRBuilder
 ) -> ir::Value {
     // eprintln!("is_ty pattern: {} is {}?", builder.pretty_ty_name(val_ty), builder.pretty_ty_name(ty));
     
@@ -171,7 +171,7 @@ fn translate_is_variant(
     val: ir::Ref,
     variant_ty: ir::Type,
     case_index: usize,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) -> ir::Ref {
     let tag_ptr = builder.local_temp(ir::Type::I32.temp_ref());
     builder.vartag(tag_ptr, val, variant_ty);

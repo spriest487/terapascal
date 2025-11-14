@@ -1,4 +1,4 @@
-use crate::codegen::builder::Builder;
+use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::ir;
 use crate::Operator;
@@ -134,7 +134,7 @@ impl SetFlagsType {
     ) -> ir::FunctionID {
         let struct_ty = ir::Type::Struct(struct_id);
 
-        let mut builder = Builder::new(lib);
+        let mut builder = IRBuilder::new(lib);
         builder.bind_param(struct_ty.clone().ptr(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
 
@@ -159,7 +159,7 @@ impl SetFlagsType {
     fn define_exclude(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
         let struct_ty = ir::Type::Struct(struct_id);
 
-        let mut builder = Builder::new(lib);
+        let mut builder = IRBuilder::new(lib);
         builder.bind_param(struct_ty.clone().ptr(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
 
@@ -185,7 +185,7 @@ impl SetFlagsType {
     fn define_contains(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
         let struct_ty = ir::Type::Struct(struct_id);
 
-        let mut builder = Builder::new(lib);
+        let mut builder = IRBuilder::new(lib);
         builder.bind_return();
         builder.bind_param(struct_ty.clone().ptr(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
@@ -218,11 +218,11 @@ impl SetFlagsType {
         word_count: usize,
         op: Operator,
         lib: &mut LibraryBuilder,
-        build_op: impl Fn(&mut Builder, ir::Ref, ir::Value, ir::Value)
+        build_op: impl Fn(&mut IRBuilder, ir::Ref, ir::Value, ir::Value)
     ) -> ir::FunctionID {
         let struct_ty = ir::Type::Struct(struct_id);
 
-        let mut builder = Builder::new(lib);
+        let mut builder = IRBuilder::new(lib);
         builder.bind_param(struct_ty.clone().temp_ref(), "flags");
         builder.bind_param(struct_ty.clone().temp_ref(), "other");
 
@@ -255,7 +255,7 @@ impl SetFlagsType {
     fn define_bit_not(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
         let struct_ty = ir::Type::Struct(struct_id);
 
-        let mut builder = Builder::new(lib);
+        let mut builder = IRBuilder::new(lib);
         builder.bind_param(struct_ty.clone().temp_ref(), "flags");
 
         let flags_ref = ir::Ref::Local(ir::LocalID(0)).to_deref();
@@ -278,7 +278,7 @@ impl SetFlagsType {
     fn define_eq(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
         let struct_ty = ir::Type::Struct(struct_id);
         
-        let mut builder = Builder::new(lib);
+        let mut builder = IRBuilder::new(lib);
         builder.bind_return();
         builder.bind_param(struct_ty.clone().temp_ref(), "flags");
         builder.bind_param(struct_ty.clone().temp_ref(), "other");
@@ -317,7 +317,7 @@ impl SetFlagsType {
     // %1: U8 bit number in the 0-255 range 
     // returns (ref to 64-bit word, bit in the 0-63 range) 
     fn find_word_bit(
-        builder: &mut Builder,
+        builder: &mut IRBuilder,
         first_arg: usize,
         word_count: usize,
         struct_ty: ir::Type

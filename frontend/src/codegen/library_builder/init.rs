@@ -1,5 +1,5 @@
 use terapascal_ir::instruction_builder::InstructionBuilder;
-use crate::codegen::builder::Builder;
+use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::typ as typ;
@@ -11,7 +11,7 @@ pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
         .map(|(loc, tags)| (loc, tags.to_vec()))
         .collect();
     
-    let mut builder = Builder::new(lib);
+    let mut builder = IRBuilder::new(lib);
 
     // type of field that stores tags in TypeInfo/MethodInfo class (array of object)
     for (loc, tags) in locations {
@@ -36,7 +36,7 @@ pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
 }
 
 fn gen_create_tags(
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
     tag_array: ir::Ref,
     tags: Vec<typ::ast::TagItem>,
 ) {

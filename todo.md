@@ -1,5 +1,4 @@
 # CIL gen
-demos\generics\GenericFunction.tpas
 demos\rc\WeakRef.tpas
 demos\rtti\DynamicType.tpas
 demos\rtti\FuncInvoke.tpas
@@ -9,12 +8,12 @@ demos\rtti\ModuleTypes.tpas
 demos\rtti\Tags.tpas
 demos\rtti\TypeMethods.tpas
 demos\rtti\TypeName.tpas
-demos\typedecl\Packing.tpas
 
 # array rework
 * C implementation could use variable sized structs instead of 2 allocations per array 
 
 # RTTI
+* remove RTTI for class inner types
 * weak pointer target type info
 * type kind info
 * type/method unit name info

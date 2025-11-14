@@ -9,7 +9,7 @@ use crate::codegen::translate_exit;
 use crate::codegen::translate_expr;
 use crate::codegen::translate_if_cond_stmt;
 use crate::codegen::typ;
-use crate::codegen::Builder;
+use crate::codegen::IRBuilder;
 use crate::typ::system_option_type_of;
 use crate::typ::OPTION_NONE_CASE;
 use crate::typ::OPTION_SOME_CASE;
@@ -19,7 +19,7 @@ use terapascal_ir::instruction_builder::jmp_exists;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 use crate::codegen::pattern::{translate_pattern_match_bindings, translate_pattern_match_is};
 
-pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
+pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut IRBuilder) {
     builder.push_debug_context(stmt.annotation().span().clone());
     builder.comment(stmt.to_string());
     
@@ -96,7 +96,7 @@ pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut Builder) {
     builder.pop_debug_context()
 }
 
-fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut Builder) {
+fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut IRBuilder) {
     let bound_ty = builder.translate_type(&binding.ty);
 
     let binding_name = Some(Arc::new(binding.name.to_string()));
@@ -107,12 +107,12 @@ fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut Builder) {
             let val = expr_to_val(init_expr, builder);
 
             builder.mov(binding_ref, val);
-            builder.retain(binding_ref, &bound_ty);
+            builder.retain_deep(binding_ref, &bound_ty);
         });
     };
 }
 
-pub fn build_for_loop(for_loop: &typ::ast::ForLoop, builder: &mut Builder) {
+pub fn build_for_loop(for_loop: &typ::ast::ForLoop, builder: &mut IRBuilder) {
     match &for_loop.range {
         ast::ForLoopRange::UpTo(range) => {
             build_for_loop_up_to(range, &for_loop.body, builder);
@@ -127,7 +127,7 @@ pub fn build_for_loop(for_loop: &typ::ast::ForLoop, builder: &mut Builder) {
 fn build_for_loop_up_to(
     range: &ast::ForLoopCounterRange<typ::Value>,
     body: &typ::ast::Stmt,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) {
     builder.scope(|builder| {
         let (counter_val, counter_init_val, counter_ty) = match &range.init {
@@ -183,11 +183,11 @@ fn build_for_loop_with_counter<BodyFn>(
     counter_init_val: ir::Value,
     inc_val: ir::Value,
     high_val: ir::Value,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
     body_fn: BodyFn,
 ) 
 where
-    BodyFn: FnOnce(&mut Builder)
+    BodyFn: FnOnce(&mut IRBuilder)
 {
     let top_label = builder.next_label();
     let continue_label = builder.next_label();
@@ -228,7 +228,7 @@ where
 fn build_for_loop_sequence(
     range: &ast::ForLoopSequenceRange<typ::Value>,
     body: &typ::ast::Stmt,
-    builder: &mut Builder
+    builder: &mut IRBuilder
 ) {
     builder.scope(|builder| {
         let src_ref = translate_expr(&range.src_expr, builder);
@@ -419,10 +419,10 @@ fn build_array_sequence_loop<ElementFn>(
     binding_ref: impl Into<ir::Ref>,
     binding_ty: ir::Type,
     body: &typ::ast::Stmt,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
     element_fn: ElementFn,
 ) 
-    where ElementFn: FnOnce(&mut Builder) -> ir::Value
+    where ElementFn: FnOnce(&mut IRBuilder) -> ir::Value
 {
     let counter_ref = counter_ref.into();
     let binding_ref = binding_ref.into();
@@ -439,7 +439,7 @@ fn build_array_sequence_loop<ElementFn>(
                 let first_iter = builder.eq_to_val(counter_ref.clone(), ir::Value::LiteralI32(0));
                 builder.jmpif(skip_release_label, first_iter);
 
-                builder.release(binding_ref.clone(), &binding_ty);
+                builder.release_deep(binding_ref.clone(), &binding_ty);
             });
             
             builder.label(skip_release_label);
@@ -447,15 +447,15 @@ fn build_array_sequence_loop<ElementFn>(
             builder.scope(|builder| {
                 let element = element_fn(builder);
                 builder.cast(binding_ref.clone(), element, binding_ty.clone());
-                builder.retain(binding_ref, &binding_ty);
+                builder.retain_deep(binding_ref, &binding_ty);
 
-                translate_stmt(body, builder);    
+                translate_stmt(body, builder);
             });
         }
     );
 }
 
-pub fn translate_while_loop(while_loop: &typ::ast::WhileLoop, builder: &mut Builder) {
+pub fn translate_while_loop(while_loop: &typ::ast::WhileLoop, builder: &mut IRBuilder) {
     let top_label = builder.next_label();
     let continue_label = builder.next_label();
     let break_label = builder.next_label();
@@ -495,13 +495,13 @@ pub fn translate_while_loop(while_loop: &typ::ast::WhileLoop, builder: &mut Buil
     }
 }
 
-pub fn translate_assignment(assignment: &typ::ast::Assignment, builder: &mut Builder) {
+pub fn translate_assignment(assignment: &typ::ast::Assignment, builder: &mut IRBuilder) {
     let lhs = translate_expr(&assignment.lhs, builder);
     let rhs = translate_expr(&assignment.rhs, builder);
 
     // the new value is being stored in a new location, retain it
     let rhs_ty = builder.translate_type(&assignment.rhs.annotation().ty());
-    builder.retain(rhs.clone(), &rhs_ty);
+    builder.retain_deep(rhs.clone(), &rhs_ty);
 
     // the old value is being replaced, release it. local variables can be uninitialized,
     // or ambiguously initialized (initialized in one branch and not another), so we can't check
@@ -512,17 +512,14 @@ pub fn translate_assignment(assignment: &typ::ast::Assignment, builder: &mut Bui
     //
     // the alternative would be to store an initialization flag alongside each rc variable
     let lhs_ty = builder.translate_type(&assignment.lhs.annotation().ty());
-    builder.release(lhs.clone(), &lhs_ty);
+    builder.release_deep(lhs.clone(), &lhs_ty);
 
-    builder.emit(ir::Instruction::Move {
-        out: lhs,
-        new_val: rhs.into(),
-    });
+    builder.mov(lhs, rhs)
 }
 
 pub fn translate_compound_assignment(
     assignment: &typ::ast::CompoundAssignment,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
 ) {
     builder.scope(|builder| {
         let lhs = translate_expr(&assignment.lhs, builder);
@@ -548,26 +545,23 @@ pub fn translate_compound_assignment(
         };
 
         // the new value is being stored in a new location, release the old value and retain it
-        builder.retain(op_result.clone(), &lhs_ty);
-        builder.release(lhs.clone(), &lhs_ty);
+        builder.retain_deep(op_result.clone(), &lhs_ty);
+        builder.release_deep(lhs.clone(), &lhs_ty);
 
-        builder.emit(ir::Instruction::Move {
-            out: lhs,
-            new_val: op_result.into(),
-        });
+        builder.mov(lhs, op_result);
     });
 }
 
-fn translate_case_stmt(case: &typ::ast::CaseStmt, builder: &mut Builder) {
+fn translate_case_stmt(case: &typ::ast::CaseStmt, builder: &mut IRBuilder) {
     build_case_block(case, builder, |item, builder| translate_stmt(item, builder))
 }
 
 pub fn build_case_block<Item, ItemFn>(
     case: &typ::ast::CaseBlock<Item>,
-    builder: &mut Builder,
+    builder: &mut IRBuilder,
     mut translate_item: ItemFn,
 ) where
-    ItemFn: FnMut(&Item, &mut Builder),
+    ItemFn: FnMut(&Item, &mut IRBuilder),
 {
     builder.scope(|builder| {
         let cond_expr_val = expr_to_val(&case.cond_expr, builder);
@@ -626,7 +620,7 @@ pub fn build_case_block<Item, ItemFn>(
     });
 }
 
-fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut Builder) {
+fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut IRBuilder) {
     builder.scope(|builder| {
         let cond_expr = translate_expr(&match_stmt.cond_expr, builder);
         let cond_ty = builder.translate_type(&match_stmt.cond_expr.annotation().ty());
@@ -655,8 +649,8 @@ fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut Builder)
                 );
 
                 // jump to skip label if pattern match return false
-                builder.not(is_skip.clone(), is_match.clone());
-                builder.jmpif(skip_label, is_skip.clone());
+                builder.not(is_skip, is_match.clone());
+                builder.jmpif(skip_label, is_skip);
 
                 // code to run if we didn't skip - the actual branch
                 builder.scope(|builder| {

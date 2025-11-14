@@ -184,7 +184,7 @@ pub trait InstructionBuilder {
 
     fn expire_local(&mut self, id: LocalID, ty: &Type, retained: bool) {
         if retained {
-            self.release(id, &ty);
+            self.release_deep(id, &ty);
         }
     }
 
@@ -242,7 +242,7 @@ pub trait InstructionBuilder {
         });
     }
 
-    fn rc_new_array(&mut self,
+    fn new_array(&mut self,
         out: impl Into<Ref>,
         element_type: Type,
         count: impl Into<Value>,
@@ -759,6 +759,13 @@ pub trait InstructionBuilder {
         })
     }
 
+    fn make_ref_local(&mut self, a: impl Into<Ref>, ty: &Type) -> LocalID {
+        let local = self.local_temp(ty.clone().temp_ref());
+        self.make_ref(local, a);
+        
+        local
+    }
+
     fn cast(&mut self, out: impl Into<Ref>, val: impl Into<Value>, ty: Type) {
         self.emit(Instruction::Cast {
             out: out.into(),
@@ -784,67 +791,19 @@ pub trait InstructionBuilder {
         })
     }
     
-    fn rc_release(&mut self, at: impl Into<Ref>, ty: &Type, released_out: impl Into<Ref>) {
-        match ty {
-            Type::RcPointer(..) => {
-                self.emit(Instruction::Release {
-                    at: at.into(),
-                    weak: false,
-                    released_out: released_out.into(),
-                });
-            },
-
-            Type::RcWeakPointer(..) => {
-                self.emit(Instruction::Release {
-                    at: at.into(),
-                    weak: true,
-                    released_out: released_out.into(),
-                });
-            },
-
-            _ => {
-            },
-        }
+    fn release(&mut self, at: impl Into<Ref>, weak: bool, released_out: impl Into<Ref>) {
+        self.emit(Instruction::Release {
+            at: at.into(),
+            weak,
+            released_out: released_out.into(),
+        });
     }
 
-    fn release(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        let at = at.into();
-
-        self.comment(&format!(
-            "release: {}",
-            ty.to_pretty_string(self.ir_formatter())
-        ));
-
-        if self.call_release(at.clone(), ty) {
-            true
-        } else {
-            self.release_deep(at, ty)
-        }
-    }
-    
-    fn ref_to_ptr_val(&mut self, at: impl Into<Ref>, ty: &Type) -> Value {
-        let at = at.into();
-
-        if let Ref::Deref(at_ptr) = &at {
-            return (**at_ptr).clone();
-        }
-        
-        let temp_at_ptr = self.local_temp(ty.clone().temp_ref());
-        self.make_ref(temp_at_ptr.clone(), at);
-        temp_at_ptr.value()
-    }
-
-    fn call_release(&mut self, at: Ref, ty: &Type) -> bool {
-        let Some(rtti) = self.metadata().get_runtime_type(ty) else {
-            return false;
-        };
-
-        let Some(release) = rtti.release else {
-            return false;
-        };
-
-        let at_ptr = self.ref_to_ptr_val(at, ty);
-        self.call(release, [at_ptr], None);
+    fn retain(&mut self, at: impl Into<Ref>, weak: bool) -> bool {
+        self.emit(Instruction::Retain {
+            at: at.into(),
+            weak,
+        });
 
         true
     }
@@ -854,70 +813,51 @@ pub trait InstructionBuilder {
             at,
             ty,
             |builder, element_ty, element_ref| {
-                builder.rc_release(element_ref, element_ty, Ref::Discard);
+                if !element_ty.is_rc() {
+                    return false;
+                }
+                
+                builder.comment(format!(
+                    "release: {}",
+                    ty.to_pretty_string(builder.ir_formatter())
+                ));
+
+                builder.release(element_ref, element_ty.is_weak(), Ref::Discard);
                 true
             },
         )
-    }
-
-    fn retain(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        let at = at.into();
-
-        self.comment(&format!(
-            "retain: {}",
-            ty.to_pretty_string(self.ir_formatter())
-        ));
-
-        if self.call_retain(at.clone(), ty) {
-            true
-        } else {
-            self.retain_deep(at, ty)
-        }
-    }
-
-    fn call_retain(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        let at = at.into();
-        
-        let Some(rtti) = self.metadata().get_runtime_type(ty) else {
-            return false;
-        };
-
-        let Some(retain) = rtti.retain else {
-            return false;
-        };
-        
-        // TODO this is a hazard for suspendable functions
-        // we can't create a temp local (field) while releasing another
-        let at_ptr = self.ref_to_ptr_val(at, ty);
-        self.call(retain, [at_ptr], None);
-
-        true
     }
 
     fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         self.visit_deep(
             at,
             ty,
-            |builder, element_ty, element_ref| match element_ty {
-                Type::RcPointer(..) => {
-                    builder.emit(Instruction::Retain {
-                        at: element_ref,
-                        weak: false,
-                    });
-                    true
-                },
+            |builder, element_ty, element_ref| {
+                if !element_ty.is_rc() {
+                    return false;
+                }
 
-                Type::RcWeakPointer(..) => {
-                    builder.emit(Instruction::Retain {
-                        at: element_ref,
-                        weak: true,
-                    });
-                    true
-                },
-
-                _ => false,
+                builder.comment(format!(
+                    "retain: {}",
+                    ty.to_pretty_string(builder.ir_formatter())
+                ));
+                
+                builder.retain(element_ref, element_ty.is_weak());
+                true
             },
         )
+    }
+
+    fn ref_to_ptr_val(&mut self, at: impl Into<Ref>, ty: &Type) -> Value {
+        let at = at.into();
+
+        if let Ref::Deref(at_ptr) = &at {
+            return (**at_ptr).clone();
+        }
+
+        let temp_at_ptr = self.local_temp(ty.clone().temp_ref());
+        self.make_ref(temp_at_ptr.clone(), at);
+        temp_at_ptr.value()
     }
 
     fn gen_dyn_array_dtor_body(
