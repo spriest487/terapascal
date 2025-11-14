@@ -1219,7 +1219,6 @@ impl<'a> LibraryBuilder<'a> {
             populate_closures.extend(closure_types.skip(done_closures));
 
             for closure_id in populate_closures.drain(0..) {
-                self.gen_runtime_type(&closure_id.to_struct_type());
                 self.gen_runtime_type(&closure_id.to_class_ptr_type());
                 self.gen_runtime_type(&closure_id.to_class_weak_type());
                 done_closures += 1;
@@ -1627,9 +1626,6 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
         .rc_resource_class_id()
         .and_then(|class_id| class_id.as_class())
         .expect("resource class of translated class type was not a struct");
-
-    let resource_ty = ir::Type::Struct(class_id);
-    lib.gen_runtime_type(&resource_ty);
 
     lib.gen_runtime_type(&class_ty);
     lib.gen_runtime_type(&class_id.to_class_weak_type());

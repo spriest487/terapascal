@@ -61,11 +61,11 @@ fn translate_builtin_class(
     id: ir::TypeDefID
 ) {
     let Ok(class_def) = module.root_ctx
-        .find_struct_def(&name.full_path, StructKind::Class) else
-    {
+        .find_struct_def(&name.full_path, StructKind::Class)
+    else {
         return;
     };
-    
+
     let generic_ctx = typ::GenericContext::empty();
 
     let name = translate_name(name, &generic_ctx, lib);
@@ -75,6 +75,6 @@ fn translate_builtin_class(
     let resource_ty = translate_struct_def(class_def.as_ref(), &generic_ctx, lib);
 
     lib.metadata_mut().define_struct(id, resource_ty);
-    lib.gen_runtime_type(&ir::Type::Struct(id));
-    lib.gen_runtime_type(&ir::Type::RcPointer(ir::VirtualTypeID::Class(id)));
+    lib.gen_runtime_type(&id.to_class_ptr_type());
+    lib.gen_runtime_type(&id.to_class_weak_type());
 }
