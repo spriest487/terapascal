@@ -81,6 +81,7 @@ pub const TYPEINFO_TYPE: Type = Type::RcPointer(TYPEINFO_VTYPE_ID);
 pub const TYPEINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const TYPEINFO_METHODS_FIELD: FieldID = FieldID(1);
 pub const TYPEINFO_TAGS_FIELD: FieldID = FieldID(2);
+pub const TYPEINFO_IMPL_FIELD: FieldID = FieldID(3);
 
 pub const METHODINFO_ID: TypeDefID = TypeDefID(3);
 pub const METHODINFO_VTYPE_ID: VirtualTypeID = VirtualTypeID::Class(METHODINFO_ID);

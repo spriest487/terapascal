@@ -76,6 +76,20 @@ public readonly record struct FieldID(ulong ID) : IComparable<FieldID> {
     // this is the only field ID it's legal to use with a Field instruction pointing at a closure object type
     public static FieldID ClosurePointerField => new FieldID(0);
     
+    public static FieldID TypeInfoName => new FieldID(0);
+    public static FieldID TypeInfoMethods => new FieldID(1);
+    public static FieldID TypeInfoTags => new FieldID(2);
+    public static FieldID TypeInfoImpl => new FieldID(3);
+    
+    public static FieldID MethodInfoName => new FieldID(0);
+    public static FieldID MethodInfoOwner => new FieldID(1);
+    public static FieldID MethodInfoImpl => new FieldID(2);
+    public static FieldID MethodInfoTags => new FieldID(3);
+    
+    public static FieldID FunctionInfoName => new FieldID(0);
+    public static FieldID FunctionInfoImpl => new FieldID(1);
+    public static FieldID FunctionInfoTags => new FieldID(2);
+    
     public int CompareTo(FieldID other) {
         return this.ID.CompareTo(other.ID);
     }
