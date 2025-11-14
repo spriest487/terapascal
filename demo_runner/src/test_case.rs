@@ -150,7 +150,6 @@ impl TestCase {
             build_command.arg(&self.path);
             build_command.arg("-o").arg(&dll_path);
             build_command.arg("-a").arg("cil");
-            build_command.arg("--rtti").arg("false");
 
             if opts.debug {
                 build_command.arg("--debug");
