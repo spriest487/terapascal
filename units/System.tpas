@@ -147,8 +147,10 @@ type
     TypeInfo = class
         name: String;
         methods: array of MethodInfo;
-        
+
         tags: array of Object;
+
+        impl: Pointer;
     public
         function Name: String;
         function Methods: array of MethodInfo;
