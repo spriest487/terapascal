@@ -43,7 +43,7 @@ use terapascal_ir as ir;
 use terapascal_vm::Interpreter;
 use terapascal_vm::InterpreterOpts;
 
-fn compile(mut args: Args) -> Result<(), RunError> {
+fn compile(args: Args) -> Result<(), RunError> {
     if args.output.is_some() && args.print_stage.is_some() {
         let msg = "output file and print stage arguments are mutually exclusive".to_string();
         return Err(RunError::InvalidArguments(msg));
@@ -53,17 +53,11 @@ fn compile(mut args: Args) -> Result<(), RunError> {
     compile_opts.verbose = args.verbose;
     compile_opts.lang_mode = args.lang_mode;
     compile_opts.allow_unsafe = args.allow_unsafe;
-    
+
     if args.rtti {
-        if args.arch == TargetArch::Cil {
-            // TODO: cil backend RTTI implementation
-            eprintln!("RTTI is not supported on the CIL backend yet");
-            args.rtti = false;
-        } else {
-            compile_opts.define("RTTI");
-        }
+        compile_opts.define("RTTI");
     }
-    
+
     if args.debug {
         compile_opts.define("DEBUG");
     }
