@@ -46,6 +46,8 @@ public class TypeBuilder {
     public TypeReference TypeType { get; }
     public TypeReference ErrorType { get; }
 
+    public MethodReference GetTypeFromHandleMethod { get; }
+
     public TypeReference ObjectBaseType { get; }
     public MethodReference ObjectCreateMethod { get; }
     public MethodReference ObjectDestroyMethod { get; }
@@ -70,6 +72,9 @@ public class TypeBuilder {
         this.ExceptionType = this.ImportCoreReference("System", "Exception", false);
         this.CLRStringType = this.ImportCoreReference("System", "String", false);
         this.TypeType = this.ImportCoreReference("System", "Type", false);
+
+        this.GetTypeFromHandleMethod = this.ImportCoreReference(this.TypeType.Resolve()
+            .Methods.Single(m => m.Name == nameof(Type.GetTypeFromHandle)));
 
         var builtinClasses = (Span<(IR.TypeDefID, string)>)[
             (IR.TypeDefID.String, nameof(Runtime.String)),
@@ -157,10 +162,10 @@ public class TypeBuilder {
             IR.F64Type => typeSystem.Double,
             IR.ArrayType { Element: var element, Length: var length } => 
                 this.BuildArrayTypeRef(element, length, library),
-            IR.StructType(var id) => this.CreateTypeRef(id, isValueType: true),
-            IR.VariantType(var id) => this.CreateTypeRef(id, isValueType: true),
+            IR.StructType(var id) => this.CreateStructTypeRef(id, isValueType: true),
+            IR.VariantType(var id) => this.CreateStructTypeRef(id, isValueType: true),
             IR.FunctionType(var id) => this.BuildFunctionTypeRef(id),
-            IR.FlagsType(var id, _) => this.CreateTypeRef(id, isValueType: true),
+            IR.FlagsType(var id, _) => this.CreateStructTypeRef(id, isValueType: true),
             IR.PointerType(var inner) => this.BuildTypeRef(inner, library).MakePointerType(),
             IR.TempRefType(var inner) => this.BuildTypeRef(inner, library).MakeByReferenceType(),
             IR.RcPointerType(var id) => this.BuildClassTypeRef(id, library),
@@ -213,7 +218,7 @@ public class TypeBuilder {
         return string.Intern($"Struct_{id.ID}");
     }
 
-    public TypeReference CreateTypeRef(IR.TypeDefID id, bool isValueType) {
+    private TypeReference CreateStructTypeRef(IR.TypeDefID id, bool isValueType) {
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
 
@@ -234,7 +239,7 @@ public class TypeBuilder {
         return id switch {
             IR.AnyVirtualTypeID => this.assemblyBuilder.Module.TypeSystem.Object,
             // in this backend, struct refs are automatically reference types if they're a class
-            IR.ClassVirtualTypeID(var classID) => this.CreateTypeRef(classID, false),
+            IR.ClassVirtualTypeID(var classID) => this.CreateStructTypeRef(classID, false),
             IR.InterfaceVirtualTypeID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
             IR.ClosureVirtualTypeID => this.ClosureBaseType,
             IR.ArrayVirtualTypeID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
@@ -264,7 +269,7 @@ public class TypeBuilder {
         var isClass = structDef.Identity is IR.ClassStructIdentity;
         var isValueType = !isClass && !isClosure;
 
-        var typeRef = this.CreateTypeRef(id, isValueType);
+        var typeRef = this.CreateStructTypeRef(id, isValueType);
 
         var attrs = TypeAttributes.Sealed 
             | TypeAttributes.NotPublic
@@ -440,7 +445,7 @@ public class TypeBuilder {
     }
 
     public void BuildVariantDef(IR.TypeDefID id, IR.VariantDef def, IR.Library library) {
-        var typeRef = this.CreateTypeRef(id, isValueType: false);
+        var typeRef = this.CreateStructTypeRef(id, isValueType: false);
 
         var typeDef = new TypeDefinition(typeRef.Namespace,
             typeRef.Name,
@@ -658,6 +663,28 @@ public class TypeBuilder {
 
         return variantRefs.CaseFieldRefs[(int)tag]
             ?? throw new ArgumentException($"invalid tag {tag} for variant type {baseType}");
+    }
+
+    public GenericInstanceMethod GetObjectCreateMethod(IR.IVirtualTypeID classID, IR.Library library) {
+        var module = this.assemblyBuilder.Module;
+        
+        var classTypeRef = this.BuildTypeRef(new IR.RcPointerType(classID), library);
+
+        var methodInstance = new GenericInstanceMethod(module.ImportReference(this.ObjectCreateMethod));
+        methodInstance.GenericArguments.Add(module.ImportReference(classTypeRef));
+
+        return methodInstance;
+    }
+
+    public GenericInstanceMethod GetArrayCreateMethod(IR.IType elementType, IR.Library library) {
+        var module = this.assemblyBuilder.Module;
+        
+        var elementTypeRef = this.BuildTypeRef(elementType, library);
+
+        var methodInstance = new GenericInstanceMethod(module.ImportReference(this.ArrayCreateMethod));
+        methodInstance.GenericArguments.Add(module.ImportReference(elementTypeRef));
+
+        return methodInstance;
     }
 
     public TypeReference ImportCoreReference(string? ns, string name, bool isValueType) {

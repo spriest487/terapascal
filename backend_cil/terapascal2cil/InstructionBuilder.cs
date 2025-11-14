@@ -583,12 +583,7 @@ public class InstructionBuilder {
 
     private void BuildNewObject(IR.IRef outRef, IR.TypeDefID typeID, bool immortal) {
         var classID = new IR.ClassVirtualTypeID(typeID);
-        var classTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(new IR.RcPointerType(classID), this.library);
-
-        var createMethodRef = this.assemblyBuilder.TypeBuilder.ObjectCreateMethod;
-
-        var createMethodInst = new GenericInstanceMethod(this.assemblyBuilder.Module.ImportReference(createMethodRef));
-        createMethodInst.GenericArguments.Add(this.assemblyBuilder.Module.ImportReference(classTypeRef));
+        var createMethodInst = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(classID, this.library);
 
         this.StoreRef(outRef, () => {
             this.body.Emit(immortal ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
@@ -597,12 +592,7 @@ public class InstructionBuilder {
     }
 
     private void BuildNewArray(IR.IRef outRef, IR.IValue countVal, IR.IType elementType, bool immortal) {
-        var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType, this.library);
-        
-        var createMethodRef = this.assemblyBuilder.TypeBuilder.ArrayCreateMethod;
-
-        var createMethodInst = new GenericInstanceMethod(this.assemblyBuilder.Module.ImportReference(createMethodRef));
-        createMethodInst.GenericArguments.Add(this.assemblyBuilder.Module.ImportReference(elementTypeRef));
+        var createMethodInst = this.assemblyBuilder.TypeBuilder.GetArrayCreateMethod(elementType, this.library);
         
         this.StoreRef(outRef, () => {
             this.LoadValue(countVal);
@@ -1024,6 +1014,16 @@ public class InstructionBuilder {
 
             case IR.GlobalRef(IR.StaticClosureGlobalRef(var closureID)): {
                 this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStaticClosureFieldRef(closureID));
+                break;
+            }
+            
+            case IR.GlobalRef(IR.StaticTypeInfoGlobalRef(var closureID)): {
+                this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStaticTypeInfoFieldRef(closureID));
+                break;
+            }
+            
+            case IR.GlobalRef(IR.StaticFuncInfoGlobalRef(var id)): {
+                this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStaticFuncInfoFieldRef(id));
                 break;
             }
 

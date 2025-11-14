@@ -1,6 +1,4 @@
-﻿using System.Runtime.InteropServices;
-
-namespace Terapascal.Runtime;
+﻿namespace Terapascal.Runtime;
 
 public class Object {
     internal int strongCount;
@@ -54,13 +52,30 @@ public sealed unsafe class String : Object {
     }
 }
 
-public sealed class TypeInfo {
+public sealed class TypeInfo : Object {
+    public String name;
+    public MethodInfo[] methods;
+
+    public object[] tags;
+
+    public Type impl;
 }
 
-public sealed class MethodInfo {
+public sealed class MethodInfo : Object {
+    public String name;
+    public TypeInfo owner;
+    
+    public System.Reflection.MethodInfo impl;
+
+    public object[] tags;
 }
 
-public sealed class FunctionInfo {
+public sealed class FunctionInfo : Object {
+    public String name;
+
+    public System.Reflection.MethodInfo impl;
+
+    public object[] tags;
 }
 
 public class ClosureBase : Object { 
