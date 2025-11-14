@@ -187,8 +187,9 @@ public class AssemblyBuilder : IDisposable {
             globals.Fields.Add(fieldDef);
 
             this.stringLitFields.Add(id, fieldDef);
-            
+
             globalsInit.Emit(OpCodes.Ldstr, stringLit);
+            globalsInit.Emit(OpCodes.Ldc_I4, 1);
             globalsInit.Emit(OpCodes.Call, createStringMethod);
             globalsInit.Emit(OpCodes.Stsfld, fieldDef);
         }

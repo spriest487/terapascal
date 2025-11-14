@@ -232,11 +232,13 @@ static bool RcRelease(OBJECT_PTR object, bool weak) {
 
         // call the dtor before decrementing the ref count, because it must still be a live reference
         // while the function is executing
-        if (object->strong_count == 1 && object->class->dtor) {
+        if (object->strong_count == 1) {
 #if TRACE_RC
             printf("rc: \tdisposing %s @ 0x%p\n", OBJECT_DISPLAY(object), object);
 #endif
-            object->class->dtor(object);
+            if (object->class->dtor) {
+                object->class->dtor(object);
+            }
             
             // invoke structural release to release struct fields
             if (object->class->cleanup) {

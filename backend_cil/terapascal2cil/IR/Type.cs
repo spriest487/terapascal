@@ -16,6 +16,10 @@ public readonly record struct TypeDefID(ulong ID) : IComparable<TypeDefID> {
     public IType ToClassType() {
         return new RcPointerType(new ClassVirtualTypeID(this));
     }
+    
+    public IType ToStructType() {
+        return new StructType(this);
+    }
 }
 
 public class TypeDefIDFormatter : IMessagePackFormatter<TypeDefID> {

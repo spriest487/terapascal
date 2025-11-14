@@ -15,27 +15,21 @@ public static class SystemFunctions {
         return Marshal.PtrToStringAnsi((IntPtr)s.chars, s.len);
     }
 
-    public static unsafe String CreateString(string s) {
-        if (string.IsNullOrEmpty(s)) {
-            return new String {
-                chars = null,
-                len = 0,
-            };
-        }
+    public static unsafe String CreateString(string s, bool immortal) {
+        var newString = Object.Create<String>(immortal);
         
-        var byteCount = Encoding.UTF8.GetByteCount(s);
-        var bytes = GetMem(byteCount + 1);
+        if (!string.IsNullOrEmpty(s)) {
+            newString.len = Encoding.UTF8.GetByteCount(s);
+            newString.chars = GetMem(newString.len + 1);
 
-        fixed (char* chars = s) {
-            Encoding.UTF8.GetBytes(chars, s.Length, bytes, byteCount);
+            fixed (char* chars = s) {
+                Encoding.UTF8.GetBytes(chars, s.Length, newString.chars, newString.len);
+            }
+
+            newString.chars[newString.len] = 0;
         }
 
-        bytes[byteCount] = 0;
-
-        return new String {
-            chars = bytes,
-            len = byteCount,
-        };
+        return newString;
     }
 
     public static unsafe byte* GetMem(int count) {
@@ -47,7 +41,7 @@ public static class SystemFunctions {
     }
     
     public static String ReadLn() {
-        return CreateString(Console.ReadLine() ?? "");
+        return CreateString(Console.ReadLine() ?? "", false);
     }
 
     public static unsafe void WriteLn(String message) {
@@ -62,51 +56,51 @@ public static class SystemFunctions {
     }
 
     public static String Int8ToStr(sbyte i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String UInt8ToStr(byte i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String Int16ToStr(short i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String UInt16ToStr(ushort i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String Int32ToStr(int i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String UInt32ToStr(uint i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String Int64ToStr(long i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String UInt64ToStr(ulong i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String NativeIntToStr(IntPtr i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String NativeUIntToStr(UIntPtr i) {
-        return CreateString(i.ToString());
+        return CreateString(i.ToString(), false);
     }
 
     public static String RealToStr(float f) {
-        return CreateString(f.ToString(CultureInfo.InvariantCulture));
+        return CreateString(f.ToString(CultureInfo.InvariantCulture), false);
     }
 
     public static unsafe String PointerToStr(void* p) {
-        return CreateString(Environment.Is64BitProcess ? $"0x{(ulong)p,16}" : $"0x{(ulong)p,8}");
+        return CreateString(Environment.Is64BitProcess ? $"0x{(ulong)p,16}" : $"0x{(ulong)p,8}", false);
     }
 
     public static int StrToInt(String s) {
@@ -174,10 +168,71 @@ public static class SystemFunctions {
     }
 
     public static void RcRetain(object? obj, bool weak) {
+        switch (obj) {
+            case Object runtimeObj: {
+                if (runtimeObj.strongCount < 0) {
+                    // immortal
+                    return;
+                }
+                
+                if (weak) {
+                    Interlocked.Increment(ref runtimeObj.weakCount);
+                } else {
+                    var strongCount = Interlocked.Increment(ref runtimeObj.strongCount);
+                    if (strongCount == 1) {
+                        var err = $"resurrected {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
+                        throw new Error(err);
+                    }
+                }
+
+                break;
+            }
+
+            case Array array: {
+                ArrayManager.RetainArray(array, weak);
+                break;
+            }
+        }
     }
 
     public static bool RcRelease(object? obj, bool weak) {
-        return false;
+        switch (obj) {
+            case Object runtimeObj: {
+                if (runtimeObj.strongCount < 0) {
+                    // immortal
+                    return false;
+                }
+
+                if (!weak) {
+                    if (Interlocked.CompareExchange(ref runtimeObj.strongCount, 0, 1) == 1) {
+                        runtimeObj.strongCount = -1;
+                        runtimeObj.Destroy();
+                        return true;
+                    }
+                    
+                    var strongCount = Interlocked.Decrement(ref runtimeObj.strongCount);
+                    if (strongCount < 0) {
+                        var err = $"released {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
+                        throw new Error(err);
+                    }
+                } else {
+                    if (Interlocked.Decrement(ref runtimeObj.weakCount) < 0) {
+                        var err = $"released {runtimeObj.GetType().FullName} with 0 weak refs (+ {runtimeObj.strongCount} strong refs remain)";
+                        throw new Error(err);
+                    }
+                }
+
+                return false;
+            }
+
+            case Array array: {
+                return ArrayManager.ReleaseArray(array, weak);
+            }
+
+            default: {
+                return false;
+            }
+        }
     }
     
     public static unsafe void InvokeMethod(
@@ -233,8 +288,9 @@ public static class SystemFunctions {
     }
 
     public static void ArrayCreateInternal(ref object array, int len) {
-        var asArray = (Array)array;
-        var elementType = asArray.GetType().GetElementType()!;
-        array = Array.CreateInstance(elementType, len);
+        var arrayInstance = (Array)array;
+        ArrayManager.CreateArray(ref arrayInstance, len);
+
+        array = arrayInstance;
     }
 }

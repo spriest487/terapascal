@@ -113,7 +113,7 @@ public class InstructionBuilder {
                     this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
                     
                     this.LoadRef(atRef);
-                    this.body.Emit(OpCodes.Ldc_I4, weak ? 1 : 0);
+                    this.body.Emit(weak ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
                     
                     this.body.Emit(OpCodes.Call, this.rcRetainMethod);
                     break;
@@ -125,7 +125,7 @@ public class InstructionBuilder {
                     
                     this.StoreRef(outRef, () => {
                         this.LoadRef(atRef);
-                        this.body.Emit(OpCodes.Ldc_I4, weak ? 1 : 0);
+                        this.body.Emit(weak ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
 
                         this.body.Emit(OpCodes.Call, this.rcReleaseMethod);
                     });
@@ -268,8 +268,9 @@ public class InstructionBuilder {
                 case IR.NewInstruction {
                     Out: var outRef,
                     TypeID: var typeID,
+                    Immortal: var immortal,
                 }: {
-                    this.BuildRcNew(outRef, typeID);
+                    this.BuildNewObject(outRef, typeID, immortal);
 
                     break;
                 }
@@ -279,7 +280,7 @@ public class InstructionBuilder {
                     ElementType: var elementType,
                     Count: var countVal,
                 }: {
-                    this.BuildRcNewArray(outRef, countVal, elementType);
+                    this.BuildNewArray(outRef, countVal, elementType);
                     break;
                 }
 
@@ -562,22 +563,22 @@ public class InstructionBuilder {
         });
     }
 
-    private void BuildRcNew(IR.IRef outRef, IR.TypeDefID typeID) {
+    private void BuildNewObject(IR.IRef outRef, IR.TypeDefID typeID, bool immortal) {
         var classID = new IR.ClassVirtualTypeID(typeID);
         var classTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(new IR.RcPointerType(classID), this.library);
-        var classTypeDef = classTypeRef.Resolve();
 
-        var defaultCtor = classTypeDef.GetConstructors()
-                .SingleOrDefault(ctor => ctor.Parameters.Count == 0)
-            ?? throw new InvalidOperationException(
-                $"invalid instruction: type {classTypeRef} cannot be constructed");
+        var createMethodRef = this.assemblyBuilder.TypeBuilder.ObjectCreateMethod;
+
+        var createMethodInst = new GenericInstanceMethod(this.assemblyBuilder.Module.ImportReference(createMethodRef));
+        createMethodInst.GenericArguments.Add(this.assemblyBuilder.Module.ImportReference(classTypeRef));
 
         this.StoreRef(outRef, () => {
-            this.body.Emit(OpCodes.Newobj, this.assemblyBuilder.Module.ImportReference(defaultCtor));
+            this.body.Emit(immortal ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+            this.body.Emit(OpCodes.Call, createMethodInst);
         });
     }
 
-    private void BuildRcNewArray(IR.IRef outRef, IR.IValue countVal, IR.IType elementType) {
+    private void BuildNewArray(IR.IRef outRef, IR.IValue countVal, IR.IType elementType) {
         var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType, this.library);
         
         this.StoreRef(outRef, () => {

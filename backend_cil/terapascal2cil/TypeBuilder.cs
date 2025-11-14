@@ -2,7 +2,6 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using Mono.Collections.Generic;
 using static Terapascal.IR.TypeExt;
 
 namespace Terapascal.CIL;
@@ -42,10 +41,14 @@ public class TypeBuilder {
     private readonly TypeReference clrStringType;
     private readonly TypeReference typeType;
     
+    private readonly TypeReference objectBaseType;
     private readonly TypeReference closureBaseType;
     private readonly TypeReference errorType;
 
     private readonly FieldReference closurePointerField;
+
+    private readonly MethodReference objectCreateMethod;
+    private readonly MethodReference objectDestroyMethod;
 
     private readonly StaticArrayTypeBuilder staticArrayBuilder;
 
@@ -55,6 +58,10 @@ public class TypeBuilder {
     public TypeReference TypeType => this.typeType;
     public TypeReference ErrorType => this.errorType;
     
+    public TypeReference ObjectBaseType => this.objectBaseType;
+    public MethodReference ObjectCreateMethod => this.objectCreateMethod;
+    public MethodReference ObjectDestroyMethod => this.objectDestroyMethod;
+
     public TypeReference ClosureBaseType => this.closureBaseType;
 
     public TypeBuilder(AssemblyBuilder assemblyBuilder) {
@@ -100,10 +107,18 @@ public class TypeBuilder {
             });
         }
 
-        this.closureBaseType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ClosureBase), false);
-        var closureTypeDef = this.closureBaseType.Resolve();
+        this.objectBaseType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.Object), false);
+        var objectBaseTypeDef = this.objectBaseType.Resolve()
+            ?? throw new InvalidDataException("missing Object base type def in runtime library");
+
+        this.objectCreateMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Create");
+        this.objectDestroyMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Destroy");
 
         this.errorType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.Error), false);
+        
+        this.closureBaseType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ClosureBase), false);
+        var closureTypeDef = this.closureBaseType.Resolve()
+            ?? throw new InvalidDataException("missing closure object base type def in runtime library");
 
         this.closurePointerField = closureTypeDef.Fields
             .Single(f => f.Name == nameof(Runtime.ClosureBase.functionPointer));
@@ -194,7 +209,7 @@ public class TypeBuilder {
         return string.Intern($"Struct_{id.ID}");
     }
 
-    private TypeReference CreateTypeRef(IR.TypeDefID id, bool isValueType) {
+    public TypeReference CreateTypeRef(IR.TypeDefID id, bool isValueType) {
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
 
@@ -259,7 +274,7 @@ public class TypeBuilder {
 
         TypeReference baseType;
         if (isClass) {
-            baseType = this.assemblyBuilder.Module.TypeSystem.Object;
+            baseType = this.objectBaseType;
         } else if (isClosure) {
             baseType = this.closureBaseType;
         } else {
@@ -557,7 +572,7 @@ public class TypeBuilder {
         var voidType = this.assemblyBuilder.TypeSystem.Void;
         var methodDef = new MethodDefinition(
             ".ctor",
-            MethodAttributes.Assembly | MethodAttributes.HideBySig | MethodAttributes.RTSpecialName |
+            MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.RTSpecialName |
             MethodAttributes.SpecialName, 
             voidType
         );

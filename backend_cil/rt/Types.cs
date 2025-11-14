@@ -1,6 +1,21 @@
 ﻿namespace Terapascal.Runtime;
 
-public sealed unsafe class String {
+public class Object {
+    internal int strongCount;
+    internal int weakCount;
+
+    public static T Create<T>(bool immortal) where T : Object, new() {
+        return new T {
+            strongCount = immortal ? -1 : 1,
+            weakCount = 0,
+        };
+    }
+
+    public virtual void Destroy() {
+    }
+}
+
+public sealed unsafe class String : Object {
     public byte* chars;
     public int len;
 
@@ -18,6 +33,6 @@ public sealed class MethodInfo {
 public sealed class FunctionInfo {
 }
 
-public class ClosureBase { 
+public class ClosureBase : Object { 
     public IntPtr functionPointer;
 }

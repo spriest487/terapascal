@@ -5,7 +5,6 @@ using static Terapascal.IR.TypeExt;
 namespace Terapascal.CIL;
 
 public class FunctionBuilder {
-    
     private readonly AssemblyBuilder assemblyBuilder;
 
     private readonly Dictionary<IR.FunctionID, MethodReference> functionMethods;
@@ -57,6 +56,24 @@ public class FunctionBuilder {
             foreach (var (implType, impls) in ifaceDef.Implementations) {
                 foreach (var (methodID, implID) in impls.Methods) {
                     this.BuildInterfaceMethodImpl(ifaceDef, ifaceTypeDef, methodID, implID, implType, lib);
+                }
+            }
+        }
+
+        foreach (var (typeID, typeDecl) in lib.Metadata.TypeDecls) {
+            if (typeDecl is not IR.DefTypeDecl(IR.StructTypeDef(var structDef))) {
+                continue;
+            }
+
+            switch (structDef.Identity) {
+                case IR.ClassStructIdentity:
+                case IR.ClosureStructIdentity: {
+                    var typeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(typeID.ToClassType(), lib).Resolve()
+                        ?? throw new InvalidDataException($"missing type def for class {typeID} which should be defined in this assembly");
+                    
+                    this.BuildObjectDestroyMethod(typeDef, typeID, lib);
+                    
+                    break;
                 }
             }
         }
@@ -118,6 +135,47 @@ public class FunctionBuilder {
         implBody.Emit(OpCodes.Ret);
 
         implTypeDef.Interfaces.Add(new InterfaceImplementation(ifaceTypeDef));
+    }
+    
+    private void BuildObjectDestroyMethod(TypeDefinition typeDef, IR.TypeDefID id, IR.Library library) {
+        var metadata = library.Metadata;
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
+        var voidType = this.assemblyBuilder.TypeSystem.Void;
+
+        var dtorFunc = metadata.Destructors.TryGetValue(id, out var dtorID) ? (IR.FunctionID?)dtorID : null;
+        var releaseFunc = metadata.RuntimeTypes.TryGetValue(id.ToStructType(), out var runtimeType)
+            ? runtimeType.Release
+            : null;
+
+        if (dtorFunc == null && releaseFunc == null) {
+            return;
+        }
+
+        const MethodAttributes attrs = MethodAttributes.Public
+            | MethodAttributes.HideBySig
+            | MethodAttributes.Virtual;
+
+        var methodDef = new MethodDefinition(typeBuilder.ObjectDestroyMethod.Name, attrs, voidType);
+
+        typeDef.Methods.Add(methodDef);
+
+        methodDef.Body = new MethodBody(methodDef);
+        var body = methodDef.Body.GetILProcessor();
+
+        if (dtorFunc.HasValue) {
+            var dtorFuncRef = this.FindFunctionMethod(dtorFunc.Value);
+            body.Emit(OpCodes.Ldarg_0);
+            body.Emit(OpCodes.Call, dtorFuncRef);
+        }
+
+        if (releaseFunc.HasValue) {
+            var releaseFuncRef = this.FindFunctionMethod(releaseFunc.Value);
+            // releaser self args are always by-ref
+            body.Emit(OpCodes.Ldarga, 0);
+            body.Emit(OpCodes.Call, releaseFuncRef);
+        }
+
+        body.Emit(OpCodes.Ret);
     }
 
     private void ResolveExternalRef(IR.FunctionID id, IR.ExternalFunctionRef externRef, IR.Library library) {
