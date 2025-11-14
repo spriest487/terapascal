@@ -14,7 +14,6 @@ use crate::codegen::build_func_static_closure_def;
 use crate::codegen::build_static_closure_impl;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::expr_to_val;
-use crate::codegen::library_builder::init::gen_tags_init;
 use crate::codegen::metadata::translate_closure_struct;
 use crate::codegen::metadata::translate_iface;
 use crate::codegen::metadata::translate_name;
@@ -49,14 +48,15 @@ use crate::typ::TypeParamContainer;
 use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
 pub use function::*;
+use init::gen_tags_init;
 use linked_hash_map::LinkedHashMap;
+pub use rc_methods::RcMethodInfo;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_ir::instruction_builder::InstructionBuilder;
-use crate::codegen::library_builder::rc_methods::RcMethodInfo;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -88,6 +88,9 @@ pub struct LibraryBuilder<'a> {
     
     // generated funcs for retain/release operations
     rc_methods: BTreeMap<ir::TypeDefID, RcMethodInfo>,
+    
+    // user-defined destructors by class ID
+    dtors: BTreeMap<ir::TypeDefID, ir::FunctionID>,
 
     init_code: Vec<ir::Instruction>,
     
@@ -162,6 +165,8 @@ impl<'a> LibraryBuilder<'a> {
             static_closures: Vec::new(),
             
             rc_methods: BTreeMap::new(),
+            
+            dtors: BTreeMap::new(),
             
             // placeholders
             free_mem_func: None,
@@ -973,8 +978,8 @@ impl<'a> LibraryBuilder<'a> {
             self_ty: src_ty,
             method_index: dtor_method_index,
         }, None);
-
-        self.metadata_mut().insert_dtor(type_id, dtor.id);
+        
+        self.dtors.insert(type_id, dtor.id);
     }
 
     pub fn translate_type(
@@ -1578,13 +1583,70 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
         .rc_resource_class_id()
         .and_then(|class_id| class_id.as_class())
         .expect("resource class of translated class type was not a struct");
+    
+    let class_pretty_name = lib.metadata.pretty_ty_name(class_ty).into_owned();
+
+    // we have to do this loop manually, because the "self" reference in a class method is
+    // meant to be immutable (it's illegal to reference it even via an immutable reference in CIL).
+    // using visit_deep on self would use references!
+    let class_struct_def = lib.metadata
+        .get_struct_def(class_id)
+        .unwrap_or_else(|| {
+            panic!("gen_class_runtime_type: missing definition for resource struct of {class_pretty_name}", )
+        })
+        .clone();
 
     let resource_ty = ir::Type::Struct(class_id);
     lib.gen_runtime_type(&resource_ty);
 
     lib.gen_runtime_type(&class_ty);
 
-    lib.gen_runtime_type(&class_id.to_class_weak_type());
+    let runtime_type = lib.gen_runtime_type(&class_id.to_class_weak_type());
+    let user_dtor = lib.dtors.get(&class_id).cloned();
+
+    let mut dtor_builder = IRBuilder::new(lib);
+
+    let self_param = dtor_builder.bind_param(class_ty.clone(), "self");
+    dtor_builder.retain(self_param, false);
+
+    if let Some(user_dtor_id) = user_dtor {
+        dtor_builder.call(user_dtor_id, [self_param.value()], None);
+    }
+    for (field_id, field_def) in class_struct_def.fields {
+        let field_rc_methods = dtor_builder.get_rc_method_info(&field_def.ty);
+        let release_field = field_def.ty.is_rc() || field_rc_methods.release.is_some();
+
+        if release_field {
+            let field_ref = dtor_builder.local_temp(field_def.ty.clone().temp_ref());
+            dtor_builder.field(field_ref, self_param, class_ty.clone(), field_id);
+            dtor_builder.release_deep(field_ref.to_deref(), &field_def.ty);
+        }
+    }
+
+    let dtor_body = dtor_builder.finish();
+    
+    // the self param is always released and retained, so discard the dtor function if there's
+    // only those two instructions
+    if dtor_body.len() > 2 {
+        let mut runtime_type = (*runtime_type).clone();
+        
+        let dtor_id = lib.metadata.insert_func(None);
+        runtime_type.dtor = Some(dtor_id);
+
+        lib.metadata.insert_runtime_type(class_ty.clone(), runtime_type);
+
+        let dtor_debug_name = lib.opts.debug
+            .then(|| format!("generated dtor for {class_pretty_name}"));
+
+        lib.functions.insert(dtor_id, ir::Function::Local(ir::FunctionDef {
+            debug_name: dtor_debug_name,
+            body: dtor_body,
+            sig: ir::FunctionSig {
+                param_tys: vec![class_ty.clone()],
+                return_ty: ir::Type::Nothing,
+            }
+        }));
+    }
 }
 
 fn expect_no_unspec_args<T: fmt::Display>(target: &T, type_args: Option<&typ::TypeArgList>) {

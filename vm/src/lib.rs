@@ -476,7 +476,7 @@ impl Interpreter {
         })?;
 
         let header = self.load_object_header(self_ptr)?;
-        let object_ptr = self_ptr.clone().reinterpret(header.object_type);
+        let object_ptr = self_ptr.clone().reinterpret(header.marshal_type);
 
         let self_val = self.load_indirect(&object_ptr)?;
         let self_class_id = match &self_val {
@@ -603,9 +603,11 @@ impl Interpreter {
     }
 
     fn invoke_dtor(&mut self, val: &DynValue, ty: &ir::Type) -> ExecResult<()> {
-        let dtor_func_id = ty.def_id().and_then(|id| self.metadata.find_dtor(id));
+        let dtor_func_id = self.metadata
+            .get_runtime_type(ty)
+            .and_then(|runtime_type| runtime_type.dtor);
 
-        // eprintln!("trying to invoke dtor for {}... {:?}, {:?}: {:?}", self.metadata.pretty_ty_name(ty), ty.def_id(), ty.rc_resource_def_id(), dtor_func_id);
+        // eprintln!("trying to invoke dtor for {}... {:?}, {:?}: {:?}", ty, ty.def_id(), ty.rc_resource_def_id(), dtor_func_id);
 
         if let Some(func_id) = dtor_func_id {
             let func_desc = self
@@ -637,7 +639,7 @@ impl Interpreter {
         let array_len = usize::try_from(array_header.len)
             .map_err(|_| MarshalError::InvalidData)?;
         
-        let ir::Type::Array { element, dim: 0 } = array_header.rc.object_type.clone() else {
+        let ir::Type::Array { element, dim: 0 } = array_header.rc.marshal_type.clone() else {
             // not an array
             return Err(ExecError::from(MarshalError::InvalidData));
         };
@@ -679,7 +681,7 @@ impl Interpreter {
     // guarantees that the struct value returned has some value for its rc field
     fn load_object(&self, ptr: &Pointer) -> ExecResult<(Box<StructValue>, ObjectHeader)> {
         let header = self.load_object_header(ptr)?;
-        let object_ptr = ptr.reinterpret(header.object_type);
+        let object_ptr = ptr.reinterpret(header.marshal_type);
 
         let struct_val = match self.load_indirect(&object_ptr)? {
             DynValue::Structure(struct_val) => struct_val,
@@ -749,8 +751,7 @@ impl Interpreter {
                     );
                 }
 
-                // call dtor on the inner resource
-                self.invoke_dtor(&val, &rc.object_type)?;
+                self.invoke_dtor(&val, &rc.object_type())?;
             }
 
             rc.strong_count -= 1;
@@ -1415,7 +1416,7 @@ impl Interpreter {
             
             ir::Type::Array { dim, .. } => {
                 let Ok(val) = i32::try_from(*dim) else {
-                    return Err(ExecError::illegal_state("couldn't convert array size {dim} to a length literal"));  
+                    return Err(ExecError::illegal_state(format!("couldn't convert array size {dim} to a length literal")));  
                 };
                 
                 val
@@ -1810,11 +1811,11 @@ impl Interpreter {
             ir::VirtualTypeID::Any => true,
 
             ir::VirtualTypeID::Class(class_id) => {
-                object_header.object_type == ir::Type::Struct(*class_id)
+                object_header.marshal_type == ir::Type::Struct(*class_id)
             },
 
             ir::VirtualTypeID::Interface(iface_id) => {
-                match &object_header.object_type {
+                match &object_header.marshal_type {
                     // out of all the types a struct might represent, only a class can
                     // implement any interfaces
                     ir::Type::Struct(class_id) => {
@@ -1827,7 +1828,7 @@ impl Interpreter {
             },
 
             ir::VirtualTypeID::Closure(func_type_id) => {
-                match object_header.object_type {
+                match object_header.marshal_type {
                     ir::Type::Struct(struct_id) => {
                         self.metadata
                             .closures_by_function()
@@ -1843,7 +1844,7 @@ impl Interpreter {
             }
 
             ir::VirtualTypeID::Array(element_type) => {
-                object_header.object_type == element_type.as_ref().clone().array(0)
+                object_header.marshal_type == element_type.as_ref().clone().array(0)
             }
         };
 
@@ -1894,7 +1895,7 @@ impl Interpreter {
                 let val_ptr = self.addr_of_ref(&a.clone().to_deref())?;
                 
                 let header = self.load_object_header(&val_ptr)?;
-                let object_ptr = val_ptr.reinterpret(header.object_type);
+                let object_ptr = val_ptr.reinterpret(header.marshal_type);
 
                 let val = self.load_indirect(&object_ptr)?;
                 let struct_val = match &val {
@@ -1988,7 +1989,7 @@ impl Interpreter {
         let res_ty = ir::Type::Struct(value.type_id);
 
         value.rc = Some(ObjectHeader {
-            object_type: value.type_id.to_struct_type(),
+            marshal_type: value.type_id.to_struct_type(),
             strong_count: if immortal { -1 } else { 1 },
             weak_count: 0,
         });

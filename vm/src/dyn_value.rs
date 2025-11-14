@@ -673,25 +673,25 @@ impl PartialEq<Self> for StructValue {
 
 #[derive(Debug, Clone)]
 pub struct ObjectHeader {
-    pub object_type: ir::Type,
+    pub marshal_type: ir::Type,
     
     pub strong_count: i32,
     pub weak_count: i32,
 }
 
 impl ObjectHeader {
-    pub fn immortal(object_type: ir::Type) -> Self {
+    pub fn immortal(marshal_type: ir::Type) -> Self {
         Self {
-            object_type,
+            marshal_type,
 
             strong_count: -1,
             weak_count: 0,
         }
     }
 
-    pub fn new(object_type: ir::Type, immortal: bool) -> Self {
+    pub fn new(marshal_type: ir::Type, immortal: bool) -> Self {
         Self {
-            object_type,
+            marshal_type,
             
             strong_count: if immortal { -1 } else { 1 },
             weak_count: 0,
@@ -700,6 +700,14 @@ impl ObjectHeader {
 
     pub fn is_immortal(&self) -> bool {
         self.strong_count < 0
+    }
+    
+    pub fn object_type(&self) -> ir::Type {
+        match &self.marshal_type {
+            ir::Type::Struct(id) => id.to_class_ptr_type(),
+            ir::Type::Array { element, .. } => (**element).clone().dyn_array(),
+            _ => panic!("object_type: unknown object type for marshalled type {}", self.marshal_type),
+        }
     }
 }
 

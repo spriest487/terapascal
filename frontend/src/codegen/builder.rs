@@ -5,6 +5,7 @@ use crate::ast as ast;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::FunctionDefKey;
 use crate::codegen::library_builder::LibraryBuilder;
+use crate::codegen::library_builder::RcMethodInfo;
 use crate::codegen::metadata::*;
 use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;
@@ -75,7 +76,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
             return true;
         }
 
-        let rc_method_info = self.library.get_rc_method_info(ty);
+        let rc_method_info = self.get_rc_method_info(ty);
         let Some(func_id) = rc_method_info.release else {
             return false;
         };
@@ -91,7 +92,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
             return true;
         }
 
-        let rc_method_info = self.library.get_rc_method_info(ty);
+        let rc_method_info = self.get_rc_method_info(ty);
         let Some(func_id) = rc_method_info.retain else {
             return false;
         };
@@ -638,5 +639,9 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.cleanup_scope(0);
 
         self.emit(Instruction::Jump { dest: EXIT_LABEL })
+    }
+    
+    pub fn get_rc_method_info(&mut self, ty: &Type) -> RcMethodInfo {
+        self.library.get_rc_method_info(ty)
     }
 }

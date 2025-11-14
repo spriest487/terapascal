@@ -10,6 +10,8 @@ pub struct RuntimeType {
     pub name: Option<StringID>,
     pub debug_name: Option<String>,
     
+    pub dtor: Option<FunctionID>,
+    
     pub methods: Vec<RuntimeMethod>,
 }
 
@@ -20,7 +22,7 @@ impl RuntimeType {
             debug_name: None,
             
             methods: Vec::new(),
-            
+            dtor: None,
         }
     }
 

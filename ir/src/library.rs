@@ -167,7 +167,7 @@ impl fmt::Display for Library {
                     .collect();
                 let return_ty = self.metadata.pretty_ty_name(&method.return_ty);
 
-                let sig = format!("({}) -> {}", sig_params.join(", "), return_ty);
+                let sig = format!("function ({}): {}", sig_params.join("; "), return_ty);
 
                 let index = format!("  .{}", i);
                 write!(f, "{:8>} ({}): {}", index, method.name, sig)?;

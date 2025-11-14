@@ -919,9 +919,9 @@ impl Marshaller {
     }
 
     pub fn marshal_object_header(&self, header: &ObjectHeader, out_bytes: &mut [u8]) -> MarshalResult<usize> {
-        let type_index = self.type_indices.get_by_right(&header.object_type)
+        let type_index = self.type_indices.get_by_right(&header.marshal_type)
             .ok_or_else(|| {
-                MarshalError::UnsupportedType(header.object_type.clone())
+                MarshalError::UnsupportedType(header.marshal_type.clone())
             })?;
         
         let mut offset = 0;
@@ -951,7 +951,7 @@ impl Marshaller {
 
         Ok(UnmarshalledValue {
             value: ObjectHeader {
-                object_type: object_type.clone(),
+                marshal_type: object_type.clone(),
                 strong_count: strong_count.value,
                 weak_count: weak_count.value,
             },
@@ -1002,7 +1002,7 @@ impl Marshaller {
         let rc = self.unmarshal_object_header(&in_bytes[offset..])?;
         offset += rc.byte_count;
 
-        assert!(matches!(rc.value.object_type, ir::Type::Array { dim: 0, .. }));
+        assert!(matches!(rc.value.marshal_type, ir::Type::Array { dim: 0, .. }));
 
         let size_int = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
         offset += size_int.byte_count;
@@ -1073,7 +1073,7 @@ impl Marshaller {
             let rc = self.unmarshal_object_header(in_bytes)?;
             offset += rc.byte_count;
 
-            assert_eq!(struct_id.to_struct_type(), rc.value.object_type);
+            assert_eq!(struct_id.to_struct_type(), rc.value.marshal_type);
 
             Some(rc.value)
         } else {

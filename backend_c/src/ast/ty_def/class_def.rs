@@ -210,8 +210,6 @@ impl Class {
 
             impls.insert(iface_id, InterfaceImpl { method_impls });
         }
-
-        let dtor = metadata.find_dtor(struct_id);
         
         let runtime_type = metadata
             .get_runtime_type(&class_ty)
@@ -229,7 +227,7 @@ impl Class {
         Class {
             identity: ClassIdentity::Class(struct_id),
             impls,
-            dtor,
+            dtor: runtime_type.dtor,
             comment: Some(comment),
             typeinfo_global_name: typeinfo_name,
         }

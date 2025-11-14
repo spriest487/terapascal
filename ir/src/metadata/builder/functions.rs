@@ -33,14 +33,6 @@ impl MetadataBuilder {
         id
     }
 
-    pub fn insert_dtor(&mut self, owning_type: TypeDefID, dtor_func: FunctionID) {
-        self.metadata.dtors.insert(owning_type, dtor_func);
-    }
-
-    pub fn find_dtor(&self, type_id: TypeDefID) -> Option<FunctionID> {
-        self.find_in_self_or_refs(|metadata| metadata.find_dtor(type_id))
-    }
-
     pub fn closures(&self) -> impl Iterator<Item=TypeDefID> {
         self.iter_in_self_or_refs(move |metadata| metadata.closures())
     }

@@ -222,7 +222,7 @@ pub(super) fn array_create(state: &mut Interpreter) -> ExecResult<()> {
         return Err(ExecError::illegal_state("array_create: array is immortal and cannot be resized"));
     }
     
-    let Type::Array { element: element_type, dim: 0 } = &array_header.rc.object_type else {
+    let Type::Array { element: element_type, dim: 0 } = &array_header.rc.marshal_type else {
         return Err(ExecError::illegal_state("array_create: array pointer points to an invalid array object"));
     };
 
@@ -386,7 +386,7 @@ fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
     
     let obj_header = state.load_object_header(&obj_ptr)?;
     
-    match &obj_header.object_type {
+    match &obj_header.marshal_type {
         Type::Struct(class_id) => {
             let type_info_ref = state
                 .get_class_runtime_type_ref(*class_id)
@@ -402,7 +402,7 @@ fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
         }
         
         _ => {
-            let type_name = state.metadata.pretty_ty_name(&obj_header.object_type);
+            let type_name = state.metadata.pretty_ty_name(&obj_header.marshal_type);
             let message = format!("missing runtime type info for object type {}", type_name);
             Err(ExecError::illegal_state(message))
         }

@@ -118,8 +118,6 @@ pub struct Metadata {
 
     variables: BTreeMap<VariableID, Type>,
 
-    dtors: BTreeMap<TypeDefID, FunctionID>,
-
     set_aliases: LinkedHashMap<SetAliasID, SetAliasDef>,
 
     functions: LinkedHashMap<FunctionID, Rc<FunctionDecl>>,
@@ -142,8 +140,6 @@ impl Metadata {
             ifaces: LinkedHashMap::new(),
             
             variables: BTreeMap::new(),
-            
-            dtors: BTreeMap::new(),
 
             set_aliases: LinkedHashMap::new(),
 
@@ -252,13 +248,6 @@ impl Metadata {
             }
 
             self.function_static_closures.insert(*func_id, *static_closure);
-        }
-
-        for (owning_ty_id, dtor_func) in &other.dtors {
-            if self.dtors.contains_key(owning_ty_id) {
-                panic!("duplicate destructor definition for type {owning_ty_id}");
-            }
-            self.dtors.insert(*owning_ty_id, *dtor_func);
         }
 
         for (ty, funcs) in &other.runtime_types {
@@ -653,11 +642,7 @@ impl Metadata {
             })
             .collect()
     }
-    
-    pub fn find_dtor(&self, owning_type: TypeDefID) -> Option<FunctionID> {
-        self.dtors.get(&owning_type).cloned()
-    }
-    
+
     pub fn insert_closure(&mut self, func_type_id: TypeDefID, closure_id: TypeDefID) {
         let closures = self.closures
             .entry(func_type_id)
