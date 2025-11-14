@@ -72,14 +72,22 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
 
     fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         if ty.is_rc() {
+            if self.opts().debug {
+                self.comment(format!("release: {}", self.metadata().pretty_ty_name(ty)));
+            }
+
             self.release(at, ty.is_weak(), Ref::Discard);
             return true;
         }
 
         let rc_method_info = self.get_rc_method_info(ty);
-        let Some(func_id) = rc_method_info.release else {
+        let Some(func_id) = rc_method_info.release_elements else {
             return false;
         };
+
+        if self.opts().debug {
+            self.comment(format!("release_deep: {}", self.metadata().pretty_ty_name(ty)));
+        }
 
         let at_ref = self.make_ref_local(at, ty);
         self.call(func_id, [at_ref.value()], None);
@@ -88,14 +96,22 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
 
     fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         if ty.is_rc() {
+            if self.opts().debug {
+                self.comment(format!("retain: {}", self.metadata().pretty_ty_name(ty)));
+            }
+            
             self.retain(at, ty.is_weak());
             return true;
         }
 
         let rc_method_info = self.get_rc_method_info(ty);
-        let Some(func_id) = rc_method_info.retain else {
+        let Some(func_id) = rc_method_info.retain_elements else {
             return false;
         };
+
+        if self.opts().debug {
+            self.comment(format!("retain_deep: {}", self.metadata().pretty_ty_name(ty)));
+        }
 
         let at_ref = self.make_ref_local(at, ty);
         self.call(func_id, [at_ref.value()], None);

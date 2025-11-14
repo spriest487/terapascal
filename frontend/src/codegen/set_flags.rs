@@ -121,8 +121,8 @@ impl SetFlagsType {
             body,
         });
 
-        let func_id = lib.metadata_mut().insert_func(None);
-        lib.insert_func(func_id, func);
+        let func_id = lib.metadata_mut().insert_func(None, false);
+        lib.insert_function(func_id, func);
 
         func_id
     }

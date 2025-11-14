@@ -29,8 +29,8 @@ pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
     let sig = ir::FunctionSig::new([], ir::Type::Nothing);
     let func = ir::Function::new_local_def(Some(name), sig, body);
 
-    let func_id = lib.metadata_mut().insert_func(None);
-    lib.insert_func(func_id, func);
+    let func_id = lib.metadata_mut().insert_func(None, false);
+    lib.insert_function(func_id, func);
     
     Some(func_id)
 }

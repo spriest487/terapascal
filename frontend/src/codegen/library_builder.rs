@@ -87,7 +87,7 @@ pub struct LibraryBuilder<'a> {
     get_mem_func: Option<ir::FunctionID>,
     
     // generated funcs for retain/release operations
-    rc_methods: BTreeMap<ir::TypeDefID, RcMethodInfo>,
+    rc_methods: HashMap<ir::Type, RcMethodInfo>,
     
     // user-defined destructors by class ID
     dtors: BTreeMap<ir::TypeDefID, ir::FunctionID>,
@@ -164,7 +164,7 @@ impl<'a> LibraryBuilder<'a> {
             
             static_closures: Vec::new(),
             
-            rc_methods: BTreeMap::new(),
+            rc_methods: HashMap::new(),
             
             dtors: BTreeMap::new(),
             
@@ -193,13 +193,6 @@ impl<'a> LibraryBuilder<'a> {
             self.translate_type(&defined_type, &empty_generic_ctx);
         }
 
-        // add optional RTTI info like class and method names
-        // can maybe disable this with a compile option to reduce startup time/build size
-        self.populate_all_runtime_type_info();
-
-        self.gen_static_closure_init();
-        self.gen_static_type_init();
-
         // builtin classes are added manually to the type cache but their methods (and therefore 
         // any destructors) are expected to be defined in code, so we need to find those in the
         // source if they exist
@@ -211,6 +204,13 @@ impl<'a> LibraryBuilder<'a> {
                 self.insert_type_dtor(class_info.id, src_ty, def.as_ref());
             }
         }
+
+        // add optional RTTI info like class and method names
+        // can maybe disable this with a compile option to reduce startup time/build size
+        self.populate_all_runtime_type_info();
+
+        self.gen_static_closure_init();
+        self.gen_static_type_init();
 
         let metadata = self.metadata.build();
 
@@ -282,7 +282,7 @@ impl<'a> LibraryBuilder<'a> {
                 debug_name,
             };
 
-            let init_func_id = self.metadata.insert_func(None);
+            let init_func_id = self.metadata.insert_func(None, false);
             self.functions.insert(init_func_id, ir::Function::Local(init_func));
 
             self.init_code.push(ir::Instruction::Call {
@@ -757,7 +757,7 @@ impl<'a> LibraryBuilder<'a> {
             None
         };
 
-        self.metadata.insert_func(global_name)
+        self.metadata.insert_func(global_name, self.opts.rtti)
     }
 
     pub fn translate_func(
@@ -774,7 +774,7 @@ impl<'a> LibraryBuilder<'a> {
         self.instantiate_func(&mut key)
     }
 
-    pub fn insert_func(&mut self, id: ir::FunctionID, function: ir::Function) {
+    pub fn insert_function(&mut self, id: ir::FunctionID, function: ir::Function) {
         assert!(
             self.metadata.get_function(id).is_some(),
             "function passed to insert_func must have been previously registered in metadata"
@@ -1166,16 +1166,12 @@ impl<'a> LibraryBuilder<'a> {
     }
     
     pub fn get_rc_method_info(&mut self, ty: &ir::Type) -> RcMethodInfo {
-        let Some(type_id) = ty.def_id() else {
-            return RcMethodInfo::none();
-        };
-        
-        if let Some(method_info) = self.rc_methods.get(&type_id) {
+        if let Some(method_info) = self.rc_methods.get(ty) {
             return *method_info;
         }
 
         let method_info = RcMethodInfo::gen_for_type(self, ty);
-        self.rc_methods.insert(type_id, method_info);
+        self.rc_methods.insert(ty.clone(), method_info);
         
         method_info
     }
@@ -1193,7 +1189,7 @@ impl<'a> LibraryBuilder<'a> {
         // type names and methods will be added after codegen
         let mut rtti = ir::RuntimeType::new(None);
         
-        if self.opts.debug {
+        if self.opts.debug && self.opts.rtti {
             rtti.debug_name = Some(self.metadata().pretty_ty_name(&ty).into_owned());
         }
 
@@ -1237,6 +1233,10 @@ impl<'a> LibraryBuilder<'a> {
                 if src_ty.as_iface().is_some() {
                     gen_iface_virtual_method_info(self, &src_ty);
                 }
+                
+                if matches!(src_ty, typ::Type::DynArray { .. }) {
+                    gen_dynarray_runtime_type(self, &ty);
+                }
 
                 self.gen_iface_impls(&src_ty);
 
@@ -1252,6 +1252,10 @@ impl<'a> LibraryBuilder<'a> {
     }
 
     fn populate_runtime_type_info(&mut self, src_ty: typ::Type, ty: ir::Type) {
+        if !self.opts.rtti {
+            return;
+        }
+        
         // should fetch from the cache at this point
         let mut rtti = (*self.gen_runtime_type(&ty)).clone();
         rtti.name = Some(self.metadata.find_or_insert_string(&src_ty.to_string()));
@@ -1381,7 +1385,7 @@ impl<'a> LibraryBuilder<'a> {
         func: &typ::ast::AnonymousFunctionDef,
         generic_ctx: &typ::GenericContext,
     ) -> ClosureInstance {
-        let id = self.metadata.insert_func(None);
+        let id = self.metadata.insert_func(None, false);
 
         // this is the signature of the *function type* of the closure, not the signature of
         // the real method implementing the closure, which has an extra type-erased parameter
@@ -1452,7 +1456,7 @@ impl<'a> LibraryBuilder<'a> {
         );
 
         // build the closure function, which is a thunk that just calls the global function
-        let thunk_id = self.metadata.insert_func(None);
+        let thunk_id = self.metadata.insert_func(None, false);
         let thunk_def = build_func_static_closure_def(self, func, &ir_func);
 
         self.functions.insert(thunk_id, ir::Function::Local(thunk_def));
@@ -1551,6 +1555,46 @@ impl<'a> LibraryBuilder<'a> {
     }
 }
 
+fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
+    let ir::Type::RcPointer(ir::VirtualTypeID::Array(element_type)) = &array_type else {
+        panic!("dyn array type did not translate to a dyn array reference");
+    };
+    
+    // the destructor can be skipped entirely if the element isn't an RC object itself and
+    // doesn't have a release function for its own elements
+    let element_release = lib.get_rc_method_info(&element_type).release_elements;
+    if element_release.is_none() && !element_type.is_rc() {
+        return;
+    }
+
+    let dtor_id = lib.metadata.insert_func(None, false);
+
+    let mut dtor_builder = IRBuilder::new(lib);
+    let self_param = dtor_builder.bind_param(array_type.clone(), "self");
+
+    dtor_builder.retain(self_param, false);
+    dtor_builder.gen_dyn_array_dtor_body(self_param, element_type);
+    
+    let dtor_body = dtor_builder.finish();
+
+    let dtor_debug_name = lib.opts.debug.then(|| {
+        format!("generated dtor for {}", lib.metadata.pretty_ty_name(array_type))
+    });
+
+    lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
+        debug_name: dtor_debug_name,
+        sig: ir::FunctionSig {
+            param_tys: vec![array_type.clone()],
+            return_ty: ir::Type::Nothing,
+        },
+        body: dtor_body,
+    }));
+
+    let mut runtime_type = lib.gen_runtime_type(array_type).as_ref().clone();
+    runtime_type.dtor = Some(dtor_id);
+    lib.metadata.insert_runtime_type(array_type.clone(), runtime_type);
+}
+
 fn gen_iface_virtual_method_info(lib: &mut LibraryBuilder, iface_ty: &typ::Type) {
     let iface_methods = iface_ty
         .methods(&lib.src_metadata)
@@ -1583,8 +1627,20 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
         .rc_resource_class_id()
         .and_then(|class_id| class_id.as_class())
         .expect("resource class of translated class type was not a struct");
-    
-    let class_pretty_name = lib.metadata.pretty_ty_name(class_ty).into_owned();
+
+    let resource_ty = ir::Type::Struct(class_id);
+    lib.gen_runtime_type(&resource_ty);
+
+    lib.gen_runtime_type(&class_ty);
+    lib.gen_runtime_type(&class_id.to_class_weak_type());
+
+    gen_class_dtor(lib, class_id);
+}
+
+fn gen_class_dtor(lib: &mut LibraryBuilder, class_id: ir::TypeDefID) {
+    let class_ty = class_id.to_class_ptr_type();
+
+    let class_pretty_name = lib.metadata.pretty_ty_name(&class_ty).into_owned();
 
     // we have to do this loop manually, because the "self" reference in a class method is
     // meant to be immutable (it's illegal to reference it even via an immutable reference in CIL).
@@ -1596,12 +1652,8 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
         })
         .clone();
 
-    let resource_ty = ir::Type::Struct(class_id);
-    lib.gen_runtime_type(&resource_ty);
+    let runtime_type = lib.gen_runtime_type(&class_ty);
 
-    lib.gen_runtime_type(&class_ty);
-
-    let runtime_type = lib.gen_runtime_type(&class_id.to_class_weak_type());
     let user_dtor = lib.dtors.get(&class_id).cloned();
 
     let mut dtor_builder = IRBuilder::new(lib);
@@ -1612,25 +1664,25 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
     if let Some(user_dtor_id) = user_dtor {
         dtor_builder.call(user_dtor_id, [self_param.value()], None);
     }
+
+    let mut released_any = user_dtor.is_some();
+
     for (field_id, field_def) in class_struct_def.fields {
         let field_rc_methods = dtor_builder.get_rc_method_info(&field_def.ty);
-        let release_field = field_def.ty.is_rc() || field_rc_methods.release.is_some();
+        let release_field = field_def.ty.is_rc() || field_rc_methods.release_elements.is_some();
 
         if release_field {
             let field_ref = dtor_builder.local_temp(field_def.ty.clone().temp_ref());
             dtor_builder.field(field_ref, self_param, class_ty.clone(), field_id);
-            dtor_builder.release_deep(field_ref.to_deref(), &field_def.ty);
+            released_any |= dtor_builder.release_deep(field_ref.to_deref(), &field_def.ty);
         }
     }
 
-    let dtor_body = dtor_builder.finish();
-    
-    // the self param is always released and retained, so discard the dtor function if there's
-    // only those two instructions
-    if dtor_body.len() > 2 {
+    if released_any {
+        let dtor_body = dtor_builder.finish();
         let mut runtime_type = (*runtime_type).clone();
-        
-        let dtor_id = lib.metadata.insert_func(None);
+
+        let dtor_id = lib.metadata.insert_func(None, false);
         runtime_type.dtor = Some(dtor_id);
 
         lib.metadata.insert_runtime_type(class_ty.clone(), runtime_type);
@@ -1638,7 +1690,7 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
         let dtor_debug_name = lib.opts.debug
             .then(|| format!("generated dtor for {class_pretty_name}"));
 
-        lib.functions.insert(dtor_id, ir::Function::Local(ir::FunctionDef {
+        lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
             debug_name: dtor_debug_name,
             body: dtor_body,
             sig: ir::FunctionSig {

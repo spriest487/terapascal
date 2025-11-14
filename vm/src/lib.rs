@@ -743,7 +743,7 @@ impl Interpreter {
             // until the last weak ref is removed, if there are any
             if rc.strong_count == 1 {
                 if self.opts.trace_rc {
-                    println!(
+                    eprintln!(
                         "[rc] destroy @ {} ({}+{} refs will remain)",
                         ptr.to_pretty_string(&self.metadata),
                         rc.strong_count - 1,
@@ -1997,6 +1997,8 @@ impl Interpreter {
         let res_ptr = self.dynalloc_init(&res_ty, [DynValue::from(value)])?;
         if immortal {
             self.native_heap.forget(&res_ptr)?;
+        } else if self.opts.trace_rc {
+            eprintln!("[rc] alloc @ {}", res_ptr.to_pretty_string(&self.metadata))
         }
 
         Ok(res_ptr)
@@ -2397,6 +2399,8 @@ impl Interpreter {
 
         if immortal {
             self.native_heap.forget(&array_ptr)?;
+        } else if self.opts.trace_rc {
+            eprintln!("[rc] alloc @ {}", array_ptr.to_pretty_string(&self.metadata))
         }
 
         let marshalled_size = self.marshaller.marshal_array(&array_val, unsafe {

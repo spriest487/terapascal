@@ -13,17 +13,21 @@ impl MetadataBuilder {
         self.find_in_self_or_refs(move |metadata| metadata.get_function(id))
     }
     
-    pub fn insert_func(&mut self, global_name: Option<NamePath>) -> FunctionID {
+    pub fn insert_func(&mut self, global_name: Option<NamePath>, gen_runtime_name: bool) -> FunctionID {
         let id = self.next_function_id;
 
-        let runtime_name = global_name
-            .as_ref()
-            .cloned()
-            .map(|name_path| {
-                let name = name_path.to_string();
+        let runtime_name = if gen_runtime_name {
+            global_name
+                .as_ref()
+                .cloned()
+                .map(|name_path| {
+                    let name = name_path.to_string();
 
-                self.find_or_insert_string(&name)
-            });
+                    self.find_or_insert_string(&name)
+                })
+        } else {
+            None
+        };
 
         let decl = FunctionDecl { global_name: global_name.clone(), runtime_name };
         self.metadata.functions.insert(id, Rc::new(decl));

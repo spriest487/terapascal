@@ -860,14 +860,8 @@ pub trait InstructionBuilder {
         temp_at_ptr.value()
     }
 
-    fn gen_dyn_array_dtor_body(
-        &mut self,
-        element_type: &Type,
-        array_class_id: TypeDefID,
-    ) where
-        Self: Sized,
-    {
-        gen_dyn_array_dtor_body(self, element_type, array_class_id)
+    fn gen_dyn_array_dtor_body(&mut self, self_param: LocalID, element_type: &Type) {
+        gen_dyn_array_dtor_body(self, self_param, element_type)
     }
 
     fn new_dyn_array(

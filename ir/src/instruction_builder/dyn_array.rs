@@ -2,18 +2,14 @@
 use crate::LocalID;
 use crate::Ref;
 use crate::Type;
-use crate::TypeDefID;
 use crate::Value;
 
-pub(super) fn gen_dyn_array_dtor_body(
-    builder: &mut impl InstructionBuilder,
+pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
+    builder: &mut B,
+    self_param: LocalID,
     elem_ty: &Type,
-    array_class_id: TypeDefID,
 ) {
-    let class_type = array_class_id.to_class_ptr_type();
-
-    let self_arg = LocalID(0);
-    builder.retain(self_arg, false);
+    let array_type = elem_ty.clone().dyn_array();
 
     builder.comment("iteration counter");
     let counter = builder.local_temp(Type::I32);
@@ -21,14 +17,14 @@ pub(super) fn gen_dyn_array_dtor_body(
 
     // arr_high := arr.length - 1
     let arr_high = builder.local_temp(Type::I32);
-    builder.length(arr_high, self_arg, class_type.clone());
+    builder.length(arr_high, self_param, array_type.clone());
     builder.sub(arr_high, arr_high, Value::LiteralI32(1));
 
     let el_ptr = builder.local_temp(elem_ty.clone().ptr());
 
     builder.comment("release every element");
     builder.counter_loop(counter, Value::LiteralI32(1), arr_high, |builder| {
-        builder.element(el_ptr, self_arg, counter, elem_ty.clone(), class_type.clone());
+        builder.element(el_ptr, self_param, counter, elem_ty.clone(), array_type.clone());
 
         builder.release_deep(el_ptr.to_deref(), &elem_ty);
     });

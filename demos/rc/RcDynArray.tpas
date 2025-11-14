@@ -1,14 +1,23 @@
 implementation
 uses System;
 
-function PrintNth(xs: array of String; n: Integer);
+type 
+    MyObject = class
+        name: String;
+    end;
+
+function PrintNth(xs: array of MyObject; n: Integer);
 begin
     var x := xs[n];
-    WriteLn(x);
+    WriteLn(x.name);
 end;
 
 initialization
-    var arr: array of String := ['1', '2', '3'];
+    var arr: array of MyObject := [
+        (name: '1'),
+        (name: '2'),
+        (name: '3'),
+    ];
     PrintNth(arr, 0);
     
     var arr2 := arr;

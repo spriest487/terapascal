@@ -384,8 +384,8 @@ pub fn build_static_closure_impl(
         None
     };
 
-    let init_func_id = library.metadata_mut().insert_func(None);
-    library.insert_func(
+    let init_func_id = library.metadata_mut().insert_func(None, false);
+    library.insert_function(
         init_func_id,
         Function::Local(FunctionDef {
             body: init_body,

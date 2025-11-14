@@ -6,18 +6,11 @@ use terapascal_ir::instruction_builder::InstructionBuilder;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct RcMethodInfo {
-    pub retain: Option<ir::FunctionID>,
-    pub release: Option<ir::FunctionID>,
+    pub retain_elements: Option<ir::FunctionID>,
+    pub release_elements: Option<ir::FunctionID>,
 }
 
 impl RcMethodInfo {
-    pub fn none() -> Self {
-        RcMethodInfo {
-            retain: None,
-            release: None,
-        }
-    }
-    
     pub fn gen_for_type(lib: &mut LibraryBuilder, ty: &ir::Type) -> Self {
         let mut rc_type_cache = HashMap::new();
         
@@ -25,8 +18,8 @@ impl RcMethodInfo {
         let release = gen_release_func(lib, ty, &mut rc_type_cache);
         
         Self {
-            retain,
-            release,
+            retain_elements: retain,
+            release_elements: release,
         }
     }
 }
@@ -113,10 +106,10 @@ fn create_rc_func(
     body: Vec<ir::Instruction>,
     debug_name: Option<String>
 ) -> ir::FunctionID {
-    let func_id = lib.metadata_mut().insert_func(None);
+    let func_id = lib.metadata_mut().insert_func(None, false);
 
     let sig = ir::FunctionSig::new([ty.clone().temp_ref()], ir::Type::Nothing);
-    lib.insert_func(func_id, ir::Function::new_local_def(debug_name, sig, body));
+    lib.insert_function(func_id, ir::Function::new_local_def(debug_name, sig, body));
 
     func_id
 }
@@ -170,9 +163,13 @@ fn has_rc_members_rec(
         }
         
         ir::Type::Array { element, .. } => {
-            has_rc_members_rec(element, lib, cache)
+            if element.is_rc() {
+                true
+            } else {
+                has_rc_members_rec(element, lib, cache)
+            }
         }
-        
+
         _ => false,
     };
     
