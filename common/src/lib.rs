@@ -143,11 +143,11 @@ impl DiagnosticMessage {
     }
 
     pub fn error(title: impl Into<String>) -> Self {
-        Self::new(Severity::Warning, title)
+        Self::new(Severity::Error, title)
     }
 
     pub fn warning(title: impl Into<String>) -> Self {
-        Self::new(Severity::Error, title)
+        Self::new(Severity::Warning, title)
     }
 
     pub fn with_label(mut self, label: DiagnosticLabel) -> Self {

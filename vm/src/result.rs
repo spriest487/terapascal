@@ -120,7 +120,7 @@ impl fmt::Display for ExecError {
 
 impl DiagnosticOutput for ExecError {
     fn severity(&self) -> Severity {
-        Severity::Warning
+        Severity::Error
     }
 
     fn label(&self) -> Option<DiagnosticLabel> {
