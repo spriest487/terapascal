@@ -112,7 +112,7 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
             format!("{}_Weak", vtype_typeinfo_name(id))
         }
 
-        ir::Type::Function(closure_id) => format!("Closure_{closure_id}"),
+        ir::Type::Function(closure_id) => format!("FunctionType_{closure_id}"),
 
         // ???
         ir::Type::Nothing => String::from("Nothing"),
