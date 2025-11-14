@@ -20,6 +20,13 @@ public static class ArrayManager {
         }
     }
 
+    // allocate new storage for an array which must previously have been allocated in user code
+    // this method is used in the implementation of private functions in the System unit to provide a way
+    // to create an uninitialized array of any type without invoking generics or directly using the NewArray
+    // instruction.
+    // in this C# implementation we use the initial array (assumed to be 0) to determine the element type only,
+    // and replace it with a new instance of the correct length. the old instance is assumed to have been allocated
+    // in user code e.g. must exist as a managed array or an error will be thrown
     public static void CreateArray(ref Array array, int length) {
         var elementType = array.GetType().GetElementType()!;
 
@@ -42,13 +49,19 @@ public static class ArrayManager {
 
     public static void RetainArray(Array array, bool weak) {
         lock (globalLock) {
-            SystemFunctions.RcRetain(arrayObjects[array], weak);
+            if (arrayObjects.TryGetValue(array, out var arrayObj)) {
+                SystemFunctions.RcRetain(arrayObj, weak);
+            }
         }
     }
 
     public static bool ReleaseArray(Array array, bool weak) {
         lock (globalLock) {
-            var dead = SystemFunctions.RcRelease(arrayObjects[array], weak);
+            if (!arrayObjects.TryGetValue(array, out var arrayObj)) {
+                return false;
+            }
+
+            var dead = SystemFunctions.RcRelease(arrayObj, weak);
             if (dead) {
                 arrayObjects.Remove(array);
             }
