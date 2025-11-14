@@ -36,33 +36,24 @@ public class TypeBuilder {
 
     private readonly Dictionary<(IR.InterfaceID, IR.MethodID), MethodReference> interfaceMethods;
 
-    private readonly TypeReference valueType;
-    private readonly TypeReference exceptionType;
-    private readonly TypeReference clrStringType;
-    private readonly TypeReference typeType;
-    
-    private readonly TypeReference objectBaseType;
-    private readonly TypeReference closureBaseType;
-    private readonly TypeReference errorType;
-
     private readonly FieldReference closurePointerField;
-
-    private readonly MethodReference objectCreateMethod;
-    private readonly MethodReference objectDestroyMethod;
 
     private readonly StaticArrayTypeBuilder staticArrayBuilder;
 
-    public TypeReference ExceptionType => this.exceptionType;
-    public TypeReference CLRStringType => this.clrStringType;
-    public TypeReference ValueType => this.valueType;
-    public TypeReference TypeType => this.typeType;
-    public TypeReference ErrorType => this.errorType;
-    
-    public TypeReference ObjectBaseType => this.objectBaseType;
-    public MethodReference ObjectCreateMethod => this.objectCreateMethod;
-    public MethodReference ObjectDestroyMethod => this.objectDestroyMethod;
+    public TypeReference ExceptionType { get; }
+    public TypeReference CLRStringType { get; }
+    public TypeReference ValueType { get; }
+    public TypeReference TypeType { get; }
+    public TypeReference ErrorType { get; }
 
-    public TypeReference ClosureBaseType => this.closureBaseType;
+    public TypeReference ObjectBaseType { get; }
+    public MethodReference ObjectCreateMethod { get; }
+    public MethodReference ObjectDestroyMethod { get; }
+    public MethodReference ObjectIsMethod { get; }
+    
+    public MethodReference ArrayCreateMethod { get; }
+
+    public TypeReference ClosureBaseType { get; }
 
     public TypeBuilder(AssemblyBuilder assemblyBuilder) {
         this.assemblyBuilder = assemblyBuilder;
@@ -75,10 +66,10 @@ public class TypeBuilder {
         
         this.interfaceMethods = new Dictionary<(IR.InterfaceID, IR.MethodID), MethodReference>();
 
-        this.valueType = this.ImportCoreReference("System", "ValueType", true);
-        this.exceptionType = this.ImportCoreReference("System", "Exception", false);
-        this.clrStringType = this.ImportCoreReference("System", "String", false);
-        this.typeType = this.ImportCoreReference("System", "Type", false);
+        this.ValueType = this.ImportCoreReference("System", "ValueType", true);
+        this.ExceptionType = this.ImportCoreReference("System", "Exception", false);
+        this.CLRStringType = this.ImportCoreReference("System", "String", false);
+        this.TypeType = this.ImportCoreReference("System", "Type", false);
 
         var builtinClasses = (Span<(IR.TypeDefID, string)>)[
             (IR.TypeDefID.String, nameof(Runtime.String)),
@@ -107,18 +98,31 @@ public class TypeBuilder {
             });
         }
 
-        this.objectBaseType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.Object), false);
-        var objectBaseTypeDef = this.objectBaseType.Resolve()
-            ?? throw new InvalidDataException("missing Object base type def in runtime library");
+        this.ObjectBaseType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.Object), false);
+        var objectBaseTypeDef = this.ObjectBaseType.Resolve()
+            ?? throw new InvalidDataException($"missing {nameof(Runtime.Object)} base type def in runtime library");
 
-        this.objectCreateMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Create");
-        this.objectDestroyMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Destroy");
+        this.ObjectDestroyMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Destroy");
 
-        this.errorType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.Error), false);
+        var objectExtClassDef = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ObjectUtil), false)
+            .Resolve()
+            ?? throw new InvalidDataException($"missing {nameof(Runtime.ObjectUtil)} class in runtime library");
+
+        this.ObjectCreateMethod = objectExtClassDef.Methods.Single(m => m.Name == "Create");
+        this.ObjectIsMethod = objectExtClassDef.Methods.Single(m => m.Name == "Is");
+
+        var arrayManagerTypeDef = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ArrayManager), false)
+                .Resolve()
+            ?? throw new InvalidDataException($"missing {nameof(Runtime.ArrayManager)} class in runtime library");
+
+        this.ArrayCreateMethod = arrayManagerTypeDef.Methods.Single(m => 
+            m.Name == "CreateArray" && m.GenericParameters.Count == 1);
+
+        this.ErrorType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.Error), false);
         
-        this.closureBaseType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ClosureBase), false);
-        var closureTypeDef = this.closureBaseType.Resolve()
-            ?? throw new InvalidDataException("missing closure object base type def in runtime library");
+        this.ClosureBaseType = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ClosureBase), false);
+        var closureTypeDef = this.ClosureBaseType.Resolve()
+            ?? throw new InvalidDataException($"missing {nameof(Runtime.ClosureBase)} type def in runtime library");
 
         this.closurePointerField = closureTypeDef.Fields
             .Single(f => f.Name == nameof(Runtime.ClosureBase.functionPointer));
@@ -232,7 +236,7 @@ public class TypeBuilder {
             // in this backend, struct refs are automatically reference types if they're a class
             IR.ClassVirtualTypeID(var classID) => this.CreateTypeRef(classID, false),
             IR.InterfaceVirtualTypeID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
-            IR.ClosureVirtualTypeID => this.closureBaseType,
+            IR.ClosureVirtualTypeID => this.ClosureBaseType,
             IR.ArrayVirtualTypeID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
             _ => throw new NotImplementedException($"unsupported virtual type ID: {id}"),
         };
@@ -274,11 +278,11 @@ public class TypeBuilder {
 
         TypeReference baseType;
         if (isClass) {
-            baseType = this.objectBaseType;
+            baseType = this.ObjectBaseType;
         } else if (isClosure) {
-            baseType = this.closureBaseType;
+            baseType = this.ClosureBaseType;
         } else {
-            baseType = this.valueType;
+            baseType = this.ValueType;
         }
 
         var typeDef = new TypeDefinition(typeRef.Namespace, typeRef.Name, attrs, baseType);
@@ -295,6 +299,7 @@ public class TypeBuilder {
             if (isClosure && fieldID.Equals(IR.FieldID.ClosurePointerField)) {
                 // the actual pointer field is declared as an IntPtr in the base class
                 Debug.Assert(structFieldDef.Type is IR.FunctionType);
+                fieldRefs.Add(fieldID, this.closurePointerField);
                 continue;
             }
 
@@ -440,7 +445,7 @@ public class TypeBuilder {
         var typeDef = new TypeDefinition(typeRef.Namespace,
             typeRef.Name,
             TypeAttributes.Sealed | TypeAttributes.NotPublic | TypeAttributes.ExplicitLayout,
-            this.valueType
+            this.ValueType
         );
 
         var discTypeRef = this.BuildTypeRef(new IR.I32Type(), library);

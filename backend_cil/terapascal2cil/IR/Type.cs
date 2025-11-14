@@ -333,7 +333,12 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
     }
 }
 
-public interface IVirtualTypeID;
+public interface IVirtualTypeID {
+    IType ToObjectType() {
+        return new RcPointerType(this);
+    }
+}
+
 public sealed record AnyVirtualTypeID : IVirtualTypeID;
 
 public sealed record ClassVirtualTypeID(TypeDefID ID) : IVirtualTypeID {

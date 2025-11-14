@@ -17,12 +17,6 @@ public class Metadata {
     [Key("variables")]
     public required OrderedDictionary<VariableID, IType> Variables { get; init; }
 
-    [Key("dtors")]
-    public required SortedDictionary<TypeDefID, FunctionID> Destructors {
-        get;
-        init => field = value!.ToDictionaryNonNull();
-    }
-
     [Key("set_aliases")]
     public required OrderedDictionary<SetAliasID, SetAliasDef> SetAliases { get; init; }
 
@@ -111,6 +105,9 @@ public class RuntimeType {
     
     [Key("debug_name")]
     public string? DebugName { get; init; }
+    
+    [Key("dtor")]
+    public FunctionID? Destructor { get; init; }
     
     [Key("methods")]
     public required IReadOnlyList<RuntimeMethod> Methods {

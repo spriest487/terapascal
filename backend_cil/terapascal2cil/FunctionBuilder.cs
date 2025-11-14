@@ -142,16 +142,15 @@ public class FunctionBuilder {
         var typeBuilder = this.assemblyBuilder.TypeBuilder;
         var voidType = this.assemblyBuilder.TypeSystem.Void;
 
-        var dtorFunc = metadata.Destructors.TryGetValue(id, out var dtorID) ? (IR.FunctionID?)dtorID : null;
-        var releaseFunc = metadata.RuntimeTypes.TryGetValue(id.ToStructType(), out var runtimeType)
-            ? runtimeType.Release
+        var dtorFunc = metadata.RuntimeTypes.TryGetValue(id.ToClassType(), out var runtimeType)
+            ? runtimeType.Destructor
             : null;
 
-        if (dtorFunc == null && releaseFunc == null) {
+        if (dtorFunc == null) {
             return;
         }
 
-        const MethodAttributes attrs = MethodAttributes.Public
+        const MethodAttributes attrs = MethodAttributes.FamORAssem
             | MethodAttributes.HideBySig
             | MethodAttributes.Virtual;
 
@@ -162,18 +161,9 @@ public class FunctionBuilder {
         methodDef.Body = new MethodBody(methodDef);
         var body = methodDef.Body.GetILProcessor();
 
-        if (dtorFunc.HasValue) {
-            var dtorFuncRef = this.FindFunctionMethod(dtorFunc.Value);
-            body.Emit(OpCodes.Ldarg_0);
-            body.Emit(OpCodes.Call, dtorFuncRef);
-        }
-
-        if (releaseFunc.HasValue) {
-            var releaseFuncRef = this.FindFunctionMethod(releaseFunc.Value);
-            // releaser self args are always by-ref
-            body.Emit(OpCodes.Ldarga, 0);
-            body.Emit(OpCodes.Call, releaseFuncRef);
-        }
+        var dtorFuncRef = this.FindFunctionMethod(dtorFunc.Value);
+        body.Emit(OpCodes.Ldarg_0);
+        body.Emit(OpCodes.Call, dtorFuncRef);
 
         body.Emit(OpCodes.Ret);
     }

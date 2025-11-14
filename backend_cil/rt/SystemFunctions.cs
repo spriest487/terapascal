@@ -16,7 +16,7 @@ public static class SystemFunctions {
     }
 
     public static unsafe String CreateString(string s, bool immortal) {
-        var newString = Object.Create<String>(immortal);
+        var newString = ObjectUtil.Create<String>(immortal);
         
         if (!string.IsNullOrEmpty(s)) {
             newString.len = Encoding.UTF8.GetByteCount(s);
@@ -204,9 +204,11 @@ public static class SystemFunctions {
                 }
 
                 if (!weak) {
-                    if (Interlocked.CompareExchange(ref runtimeObj.strongCount, 0, 1) == 1) {
-                        runtimeObj.strongCount = -1;
+                    // make objects temporarily immortal while the destructor runs so the ref count can't
+                    // change again for any reason
+                    if (Interlocked.CompareExchange(ref runtimeObj.strongCount, -1, 1) == 1) {
                         runtimeObj.Destroy();
+                        runtimeObj.strongCount = 0;
                         return true;
                     }
                     

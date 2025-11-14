@@ -19,10 +19,10 @@ initialization
     
     RefHello(x);
     WriteLn('message is now: ' + x);
-    
+   
     OutHello(x);
     WriteLn('message is now: ' + x);
-    
+
     var y: String;
     OutHello(y);
     WriteLn('message is now: ' + y);

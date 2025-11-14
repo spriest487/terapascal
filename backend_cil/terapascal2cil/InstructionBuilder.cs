@@ -128,6 +128,18 @@ public class InstructionBuilder {
                         this.body.Emit(weak ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
 
                         this.body.Emit(OpCodes.Call, this.rcReleaseMethod);
+                        
+                        // if the result is true (destroyed), always reset the pointer to null
+                        var aliveLabel = Instruction.Create(OpCodes.Nop);
+                        
+                        this.body.Emit(OpCodes.Dup);
+                        this.body.Emit(OpCodes.Brfalse, aliveLabel);
+
+                        this.StoreRef(atRef, () => {
+                            this.body.Emit(OpCodes.Ldnull);
+                        });
+                        
+                        this.body.Append(aliveLabel);
                     });
                     
                     break;
@@ -279,8 +291,9 @@ public class InstructionBuilder {
                     Out: var outRef,
                     ElementType: var elementType,
                     Count: var countVal,
+                    Immortal: var immortal,
                 }: {
-                    this.BuildNewArray(outRef, countVal, elementType);
+                    this.BuildNewArray(outRef, countVal, elementType, immortal);
                     break;
                 }
 
@@ -305,13 +318,18 @@ public class InstructionBuilder {
                     Arg: var argVal,
                     ClassID: var classID,
                 }: {
-                    var classTypeRef = typeBuilder.BuildTypeRef(new IR.RcPointerType(classID), this.library);
+                    var classTypeRef = typeBuilder.BuildTypeRef(classID.ToObjectType(), this.library);
+                    
+                    var isMethodRef = this.assemblyBuilder.TypeBuilder.ObjectIsMethod;
+
+                    var isMethodInstance = new GenericInstanceMethod(isMethodRef);
+                    isMethodInstance.GenericArguments.Add(classTypeRef);
+
+                    var isMethodInstanceRef = this.assemblyBuilder.Module.ImportReference(isMethodInstance);
 
                     this.StoreRef(outRef, () => {
                         this.LoadValue(argVal);
-                        this.body.Emit(OpCodes.Isinst, classTypeRef);
-                        this.body.Emit(OpCodes.Ldnull);
-                        this.body.Emit(OpCodes.Cgt_Un);
+                        this.body.Emit(OpCodes.Call, isMethodInstanceRef);
                     });
 
                     break;
@@ -578,12 +596,18 @@ public class InstructionBuilder {
         });
     }
 
-    private void BuildNewArray(IR.IRef outRef, IR.IValue countVal, IR.IType elementType) {
+    private void BuildNewArray(IR.IRef outRef, IR.IValue countVal, IR.IType elementType, bool immortal) {
         var elementTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(elementType, this.library);
+        
+        var createMethodRef = this.assemblyBuilder.TypeBuilder.ArrayCreateMethod;
+
+        var createMethodInst = new GenericInstanceMethod(this.assemblyBuilder.Module.ImportReference(createMethodRef));
+        createMethodInst.GenericArguments.Add(this.assemblyBuilder.Module.ImportReference(elementTypeRef));
         
         this.StoreRef(outRef, () => {
             this.LoadValue(countVal);
-            this.body.Emit(OpCodes.Newarr, elementTypeRef);
+            this.body.Emit(immortal ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+            this.body.Emit(OpCodes.Call, createMethodInst);
         });
     }
 
