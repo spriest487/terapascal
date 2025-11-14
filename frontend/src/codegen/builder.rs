@@ -269,30 +269,17 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let closure_ptr_ty = closure.closure_id.to_class_ptr_type();
 
         // virtual pointer to the closure
-        let closure_ref = self.local_new(closure_ptr_ty.clone(), None);
+        let closure_virtual_ty = Type::RcPointer(VirtualTypeID::Closure(closure.func_ty_id));
+        let closure_virtual_ptr = self.local_new(closure_virtual_ty.clone(), None);
 
         self.scope(|builder| {
-            builder.rc_new(closure_ref.clone(), closure.closure_id, false);
-
-            // the closure pointer type (a virtual pointer to any closure of this function type)
-            // and the closure structure pointer type are different - we need to use the closure
-            // *structure* pointer type to set members of this specific closure instance!
-            let closure_struct_ty = Type::Struct(closure.closure_id);
-            let closure_struct_ptr_ty = closure_struct_ty.clone().ptr();
-
-            // downcast virtual closure ptr to the concrete closure struct
-            let closure_struct_ref = builder.local_temp(closure_struct_ptr_ty.clone());
-            builder.cast(closure_struct_ref.clone(), closure_ref.clone(), closure_struct_ptr_ty.clone());
+            let closure_ref = builder.local_temp(closure_ptr_ty.clone());
+            builder.rc_new(closure_ref, closure.closure_id, false);
 
             let func_ptr_ty = closure_def.fields[&CLOSURE_PTR_FIELD].ty.clone();
 
             let func_field_ref = builder.local_temp(func_ptr_ty.clone().temp_ref());
-            builder.field(
-                func_field_ref,
-                closure_struct_ref.to_deref(),
-                closure_struct_ty.clone(),
-                CLOSURE_PTR_FIELD,
-            );
+            builder.field(func_field_ref, closure_ref, closure_ptr_ty.clone(), CLOSURE_PTR_FIELD);
 
             // initialize closure reference to function
             let func_ref = Ref::Global(GlobalRef::Function(closure.func_instance.id));
@@ -313,20 +300,18 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
                 };
 
                 let capture_field_ref = builder.local_temp(field_def.ty.clone().temp_ref());
-                builder.field(
-                    capture_field_ref,
-                    closure_struct_ref.to_deref(),
-                    closure_struct_ty.clone(),
-                    *field_id,
-                );
+                builder.field(capture_field_ref, closure_ref, closure_ptr_ty.clone(), *field_id);
 
                 let captured_local_id = builder.find_local(field_name).unwrap().id();
                 builder.mov(capture_field_ref.to_deref(), captured_local_id);
                 builder.retain_deep(capture_field_ref.to_deref(), &field_def.ty);
             }
+            
+            builder.cast(closure_virtual_ptr, closure_ref, closure_ptr_ty);
         });
 
-        closure_ref.to_ref()
+        self.retain(closure_virtual_ptr, false);
+        closure_virtual_ptr.to_ref()
     }
     
     pub fn get_method(&self, self_ty: &typ::Type, index: usize) -> typ::ast::MethodDecl {

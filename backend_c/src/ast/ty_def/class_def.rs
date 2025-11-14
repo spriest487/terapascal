@@ -1,6 +1,7 @@
-use crate::ast::{global_typeinfo_decl_name, FieldName};
+use crate::ast::global_typeinfo_decl_name;
 use crate::ast::DynArrayTypeID;
 use crate::ast::Expr;
+use crate::ast::FieldName;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionDef;
 use crate::ast::FunctionName;
@@ -249,8 +250,8 @@ impl Class {
     }
     
     pub fn gen_closure_class(closure_struct_id: ir::TypeDefID) -> Self {
-        let ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(closure_struct_id));
-        
+        let ty = closure_struct_id.to_class_ptr_type();
+
         Class {
             identity: ClassIdentity::Class(closure_struct_id),
             comment: Some(format!("closure class {}", closure_struct_id)),

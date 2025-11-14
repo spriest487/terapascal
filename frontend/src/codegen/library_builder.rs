@@ -1229,7 +1229,7 @@ impl<'a> LibraryBuilder<'a> {
                 if src_ty.as_class().is_ok() {
                     gen_class_runtime_type(self, &ty);
                 }
-                
+
                 if src_ty.as_iface().is_some() {
                     gen_iface_virtual_method_info(self, &src_ty);
                 }
