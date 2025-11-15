@@ -13,8 +13,12 @@ public readonly record struct TypeDefID(ulong ID) : IComparable<TypeDefID> {
         return this.ID.CompareTo(other.ID);
     }
 
-    public IType ToClassType() {
-        return new RcPointerType(new ClassVirtualTypeID(this));
+    public IType ToObjectType() {
+        return new ObjectType(new ClassID(this));
+    }
+    
+    public IType ToWeakObjectType() {
+        return new WeakObjectType(new ClassID(this));
     }
     
     public IType ToStructType() {
@@ -39,7 +43,7 @@ public readonly record struct InterfaceID(ulong ID) : IComparable<InterfaceID> {
     }
 
     public IType InterfacePointerType() {
-        return new RcPointerType(new InterfaceVirtualTypeID(this));
+        return new ObjectType(new InterfaceVirtualTypeID(this));
     }
 }
 
@@ -124,12 +128,12 @@ public class MethodIDFormatter : IMessagePackFormatter<MethodID> {
 }
 
 public interface IType {
-    static IType String => new RcPointerType(ClassVirtualTypeID.String);
-    static IType TypeInfo => new RcPointerType(ClassVirtualTypeID.TypeInfo);
-    static IType MethodInfo => new RcPointerType(ClassVirtualTypeID.MethodInfo);
-    static IType FunctionInfo => new RcPointerType(ClassVirtualTypeID.FunctionInfo);
+    static IType String => new ObjectType(ClassID.String);
+    static IType TypeInfo => new ObjectType(ClassID.TypeInfo);
+    static IType MethodInfo => new ObjectType(ClassID.MethodInfo);
+    static IType FunctionInfo => new ObjectType(ClassID.FunctionInfo);
     
-    static IType Any { get; } = new RcPointerType(new AnyVirtualTypeID());
+    static IType Any { get; } = new ObjectType(new AnyVirtualTypeID());
     static IType Nothing { get; } = new NothingType();
 
     static IType Bool { get; } = new BoolType();
@@ -184,8 +188,8 @@ public sealed record ArrayType : IType {
 public static class TypeExt {
     extension(IType type) {
         public bool IsObjectType() => type switch {
-            RcPointerType => true,
-            RcWeakPointerType => true,
+            ObjectType => true,
+            WeakObjectType => true,
             _ => false,
         };
 
@@ -222,7 +226,7 @@ public static class TypeExt {
         }
 
         public IType MakeDynArray() {
-            return new RcPointerType(new ArrayVirtualTypeID(type));
+            return new ObjectType(new ArrayVirtualTypeID(type));
         }
 
         public IType MakePointer() {
@@ -239,8 +243,8 @@ public static class TypeExt {
     }
 }
 
-public sealed record RcPointerType(IVirtualTypeID ID) : IType;
-public sealed record RcWeakPointerType(IVirtualTypeID ID) : IType;
+public sealed record ObjectType(IVirtualTypeID ID) : IType;
+public sealed record WeakObjectType(IVirtualTypeID ID) : IType;
 
 public class NullableTypeFormatter : IMessagePackFormatter<IType?> {
     private readonly TypeFormatter typeFormatter = new TypeFormatter();
@@ -313,12 +317,12 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
             
             case "RcPointer": {
                 var id = MessagePackSerializer.Deserialize<IVirtualTypeID>(ref reader, options);
-                return new RcPointerType(id);
+                return new ObjectType(id);
             }
             
             case "RcWeakPointer": {
                 var id = MessagePackSerializer.Deserialize<IVirtualTypeID>(ref reader, options);
-                return new RcWeakPointerType(id);
+                return new WeakObjectType(id);
             }
             
             case "Function": {
@@ -349,17 +353,17 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
 
 public interface IVirtualTypeID {
     IType ToObjectType() {
-        return new RcPointerType(this);
+        return new ObjectType(this);
     }
 }
 
 public sealed record AnyVirtualTypeID : IVirtualTypeID;
 
-public sealed record ClassVirtualTypeID(TypeDefID ID) : IVirtualTypeID {
-    public static ClassVirtualTypeID String => new ClassVirtualTypeID(TypeDefID.String);
-    public static ClassVirtualTypeID TypeInfo => new ClassVirtualTypeID(TypeDefID.TypeInfo);
-    public static ClassVirtualTypeID MethodInfo => new ClassVirtualTypeID(TypeDefID.MethodInfo);
-    public static ClassVirtualTypeID FunctionInfo => new ClassVirtualTypeID(TypeDefID.FunctionInfo);
+public sealed record ClassID(TypeDefID ID) : IVirtualTypeID {
+    public static ClassID String => new ClassID(TypeDefID.String);
+    public static ClassID TypeInfo => new ClassID(TypeDefID.TypeInfo);
+    public static ClassID MethodInfo => new ClassID(TypeDefID.MethodInfo);
+    public static ClassID FunctionInfo => new ClassID(TypeDefID.FunctionInfo);
 }
 
 public sealed record InterfaceVirtualTypeID(InterfaceID ID) : IVirtualTypeID;
@@ -388,7 +392,7 @@ public class VirtualTypeIDFormatter : IMessagePackFormatter<IVirtualTypeID> {
 
             case "Class": {
                 var id = reader.ReadUInt64();
-                return new ClassVirtualTypeID(new TypeDefID(id));
+                return new ClassID(new TypeDefID(id));
             }
 
             case "Interface": {

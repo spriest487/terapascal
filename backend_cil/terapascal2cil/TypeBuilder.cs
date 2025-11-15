@@ -86,7 +86,8 @@ public class TypeBuilder {
         foreach (var (id, name) in builtinClasses) {
             var typeRef = this.assemblyBuilder.GetRuntimeTypeRef(name, false);
             
-            this.cache.Add(id.ToClassType(), typeRef);
+            this.cache.Add(id.ToObjectType(), typeRef);
+            this.cache.Add(id.ToWeakObjectType(), typeRef);
 
             var typeDef = typeRef.Resolve();
             var fieldRefs = new Dictionary<IR.FieldID, FieldReference>();
@@ -168,8 +169,8 @@ public class TypeBuilder {
             IR.FlagsType(var id, _) => this.CreateStructTypeRef(id, isValueType: true),
             IR.PointerType(var inner) => this.BuildTypeRef(inner, library).MakePointerType(),
             IR.TempRefType(var inner) => this.BuildTypeRef(inner, library).MakeByReferenceType(),
-            IR.RcPointerType(var id) => this.BuildClassTypeRef(id, library),
-            IR.RcWeakPointerType(var id) => this.BuildClassTypeRef(id, library),
+            IR.ObjectType(var id) => this.BuildClassTypeRef(id, library),
+            IR.WeakObjectType(var id) => this.BuildClassTypeRef(id, library),
             _ => throw new ArgumentException($"unhandled IR type: {type}"),
         };
 
@@ -239,7 +240,7 @@ public class TypeBuilder {
         return id switch {
             IR.AnyVirtualTypeID => this.assemblyBuilder.Module.TypeSystem.Object,
             // in this backend, struct refs are automatically reference types if they're a class
-            IR.ClassVirtualTypeID(var classID) => this.CreateStructTypeRef(classID, false),
+            IR.ClassID(var classID) => this.CreateStructTypeRef(classID, false),
             IR.InterfaceVirtualTypeID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
             IR.ClosureVirtualTypeID => this.ClosureBaseType,
             IR.ArrayVirtualTypeID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
@@ -377,8 +378,8 @@ public class TypeBuilder {
                 return 0;
             }
             
-            case IR.RcPointerType:
-            case IR.RcWeakPointerType:
+            case IR.ObjectType:
+            case IR.WeakObjectType:
             case IR.FunctionType:
             case IR.PointerType:
             case IR.TempRefType: {
@@ -537,7 +538,7 @@ public class TypeBuilder {
             | TypeAttributes.BeforeFieldInit;
 
         var ifaceDef = new TypeDefinition(ns, GetTypeName(id), attrs);
-        var ifaceSelfType = new IR.RcPointerType(new IR.InterfaceVirtualTypeID(id));
+        var ifaceSelfType = new IR.ObjectType(new IR.InterfaceVirtualTypeID(id));
 
         for (var methodIndex = 0; methodIndex < def.Methods.Count; methodIndex += 1) {
             var ifaceMethod = def.Methods[methodIndex];
@@ -607,7 +608,7 @@ public class TypeBuilder {
         // (accessing the pointer of an unknown closure type to call it) or directly as a member of a
         // specific closure class (setting the pointer during construction)
         if (fieldID.Equals(IR.FieldID.ClosurePointerField)) {
-            if (baseType is IR.RcPointerType(IR.ClosureVirtualTypeID)
+            if (baseType is IR.ObjectType(IR.ClosureVirtualTypeID)
                 || (baseType is IR.StructType(var closureStructID)
                     && this.assemblyBuilder.IsClosureStruct(closureStructID))) {
                 return this.closurePointerField;
@@ -617,7 +618,7 @@ public class TypeBuilder {
         var structID = baseType switch {
             IR.StructType(var id) => id,
             IR.FlagsType(_, var setAliasID) => library.Metadata.SetAliases[setAliasID].FlagsStruct,
-            IR.RcPointerType(IR.ClassVirtualTypeID(var id)) => id,
+            IR.ObjectType(IR.ClassID(var id)) => id,
 
             _ => throw new ArgumentException($"type {baseType} does not have struct fields (accessing field {fieldID.ID})"),
         };
@@ -668,7 +669,7 @@ public class TypeBuilder {
     public GenericInstanceMethod GetObjectCreateMethod(IR.IVirtualTypeID classID, IR.Library library) {
         var module = this.assemblyBuilder.Module;
         
-        var classTypeRef = this.BuildTypeRef(new IR.RcPointerType(classID), library);
+        var classTypeRef = this.BuildTypeRef(new IR.ObjectType(classID), library);
 
         var methodInstance = new GenericInstanceMethod(module.ImportReference(this.ObjectCreateMethod));
         methodInstance.GenericArguments.Add(module.ImportReference(classTypeRef));

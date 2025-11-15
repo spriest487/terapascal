@@ -288,14 +288,13 @@ public class AssemblyBuilder : IDisposable {
         IR.Library library
     ) {
         var typeRef = this.TypeBuilder.BuildTypeRef(type, library);
-        
-        var typeInfoClassID = new IR.ClassVirtualTypeID(IR.TypeDefID.TypeInfo);
-        var typeInfoType = IR.TypeDefID.TypeInfo.ToClassType();
+
+        var typeInfoClassID = new IR.ClassID(IR.TypeDefID.TypeInfo);
+        var typeInfoType = IR.TypeDefID.TypeInfo.ToObjectType();
 
         var typeInfoTypeRef = this.Module
             .ImportReference(this.TypeBuilder
             .BuildTypeRef(typeInfoType, library));
-        var typeInfoTypeDef = typeInfoTypeRef.Resolve();
 
         var fieldName = $"StaticTypeInfo_{type.GetUniqueName()}";
 
@@ -340,7 +339,7 @@ public class AssemblyBuilder : IDisposable {
         TypeDefinition globals,
         IR.Library library
     ) {
-        var funcInfoTypeRef = this.TypeBuilder.BuildTypeRef(IR.TypeDefID.FunctionInfo.ToClassType(), library);
+        var funcInfoTypeRef = this.TypeBuilder.BuildTypeRef(IR.TypeDefID.FunctionInfo.ToObjectType(), library);
 
         var fieldName = $"StaticFuncInfo_{funcID.ID}";
 

@@ -1,5 +1,4 @@
 # CIL gen
-demos\rc\WeakRef.tpas
 demos\rtti\DynamicType.tpas
 demos\rtti\FuncInvoke.tpas
 demos\rtti\FunctionTags.tpas
@@ -7,7 +6,6 @@ demos\rtti\MethodTags.tpas
 demos\rtti\ModuleTypes.tpas
 demos\rtti\Tags.tpas
 demos\rtti\TypeMethods.tpas
-demos\rtti\TypeName.tpas
 
 # array rework
 * C implementation could use variable sized structs instead of 2 allocations per array 

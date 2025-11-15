@@ -214,7 +214,7 @@ public class InstructionBuilder {
                             this.body.Emit(OpCodes.Call, elementMethod);
                         } else {
                             // must be a dynarray
-                            var arrayElementType = ((IR.ArrayVirtualTypeID)((IR.RcPointerType)arrayType).ID).Element;
+                            var arrayElementType = ((IR.ArrayVirtualTypeID)((IR.ObjectType)arrayType).ID).Element;
                             var elementTypeRef = typeBuilder.BuildTypeRef(arrayElementType, this.library);
 
                             this.LoadRef(arrRef);
@@ -234,7 +234,7 @@ public class InstructionBuilder {
                     this.StoreRef(outRef, () => {
                         if (arrayType is IR.ArrayType staticArrayType) {
                             this.body.Emit(OpCodes.Ldc_I4, (int)staticArrayType.Length);
-                        } else if (arrayType is IR.RcPointerType) {
+                        } else if (arrayType is IR.ObjectType) {
                             // must be a dynarray
                             this.LoadRef(argRef);
                             this.body.Emit(OpCodes.Ldlen);
@@ -582,7 +582,7 @@ public class InstructionBuilder {
     }
 
     private void BuildNewObject(IR.IRef outRef, IR.TypeDefID typeID, bool immortal) {
-        var classID = new IR.ClassVirtualTypeID(typeID);
+        var classID = new IR.ClassID(typeID);
         var createMethodInst = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(classID, this.library);
 
         this.StoreRef(outRef, () => {

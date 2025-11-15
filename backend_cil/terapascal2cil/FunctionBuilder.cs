@@ -68,7 +68,7 @@ public class FunctionBuilder {
             switch (structDef.Identity) {
                 case IR.ClassStructIdentity:
                 case IR.ClosureStructIdentity: {
-                    var typeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(typeID.ToClassType(), lib).Resolve()
+                    var typeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(typeID.ToObjectType(), lib).Resolve()
                         ?? throw new InvalidDataException($"missing type def for class {typeID} which should be defined in this assembly");
                     
                     this.BuildObjectDestroyMethod(typeDef, typeID, lib);
@@ -142,7 +142,7 @@ public class FunctionBuilder {
         var typeBuilder = this.assemblyBuilder.TypeBuilder;
         var voidType = this.assemblyBuilder.TypeSystem.Void;
 
-        var dtorFunc = metadata.RuntimeTypes.TryGetValue(id.ToClassType(), out var runtimeType)
+        var dtorFunc = metadata.RuntimeTypes.TryGetValue(id.ToObjectType(), out var runtimeType)
             ? runtimeType.Destructor
             : null;
 
