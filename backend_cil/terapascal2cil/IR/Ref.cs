@@ -22,6 +22,8 @@ public readonly record struct VariableID(ulong ID) : IComparable<VariableID> {
 }
 
 public readonly record struct StringID(ulong ID) : IComparable<StringID> {
+    public static StringID EmptyString => new StringID(0); 
+    
     public int CompareTo(StringID other) {
         return this.ID.CompareTo(other.ID);
     }

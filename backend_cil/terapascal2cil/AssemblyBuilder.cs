@@ -1,6 +1,9 @@
 ﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using FieldAttributes = Mono.Cecil.FieldAttributes;
+using MethodAttributes = Mono.Cecil.MethodAttributes;
+using TypeAttributes = Mono.Cecil.TypeAttributes;
 
 namespace Terapascal.CIL;
 
@@ -271,8 +274,8 @@ public class AssemblyBuilder : IDisposable {
             this.BuildStaticTypeInfo(type, typeInfo, globals, library);
         }
 
-        foreach (var (funcID, func) in library.Functions) {
-            this.BuildStaticFuncInfo(funcID, func, globals, library);
+        foreach (var (funcID, _) in library.Metadata.Functions) {
+            this.CreateStaticFuncInfoVariable(funcID, library);
         }
 
         foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
@@ -282,6 +285,10 @@ public class AssemblyBuilder : IDisposable {
         }
 
         this.FunctionBuilder.BuildFunctions(library);
+
+        foreach (var (funcID, funcDecl) in library.Metadata.Functions) {
+            this.BuildStaticFuncInfo(funcID, funcDecl, library);
+        }
 
         if (library.Initialization.Count > 0) {
             var initAttrs = MethodAttributes.Private | MethodAttributes.Static;
@@ -355,13 +362,11 @@ public class AssemblyBuilder : IDisposable {
         initBody.Emit(OpCodes.Ldc_I4_1); // immortal: true
         initBody.Emit(OpCodes.Call, createTypeInfoInst);
 
-        if (runtimeType.Name.HasValue) {
-            initBody.Emit(OpCodes.Dup); // typeinfo pointer
-            
-            var nameStringFieldRef = this.GetStringLiteralRef(runtimeType.Name.Value);
-            initBody.Emit(OpCodes.Ldsfld, nameStringFieldRef);
-            initBody.Emit(OpCodes.Stfld, nameField);
-        }
+        initBody.Emit(OpCodes.Dup); // typeinfo pointer
+        
+        var nameStringFieldRef = this.GetStringLiteralRef(runtimeType.Name ?? IR.StringID.EmptyString);
+        initBody.Emit(OpCodes.Ldsfld, nameStringFieldRef);
+        initBody.Emit(OpCodes.Stfld, nameField);
 
         // set type pointer
         initBody.Emit(OpCodes.Dup);
@@ -384,21 +389,64 @@ public class AssemblyBuilder : IDisposable {
         initBody.Emit(OpCodes.Stsfld, fieldDef);
     }
 
-    private void BuildStaticFuncInfo(
-        IR.FunctionID funcID,
-        IR.IFunction func,
-        TypeDefinition globals,
-        IR.Library library
-    ) {
-        var funcInfoTypeRef = this.TypeBuilder.BuildTypeRef(IR.TypeDefID.FunctionInfo.ToObjectType(), library);
+    private void CreateStaticFuncInfoVariable(IR.FunctionID funcID, IR.Library library) {
+        var funcInfoType = IR.TypeDefID.FunctionInfo.ToObjectType();
+        var funcInfoTypeRef = this.TypeBuilder.BuildTypeRef(funcInfoType, library);
 
         var fieldName = $"StaticFuncInfo_{funcID.ID}";
 
         const FieldAttributes fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
         var fieldDef = new FieldDefinition(fieldName, fieldAttrs, funcInfoTypeRef);
 
-        globals.Fields.Add(fieldDef);
+        this.GetGlobalsClass().Fields.Add(fieldDef);
         this.staticFuncInfoFields.Add(funcID, fieldDef);
+    }
+
+    private void BuildStaticFuncInfo(IR.FunctionID funcID, IR.FunctionDecl func, IR.Library library) {
+        var fieldRef = this.GetStaticFuncInfoFieldRef(funcID)!;
+        
+        var funcInfoType = IR.TypeDefID.FunctionInfo.ToObjectType();
+        var funcObjectID = new IR.ClassObjectID(IR.TypeDefID.FunctionInfo);
+
+        var nameField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoName, library);
+        var implField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoImpl, library);
+        var tagsField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoTags, library);
+
+        var initBuilder = this.GetInitMethodDef();
+        var initBody = initBuilder.Body.GetILProcessor();
+
+        var createTypeInfoInst = this.TypeBuilder.GetObjectCreateMethod(funcObjectID, library);
+        
+        initBody.Emit(OpCodes.Ldc_I4_1); // immortal: true
+        initBody.Emit(OpCodes.Call, createTypeInfoInst);
+
+        var nameStringFieldRef = this.GetStringLiteralRef(func.RuntimeName ?? IR.StringID.EmptyString);
+        initBody.Emit(OpCodes.Dup);
+        initBody.Emit(OpCodes.Ldsfld, nameStringFieldRef);
+        initBody.Emit(OpCodes.Stfld, nameField);
+
+        var methodRef = this.FunctionBuilder.FindFunctionMethod(funcID)
+            ?? throw new InvalidDataException($"function {funcID.ID} was not defined");
+
+        // set type pointer
+        initBody.Emit(OpCodes.Dup);
+        initBody.Emit(OpCodes.Ldtoken, methodRef);
+        initBody.Emit(OpCodes.Call, this.TypeBuilder.GetMethodFromHandleMethod);
+        initBody.Emit(OpCodes.Stfld, implField);
+
+        // set tags array
+        var funcTagsLocation = new IR.FunctionTagLocation(funcID);
+        if (this.GetStaticTagArrayFieldRef(funcTagsLocation) is {} tagsArrayFieldRef) {
+            initBody.Emit(OpCodes.Dup);
+            initBody.Emit(OpCodes.Ldsfld, tagsArrayFieldRef);
+            initBody.Emit(OpCodes.Stfld, tagsField);
+        }
+        
+        // register in RTTI list
+        initBody.Emit(OpCodes.Dup);
+        initBody.Emit(OpCodes.Call, this.rttiAddFuncMethod);
+
+        initBody.Emit(OpCodes.Stsfld, fieldRef);
     }
 
     public IR.FunctionSig? GetFunctionPointerType(IR.TypeDefID id) {

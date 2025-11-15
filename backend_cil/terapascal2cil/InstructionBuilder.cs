@@ -2,7 +2,6 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using static Terapascal.IR.FunctionExt;
 
 namespace Terapascal.CIL;
 
@@ -614,7 +613,7 @@ public class InstructionBuilder {
         // converting the pascal string back to a CLR one
         if (val is IR.GlobalRef(IR.StringLiteralGlobalRef(var stringID))) {
             var stringLit = this.library.Metadata.StringLiterals[stringID];
-            this.body.Emit(OpCodes.Ldstr, "Runtime error raised: " + stringLit);
+            this.body.Emit(OpCodes.Ldstr, stringLit);
         } else {
             this.LoadRef(val);
 
@@ -1042,7 +1041,7 @@ public class InstructionBuilder {
             
             case IR.GlobalRef(IR.FunctionGlobalRef(var id)): {
                 var methodRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(id)
-                    ?? throw new InvalidDataException($"ref to global function {id.ID} which hasn't been translated");
+                    ?? throw new InvalidDataException($"reference to missing function: {id.ID}");
 
                 this.body.Emit(OpCodes.Ldftn, methodRef);
                 break;

@@ -1,7 +1,11 @@
 ﻿using System.Diagnostics;
+using System.Reflection;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using FieldAttributes = Mono.Cecil.FieldAttributes;
+using MethodAttributes = Mono.Cecil.MethodAttributes;
+using TypeAttributes = Mono.Cecil.TypeAttributes;
 
 namespace Terapascal.CIL;
 
@@ -43,9 +47,11 @@ public class TypeBuilder {
     public TypeReference CLRStringType { get; }
     public TypeReference ValueType { get; }
     public TypeReference TypeType { get; }
+    public TypeReference MethodInfoType { get; }
     public TypeReference ErrorType { get; }
 
     public MethodReference GetTypeFromHandleMethod { get; }
+    public MethodReference GetMethodFromHandleMethod { get; }
 
     public TypeReference ObjectBaseType { get; }
     public MethodReference ObjectCreateMethod { get; }
@@ -67,13 +73,19 @@ public class TypeBuilder {
         
         this.interfaceMethods = new Dictionary<(IR.InterfaceID, IR.MethodID), MethodReference>();
 
-        this.ValueType = this.ImportCoreReference("System", "ValueType", true);
-        this.ExceptionType = this.ImportCoreReference("System", "Exception", false);
-        this.CLRStringType = this.ImportCoreReference("System", "String", false);
-        this.TypeType = this.ImportCoreReference("System", "Type", false);
+        this.ValueType = this.ImportCoreReference(typeof(ValueType));
+        this.ExceptionType = this.ImportCoreReference(typeof(Exception));
+        this.CLRStringType = this.ImportCoreReference(typeof(string));
+        this.TypeType = this.ImportCoreReference(typeof(Type));
+        this.MethodInfoType = this.ImportCoreReference(typeof(MethodInfo));
 
-        this.GetTypeFromHandleMethod = this.ImportCoreReference(this.TypeType.Resolve()
-            .Methods.Single(m => m.Name == nameof(Type.GetTypeFromHandle)));
+        var typeTypeDef = this.TypeType.Resolve();
+        this.GetTypeFromHandleMethod = this.ImportCoreReference(typeTypeDef.GetAllMethods()
+            .Single(m => m.Name == nameof(Type.GetTypeFromHandle) && m.Parameters.Count == 1));
+
+        var methodInfoTypeDef = this.MethodInfoType.Resolve();
+        this.GetMethodFromHandleMethod = this.ImportCoreReference(methodInfoTypeDef.GetAllMethods()
+            .Single(m => m.Name == nameof(MethodInfo.GetMethodFromHandle) && m.Parameters.Count == 1));
 
         var builtinClasses = (Span<(IR.TypeDefID, string)>)[
             (IR.TypeDefID.String, nameof(Runtime.String)),
@@ -690,6 +702,10 @@ public class TypeBuilder {
         typeRef = this.assemblyBuilder.Module.ImportReference(typeRef);
 
         return typeRef;
+    }
+    
+    public TypeReference ImportCoreReference(Type type) {
+        return this.ImportCoreReference(type.Namespace, type.Name, type.IsValueType);
     }
 
     public TypeDefinition? ResolveCore(TypeReference reference) {

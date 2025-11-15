@@ -314,7 +314,7 @@ public static class SystemFunctions {
     }
     
     public static FunctionInfo? GetFunctionInfoByIndex(int index) {
-        if (index < 0 || index >= RTTI.Types.Count) {
+        if (index < 0 || index >= RTTI.Functions.Count) {
             return null;
         }
 

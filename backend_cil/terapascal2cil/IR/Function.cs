@@ -3,7 +3,16 @@ using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
-public interface IFunction;
+public interface IFunction {
+    FunctionSig Signature() {
+        return this switch {
+            ExternalFunction(var funcRef) => funcRef.Signature,
+            LocalFunction(var funcDef)=> funcDef.Signature,
+            _ => throw new NotSupportedException($"unsupported function: {this}"),
+        };
+    }
+}
+
 public record ExternalFunction(ExternalFunctionRef Ref) : IFunction;
 public record LocalFunction(FunctionDef Def) : IFunction;
 
@@ -126,16 +135,4 @@ public record FunctionDecl {
     
     [Key("global_name")]
     public required NamePath? GlobalName { get; init; }
-}
-
-public static class FunctionExt {
-    extension(IFunction function) {
-        public FunctionSig Signature() {
-            return function switch {
-                ExternalFunction(var funcRef) => funcRef.Signature,
-                LocalFunction(var funcDef)=> funcDef.Signature,
-                _ => throw new ArgumentOutOfRangeException(nameof(function)),
-            };
-        }
-    }
 }

@@ -28,7 +28,9 @@ begin
 
     A();
 
-    var funcInfo := FunctionInfo.Find('FunctionTags.A').Get;
+    var funcInfo := if FunctionInfo.Find('FunctionTags.A') is Option.Some result
+        then result
+        else raise 'failed to find FunctionInfo for function A';
     
     for var funcTag in funcInfo.Tags do
     begin
