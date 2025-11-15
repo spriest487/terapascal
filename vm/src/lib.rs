@@ -203,17 +203,17 @@ impl Interpreter {
 
             ir::Type::Flags(repr_id, ..) => DynValue::from(self.default_struct(*repr_id)?),
 
-            ir::Type::RcPointer(class_id) | ir::Type::RcWeakPointer(class_id) => {
+            ir::Type::Object(class_id) | ir::Type::WeakObject(class_id) => {
                 DynValue::Pointer(Pointer::nil(match class_id {
-                    ir::VirtualTypeID::Class(struct_id) => ir::Type::Struct(*struct_id),
-                    ir::VirtualTypeID::Array(element_type) => ir::Type::Array { 
+                    ir::ObjectID::Class(struct_id) => ir::Type::Struct(*struct_id),
+                    ir::ObjectID::Array(element_type) => ir::Type::Array { 
                         element: element_type.clone(), 
                         dim: 0 
                     },
                     
-                    ir::VirtualTypeID::Closure(..)
-                    | ir::VirtualTypeID::Any
-                    | ir::VirtualTypeID::Interface(..) => ir::Type::Nothing,
+                    ir::ObjectID::Closure(..)
+                    | ir::ObjectID::Any
+                    | ir::ObjectID::Interface(..) => ir::Type::Nothing,
                 }))
             },
 
@@ -490,14 +490,14 @@ impl Interpreter {
             },
         }?;
 
-        let instance_ty = ir::Type::RcPointer(ir::VirtualTypeID::Class(self_class_id));
+        let instance_ty = ir::Type::Object(ir::ObjectID::Class(self_class_id));
 
         self.metadata
             .find_virtual_impl(&instance_ty, iface_id, method)
             .ok_or_else(|| {
                 let mut err = "virtual call ".to_string();
 
-                let iface_ty = ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id));
+                let iface_ty = ir::Type::Object(ir::ObjectID::Interface(iface_id));
                 let _ = self.metadata.format_type(&iface_ty, &mut err);
                 err.push('.');
                 let _ = self.metadata.format_method(iface_id, method, &mut err);
@@ -1333,7 +1333,7 @@ impl Interpreter {
         match of_type {
             ir::Type::Array { element, .. } => Some(element.as_ref()),
             
-            ir::Type::RcPointer(ir::VirtualTypeID::Array(element_type)) => {
+            ir::Type::Object(ir::ObjectID::Array(element_type)) => {
                 Some(element_type.as_ref())
             }
 
@@ -1405,7 +1405,7 @@ impl Interpreter {
     ) -> ExecResult<()> {
         let length = match of_type {
             // assume any object pointer is a dynarray
-            ir::Type::RcPointer(..) => {
+            ir::Type::Object(..) => {
                 let DynValue::Pointer(array_ptr) = self.load(a)? else {
                     return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
                 };
@@ -1787,7 +1787,7 @@ impl Interpreter {
         &mut self,
         out: &ir::Ref,
         a: &ir::Value,
-        class_id: &ir::VirtualTypeID,
+        class_id: &ir::ObjectID,
     ) -> ExecResult<()> {
         let a_ptr = self.evaluate(a)?.as_pointer().cloned().ok_or_else(|| {
             let msg = "argument a of ClassIs instruction must evaluate to a pointer";
@@ -1808,13 +1808,13 @@ impl Interpreter {
         }
         
         let is = match class_id {
-            ir::VirtualTypeID::Any => true,
+            ir::ObjectID::Any => true,
 
-            ir::VirtualTypeID::Class(class_id) => {
+            ir::ObjectID::Class(class_id) => {
                 object_header.marshal_type == ir::Type::Struct(*class_id)
             },
 
-            ir::VirtualTypeID::Interface(iface_id) => {
+            ir::ObjectID::Interface(iface_id) => {
                 match &object_header.marshal_type {
                     // out of all the types a struct might represent, only a class can
                     // implement any interfaces
@@ -1827,7 +1827,7 @@ impl Interpreter {
                 }
             },
 
-            ir::VirtualTypeID::Closure(func_type_id) => {
+            ir::ObjectID::Closure(func_type_id) => {
                 match object_header.marshal_type {
                     ir::Type::Struct(struct_id) => {
                         self.metadata
@@ -1843,7 +1843,7 @@ impl Interpreter {
                 }
             }
 
-            ir::VirtualTypeID::Array(element_type) => {
+            ir::ObjectID::Array(element_type) => {
                 object_header.marshal_type == element_type.as_ref().clone().array(0)
             }
         };
@@ -1878,7 +1878,7 @@ impl Interpreter {
 
             // assume the statically-provided type ID is correct, no need to load the actual value
             // and check dynamically
-            ir::Type::RcPointer(ir::VirtualTypeID::Class(type_id)) => {
+            ir::Type::Object(ir::ObjectID::Class(type_id)) => {
                 let val_ptr = self.addr_of_ref(&a.clone().to_deref())?;
 
                 let field_info = self.marshaller.get_field_info(*type_id, *field)?;
@@ -1891,7 +1891,7 @@ impl Interpreter {
 
             // virtual reference, we need to load the actual value behind the pointer to get the
             // concrete type ID
-            ir::Type::RcPointer(..) => {
+            ir::Type::Object(..) => {
                 let val_ptr = self.addr_of_ref(&a.clone().to_deref())?;
                 
                 let header = self.load_object_header(&val_ptr)?;
@@ -2112,7 +2112,7 @@ impl Interpreter {
 
             self.globals.insert(str_ref, GlobalValue::Variable {
                 value: self.marshaller.marshal_to_vec(&str_val)?.into_boxed_slice(),
-                ty: ir::Type::RcPointer(ir::VirtualTypeID::Class(ir::STRING_ID)),
+                ty: ir::Type::Object(ir::ObjectID::Class(ir::STRING_ID)),
             });
 
             string_lit_values.insert(id, str_val);
@@ -2149,7 +2149,7 @@ impl Interpreter {
         for static_closure in &lib.static_closures {
             let closure_ptr_ref = ir::GlobalRef::StaticClosure(static_closure.id);
             let closure_ptr_ty =
-                ir::Type::RcPointer(ir::VirtualTypeID::Closure(static_closure.func_ty_id));
+                ir::Type::Object(ir::ObjectID::Closure(static_closure.func_ty_id));
 
             // we only need to set a null pointer here, init code will set the actual value
             let default_val = self.default_val(&closure_ptr_ty)?;
@@ -2212,7 +2212,7 @@ impl Interpreter {
                     ty: ir::TYPEINFO_TYPE,
                 });
 
-            if !matches!(ty, ir::Type::RcWeakPointer(..)) {
+            if !matches!(ty, ir::Type::WeakObject(..)) {
                 let class_id = ty.rc_resource_def_id();
 
                 let runtime_name = runtime_type
@@ -2439,11 +2439,11 @@ impl Interpreter {
         };
 
         let ty_tags_loc = match ty {
-            ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id)) => {
+            ir::Type::Object(ir::ObjectID::Interface(iface_id)) => {
                 Some(ir::TagLocation::Interface(*iface_id))
             },
 
-            ir::Type::RcPointer(ir::VirtualTypeID::Class(id))
+            ir::Type::Object(ir::ObjectID::Class(id))
             | ir::Type::Struct(id)
             | ir::Type::Variant(id) => Some(ir::TagLocation::TypeDef(*id)),
 
@@ -2657,8 +2657,8 @@ impl Interpreter {
             };
 
             let ref_weak = match ty {
-                ir::Type::RcPointer(..) => Some(false),
-                ir::Type::RcWeakPointer(..) => Some(false),
+                ir::Type::Object(..) => Some(false),
+                ir::Type::WeakObject(..) => Some(false),
                 _ => None,
             };
 

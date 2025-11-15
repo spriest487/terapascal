@@ -571,8 +571,8 @@ impl Marshaller {
                 self.add_struct(*id, def, metadata)
             },
 
-            ir::Type::RcPointer(..) 
-            | ir::Type::RcWeakPointer(..) 
+            ir::Type::Object(..) 
+            | ir::Type::WeakObject(..) 
             | ir::Type::Pointer(..) 
             | ir::Type::TempRef(..) 
             | ir::Type::Function(..) => {
@@ -625,8 +625,8 @@ impl Marshaller {
 
             ir::Type::Pointer(..) 
             | ir::Type::TempRef(..) 
-            | ir::Type::RcPointer(..) 
-            | ir::Type::RcWeakPointer(..) 
+            | ir::Type::Object(..) 
+            | ir::Type::WeakObject(..) 
             | ir::Type::Function(..) => Ok(ForeignType::pointer()),
 
             ty => match self.types.get(ty) {
@@ -836,15 +836,15 @@ impl Marshaller {
                 }
             },
 
-            ir::Type::RcPointer(class_id)
-            | ir::Type::RcWeakPointer(class_id) => {
+            ir::Type::Object(class_id)
+            | ir::Type::WeakObject(class_id) => {
                 let raw_ptr_val = self.unmarshal_ptr(ir::Type::Nothing, in_bytes)?;
 
                 // if we have an expected type, assume the pointer is of that type
                 let ptr_ty = match class_id {
-                    ir::VirtualTypeID::Class(type_id) => ir::Type::Struct(*type_id),
+                    ir::ObjectID::Class(type_id) => ir::Type::Struct(*type_id),
 
-                    ir::VirtualTypeID::Array(element_type) => ir::Type::Array { 
+                    ir::ObjectID::Array(element_type) => ir::Type::Array { 
                         element: element_type.clone(),
                         dim: 0,
                     },

@@ -299,9 +299,9 @@ impl Expr {
         }
     }
     
-    fn array_class_ptr(arr_obj: &Expr, v_id: &ir::VirtualTypeID, unit: &mut Unit) -> Expr {
+    fn array_class_ptr(arr_obj: &Expr, v_id: &ir::ObjectID, unit: &mut Unit) -> Expr {
         match v_id {
-            ir::VirtualTypeID::Array(element_ty) => {
+            ir::ObjectID::Array(element_ty) => {
                 let dyn_array_id = unit.get_dyn_array_type(element_ty);
                 dyn_array_id.class_ptr()
             }
@@ -323,7 +323,7 @@ impl Expr {
         let index_expr = Expr::translate_val(index, module);
         
         match of_type {
-            ir::Type::RcPointer(ir::VirtualTypeID::Array(element_type)) => {
+            ir::Type::Object(ir::ObjectID::Array(element_type)) => {
                 let arr_id = module.get_dyn_array_type(element_type);
                 let arr_obj = array_expr.cast(Type::object_ptr());
                 
@@ -359,7 +359,7 @@ impl Expr {
         let array_expr = Expr::translate_ref(arr, module);
 
         match of_type {
-            ir::Type::RcPointer(type_id) => {
+            ir::Type::Object(type_id) => {
                 let arr_obj = array_expr.cast(Type::object_ptr());
                 let class_ptr = Self::array_class_ptr(&arr_obj, type_id, module);
 
@@ -389,13 +389,13 @@ impl Expr {
         let a_expr = Expr::translate_ref(a, module);
 
         match of_ty {
-            ir::Type::RcPointer(class_id) => {
+            ir::Type::Object(class_id) => {
                 // pointer to RC containing pointer to class resource
                 match class_id {
                     // cast closures are of unknown type, but we don't need a real vtable to call
                     // them. cast to the AnonymousClosure struct which is guaranteed to have the
                     // same layout as the first two fields of any closure struct
-                    ir::VirtualTypeID::Closure(func_ty_id) if field_id == ir::CLOSURE_PTR_FIELD => {
+                    ir::ObjectID::Closure(func_ty_id) if field_id == ir::CLOSURE_PTR_FIELD => {
                         let cast_to_anon_closure = a_expr.cast(Type::AnonymousClosure.ptr());
                         let func_ptr = cast_to_anon_closure.arrow(FieldName::ClosureFunctionPointer).addr_of();
 
@@ -404,7 +404,7 @@ impl Expr {
                     },
 
                     // normal class: it's just a field accessed through this pointer
-                    ir::VirtualTypeID::Class(..) => {
+                    ir::ObjectID::Class(..) => {
                         a_expr.arrow(FieldName::ID(field_id)).addr_of()
                     },
 

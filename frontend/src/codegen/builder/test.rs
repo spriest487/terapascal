@@ -40,11 +40,11 @@ fn break_cleans_up_loop_locals() {
 
     builder.begin_loop_body_scope(continue_label, break_label);
     builder.local_new(
-        Type::RcPointer(VirtualTypeID::Any),
+        Type::Object(ObjectID::Any),
         Some(Arc::new("local1".to_string())),
     );
     builder.local_new(
-        Type::RcPointer(VirtualTypeID::Any),
+        Type::Object(ObjectID::Any),
         Some(Arc::new("local2".to_string())),
     );
 

@@ -29,8 +29,8 @@ pub enum Type {
     /// pointer to an RC object somewhere on the heap, which can be dereferenced to yield a value
     /// of the inner type. the resource type is Some in the case that the type is known, and
     /// None for the Any type
-    RcPointer(VirtualTypeID),
-    RcWeakPointer(VirtualTypeID),
+    Object(ObjectID),
+    WeakObject(ObjectID),
 
     // Function pointer type for a function
     Function(TypeDefID),
@@ -60,23 +60,23 @@ impl Type {
     }
 
     pub const fn any() -> Self {
-        Type::RcPointer(VirtualTypeID::Any)
+        Type::Object(ObjectID::Any)
     }
 
     pub const fn class_ptr(id: TypeDefID) -> Self {
-        Self::rc_ptr_to(VirtualTypeID::Class(id))
+        Self::rc_ptr_to(ObjectID::Class(id))
     }
     
-    pub const fn rc_ptr_to(class: VirtualTypeID) -> Self {
-        Type::RcPointer(class)
+    pub const fn rc_ptr_to(class: ObjectID) -> Self {
+        Type::Object(class)
     }
     
-    pub const fn rc_weak_ptr_to(class: VirtualTypeID) -> Self {
-        Type::RcWeakPointer(class)
+    pub const fn rc_weak_ptr_to(class: ObjectID) -> Self {
+        Type::WeakObject(class)
     }
 
     pub const fn string_ptr() -> Self {
-        Type::rc_ptr_to(VirtualTypeID::Class(STRING_ID))
+        Type::rc_ptr_to(ObjectID::Class(STRING_ID))
     }
 
     pub fn deref_ty(&self) -> Option<&Self> {
@@ -95,11 +95,11 @@ impl Type {
     }
 
     pub fn dyn_array(self) -> Self {
-        Type::RcPointer(VirtualTypeID::Array(Rc::new(self)))
+        Type::Object(ObjectID::Array(Rc::new(self)))
     }
 
     pub fn weak_dyn_array(self) -> Self {
-        Type::RcWeakPointer(VirtualTypeID::Array(Rc::new(self)))
+        Type::WeakObject(ObjectID::Array(Rc::new(self)))
     }
 
     pub fn as_struct(&self) -> Option<TypeDefID> {
@@ -117,35 +117,35 @@ impl Type {
     }
     
     pub fn iface_ptr(id: InterfaceID) -> Self {
-        Type::RcPointer(VirtualTypeID::Interface(id))
+        Type::Object(ObjectID::Interface(id))
     }
 
     pub fn as_iface(&self) -> Option<InterfaceID> {
         match self {
-            Type::RcPointer(VirtualTypeID::Interface(id)) => Some(*id),
-            Type::RcWeakPointer(VirtualTypeID::Interface(id)) => Some(*id),
+            Type::Object(ObjectID::Interface(id)) => Some(*id),
+            Type::WeakObject(ObjectID::Interface(id)) => Some(*id),
             _ => None,
         }
     }
 
     pub fn is_rc(&self) -> bool {
-        matches!(self, Type::RcPointer(..) | Type::RcWeakPointer(..))
+        matches!(self, Type::Object(..) | Type::WeakObject(..))
     }
 
     pub fn is_complex(&self) -> bool {
         matches!(self, Type::Variant(..) | Type::Array { .. } | Type::Struct(..))
     }
 
-    pub fn rc_resource_class_id(&self) -> Option<&VirtualTypeID> {
+    pub fn rc_resource_class_id(&self) -> Option<&ObjectID> {
         match self {
-            Type::RcPointer(class_id) => Some(class_id),
-            Type::RcWeakPointer(class_id) => Some(class_id),
+            Type::Object(class_id) => Some(class_id),
+            Type::WeakObject(class_id) => Some(class_id),
             _ => None,
         }
     }
     
     pub fn is_weak(&self) -> bool {
-        matches!(self, Type::RcWeakPointer(..))
+        matches!(self, Type::WeakObject(..))
     }
     
     pub fn def_id(&self) -> Option<TypeDefID> {
@@ -163,19 +163,19 @@ impl Type {
 
     pub fn rc_resource_def_id(&self) -> Option<TypeDefID> {
         match self.rc_resource_class_id()? {
-            VirtualTypeID::Class(id) => Some(*id),
+            ObjectID::Class(id) => Some(*id),
             _ => None,
         }
     }
     
     pub fn tags_loc(&self) -> Option<TagLocation> {
         match self {
-            | Type::RcPointer(VirtualTypeID::Class(id))
+            | Type::Object(ObjectID::Class(id))
             | Type::Struct(id)
             | Type::Flags(id, _)
             | Type::Variant(id) => Some(TagLocation::TypeDef(*id)),
 
-            | Type::RcPointer(VirtualTypeID::Interface(id)) => Some(TagLocation::Interface(*id)),
+            | Type::Object(ObjectID::Interface(id)) => Some(TagLocation::Interface(*id)),
 
             | _ => None,
         }
@@ -190,8 +190,8 @@ impl Type {
     pub fn default_literal(&self) -> Option<Value> {
         match self {
             Type::Pointer(_)
-            | Type::RcPointer(_)
-            | Type::RcWeakPointer(_)
+            | Type::Object(_)
+            | Type::WeakObject(_)
             | Type::Function(_) => {
                 Some(Value::LiteralNull)
             },
@@ -244,19 +244,19 @@ impl fmt::Display for Type {
             Type::Struct(id) => write!(f, "{{struct {}}}", id),
             Type::Variant(id) => write!(f, "{{variant {}}}", id),
             Type::Flags(_repr_id, set_id) => write!(f, "{{flags {}}}", set_id),
-            Type::RcPointer(id) => match id {
-                VirtualTypeID::Any => write!(f, "any"),
-                VirtualTypeID::Class(id) => write!(f, "class {}", id),
-                VirtualTypeID::Interface(id) => write!(f, "iface {}", id),
-                VirtualTypeID::Closure(id) => write!(f, "closure {}", id),
-                VirtualTypeID::Array(element) => write!(f, "array of {}", element),
+            Type::Object(id) => match id {
+                ObjectID::Any => write!(f, "any"),
+                ObjectID::Class(id) => write!(f, "class {}", id),
+                ObjectID::Interface(id) => write!(f, "iface {}", id),
+                ObjectID::Closure(id) => write!(f, "closure {}", id),
+                ObjectID::Array(element) => write!(f, "array of {}", element),
             },
-            Type::RcWeakPointer(id) => match id {
-                VirtualTypeID::Any => write!(f, "weak any"),
-                VirtualTypeID::Class(id) => write!(f, "weak class {}", id),
-                VirtualTypeID::Interface(id) => write!(f, "weak iface {}", id),
-                VirtualTypeID::Closure(id) => write!(f, "weak closure {}", id),
-                VirtualTypeID::Array(element) => write!(f, "weak array of {}", element),
+            Type::WeakObject(id) => match id {
+                ObjectID::Any => write!(f, "weak any"),
+                ObjectID::Class(id) => write!(f, "weak class {}", id),
+                ObjectID::Interface(id) => write!(f, "weak iface {}", id),
+                ObjectID::Closure(id) => write!(f, "weak closure {}", id),
+                ObjectID::Array(element) => write!(f, "weak array of {}", element),
             },
             Type::Array { element, dim } => write!(f, "{}[{}]", element, dim),
             Type::Function(id) => write!(f, "function {}", id),
@@ -266,7 +266,7 @@ impl fmt::Display for Type {
 
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum VirtualTypeID {
+pub enum ObjectID {
     // unknown type - may refer to any class type, only known at runtime
     Any,
 
@@ -279,12 +279,13 @@ pub enum VirtualTypeID {
     // closure of an unknown structure that calls the function type with this typedef ID
     Closure(TypeDefID),
 
+    // array class (dyn array)
     Array(Rc<Type>),
 }
 
-impl VirtualTypeID {
+impl ObjectID {
     pub fn as_class(&self) -> Option<TypeDefID> {
-        let VirtualTypeID::Class(class_id) = self else {
+        let ObjectID::Class(class_id) = self else {
             return None;  
         };
         
@@ -292,14 +293,14 @@ impl VirtualTypeID {
     }
 }
 
-impl fmt::Display for VirtualTypeID {
+impl fmt::Display for ObjectID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            VirtualTypeID::Any => write!(f, "any"),
-            VirtualTypeID::Class(struct_id) => write!(f, "{}", struct_id),
-            VirtualTypeID::Interface(iface_id) => write!(f, "{}", iface_id),
-            VirtualTypeID::Closure(closure_id) => write!(f, "{}", closure_id),
-            VirtualTypeID::Array(element_type) => write!(f, "array of {}", element_type),
+            ObjectID::Any => write!(f, "any"),
+            ObjectID::Class(class_id) => write!(f, "{}", class_id),
+            ObjectID::Interface(iface_id) => write!(f, "{}", iface_id),
+            ObjectID::Closure(closure_id) => write!(f, "{}", closure_id),
+            ObjectID::Array(element_type) => write!(f, "array of {}", element_type),
         }
     }
 }

@@ -214,7 +214,7 @@ public class InstructionBuilder {
                             this.body.Emit(OpCodes.Call, elementMethod);
                         } else {
                             // must be a dynarray
-                            var arrayElementType = ((IR.ArrayVirtualTypeID)((IR.ObjectType)arrayType).ID).Element;
+                            var arrayElementType = ((IR.ArrayObjectID)((IR.ObjectType)arrayType).ID).Element;
                             var elementTypeRef = typeBuilder.BuildTypeRef(arrayElementType, this.library);
 
                             this.LoadRef(arrRef);

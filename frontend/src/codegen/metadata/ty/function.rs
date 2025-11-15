@@ -21,7 +21,7 @@ pub struct ClosureInstance {
 
 impl ClosureInstance {
     pub fn closure_ptr_ty(&self) -> ir::Type {
-        ir::Type::RcPointer(ir::VirtualTypeID::Closure(self.func_ty_id))
+        ir::Type::Object(ir::ObjectID::Closure(self.func_ty_id))
     }
 }
 

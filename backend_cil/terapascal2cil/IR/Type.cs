@@ -43,7 +43,7 @@ public readonly record struct InterfaceID(ulong ID) : IComparable<InterfaceID> {
     }
 
     public IType InterfacePointerType() {
-        return new ObjectType(new InterfaceVirtualTypeID(this));
+        return new ObjectType(new InterfaceObjectID(this));
     }
 }
 
@@ -133,7 +133,7 @@ public interface IType {
     static IType MethodInfo => new ObjectType(ClassID.MethodInfo);
     static IType FunctionInfo => new ObjectType(ClassID.FunctionInfo);
     
-    static IType Any { get; } = new ObjectType(new AnyVirtualTypeID());
+    static IType Any { get; } = new ObjectType(new AnyObjectID());
     static IType Nothing { get; } = new NothingType();
 
     static IType Bool { get; } = new BoolType();
@@ -226,7 +226,7 @@ public static class TypeExt {
         }
 
         public IType MakeDynArray() {
-            return new ObjectType(new ArrayVirtualTypeID(type));
+            return new ObjectType(new ArrayObjectID(type));
         }
 
         public IType MakePointer() {
@@ -243,8 +243,8 @@ public static class TypeExt {
     }
 }
 
-public sealed record ObjectType(IVirtualTypeID ID) : IType;
-public sealed record WeakObjectType(IVirtualTypeID ID) : IType;
+public sealed record ObjectType(IObjectID ID) : IType;
+public sealed record WeakObjectType(IObjectID ID) : IType;
 
 public class NullableTypeFormatter : IMessagePackFormatter<IType?> {
     private readonly TypeFormatter typeFormatter = new TypeFormatter();
@@ -315,13 +315,13 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
                 return MessagePackSerializer.Deserialize<ArrayType>(ref reader, options);
             }
             
-            case "RcPointer": {
-                var id = MessagePackSerializer.Deserialize<IVirtualTypeID>(ref reader, options);
+            case "Object": {
+                var id = MessagePackSerializer.Deserialize<IObjectID>(ref reader, options);
                 return new ObjectType(id);
             }
             
-            case "RcWeakPointer": {
-                var id = MessagePackSerializer.Deserialize<IVirtualTypeID>(ref reader, options);
+            case "WeakObject": {
+                var id = MessagePackSerializer.Deserialize<IObjectID>(ref reader, options);
                 return new WeakObjectType(id);
             }
             
@@ -351,35 +351,35 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
     }
 }
 
-public interface IVirtualTypeID {
+public interface IObjectID {
     IType ToObjectType() {
         return new ObjectType(this);
     }
 }
 
-public sealed record AnyVirtualTypeID : IVirtualTypeID;
+public sealed record AnyObjectID : IObjectID;
 
-public sealed record ClassID(TypeDefID ID) : IVirtualTypeID {
+public sealed record ClassID(TypeDefID ID) : IObjectID {
     public static ClassID String => new ClassID(TypeDefID.String);
     public static ClassID TypeInfo => new ClassID(TypeDefID.TypeInfo);
     public static ClassID MethodInfo => new ClassID(TypeDefID.MethodInfo);
     public static ClassID FunctionInfo => new ClassID(TypeDefID.FunctionInfo);
 }
 
-public sealed record InterfaceVirtualTypeID(InterfaceID ID) : IVirtualTypeID;
-public sealed record ClosureVirtualTypeID(TypeDefID FunctionTypeID) : IVirtualTypeID;
-public sealed record ArrayVirtualTypeID(IType Element) : IVirtualTypeID;
+public sealed record InterfaceObjectID(InterfaceID ID) : IObjectID;
+public sealed record ClosureObjectID(TypeDefID FunctionTypeID) : IObjectID;
+public sealed record ArrayObjectID(IType Element) : IObjectID;
 
-public class VirtualTypeIDFormatter : IMessagePackFormatter<IVirtualTypeID> {
-    public void Serialize(ref MessagePackWriter writer, IVirtualTypeID value, MessagePackSerializerOptions options) {
+public class ObjectIDFormatter : IMessagePackFormatter<IObjectID> {
+    public void Serialize(ref MessagePackWriter writer, IObjectID value, MessagePackSerializerOptions options) {
         throw new NotImplementedException();
     }
 
-    public IVirtualTypeID Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
+    public IObjectID Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
         if (reader.NextMessagePackType != MessagePackType.String) {
             var count = reader.ReadMapHeader();
             if (count != 1) {
-                throw new MessagePackSerializationException($"unexpected virtual type ID element count: {count}");
+                throw new MessagePackSerializationException($"unexpected object ID element count: {count}");
             }
         }
 
@@ -387,7 +387,7 @@ public class VirtualTypeIDFormatter : IMessagePackFormatter<IVirtualTypeID> {
 
         switch (key) {
             case "Any": {
-                return new AnyVirtualTypeID();
+                return new AnyObjectID();
             }
 
             case "Class": {
@@ -397,21 +397,21 @@ public class VirtualTypeIDFormatter : IMessagePackFormatter<IVirtualTypeID> {
 
             case "Interface": {
                 var id = reader.ReadUInt64();
-                return new InterfaceVirtualTypeID(new InterfaceID(id));
+                return new InterfaceObjectID(new InterfaceID(id));
             }
             
             case "Closure": {
                 var id = reader.ReadUInt64();
-                return new ClosureVirtualTypeID(new TypeDefID(id));
+                return new ClosureObjectID(new TypeDefID(id));
             }
             
             case "Array": {
                 var element = MessagePackSerializer.Deserialize<IType>(ref reader, options);
-                return new ArrayVirtualTypeID(element);
+                return new ArrayObjectID(element);
             }
 
             default: {
-                throw new MessagePackSerializationException($"illegal virtual type ID discriminator: {key}");
+                throw new MessagePackSerializationException($"illegal object ID discriminator: {key}");
             }
         }
     }

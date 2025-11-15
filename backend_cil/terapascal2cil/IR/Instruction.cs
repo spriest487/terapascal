@@ -314,7 +314,7 @@ public record ClassIsInstruction : IInstruction {
     }
 
     [Key("class_id")]
-    public required IVirtualTypeID ClassID {
+    public required IObjectID ClassID {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }

@@ -17,7 +17,7 @@ pub fn translate_iface(
         .methods
         .iter()
         .map(|method| {
-            let self_ty = ir::Type::RcPointer(ir::VirtualTypeID::Interface(id));
+            let self_ty = ir::Type::Object(ir::ObjectID::Interface(id));
 
             ir::Method {
                 name: method.ident().to_string(),

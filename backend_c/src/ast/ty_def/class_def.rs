@@ -32,7 +32,7 @@ impl MethodImplFunc {
         metadata: &ir::Metadata,
         module: &mut Unit,
     ) -> Self {
-        let iface_ty = ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id));
+        let iface_ty = ir::Type::Object(ir::ObjectID::Interface(iface_id));
 
         let impl_func_name = FunctionName::ID(impl_func_id);
         let vcall_wrapper_name = FunctionName::MethodWrapper(iface_id, method_id, self_class.to_def_name());
@@ -180,7 +180,7 @@ impl Class {
         metadata: &ir::Metadata,
         module: &mut Unit,
     ) -> Self {
-        let class_ty = ir::Type::RcPointer(ir::VirtualTypeID::Class(struct_id));
+        let class_ty = ir::Type::Object(ir::ObjectID::Class(struct_id));
 
         let mut impls = BTreeMap::new();
 

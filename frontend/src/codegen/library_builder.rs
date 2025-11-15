@@ -877,8 +877,8 @@ impl<'a> LibraryBuilder<'a> {
 
                 match src_ty {
                     typ::Type::Class(..) => {
-                        let class_id = ir::VirtualTypeID::Class(struct_id);
-                        ir::Type::RcPointer(class_id)
+                        let class_id = ir::ObjectID::Class(struct_id);
+                        ir::Type::Object(class_id)
                     },
 
                     typ::Type::Record(..) => ir::Type::Struct(struct_id),
@@ -895,7 +895,7 @@ impl<'a> LibraryBuilder<'a> {
                     None => panic!("missing IR definition for interface {}", iface),
                 };
 
-                ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id))
+                ir::Type::Object(ir::ObjectID::Interface(iface_id))
             },
 
             typ::Type::Array(array_ty) => {
@@ -950,7 +950,7 @@ impl<'a> LibraryBuilder<'a> {
                 ir::Type::Flags(set_ty.flags_struct, set_id)
             },
 
-            typ::Type::Any => ir::Type::RcPointer(ir::VirtualTypeID::Any),
+            typ::Type::Any => ir::Type::Object(ir::ObjectID::Any),
         }
     }
     
@@ -1024,7 +1024,7 @@ impl<'a> LibraryBuilder<'a> {
                 let id = self.metadata.new_type();
                 let ty = match def.kind {
                     StructKind::Class => {
-                        ir::Type::RcPointer(ir::VirtualTypeID::Class(id))
+                        ir::Type::Object(ir::ObjectID::Class(id))
                     },
                     StructKind::Record => {
                         ir::Type::Struct(id)
@@ -1049,7 +1049,7 @@ impl<'a> LibraryBuilder<'a> {
             
             typ::Type::Weak(weak_ty) => {
                 let ty = match self.translate_type(weak_ty, generic_ctx) {
-                    ir::Type::RcPointer(id) => ir::Type::RcWeakPointer(id),
+                    ir::Type::Object(id) => ir::Type::WeakObject(id),
                     other => unreachable!("only RC class types can be weak, found: {}", other),
                 };
 
@@ -1064,7 +1064,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 let iface_name = translate_name(&iface_def.name, generic_ctx, self);
                 let id = self.metadata.declare_iface(&iface_name);
-                let ty = ir::Type::RcPointer(ir::VirtualTypeID::Interface(id));
+                let ty = ir::Type::Object(ir::ObjectID::Interface(id));
 
                 self.type_cache.insert(src_ty.clone(), ty.clone());
                 self.cached_types.insert(ty.clone(), src_ty);
@@ -1098,7 +1098,7 @@ impl<'a> LibraryBuilder<'a> {
 
             typ::Type::Function(func_sig) => {
                 let func_ty_id = self.translate_func_ty(func_sig, generic_ctx);
-                let ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(func_ty_id));
+                let ty = ir::Type::Object(ir::ObjectID::Closure(func_ty_id));
 
                 self.type_cache.insert(src_ty.clone(), ty.clone());
                 self.cached_types.insert(ty.clone(), src_ty);
@@ -1555,7 +1555,7 @@ impl<'a> LibraryBuilder<'a> {
 }
 
 fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
-    let ir::Type::RcPointer(ir::VirtualTypeID::Array(element_type)) = &array_type else {
+    let ir::Type::Object(ir::ObjectID::Array(element_type)) = &array_type else {
         panic!("dyn array type did not translate to a dyn array reference");
     };
     

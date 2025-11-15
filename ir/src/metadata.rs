@@ -2,7 +2,7 @@ mod builder;
 
 use crate::rtti::RuntimeType;
 use crate::ty::FieldID;
-use crate::ty::VirtualTypeID;
+use crate::ty::ObjectID;
 use crate::ty_decl::TagLocation;
 use crate::FunctionID;
 use crate::FunctionSig;
@@ -68,37 +68,37 @@ impl fmt::Display for VariableID {
 pub const EMPTY_STRING_ID: StringID = StringID(0);
 
 pub const STRING_ID: TypeDefID = TypeDefID(1);
-pub const STRING_VTYPE_ID: VirtualTypeID = VirtualTypeID::Class(STRING_ID);
-pub const STRING_TYPE: Type = Type::RcPointer(STRING_VTYPE_ID);
+pub const STRING_VTYPE_ID: ObjectID = ObjectID::Class(STRING_ID);
+pub const STRING_TYPE: Type = Type::Object(STRING_VTYPE_ID);
 pub const STRING_CHARS_FIELD: FieldID = FieldID(0);
 pub const STRING_LEN_FIELD: FieldID = FieldID(1);
 
 pub const CLOSURE_PTR_FIELD: FieldID = FieldID(0);
 
 pub const TYPEINFO_ID: TypeDefID = TypeDefID(2);
-pub const TYPEINFO_VTYPE_ID: VirtualTypeID = VirtualTypeID::Class(TYPEINFO_ID);
-pub const TYPEINFO_TYPE: Type = Type::RcPointer(TYPEINFO_VTYPE_ID);
+pub const TYPEINFO_VTYPE_ID: ObjectID = ObjectID::Class(TYPEINFO_ID);
+pub const TYPEINFO_TYPE: Type = Type::Object(TYPEINFO_VTYPE_ID);
 pub const TYPEINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const TYPEINFO_METHODS_FIELD: FieldID = FieldID(1);
 pub const TYPEINFO_TAGS_FIELD: FieldID = FieldID(2);
 pub const TYPEINFO_IMPL_FIELD: FieldID = FieldID(3);
 
 pub const METHODINFO_ID: TypeDefID = TypeDefID(3);
-pub const METHODINFO_VTYPE_ID: VirtualTypeID = VirtualTypeID::Class(METHODINFO_ID);
-pub const METHODINFO_TYPE: Type = Type::RcPointer(METHODINFO_VTYPE_ID);
+pub const METHODINFO_VTYPE_ID: ObjectID = ObjectID::Class(METHODINFO_ID);
+pub const METHODINFO_TYPE: Type = Type::Object(METHODINFO_VTYPE_ID);
 pub const METHODINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const METHODINFO_OWNER_FIELD: FieldID = FieldID(1);
 pub const METHODINFO_IMPL_FIELD: FieldID = FieldID(2);
 pub const METHODINFO_TAGS_FIELD: FieldID = FieldID(3);
 
 pub const FUNCINFO_ID: TypeDefID = TypeDefID(4);
-pub const FUNCINFO_VTYPE_ID: VirtualTypeID = VirtualTypeID::Class(FUNCINFO_ID);
-pub const FUNCINFO_TYPE: Type = Type::RcPointer(FUNCINFO_VTYPE_ID);
+pub const FUNCINFO_VTYPE_ID: ObjectID = ObjectID::Class(FUNCINFO_ID);
+pub const FUNCINFO_TYPE: Type = Type::Object(FUNCINFO_VTYPE_ID);
 pub const FUNCINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const FUNCINFO_IMPL_FIELD: FieldID = FieldID(1);
 pub const FUNCINFO_TAGS_FIELD: FieldID = FieldID(2);
 
-pub const ANY_TYPE: Type = Type::RcPointer(VirtualTypeID::Any);
+pub const ANY_TYPE: Type = Type::Object(ObjectID::Any);
 
 pub const RESERVED_TYPES: [TypeDefID; 4] = [
     STRING_ID,
@@ -488,12 +488,12 @@ impl Metadata {
                 Cow::Owned(format!("array [{}] of {}", dim, elem_name))
             },
             
-            Type::RcWeakPointer(class_id) => {
+            Type::WeakObject(class_id) => {
                 let resource_name = self.pretty_virtual_type_name(class_id);
                 Cow::Owned(format!("*weak {}", resource_name))
             }
 
-            Type::RcPointer(class_id) => {
+            Type::Object(class_id) => {
                 let resource_name = self.pretty_virtual_type_name(class_id);
                 Cow::Owned(format!("*{}", resource_name))
             },
@@ -512,26 +512,26 @@ impl Metadata {
         }
     }
     
-    fn pretty_virtual_type_name(&self, id: &VirtualTypeID) -> Cow<'_, str> {
+    fn pretty_virtual_type_name(&self, id: &ObjectID) -> Cow<'_, str> {
         match id {
-            VirtualTypeID::Any => Cow::Borrowed("any"),
+            ObjectID::Any => Cow::Borrowed("any"),
 
-            VirtualTypeID::Interface(iface_id) => {
+            ObjectID::Interface(iface_id) => {
                 Cow::Owned(self.iface_name(*iface_id))
             },
 
-            VirtualTypeID::Closure(func_ty_id) => {
+            ObjectID::Closure(func_ty_id) => {
                 Cow::Owned(match self.get_func_ptr_ty(*func_ty_id) {
                     Some(sig) => format!("closure of {}", self.pretty_func_sig(sig)),
                     None => format!("closure of {}", func_ty_id),
                 })
             }
 
-            VirtualTypeID::Class(struct_id) => {
+            ObjectID::Class(struct_id) => {
                 self.pretty_ty_name(&Type::Struct(*struct_id))
             },
             
-            VirtualTypeID::Array(element_type) => {
+            ObjectID::Array(element_type) => {
                 Cow::Owned(format!("array of {}", self.pretty_ty_name(element_type)))
             }
         }
@@ -563,16 +563,16 @@ impl Metadata {
             | Type::Function(id)
             | Type::Flags(id, ..) => *id,
 
-            Type::RcPointer(virt_id) | Type::RcWeakPointer(virt_id) => {
+            Type::Object(virt_id) | Type::WeakObject(virt_id) => {
                 match virt_id {
-                    VirtualTypeID::Class(id)
-                    | VirtualTypeID::Closure(id) => *id,
+                    ObjectID::Class(id)
+                    | ObjectID::Closure(id) => *id,
                     
-                    VirtualTypeID::Interface(id) => {
+                    ObjectID::Interface(id) => {
                         return self.ifaces.contains_key(id);
                     },
 
-                    VirtualTypeID::Any | VirtualTypeID::Array(..) => {
+                    ObjectID::Any | ObjectID::Array(..) => {
                         return true;
                     }
                 }
@@ -803,7 +803,7 @@ impl IRFormatter for Metadata {
         let field_name = of_ty
             .as_struct()
             .or_else(|| match of_ty.rc_resource_class_id()? {
-                VirtualTypeID::Class(struct_id) => Some(*struct_id),
+                ObjectID::Class(struct_id) => Some(*struct_id),
                 _ => None,
             })
             .and_then(|struct_id| self.get_struct_def(struct_id))

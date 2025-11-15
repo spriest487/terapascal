@@ -11,7 +11,7 @@ use crate::StructIdentity;
 use crate::Type;
 use crate::TypeDef;
 use crate::VariableID;
-use crate::VirtualTypeID;
+use crate::ObjectID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -120,7 +120,7 @@ impl fmt::Display for Library {
                     }
 
                     let ty_as_struct = Type::Struct(*id);
-                    let ty_as_class = Type::RcPointer(VirtualTypeID::Class(*id));
+                    let ty_as_class = Type::Object(ObjectID::Class(*id));
                     let mut iface_impls = self.metadata.impls(&ty_as_struct);
                     iface_impls.extend(self.metadata.impls(&ty_as_class));
 

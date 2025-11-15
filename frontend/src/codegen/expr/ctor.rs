@@ -17,7 +17,7 @@ pub fn build_object_ctor_invocation(
     let object_ty = builder.translate_type(object_ty);
 
     let struct_id = match &object_ty {
-        ir::Type::RcPointer(ir::VirtualTypeID::Class(struct_id)) => *struct_id,
+        ir::Type::Object(ir::ObjectID::Class(struct_id)) => *struct_id,
         ir::Type::Struct(struct_id) => *struct_id,
         _ => panic!("type of object ctor expr must be a record or class"),
     };

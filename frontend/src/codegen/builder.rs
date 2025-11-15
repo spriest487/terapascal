@@ -269,7 +269,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let closure_ptr_ty = closure.closure_id.to_class_ptr_type();
 
         // virtual pointer to the closure
-        let closure_virtual_ty = Type::RcPointer(VirtualTypeID::Closure(closure.func_ty_id));
+        let closure_virtual_ty = Type::Object(ObjectID::Closure(closure.func_ty_id));
         let closure_virtual_ptr = self.local_new(closure_virtual_ty.clone(), None);
 
         self.scope(|builder| {

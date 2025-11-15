@@ -3,7 +3,7 @@ use crate::formatter::RawInstructionFormatter;
 use crate::metadata::MethodID;
 use crate::ty::FieldID;
 use crate::ty::Type;
-use crate::ty::VirtualTypeID;
+use crate::ty::ObjectID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
 use crate::val::LocalID;
@@ -122,7 +122,7 @@ pub enum Instruction {
     ClassIs {
         out: Ref,
         a: Value,
-        class_id: VirtualTypeID,
+        class_id: ObjectID,
     },
 
     Label(Label),

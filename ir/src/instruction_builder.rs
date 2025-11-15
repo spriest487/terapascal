@@ -19,7 +19,7 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
-use crate::VirtualTypeID;
+use crate::ObjectID;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 
@@ -256,7 +256,7 @@ pub trait InstructionBuilder {
         });
     }
 
-    fn class_is(&mut self, out: impl Into<Ref>, a: impl Into<Value>, type_id: VirtualTypeID) {
+    fn class_is(&mut self, out: impl Into<Ref>, a: impl Into<Value>, type_id: ObjectID) {
         self.emit(Instruction::ClassIs {
             out: out.into(),
             a: a.into(),

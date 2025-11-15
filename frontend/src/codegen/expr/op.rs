@@ -43,7 +43,7 @@ pub fn translate_bin_op(
 
             let struct_id = match &of_ty {
                 ir::Type::Struct(id) => *id,
-                ir::Type::RcPointer(ir::VirtualTypeID::Class(id)) => *id,
+                ir::Type::Object(ir::ObjectID::Class(id)) => *id,
                 other => panic!(
                     "lhs ty_def of member binop must be a struct or class, was: {}",
                     other

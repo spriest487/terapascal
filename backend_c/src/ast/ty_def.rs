@@ -73,18 +73,18 @@ impl Type {
             },
             ir::Type::Function(id) => Type::DefinedType(TypeDefName::Alias(*id)),
             
-            ir::Type::RcPointer(ir::VirtualTypeID::Class(id))
-            | ir::Type::RcWeakPointer(ir::VirtualTypeID::Class(id)) => {
+            ir::Type::Object(ir::ObjectID::Class(id))
+            | ir::Type::WeakObject(ir::ObjectID::Class(id)) => {
                 Type::DefinedType(TypeDefName::Struct(*id)).ptr()
             },
 
-            ir::Type::RcPointer(ir::VirtualTypeID::Array(element))
-            | ir::Type::RcWeakPointer(ir::VirtualTypeID::Array(element)) => {
+            ir::Type::Object(ir::ObjectID::Array(element))
+            | ir::Type::WeakObject(ir::ObjectID::Array(element)) => {
                 let array_id = module.get_dyn_array_type(element);
                 Type::dyn_array_ptr(array_id)
             }
             
-            ir::Type::RcPointer(..) | ir::Type::RcWeakPointer(..) => Type::Rc.ptr(),
+            ir::Type::Object(..) | ir::Type::WeakObject(..) => Type::Rc.ptr(),
             
             ir::Type::Struct(id) => Type::from_ir_struct(*id),
             ir::Type::Variant(id) => Type::from_ir_variant(*id),

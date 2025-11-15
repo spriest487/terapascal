@@ -9,7 +9,7 @@ use crate::IRFormatter;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Type;
-use crate::VirtualTypeID;
+use crate::ObjectID;
 pub use interface::*;
 pub use r#struct::*;
 use serde::Deserialize;
@@ -29,7 +29,7 @@ impl TypeDefID {
     }
 
     pub fn to_class_weak_type(self) -> Type {
-        Type::RcWeakPointer(VirtualTypeID::Class(self))
+        Type::WeakObject(ObjectID::Class(self))
     }
 
     pub fn to_struct_type(self) -> Type {
@@ -52,7 +52,7 @@ pub struct InterfaceID(pub usize);
 
 impl InterfaceID {
     pub fn to_interface_ptr_type(self) -> Type {
-        Type::RcPointer(VirtualTypeID::Interface(self))
+        Type::Object(ObjectID::Interface(self))
     }
 }
 
@@ -117,7 +117,7 @@ pub struct ClosureIdentity {
 
 impl ClosureIdentity {
     pub fn to_closure_ptr_type(&self) -> Type {
-        Type::RcPointer(VirtualTypeID::Closure(self.virt_func_ty))
+        Type::Object(ObjectID::Closure(self.virt_func_ty))
     }
 }
 

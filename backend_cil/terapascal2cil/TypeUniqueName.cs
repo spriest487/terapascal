@@ -30,13 +30,13 @@ public static class TypeUniqueName {
         };
     }
 
-    public static string GetUniqueName(this IR.IVirtualTypeID classID) {
+    public static string GetUniqueName(this IR.IObjectID classID) {
         return classID switch {
-            IR.AnyVirtualTypeID => "Any",
-            IR.ArrayVirtualTypeID(var elementType) => $"DynArray_{elementType.GetUniqueName()}",
+            IR.AnyObjectID => "Any",
+            IR.ArrayObjectID(var elementType) => $"DynArray_{elementType.GetUniqueName()}",
             IR.ClassID(var id) => $"Class_{id.ID}",
-            IR.ClosureVirtualTypeID(var id) => $"AnyClosure_{id.ID}",
-            IR.InterfaceVirtualTypeID(var id) => $"Interface_{id.ID}",
+            IR.ClosureObjectID(var id) => $"AnyClosure_{id.ID}",
+            IR.InterfaceObjectID(var id) => $"Interface_{id.ID}",
             _ => throw new NotSupportedException(nameof(classID)),
         };
     }

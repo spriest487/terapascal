@@ -3,7 +3,7 @@ use crate::instruction::Instruction;
 use crate::metadata::MethodID;
 use crate::ty::FieldID;
 use crate::ty::Type;
-use crate::ty::VirtualTypeID;
+use crate::ty::ObjectID;
 use crate::ty_decl::InterfaceID;
 use crate::val::Ref;
 use crate::val::Value;
@@ -153,7 +153,7 @@ pub trait IRFormatter {
 
                 self.format_val(self_arg, f)?;
                 write!(f, " as ")?;
-                self.format_type(&Type::RcPointer(VirtualTypeID::Interface(*iface_id)), f)?;
+                self.format_type(&Type::Object(ObjectID::Interface(*iface_id)), f)?;
 
                 write!(f, ").")?;
                 self.format_method(*iface_id, *method, f)?;
@@ -175,7 +175,7 @@ pub trait IRFormatter {
                 write!(f, " := ")?;
                 self.format_val(a, f)?;
                 write!(f, " is ")?;
-                self.format_type(&Type::RcPointer(class_id.clone()), f)
+                self.format_type(&Type::Object(class_id.clone()), f)
             }
 
             Instruction::AddrOf { out, a } => {

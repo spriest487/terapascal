@@ -152,7 +152,7 @@ pub fn translate_is_ty(
 ) -> ir::Value {
     // eprintln!("is_ty pattern: {} is {}?", builder.pretty_ty_name(val_ty), builder.pretty_ty_name(ty));
     
-    if let ir::Type::RcPointer(class_id) = ty {
+    if let ir::Type::Object(class_id) = ty {
         // casting strong or weak RC type to strong RC type: do a dynamic check
         if val_ty.is_rc() {
             let result = builder.local_temp(ir::Type::Bool);

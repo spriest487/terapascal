@@ -156,7 +156,7 @@ fn build_func_val_invocation(
     let func_field_ptr = ir::Ref::Local(builder.local_temp(ir::Type::Function(func_ty_id).ptr()));
 
     builder.scope(|builder| {
-        let closure_ptr_ty = ir::Type::RcPointer(ir::VirtualTypeID::Closure(func_ty_id));
+        let closure_ptr_ty = ir::Type::Object(ir::ObjectID::Closure(func_ty_id));
         builder.field(
             func_field_ptr.clone(),
             target_expr_val.clone(),
@@ -224,7 +224,7 @@ pub fn build_method_invocation(
     let method_call_sig = call_generic_ctx.apply_to_sig(&method_decl_sig);
 
     let call_target = match builder.translate_type(&self_ty) {
-        ir::Type::RcPointer(ir::VirtualTypeID::Interface(iface_id)) => {
+        ir::Type::Object(ir::ObjectID::Interface(iface_id)) => {
             if ty_args.is_some() {
                 unimplemented!("IR for virtual call with type args")
             }

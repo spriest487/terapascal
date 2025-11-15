@@ -236,14 +236,14 @@ public class TypeBuilder {
         return new TypeReference(ns, GetTypeName(id), module, module, valueType: false);
     }
 
-    private TypeReference BuildClassTypeRef(IR.IVirtualTypeID id, IR.Library library) {
+    private TypeReference BuildClassTypeRef(IR.IObjectID id, IR.Library library) {
         return id switch {
-            IR.AnyVirtualTypeID => this.assemblyBuilder.Module.TypeSystem.Object,
+            IR.AnyObjectID => this.assemblyBuilder.Module.TypeSystem.Object,
             // in this backend, struct refs are automatically reference types if they're a class
             IR.ClassID(var classID) => this.CreateStructTypeRef(classID, false),
-            IR.InterfaceVirtualTypeID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
-            IR.ClosureVirtualTypeID => this.ClosureBaseType,
-            IR.ArrayVirtualTypeID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
+            IR.InterfaceObjectID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
+            IR.ClosureObjectID => this.ClosureBaseType,
+            IR.ArrayObjectID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
             _ => throw new NotImplementedException($"unsupported virtual type ID: {id}"),
         };
     }
@@ -538,7 +538,7 @@ public class TypeBuilder {
             | TypeAttributes.BeforeFieldInit;
 
         var ifaceDef = new TypeDefinition(ns, GetTypeName(id), attrs);
-        var ifaceSelfType = new IR.ObjectType(new IR.InterfaceVirtualTypeID(id));
+        var ifaceSelfType = new IR.ObjectType(new IR.InterfaceObjectID(id));
 
         for (var methodIndex = 0; methodIndex < def.Methods.Count; methodIndex += 1) {
             var ifaceMethod = def.Methods[methodIndex];
@@ -608,7 +608,7 @@ public class TypeBuilder {
         // (accessing the pointer of an unknown closure type to call it) or directly as a member of a
         // specific closure class (setting the pointer during construction)
         if (fieldID.Equals(IR.FieldID.ClosurePointerField)) {
-            if (baseType is IR.ObjectType(IR.ClosureVirtualTypeID)
+            if (baseType is IR.ObjectType(IR.ClosureObjectID)
                 || (baseType is IR.StructType(var closureStructID)
                     && this.assemblyBuilder.IsClosureStruct(closureStructID))) {
                 return this.closurePointerField;
@@ -666,7 +666,7 @@ public class TypeBuilder {
             ?? throw new ArgumentException($"invalid tag {tag} for variant type {baseType}");
     }
 
-    public GenericInstanceMethod GetObjectCreateMethod(IR.IVirtualTypeID classID, IR.Library library) {
+    public GenericInstanceMethod GetObjectCreateMethod(IR.IObjectID classID, IR.Library library) {
         var module = this.assemblyBuilder.Module;
         
         var classTypeRef = this.BuildTypeRef(new IR.ObjectType(classID), library);
