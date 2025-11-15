@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -257,31 +258,66 @@ public static class SystemFunctions {
     }
     
     public static int GetTypeInfoCount() {
-        throw new NotImplementedException("RTTI");
+        return RTTI.Types.Count;
     }
     
-    public static int GetTypeInfoByIndex(int index) {
-        throw new NotImplementedException("RTTI");
+    public static TypeInfo? GetTypeInfoByIndex(int index) {
+        if (index < 0 || index >= RTTI.Types.Count) {
+            return null;
+        }
+
+        return RTTI.Types[index];
     }
     
-    public static int FindTypeInfo(string typeName) {
-        throw new NotImplementedException("RTTI");
+    public static TypeInfo? FindTypeInfo(String typeName) {
+        for (var i = 0; i < RTTI.Types.Count; i += 1) {
+            var typeInfo = RTTI.Types[i];
+            if (typeInfo.name.Equals(typeName)) {
+                return typeInfo;
+            }
+        }
+
+        return null;
     }
     
-    public static TypeInfo GetObjectTypeInfo(object obj) {
-        throw new NotImplementedException("RTTI");
+    public static TypeInfo? GetObjectTypeInfo(object? obj) {
+        if (obj is null or Object { strongCount: 0 }) {
+            return null;
+        }
+
+        var objType = obj.GetType();
+
+        for (var i = 0; i < RTTI.Types.Count; i += 1) {
+            var typeInfo = RTTI.Types[i];
+            if (typeInfo.impl == objType) {
+                return typeInfo;
+            }
+        }
+
+        return null;
     }
 
-    public static FunctionInfo FindFunctionInfo(string name) {
-        throw new NotImplementedException("RTTI");
+    public static FunctionInfo? FindFunctionInfo(String name) {
+        for (var i = 0; i < RTTI.Functions.Count; i += 1) {
+            var funcInfo = RTTI.Functions[i];
+            if (funcInfo.name.Equals(name)) {
+                return funcInfo;
+            }
+        }
+
+        return null;
     }
     
     public static int GetFunctionInfoCount() {
-        throw new NotImplementedException("RTTI");
+        return RTTI.Functions.Count;
     }
     
-    public static int GetFunctionInfoByIndex(int index) {
-        throw new NotImplementedException("RTTI");
+    public static FunctionInfo? GetFunctionInfoByIndex(int index) {
+        if (index < 0 || index >= RTTI.Types.Count) {
+            return null;
+        }
+
+        return RTTI.Functions[index];
     }
 
     public static int ArrayLengthInternal(object array) {
