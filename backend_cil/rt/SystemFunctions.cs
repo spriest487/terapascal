@@ -17,14 +17,14 @@ public static class SystemFunctions {
     }
 
     public static unsafe String CreateString(string s, bool immortal) {
-        var newString = ObjectUtil.Create<String>(immortal);
+        var newString = Object.Create<String>(immortal);
         
         if (!string.IsNullOrEmpty(s)) {
-            newString.len = Encoding.UTF8.GetByteCount(s);
-            newString.chars = GetMem(newString.len + 1);
+            var size = Encoding.UTF8.GetMaxByteCount(s.Length);
+            newString.chars = GetMem(size + 1);
 
             fixed (char* chars = s) {
-                Encoding.UTF8.GetBytes(chars, s.Length, newString.chars, newString.len);
+                newString.len = Encoding.UTF8.GetBytes(chars, s.Length, newString.chars, size);
             }
 
             newString.chars[newString.len] = 0;
@@ -49,6 +49,7 @@ public static class SystemFunctions {
         var messageBytes = new Span<byte>(message.chars, message.len);
         Console.OpenStandardOutput().Write(messageBytes);
         Console.Out.Write(Environment.NewLine);
+        Console.Out.Flush();
     }
 
     public static unsafe void Write(String message) {

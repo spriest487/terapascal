@@ -14,11 +14,11 @@ public readonly record struct TypeDefID(ulong ID) : IComparable<TypeDefID> {
     }
 
     public IType ToObjectType() {
-        return new ObjectType(new ClassID(this));
+        return new ObjectType(new ClassObjectID(this));
     }
     
     public IType ToWeakObjectType() {
-        return new WeakObjectType(new ClassID(this));
+        return new WeakObjectType(new ClassObjectID(this));
     }
     
     public IType ToStructType() {
@@ -128,10 +128,10 @@ public class MethodIDFormatter : IMessagePackFormatter<MethodID> {
 }
 
 public interface IType {
-    static IType String => new ObjectType(ClassID.String);
-    static IType TypeInfo => new ObjectType(ClassID.TypeInfo);
-    static IType MethodInfo => new ObjectType(ClassID.MethodInfo);
-    static IType FunctionInfo => new ObjectType(ClassID.FunctionInfo);
+    static IType String => new ObjectType(ClassObjectID.String);
+    static IType TypeInfo => new ObjectType(ClassObjectID.TypeInfo);
+    static IType MethodInfo => new ObjectType(ClassObjectID.MethodInfo);
+    static IType FunctionInfo => new ObjectType(ClassObjectID.FunctionInfo);
     
     static IType Any { get; } = new ObjectType(new AnyObjectID());
     static IType Nothing { get; } = new NothingType();
@@ -149,6 +149,68 @@ public interface IType {
     static IType ISize { get; } = new ISizeType();
     static IType F32 { get; } = new F32Type();
     static IType F64 { get; } = new F64Type();
+    
+    public bool IsObjectType() => this switch {
+        ObjectType => true,
+        WeakObjectType => true,
+        _ => false,
+    };
+
+    public bool IsComplex() => this switch {
+        StructType => true,
+        VariantType => true,
+        ArrayType => true,
+        FlagsType => true,
+        _ => false,
+    };
+        
+    public bool IsInteger() => this switch {
+        F32Type or
+            F64Type or
+            I16Type or
+            I32Type or
+            I64Type or
+            I8Type or
+            ISizeType or
+            U16Type or
+            U32Type or
+            U64Type or
+            U8Type or
+            USizeType => true,
+        _ => false,
+    };
+
+    public IType? GetDerefType() {
+        return this switch {
+            PointerType(var inner) => inner,
+            TempRefType(var inner) => inner,
+            _ => null,
+        };
+    }
+
+    public IType MakeDynArray() {
+        return new ObjectType(new ArrayObjectID(this));
+    }
+
+    public IType MakePointer() {
+        return new PointerType(this);
+    }
+
+    public int? IntrinsicSize() => this switch {
+        BoolType or U8Type or I8Type => 1,
+        I16Type or U16Type => 2,
+        F32Type or U32Type or I32Type => 4,
+        F64Type or U64Type or I64Type => 8,
+        _ => null,
+    };
+
+    public ITagLocation? GetTagsLocation() => this switch {
+        VariantType(var id) => new TypeDefTagLocation(id),
+        StructType(var id) => new TypeDefTagLocation(id),
+        ObjectType(ClassObjectID(var id)) => new TypeDefTagLocation(id),
+        ObjectType(InterfaceObjectID(var id)) => new InterfaceTagLocation(id),
+        _ => null,
+    };
 }
 
 public sealed record NothingType : IType;
@@ -183,64 +245,6 @@ public sealed record ArrayType : IType {
     
     [Key("dim")]
     public required ulong Length { get; init; }
-}
-
-public static class TypeExt {
-    extension(IType type) {
-        public bool IsObjectType() => type switch {
-            ObjectType => true,
-            WeakObjectType => true,
-            _ => false,
-        };
-
-        public bool IsComplex() => type switch {
-            StructType => true,
-            VariantType => true,
-            ArrayType => true,
-            FlagsType => true,
-            _ => false,
-        };
-        
-        public bool IsInteger() => type switch {
-            F32Type or
-            F64Type or
-            I16Type or
-            I32Type or
-            I64Type or
-            I8Type or
-            ISizeType or
-            U16Type or
-            U32Type or
-            U64Type or
-            U8Type or
-            USizeType => true,
-            _ => false,
-        };
-
-        public IType? GetDerefType() {
-            return type switch {
-                PointerType(var inner) => inner,
-                TempRefType(var inner) => inner,
-                _ => null,
-            };
-        }
-
-        public IType MakeDynArray() {
-            return new ObjectType(new ArrayObjectID(type));
-        }
-
-        public IType MakePointer() {
-            return new PointerType(type);
-        }
-
-        public int? IntrinsicSize() => type switch {
-            BoolType or U8Type or I8Type => 1,
-            I16Type or U16Type => 2,
-            F32Type or U32Type or I32Type => 4,
-            F64Type or U64Type or I64Type => 8,
-            _ => null,
-        };
-    }
 }
 
 public sealed record ObjectType(IObjectID ID) : IType;
@@ -359,11 +363,11 @@ public interface IObjectID {
 
 public sealed record AnyObjectID : IObjectID;
 
-public sealed record ClassID(TypeDefID ID) : IObjectID {
-    public static ClassID String => new ClassID(TypeDefID.String);
-    public static ClassID TypeInfo => new ClassID(TypeDefID.TypeInfo);
-    public static ClassID MethodInfo => new ClassID(TypeDefID.MethodInfo);
-    public static ClassID FunctionInfo => new ClassID(TypeDefID.FunctionInfo);
+public sealed record ClassObjectID(TypeDefID ID) : IObjectID {
+    public static ClassObjectID String => new ClassObjectID(TypeDefID.String);
+    public static ClassObjectID TypeInfo => new ClassObjectID(TypeDefID.TypeInfo);
+    public static ClassObjectID MethodInfo => new ClassObjectID(TypeDefID.MethodInfo);
+    public static ClassObjectID FunctionInfo => new ClassObjectID(TypeDefID.FunctionInfo);
 }
 
 public sealed record InterfaceObjectID(InterfaceID ID) : IObjectID;
@@ -392,7 +396,7 @@ public class ObjectIDFormatter : IMessagePackFormatter<IObjectID> {
 
             case "Class": {
                 var id = reader.ReadUInt64();
-                return new ClassID(new TypeDefID(id));
+                return new ClassObjectID(new TypeDefID(id));
             }
 
             case "Interface": {

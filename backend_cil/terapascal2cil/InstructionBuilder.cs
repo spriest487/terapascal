@@ -2,7 +2,6 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using static Terapascal.IR.TypeExt;
 using static Terapascal.IR.FunctionExt;
 
 namespace Terapascal.CIL;
@@ -582,7 +581,7 @@ public class InstructionBuilder {
     }
 
     private void BuildNewObject(IR.IRef outRef, IR.TypeDefID typeID, bool immortal) {
-        var classID = new IR.ClassID(typeID);
+        var classID = new IR.ClassObjectID(typeID);
         var createMethodInst = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(classID, this.library);
 
         this.StoreRef(outRef, () => {
@@ -823,7 +822,7 @@ public class InstructionBuilder {
             }
 
             default: {
-                throw new ArgumentOutOfRangeException(nameof(loadValue), loadValue.ToString());
+                throw new NotSupportedException($"unsupported value: {loadValue}");
             }
         }
     }
@@ -871,7 +870,7 @@ public class InstructionBuilder {
             }
             
             default: {
-                throw new ArgumentOutOfRangeException(nameof(ofRef));
+                throw new NotSupportedException($"unsupported ref: {ofRef}");
             }
         }
     }
@@ -1016,22 +1015,26 @@ public class InstructionBuilder {
                 this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStaticClosureFieldRef(closureID));
                 break;
             }
-            
-            case IR.GlobalRef(IR.StaticTypeInfoGlobalRef(var closureID)): {
-                this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStaticTypeInfoFieldRef(closureID));
-                break;
-            }
-            
-            case IR.GlobalRef(IR.StaticFuncInfoGlobalRef(var id)): {
-                this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStaticFuncInfoFieldRef(id));
-                break;
-            }
 
             case IR.GlobalRef(IR.StringLiteralGlobalRef(var id)): {
                 this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStringLiteralRef(id));
                 break;
             }
-            
+            case IR.GlobalRef(IR.StaticTypeInfoGlobalRef(var closureID)): {
+                this.LoadOptionalGlobal(this.assemblyBuilder.GetStaticTypeInfoFieldRef(closureID));
+                break;
+            }
+
+            case IR.GlobalRef(IR.StaticFuncInfoGlobalRef(var id)): {
+                this.LoadOptionalGlobal(this.assemblyBuilder.GetStaticFuncInfoFieldRef(id));
+                break;
+            }
+
+            case IR.GlobalRef(IR.StaticTagArrayGlobalRef(var tagLoc)): {
+                this.LoadOptionalGlobal(this.assemblyBuilder.GetStaticTagArrayFieldRef(tagLoc));
+                break;
+            }
+
             case IR.GlobalRef(IR.VariableGlobalRef(var id)): {
                 this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetGlobalVariableRef(id));
                 break;
@@ -1056,10 +1059,10 @@ public class InstructionBuilder {
                 }
 
                 var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType, this.library);
-                
+
                 this.LoadValue(atRef);
                 this.body.Emit(OpCodes.Ldobj, targetTypeRef);
-                
+
                 break;
             }
 
@@ -1070,6 +1073,15 @@ public class InstructionBuilder {
             default: {
                 throw new ArgumentOutOfRangeException(nameof(loadRef));
             }
+        }
+    }
+
+    // RTTI globals are optional and may evaluate to null if RTTI is disabled 
+    private void LoadOptionalGlobal(FieldReference? fieldRef) {
+        if (fieldRef == null) {
+            this.body.Emit(OpCodes.Ldnull);
+        } else {
+            this.body.Emit(OpCodes.Ldsfld, fieldRef);
         }
     }
 

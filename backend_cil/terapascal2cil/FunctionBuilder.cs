@@ -1,6 +1,5 @@
 ﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
-using static Terapascal.IR.TypeExt;
 
 namespace Terapascal.CIL;
 

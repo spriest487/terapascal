@@ -2,7 +2,6 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using static Terapascal.IR.TypeExt;
 
 namespace Terapascal.CIL;
 
@@ -110,12 +109,8 @@ public class TypeBuilder {
 
         this.ObjectDestroyMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Destroy");
 
-        var objectExtClassDef = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ObjectUtil), false)
-            .Resolve()
-            ?? throw new InvalidDataException($"missing {nameof(Runtime.ObjectUtil)} class in runtime library");
-
-        this.ObjectCreateMethod = objectExtClassDef.Methods.Single(m => m.Name == "Create");
-        this.ObjectIsMethod = objectExtClassDef.Methods.Single(m => m.Name == "Is");
+        this.ObjectCreateMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Create");
+        this.ObjectIsMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Is");
 
         var arrayManagerTypeDef = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ArrayManager), false)
                 .Resolve()
@@ -240,7 +235,7 @@ public class TypeBuilder {
         return id switch {
             IR.AnyObjectID => this.assemblyBuilder.Module.TypeSystem.Object,
             // in this backend, struct refs are automatically reference types if they're a class
-            IR.ClassID(var classID) => this.CreateStructTypeRef(classID, false),
+            IR.ClassObjectID(var classID) => this.CreateStructTypeRef(classID, false),
             IR.InterfaceObjectID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
             IR.ClosureObjectID => this.ClosureBaseType,
             IR.ArrayObjectID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
@@ -618,7 +613,7 @@ public class TypeBuilder {
         var structID = baseType switch {
             IR.StructType(var id) => id,
             IR.FlagsType(_, var setAliasID) => library.Metadata.SetAliases[setAliasID].FlagsStruct,
-            IR.ObjectType(IR.ClassID(var id)) => id,
+            IR.ObjectType(IR.ClassObjectID(var id)) => id,
 
             _ => throw new ArgumentException($"type {baseType} does not have struct fields (accessing field {fieldID.ID})"),
         };

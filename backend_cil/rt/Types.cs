@@ -1,4 +1,7 @@
-﻿namespace Terapascal.Runtime;
+﻿// ReSharper disable InconsistentNaming
+#nullable disable
+
+namespace Terapascal.Runtime;
 
 public class Object {
     internal int strongCount;
@@ -6,9 +9,7 @@ public class Object {
 
     protected internal virtual void Destroy() {
     }
-}
 
-public static class ObjectUtil {
     public static T Create<T>(bool immortal) where T : Object, new() {
         return new T {
             strongCount = immortal ? -1 : 1,
@@ -16,7 +17,7 @@ public static class ObjectUtil {
         };
     }
 
-    public static bool Is<T>(object? any) {
+    public static bool Is<T>(object any) {
         if (any is not T instance) {
             return false;
         }

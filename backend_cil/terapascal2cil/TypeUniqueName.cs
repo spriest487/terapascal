@@ -34,7 +34,7 @@ public static class TypeUniqueName {
         return classID switch {
             IR.AnyObjectID => "Any",
             IR.ArrayObjectID(var elementType) => $"DynArray_{elementType.GetUniqueName()}",
-            IR.ClassID(var id) => $"Class_{id.ID}",
+            IR.ClassObjectID(var id) => $"Class_{id.ID}",
             IR.ClosureObjectID(var id) => $"AnyClosure_{id.ID}",
             IR.InterfaceObjectID(var id) => $"Interface_{id.ID}",
             _ => throw new NotSupportedException(nameof(classID)),

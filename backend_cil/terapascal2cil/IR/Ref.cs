@@ -89,13 +89,6 @@ public record GlobalRef(IGlobalRef Global) : IRef;
 public record Deref(IValue Value) : IRef;
 public record DiscardRef : IRef;
 
-public interface ITagLocation;
-public record TypeDefTagLocation(TypeDefID ID) : ITagLocation;
-public record InterfaceTagLocation(InterfaceID ID) : ITagLocation;
-public record MethodTagLocation(TypeDefID TypeID, ulong MethodIndex) : ITagLocation;
-public record InterfaceMethodTagLocation(InterfaceID Interface, ulong MethodIndex) : ITagLocation;
-public record FunctionTagLocation(FunctionID ID) : ITagLocation;
-
 public class NullableRefFormatter : IMessagePackFormatter<IRef?> {
     private readonly RefFormatter refFormatter = new RefFormatter();
 
