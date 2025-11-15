@@ -888,7 +888,14 @@ fn get_set_type_range(range_ty: &Type, at: &Span, ctx: &Context) -> TypeResult<(
             let mut min = None;
             let mut max = None;
             for item in &enum_decl.items {
-                let item_val = item.value.as_ref().unwrap().value.as_i128();
+                let item_val = item.annotation
+                    .as_const()
+                    .and_then(|const_val| match &const_val.value {
+                        Literal::Integer(int_val) => Some(int_val.as_i128()),
+                        _ => None,
+                    })
+                    .expect("enum items must have const integer values");
+
                 min = Some(min.map_or(item_val, |val| i128::min(item_val, val)));
                 max = Some(max.map_or(item_val, |val| i128::max(item_val, val)));
             }
