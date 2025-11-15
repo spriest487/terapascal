@@ -917,7 +917,7 @@ pub fn typecheck_in_set_operator(
     // which can be used to infer the item expr type if needed
     let (item_expr, set_expr) = match &bin_op.rhs {
         ast::Expr::CollectionCtor(ctor) => {
-            let item_expr = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
+            let item_expr = evaluate_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
 
             item_expr.annotation().expect_any_value()?;
             let item_type = item_expr.annotation().ty().into_owned();
@@ -930,7 +930,7 @@ pub fn typecheck_in_set_operator(
                 .collect();
 
             let set_type = SetDecl::items_to_set_type(None, &item_exprs, &ctor.annotation, ctx)?;
-            let set_expr = typecheck_expr(&bin_op.rhs, &Type::set(set_type), ctx)?;
+            let set_expr = evaluate_expr(&bin_op.rhs, &Type::set(set_type), ctx)?;
 
             match set_expr.annotation().ty().as_ref() {
                 Type::Set(set_type) => {
@@ -958,7 +958,7 @@ pub fn typecheck_in_set_operator(
         }
 
         _ => {
-            let set_expr = typecheck_expr(&bin_op.rhs, &Type::Nothing, ctx)?;
+            let set_expr = evaluate_expr(&bin_op.rhs, &Type::Nothing, ctx)?;
             let set_expr_type = set_expr.annotation().ty();
 
             let item_expect_ty = match set_expr_type.as_ref() {
@@ -967,7 +967,7 @@ pub fn typecheck_in_set_operator(
                 }
 
                 invalid => {
-                    let invalid_lhs = typecheck_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
+                    let invalid_lhs = evaluate_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
                     return Err(TypeError::InvalidBinOp {
                         lhs: invalid_lhs.annotation().ty().into_owned(),
                         rhs: invalid.clone(),
@@ -977,7 +977,7 @@ pub fn typecheck_in_set_operator(
                 }
             };
 
-            let item_expr = typecheck_expr(&bin_op.lhs, item_expect_ty, ctx)?;
+            let item_expr = evaluate_expr(&bin_op.lhs, item_expect_ty, ctx)?;
             item_expr.annotation().expect_value(&item_expect_ty)?;
 
             (item_expr, set_expr)
