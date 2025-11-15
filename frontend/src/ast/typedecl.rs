@@ -326,7 +326,7 @@ impl TypeDeclItem {
                     .into());
                 }
 
-                let enum_decl = EnumDecl::parse(name, parser.tokens())?;
+                let enum_decl = EnumDecl::parse(name, parser)?;
                 Ok(TypeDeclItem::Enum(Arc::new(enum_decl)))
             },
 

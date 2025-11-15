@@ -1,17 +1,20 @@
 use crate::ast::Annotation;
+use crate::ast::DeclIdent;
 use crate::ast::Expr;
 use crate::ast::Ident;
-use crate::ast::DeclIdent;
+use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
+use crate::parse::Parser;
 use crate::parse::TokenStream;
+use crate::result::ErrorContinue;
 use crate::DelimiterPair;
 use crate::Operator;
 use crate::Separator;
 use derivative::*;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use std::fmt;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Debug, Hash)]
@@ -48,8 +51,8 @@ impl<A: Annotation> fmt::Display for EnumDecl<A> {
 }
 
 impl EnumDecl<Span> {
-    pub fn parse(name: DeclIdent, tokens: &mut TokenStream) -> ParseResult<Self> {
-        let group = tokens
+    pub fn parse(name: DeclIdent, parser: &mut Parser) -> ParseResult<Self> {
+        let group = parser
             .match_one(DelimiterPair::Bracket)?
             .into_delimited_group()
             .unwrap();
@@ -60,11 +63,18 @@ impl EnumDecl<Span> {
         let mut span = first_item.span().clone();
         let mut items = vec![first_item];
         while items_tokens.match_one_maybe(Separator::Comma).is_some() {
+            if items_tokens.look_ahead().match_one(Matcher::AnyIdent).is_none() {
+                break;
+            }
+            
             let item = EnumDeclItem::parse(&mut items_tokens)?;
             span = span.to(item.span());
 
             items.push(item);
         }
+        
+        items_tokens.finish()
+            .or_continue(parser.errors(), ());
 
         let enum_decl = EnumDecl { name, items, span };
 
