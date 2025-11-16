@@ -21,6 +21,7 @@ use crate::SetAliasDef;
 use crate::SetAliasID;
 use crate::StaticClosureID;
 use crate::StructDef;
+use crate::StructIdentity;
 use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
@@ -353,6 +354,37 @@ impl Metadata {
 
             TypeDecl::Def(..) => None,
         }
+    }
+
+    // find the struct used as the backing type for set types with at least the given number of bits
+    // the same struct definition may represent multiple defined set types
+    pub fn find_set_repr_struct(&self, bits: usize) -> Option<&StructDef> {
+        let mut result = None;
+        let mut min_bits: Option<usize> = None;
+
+        for (_, decl) in &self.type_decls {
+            let TypeDecl::Def(TypeDef::Struct(struct_def)) = decl else {
+                continue;
+            };
+
+            if let StructIdentity::SetFlags { bits: def_bits } = &struct_def.identity {
+                if *def_bits < bits {
+                    continue;
+                }
+                
+                let is_min = match min_bits {
+                    Some(prev_min) => *def_bits < prev_min,
+                    None => true,
+                };
+                
+                if is_min {
+                    result = Some(struct_def);
+                    min_bits = Some(*def_bits);
+                }
+            }
+        }
+        
+        result
     }
 
     pub fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {

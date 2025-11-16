@@ -21,6 +21,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 use topological_sort::TopologicalSort;
+use terapascal_ir::FieldID;
 
 pub struct Unit<'a> {
     metadata: &'a ir::Metadata,
@@ -824,6 +825,20 @@ impl<'a> fmt::Display for Unit<'a> {
         let typeinfo_class = GlobalName::ClassInstance(ir::TYPEINFO_ID);
 
         if self.opts.enable_rtti {
+            let typeinfo_def = self.metadata
+                .get_struct_def(ir::TYPEINFO_ID)
+                .expect("missing definition for TypeInfo object");
+            
+            let flags_field = typeinfo_def.fields
+                .get(&ir::TYPEINFO_FLAGS_FIELD)
+                .expect("missing definition for TypeInfo flags field");
+            
+            // should be a set struct
+            let flags_type_name = flags_field.ty
+                .def_id()
+                .map(|id| TypeDefName::Struct(id))
+                .unwrap_or_else(|| panic!("invalid type for TypeInfo flags field: {}", flags_field.ty));
+
             for (ty, typeinfo) in &self.type_infos {
                 if self.opts.debug {
                     let debug_name = typeinfo.name
@@ -849,6 +864,11 @@ impl<'a> fmt::Display for Unit<'a> {
 
                 // initialized at runtime for now
                 writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
+
+                // should be a single 1-word flag type
+                writeln!(f, "  .{} = (struct {flags_type_name}) {{", FieldName::ID(ir::TYPEINFO_FLAGS_FIELD))?;
+                writeln!(f, "       .{} = {}", FieldName::ID(FieldID(0)), typeinfo.flags)?;
+                writeln!(f, "}},")?;
 
                 writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
 
