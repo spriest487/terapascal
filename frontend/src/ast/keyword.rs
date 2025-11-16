@@ -50,9 +50,10 @@ pub enum Keyword {
     Finalization,
     
     Array,
+    Weak,
     Of,
     Const,
-    Weak,
+    Box,
 
     Out,
     
@@ -125,6 +126,7 @@ impl Keyword {
             "finalization" => Some(Keyword::Finalization),
 
             "array" => Some(Keyword::Array),
+            "box" => Some(Keyword::Box),
             "of" => Some(Keyword::Of),
             "const" => Some(Keyword::Const),
             "weak" => Some(Keyword::Weak),
@@ -212,6 +214,7 @@ impl fmt::Display for Keyword {
             Keyword::Finalization => "finalization",
 
             Keyword::Array => "array",
+            Keyword::Box => "box",
             Keyword::Of => "of",
             Keyword::Const => "const",
             Keyword::Weak => "weak",

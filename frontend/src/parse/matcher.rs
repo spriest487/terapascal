@@ -201,6 +201,7 @@ impl Matcher {
                     | Keyword::If
                     | Keyword::Raise
                     | Keyword::Exit
+                    | Keyword::Box
 
                     // inline function decl
                     | Keyword::Function

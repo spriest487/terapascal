@@ -145,24 +145,22 @@ fn translate_indexer(
             let element_ref = builder.local_temp(val_ty.clone().temp_ref());
             
             let base_ty = builder.translate_type(base_ty);
-            let element_ty = builder.translate_type(&array_ty.element_ty);
             let len = i32::try_from(array_ty.dim)
                 .expect("array dim must be within range of i32");
             let len_val = ir::Value::LiteralI32(len);
 
             builder.array_bounds_check(len_val, index_val.clone());
-            builder.element(element_ref, base_ref, index_val, element_ty, base_ty.clone());
+            builder.element(element_ref, base_ref, index_val, base_ty.clone());
 
             element_ref.to_ref()
         },
 
-        typ::Type::DynArray { element } => {
+        typ::Type::DynArray(..) => {
             let element_ref = builder.local_temp(val_ty.clone().temp_ref());
 
             let base_ty = builder.translate_type(base_ty);
-            let element_ty = builder.translate_type(element);
 
-            builder.element(element_ref, base_ref, index_val, element_ty, base_ty.clone());
+            builder.element(element_ref, base_ref, index_val, base_ty.clone());
 
             element_ref.to_ref()
         },

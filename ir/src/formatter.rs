@@ -277,7 +277,7 @@ pub trait IRFormatter {
                 self.format_val(test, f)
             }
 
-            Instruction::RcNew { out, type_id, immortal } => {
+            Instruction::NewObject { out, type_id, immortal } => {
                 write!(f, "{:>width$} ", "new", width = IX_WIDTH)?;
                 self.format_type(&Type::Struct(*type_id), f)?;
                 
@@ -290,8 +290,8 @@ pub trait IRFormatter {
                 Ok(())
             }
             
-            Instruction::RcNewArray { out, element_type, count, immortal } => {
-                write!(f, "{:>width$} ", "newa", width = IX_WIDTH)?;
+            Instruction::NewArray { out, element_type, count, immortal } => {
+                write!(f, "{:>width$} ", "newarr", width = IX_WIDTH)?;
                 
                 self.format_ref(out, f)?;
 
@@ -305,6 +305,22 @@ pub trait IRFormatter {
                     write!(f, " (immortal)")?;
                 }
                 
+                Ok(())
+            }
+
+            Instruction::NewBox { out, element_type, immortal } => {
+                write!(f, "{:>width$} ", "newbox", width = IX_WIDTH)?;
+
+                self.format_ref(out, f)?;
+
+                write!(f, " := [")?;
+                self.format_type(element_type, f)?;
+                write!(f, "]")?;
+
+                if *immortal {
+                    write!(f, " (immortal)")?;
+                }
+
                 Ok(())
             }
 

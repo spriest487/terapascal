@@ -2,18 +2,17 @@ implementation
 uses System;
 
 type BigBox = class
-    a: Box[Integer];
-    b: Box[Integer];
+    a: box of Integer;
+    b: box of Integer;
 end;
 
 initialization
-    var boxes := BigBox(a: NewBox[Integer](1); b: NewBox[Integer](2));
+    var boxes := BigBox(a: [1]; b: [2]);
     
     var a := boxes.a;
-    var aVal := Unbox[Integer](a);
-    
-    var bVal := Unbox[Integer](boxes.b);
-    
+    var aVal := a^;
+    var bVal := boxes.b^;
+
     WriteLn('box contents:');
     WriteLn(IntToStr(aVal));
     WriteLn(IntToStr(bVal));

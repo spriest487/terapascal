@@ -703,6 +703,7 @@ pub fn typecheck_unary_op(
 ) -> TypeResult<UnaryOp> {
     let operand_expect_ty = match unary_op.op {
         Operator::Add | Operator::Sub | Operator::Not => expect_ty.clone(),
+
         Operator::AddressOf => match expect_ty {
             // value of the operator expr is the pointer to the deref type, so the operand
             // is of the deref type
@@ -867,7 +868,7 @@ pub fn typecheck_indexer(
 
     let (el_ty, value_kind) = match (base_ty.element_ty(), base.annotation().value_kind()) {
         (Some(el_ty), Some(base_value_kind)) => {
-            let base_value_kind = if base.annotation().ty().is_by_ref() {
+            let base_value_kind = if base.annotation().ty().is_object() {
                 // on heap e.g. dynamic array, always mutable
                 ValueKind::Mutable
             } else {

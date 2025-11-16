@@ -28,14 +28,19 @@ impl StructLayout {
                 Type::Nothing
                 | Type::Pointer(..)
                 | Type::Function(..)
-                | Type::DynArray { .. }
+                | Type::DynArray(..)
+                | Type::Box(..)
                 | Type::Class(..)
                 | Type::Interface(..)
                 | Type::Any
                 | Type::Enum(..)
-                | Type::Primitive(..) => self.size_of(ty, ctx)?,
+                | Type::Primitive(..) => {
+                    self.size_of(ty, ctx)?
+                },
 
-                Type::Array(array_ty) => self.align_of(&array_ty.element_ty, ctx)?,
+                Type::Array(array_ty) => {
+                    self.align_of(&array_ty.element_ty, ctx)?
+                },
 
                 Type::Record(record_sym) => {
                     let struct_def = ctx.instantiate_struct_def(&record_sym, StructKind::Record)?;
@@ -87,7 +92,8 @@ impl StructLayout {
             Type::Nothing
             | Type::Pointer(..)
             | Type::Function(..)
-            | Type::DynArray { .. }
+            | Type::DynArray(..)
+            | Type::Box(..)
             | Type::Interface(..)
             | Type::Any
             | Type::Enum(..) // TODO: enums may be variable size later depending on their range?

@@ -70,7 +70,6 @@ pub enum Instruction {
         out: Ref,
         a: Ref,
         index: Value,
-        element: Type,
         of_type: Type,
     },
 
@@ -134,15 +133,20 @@ pub enum Instruction {
         test: Value,
     },
 
-    RcNew {
+    NewObject {
         out: Ref,
         type_id: TypeDefID,
         immortal: bool,
     },
-    RcNewArray {
+    NewArray {
         out: Ref,
         element_type: Type,
         count: Value,
+        immortal: bool,
+    },
+    NewBox {
+        out: Ref,
+        element_type: Type,
         immortal: bool,
     },
 
@@ -228,8 +232,9 @@ impl Instruction {
             | Instruction::VariantData { out, .. }
             | Instruction::Field { out, .. }
             | Instruction::ClassIs { out, .. }
-            | Instruction::RcNew { out, .. }
-            | Instruction::RcNewArray { out, .. }
+            | Instruction::NewObject { out, .. }
+            | Instruction::NewArray { out, .. }
+            | Instruction::NewBox { out, .. }
             | Instruction::Cast { out, .. } => *out == Ref::Discard,
         }
     }

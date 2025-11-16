@@ -387,6 +387,21 @@ public record NewArrayInstruction : IInstruction {
 }
 
 [MessagePackObject]
+public record NewBoxInstruction : IInstruction {
+    [Key("out")]
+    public required IRef Out {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("element_type")]
+    public required IType ElementType { get; init; }
+
+    [Key("immortal")]
+    public required bool Immortal { get; init; }
+}
+
+[MessagePackObject]
 public record ReleaseInstruction : IInstruction {
     [Key("at")]
     public required IRef At {
@@ -624,12 +639,16 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
                 return MessagePackSerializer.Deserialize<JumpIfInstruction>(ref reader, options);
             }
 
-            case "RcNew": {
+            case "NewObject": {
                 return MessagePackSerializer.Deserialize<NewInstruction>(ref reader, options);
             }
 
-            case "RcNewArray": {
+            case "NewArray": {
                 return MessagePackSerializer.Deserialize<NewArrayInstruction>(ref reader, options);
+            }
+            
+            case "NewBox": {
+                return MessagePackSerializer.Deserialize<NewBoxInstruction>(ref reader, options);
             }
 
             case "Release": {

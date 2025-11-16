@@ -1649,7 +1649,8 @@ impl Context {
             | Type::Pointer(..)
             | Type::Primitive(..)
             | Type::Function(..)
-            | Type::DynArray { .. }
+            | Type::DynArray(..)
+            | Type::Box(..)
             | Type::Enum(..)
             | Type::Set(..) => Ok(false),
         }

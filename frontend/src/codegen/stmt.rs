@@ -269,7 +269,7 @@ fn build_for_loop_sequence(
                 );
             },
             
-            typ::Type::DynArray { element } => {
+            typ::Type::DynArray(element) => {
                 builder.comment("loop counter");
                 let counter_ref = builder.local_temp(ir::Type::I32);
                 builder.comment("loop binding");

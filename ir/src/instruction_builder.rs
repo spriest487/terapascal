@@ -234,8 +234,8 @@ pub trait InstructionBuilder {
         });
     }
 
-    fn rc_new(&mut self, out: impl Into<Ref>, type_id: TypeDefID, immortal: bool) {
-        self.emit(Instruction::RcNew {
+    fn new_object(&mut self, out: impl Into<Ref>, type_id: TypeDefID, immortal: bool) {
+        self.emit(Instruction::NewObject {
             out: out.into(),
             type_id,
             immortal,
@@ -248,10 +248,22 @@ pub trait InstructionBuilder {
         count: impl Into<Value>,
         immortal: bool,
     ) {
-        self.emit(Instruction::RcNewArray {
+        self.emit(Instruction::NewArray {
             out: out.into(),
             element_type,
             count: count.into(),
+            immortal,
+        });
+    }
+
+    fn new_box(&mut self,
+        out: impl Into<Ref>,
+        element_type: Type,
+        immortal: bool,
+    ) {
+        self.emit(Instruction::NewBox {
+            out: out.into(),
+            element_type,
             immortal,
         });
     }
@@ -644,11 +656,9 @@ pub trait InstructionBuilder {
         out: impl Into<Ref>,
         a: impl Into<Ref>,
         index: impl Into<Value>,
-        element_ty: impl Into<Type>,
         of_type: impl Into<Type>,
     ) {
         self.emit(Instruction::Element {
-            element: element_ty.into(),
             out: out.into(),
             a: a.into(),
             index: index.into(),
@@ -665,9 +675,9 @@ pub trait InstructionBuilder {
         of_type: impl Into<Type>,
     ) {
         let element_ty = element_ty.into();
-        let element_ref = self.local_temp(element_ty.clone().temp_ref());
+        let element_ref = self.local_temp(element_ty.temp_ref());
 
-        self.element(element_ref, a, index, element_ty, of_type);
+        self.element(element_ref, a, index, of_type);
         self.mov(out, Ref::Local(element_ref).to_deref());
     }
 
@@ -1147,7 +1157,7 @@ pub trait InstructionBuilder {
 
                 for i in 0..*dim {
                     let index = Value::LiteralI32(i as i32);
-                    self.element(element_ptr.clone(), at.clone(), index, element_ty.clone(), ty.clone());
+                    self.element(element_ptr.clone(), at.clone(), index, ty.clone());
 
                     result |= self.visit_deep(element_ptr.clone().to_deref(), element, f);
                 }

@@ -26,7 +26,7 @@ impl fmt::Display for FunctionID {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct StaticClosureID(pub usize);
 
 impl fmt::Display for StaticClosureID {

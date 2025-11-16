@@ -149,6 +149,7 @@ impl Annotation for Span {
         match typename {
             TypeName::Ident(ident_type_name) => ident_type_name.hash(state),
             TypeName::Array(array_type_name) => array_type_name.hash(state),
+            TypeName::Box(box_type_name) => box_type_name.hash(state),
             TypeName::Function(func_type_name) => func_type_name.hash(state),
             TypeName::Weak(weak_type_name, ..) => weak_type_name.hash(state),
             TypeName::Unspecified(ty) => ty.hash(state),
@@ -159,6 +160,7 @@ impl Annotation for Span {
         match typename {
             TypeName::Ident(ident_type_name) => write!(f, "{}", ident_type_name),
             TypeName::Array(array_type_name) => write!(f, "{}", array_type_name),
+            TypeName::Box(box_type_name) => write!(f, "{}", box_type_name),
             TypeName::Function(func_type_name) => write!(f, "{}", func_type_name),
             TypeName::Weak(type_name, ..) => write!(f, "weak {}", type_name.type_name),
             TypeName::Unspecified(..) => write!(f, "<unknown type>"),

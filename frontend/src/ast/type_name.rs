@@ -142,6 +142,42 @@ impl<A: Annotation> fmt::Display for ArrayTypeName<A> {
     }
 }
 
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, Hash, PartialEq)]
+pub struct BoxTypeName<A: Annotation = Span> {
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub box_kw: Span,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub of_kw: Span,
+
+    pub value: Box<TypeName<A>>,
+    pub indirection: usize,
+
+    #[derivative(Hash = "ignore")]
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    pub span: Span,
+
+    pub ty: A::Type,
+}
+
+impl<A: Annotation> Spanned for BoxTypeName<A> {
+    fn span(&self) -> &Span {
+        &self.span
+    }
+}
+
+impl<A: Annotation> fmt::Display for BoxTypeName<A> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "box of {}", self.value)
+    }
+}
+
 #[derive(Eq, Clone, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]
 pub struct WeakTypeName<A: Annotation = Span> {
@@ -168,6 +204,7 @@ pub enum TypeName<A: Annotation = Span> {
 
     Ident(IdentTypeName<A>),
     Array(ArrayTypeName<A>),
+    Box(BoxTypeName<A>),
     
     Weak(WeakTypeName<A>),
 
@@ -180,6 +217,7 @@ impl<A: Annotation> MaybeSpanned for TypeName<A> {
             TypeName::Unspecified(..) => None,
             TypeName::Ident(i) => Some(i.span()),
             TypeName::Array(a) => Some(a.span()),
+            TypeName::Box(b) => Some(b.span()),
             TypeName::Function(f) => Some(f.span()),
             TypeName::Weak(weak_ty) => Some(&weak_ty.span),
         }
@@ -209,6 +247,12 @@ impl Parse for TypeName {
                 let kw_span = array_kw.span().clone();
                 tokens.advance(1);
                 Self::parse_array_type(tokens, &kw_span, indirection, indirection_span)
+            },
+
+            Some(array_kw) if array_kw.is_keyword(Keyword::Box) => {
+                let kw_span = array_kw.span().clone();
+                tokens.advance(1);
+                Self::parse_box_type(tokens, &kw_span, indirection, indirection_span)
             },
 
             Some(fn_kw)
@@ -277,7 +321,7 @@ impl Match for TypeName {
 }
 
 fn start_non_weak_matcher() -> Matcher {
-    Keyword::Array | Keyword::Function | Keyword::Procedure | Matcher::AnyIdent
+    Keyword::Box | Keyword::Array | Keyword::Function | Keyword::Procedure | Matcher::AnyIdent
 }
 
 impl<A: Annotation> TypeName<A> {
@@ -310,6 +354,7 @@ impl<A: Annotation> TypeName<A> {
             TypeName::Unspecified(ty) => ty,
             TypeName::Ident(ident_ty) => &ident_ty.ty,
             TypeName::Array(array_ty) => &array_ty.ty,
+            TypeName::Box(box_ty) => &box_ty.ty,
             TypeName::Weak(weak_ty) => &weak_ty.ty,
             TypeName::Function(func_ty) => &func_ty.ty,
         }
@@ -320,6 +365,7 @@ impl<A: Annotation> TypeName<A> {
             TypeName::Unspecified(ty) => ty,
             TypeName::Ident(ident_ty) => ident_ty.ty,
             TypeName::Array(array_ty) => array_ty.ty,
+            TypeName::Box(box_ty) => box_ty.ty,
             TypeName::Weak(weak_ty) => weak_ty.ty,
             TypeName::Function(func_ty) => func_ty.ty,
         }
@@ -341,7 +387,10 @@ impl TypeName {
         indirection: usize,
         indirection_span: Option<Span>,
     ) -> ParseResult<Self> {
-        let mut span = array_kw_span.clone();
+        let mut span = match &indirection_span {
+            Some(s) => s.to(array_kw_span),
+            None => array_kw_span.clone(),
+        };
 
         // `array of` means the array is dynamic (no dimension)
         let dim = match tokens.look_ahead().match_one(Keyword::Of) {
@@ -378,10 +427,6 @@ impl TypeName {
         if let Some(element_span) = element.get_span() {
             span.extend(element_span);
         }
-        
-        if let Some(indirection_span) = indirection_span {
-            span.extend(&indirection_span);
-        }
 
         Ok(TypeName::Array(ArrayTypeName {
             array_kw: array_kw_span.clone(),
@@ -390,6 +435,35 @@ impl TypeName {
             span,
             indirection,
             element: Box::new(element),
+            ty: UncheckedType,
+        }))
+    }
+
+    fn parse_box_type(
+        tokens: &mut TokenStream,
+        box_kw_span: &Span,
+        indirection: usize,
+        indirection_span: Option<Span>,
+    ) -> ParseResult<Self> {
+        let mut span = match &indirection_span {
+            Some(s) => s.to(box_kw_span),
+            None => box_kw_span.clone(),
+        };
+
+        let of_kw = tokens.match_one(Keyword::Of)?.into_span();
+        span.extend(&of_kw);
+
+        let value = Self::parse(tokens)?;
+        if let Some(value_span) = value.get_span() {
+            span.extend(value_span);
+        }
+
+        Ok(TypeName::Box(BoxTypeName {
+            box_kw: box_kw_span.clone(),
+            of_kw,
+            span,
+            indirection,
+            value: Box::new(value),
             ty: UncheckedType,
         }))
     }

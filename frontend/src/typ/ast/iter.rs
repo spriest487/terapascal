@@ -148,7 +148,7 @@ pub fn typecheck_for_loop(for_loop: &ast::ForLoop<Span>, ctx: &mut Context) -> T
                     seq_expr = implicit_conversion(seq_expr, &binding_array_ty, ctx)?;
                 },
 
-                (Type::DynArray { element }, true) => {
+                (Type::DynArray(element), true) => {
                     binding_ty = TypeName::inferred((**element).clone());
                 },
 

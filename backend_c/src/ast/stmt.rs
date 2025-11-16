@@ -519,12 +519,16 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.translate_call(out.as_ref(), function, args);
             },
 
-            ir::Instruction::RcNew { out, type_id, immortal } => {
-                self.translate_rc_new(out, *type_id, *immortal);
+            ir::Instruction::NewObject { out, type_id, immortal } => {
+                self.translate_new_object(out, *type_id, *immortal);
             }
 
-            ir::Instruction::RcNewArray { out, element_type, count, immortal } => {
-                self.translate_rc_new_array(out, element_type, count, *immortal);
+            ir::Instruction::NewArray { out, element_type, count, immortal } => {
+                self.translate_new_array(out, element_type, count, *immortal);
+            }
+
+            ir::Instruction::NewBox { out, element_type, immortal } => {
+                self.translate_new_box(out, element_type, *immortal);
             }
 
             ir::Instruction::Gt(ir::BinOpInstruction { out, a, b }) => {
@@ -829,7 +833,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         }));
     }
 
-    fn translate_rc_new(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID, immortal: bool) {
+    fn translate_new_object(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID, immortal: bool) {
         let ty_class_ptr = Expr::class_ptr(struct_id);
         
         let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
@@ -846,7 +850,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         )))
     }
 
-    fn translate_rc_new_array(
+    fn translate_new_array(
         &mut self,
         out: &ir::Ref,
         element_type: &ir::Type,
@@ -873,5 +877,14 @@ impl<'a, 'b> Builder<'a, 'b> {
             array_ptr,
             self.module,
         )))
+    }
+
+    fn translate_new_box(
+        &mut self,
+        _out: &ir::Ref,
+        _element_type: &ir::Type,
+        _immortal: bool,
+    ) {
+        todo!()
     }
 }

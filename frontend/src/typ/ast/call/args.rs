@@ -91,7 +91,7 @@ pub fn infer_from_structural_ty_args(
         },
 
         // dynarrays only need element type to match
-        (Type::DynArray { element: param_el }, Type::DynArray { element: actual_el }) => {
+        (Type::DynArray(param_el), Type::DynArray(actual_el)) => {
             (vec![(**param_el).clone()], vec![(**actual_el).clone()])
         },
 

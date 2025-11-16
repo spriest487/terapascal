@@ -158,6 +158,10 @@ pub enum TypeError {
         members: Vec<Ident>,
         span: Span,
     },
+    InvalidBoxCtorElementCount {
+        span: Span,
+        actual: usize,
+    },
     TypeHasMultipleDtors {
         owning_type: Type,
 
@@ -541,6 +545,7 @@ impl Spanned for TypeError {
 
             TypeError::InvalidCtorType { span, .. } => span,
             TypeError::CtorMissingMembers { span, .. } => span,
+            TypeError::InvalidBoxCtorElementCount { span, .. } => span,
             TypeError::MethodDeclMissingType { span, .. } => span,
             TypeError::TypeHasMultipleDtors { new_dtor, .. } => new_dtor,
             TypeError::DtorCannotHaveParams { span } => span,
@@ -672,6 +677,9 @@ impl DiagnosticOutput for TypeError {
             TypeError::InvalidCtorType { .. } => "Invalid constructor expression type",
             TypeError::CtorMissingMembers { .. } => {
                 "Constructor is missing one or more named members"
+            },
+            TypeError::InvalidBoxCtorElementCount { .. } => {
+                "Box constructor must contain exactly one element"
             },
             TypeError::TypeHasMultipleDtors { .. } => "Type has multiple destructors",
             TypeError::DtorCannotHaveParams { .. } => "Destructor cannot have parameters",
@@ -1193,6 +1201,10 @@ impl fmt::Display for TypeError {
                 }
                 Ok(())
             },
+            
+            TypeError::InvalidBoxCtorElementCount { actual, .. } => {
+                write!(f, "box constructor contains {actual} elements")
+            }
 
             TypeError::TypeHasMultipleDtors { owning_type, .. } => {
                 write!(

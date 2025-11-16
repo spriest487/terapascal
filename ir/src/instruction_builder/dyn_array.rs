@@ -24,7 +24,7 @@ pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
 
     builder.comment("release every element");
     builder.counter_loop(counter, Value::LiteralI32(1), arr_high, |builder| {
-        builder.element(el_ptr, self_param, counter, elem_ty.clone(), array_type.clone());
+        builder.element(el_ptr, self_param, counter, array_type.clone());
 
         builder.release_deep(el_ptr.to_deref(), &elem_ty);
     });
@@ -51,7 +51,7 @@ pub(super) fn new_dyn_array(
             let element_ref = builder.local_temp(element_type.clone().temp_ref());
 
             for (i, el) in elements.into_iter().enumerate() {
-                builder.element(element_ref, arr, Value::LiteralI32(i as i32), element_type.clone(), array_ty.clone());
+                builder.element(element_ref, arr, Value::LiteralI32(i as i32), array_ty.clone());
                 builder.mov(element_ref.to_deref(), el);
 
                 // retain each element. we don't do this for static arrays because retaining

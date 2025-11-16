@@ -9,10 +9,10 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use std::fmt;
-use std::sync::Arc;
 use terapascal_common::span::Spanned;
 
 pub type ArrayTypeName = ast::ArrayTypeName<Value>;
+pub type BoxTypeName = ast::BoxTypeName<Value>;
 
 const ARRAY_DIM_TY: Type = Type::Primitive(Primitive::Int32);
 
@@ -72,11 +72,7 @@ pub fn typecheck_array_type(array_type_name: &ast::ArrayTypeName, ctx: &mut Cont
         }
 
         None => {
-            let dyn_array_ty = Type::DynArray {
-                element: Arc::new(element_ty.ty().clone()),
-            };
-
-            (dyn_array_ty, None)
+            (element_ty.ty().clone().dyn_array(), None)
         }
     };
 

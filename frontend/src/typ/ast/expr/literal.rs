@@ -304,7 +304,7 @@ pub fn typecheck_literal(
             let has_nil_ty = if ctx.allow_unsafe() {
                 // in unsafe contexts, nil literals can be assigned/compared directly to object
                 // pointers, and should act like a nil pointer of that type
-                expect_ty.is_pointer() || expect_ty.is_by_ref()
+                expect_ty.is_pointer() || expect_ty.is_object()
             } else {
                 // otherwise, nil can only have a pointer type when treated as a raw pointer
                 expect_ty.is_pointer()

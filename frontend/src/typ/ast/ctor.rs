@@ -25,7 +25,6 @@ use crate::typ::TypedValue;
 use crate::typ::Value;
 use linked_hash_map::LinkedHashMap;
 use std::iter;
-use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -292,9 +291,7 @@ pub fn typecheck_collection_ctor(
         // any dynamic array - creating a dynamic array
         Type::DynArray { .. } => {
             let (elements, element_ty) = array_ctor_elements(expect_ty, ctor, ctx)?;
-            let array_ty = Type::DynArray {
-                element: Arc::new(element_ty),
-            };
+            let array_ty = element_ty.dyn_array();
 
             (array_ty, elements)
         },
@@ -314,6 +311,22 @@ pub fn typecheck_collection_ctor(
 
             (array_ty, elements)
         },
+        
+        Type::Box(value_ty) => {
+            if ctor.elements.len() != 1 {
+                return Err(TypeError::InvalidBoxCtorElementCount {
+                    span: ctor.annotation.clone(),
+                    actual: ctor.elements.len(),
+                });
+            }
+
+            let value = typecheck_expr(&ctor.elements[0].value, value_ty, ctx)?;
+            let box_ty = value.annotation().ty().into_owned().boxed();
+
+            (box_ty, vec![CollectionCtorElement {
+                value,
+            }])
+        }
 
         // any set - creating that set
         Type::Set(set_type) => {

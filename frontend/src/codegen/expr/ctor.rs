@@ -1,13 +1,13 @@
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr;
-use crate::codegen::expr::translate_expr;
+use crate::codegen::expr::{expr_to_val, translate_expr};
 use crate::codegen::set_word_count;
 use crate::codegen::WORD_TYPE;
 use crate::ir;
 use crate::typ;
 use bigdecimal::BigDecimal;
 use bigdecimal::Zero;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::instruction_builder::InstructionBuilder as _;
 
 pub fn build_object_ctor_invocation(
     object_ty: &typ::Type,
@@ -35,7 +35,7 @@ pub fn build_object_ctor_invocation(
 
     if object_ty.is_object() {
         // allocate class struct at out pointer
-        builder.rc_new(out_val.clone(), struct_id, false);
+        builder.new_object(out_val.clone(), struct_id, false);
     }
 
     builder.scope(|builder| {
@@ -81,13 +81,17 @@ pub fn translate_collection_ctor(ctor: &typ::ast::CollectionCtor, builder: &mut 
             translate_static_array_ctor(ctor, &array_ty.element_ty, array_ty.dim, builder)
         },
 
-        typ::Type::DynArray { element } => {
+        typ::Type::DynArray(element) => {
             translate_dyn_array_ctor(ctor, element, builder)
         },
 
         typ::Type::Set(set_type) => {
             let flags_type = builder.translate_type(ctor_ty.as_ref());
             translate_set_ctor(ctor, set_type, flags_type, builder)
+        }
+        
+        typ::Type::Box(value_ty) => {
+            translate_box_ctor(ctor, value_ty, builder)
         }
 
         unimpl => unimplemented!("IR for collection constructor {} of type {}", ctor, unimpl),
@@ -114,7 +118,7 @@ fn translate_static_array_ctor(
                     let index = i32::try_from(i).expect("invalid array index in array ctor");
                     let index_val = ir::Value::LiteralI32(index);
 
-                    builder.element(element_ref, arr, index_val, el_ty.clone(), array_ty.clone());
+                    builder.element(element_ref, arr, index_val, array_ty.clone());
 
                     let el_init = translate_expr(&el.value, builder);
 
@@ -150,8 +154,8 @@ fn translate_set_ctor(
     set_type: &typ::SetType,
     flags_type: ir::Type,
     builder: &mut IRBuilder
-) -> ir::Ref {    
-    let set_result = builder.local_temp(flags_type.clone());
+) -> ir::Ref {
+    let set_result = builder.local_new(flags_type.clone(), None);
 
     // zero-init the value
     let word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
@@ -179,4 +183,29 @@ fn translate_set_ctor(
     }
 
     set_result.to_ref()
+}
+
+fn translate_box_ctor(
+    ctor: &typ::ast::CollectionCtor,
+    value_ty: &typ::Type,
+    builder: &mut IRBuilder,
+) -> ir::Ref {
+    let value = expr_to_val(&ctor.elements[0].value, builder);
+    
+    let boxed_ty = builder.translate_type(value_ty);
+    let box_ty = boxed_ty.clone().boxed();
+    
+    let box_var = builder.local_new(box_ty.clone(), None);
+    
+    builder.new_box(box_var, boxed_ty.clone(), false);
+    
+    builder.local_begin();
+    {
+        let element_ref = builder.local_temp(boxed_ty.temp_ref());
+        builder.element(element_ref, box_var, ir::Value::LiteralI32(0), box_ty);
+        builder.mov(element_ref.to_deref(), value);
+    }
+    builder.local_end();
+    
+    box_var.to_ref()
 }

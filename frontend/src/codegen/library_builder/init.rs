@@ -65,10 +65,10 @@ fn gen_create_tags(
             .clone();
 
         let tag_instance = builder.local_temp(tag_class.clone());
-        builder.rc_new(tag_instance, tag_ty, true);
+        builder.new_object(tag_instance, tag_ty, true);
         
         let index_val = ir::Value::LiteralI32(i as i32);
-        builder.element(element_ref, tag_array.clone(), index_val, ir::ANY_TYPE, tag_array_ty.clone());
+        builder.element(element_ref, tag_array.clone(), index_val, tag_array_ty.clone());
         builder.cast(element_ref.to_deref(), tag_instance, ir::ANY_TYPE);
 
         for arg in tag_item.args.members.iter() {

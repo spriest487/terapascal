@@ -902,9 +902,13 @@ impl<'a> LibraryBuilder<'a> {
                 self.find_type(&array_ty.element_ty).array(array_ty.dim)
             },
 
-            typ::Type::DynArray { element } => {
+            typ::Type::DynArray(element) => {
                 self.find_type(element.as_ref()).dyn_array()
             },
+
+            typ::Type::Box(value) => {
+                self.find_type(value.as_ref()).boxed()
+            }
 
             typ::Type::Variant(variant) => {
                 expect_no_unspec_args(&variant, variant.type_args.as_ref());
@@ -1087,7 +1091,7 @@ impl<'a> LibraryBuilder<'a> {
                 ty
             },
 
-            typ::Type::DynArray { element } => {
+            typ::Type::DynArray(element) => {
                 let ty = self.translate_type(element, generic_ctx).dyn_array();
 
                 self.type_cache.insert(src_ty.clone(), ty.clone());

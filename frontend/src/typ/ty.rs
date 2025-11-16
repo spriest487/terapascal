@@ -1,4 +1,5 @@
 mod array;
+mod boxed;
 mod specialize;
 
 #[cfg(test)]
@@ -36,6 +37,7 @@ use crate::typ::ast::MethodDecl;
 use crate::typ::ast::TypeDeclItem;
 use crate::typ::ast::SELF_TY_NAME;
 use crate::typ::builtin_unit_path;
+use crate::typ::ty::boxed::typecheck_box_type;
 use crate::typ::Context;
 use crate::typ::Def;
 use crate::typ::GenericError;
@@ -75,7 +77,8 @@ pub enum Type {
     Interface(Arc<Symbol>),
     Variant(Arc<Symbol>),
     Array(Arc<ArrayType>),
-    DynArray { element: Arc<Type> },
+    DynArray(Arc<Type>),
+    Box(Arc<Type>),
     MethodSelf,
     GenericParam(Arc<TypeParamListItem>),
     Weak(Arc<Type>),
@@ -138,9 +141,11 @@ impl Type {
     }
 
     pub fn dyn_array(self) -> Self {
-        Type::DynArray {
-            element: Arc::new(self),
-        }
+        Type::DynArray(Arc::new(self))
+    }
+
+    pub fn boxed(self) -> Self {
+        Type::Box(Arc::new(self))
     }
 
     pub fn generic_constrained_param(name: Ident, is_iface: impl Into<TypeName>) -> Type {
@@ -219,7 +224,7 @@ impl Type {
         }
     }
 
-    pub fn is_by_ref(&self) -> bool {
+    pub fn is_object(&self) -> bool {
         match self {
             Type::Nothing => false,
             Type::Primitive(_) => false,
@@ -235,6 +240,7 @@ impl Type {
             Type::Class(_) => true,
             Type::Interface(_) => true,
             Type::DynArray { .. } => true,
+            Type::Box(..) => true,
             Type::MethodSelf => true,
             Type::Weak(..) => true,
             Type::Any => true,
@@ -251,7 +257,8 @@ impl Type {
             Type::Any
             | Type::Class(_)
             | Type::Interface(_)
-            | Type::DynArray { .. }
+            | Type::DynArray(..)
+            | Type::Box(..)
             | Type::Function(_)
             | Type::Nothing
             | Type::GenericParam(_)
@@ -438,7 +445,7 @@ impl Type {
         match self {
             Type::Array(array_ty) => array_ty.element_ty.contains_unresolved_params(ctx),
 
-            Type::DynArray { element, .. } => element.contains_unresolved_params(ctx),
+            Type::DynArray(element) => element.contains_unresolved_params(ctx),
 
             Type::Function(sig) => sig.contains_generic_params(ctx),
 
@@ -474,10 +481,8 @@ impl Type {
             },
 
             (
-                Type::DynArray { element },
-                Type::DynArray {
-                    element: other_element,
-                },
+                Type::DynArray(element),
+                Type::DynArray(other_element),
             ) => element.can_specialize_to(other_element, ctx),
 
             (Type::Function(sig), Type::Function(other_sig)) => {
@@ -538,7 +543,7 @@ impl Type {
 
     pub fn array_element_ty(&self) -> Option<&Type> {
         match self {
-            Type::DynArray { element } => Some(element),
+            Type::DynArray(element) => Some(element),
             Type::Array(array_ty) => Some(&array_ty.element_ty),
 
             _ => None,
@@ -593,6 +598,7 @@ impl Type {
     pub fn deref_ty(&self) -> Option<&Type> {
         match self {
             Type::Pointer(ty) => Some(ty.as_ref()),
+            Type::Box(value_ty) => Some(value_ty.as_ref()),
             _ => None,
         }
     }
@@ -613,7 +619,8 @@ impl Type {
             | Type::Function(..)
             | Type::GenericParam(..)
             | Type::Array(..)
-            | Type::DynArray { .. }
+            | Type::DynArray(..)
+            | Type::Box(..)
             | Type::MethodSelf => false,
 
             | Type::Weak(..)
@@ -1052,7 +1059,7 @@ impl Type {
     pub fn element_ty(&self) -> Option<&Type> {
         match self {
             Type::Array(array_ty) => Some(&array_ty.element_ty),
-            Type::DynArray { element } => Some(element.as_ref()),
+            Type::DynArray(element) => Some(element.as_ref()),
             Type::Pointer(deref_ty) => Some(deref_ty.as_ref()),
             _ => None,
         }
@@ -1207,7 +1214,11 @@ impl Type {
                 array_ty.element_ty.visit_types(visitor);
             },
 
-            Type::DynArray { element } => {
+            Type::DynArray(element) => {
+                element.visit_types(visitor);
+            },
+
+            Type::Box(element) => {
                 element.visit_types(visitor);
             },
 
@@ -1262,12 +1273,19 @@ impl Type {
                 });
             },
 
-            Type::DynArray { element } => {
+            Type::DynArray(element) => {
                 let mut new_element = (**element).clone();
                 new_element.visit_types_mut(visitor);
 
                 *element = Arc::new(new_element);
             },
+
+            Type::Box(value) => {
+                let mut new_value = (**value).clone();
+                new_value.visit_types_mut(visitor);
+
+                *value = Arc::new(new_value);
+            }
 
             Type::Function(sig) => {
                 let mut new_sig = (**sig).clone();
@@ -1308,16 +1326,15 @@ impl Type {
         match self {
             Type::Nothing => "nothing".to_string(),
             Type::Primitive(..) => "primitive".to_string(),
-            Type::Pointer(ty) => format!("pointer to {}", ty.kind_description()),
+            Type::Pointer(..) => "pointer".to_string(),
             Type::Function(..) => "function".to_string(),
             Type::Record(..) => "record".to_string(),
             Type::Class(..) => "class".to_string(),
             Type::Interface(..) => "interface".to_string(),
             Type::Variant(..) => "variant".to_string(),
-            Type::Array(array_ty) => format!("array of {}", array_ty.element_ty.kind_description()),
-            Type::DynArray { element } => {
-                format!("dynamic array of {}", element.kind_description())
-            },
+            Type::Array(..) => "static array".to_string(),
+            Type::DynArray(..) => "dynamic array".to_string(),
+            Type::Box(..) => "boxed value".to_string(),
             Type::MethodSelf => "self".to_string(),
             Type::GenericParam(..) => "generic argument".to_string(),
             Type::Weak(..) => "weak reference".to_string(),
@@ -1340,10 +1357,12 @@ impl fmt::Display for Type {
             Type::Weak(weak_ty) => write!(f, "{} {}", Keyword::Weak, weak_ty),
             Type::Pointer(target_ty) => write!(f, "^{}", target_ty),
             Type::Any => write!(f, "{ANY_TYPE_NAME}"),
-
             Type::Interface(iface) => write!(f, "{}", iface),
+
             Type::Array(array_ty) => write!(f, "{}", array_ty),
-            Type::DynArray { element } => write!(f, "array of {}", element),
+            Type::DynArray(element) => write!(f, "array of {}", element),
+            Type::Box(element) => write!(f, "box of {}", element),
+
             Type::GenericParam(ident) => write!(f, "{}", ident),
             Type::Nothing => write!(f, "{NOTHING_TYPE_NAME}"),
             Type::Primitive(p) => write!(f, "{}.{}", SYSTEM_UNIT_NAME, p.name()),
@@ -1490,6 +1509,12 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
             Ok(TypeName::Array(typename))
         },
 
+        ast::TypeName::Box(box_typename) => {
+            let typename = typecheck_box_type(box_typename, ctx)?;
+
+            Ok(TypeName::Box(typename))
+        },
+
         ast::TypeName::Function(func_ty_name) => {
             let return_ty = match &func_ty_name.result_type {
                 Some(return_ty) => typecheck_typename(return_ty, ctx)?,
@@ -1564,7 +1589,7 @@ impl Specializable for Type {
         match self {
             Type::Array(array_ty) => array_ty.element_ty.is_unspecialized_generic(),
 
-            Type::DynArray { element } => element.is_unspecialized_generic(),
+            Type::DynArray(element) => element.is_unspecialized_generic(),
 
             Type::Function(sig) => {
                 sig.result_ty.is_unspecialized_generic()
@@ -1662,6 +1687,7 @@ impl TypeName {
             TypeName::Unspecified(ty) => ty,
             TypeName::Ident(item) => &mut item.ty,
             TypeName::Array(item) => &mut item.ty,
+            TypeName::Box(item) => &mut item.ty,
             TypeName::Weak(item) => &mut item.ty,
             TypeName::Function(item) => &mut item.ty,
         }
