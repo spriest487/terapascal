@@ -15,7 +15,7 @@ use std::fmt;
 #[allow(unused)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Type {
-    // primitive tyeps
+    // primitive types
     Void,
     Int,
     Int16,
