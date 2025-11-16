@@ -353,6 +353,7 @@ public class AssemblyBuilder : IDisposable {
         var implField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoImpl, library);
         var methodsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoMethods, library);
         var tagsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoTags, library);
+        var flagsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoFlags, library);
 
         var initBuilder = this.GetInitMethodDef();
         var initBody = initBuilder.Body.GetILProcessor();
@@ -382,6 +383,13 @@ public class AssemblyBuilder : IDisposable {
             initBody.Emit(OpCodes.Stfld, tagsField);
         }
         
+        // set flags
+        initBody.Emit(OpCodes.Dup);
+        unchecked {
+            initBody.Emit(OpCodes.Ldc_I8, (long)runtimeType.Flags);
+        }
+        initBody.Emit(OpCodes.Stfld, flagsField);
+
         // register in RTTI list
         initBody.Emit(OpCodes.Dup);
         initBody.Emit(OpCodes.Call, this.rttiAddTypeMethod);

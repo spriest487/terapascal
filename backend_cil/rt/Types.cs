@@ -67,7 +67,7 @@ public sealed unsafe class String : Object, IEquatable<String> {
         return hash;
     }
 
-    public bool Equals(String? other) {
+    public bool Equals(String other) {
         if (other == null || other.len != this.len) {
             return false;
         }
@@ -81,9 +81,16 @@ public sealed unsafe class String : Object, IEquatable<String> {
         return true;
     }
 
-    public override bool Equals(object? obj) {
+    public override bool Equals(object obj) {
         return obj is String other && this.Equals(other);
     }
+}
+
+public enum TypeFlags : ulong {
+    Value = 1 << 0,
+    Weak = 1 << 1,
+    Array = 1 << 2,
+    Function = 1 << 3,
 }
 
 public sealed class TypeInfo : Object {
@@ -93,6 +100,8 @@ public sealed class TypeInfo : Object {
     public object[] tags;
 
     public Type impl;
+
+    public ulong flags;
 }
 
 public sealed class MethodInfo : Object {
@@ -112,6 +121,6 @@ public sealed class FunctionInfo : Object {
     public object[] tags;
 }
 
-public class ClosureBase : Object { 
-    public IntPtr functionPointer;
+public unsafe class ClosureBase : Object { 
+    public void* functionPointer;
 }

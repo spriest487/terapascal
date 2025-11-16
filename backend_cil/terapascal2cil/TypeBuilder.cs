@@ -61,6 +61,8 @@ public class TypeBuilder {
     public MethodReference ArrayCreateMethod { get; }
 
     public TypeReference ClosureBaseType { get; }
+    
+    public IR.TypeDefID? Flags64StructID { get; private set; }
 
     public TypeBuilder(AssemblyBuilder assemblyBuilder) {
         this.assemblyBuilder = assemblyBuilder;
@@ -170,10 +172,10 @@ public class TypeBuilder {
             IR.F64Type => typeSystem.Double,
             IR.ArrayType { Element: var element, Length: var length } => 
                 this.BuildArrayTypeRef(element, length, library),
-            IR.StructType(var id) => this.CreateStructTypeRef(id, isValueType: true),
-            IR.VariantType(var id) => this.CreateStructTypeRef(id, isValueType: true),
+            IR.StructType(var id) => this.CreateStructTypeRef(id, isValueType: true, library),
+            IR.VariantType(var id) => this.CreateStructTypeRef(id, isValueType: true, library),
             IR.FunctionType(var id) => this.BuildFunctionTypeRef(id),
-            IR.FlagsType(var id, _) => this.CreateStructTypeRef(id, isValueType: true),
+            IR.FlagsType(var id, _) => this.CreateStructTypeRef(id, isValueType: true, library),
             IR.PointerType(var inner) => this.BuildTypeRef(inner, library).MakePointerType(),
             IR.TempRefType(var inner) => this.BuildTypeRef(inner, library).MakeByReferenceType(),
             IR.ObjectType(var id) => this.BuildClassTypeRef(id, library),
@@ -226,7 +228,15 @@ public class TypeBuilder {
         return string.Intern($"Struct_{id.ID}");
     }
 
-    private TypeReference CreateStructTypeRef(IR.TypeDefID id, bool isValueType) {
+    private TypeReference CreateStructTypeRef(IR.TypeDefID id, bool isValueType, IR.Library library) {
+        // the 64-bit flags struct is remapped to a plain U64, and any field instructions on it should be
+        // updated accordingly during translation
+        if (library.Metadata.FindStructDef(id, out var structDef)
+            && structDef.Identity is IR.SetFlagsStructIdentity { Bits: 64 }) {
+            this.Flags64StructID = id;
+            return this.assemblyBuilder.TypeSystem.UInt64;
+        }
+        
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
 
@@ -247,7 +257,7 @@ public class TypeBuilder {
         return id switch {
             IR.AnyObjectID => this.assemblyBuilder.Module.TypeSystem.Object,
             // in this backend, struct refs are automatically reference types if they're a class
-            IR.ClassObjectID(var classID) => this.CreateStructTypeRef(classID, false),
+            IR.ClassObjectID(var classID) => this.CreateStructTypeRef(classID, false, library),
             IR.InterfaceObjectID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
             IR.ClosureObjectID => this.ClosureBaseType,
             IR.ArrayObjectID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
@@ -277,7 +287,13 @@ public class TypeBuilder {
         var isClass = structDef.Identity is IR.ClassStructIdentity;
         var isValueType = !isClass && !isClosure;
 
-        var typeRef = this.CreateStructTypeRef(id, isValueType);
+        var typeRef = this.CreateStructTypeRef(id, isValueType, library);
+        
+        // creating the type ref will check for the 64-bit struct type which we remap to ulong, so 
+        // no need to generate a new type if this is that type
+        if (id == this.Flags64StructID) {
+            return;
+        }
 
         var attrs = TypeAttributes.Sealed 
             | TypeAttributes.NotPublic
@@ -453,7 +469,7 @@ public class TypeBuilder {
     }
 
     public void BuildVariantDef(IR.TypeDefID id, IR.VariantDef def, IR.Library library) {
-        var typeRef = this.CreateStructTypeRef(id, isValueType: false);
+        var typeRef = this.CreateStructTypeRef(id, isValueType: false, library);
 
         var typeDef = new TypeDefinition(typeRef.Namespace,
             typeRef.Name,

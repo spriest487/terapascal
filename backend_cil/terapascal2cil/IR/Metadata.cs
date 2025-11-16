@@ -115,11 +115,8 @@ public class RuntimeType {
         init => field = value.ToArrayNonNull();
     }
     
-    [Key("release")]
-    public FunctionID? Release { get; init; }
-    
-    [Key("retain")]
-    public FunctionID? Retain { get; init; }
+    [Key("flags")]
+    public ulong Flags { get; init; }
 }
 
 [MessagePackObject]

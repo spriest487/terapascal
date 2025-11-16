@@ -84,6 +84,7 @@ public readonly record struct FieldID(ulong ID) : IComparable<FieldID> {
     public static FieldID TypeInfoMethods => new FieldID(1);
     public static FieldID TypeInfoTags => new FieldID(2);
     public static FieldID TypeInfoImpl => new FieldID(3);
+    public static FieldID TypeInfoFlags => new FieldID(4);
     
     public static FieldID MethodInfoName => new FieldID(0);
     public static FieldID MethodInfoOwner => new FieldID(1);
