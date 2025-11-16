@@ -567,6 +567,10 @@ impl Metadata {
             ObjectID::Array(element_type) => {
                 Cow::Owned(format!("array of {}", self.pretty_ty_name(element_type)))
             }
+
+            ObjectID::Box(element_type) => {
+                Cow::Owned(format!("box of {}", self.pretty_ty_name(element_type)))
+            }
         }
     }
 
@@ -605,7 +609,7 @@ impl Metadata {
                         return self.ifaces.contains_key(id);
                     },
 
-                    ObjectID::Any | ObjectID::Array(..) => {
+                    ObjectID::Any | ObjectID::Array(..) | ObjectID::Box(..) => {
                         return true;
                     }
                 }

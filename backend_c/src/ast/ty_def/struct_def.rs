@@ -179,6 +179,9 @@ pub enum FieldName {
     // builtin name: static array inner array
     StaticArrayElements,
 
+    BoxClassValue,
+    BoxValue,
+
     VariantTag,
     VariantData,
     VariantDataCase(usize),
@@ -201,6 +204,8 @@ impl fmt::Display for FieldName {
             FieldName::DynArrayClassLength => write!(f, "length"),
             FieldName::DynArrayLength => write!(f, "length"),
             FieldName::DynArrayElements => write!(f, "elements"),
+            FieldName::BoxClassValue => write!(f, "get_value"),
+            FieldName::BoxValue => write!(f, "value"),
             FieldName::VariantTag => write!(f, "tag"),
             FieldName::VariantData => write!(f, "data"),
             FieldName::VariantDataCase(case) => write!(f, "data_{}", case),

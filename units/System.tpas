@@ -108,7 +108,7 @@ type
         tags: array of Object;
     public
         function Name: String;
-        function Invoke(args: array of Pointer; resultPtr: Pointer);
+        function Invoke(args: array of Object): Object;
 
         class function LoadedFunctions: array of FunctionInfo;
         class function Find(functionName: String): Option[FunctionInfo];
@@ -133,7 +133,7 @@ type
         function Owner: TypeInfo;
         function Name: String;
 
-        function Invoke(instance: Pointer; args: array of Pointer; resultPtr: Pointer);
+        function Invoke(instance: Object; args: array of Object): Object;
 
         function FindTag(tagClass: TypeInfo): Option[Object]; overload;
         function FindTag[TTag]: Option[TTag]; overload;
@@ -260,18 +260,14 @@ implementation
 
 function InvokeMethod(
     method: MethodInfo; 
-    instance: Pointer; 
-    args: ^Pointer;
-    argCount: Integer;
-    resultOut: Pointer;
-); external 'rt';
+    instance: Object; 
+    args: array of Object;
+): Object; external 'rt';
 
 function InvokeFunction(
     func: FunctionInfo;
-    args: ^Pointer;
-    argCount: Integer;
-    resultOut: Pointer;
-); external 'rt';
+    args: array of Object;
+): Object; external 'rt';
 
 {$ENDIF}
 
@@ -480,11 +476,9 @@ begin
     self.name
 end;
 
-function FunctionInfo.Invoke(args: array of Pointer; resultPtr: Pointer);
+function FunctionInfo.Invoke(args: array of Object): Object;
 begin
-    var argsCount := args.Length;
-    var argsPtr: ^Pointer := if argsCount = 0 then nil else @args[0];
-    InvokeFunction(self, argsPtr, argsCount, resultPtr);
+    InvokeFunction(self, args);
 end;
 
 function FunctionInfo.Tags: TagCollection;
@@ -548,11 +542,9 @@ begin
     self.owner
 end;
 
-function MethodInfo.Invoke(instance: Pointer; args: array of Pointer; resultOut: Pointer);
+function MethodInfo.Invoke(instance: Object; args: array of Object): Object;
 begin
-    var argsCount := args.Length;
-    var argsPtr: ^Pointer := if argsCount = 0 then nil else @args[0];
-    InvokeMethod(self, instance, argsPtr, argsCount, resultOut);
+    InvokeMethod(self, instance, args);
 end;
 
 function TagCollection.Sequence: ArraySequence[Object];

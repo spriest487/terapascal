@@ -102,6 +102,10 @@ impl Type {
         Type::WeakObject(ObjectID::Array(Rc::new(self)))
     }
 
+    pub fn boxed(self) -> Self {
+        Type::Object(ObjectID::Box(Rc::new(self)))
+    }
+    
     pub fn as_struct(&self) -> Option<TypeDefID> {
         match self {
             Type::Struct(struct_id) => Some(*struct_id),
@@ -250,6 +254,7 @@ impl fmt::Display for Type {
                 ObjectID::Interface(id) => write!(f, "iface {}", id),
                 ObjectID::Closure(id) => write!(f, "closure {}", id),
                 ObjectID::Array(element) => write!(f, "array of {}", element),
+                ObjectID::Box(element) => write!(f, "box of {}", element),
             },
             Type::WeakObject(id) => match id {
                 ObjectID::Any => write!(f, "weak any"),
@@ -257,6 +262,7 @@ impl fmt::Display for Type {
                 ObjectID::Interface(id) => write!(f, "weak iface {}", id),
                 ObjectID::Closure(id) => write!(f, "weak closure {}", id),
                 ObjectID::Array(element) => write!(f, "weak array of {}", element),
+                ObjectID::Box(element) => write!(f, "weak box of {}", element),
             },
             Type::Array { element, dim } => write!(f, "{}[{}]", element, dim),
             Type::Function(id) => write!(f, "function {}", id),
@@ -281,6 +287,9 @@ pub enum ObjectID {
 
     // array class (dyn array)
     Array(Rc<Type>),
+
+    // boxed value
+    Box(Rc<Type>),
 }
 
 impl ObjectID {
@@ -301,6 +310,7 @@ impl fmt::Display for ObjectID {
             ObjectID::Interface(iface_id) => write!(f, "{}", iface_id),
             ObjectID::Closure(closure_id) => write!(f, "{}", closure_id),
             ObjectID::Array(element_type) => write!(f, "array of {}", element_type),
+            ObjectID::Box(element_type) => write!(f, "box of {}", element_type),
         }
     }
 }

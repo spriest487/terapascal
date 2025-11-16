@@ -12,9 +12,7 @@ begin
     var greet := FunctionInfo.Find('FuncInvoke.Greet').Get;
     
     unsafe begin
-        var name := 'World';
-        var msg := '';
-        greet.Invoke([@name as Pointer], @msg);
+        var msg := greet.Invoke(['World' as Object]).Downcast[String]().Get;
         
         WriteLn(msg); 
     end;

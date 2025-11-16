@@ -94,27 +94,15 @@ impl DynValue {
 
             ir::Type::Nothing => None,
 
-            ir::Type::Object(class_id) | ir::Type::WeakObject(class_id) => {
+            ir::Type::Object(..) | ir::Type::WeakObject(..) => {
                 // assume self is a pointer-compatible type, its int value be the address
                 let addr = cast::usize(self.to_bigint()?).ok()?;
 
                 let ptr = Pointer {
                     addr,
-                    ty: match class_id {
-                        ir::ObjectID::Class(struct_id) => ir::Type::Struct(*struct_id),
-                        
-                        ir::ObjectID::Array(element_ty) => ir::Type::Array {
-                            element: element_ty.clone(),
-                            dim: 0
-                        },
-
-                        // Any, interfaces and closure pointers only have virtual types so we
-                        // can't include any type info about the concrete type here - it's up to
-                        // the language to have the right info when it uses this pointer value
-                        ir::ObjectID::Any
-                        | ir::ObjectID::Interface(..)
-                        | ir::ObjectID::Closure(..) => ir::Type::Nothing,
-                    },
+                    // object types don't have a usable data layout behind the pointer, and the
+                    // type can be discovered by reading the object header instead
+                    ty: ir::Type::Nothing,
                 };
                 Some(DynValue::Pointer(ptr))
             },

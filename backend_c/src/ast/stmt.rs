@@ -1,3 +1,4 @@
+use crate::ast::boxed::BoxTypeID;
 use crate::ast::expr::Expr;
 use crate::ast::expr::InfixOp;
 use crate::ast::expr::PrefixOp;
@@ -5,7 +6,8 @@ use crate::ast::ty_def::FieldName;
 use crate::ast::FunctionName;
 use crate::ast::Type;
 use crate::ast::Unit;
-use crate::ast::{BuiltinName, DynArrayTypeID};
+use crate::ast::BuiltinName;
+use crate::ast::DynArrayTypeID;
 use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -15,9 +17,11 @@ use std::rc::Rc;
 pub enum GlobalName {
     ClassType,
     DynArrayClassType,
+    BoxClassType,
     
     ClassInstance(ir::TypeDefID),
     DynArrayClassInstance(DynArrayTypeID),
+    BoxClassInstance(BoxTypeID),
 
     StringLiteral(ir::StringID),
 
@@ -41,9 +45,12 @@ impl fmt::Display for GlobalName {
         match self {
             GlobalName::ClassType => write!(f, "Class"),
             GlobalName::DynArrayClassType => write!(f, "DynArrayClass"),
+            GlobalName::BoxClassType => write!(f, "BoxClass"),
             
             GlobalName::ClassInstance(id) => write!(f, "Class_{}", id.0),
             GlobalName::DynArrayClassInstance(id) => write!(f, "DynArrayClass_{}", id.0),
+            GlobalName::BoxClassInstance(id) => write!(f, "BoxClass_{}", id.0),
+
             GlobalName::StringLiteral(id) => write!(f, "String_{}", id.0),
             GlobalName::StaticClosure(id) => write!(f, "StaticClosure_{}", id.0),
             GlobalName::StaticTagArray(loc) => {
@@ -138,6 +145,9 @@ fn vtype_typeinfo_name(id: &ir::ObjectID) -> String {
         ir::ObjectID::Closure(id) => format!("VType_Closure_{id}"),
         ir::ObjectID::Array(element) => {
             format!("DynArray_{}", global_typeinfo_decl_name_type(&element))
+        }
+        ir::ObjectID::Box(element) => {
+            format!("Box_{}", global_typeinfo_decl_name_type(&element))
         }
     }
 }
@@ -702,6 +712,14 @@ impl<'a, 'b> Builder<'a, 'b> {
                     let is_class_ptr = Expr::dyn_array_class_ptr(array_id)
                         .cast(Type::Class.ptr());
                     
+                    Expr::infix_op(actual_class_ptr, InfixOp::Eq, is_class_ptr)
+                }
+
+                ir::ObjectID::Box(element) => {
+                    let array_id = self.module.get_dyn_array_type(element);
+                    let is_class_ptr = Expr::dyn_array_class_ptr(array_id)
+                        .cast(Type::Class.ptr());
+
                     Expr::infix_op(actual_class_ptr, InfixOp::Eq, is_class_ptr)
                 }
 

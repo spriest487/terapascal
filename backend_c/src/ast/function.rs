@@ -1,3 +1,4 @@
+use crate::ast::boxed::BoxTypeID;
 use crate::ast::Builder;
 use crate::ast::DynArrayTypeID;
 use crate::ast::Expr;
@@ -8,8 +9,8 @@ use crate::ast::TypeDecl;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
 use crate::ast::VariableID;
-use std::fmt;
 use std::env;
+use std::fmt;
 use terapascal_ir as ir;
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
@@ -33,6 +34,8 @@ pub enum FunctionName {
     DynArrayGetElement(DynArrayTypeID),
     DynArrayAlloc(DynArrayTypeID),
     DynArrayLength(DynArrayTypeID),
+    
+    BoxValue(BoxTypeID),
     
     // helper function for runtime bounds checking
     DynArrayBoundsCheck,
@@ -68,6 +71,10 @@ impl fmt::Display for FunctionName {
                 write!(f, "DynArrayAlloc_{}", id.0)
             }
 
+            FunctionName::BoxValue(id) => {
+                write!(f, "BoxValue_{}", id.0)
+            }
+
             FunctionName::DynArrayBoundsCheck => write!(f, "DynArrayBoundsCheck"),
 
             FunctionName::Builtin(name) => write!(f, "{}", name),
@@ -93,7 +100,7 @@ pub enum BuiltinName {
     FindFuncInfo,
     GetFuncInfoCount,
     GetFuncInfoByIndex,
-    InvokeFunc,
+    InvokeFunction,
 
     Int8ToStr,
     ByteToStr,
@@ -149,7 +156,7 @@ impl fmt::Display for BuiltinName {
             BuiltinName::IsImpl => write!(f, "IsImpl"),
             BuiltinName::Raise => write!(f, "Raise"),
             BuiltinName::InvokeMethod => write!(f, "InvokeMethod"),
-            BuiltinName::InvokeFunc => write!(f, "InvokeFunction"),
+            BuiltinName::InvokeFunction => write!(f, "InvokeFunction"),
 
             BuiltinName::FindTypeInfo => write!(f, "System_FindTypeInfo"),
             BuiltinName::GetTypeInfoCount => write!(f, "System_GetTypeInfoCount"),

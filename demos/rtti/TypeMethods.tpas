@@ -31,17 +31,16 @@ initialization
     for var i := 0 to methods.Length - 1 do begin
         WriteLn(myClassInfo.Name + ' has method ' + methods[i].Name);
     end;
-    
+
     var instance := MyClass();
 
-    unsafe begin
-        methods[0].Invoke(@instance as Pointer, [], nil);
+    begin
+        methods[0].Invoke(instance, []);
 
-        var message := default(String);
-        methods[1].Invoke(@instance as Pointer, [], @message);
+        var message := methods[1].Invoke(instance, []).Downcast[String]().Get;
         WriteLn(message); 
 
-        var i := 456;
-        methods[2].Invoke(@instance, [@i as Pointer], nil);
+        var i := box 456;
+        methods[2].Invoke(@instance, [i as Object]);
     end
 end

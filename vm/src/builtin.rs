@@ -647,18 +647,14 @@ pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, Type, 
             Type::any().temp_ref(), 
             Type::I32, 
         ]),
-        ("InvokeMethod", invoke_method, Type::Nothing, vec![
+        ("InvokeMethod", invoke_method, Type::any(), vec![
             METHODINFO_TYPE,
-            Type::Nothing.ptr(),
-            Type::Nothing.ptr().ptr(),
-            Type::I32,
-            Type::Nothing.ptr(),
+            Type::any(),
+            Type::any().dyn_array(),
         ]),
-        ("InvokeFunction", invoke_func, Type::Nothing, vec![
+        ("InvokeFunction", invoke_func, Type::any(), vec![
             FUNCINFO_TYPE,
-            Type::Nothing.ptr().ptr(),
-            Type::I32,
-            Type::Nothing.ptr(),
+            Type::any().dyn_array(),
         ]),
         
         ("FindTypeInfo", find_type_info, TYPEINFO_TYPE, vec![Type::string_ptr()]),

@@ -523,13 +523,13 @@ static FUNCINFO_STRUCT* System_GetFunctionInfoByIndex(int32_t func_index) {
     return funcinfo_list[func_index];
 }
 
-static void InvokeFunction(FUNCINFO_STRUCT* func, void** args, int32_t arg_count, void* out_result) {
+static OBJECT_PTR InvokeFunction(FUNCINFO_STRUCT* func, OBJECT_ARRAY_PTR args) {
     Invoker invoker = FUNCINFO_INVOKER(func);
     if (!invoker) {
         fatal("InvokeFunction called for non-invokable func");
     }
 
-    invoker(args, out_result);
+    return invoker(args);
 }
 
 #endif // DISABLE_RTTI

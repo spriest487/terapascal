@@ -30,9 +30,8 @@ initialization
         WriteLn('this animal is a ' + animalType.Name);
         
         if animalType.FindMethod('Bark') is Option.Some method then
-        unsafe begin
-            var animalPtr := animal;
-            method.Invoke(@animalPtr as Pointer, [], nil);
+        begin
+            method.Invoke(animal, []);
         end;
     end;
 end.

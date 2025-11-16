@@ -6,6 +6,7 @@ use crate::c::ArrayTypeID;
 use crate::c::DynArrayTypeID;
 use crate::ir;
 use std::fmt;
+use crate::ast::boxed::BoxTypeID;
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub enum TypeDef {
@@ -58,6 +59,7 @@ pub enum TypeDefName {
 
     // TODO: this shouldn't be in here, move it up to Type
     DynArray(DynArrayTypeID),
+    Box(BoxTypeID),
 }
 
 impl fmt::Display for TypeDefName {
@@ -67,6 +69,7 @@ impl fmt::Display for TypeDefName {
             TypeDefName::Variant(id) => write!(f, "Variant_{}", id.0),
             TypeDefName::StaticArray(id) => write!(f, "StaticArray_{}", id.0),
             TypeDefName::DynArray(id) => write!(f, "DynArray_{}", id.0),
+            TypeDefName::Box(id) => write!(f, "Box_{}", id.0),
             TypeDefName::Alias(id) => write!(f, "FuncAlias_{}", id.0),
         }
     }
@@ -95,6 +98,7 @@ impl TypeDefName {
             TypeDefName::Struct(..)
             | TypeDefName::Variant(..)
             | TypeDefName::StaticArray(..)
+            | TypeDefName::Box(..)
             | TypeDefName::DynArray(..) => {
                 left.push_str(&format!("struct {}", self.to_string()));
             },

@@ -4,12 +4,14 @@ mod expr;
 mod string_lit;
 mod ty_def;
 mod array;
+mod boxed;
 
 pub use self::array::*;
 pub use self::expr::*;
 pub use self::function::*;
 pub use self::stmt::*;
 pub use self::ty_def::*;
+use crate::ast::boxed::BoxTypeID;
 use crate::ast::string_lit::StringLiteral;
 use crate::ir;
 use crate::rtti::RuntimeFuncInfo;
@@ -20,8 +22,11 @@ use std::collections::hash_map::HashMap;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
-use topological_sort::TopologicalSort;
 use terapascal_ir::FieldID;
+use topological_sort::TopologicalSort;
+
+mod builtin;
+
 
 pub struct Unit<'a> {
     metadata: &'a ir::Metadata,
@@ -37,6 +42,7 @@ pub struct Unit<'a> {
     static_array_types: HashMap<ArraySig, Type>,
     
     dyn_array_types_by_element: HashMap<ir::Type, DynArrayTypeID>,
+    box_types_by_element: HashMap<ir::Type, BoxTypeID>,
 
     type_defs: HashMap<TypeDefName, TypeDef>,
     type_defs_order: TopologicalSort<TypeDefName>,
@@ -59,152 +65,10 @@ pub struct Unit<'a> {
 }
 
 impl<'a> Unit<'a> {
-    pub fn new(metadata: &'a ir::Metadata, opts: Options) -> Self {
-        let string_ty = Type::DefinedType(TypeDefName::Struct(ir::STRING_ID)).ptr();
-
-        let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
-        let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
-        
+    pub fn new(metadata: &'a ir::Metadata, opts: Options) -> Self {        
         let enable_rtti = metadata.get_struct_def(ir::TYPEINFO_ID).is_some()
             && metadata.get_struct_def(ir::METHODINFO_ID).is_some()
             && metadata.get_struct_def(ir::FUNCINFO_ID).is_some();
-
-        let system_funcs = &[
-            ("Int8ToStr", BuiltinName::Int8ToStr, string_ty.clone(), vec![
-                Type::SChar
-            ]),
-            ("UInt8ToStr", BuiltinName::ByteToStr, string_ty.clone(), vec![
-                Type::UChar
-            ]),
-            ("Int16ToStr", BuiltinName::Int16ToStr, string_ty.clone(), vec![
-                Type::Int16
-            ]),
-            ("UInt16ToStr", BuiltinName::UInt16ToStr, string_ty.clone(), vec![
-                Type::UInt16
-            ]),
-            ("Int32ToStr", BuiltinName::IntToStr, string_ty.clone(), vec![
-                Type::Int32
-            ]),
-            ("UInt32ToStr", BuiltinName::UInt32ToStr, string_ty.clone(), vec![
-                Type::UInt32
-            ]),
-            ("Int64ToStr", BuiltinName::Int64ToStr, string_ty.clone(), vec![
-                Type::Int64
-            ]),
-            ("UInt64ToStr", BuiltinName::UInt64ToStr, string_ty.clone(), vec![
-                Type::UInt64
-            ]),
-            ("NativeIntToStr", BuiltinName::NativeIntToStr, string_ty.clone(), vec![
-                Type::PtrDiffType
-            ]),
-            ("NativeUIntToStr", BuiltinName::NativeUIntToStr, string_ty.clone(), vec![
-                Type::SizeType
-            ]),
-            ("PointerToStr", BuiltinName::PointerToStr, string_ty.clone(), vec![
-                Type::Void.ptr()
-            ]),
-            ("RealToStr", BuiltinName::RealToStr, string_ty.clone(), vec![
-                Type::Float
-            ]),
-            ("StrToInt", BuiltinName::StrToInt, Type::Int32, vec![
-                string_ty.clone()
-            ]),
-            ("GetMem", BuiltinName::GetMem, Type::UChar.ptr(), vec![
-                Type::Int32
-            ]),
-            ("FreeMem", BuiltinName::FreeMem, Type::Void, vec![
-                Type::UChar.ptr()
-            ]),
-            ("WriteLn", BuiltinName::WriteLn, Type::Void, vec![
-                string_ty.clone()
-            ]),
-            ("Write", BuiltinName::Write, Type::Void, vec![
-                string_ty.clone()
-            ]),
-            ("ReadLn", BuiltinName::ReadLn, string_ty.clone(), vec![]),
-            ("ArrayLengthInternal", BuiltinName::ArrayLengthInternal, Type::Int32, vec![
-                Type::Rc.ptr(),
-            ]),
-            ("ArrayCreateInternal", BuiltinName::ArrayCreateInternal, Type::Void, vec![
-                Type::Rc.ptr().ptr(),
-                Type::Int32,
-            ]),
-            
-            ("FindTypeInfo", BuiltinName::FindTypeInfo, typeinfo_ty.clone(), vec![string_ty.clone()]),
-            ("GetTypeInfoCount", BuiltinName::GetTypeInfoCount, Type::Int32, vec![]),
-            ("GetTypeInfoByIndex", BuiltinName::GetTypeInfoByIndex, typeinfo_ty.clone(), vec![Type::Int32]),
-            ("GetObjectTypeInfo", BuiltinName::GetObjectTypeInfo, typeinfo_ty.clone(), vec![Type::Rc.ptr()]),
-            
-            ("FindFunctionInfo", BuiltinName::FindFuncInfo, funcinfo_ty.clone(), vec![string_ty.clone()]),
-            ("GetFunctionInfoCount", BuiltinName::GetFuncInfoCount, Type::Int32, vec![]),
-            ("GetFunctionInfoByIndex", BuiltinName::GetFuncInfoByIndex, funcinfo_ty.clone(), vec![Type::Int32]),
-            ("InvokeMethod", BuiltinName::InvokeMethod, Type::Void, vec![
-                Type::from_ir_struct(ir::METHODINFO_ID).ptr(),
-                Type::Void.ptr(),
-                Type::Void.ptr().ptr(),
-                Type::Int32,
-                Type::Void.ptr(),
-            ]),
-            ("InvokeFunction", BuiltinName::InvokeFunc, Type::Void, vec![
-                Type::from_ir_struct(ir::FUNCINFO_ID).ptr(),
-                Type::Void.ptr().ptr(),
-                Type::Int32,
-                Type::Void.ptr(),
-            ]),
-            ("RandomInteger", BuiltinName::RandomInteger, Type::Int32, vec![
-                Type::Int32, 
-                Type::Int32]),
-            ("RandomSingle", BuiltinName::RandomSingle, Type::Float, vec![
-                Type::Float, 
-                Type::Float
-            ]),
-            ("Time", BuiltinName::Time, Type::Double, vec![]),
-            ("Pow", BuiltinName::Pow, Type::Float, vec![
-                Type::Float, Type::Float
-            ]),
-            ("Sqrt", BuiltinName::Sqrt, Type::Float, vec![
-                Type::Float
-            ]),
-            ("Sin", BuiltinName::Sin, Type::Float, vec![
-                Type::Float
-            ]),
-            ("ArcSin", BuiltinName::ArcSin, Type::Float, vec![
-                Type::Float
-            ]),
-            ("Cos", BuiltinName::Cos, Type::Float, vec![
-                Type::Float
-            ]),
-            ("ArcCos", BuiltinName::ArcCos, Type::Float, vec![
-                Type::Float
-            ]),
-            ("Tan", BuiltinName::Tan, Type::Float, vec![
-                Type::Float
-            ]),
-            ("ArcTan", BuiltinName::ArcTan, Type::Float, vec![
-                Type::Float
-            ]),
-            ("Infinity", BuiltinName::Infinity, Type::Float, vec![]),
-            ("NaN", BuiltinName::NaN, Type::Float, vec![]),
-            ("IsInfinite", BuiltinName::IsInfinite, Type::Bool, vec![
-                Type::Float
-            ]),
-            ("IsNaN", BuiltinName::IsNaN, Type::Bool, vec![
-                Type::Float
-            ]),
-        ];
-
-        let mut builtin_func_ids = HashMap::with_capacity(system_funcs.len());
-        let mut builtin_funcs = HashMap::new();
-
-        for (pas_name, c_name, _return_ty, _params) in system_funcs {
-            let global_name = &ir::NamePath::new(vec!["System".to_string()], *pas_name);
-
-            // if a function isn't used then it won't be included in the metadata
-            if let Some(func_id) = metadata.find_function(global_name) {
-                builtin_funcs.insert(func_id, *c_name);
-                builtin_func_ids.insert(*c_name, func_id);
-            }
-        }
 
         let string_literals = metadata
             .strings()
@@ -231,14 +95,14 @@ impl<'a> Unit<'a> {
             .tag_counts()
             .collect();
 
-        let mut module = Unit {
+        let mut unit = Unit {
             metadata,
 
             functions: Vec::new(),
             function_types: BTreeMap::new(),
 
             ffi_funcs: Vec::new(),
-            builtin_funcs,
+            builtin_funcs: HashMap::new(),
 
             type_defs: HashMap::new(),
             type_defs_order: TopologicalSort::new(),
@@ -246,6 +110,7 @@ impl<'a> Unit<'a> {
             static_array_types: HashMap::new(),
             
             dyn_array_types_by_element: HashMap::new(),
+            box_types_by_element: HashMap::new(),
             
             global_vars: Vec::new(),
 
@@ -267,33 +132,47 @@ impl<'a> Unit<'a> {
             object_array_id: DynArrayTypeID(usize::MAX),
         };
 
-        module.object_array_id = module.get_dyn_array_type(&ir::ANY_TYPE);
+        unit.object_array_id = unit.get_dyn_array_type(&ir::ANY_TYPE);
+
+        let system_funcs = builtin::system_funcs(&unit);
+        
+        let mut builtin_func_ids = HashMap::with_capacity(system_funcs.len());
+
+        for (pas_name, c_name, _return_ty, _params) in &system_funcs {
+            let global_name = &ir::NamePath::new(vec!["System".to_string()], *pas_name);
+
+            // if a function isn't used then it won't be included in the metadata
+            if let Some(func_id) = metadata.find_function(global_name) {
+                unit.builtin_funcs.insert(func_id, *c_name);
+                builtin_func_ids.insert(*c_name, func_id);
+            }
+        }
 
         for (class_id, _class_def) in metadata.class_defs() {
-            let class = Class::translate(class_id, metadata, &mut module);
-            module.classes.push(class);
+            let class = Class::translate(class_id, metadata, &mut unit);
+            unit.classes.push(class);
         }
         
         for closure_id in metadata.closures() {
             let class = Class::gen_closure_class(closure_id);
-            module.classes.push(class);
+            unit.classes.push(class);
         } 
 
         for (iface_id, iface_def) in metadata.ifaces() {
-            let iface = Interface::translate(iface_id, iface_def, &mut module);
-            module.ifaces.push(iface);
+            let iface = Interface::translate(iface_id, iface_def, &mut unit);
+            unit.ifaces.push(iface);
         }
 
         if enable_rtti {
             for (_pas_name, c_name, return_ty, params) in system_funcs {
-                if let Some(id) = builtin_func_ids.get(c_name) {
-                    let invoker = FunctionDef::invoker_builtin(*c_name, *id, params, return_ty, &mut module);
-                    module.functions.push(invoker);
+                if let Some(id) = builtin_func_ids.get(&c_name) {
+                    let invoker = FunctionDef::invoker_builtin(c_name, *id, &params, &return_ty, &mut unit);
+                    unit.functions.push(invoker);
                 }
             }
         }
 
-        module
+        unit
     }
 
     pub fn pretty_type(&self, ir_ty: &ir::Type) -> Cow<'_, str> {
@@ -729,6 +608,8 @@ impl<'a> fmt::Display for Unit<'a> {
         
         writeln!(f, "#define DYNARRAY_PTR(arr) (arr->{})", FieldName::DynArrayElements)?;
         writeln!(f, "#define DYNARRAY_LEN(arr) (arr->{})", FieldName::DynArrayLength)?;
+        
+        writeln!(f, "#define OBJECT_ARRAY_PTR {}", TypeDefName::DynArray(self.object_array_id))?;
 
         writeln!(f, "{}", include_str!("prelude.h"))?;
 

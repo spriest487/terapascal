@@ -14,6 +14,7 @@ use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write;
+use crate::ast::boxed::BoxTypeID;
 
 #[derive(Clone, Debug)]
 struct MethodImplFunc {
@@ -107,10 +108,11 @@ pub struct InterfaceImpl {
     method_impls: BTreeMap<ir::MethodID, MethodImplFunc>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum ClassIdentity {
     Class(ir::TypeDefID),
-    DynArrayClass(DynArrayTypeID)
+    DynArrayClass(DynArrayTypeID),
+    Box(BoxTypeID),
 }
 
 impl fmt::Display for ClassIdentity {    
@@ -118,6 +120,7 @@ impl fmt::Display for ClassIdentity {
         match self {
             ClassIdentity::Class(id) => write!(f, "Class_{}", id.0),
             ClassIdentity::DynArrayClass(id) => write!(f, "DynArrayClass_{}", id.0),
+            ClassIdentity::Box(id) => write!(f, "Box_{}", id.0),
         }
     }
 }
@@ -127,6 +130,7 @@ impl ClassIdentity {
         match self {
             ClassIdentity::Class(id) => TypeDefName::Struct(*id),
             ClassIdentity::DynArrayClass(id) => TypeDefName::DynArray(*id),
+            ClassIdentity::Box(id) => TypeDefName::Box(*id),
         }
     }
 
@@ -144,6 +148,18 @@ impl ClassIdentity {
                 
                 element.dyn_array()
             }
+            
+            ClassIdentity::Box(id) => {
+                let element = unit.box_types_by_element.iter()
+                    .find_map(|(element, element_box_id)| {
+                        (*element_box_id == *id).then(|| {
+                            element.clone()
+                        })
+                    })
+                    .unwrap_or_else(|| panic!("missing box type for ID {}", id.0));
+                
+                element.boxed()
+            }
         }
     }
 
@@ -151,6 +167,7 @@ impl ClassIdentity {
         match self {
             ClassIdentity::Class(_) => GlobalName::ClassType,
             ClassIdentity::DynArrayClass(_) => GlobalName::DynArrayClassType,
+            ClassIdentity::Box(_) => GlobalName::DynArrayClassType,
         }
     }
     
@@ -158,6 +175,7 @@ impl ClassIdentity {
         match self {
             ClassIdentity::Class(id) => GlobalName::ClassInstance(*id),
             ClassIdentity::DynArrayClass(id) => GlobalName::DynArrayClassInstance(*id),
+            ClassIdentity::Box(id) => GlobalName::BoxClassInstance(*id),
         }
     }
 }
@@ -248,6 +266,21 @@ impl Class {
             typeinfo_global_name: global_typeinfo_decl_name(&array_type),
         }
     }
+
+    pub fn gen_box_class(
+        id: BoxTypeID,
+        element_type: ir::Type,
+    ) -> Self {
+        let array_type = element_type.clone().dyn_array();
+
+        Class {
+            identity: ClassIdentity::Box(id),
+            impls: BTreeMap::new(),
+            dtor: None,
+            comment: Some(format!("generated dynarray class (array of {element_type})")),
+            typeinfo_global_name: global_typeinfo_decl_name(&array_type),
+        }
+    }
     
     pub fn gen_closure_class(closure_struct_id: ir::TypeDefID) -> Self {
         let ty = closure_struct_id.to_class_ptr_type();
@@ -317,11 +350,6 @@ impl Class {
     }
 
     pub fn to_def_string(&self, enable_rtti: bool) -> String {
-        let array_id = match &self.identity {
-            ClassIdentity::DynArrayClass(id) => Some(*id),
-            ClassIdentity::Class(..) => None,
-        };
-
         let mut def = String::new();
         
         if let Some(comment) = &self.comment {
@@ -384,55 +412,39 @@ impl Class {
 
         let mut class_init = String::new();
         writeln!(class_init, "{{").unwrap();
-
-        // for dyn arrays, the regular class fields belong to the "base" field
-        if array_id.is_some() {
-            class_init.push_str("  .base = {\n");
-        }
-
-        writeln!(
-            class_init,
-            "  .size = {},",
-            Expr::SizeOf(Type::DefinedType(self.identity.to_def_name()))
-        ).unwrap();
-
-        if self.dtor.is_some() {
-            let dtor_name = FunctionName::DestructorInvoker(self.identity.to_def_name());
-            writeln!(class_init, "  .dtor = &{},", dtor_name).unwrap();
-        } else {
-            writeln!(class_init, "  .dtor = NULL,").unwrap();
-        };
-
-        if enable_rtti {
-            writeln!(class_init, "  .typeinfo = &{},", self.typeinfo_global_name).unwrap();
-        }
-
-        if let Some((_, (first_iface_id, _))) = impls.get(0) {
-            writeln!(
-                class_init,
-                "  .iface_methods = (struct MethodTable*) &ImplTable_{}_{},",
-                self.identity, first_iface_id
-            )
-            .unwrap();
-        } else {
-            writeln!(class_init, "  .iface_methods = NULL,").unwrap();
-        }
         
-        // add dyn array fields if we have them
-        if let Some(array_id) = array_id {
-            class_init.push_str("  },");
-            
-            let get_element_name = FieldName::DynArrayClassElement;
-            let get_element_func = FunctionName::DynArrayGetElement(array_id);
-            writeln!(class_init, "  .{} = {},", get_element_name, get_element_func).unwrap();
+        match self.identity {
+            ClassIdentity::Class(..) => {
+                self.write_class_field_init(&mut class_init, enable_rtti, &impls);
+            }
 
-            let alloc_name = FieldName::DynArrayClassAlloc;
-            let alloc_func = FunctionName::DynArrayAlloc(array_id);
-            writeln!(class_init, "  .{} = {},", alloc_name, alloc_func).unwrap();
+            ClassIdentity::DynArrayClass(array_id) => {
+                class_init.push_str("  .base = {\n");
+                self.write_class_field_init(&mut class_init, enable_rtti, &impls);
+                class_init.push_str("  },");
 
-            let length_name = FieldName::DynArrayClassLength;
-            let length_func = FunctionName::DynArrayLength(array_id);
-            writeln!(class_init, "  .{} = {},", length_name, length_func).unwrap();
+                let get_element_name = FieldName::DynArrayClassElement;
+                let get_element_func = FunctionName::DynArrayGetElement(array_id);
+                writeln!(class_init, "  .{} = {},", get_element_name, get_element_func).unwrap();
+
+                let alloc_name = FieldName::DynArrayClassAlloc;
+                let alloc_func = FunctionName::DynArrayAlloc(array_id);
+                writeln!(class_init, "  .{} = {},", alloc_name, alloc_func).unwrap();
+
+                let length_name = FieldName::DynArrayClassLength;
+                let length_func = FunctionName::DynArrayLength(array_id);
+                writeln!(class_init, "  .{} = {},", length_name, length_func).unwrap();
+            }
+
+            ClassIdentity::Box(box_id) => {
+                class_init.push_str("  .base = {\n");
+                self.write_class_field_init(&mut class_init, enable_rtti, &impls);
+                class_init.push_str("  },");
+
+                let element_name = FieldName::BoxClassValue;
+                let box_func = FunctionName::BoxValue(box_id);
+                writeln!(class_init, "  .{} = {},", element_name, box_func).unwrap();
+            }
         }
 
         class_init.truncate(class_init.trim_end_matches(',').len());
@@ -448,6 +460,40 @@ impl Class {
         ).unwrap();
 
         def
+    }
+    
+    fn write_class_field_init(&self,
+        out: &mut String,
+        enable_rtti: bool,
+        impls: &[(usize, (&ir::InterfaceID, &InterfaceImpl))]
+    ) {
+        writeln!(
+            out,
+            "  .size = {},",
+            Expr::SizeOf(Type::DefinedType(self.identity.to_def_name()))
+        ).unwrap();
+
+        if self.dtor.is_some() {
+            let dtor_name = FunctionName::DestructorInvoker(self.identity.to_def_name());
+            writeln!(out, "  .dtor = &{},", dtor_name).unwrap();
+        } else {
+            writeln!(out, "  .dtor = NULL,").unwrap();
+        };
+
+        if enable_rtti {
+            writeln!(out, "  .typeinfo = &{},", self.typeinfo_global_name).unwrap();
+        }
+
+        if let Some((_, (first_iface_id, _))) = impls.get(0) {
+            writeln!(
+                out,
+                "  .iface_methods = (struct MethodTable*) &ImplTable_{}_{},",
+                self.identity, first_iface_id
+            )
+                .unwrap();
+        } else {
+            writeln!(out, "  .iface_methods = NULL,").unwrap();
+        }
     }
 }
 

@@ -59,7 +59,7 @@ struct Rc {
 
 #define OBJECT_PTR struct Rc*
 
-typedef void (*Invoker)(void** args, void* resultOut);
+typedef OBJECT_PTR (*Invoker)(OBJECT_ARRAY_PTR args);
 
 typedef void (*DynArrayAlloc)(OBJECT_PTR arr, int32_t len);
 typedef int32_t (*DynArrayLength)(OBJECT_PTR arr);
@@ -120,8 +120,8 @@ static OBJECT_PTR RcNewArray(struct DynArrayClass* class, int count, bool immort
 
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 
-static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, void** args, int32_t arg_count, void* out_result);
-static void InvokeFunction(FUNCINFO_STRUCT* func, void** args, int32_t arg_count, void* out_result);
+static OBJECT_PTR InvokeMethod(METHODINFO_STRUCT* method, void* instance, OBJECT_ARRAY_PTR args);
+static OBJECT_PTR InvokeFunction(FUNCINFO_STRUCT* func, OBJECT_ARRAY_PTR args);
 
 static TYPEINFO_STRUCT** typeinfo_list;
 static int32_t typeinfo_count;

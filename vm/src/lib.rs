@@ -203,18 +203,8 @@ impl Interpreter {
 
             ir::Type::Flags(repr_id, ..) => DynValue::from(self.default_struct(*repr_id)?),
 
-            ir::Type::Object(class_id) | ir::Type::WeakObject(class_id) => {
-                DynValue::Pointer(Pointer::nil(match class_id {
-                    ir::ObjectID::Class(struct_id) => ir::Type::Struct(*struct_id),
-                    ir::ObjectID::Array(element_type) => ir::Type::Array { 
-                        element: element_type.clone(), 
-                        dim: 0 
-                    },
-                    
-                    ir::ObjectID::Closure(..)
-                    | ir::ObjectID::Any
-                    | ir::ObjectID::Interface(..) => ir::Type::Nothing,
-                }))
+            ir::Type::Object(..) | ir::Type::WeakObject(..) => {
+                DynValue::Pointer(Pointer::nil(ir::Type::Nothing))
             },
 
             ir::Type::Pointer(target) | ir::Type::TempRef(target) => {
@@ -1845,6 +1835,10 @@ impl Interpreter {
 
             ir::ObjectID::Array(element_type) => {
                 object_header.marshal_type == element_type.as_ref().clone().array(0)
+            }
+
+            ir::ObjectID::Box(element_type) => {
+                object_header.marshal_type == element_type.as_ref().clone().boxed()
             }
         };
 
