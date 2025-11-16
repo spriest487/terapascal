@@ -372,9 +372,8 @@ pub fn build_static_closure_impl(
 
     let static_closure_ptr_ref = Ref::Global(GlobalRef::StaticClosure(id));
 
-    let closure_ref = init_builder.build_closure_instance(closure.clone());
-    init_builder.retain_deep(closure_ref.clone(), &closure.closure_ptr_ty());
-    init_builder.mov(static_closure_ptr_ref, closure_ref);
+    let closure_ref = init_builder.build_closure_instance(closure.clone(), true);
+    init_builder.cast(static_closure_ptr_ref, closure_ref, closure.closure_class_type());
 
     let init_body = init_builder.finish();
     

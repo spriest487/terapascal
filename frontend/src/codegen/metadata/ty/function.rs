@@ -20,8 +20,12 @@ pub struct ClosureInstance {
 }
 
 impl ClosureInstance {
-    pub fn closure_ptr_ty(&self) -> ir::Type {
+    pub fn function_pointer_type(&self) -> ir::Type {
         ir::Type::Object(ir::ObjectID::Closure(self.func_ty_id))
+    }
+
+    pub fn closure_class_type(&self) -> ir::Type {
+        ir::Type::Object(ir::ObjectID::Class(self.closure_id))
     }
 }
 

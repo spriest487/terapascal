@@ -245,7 +245,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             
             closure_obj.to_ref()
         } else {
-            self.build_closure_instance(closure)
+            self.build_closure_instance(closure, false)
         }
     }
     
@@ -257,7 +257,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         Ref::Global(GlobalRef::StaticClosure(static_closure.id))
     }
 
-    pub fn build_closure_instance(&mut self, closure: ClosureInstance) -> Ref {
+    pub fn build_closure_instance(&mut self, closure: ClosureInstance, immortal: bool) -> Ref {
         let closure_def = self
             .library
             .metadata()
@@ -274,7 +274,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
         self.scope(|builder| {
             let closure_ref = builder.local_temp(closure_ptr_ty.clone());
-            builder.rc_new(closure_ref, closure.closure_id, false);
+            builder.rc_new(closure_ref, closure.closure_id, immortal);
 
             let func_ptr_ty = closure_def.fields[&CLOSURE_PTR_FIELD].ty.clone();
 
@@ -307,7 +307,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
                 builder.retain_deep(capture_field_ref.to_deref(), &field_def.ty);
             }
             
-            builder.cast(closure_virtual_ptr, closure_ref, closure_ptr_ty);
+            builder.cast(closure_virtual_ptr, closure_ref, closure_virtual_ty);
         });
 
         self.retain(closure_virtual_ptr, false);
