@@ -951,7 +951,7 @@ impl Interpreter {
                 self.exec_local_end()?
             },
 
-            ir::Instruction::RcNew {
+            ir::Instruction::NewObject {
                 out,
                 type_id,
                 immortal,
@@ -959,7 +959,7 @@ impl Interpreter {
                 self.exec_new_object(out, *type_id, *immortal)?
             },
 
-            ir::Instruction::RcNewArray {
+            ir::Instruction::NewArray {
                 out,
                 element_type,
                 count,
@@ -967,6 +967,10 @@ impl Interpreter {
             } => {
                 self.exec_new_array(out, element_type, count, *immortal)?
             },
+            
+            ir::Instruction::NewBox { out, value_type, immortal } => {
+                self.exec_new_box(out, value_type, *immortal)?;
+            }
 
             ir::Instruction::Add(op) => self.exec_add(op)?,
 
@@ -1134,6 +1138,21 @@ impl Interpreter {
 
         let default_val = self.default_val(element_type)?;
         let elements = iter::repeat(default_val).take(count).collect();
+
+        let array_ptr = self.new_dyn_array(element_type, elements, immortal)?;
+        self.store(out, DynValue::Pointer(array_ptr))?;
+
+        Ok(())
+    }
+
+    fn exec_new_box(
+        &mut self,
+        out: &ir::Ref,
+        element_type: &ir::Type,
+        immortal: bool,
+    ) -> ExecResult<()> {
+        let default_val = self.default_val(element_type)?;
+        let elements = vec![default_val];
 
         let array_ptr = self.new_dyn_array(element_type, elements, immortal)?;
         self.store(out, DynValue::Pointer(array_ptr))?;
@@ -1325,6 +1344,10 @@ impl Interpreter {
             
             ir::Type::Object(ir::ObjectID::Array(element_type)) => {
                 Some(element_type.as_ref())
+            }
+
+            ir::Type::Object(ir::ObjectID::Box(value_type)) => {
+                Some(value_type.as_ref())
             }
 
             _ => None,

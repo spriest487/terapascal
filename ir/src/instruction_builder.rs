@@ -258,12 +258,12 @@ pub trait InstructionBuilder {
 
     fn new_box(&mut self,
         out: impl Into<Ref>,
-        element_type: Type,
+        value_type: Type,
         immortal: bool,
     ) {
         self.emit(Instruction::NewBox {
             out: out.into(),
-            element_type,
+            value_type,
             immortal,
         });
     }

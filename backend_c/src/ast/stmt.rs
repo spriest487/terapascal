@@ -527,8 +527,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.translate_new_array(out, element_type, count, *immortal);
             }
 
-            ir::Instruction::NewBox { out, element_type, immortal } => {
-                self.translate_new_box(out, element_type, *immortal);
+            ir::Instruction::NewBox { out, value_type, immortal } => {
+                self.translate_new_box(out, value_type, *immortal);
             }
 
             ir::Instruction::Gt(ir::BinOpInstruction { out, a, b }) => {

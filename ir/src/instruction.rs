@@ -146,7 +146,7 @@ pub enum Instruction {
     },
     NewBox {
         out: Ref,
-        element_type: Type,
+        value_type: Type,
         immortal: bool,
     },
 

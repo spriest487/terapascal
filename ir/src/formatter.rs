@@ -308,13 +308,13 @@ pub trait IRFormatter {
                 Ok(())
             }
 
-            Instruction::NewBox { out, element_type, immortal } => {
+            Instruction::NewBox { out, value_type, immortal } => {
                 write!(f, "{:>width$} ", "newbox", width = IX_WIDTH)?;
 
                 self.format_ref(out, f)?;
 
                 write!(f, " := [")?;
-                self.format_type(element_type, f)?;
+                self.format_type(value_type, f)?;
                 write!(f, "]")?;
 
                 if *immortal {
