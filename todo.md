@@ -1,9 +1,7 @@
 # CIL gen
 demos\rtti\DynamicType.tpas
 demos\rtti\FuncInvoke.tpas
-demos\rtti\FunctionTags.tpas
 demos\rtti\MethodTags.tpas
-demos\rtti\ModuleTypes.tpas
 demos\rtti\TypeMethods.tpas
 
 # array rework
