@@ -290,6 +290,12 @@ public static class SystemFunctions {
 
         for (var i = 0; i < RTTI.Types.Count; i += 1) {
             var typeInfo = RTTI.Types[i];
+
+            // skip weak types, they have a duplicate ref to the same actual type as the strong pointer type
+            if ((typeInfo.flags & (ulong)TypeFlags.Weak) != 0) {
+                continue;
+            }
+            
             if (typeInfo.impl == objType) {
                 return typeInfo;
             }
