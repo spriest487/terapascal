@@ -379,7 +379,7 @@ fn run_step(
         
         let is_match = {
             if let Some(exact_output) = &step.output {
-                output_line == *exact_output
+                output_line.trim() == exact_output.trim()
             } else {
                 let regex = Regex::new(&format!("(?s){}", step.output_regex.as_ref().unwrap()))
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))?;
