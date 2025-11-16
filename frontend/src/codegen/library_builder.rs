@@ -1228,6 +1228,12 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             for (src_ty, ty) in populate_types.drain(0..) {
+                done_types += 1;
+    
+                if !self.metadata.is_defined(&ty) {
+                    continue;
+                }
+
                 if src_ty.as_class().is_ok() {
                     gen_class_runtime_type(self, &ty);
                 }
