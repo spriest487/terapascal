@@ -354,7 +354,7 @@ fn binding_completion(label: String, binding: &Binding) -> lsp::CompletionItem {
 
 fn type_completion(label: String, ty: &Type) -> lsp::CompletionItem {
     let kind = match ty {
-        Type::Nothing | Type::Nil => lsp::CompletionItemKind::VALUE,
+        Type::Nothing => lsp::CompletionItemKind::VALUE,
 
         Type::GenericParam(_) => lsp::CompletionItemKind::TYPE_PARAMETER,
 
