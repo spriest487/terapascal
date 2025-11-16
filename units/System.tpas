@@ -15,12 +15,6 @@ type
     
     String = class;
 
-    Box[T] = class
-        value: T;
-    public
-        function Get: T;
-    end;
-
     Option[T] = variant
         None;
         Some: T;
@@ -207,9 +201,6 @@ function StrToInt(s: String): Int32; external 'rt';
 
 function ByteToStr(i: Byte): String;
 function IntToStr(i: Integer): String;
-
-function Unbox[T](b: Box[T]): T;
-function NewBox[T](value: T): Box[T];
 
 function IsWhiteSpace(char: Byte): Boolean;
 
@@ -569,11 +560,6 @@ begin
     s.len
 end;
 
-function Box[T].Get: T;
-begin
-    self.value
-end;
-
 function Option[T].Get: T;
 begin
     match self of
@@ -821,16 +807,6 @@ end;
 function Length[T](arr: array of T): Integer;
 begin
     ArrayLengthInternal(arr as Object)
-end;
-
-function Unbox[T](b: Box[T]): T;
-begin
-    b.value
-end;
-
-function NewBox[T](value: T): Box[T];
-begin
-    Box(value: value)
 end;
 
 function UInt8.Compare(other: UInt8): Integer;
