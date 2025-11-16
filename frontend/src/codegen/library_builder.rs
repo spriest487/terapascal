@@ -56,9 +56,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
-use terapascal_ir::instruction_builder::InstructionBuilder;
-use terapascal_ir::RuntimeType;
-use terapascal_ir::TYPE_FLAG_FUNCTION;
+use terapascal_ir::instruction_builder::InstructionBuilder as _;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -1245,8 +1243,6 @@ impl<'a> LibraryBuilder<'a> {
                 self.gen_iface_impls(&src_ty);
 
                 self.populate_runtime_type_info(src_ty, ty.clone());
-                
-                done_types += 1;
             }
 
             if done_types == self.type_cache.len() {
@@ -1634,8 +1630,8 @@ fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID)
     gen_class_dtor(lib, closure_id, &mut runtime_type);
 
     // this type is the unnamed class implementing a closure, give it the function flag too
-    runtime_type.flags |= TYPE_FLAG_FUNCTION;
-    weak_runtime_type.flags |= TYPE_FLAG_FUNCTION;
+    runtime_type.flags |= ir::TYPE_FLAG_FUNCTION;
+    weak_runtime_type.flags |= ir::TYPE_FLAG_FUNCTION;
     
     lib.metadata.insert_runtime_type(closure_class_ty, runtime_type);
     lib.metadata.insert_runtime_type(closure_weak_ty, weak_runtime_type);
@@ -1665,7 +1661,11 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
     lib.metadata.insert_runtime_type(class_ty.clone(), runtime_type);
 }
 
-fn gen_class_dtor(lib: &mut LibraryBuilder, class_id: ir::TypeDefID, runtime_type: &mut RuntimeType) {
+fn gen_class_dtor(
+    lib: &mut LibraryBuilder,
+    class_id: ir::TypeDefID,
+    runtime_type: &mut ir::RuntimeType,
+) {
     let class_ty = class_id.to_class_ptr_type();
 
     let class_pretty_name = lib.metadata.pretty_ty_name(&class_ty).into_owned();
