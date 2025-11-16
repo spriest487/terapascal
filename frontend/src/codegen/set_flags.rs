@@ -135,7 +135,7 @@ impl SetFlagsType {
         let struct_ty = ir::Type::Struct(struct_id);
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_param(struct_ty.clone().ptr(), "flags");
+        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
 
         let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 0, word_count, struct_ty.clone());
@@ -143,13 +143,13 @@ impl SetFlagsType {
         let word_mask = builder.local_temp(WORD_TYPE);
 
         // word_ref := word_ref | (1 shl (word_bit as u64))  
-        builder.cast(word_mask.clone(), word_bit, WORD_TYPE);
-        builder.shl(word_mask.clone(), ir::Value::LiteralU64(1), word_mask.clone());
-        builder.bit_or(word_ref.clone(), word_mask.clone(), word_ref);
+        builder.cast(word_mask, word_bit, WORD_TYPE);
+        builder.shl(word_mask, ir::Value::LiteralU64(1), word_mask);
+        builder.bit_or(word_ref.clone(), word_mask, word_ref);
         
         let name = format!("operator include ({}-bit flags)", word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).ptr(),
+            ir::Type::Struct(struct_id).temp_ref(),
             ir::Type::U8,
         ], ir::Type::Nothing);
         
@@ -160,7 +160,7 @@ impl SetFlagsType {
         let struct_ty = ir::Type::Struct(struct_id);
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_param(struct_ty.clone().ptr(), "flags");
+        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
 
         let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 0, word_count, struct_ty.clone());
@@ -168,14 +168,14 @@ impl SetFlagsType {
         let word_mask = builder.local_temp(WORD_TYPE);
 
         // word_ref := word_ref & ~(1 shl (word_bit as u64))  
-        builder.cast(word_mask.clone(), word_bit, WORD_TYPE);
-        builder.shl(word_mask.clone(), ir::Value::LiteralU64(1), word_mask.clone());
-        builder.bit_not(word_mask.clone(), word_mask.clone());
-        builder.bit_and(word_ref.clone(), word_mask.clone(), word_ref);
+        builder.cast(word_mask, word_bit, WORD_TYPE);
+        builder.shl(word_mask, ir::Value::LiteralU64(1), word_mask);
+        builder.bit_not(word_mask, word_mask);
+        builder.bit_and(word_ref.clone(), word_mask, word_ref);
         
         let name = format!("operator exclude ({}-bit flags)", word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).ptr(),
+            ir::Type::Struct(struct_id).temp_ref(),
             ir::Type::U8,
         ], ir::Type::Nothing);
         
@@ -187,7 +187,7 @@ impl SetFlagsType {
 
         let mut builder = IRBuilder::new(lib);
         builder.bind_return();
-        builder.bind_param(struct_ty.clone().ptr(), "flags");
+        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
         
         let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 1, word_count, struct_ty.clone());
@@ -195,18 +195,18 @@ impl SetFlagsType {
         let word_mask = builder.local_temp(WORD_TYPE);
 
         // word_mask := 1 shl (word_bit as u64)
-        builder.cast(word_mask.clone(), word_bit, WORD_TYPE);
-        builder.shl(word_mask.clone(), ir::Value::LiteralU64(1), word_mask.clone());
+        builder.cast(word_mask, word_bit, WORD_TYPE);
+        builder.shl(word_mask, ir::Value::LiteralU64(1), word_mask);
         
         // result := (word_mask & word_ref) = word_mask
         let val_and_mask = builder.local_temp(WORD_TYPE);
-        builder.bit_and(val_and_mask.clone(), word_mask.clone(), word_ref);
-        builder.eq(ir::RETURN_REF, word_mask, val_and_mask.clone());
+        builder.bit_and(val_and_mask, word_mask, word_ref);
+        builder.eq(ir::RETURN_REF, word_mask, val_and_mask);
         
         let name = format!("operator in ({}-bit flags)", word_count * WORD_BITS);
         
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).ptr(),
+            ir::Type::Struct(struct_id).temp_ref(),
             ir::Type::U8,
         ], ir::Type::Bool);
 
@@ -245,8 +245,8 @@ impl SetFlagsType {
 
         let name = format!("operator {} ({}-bit flags)", op, word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).ptr(),
-            ir::Type::Struct(struct_id).ptr(),
+            ir::Type::Struct(struct_id).temp_ref(),
+            ir::Type::Struct(struct_id).temp_ref(),
         ], ir::Type::Nothing);
 
         Self::define_func(name, builder.finish(), sig, lib)
@@ -269,7 +269,7 @@ impl SetFlagsType {
         
         let name = format!("operator ~ ({}-bit flags)", word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).ptr(),
+            ir::Type::Struct(struct_id).temp_ref(),
         ], ir::Type::Nothing);
         
         Self::define_func(name, builder.finish(), sig, lib)
@@ -305,8 +305,8 @@ impl SetFlagsType {
         
         let name = format!("operator = ({}-bit flags)", word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).ptr(),
-            ir::Type::Struct(struct_id).ptr(),
+            ir::Type::Struct(struct_id).temp_ref(),
+            ir::Type::Struct(struct_id).temp_ref(),
         ], ir::Type::Bool);
 
         Self::define_func(name, builder.finish(), sig, lib)
