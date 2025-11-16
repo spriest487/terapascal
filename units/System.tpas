@@ -144,6 +144,14 @@ type
         function Tags: TagCollection;
     end;
     
+    TypeFlag = (
+        TypeFlagValue,
+        TypeFlagWeak,
+        TypeFlagArray,
+        TypeFlagFunction,
+    );
+    TypeFlags = set of TypeFlag;
+    
     TypeInfo = class
         name: String;
         methods: array of MethodInfo;
@@ -151,6 +159,8 @@ type
         tags: array of Object;
 
         impl: Pointer;
+        
+        flags: TypeFlags;
     public
         function Name: String;
         function Methods: array of MethodInfo;
@@ -164,6 +174,8 @@ type
         function FindTags[TTag]: array of TTag; overload;
 
         function Tags: TagCollection;
+
+        function Flags: TypeFlags;
 
         class function LoadedTypes: array of TypeInfo;
         class function Find(typeName: String): Option[TypeInfo]; 
@@ -411,6 +423,11 @@ end;
 function TypeInfo.Tags: TagCollection;
 begin
     TagCollection(tags: self.tags);
+end;
+
+function TypeInfo.Flags: TypeFlags;
+begin
+    self.flags;
 end;
 
 function TypeInfo.FindTag(tagClass: TypeInfo): Option[Object]; overload;
