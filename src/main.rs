@@ -290,16 +290,15 @@ fn clang_compile(module: &ir::Library, args: &Args, out_path: &OsStr) -> io::Res
         .arg("-Wno-unused-variable")
         .arg("-Wno-unused-label")
         .arg("-Wno-address-of-packed-member")
-        .arg("-x").arg("c")
-        .arg("-o").arg(out_path);
+        .arg("-x").arg("c");
     
     let debug = args.debug || args.debug_codeview;
-
-    let mut clang = if debug {
-        // debug: generate a source file next to the output
+    
+    if debug {
+        // debug: generates a source file next to the output
         let c_file_path = PathBuf::from(out_path).with_extension("c");
-        
-        let mut c_file = File::create(&c_file_path)?; 
+
+        let mut c_file = File::create(&c_file_path)?;
         write!(c_file, "{c_unit}")?;
 
         clang_cmd.arg(c_file_path)
@@ -309,14 +308,18 @@ fn clang_compile(module: &ir::Library, args: &Args, out_path: &OsStr) -> io::Res
         if args.debug_codeview {
             clang_cmd.arg("-gcodeview");
         }
-
-        clang_cmd.spawn()?
     } else {
         // release: compile from stdin
         clang_cmd.arg("-")
             .arg("-O2")
             .stdin(Stdio::piped());
+    }
 
+    clang_cmd.arg("-o").arg(out_path);
+
+    let mut clang = if debug {
+        clang_cmd.spawn()?
+    } else {
         let mut clang = clang_cmd.spawn()?;
 
         let mut clang_in = clang.stdin
@@ -324,7 +327,7 @@ fn clang_compile(module: &ir::Library, args: &Args, out_path: &OsStr) -> io::Res
             .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "unable to write to stdin"))?;
 
         write!(clang_in, "{}", c_unit)?;
-        drop(clang_in);
+        clang_in.flush()?;
         
         clang
     };
