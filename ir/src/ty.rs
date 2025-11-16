@@ -128,7 +128,7 @@ impl Type {
         }
     }
 
-    pub fn is_rc(&self) -> bool {
+    pub fn is_object(&self) -> bool {
         matches!(self, Type::Object(..) | Type::WeakObject(..))
     }
 

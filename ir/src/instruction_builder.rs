@@ -813,7 +813,7 @@ pub trait InstructionBuilder {
             at,
             ty,
             |builder, element_ty, element_ref| {
-                if !element_ty.is_rc() {
+                if !element_ty.is_object() {
                     return false;
                 }
                 
@@ -833,7 +833,7 @@ pub trait InstructionBuilder {
             at,
             ty,
             |builder, element_ty, element_ref| {
-                if !element_ty.is_rc() {
+                if !element_ty.is_object() {
                     return false;
                 }
 
@@ -1056,7 +1056,7 @@ pub trait InstructionBuilder {
 
                 let mut result = false;
                 for (field, field_ty) in fields {
-                    if !(field_ty.is_rc() || field_ty.is_complex()) {
+                    if !(field_ty.is_object() || field_ty.is_complex()) {
                         continue;
                     }
 
@@ -1097,7 +1097,7 @@ pub trait InstructionBuilder {
                     self.comment(&format!("testing for variant case {} ({})", tag, case.name));
 
                     if let Some(data_ty) = &case.ty {
-                        if !(data_ty.is_rc() || data_ty.is_complex()) {
+                        if !(data_ty.is_object() || data_ty.is_complex()) {
                             continue;
                         }
 
@@ -1137,7 +1137,7 @@ pub trait InstructionBuilder {
             },
 
             Type::Array { element, dim } => {
-                if !element.is_rc() && !element.is_complex() {
+                if !element.is_object() && !element.is_complex() {
                     return false;
                 }
 

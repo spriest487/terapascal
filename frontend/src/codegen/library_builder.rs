@@ -57,6 +57,8 @@ use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::RuntimeType;
+use terapascal_ir::TYPE_FLAG_FUNCTION;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -1185,9 +1187,11 @@ impl<'a> LibraryBuilder<'a> {
         }
 
         assert!(self.metadata().is_defined(ty), "gen_runtime_type: type {} ({:?}) is not defined yet", self.metadata().pretty_ty_name(ty), ty);
+        
+        let flags = ir::RuntimeType::type_runtime_flags(ty);
 
         // type names and methods will be added after codegen
-        let mut rtti = ir::RuntimeType::new(None);
+        let mut rtti = ir::RuntimeType::new(None, flags);
         
         if self.opts.debug && self.opts.rtti {
             rtti.debug_name = Some(self.metadata().pretty_ty_name(&ty).into_owned());
@@ -1217,8 +1221,9 @@ impl<'a> LibraryBuilder<'a> {
             
             let closure_types = self.metadata.closures();
             populate_closures.extend(closure_types.skip(done_closures));
-
+            
             for closure_id in populate_closures.drain(0..) {
+                gen_closure_runtime_type(self, closure_id);
                 self.gen_runtime_type(&closure_id.to_class_ptr_type());
                 self.gen_runtime_type(&closure_id.to_class_weak_type());
                 done_closures += 1;
@@ -1516,14 +1521,14 @@ impl<'a> LibraryBuilder<'a> {
     fn gen_static_type_init(&mut self) {
         let mut instructions = Vec::new();
 
-        if let Some(tag_init_func) = gen_tags_init(self) {
+        if self.opts.rtti && let Some(tag_init_func) = gen_tags_init(self) {
             instructions.push(ir::Instruction::Call {
                 args: Vec::new(),
                 out: None,
                 function: ir::Value::from(tag_init_func),
             });
         };
-        
+
         instructions.append(&mut self.init_code);
         self.init_code = instructions;
     }
@@ -1562,7 +1567,7 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
     // the destructor can be skipped entirely if the element isn't an RC object itself and
     // doesn't have a release function for its own elements
     let element_release = lib.get_rc_method_info(&element_type).release_elements;
-    if element_release.is_none() && !element_type.is_rc() {
+    if element_release.is_none() && !element_type.is_object() {
         return;
     }
 
@@ -1615,6 +1620,27 @@ fn gen_iface_virtual_method_info(lib: &mut LibraryBuilder, iface_ty: &typ::Type)
     }
 }
 
+fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID) {
+    let closure_class_ty = closure_id.to_class_ptr_type();
+    let closure_weak_ty = closure_id.to_class_weak_type();
+    
+    let runtime_type = lib.gen_runtime_type(&closure_class_ty);
+    let mut runtime_type = (*runtime_type).clone();
+
+    let mut weak_runtime_type = lib.gen_runtime_type(&closure_weak_ty)
+        .as_ref()
+        .clone();
+
+    gen_class_dtor(lib, closure_id, &mut runtime_type);
+
+    // this type is the unnamed class implementing a closure, give it the function flag too
+    runtime_type.flags |= TYPE_FLAG_FUNCTION;
+    weak_runtime_type.flags |= TYPE_FLAG_FUNCTION;
+    
+    lib.metadata.insert_runtime_type(closure_class_ty, runtime_type);
+    lib.metadata.insert_runtime_type(closure_weak_ty, weak_runtime_type);
+}
+
 // class types must generate cleanup code for their inner struct which isn't
 // explicitly called in IR but must be called dynamically by the target to
 // clean up the inner structs of class RC cells.
@@ -1630,10 +1656,16 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
     lib.gen_runtime_type(&class_ty);
     lib.gen_runtime_type(&class_id.to_class_weak_type());
 
-    gen_class_dtor(lib, class_id);
+    let mut runtime_type = lib.gen_runtime_type(&class_ty)
+        .as_ref()
+        .clone();
+
+    gen_class_dtor(lib, class_id, &mut runtime_type);
+
+    lib.metadata.insert_runtime_type(class_ty.clone(), runtime_type);
 }
 
-fn gen_class_dtor(lib: &mut LibraryBuilder, class_id: ir::TypeDefID) {
+fn gen_class_dtor(lib: &mut LibraryBuilder, class_id: ir::TypeDefID, runtime_type: &mut RuntimeType) {
     let class_ty = class_id.to_class_ptr_type();
 
     let class_pretty_name = lib.metadata.pretty_ty_name(&class_ty).into_owned();
@@ -1647,8 +1679,6 @@ fn gen_class_dtor(lib: &mut LibraryBuilder, class_id: ir::TypeDefID) {
             panic!("gen_class_runtime_type: missing definition for resource struct of {class_pretty_name}", )
         })
         .clone();
-
-    let runtime_type = lib.gen_runtime_type(&class_ty);
 
     let user_dtor = lib.dtors.get(&class_id).cloned();
 
@@ -1665,7 +1695,7 @@ fn gen_class_dtor(lib: &mut LibraryBuilder, class_id: ir::TypeDefID) {
 
     for (field_id, field_def) in class_struct_def.fields {
         let field_rc_methods = dtor_builder.get_rc_method_info(&field_def.ty);
-        let release_field = field_def.ty.is_rc() || field_rc_methods.release_elements.is_some();
+        let release_field = field_def.ty.is_object() || field_rc_methods.release_elements.is_some();
 
         if release_field {
             let field_ref = dtor_builder.local_temp(field_def.ty.clone().temp_ref());
@@ -1676,12 +1706,9 @@ fn gen_class_dtor(lib: &mut LibraryBuilder, class_id: ir::TypeDefID) {
 
     if released_any {
         let dtor_body = dtor_builder.finish();
-        let mut runtime_type = (*runtime_type).clone();
 
         let dtor_id = lib.metadata.insert_func(None, false);
         runtime_type.dtor = Some(dtor_id);
-
-        lib.metadata.insert_runtime_type(class_ty.clone(), runtime_type);
 
         let dtor_debug_name = lib.opts.debug
             .then(|| format!("generated dtor for {class_pretty_name}"));

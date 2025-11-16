@@ -4,6 +4,7 @@ use crate::rtti::RuntimeType;
 use crate::ty::FieldID;
 use crate::ty::ObjectID;
 use crate::ty_decl::TagLocation;
+use crate::FunctionDecl;
 use crate::FunctionID;
 use crate::FunctionSig;
 use crate::GlobalRef;
@@ -26,7 +27,6 @@ use crate::TypeDef;
 use crate::TypeDefID;
 use crate::Value;
 use crate::VariantDef;
-use crate::FunctionDecl;
 use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 use serde::Serialize;
@@ -82,6 +82,7 @@ pub const TYPEINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const TYPEINFO_METHODS_FIELD: FieldID = FieldID(1);
 pub const TYPEINFO_TAGS_FIELD: FieldID = FieldID(2);
 pub const TYPEINFO_IMPL_FIELD: FieldID = FieldID(3);
+pub const TYPEINFO_FLAGS_FIELD: FieldID = FieldID(4);
 
 pub const METHODINFO_ID: TypeDefID = TypeDefID(3);
 pub const METHODINFO_VTYPE_ID: ObjectID = ObjectID::Class(METHODINFO_ID);
@@ -660,6 +661,15 @@ impl Metadata {
         self.closures
             .values()
             .flat_map(|ids| ids.iter().cloned())
+    }
+    
+    pub fn find_closure_func_type_id(&self, closure_class_id: TypeDefID) -> Option<TypeDefID> {
+        for (func_id, closure_class_ids) in &self.closures {
+            if closure_class_ids.contains(&closure_class_id) {
+                return Some(*func_id);
+            }
+        }
+        None
     }
 
     pub fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {

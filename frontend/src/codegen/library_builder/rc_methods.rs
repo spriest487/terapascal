@@ -52,7 +52,7 @@ fn gen_release_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Vec<ir::Instruct
     let target_param = release_builder.bind_ref_param(ty.clone(), "target");
 
     release_builder.visit_deep(target_param.to_deref(), ty, |builder, element_type, element_ref| {
-        if element_type.is_rc() {
+        if element_type.is_object() {
             builder.release(element_ref, element_type.is_weak(), ir::Ref::Discard);
             true
         } else {
@@ -89,7 +89,7 @@ fn gen_retain_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Vec<ir::Instructi
     let target_param = retain_builder.bind_ref_param(ty.clone(), "target");
     
     retain_builder.visit_deep(target_param.to_deref(), ty, |builder, element_type, element_ref| {
-        if element_type.is_rc() {
+        if element_type.is_object() {
             builder.retain(element_ref, element_type.is_weak());
             true
         } else {
@@ -133,7 +133,7 @@ fn has_rc_members_rec(
 
             let mut any_rc = false;
             for (_, field_def) in &def.fields {
-                if field_def.ty.is_rc() || has_rc_members_rec(&field_def.ty, lib, cache) {
+                if field_def.ty.is_object() || has_rc_members_rec(&field_def.ty, lib, cache) {
                     any_rc = true;
                     break;
                 }
@@ -154,7 +154,7 @@ fn has_rc_members_rec(
                     continue;
                 };
 
-                if case_ty.is_rc() || has_rc_members_rec(case_ty, lib, cache) {
+                if case_ty.is_object() || has_rc_members_rec(case_ty, lib, cache) {
                     any_rc = true;
                     break;
                 }
@@ -163,7 +163,7 @@ fn has_rc_members_rec(
         }
         
         ir::Type::Array { element, .. } => {
-            if element.is_rc() {
+            if element.is_object() {
                 true
             } else {
                 has_rc_members_rec(element, lib, cache)

@@ -331,7 +331,7 @@ fn build_for_loop_sequence(
                 let seq_var = builder.local_new(seq_ty.clone(), None);
 
                 // call Sequence with a ref to the source if it's a value type
-                let src_self_arg_ref = if src_ty.is_rc() {
+                let src_self_arg_ref = if src_ty.is_object() {
                     src_ref.clone()
                 } else {
                     builder.comment(format!("source ref (source is a value type: {})", builder.pretty_ty_name(&src_ty)));
@@ -341,7 +341,7 @@ fn build_for_loop_sequence(
                 };
 
                 // call Next with a pointer to the sequence if it's a value type
-                let seq_self_arg_var = if seq_ty.is_rc() {
+                let seq_self_arg_var = if seq_ty.is_object() {
                     seq_var
                 } else {
                     builder.comment(format!("sequence ref (sequence is a value type: {})", builder.pretty_ty_name(&seq_ty)));

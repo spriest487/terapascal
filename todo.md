@@ -11,8 +11,7 @@ demos\rtti\TypeMethods.tpas
 
 # RTTI
 * remove RTTI for class inner types
-* weak pointer target type info
-* type kind info
+* more detailed type kind info
 * type/method unit name info
 * can Invokers in the C backend store an arg count for validation
 

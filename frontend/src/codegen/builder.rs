@@ -71,7 +71,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
     }
 
     fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        if ty.is_rc() {
+        if ty.is_object() {
             if self.opts().debug {
                 self.comment(format!("release: {}", self.metadata().pretty_ty_name(ty)));
             }
@@ -95,7 +95,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
     }
 
     fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        if ty.is_rc() {
+        if ty.is_object() {
             if self.opts().debug {
                 self.comment(format!("retain: {}", self.metadata().pretty_ty_name(ty)));
             }

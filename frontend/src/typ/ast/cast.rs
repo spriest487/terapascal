@@ -80,7 +80,11 @@ pub fn check_implicit_conversion(
         },
 
         Type::Any => match from {
-            Type::DynArray { .. } | Type::Class(..) | Type::Interface(..) => Conversion::Blittable,
+            Type::DynArray { .. } 
+            | Type::Class(..) 
+            | Type::Interface(..) 
+            | Type::Function(..) => Conversion::Blittable,
+            
             _ => Conversion::Illegal,
         },
 

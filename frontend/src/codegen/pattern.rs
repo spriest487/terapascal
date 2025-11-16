@@ -154,7 +154,7 @@ pub fn translate_is_ty(
     
     if let ir::Type::Object(class_id) = ty {
         // casting strong or weak RC type to strong RC type: do a dynamic check
-        if val_ty.is_rc() {
+        if val_ty.is_object() {
             let result = builder.local_temp(ir::Type::Bool);
             builder.class_is(result, val, class_id.clone());
 

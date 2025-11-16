@@ -668,7 +668,7 @@ impl Value {
                 return Ok(())
             }
         }
-        
+
         match self {
             // can't be evaluated
             Value::Untyped(..)

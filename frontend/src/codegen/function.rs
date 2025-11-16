@@ -294,7 +294,7 @@ fn bind_function_params(
 
         // pass the self parameter as a ref for value types
         if is_self_param {
-            if !param.ty.is_rc() {
+            if !param.ty.is_object() {
                 assert!(!by_ref, "self param should not already be by-ref");
                 by_ref = true;
             }

@@ -1363,7 +1363,7 @@ impl Interpreter {
         let el_marshal_ty = self.marshaller.get_ty(element_type)?;
 
         // assume any object pointer is a dynarray
-        let elements_addr = if of_type.is_rc() {
+        let elements_addr = if of_type.is_object() {
             let DynValue::Pointer(array_ptr) = self.load(a)? else {
                 return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
             };
@@ -2117,20 +2117,28 @@ impl Interpreter {
 
             string_lit_values.insert(id, str_val);
         }
-
-        // allocate static arrays for runtime tag objects (must exist before RTTI init)
-        for (tag_loc, tag_count) in lib.metadata.tag_counts() {
-            let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
-            let elements = iter::repeat(nil_any).take(tag_count).collect();
-
-            let empty_tag_array = self.new_dyn_array(&ir::ANY_TYPE, elements, true)?;
-
-            let array_ref = ir::GlobalRef::StaticTagArray(tag_loc);
-            let array_value = GlobalValue::StaticTagArray(empty_tag_array);
-            self.globals.insert(array_ref, array_value);
-        }
         
-        self.init_rtti(lib, &string_lit_values)?;
+        let disable_rtti = self.metadata.get_struct_def(ir::TYPEINFO_ID).is_none()
+            || self.metadata.get_struct_def(ir::FUNCINFO_ID).is_none()
+            || self.metadata.get_struct_def(ir::METHODINFO_ID).is_none();
+
+        if !disable_rtti {
+            // allocate static arrays for runtime tag objects (must exist before RTTI init)
+            for (tag_loc, tag_count) in lib.metadata.tag_counts() {
+                let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
+                let elements = iter::repeat(nil_any).take(tag_count).collect();
+
+                let empty_tag_array = self.new_dyn_array(&ir::ANY_TYPE, elements, true)?;
+
+                let array_ref = ir::GlobalRef::StaticTagArray(tag_loc);
+                let array_value = GlobalValue::StaticTagArray(empty_tag_array);
+                self.globals.insert(array_ref, array_value);
+            }
+
+            self.init_rtti(lib, &string_lit_values)?;
+        } else {
+            eprintln!("[vm] RTTI is disabled");
+        }
 
         // declare global variables
         for (var_id, var_ty) in &lib.variables {
@@ -2189,16 +2197,6 @@ impl Interpreter {
         lib: &ir::Library,
         string_lit_values: &HashMap<ir::StringID, DynValue>
     ) -> ExecResult<()> {
-        if self.metadata.get_struct_def(ir::TYPEINFO_ID).is_none() 
-            || self.metadata.get_struct_def(ir::FUNCINFO_ID).is_none() 
-            || self.metadata.get_struct_def(ir::METHODINFO_ID).is_none() 
-        {
-            if self.opts.verbose {
-                eprintln!("[vm] missing typeinfo class(es), runtime type info will not be populated");
-            }
-            return Ok(());
-        }
-
         // create runtime type info objects (TypeInfo and MethodInfo)
         for (ty, runtime_type) in lib.metadata.runtime_types() {
             let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
@@ -2453,6 +2451,13 @@ impl Interpreter {
         let ty_tags_array_ptr = ty_tags_loc
             .and_then(|loc| self.get_tags_array_ptr(loc))
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
+        
+        let type_flags_path = ir::NamePath::new(["System".to_string()], "TypeFlags");
+        let type_flags_val = self.create_flags_value(rtti.flags, &type_flags_path)?;
+
+        let typeinfo_methods_ptr = DynValue::Pointer(
+            Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))
+        );
 
         // allocate and store the typeinfo before populating methods, so we can easily
         // get a real heap pointer to use for the "owner" field
@@ -2460,9 +2465,13 @@ impl Interpreter {
             // 0: name
             type_name_string,
             // 1: methods
-            DynValue::Pointer(Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))),
+            typeinfo_methods_ptr,
             // 2: tags
             DynValue::Pointer(ty_tags_array_ptr),
+            // 3: impl
+            DynValue::Pointer(Pointer::nil(ir::Type::Nothing)),
+            // 3: flags
+            type_flags_val,
         ]);
 
         let typeinfo_ptr = self.new_object(typeinfo_struct.clone(), true)?;
@@ -2521,6 +2530,19 @@ impl Interpreter {
             .store(&typeinfo_ptr, DynValue::from(typeinfo_struct))?;
 
         Ok(DynValue::Pointer(typeinfo_ptr))
+    }
+    
+    fn create_flags_value(&mut self, flags: u64, flags_type_name: &ir::NamePath) -> ExecResult<DynValue> {
+        let Some((_, alias_def)) = self.metadata.find_set_def(flags_type_name) else {
+            let msg = format!("flags set type not found: {flags_type_name}");
+            return Err(ExecError::illegal_state(msg));
+        };
+        
+        let struct_val = StructValue::new(alias_def.flags_struct, [
+            DynValue::U64(flags)
+        ]);
+        
+        Ok(DynValue::from(struct_val))
     }
 
     fn create_funcinfo(

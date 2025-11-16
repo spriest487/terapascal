@@ -33,7 +33,7 @@ pub fn build_object_ctor_invocation(
     // type for rc class types
     let out_val = builder.local_new(object_ty.clone(), None).to_ref();
 
-    if object_ty.is_rc() {
+    if object_ty.is_object() {
         // allocate class struct at out pointer
         builder.rc_new(out_val.clone(), struct_id, false);
     }

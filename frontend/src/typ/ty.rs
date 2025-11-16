@@ -551,6 +551,7 @@ impl Type {
             Type::Interface(..) => true,
             Type::Any => true,
             Type::DynArray { .. } => true,
+            Type::Function(..) => true,
 
             _ => false,
         }

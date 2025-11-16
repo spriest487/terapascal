@@ -309,7 +309,7 @@ impl<'a, 'b> Builder<'a, 'b> {
 
         match instruction {
             ir::Instruction::LocalAlloc(id, ty) => {
-                let null_init = ty.is_rc();
+                let null_init = ty.is_object();
                 let c_type = Type::from_metadata(ty, self.module);
 
                 self.stmts.push(Statement::VariableDecl {

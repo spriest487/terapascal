@@ -50,6 +50,12 @@ impl MetadataBuilder {
         )
     }
     
+    pub fn find_closure_func_type_id(&self, closure_class_id: TypeDefID) -> Option<TypeDefID> {
+        self.find_in_self_or_refs(move |metadata| {
+            metadata.find_closure_func_type_id(closure_class_id)
+        })
+    }
+    
     pub fn get_static_closure(&self, func_id: FunctionID) -> Option<StaticClosureID> {
         self.find_in_self_or_refs(move |metadata| metadata.get_static_closure(func_id))
     }
