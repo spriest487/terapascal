@@ -1,0 +1,40 @@
+program TypeFlags;
+
+function PrintFlags(ty: TypeInfo);
+begin
+    var tyName := if ty.Name.Length = 0 
+        then '<anonymous type>' 
+        else ty.Name;
+    WriteLn('flags for ' + tyName + ':');
+
+    if TypeFlagValue in ty.Flags then WriteLn(' * Value');
+    if TypeFlagArray in ty.Flags then WriteLn(' * Array');
+    if TypeFlagWeak in ty.Flags then WriteLn(' * Weak');
+    if TypeFlagFunction in ty.Flags then WriteLn(' * Function');
+end;
+
+begin
+    var intType := typeinfo(Integer);
+    PrintFlags(intType);
+
+    var stringType := typeinfo(String);
+    PrintFlags(stringType);
+
+    var arrType := typeinfo(array of Object);
+    PrintFlags(arrType);
+    
+    var weakArrType := typeinfo(weak array of Object);
+    PrintFlags(weakArrType);
+
+    var weakType := typeinfo(weak Object);
+    PrintFlags(weakType);
+
+    var anonClosure: function := function; begin end;
+    PrintFlags(TypeInfo.Get(anonClosure));
+
+    var funcType := typeinfo(function);
+    PrintFlags(funcType);
+    
+    var weakFuncType := typeinfo(weak function);
+    PrintFlags(weakFuncType);
+end.

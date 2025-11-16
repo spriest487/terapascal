@@ -44,7 +44,9 @@ initialization
         WriteLn('second tag with value: ' + secondTag.Value);
     end;
     
-    var myRecordTag := typeinfo(MyRecord).FindTag[MyCustomTag]().Get;
+    var myRecordTag := if typeinfo(MyRecord).FindTag[MyCustomTag]() is Option.Some t
+        then t
+        else raise 'MyCustomTag on MyRecord is missing!';
     WriteLn(myRecordTag.Greeting +', world!');
     
     var myVariantTag := typeinfo(MyVariant).FindTag[MyCustomTag]().Get;

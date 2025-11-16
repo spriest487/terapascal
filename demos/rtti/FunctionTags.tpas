@@ -41,7 +41,9 @@ begin
         WriteLn('A has tag: ' + typeName);
     end;
 
-    var myTag1 := funcInfo.FindTag[MyTag1]().Get;
+    var myTag1 := if funcInfo.FindTag[MyTag1]() is Option.Some t 
+        then t 
+        else raise 'function A is missing tag MyTag1';
     WriteLn('Hello, name of tag1: ' + myTag1.name);
     
     for var myTag2 in funcInfo.FindTags(typeinfo(MyTag2)) do
