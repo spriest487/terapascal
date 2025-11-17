@@ -12,8 +12,8 @@ use ::dlopen::Error as DlopenError;
 use ir::IRFormatter;
 use ir::RawInstructionFormatter;
 use libffi::low::ffi_type;
-use libffi::middle::Type as FfiType;
 use libffi::middle::Builder as FfiBuilder;
+use libffi::middle::Type as FfiType;
 use libffi::raw::FFI_TYPE_STRUCT;
 use std::cmp::max;
 use std::collections::BTreeMap;
@@ -62,6 +62,10 @@ pub enum MarshalError {
         lib: String,
         symbol: String,
         msg: String,
+    },
+    InvalidWrite { 
+        data_size: usize, 
+        dest_size: usize 
     },
 }
 
@@ -114,6 +118,9 @@ impl MarshalError {
             MarshalError::InvalidRefCountValue(val) => {
                 write!(f, "value is not a valid ref count: {:?}", val)
             },
+            MarshalError::InvalidWrite { dest_size, data_size } => {
+                write!(f, "writing {} bytes to buffer of size {}", data_size, dest_size)
+            }
         }
     }
 }
@@ -654,18 +661,18 @@ impl Marshaller {
 
     pub fn marshal(&self, val: &DynValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
         let size = match val {
-            DynValue::I8(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::U8(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::I16(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::U16(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::I32(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::U32(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::I64(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::U64(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::ISize(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::USize(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::F32(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
-            DynValue::F64(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes),
+            DynValue::I8(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::U8(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::I16(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::U16(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::I32(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::U32(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::I64(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::U64(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::ISize(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::USize(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::F32(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
+            DynValue::F64(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
             DynValue::Bool(x) => {
                 out_bytes[0] = if *x { 1 } else { 0 };
                 1
@@ -692,7 +699,7 @@ impl Marshaller {
             DynValue::Pointer(ptr) => self.marshal_ptr(ptr, out_bytes)?,
 
             DynValue::Function(func_id) => {
-                marshal_bytes(&func_id.0.to_ne_bytes(), out_bytes)
+                marshal_bytes(&func_id.0.to_ne_bytes(), out_bytes)?
             }
         };
 
@@ -737,7 +744,7 @@ impl Marshaller {
 
     fn marshal_ptr(&self, ptr: &Pointer, out_bytes: &mut [u8]) -> MarshalResult<usize> {
         let ptr_bytes = ptr.addr.to_ne_bytes();
-        let len = marshal_bytes(&ptr_bytes, out_bytes);
+        let len = marshal_bytes(&ptr_bytes, out_bytes)?;
         Ok(len)
     }
 
@@ -849,6 +856,11 @@ impl Marshaller {
                         dim: 0,
                     },
 
+                    ir::ObjectID::Box(element_type) => ir::Type::Array {
+                        element: element_type.clone(),
+                        dim: 1,
+                    },
+
                     _ => ir::Type::Nothing,
                 };
 
@@ -925,9 +937,9 @@ impl Marshaller {
             })?;
         
         let mut offset = 0;
-        offset += marshal_bytes(&type_index.to_ne_bytes(), &mut out_bytes[offset..]);
-        offset += marshal_bytes(&header.strong_count.to_ne_bytes(), &mut out_bytes[offset..]);
-        offset += marshal_bytes(&header.weak_count.to_ne_bytes(), &mut out_bytes[offset..]);
+        offset += marshal_bytes(&type_index.to_ne_bytes(), &mut out_bytes[offset..])?;
+        offset += marshal_bytes(&header.strong_count.to_ne_bytes(), &mut out_bytes[offset..])?;
+        offset += marshal_bytes(&header.weak_count.to_ne_bytes(), &mut out_bytes[offset..])?;
 
         Ok(offset)
     }
@@ -985,7 +997,7 @@ impl Marshaller {
                     MarshalError::UnsupportedValue(DynValue::Array(Box::new(array_value.clone())))
                 })?;
             
-            offset += marshal_bytes(&len.to_ne_bytes(), &mut out_bytes[offset..]);
+            offset += marshal_bytes(&len.to_ne_bytes(), &mut out_bytes[offset..])?;
         }
         
         for element in &array_value.elements {
@@ -1212,9 +1224,16 @@ impl Marshaller {
     }
 }
 
-fn marshal_bytes(bytes: &[u8], out_bytes: &mut [u8]) -> usize {
+fn marshal_bytes(bytes: &[u8], out_bytes: &mut [u8]) -> MarshalResult<usize> {
+    if bytes.len() > out_bytes.len() {
+        return Err(MarshalError::InvalidWrite {
+            data_size: bytes.len(),
+            dest_size: out_bytes.len(),
+        });
+    }
+    
     out_bytes[0..bytes.len()].copy_from_slice(bytes);
-    bytes.len()
+    Ok(bytes.len())
 }
 
 fn unmarshal_bytes<const COUNT: usize>(in_bytes: &[u8]) -> MarshalResult<[u8; COUNT]> {
