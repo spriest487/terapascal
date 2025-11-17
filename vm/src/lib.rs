@@ -378,11 +378,19 @@ impl Interpreter {
             },
 
             ir::Ref::Deref(inner) => match self.evaluate(inner)? {
-                DynValue::Pointer(ptr) => self.load_indirect(&ptr),
+                DynValue::Pointer(ptr) => {
+                    if ptr.ty == ir::Type::Nothing {
+                        let ref_name = at.to_pretty_string(self.metadata.as_ref());
+                        let msg = format!("can't deref untyped pointer: {ref_name}");
+                        return Err(ExecError::illegal_state(msg));
+                    }
+                    
+                    self.load_indirect(&ptr)
+                },
 
                 x => {
                     let ref_name = at.to_pretty_string(self.metadata.as_ref());
-                    let msg = format!("can't dereference `{ref_name}`: {x:?}");
+                    let msg = format!("can't dereference value: {ref_name} ({})", x.value_type_category());
                     Err(ExecError::illegal_state(msg))
                 },
             },
