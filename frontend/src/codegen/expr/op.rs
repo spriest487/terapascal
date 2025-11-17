@@ -5,6 +5,7 @@ use crate::codegen::typ;
 use crate::ir;
 use crate::IntConstant;
 use bigdecimal::BigDecimal;
+use terapascal_common::span::Spanned;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
 pub fn translate_bin_op(
@@ -331,7 +332,34 @@ pub fn translate_unary_op(
             out_val.to_ref()
         },
 
-        ast::Operator::Caret => operand_ref.to_deref(),
+        ast::Operator::Caret if unary_op.pos == ast::UnaryPosition::Postfix => {
+            let operand_type = unary_op.operand.annotation().ty();
+
+            // deref syntax is overloaded for box types
+            if let typ::Type::Box(value_type) = operand_type.as_ref() {
+                let element_type = builder.translate_type(value_type.as_ref());
+                let element_val = builder.local_new(element_type.clone(), None);
+                
+                builder.local_begin();
+                {
+                    let box_type = builder.translate_type(operand_type.as_ref());
+
+                    let element_ref = builder.local_temp(element_type.clone().temp_ref());
+                    builder.element(element_ref, operand_ref, ir::Value::LiteralI32(0), box_type);
+                    builder.mov(element_val, element_ref.to_deref());
+                }
+                builder.local_end();
+
+                element_val.to_ref()
+            } else {
+                if !operand_type.is_pointer() {
+                    panic!("operand of deref operator must be a pointer, was {operand_type} @ {}", unary_op.span());
+                }
+                
+                // the operand must be a pointer
+                operand_ref.to_deref()
+            }
+        },
 
         ast::Operator::Sub => {
             let out_ty = builder.translate_type(out_ty);
