@@ -8,6 +8,11 @@ initialization
     SetLength(x, 2, 0);
     WriteLn(x.Length.ToString);
     
-    var strings: array of Box[Integer] := [NewBox(1), NewBox(2)];
-    strings.SetLength(0, NewBox(0));
+    var boxes: array of box of Integer := [[1], [2]];
+    boxes.SetLength(0, [0]);
+    
+    for var b in boxes do 
+    begin
+        WriteLn('array now contains:' + b^);
+    end;
 end
