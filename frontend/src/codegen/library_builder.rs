@@ -30,7 +30,6 @@ use crate::codegen::SetFlagsType;
 use crate::ir;
 use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::ast::FunctionDeclContext;
-use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
@@ -47,13 +46,13 @@ use crate::typ::TypeArgsResult;
 use crate::typ::TypeParamContainer;
 use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
+use crate::typ::builtin_funcinfo_name;
 pub use function::*;
 use init::gen_tags_init;
 use linked_hash_map::LinkedHashMap;
 pub use rc_methods::RcMethodInfo;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_ir::instruction_builder::InstructionBuilder as _;
@@ -841,123 +840,6 @@ impl<'a> LibraryBuilder<'a> {
         }
     }
 
-    pub fn find_type(&mut self, src_ty: &typ::Type) -> ir::Type {
-        match src_ty {
-            typ::Type::Nothing => ir::Type::Nothing,
-
-            typ::Type::Primitive(typ::Primitive::Boolean) => ir::Type::Bool,
-
-            typ::Type::Primitive(typ::Primitive::Int8) => ir::Type::I8,
-            typ::Type::Primitive(typ::Primitive::UInt8) => ir::Type::U8,
-            typ::Type::Primitive(typ::Primitive::Int16) => ir::Type::I16,
-            typ::Type::Primitive(typ::Primitive::UInt16) => ir::Type::U16,
-            typ::Type::Primitive(typ::Primitive::Int32) => ir::Type::I32,
-            typ::Type::Primitive(typ::Primitive::UInt32) => ir::Type::U32,
-            typ::Type::Primitive(typ::Primitive::Int64) => ir::Type::I64,
-            typ::Type::Primitive(typ::Primitive::UInt64) => ir::Type::U64,
-            typ::Type::Primitive(typ::Primitive::NativeInt) => ir::Type::ISize,
-            typ::Type::Primitive(typ::Primitive::NativeUInt) => ir::Type::USize,
-
-            typ::Type::Primitive(typ::Primitive::Real32) => ir::Type::F32,
-
-            typ::Type::Primitive(typ::Primitive::Pointer) => ir::Type::Nothing.ptr(),
-
-            typ::Type::Weak(weak_ty) => self.find_type(weak_ty), 
-
-            typ::Type::Pointer(target) => self.find_type(target).ptr(),
-
-            typ::Type::Record(class) | typ::Type::Class(class) => {
-                expect_no_unspec_args(&class, class.type_args.as_ref());
-
-                let ty_name = ir::NamePath::from_decl(class.as_ref().clone(), self);
-                let struct_id = match self.metadata().find_type_decl(&ty_name) {
-                    Some(id) => id,
-                    None => panic!("{} was not found in metadata (not instantiated)", class),
-                };
-
-                match src_ty {
-                    typ::Type::Class(..) => {
-                        let class_id = ir::ObjectID::Class(struct_id);
-                        ir::Type::Object(class_id)
-                    },
-
-                    typ::Type::Record(..) => ir::Type::Struct(struct_id),
-
-                    _ => unreachable!(),
-                }
-            },
-
-            typ::Type::Interface(iface) => {
-                expect_no_unspec_args(&iface, iface.type_args.as_ref());
-
-                let iface_id = match self.find_iface_decl(&iface) {
-                    Some(id) => id,
-                    None => panic!("missing IR definition for interface {}", iface),
-                };
-
-                ir::Type::Object(ir::ObjectID::Interface(iface_id))
-            },
-
-            typ::Type::Array(array_ty) => {
-                self.find_type(&array_ty.element_ty).array(array_ty.dim)
-            },
-
-            typ::Type::DynArray(element) => {
-                self.find_type(element.as_ref()).dyn_array()
-            },
-
-            typ::Type::Box(value) => {
-                self.find_type(value.as_ref()).boxed()
-            }
-
-            typ::Type::Variant(variant) => {
-                expect_no_unspec_args(&variant, variant.type_args.as_ref());
-
-                let ty_name = ir::NamePath::from_decl(variant.as_ref().clone(), self);
-
-                match self.metadata().find_type_decl(&ty_name) {
-                    Some(id) => ir::Type::Variant(id),
-                    None => panic!("missing IR struct metadata for variant {}", variant),
-                }
-            },
-
-            typ::Type::MethodSelf => panic!("Self is not a real type in this context"),
-
-            typ::Type::GenericParam(param) => panic!(
-                "{} is not a real type in this context",
-                param,
-            ),
-
-            typ::Type::Function(sig) => match self.find_func_ty(sig) {
-                Some(id) => ir::Type::Function(id),
-                None => panic!("no type definition for function with sig {}", sig),
-            },
-
-            // TODO: enums may later be variably sized
-            typ::Type::Enum(..) => ir::Type::ISize,
-            
-            // TODO: variable sized sets
-            // we could decide to use a smaller or larger set flags type here depending on the range
-            // of values, but for now all sets use the widest representation (256-bit)
-            typ::Type::Set(set_ty) => {
-                let name = set_ty.name
-                    .as_ref()
-                    .map(|ident_path| ir::NamePath::from_ident_path(ident_path, None))
-                    .unwrap_or_else(|| {
-                        panic!("can't find existing definition of unnamed set type for {}", src_ty)
-                    });
-                
-                let Some((set_id, set_ty)) = self.metadata.find_set_def(&name) else {
-                    panic!("flags type for {} is not defined", src_ty);
-                };
-
-                ir::Type::Flags(set_ty.flags_struct, set_id)
-            },
-
-            typ::Type::Any => ir::Type::Object(ir::ObjectID::Any),
-        }
-    }
-    
     pub fn apply_ty_args<Generic>(&self,
         target: Generic,
         params: &impl TypeParamContainer,
@@ -985,6 +867,11 @@ impl<'a> LibraryBuilder<'a> {
         
         self.dtors.insert(type_id, dtor.id);
     }
+    
+    fn add_cached_type(&mut self, src_ty: typ::Type, ty: ir::Type) {
+        self.type_cache.insert(src_ty.clone(), ty.clone());
+        self.cached_types.insert(ty.clone(), src_ty.clone());
+    }
 
     pub fn translate_type(
         &mut self,
@@ -1005,8 +892,7 @@ impl<'a> LibraryBuilder<'a> {
                 let id = self.metadata.new_type();
                 let ty = ir::Type::Variant(id);
 
-                self.type_cache.insert(src_ty.clone(), ty.clone());
-                self.cached_types.insert(ty.clone(), src_ty.clone());
+                self.add_cached_type(src_ty.clone(), ty.clone());
 
                 let name_path = translate_name(&variant, generic_ctx, self);
                 self.metadata.declare_type(id, &name_path);
@@ -1035,8 +921,7 @@ impl<'a> LibraryBuilder<'a> {
                     },
                 };
 
-                self.type_cache.insert(src_ty.clone(), ty.clone());
-                self.cached_types.insert(ty.clone(), src_ty.clone());
+                self.add_cached_type(src_ty.clone(), ty.clone());
 
                 let name_path = translate_name(&name, generic_ctx, self);
                 self.metadata.declare_type(id, &name_path);
@@ -1057,8 +942,7 @@ impl<'a> LibraryBuilder<'a> {
                     other => unreachable!("only RC class types can be weak, found: {}", other),
                 };
 
-                self.type_cache.insert(src_ty.clone(), ty.clone());
-                self.cached_types.insert(ty.clone(), src_ty);
+                self.add_cached_type(src_ty.clone(), ty.clone());
                 
                 ty
             }
@@ -1070,8 +954,7 @@ impl<'a> LibraryBuilder<'a> {
                 let id = self.metadata.declare_iface(&iface_name);
                 let ty = ir::Type::Object(ir::ObjectID::Interface(id));
 
-                self.type_cache.insert(src_ty.clone(), ty.clone());
-                self.cached_types.insert(ty.clone(), src_ty);
+                self.add_cached_type(src_ty.clone(), ty.clone());
 
                 let iface_meta = translate_iface(&iface_def, generic_ctx, self);
                 let def_id = self.metadata.define_iface(iface_meta);
@@ -1086,16 +969,14 @@ impl<'a> LibraryBuilder<'a> {
                 let elem_ty = self.translate_type(&array_ty.element_ty, generic_ctx);
                 let ty = elem_ty.array(array_ty.dim);
 
-                self.type_cache.insert(src_ty.clone(), ty.clone());
-                self.cached_types.insert(ty.clone(), src_ty);
+                self.add_cached_type(src_ty.clone(), ty.clone());
                 ty
             },
 
             typ::Type::DynArray(element) => {
                 let ty = self.translate_type(element, generic_ctx).dyn_array();
 
-                self.type_cache.insert(src_ty.clone(), ty.clone());
-                self.cached_types.insert(ty.clone(), src_ty);
+                self.add_cached_type(src_ty.clone(), ty.clone());
 
                 ty
             },
@@ -1104,8 +985,7 @@ impl<'a> LibraryBuilder<'a> {
                 let func_ty_id = self.translate_func_ty(func_sig, generic_ctx);
                 let ty = ir::Type::Object(ir::ObjectID::Closure(func_ty_id));
 
-                self.type_cache.insert(src_ty.clone(), ty.clone());
-                self.cached_types.insert(ty.clone(), src_ty);
+                self.add_cached_type(src_ty.clone(), ty.clone());
 
                 ty
             },
@@ -1120,21 +1000,104 @@ impl<'a> LibraryBuilder<'a> {
                     .define_set_type(name, flags_ty.struct_id);
                 let ty = ir::Type::Flags(flags_ty.struct_id, set_id);
 
-                self.type_cache.insert(src_ty.clone(), ty.clone());
-                self.cached_types.insert(ty.clone(), src_ty);
+                self.add_cached_type(src_ty.clone(), ty.clone());
                 
                 ty
             }
 
-            real_ty => {
-                // nothing to be instantiated (must be a trivial/primitive type or this will panic)
-                let ty = self.find_type(real_ty);
-                
-                self.type_cache.insert(src_ty.clone(), ty.clone());
-                self.cached_types.insert(ty.clone(), src_ty);
-
-                ty
+            typ::Type::Nothing => {
+                self.add_cached_type(src_ty.clone(), ir::Type::Nothing);
+                ir::Type::Nothing
             },
+
+            typ::Type::Primitive(typ::Primitive::Boolean) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::Bool);
+                ir::Type::Bool
+            },
+
+            typ::Type::Primitive(typ::Primitive::Int8) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::I8);
+                ir::Type::I8
+            },
+            typ::Type::Primitive(typ::Primitive::UInt8) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::U8);
+                ir::Type::U8
+            },
+            typ::Type::Primitive(typ::Primitive::Int16) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::I16);
+                ir::Type::I16
+            },
+            typ::Type::Primitive(typ::Primitive::UInt16) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::U16);
+                ir::Type::U16
+            },
+            typ::Type::Primitive(typ::Primitive::Int32) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::I32);
+                ir::Type::I32
+            },
+            typ::Type::Primitive(typ::Primitive::UInt32) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::U32);
+                ir::Type::U32
+            },
+            typ::Type::Primitive(typ::Primitive::Int64) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::I64);
+                ir::Type::I64
+            },
+            typ::Type::Primitive(typ::Primitive::UInt64) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::U64);
+                ir::Type::U64
+            },
+            typ::Type::Primitive(typ::Primitive::NativeInt) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::ISize);
+                ir::Type::ISize
+            },
+            typ::Type::Primitive(typ::Primitive::NativeUInt) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::USize);
+                ir::Type::USize
+            },
+
+            typ::Type::Primitive(typ::Primitive::Real32) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::F32);
+                ir::Type::F32
+            },
+
+            typ::Type::Primitive(typ::Primitive::Pointer) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::Nothing.ptr());
+                ir::Type::Nothing.ptr()
+            },
+
+            typ::Type::Any => {
+                self.add_cached_type(src_ty.clone(), ir::ANY_TYPE);
+                ir::ANY_TYPE
+            }
+
+            typ::Type::Pointer(inner) => {
+                let inner_type = self.translate_type(inner, generic_ctx);
+                let ptr_type = inner_type.ptr();
+                self.add_cached_type(src_ty.clone(), ptr_type.clone());
+                ptr_type
+            }
+
+            typ::Type::Box(inner) => {
+                let inner_type = self.translate_type(inner, generic_ctx);
+                let boxed_type = inner_type.boxed();
+                self.add_cached_type(src_ty.clone(), boxed_type.clone());
+                boxed_type
+            }
+
+            typ::Type::Enum(..) => {
+                let ord_type = self.translate_type(&typ::ast::ENUM_ORD_TYPE, generic_ctx);
+                self.add_cached_type(src_ty.clone(), ord_type.clone());
+                ord_type
+            }
+
+            typ::Type::GenericParam(param) => {
+                panic!("translate_type: unresolved generic type {}", param.name)
+            }
+
+            typ::Type::MethodSelf => {
+                panic!("translate_type: unresolved Self type")
+            }
         };
 
         // ensure the runtime type info exists for all referenced types
@@ -1731,16 +1694,5 @@ fn gen_class_dtor(
                 return_ty: ir::Type::Nothing,
             }
         }));
-    }
-}
-
-fn expect_no_unspec_args<T: fmt::Display>(target: &T, type_args: Option<&typ::TypeArgList>) {
-    if let Some(type_args) = type_args {
-        let any_generic_args = type_args.items.iter().any(|arg| arg.is_generic_param());
-        assert!(
-            !any_generic_args,
-            "name of translated variant must not contain unspecialized generics: {}",
-            target
-        );
     }
 }
