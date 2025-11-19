@@ -83,6 +83,7 @@ pub fn check_implicit_conversion(
             Type::DynArray { .. } 
             | Type::Class(..) 
             | Type::Interface(..) 
+            | Type::Box(..) 
             | Type::Function(..) => Conversion::Blittable,
             
             _ => Conversion::Illegal,
@@ -126,7 +127,7 @@ pub fn check_explicit_cast(from: &Type, to: &Type, span: &Span, ctx: &Context) -
         | (Type::Enum(..), Type::Primitive(p)) if p.is_integer() => Ok(()),
 
         // upcast ref type to Any
-        | (Type::Class(..) | Type::Interface(..) | Type::DynArray { .. }, Type::Any) => Ok(()),
+        | (Type::Class(..) | Type::Box(..) | Type::Interface(..) | Type::DynArray { .. }, Type::Any) => Ok(()),
 
         // upcast class ref to interface it implements
         | (Type::Class(..), Type::Interface(..)) if ctx.is_implementation_at(from, to, span)? => {
