@@ -690,8 +690,9 @@ impl Interpreter {
         if weak {
             if rc.weak_count == 0 {
                 panic!(
-                    "releasing with 0 weak refs remaining @ {} (+{} weak refs remain)\n{}",
+                    "releasing with 0 weak refs remaining @ {} <{}> (+{} weak refs remain)\n{}",
                     ptr.to_pretty_string(&self.metadata),
+                    rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
                     rc.weak_count,
                     self.stack_trace_formatted(),
                 );
@@ -701,8 +702,9 @@ impl Interpreter {
         } else {
             if rc.strong_count == 0 {
                 panic!(
-                    "releasing with 0 strong refs remaining @ {} (+{} strong refs remain)\n{}",
+                    "releasing with 0 strong refs remaining @ {} <{}> (+{} strong refs remain)\n{}",
                     ptr.to_pretty_string(&self.metadata),
+                    rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
                     rc.strong_count,
                     self.stack_trace_formatted(),
                 );
@@ -713,8 +715,9 @@ impl Interpreter {
             if rc.strong_count == 1 {
                 if self.opts.trace_rc {
                     eprintln!(
-                        "[rc] destroy @ {} ({}+{} refs will remain)",
+                        "[rc] destroy @ {} <{}> ({}+{} refs will remain)",
                         ptr.to_pretty_string(&self.metadata),
+                        rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
                         rc.strong_count - 1,
                         rc.weak_count,
                     );
@@ -728,8 +731,9 @@ impl Interpreter {
 
         if self.opts.trace_rc {
             eprintln!(
-                "[rc] release @ {} ({}+{} refs remain)",
+                "[rc] release @ {} <{}> ({}+{} refs remain)",
                 ptr.to_pretty_string(&self.metadata),
+                rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
                 rc.strong_count,
                 rc.weak_count,
             )
@@ -738,7 +742,11 @@ impl Interpreter {
         if rc.strong_count == 0 && rc.weak_count == 0 {
             // no more refs, free the object
             if self.opts.trace_rc {
-                eprintln!("[rc] free @ {}", ptr.to_pretty_string(&self.metadata))
+                eprintln!(
+                    "[rc] free @ {} <{}>", 
+                    ptr.to_pretty_string(&self.metadata), 
+                    rc.id.to_type().to_pretty_string(self.metadata.as_ref())
+                )
             }
 
             self.dynfree(ptr)?;
@@ -754,7 +762,7 @@ impl Interpreter {
     fn retain_dyn_val(&mut self, val: &DynValue, weak: bool) -> ExecResult<()> {
         let ptr = val
             .as_pointer()
-            .ok_or_else(|| ExecError::illegal_state(format!("{:?} cannot be retained", val)))?;
+            .ok_or_else(|| ExecError::illegal_state(format!("{} cannot be retained", val.value_type_category())))?;
 
         // retain on null is valid and does nothing
         // it should never normally happen in user code, but with unsafe casting it's
@@ -775,8 +783,9 @@ impl Interpreter {
         } else {
             if rc.strong_count == 0 {
                 panic!(
-                    "resurrecting with 0 strong refs @ {} (+{} weak refs remain)\n{}",
+                    "resurrecting with 0 strong refs @ {} <{}> (+{} weak refs remain)\n{}",
                     ptr.to_pretty_string(&self.metadata),
+                    rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
                     rc.strong_count,
                     self.stack_trace_formatted(),
                 );
@@ -787,8 +796,9 @@ impl Interpreter {
 
         if self.opts.trace_rc {
             eprintln!(
-                "[rc] retain @ {} ({}+{} refs)",
+                "[rc] retain @ {} <{}> ({}+{} refs)",
                 ptr.to_pretty_string(&self.metadata),
+                rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
                 rc.strong_count,
                 rc.weak_count
             );
@@ -1130,7 +1140,9 @@ impl Interpreter {
         element_type: &ir::Type,
         immortal: bool,
     ) -> ExecResult<()> {
-        let box_ptr = self.new_box(element_type, immortal)?;
+        let empty_val = self.default_val(element_type)?;
+        let box_ptr = self.new_box(element_type, empty_val, immortal)?;
+
         self.store(out, DynValue::Pointer(box_ptr))?;
 
         Ok(())
@@ -1369,13 +1381,14 @@ impl Interpreter {
                 // the elements array starts after the header
                 array_ptr.addr + Marshaller::array_header_size()
             }
-            
+
             ir::Type::Object(ir::ObjectID::Box(..)) => {
                 let DynValue::Pointer(box_ptr) = self.load(a)? else {
                     return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
                 };
-                
-                box_ptr.addr + Marshaller::object_header_size()
+
+                let value_ptr = self.box_value_ptr(&box_ptr)?;
+                value_ptr.addr
             }
             
             ir::Type::Array { .. } => {
@@ -1400,6 +1413,26 @@ impl Interpreter {
         let element_pointer = elements_pointer.addr_add(index_offset);
 
         self.store(out, DynValue::Pointer(element_pointer))
+    }
+
+    fn unbox(&mut self, boxed_value: DynValue) -> ExecResult<DynValue> {
+        let DynValue::Pointer(box_ptr) = boxed_value else {
+            return Err(ExecError::illegal_state("unbox: argument is not a box pointer"));
+        };
+        
+        let header = self.marshaller.unmarshal_object_header(unsafe {
+            box_ptr.as_slice(Marshaller::object_header_size())
+        })?;
+        
+        let ObjectID::Box(value_type) = header.value.id else {
+            return Err(ExecError::illegal_state("unbox: object is not a box"));
+        };
+
+        let value_addr = box_ptr.addr + header.byte_count;
+        let value_ptr = Pointer::new(value_addr, (*value_type).clone());
+        
+        let value = self.marshaller.unmarshal_at(&value_ptr)?;
+        Ok(value)
     }
 
     fn exec_length(
@@ -1912,21 +1945,33 @@ impl Interpreter {
         Ok(())
     }
     
+    fn box_value_ptr(&self, box_ptr: &Pointer) -> ExecResult<Pointer> {
+        let header = self.load_object_header(box_ptr)?;
+
+        let ObjectID::Box(value_type) = &header.id else {
+            return Err(ExecError::illegal_state(format!(
+                "exec_field: loading a box object returned the wrong type of object ({})",
+                header.id.to_type().to_pretty_string(self.metadata.as_ref())
+            )));
+        };
+
+        let addr = box_ptr.addr + Marshaller::object_header_size();
+        
+        Ok(Pointer::new(addr, value_type.as_ref().clone()))
+    }
+    
     fn object_field_ptr(&mut self, object_ptr: &Pointer, field: ir::FieldID) -> ExecResult<Pointer> {
         let header = self.load_object_header(&object_ptr)?;
 
-        let struct_id = match &header.id {
-            ObjectID::Class(id) => *id,
-            other => {
-                return Err(ExecError::illegal_state(format!(
-                    "exec_field: loading a class object returned the wrong type of object ({})",
-                    other.to_type().to_pretty_string(self.metadata.as_ref())
-                )));
-            }
+        let ObjectID::Class(struct_id) = &header.id else {
+            return Err(ExecError::illegal_state(format!(
+                "exec_field: loading a class object returned the wrong type of object ({})",
+                header.id.to_type().to_pretty_string(self.metadata.as_ref())
+            )));
         };
 
         let fields_addr = object_ptr.addr + Marshaller::object_header_size();
-        let field_info = self.marshaller.get_field_info(struct_id, field)?;
+        let field_info = self.marshaller.get_field_info(*struct_id, field)?;
 
         Ok(Pointer {
             ty: field_info.ty.clone(),
@@ -2375,6 +2420,7 @@ impl Interpreter {
     fn new_box(
         &mut self,
         value_ty: &ir::Type,
+        value: DynValue,
         immortal: bool,
     ) -> ExecResult<Pointer> {
         let object_id = ObjectID::Box(Rc::new(value_ty.clone()));
@@ -2400,12 +2446,10 @@ impl Interpreter {
             box_ptr.as_slice_mut(alloc_size)
         })?;
 
-        let default_val = self.default_val(value_ty)?;
-
         let value_ptr = box_ptr.addr_add(offset)
             .reinterpret(value_ty.clone());
 
-        offset += self.marshaller.marshal_at(&default_val, &value_ptr)?;
+        offset += self.marshaller.marshal_at(&value, &value_ptr)?;
 
         assert_eq!(offset, alloc_size);
 
@@ -2642,78 +2686,86 @@ impl Interpreter {
     pub fn runtime_invoke(
         &mut self,
         func_id: ir::FunctionID,
-        instance_ptr: &Pointer,
-        instance_ty: &ir::Type,
-        instance_ty_name: &str,
-        args_ptr: Pointer,
-        arg_count: i32,
-        func_name: &str,
+        instance_arg: Option<DynValue>,
+        args_array_ptr: Pointer,
         func_param_tys: &[ir::Type],
-        result_ty: &ir::Type,
-        result_ptr: &Pointer,
-    ) -> ExecResult<()> {
-        let mut call_arg_vals = Vec::new();
+        return_ty: &ir::Type,
+        type_name_string: Option<&Pointer>,
+        func_name_string: &Pointer,
+    ) -> ExecResult<DynValue> {
+        // load the arg array
+        let (args_array, _) = self.load_dyn_array_ptr(&args_array_ptr)?;
+        let mut boxed_args = args_array.elements;
 
-        if !instance_ptr.is_null() {
-            let instance_val =
-                self.load_indirect(&instance_ptr.reinterpret(instance_ty.clone()))?;
-
-            call_arg_vals.push(instance_val);
-        }
-        
-        let arg_count = usize::try_from(arg_count).map_err(|_err| {
-            ExecError::illegal_state(format!("runtime_invoke bad arg count: {}", arg_count))
-        })?;
-
-        let arg_stride = self.marshaller.get_ty(&ir::Type::Nothing.ptr())?.size();
-
-        // starts at 1 if we have a self argument for a method
-        let mut param_index = call_arg_vals.len();
-
-        for i in 0..arg_count {
-            let ptr_to_arg = args_ptr.addr_add(arg_stride * i);
-            
-            // args are passed as pointers to the actual values so we need to dereference them
-            let arg_ptr_val = self.load_indirect(&ptr_to_arg)?;
-            
-            let arg_ptr = arg_ptr_val
-                .as_pointer()
-                .ok_or_else(|| {
-                    ExecError::illegal_state("invoke arg array may only contain pointers")
-                })?
-                .reinterpret(func_param_tys[param_index].clone());
-
-            let arg_val = self.load_indirect(&arg_ptr)?;
-
-            call_arg_vals.push(arg_val);
-            param_index += 1;
+        let mut has_instance_arg = false;
+        if let Some(val) = instance_arg {
+            boxed_args.insert(0, val);
+            has_instance_arg = true;
         }
 
-        if call_arg_vals.len() != func_param_tys.len() {
-            return Err(ExecError::illegal_state(format!(
-                "invoke arg array for {func_name} did not match expected size (got {}, expected {})",
-                call_arg_vals.len(),
-                func_param_tys.len(),
-                func_name = match instance_ty {
-                    ir::Type::Nothing => func_name.to_string(),
-                    _ => format!("{}.{}", instance_ty_name, func_name),
+        if boxed_args.len() != func_param_tys.len() {
+            let func_name = self
+                .read_string_at(func_name_string)
+                .unwrap_or_else(|_| "<error>".to_string());
+
+            let full_name = match type_name_string {
+                Some(str_ptr) => {
+                    let type_name = self
+                        .read_string_at(str_ptr)
+                        .unwrap_or_else(|_| "<error>".to_string());
+                    format!("{type_name}.{func_name}")
+                },
+                None => {
+                    func_name
                 }
-            )));
-        }
-
-        let result_val = self.call(func_id, &call_arg_vals)?;
-        if !result_ptr.is_null() {
-            let Some(result_val) = result_val else {
-                return Err(ExecError::illegal_state(
-                    "result pointer was provided but function did not return a value",
-                ));
             };
 
-            let result_ptr = result_ptr.reinterpret(result_ty.clone());
-            self.store_indirect(&result_ptr, result_val)?;
+            let expect_count = func_param_tys.len();
+            let actual_count = boxed_args.len();
+
+            return Err(ExecError::Raised {
+                msg: format!("function {full_name} invoked with invalid argument count: expected {expect_count}, got {actual_count}"),
+            });
+        }
+        
+        let mut call_args = Vec::with_capacity(boxed_args.len());
+
+        let mut arg_index = 0;
+        for (arg, param_ty) in boxed_args.into_iter().zip(func_param_tys.iter()) {
+            // if the expected parameter type is an object, expect the parameter to be passed
+            // directly in the array. if it's a value, expect a box of that value type
+            if param_ty.is_object() {
+                call_args.push(arg);
+            } else if has_instance_arg && arg_index == 0 {
+                let box_ptr = arg
+                    .as_pointer()
+                    .ok_or_else(|| {
+                        ExecError::illegal_state("self argument must be a pointer")
+                    })?;
+
+                // methods of value types are by-reference, so we need to pass a pointer to the
+                // boxed value
+                let box_value_ptr = self.box_value_ptr(box_ptr)?;
+                call_args.push(DynValue::Pointer(box_value_ptr))
+            } else {
+                let arg_value = self.unbox(arg)?;
+                call_args.push(arg_value);
+            }
+
+            arg_index += 1;
         }
 
-        Ok(())
+        let Some(result_val) = self.call(func_id, &call_args)? else {
+            return Ok(DynValue::from(Pointer::nil(ir::Type::Nothing)));
+        };
+        
+        if return_ty.is_object() {
+            return Ok(result_val);
+        }
+        
+        // box value return type
+        let box_ptr = self.new_box(return_ty, result_val, false)?;
+        Ok(DynValue::from(box_ptr))
     }
 
     fn update_diagnostics(&self) {

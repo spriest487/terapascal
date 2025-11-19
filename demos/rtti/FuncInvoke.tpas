@@ -2,18 +2,31 @@ program FuncInvoke;
 
 function Greet(name: String): String;
 begin
-    'Hello, ' + name + '!';
+    'Hello, ' + name + '!'
 end;
 
+function MultiplyIt(val1, val2: Integer): Integer;
 begin
+    val1 * val2
+end;
+
+begin    
     // TODO: usage required to avoid unused function being discarded
-    WriteLn(Greet('Nobody'));
+    Greet('Nobody');
+    MultiplyIt(1, 1);
     
     var greet := FunctionInfo.Find('FuncInvoke.Greet').Get;
+    var greetArgs: array of Object := ['World' as Object];
     
-    unsafe begin
-        var msg := greet.Invoke(['World' as Object]).Downcast[String]().Get;
-        
-        WriteLn(msg); 
-    end;
+    var msg := greet.Invoke(greetArgs).Downcast[String]().Get;
+    WriteLn(msg);
+    
+    var multiplyIt := FunctionInfo.Find('FuncInvoke.MultiplyIt').Get;
+    var multiplyArgs: array of Object := [
+        [2] as box of Integer, 
+        [3] as box of Integer,
+    ];
+
+    var multiplied := multiplyIt.Invoke(multiplyArgs).Downcast[box of Integer]().Get;
+    WriteLn(multiplied^.ToString);
 end.

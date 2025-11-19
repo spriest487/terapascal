@@ -83,9 +83,15 @@ impl Pointer {
     }
 
     pub fn to_pretty_string(&self, metadata: &ir::Metadata) -> String {
-        let ty_pretty_name = metadata.pretty_ty_name(&self.ty);
+        let width = size_of::<usize>() * 2;
 
-        format!("0x{:0width$x} ({})", self.addr, ty_pretty_name, width = size_of::<usize>() * 2)
+        if self.ty != ir::Type::Nothing {
+            let ty_pretty_name = metadata.pretty_ty_name(&self.ty);
+
+            format!("0x{:0WIDTH$x} ({})", self.addr, ty_pretty_name, WIDTH = width)
+        } else {
+            format!("0x{:0WIDTH$x}", self.addr, WIDTH = width)
+        }
     }
     
     pub unsafe fn as_slice(&self, len: usize) -> &[u8] {

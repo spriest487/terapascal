@@ -136,6 +136,7 @@ impl Marshaller {
                 ir::ObjectID::Box(value) => Some(ObjectID::Box(value.clone())),
                 _ => None,
             },
+
             _ => None,
         };
 
@@ -149,6 +150,10 @@ impl Marshaller {
             self.object_id_indices.insert(self.next_object_id_index, object_id);
 
             self.next_object_id_index += 1;
+        } else {
+            // register the box type for non-object types so all known value types also
+            // have a boxed version if we need to use them via RTTI
+            self.register_object_type(ty.clone().boxed());
         }
     }
 
@@ -687,7 +692,7 @@ impl Marshaller {
                     })?;
 
                 let array_ptr = Pointer { 
-                    addr: body_addr, 
+                    addr: body_addr + size.byte_count, 
                     ty: element.as_ref().clone().array(array_dim) 
                 };
                 self.unmarshal_at(&array_ptr)?

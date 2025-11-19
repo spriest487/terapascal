@@ -11,7 +11,7 @@ type
     public
         function Bark;
     end;
-    
+
 function Dog.Bark;
 begin
     WriteLn('woof!');

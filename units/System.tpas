@@ -468,7 +468,7 @@ begin
 end;
 
 function FunctionInfo.Invoke(args: array of Object): Object;
-begin
+begin    
     InvokeFunction(self, args);
 end;
 

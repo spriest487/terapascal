@@ -242,11 +242,9 @@ pub(super) fn array_create(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
-    let method_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(0)))?;
-    let instance_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(1)))?;
-    let args_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(2)))?;
-    let args_count = load_integer(state, &ir::Ref::Local(ir::LocalID(3)))?;
-    let result_ptr_arg = load_pointer(state, &ir::Ref::Local(ir::LocalID(4)))?;
+    let method_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(1)))?;
+    let instance_arg = state.load(&ir::LocalID(2).to_ref())?;
+    let args_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
 
     let (method_info_val,_) = state.load_class_object(&method_ptr)?;
 
@@ -260,60 +258,53 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
         .ok_or_else(|| ExecError::illegal_state("InvokeMethod called for method with invalid impl pointer"))?
         .clone();
     
-    match runtime_method.function {
-        Some(func_id) => {
-            let type_info_ptr = method_info_val[ir::METHODINFO_OWNER_FIELD]
-                .as_pointer()
-                .ok_or_else(|| {
-                    let msg = format!("bad type: expected owner pointer at field {} of method info", ir::METHODINFO_OWNER_FIELD);
-                    ExecError::illegal_state(msg)
-                })?;
+    let Some(func_id) = runtime_method.function else {
+        return Err(ExecError::illegal_state("InvokeMethod called for abstract method"));
+    };
 
-            let (type_info_val, _) = state.load_class_object(&type_info_ptr)?;
-            let type_name_ptr = type_info_val[ir::TYPEINFO_NAME_FIELD]
-                .as_pointer()
-                .ok_or_else(|| {
-                    let msg = format!("bad type: expected string pointer at field {} of type info", ir::TYPEINFO_NAME_FIELD);
-                    ExecError::illegal_state(msg)
-                })?;
+    let type_info_ptr = method_info_val[ir::METHODINFO_OWNER_FIELD]
+        .as_pointer()
+        .ok_or_else(|| {
+            let msg = format!("bad type: expected owner pointer at field {} of method info", ir::METHODINFO_OWNER_FIELD);
+            ExecError::illegal_state(msg)
+        })?;
 
-            let type_name = state.read_string_at(type_name_ptr)?;
+    let (type_info_val, _) = state.load_class_object(&type_info_ptr)?;
+    let type_name_ptr = type_info_val[ir::TYPEINFO_NAME_FIELD]
+        .as_pointer()
+        .ok_or_else(|| {
+            let msg = format!("bad type: expected string pointer at field {} of type info", ir::TYPEINFO_NAME_FIELD);
+            ExecError::illegal_state(msg)
+        })?;
 
-            let method_name_ptr = method_info_val[ir::METHODINFO_NAME_FIELD]
-                .as_pointer()
-                .ok_or_else(|| {
-                    let msg = format!("bad type: expected string pointer at field {} of method info", ir::METHODINFO_NAME_FIELD);
-                    ExecError::illegal_state(msg)
-                })?;
-            let method_name = state.read_string_at(method_name_ptr)?;
-            
-            state.runtime_invoke(
-                func_id,
-                &instance_ptr,
-                &runtime_method.instance_ty,
-                &type_name,
-                args_ptr,
-                args_count,
-                &method_name,
-                &runtime_method.params,
-                &runtime_method.result_ty,
-                &result_ptr_arg,
-            )
-        }
-
-        None => {
-            Err(ExecError::illegal_state("InvokeMethod called for abstract method"))
-        }
-    }
+    let method_name_ptr = method_info_val[ir::METHODINFO_NAME_FIELD]
+        .as_pointer()
+        .ok_or_else(|| {
+            let msg = format!("bad type: expected string pointer at field {} of method info", ir::METHODINFO_NAME_FIELD);
+            ExecError::illegal_state(msg)
+        })?;
+    
+    let result_object = state.runtime_invoke(
+        func_id,
+        Some(instance_arg),
+        args_ptr,
+        &runtime_method.params,
+        &runtime_method.result_ty,
+        Some(type_name_ptr),
+        method_name_ptr,
+    )?;
+    
+    state.store(&ir::RETURN_REF, result_object)?;
+    Ok(())
 }
 
 fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
-    let func_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(0)))?;
-    let args_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(1)))?;
-    let args_count = load_integer(state, &ir::Ref::Local(ir::LocalID(2)))?;
-    let result_ptr_arg = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
+    let func_info_ptr = load_pointer(state, &ir::LocalID(1).to_ref())?;
+    let args_array_ptr = load_pointer(state, &ir::LocalID(2).to_ref())?;
 
-    let (func_info_val,_) = state.load_class_object(&func_ptr)?;
+    let (func_info_val,_) = state.load_class_object(&func_info_ptr)?;
+    
+    // we store a function ID in the FunctionInfo impl pointer
     let impl_val = func_info_val[ir::FUNCINFO_IMPL_FIELD]
         .as_pointer()
         .ok_or_else(|| ExecError::illegal_state("impl field must be a pointer"))?
@@ -321,20 +312,27 @@ fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
 
     let func_id = ir::FunctionID(impl_val);
     let func = state.functions[&func_id].clone();
-    let func_name = func.name.as_ref();
+    
+    let func_name_field_ptr = state.object_field_ptr(&func_info_ptr, ir::FUNCINFO_NAME_FIELD)?;
+    let func_name_ptr = state.load_indirect(&func_name_field_ptr)?
+        .as_pointer()
+        .cloned()
+        .ok_or_else(|| ExecError::illegal_state("name field must be a pointer"))?;
 
-    state.runtime_invoke(
+    // returns either an object ref or a boxed value
+    let result_object = state.runtime_invoke(
         func_id,
-        &Pointer::nil(ir::Type::Nothing),
-        &ir::Type::Nothing,
-        "",
-        args_ptr,
-        args_count,
-        func_name,
+        None,
+        args_array_ptr,
         func.func.param_tys(),
         func.func.return_ty(),
-        &result_ptr_arg
-    )
+        None,
+        &func_name_ptr,
+    )?;
+    
+    state.store(&ir::RETURN_REF, result_object)?;
+    
+    Ok(())
 }
 
 fn find_type_info(state: &mut Interpreter) -> ExecResult<()> {

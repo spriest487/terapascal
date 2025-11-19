@@ -1,0 +1,6 @@
+{
+  "steps": [
+    {"output": "Hello, World!"},
+    {"output": "6"}
+  ]
+}

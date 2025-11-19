@@ -7,27 +7,27 @@ type IntBox = class
 end;
 
 type IntBoxHolder = class
-    box: IntBox;
+    intBox: IntBox;
 end;
 
-function Value(box: IntBox): Integer;
+function Value(intBox: IntBox): Integer;
 begin
-    box.otherValue
+    intBox.otherValue
 end;
 
 function GetBox(holder: IntBoxHolder): IntBox;
 begin
-    holder.box
+    holder.intBox
 end;
 
 initialization
-    var box := IntBox(value: 1; otherValue: 2);
-    IntToStr(box.otherValue);
+    var intBox := IntBox(value: 1; otherValue: 2);
+    IntToStr(intBox.otherValue);
     
-    var holder: IntBoxHolder := IntBoxHolder(box: box);
+    var holder: IntBoxHolder := IntBoxHolder(intBox: intBox);
     
-    WriteLn(IntToStr(holder.box.value));
-    WriteLn(IntToStr(Value(holder.box)));
+    WriteLn(IntToStr(holder.intBox.value));
+    WriteLn(IntToStr(Value(holder.intBox)));
     
     WriteLn(IntToStr(Value(IntBox(value: 321; otherValue: 123))));
     

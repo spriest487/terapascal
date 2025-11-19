@@ -7,6 +7,13 @@ type
         function MyMethod1: String;
         function MyMethod2(i: Integer);
     end;
+    
+    MyRecord = record
+    public
+        val: Integer;
+    published
+        function MyMethod3: Integer;
+    end;
 
 function MyClass.MyMethod;
 begin
@@ -24,6 +31,11 @@ begin
     WriteLn('Hello again! i is ' + i);
 end;
 
+function MyRecord.MyMethod3: Integer;
+begin
+    self.val
+end;
+
 initialization
     var myClassInfo := typeinfo(MyClass);
     var methods := myClassInfo.Methods;
@@ -34,13 +46,16 @@ initialization
 
     var instance := MyClass();
 
-    begin
-        methods[0].Invoke(instance, []);
+    methods[0].Invoke(instance, []);
 
-        var message := methods[1].Invoke(instance, []).Downcast[String]().Get;
-        WriteLn(message); 
+    var message := methods[1].Invoke(instance, []).Downcast[String]().Get;
+    WriteLn(message); 
 
-        var i := box 456;
-        methods[2].Invoke(@instance, [i as Object]);
-    end
+    var i: box of Integer := [456];
+    methods[2].Invoke(instance, [i as Object]);
+
+    var valueInstance: box of MyRecord := [MyRecord(val: 29312)];
+    var valueResult := typeinfo(MyRecord).Methods[0].Invoke(valueInstance, []).Downcast[box of Integer]().Get; 
+    
+    WriteLn('val is ' + valueResult^);
 end

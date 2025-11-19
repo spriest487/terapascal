@@ -5,5 +5,5 @@ type MyBox = class
 end;
 
 initialization
-    var box := MyBox();
+    var myBox := MyBox();
 end
