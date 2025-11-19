@@ -27,6 +27,7 @@ use linked_hash_map::LinkedHashMap;
 use std::iter;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::result::ErrorContinue;
 
 pub type ObjectCtor = ast::ObjectCtor<Value>;
 pub type ObjectCtorMember = ast::ObjectCtorMember<Value>;
@@ -408,12 +409,15 @@ pub fn collection_ctor_elements(
     expect_element_type: &Type,
     ctx: &mut Context,
 ) -> TypeResult<Vec<CollectionCtorElement>> {
-    let mut elements = Vec::new();
+    let mut elements = Vec::with_capacity(ctor.elements.len());
+
     for e in &ctor.elements {
         let value = evaluate_expr(&e.value, expect_element_type, ctx)?;
-        value.annotation().expect_value(&expect_element_type)?;
+        
+        let as_element = implicit_conversion(value.clone(), expect_element_type, ctx)
+            .or_continue(ctx, value);
 
-        elements.push(CollectionCtorElement { value });
+        elements.push(CollectionCtorElement { value: as_element });
     }
 
     Ok(elements)
