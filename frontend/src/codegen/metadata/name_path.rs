@@ -4,38 +4,11 @@ use crate::{ast, ir};
 use typ::Specializable;
 
 pub trait NamePathExt {
-    fn from_decl(name: typ::Symbol, metadata: &mut LibraryBuilder) -> Self;
     fn from_ident_path(ident: &ast::IdentPath, type_args: Option<Vec<ir::Type>>) -> Self;
     fn from_parts<Iter: IntoIterator<Item = String>>(iter: Iter) -> Self;
 }
 
 impl NamePathExt for ir::NamePath {
-    fn from_decl(name: typ::Symbol, builder: &mut LibraryBuilder) -> Self {
-        let path_parts = name
-            .full_path
-            .into_iter()
-            .map(|ident| ident.to_string());
-
-        let type_args = match name.type_args {
-            Some(name_type_args) => {
-                let types = name_type_args
-                    .items
-                    .iter()
-                    .map(|arg| builder.find_type(arg))
-                    .collect();
-
-                Some(types)
-            },
-
-            None => None,
-        };
-
-        ir::NamePath {
-            path: path_parts.collect(),
-            type_args,
-        }
-    }
-
     fn from_ident_path(ident: &ast::IdentPath, type_args: Option<Vec<ir::Type>>) -> Self {
         let path = ident.iter()
             .map(|ident| ident.to_string())

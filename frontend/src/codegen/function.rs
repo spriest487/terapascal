@@ -172,14 +172,13 @@ pub fn build_closure_function_def(
 
     let bound_params = bind_function_params(def_params, false, &mut body_builder);
 
-    // cast the closure pointer param from the erased pointer passed in to its actual internal type
-    let closure_struct_ty = Type::Struct(closure_id);
-    let closure_struct_ptr_ty = closure_struct_ty.clone().ptr();
-    let closure_ptr_ref = body_builder.local_temp(closure_struct_ptr_ty.clone());
+    // cast the closure pointer param from the erased pointer passed in to its actual class type
+    let closure_ptr_ty = closure_id.to_class_ptr_type();
+    let closure_ptr_ref = body_builder.local_temp(closure_ptr_ty.clone());
     body_builder.cast(
         closure_ptr_ref.clone(),
         closure_ptr_param_ref,
-        closure_struct_ptr_ty,
+        closure_ptr_ty.clone(),
     );
 
     // copy closure members into the body scope
@@ -197,13 +196,12 @@ pub fn build_closure_function_def(
         };
 
         let capture_val_ptr_ty = field_def.ty.clone().temp_ref();
-        let capture_val_ptr_field_ref =
-            body_builder.local_closure_capture(capture_val_ptr_ty, field_name.clone());
+        let capture_val_ptr_field_ref = body_builder.local_closure_capture(capture_val_ptr_ty, field_name.clone());
 
         body_builder.field(
-            capture_val_ptr_field_ref.clone(),
-            closure_ptr_ref.clone().to_ref().to_deref(),
-            closure_struct_ty.clone(),
+            capture_val_ptr_field_ref,
+            closure_ptr_ref,
+            closure_ptr_ty.clone(),
             *field_id,
         );
     }

@@ -12,7 +12,7 @@ pub const TYPE_FLAG_ARRAY: u64 = 1 << 2;
 pub const TYPE_FLAG_FUNCTION: u64 = 1 << 3;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RuntimeType {
+pub struct TypeInfo {
     pub name: Option<StringID>,
     pub debug_name: Option<String>,
 
@@ -20,10 +20,10 @@ pub struct RuntimeType {
     
     pub dtor: Option<FunctionID>,
     
-    pub methods: Vec<RuntimeMethod>,
+    pub methods: Vec<MethodInfo>,
 }
 
-impl RuntimeType {
+impl TypeInfo {
     pub fn new(name: Option<StringID>, flags: u64) -> Self {
         Self {
             name,
@@ -63,7 +63,7 @@ impl RuntimeType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RuntimeMethod {
+pub struct MethodInfo {
     pub name: StringID,
     
     pub instance_ty: Type,

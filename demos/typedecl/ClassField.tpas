@@ -1,0 +1,16 @@
+implementation
+
+type
+    MyClass = class
+        myField: Integer;
+    end;
+
+initialization
+    var myObj := MyClass(myField: 123);
+    
+    WriteLn('field is: ' + myObj.myField);
+    
+    myObj.myField := 456;
+
+    WriteLn('field is: ' + myObj.myField);
+end

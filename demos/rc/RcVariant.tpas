@@ -2,14 +2,13 @@ implementation
 uses System;
 
 type Things = variant
-    Box: Box[Integer];
+    Box: box of Integer;
     Text: String;
     None;
 end;
 
 initialization
-    var boxVal := NewBox[Integer](123);
-    var v := Things.Box(boxVal);
+    var v := Things.Box([123]);
     v := Things.Text('hello world');
     v := Things.None();
 end

@@ -377,20 +377,25 @@ fn run_step(
         let output_line = read_to_line_feed(stdout, line_buf)?;
         println!("  << {}", output_line);
         
-        let is_match = {
+        let (is_match, expected_pattern) = {
             if let Some(exact_output) = &step.output {
-                output_line.trim() == exact_output.trim()
+                let is_match = output_line.trim() == exact_output.trim();
+
+                (is_match, exact_output.as_str())
             } else {
-                let regex = Regex::new(&format!("(?s){}", step.output_regex.as_ref().unwrap()))
+                let pattern = step.output_regex.as_ref().unwrap();
+                let regex = Regex::new(&format!("(?s){}", pattern))
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))?;
                 
-                regex.is_match(&output_line)
+                let is_match = regex.is_match(&output_line);
+
+                (is_match, pattern.as_str())
             }
         };
 
         if !is_match {
             println!("ERROR: unexpected output");
-            println!("EXPECTED: {}", output_line.trim_end());
+            println!("EXPECTED: {}", expected_pattern.trim_end());
 
             return Ok(false);
         }

@@ -7,7 +7,7 @@ type MyBox = class
 end;
 
 type BoxBox = class
-    box: MyBox;
+    myBox: MyBox;
 end;
 
 function DoNothing(bb: BoxBox);
@@ -17,6 +17,6 @@ end;
 initialization
     var box1 := MyBox(val1: 1; val2: true);
     
-    var boxbox := BoxBox(box: box1);
+    var boxbox := BoxBox(myBox: box1);
     DoNothing(boxbox);
 end

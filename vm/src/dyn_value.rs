@@ -3,6 +3,7 @@ use crate::ptr::Pointer;
 use cast::i128;
 use std::ops::Index;
 use std::ops::IndexMut;
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub enum DynValue {
@@ -609,7 +610,6 @@ impl From<Pointer> for DynValue {
 #[derive(Debug, Clone)]
 pub struct StructValue {
     pub type_id: ir::TypeDefID,
-    pub rc: Option<ObjectHeader>,
     pub fields: Vec<DynValue>,
 }
 
@@ -618,9 +618,6 @@ impl StructValue {
         Self {
             type_id: id,
             fields: fields.into_iter().collect(),
-
-            // will be set by rc_alloc
-            rc: None,
         }
     }
 
@@ -659,27 +656,49 @@ impl PartialEq<Self> for StructValue {
     }
 }
 
+// subset of ir::ObjectID that only includes concrete types
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum ObjectID {
+    Class(ir::TypeDefID),
+    Array(Rc<ir::Type>),
+    Box(Rc<ir::Type>),
+}
+
+impl ObjectID {
+    pub fn to_type(&self) -> ir::Type {
+        match self {
+            ObjectID::Class(id) => id.to_class_ptr_type(),
+            ObjectID::Array(element) => ir::Type::Object(ir::ObjectID::Array(element.clone())),
+            ObjectID::Box(value) => ir::Type::Object(ir::ObjectID::Box(value.clone())),
+        }
+    }
+
+    pub(crate) fn to_pretty_name(&self, metadata: &ir::Metadata) -> String {
+        self.to_type().to_pretty_string(metadata)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ObjectHeader {
-    pub marshal_type: ir::Type,
+    pub id: ObjectID,
     
     pub strong_count: i32,
     pub weak_count: i32,
 }
 
 impl ObjectHeader {
-    pub fn immortal(marshal_type: ir::Type) -> Self {
+    pub fn immortal(id: ObjectID) -> Self {
         Self {
-            marshal_type,
+            id,
 
             strong_count: -1,
             weak_count: 0,
         }
     }
 
-    pub fn new(marshal_type: ir::Type, immortal: bool) -> Self {
+    pub fn new(id: ObjectID, immortal: bool) -> Self {
         Self {
-            marshal_type,
+            id,
             
             strong_count: if immortal { -1 } else { 1 },
             weak_count: 0,
@@ -689,14 +708,12 @@ impl ObjectHeader {
     pub fn is_immortal(&self) -> bool {
         self.strong_count < 0
     }
-    
-    pub fn object_type(&self) -> ir::Type {
-        match &self.marshal_type {
-            ir::Type::Struct(id) => id.to_class_ptr_type(),
-            ir::Type::Array { element, .. } => (**element).clone().dyn_array(),
-            _ => panic!("object_type: unknown object type for marshalled type {}", self.marshal_type),
-        }
-    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ObjectValue {
+    pub header: ObjectHeader,
+    pub value: DynValue,
 }
 
 #[derive(Debug, Clone)]
@@ -716,8 +733,6 @@ impl VariantValue {
 pub struct ArrayValue {
     pub element_type: ir::Type,
     pub elements: Vec<DynValue>,
-    
-    pub rc: Option<ObjectHeader>,
 }
 
 impl ArrayValue {

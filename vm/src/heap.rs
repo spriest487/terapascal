@@ -1,9 +1,10 @@
-use crate::ir;
 use crate::marshal::MarshalError;
 use crate::marshal::Marshaller;
 use crate::ptr::POINTER_FMT_WIDTH;
 use crate::DynValue;
 use crate::Pointer;
+use crate::ir;
+use crate::ObjectValue;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::mem::forget;
@@ -64,7 +65,7 @@ impl NativeHeap {
             },
         }
     }
-    
+
     pub fn set_metadata(&mut self, metadata: Rc<ir::Metadata>, marshaller: Rc<Marshaller>) {
         self.metadata = metadata;
         self.marshaller = marshaller;
@@ -138,6 +139,16 @@ impl NativeHeap {
         let val = self.marshaller.unmarshal_at(pointer)?;
 
         Ok(val)
+    }
+
+    pub fn load_object(&self, pointer: &Pointer) -> NativeHeapResult<ObjectValue> {
+        if pointer.addr == 0 {
+            return Err(NativeHeapError::NullPointerDeref);
+        }
+
+        let object_val = self.marshaller.unmarshal_object_at(pointer)?;
+
+        Ok(object_val)
     }
 
     pub fn store(&mut self, pointer: &Pointer, val: DynValue) -> NativeHeapResult<()> {

@@ -455,8 +455,8 @@ fn can_infer_func_ty_from_lambda_with_generic_return() {
 
             initialization
                 var f := lambda: begin
-                    var box: MyBox[Integer] := MyBox(val: 123);
-                    box
+                    var myBox: MyBox[Integer] := MyBox(val: 123);
+                    myBox
                 end;
             end
         "

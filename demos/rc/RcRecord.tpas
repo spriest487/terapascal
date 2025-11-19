@@ -6,7 +6,7 @@ type IntBox = class
 end;
 
 type Wrapper = record
-    box: IntBox;
+    intBox: IntBox;
 end;
 
 type BigWrapper = record
@@ -22,13 +22,13 @@ end;
 initialization
     begin
         var wrapped := IntBox(val: 123);
-        var wrapper := Wrapper(box: wrapped);
+        var wrapper := Wrapper(intBox: wrapped);
     
         DoNothing(wrapper);
     end;
     
     begin
-        var wrapper := Wrapper(box: IntBox(val: 123));
+        var wrapper := Wrapper(intBox: IntBox(val: 123));
         var wrapper2 := BigWrapper(wrapper1: wrapper; wrapper2: wrapper);
     end;
 end

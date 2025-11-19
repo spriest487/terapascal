@@ -5,19 +5,19 @@ type TestBox[Val] = class
     val: Val;
 end;
 
-function UnwrapTestBox[T](box: TestBox[T]): T;
+function UnwrapTestBox[T](testBox: TestBox[T]): T;
 begin
-    box.val
+    testBox.val
 end;
 
 initialization
     // first ctor needs explicit types, subsequently can be inferred from type of var 
-    var box := TestBox with [array[1] of Integer](val: [5]);
+    var testBox := TestBox with [array[1] of Integer](val: [5]);
     
-    box := TestBox[array[1] of Integer](val: [3]);
+    testBox := TestBox[array[1] of Integer](val: [3]);
     
-    box := TestBox(val: [1]);
+    testBox := TestBox(val: [1]);
 
-    var val := UnwrapTestBox(box);
+    var val := UnwrapTestBox(testBox);
     WriteLn(IntToStr(val[0]));
 end

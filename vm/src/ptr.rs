@@ -29,6 +29,13 @@ impl fmt::Display for Pointer {
 }
 
 impl Pointer {
+    pub fn new(addr: usize, ty: ir::Type) -> Self {
+        Pointer {
+            addr,
+            ty,
+        }
+    }
+    
     pub fn nil(ty: ir::Type) -> Self {
         Self {
             addr: 0,

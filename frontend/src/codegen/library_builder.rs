@@ -1146,17 +1146,17 @@ impl<'a> LibraryBuilder<'a> {
     // get or generate runtime type for a given type, which contains the function IDs etc
     // used for RC operations at runtime. the rest of the RTTI info will be filled in later 
     // in a separate pass
-    pub fn gen_runtime_type(&mut self, ty: &ir::Type) -> Rc<ir::RuntimeType> {
+    pub fn gen_runtime_type(&mut self, ty: &ir::Type) -> Rc<ir::TypeInfo> {
         if let Some(existing) = self.metadata.get_runtime_type(&ty) {
             return existing;
         }
 
         assert!(self.metadata().is_defined(ty), "gen_runtime_type: type {} ({:?}) is not defined yet", self.metadata().pretty_ty_name(ty), ty);
         
-        let flags = ir::RuntimeType::type_runtime_flags(ty);
+        let flags = ir::TypeInfo::type_runtime_flags(ty);
 
         // type names and methods will be added after codegen
-        let mut rtti = ir::RuntimeType::new(None, flags);
+        let mut rtti = ir::TypeInfo::new(None, flags);
         
         if self.opts.debug && self.opts.rtti {
             rtti.debug_name = Some(self.metadata().pretty_ty_name(&ty).into_owned());
@@ -1279,7 +1279,7 @@ impl<'a> LibraryBuilder<'a> {
         method_index: usize,
         is_abstract: bool,
         decl: &typ::ast::FunctionDecl,
-    ) -> ir::RuntimeMethod {
+    ) -> ir::MethodInfo {
         let method_name = decl.name.ident.as_str();
         let method_name_id = self.metadata.find_or_insert_string(method_name);
 
@@ -1313,7 +1313,7 @@ impl<'a> LibraryBuilder<'a> {
             Some(method_instance.id)
         };
 
-        ir::RuntimeMethod {
+        ir::MethodInfo {
             function,
             instance_ty,
             name: method_name_id,
@@ -1637,7 +1637,7 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
 fn gen_class_dtor(
     lib: &mut LibraryBuilder,
     class_id: ir::TypeDefID,
-    runtime_type: &mut ir::RuntimeType,
+    runtime_type: &mut ir::TypeInfo,
 ) {
     let class_ty = class_id.to_class_ptr_type();
 

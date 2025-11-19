@@ -1,7 +1,12 @@
 implementation
 uses System;
 
+type
+    TestBox = class
+        member: Integer;
+    end;
+
 initialization
-    var box1 := NewBox[Integer](123);
-    box1 := NewBox[Integer](456);
+    var box1 := TestBox(member: 123);
+    box1 := TestBox(member: 456);
 end

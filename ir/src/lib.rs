@@ -7,7 +7,7 @@ mod ty_decl;
 mod val;
 mod library;
 pub mod dep_sort;
-pub mod rtti;
+pub mod typeinfo;
 pub mod instruction_builder;
 pub mod builtin;
 
@@ -16,7 +16,7 @@ pub use function::*;
 pub use instruction::*;
 pub use library::*;
 pub use metadata::*;
-pub use rtti::*;
+pub use typeinfo::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;

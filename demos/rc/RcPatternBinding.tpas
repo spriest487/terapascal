@@ -2,7 +2,7 @@ implementation
 uses System;
 
 type MaybeIntBox = variant
-    Some: Box[Integer];
+    Some: box of Integer;
     None;
 end;
 
@@ -11,16 +11,14 @@ type Outer = class
 end;
 
 initialization
-    var maybeBox := MaybeIntBox.Some(
-        NewBox[Integer](123)
-    );
+    var maybeBox := MaybeIntBox.Some([123]);
     
     var outer := Outer(
         maybeBox: maybeBox;
     );
-    
-    {
-    if outer.maybeBox is MaybeIntBox.Some box then begin
+
+    if outer.maybeBox is MaybeIntBox.Some i then 
+    begin
+        WriteLn('value is: ' + i^);
     end;
-    }
 end

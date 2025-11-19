@@ -1,6 +1,6 @@
 mod builder;
 
-use crate::rtti::RuntimeType;
+use crate::typeinfo::TypeInfo;
 use crate::ty::FieldID;
 use crate::ty::ObjectID;
 use crate::ty_decl::TagLocation;
@@ -16,7 +16,7 @@ use crate::InterfaceImpl;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Ref;
-use crate::RuntimeMethod;
+use crate::MethodInfo;
 use crate::SetAliasDef;
 use crate::SetAliasID;
 use crate::StaticClosureID;
@@ -130,7 +130,7 @@ pub struct Metadata {
 
     function_static_closures: HashMap<FunctionID, StaticClosureID>,
 
-    runtime_types: HashMap<Type, Rc<RuntimeType>>,
+    types: HashMap<Type, Rc<TypeInfo>>,
 
     tag_counts: HashMap<TagLocation, usize>,
 }
@@ -151,7 +151,7 @@ impl Metadata {
             closures: BTreeMap::new(),
             function_static_closures: HashMap::new(),
 
-            runtime_types: HashMap::new(),
+            types: HashMap::new(),
 
             tag_counts: HashMap::new(),
         };
@@ -253,12 +253,12 @@ impl Metadata {
             self.function_static_closures.insert(*func_id, *static_closure);
         }
 
-        for (ty, funcs) in &other.runtime_types {
-            if self.runtime_types.contains_key(ty) {
+        for (ty, funcs) in &other.types {
+            if self.types.contains_key(ty) {
                 panic!("duplicate RTTI definitions for type {}", self.pretty_ty_name(ty));
             }
 
-            self.runtime_types.insert(ty.clone(), funcs.clone());
+            self.types.insert(ty.clone(), funcs.clone());
         }
         
         for (id, def) in &other.set_aliases {
@@ -404,18 +404,18 @@ impl Metadata {
         }
     }
 
-    pub fn get_runtime_type(&self, ty: &Type) -> Option<Rc<RuntimeType>> {
-        self.runtime_types.get(ty).cloned()
+    pub fn get_runtime_type(&self, ty: &Type) -> Option<Rc<TypeInfo>> {
+        self.types.get(ty).cloned()
     }
 
-    pub fn runtime_types(&self) -> impl Iterator<Item = (&Type, &Rc<RuntimeType>)> {
-        self.runtime_types.iter()
+    pub fn types(&self) -> impl Iterator<Item = (&Type, &Rc<TypeInfo>)> {
+        self.types.iter()
     }
 
-    pub fn find_runtime_method(&self, type_name: &str, method_name: &str) -> Option<(&Type, &Rc<RuntimeType>, usize)> {
+    pub fn find_runtime_method(&self, type_name: &str, method_name: &str) -> Option<(&Type, &Rc<TypeInfo>, usize)> {
         let type_name_str = self.find_string_id(type_name)?;
         
-        let (ty, runtime_type) = self.runtime_types
+        let (ty, runtime_type) = self.types
             .iter()
             .find(|(_, t)| t.name == Some(type_name_str))?;
         
@@ -428,8 +428,8 @@ impl Metadata {
         Some((ty, runtime_type, method_index))
     }
 
-    pub fn get_runtime_methods(&self, ty: &Type) -> impl Iterator<Item=&RuntimeMethod> {
-        self.runtime_types
+    pub fn get_runtime_methods(&self, ty: &Type) -> impl Iterator<Item=&MethodInfo> {
+        self.types
             .get(ty)
             .into_iter()
             .flat_map(|src_ty| src_ty.methods.iter())

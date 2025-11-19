@@ -860,6 +860,12 @@ where
                 self.add_keyword(&array_name.of_kw);
                 self.add_typename(&array_name.element);
             },
+            
+            ast::TypeName::Box(box_name) => {
+                self.add_keyword(&box_name.box_kw);
+                self.add_keyword(&box_name.of_kw);
+                self.add_typename(&box_name.value);
+            }
 
             ast::TypeName::Weak(weak_name) => {
                 self.add_keyword(&weak_name.weak_kw);

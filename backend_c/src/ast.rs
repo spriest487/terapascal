@@ -59,7 +59,7 @@ pub struct Unit<'a> {
 
     opts: Options,
     
-    type_infos: HashMap<ir::Type, Rc<ir::RuntimeType>>,
+    type_infos: HashMap<ir::Type, Rc<ir::TypeInfo>>,
     
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
 }
@@ -76,7 +76,7 @@ impl<'a> Unit<'a> {
             .collect();
         
         let type_infos = metadata
-            .runtime_types()
+            .types()
             .map(|(ty, rtti)| (ty.clone(), rtti.clone()))
             .collect();
 

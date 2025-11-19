@@ -21,7 +21,8 @@ use crate::func::BuiltinFn;
 use crate::func::BuiltinFunction;
 use crate::func::Function;
 use crate::heap::NativeHeap;
-use crate::marshal::{MarshalError, Marshaller};
+use crate::heap::NativeHeapError;
+use crate::marshal::Marshaller;
 use crate::result::ExecError;
 use crate::result::ExecResult;
 use crate::rtti_map::RttiMap;
@@ -62,7 +63,7 @@ pub struct Interpreter {
 
     // all methods with a corresponding MethodInfo object - the impl pointer of each
     // MethodInfo is an index into this list
-    runtime_methods: Vec<ir::RuntimeMethod>,
+    runtime_methods: Vec<ir::MethodInfo>,
 }
 
 impl Interpreter {
@@ -176,7 +177,6 @@ impl Interpreter {
         let struct_val = StructValue {
             type_id: id,
             fields,
-            rc: None,
         };
 
         Ok(struct_val)
@@ -222,7 +222,6 @@ impl Interpreter {
                 DynValue::Array(Box::new(ArrayValue {
                     element_type: (**element).clone(),
                     elements,
-                    rc: None,
                 }))
             },
 
@@ -296,6 +295,10 @@ impl Interpreter {
         let local_ptr = current_frame
             .get_local_ptr(id)
             .map_err(|err| self.add_stack_trace(err.into()))?;
+
+        if local_ptr.addr == 0 {
+            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
+        }
 
         let value = self.marshaller.unmarshal_at(&local_ptr)?;
 
@@ -472,23 +475,8 @@ impl Interpreter {
             let msg = "expected target of vcall to be a pointer";
             ExecError::illegal_state(msg)
         })?;
-
-        let header = self.load_object_header(self_ptr)?;
-        let object_ptr = self_ptr.clone().reinterpret(header.marshal_type);
-
-        let self_val = self.load_indirect(&object_ptr)?;
-        let self_class_id = match &self_val {
-            DynValue::Structure(struct_val) => Ok(struct_val.type_id),
-            _ => {
-                let msg = format!(
-                    "expected target of vcall {}.{} to be an rc value, but found {:?}",
-                    iface_id, method.0, self_val,
-                );
-                Err(ExecError::illegal_state(msg))
-            },
-        }?;
-
-        let instance_ty = ir::Type::Object(ir::ObjectID::Class(self_class_id));
+        
+        let instance_ty = self.load_object_header(self_ptr)?.id.to_type();
 
         self.metadata
             .find_virtual_impl(&instance_ty, iface_id, method)
@@ -631,32 +619,21 @@ impl Interpreter {
 
     // load a pointer, expected to point to an RC struct
     // guarantees that the struct value returned has some value for its rc field
-    fn load_dyn_array_ptr(&self, ptr: &Pointer) -> ExecResult<(Box<ArrayValue>, ObjectHeader)> {
-        let array_header = self.marshaller.unmarshal_dyn_array_header_at(ptr)?;
-        
-        let array_len = usize::try_from(array_header.len)
-            .map_err(|_| MarshalError::InvalidData)?;
-        
-        let ir::Type::Array { element, dim: 0 } = array_header.rc.marshal_type.clone() else {
-            // not an array
-            return Err(ExecError::from(MarshalError::InvalidData));
-        };
+    fn load_dyn_array_ptr(&self, ptr: &Pointer) -> ExecResult<(ArrayValue, ObjectHeader)> {
+        let object_value = self.marshaller.unmarshal_object_at(ptr)?;
 
-        let array_ty = element.as_ref().clone().array(array_len);
-        
-        let elements_ptr = ptr.reinterpret(array_ty)
-            .addr_add(Marshaller::array_header_size());
-        
-        let mut elements_array = match self.load_indirect(&elements_ptr)? {
-            DynValue::Array(array_val) => array_val,
-            other => {
-                let msg = format!("loaded val was not an array, found: {:?}", other);
-                return Err(ExecError::illegal_state(msg));
+        let elements_array = match object_value.value {
+            DynValue::Array(array_val) => *array_val,
+
+            _ => {
+                return Err(ExecError::illegal_state(format!(
+                    "loaded val was not an array, found: {}",
+                    object_value.header.id.to_type().to_pretty_string(self.metadata.as_ref())
+                )));
             },
         };
-        
-        elements_array.rc = Some(array_header.rc.clone());
-        Ok((elements_array, array_header.rc))
+
+        Ok((elements_array, object_value.header))
     }
     
     fn load_object_header(&self, ptr: &Pointer) -> ExecResult<ObjectHeader> {
@@ -675,26 +652,20 @@ impl Interpreter {
         Ok(())
     }
 
-    // load a pointer, expected to point to an RC struct
-    // guarantees that the struct value returned has some value for its rc field
-    fn load_object(&self, ptr: &Pointer) -> ExecResult<(Box<StructValue>, ObjectHeader)> {
-        let header = self.load_object_header(ptr)?;
-        let object_ptr = ptr.reinterpret(header.marshal_type);
+    // load a pointer, expected to point to an RC class object
+    fn load_class_object(&self, ptr: &Pointer) -> ExecResult<(Box<StructValue>, ObjectHeader)> {
+        let object_val = self.native_heap.load_object(ptr)?;
 
-        let struct_val = match self.load_indirect(&object_ptr)? {
+        let struct_val = match object_val.value {
             DynValue::Structure(struct_val) => struct_val,
+
             other => {
                 let msg = format!("loaded val was not a structure, found: {:?}", other);
                 return Err(ExecError::illegal_state(msg));
             },
         };
 
-        let struct_rc = struct_val.rc.as_ref().cloned().ok_or_else(|| {
-            let msg = "unable to access rc state of loaded structure".to_string();
-            ExecError::illegal_state(msg)
-        })?;
-
-        Ok((struct_val, struct_rc))
+        Ok((struct_val, object_val.header))
     }
 
     fn release_dyn_val(&mut self, val: &DynValue, weak: bool) -> ExecResult<bool> {
@@ -749,7 +720,7 @@ impl Interpreter {
                     );
                 }
 
-                self.invoke_dtor(&val, &rc.object_type())?;
+                self.invoke_dtor(&val, &rc.id.to_type())?;
             }
 
             rc.strong_count -= 1;
@@ -1159,11 +1130,8 @@ impl Interpreter {
         element_type: &ir::Type,
         immortal: bool,
     ) -> ExecResult<()> {
-        let default_val = self.default_val(element_type)?;
-        let elements = vec![default_val];
-
-        let array_ptr = self.new_dyn_array(element_type, elements, immortal)?;
-        self.store(out, DynValue::Pointer(array_ptr))?;
+        let box_ptr = self.new_box(element_type, immortal)?;
+        self.store(out, DynValue::Pointer(box_ptr))?;
 
         Ok(())
     }
@@ -1383,28 +1351,44 @@ impl Interpreter {
 
         let el_marshal_ty = self.marshaller.get_ty(element_type)?;
 
-        // assume any object pointer is a dynarray
-        let elements_addr = if of_type.is_object() {
-            let DynValue::Pointer(array_ptr) = self.load(a)? else {
-                return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
-            };
-            
-            let (array, _) = self.load_dyn_array_ptr(&array_ptr)?;
+        let elements_addr = match of_type {
+            ir::Type::Object(ir::ObjectID::Array(..)) => {
+                let DynValue::Pointer(array_ptr) = self.load(a)? else {
+                    return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
+                };
+                
+                let array_header = self.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
 
-            // dynarray access isn't statically bounds checked
-            let array_len = i32::try_from(array.elements.len())
-                .map_err(|_| ExecError::illegal_state("expected array struct to have a length field"))?;
-            if index_value < 0 || index_value >= array_len {
-                return Err(ExecError::Raised {
-                    msg: "array index out of bounds".to_string()
-                });
+                // dynarray access isn't statically bounds checked
+                if index_value < 0 || index_value >= array_header.len {
+                    return Err(ExecError::Raised {
+                        msg: "array index out of bounds".to_string()
+                    });
+                }
+
+                // the elements array starts after the header
+                array_ptr.addr + Marshaller::array_header_size()
+            }
+            
+            ir::Type::Object(ir::ObjectID::Box(..)) => {
+                let DynValue::Pointer(box_ptr) = self.load(a)? else {
+                    return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
+                };
+                
+                box_ptr.addr + Marshaller::object_header_size()
+            }
+            
+            ir::Type::Array { .. } => {
+                // static array element pointers are just offsets from the object itself
+                self.addr_of_ref(a)?.addr
             }
 
-            // the elements array starts after the header
-            array_ptr.addr + Marshaller::array_header_size()
-        } else {
-            // static array element pointers are just offsets from the object itself
-            self.addr_of_ref(a)?.addr
+            other => {
+                return Err(ExecError::illegal_state(format!(
+                    "exec_element: argument type {} is not an array or box",
+                    other.to_pretty_string(self.metadata.as_ref())
+                )));
+            }
         };
 
         let elements_pointer = Pointer {
@@ -1808,7 +1792,7 @@ impl Interpreter {
         &mut self,
         out: &ir::Ref,
         a: &ir::Value,
-        class_id: &ir::ObjectID,
+        object_id: &ir::ObjectID,
     ) -> ExecResult<()> {
         let a_ptr = self.evaluate(a)?.as_pointer().cloned().ok_or_else(|| {
             let msg = "argument a of ClassIs instruction must evaluate to a pointer";
@@ -1828,18 +1812,18 @@ impl Interpreter {
             return Ok(())
         }
         
-        let is = match class_id {
+        let is = match object_id {
             ir::ObjectID::Any => true,
 
             ir::ObjectID::Class(class_id) => {
-                object_header.marshal_type == ir::Type::Struct(*class_id)
+                object_header.id == ObjectID::Class(*class_id)
             },
 
             ir::ObjectID::Interface(iface_id) => {
-                match &object_header.marshal_type {
+                match &object_header.id {
                     // out of all the types a struct might represent, only a class can
                     // implement any interfaces
-                    ir::Type::Struct(class_id) => {
+                    ObjectID::Class(class_id) => {
                         let class_type = class_id.to_class_ptr_type();
                         self.metadata.is_impl(&class_type, *iface_id)
                     },
@@ -1849,13 +1833,13 @@ impl Interpreter {
             },
 
             ir::ObjectID::Closure(func_type_id) => {
-                match object_header.marshal_type {
-                    ir::Type::Struct(struct_id) => {
+                match object_header.id {
+                    ObjectID::Class(class_id) => {
                         self.metadata
                             .closures_by_function()
                             .get(&func_type_id)
                             .map(|func_closures| {
-                                func_closures.contains(&struct_id)
+                                func_closures.contains(&class_id)
                             })
                             .unwrap_or(false)
                     }
@@ -1865,11 +1849,11 @@ impl Interpreter {
             }
 
             ir::ObjectID::Array(element_type) => {
-                object_header.marshal_type == element_type.as_ref().clone().array(0)
+                object_header.id == ObjectID::Array(element_type.clone())
             }
 
-            ir::ObjectID::Box(element_type) => {
-                object_header.marshal_type == element_type.as_ref().clone().boxed()
+            ir::ObjectID::Box(value_type) => {
+                object_header.id == ObjectID::Box(value_type.clone())
             }
         };
 
@@ -1901,45 +1885,17 @@ impl Interpreter {
                 }
             },
 
-            // assume the statically-provided type ID is correct, no need to load the actual value
-            // and check dynamically
-            ir::Type::Object(ir::ObjectID::Class(type_id)) => {
-                let val_ptr = self.addr_of_ref(&a.clone().to_deref())?;
-
-                let field_info = self.marshaller.get_field_info(*type_id, *field)?;
-
-                Pointer {
-                    ty: field_info.ty.clone(),
-                    addr: val_ptr.addr + field_info.offset,
-                }
-            },
-
             // virtual reference, we need to load the actual value behind the pointer to get the
-            // concrete type ID
-            ir::Type::Object(..) => {
-                let val_ptr = self.addr_of_ref(&a.clone().to_deref())?;
-                
-                let header = self.load_object_header(&val_ptr)?;
-                let object_ptr = val_ptr.reinterpret(header.marshal_type);
-
-                let val = self.load_indirect(&object_ptr)?;
-                let struct_val = match &val {
-                    DynValue::Structure(struct_val) => struct_val.as_ref(),
-                    val => {
-                        let msg = format!(
-                            "trying to read field pointer of rc type but target wasn't an rc value @ {} (target was: {:?}",
-                            a, val
-                        );
-                        return Err(ExecError::illegal_state(msg));
-                    },
+            // concrete type ID. we assume it's a class or closure, the only types to have fields
+            ir::Type::Object(ir::ObjectID::Class(..) | ir::ObjectID::Closure(..)) => {
+                let DynValue::Pointer(object_ptr) = self.load(a)? else {
+                    return Err(ExecError::illegal_state(format!(
+                        "exec_field: expected base value to be an object pointer ({})",
+                        of_ty.to_pretty_string(self.metadata.as_ref())
+                    )));
                 };
 
-                let field_info = self.marshaller.get_field_info(struct_val.type_id, *field)?;
-
-                Pointer {
-                    ty: field_info.ty.clone(),
-                    addr: object_ptr.addr + field_info.offset,
-                }
+                self.object_field_ptr(&object_ptr, *field)?
             },
 
             _ => {
@@ -1954,6 +1910,28 @@ impl Interpreter {
         self.store(out, DynValue::Pointer(field_ptr))?;
 
         Ok(())
+    }
+    
+    fn object_field_ptr(&mut self, object_ptr: &Pointer, field: ir::FieldID) -> ExecResult<Pointer> {
+        let header = self.load_object_header(&object_ptr)?;
+
+        let struct_id = match &header.id {
+            ObjectID::Class(id) => *id,
+            other => {
+                return Err(ExecError::illegal_state(format!(
+                    "exec_field: loading a class object returned the wrong type of object ({})",
+                    other.to_type().to_pretty_string(self.metadata.as_ref())
+                )));
+            }
+        };
+
+        let fields_addr = object_ptr.addr + Marshaller::object_header_size();
+        let field_info = self.marshaller.get_field_info(struct_id, field)?;
+
+        Ok(Pointer {
+            ty: field_info.ty.clone(),
+            addr: fields_addr + field_info.offset,
+        })
     }
 
     fn exec_jump(&mut self,
@@ -2010,23 +1988,30 @@ impl Interpreter {
         });
     }
 
-    fn new_object(&mut self, mut value: StructValue, immortal: bool) -> ExecResult<Pointer> {
-        let res_ty = ir::Type::Struct(value.type_id);
+    fn new_object(&mut self, fields: StructValue, immortal: bool) -> ExecResult<Pointer> {
+        let fields_type = fields.type_id.to_struct_type();
+        let fields_size = self.marshaller.get_ty(&fields_type)?.size();
 
-        value.rc = Some(ObjectHeader {
-            marshal_type: value.type_id.to_struct_type(),
-            strong_count: if immortal { -1 } else { 1 },
-            weak_count: 0,
-        });
+        let alloc_size = Marshaller::object_header_size() + fields_size;
 
-        let res_ptr = self.dynalloc_init(&res_ty, [DynValue::from(value)])?;
+        let object_ptr = self.dynalloc(&ir::Type::U8, alloc_size)?
+            .reinterpret(ir::Type::Nothing);
+
         if immortal {
-            self.native_heap.forget(&res_ptr)?;
+            self.native_heap.forget(&object_ptr)?;
         } else if self.opts.trace_rc {
-            eprintln!("[rc] alloc @ {}", res_ptr.to_pretty_string(&self.metadata))
+            eprintln!("[rc] alloc @ {}", object_ptr.to_pretty_string(&self.metadata))
         }
 
-        Ok(res_ptr)
+        let object_id = ObjectID::Class(fields.type_id);
+        let header = ObjectHeader::new(object_id, immortal);
+        
+        self.marshaller.marshal_object_at(&object_ptr, &ObjectValue {
+            header,
+            value: DynValue::Structure(Box::new(fields)),
+        })?;
+
+        Ok(object_ptr)
     }
 
     fn init_stdlib_globals(&mut self) {
@@ -2113,6 +2098,12 @@ impl Interpreter {
                 });
             }
         }
+        
+        for (ty, _) in lib.metadata.types() {
+            if ty.is_object() {
+                marshaller.register_object_type(ty.clone());
+            }
+        }
 
         self.metadata = Rc::new(metadata);
         self.marshaller = Rc::new(marshaller);
@@ -2126,18 +2117,18 @@ impl Interpreter {
         let mut string_lit_values = HashMap::new();
 
         for (id, literal) in lib.metadata().strings() {
-            let str_val =
-                self.create_string(literal, true)
-                    .map_err(|err| ExecError::WithStackTrace {
-                        err: err.into(),
-                        stack_trace: self.stack_trace(),
-                    })?;
+            let str_val = self
+                .create_string(literal, true)
+                .map_err(|err| ExecError::WithStackTrace {
+                    err: err.into(),
+                    stack_trace: self.stack_trace(),
+                })?;
 
             let str_ref = ir::GlobalRef::StringLiteral(id);
 
             self.globals.insert(str_ref, GlobalValue::Variable {
                 value: self.marshaller.marshal_to_vec(&str_val)?.into_boxed_slice(),
-                ty: ir::Type::Object(ir::ObjectID::Class(ir::STRING_ID)),
+                ty: ir::STRING_ID.to_class_ptr_type(),
             });
 
             string_lit_values.insert(id, str_val);
@@ -2223,7 +2214,7 @@ impl Interpreter {
         string_lit_values: &HashMap<ir::StringID, DynValue>
     ) -> ExecResult<()> {
         // create runtime type info objects (TypeInfo and MethodInfo)
-        for (ty, runtime_type) in lib.metadata.runtime_types() {
+        for (ty, runtime_type) in lib.metadata.types() {
             let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
 
             let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
@@ -2297,27 +2288,22 @@ impl Interpreter {
         Ok(DynValue::Pointer(str_ptr))
     }
 
-    pub fn read_string_indirect(&self, str_ptr: &Pointer) -> ExecResult<String> {
-        let (str_struct, _) = self.load_object(str_ptr)?;
+    pub fn read_string_at(&self, str_ptr: &Pointer) -> ExecResult<String> {
+        let (str_struct, _) = self.load_class_object(str_ptr)?;
         self.read_string_struct(str_struct.as_ref())
     }
 
     // reads the string value stored in the string object that `str_ref` is a pointer to
     pub fn read_string(&self, str_ref: &ir::Ref) -> ExecResult<String> {
-        let str_val = self.load(&str_ref.clone().to_deref())?;
+        let str_ptr_val = self.load(str_ref)?;
+        let str_ptr = str_ptr_val
+            .as_pointer()
+            .ok_or_else(|| {
+                let msg = format!("invalid value at {str_ref}, expected a string pointer, got {}", str_ptr_val.value_type_category());
+                ExecError::illegal_state(msg)
+            })?;
 
-        let str_struct = match str_val.as_struct(ir::STRING_ID) {
-            Some(struct_val) if struct_val.type_id == ir::STRING_ID => struct_val,
-            _ => {
-                let msg = format!(
-                    "tried to read string value from rc val which didn't contain a string struct: {:?}",
-                    str_val,
-                );
-                return Err(ExecError::illegal_state(msg));
-            },
-        };
-
-        self.read_string_struct(str_struct)
+        self.read_string_at(str_ptr)
     }
 
     fn read_string_struct(&self, str_struct: &StructValue) -> ExecResult<String> {
@@ -2386,13 +2372,55 @@ impl Interpreter {
             })
     }
 
+    fn new_box(
+        &mut self,
+        value_ty: &ir::Type,
+        immortal: bool,
+    ) -> ExecResult<Pointer> {
+        let object_id = ObjectID::Box(Rc::new(value_ty.clone()));
+        let header = ObjectHeader::new(object_id, immortal);
+
+        let immortal = header.is_immortal();
+
+        let value_size = self.marshaller.get_ty(value_ty)?.size();
+        let alloc_size = Marshaller::object_header_size() + value_size;
+
+        // we can't allocate a fixed-size object here so allocate bytes and reinterpret the pointer
+        let box_ptr = self.dynalloc(&ir::Type::U8, alloc_size)?
+            .reinterpret(ir::Type::Nothing);
+
+        if immortal {
+            self.native_heap.forget(&box_ptr)?;
+        } else if self.opts.trace_rc {
+            eprintln!("[rc] alloc @ {}", box_ptr.to_pretty_string(&self.metadata))
+        }
+
+        let mut offset = 0;
+        offset += self.marshaller.marshal_object_header(&header, unsafe {
+            box_ptr.as_slice_mut(alloc_size)
+        })?;
+
+        let default_val = self.default_val(value_ty)?;
+
+        let value_ptr = box_ptr.addr_add(offset)
+            .reinterpret(value_ty.clone());
+
+        offset += self.marshaller.marshal_at(&default_val, &value_ptr)?;
+
+        assert_eq!(offset, alloc_size);
+
+        Ok(box_ptr)
+    }
+
     fn new_dyn_array(
         &mut self,
         element_ty: &ir::Type,
         elements: Vec<DynValue>,
         immortal: bool,
     ) -> ExecResult<Pointer> {
-        let header = ObjectHeader::new(element_ty.clone().array(0), immortal);
+        let object_id = ObjectID::Array(Rc::new(element_ty.clone()));
+        let header = ObjectHeader::new(object_id, immortal);
+
         self.new_dyn_array_with_header(element_ty, elements, header)
     }
 
@@ -2404,21 +2432,20 @@ impl Interpreter {
     ) -> ExecResult<Pointer> {
         let immortal = header.is_immortal();
         
+        let array_len = elements.len();
+
         let array_val = ArrayValue {
             element_type: element_ty.clone(),
             elements,
-            rc: Some(header),
         };
 
-        let array_deref_ty = element_ty.clone().array(0);
-        
         let element_size = self.marshaller.get_ty(&element_ty)?.size();
         let alloc_size = Marshaller::array_header_size()
-            + element_size * array_val.elements.len();
+            + element_size * array_len;
         
         // we can't allocate a fixed-size object here so allocate bytes and reinterpret the pointer
         let array_ptr = self.dynalloc(&ir::Type::U8, alloc_size)?
-            .reinterpret(array_deref_ty);
+            .reinterpret(ir::Type::Nothing);
 
         if immortal {
             self.native_heap.forget(&array_ptr)?;
@@ -2426,11 +2453,21 @@ impl Interpreter {
             eprintln!("[rc] alloc @ {}", array_ptr.to_pretty_string(&self.metadata))
         }
 
-        let marshalled_size = self.marshaller.marshal_array(&array_val, unsafe {
+        let mut offset = 0;
+        offset += self.marshaller.marshal_array_object_header(&header, array_len, unsafe {
             array_ptr.as_slice_mut(alloc_size)
         })?;
+
+        let elements_ptr = array_ptr.addr_add(offset);
+        offset += self.marshaller.marshal_array(&array_val, unsafe {
+            elements_ptr.as_slice_mut(alloc_size - offset)
+        })?;
         
-        assert_eq!(marshalled_size, alloc_size);
+        assert_eq!(offset, alloc_size);
+        
+        let rev = self.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
+        assert_eq!(rev.object_header.id, header.id);
+        assert_eq!(rev.len as usize, array_len);
 
         Ok(array_ptr)
     }
@@ -2453,7 +2490,7 @@ impl Interpreter {
     fn create_typeinfo(
         &mut self,
         ty: &ir::Type,
-        rtti: &ir::RuntimeType,
+        rtti: &ir::TypeInfo,
         string_lit_values: &HashMap<ir::StringID, DynValue>,
     ) -> ExecResult<DynValue> {
         let type_name_string = match &rtti.name {
@@ -2486,7 +2523,7 @@ impl Interpreter {
 
         // allocate and store the typeinfo before populating methods, so we can easily
         // get a real heap pointer to use for the "owner" field
-        let mut typeinfo_struct = StructValue::new(ir::TYPEINFO_ID, [
+        let typeinfo_struct = StructValue::new(ir::TYPEINFO_ID, [
             // 0: name
             type_name_string,
             // 1: methods
@@ -2499,10 +2536,7 @@ impl Interpreter {
             type_flags_val,
         ]);
 
-        let typeinfo_ptr = self.new_object(typeinfo_struct.clone(), true)?;
-
-        // rc_alloc sets this on the copy it stores in memory, but we need to store it again later
-        typeinfo_struct.rc = Some(ObjectHeader::immortal(ir::TYPEINFO_ID.to_struct_type()));
+        let typeinfo_ptr = self.new_object(typeinfo_struct, true)?;
 
         // the metadata object has more method info than is stored in the actual MethodInfos
         let method_func_ids: Vec<_> = self
@@ -2548,11 +2582,10 @@ impl Interpreter {
         }
 
         let method_array = self.new_dyn_array(&ir::METHODINFO_TYPE, method_info_ptrs, true)?;
-        typeinfo_struct[ir::TYPEINFO_METHODS_FIELD] = DynValue::from(method_array);
 
-        // update the typeinfo instance in memory with the circular references set
-        self.native_heap
-            .store(&typeinfo_ptr, DynValue::from(typeinfo_struct))?;
+        // update the typeinfo instance's methods field with the circular reference
+        let methods_field_ptr = self.object_field_ptr(&typeinfo_ptr, ir::TYPEINFO_METHODS_FIELD)?;
+        self.marshaller.marshal_at(&DynValue::from(method_array), &methods_field_ptr)?;
 
         Ok(DynValue::Pointer(typeinfo_ptr))
     }
@@ -2592,7 +2625,7 @@ impl Interpreter {
             ty: ir::Type::Nothing,
         };
 
-        let mut funcinfo_struct = StructValue::new(ir::FUNCINFO_ID, [
+        let funcinfo_struct = StructValue::new(ir::FUNCINFO_ID, [
             // 0: name
             func_name_string,
             // 1: impl
@@ -2600,9 +2633,8 @@ impl Interpreter {
             // 2: tags
             DynValue::Pointer(ty_tags_array_ptr),
         ]);
-        funcinfo_struct.rc = Some(ObjectHeader::immortal(ir::FUNCINFO_ID.to_struct_type()));
 
-        let funcinfo_ptr = self.new_object(funcinfo_struct.clone(), true)?;
+        let funcinfo_ptr = self.new_object(funcinfo_struct, true)?;
 
         Ok(DynValue::Pointer(funcinfo_ptr))
     }

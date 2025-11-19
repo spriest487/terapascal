@@ -70,7 +70,7 @@ pub type TagItem = ast::tag::TagItem<Value>;
 pub const VARIANT_TAG_TYPE: Type = Type::Primitive(Primitive::Int32);
 pub const SET_DEFAULT_VALUE_TYPE: Type = Type::Primitive(Primitive::UInt8);
 
-const ENUM_ORD_TYPE: Type = Type::Primitive(Primitive::NativeInt);
+pub const ENUM_ORD_TYPE: Type = Type::Primitive(Primitive::NativeInt);
 
 impl VariantDecl {
     pub fn find_method<'a>(&'a self, name: &'a Ident, sig: &FunctionSig) -> Option<&'a MethodDecl> {

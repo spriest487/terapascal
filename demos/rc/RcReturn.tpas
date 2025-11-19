@@ -5,9 +5,9 @@ type IntBox = class
     val: Integer;
 end;
 
-function Id(box: IntBox): IntBox;
+function Id(intBox: IntBox): IntBox;
 begin
-    box
+    intBox
 end;
 
 function New(): IntBox;
@@ -18,9 +18,9 @@ end;
 initialization
     New();
     
-    var box := IntBox(val: 1);
-    Id(box);
+    var intBox := IntBox(val: 1);
+    Id(intBox);
     
-    var box2 := IntBox(val: 1);
-    box2 := New();
+    var intBox2 := IntBox(val: 1);
+    intBox2 := New();
 end

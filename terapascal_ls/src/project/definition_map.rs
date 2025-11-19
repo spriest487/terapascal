@@ -457,6 +457,10 @@ impl DefinitionMap {
                 self.add_typename(&weak_name.type_name, ctx);
             }
 
+            TypeName::Box(value_name) => {
+                self.add_typename(&value_name.value, ctx);
+            }
+
             TypeName::Function(func_name) => {
                 for param in &func_name.params {
                     self.add_typename(&param.ty, ctx);
