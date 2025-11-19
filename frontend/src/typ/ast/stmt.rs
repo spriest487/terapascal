@@ -36,6 +36,7 @@ use crate::typ::Value;
 use crate::typ::ValueKind;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::result::ErrorContinue;
 
 pub type LocalBinding = ast::LocalBinding<Value>;
 pub type Stmt = ast::Stmt<Value>;
@@ -49,50 +50,70 @@ pub fn typecheck_local_binding(
     let (val, binding_ty) = match &binding.ty {
         ast::TypeName::Unspecified(..) => match &binding.val {
             None => {
-                return Err(TypeError::UninitBindingWithNoType {
+                ctx.error(TypeError::UninitBindingWithNoType {
                     binding: Box::new(binding.clone()),
                 });
+
+                (None, TypeName::inferred(Type::Nothing))
             },
 
             Some(val) => {
-                let val = evaluate_expr(val, &Type::Nothing, ctx)?;
-
-                let val_ty = val.annotation().ty().into_owned();
-                (Some(val), TypeName::inferred(val_ty))
+                match evaluate_expr(val, &Type::Nothing, ctx) {
+                    Ok(val) => {
+                        let val_ty = val.annotation().ty().into_owned();
+                        (Some(val), TypeName::inferred(val_ty))
+                    }
+                    
+                    Err(err) => {
+                        ctx.error(err);
+                        (None, (TypeName::inferred(Type::Nothing)))
+                    }
+                }
             },
         },
 
         val_ty => {
-            let explicit_ty = typecheck_typename(val_ty, ctx)?;
+            let mut explicit_ty = typecheck_typename(val_ty, ctx)
+                .or_continue(ctx, TypeName::inferred(Type::Nothing));
+
             if explicit_ty.ty().is_unspecialized_generic() {
-                return Err(TypeError::from_generic_err(
+                ctx.error(TypeError::from_generic_err(
                     GenericError::IllegalUnspecialized { ty: explicit_ty.ty().clone() },
                     binding.span().clone(),
                 ));
+                explicit_ty = TypeName::inferred(Type::Nothing);
             }
 
             let val = match &binding.val {
                 Some(val) => {
-                    let val = evaluate_expr(val, explicit_ty.ty(), ctx)?;
+                    match evaluate_expr(val, explicit_ty.ty(), ctx) {
+                        Ok(val) => {
+                            let val = implicit_conversion(val.clone(), explicit_ty.ty(), ctx)
+                                .map_err(|err| match err {
+                                    TypeError::TypeMismatch {
+                                        expected,
+                                        actual,
+                                        span,
+                                        ..
+                                    } => TypeError::InvalidBinOp {
+                                        lhs: expected,
+                                        rhs: actual,
+                                        op: Operator::Assignment,
+                                        span,
+                                    },
 
-                    let val = implicit_conversion(val, explicit_ty.ty(), ctx)
-                        .map_err(|err| match err {
-                            TypeError::TypeMismatch {
-                                expected,
-                                actual,
-                                span,
-                                ..
-                            } => TypeError::InvalidBinOp {
-                                lhs: expected,
-                                rhs: actual,
-                                op: Operator::Assignment,
-                                span,
-                            },
+                                    err => err,
+                                })
+                                .or_continue_with(ctx, || val.clone());
 
-                            err => err,
-                        })?;
-                    
-                    Some(val)
+                            Some(val)
+                        }
+                        
+                        Err(err) => {
+                            ctx.error(err);
+                            None
+                        }
+                    }
                 },
                 None => None,
             };
