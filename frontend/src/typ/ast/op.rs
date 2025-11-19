@@ -856,11 +856,11 @@ pub fn typecheck_indexer(
 
     // todo: other index types
     let index_ty = Type::Primitive(Primitive::Int32);
-    let index = typecheck_expr(index, &index_ty, ctx)?;
+    let index = evaluate_expr(index, &index_ty, ctx)?;
 
     index.annotation().expect_value(&index_ty)?;
 
-    let base = typecheck_expr(base, &Type::Nothing, ctx)?;
+    let base = evaluate_expr(base, &Type::Nothing, ctx)?;
 
     check_array_bound_static(&base, &index, ctx)?;
 
