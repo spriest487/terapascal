@@ -15,11 +15,14 @@ STRING_STRUCT;
 TYPEINFO_STRUCT;
 METHODINFO_STRUCT;
 FUNCINFO_STRUCT;
+OBJECT_ARRAY_STRUCT;
 
-typedef void (*DestructorFunc)(void*);
+#define OBJECT_PTR struct Rc*
+#define OBJECT_ARRAY_PTR OBJECT_ARRAY_STRUCT*
 
-typedef void (*RcCleanupFunc)(void*);
-typedef void (*RcRetainFunc)(void*);
+typedef OBJECT_PTR (*Invoker)(OBJECT_PTR* args, int32_t arg_count);
+
+typedef void (*DestructorFunc)(OBJECT_PTR);
 
 #ifdef _MSC_VER
 #   define PACKED_DECL(DECL) __pragma(pack(push, 1)) DECL __pragma(pack(pop))
@@ -41,7 +44,6 @@ struct Class {
 
     struct MethodTable* iface_methods;
 
-    RcCleanupFunc cleanup;
     DestructorFunc dtor;
 };
 
@@ -56,10 +58,6 @@ struct Rc {
     .strong_count = strong,\
     .weak_count = weak\
 }
-
-#define OBJECT_PTR struct Rc*
-
-typedef OBJECT_PTR (*Invoker)(OBJECT_ARRAY_PTR args);
 
 typedef void (*DynArrayAlloc)(OBJECT_PTR arr, int32_t len);
 typedef int32_t (*DynArrayLength)(OBJECT_PTR arr);
@@ -120,7 +118,7 @@ static OBJECT_PTR RcNewArray(struct DynArrayClass* class, int count, bool immort
 
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 
-static OBJECT_PTR InvokeMethod(METHODINFO_STRUCT* method, void* instance, OBJECT_ARRAY_PTR args);
+static OBJECT_PTR InvokeMethod(METHODINFO_STRUCT* method, OBJECT_PTR instance, OBJECT_ARRAY_PTR args);
 static OBJECT_PTR InvokeFunction(FUNCINFO_STRUCT* func, OBJECT_ARRAY_PTR args);
 
 static TYPEINFO_STRUCT** typeinfo_list;

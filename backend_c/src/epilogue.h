@@ -239,11 +239,7 @@ static bool RcRelease(OBJECT_PTR object, bool weak) {
             if (object->class->dtor) {
                 object->class->dtor(object);
             }
-            
-            // invoke structural release to release struct fields
-            if (object->class->cleanup) {
-                object->class->cleanup(object);
-            }
+
             object->class = NULL;
 
             if (object->strong_count != 1) {
@@ -425,21 +421,23 @@ static bool System_IsNaN(float val) {
 
 #ifndef DISABLE_RTTI
 
-static void InvokeMethod(METHODINFO_STRUCT* method, void* instance, void** args, int32_t arg_count, void* out_result) {
+static OBJECT_PTR InvokeMethod(METHODINFO_STRUCT* method, OBJECT_PTR instance, OBJECT_ARRAY_PTR args) {
     Invoker invoker = METHODINFO_INVOKER(method);
     if (!invoker) {
         fatal("InvokeMethod called for abstract method");
     }
+    
+    int32_t arg_count = DYNARRAY_LEN(args);
 
     if (instance) {
-        void** all_args = (void**) STACKALLOC(sizeof(void*) * (arg_count + 1));
+        OBJECT_PTR* all_args = (OBJECT_PTR*) STACKALLOC(sizeof(OBJECT_PTR) * (arg_count + 1));
         all_args[0] = instance;
 
-        memcpy(all_args + 1, args, arg_count * sizeof(void*));
+        memcpy(all_args + 1, args, arg_count * sizeof(OBJECT_PTR));
 
-        invoker(all_args, out_result);
+        return invoker(all_args, arg_count + 1);
     } else {
-        invoker(args, out_result);
+        return invoker(DYNARRAY_PTR(args), arg_count);
     }
 }
 
@@ -529,7 +527,7 @@ static OBJECT_PTR InvokeFunction(FUNCINFO_STRUCT* func, OBJECT_ARRAY_PTR args) {
         fatal("InvokeFunction called for non-invokable func");
     }
 
-    return invoker(args);
+    return invoker(DYNARRAY_PTR(args), DYNARRAY_LEN(args));
 }
 
 #endif // DISABLE_RTTI

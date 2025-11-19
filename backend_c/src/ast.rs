@@ -609,7 +609,7 @@ impl<'a> fmt::Display for Unit<'a> {
         writeln!(f, "#define DYNARRAY_PTR(arr) (arr->{})", FieldName::DynArrayElements)?;
         writeln!(f, "#define DYNARRAY_LEN(arr) (arr->{})", FieldName::DynArrayLength)?;
         
-        writeln!(f, "#define OBJECT_ARRAY_PTR {}", TypeDefName::DynArray(self.object_array_id))?;
+        writeln!(f, "#define OBJECT_ARRAY_STRUCT struct {}", TypeDefName::DynArray(self.object_array_id))?;
 
         writeln!(f, "{}", include_str!("prelude.h"))?;
 

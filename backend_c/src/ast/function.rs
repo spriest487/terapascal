@@ -346,50 +346,53 @@ impl FunctionDef {
         invoker_name: FunctionName,
         func_name: FunctionName,
         param_tys: &[Type], 
-        return_ty: &Type
+        return_ty: &Type,
     ) -> Self {
         let mut builder = Builder::new(module);
+        
+        // TODO
+        builder.stmts.push(Statement::ReturnValue(Expr::Null));
 
-        let args_array = ir::LocalID(0);
-        let result_ptr = ir::LocalID(1);
-
-        let mut arg_vars = Vec::new();
-
-        for i in 0..param_tys.len() {
-            let param_ty = &param_tys[i];
-            let arg_var = VariableID::Named(Box::new(format!("arg{i}")));
-
-            builder.stmts.push(Statement::VariableDecl {
-                id: arg_var.clone(),
-                null_init: false,
-                ty: param_ty.clone(),
-            });
-
-            // argN := *((TArg*) *(args + i));
-            builder.assign(
-                Expr::Variable(arg_var.clone()),
-                Expr::infix_op(
-                    Expr::local_var(args_array),
-                    InfixOp::Add,
-                    Expr::LitInt(i as i128),
-                ).deref().cast(param_ty.clone().ptr()).deref(),
-            );
-
-            arg_vars.push(Expr::Variable(arg_var));
-        }
-
-        let function = Expr::Function(func_name);
-
-        if *return_ty == Type::Void {
-            builder.stmts.push(Statement::Expr(function.call(arg_vars)));
-        } else {
-            // *((TReturn*) resultPtr) = function(..); 
-            let result_ptr_expr = Expr::local_var(result_ptr)
-                .cast(return_ty.clone().ptr())
-                .deref();
-
-            builder.assign(result_ptr_expr, function.call(arg_vars));
-        }
+        // let args_array = ir::LocalID(0);
+        // let result_ptr = ir::LocalID(1);
+        // 
+        // let mut arg_vars = Vec::new();
+        // 
+        // for i in 0..param_tys.len() {
+        //     let param_ty = &param_tys[i];
+        //     let arg_var = VariableID::Named(Box::new(format!("arg{i}")));
+        // 
+        //     builder.stmts.push(Statement::VariableDecl {
+        //         id: arg_var.clone(),
+        //         null_init: false,
+        //         ty: param_ty.clone(),
+        //     });
+        // 
+        //     // argN := *((TArg*) *(args + i));
+        //     builder.assign(
+        //         Expr::Variable(arg_var.clone()),
+        //         Expr::infix_op(
+        //             Expr::local_var(args_array),
+        //             InfixOp::Add,
+        //             Expr::LitInt(i as i128),
+        //         ).deref().cast(param_ty.clone().ptr()).deref(),
+        //     );
+        // 
+        //     arg_vars.push(Expr::Variable(arg_var));
+        // }
+        // 
+        // let function = Expr::Function(func_name);
+        // 
+        // if *return_ty == Type::Void {
+        //     builder.stmts.push(Statement::Expr(function.call(arg_vars)));
+        // } else {
+        //     // *((TReturn*) resultPtr) = function(..); 
+        //     let result_ptr_expr = Expr::local_var(result_ptr)
+        //         .cast(return_ty.clone().ptr())
+        //         .deref();
+        // 
+        //     builder.assign(result_ptr_expr, function.call(arg_vars));
+        // }
 
         Self {
             body: builder.stmts,
@@ -397,10 +400,10 @@ impl FunctionDef {
                 comment: Some(format!("runtime invoker for function {func_name}")),
                 name: invoker_name,
                 params: vec![
-                    Type::Void.ptr().ptr(), // args
-                    Type::Void.ptr(), // result
+                    Type::object_ptr().ptr(), // args (OBJECT_PTR*)
+                    Type::Int32, // arg_count (int32_t)
                 ],
-                return_ty: Type::Void,
+                return_ty: Type::object_ptr(),
             }
         }
     }

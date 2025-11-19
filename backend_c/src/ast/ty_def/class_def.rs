@@ -316,7 +316,7 @@ impl Class {
         let def = FunctionDef {
             decl: FunctionDecl {
                 name: FunctionName::DestructorInvoker(def_name),
-                params: vec![Type::Void.ptr()],
+                params: vec![Type::Rc.ptr()],
                 comment: None,
                 return_ty: Type::Void,
             },
