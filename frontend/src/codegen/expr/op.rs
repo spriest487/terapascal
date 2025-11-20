@@ -338,19 +338,12 @@ pub fn translate_unary_op(
             // deref syntax is overloaded for box types
             if let typ::Type::Box(value_type) = operand_type.as_ref() {
                 let element_type = builder.translate_type(value_type.as_ref());
-                let element_val = builder.local_new(element_type.clone(), None);
+                let element_ref = builder.local_temp(element_type.clone().temp_ref());
                 
-                builder.local_begin();
-                {
-                    let box_type = builder.translate_type(operand_type.as_ref());
-
-                    let element_ref = builder.local_temp(element_type.clone().temp_ref());
-                    builder.element(element_ref, operand_ref, ir::Value::LiteralI32(0), box_type);
-                    builder.mov(element_val, element_ref.to_deref());
-                }
-                builder.local_end();
-
-                element_val.to_ref()
+                let box_type = builder.translate_type(operand_type.as_ref());
+                builder.element(element_ref, operand_ref, ir::Value::LiteralI32(0), box_type);
+                
+                element_ref.to_deref()
             } else {
                 if !operand_type.is_pointer() {
                     panic!("operand of deref operator must be a pointer, was {operand_type} @ {}", unary_op.span());

@@ -1,4 +1,4 @@
-use crate::ast::TypeDefName;
+use crate::ast::{DynArrayTypeID, Expr, FunctionDecl, FunctionDef, FunctionName, GlobalName, Statement, TypeDefName};
 use crate::ast::TypeDef;
 use crate::ast::Type;
 use crate::ast::StructMember;
@@ -10,6 +10,16 @@ use crate::ir;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BoxTypeID(pub usize);
+
+impl BoxTypeID {
+    pub fn class_ptr(&self) -> Expr {
+        Expr::Global(GlobalName::BoxClassInstance(*self)).addr_of()
+    }
+
+    pub fn ptr_type(&self) -> Type {
+        Type::Pointer(Box::new(Type::DefinedType(TypeDefName::Box(*self))))
+    }
+}
 
 impl<'a> Unit<'a> {
     pub fn get_box_type(&mut self, element_type: &ir::Type) -> BoxTypeID {
@@ -49,6 +59,36 @@ impl<'a> Unit<'a> {
 
         self.box_types_by_element.insert(element_type.clone(), id);
 
+        self.gen_box_element_method(id, element_type);
+
         id
+    }
+
+    fn gen_box_element_method(&mut self, box_id: BoxTypeID, element_type: &ir::Type) {
+        let box_ptr_ty = Type::DefinedType(TypeDefName::Box(box_id)).ptr();
+
+        let object_ptr_arg = Expr::local_var(ir::LocalID(1));
+
+        let element_func_body = vec![
+            Statement::ReturnValue(
+                object_ptr_arg
+                    .cast(box_ptr_ty)
+                    .arrow(FieldName::BoxValue)
+                    .addr_of()
+            ),
+        ];
+
+        self.functions.push(FunctionDef {
+            decl: FunctionDecl {
+                name: FunctionName::BoxValue(box_id),
+                comment: Some(format!(
+                    "generated element function for box of {}",
+                    self.pretty_type(element_type),
+                )),
+                params: vec![Type::Rc.ptr()],
+                return_ty: Type::Void.ptr(),
+            },
+            body: element_func_body,
+        });
     }
 }

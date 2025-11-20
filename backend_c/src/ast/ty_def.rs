@@ -7,7 +7,7 @@ pub use self::class_def::*;
 pub use self::struct_def::*;
 pub use self::type_def::*;
 pub use self::variant_def::*;
-use crate::ast::DynArrayTypeID;
+use crate::ast::{DynArrayTypeID, Expr};
 use crate::ast::Unit;
 use crate::ir;
 use std::fmt;
@@ -78,10 +78,16 @@ impl Type {
                 Type::DefinedType(TypeDefName::Struct(*id)).ptr()
             },
 
-            ir::Type::Object(ir::ObjectID::Array(element))
-            | ir::Type::WeakObject(ir::ObjectID::Array(element)) => {
-                let array_id = module.get_dyn_array_type(element);
+            ir::Type::Object(ir::ObjectID::Array(element_type))
+            | ir::Type::WeakObject(ir::ObjectID::Array(element_type)) => {
+                let array_id = module.get_dyn_array_type(element_type);
                 Type::dyn_array_ptr(array_id)
+            }
+
+            ir::Type::Object(ir::ObjectID::Box(value_type))
+            | ir::Type::WeakObject(ir::ObjectID::Box(value_type)) => {
+                let box_id = module.get_box_type(value_type);
+                box_id.ptr_type()
             }
             
             ir::Type::Object(..) | ir::Type::WeakObject(..) => Type::Rc.ptr(),
@@ -130,6 +136,10 @@ impl Type {
     
     pub fn sized_array(self, size: usize) -> Self {
         Type::SizedArray(Box::new(self), size)
+    }
+    
+    pub fn size_of(&self) -> Expr {
+        Expr::SizeOf(self.clone())
     }
 
     fn build_decl_string(&self, left: &mut String, right: &mut String) {

@@ -433,6 +433,11 @@ impl<'a> Unit<'a> {
                 )])
                 .cast(typeinfo_ty.ptr()),
         ));
+        init_stmts.push(Statement::Expr(Expr::Function(FunctionName::Forget).call([
+            Expr::Global(GlobalName::TypeInfoList),
+            Expr::LitCString("forget".to_string()),
+        ])));
+        
         init_stmts.push(Statement::assign(
             Expr::Global(GlobalName::FuncInfoList),
             Expr::Function(FunctionName::Builtin(BuiltinName::GetMem))
@@ -443,6 +448,10 @@ impl<'a> Unit<'a> {
                 )])
                 .cast(funcinfo_ty.ptr()),
         ));
+        init_stmts.push(Statement::Expr(Expr::Function(FunctionName::Forget).call([
+            Expr::Global(GlobalName::FuncInfoList),
+            Expr::LitCString("forget".to_string()),
+        ])));
         
         let method_info_class_type = ir::METHODINFO_ID.to_class_ptr_type();
         let method_info_array_id = self.get_dyn_array_type(&method_info_class_type);

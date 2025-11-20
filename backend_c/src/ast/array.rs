@@ -156,12 +156,16 @@ impl<'a> Unit<'a> {
         let get_mem = Expr::Function(FunctionName::Builtin(BuiltinName::GetMem));
         let free_mem = Expr::Function(FunctionName::Builtin(BuiltinName::FreeMem));
         let zero_mem = Expr::Function(FunctionName::Builtin(BuiltinName::ZeroMemory));
+        let forget_mem = Expr::Function(FunctionName::Forget);
 
         let c_element_type = Type::from_metadata(element_type, self);
         let elements_ptr_type = c_element_type.clone().ptr();
 
         let alloc_size = Expr::SizeOf(c_element_type.clone())
             .infix_op(InfixOp::Mul, len_arg.clone().cast(Type::SizeType));
+        
+        let arr_elements_ptr = Expr::Variable(arr_ptr_var.clone())
+            .arrow(FieldName::DynArrayElements);
 
         self.functions.push(FunctionDef {
             decl: FunctionDecl {
@@ -177,6 +181,7 @@ impl<'a> Unit<'a> {
                 return_ty: Type::Void,
             },
             body: vec![
+                // declare array pointer and cast arg to it
                 Statement::VariableDecl {
                     id: arr_ptr_var.clone(),
                     ty: array_ptr_ty.clone(),
@@ -186,21 +191,39 @@ impl<'a> Unit<'a> {
                     Expr::Variable(arr_ptr_var.clone()), 
                     arr_arg.cast(array_ptr_ty)
                 ),
+
+                // free the old memory
                 Statement::Expr(free_mem.call([
                     Expr::Variable(arr_ptr_var.clone())
                         .arrow(FieldName::DynArrayElements)
                         .cast(Type::UChar.ptr()),
                 ])),
+
+                // alloc and zero the new memory
                 Statement::assign(
-                    Expr::Variable(arr_ptr_var.clone()).arrow(FieldName::DynArrayElements),
+                    arr_elements_ptr.clone(),
                     get_mem.call([alloc_size.clone()])
                         .cast(elements_ptr_type),
                 ),
                 Statement::Expr(zero_mem.call([
-                    Expr::Variable(arr_ptr_var.clone()).arrow(FieldName::DynArrayElements)
-                        .cast(Type::UChar.ptr()),
+                    arr_elements_ptr.clone().cast(Type::UChar.ptr()),
                     alloc_size,
                 ])),
+                
+                // if immortal (strong count < 0), forget the new memory
+                Statement::if_then(
+                    Expr::Variable(arr_ptr_var.clone())
+                        .arrow(FieldName::Rc)
+                        .field(FieldName::RcStrongCount)
+                        .infix_op(InfixOp::Lt, Expr::LitInt(0)),
+                    [
+                        Statement::Expr(forget_mem.call([
+                            arr_elements_ptr,
+                            Expr::LitCString("forget".to_string()),
+                        ])),
+                    ]
+                ),
+                
                 Statement::assign(
                     Expr::Variable(arr_ptr_var.clone()).arrow(FieldName::DynArrayLength),
                     len_arg,

@@ -319,25 +319,33 @@ impl Expr {
         of_type: &ir::Type,
         module: &mut Unit,
     ) -> Self {
-        let array_expr = Expr::translate_ref(arr, module);
+        let base_expr = Expr::translate_ref(arr, module);
         let index_expr = Expr::translate_val(index, module);
         
         match of_type {
             ir::Type::Object(ir::ObjectID::Array(element_type)) => {
                 let arr_id = module.get_dyn_array_type(element_type);
-                let arr_obj = array_expr.cast(Type::object_ptr());
+                let arr_as_obj = base_expr.cast(Type::object_ptr());
                 
-                let ptr_type = Type::from_metadata(&(**element_type).clone().ptr(), module);
+                let element_ptr_type = Type::from_metadata(&element_type.as_ref().clone().ptr(), module);
 
                 arr_id.class_ptr()
                     .arrow(FieldName::DynArrayClassElement)
-                    .call([arr_obj, index_expr])
-                    .cast(ptr_type)
+                    .call([arr_as_obj, index_expr])
+                    .cast(element_ptr_type)
+            }
+
+            ir::Type::Object(ir::ObjectID::Box(value_type)) => {
+                let box_id = module.get_box_type(value_type);
+
+                base_expr.cast(box_id.ptr_type())
+                    .arrow(FieldName::BoxValue)
+                    .addr_of()
             }
             
             ir::Type::Array { .. } => {
                 // static array
-                let elements_expr = array_expr.field(FieldName::StaticArrayElements);
+                let elements_expr = base_expr.field(FieldName::StaticArrayElements);
 
                 // the field is already an array, so the size info is encoded in the type
                 elements_expr

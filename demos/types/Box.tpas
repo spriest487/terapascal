@@ -1,0 +1,11 @@
+program Box;
+
+begin
+    var box1: box of Integer := [4567];
+    WriteLn(box1^.ToString);
+    
+    var box2 := box1;
+    box2^ := 123;
+
+    WriteLn(box1^.ToString);
+end.

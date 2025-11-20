@@ -112,15 +112,15 @@ pub struct InterfaceImpl {
 pub enum ClassIdentity {
     Class(ir::TypeDefID),
     DynArrayClass(DynArrayTypeID),
-    Box(BoxTypeID),
+    BoxClass(BoxTypeID),
 }
 
-impl fmt::Display for ClassIdentity {    
+impl fmt::Display for ClassIdentity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ClassIdentity::Class(id) => write!(f, "Class_{}", id.0),
-            ClassIdentity::DynArrayClass(id) => write!(f, "DynArrayClass_{}", id.0),
-            ClassIdentity::Box(id) => write!(f, "Box_{}", id.0),
+            ClassIdentity::Class(id) => write!(f, "{}", GlobalName::ClassInstance(*id)),
+            ClassIdentity::DynArrayClass(id) => write!(f, "{}", GlobalName::DynArrayClassInstance(*id)),
+            ClassIdentity::BoxClass(id) => write!(f, "{}", GlobalName::BoxClassInstance(*id)),
         }
     }
 }
@@ -130,7 +130,7 @@ impl ClassIdentity {
         match self {
             ClassIdentity::Class(id) => TypeDefName::Struct(*id),
             ClassIdentity::DynArrayClass(id) => TypeDefName::DynArray(*id),
-            ClassIdentity::Box(id) => TypeDefName::Box(*id),
+            ClassIdentity::BoxClass(id) => TypeDefName::Box(*id),
         }
     }
 
@@ -149,7 +149,7 @@ impl ClassIdentity {
                 element.dyn_array()
             }
             
-            ClassIdentity::Box(id) => {
+            ClassIdentity::BoxClass(id) => {
                 let element = unit.box_types_by_element.iter()
                     .find_map(|(element, element_box_id)| {
                         (*element_box_id == *id).then(|| {
@@ -167,7 +167,7 @@ impl ClassIdentity {
         match self {
             ClassIdentity::Class(_) => GlobalName::ClassType,
             ClassIdentity::DynArrayClass(_) => GlobalName::DynArrayClassType,
-            ClassIdentity::Box(_) => GlobalName::DynArrayClassType,
+            ClassIdentity::BoxClass(_) => GlobalName::ClassType,
         }
     }
     
@@ -175,7 +175,7 @@ impl ClassIdentity {
         match self {
             ClassIdentity::Class(id) => GlobalName::ClassInstance(*id),
             ClassIdentity::DynArrayClass(id) => GlobalName::DynArrayClassInstance(*id),
-            ClassIdentity::Box(id) => GlobalName::BoxClassInstance(*id),
+            ClassIdentity::BoxClass(id) => GlobalName::BoxClassInstance(*id),
         }
     }
 }
@@ -269,16 +269,16 @@ impl Class {
 
     pub fn gen_box_class(
         id: BoxTypeID,
-        element_type: ir::Type,
+        value_type: ir::Type,
     ) -> Self {
-        let array_type = element_type.clone().dyn_array();
+        let box_type = value_type.clone().boxed();
 
         Class {
-            identity: ClassIdentity::Box(id),
+            identity: ClassIdentity::BoxClass(id),
             impls: BTreeMap::new(),
             dtor: None,
-            comment: Some(format!("generated dynarray class (array of {element_type})")),
-            typeinfo_global_name: global_typeinfo_decl_name(&array_type),
+            comment: Some(format!("generated box class (box of {value_type})")),
+            typeinfo_global_name: global_typeinfo_decl_name(&box_type),
         }
     }
     
@@ -414,10 +414,6 @@ impl Class {
         writeln!(class_init, "{{").unwrap();
         
         match self.identity {
-            ClassIdentity::Class(..) => {
-                self.write_class_field_init(&mut class_init, enable_rtti, &impls);
-            }
-
             ClassIdentity::DynArrayClass(array_id) => {
                 class_init.push_str("  .base = {\n");
                 self.write_class_field_init(&mut class_init, enable_rtti, &impls);
@@ -436,14 +432,8 @@ impl Class {
                 writeln!(class_init, "  .{} = {},", length_name, length_func).unwrap();
             }
 
-            ClassIdentity::Box(box_id) => {
-                class_init.push_str("  .base = {\n");
+            _ => {
                 self.write_class_field_init(&mut class_init, enable_rtti, &impls);
-                class_init.push_str("  },");
-
-                let element_name = FieldName::BoxClassValue;
-                let box_func = FunctionName::BoxValue(box_id);
-                writeln!(class_init, "  .{} = {},", element_name, box_func).unwrap();
             }
         }
 

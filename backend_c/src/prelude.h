@@ -94,6 +94,8 @@ struct AnonymousClosure {
 
 // internal memory allocation
 
+static void Forget(const void* mem, const char* msg);
+
 #ifdef TRACE_HEAP
 
     struct AllocTrace {
@@ -105,9 +107,6 @@ struct AnonymousClosure {
     static struct AllocTrace* alloc_traces;
 
 #endif
-
-static void* Alloc(size_t len);
-static void Free(void* mem);
 
 // RC runtime functions
 

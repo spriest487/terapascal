@@ -22,6 +22,9 @@
 #define MIN(a, b) (a > b ? b : a)
 #define MAX(a, b) (a > b ? a : b)
 
+static void* Alloc(size_t len);
+static void Free(void* mem);
+
 _Noreturn static void fatal(const char* msg, ...) {
     va_list args;
     va_start(args, msg);
@@ -119,23 +122,28 @@ static void* Alloc(size_t len) {
     return mem;
 }
 
-static void Free(void* mem) {
+static void Forget(const void* mem, const char* msg) {
 #ifdef TRACE_HEAP
     struct AllocTrace** alloc = &alloc_traces;
 
     while (*alloc) {
-        if ((*alloc)->at == mem) {
-            struct AllocTrace* removed = *alloc;
-            *alloc = removed->next;
-
-            fprintf(stderr, "heap:  free %4zu bytes at 0x%p\n", removed->len, removed->at);
-            free(removed);
-            break;
-        } else {
+        if ((*alloc)->at != mem) {
             alloc = &((*alloc)->next);
+            continue;
         }
+        
+        struct AllocTrace* removed = *alloc;
+        *alloc = removed->next;
+
+        fprintf(stderr, "heap:  %s %4zu bytes at 0x%p\n", msg, removed->len, removed->at);
+        
+        free(removed);
     }
 #endif
+} 
+
+static void Free(void* mem) {
+    Forget(mem, "free");
 
     free(mem);
 }
@@ -148,6 +156,9 @@ static OBJECT_PTR RcNew(struct Class* class, bool immortal) {
     }
 
     char* mem = (char*) Alloc(class->size);
+    if (immortal) {
+        Forget(mem, "forget");
+    }
 
     for (size_t i = 0; i < class->size; i += 1) {
         mem[i] = 0;
@@ -192,7 +203,7 @@ static void RcRetain(OBJECT_PTR object, bool weak) {
 
 #if TRACE_RC
     // safe to use the name chars ptr as a C string here, we null-terminate string literals
-    printf("rc: retain %s @ 0x%p (%d+%d refs)\n", 
+    fprintf(stderr, "rc: retain %s @ 0x%p (%d+%d refs)\n", 
         OBJECT_DISPLAY(object), 
         object, 
         object->strong_count, 
@@ -217,7 +228,7 @@ static bool RcRelease(OBJECT_PTR object, bool weak) {
         }
 
 #if TRACE_RC
-        printf("rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(object), object, object->strong_count, object->weak_count - 1);
+        fprintf(stderr, "rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(object), object, object->strong_count, object->weak_count - 1);
 #endif
         
         object->weak_count -= 1;
@@ -227,17 +238,20 @@ static bool RcRelease(OBJECT_PTR object, bool weak) {
         }
 
 #if TRACE_RC
-        printf("rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(object), object, object->strong_count - 1, object->weak_count);
+        fprintf(stderr, "rc: release %s @ 0x%p (%d+%d remain)\n", OBJECT_DISPLAY(object), object, object->strong_count - 1, object->weak_count);
 #endif
 
         // call the dtor before decrementing the ref count, because it must still be a live reference
         // while the function is executing
         if (object->strong_count == 1) {
 #if TRACE_RC
-            printf("rc: \tdisposing %s @ 0x%p\n", OBJECT_DISPLAY(object), object);
+            fprintf(stderr, "rc: \tdisposing %s @ 0x%p\n", OBJECT_DISPLAY(object), object);
 #endif
             if (object->class->dtor) {
+                fprintf(stderr, "rc: \tinvoking dtor of %s @ 0x%p\n", OBJECT_DISPLAY(object), object);
                 object->class->dtor(object);
+            } else {
+                fprintf(stderr, "rc: \tno dtor for %s @ 0x%p\n", OBJECT_DISPLAY(object), object);
             }
 
             object->class = NULL;

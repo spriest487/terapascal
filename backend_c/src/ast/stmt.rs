@@ -3,7 +3,7 @@ use crate::ast::expr::Expr;
 use crate::ast::expr::InfixOp;
 use crate::ast::expr::PrefixOp;
 use crate::ast::ty_def::FieldName;
-use crate::ast::FunctionName;
+use crate::ast::{FunctionName, TypeDefName};
 use crate::ast::Type;
 use crate::ast::Unit;
 use crate::ast::BuiltinName;
@@ -156,6 +156,7 @@ fn vtype_typeinfo_name(id: &ir::ObjectID) -> String {
 pub enum VariableID {
     Local(ir::LocalID),
     Named(Box<String>),
+    Temp(usize),
 }
 
 impl VariableID {
@@ -174,10 +175,10 @@ impl VariableID {
 
 impl fmt::Display for VariableID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "L")?;
         match self {
-            VariableID::Local(id) => write!(f, "{}", id.0),
-            VariableID::Named(name) => write!(f, "_{}", name),
+            VariableID::Local(id) => write!(f, "L{}", id.0),
+            VariableID::Named(name) => write!(f, "V_{name}"),
+            VariableID::Temp(id) => write!(f, "V{id}"),
         }
     }
 }
@@ -284,6 +285,8 @@ impl fmt::Display for Statement {
 #[derive(Default)]
 struct LocalScope {
     variable_types: BTreeMap<ir::LocalID, ir::Type>,
+    
+    next_temp_var: usize,
 }
 
 pub struct Builder<'a, 'b> {
@@ -298,7 +301,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         Self {
             module,
             stmts: Vec::new(),
-            local_stack: vec![LocalScope::default()]
+            local_stack: vec![LocalScope::default()],
         }
     }
     
@@ -310,6 +313,20 @@ impl<'a, 'b> Builder<'a, 'b> {
         for instruction in instructions {
             self.translate_instruction(instruction);
         }
+    }
+    
+    pub fn new_temp_var(&mut self, var_type: Type, null_init: bool) -> VariableID {
+        let current_scope = self.local_stack.last_mut().unwrap();
+        let id = VariableID::Temp(current_scope.next_temp_var);
+        current_scope.next_temp_var += 1;
+
+        self.stmts.push(Statement::VariableDecl {
+            ty: var_type,
+            id: id.clone(),
+            null_init,
+        });
+        
+        id
     }
 
     fn translate_instruction(&mut self, instruction: &ir::Instruction) {
@@ -881,10 +898,28 @@ impl<'a, 'b> Builder<'a, 'b> {
 
     fn translate_new_box(
         &mut self,
-        _out: &ir::Ref,
-        _element_type: &ir::Type,
-        _immortal: bool,
+        out: &ir::Ref,
+        element_type: &ir::Type,
+        immortal: bool,
     ) {
-        todo!()
+        let box_type_id = self.module.get_box_type(element_type);
+        
+        let box_type = Type::DefinedType(TypeDefName::Box(box_type_id));
+        let box_ptr_type = box_type.clone().ptr();
+        
+        let out_ref = Expr::translate_ref(out, self.module);
+
+        let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
+
+        let box_class = box_type_id
+            .class_ptr()
+            .cast(Type::Class.ptr());
+        
+        self.stmts.push(Statement::assign(
+            out_ref, 
+            new_function
+                .call([box_class, Expr::LitBool(immortal)])
+                .cast(box_ptr_type)
+        ));
     }
 }

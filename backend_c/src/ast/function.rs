@@ -35,6 +35,8 @@ pub enum FunctionName {
     DynArrayAlloc(DynArrayTypeID),
     DynArrayLength(DynArrayTypeID),
     
+    Forget,
+    
     BoxValue(BoxTypeID),
     
     // helper function for runtime bounds checking
@@ -74,6 +76,8 @@ impl fmt::Display for FunctionName {
             FunctionName::BoxValue(id) => {
                 write!(f, "BoxValue_{}", id.0)
             }
+            
+            FunctionName::Forget => write!(f, "Forget"),
 
             FunctionName::DynArrayBoundsCheck => write!(f, "DynArrayBoundsCheck"),
 

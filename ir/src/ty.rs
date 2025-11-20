@@ -136,6 +136,14 @@ impl Type {
         matches!(self, Type::Object(..) | Type::WeakObject(..))
     }
 
+    pub fn is_pointer(&self) -> bool {
+        matches!(self, Type::Pointer(..))
+    }
+
+    pub fn is_temp_ref(&self) -> bool {
+        matches!(self, Type::TempRef(..))
+    }
+
     pub fn is_complex(&self) -> bool {
         matches!(self, Type::Variant(..) | Type::Array { .. } | Type::Struct(..))
     }
