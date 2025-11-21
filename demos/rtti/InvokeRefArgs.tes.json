@@ -1,0 +1,6 @@
+{
+  "steps": [
+    {"output": "old i is 1, old b is false"},
+    {"output": "new i is 9, new b is true"}
+  ]
+}

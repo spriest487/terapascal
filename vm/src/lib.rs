@@ -1387,6 +1387,12 @@ impl Interpreter {
                     return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
                 };
 
+                if index_value != 0 {
+                    return Err(ExecError::Raised {
+                        msg: format!("invalid box element index: {index_value}")
+                    });
+                }
+
                 let value_ptr = self.box_value_ptr(&box_ptr)?;
                 value_ptr.addr
             }
@@ -1413,6 +1419,32 @@ impl Interpreter {
         let element_pointer = elements_pointer.addr_add(index_offset);
 
         self.store(out, DynValue::Pointer(element_pointer))
+    }
+    
+    fn dyn_array_element_pointer(&mut self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
+        let array_header = self.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
+        
+        let element_type = match &array_header.object_header.id {
+            ObjectID::Array(t) => t.as_ref().clone(),
+            _ => return Err(ExecError::illegal_state("dyn_array_element_pointer: object was not an array")),
+        };
+
+        let element_marshal_type = self.marshaller.get_ty(&element_type)?;
+
+        // dynarray access isn't statically bounds checked
+        if index < 0 || index >= array_header.len {
+            return Err(ExecError::Raised {
+                msg: "array index out of bounds".to_string()
+            });
+        }
+
+        // the elements array starts after the header
+        let elements_addr = array_ptr.addr + Marshaller::array_header_size();
+
+        let index_offset = element_marshal_type.size() * (index as usize);
+        let element_addr = elements_addr + index_offset;
+        
+        Ok(Pointer::new(element_addr, element_type))
     }
 
     fn unbox(&mut self, boxed_value: DynValue) -> ExecResult<DynValue> {
@@ -2697,10 +2729,8 @@ impl Interpreter {
         let (args_array, _) = self.load_dyn_array_ptr(&args_array_ptr)?;
         let mut boxed_args = args_array.elements;
 
-        let mut has_instance_arg = false;
         if let Some(val) = instance_arg {
             boxed_args.insert(0, val);
-            has_instance_arg = true;
         }
 
         if boxed_args.len() != func_param_tys.len() {
@@ -2732,24 +2762,34 @@ impl Interpreter {
 
         let mut arg_index = 0;
         for (arg, param_ty) in boxed_args.into_iter().zip(func_param_tys.iter()) {
-            // if the expected parameter type is an object, expect the parameter to be passed
-            // directly in the array. if it's a value, expect a box of that value type
-            if param_ty.is_object() {
-                call_args.push(arg);
-            } else if has_instance_arg && arg_index == 0 {
-                let box_ptr = arg
-                    .as_pointer()
-                    .ok_or_else(|| {
-                        ExecError::illegal_state("self argument must be a pointer")
-                    })?;
+            match param_ty {
+                // if the expected parameter type is an object, expect the parameter to be passed
+                // directly in the array
+                ir::Type::Object(..) | ir::Type::WeakObject(..) => {
+                    call_args.push(arg);
+                }
+                
+                // if the parameter type is a ref, expect a box containing the referenced type
+                // which we will clone and pass a pointer to the value of (to replace the boxed
+                // value instead of modifying the value in the original box)
+                ir::Type::TempRef(deref_type) => {
+                    let unboxed_value = self.unbox(arg.clone())?;
 
-                // methods of value types are by-reference, so we need to pass a pointer to the
-                // boxed value
-                let box_value_ptr = self.box_value_ptr(box_ptr)?;
-                call_args.push(DynValue::Pointer(box_value_ptr))
-            } else {
-                let arg_value = self.unbox(arg)?;
-                call_args.push(arg_value);
+                    let ref_box = self.new_box(deref_type, unboxed_value, false)?;
+                    let ref_box_value_ptr = self.box_value_ptr(&ref_box)?;
+                    
+                    // release and replace the item in the array
+                    self.release_dyn_val(&arg, false)?;
+                    let element = self.dyn_array_element_pointer(&args_array_ptr, arg_index)?;
+                    self.store_indirect(&element, DynValue::Pointer(ref_box))?;
+                    
+                    call_args.push(DynValue::Pointer(ref_box_value_ptr));
+                }
+                
+                _ => {
+                    let arg_value = self.unbox(arg)?;
+                    call_args.push(arg_value);
+                }
             }
 
             arg_index += 1;

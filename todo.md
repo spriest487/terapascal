@@ -12,6 +12,8 @@ demos\rtti\TypeMethods.tpas
 * more detailed type kind info
 * type/method unit name info
 * can Invokers in the C backend store an arg count for validation
+* box contents aren't refcounted properly, backends needs to deep release structures
+  * maybe some IR gen helpers?
 
 # IR
 * remove forward types from metadata

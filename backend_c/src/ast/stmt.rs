@@ -712,6 +712,24 @@ impl<'a, 'b> Builder<'a, 'b> {
         }
     }
     
+    pub fn retain(&mut self, at: Expr, weak: bool) {
+        let retain = Expr::Function(FunctionName::Builtin(BuiltinName::RcRetain));
+
+        self.stmts.push(Statement::Expr(retain.call([
+            at.cast(Type::Rc.ptr()),
+            Expr::LitBool(weak),
+        ])));
+    }
+    
+    pub fn release(&mut self, at: Expr, weak: bool) {
+        let release = Expr::Function(FunctionName::Builtin(BuiltinName::RcRelease));
+
+        self.stmts.push(Statement::Expr(release.call([
+            at.cast(Type::Rc.ptr()),
+            Expr::LitBool(weak),
+        ])));
+    }
+    
     pub fn raise(&mut self, message_str: Expr) {
         let raise_func = Expr::Function(FunctionName::Builtin(BuiltinName::Raise));
         self.stmts.push(Statement::Expr(raise_func.call([message_str])));
@@ -957,9 +975,16 @@ impl<'a, 'b> Builder<'a, 'b> {
     pub fn box_value(&mut self, value: Expr, value_type: &ir::Type) -> Expr {
         let box_ptr_type = self.module.get_box_type(value_type).ptr_type();
         let box_ptr = Expr::Variable(self.new_temp_var(box_ptr_type, false));
+        
+        let box_value_field = box_ptr.clone().arrow(FieldName::BoxValue);
 
         self.new_box(box_ptr.clone(), value_type, false);
-        self.assign(box_ptr.clone().arrow(FieldName::BoxValue), value);
+        self.assign(box_value_field.clone(), value);
+
+        if value_type.is_object() {
+            // TODO: deep retain
+            self.retain(box_value_field.cast(Type::Rc.ptr()), false);
+        }
 
         box_ptr
     }

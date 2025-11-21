@@ -384,15 +384,20 @@ impl FunctionDef {
                     arg.cast(obj_ptr_type)
                 }
                 
-                // ref params: a value of the ref's deref type is passed in a box. deref that
-                // and pass a pointer to a local copy of it to the function
+                // ref params: a value of the ref's deref type is passed in a box. clone the box
+                // so the call doesn't modify the original object, and replace the old box with the
+                // new one in the original argument array
                 ir::Type::TempRef(deref_ty) => {
-                    let value_var_type = builder.translate_type(deref_ty);
-                    let value_var = Expr::Variable(builder.new_temp_var(value_var_type, false));
-                    let unboxed_value = builder.unbox_value(arg, deref_ty);
+                    // clone the box
+                    let unboxed_value = builder.unbox_value(arg.clone(), deref_ty);
+                    let new_box = builder.box_value(unboxed_value, deref_ty);
+                    
+                    // replace the old box in the array
+                    builder.release(arg.clone(), false);
+                    builder.assign(arg, new_box.clone().cast(Type::Rc.ptr()));
 
-                    builder.assign(value_var.clone(), unboxed_value);
-                    value_var.addr_of()
+                    // arg passed to function is pointer to the value in the new box 
+                    builder.unbox_value(new_box, deref_ty).addr_of()
                 }
                 
                 // other value types: unbox them
