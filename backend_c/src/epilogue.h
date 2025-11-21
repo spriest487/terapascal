@@ -248,10 +248,14 @@ static bool RcRelease(OBJECT_PTR object, bool weak) {
             fprintf(stderr, "rc: \tdisposing %s @ 0x%p\n", OBJECT_DISPLAY(object), object);
 #endif
             if (object->class->dtor) {
+#if TRACE_RC
                 fprintf(stderr, "rc: \tinvoking dtor of %s @ 0x%p\n", OBJECT_DISPLAY(object), object);
+#endif
                 object->class->dtor(object);
             } else {
+#if TRACE_RC
                 fprintf(stderr, "rc: \tno dtor for %s @ 0x%p\n", OBJECT_DISPLAY(object), object);
+#endif
             }
 
             object->class = NULL;

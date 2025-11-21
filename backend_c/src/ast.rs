@@ -5,6 +5,7 @@ mod string_lit;
 mod ty_def;
 mod array;
 mod boxed;
+mod builtin;
 
 pub use self::array::*;
 pub use self::expr::*;
@@ -13,6 +14,7 @@ pub use self::stmt::*;
 pub use self::ty_def::*;
 use crate::ast::boxed::BoxTypeID;
 use crate::ast::string_lit::StringLiteral;
+use crate::ast::string_lit::StringLiteralKey;
 use crate::ir;
 use crate::rtti::RuntimeFuncInfo;
 use crate::Options;
@@ -24,9 +26,6 @@ use std::fmt;
 use std::rc::Rc;
 use terapascal_ir::FieldID;
 use topological_sort::TopologicalSort;
-
-mod builtin;
-
 
 pub struct Unit<'a> {
     metadata: &'a ir::Metadata,
@@ -50,7 +49,7 @@ pub struct Unit<'a> {
     classes: Vec<Class>,
     ifaces: Vec<Interface>,
 
-    string_literals: HashMap<ir::StringID, StringLiteral>,
+    string_literals: HashMap<StringLiteralKey, StringLiteral>,
     static_closures: Vec<ir::StaticClosure>,
 
     tag_arrays: HashMap<ir::TagLocation, usize>,
@@ -72,7 +71,9 @@ impl<'a> Unit<'a> {
 
         let string_literals = metadata
             .strings()
-            .map(|(id, str)| (id, StringLiteral::from(str.to_string())))
+            .map(|(id, str)| (
+                StringLiteralKey::StringID(id), 
+                StringLiteral::from(str.to_string())))
             .collect();
         
         let type_infos = metadata
@@ -131,10 +132,12 @@ impl<'a> Unit<'a> {
             // temp value we're about to replace
             object_array_id: DynArrayTypeID(usize::MAX),
         };
+        
+        unit.create_named_string_lit(GlobalName::InvokeArgsError, "function invoked with invalid argument count");
 
         unit.object_array_id = unit.get_dyn_array_type(&ir::ANY_TYPE);
 
-        let system_funcs = builtin::system_funcs(&unit);
+        let system_funcs = builtin::system_funcs();
         
         let mut builtin_func_ids = HashMap::with_capacity(system_funcs.len());
 
@@ -154,7 +157,7 @@ impl<'a> Unit<'a> {
         }
         
         for closure_id in metadata.closures() {
-            let class = Class::gen_closure_class(closure_id);
+            let class = Class::gen_closure_class(metadata, closure_id);
             unit.classes.push(class);
         } 
 
@@ -178,7 +181,7 @@ impl<'a> Unit<'a> {
     pub fn pretty_type(&self, ir_ty: &ir::Type) -> Cow<'_, str> {
         match self.type_infos.get(ir_ty).and_then(|typeinfo| typeinfo.name) {
             Some(name_id) => {
-                let name = &self.string_literals[&name_id];
+                let name = &self.string_literals[&StringLiteralKey::StringID(name_id)];
                 Cow::Borrowed(name.as_str())
             },
 
@@ -396,9 +399,14 @@ impl<'a> Unit<'a> {
 
         self.functions.push(init_func);
     }
+    
+    fn create_named_string_lit(&mut self, name: GlobalName, text: &str) {
+        self.string_literals.insert(StringLiteralKey::Named(name), StringLiteral(text.to_string()));
+    }
 
     fn get_string_lit(&self, id: ir::StringID) -> Option<&str> {
-        self.string_literals.get(&id)
+        self.string_literals
+            .get(&StringLiteralKey::StringID(id))
             .map(|s| s.0.as_str())
     }
     
@@ -673,9 +681,8 @@ impl<'a> fmt::Display for Unit<'a> {
         
         // declare string vars
         let string_name = TypeDefName::Struct(ir::STRING_ID);
-        for str_id in self.string_literals.keys() {
-            let lit_name = GlobalName::StringLiteral(*str_id);
-            write!(f, "static struct {} {};", string_name, lit_name)?;
+        for str_key in self.string_literals.keys() {
+            write!(f, "static struct {} {};", string_name, str_key.global_name())?;
         } 
         
         for (tag_loc, tag_array_len) in &self.tag_arrays {
@@ -827,9 +834,8 @@ impl<'a> fmt::Display for Unit<'a> {
         }
 
         let string_name = TypeDefName::Struct(ir::STRING_ID);
-        for (str_id, lit) in &self.string_literals {
-            let lit_name = GlobalName::StringLiteral(*str_id);
-            write!(f, "static struct {} {} = ", string_name, lit_name)?;
+        for (str_key, lit) in &self.string_literals {
+            write!(f, "static struct {} {} = ", string_name, str_key.global_name())?;
             writeln!(f, "MAKE_STRING_LIT(\"{}\");", lit.as_str().escape_default())?;
         }
 

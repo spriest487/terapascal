@@ -404,7 +404,7 @@ impl Metadata {
         }
     }
 
-    pub fn get_runtime_type(&self, ty: &Type) -> Option<Rc<TypeInfo>> {
+    pub fn get_typeinfo(&self, ty: &Type) -> Option<Rc<TypeInfo>> {
         self.types.get(ty).cloned()
     }
 

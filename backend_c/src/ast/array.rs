@@ -13,8 +13,8 @@ use crate::ast::TypeDef;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
 use crate::ast::VariableID;
-use crate::c::BuiltinName;
-use crate::c::InfixOp;
+use crate::ast::BuiltinName;
+use crate::ast::InfixOp;
 use crate::ir;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -40,7 +40,7 @@ impl<'a> Unit<'a> {
 
         self.gen_dyn_array_methods(id, element_type);
 
-        let class = Class::gen_dyn_array_class(id, element_type.clone());
+        let class = Class::gen_dyn_array_class(self.metadata, id, element_type.clone());
 
         self.classes.push(class);
 

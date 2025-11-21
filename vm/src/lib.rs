@@ -590,7 +590,7 @@ impl Interpreter {
 
     fn invoke_dtor(&mut self, val: &DynValue, ty: &ir::Type) -> ExecResult<()> {
         let dtor_func_id = self.metadata
-            .get_runtime_type(ty)
+            .get_typeinfo(ty)
             .and_then(|runtime_type| runtime_type.dtor);
 
         // eprintln!("trying to invoke dtor for {}... {:?}, {:?}: {:?}", ty, ty.def_id(), ty.rc_resource_def_id(), dtor_func_id);

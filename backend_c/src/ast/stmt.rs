@@ -3,11 +3,12 @@ use crate::ast::expr::Expr;
 use crate::ast::expr::InfixOp;
 use crate::ast::expr::PrefixOp;
 use crate::ast::ty_def::FieldName;
-use crate::ast::{FunctionName, TypeDefName};
-use crate::ast::Type;
-use crate::ast::Unit;
 use crate::ast::BuiltinName;
 use crate::ast::DynArrayTypeID;
+use crate::ast::FunctionName;
+use crate::ast::Type;
+use crate::ast::TypeDefName;
+use crate::ast::Unit;
 use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -34,6 +35,12 @@ pub enum GlobalName {
     FuncInfoList,
     FuncInfoCount,
     StaticFuncInfo(ir::FunctionID),
+
+    // TODO
+    // this error message should be moved directly into the C impl files once FunctionInfo provides
+    // enough info for the common code to do the arg validation itself rather than doing it per
+    // invoker func
+    InvokeArgsError,
     
     StaticTagArray(ir::TagLocation),
     
@@ -56,11 +63,21 @@ impl fmt::Display for GlobalName {
             GlobalName::StaticTagArray(loc) => {
                 write!(f, "StaticTagArray_")?;
                 match loc {
-                    ir::TagLocation::TypeDef(id) => write!(f, "Type_{}", id.0),
-                    ir::TagLocation::Interface(id) => write!(f, "Iface_{}", id.0),
-                    ir::TagLocation::Method { type_id, method_index} => write!(f, "Method_{}_{}", type_id, method_index),
-                    ir::TagLocation::InterfaceMethod { iface_id, method_index} => write!(f, "IfaceMethod_{}_{}", iface_id, method_index),
-                    ir::TagLocation::Function(id) => write!(f, "Function_{}", id.0),
+                    ir::TagLocation::TypeDef(id) => {
+                        write!(f, "Type_{}", id.0)
+                    },
+                    ir::TagLocation::Interface(id) => {
+                        write!(f, "Iface_{}", id.0)
+                    },
+                    ir::TagLocation::Method { type_id, method_index} => {
+                        write!(f, "Method_{}_{}", type_id, method_index)
+                    },
+                    ir::TagLocation::InterfaceMethod { iface_id, method_index} => {
+                        write!(f, "IfaceMethod_{}_{}", iface_id, method_index)
+                    },
+                    ir::TagLocation::Function(id) => {
+                        write!(f, "Function_{}", id.0)
+                    },
                 }
             }
             GlobalName::Variable(id) => write!(f, "Variable_{}", id.0),
@@ -76,6 +93,10 @@ impl fmt::Display for GlobalName {
             }
             
             GlobalName::StaticFuncInfo(id) => write!(f, "FuncInfo_{}", id.0),
+            
+            GlobalName::InvokeArgsError => {
+                write!(f, "Error_InvokeArgs")
+            }
         }
     }
 }
@@ -84,8 +105,12 @@ pub fn write_global_typeinfo_decl_name(f: &mut fmt::Formatter, ty: &ir::Type) ->
     write!(f, "TypeInfo_{}", global_typeinfo_decl_name_type(ty))
 }
 
-pub fn global_typeinfo_decl_name(ty: &ir::Type) -> String {
-    format!("TypeInfo_{}", global_typeinfo_decl_name_type(ty))
+pub fn global_typeinfo_decl_name(metadata: &ir::Metadata, ty: &ir::Type) -> Option<String> {
+    if metadata.get_typeinfo(ty).is_some() {
+        Some(format!("TypeInfo_{}", global_typeinfo_decl_name_type(ty)))
+    } else {
+        None
+    }
 }
 
 fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
@@ -667,10 +692,8 @@ impl<'a, 'b> Builder<'a, 'b> {
             },
 
             ir::Instruction::Raise { val } => {
-                let raise_func = Expr::Function(FunctionName::Builtin(BuiltinName::Raise));
-                let val_expr = Expr::translate_ref(val, self.module);
-
-                self.stmts.push(Statement::Expr(raise_func.call([val_expr])));
+                let value_expr = Expr::translate_ref(val, self.module);
+                self.raise(value_expr);
             },
 
             ir::Instruction::Cast { ty, out, a } => {
@@ -687,6 +710,11 @@ impl<'a, 'b> Builder<'a, 'b> {
                 )));
             },
         }
+    }
+    
+    pub fn raise(&mut self, message_str: Expr) {
+        let raise_func = Expr::Function(FunctionName::Builtin(BuiltinName::Raise));
+        self.stmts.push(Statement::Expr(raise_func.call([message_str])));
     }
     
     pub fn assign(&mut self, lhs: impl Into<Expr>, rhs: impl Into<Expr>) {
@@ -730,18 +758,17 @@ impl<'a, 'b> Builder<'a, 'b> {
 
                 ir::ObjectID::Array(element) => {
                     let array_id = self.module.get_dyn_array_type(element);
-                    let is_class_ptr = Expr::dyn_array_class_ptr(array_id)
+                    let array_class_ptr = Expr::dyn_array_class_ptr(array_id)
                         .cast(Type::Class.ptr());
                     
-                    Expr::infix_op(actual_class_ptr, InfixOp::Eq, is_class_ptr)
+                    Expr::infix_op(actual_class_ptr, InfixOp::Eq, array_class_ptr)
                 }
 
                 ir::ObjectID::Box(element) => {
-                    let array_id = self.module.get_dyn_array_type(element);
-                    let is_class_ptr = Expr::dyn_array_class_ptr(array_id)
-                        .cast(Type::Class.ptr());
+                    let box_id = self.module.get_box_type(element);
+                    let box_class_ptr = box_id.class_ptr().cast(Type::Class.ptr());
 
-                    Expr::infix_op(actual_class_ptr, InfixOp::Eq, is_class_ptr)
+                    Expr::infix_op(actual_class_ptr, InfixOp::Eq, box_class_ptr)
                 }
 
                 ir::ObjectID::Any => {
@@ -753,7 +780,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                     // TODO - can you use `is` on a function type?
                     Expr::LitBool(false)
                 },
-                
+
                 ir::ObjectID::Interface(iface_id) => {
                     let is_impl_func = Expr::Function(FunctionName::Builtin(BuiltinName::IsImpl));
 
@@ -898,28 +925,49 @@ impl<'a, 'b> Builder<'a, 'b> {
 
     fn translate_new_box(
         &mut self,
-        out: &ir::Ref,
+        out_ref: &ir::Ref,
         element_type: &ir::Type,
         immortal: bool,
     ) {
-        let box_type_id = self.module.get_box_type(element_type);
+        let out = Expr::translate_ref(out_ref, self.module);
         
+        self.new_box(out, element_type, immortal);
+    }
+    
+    pub fn new_box(&mut self, out: Expr, value_type: &ir::Type, immortal: bool) {
+        let box_type_id = self.module.get_box_type(value_type);
+
         let box_type = Type::DefinedType(TypeDefName::Box(box_type_id));
         let box_ptr_type = box_type.clone().ptr();
-        
-        let out_ref = Expr::translate_ref(out, self.module);
 
         let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
 
         let box_class = box_type_id
             .class_ptr()
             .cast(Type::Class.ptr());
-        
+
         self.stmts.push(Statement::assign(
-            out_ref, 
+            out,
             new_function
                 .call([box_class, Expr::LitBool(immortal)])
                 .cast(box_ptr_type)
         ));
+    }
+    
+    pub fn box_value(&mut self, value: Expr, value_type: &ir::Type) -> Expr {
+        let box_ptr_type = self.module.get_box_type(value_type).ptr_type();
+        let box_ptr = Expr::Variable(self.new_temp_var(box_ptr_type, false));
+
+        self.new_box(box_ptr.clone(), value_type, false);
+        self.assign(box_ptr.clone().arrow(FieldName::BoxValue), value);
+
+        box_ptr
+    }
+    
+    pub fn unbox_value(&mut self, box_ptr: Expr, value_type: &ir::Type) -> Expr {
+        let arg_box_id = self.module.get_box_type(value_type);
+        let arg_box = box_ptr.cast(arg_box_id.ptr_type());
+
+        arg_box.arrow(FieldName::BoxValue)
     }
 }

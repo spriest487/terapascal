@@ -16,7 +16,7 @@ impl MetadataBuilder {
     }
 
     pub fn get_runtime_type(&self, ty: &Type) -> Option<Rc<TypeInfo>> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_runtime_type(ty))
+        self.find_in_self_or_refs(move |metadata| metadata.get_typeinfo(ty))
     }
 
     pub fn alloc_tag_array(&mut self, loc: TagLocation, len: usize) {

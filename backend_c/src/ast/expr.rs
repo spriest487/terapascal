@@ -4,8 +4,8 @@ use crate::ast::GlobalName;
 use crate::ast::Type;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
-use crate::c::BuiltinName;
-use crate::c::VariableID;
+use crate::ast::BuiltinName;
+use crate::ast::VariableID;
 use crate::ir;
 use std::fmt;
 
@@ -13,6 +13,7 @@ use std::fmt;
 #[derive(Clone, PartialEq, Debug)]
 pub enum InfixOp {
     Eq,
+    Neq,
     Assign,
     Add,
     Sub,
@@ -36,6 +37,7 @@ impl fmt::Display for InfixOp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             InfixOp::Eq => write!(f, "=="),
+            InfixOp::Neq => write!(f, "!="),
             InfixOp::Assign => write!(f, "="),
             InfixOp::Add => write!(f, "+"),
             InfixOp::Sub => write!(f, "-"),

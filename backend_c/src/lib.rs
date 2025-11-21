@@ -2,8 +2,6 @@ mod rtti;
 pub mod ast;
 pub use terapascal_ir as ir;
 
-pub use ast as c;
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Options {
     pub trace_heap: bool,
@@ -15,8 +13,8 @@ pub struct Options {
     pub enable_rtti: bool,
 }
 
-pub fn translate(lib: &ir::Library, opts: Options) -> c::Unit<'_> {
-    let mut unit = c::Unit::new(&lib.metadata(), opts);
+pub fn translate(lib: &ir::Library, opts: Options) -> ast::Unit<'_> {
+    let mut unit = ast::Unit::new(&lib.metadata(), opts);
     unit.add_lib(lib);
 
     unit

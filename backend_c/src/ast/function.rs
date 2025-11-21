@@ -2,13 +2,13 @@ use crate::ast::boxed::BoxTypeID;
 use crate::ast::Builder;
 use crate::ast::DynArrayTypeID;
 use crate::ast::Expr;
+use crate::ast::GlobalName;
 use crate::ast::InfixOp;
 use crate::ast::Statement;
 use crate::ast::Type;
 use crate::ast::TypeDecl;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
-use crate::ast::VariableID;
 use std::env;
 use std::fmt;
 use terapascal_ir as ir;
@@ -313,27 +313,20 @@ impl FunctionDef {
     }
     
     pub fn invoker(id: ir::FunctionID, sig: &ir::FunctionSig, module: &mut Unit) -> Self {
-        let param_tys: Vec<_> = sig.param_tys
-            .iter()
-            .map(|ir_ty| Type::from_metadata(ir_ty, module))
-            .collect();
-        
-        let return_ty = Type::from_metadata(&sig.return_ty, module);
-        
         Self::new_invoker(
             module,
             FunctionName::Invoker(id),
             FunctionName::ID(id),
-            &param_tys,
-            &return_ty
+            &sig.param_tys,
+            &sig.return_ty
         )
     }
 
     pub fn invoker_builtin(
         name: BuiltinName,
         func_id: ir::FunctionID,
-        param_tys: &[Type],
-        return_ty: &Type,
+        param_tys: &[ir::Type],
+        return_ty: &ir::Type,
         module: &mut Unit
     ) -> Self {
         Self::new_invoker(
@@ -346,57 +339,89 @@ impl FunctionDef {
     }
 
     fn new_invoker(
-        module: &mut Unit, 
+        unit: &mut Unit, 
         invoker_name: FunctionName,
         func_name: FunctionName,
-        param_tys: &[Type], 
-        return_ty: &Type,
+        param_tys: &[ir::Type], 
+        return_ty: &ir::Type,
     ) -> Self {
-        let mut builder = Builder::new(module);
-        
-        // TODO
-        builder.stmts.push(Statement::ReturnValue(Expr::Null));
+        let c_param_tys: Vec<_> = param_tys
+            .iter()
+            .map(|ir_ty| Type::from_metadata(ir_ty, unit))
+            .collect();
 
-        // let args_array = ir::LocalID(0);
-        // let result_ptr = ir::LocalID(1);
-        // 
-        // let mut arg_vars = Vec::new();
-        // 
-        // for i in 0..param_tys.len() {
-        //     let param_ty = &param_tys[i];
-        //     let arg_var = VariableID::Named(Box::new(format!("arg{i}")));
-        // 
-        //     builder.stmts.push(Statement::VariableDecl {
-        //         id: arg_var.clone(),
-        //         null_init: false,
-        //         ty: param_ty.clone(),
-        //     });
-        // 
-        //     // argN := *((TArg*) *(args + i));
-        //     builder.assign(
-        //         Expr::Variable(arg_var.clone()),
-        //         Expr::infix_op(
-        //             Expr::local_var(args_array),
-        //             InfixOp::Add,
-        //             Expr::LitInt(i as i128),
-        //         ).deref().cast(param_ty.clone().ptr()).deref(),
-        //     );
-        // 
-        //     arg_vars.push(Expr::Variable(arg_var));
-        // }
-        // 
-        // let function = Expr::Function(func_name);
-        // 
-        // if *return_ty == Type::Void {
-        //     builder.stmts.push(Statement::Expr(function.call(arg_vars)));
-        // } else {
-        //     // *((TReturn*) resultPtr) = function(..); 
-        //     let result_ptr_expr = Expr::local_var(result_ptr)
-        //         .cast(return_ty.clone().ptr())
-        //         .deref();
-        // 
-        //     builder.assign(result_ptr_expr, function.call(arg_vars));
-        // }
+        let c_return_ty = Type::from_metadata(return_ty, unit);
+        
+        let mut builder = Builder::new(unit);
+        
+        let return_var = Expr::local_var(ir::LocalID(0));
+        let args_array_ptr = Expr::local_var(ir::LocalID(1));
+        let args_array_count = Expr::local_var(ir::LocalID(2));
+        
+        let raise_func = Expr::Function(FunctionName::Builtin(BuiltinName::Raise));
+
+        let args_invalid = args_array_count
+            .infix_op(InfixOp::Neq, Expr::LitInt(param_tys.len() as i128))
+            .infix_op(InfixOp::Or, args_array_ptr.clone().infix_op(InfixOp::Eq, Expr::Null));
+        
+        builder.stmts.push(Statement::if_then(args_invalid, [
+            Statement::Expr(raise_func.call([
+                Expr::Global(GlobalName::InvokeArgsError).addr_of(),
+            ]))],
+        ));
+
+        let function = Expr::Function(func_name);
+        
+        let mut arg_vars = Vec::new();
+        for i in 0..param_tys.len() {
+            let arg_var = Expr::Variable(builder.new_temp_var(c_param_tys[i].clone(), false));
+            let arg = args_array_ptr.clone().index(Expr::LitInt(i as i128));
+
+            let arg_val = match &param_tys[i] {
+                // object params: the arg is not boxed, copy it directly
+                ir::Type::Object(..) | ir::Type::WeakObject(..) => {
+                    let obj_ptr_type = builder.translate_type(&param_tys[i]);
+                    arg.cast(obj_ptr_type)
+                }
+                
+                // ref params: a value of the ref's deref type is passed in a box. deref that
+                // and pass a pointer to a local copy of it to the function
+                ir::Type::TempRef(deref_ty) => {
+                    let value_var_type = builder.translate_type(deref_ty);
+                    let value_var = Expr::Variable(builder.new_temp_var(value_var_type, false));
+                    let unboxed_value = builder.unbox_value(arg, deref_ty);
+
+                    builder.assign(value_var.clone(), unboxed_value);
+                    value_var.addr_of()
+                }
+                
+                // other value types: unbox them
+                _ => {
+                    builder.unbox_value(arg, &param_tys[i])
+                }
+            };
+            
+            builder.assign(arg_var.clone(), arg_val);
+            arg_vars.push(arg_var);
+        }
+
+        let call_func = function.call(arg_vars);
+        
+        if return_ty.is_object() {
+            // return the result directly
+            builder.stmts.push(Statement::assign(return_var, call_func.cast(Type::Rc.ptr())));
+        } else if *return_ty != ir::Type::Nothing {
+            // box the result
+            let return_val = Expr::Variable(builder.new_temp_var(c_return_ty, false));
+            builder.stmts.push(Statement::assign(return_val.clone(), call_func));
+            
+            let boxed_result = builder.box_value(return_val, return_ty);
+            builder.stmts.push(Statement::assign(return_var, boxed_result.cast(Type::Rc.ptr())));
+        } else {
+            // no return value, return NULL
+            builder.stmts.push(Statement::Expr(call_func));
+            builder.stmts.push(Statement::assign(return_var, Expr::Null));
+        }
 
         Self {
             body: builder.stmts,

@@ -1,4 +1,22 @@
+use std::borrow::Cow;
 use std::fmt;
+use crate::ast::GlobalName;
+use crate::ir;
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum StringLiteralKey {
+    StringID(ir::StringID),
+    Named(GlobalName),
+}
+
+impl StringLiteralKey {
+    pub fn global_name(&self) -> Cow<'_, GlobalName> {
+        match self {
+            StringLiteralKey::StringID(id) => Cow::Owned(GlobalName::StringLiteral(*id)),
+            StringLiteralKey::Named(name) => Cow::Borrowed(name),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct StringLiteral(pub String);

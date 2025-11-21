@@ -18,7 +18,6 @@ use std::process::Stdio;
 use std::time::Duration;
 use structopt::StructOpt;
 use terapascal_backend_c as backend_c;
-use terapascal_backend_c::c;
 use terapascal_backend_cil as backend_cil;
 use terapascal_build::build;
 use terapascal_build::decode_lib;
@@ -265,7 +264,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
     }
 }
 
-fn translate_c<'a>(module: &'a ir::Library, args: &Args) -> c::Unit<'a> {
+fn translate_c<'a>(module: &'a ir::Library, args: &Args) -> backend_c::ast::Unit<'a> {
     let c_opts = backend_c::Options {
         enable_rtti: args.rtti,
         trace_heap: args.trace_heap,

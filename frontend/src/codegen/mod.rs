@@ -75,6 +75,6 @@ fn translate_builtin_class(
     let resource_ty = translate_struct_def(class_def.as_ref(), &generic_ctx, lib);
 
     lib.metadata_mut().define_struct(id, resource_ty);
-    lib.gen_runtime_type(&id.to_class_ptr_type());
-    lib.gen_runtime_type(&id.to_class_weak_type());
+    lib.gen_typeinfo(&id.to_class_ptr_type());
+    lib.gen_typeinfo(&id.to_class_weak_type());
 }

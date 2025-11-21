@@ -204,9 +204,7 @@ impl<'a> LibraryBuilder<'a> {
             }
         }
 
-        // add optional RTTI info like class and method names
-        // can maybe disable this with a compile option to reduce startup time/build size
-        self.populate_all_runtime_type_info();
+        self.build_typeinfo();
 
         self.gen_static_closure_init();
         self.gen_static_type_init();
@@ -357,7 +355,7 @@ impl<'a> LibraryBuilder<'a> {
         let set_flags_type = SetFlagsType::define_new(self, bits);
         self.set_flags_type_info.insert(bits, set_flags_type);
 
-        self.gen_runtime_type(&ir::Type::Struct(set_flags_type.struct_id));
+        self.gen_typeinfo(&ir::Type::Struct(set_flags_type.struct_id));
 
         set_flags_type
     }
@@ -1102,7 +1100,7 @@ impl<'a> LibraryBuilder<'a> {
 
         // ensure the runtime type info exists for all referenced types
         if self.metadata().is_defined(&ty) {
-            self.gen_runtime_type(&ty);
+            self.gen_typeinfo(&ty);
         }
 
         ty
@@ -1146,7 +1144,7 @@ impl<'a> LibraryBuilder<'a> {
     // get or generate runtime type for a given type, which contains the function IDs etc
     // used for RC operations at runtime. the rest of the RTTI info will be filled in later 
     // in a separate pass
-    pub fn gen_runtime_type(&mut self, ty: &ir::Type) -> Rc<ir::TypeInfo> {
+    pub fn gen_typeinfo(&mut self, ty: &ir::Type) -> Rc<ir::TypeInfo> {
         if let Some(existing) = self.metadata.get_runtime_type(&ty) {
             return existing;
         }
@@ -1164,10 +1162,8 @@ impl<'a> LibraryBuilder<'a> {
 
         self.metadata.insert_runtime_type(ty.clone(), rtti)
     }
-    
-    // gen_runtime_type only populates the basics needed for codegen, this fills in reflection
-    // values like type names and methods
-    fn populate_all_runtime_type_info(&mut self) {
+
+    fn build_typeinfo(&mut self) {
         // TODO: this might be overly defensive, maybe the type cache will never change here?
         // clone the type cache for iteration
         // the RTTI generation process can touch new parts of code and
@@ -1189,14 +1185,23 @@ impl<'a> LibraryBuilder<'a> {
             
             for closure_id in populate_closures.drain(0..) {
                 gen_closure_runtime_type(self, closure_id);
-                self.gen_runtime_type(&closure_id.to_class_ptr_type());
-                self.gen_runtime_type(&closure_id.to_class_weak_type());
+                self.gen_typeinfo(&closure_id.to_class_ptr_type());
+                self.gen_typeinfo(&closure_id.to_class_weak_type());
                 done_closures += 1;
             }
 
             for (src_ty, ty) in populate_types.drain(0..) {
                 done_types += 1;
-    
+                
+                // for any non-object types, ensure boxed versions exist in the type cache
+                // for use with RTTI
+                if !src_ty.is_object() && self.opts().rtti {
+                    let box_src_type  = src_ty.clone().boxed();
+                    let box_type = self.translate_type(&box_src_type, &GenericContext::empty());
+
+                    self.gen_typeinfo(&box_type);
+                }
+
                 if !self.metadata.is_defined(&ty) {
                     continue;
                 }
@@ -1230,7 +1235,7 @@ impl<'a> LibraryBuilder<'a> {
         }
         
         // should fetch from the cache at this point
-        let mut rtti = (*self.gen_runtime_type(&ty)).clone();
+        let mut rtti = (*self.gen_typeinfo(&ty)).clone();
         rtti.name = Some(self.metadata.find_or_insert_string(&src_ty.to_string()));
 
         match &src_ty {
@@ -1563,7 +1568,7 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
         body: dtor_body,
     }));
 
-    let mut runtime_type = lib.gen_runtime_type(array_type).as_ref().clone();
+    let mut runtime_type = lib.gen_typeinfo(array_type).as_ref().clone();
     runtime_type.dtor = Some(dtor_id);
     lib.metadata.insert_runtime_type(array_type.clone(), runtime_type);
 }
@@ -1593,10 +1598,10 @@ fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID)
     let closure_class_ty = closure_id.to_class_ptr_type();
     let closure_weak_ty = closure_id.to_class_weak_type();
     
-    let runtime_type = lib.gen_runtime_type(&closure_class_ty);
+    let runtime_type = lib.gen_typeinfo(&closure_class_ty);
     let mut runtime_type = (*runtime_type).clone();
 
-    let mut weak_runtime_type = lib.gen_runtime_type(&closure_weak_ty)
+    let mut weak_runtime_type = lib.gen_typeinfo(&closure_weak_ty)
         .as_ref()
         .clone();
 
@@ -1622,10 +1627,10 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
         .and_then(|class_id| class_id.as_class())
         .expect("resource class of translated class type was not a struct");
 
-    lib.gen_runtime_type(&class_ty);
-    lib.gen_runtime_type(&class_id.to_class_weak_type());
+    lib.gen_typeinfo(&class_ty);
+    lib.gen_typeinfo(&class_id.to_class_weak_type());
 
-    let mut runtime_type = lib.gen_runtime_type(&class_ty)
+    let mut runtime_type = lib.gen_typeinfo(&class_ty)
         .as_ref()
         .clone();
 

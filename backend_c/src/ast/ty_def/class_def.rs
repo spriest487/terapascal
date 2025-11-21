@@ -1,3 +1,4 @@
+use crate::ast::boxed::BoxTypeID;
 use crate::ast::global_typeinfo_decl_name;
 use crate::ast::DynArrayTypeID;
 use crate::ast::Expr;
@@ -14,7 +15,6 @@ use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write;
-use crate::ast::boxed::BoxTypeID;
 
 #[derive(Clone, Debug)]
 struct MethodImplFunc {
@@ -189,7 +189,7 @@ pub struct Class {
 
     comment: Option<String>,
 
-    typeinfo_global_name: String,
+    typeinfo_global_name: Option<String>,
 }
 
 impl Class {
@@ -231,7 +231,7 @@ impl Class {
         }
         
         let runtime_type = metadata
-            .get_runtime_type(&class_ty)
+            .get_typeinfo(&class_ty)
             .unwrap_or_else(|| {
                 panic!("missing runtime type for class {}", metadata.pretty_ty_name(&class_ty))
             });
@@ -240,8 +240,8 @@ impl Class {
             .get_name_string(metadata)
             .map(|name| name.clone())
             .unwrap_or_else(|| metadata.pretty_ty_name(&class_ty).to_string());
-        
-        let typeinfo_name = global_typeinfo_decl_name(&class_ty);
+
+        let typeinfo_name = global_typeinfo_decl_name(metadata, &class_ty);
 
         Class {
             identity: ClassIdentity::Class(struct_id),
@@ -253,6 +253,7 @@ impl Class {
     }
     
     pub fn gen_dyn_array_class(
+        metadata: &ir::Metadata,
         id: DynArrayTypeID,
         element_type: ir::Type,
     ) -> Self {
@@ -263,11 +264,12 @@ impl Class {
             impls: BTreeMap::new(),
             dtor: None,
             comment: Some(format!("generated dynarray class (array of {element_type})")),
-            typeinfo_global_name: global_typeinfo_decl_name(&array_type),
+            typeinfo_global_name: global_typeinfo_decl_name(metadata, &array_type),
         }
     }
 
     pub fn gen_box_class(
+        metadata: &ir::Metadata,
         id: BoxTypeID,
         value_type: ir::Type,
     ) -> Self {
@@ -278,11 +280,11 @@ impl Class {
             impls: BTreeMap::new(),
             dtor: None,
             comment: Some(format!("generated box class (box of {value_type})")),
-            typeinfo_global_name: global_typeinfo_decl_name(&box_type),
+            typeinfo_global_name: global_typeinfo_decl_name(metadata, &box_type),
         }
     }
     
-    pub fn gen_closure_class(closure_struct_id: ir::TypeDefID) -> Self {
+    pub fn gen_closure_class(metadata: &ir::Metadata, closure_struct_id: ir::TypeDefID) -> Self {
         let ty = closure_struct_id.to_class_ptr_type();
 
         Class {
@@ -290,7 +292,7 @@ impl Class {
             comment: Some(format!("closure class {}", closure_struct_id)),
             dtor: None,
             impls: BTreeMap::new(),
-            typeinfo_global_name: global_typeinfo_decl_name(&ty),
+            typeinfo_global_name: global_typeinfo_decl_name(metadata, &ty),
         }
     }
 
@@ -470,8 +472,11 @@ impl Class {
             writeln!(out, "  .dtor = NULL,").unwrap();
         };
 
-        if enable_rtti {
-            writeln!(out, "  .typeinfo = &{},", self.typeinfo_global_name).unwrap();
+        write!(out, "  .typeinfo =").unwrap();
+        if enable_rtti && let Some(typeinfo_name) = &self.typeinfo_global_name {
+            writeln!(out, "&{},", typeinfo_name).unwrap();
+        } else {
+            writeln!(out, "NULL,").unwrap()
         }
 
         if let Some((_, (first_iface_id, _))) = impls.get(0) {

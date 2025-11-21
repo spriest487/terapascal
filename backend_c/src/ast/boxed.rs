@@ -1,11 +1,17 @@
-use crate::ast::{DynArrayTypeID, Expr, FunctionDecl, FunctionDef, FunctionName, GlobalName, Statement, TypeDefName};
-use crate::ast::TypeDef;
-use crate::ast::Type;
-use crate::ast::StructMember;
-use crate::ast::StructDef;
-use crate::ast::FieldName;
 use crate::ast::Class;
+use crate::ast::FieldName;
+use crate::ast::StructDef;
+use crate::ast::StructMember;
+use crate::ast::Type;
+use crate::ast::TypeDef;
 use crate::ast::Unit;
+use crate::ast::FunctionDef;
+use crate::ast::FunctionDecl;
+use crate::ast::Expr;
+use crate::ast::FunctionName;
+use crate::ast::GlobalName;
+use crate::ast::Statement;
+use crate::ast::TypeDefName;
 use crate::ir;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -30,7 +36,7 @@ impl<'a> Unit<'a> {
         let index = self.box_types_by_element.len();
         let id = BoxTypeID(index);
 
-        let class = Class::gen_box_class(id, element_type.clone());
+        let class = Class::gen_box_class(self.metadata, id, element_type.clone());
         self.classes.push(class);
 
         let element_field_ty = Type::from_metadata(element_type, self);

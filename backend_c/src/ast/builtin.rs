@@ -1,129 +1,129 @@
-use crate::ast::{BuiltinName, Type, TypeDefName, Unit};
+use crate::ast::BuiltinName;
 use crate::ir;
 
-pub fn system_funcs(unit: &Unit) -> Vec<(&'static str, BuiltinName, Type, Vec<Type>)> {
-    let string_ty = Type::DefinedType(TypeDefName::Struct(ir::STRING_ID)).ptr();
+pub fn system_funcs() -> Vec<(&'static str, BuiltinName, ir::Type, Vec<ir::Type>)> {
+    let string_ty = ir::STRING_ID.to_class_ptr_type();
 
-    let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
-    let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
+    let typeinfo_ty = ir::TYPEINFO_ID.to_class_ptr_type();
+    let funcinfo_ty = ir::FUNCINFO_ID.to_class_ptr_type();
 
     vec![
         ("Int8ToStr", BuiltinName::Int8ToStr, string_ty.clone(), vec![
-            Type::SChar
+            ir::Type::I8
         ]),
         ("UInt8ToStr", BuiltinName::ByteToStr, string_ty.clone(), vec![
-            Type::UChar
+            ir::Type::U8
         ]),
         ("Int16ToStr", BuiltinName::Int16ToStr, string_ty.clone(), vec![
-            Type::Int16
+            ir::Type::I16
         ]),
         ("UInt16ToStr", BuiltinName::UInt16ToStr, string_ty.clone(), vec![
-            Type::UInt16
+            ir::Type::U16
         ]),
         ("Int32ToStr", BuiltinName::IntToStr, string_ty.clone(), vec![
-            Type::Int32
+            ir::Type::I32
         ]),
         ("UInt32ToStr", BuiltinName::UInt32ToStr, string_ty.clone(), vec![
-            Type::UInt32
+            ir::Type::U32
         ]),
         ("Int64ToStr", BuiltinName::Int64ToStr, string_ty.clone(), vec![
-            Type::Int64
+            ir::Type::I64
         ]),
         ("UInt64ToStr", BuiltinName::UInt64ToStr, string_ty.clone(), vec![
-            Type::UInt64
+            ir::Type::U64
         ]),
         ("NativeIntToStr", BuiltinName::NativeIntToStr, string_ty.clone(), vec![
-            Type::PtrDiffType
+            ir::Type::ISize
         ]),
         ("NativeUIntToStr", BuiltinName::NativeUIntToStr, string_ty.clone(), vec![
-            Type::SizeType
+            ir::Type::USize
         ]),
         ("PointerToStr", BuiltinName::PointerToStr, string_ty.clone(), vec![
-            Type::Void.ptr()
+            ir::Type::Nothing.ptr()
         ]),
         ("RealToStr", BuiltinName::RealToStr, string_ty.clone(), vec![
-            Type::Float
+            ir::Type::F32
         ]),
-        ("StrToInt", BuiltinName::StrToInt, Type::Int32, vec![
+        ("StrToInt", BuiltinName::StrToInt, ir::Type::I32, vec![
             string_ty.clone()
         ]),
-        ("GetMem", BuiltinName::GetMem, Type::UChar.ptr(), vec![
-            Type::Int32
+        ("GetMem", BuiltinName::GetMem, ir::Type::U8.ptr(), vec![
+            ir::Type::I32
         ]),
-        ("FreeMem", BuiltinName::FreeMem, Type::Void, vec![
-            Type::UChar.ptr()
+        ("FreeMem", BuiltinName::FreeMem, ir::Type::Nothing, vec![
+            ir::Type::U8.ptr()
         ]),
-        ("WriteLn", BuiltinName::WriteLn, Type::Void, vec![
+        ("WriteLn", BuiltinName::WriteLn, ir::Type::Nothing, vec![
             string_ty.clone()
         ]),
-        ("Write", BuiltinName::Write, Type::Void, vec![
+        ("Write", BuiltinName::Write, ir::Type::Nothing, vec![
             string_ty.clone()
         ]),
         ("ReadLn", BuiltinName::ReadLn, string_ty.clone(), vec![]),
-        ("ArrayLengthInternal", BuiltinName::ArrayLengthInternal, Type::Int32, vec![
-            Type::Rc.ptr(),
+        ("ArrayLengthInternal", BuiltinName::ArrayLengthInternal, ir::Type::I32, vec![
+            ir::ANY_TYPE,
         ]),
-        ("ArrayCreateInternal", BuiltinName::ArrayCreateInternal, Type::Void, vec![
-            Type::Rc.ptr().ptr(),
-            Type::Int32,
+        ("ArrayCreateInternal", BuiltinName::ArrayCreateInternal, ir::Type::Nothing, vec![
+            ir::ANY_TYPE.ptr(),
+            ir::Type::I32,
         ]),
 
         ("FindTypeInfo", BuiltinName::FindTypeInfo, typeinfo_ty.clone(), vec![string_ty.clone()]),
-        ("GetTypeInfoCount", BuiltinName::GetTypeInfoCount, Type::Int32, vec![]),
-        ("GetTypeInfoByIndex", BuiltinName::GetTypeInfoByIndex, typeinfo_ty.clone(), vec![Type::Int32]),
-        ("GetObjectTypeInfo", BuiltinName::GetObjectTypeInfo, typeinfo_ty.clone(), vec![Type::Rc.ptr()]),
+        ("GetTypeInfoCount", BuiltinName::GetTypeInfoCount, ir::Type::I32, vec![]),
+        ("GetTypeInfoByIndex", BuiltinName::GetTypeInfoByIndex, typeinfo_ty.clone(), vec![ir::Type::I32]),
+        ("GetObjectTypeInfo", BuiltinName::GetObjectTypeInfo, typeinfo_ty.clone(), vec![ir::ANY_TYPE]),
 
         ("FindFunctionInfo", BuiltinName::FindFuncInfo, funcinfo_ty.clone(), vec![string_ty.clone()]),
-        ("GetFunctionInfoCount", BuiltinName::GetFuncInfoCount, Type::Int32, vec![]),
-        ("GetFunctionInfoByIndex", BuiltinName::GetFuncInfoByIndex, funcinfo_ty.clone(), vec![Type::Int32]),
-        ("InvokeMethod", BuiltinName::InvokeMethod, Type::object_ptr(), vec![
-            Type::from_ir_struct(ir::METHODINFO_ID).ptr(),
-            Type::object_ptr(),
-            Type::dyn_array_ptr(unit.object_array_id),
+        ("GetFunctionInfoCount", BuiltinName::GetFuncInfoCount, ir::Type::I32, vec![]),
+        ("GetFunctionInfoByIndex", BuiltinName::GetFuncInfoByIndex, funcinfo_ty.clone(), vec![ir::Type::I32]),
+        ("InvokeMethod", BuiltinName::InvokeMethod, ir::ANY_TYPE, vec![
+            ir::METHODINFO_ID.to_class_ptr_type(),
+            ir::ANY_TYPE,
+            ir::ANY_TYPE.dyn_array(),
         ]),
-        ("InvokeFunction", BuiltinName::InvokeFunction, Type::object_ptr(), vec![
-            Type::from_ir_struct(ir::FUNCINFO_ID).ptr(),
-            Type::dyn_array_ptr(unit.object_array_id),
+        ("InvokeFunction", BuiltinName::InvokeFunction, ir::ANY_TYPE, vec![
+            ir::FUNCINFO_ID.to_class_ptr_type(),
+            ir::ANY_TYPE.dyn_array(),
         ]),
-        ("RandomInteger", BuiltinName::RandomInteger, Type::Int32, vec![
-            Type::Int32,
-            Type::Int32]),
-        ("RandomSingle", BuiltinName::RandomSingle, Type::Float, vec![
-            Type::Float,
-            Type::Float
+        ("RandomInteger", BuiltinName::RandomInteger, ir::Type::I32, vec![
+            ir::Type::I32,
+            ir::Type::I32]),
+        ("RandomSingle", BuiltinName::RandomSingle, ir::Type::F32, vec![
+            ir::Type::F32,
+            ir::Type::F32
         ]),
-        ("Time", BuiltinName::Time, Type::Double, vec![]),
-        ("Pow", BuiltinName::Pow, Type::Float, vec![
-            Type::Float, Type::Float
+        ("Time", BuiltinName::Time, ir::Type::F64, vec![]),
+        ("Pow", BuiltinName::Pow, ir::Type::F32, vec![
+            ir::Type::F32, ir::Type::F32
         ]),
-        ("Sqrt", BuiltinName::Sqrt, Type::Float, vec![
-            Type::Float
+        ("Sqrt", BuiltinName::Sqrt, ir::Type::F32, vec![
+            ir::Type::F32
         ]),
-        ("Sin", BuiltinName::Sin, Type::Float, vec![
-            Type::Float
+        ("Sin", BuiltinName::Sin, ir::Type::F32, vec![
+            ir::Type::F32
         ]),
-        ("ArcSin", BuiltinName::ArcSin, Type::Float, vec![
-            Type::Float
+        ("ArcSin", BuiltinName::ArcSin, ir::Type::F32, vec![
+            ir::Type::F32
         ]),
-        ("Cos", BuiltinName::Cos, Type::Float, vec![
-            Type::Float
+        ("Cos", BuiltinName::Cos, ir::Type::F32, vec![
+            ir::Type::F32
         ]),
-        ("ArcCos", BuiltinName::ArcCos, Type::Float, vec![
-            Type::Float
+        ("ArcCos", BuiltinName::ArcCos, ir::Type::F32, vec![
+            ir::Type::F32
         ]),
-        ("Tan", BuiltinName::Tan, Type::Float, vec![
-            Type::Float
+        ("Tan", BuiltinName::Tan, ir::Type::F32, vec![
+            ir::Type::F32
         ]),
-        ("ArcTan", BuiltinName::ArcTan, Type::Float, vec![
-            Type::Float
+        ("ArcTan", BuiltinName::ArcTan, ir::Type::F32, vec![
+            ir::Type::F32
         ]),
-        ("Infinity", BuiltinName::Infinity, Type::Float, vec![]),
-        ("NaN", BuiltinName::NaN, Type::Float, vec![]),
-        ("IsInfinite", BuiltinName::IsInfinite, Type::Bool, vec![
-            Type::Float
+        ("Infinity", BuiltinName::Infinity, ir::Type::F32, vec![]),
+        ("NaN", BuiltinName::NaN, ir::Type::F32, vec![]),
+        ("IsInfinite", BuiltinName::IsInfinite, ir::Type::Bool, vec![
+            ir::Type::F32
         ]),
-        ("IsNaN", BuiltinName::IsNaN, Type::Bool, vec![
-            Type::Float
+        ("IsNaN", BuiltinName::IsNaN, ir::Type::Bool, vec![
+            ir::Type::F32
         ]),
     ]
 }
