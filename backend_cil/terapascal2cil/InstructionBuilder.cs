@@ -207,7 +207,7 @@ public class InstructionBuilder {
                     Out: var outRef,
                     Arg: var baseRef,
                     Index: var indexVal,
-                    ArrayType: var baseType,
+                    BaseType: var baseType,
                 }: {
                     this.StoreRef(outRef, () => {
                         switch (baseType) {
@@ -232,7 +232,7 @@ public class InstructionBuilder {
 
                             case IR.ObjectType(IR.BoxObjectID(var valueType)): {
                                 var boxTypeInfo = typeBuilder.GetBoxTypeInfo(valueType);
-                                
+
                                 this.LoadRef(baseRef);
                                 this.body.Emit(OpCodes.Ldflda, boxTypeInfo.ValueFieldRef);
                                 break;

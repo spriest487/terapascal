@@ -159,7 +159,7 @@ public record ElementInstruction : IInstruction {
     }
 
     [Key("of_type")]
-    public required IType ArrayType {
+    public required IType BaseType {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }

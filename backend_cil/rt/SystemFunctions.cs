@@ -260,7 +260,7 @@ public static class SystemFunctions {
     }
 
     public static unsafe object? InvokeFunction(
-        MethodInfo? method,
+        FunctionInfo? method,
         object[]? args,
         ref int errorCode
     ) {

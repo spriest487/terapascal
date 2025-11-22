@@ -50,8 +50,6 @@ public class TypeBuilder {
 
     private readonly StaticArrayTypeBuilder staticArrayBuilder;
 
-    private readonly TypeReference boxGenericType;
-
     public TypeReference ExceptionType { get; }
     public TypeReference CLRStringType { get; }
     public TypeReference ValueType { get; }
@@ -152,7 +150,6 @@ public class TypeBuilder {
             .Single(f => f.Name == nameof(Runtime.ClosureBase.functionPointer));
         this.closurePointerField = this.assemblyBuilder.Module.ImportReference(this.closurePointerField);
 
-        this.boxGenericType = this.assemblyBuilder.GetRuntimeTypeRef(typeof(Runtime.Box<>).Name, false);
         this.boxTypes = new Dictionary<IR.IType, BoxTypeInfo>();
 
         this.staticArrayBuilder = new StaticArrayTypeBuilder(this.assemblyBuilder, this);
@@ -551,24 +548,32 @@ public class TypeBuilder {
             return boxInfo.TypeRef;
         }
 
-        if (valueType is IR.PointerType(IR.ObjectType)) {
-            var typeName = valueType.ToPrettyString(library.Metadata);
-            throw new InvalidDataException($"object pointer types cannot be boxed on this platform ({typeName})");
-        }
+        var attrs = TypeAttributes.Sealed 
+            | TypeAttributes.NotPublic
+            | TypeAttributes.AnsiClass
+            | TypeAttributes.BeforeFieldInit
+            | TypeAttributes.Class 
+            | TypeAttributes.AutoLayout;
 
-        var valueTypeRef = this.BuildTypeRef(valueType, library);
+        var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
+        var typeName = $"Box_{valueType.GetUniqueName()}";
 
-        var boxTypeDef = this.boxGenericType.MakeGenericInstanceType(valueTypeRef);
-        var valueFieldRef = new FieldReference(nameof(Runtime.Box<>.value), valueTypeRef, boxTypeDef);
+        var typeDef = new TypeDefinition(systemTypesNamespace, typeName, attrs, this.ObjectBaseType);
 
-        boxInfo = new BoxTypeInfo {
-            TypeRef = this.assemblyBuilder.Module.ImportReference(boxTypeDef),
-            ValueFieldRef = this.assemblyBuilder.Module.ImportReference(valueFieldRef),
-        };
+        var valueFieldType = this.BuildTypeRef(valueType, library);
+        var valueFieldDef = new FieldDefinition("value", FieldAttributes.Assembly, valueFieldType);
+        typeDef.Fields.Add(valueFieldDef);
 
-        this.boxTypes.Add(valueType, boxInfo);
+        this.boxTypes.Add(valueType, new BoxTypeInfo {
+            TypeRef = typeDef,
+            ValueFieldRef = valueFieldDef,
+        });
 
-        return boxInfo.TypeRef;
+        this.BuildDefaultConstructor(typeDef);
+
+        this.assemblyBuilder.Module.Types.Add(typeDef);
+
+        return typeDef;
     }
 
     internal BoxTypeInfo GetBoxTypeInfo(IR.IType valueType) {

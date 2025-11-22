@@ -1,6 +1,8 @@
 ﻿// ReSharper disable InconsistentNaming
 
 #nullable disable
+using System.Runtime.InteropServices;
+
 namespace Terapascal.Runtime;
 
 public class Object {
@@ -32,8 +34,4 @@ public class Object {
 
 public unsafe class ClosureBase : Object { 
     public void* functionPointer;
-}
-
-public class Box<T> : Object {
-    public T value;
 }
