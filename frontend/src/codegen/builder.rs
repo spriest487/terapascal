@@ -380,7 +380,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     
     pub fn set_include(&mut self, set_ref: impl Into<Ref>, bit_val: impl Into<Value>, set_type: &typ::SetType) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Struct(flags_type_info.struct_id);
+        let flags_type = Type::Flags(flags_type_info.struct_id);
         
         let flags_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(flags_ptr, set_ref);
@@ -395,7 +395,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     #[allow(unused)]
     pub fn set_exclude(&mut self, set_ref: impl Into<Ref>, bit_val: impl Into<Value>, set_type: &typ::SetType) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Struct(flags_type_info.struct_id);
+        let flags_type = Type::Flags(flags_type_info.struct_id);
 
         let flags_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(flags_ptr, set_ref);
@@ -413,7 +413,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         set_type: &typ::SetType
     ) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Struct(flags_type_info.struct_id);
+        let flags_type = Type::Flags(flags_type_info.struct_id);
 
         let flags_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(flags_ptr, set_ref);
@@ -431,7 +431,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         set_type: &typ::SetType
     ) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Struct(flags_type_info.struct_id);
+        let flags_type = Type::Flags(flags_type_info.struct_id);
 
         let a_ptr = self.local_temp(flags_type.clone().temp_ref());
         let b_ptr = self.local_temp(flags_type.temp_ref());
@@ -449,7 +449,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         set_type: &typ::SetType
     ) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Struct(flags_type_info.struct_id);
+        let flags_type = Type::Flags(flags_type_info.struct_id);
 
         let a_ptr = self.local_temp(flags_type.clone().temp_ref());
         self.make_ref(a_ptr, a);
@@ -466,7 +466,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         get_func_id: fn(&SetFlagsType) -> FunctionID,
     ) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Struct(flags_type_info.struct_id);
+        let flags_type = Type::Flags(flags_type_info.struct_id);
 
         let a_ptr = self.local_temp(flags_type.clone().temp_ref());
         let b_ptr = self.local_temp(flags_type.temp_ref());

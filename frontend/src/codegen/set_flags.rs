@@ -128,17 +128,17 @@ impl SetFlagsType {
     }
 
     fn define_include(
-        struct_id: ir::TypeDefID,
+        repr_id: ir::TypeDefID,
         word_count: usize,
         lib: &mut LibraryBuilder
     ) -> ir::FunctionID {
-        let struct_ty = ir::Type::Struct(struct_id);
+        let flags_ty = ir::Type::Flags(repr_id);
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
+        builder.bind_param(flags_ty.clone().temp_ref(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
 
-        let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 0, word_count, struct_ty.clone());
+        let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 0, word_count, flags_ty.clone());
 
         let word_mask = builder.local_temp(WORD_TYPE);
 
@@ -149,7 +149,7 @@ impl SetFlagsType {
         
         let name = format!("operator include ({}-bit flags)", word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).temp_ref(),
+            flags_ty.temp_ref(),
             ir::Type::U8,
         ], ir::Type::Nothing);
         
@@ -157,13 +157,13 @@ impl SetFlagsType {
     }
     
     fn define_exclude(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let struct_ty = ir::Type::Struct(struct_id);
+        let flags_ty = ir::Type::Flags(struct_id);
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
+        builder.bind_param(flags_ty.clone().temp_ref(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
 
-        let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 0, word_count, struct_ty.clone());
+        let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 0, word_count, flags_ty.clone());
 
         let word_mask = builder.local_temp(WORD_TYPE);
 
@@ -175,7 +175,7 @@ impl SetFlagsType {
         
         let name = format!("operator exclude ({}-bit flags)", word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).temp_ref(),
+            flags_ty.temp_ref(),
             ir::Type::U8,
         ], ir::Type::Nothing);
         
@@ -183,14 +183,14 @@ impl SetFlagsType {
     }
 
     fn define_contains(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let struct_ty = ir::Type::Struct(struct_id);
+        let flags_ty = ir::Type::Flags(struct_id);
 
         let mut builder = IRBuilder::new(lib);
         builder.bind_return();
-        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
+        builder.bind_param(flags_ty.clone().temp_ref(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
         
-        let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 1, word_count, struct_ty.clone());
+        let (word_ref, word_bit) = Self::find_word_bit(&mut builder, 1, word_count, flags_ty.clone());
 
         let word_mask = builder.local_temp(WORD_TYPE);
 
@@ -206,7 +206,7 @@ impl SetFlagsType {
         let name = format!("operator in ({}-bit flags)", word_count * WORD_BITS);
         
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).temp_ref(),
+            flags_ty.temp_ref(),
             ir::Type::U8,
         ], ir::Type::Bool);
 
@@ -220,11 +220,11 @@ impl SetFlagsType {
         lib: &mut LibraryBuilder,
         build_op: impl Fn(&mut IRBuilder, ir::Ref, ir::Value, ir::Value)
     ) -> ir::FunctionID {
-        let struct_ty = ir::Type::Struct(struct_id);
+        let flags_ty = ir::Type::Flags(struct_id);
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
-        builder.bind_param(struct_ty.clone().temp_ref(), "other");
+        builder.bind_param(flags_ty.clone().temp_ref(), "flags");
+        builder.bind_param(flags_ty.clone().temp_ref(), "other");
 
         let flags_ref = ir::LocalID(0).to_deref();
         let other_ref = ir::LocalID(1).to_deref();
@@ -234,8 +234,8 @@ impl SetFlagsType {
 
         for word in 0..word_count {
             let field_id = ir::FieldID(word);
-            builder.field(word_field_ref, flags_ref.clone(), struct_ty.clone(), field_id);
-            builder.field(other_word_field_ref, other_ref.clone(), struct_ty.clone(), field_id);
+            builder.field(word_field_ref, flags_ref.clone(), flags_ty.clone(), field_id);
+            builder.field(other_word_field_ref, other_ref.clone(), flags_ty.clone(), field_id);
             
             let word_val = word_field_ref.to_deref().value();
             let other_word_val = other_word_field_ref.to_deref().value();
@@ -245,43 +245,43 @@ impl SetFlagsType {
 
         let name = format!("operator {} ({}-bit flags)", op, word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).temp_ref(),
-            ir::Type::Struct(struct_id).temp_ref(),
+            flags_ty.clone().temp_ref(),
+            flags_ty.temp_ref(),
         ], ir::Type::Nothing);
 
         Self::define_func(name, builder.finish(), sig, lib)
     }
     
     fn define_bit_not(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let struct_ty = ir::Type::Struct(struct_id);
+        let flags_ty = ir::Type::Flags(struct_id);
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
+        builder.bind_param(flags_ty.clone().temp_ref(), "flags");
 
         let flags_ref = ir::Ref::Local(ir::LocalID(0)).to_deref();
         
         let word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
         for word in 0..word_count {
             let field_id = ir::FieldID(word);
-            builder.field(word_field_ref, flags_ref.clone(), struct_ty.clone(), field_id);
+            builder.field(word_field_ref, flags_ref.clone(), flags_ty.clone(), field_id);
             builder.bit_not(word_field_ref.to_deref(), word_field_ref.to_deref());
         }
-        
+
         let name = format!("operator ~ ({}-bit flags)", word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).temp_ref(),
+            flags_ty.temp_ref(),
         ], ir::Type::Nothing);
-        
+
         Self::define_func(name, builder.finish(), sig, lib)
     }
 
     fn define_eq(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let struct_ty = ir::Type::Struct(struct_id);
+        let flags_ty = ir::Type::Flags(struct_id);
         
         let mut builder = IRBuilder::new(lib);
         builder.bind_return();
-        builder.bind_param(struct_ty.clone().temp_ref(), "flags");
-        builder.bind_param(struct_ty.clone().temp_ref(), "other");
+        builder.bind_param(flags_ty.clone().temp_ref(), "flags");
+        builder.bind_param(flags_ty.clone().temp_ref(), "other");
 
         let flags_arg = ir::LocalID(1);
         let other_arg = ir::LocalID(2);
@@ -295,8 +295,8 @@ impl SetFlagsType {
 
         for word in 0..word_count {
             let field_id = ir::FieldID(word);
-            builder.field(word_field_ref, flags_arg.to_deref(), struct_ty.clone(), field_id);
-            builder.field(other_word_field_ref, other_arg.to_deref(), struct_ty.clone(), field_id);
+            builder.field(word_field_ref, flags_arg.to_deref(), flags_ty.clone(), field_id);
+            builder.field(other_word_field_ref, other_arg.to_deref(), flags_ty.clone(), field_id);
 
             // result := result and (word = other_word)
             builder.eq(word_eq_var, word_field_ref.to_deref(), other_word_field_ref.to_deref());
@@ -305,8 +305,8 @@ impl SetFlagsType {
         
         let name = format!("operator = ({}-bit flags)", word_count * WORD_BITS);
         let sig = ir::FunctionSig::new([
-            ir::Type::Struct(struct_id).temp_ref(),
-            ir::Type::Struct(struct_id).temp_ref(),
+            flags_ty.clone().temp_ref(),
+            flags_ty.clone().temp_ref(),
         ], ir::Type::Bool);
 
         Self::define_func(name, builder.finish(), sig, lib)
