@@ -6,6 +6,7 @@ type
     end;
 
     ClassWithMethods = class
+    published
         [MyTag(message: 'Class method A')]
         function A;
     end;
