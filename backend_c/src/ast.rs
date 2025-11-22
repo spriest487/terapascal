@@ -64,11 +64,7 @@ pub struct Unit<'a> {
 }
 
 impl<'a> Unit<'a> {
-    pub fn new(metadata: &'a ir::Metadata, opts: Options) -> Self {        
-        let enable_rtti = metadata.get_struct_def(ir::TYPEINFO_ID).is_some()
-            && metadata.get_struct_def(ir::METHODINFO_ID).is_some()
-            && metadata.get_struct_def(ir::FUNCINFO_ID).is_some();
-
+    pub fn new(metadata: &'a ir::Metadata, opts: Options) -> Self {
         let string_literals = metadata
             .strings()
             .map(|(id, str)| (
@@ -83,11 +79,13 @@ impl<'a> Unit<'a> {
 
         let func_infos = metadata
             .functions()
-            .filter_map(|(id, decl)| {
-                let name = decl.runtime_name?;
+            .filter_map(|(id, func_info)| {
+                let name = func_info.runtime_name?;
+
                 Some(RuntimeFuncInfo {
                     name,
                     id,
+                    invoker: func_info.invoker,
                 })
             })
             .collect();
@@ -164,15 +162,6 @@ impl<'a> Unit<'a> {
         for (iface_id, iface_def) in metadata.ifaces() {
             let iface = Interface::translate(iface_id, iface_def, &mut unit);
             unit.ifaces.push(iface);
-        }
-
-        if enable_rtti {
-            for (_pas_name, c_name, return_ty, params) in system_funcs {
-                if let Some(id) = builtin_func_ids.get(&c_name) {
-                    let invoker = FunctionDef::invoker_builtin(c_name, *id, &params, &return_ty, &mut unit);
-                    unit.functions.push(invoker);
-                }
-            }
         }
 
         unit
@@ -307,11 +296,6 @@ impl<'a> Unit<'a> {
                 ir::Function::Local(func_def) => {
                     let c_func = FunctionDef::translate(*func_id, func_def, self);
                     self.functions.push(c_func);
-
-                    if self.opts.enable_rtti {
-                        let invoker = FunctionDef::invoker(*func_id, &func_def.sig, self);
-                        self.functions.push(invoker);
-                    }
                 },
 
                 ir::Function::External(func_ref) if func_ref.src == ir::BUILTIN_SRC => {
@@ -320,11 +304,6 @@ impl<'a> Unit<'a> {
                 ir::Function::External(func_ref) => {
                     let ffi_func = FfiFunction::translate(*func_id, func_ref, self);
                     self.ffi_funcs.push(ffi_func);
-
-                    if self.opts.enable_rtti {
-                        let invoker = FunctionDef::invoker(*func_id, &func_ref.sig, self);
-                        self.functions.push(invoker);
-                    }
                 },
             }
             
@@ -542,9 +521,14 @@ impl<'a> Unit<'a> {
                     type_info_expr.clone().addr_of(),
                 )));
 
-                let impl_ptr_expr = match method.function {
-                    Some(id) => Expr::Function(FunctionName::Invoker(id)).addr_of(),
-                    None => Expr::Null,
+                let impl_ptr_expr = if let Some(method_func_id) = method.function
+                    && let Some(invoker_id) = self.metadata
+                    .get_function_info(method_func_id)
+                    .and_then(|f| f.invoker)
+                {
+                    Expr::Function(FunctionName::ID(invoker_id)).addr_of()
+                } else {
+                    Expr::Null
                 };
 
                 init_stmts.push(Statement::Expr(Expr::assign(
@@ -804,10 +788,16 @@ impl<'a> fmt::Display for Unit<'a> {
                 writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
 
                 let name_str = GlobalName::StringLiteral(func.name);
-                let invoker = FunctionName::Invoker(func.id);
 
                 writeln!(f, "  .{} = &{},", FieldName::ID(ir::FUNCINFO_NAME_FIELD), name_str)?;
-                writeln!(f, "  .{} = &{invoker},", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
+
+                write!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
+                if let Some(invoker_id) = func.invoker {
+                    write!(f, "&{}", FunctionName::ID(invoker_id))?;
+                } else {
+                    write!(f, "NULL")?;
+                }
+                writeln!(f, ",")?;
 
                 writeln!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_TAGS_FIELD))?;
 

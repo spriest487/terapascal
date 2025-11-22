@@ -439,24 +439,20 @@ static bool System_IsNaN(float val) {
 
 #ifndef DISABLE_RTTI
 
-static OBJECT_PTR InvokeMethod(METHODINFO_STRUCT* method, OBJECT_PTR instance, OBJECT_ARRAY_PTR args) {
+static OBJECT_PTR InvokeMethod(
+    METHODINFO_STRUCT* method,
+    OBJECT_PTR* instance,
+    OBJECT_ARRAY_PTR args,
+    int32_t* error_code
+) {
     Invoker invoker = METHODINFO_INVOKER(method);
+
     if (!invoker) {
-        fatal("InvokeMethod called for abstract method");
+        *error_code = 2;
+        return NULL;
     }
-    
-    int32_t arg_count = DYNARRAY_LEN(args);
 
-    if (instance) {
-        OBJECT_PTR* all_args = (OBJECT_PTR*) STACKALLOC(sizeof(OBJECT_PTR) * (arg_count + 1));
-        all_args[0] = instance;
-
-        memcpy(all_args + 1, args, arg_count * sizeof(OBJECT_PTR));
-
-        return invoker(all_args, arg_count + 1);
-    } else {
-        return invoker(DYNARRAY_PTR(args), arg_count);
-    }
+    return invoker(instance, args, error_code);
 }
 
 static TYPEINFO_STRUCT* System_FindTypeInfo(STRING_STRUCT* type_name) {
@@ -539,13 +535,15 @@ static FUNCINFO_STRUCT* System_GetFunctionInfoByIndex(int32_t func_index) {
     return funcinfo_list[func_index];
 }
 
-static OBJECT_PTR InvokeFunction(FUNCINFO_STRUCT* func, OBJECT_ARRAY_PTR args) {
+static OBJECT_PTR InvokeFunction(FUNCINFO_STRUCT* func, OBJECT_ARRAY_PTR args, int* error_code) {
     Invoker invoker = FUNCINFO_INVOKER(func);
+
     if (!invoker) {
-        fatal("InvokeFunction called for non-invokable func");
+        *error_code = 2;
+        return NULL;
     }
 
-    return invoker(DYNARRAY_PTR(args), DYNARRAY_LEN(args));
+    return invoker(NULL, args, error_code);
 }
 
 #endif // DISABLE_RTTI

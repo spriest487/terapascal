@@ -20,7 +20,7 @@ OBJECT_ARRAY_STRUCT;
 #define OBJECT_PTR struct Rc*
 #define OBJECT_ARRAY_PTR OBJECT_ARRAY_STRUCT*
 
-typedef OBJECT_PTR (*Invoker)(OBJECT_PTR* args, int32_t arg_count);
+typedef OBJECT_PTR (*Invoker)(OBJECT_PTR* self_arg, OBJECT_ARRAY_PTR args_array, int32_t* error_code);
 
 typedef void (*DestructorFunc)(OBJECT_PTR);
 
@@ -117,8 +117,8 @@ static OBJECT_PTR RcNewArray(struct DynArrayClass* class, int count, bool immort
 
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 
-static OBJECT_PTR InvokeMethod(METHODINFO_STRUCT* method, OBJECT_PTR instance, OBJECT_ARRAY_PTR args);
-static OBJECT_PTR InvokeFunction(FUNCINFO_STRUCT* func, OBJECT_ARRAY_PTR args);
+static OBJECT_PTR InvokeMethod(METHODINFO_STRUCT* method, OBJECT_PTR* instance, OBJECT_ARRAY_PTR args, int32_t* error_code);
+static OBJECT_PTR InvokeFunction(FUNCINFO_STRUCT* func, OBJECT_ARRAY_PTR args, int32_t* error_code);
 
 static TYPEINFO_STRUCT** typeinfo_list;
 static int32_t typeinfo_count;
