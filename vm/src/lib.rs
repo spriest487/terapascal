@@ -2756,9 +2756,9 @@ impl Interpreter {
         };
 
         // zeroed memory where a boxed result pointer may be stored
-        let ptr_size = self.marshaller.get_ty(&ir::ANY_TYPE.temp_ref())?.size();
-        let mut result_mem: SmallVec<[u8; size_of::<usize>()]> = SmallVec::new();
-        result_mem.resize(ptr_size, 0);
+        let error_code_size = self.marshaller.get_ty(&ir::Type::I32)?.size();
+        let mut error_code_mem: SmallVec<[u8; size_of::<i32>()]> = SmallVec::new();
+        error_code_mem.resize(error_code_size, 0);
 
         let mut invoker_args = Vec::with_capacity(3);
         
@@ -2768,24 +2768,24 @@ impl Interpreter {
         // args array arg
         invoker_args.push(DynValue::Pointer(args_array_ptr));
 
-        // result pointer arg
+        // error code out ptr arg
         invoker_args.push(DynValue::Pointer(Pointer::new(
-            result_mem.as_mut_ptr() as usize,
+            error_code_mem.as_mut_ptr() as usize,
             ir::Type::Nothing,
         )));
-        
-        // copy the result pointer
-        let result_code = self
-            .call(invoker_id, &invoker_args)?
-            .and_then(|val| val.as_i32())
-            .ok_or_else(|| ExecError::illegal_state("expected invoker to return a result code"))?;
 
-        let result_ptr = self.marshaller
-            .unmarshal(&result_mem, &ir::ANY_TYPE.temp_ref())?
+        // result is a box pointer
+        let result_ptr = self
+            .call(invoker_id, &invoker_args)?
+            .and_then(|val| val.as_pointer().cloned())
+            .ok_or_else(|| ExecError::illegal_state("expected invoker to return a pointer"))?;
+
+        // error code should be set to 0 or a non-zero error value
+        let result_code = self.marshaller
+            .unmarshal(&error_code_mem, &ir::Type::I32)?
             .value
-            .as_pointer()
-            .cloned()
-            .ok_or_else(|| ExecError::illegal_state("expected result to contain a pointer"))?;
+            .as_i32()
+            .ok_or_else(|| ExecError::illegal_state("expected error code to contain a 32-bit int"))?;
 
         Ok((result_code, result_ptr))
     }

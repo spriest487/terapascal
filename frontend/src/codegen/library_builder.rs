@@ -1709,12 +1709,12 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
     // temporarily swap because we can't build new functions with this borrowed
     let mut all_funcs = HashMap::new();
     mem::swap(&mut all_funcs, &mut lib.translated_funcs);
-    
+
     let invoker_sig = ir::FunctionSig::new([
         ir::ANY_TYPE.temp_ref(), // self-arg
         ir::ANY_TYPE.dyn_array(), // rest args
-        ir::ANY_TYPE.temp_ref(), // result out ref
-    ], ir::Type::I32);
+        ir::Type::I32.temp_ref(), // error code out
+    ], ir::ANY_TYPE);
 
     for (_, func) in &all_funcs {
         let invoker_id = lib.metadata_mut().insert_func(None, false);
@@ -1730,7 +1730,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         builder.bind_return();
         let self_param = builder.bind_param(ir::ANY_TYPE.temp_ref(), "self");
         let args_param = builder.bind_param(ir::ANY_TYPE.dyn_array(), "args");
-        builder.bind_param(ir::ANY_TYPE.temp_ref(), "result_out");
+        builder.bind_param(ir::Type::I32.temp_ref(), "error_out");
         builder.retain(self_param, false);
         builder.retain(args_param, false);
         
@@ -1743,9 +1743,9 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
             debug_name,
             body,
         };
-        
+
         lib.functions.insert(invoker_id, ir::Function::Local(invoker_func));
-    
+
         lib.metadata.insert_func_invoker(func.id, invoker_id);
     }
     

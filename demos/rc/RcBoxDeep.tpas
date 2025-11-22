@@ -13,12 +13,12 @@ type
     
 
 begin
-    var objBox: box of MyRecord := [MyRecord(
+    var objBox: Object := [MyRecord(
         obj1: MyObject();
         obj2: [
             MyObject(),
             MyObject(),
             MyObject(),
         ];
-    )];
+    )] as box of MyRecord;
 end.

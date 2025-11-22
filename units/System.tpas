@@ -23,7 +23,9 @@ type
         function IsSome: Boolean;
     end;
 
-    Result[T, E] = variant
+    IToString = interface;
+
+    Result[T, E] = variant where E is IToString
         Ok: T;
         Error: E;
         
@@ -36,7 +38,7 @@ type
 
         function Then[TNext](f: function(T): Result[TNext, E]): Result[TNext, E];
     end;
-    
+
     ArraySequence[T] = record
     private
         arr: array of T;
@@ -85,6 +87,14 @@ type
         function ToString: String;
     end;
 
+    InvokeError = variant of IToString
+        InvalidArgs;
+        NotInvokable;
+        InternalError;
+        
+        function ToString: String;
+    end;
+
 {$IFDEF RTTI}
     TagCollection = record
     private
@@ -102,7 +112,7 @@ type
         tags: array of Object;
     public
         function Name: String;
-        function Invoke(args: array of Object): Result[Object, String];
+        function Invoke(args: array of Object): Result[Object, InvokeError];
 
         class function LoadedFunctions: array of FunctionInfo;
         class function Find(functionName: String): Option[FunctionInfo];
@@ -127,7 +137,7 @@ type
         function Owner: TypeInfo;
         function Name: String;
 
-        function Invoke(instance: Object; args: array of Object): Result[Object, String];
+        function Invoke(instance: Object; args: array of Object): Result[Object, InvokeError];
 
         function FindTag(tagClass: TypeInfo): Option[Object]; overload;
         function FindTag[TTag]: Option[TTag]; overload;
@@ -253,14 +263,14 @@ function InvokeMethod(
     method: MethodInfo; 
     var instance: Object; 
     args: array of Object;
-    out result: Object;
-): Integer; external 'rt';
+    out errorCode: Integer;
+): Object; external 'rt';
 
 function InvokeFunction(
     func: FunctionInfo;
     args: array of Object;
-    out result: Object;
-): Integer; external 'rt';
+    out errorCode: Integer;
+): Object; external 'rt';
 
 {$ENDIF}
 
@@ -299,6 +309,16 @@ begin
     end;
     
     arr
+end;
+
+function InvokeError.ToString: String;
+begin
+    match self of
+        InvokeError.InvalidArgs: 'Invalid arguments';
+        InvokeError.NotInvokable: 'Function does not support dynamic invocation';
+        InvokeError.InternalError: 'Internal error';
+        else 'Unknown error';
+    end;
 end;
 
 {$IFDEF RTTI}
@@ -469,16 +489,17 @@ begin
     self.name
 end;
 
-function FunctionInfo.Invoke(args: array of Object): Result[Object, String];
+function FunctionInfo.Invoke(args: array of Object): Result[Object, InvokeError];
 unsafe begin
-    var resultObj: Object := default;
-    var errorCode := InvokeFunction(self, args, resultObj);
+    var errorCode := -1;
+    var resultObj := InvokeFunction(self, args, errorCode);
 
-    if errorCode = 0 
-        then Result.Ok(resultObj)
-        else if errorCode = 1 
-            then Result.Error('invalid arguments')
-        else Result.Error('internal error')
+    case errorCode of
+        0: Result.Ok(resultObj);
+        1: Result.Error(InvokeError.InvalidArgs);
+        2: Result.Error(InvokeError.NotInvokable);
+        else Result.Error(InvokeError.InternalError);
+    end;
 end;
 
 function FunctionInfo.Tags: TagCollection;
@@ -542,17 +563,17 @@ begin
     self.owner
 end;
 
-function MethodInfo.Invoke(instance: Object; args: array of Object): Result[Object, String];
+function MethodInfo.Invoke(instance: Object; args: array of Object): Result[Object, InvokeError];
 unsafe begin
-    var resultObj: Object := default;
-    var errorCode := InvokeMethod(self, instance, args, resultObj);
+    var errorCode := -1;
+    var resultObj := InvokeMethod(self, instance, args, errorCode);
 
-    if errorCode = 0 then
-        Result.Ok(resultObj)
-    else if errorCode = 1 then
-        Result.Error('invalid arguments')
-    else
-        Result.Error('internal error')
+    case errorCode of
+        0: Result.Ok(resultObj);
+        1: Result.Error(InvokeError.InvalidArgs);
+        2: Result.Error(InvokeError.NotInvokable);
+        else Result.Error(InvokeError.InternalError);
+    end;
 end;
 
 function TagCollection.Sequence: ArraySequence[Object];
@@ -603,12 +624,10 @@ function Result[T, E].Get: T;
 begin
     match self of
         Result.Ok value: value;
-        else raise 'cannot get value of ' + 
-{$IFDEF RTTI}
-            typeinfo(Result[T, E]).Name + '.Error';
-{$ELSE}
-            'Result.Error';
-{$ENDIF}
+        Result.Error err: raise err.ToString;
+        else
+            // should be unreachable
+            raise 'cannot get value of Result.Error';
     end;
 end;
 

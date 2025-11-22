@@ -245,7 +245,7 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
     let method_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(1)))?;
     let instance_arg_ref = load_pointer(state, &ir::Ref::Local(ir::LocalID(2)))?;
     let args_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
-    let result_out = load_pointer(state, &ir::Ref::Local(ir::LocalID(4)))?;
+    let error_out = load_pointer(state, &ir::Ref::Local(ir::LocalID(4)))?;
 
     let (method_info_val,_) = state.load_class_object(&method_ptr)?;
 
@@ -263,21 +263,21 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
         return Err(ExecError::illegal_state("InvokeMethod called for abstract method"));
     };
 
-    let (result_code, result_box_ptr) = state.runtime_invoke(
+    let (error_code, result_box_ptr) = state.runtime_invoke(
         func_id,
         instance_arg_ref,
         args_ptr,
     )?;
     
-    state.store_indirect(&result_out, DynValue::Pointer(result_box_ptr))?;
-    state.store(&ir::RETURN_REF, DynValue::I32(result_code))?;
+    state.store_indirect(&error_out, DynValue::I32(error_code))?;
+    state.store(&ir::RETURN_REF, DynValue::Pointer(result_box_ptr))?;
     Ok(())
 }
 
 fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
     let func_info_ptr = load_pointer(state, &ir::LocalID(1).to_ref())?;
     let args_array_ptr = load_pointer(state, &ir::LocalID(2).to_ref())?;
-    let result_out = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
+    let error_out = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
 
     let (func_info_val,_) = state.load_class_object(&func_info_ptr)?;
     
@@ -290,18 +290,14 @@ fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
     let func_id = ir::FunctionID(impl_val);
 
     // returns either an object ref or a boxed value
-    let (result_code, result_box_ptr) = state.runtime_invoke(
+    let (error_code, result_box_ptr) = state.runtime_invoke(
         func_id,
         Pointer::nil(ir::Type::Nothing),
         args_array_ptr,
     )?;
 
-    if result_code != 0 {
-        unimplemented!();
-    }
-
-    state.store_indirect(&result_out, DynValue::Pointer(result_box_ptr))?;
-    state.store(&ir::RETURN_REF, DynValue::I32(result_code))?;
+    state.store_indirect(&error_out, DynValue::I32(error_code))?;
+    state.store(&ir::RETURN_REF, DynValue::Pointer(result_box_ptr))?;
     
     Ok(())
 }
@@ -616,16 +612,16 @@ pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, ir::Ty
             ir::Type::any().temp_ref(), 
             ir::Type::I32, 
         ]),
-        ("InvokeMethod", invoke_method, ir::Type::I32, vec![
+        ("InvokeMethod", invoke_method, ir::ANY_TYPE, vec![
             ir::METHODINFO_TYPE,
             ir::Type::any().temp_ref(),
             ir::Type::any().dyn_array(),
-            ir::Type::any().temp_ref(),
+            ir::Type::I32.temp_ref(),
         ]),
-        ("InvokeFunction", invoke_func, ir::Type::I32, vec![
+        ("InvokeFunction", invoke_func, ir::ANY_TYPE, vec![
             ir::FUNCINFO_TYPE,
             ir::Type::any().dyn_array(),
-            ir::Type::any().temp_ref(),
+            ir::Type::I32.temp_ref(),
         ]),
         
         ("FindTypeInfo", find_type_info, ir::TYPEINFO_TYPE, vec![ir::Type::string_ptr()]),

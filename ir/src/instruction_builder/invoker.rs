@@ -41,7 +41,7 @@ where
 {
     let self_arg_ref = LocalID(1);
     let args_arg = LocalID(2);
-    let result_ref_arg = LocalID(3);
+    let result_code_ref_arg = LocalID(3);
 
     let exit_label = builder.next_label();
     let exit_error_label = builder.next_label();
@@ -175,20 +175,17 @@ where
         }
     }
 
-    // in case the value at the result ref isn't null, release it
-    builder.release(result_ref_arg.to_deref(), false, Ref::Discard);
-
     if func_sig.return_ty == Type::Nothing {
         // no result: set result ref to nil
         builder.call(func_id, call_args, None);
-        builder.mov(result_ref_arg.to_deref(), Value::LiteralNull);
+        builder.mov(RETURN_REF, Value::LiteralNull);
     } else {
         let call_result = builder.local_temp(func_sig.return_ty.clone());
         builder.call(func_id, call_args, Some(call_result.to_ref()));
         
         if func_sig.return_ty.is_object() {
             // result is an object: replace the result ref
-            builder.cast(result_ref_arg.to_deref(), call_result, Type::any());
+            builder.cast(RETURN_REF, call_result, Type::any());
         } else {
             // box the result
             let result_box_type = func_sig.return_ty.clone().boxed();
@@ -199,15 +196,15 @@ where
             builder.new_box(result_box, func_sig.return_ty.clone(), false);
             builder.element(result_box_value_ref, result_box, Value::LiteralI32(0), result_box_type);
             builder.mov(result_box_value_ref.to_deref(), call_result);
-            
-            builder.cast(result_ref_arg.to_deref(), result_box, Type::any());
+
+            builder.cast(RETURN_REF, result_box, Type::any());
         }
     }
 
-    builder.mov(RETURN_REF, Value::I32_0);
+    builder.mov(result_code_ref_arg.to_deref(), Value::I32_0);
     builder.jmp(exit_label);
     builder.label(exit_error_label);
-    builder.mov(RETURN_REF, Value::I32_1);
+    builder.mov(result_code_ref_arg.to_deref(), Value::I32_1);
 
     builder.label(exit_label);
 }
