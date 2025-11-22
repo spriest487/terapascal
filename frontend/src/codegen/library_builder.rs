@@ -1728,10 +1728,9 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
 
         let mut builder = IRBuilder::new(lib);
         builder.bind_return();
-        let self_param = builder.bind_param(ir::ANY_TYPE.temp_ref(), "self");
+        let _self_param = builder.bind_param(ir::ANY_TYPE.temp_ref(), "self");
         let args_param = builder.bind_param(ir::ANY_TYPE.dyn_array(), "args");
         builder.bind_param(ir::Type::I32.temp_ref(), "error_out");
-        builder.retain(self_param, false);
         builder.retain(args_param, false);
         
         builder.gen_invoker_body(func.id, &sig);

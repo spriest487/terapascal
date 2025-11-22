@@ -31,7 +31,8 @@ initialization
         
         if animalType.FindMethod('Bark') is Option.Some method then
         begin
-            method.Invoke(animal, []);
+            var animalRef := animal as Object;
+            method.Invoke(animalRef, []);
         end;
     end;
 end.

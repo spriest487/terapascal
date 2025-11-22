@@ -45,17 +45,23 @@ initialization
     end;
 
     var instance := MyClass();
+    var instanceRef := instance as Object;
 
-    methods[0].Invoke(instance, []);
+    methods[0].Invoke(instanceRef, []);
 
-    var message := methods[1].Invoke(instance, []).Downcast[String]().Get;
+    var message := methods[1].Invoke(instanceRef, []).Get
+        .Downcast[String]().Get;
     WriteLn(message); 
 
     var i: box of Integer := [456];
-    methods[2].Invoke(instance, [i as Object]);
+    methods[2].Invoke(instanceRef, [i as Object]);
 
     var valueInstance: box of MyRecord := [MyRecord(val: 29312)];
-    var valueResult := typeinfo(MyRecord).Methods[0].Invoke(valueInstance, []).Downcast[box of Integer]().Get; 
+    var valueInstanceRef := valueInstance as Object;
+    
+    var valueResult := typeinfo(MyRecord).Methods[0]
+        .Invoke(valueInstanceRef, []).Get
+        .Downcast[box of Integer]().Get; 
     
     WriteLn('val is ' + valueResult^);
 end
