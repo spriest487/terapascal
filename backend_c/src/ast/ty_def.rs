@@ -94,7 +94,7 @@ impl Type {
             
             ir::Type::Struct(id) => Type::from_ir_struct(*id),
             ir::Type::Variant(id) => Type::from_ir_variant(*id),
-            ir::Type::Flags(repr_id, _set_id) => Type::from_ir_struct(*repr_id),
+            ir::Type::Flags(repr_id) => Type::from_ir_struct(*repr_id),
             
             ir::Type::Nothing => Type::Void,
             ir::Type::Bool => Type::Bool,

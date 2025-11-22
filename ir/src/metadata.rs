@@ -1,11 +1,11 @@
 mod builder;
 
-use crate::typeinfo::TypeInfo;
 use crate::ty::FieldID;
 use crate::ty::ObjectID;
 use crate::ty_decl::TagLocation;
-use crate::FunctionInfo;
+use crate::typeinfo::TypeInfo;
 use crate::FunctionID;
+use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::GlobalRef;
 use crate::IRFormatter;
@@ -13,12 +13,10 @@ use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::InterfaceImpl;
+use crate::MethodInfo;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Ref;
-use crate::MethodInfo;
-use crate::SetAliasDef;
-use crate::SetAliasID;
 use crate::StaticClosureID;
 use crate::StructDef;
 use crate::StructIdentity;
@@ -84,6 +82,7 @@ pub const TYPEINFO_METHODS_FIELD: FieldID = FieldID(1);
 pub const TYPEINFO_TAGS_FIELD: FieldID = FieldID(2);
 pub const TYPEINFO_IMPL_FIELD: FieldID = FieldID(3);
 pub const TYPEINFO_FLAGS_FIELD: FieldID = FieldID(4);
+pub const TYPEINFO_FLAGS_BITS: usize = 64;
 
 pub const METHODINFO_ID: TypeDefID = TypeDefID(3);
 pub const METHODINFO_VTYPE_ID: ObjectID = ObjectID::Class(METHODINFO_ID);
@@ -121,8 +120,6 @@ pub struct Metadata {
 
     variables: BTreeMap<VariableID, Type>,
 
-    set_aliases: LinkedHashMap<SetAliasID, SetAliasDef>,
-
     type_info: HashMap<Type, Rc<TypeInfo>>,
     function_info: LinkedHashMap<FunctionID, FunctionInfo>,
 
@@ -142,8 +139,6 @@ impl Metadata {
             ifaces: LinkedHashMap::new(),
 
             variables: BTreeMap::new(),
-
-            set_aliases: LinkedHashMap::new(),
 
             function_info: LinkedHashMap::new(),
 
@@ -260,12 +255,6 @@ impl Metadata {
             self.type_info.insert(ty.clone(), funcs.clone());
         }
         
-        for (id, def) in &other.set_aliases {
-            if !self.set_aliases.contains_key(id) {
-                self.set_aliases.insert(*id, def.clone());
-            }
-        }
-        
         for (loc, count) in &other.tag_counts {
             if !self.tag_counts.contains_key(loc) {
                 self.tag_counts.insert(*loc, *count);
@@ -336,14 +325,6 @@ impl Metadata {
                 }
             })
     }
-    
-    pub fn set_alias_defs(&self) -> impl Iterator<Item = (SetAliasID, &SetAliasDef)> {
-        self.set_aliases
-            .iter()
-            .map(|(id, def)| {
-                (*id, def)
-            })
-    }
 
     pub fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
         match self.type_decls.get(&struct_id)? {
@@ -357,11 +338,11 @@ impl Metadata {
 
     // find the struct used as the backing type for set types with at least the given number of bits
     // the same struct definition may represent multiple defined set types
-    pub fn find_set_repr_struct(&self, bits: usize) -> Option<&StructDef> {
+    pub fn find_set_repr_struct(&self, bits: usize) -> Option<TypeDefID> {
         let mut result = None;
         let mut min_bits: Option<usize> = None;
 
-        for (_, decl) in &self.type_decls {
+        for (id, decl) in &self.type_decls {
             let TypeDecl::Def(TypeDef::Struct(struct_def)) = decl else {
                 continue;
             };
@@ -377,7 +358,7 @@ impl Metadata {
                 };
                 
                 if is_min {
-                    result = Some(struct_def);
+                    result = Some(*id);
                     min_bits = Some(*def_bits);
                 }
             }
@@ -743,17 +724,6 @@ impl Metadata {
 
             _ => None,
         })
-    }
-    
-    pub fn find_set_def(&self, name: &NamePath) -> Option<(SetAliasID, &SetAliasDef)> {
-        self.set_aliases
-            .iter()
-            .find_map(|(id, def)| {
-                match &def.name {
-                    Some(def_name) if def_name == name => Some((*id, def)),
-                    _ => None,
-                }
-            })
     }
 
     pub fn find_string_id(&self, string: &str) -> Option<StringID> {

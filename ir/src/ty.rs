@@ -1,6 +1,5 @@
 use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
-use crate::ty_decl::SetAliasID;
 use crate::ty_decl::TypeDefID;
 use crate::TagLocation;
 use crate::Value;
@@ -20,7 +19,7 @@ pub enum Type {
 
     Struct(TypeDefID),
     Variant(TypeDefID),
-    Flags(TypeDefID, SetAliasID),
+    Flags(TypeDefID),
     Array {
         element: Rc<Type>,
         dim: usize,
@@ -184,7 +183,7 @@ impl Type {
         match self {
             | Type::Object(ObjectID::Class(id))
             | Type::Struct(id)
-            | Type::Flags(id, _)
+            | Type::Flags(id)
             | Type::Variant(id) => Some(TagLocation::TypeDef(*id)),
 
             | Type::Object(ObjectID::Interface(id)) => Some(TagLocation::Interface(*id)),
@@ -255,7 +254,7 @@ impl fmt::Display for Type {
             Type::TempRef(target) => write!(f, "&{}", target),
             Type::Struct(id) => write!(f, "{{struct {}}}", id),
             Type::Variant(id) => write!(f, "{{variant {}}}", id),
-            Type::Flags(_repr_id, set_id) => write!(f, "{{flags {}}}", set_id),
+            Type::Flags(repr_id) => write!(f, "{{flags {}}}", repr_id),
             Type::Object(id) => match id {
                 ObjectID::Any => write!(f, "any"),
                 ObjectID::Class(id) => write!(f, "class {}", id),

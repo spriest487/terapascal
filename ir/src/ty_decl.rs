@@ -56,17 +56,6 @@ impl InterfaceID {
     }
 }
 
-// key used for distinguishing unique set types, which are implemented using the same underlying
-// struct type but can have different RTTI
-#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
-pub struct SetAliasID(pub usize);
-
-impl fmt::Display for SetAliasID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum StructIdentity {
     Record(NamePath),
@@ -202,7 +191,11 @@ impl TypeDef {
                     format!("set<{bits}>")
                 }
             },
-            TypeDef::Variant(def) => def.name.to_pretty_string(ty_format),
+            
+            TypeDef::Variant(def) => {
+                def.name.to_pretty_string(ty_format)
+            },
+            
             TypeDef::Function(def) => {
                 let mut string = String::new();
                 let f = &mut string;
@@ -218,7 +211,7 @@ impl TypeDef {
                 write!(f, "): {}", ty_format(&def.return_ty).as_ref()).unwrap();
 
                 string
-            }
+            },
         }
     }
     
@@ -233,9 +226,7 @@ impl TypeDef {
 // sets aren't normal types because they share an underlying type based on their bit width
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SetAliasDef {
-    // sets can be anonymous (inline in an `in` expression), in which case we will only ever
-    // reference them once and won't need to find them by this name
-    pub name: Option<NamePath>,
+    pub name: NamePath,
 
     pub flags_struct: TypeDefID,
 }

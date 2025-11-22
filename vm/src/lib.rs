@@ -2153,10 +2153,6 @@ impl Interpreter {
             marshaller.add_iface(iface_id)
         }
 
-        for (set_id, set_ty_def) in lib.metadata.set_alias_defs() {
-            marshaller.add_flags_type(set_ty_def.flags_struct, set_id, lib.metadata())?;
-        }
-
         for (func_id, ir_func) in lib.functions() {
             let func = match ir_func {
                 ir::Function::Local(ir_func_def) => {
@@ -2612,8 +2608,11 @@ impl Interpreter {
             .and_then(|loc| self.get_tags_array_ptr(loc))
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
         
-        let type_flags_path = ir::NamePath::new(["System".to_string()], "TypeFlags");
-        let type_flags_val = self.create_flags_value(rtti.flags, &type_flags_path)?;
+        let type_flags_repr = self.metadata.find_set_repr_struct(ir::TYPEINFO_FLAGS_BITS)
+            .ok_or_else(|| ExecError::illegal_state("missing flags type for TypeFlags"))?;
+        let type_flags_val = StructValue::new(type_flags_repr, [
+            DynValue::U64(rtti.flags)
+        ]);
 
         let typeinfo_methods_ptr = DynValue::Pointer(
             Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))
@@ -2631,7 +2630,7 @@ impl Interpreter {
             // 3: impl
             DynValue::Pointer(Pointer::nil(ir::Type::Nothing)),
             // 3: flags
-            type_flags_val,
+            DynValue::from(type_flags_val),
         ]);
 
         let typeinfo_ptr = self.new_object(typeinfo_struct, true)?;
@@ -2686,19 +2685,6 @@ impl Interpreter {
         self.marshaller.marshal_at(&DynValue::from(method_array), &methods_field_ptr)?;
 
         Ok(DynValue::Pointer(typeinfo_ptr))
-    }
-    
-    fn create_flags_value(&mut self, flags: u64, flags_type_name: &ir::NamePath) -> ExecResult<DynValue> {
-        let Some((_, alias_def)) = self.metadata.find_set_def(flags_type_name) else {
-            let msg = format!("flags set type not found: {flags_type_name}");
-            return Err(ExecError::illegal_state(msg));
-        };
-        
-        let struct_val = StructValue::new(alias_def.flags_struct, [
-            DynValue::U64(flags)
-        ]);
-        
-        Ok(DynValue::from(struct_val))
     }
 
     fn create_func_info_object(

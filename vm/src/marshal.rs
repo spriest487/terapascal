@@ -174,7 +174,11 @@ impl Marshaller {
         def: &ir::StructDef,
         metadata: &ir::Metadata,
     ) -> MarshalResult<ForeignType> {
-        let struct_ty = ir::Type::Struct(id);
+        let struct_ty = match &def.identity {
+            ir::StructIdentity::SetFlags { .. } => ir::Type::Flags(id),
+            _ => ir::Type::Struct(id),
+        };
+
         if let Some(cached) = self.types.get(&struct_ty) {
             return Ok(cached.clone());
         }
@@ -287,13 +291,12 @@ impl Marshaller {
     pub fn add_flags_type(
         &mut self,
         repr_ty_id: ir::TypeDefID,
-        set_id: ir::SetAliasID,
         metadata: &ir::Metadata
     ) -> MarshalResult<ForeignType> {
         let repr_struct_ty = ir::Type::Struct(repr_ty_id);
         let repr_ffi_ty = self.build_marshalled_type(&repr_struct_ty, metadata)?;
 
-        let flags_type = ir::Type::Flags(repr_ty_id, set_id);
+        let flags_type = ir::Type::Flags(repr_ty_id);
         
         self.add_dyn_array_type(flags_type.clone());
         self.register_type(flags_type, repr_ffi_ty.clone());
@@ -413,8 +416,8 @@ impl Marshaller {
                 Ok(array_struct)
             },
 
-            ir::Type::Flags(ty_id, set_id) => {
-                Ok(self.add_flags_type(*ty_id, *set_id, metadata)?)
+            ir::Type::Flags(ty_id) => {
+                Ok(self.add_flags_type(*ty_id, metadata)?)
             }
 
             // all primitives/builtins should be in the cache already

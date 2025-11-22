@@ -133,7 +133,7 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
         // aggregates
         ir::Type::Struct(id) => format!("Struct_{id}"),
         ir::Type::Variant(id) => format!("Variant_{id}"),
-        ir::Type::Flags(_repr_id, set_id) => format!("Flags_{set_id}"),
+        ir::Type::Flags(repr_id) => format!("Flags_{repr_id}"),
 
         // reference types
         ir::Type::Object(id) => {

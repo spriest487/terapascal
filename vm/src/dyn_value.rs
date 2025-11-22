@@ -125,7 +125,7 @@ impl DynValue {
                 _ => None,
             },
 
-            ir::Type::Flags(repr_id, _set_id) => match self {
+            ir::Type::Flags(repr_id) => match self {
                 DynValue::Structure(s) if s.type_id == *repr_id => Some(self.clone()),
                 _ => None,
             },

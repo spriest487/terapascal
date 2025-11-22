@@ -20,7 +20,6 @@ use crate::codegen::metadata::translate_sig;
 use crate::codegen::metadata::translate_struct_def;
 use crate::codegen::metadata::translate_variant_def;
 use crate::codegen::metadata::ClosureInstance;
-use crate::codegen::metadata::NamePathExt;
 use crate::codegen::stmt::translate_stmt;
 use crate::codegen::typ;
 use crate::codegen::CodegenOpts;
@@ -1004,13 +1003,8 @@ impl<'a> LibraryBuilder<'a> {
             
             typ::Type::Set(set_ty) => {
                 let flags_ty = self.get_set_flags_type_info(set_ty.flags_type_bits());
-                let name = set_ty.name
-                    .as_ref()
-                    .map(|ident_path| ir::NamePath::from_ident_path(ident_path, None));
-    
-                let set_id = self.metadata_mut()
-                    .define_set_type(name, flags_ty.struct_id);
-                let ty = ir::Type::Flags(flags_ty.struct_id, set_id);
+
+                let ty = ir::Type::Flags(flags_ty.struct_id);
 
                 self.add_cached_type(src_ty.clone(), ty.clone());
                 

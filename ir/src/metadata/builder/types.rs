@@ -4,8 +4,6 @@ use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::MetadataBuilder;
 use crate::NamePath;
-use crate::SetAliasDef;
-use crate::SetAliasID;
 use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
@@ -222,23 +220,6 @@ impl MetadataBuilder {
         };
 
         iface_def.declare_empty_impl(self_ty);
-    }
-
-    pub fn find_set_def(&self, name: &NamePath) -> Option<(SetAliasID, &SetAliasDef)> {
-        self.find_in_self_or_refs(move |metadata| metadata.find_set_def(name))
-    }
-
-    pub fn define_set_type(&mut self, name: Option<NamePath>, flags_struct: TypeDefID) -> SetAliasID {
-        let set_id = self.next_set_id;
-
-        self.metadata.set_aliases.insert(set_id, SetAliasDef {
-            name,
-            flags_struct,
-        });
-        
-        self.next_set_id.0 += 1;
-
-        set_id
     }
     
     pub fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)> {

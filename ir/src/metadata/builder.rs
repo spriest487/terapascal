@@ -10,7 +10,6 @@ use crate::InterfaceID;
 use crate::Metadata;
 use crate::MethodID;
 use crate::Ref;
-use crate::SetAliasID;
 use crate::StringID;
 use crate::Type;
 use crate::TypeDecl;
@@ -32,7 +31,6 @@ pub struct MetadataBuilder {
     next_function_id: FunctionID,
     next_string_id: StringID,
     next_iface_id: InterfaceID,
-    next_set_id: SetAliasID,
     
     refs: Vec<Arc<Metadata>>,
     
@@ -64,7 +62,6 @@ impl MetadataBuilder {
         let mut next_variable_id = VariableID(1);
         let mut next_function_id = FunctionID(1);
         let mut next_string_id = StringID(first_user_string);
-        let mut next_set_id = SetAliasID(1);
         
         for ref_metadata in &refs {
             if let Some(max_id) = ref_metadata.type_decls.keys().max() {
@@ -82,9 +79,6 @@ impl MetadataBuilder {
             if let Some(max_id) = ref_metadata.string_literals.keys().max() {
                 next_string_id.0 = max_id.0 + 1;
             }
-            if let Some(max_id) = ref_metadata.set_aliases.keys().max() {
-                next_set_id.0 = max_id.0 + 1;
-            }
         }
 
         Self {
@@ -93,7 +87,6 @@ impl MetadataBuilder {
             next_variable_id,
             next_function_id,
             next_string_id,
-            next_set_id,
             
             refs,
 
