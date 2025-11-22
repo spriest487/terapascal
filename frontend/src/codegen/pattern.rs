@@ -43,8 +43,8 @@ pub fn translate_pattern_match_is(
             let inner_pattern = translate_pattern_match_is(pattern, None, target_val, target_ty, builder);
             builder.not_to_val(inner_pattern)
         }
-        
-        MatchPattern::Name { annotation: typ::Value::Type(is_ty, _), .. } => {
+
+        MatchPattern::Name { annotation: typ::Value::Type(is_ty, _span), .. } => {
             let is_ty = builder.translate_type(is_ty);
             translate_is_ty(target_val.clone(), &target_ty, &is_ty, builder)
         },
@@ -150,17 +150,20 @@ pub fn translate_is_ty(
     ty: &ir::Type,
     builder: &mut IRBuilder
 ) -> ir::Value {
-    // eprintln!("is_ty pattern: {} is {}?", builder.pretty_ty_name(val_ty), builder.pretty_ty_name(ty));
-    
-    if let ir::Type::Object(class_id) = ty {
-        // casting strong or weak RC type to strong RC type: do a dynamic check
-        if val_ty.is_object() {
-            let result = builder.local_temp(ir::Type::Bool);
-            builder.class_is(result, val, class_id.clone());
+    // casting strong or weak RC type to strong RC type: do a dynamic check
+    if let ir::Type::Object(object_id) | ir::Type::WeakObject(object_id) = ty 
+        && val_ty.is_object() 
+    {
+        let result = builder.local_temp(ir::Type::Bool);
+        builder.class_is(result, val, object_id.clone());
 
-            return result.value();
-        }
+        return result.value();
     }
+    
+    // TODO
+    // it should be possible to box a value type, and for boxes of value types to act as
+    // implementations of their implemented interfaces, but for now dynamic checks of this kind
+    // will always fail
 
     // any other type combination must match exactly
     let same_ty = *val_ty == *ty;

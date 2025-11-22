@@ -129,10 +129,8 @@ impl<A: Annotation> TypeDeclItem<A> {
     pub fn constraint_clause(&self) -> Option<&WhereClause<A>> {
         match self {
             TypeDeclItem::Struct(def) => def.where_clause.as_ref(),
-
-            // TODO
-            TypeDeclItem::Interface(_def) => None,
-            TypeDeclItem::Variant(_def) => None,
+            TypeDeclItem::Interface(def) => def.where_clause.as_ref(),
+            TypeDeclItem::Variant(def) => def.where_clause.as_ref(),
 
             TypeDeclItem::Alias(_) | TypeDeclItem::Enum(_) | TypeDeclItem::Set(_) => None,
         }

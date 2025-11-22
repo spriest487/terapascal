@@ -1429,8 +1429,8 @@ impl Context {
             Type::Record(name) | Type::Class(name) => {
                 let struct_kind = self_ty.struct_kind().unwrap();
                 let def = self.instantiate_struct_def(name, struct_kind)?;
-                
-                for implements_ty in def.implements_types()  {
+
+                for implements_ty in def.implements_types() {
                     if self.is_implementation(implements_ty, iface_ty)? {
                         return Ok(true);
                     }
@@ -1438,6 +1438,18 @@ impl Context {
                 
                 Ok(false)
             },
+
+            Type::Variant(name) => {
+                let def = self.instantiate_variant_def(name)?;
+                
+                for implements_ty in def.implements_types() {
+                    if self.is_implementation(implements_ty, iface_ty)? {
+                        return Ok(true);
+                    }
+                }
+                
+                Ok(false)
+            }
             
             Type::Interface(name) => {
                 let def = self.instantiate_iface_def(name)?;
