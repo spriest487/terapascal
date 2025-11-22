@@ -1,8 +1,5 @@
 ﻿namespace Terapascal.Runtime;
 
-public unsafe delegate void InvokeFunctionAction(void*[] args, void** resultPtr);
-public unsafe delegate void InvokeMethodAction(void* selfArg, void*[] args, void** resultPtr);
-
 public static class RTTI {
     private static List<TypeInfo> typeList;
     private static List<FunctionInfo> functionList;

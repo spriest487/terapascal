@@ -97,4 +97,17 @@ public sealed class NamePath : IEquatable<NamePath> {
 
         return result.ToString();
     }
+    
+    public string ToPrettyString(Metadata metadata) {
+        var result = new StringBuilder();
+        result.AppendJoin(".", this.Path);
+
+        if (this.TypeArgs != null) {
+            result.Append('[');
+            result.AppendJoin(", ", this.TypeArgs.Select(t => t.ToPrettyString(metadata)));
+            result.Append(']');
+        }
+
+        return result.ToString();
+    }
 }

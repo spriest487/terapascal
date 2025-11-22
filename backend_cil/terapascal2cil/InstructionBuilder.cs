@@ -205,29 +205,43 @@ public class InstructionBuilder {
 
                 case IR.ElementInstruction {
                     Out: var outRef,
-                    Arg: var arrRef,
+                    Arg: var baseRef,
                     Index: var indexVal,
-                    ArrayType: var arrayType,
+                    ArrayType: var baseType,
                 }: {
                     this.StoreRef(outRef, () => {
-                        if (arrayType is IR.ArrayType staticArrayType) {
-                            this.LoadRefAddr(arrRef);
-                            this.LoadValue(indexVal);
+                        switch (baseType) {
+                            case IR.ArrayType { Element: var elementType, Length: var length }: {
+                                this.LoadRefAddr(baseRef);
+                                this.LoadValue(indexVal);
                             
-                            var elementMethod = this.assemblyBuilder.TypeBuilder.GetStaticArrayElementMethodRef(
-                                staticArrayType.Element, 
-                                staticArrayType.Length
-                            );
+                                var elementMethod = typeBuilder.GetStaticArrayElementMethodRef(elementType, length);
                             
-                            this.body.Emit(OpCodes.Call, elementMethod);
-                        } else {
-                            // must be a dynarray
-                            var arrayElementType = ((IR.ArrayObjectID)((IR.ObjectType)arrayType).ID).Element;
-                            var elementTypeRef = typeBuilder.BuildTypeRef(arrayElementType, this.library);
+                                this.body.Emit(OpCodes.Call, elementMethod);
+                                break;
+                            }
 
-                            this.LoadRef(arrRef);
-                            this.LoadValue(indexVal);
-                            this.body.Emit(OpCodes.Ldelema, elementTypeRef);
+                            case IR.ObjectType(IR.ArrayObjectID(var elementType)): {
+                                var elementTypeRef = typeBuilder.BuildTypeRef(elementType, this.library);
+
+                                this.LoadRef(baseRef);
+                                this.LoadValue(indexVal);
+                                this.body.Emit(OpCodes.Ldelema, elementTypeRef);
+                                break;
+                            }
+
+                            case IR.ObjectType(IR.BoxObjectID(var valueType)): {
+                                var boxTypeInfo = typeBuilder.GetBoxTypeInfo(valueType);
+                                
+                                this.LoadRef(baseRef);
+                                this.body.Emit(OpCodes.Ldflda, boxTypeInfo.ValueFieldRef);
+                                break;
+                            }
+
+                            default: {
+                                var msg = $"illegal base type for element instruction: {baseType}";
+                                throw new InvalidDataException(msg);
+                            }
                         }
                     });
 
@@ -302,6 +316,15 @@ public class InstructionBuilder {
                     Immortal: var immortal,
                 }: {
                     this.BuildNewArray(outRef, countVal, elementType, immortal);
+                    break;
+                }
+
+                case IR.NewBoxInstruction {
+                    Out: var outRef,
+                    ElementType: var elementType,
+                    Immortal: var immortal,
+                }: {
+                    this.BuildNewBox(outRef, elementType, immortal);
                     break;
                 }
 
@@ -606,6 +629,18 @@ public class InstructionBuilder {
             this.LoadValue(countVal);
             this.body.Emit(immortal ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
             this.body.Emit(OpCodes.Call, createMethodInst);
+        });
+    }
+    
+    private void BuildNewBox(IR.IRef outRef, IR.IType valueType, bool immortal) {
+        var boxCreateMethod = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(
+            new IR.BoxObjectID(valueType), 
+            this.library
+        );
+
+        this.StoreRef(outRef, () => {
+            this.body.Emit(immortal ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+            this.body.Emit(OpCodes.Call, boxCreateMethod);
         });
     }
 

@@ -1,10 +1,10 @@
 ﻿using System.Diagnostics;
-using System.Reflection;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodAttributes = Mono.Cecil.MethodAttributes;
+using MethodInfo = System.Reflection.MethodInfo;
 using TypeAttributes = Mono.Cecil.TypeAttributes;
 
 namespace Terapascal.CIL;
@@ -16,6 +16,11 @@ internal class StructFieldRefs {
 internal class VariantFieldRefs {
     internal required FieldReference DiscriminatorFieldRef { get; init; }
     internal required List<FieldReference?> CaseFieldRefs { get; init; }
+}
+
+internal class BoxTypeInfo {
+    internal required TypeReference TypeRef { get; init; }
+    internal required FieldReference ValueFieldRef { get; init; }
 }
 
 public class TypeBuilder {
@@ -37,11 +42,15 @@ public class TypeBuilder {
     private readonly Dictionary<IR.TypeDefID, StructFieldRefs> structFields;
     private readonly Dictionary<IR.TypeDefID, VariantFieldRefs> variantFields;
 
+    private readonly Dictionary<IR.IType, BoxTypeInfo> boxTypes;
+
     private readonly Dictionary<(IR.InterfaceID, IR.MethodID), MethodReference> interfaceMethods;
 
     private readonly FieldReference closurePointerField;
 
     private readonly StaticArrayTypeBuilder staticArrayBuilder;
+
+    private readonly TypeReference boxGenericType;
 
     public TypeReference ExceptionType { get; }
     public TypeReference CLRStringType { get; }
@@ -142,6 +151,9 @@ public class TypeBuilder {
         this.closurePointerField = closureTypeDef.Fields
             .Single(f => f.Name == nameof(Runtime.ClosureBase.functionPointer));
         this.closurePointerField = this.assemblyBuilder.Module.ImportReference(this.closurePointerField);
+
+        this.boxGenericType = this.assemblyBuilder.GetRuntimeTypeRef(typeof(Runtime.Box<>).Name, false);
+        this.boxTypes = new Dictionary<IR.IType, BoxTypeInfo>();
 
         this.staticArrayBuilder = new StaticArrayTypeBuilder(this.assemblyBuilder, this);
         this.staticArrayTypes = new Dictionary<ArraySig, TypeReference>();
@@ -261,10 +273,11 @@ public class TypeBuilder {
             IR.InterfaceObjectID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
             IR.ClosureObjectID => this.ClosureBaseType,
             IR.ArrayObjectID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
+            IR.BoxObjectID(var boxValue) => this.BuildBoxTypeRef(boxValue, library),
             _ => throw new NotImplementedException($"unsupported virtual type ID: {id}"),
         };
     }
-    
+
     private TypeReference BuildFunctionTypeRef(IR.TypeDefID id) {
         if (!this.funcPointerTypes.TryGetValue(id, out var typeRef)) {
             throw new InvalidOperationException("function pointer types must be populated before any types that reference them");
@@ -531,6 +544,35 @@ public class TypeBuilder {
             DiscriminatorFieldRef = discField,
             CaseFieldRefs = caseFieldRefs,
         };
+    }
+
+    private TypeReference BuildBoxTypeRef(IR.IType valueType, IR.Library library) {
+        if (this.boxTypes.TryGetValue(valueType, out var boxInfo)) {
+            return boxInfo.TypeRef;
+        }
+
+        if (valueType is IR.PointerType(IR.ObjectType)) {
+            var typeName = valueType.ToPrettyString(library.Metadata);
+            throw new InvalidDataException($"object pointer types cannot be boxed on this platform ({typeName})");
+        }
+
+        var valueTypeRef = this.BuildTypeRef(valueType, library);
+
+        var boxTypeDef = this.boxGenericType.MakeGenericInstanceType(valueTypeRef);
+        var valueFieldRef = new FieldReference(nameof(Runtime.Box<>.value), valueTypeRef, boxTypeDef);
+
+        boxInfo = new BoxTypeInfo {
+            TypeRef = this.assemblyBuilder.Module.ImportReference(boxTypeDef),
+            ValueFieldRef = this.assemblyBuilder.Module.ImportReference(valueFieldRef),
+        };
+
+        this.boxTypes.Add(valueType, boxInfo);
+
+        return boxInfo.TypeRef;
+    }
+
+    internal BoxTypeInfo GetBoxTypeInfo(IR.IType valueType) {
+        return this.boxTypes[valueType];
     }
 
     public void BuildFunctionTypeDef(IR.TypeDefID id, IR.FunctionSig sig, IR.Library library) {

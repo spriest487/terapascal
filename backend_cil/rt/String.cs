@@ -1,34 +1,7 @@
 ﻿// ReSharper disable InconsistentNaming
+
 #nullable disable
-
 namespace Terapascal.Runtime;
-
-public class Object {
-    internal int strongCount;
-    internal int weakCount;
-
-    protected internal virtual void Destroy() {
-    }
-
-    public static T Create<T>(bool immortal) where T : Object, new() {
-        return new T {
-            strongCount = immortal ? -1 : 1,
-            weakCount = 0,
-        };
-    }
-
-    public static bool Is<T>(object any) {
-        if (any is not T instance) {
-            return false;
-        }
-
-        if (instance is Object obj) {
-            return obj.strongCount != 0;
-        }
-
-        return true;
-    }
-}
 
 public sealed unsafe class String : Object, IEquatable<String> {
     // TODO
@@ -84,43 +57,4 @@ public sealed unsafe class String : Object, IEquatable<String> {
     public override bool Equals(object obj) {
         return obj is String other && this.Equals(other);
     }
-}
-
-public enum TypeFlags : ulong {
-    Value = 1 << 0,
-    Weak = 1 << 1,
-    Array = 1 << 2,
-    Function = 1 << 3,
-}
-
-public sealed class TypeInfo : Object {
-    public String name;
-    public MethodInfo[] methods;
-
-    public object[] tags;
-
-    public Type impl;
-
-    public ulong flags;
-}
-
-public sealed class MethodInfo : Object {
-    public String name;
-    public TypeInfo owner;
-    
-    public System.Reflection.MethodInfo impl;
-
-    public object[] tags;
-}
-
-public sealed class FunctionInfo : Object {
-    public String name;
-
-    public System.Reflection.MethodInfo impl;
-
-    public object[] tags;
-}
-
-public unsafe class ClosureBase : Object { 
-    public void* functionPointer;
 }

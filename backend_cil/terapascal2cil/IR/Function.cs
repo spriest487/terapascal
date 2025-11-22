@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Text;
+using MessagePack;
 using MessagePack.Formatters;
 
 namespace Terapascal.IR;
@@ -126,6 +127,23 @@ public class FunctionSig : IEquatable<FunctionSig> {
         hashCode ^= this.ReturnType.GetHashCode();
         return hashCode;
     }
+
+    public string ToPrettyString(Metadata metadata) {
+        var result = new StringBuilder("function(");
+
+        for (var i = 0; i < this.ParameterTypes.Count; i += 1) {
+            if (i > 0) {
+                result.Append(", ");
+            }
+
+            result.Append(this.ParameterTypes[i].ToPrettyString(metadata));
+        }
+        
+        result.Append("): ");
+        result.Append(this.ReturnType.ToPrettyString(metadata));
+
+        return result.ToString();
+    }
 }
 
 [MessagePackObject]
@@ -135,4 +153,7 @@ public record FunctionInfo {
     
     [Key("global_name")]
     public required NamePath? GlobalName { get; init; }
+
+    [Key("invoker")]
+    public FunctionID? Invoker { get; init; }
 }

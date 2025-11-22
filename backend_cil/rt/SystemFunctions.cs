@@ -1,9 +1,10 @@
 ﻿using System.Globalization;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Terapascal.Runtime;
+
+using unsafe InvokeFunc = delegate* managed<ref object?, object[]?, ref int, object?>;
 
 public static class SystemFunctions {
     private static readonly Random random = new Random();
@@ -18,7 +19,7 @@ public static class SystemFunctions {
 
     public static unsafe String CreateString(string s, bool immortal) {
         var newString = Object.Create<String>(immortal);
-        
+
         if (!string.IsNullOrEmpty(s)) {
             var size = Encoding.UTF8.GetMaxByteCount(s.Length);
             newString.chars = GetMem(size + 1);
@@ -40,7 +41,7 @@ public static class SystemFunctions {
     public static unsafe void FreeMem(byte* mem) {
         Marshal.FreeHGlobal((IntPtr)mem);
     }
-    
+
     public static String ReadLn() {
         return CreateString(Console.ReadLine() ?? "", false);
     }
@@ -112,11 +113,11 @@ public static class SystemFunctions {
     public static int RandomInteger(int rangeStart, int rangeEnd) {
         return random.Next(rangeStart, rangeEnd);
     }
-    
+
     public static float RandomSingle(float rangeStart, float rangeEnd) {
         return rangeStart + (float)random.NextDouble() * (rangeEnd - rangeStart);
     }
-    
+
     public static double RandomDouble(double rangeStart, double rangeEnd) {
         return rangeStart + random.NextDouble() * (rangeEnd - rangeStart);
     }
@@ -124,35 +125,35 @@ public static class SystemFunctions {
     public static float Pow(float val, float pow) {
         return (float)Math.Pow(val, pow);
     }
-    
+
     public static float Sqrt(float val) {
         return (float)Math.Sqrt(val);
     }
-    
+
     public static float Sin(float val) {
         return (float)Math.Sin(val);
     }
-    
+
     public static float Cos(float val) {
         return (float)Math.Cos(val);
     }
-    
+
     public static float Tan(float val) {
         return (float)Math.Tan(val);
     }
-    
+
     public static float ArcSin(float val) {
         return (float)Math.Asin(val);
     }
-    
+
     public static float ArcCos(float val) {
         return (float)Math.Acos(val);
     }
-    
+
     public static float ArcTan(float val) {
         return (float)Math.Atan(val);
     }
-    
+
     public static float Infinity() {
         return float.PositiveInfinity;
     }
@@ -176,13 +177,14 @@ public static class SystemFunctions {
                     // immortal
                     return;
                 }
-                
+
                 if (weak) {
                     Interlocked.Increment(ref runtimeObj.weakCount);
                 } else {
                     var strongCount = Interlocked.Increment(ref runtimeObj.strongCount);
                     if (strongCount == 1) {
-                        var err = $"resurrected {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
+                        var err =
+                            $"resurrected {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
                         throw new Error(err);
                     }
                 }
@@ -213,15 +215,17 @@ public static class SystemFunctions {
                         runtimeObj.strongCount = 0;
                         return true;
                     }
-                    
+
                     var strongCount = Interlocked.Decrement(ref runtimeObj.strongCount);
                     if (strongCount < 0) {
-                        var err = $"released {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
+                        var err =
+                            $"released {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
                         throw new Error(err);
                     }
                 } else {
                     if (Interlocked.Decrement(ref runtimeObj.weakCount) < 0) {
-                        var err = $"released {runtimeObj.GetType().FullName} with 0 weak refs (+ {runtimeObj.strongCount} strong refs remain)";
+                        var err =
+                            $"released {runtimeObj.GetType().FullName} with 0 weak refs (+ {runtimeObj.strongCount} strong refs remain)";
                         throw new Error(err);
                     }
                 }
@@ -238,30 +242,43 @@ public static class SystemFunctions {
             }
         }
     }
-    
-    public static unsafe void InvokeMethod(
-        MethodInfo method,
-        void* instance,
-        void** args,
-        int argCount,
-        void* resultOut
+
+    public static unsafe object? InvokeMethod(
+        MethodInfo? method,
+        ref object? instance,
+        object[]? args,
+        ref int errorCode
     ) {
-        throw new NotImplementedException("RTTI");
+        if (method?.impl == null) {
+            errorCode = 2;
+            return null;
+        }
+
+        var invoker = (InvokeFunc)method.impl.invoker;
+
+        return invoker(ref instance, args, ref errorCode);
     }
-    
-    public static unsafe void InvokeFunction(
-        MethodInfo method,
-        void** args,
-        int argCount,
-        void* resultOut
+
+    public static unsafe object? InvokeFunction(
+        MethodInfo? method,
+        object[]? args,
+        ref int errorCode
     ) {
-        throw new NotImplementedException("RTTI");
+        if (method?.impl == null) {
+            errorCode = 2;
+            return null;
+        }
+
+        var invoker = (InvokeFunc)method.impl.invoker;
+
+        object? self = null;
+        return invoker(ref self, args, ref errorCode);
     }
-    
+
     public static int GetTypeInfoCount() {
         return RTTI.Types.Count;
     }
-    
+
     public static TypeInfo? GetTypeInfoByIndex(int index) {
         if (index < 0 || index >= RTTI.Types.Count) {
             return null;
@@ -269,7 +286,7 @@ public static class SystemFunctions {
 
         return RTTI.Types[index];
     }
-    
+
     public static TypeInfo? FindTypeInfo(String typeName) {
         for (var i = 0; i < RTTI.Types.Count; i += 1) {
             var typeInfo = RTTI.Types[i];
@@ -280,7 +297,7 @@ public static class SystemFunctions {
 
         return null;
     }
-    
+
     public static TypeInfo? GetObjectTypeInfo(object? obj) {
         if (obj is null or Object { strongCount: 0 }) {
             return null;
@@ -295,7 +312,7 @@ public static class SystemFunctions {
             if ((typeInfo.flags & (ulong)TypeFlags.Weak) != 0) {
                 continue;
             }
-            
+
             if (typeInfo.impl == objType) {
                 return typeInfo;
             }
@@ -314,11 +331,11 @@ public static class SystemFunctions {
 
         return null;
     }
-    
+
     public static int GetFunctionInfoCount() {
         return RTTI.Functions.Count;
     }
-    
+
     public static FunctionInfo? GetFunctionInfoByIndex(int index) {
         if (index < 0 || index >= RTTI.Functions.Count) {
             return null;

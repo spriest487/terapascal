@@ -193,6 +193,10 @@ public interface IType {
         return new ObjectType(new ArrayObjectID(this));
     }
 
+    public IType MakeBox() {
+        return new ObjectType(new BoxObjectID(this));
+    }
+
     public IType MakePointer() {
         return new PointerType(this);
     }
@@ -212,29 +216,143 @@ public interface IType {
         ObjectType(InterfaceObjectID(var id)) => new InterfaceTagLocation(id),
         _ => null,
     };
+
+    string ToPrettyString(Metadata metadata);
 }
 
-public sealed record NothingType : IType;
-public sealed record PointerType(IType Inner) : IType;
-public sealed record TempRefType(IType Inner) : IType;
-public sealed record StructType(TypeDefID ID) : IType;
-public sealed record VariantType(TypeDefID ID) : IType;
-public sealed record FlagsType(TypeDefID ID, SetAliasID AliasID) : IType;
-public sealed record FunctionType(TypeDefID ID) : IType;
+public sealed record NothingType : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "nothing";
+    }
+}
 
-public sealed record BoolType : IType;
-public sealed record U8Type : IType;
-public sealed record I8Type : IType;
-public sealed record U16Type : IType;
-public sealed record I16Type : IType;
-public sealed record U32Type : IType;
-public sealed record I32Type : IType;
-public sealed record U64Type : IType;
-public sealed record I64Type : IType;
-public sealed record USizeType : IType;
-public sealed record ISizeType : IType;
-public sealed record F32Type : IType;
-public sealed record F64Type : IType;
+public sealed record PointerType(IType Inner) : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return $"^{this.Inner.ToPrettyString(metadata)}";
+    }
+}
+
+public sealed record TempRefType(IType Inner) : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return $"&{this.Inner.ToPrettyString(metadata)}";
+    }
+}
+
+public sealed record StructType(TypeDefID ID) : IType {
+    public string ToPrettyString(Metadata metadata) {
+        if (metadata.FindStructDef(this.ID, out var def)) {
+            return def.Identity.ToPrettyString(metadata);
+        }
+        
+        return $"{{struct {this.ID.ID}}}";
+    }
+}
+
+public sealed record VariantType(TypeDefID ID) : IType {
+    public string ToPrettyString(Metadata metadata) {
+        throw new NotImplementedException();
+    }
+}
+
+public sealed record FlagsType(TypeDefID ID, SetAliasID AliasID) : IType {
+    public string ToPrettyString(Metadata metadata) {
+        if (metadata.SetAliases.TryGetValue(this.AliasID, out var def)
+            && def.Name != null) {
+            return def.Name.ToPrettyString(metadata);
+        }
+
+        return $"{{flags {this.AliasID.ID}}}";
+    }
+}
+
+public sealed record FunctionType(TypeDefID ID) : IType {
+    public string ToPrettyString(Metadata metadata) {
+        if (metadata.TypeDecls.TryGetValue(this.ID, out var decl) 
+            && decl is DefTypeDecl(FunctionTypeDef(var sig))) {
+            return sig.ToPrettyString(metadata);
+        }
+
+        return $"function pointer {this.ID}";
+    }
+}
+
+public sealed record BoolType : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "bool";
+    }
+}
+
+public sealed record U8Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "u8";
+    }
+}
+
+public sealed record I8Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "i8";
+    }
+}
+
+public sealed record U16Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "u16";
+    }
+}
+
+public sealed record I16Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "i16";
+    }
+}
+
+public sealed record U32Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "u32";
+    }
+}
+
+public sealed record I32Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "i32";
+    }
+}
+
+public sealed record U64Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "u64";
+    }
+}
+
+public sealed record I64Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "i64";
+    }
+}
+
+public sealed record USizeType : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "usize";
+    }
+}
+
+public sealed record ISizeType : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "isize";
+    }
+}
+
+public sealed record F32Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "f32";
+    }
+}
+
+public sealed record F64Type : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return "f64";
+    }
+}
 
 [MessagePackObject]
 public sealed record ArrayType : IType {
@@ -246,10 +364,23 @@ public sealed record ArrayType : IType {
     
     [Key("dim")]
     public required ulong Length { get; init; }
+
+    public string ToPrettyString(Metadata metadata) {
+        return $"{this.Element.ToPrettyString(metadata)}[{this.Length}]";
+    }
 }
 
-public sealed record ObjectType(IObjectID ID) : IType;
-public sealed record WeakObjectType(IObjectID ID) : IType;
+public sealed record ObjectType(IObjectID ID) : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return $"*{this.ID.ToPrettyString(metadata)}";
+    }
+}
+
+public sealed record WeakObjectType(IObjectID ID) : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return $"weak *{this.ID.ToPrettyString(metadata)}";
+    }
+}
 
 public class NullableTypeFormatter : IMessagePackFormatter<IType?> {
     private readonly TypeFormatter typeFormatter = new TypeFormatter();
@@ -360,20 +491,69 @@ public interface IObjectID {
     IType ToObjectType() {
         return new ObjectType(this);
     }
+
+    string ToPrettyString(Metadata metadata);
 }
 
-public sealed record AnyObjectID : IObjectID;
+public sealed record AnyObjectID : IObjectID {
+    public string ToPrettyString(Metadata metadata) {
+        return "any";
+    }
+}
 
 public sealed record ClassObjectID(TypeDefID ID) : IObjectID {
     public static ClassObjectID String => new ClassObjectID(TypeDefID.String);
     public static ClassObjectID TypeInfo => new ClassObjectID(TypeDefID.TypeInfo);
     public static ClassObjectID MethodInfo => new ClassObjectID(TypeDefID.MethodInfo);
     public static ClassObjectID FunctionInfo => new ClassObjectID(TypeDefID.FunctionInfo);
+    
+    public string ToPrettyString(Metadata metadata) {
+        if (metadata.FindStructDef(this.ID, out var def)) {
+            return def.Identity.ToPrettyString(metadata);
+        }
+        
+        return $"{{class {this.ID.ID}}}";
+    }
 }
 
-public sealed record InterfaceObjectID(InterfaceID ID) : IObjectID;
-public sealed record ClosureObjectID(TypeDefID FunctionTypeID) : IObjectID;
-public sealed record ArrayObjectID(IType Element) : IObjectID;
+public sealed record InterfaceObjectID(InterfaceID ID) : IObjectID {
+    public string ToPrettyString(Metadata metadata) {
+        if (metadata.Interfaces.TryGetValue(this.ID, out var ifaceDecl)) {
+            if (ifaceDecl is DefInterfaceDecl(var def)) {
+                return def.Name.ToPrettyString(metadata);
+            }
+
+            if (ifaceDecl is ForwardInterfaceDecl(var name)) {
+                return name.ToPrettyString(metadata);
+            }
+        }
+
+        return $"{{interface {this.ID.ID}}}";
+    }
+}
+
+public sealed record ClosureObjectID(TypeDefID FunctionTypeID) : IObjectID {
+    public string ToPrettyString(Metadata metadata) {
+        if (metadata.TypeDecls.TryGetValue(this.FunctionTypeID, out var typeDecl)
+            && typeDecl is DefTypeDecl(FunctionTypeDef(var sig))) {
+            return $"closure of {sig.ToPrettyString(metadata)}";
+        }
+
+        return $"closure of function {this.FunctionTypeID}";
+    }
+}
+
+public sealed record ArrayObjectID(IType Element) : IObjectID {
+    public string ToPrettyString(Metadata metadata) {
+        return $"array of {this.Element.ToPrettyString(metadata)}";
+    }
+}
+
+public sealed record BoxObjectID(IType Value) : IObjectID {
+    public string ToPrettyString(Metadata metadata) {
+        return $"box of {this.Value.ToPrettyString(metadata)}";
+    }
+}
 
 public class ObjectIDFormatter : IMessagePackFormatter<IObjectID> {
     public void Serialize(ref MessagePackWriter writer, IObjectID value, MessagePackSerializerOptions options) {
@@ -413,6 +593,11 @@ public class ObjectIDFormatter : IMessagePackFormatter<IObjectID> {
             case "Array": {
                 var element = MessagePackSerializer.Deserialize<IType>(ref reader, options);
                 return new ArrayObjectID(element);
+            }
+            
+            case "Box": {
+                var element = MessagePackSerializer.Deserialize<IType>(ref reader, options);
+                return new BoxObjectID(element);
             }
 
             default: {

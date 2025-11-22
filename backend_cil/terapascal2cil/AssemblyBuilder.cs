@@ -1,6 +1,7 @@
 ﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using Terapascal.Runtime;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodAttributes = Mono.Cecil.MethodAttributes;
 using TypeAttributes = Mono.Cecil.TypeAttributes;
@@ -286,8 +287,8 @@ public class AssemblyBuilder : IDisposable {
 
         this.FunctionBuilder.BuildFunctions(library);
 
-        foreach (var (funcID, funcDecl) in library.Metadata.Functions) {
-            this.BuildStaticFuncInfo(funcID, funcDecl, library);
+        foreach (var (funcID, funcInfo) in library.Metadata.Functions) {
+            this.BuildStaticFuncInfo(funcID, funcInfo, library);
         }
 
         if (library.Initialization.Count > 0) {
@@ -410,9 +411,14 @@ public class AssemblyBuilder : IDisposable {
         this.staticFuncInfoFields.Add(funcID, fieldDef);
     }
 
-    private void BuildStaticFuncInfo(IR.FunctionID funcID, IR.FunctionInfo func, IR.Library library) {
+    private void BuildStaticFuncInfo(IR.FunctionID funcID, IR.FunctionInfo funcInfo, IR.Library library) {
+        var implTypeDef = this.GetRuntimeTypeRef(nameof(FunctionInfoImpl), false).Resolve();
+        var implTypeCtor = this.Module.ImportReference(implTypeDef.FindConstructor([]));
+        var implMethodField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(FunctionInfoImpl.method))!);
+        var implInvokerField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(FunctionInfoImpl.invoker))!);
+
         var fieldRef = this.GetStaticFuncInfoFieldRef(funcID)!;
-        
+
         var funcInfoType = IR.TypeDefID.FunctionInfo.ToObjectType();
         var funcObjectID = new IR.ClassObjectID(IR.TypeDefID.FunctionInfo);
 
@@ -428,7 +434,7 @@ public class AssemblyBuilder : IDisposable {
         initBody.Emit(OpCodes.Ldc_I4_1); // immortal: true
         initBody.Emit(OpCodes.Call, createTypeInfoInst);
 
-        var nameStringFieldRef = this.GetStringLiteralRef(func.RuntimeName ?? IR.StringID.EmptyString);
+        var nameStringFieldRef = this.GetStringLiteralRef(funcInfo.RuntimeName ?? IR.StringID.EmptyString);
         initBody.Emit(OpCodes.Dup);
         initBody.Emit(OpCodes.Ldsfld, nameStringFieldRef);
         initBody.Emit(OpCodes.Stfld, nameField);
@@ -436,10 +442,23 @@ public class AssemblyBuilder : IDisposable {
         var methodRef = this.FunctionBuilder.FindFunctionMethod(funcID)
             ?? throw new InvalidDataException($"function {funcID.ID} was not defined");
 
-        // set type pointer
+        // set impl pointer
+        initBody.Emit(OpCodes.Dup);
+
+        initBody.Emit(OpCodes.Newobj, implTypeCtor);
+
         initBody.Emit(OpCodes.Dup);
         initBody.Emit(OpCodes.Ldtoken, methodRef);
         initBody.Emit(OpCodes.Call, this.TypeBuilder.GetMethodFromHandleMethod);
+        initBody.Emit(OpCodes.Stfld, implMethodField);
+
+        if (funcInfo.Invoker != null) {
+            var invokerRef = this.FunctionBuilder.FindFunctionMethod(funcInfo.Invoker.Value)!;
+            initBody.Emit(OpCodes.Dup);
+            initBody.Emit(OpCodes.Ldftn, invokerRef);
+            initBody.Emit(OpCodes.Stfld, implInvokerField);
+        }
+
         initBody.Emit(OpCodes.Stfld, implField);
 
         // set tags array

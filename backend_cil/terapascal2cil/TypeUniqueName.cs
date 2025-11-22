@@ -33,10 +33,11 @@ public static class TypeUniqueName {
     public static string GetUniqueName(this IR.IObjectID classID) {
         return classID switch {
             IR.AnyObjectID => "Any",
-            IR.ArrayObjectID(var elementType) => $"DynArray_{elementType.GetUniqueName()}",
             IR.ClassObjectID(var id) => $"Class_{id.ID}",
             IR.ClosureObjectID(var id) => $"AnyClosure_{id.ID}",
             IR.InterfaceObjectID(var id) => $"Interface_{id.ID}",
+            IR.ArrayObjectID(var elementType) => $"DynArray_{elementType.GetUniqueName()}",
+            IR.BoxObjectID(var valueType) => $"Box_{valueType.GetUniqueName()}",
             _ => throw new NotSupportedException(nameof(classID)),
         };
     }

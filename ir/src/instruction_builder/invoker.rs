@@ -59,11 +59,23 @@ where
     let actual_args_len = builder.local_temp(Type::I32);
     builder.length(actual_args_len, args_arg, arg_array_type.clone());
 
-    // if self != null then actual_args_len += 1
-    let has_self_arg = builder.neq_to_val(self_arg_ref, Value::LiteralNull);
-    builder.if_then(has_self_arg.clone(), |builder| {
-        builder.add(actual_args_len, actual_args_len, Value::LiteralI32(1));
-    });
+    // if self <> nil and self^ <> nil then actual_args_len += 1
+    let has_self_arg_ref = builder.local_temp(Type::Bool);
+    let has_self_arg = builder.local_temp(Type::Bool);
+
+    builder.neq(has_self_arg_ref, self_arg_ref, Value::LiteralNull);
+    builder.if_then_else(has_self_arg_ref,
+        |builder| {
+            builder.neq(has_self_arg, self_arg_ref.to_deref(), Value::LiteralNull);
+
+            builder.if_then(has_self_arg, |builder| {
+                builder.add(actual_args_len, actual_args_len, Value::LiteralI32(1));
+            })
+        },
+        |builder| {
+            builder.mov(has_self_arg, Value::LiteralBool(false));
+        },
+    );
 
     let args_len_invalid = builder.neq_to_val(actual_args_len, Value::LiteralI32(params_len));
     builder.jmpif(exit_error_label, args_len_invalid);

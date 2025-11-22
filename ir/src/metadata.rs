@@ -521,19 +521,19 @@ impl Metadata {
             },
             
             Type::WeakObject(class_id) => {
-                let resource_name = self.pretty_virtual_type_name(class_id);
+                let resource_name = self.pretty_object_type_name(class_id);
                 Cow::Owned(format!("*weak {}", resource_name))
             }
 
             Type::Object(class_id) => {
-                let resource_name = self.pretty_virtual_type_name(class_id);
+                let resource_name = self.pretty_object_type_name(class_id);
                 Cow::Owned(format!("*{}", resource_name))
             },
 
             Type::Function(func_ty_id) => {
                 Cow::Owned(match self.get_func_ptr_ty(*func_ty_id) {
                     Some(sig) => self.pretty_func_sig(sig),
-                    None => format!("function {}", *func_ty_id),
+                    None => format!("function pointer {}", *func_ty_id),
                 })
             }
 
@@ -544,7 +544,7 @@ impl Metadata {
         }
     }
     
-    fn pretty_virtual_type_name(&self, id: &ObjectID) -> Cow<'_, str> {
+    fn pretty_object_type_name(&self, id: &ObjectID) -> Cow<'_, str> {
         match id {
             ObjectID::Any => Cow::Borrowed("any"),
 

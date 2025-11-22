@@ -24,12 +24,44 @@ public readonly record struct StructFieldDef {
     }
 }
 
-public interface IStructIdentity;
-public record RecordStructIdentity(NamePath Name) : IStructIdentity;
-public record ClassStructIdentity(NamePath Name) : IStructIdentity;
-public record ArrayStructIdentity(IType ElementType, ulong Size) : IStructIdentity;
-public record DynArrayStructIdentity(IType Type) : IStructIdentity;
-public record ClosureStructIdentity(ClosureIdentity Identity) : IStructIdentity;
+public interface IStructIdentity {
+    string ToPrettyString(Metadata metadata);
+}
+
+public record RecordStructIdentity(NamePath Name) : IStructIdentity {
+    public string ToPrettyString(Metadata metadata) {
+        return this.Name.ToPrettyString(metadata);
+    }
+}
+
+public record ClassStructIdentity(NamePath Name) : IStructIdentity {
+    public string ToPrettyString(Metadata metadata) {
+        return this.Name.ToPrettyString(metadata);
+    }
+}
+
+public record ArrayStructIdentity(IType ElementType, ulong Size) : IStructIdentity {
+    public string ToPrettyString(Metadata metadata) {
+        return $"{this.ElementType.ToPrettyString(metadata)}[{this.Size}]";
+    }
+}
+
+public record DynArrayStructIdentity(IType Type) : IStructIdentity {
+    public string ToPrettyString(Metadata metadata) {
+        return $"array of {this.Type.ToPrettyString(metadata)}";
+    }
+}
+
+public record ClosureStructIdentity(ClosureIdentity Identity) : IStructIdentity {
+    public string ToPrettyString(Metadata metadata) {
+        if (metadata.TypeDecls.TryGetValue(this.Identity.VirtualFunctionType, out var typeDecl)
+            && typeDecl is DefTypeDecl(FunctionTypeDef(var sig))) {
+            return $"closure of {sig.ToPrettyString(metadata)}";
+        }
+
+        return $"closure of function {this.Identity.VirtualFunctionType.ID}";
+    }
+}
 
 [MessagePackObject]
 public readonly record struct ClosureIdentity {
@@ -44,6 +76,10 @@ public readonly record struct ClosureIdentity {
 public readonly record struct SetFlagsStructIdentity : IStructIdentity {
     [Key("bits")]
     public required ulong Bits { get; init; }
+
+    public string ToPrettyString(Metadata metadata) {
+        return $"set<{this.Bits}>";
+    }
 }
 
 public class StructIdentityFormatter : IMessagePackFormatter<IStructIdentity> {

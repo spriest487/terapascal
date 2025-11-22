@@ -394,7 +394,7 @@ public record NewBoxInstruction : IInstruction {
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    [Key("element_type")]
+    [Key("value_type")]
     public required IType ElementType { get; init; }
 
     [Key("immortal")]
