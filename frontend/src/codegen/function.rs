@@ -15,6 +15,8 @@ use terapascal_ir::instruction_builder::InstructionBuilder;
 pub struct FunctionInstance {
     pub id: FunctionID,
     pub src_sig: Arc<typ::FunctionSig>,
+    
+    pub published: bool,
 }
 
 fn create_function_body_builder<'m, 'l: 'm>(

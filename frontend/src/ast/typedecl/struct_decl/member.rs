@@ -276,6 +276,16 @@ pub struct MethodDecl<A: Annotation = Span> {
     pub func_decl: Arc<FunctionDecl<A>>,
 }
 
+impl<A: Annotation> MethodDecl<A> {
+    pub fn is_published(&self) -> bool {
+        match self.access {
+            Access::Published => true,
+            Access::Public => false,
+            Access::Private => false,
+        }
+    }
+}
+
 pub trait MemberDeclSection<A: Annotation = Span> {
     type Source: MemberDeclSection<Span>;
 

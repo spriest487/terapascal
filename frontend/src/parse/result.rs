@@ -1,6 +1,6 @@
 use crate::ast::Annotation;
 use crate::ast::Block;
-use crate::ast::DeclMod;
+use crate::ast::FunctionDeclMod;
 use crate::ast::Expr;
 use crate::ast::Stmt;
 use crate::ast::TypeArgList;
@@ -69,8 +69,8 @@ pub enum ParseError {
     InvalidForLoopInit(Stmt<Span>),
 
     DuplicateModifier {
-        new: DeclMod,
-        existing: DeclMod,
+        new: FunctionDeclMod,
+        existing: FunctionDeclMod,
     },
 
     CtorWithTypeArgs {

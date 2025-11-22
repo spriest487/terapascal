@@ -5,7 +5,7 @@ use crate::ast::tag::Tag;
 use crate::ast::type_name::TypeName;
 use crate::ast::BindingDeclKind;
 use crate::ast::Block;
-use crate::ast::DeclMod;
+use crate::ast::FunctionDeclMod;
 use crate::ast::Expr;
 use crate::ast::FunctionName;
 use crate::ast::Ident;
@@ -237,7 +237,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
 
     pub result_ty: TypeName<A>,
 
-    pub mods: Vec<DeclMod<A>>,
+    pub mods: Vec<FunctionDeclMod<A>>,
 }
 
 impl FunctionDecl<Span> {
@@ -321,7 +321,7 @@ impl FunctionDecl<Span> {
             }
         }
 
-        func_decl.mods = DeclMod::parse_seq(parser).or_continue_with(parser.errors(), Vec::new);
+        func_decl.mods = FunctionDeclMod::parse_seq(parser).or_continue_with(parser.errors(), Vec::new);
         if let Some(last_mod) = func_decl.mods.last() {
             func_decl.span.extend(last_mod.span());
         }
@@ -512,18 +512,18 @@ impl<A: Annotation> FunctionDecl<A> {
         self.mods
             .iter()
             .filter_map(|decl_mod| match decl_mod {
-                DeclMod::External { src, .. } => Some(src),
+                FunctionDeclMod::External { src, .. } => Some(src),
                 _ => None,
             })
             .next()
     }
 
-    pub fn get_mod(&self, keyword: &str) -> Option<&DeclMod<A>> {
+    pub fn get_mod(&self, keyword: &str) -> Option<&FunctionDeclMod<A>> {
         self.mods.iter().find(|decl_mod| decl_mod.keyword() == keyword)
     }
 
     pub fn is_overload(&self) -> bool {
-        self.get_mod(DeclMod::<A>::OVERLOAD_WORD).is_some() && self.external_src().is_none()
+        self.get_mod(FunctionDeclMod::<A>::OVERLOAD_WORD).is_some() && self.external_src().is_none()
     }
 
     pub fn type_params_len(&self) -> usize {

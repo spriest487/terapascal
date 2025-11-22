@@ -396,14 +396,14 @@ fn parse_unit_func_decl(parser: &mut Parser, visibility: Visibility) -> ParseRes
     let body_ahead = if visibility == Visibility::Interface {
         // interface funcs - never expect a body, unless the function is marked `inline`
         func_decl.mods.iter().any(|decl_mod| match decl_mod {
-            DeclMod::Inline(..) => true,
+            FunctionDeclMod::Inline(..) => true,
             _ => false,
         })
     } else {
         // implementation funcs - always expect a body, unless the function has the
         // `external` (body is external) or `forward` (body to follow later) modifiers
         !func_decl.mods.iter().any(|decl_mod| match decl_mod {
-            DeclMod::External { .. } | DeclMod::Forward(..) => true,
+            FunctionDeclMod::External { .. } | FunctionDeclMod::Forward(..) => true,
             _ => false,
         })
     };

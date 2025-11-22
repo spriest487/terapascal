@@ -1,23 +1,23 @@
 use crate::ast::Annotation;
 use crate::ast::Expr;
-use crate::ast::Ident;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
-use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
+use crate::Keyword;
 use crate::Separator;
+use crate::TokenTree;
 use derivative::*;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use std::fmt;
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]
-pub enum DeclMod<A: Annotation = Span> {
+pub enum FunctionDeclMod<A: Annotation = Span> {
     External {
         src: A::ConstStringExpr,
 
@@ -52,9 +52,16 @@ pub enum DeclMod<A: Annotation = Span> {
         #[derivative(PartialEq = "ignore")]
         Span
     ),
+    
+    Published(
+        #[derivative(Hash = "ignore")]
+        #[derivative(Debug = "ignore")]
+        #[derivative(PartialEq = "ignore")]
+        Span
+    ),
 }
 
-impl<A: Annotation> DeclMod<A> {
+impl<A: Annotation> FunctionDeclMod<A> {
     pub const EXTERNAL_WORD: &'static str = "external";
     pub const FORWARD_WORD: &'static str = "forward";
     pub const INLINE_WORD: &'static str = "inline";
@@ -69,51 +76,69 @@ impl<A: Annotation> DeclMod<A> {
 
     pub fn keyword(&self) -> &str {
         match self {
-            DeclMod::External { .. } => Self::EXTERNAL_WORD,
-            DeclMod::Forward(..) => Self::FORWARD_WORD,
-            DeclMod::Inline(..) => Self::INLINE_WORD,
-            DeclMod::Overload(..) => Self::OVERLOAD_WORD,
+            FunctionDeclMod::External { .. } => Self::EXTERNAL_WORD,
+            FunctionDeclMod::Forward(..) => Self::FORWARD_WORD,
+            FunctionDeclMod::Inline(..) => Self::INLINE_WORD,
+            FunctionDeclMod::Overload(..) => Self::OVERLOAD_WORD,
+            FunctionDeclMod::Published(..) => Keyword::Published.to_str(),
         }
     }
 
     pub fn keyword_span(&self) -> &Span {
         match self {
-            DeclMod::External { kw_span: span, .. } => span,
-            DeclMod::Forward(span) => span,
-            DeclMod::Inline(span) => span,
-            DeclMod::Overload(span) => span,
+            FunctionDeclMod::External { kw_span: span, .. } => span,
+            FunctionDeclMod::Forward(span) => span,
+            FunctionDeclMod::Inline(span) => span,
+            FunctionDeclMod::Overload(span) => span,
+            FunctionDeclMod::Published(span) => span,
         }
     }
     
     pub fn arg(&self) -> Option<&A::ConstStringExpr> {
         match self {
-            DeclMod::External { src, .. } => Some(src),
+            FunctionDeclMod::External { src, .. } => Some(src),
             _ => None,
         }
     }
 }
 
-impl ParseSeq for DeclMod<Span> {
+fn word_matcher() -> Matcher {
+    Matcher::Ident(String::from(FunctionDeclMod::<Span>::EXTERNAL_WORD))
+        | Matcher::Ident(String::from(FunctionDeclMod::<Span>::INLINE_WORD))
+        | Matcher::Ident(String::from(FunctionDeclMod::<Span>::FORWARD_WORD))
+        | Matcher::Ident(String::from(FunctionDeclMod::<Span>::OVERLOAD_WORD))
+        | Keyword::Published
+}
+
+impl ParseSeq for FunctionDeclMod<Span> {
     fn parse_group(prev: &[Self], tokens: &mut TokenStream) -> ParseResult<Self> {
         tokens.match_one(Separator::Semicolon)?;
 
-        let word_token = Ident::parse(tokens)?;
+        let word_token = tokens.match_one(word_matcher())?;
 
-        let new_mod = match word_token.name.as_str() {
-            Self::EXTERNAL_WORD => {
-                let src = Expr::parse(tokens)?;
-                DeclMod::External {
-                    span: word_token.span.to(src.span()),
-                    kw_span: word_token.span,
-                    src: Box::new(src),
-                }
-            },
+        let new_mod = match word_token {
+            TokenTree::Ident(ident) => match ident.as_str() {
+                Self::EXTERNAL_WORD => {
+                    let src = Expr::parse(tokens)?;
+                    FunctionDeclMod::External {
+                        span: ident.span.to(src.span()),
+                        kw_span: ident.span,
+                        src: Box::new(src),
+                    }
+                },
 
-            Self::INLINE_WORD => DeclMod::Inline(word_token.span().clone()),
-            Self::FORWARD_WORD => DeclMod::Forward(word_token.span().clone()),
-            Self::OVERLOAD_WORD => DeclMod::Overload(word_token.span().clone()),
-
-            _ => unreachable!("bad modified contextual keyword"),
+                Self::INLINE_WORD => FunctionDeclMod::Inline(ident.span),
+                Self::FORWARD_WORD => FunctionDeclMod::Forward(ident.span),
+                Self::OVERLOAD_WORD => FunctionDeclMod::Overload(ident.span),
+                
+                _ => unreachable!("excluded by matcher"),
+            }
+            
+            tt if tt.is_keyword(Keyword::Published) => {
+                FunctionDeclMod::Published(tt.into_span())
+            }
+            
+            _ => unreachable!("excluded by matcher"),
         };
 
         let existing = prev.iter().find(|m| m.keyword() == new_mod.keyword());
@@ -132,35 +157,30 @@ impl ParseSeq for DeclMod<Span> {
             return false;
         }
 
-        let match_any_reserved = Matcher::OneOf(
-            Self::RESERVED_WORDS
-                .iter()
-                .map(|word| Matcher::Ident(word.to_string()))
-                .collect(),
-        );
-
-        tokens.match_one(match_any_reserved).is_some()
+        tokens.match_one(word_matcher()).is_some()
     }
 }
 
-impl<A: Annotation> fmt::Display for DeclMod<A> {
+impl<A: Annotation> fmt::Display for FunctionDeclMod<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            DeclMod::External { src, .. } => write!(f, "{} '{}'", Self::EXTERNAL_WORD, src),
-            DeclMod::Inline(_) => write!(f, "{}", Self::INLINE_WORD),
-            DeclMod::Forward(_) => write!(f, "{}", Self::FORWARD_WORD),
-            DeclMod::Overload(_) => write!(f, "{}", Self::OVERLOAD_WORD),
+            FunctionDeclMod::External { src, .. } => write!(f, "{} '{}'", Self::EXTERNAL_WORD, src),
+            FunctionDeclMod::Inline(_) => write!(f, "{}", Self::INLINE_WORD),
+            FunctionDeclMod::Forward(_) => write!(f, "{}", Self::FORWARD_WORD),
+            FunctionDeclMod::Overload(_) => write!(f, "{}", Self::OVERLOAD_WORD),
+            FunctionDeclMod::Published(_) => write!(f, "{}", Keyword::Published),
         }
     }
 }
 
-impl<A: Annotation> Spanned for DeclMod<A> {
+impl<A: Annotation> Spanned for FunctionDeclMod<A> {
     fn span(&self) -> &Span {
         match self {
-            DeclMod::External { span, .. } => span,
-            DeclMod::Inline(span) => span,
-            DeclMod::Forward(span) => span,
-            DeclMod::Overload(span) => span,
+            FunctionDeclMod::External { span, .. } => span,
+            FunctionDeclMod::Inline(span) => span,
+            FunctionDeclMod::Forward(span) => span,
+            FunctionDeclMod::Overload(span) => span,
+            FunctionDeclMod::Published(span) => span,
         }
     }
 }

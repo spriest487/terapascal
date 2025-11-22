@@ -2,7 +2,6 @@ mod init;
 mod function;
 mod rc_methods;
 
-use crate::ast::Access::Published;
 use crate::ast::FunctionParamMod;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
@@ -30,6 +29,7 @@ use crate::codegen::SetFlagsType;
 use crate::ir;
 use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::ast::FunctionDeclContext;
+use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
@@ -46,7 +46,6 @@ use crate::typ::TypeArgsResult;
 use crate::typ::TypeParamContainer;
 use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::builtin_funcinfo_name;
 pub use function::*;
 use init::gen_tags_init;
 use linked_hash_map::LinkedHashMap;
@@ -432,6 +431,8 @@ impl<'a> LibraryBuilder<'a> {
         let cached_func = FunctionInstance {
             id,
             src_sig: Arc::new(sig),
+            
+            published: func_def.decl.is_published(),
         };
 
         let debug_name = if self.opts.debug {
@@ -493,6 +494,8 @@ impl<'a> LibraryBuilder<'a> {
         let cached_func = FunctionInstance {
             id,
             src_sig: Arc::new(sig),
+            
+            published: extern_decl.is_published(),
         };
 
         let extern_src = extern_decl
@@ -619,6 +622,7 @@ impl<'a> LibraryBuilder<'a> {
         let cached_func = FunctionInstance {
             id,
             src_sig: Arc::new(specialized_decl.sig()),
+            published: method_decl.is_published(),
         };
 
         let key = FunctionDefKey {
@@ -1198,7 +1202,10 @@ impl<'a> LibraryBuilder<'a> {
                 
                 // for any non-object types, ensure boxed versions exist in the type cache
                 // for use with RTTI
-                if !src_ty.is_object() && self.opts().rtti {
+                if !src_ty.is_object() 
+                    && self.opts().rtti 
+                    && let Ok(true) = src_ty.is_sized(&self.src_metadata) 
+                {
                     let box_src_type  = src_ty.clone().boxed();
                     let box_type = self.translate_type(&box_src_type, &GenericContext::empty());
 
@@ -1250,7 +1257,7 @@ impl<'a> LibraryBuilder<'a> {
                 for (method_index, method) in def.methods().enumerate() {
                     let method_decl = &method.func_decl;
 
-                    if method.access >= Published && method_decl.name.type_params.is_none() {
+                    if method.is_published() && method_decl.name.type_params.is_none() {
                         let method_info = self.create_runtime_method(ty.clone(), &src_ty, method_index, false, method_decl);
                         rtti.methods.push(method_info);
                     }
@@ -1393,7 +1400,11 @@ impl<'a> LibraryBuilder<'a> {
             None
         };
 
-        let cached_func = FunctionInstance { id, src_sig: func_ty_sig };
+        let cached_func = FunctionInstance { 
+            id, 
+            src_sig: func_ty_sig,
+            published: false,
+        };
 
         let ir_func = build_closure_function_def(self, &func, closure_id, debug_name);
 
@@ -1448,6 +1459,7 @@ impl<'a> LibraryBuilder<'a> {
             func_instance: FunctionInstance {
                 id: thunk_id,
                 src_sig: func.src_sig.clone(),
+                published: false,
             },
         };
 
@@ -1717,6 +1729,10 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
     ], ir::ANY_TYPE);
 
     for (_, func) in &all_funcs {
+        if !func.published {
+            continue;
+        }
+        
         let invoker_id = lib.metadata_mut().insert_func(None, false);
 
         let debug_name = lib.opts.debug

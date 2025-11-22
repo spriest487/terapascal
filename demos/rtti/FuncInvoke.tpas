@@ -1,16 +1,18 @@
 program FuncInvoke;
 
 function Greet(name: String): String;
+published;
 begin
     'Hello, ' + name + '!'
 end;
 
-function MultiplyIt(val1, val2: Integer): Integer;
+function MultiplyIt(val1, val2: Integer): Integer; 
+published;
 begin
     val1 * val2
 end;
 
-begin    
+begin
     // TODO: usage required to avoid unused function being discarded
     Greet('Nobody');
     MultiplyIt(1, 1);

@@ -11,7 +11,7 @@ use crate::typ::Value;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
-pub type DeclMod = ast::DeclMod<Value>;
+pub type DeclMod = ast::FunctionDeclMod<Value>;
 
 impl DeclMod {
     pub fn typecheck_mods(
@@ -42,7 +42,7 @@ impl DeclMod {
             }
 
             let result = match decl_mod {
-                ast::DeclMod::External { src, span, kw_span } => {
+                ast::FunctionDeclMod::External { src, span, kw_span } => {
                     check_incompatible_mod(
                         &overload,
                         Self::OVERLOAD_WORD,
@@ -85,7 +85,7 @@ impl DeclMod {
                     extern_mod
                 },
 
-                ast::DeclMod::Inline(span) => {
+                ast::FunctionDeclMod::Inline(span) => {
                     let inline_mod = DeclMod::Inline(span.clone());
                     if is_method {
                         invalid_method_mods.push(inline_mod.clone());
@@ -94,7 +94,7 @@ impl DeclMod {
                     inline_mod
                 },
 
-                ast::DeclMod::Forward(span) => {
+                ast::FunctionDeclMod::Forward(span) => {
                     let forward_mod = DeclMod::Forward(span.clone());
                     if is_method {
                         invalid_method_mods.push(forward_mod.clone());
@@ -103,7 +103,7 @@ impl DeclMod {
                     forward_mod
                 },
 
-                ast::DeclMod::Overload(span) => {
+                ast::FunctionDeclMod::Overload(span) => {
                     check_incompatible_mod(
                         &external,
                         Self::EXTERNAL_WORD,
@@ -113,6 +113,15 @@ impl DeclMod {
 
                     overload = Some(span.clone());
                     DeclMod::Overload(span.clone())
+                },
+
+                ast::FunctionDeclMod::Published(span) => {
+                    let published_mod = DeclMod::Published(span.clone());
+                    if is_method {
+                        invalid_method_mods.push(published_mod.clone());
+                    }
+
+                    published_mod
                 },
             };
 

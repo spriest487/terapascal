@@ -156,21 +156,11 @@ impl Keyword {
             _ => None,
         }
     }
-
-    pub fn try_parse(from: &str, case_sensitive: bool) -> Option<Self> {
-        if case_sensitive {
-            Self::try_parse_lowercase(from)
-        } else {
-            Self::try_parse_lowercase(&from.to_ascii_lowercase())
-        }
-    }
-}
-
-impl fmt::Display for Keyword {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match self {
+    
+    pub const fn to_str(&self) -> &str {
+        match self {
             Keyword::Var => "var",
-            
+
             Keyword::Function => "function",
             Keyword::Procedure => "procedure",
             Keyword::Lambda => "lambda",
@@ -180,16 +170,16 @@ impl fmt::Display for Keyword {
             Keyword::Begin => "begin",
             Keyword::End => "end",
             Keyword::Unsafe => "unsafe",
-            
+
             Keyword::Uses => "uses",
-            
+
             Keyword::Type => "type",
             Keyword::Class => "class",
             Keyword::Record => "record",
             Keyword::Packed => "packed",
             Keyword::Variant => "variant",
             Keyword::Set => "set",
-            
+
             Keyword::If => "if",
             Keyword::Case => "case",
             Keyword::Match => "match",
@@ -207,7 +197,7 @@ impl fmt::Display for Keyword {
             Keyword::Program => "program",
             Keyword::Library => "library",
             Keyword::Unit => "unit",
-            
+
             Keyword::Interface => "interface",
             Keyword::Implementation => "implementation",
             Keyword::Initialization => "initialization",
@@ -218,12 +208,12 @@ impl fmt::Display for Keyword {
             Keyword::Of => "of",
             Keyword::Const => "const",
             Keyword::Weak => "weak",
-            
+
             Keyword::Out => "out",
-            
+
             Keyword::True => "true",
             Keyword::False => "false",
-            
+
             Keyword::Try => "try",
             Keyword::Except => "except",
             Keyword::Finally => "finally",
@@ -236,11 +226,25 @@ impl fmt::Display for Keyword {
             Keyword::SizeOf => "sizeof",
             Keyword::Default => "default",
             Keyword::TypeInfo => "typeinfo",
-            
+
             Keyword::Public => "public",
             Keyword::Private => "private",
             Keyword::Published => "published",
-        })
+        }
+    }
+
+    pub fn try_parse(from: &str, case_sensitive: bool) -> Option<Self> {
+        if case_sensitive {
+            Self::try_parse_lowercase(from)
+        } else {
+            Self::try_parse_lowercase(&from.to_ascii_lowercase())
+        }
+    }
+}
+
+impl fmt::Display for Keyword {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.to_str())
     }
 }
 

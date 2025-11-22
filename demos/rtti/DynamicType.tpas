@@ -8,7 +8,7 @@ type
     end;
     
     Dog = class of IAnimal
-    public
+    published
         function Bark;
     end;
 
@@ -23,12 +23,12 @@ initialization
         Dog() as IAnimal,
         Cat() as IAnimal,
     ];
-    
+
     for var animal in animals do
     begin
         var animalType := TypeInfo.Get(animal);
         WriteLn('this animal is a ' + animalType.Name);
-        
+
         if animalType.FindMethod('Bark') is Option.Some method then
         begin
             var animalRef := animal as Object;

@@ -2,12 +2,13 @@
 mod test;
 mod decl_mod;
 
-use std::borrow::Cow;
 pub use self::decl_mod::*;
 use crate::ast;
-use crate::ast::{FunctionDeclKind, FunctionParamItem};
+use crate::ast::FunctionDeclKind;
+use crate::ast::FunctionParamItem;
 use crate::ast::Ident;
 use crate::ast::SemanticHint;
+use crate::result::ErrorContinue;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_expr;
@@ -42,14 +43,15 @@ use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use crate::Keyword;
 use derivative::Derivative;
 use linked_hash_map::LinkedHashMap;
+use std::borrow::Cow;
 use std::fmt;
 use std::ops::Deref;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use crate::result::ErrorContinue;
 
 pub const SELF_PARAM_NAME: &str = "self";
 pub const SELF_TY_NAME: &str = "Self";
@@ -442,6 +444,10 @@ impl FunctionDecl {
 
             decl
         })
+    }
+    
+    pub fn is_published(&self) -> bool {
+        self.get_mod(Keyword::Published.to_str()).is_some()
     }
 
     pub fn check_new_overload<Overload>(

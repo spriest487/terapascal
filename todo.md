@@ -1,6 +1,5 @@
 # CIL gen
 demos\rtti\DynamicType.tpas
-demos\rtti\FuncInvoke.tpas
 demos\rtti\MethodTags.tpas
 demos\rtti\TypeMethods.tpas
 

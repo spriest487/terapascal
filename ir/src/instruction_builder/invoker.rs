@@ -108,7 +108,7 @@ where
                 } else {
                     let arg_index = param_index as i32 - 1;
                     let index_val = Value::LiteralI32(arg_index);
-                    
+
                     builder.comment(format!("param {}: arg {}", param_index, arg_index));
                     builder.element(arg_ref, args_arg, index_val, arg_array_type.clone());
                 }
@@ -149,8 +149,12 @@ where
                 // unbox...
                 let value_type = deref_type.as_ref();
                 let box_type = value_type.clone().boxed();
+                
+                let arg_box = builder.local_temp(box_type.clone());
+                builder.cast(arg_box, arg_ref.to_deref(), box_type.clone());
+
                 let arg_val = builder.element_to_val(
-                    arg_ref.to_deref(),
+                    arg_box,
                     Value::I32_0,
                     value_type.clone(),
                     box_type.clone(),
@@ -175,9 +179,12 @@ where
                 builder.comment("value param: unbox the argument");
                 // unbox the arg and pass that
                 let box_type = value_type.clone().boxed();
+                
+                let arg_box = builder.local_temp(box_type.clone());
+                builder.cast(arg_box, arg_ref.to_deref(), box_type.clone());
 
                 let arg_val = builder.element_to_val(
-                    arg_ref.to_deref(),
+                    arg_box,
                     Value::I32_0, 
                     value_type.clone(), 
                     box_type
