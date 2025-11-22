@@ -1,13 +1,13 @@
 use crate::ast;
 use crate::ast::SemanticHint;
-use crate::typ::ast::typecheck_expr;
+use crate::typ::ast::evaluate_expr;
+use crate::typ::builtin_string_type;
 use crate::typ::Context;
 use crate::typ::Type;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::ValueKind;
-use crate::typ::builtin_string_type;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -19,7 +19,7 @@ pub fn typecheck_raise(
     ctx: &mut Context,
 ) -> TypeResult<Raise> {
     let string_ty = builtin_string_type();
-    let value = typecheck_expr(&raise.value, &string_ty, ctx)?;
+    let value = evaluate_expr(&raise.value, &string_ty, ctx)?;
     value.annotation().expect_value(&string_ty)?;
 
     // the "raise" expr just aborts, so it has whatever type is expected of it, so we
