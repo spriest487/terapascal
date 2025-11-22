@@ -58,23 +58,6 @@ public class InterfaceIDFormatter : IMessagePackFormatter<InterfaceID> {
     }
 }
 
-public readonly record struct SetAliasID(ulong ID) : IComparable<SetAliasID> {
-    public int CompareTo(SetAliasID other) {
-        return this.ID.CompareTo(other.ID);
-    }
-}
-
-public class SetAliasIDFormatter : IMessagePackFormatter<SetAliasID> {
-    public void Serialize(ref MessagePackWriter writer, SetAliasID value, MessagePackSerializerOptions options) {
-        throw new NotImplementedException();
-    }
-
-    public SetAliasID Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
-        var id = reader.ReadUInt64();
-        return new SetAliasID(id);
-    }
-}
-
 public readonly record struct FieldID(ulong ID) : IComparable<FieldID> {
     // magic field used to access the function pointer of any closure instance
     // this is the only field ID it's legal to use with a Field instruction pointing at a closure object type
@@ -262,14 +245,15 @@ public sealed record VariantType(TypeDefID ID) : IType {
     }
 }
 
-public sealed record FlagsType(TypeDefID ID, SetAliasID AliasID) : IType {
+public sealed record FlagsType(TypeDefID ID) : IType {
     public string ToPrettyString(Metadata metadata) {
-        if (metadata.SetAliases.TryGetValue(this.AliasID, out var def)
-            && def.Name != null) {
-            return def.Name.ToPrettyString(metadata);
+        if (metadata.TypeDecls.TryGetValue(this.ID, out var decl)
+            && decl is DefTypeDecl(StructTypeDef(var structDef))
+            && structDef.Identity is SetFlagsStructIdentity setIdentity) {
+            return $"set<{setIdentity.Bits}>";
         }
 
-        return $"{{flags {this.AliasID.ID}}}";
+        return $"{{flags {this.ID.ID}}}";
     }
 }
 
@@ -451,8 +435,8 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
             }
             
             case "Flags": {
-                var (id, aliasId) = reader.ReadPair<ulong, ulong>(options);
-                return new FlagsType(new TypeDefID(id), new SetAliasID(aliasId));
+                var id = reader.ReadUInt64();
+                return new FlagsType(new TypeDefID(id));
             }
 
             case "Array": {

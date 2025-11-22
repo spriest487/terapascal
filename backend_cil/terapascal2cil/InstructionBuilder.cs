@@ -177,8 +177,10 @@ public class InstructionBuilder {
                     BaseType: var baseType,
                 }: {
                     // the 64-bit flags struct gets translated to a plain U64, so its "field" is just itself
-                    if (baseType is IR.StructType { ID: var structID } 
-                        && structID == this.assemblyBuilder.TypeBuilder.Flags64StructID) {
+                    if (baseType is IR.FlagsType { ID: var structID }
+                        && structID == this.assemblyBuilder.TypeBuilder.Flags64StructID
+                        && fieldID.ID == 0
+                    ) {
                         this.StoreRef(outRef, () => {
                             this.LoadRefAddr(argRef);
                         });

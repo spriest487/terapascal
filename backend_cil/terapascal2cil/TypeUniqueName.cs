@@ -7,7 +7,7 @@ public static class TypeUniqueName {
             IR.BoolType => "Bool",
             IR.F32Type => "F32",
             IR.F64Type => "F64",
-            IR.FlagsType(var setID, _) => $"Flags_{setID.ID}",
+            IR.FlagsType(var setID) => $"Flags_{setID.ID}",
             IR.FunctionType(var defID) => $"FunctionType_{defID.ID}",
             IR.I16Type => "I16",
             IR.I32Type => "I32",

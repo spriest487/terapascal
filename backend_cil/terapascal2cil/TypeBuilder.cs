@@ -190,7 +190,7 @@ public class TypeBuilder {
             IR.StructType(var id) => this.CreateStructTypeRef(id, isValueType: true, library),
             IR.VariantType(var id) => this.CreateStructTypeRef(id, isValueType: true, library),
             IR.FunctionType(var id) => this.BuildFunctionTypeRef(id),
-            IR.FlagsType(var id, _) => this.CreateStructTypeRef(id, isValueType: true, library),
+            IR.FlagsType(var id) => this.CreateStructTypeRef(id, isValueType: true, library),
             IR.PointerType(var inner) => this.BuildTypeRef(inner, library).MakePointerType(),
             IR.TempRefType(var inner) => this.BuildTypeRef(inner, library).MakeByReferenceType(),
             IR.ObjectType(var id) => this.BuildClassTypeRef(id, library),
@@ -427,7 +427,7 @@ public class TypeBuilder {
                 return 8;
             }
 
-            case IR.FlagsType(var defID, _): {
+            case IR.FlagsType(var defID): {
                 return this.GetStructLayoutSize(defID, library);
             }
             case IR.NothingType: {
@@ -726,7 +726,7 @@ public class TypeBuilder {
 
         var structID = baseType switch {
             IR.StructType(var id) => id,
-            IR.FlagsType(_, var setAliasID) => library.Metadata.SetAliases[setAliasID].FlagsStruct,
+            IR.FlagsType(var id) => id,
             IR.ObjectType(IR.ClassObjectID(var id)) => id,
 
             _ => throw new ArgumentException($"type {baseType} does not have struct fields (accessing field {fieldID.ID})"),

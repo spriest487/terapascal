@@ -17,9 +17,6 @@ public class Metadata {
     [Key("variables")]
     public required OrderedDictionary<VariableID, IType> Variables { get; init; }
 
-    [Key("set_aliases")]
-    public required OrderedDictionary<SetAliasID, SetAliasDef> SetAliases { get; init; }
-
     [Key("function_info")]
     public required OrderedDictionary<FunctionID, FunctionInfo> Functions { get; init; }
 
