@@ -77,7 +77,7 @@ impl<'a> Unit<'a> {
             .collect();
         
         let type_infos = metadata
-            .types()
+            .type_info()
             .map(|(ty, rtti)| (ty.clone(), rtti.clone()))
             .collect();
 

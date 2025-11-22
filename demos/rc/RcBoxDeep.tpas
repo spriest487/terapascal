@@ -1,0 +1,24 @@
+program RcBoxDeep;
+
+type
+    MyObject = class
+    end;
+
+    MyArr = array[3] of MyObject;
+    
+    MyRecord = record
+        obj1: MyObject;
+        obj2: MyArr;
+    end;
+    
+
+begin
+    var objBox: box of MyRecord := [MyRecord(
+        obj1: MyObject();
+        obj2: [
+            MyObject(),
+            MyObject(),
+            MyObject(),
+        ];
+    )];
+end.

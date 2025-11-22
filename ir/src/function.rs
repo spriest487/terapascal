@@ -99,10 +99,12 @@ pub struct ExternalFunctionRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FunctionDecl {
+pub struct FunctionInfo {
     pub runtime_name: Option<StringID>,
     
     pub global_name: Option<NamePath>,
+    
+    pub invoker: Option<FunctionID>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

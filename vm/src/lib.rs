@@ -30,6 +30,7 @@ use crate::stack::StackFrame;
 use crate::stack::StackTrace;
 use crate::stack::StackTraceFrame;
 use ir::IRFormatter as _;
+use smallvec::SmallVec;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -58,7 +59,7 @@ pub struct Interpreter {
     diag_worker: Option<DiagnosticWorker>,
 
     // cache of RTTI info by the names/IDs used to look them up from user code
-    typeinfo_map: RttiMap<ir::TypeDefID>,
+    typeinfo_map: RttiMap<ObjectID>,
     funcinfo_map: RttiMap<ir::FunctionID>,
 
     // all methods with a corresponding MethodInfo object - the impl pointer of each
@@ -590,7 +591,7 @@ impl Interpreter {
 
     fn invoke_dtor(&mut self, val: &DynValue, ty: &ir::Type) -> ExecResult<()> {
         let dtor_func_id = self.metadata
-            .get_typeinfo(ty)
+            .get_type_info(ty)
             .and_then(|runtime_type| runtime_type.dtor);
 
         // eprintln!("trying to invoke dtor for {}... {:?}, {:?}: {:?}", ty, ty.def_id(), ty.rc_resource_def_id(), dtor_func_id);
@@ -613,10 +614,6 @@ impl Interpreter {
         Ok(())
     }
 
-    fn get_class_runtime_type_ref(&self, type_id: ir::TypeDefID) -> Option<ir::GlobalRef> {
-        self.typeinfo_map.find_by_key(type_id).cloned()
-    }
-
     // load a pointer, expected to point to an RC struct
     // guarantees that the struct value returned has some value for its rc field
     fn load_dyn_array_ptr(&self, ptr: &Pointer) -> ExecResult<(ArrayValue, ObjectHeader)> {
@@ -636,15 +633,25 @@ impl Interpreter {
         Ok((elements_array, object_value.header))
     }
     
+    // TODO: move to NativeHeap
     fn load_object_header(&self, ptr: &Pointer) -> ExecResult<ObjectHeader> {
+        if ptr.is_null() {
+            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
+        }
+        
         let rc = self.marshaller.unmarshal_object_header(unsafe {
             ptr.as_slice(Marshaller::object_header_size())
         })?;
 
         Ok(rc.value)
     }
-    
+
+    // TODO: move to NativeHeap
     fn store_object_header(&self, header: &ObjectHeader, ptr: &Pointer) -> ExecResult<()> {
+        if ptr.is_null() {
+            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
+        }
+        
         self.marshaller.marshal_object_header(header, unsafe {
             ptr.as_slice_mut(Marshaller::object_header_size())
         })?;
@@ -1361,25 +1368,14 @@ impl Interpreter {
                 ExecError::illegal_state(msg)
             })?;
 
-        let el_marshal_ty = self.marshaller.get_ty(element_type)?;
-
-        let elements_addr = match of_type {
+        let element_ptr = match of_type {
             ir::Type::Object(ir::ObjectID::Array(..)) => {
                 let DynValue::Pointer(array_ptr) = self.load(a)? else {
                     return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
                 };
                 
-                let array_header = self.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
-
-                // dynarray access isn't statically bounds checked
-                if index_value < 0 || index_value >= array_header.len {
-                    return Err(ExecError::Raised {
-                        msg: "array index out of bounds".to_string()
-                    });
-                }
-
-                // the elements array starts after the header
-                array_ptr.addr + Marshaller::array_header_size()
+                self.dyn_array_element_pointer(&array_ptr, index_value)?
+                    .reinterpret(element_type.clone())
             }
 
             ir::Type::Object(ir::ObjectID::Box(..)) => {
@@ -1393,13 +1389,16 @@ impl Interpreter {
                     });
                 }
 
-                let value_ptr = self.box_value_ptr(&box_ptr)?;
-                value_ptr.addr
+                self.box_value_ptr(&box_ptr)?
+                    .reinterpret(element_type.clone())
             }
             
             ir::Type::Array { .. } => {
-                // static array element pointers are just offsets from the object itself
-                self.addr_of_ref(a)?.addr
+                let at_ptr = self.addr_of_ref(a)?;
+                let array_ptr = at_ptr.reinterpret(of_type.clone());
+                
+                self.static_array_element_pointer(&array_ptr, index_value)?
+                    .reinterpret(element_type.clone())
             }
 
             other => {
@@ -1410,18 +1409,34 @@ impl Interpreter {
             }
         };
 
-        let elements_pointer = Pointer {
-            addr: elements_addr,
-            ty: element_type.clone(),
-        };
-
-        let index_offset = el_marshal_ty.size() * (index_value as usize);
-        let element_pointer = elements_pointer.addr_add(index_offset);
-
-        self.store(out, DynValue::Pointer(element_pointer))
+        self.store(out, DynValue::Pointer(element_ptr))
     }
     
-    fn dyn_array_element_pointer(&mut self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
+    fn static_array_element_pointer(&self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
+        let ir::Type::Array { element: element_type, .. } = &array_ptr.ty else {
+            return Err(ExecError::illegal_state(&format!(
+                "type {} is not an array",
+                array_ptr.ty.to_pretty_string(self.metadata.as_ref()),
+            )));
+        };
+        
+        let elements_pointer = Pointer {
+            addr: array_ptr.addr,
+            ty: element_type.as_ref().clone(),
+        };
+        
+        let element_size = self.marshaller.get_ty(&element_type)?.size();
+        
+        let index_offset = element_size * usize::try_from(index)
+            .map_err(|_| {
+                let msg = "element instruction has non-integer illegal index value";
+                ExecError::illegal_state(msg)
+            })?;
+
+        Ok(elements_pointer.addr_add(index_offset))
+    }
+
+    fn dyn_array_element_pointer(&self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
         let array_header = self.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
         
         let element_type = match &array_header.object_header.id {
@@ -1447,6 +1462,7 @@ impl Interpreter {
         Ok(Pointer::new(element_addr, element_type))
     }
 
+    #[expect(unused)]
     fn unbox(&mut self, boxed_value: DynValue) -> ExecResult<DynValue> {
         let DynValue::Pointer(box_ptr) = boxed_value else {
             return Err(ExecError::illegal_state("unbox: argument is not a box pointer"));
@@ -2058,10 +2074,15 @@ impl Interpreter {
             param_tys: params,
             debug_name: name.to_string(),
         });
+        
+        let invoker = self.metadata
+            .get_function_info(func_id)
+            .and_then(|f| f.invoker);
 
         self.functions.insert(func_id, FunctionInfo {
             func: Rc::new(func),
             name: Rc::new(name.to_string()),
+            invoker,
         });
     }
 
@@ -2104,11 +2125,6 @@ impl Interpreter {
         let mut metadata = (*self.metadata).clone();
 
         metadata.merge_from(&lib.metadata);
-        
-        // eprintln!("importing lib");
-        // for (id, func) in &lib.functions {
-        //     eprintln!("importing {} ({})", id, func.debug_name().map(|x| x.to_string()).unwrap_or_else(|| "unnamed".to_string()));
-        // }
 
         let mut marshaller = (*self.marshaller).clone();
 
@@ -2147,8 +2163,11 @@ impl Interpreter {
                     let ir_func = Function::IR(ir_func_def.clone());
                     Some(ir_func)
                 },
-
-                ir::Function::External(external_ref) if external_ref.src == ir::BUILTIN_SRC => None,
+                
+                ir::Function::External(external_ref) 
+                if external_ref.src == ir::BUILTIN_SRC => {
+                    None
+                },
 
                 ir::Function::External(external_ref) => {
                     let ffi_func = Function::new_ffi(external_ref, &mut marshaller, &self.metadata)
@@ -2157,9 +2176,13 @@ impl Interpreter {
                             stack_trace: self.stack_trace(),
                         })?;
                     Some(ffi_func)
-                },
+                }
             };
 
+            let invoker = lib.metadata
+                .get_function_info(*func_id)
+                .and_then(|f| f.invoker);
+            
             if let Some(func) = func {
                 self.globals.insert(
                     ir::GlobalRef::Function(*func_id),
@@ -2172,11 +2195,12 @@ impl Interpreter {
                         None => format!("{}", func_id),
                     }),
                     func: Rc::new(func),
+                    invoker,
                 });
             }
         }
         
-        for (ty, _) in lib.metadata.types() {
+        for (ty, _) in lib.metadata.type_info() {
             if ty.is_object() {
                 marshaller.register_object_type(ty.clone());
             }
@@ -2291,7 +2315,11 @@ impl Interpreter {
         string_lit_values: &HashMap<ir::StringID, DynValue>
     ) -> ExecResult<()> {
         // create runtime type info objects (TypeInfo and MethodInfo)
-        for (ty, runtime_type) in lib.metadata.types() {
+        for (ty, runtime_type) in lib.metadata.type_info() {
+            if matches!(ty, ir::Type::WeakObject(..)) {
+                continue;
+            }
+            
             let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
 
             let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
@@ -2303,17 +2331,15 @@ impl Interpreter {
                     ty: ir::TYPEINFO_TYPE,
                 });
 
-            if !matches!(ty, ir::Type::WeakObject(..)) {
-                let class_id = ty.rc_resource_def_id();
+            let runtime_name = runtime_type
+                .name
+                .as_ref()
+                .and_then(|str_id| self.metadata.get_string(*str_id))
+                .cloned();
 
-                let runtime_name = runtime_type
-                    .name
-                    .as_ref()
-                    .and_then(|str_id| self.metadata.get_string(*str_id))
-                    .cloned();
+            let object_id = ObjectID::try_from_type(ty);
 
-                self.typeinfo_map.add(class_id, runtime_name, typeinfo_ref);
-            }
+            self.typeinfo_map.add(object_id, runtime_name, typeinfo_ref.clone());
         }
 
         for (func_id, func_decl) in lib.metadata.functions() {
@@ -2323,7 +2349,7 @@ impl Interpreter {
                 .and_then(|str_id| self.metadata.get_string(*str_id))
                 .cloned();
 
-            let funcinfo_ptr = self.create_funcinfo(func_id, func_decl, &string_lit_values)?;
+            let funcinfo_ptr = self.create_func_info_object(func_id, func_decl, &string_lit_values)?;
             let ptr_bytes = self.marshaller.marshal_to_vec(&funcinfo_ptr)?;
 
             let funcinfo_ref = ir::GlobalRef::StaticFuncInfo(func_id);
@@ -2679,13 +2705,13 @@ impl Interpreter {
         Ok(DynValue::from(struct_val))
     }
 
-    fn create_funcinfo(
+    fn create_func_info_object(
         &mut self,
         func_id: ir::FunctionID,
-        decl: &ir::FunctionDecl,
+        func_info: &ir::FunctionInfo,
         string_lit_values: &HashMap<ir::StringID, DynValue>,
     ) -> ExecResult<DynValue> {
-        let func_name_string = match &decl.runtime_name {
+        let func_name_string = match &func_info.runtime_name {
             None => string_lit_values[&ir::EMPTY_STRING_ID].clone(),
             Some(name_id) => string_lit_values[name_id].clone(),
         };
@@ -2701,7 +2727,7 @@ impl Interpreter {
             ty: ir::Type::Nothing,
         };
 
-        let funcinfo_struct = StructValue::new(ir::FUNCINFO_ID, [
+        let fields = StructValue::new(ir::FUNCINFO_ID, [
             // 0: name
             func_name_string,
             // 1: impl
@@ -2710,102 +2736,58 @@ impl Interpreter {
             DynValue::Pointer(ty_tags_array_ptr),
         ]);
 
-        let funcinfo_ptr = self.new_object(funcinfo_struct, true)?;
-
-        Ok(DynValue::Pointer(funcinfo_ptr))
+        let object_ptr = self.new_object(fields, true)?;
+        Ok(DynValue::Pointer(object_ptr))
     }
 
     pub fn runtime_invoke(
         &mut self,
         func_id: ir::FunctionID,
-        instance_arg: Option<DynValue>,
+        instance_arg_ref: Pointer,
         args_array_ptr: Pointer,
-        func_param_tys: &[ir::Type],
-        return_ty: &ir::Type,
-        type_name_string: Option<&Pointer>,
-        func_name_string: &Pointer,
-    ) -> ExecResult<DynValue> {
-        // load the arg array
-        let (args_array, _) = self.load_dyn_array_ptr(&args_array_ptr)?;
-        let mut boxed_args = args_array.elements;
-
-        if let Some(val) = instance_arg {
-            boxed_args.insert(0, val);
-        }
-
-        if boxed_args.len() != func_param_tys.len() {
-            let func_name = self
-                .read_string_at(func_name_string)
-                .unwrap_or_else(|_| "<error>".to_string());
-
-            let full_name = match type_name_string {
-                Some(str_ptr) => {
-                    let type_name = self
-                        .read_string_at(str_ptr)
-                        .unwrap_or_else(|_| "<error>".to_string());
-                    format!("{type_name}.{func_name}")
-                },
-                None => {
-                    func_name
-                }
-            };
-
-            let expect_count = func_param_tys.len();
-            let actual_count = boxed_args.len();
-
-            return Err(ExecError::Raised {
-                msg: format!("function {full_name} invoked with invalid argument count: expected {expect_count}, got {actual_count}"),
-            });
-        }
-        
-        let mut call_args = Vec::with_capacity(boxed_args.len());
-
-        let mut arg_index = 0;
-        for (arg, param_ty) in boxed_args.into_iter().zip(func_param_tys.iter()) {
-            match param_ty {
-                // if the expected parameter type is an object, expect the parameter to be passed
-                // directly in the array
-                ir::Type::Object(..) | ir::Type::WeakObject(..) => {
-                    call_args.push(arg);
-                }
-                
-                // if the parameter type is a ref, expect a box containing the referenced type
-                // which we will clone and pass a pointer to the value of (to replace the boxed
-                // value instead of modifying the value in the original box)
-                ir::Type::TempRef(deref_type) => {
-                    let unboxed_value = self.unbox(arg.clone())?;
-
-                    let ref_box = self.new_box(deref_type, unboxed_value, false)?;
-                    let ref_box_value_ptr = self.box_value_ptr(&ref_box)?;
-                    
-                    // release and replace the item in the array
-                    self.release_dyn_val(&arg, false)?;
-                    let element = self.dyn_array_element_pointer(&args_array_ptr, arg_index)?;
-                    self.store_indirect(&element, DynValue::Pointer(ref_box))?;
-                    
-                    call_args.push(DynValue::Pointer(ref_box_value_ptr));
-                }
-                
-                _ => {
-                    let arg_value = self.unbox(arg)?;
-                    call_args.push(arg_value);
-                }
-            }
-
-            arg_index += 1;
-        }
-
-        let Some(result_val) = self.call(func_id, &call_args)? else {
-            return Ok(DynValue::from(Pointer::nil(ir::Type::Nothing)));
+    ) -> ExecResult<(i32, Pointer)> {
+        let Some(invoker_id) = self.functions
+            .get(&func_id)
+            .and_then(|f| f.invoker) 
+        else {
+            // not invokable
+            const NOT_INVOKABLE_CODE: i32 = 2;
+            return Ok((NOT_INVOKABLE_CODE, Pointer::nil(ir::Type::Nothing)));
         };
+
+        // zeroed memory where a boxed result pointer may be stored
+        let ptr_size = self.marshaller.get_ty(&ir::ANY_TYPE.temp_ref())?.size();
+        let mut result_mem: SmallVec<[u8; size_of::<usize>()]> = SmallVec::new();
+        result_mem.resize(ptr_size, 0);
+
+        let mut invoker_args = Vec::with_capacity(3);
         
-        if return_ty.is_object() {
-            return Ok(result_val);
-        }
+        // self arg
+        invoker_args.push(DynValue::Pointer(instance_arg_ref));
+
+        // args array arg
+        invoker_args.push(DynValue::Pointer(args_array_ptr));
+
+        // result pointer arg
+        invoker_args.push(DynValue::Pointer(Pointer::new(
+            result_mem.as_mut_ptr() as usize,
+            ir::Type::Nothing,
+        )));
         
-        // box value return type
-        let box_ptr = self.new_box(return_ty, result_val, false)?;
-        Ok(DynValue::from(box_ptr))
+        // copy the result pointer
+        let result_code = self
+            .call(invoker_id, &invoker_args)?
+            .and_then(|val| val.as_i32())
+            .ok_or_else(|| ExecError::illegal_state("expected invoker to return a result code"))?;
+
+        let result_ptr = self.marshaller
+            .unmarshal(&result_mem, &ir::ANY_TYPE.temp_ref())?
+            .value
+            .as_pointer()
+            .cloned()
+            .ok_or_else(|| ExecError::illegal_state("expected result to contain a pointer"))?;
+
+        Ok((result_code, result_ptr))
     }
 
     fn update_diagnostics(&self) {
@@ -2860,6 +2842,8 @@ struct FunctionInfo {
 
     // cached debug name for stack frame
     name: Rc<String>,
+    
+    invoker: Option<ir::FunctionID>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]

@@ -148,6 +148,9 @@ impl From<bool> for Value {
 }
 
 impl Value {
+    pub const I32_0: Self = Self::LiteralI32(0);
+    pub const I32_1: Self = Self::LiteralI32(1);
+    
     pub fn deref(self) -> Ref {
         Ref::Deref(Box::new(self))
     }

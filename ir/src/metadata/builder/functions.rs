@@ -1,16 +1,15 @@
-use crate::FunctionDecl;
 use crate::FunctionID;
+use crate::FunctionInfo;
 use crate::MetadataBuilder;
 use crate::NamePath;
 use crate::StaticClosureID;
 use crate::StructDef;
 use crate::StructIdentity;
 use crate::TypeDefID;
-use std::rc::Rc;
 
 impl MetadataBuilder {
-    pub fn get_function(&self, id: FunctionID) -> Option<&Rc<FunctionDecl>> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_function(id))
+    pub fn get_function(&self, id: FunctionID) -> Option<&FunctionInfo> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_function_info(id))
     }
     
     pub fn insert_func(&mut self, global_name: Option<NamePath>, gen_runtime_name: bool) -> FunctionID {
@@ -29,12 +28,29 @@ impl MetadataBuilder {
             None
         };
 
-        let decl = FunctionDecl { global_name: global_name.clone(), runtime_name };
-        self.metadata.functions.insert(id, Rc::new(decl));
+        let func_info = FunctionInfo { 
+            global_name: global_name.clone(), 
+            runtime_name,
+            
+            // up to the frontend to generate and add an invoker later if desired
+            invoker: None 
+        };
+
+        self.metadata.function_info.insert(id, func_info);
         
         self.next_function_id.0 += 1;
 
         id
+    }
+    
+    pub fn insert_func_invoker(&mut self, function_id: FunctionID, invoker_id: FunctionID) {
+        let Some(function_info) = self.metadata.function_info
+            .get_mut(&function_id)
+        else {
+            panic!("function {} was not declared in this metadata collection", function_id);
+        };
+
+        function_info.invoker = Some(invoker_id);
     }
 
     pub fn closures(&self) -> impl Iterator<Item=TypeDefID> {

@@ -106,7 +106,7 @@ pub fn write_global_typeinfo_decl_name(f: &mut fmt::Formatter, ty: &ir::Type) ->
 }
 
 pub fn global_typeinfo_decl_name(metadata: &ir::Metadata, ty: &ir::Type) -> Option<String> {
-    if metadata.get_typeinfo(ty).is_some() {
+    if metadata.get_type_info(ty).is_some() {
         Some(format!("TypeInfo_{}", global_typeinfo_decl_name_type(ty)))
     } else {
         None

@@ -270,7 +270,7 @@ public class AssemblyBuilder : IDisposable {
             this.BuildStaticTagsArrayField(tagLoc, count, library);
         }
 
-        foreach (var (type, typeInfo) in library.Metadata.RuntimeTypes) {
+        foreach (var (type, typeInfo) in library.Metadata.TypeInfo) {
             this.BuildStaticTypeInfo(type, typeInfo, globals, library);
         }
 
@@ -328,7 +328,7 @@ public class AssemblyBuilder : IDisposable {
 
     private void BuildStaticTypeInfo(
         IR.IType type,
-        IR.RuntimeType runtimeType,
+        IR.TypeInfo typeInfo,
         TypeDefinition globals,
         IR.Library library
     ) {
@@ -365,7 +365,7 @@ public class AssemblyBuilder : IDisposable {
 
         initBody.Emit(OpCodes.Dup); // typeinfo pointer
         
-        var nameStringFieldRef = this.GetStringLiteralRef(runtimeType.Name ?? IR.StringID.EmptyString);
+        var nameStringFieldRef = this.GetStringLiteralRef(typeInfo.Name ?? IR.StringID.EmptyString);
         initBody.Emit(OpCodes.Ldsfld, nameStringFieldRef);
         initBody.Emit(OpCodes.Stfld, nameField);
 
@@ -386,7 +386,7 @@ public class AssemblyBuilder : IDisposable {
         // set flags
         initBody.Emit(OpCodes.Dup);
         unchecked {
-            initBody.Emit(OpCodes.Ldc_I8, (long)runtimeType.Flags);
+            initBody.Emit(OpCodes.Ldc_I8, (long)typeInfo.Flags);
         }
         initBody.Emit(OpCodes.Stfld, flagsField);
 
@@ -410,7 +410,7 @@ public class AssemblyBuilder : IDisposable {
         this.staticFuncInfoFields.Add(funcID, fieldDef);
     }
 
-    private void BuildStaticFuncInfo(IR.FunctionID funcID, IR.FunctionDecl func, IR.Library library) {
+    private void BuildStaticFuncInfo(IR.FunctionID funcID, IR.FunctionInfo func, IR.Library library) {
         var fieldRef = this.GetStaticFuncInfoFieldRef(funcID)!;
         
         var funcInfoType = IR.TypeDefID.FunctionInfo.ToObjectType();

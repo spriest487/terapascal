@@ -309,7 +309,7 @@ pub fn translate_invocation(
                 .collect();
 
             let call_target = CallTarget::Function(func.id);
-            translate_call_with_args(call_target, &args, &func.sig, builder)
+            translate_call_with_args(call_target, &args, &func.src_sig, builder)
         },
 
         Invocation::Method {

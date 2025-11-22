@@ -231,7 +231,7 @@ impl Class {
         }
         
         let runtime_type = metadata
-            .get_typeinfo(&class_ty)
+            .get_type_info(&class_ty)
             .unwrap_or_else(|| {
                 panic!("missing runtime type for class {}", metadata.pretty_ty_name(&class_ty))
             });

@@ -14,7 +14,7 @@ use terapascal_ir::instruction_builder::InstructionBuilder;
 #[derive(Clone, Debug)]
 pub struct FunctionInstance {
     pub id: FunctionID,
-    pub sig: Arc<typ::FunctionSig>,
+    pub src_sig: Arc<typ::FunctionSig>,
 }
 
 fn create_function_body_builder<'m, 'l: 'm>(
@@ -87,7 +87,7 @@ pub fn build_func_static_closure_def(
     let generic_ctx = typ::GenericContext::empty();
 
     let params = target_func
-        .sig
+        .src_sig
         .params
         .iter()
         .enumerate()
@@ -110,7 +110,7 @@ pub fn build_func_static_closure_def(
 
     let mut body_builder = create_function_body_builder(library, generic_ctx, debug_name.clone());
 
-    let return_ty = bind_function_return(&target_func.sig.result_ty, &mut body_builder);
+    let return_ty = bind_function_return(&target_func.src_sig.result_ty, &mut body_builder);
 
     let closure_ptr_local_id = body_builder.bind_closure_ptr();
 

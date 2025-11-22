@@ -1,11 +1,9 @@
-mod dyn_array;
 pub mod scope;
+mod dyn_array;
+mod invoker;
+mod util;
 
-use crate::instruction_builder::dyn_array::gen_dyn_array_dtor_body;
-use crate::instruction_builder::dyn_array::new_dyn_array;
-use crate::instruction_builder::scope::LocalBinding;
-use crate::instruction_builder::scope::LocalStack;
-use crate::BinOpInstruction;
+use crate::{BinOpInstruction, FunctionID, FunctionSig};
 use crate::FieldID;
 use crate::IRFormatter;
 use crate::Instruction;
@@ -14,14 +12,20 @@ use crate::Label;
 use crate::LocalID;
 use crate::MetadataBuilder;
 use crate::MethodID;
+use crate::ObjectID;
 use crate::Ref;
 use crate::Type;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
-use crate::ObjectID;
+use dyn_array::gen_dyn_array_dtor_body;
+use dyn_array::new_dyn_array;
+use scope::LocalBinding;
+use scope::LocalStack;
 use std::sync::Arc;
 use terapascal_common::span::Span;
+pub use util::jmp_exists;
+pub use util::remove_empty_blocks;
 
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
@@ -889,16 +893,7 @@ pub trait InstructionBuilder {
     where
         Branch: FnOnce(&mut Self),
     {
-        let then_label = self.next_label();
-        let break_label = self.next_label();
-
-        self.jmpif(then_label, cond);
-        self.jmp(break_label);
-
-        self.label(then_label);
-        then_branch(self);
-
-        self.label(break_label);
+        util::if_then(self, cond, then_branch);
     }
 
     fn if_then_else<IfBranch, ElseBranch>(
@@ -910,21 +905,7 @@ pub trait InstructionBuilder {
         IfBranch: FnOnce(&mut Self),
         ElseBranch: FnOnce(&mut Self),
     {
-        let then_label = self.next_label();
-        let else_label = self.next_label();
-        let break_label = self.next_label();
-
-        self.jmpif(then_label, cond);
-        self.jmp(else_label);
-
-        self.label(then_label);
-        then_branch(self);
-        self.jmp(break_label);
-
-        self.label(else_label);
-        else_branch(self);
-
-        self.label(break_label);
+        util::if_then_else(self, cond, then_branch, else_branch);
     }
 
     fn counter_loop<F>(
@@ -936,77 +917,20 @@ pub trait InstructionBuilder {
     ) where
         F: Fn(&mut Self),
     {
-        let break_label = self.next_label();
-        let loop_label = self.next_label();
-        let done = self.local_temp(Type::Bool);
-
-        let counter = counter.into();
-
-        self.label(loop_label);
-        self.gt(done.clone(), counter.clone(), high_val);
-        self.jmpif(break_label, done);
-
-        self.local_begin();
-        f(self);
-        self.local_end();
-
-        self.add(counter.clone(), counter, inc_val);
-        self.jmp(loop_label);
-        self.label(break_label);
+        util::counter_loop(self, counter, inc_val, high_val, f);
     }
     
     fn gen_default_init(&mut self, at: impl Into<Ref>, ty: &Type) {
-        match ty.default_literal() {
-            Some(lit) => {
-                self.mov(at, lit);
-            },
-
-            None => {
-                let at = at.into();
-                self.gen_fill_byte(at, Value::SizeOf(ty.clone()), Value::LiteralU8(0));
-            }
-        }
+        util::gen_default_init(self, at, ty)
     }
 
     // inline IR for FillByte-style memory set procedure
     fn gen_fill_byte(&mut self, at: Ref, count: Value, byte_val: Value) {
-        self.comment(&format!("fill_byte: {}, count={}, value {}", at, count, byte_val));
-
-        let byte_ptr_ty = Type::U8.ptr();
-
-        // dst_ptr := @at as ^UInt8
-        let at_addr = self.local_temp(Type::Nothing.ptr());
-        self.addr_of(at_addr.clone(), at);
-
-        let dst_ptr = self.local_temp(byte_ptr_ty.clone()).to_ref();
-        self.cast(dst_ptr.clone(), at_addr, byte_ptr_ty.clone());
-
-        // end_ptr := dst_ptr + count 
-        let end_ptr = self.local_temp(byte_ptr_ty.clone());
-        self.add(end_ptr.clone(), dst_ptr.clone(), count);
-
-        let continue_label = self.next_label();
-        let break_label = self.next_label();
-
-        self.label(continue_label);
-
-        // at_end := dst_ptr = end_ptr
-        let at_end = self.local_temp(Type::Bool);
-        self.eq(at_end.clone(), dst_ptr.clone(), end_ptr);
-
-        // if at_end then break
-        self.jmpif(break_label, at_end);
-
-        // else dst_ptr^ := byte_val
-        self.mov(dst_ptr.clone().to_deref(), byte_val.clone());
-
-        // dst_ptr += 1;
-        self.add(dst_ptr.clone(), dst_ptr.clone(), Value::LiteralISize(1));
-
-        // continue
-        self.jmp(continue_label);
-
-        self.label(break_label);
+        util::gen_fill_byte(self, at, count, byte_val);
+    }
+    
+    fn gen_invoker_body(&mut self, func_id: FunctionID, func_sig: &FunctionSig) {
+        invoker::gen_invoker_body(self, func_id, func_sig);
     }
 
     fn while_do<CondFn, DoFn>(&mut self, cond_fn: CondFn, do_fn: DoFn)
@@ -1014,31 +938,7 @@ pub trait InstructionBuilder {
         CondFn: Fn(&mut Self, Ref),
         DoFn: Fn(&mut Self, Label, Label),
     {
-        let continue_label = self.next_label();
-        let break_label = self.next_label();
-        
-        let cond_val = self.local_temp(Type::Bool);
-
-        self.label(continue_label);
-
-        self.local_begin();
-        {
-            cond_fn(self, cond_val.to_ref());
-        }
-        self.local_end();
-
-        self.not(cond_val, cond_val);
-        self.jmpif(break_label, cond_val);
-
-        self.local_begin();
-        {
-            do_fn(self, continue_label, break_label);
-        }
-        self.local_end();
-
-        self.jmp(continue_label);
-
-        self.label(break_label);
+        util::while_do(self, cond_fn, do_fn);
     }
 
     /// Call `f` for every structural member of the object of type `ty_def` found at the `at`
@@ -1052,178 +952,6 @@ pub trait InstructionBuilder {
     where
         Visitor: Fn(&mut Self, &Type, Ref) -> bool + Copy,
     {
-        let at = at.into();
-
-        match ty {
-            Type::Struct(struct_id) => {
-                let struct_def = self.metadata().get_struct_def(*struct_id).unwrap();
-
-                let fields: Vec<_> = struct_def
-                    .fields
-                    .iter()
-                    .map(|(field_id, field)| (*field_id, field.ty.clone()))
-                    .collect();
-
-                let mut result = false;
-                for (field, field_ty) in fields {
-                    if !(field_ty.is_object() || field_ty.is_complex()) {
-                        continue;
-                    }
-
-                    // store the field pointer in a temp slot
-                    let field_val = Ref::Local(self.local_temp(field_ty.clone().temp_ref()));
-
-                    let of_ty = Type::Struct(*struct_id);
-                    self.field(field_val.clone(), at.clone(), of_ty, field);
-
-                    result |= self.visit_deep(field_val.to_deref(), &field_ty, f);
-                }
-
-                result
-            },
-
-            Type::Variant(id) => {
-                let cases = &self
-                    .metadata()
-                    .get_variant_def(*id)
-                    .unwrap_or_else(|| panic!("missing variant def {}", id))
-                    .cases
-                    .to_vec();
-
-                let tag_ref = self.local_temp(Type::I32.temp_ref());
-                let is_not_case = self.local_temp(Type::Bool);
-
-                // get the tag
-                self.vartag(tag_ref, at.clone(), Type::Variant(*id));
-
-                // jump out of the search loop if we find the matching case
-                let break_label = self.next_label();
-
-                let mut result = false;
-
-                // for each case, check if the tag matches and jump past it if not
-
-                for (tag, case) in cases.iter().enumerate() {
-                    self.comment(&format!("testing for variant case {} ({})", tag, case.name));
-
-                    if let Some(data_ty) = &case.ty {
-                        if !(data_ty.is_object() || data_ty.is_complex()) {
-                            continue;
-                        }
-
-                        let skip_case_label = self.next_label();
-
-                        // is_not_case := tag_ptr^ != tag
-                        let tag_val = Value::LiteralI32(tag as i32);
-                        self.neq(is_not_case, tag_ref.to_deref(), tag_val);
-                        self.jmpif(skip_case_label, is_not_case.clone());
-
-                        // get ptr into case data and visit it
-
-                        // only one data_ptr local will be allocated depending on which case is
-                        // active, so a scope is needed here to stop the local counter being
-                        // incremented once per case
-                        self.local_begin();
-                        {
-                            let data_ref = self.local_temp(data_ty.clone().temp_ref());
-
-                            self.vardata(data_ref, at.clone(), Type::Variant(*id), tag);
-
-                            result |= self.visit_deep(data_ref.to_deref(), &data_ty, f);
-                        }
-                        self.local_end();
-
-                        // break after any case executes
-                        self.jmp(break_label);
-
-                        // jump to here if this case isn't active
-                        self.label(skip_case_label);
-                    }
-                }
-
-                self.label(break_label);
-
-                result
-            },
-
-            Type::Array { element, dim } => {
-                if !element.is_object() && !element.is_complex() {
-                    return false;
-                }
-
-                let element_ty = (**element).clone();
-                let element_ptr = Ref::Local(self.local_temp(element_ty.clone().temp_ref()));
-                let mut result = false;
-
-                for i in 0..*dim {
-                    let index = Value::LiteralI32(i as i32);
-                    self.element(element_ptr.clone(), at.clone(), index, ty.clone());
-
-                    result |= self.visit_deep(element_ptr.clone().to_deref(), element, f);
-                }
-
-                result
-            },
-
-            // field or element
-            _ => f(self, ty, at),
-        }
+        util::visit_deep(self, at, ty, f)
     }
-}
-
-pub fn remove_empty_blocks(instructions: &mut Vec<Instruction>) {
-    let mut pc = 0;
-
-    // stack of instruction indices at which the current empty scope begins
-    let mut empty = vec![Some(pc)];
-
-    while pc < instructions.len() {
-        let block_empty = empty.last_mut().unwrap();
-
-        match &instructions[pc] {
-            Instruction::LocalBegin => {
-                empty.push(Some(pc));
-                pc += 1;
-            },
-
-            // end the scope
-            Instruction::LocalEnd => {
-                if let Some(empty_start) = *block_empty {
-                    // it's still empty, remove all the empty statements
-                    let remove_count = (pc + 1) - empty_start;
-                    pc = empty_start;
-                    for _ in 0..remove_count {
-                        instructions.remove(pc);
-                    }
-
-                    empty.pop();
-                } else {
-                    empty.pop();
-
-                    // containing scope is no longer empty
-                    if let Some(last) = empty.last_mut() {
-                        *last = None;
-                    }
-
-                    pc += 1;
-                }
-            },
-
-            Instruction::DebugPop | Instruction::DebugPush(..) | Instruction::Comment(..) => {
-                pc += 1;
-            },
-
-            _ => {
-                *block_empty = None;
-                pc += 1;
-            },
-        }
-    }
-}
-
-pub fn jmp_exists(instructions: &[Instruction], to_label: Label) -> bool {
-    instructions.iter().any(|i| match i {
-        Instruction::Jump { dest } | Instruction::JumpIf { dest, .. } => *dest == to_label,
-        _ => false,
-    })
 }

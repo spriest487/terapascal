@@ -53,6 +53,7 @@ use linked_hash_map::LinkedHashMap;
 pub use rc_methods::RcMethodInfo;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_ir::instruction_builder::InstructionBuilder as _;
@@ -209,6 +210,8 @@ impl<'a> LibraryBuilder<'a> {
         self.gen_static_closure_init();
         self.gen_static_type_init();
 
+        gen_func_invokers(&mut self);
+
         let metadata = self.metadata.build();
 
         let mut lib = ir::Library::new(metadata);
@@ -226,7 +229,7 @@ impl<'a> LibraryBuilder<'a> {
 
     pub fn metadata(&self) -> &ir::MetadataBuilder {
         &self.metadata
-    }    
+    }
     
     pub fn metadata_mut(&mut self) -> &mut ir::MetadataBuilder {
         &mut self.metadata
@@ -355,7 +358,7 @@ impl<'a> LibraryBuilder<'a> {
         let set_flags_type = SetFlagsType::define_new(self, bits);
         self.set_flags_type_info.insert(bits, set_flags_type);
 
-        self.gen_typeinfo(&ir::Type::Struct(set_flags_type.struct_id));
+        self.gen_type_info(&ir::Type::Struct(set_flags_type.struct_id));
 
         set_flags_type
     }
@@ -428,7 +431,7 @@ impl<'a> LibraryBuilder<'a> {
         // it may recurse and instantiate itself in its own body
         let cached_func = FunctionInstance {
             id,
-            sig: Arc::new(sig),
+            src_sig: Arc::new(sig),
         };
 
         let debug_name = if self.opts.debug {
@@ -489,7 +492,7 @@ impl<'a> LibraryBuilder<'a> {
 
         let cached_func = FunctionInstance {
             id,
-            sig: Arc::new(sig),
+            src_sig: Arc::new(sig),
         };
 
         let extern_src = extern_decl
@@ -615,7 +618,7 @@ impl<'a> LibraryBuilder<'a> {
         // it may recurse and instantiate itself in its own body
         let cached_func = FunctionInstance {
             id,
-            sig: Arc::new(specialized_decl.sig()),
+            src_sig: Arc::new(specialized_decl.sig()),
         };
 
         let key = FunctionDefKey {
@@ -1100,7 +1103,7 @@ impl<'a> LibraryBuilder<'a> {
 
         // ensure the runtime type info exists for all referenced types
         if self.metadata().is_defined(&ty) {
-            self.gen_typeinfo(&ty);
+            self.gen_type_info(&ty);
         }
 
         ty
@@ -1144,8 +1147,8 @@ impl<'a> LibraryBuilder<'a> {
     // get or generate runtime type for a given type, which contains the function IDs etc
     // used for RC operations at runtime. the rest of the RTTI info will be filled in later 
     // in a separate pass
-    pub fn gen_typeinfo(&mut self, ty: &ir::Type) -> Rc<ir::TypeInfo> {
-        if let Some(existing) = self.metadata.get_runtime_type(&ty) {
+    pub fn gen_type_info(&mut self, ty: &ir::Type) -> Rc<ir::TypeInfo> {
+        if let Some(existing) = self.metadata.get_type_info(&ty) {
             return existing;
         }
 
@@ -1160,7 +1163,7 @@ impl<'a> LibraryBuilder<'a> {
             rtti.debug_name = Some(self.metadata().pretty_ty_name(&ty).into_owned());
         }
 
-        self.metadata.insert_runtime_type(ty.clone(), rtti)
+        self.metadata.insert_type_info(ty.clone(), rtti)
     }
 
     fn build_typeinfo(&mut self) {
@@ -1185,8 +1188,8 @@ impl<'a> LibraryBuilder<'a> {
             
             for closure_id in populate_closures.drain(0..) {
                 gen_closure_runtime_type(self, closure_id);
-                self.gen_typeinfo(&closure_id.to_class_ptr_type());
-                self.gen_typeinfo(&closure_id.to_class_weak_type());
+                self.gen_type_info(&closure_id.to_class_ptr_type());
+                self.gen_type_info(&closure_id.to_class_weak_type());
                 done_closures += 1;
             }
 
@@ -1199,7 +1202,7 @@ impl<'a> LibraryBuilder<'a> {
                     let box_src_type  = src_ty.clone().boxed();
                     let box_type = self.translate_type(&box_src_type, &GenericContext::empty());
 
-                    self.gen_typeinfo(&box_type);
+                    self.gen_type_info(&box_type);
                 }
 
                 if !self.metadata.is_defined(&ty) {
@@ -1235,7 +1238,7 @@ impl<'a> LibraryBuilder<'a> {
         }
         
         // should fetch from the cache at this point
-        let mut rtti = (*self.gen_typeinfo(&ty)).clone();
+        let mut rtti = (*self.gen_type_info(&ty)).clone();
         rtti.name = Some(self.metadata.find_or_insert_string(&src_ty.to_string()));
 
         match &src_ty {
@@ -1275,7 +1278,7 @@ impl<'a> LibraryBuilder<'a> {
         };
 
         // replace the existing RTTI
-        self.metadata.insert_runtime_type(ty, rtti);
+        self.metadata.insert_type_info(ty, rtti);
     }
 
     fn create_runtime_method(&mut self,
@@ -1390,7 +1393,7 @@ impl<'a> LibraryBuilder<'a> {
             None
         };
 
-        let cached_func = FunctionInstance { id, sig: func_ty_sig };
+        let cached_func = FunctionInstance { id, src_sig: func_ty_sig };
 
         let ir_func = build_closure_function_def(self, &func, closure_id, debug_name);
 
@@ -1414,7 +1417,7 @@ impl<'a> LibraryBuilder<'a> {
         // function reference closures can never have a capture list or type args
         let captures = LinkedHashMap::default();
 
-        let func_ty_id = self.translate_func_ty(func.sig.as_ref(), generic_ctx);
+        let func_ty_id = self.translate_func_ty(func.src_sig.as_ref(), generic_ctx);
 
         let ir_func = self.functions
             .get(&func.id)
@@ -1444,7 +1447,7 @@ impl<'a> LibraryBuilder<'a> {
             func_ty_id,
             func_instance: FunctionInstance {
                 id: thunk_id,
-                sig: func.sig.clone(),
+                src_sig: func.src_sig.clone(),
             },
         };
 
@@ -1568,9 +1571,9 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
         body: dtor_body,
     }));
 
-    let mut runtime_type = lib.gen_typeinfo(array_type).as_ref().clone();
+    let mut runtime_type = lib.gen_type_info(array_type).as_ref().clone();
     runtime_type.dtor = Some(dtor_id);
-    lib.metadata.insert_runtime_type(array_type.clone(), runtime_type);
+    lib.metadata.insert_type_info(array_type.clone(), runtime_type);
 }
 
 fn gen_iface_virtual_method_info(lib: &mut LibraryBuilder, iface_ty: &typ::Type) {
@@ -1598,10 +1601,10 @@ fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID)
     let closure_class_ty = closure_id.to_class_ptr_type();
     let closure_weak_ty = closure_id.to_class_weak_type();
     
-    let runtime_type = lib.gen_typeinfo(&closure_class_ty);
+    let runtime_type = lib.gen_type_info(&closure_class_ty);
     let mut runtime_type = (*runtime_type).clone();
 
-    let mut weak_runtime_type = lib.gen_typeinfo(&closure_weak_ty)
+    let mut weak_runtime_type = lib.gen_type_info(&closure_weak_ty)
         .as_ref()
         .clone();
 
@@ -1611,8 +1614,8 @@ fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID)
     runtime_type.flags |= ir::TYPE_FLAG_FUNCTION;
     weak_runtime_type.flags |= ir::TYPE_FLAG_FUNCTION;
     
-    lib.metadata.insert_runtime_type(closure_class_ty, runtime_type);
-    lib.metadata.insert_runtime_type(closure_weak_ty, weak_runtime_type);
+    lib.metadata.insert_type_info(closure_class_ty, runtime_type);
+    lib.metadata.insert_type_info(closure_weak_ty, weak_runtime_type);
 }
 
 // class types must generate cleanup code for their inner struct which isn't
@@ -1627,16 +1630,16 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
         .and_then(|class_id| class_id.as_class())
         .expect("resource class of translated class type was not a struct");
 
-    lib.gen_typeinfo(&class_ty);
-    lib.gen_typeinfo(&class_id.to_class_weak_type());
+    lib.gen_type_info(&class_ty);
+    lib.gen_type_info(&class_id.to_class_weak_type());
 
-    let mut runtime_type = lib.gen_typeinfo(&class_ty)
+    let mut runtime_type = lib.gen_type_info(&class_ty)
         .as_ref()
         .clone();
 
     gen_class_dtor(lib, class_id, &mut runtime_type);
 
-    lib.metadata.insert_runtime_type(class_ty.clone(), runtime_type);
+    lib.metadata.insert_type_info(class_ty.clone(), runtime_type);
 }
 
 fn gen_class_dtor(
@@ -1700,4 +1703,54 @@ fn gen_class_dtor(
             }
         }));
     }
+}
+
+fn gen_func_invokers(lib: &mut LibraryBuilder) {
+    // temporarily swap because we can't build new functions with this borrowed
+    let mut all_funcs = HashMap::new();
+    mem::swap(&mut all_funcs, &mut lib.translated_funcs);
+    
+    let invoker_sig = ir::FunctionSig::new([
+        ir::ANY_TYPE.temp_ref(), // self-arg
+        ir::ANY_TYPE.dyn_array(), // rest args
+        ir::ANY_TYPE.temp_ref(), // result out ref
+    ], ir::Type::I32);
+
+    for (_, func) in &all_funcs {
+        let invoker_id = lib.metadata_mut().insert_func(None, false);
+
+        let debug_name = lib.opts.debug
+            .then(|| format!("generated invoker for {}", func.id));
+        
+        // the source sig may be generic, so look up the translated sig rather than attempting
+        // to translate it without a generic context
+        let sig = lib.functions[&func.id].sig().clone();
+
+        let mut builder = IRBuilder::new(lib);
+        builder.bind_return();
+        let self_param = builder.bind_param(ir::ANY_TYPE.temp_ref(), "self");
+        let args_param = builder.bind_param(ir::ANY_TYPE.dyn_array(), "args");
+        builder.bind_param(ir::ANY_TYPE.temp_ref(), "result_out");
+        builder.retain(self_param, false);
+        builder.retain(args_param, false);
+        
+        builder.gen_invoker_body(func.id, &sig);
+        
+        let body = builder.finish();
+        
+        let invoker_func = ir::FunctionDef {
+            sig: invoker_sig.clone(),
+            debug_name,
+            body,
+        };
+        
+        lib.functions.insert(invoker_id, ir::Function::Local(invoker_func));
+    
+        lib.metadata.insert_func_invoker(func.id, invoker_id);
+    }
+    
+    // nothing we do above should modify this!
+    assert_eq!(0, lib.translated_funcs.len());
+    mem::swap(&mut all_funcs, &mut lib.translated_funcs);
+    
 }

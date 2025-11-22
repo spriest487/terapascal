@@ -4,6 +4,7 @@ use cast::i128;
 use std::ops::Index;
 use std::ops::IndexMut;
 use std::rc::Rc;
+use terapascal_ir::Type;
 
 #[derive(Debug, Clone)]
 pub enum DynValue {
@@ -665,6 +666,24 @@ pub enum ObjectID {
 }
 
 impl ObjectID {
+    pub fn try_from_type(ty: &ir::Type) -> Option<Self> {
+        match ty {
+            Type::Object(id) | Type::WeakObject(id) => match id {
+                // real types
+                ir::ObjectID::Class(class_id) => Some(ObjectID::Class(*class_id)),
+                ir::ObjectID::Array(element_type) => Some(ObjectID::Array(element_type.clone())),
+                ir::ObjectID::Box(value_type) => Some(ObjectID::Box(value_type.clone())),
+
+                // abstract types
+                ir::ObjectID::Any
+                | ir::ObjectID::Interface(_)
+                | ir::ObjectID::Closure(_) => None,
+            },
+
+            _ => None,
+        }
+    }
+    
     pub fn to_type(&self) -> ir::Type {
         match self {
             ObjectID::Class(id) => id.to_class_ptr_type(),

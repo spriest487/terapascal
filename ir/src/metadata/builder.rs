@@ -76,7 +76,7 @@ impl MetadataBuilder {
             if let Some(max_id) = ref_metadata.variables.keys().max() {
                 next_variable_id.0 = max_id.0 + 1;
             }
-            if let Some(max_id) = ref_metadata.functions.keys().max() {
+            if let Some(max_id) = ref_metadata.function_info.keys().max() {
                 next_function_id.0 = max_id.0 + 1;
             }
             if let Some(max_id) = ref_metadata.string_literals.keys().max() {
@@ -196,7 +196,9 @@ impl MetadataBuilder {
     
     fn all_metadata(&self) -> impl Iterator<Item=&Metadata> {
         iter::once(&self.metadata)
-            .chain(self.refs.iter()
+            .chain(self.refs
+                .iter()
+                .rev()
                 .map(|metadata| metadata.as_ref()))
     }
 

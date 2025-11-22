@@ -141,7 +141,7 @@ public class FunctionBuilder {
         var typeBuilder = this.assemblyBuilder.TypeBuilder;
         var voidType = this.assemblyBuilder.TypeSystem.Void;
 
-        var dtorFunc = metadata.RuntimeTypes.TryGetValue(id.ToObjectType(), out var runtimeType)
+        var dtorFunc = metadata.TypeInfo.TryGetValue(id.ToObjectType(), out var runtimeType)
             ? runtimeType.Destructor
             : null;
 

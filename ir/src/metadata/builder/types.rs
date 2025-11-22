@@ -1,4 +1,5 @@
-use crate::FunctionID;
+use std::rc::Rc;
+use crate::{FunctionID, TypeInfo};
 use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceID;
@@ -15,6 +16,10 @@ use crate::VariantDef;
 use linked_hash_map::Entry;
 
 impl MetadataBuilder {
+    pub fn type_info(&self) -> impl Iterator<Item=(&Type, &Rc<TypeInfo>)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.type_info())
+    }
+    
     pub fn is_defined(&self, ty: &Type) -> bool {
         self.find_in_self_or_refs(move |metadata| Some(metadata.is_defined(ty)))
             .unwrap_or(false)

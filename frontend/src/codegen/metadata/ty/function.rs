@@ -34,7 +34,7 @@ impl fmt::Display for ClosureInstance {
         write!(
             f,
             "closure {} of {} ({})",
-            self.closure_id, self.func_ty_id, self.func_instance.sig
+            self.closure_id, self.func_ty_id, self.func_instance.src_sig
         )
     }
 }

@@ -4,7 +4,7 @@ use crate::typeinfo::TypeInfo;
 use crate::ty::FieldID;
 use crate::ty::ObjectID;
 use crate::ty_decl::TagLocation;
-use crate::FunctionDecl;
+use crate::FunctionInfo;
 use crate::FunctionID;
 use crate::FunctionSig;
 use crate::GlobalRef;
@@ -123,14 +123,13 @@ pub struct Metadata {
 
     set_aliases: LinkedHashMap<SetAliasID, SetAliasDef>,
 
-    functions: LinkedHashMap<FunctionID, Rc<FunctionDecl>>,
+    type_info: HashMap<Type, Rc<TypeInfo>>,
+    function_info: LinkedHashMap<FunctionID, FunctionInfo>,
 
     // function pointer type ID -> closure class IDs
     closures: BTreeMap<TypeDefID, Vec<TypeDefID>>,
 
     function_static_closures: HashMap<FunctionID, StaticClosureID>,
-
-    types: HashMap<Type, Rc<TypeInfo>>,
 
     tag_counts: HashMap<TagLocation, usize>,
 }
@@ -146,12 +145,12 @@ impl Metadata {
 
             set_aliases: LinkedHashMap::new(),
 
-            functions: LinkedHashMap::new(),
+            function_info: LinkedHashMap::new(),
 
             closures: BTreeMap::new(),
             function_static_closures: HashMap::new(),
 
-            types: HashMap::new(),
+            type_info: HashMap::new(),
 
             tag_counts: HashMap::new(),
         };
@@ -225,13 +224,13 @@ impl Metadata {
             self.ifaces.insert(*id, iface_decl.clone());
         }
 
-        for (id, func_decl) in &other.functions {
-            if self.functions.contains_key(id) {
-                let existing = &self.functions[id];
+        for (id, func_info) in &other.function_info {
+            if self.function_info.contains_key(id) {
+                let existing = &self.function_info[id];
 
-                Self::check_conflict("function ID", id, func_decl.global_name.as_ref(), existing.global_name.as_ref());
+                Self::check_conflict("function ID", id, func_info.global_name.as_ref(), existing.global_name.as_ref());
             }
-            self.functions.insert(*id, func_decl.clone());
+            self.function_info.insert(*id, func_info.clone());
         }
 
         for (func_type_id, other_closure_ids) in &other.closures {
@@ -253,12 +252,12 @@ impl Metadata {
             self.function_static_closures.insert(*func_id, *static_closure);
         }
 
-        for (ty, funcs) in &other.types {
-            if self.types.contains_key(ty) {
+        for (ty, funcs) in &other.type_info {
+            if self.type_info.contains_key(ty) {
                 panic!("duplicate RTTI definitions for type {}", self.pretty_ty_name(ty));
             }
 
-            self.types.insert(ty.clone(), funcs.clone());
+            self.type_info.insert(ty.clone(), funcs.clone());
         }
         
         for (id, def) in &other.set_aliases {
@@ -404,18 +403,18 @@ impl Metadata {
         }
     }
 
-    pub fn get_typeinfo(&self, ty: &Type) -> Option<Rc<TypeInfo>> {
-        self.types.get(ty).cloned()
+    pub fn get_type_info(&self, ty: &Type) -> Option<Rc<TypeInfo>> {
+        self.type_info.get(ty).cloned()
     }
 
-    pub fn types(&self) -> impl Iterator<Item = (&Type, &Rc<TypeInfo>)> {
-        self.types.iter()
+    pub fn type_info(&self) -> impl Iterator<Item = (&Type, &Rc<TypeInfo>)> {
+        self.type_info.iter()
     }
 
     pub fn find_runtime_method(&self, type_name: &str, method_name: &str) -> Option<(&Type, &Rc<TypeInfo>, usize)> {
         let type_name_str = self.find_string_id(type_name)?;
         
-        let (ty, runtime_type) = self.types
+        let (ty, runtime_type) = self.type_info
             .iter()
             .find(|(_, t)| t.name == Some(type_name_str))?;
         
@@ -429,14 +428,14 @@ impl Metadata {
     }
 
     pub fn get_runtime_methods(&self, ty: &Type) -> impl Iterator<Item=&MethodInfo> {
-        self.types
+        self.type_info
             .get(ty)
             .into_iter()
             .flat_map(|src_ty| src_ty.methods.iter())
     }
 
-    pub fn functions(&self) -> impl Iterator<Item=(FunctionID, &Rc<FunctionDecl>)> + use<'_> {
-        self.functions
+    pub fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)> + use<'_> {
+        self.function_info
             .iter()
             .map(|(id, decl)| (*id, decl))
     }
@@ -445,7 +444,7 @@ impl Metadata {
         // do a linear search for now because we don't want to store a redundant map of names,
         // and a user can always make a hashmap themselves if looking up names this way is too slow.
         // this should probabl
-        self.functions
+        self.function_info
             .iter()
             .find_map(|(id, func)| {
                 let func_name = func.global_name.as_ref()?;
@@ -457,12 +456,12 @@ impl Metadata {
             })
     }
 
-    pub fn get_function(&self, id: FunctionID) -> Option<&Rc<FunctionDecl>> {
-        self.functions.get(&id)
+    pub fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo> {
+        self.function_info.get(&id)
     }
 
     pub fn func_desc(&self, id: FunctionID) -> Option<String> {
-        self.functions
+        self.function_info
             .get(&id)
             .and_then(|decl| decl.global_name.as_ref())
             .map(NamePath::to_string)
@@ -805,7 +804,7 @@ impl IRFormatter for Metadata {
             },
 
             Ref::Global(GlobalRef::Function(id)) => {
-                let func_name = self.get_function(*id).and_then(|f| f.global_name.as_ref());
+                let func_name = self.get_function_info(*id).and_then(|f| f.global_name.as_ref());
 
                 match func_name {
                     Some(name) => write!(f, "{}", name),

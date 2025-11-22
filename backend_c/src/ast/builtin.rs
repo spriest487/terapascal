@@ -76,14 +76,16 @@ pub fn system_funcs() -> Vec<(&'static str, BuiltinName, ir::Type, Vec<ir::Type>
         ("FindFunctionInfo", BuiltinName::FindFuncInfo, funcinfo_ty.clone(), vec![string_ty.clone()]),
         ("GetFunctionInfoCount", BuiltinName::GetFuncInfoCount, ir::Type::I32, vec![]),
         ("GetFunctionInfoByIndex", BuiltinName::GetFuncInfoByIndex, funcinfo_ty.clone(), vec![ir::Type::I32]),
-        ("InvokeMethod", BuiltinName::InvokeMethod, ir::ANY_TYPE, vec![
+        ("InvokeMethod", BuiltinName::InvokeMethod, ir::Type::I32, vec![
             ir::METHODINFO_ID.to_class_ptr_type(),
-            ir::ANY_TYPE,
+            ir::ANY_TYPE.temp_ref(),
             ir::ANY_TYPE.dyn_array(),
+            ir::ANY_TYPE.temp_ref(),
         ]),
-        ("InvokeFunction", BuiltinName::InvokeFunction, ir::ANY_TYPE, vec![
+        ("InvokeFunction", BuiltinName::InvokeFunction, ir::Type::I32, vec![
             ir::FUNCINFO_ID.to_class_ptr_type(),
             ir::ANY_TYPE.dyn_array(),
+            ir::ANY_TYPE.temp_ref(),
         ]),
         ("RandomInteger", BuiltinName::RandomInteger, ir::Type::I32, vec![
             ir::Type::I32,

@@ -1,27 +1,26 @@
-use std::collections::BTreeMap;
+use crate::ir;
 use std::collections::HashMap;
 use std::hash::Hash;
-use crate::ir;
 
 #[derive(Debug)]
 pub struct RttiMap<Key>
 where 
-    Key: Copy + Hash + Ord
+    Key: Clone + Eq + Hash
 {
     items: Vec<ir::GlobalRef>,
     items_by_name: HashMap<String, ir::GlobalRef>,
-    items_by_key: BTreeMap<Key, ir::GlobalRef>,
+    items_by_key: HashMap<Key, ir::GlobalRef>,
 }
 
 impl<Key> RttiMap<Key>
 where
-    Key: Copy + Hash + Ord
+    Key: Clone + Eq + Hash
 {
     pub fn new() -> Self {
         Self {
             items: Vec::new(),
             items_by_name: Default::default(),
-            items_by_key: BTreeMap::new(),
+            items_by_key: Default::default(),
         }
     }
     
@@ -41,8 +40,8 @@ where
         self.items_by_name.get(name)
     }
     
-    pub fn find_by_key(&self, key: Key) -> Option<&ir::GlobalRef> {
-        self.items_by_key.get(&key)
+    pub fn find_by_key(&self, key: &Key) -> Option<&ir::GlobalRef> {
+        self.items_by_key.get(key)
     }
 
     pub fn items(&self) -> &[ir::GlobalRef] {

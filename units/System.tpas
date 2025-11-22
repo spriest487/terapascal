@@ -102,7 +102,7 @@ type
         tags: array of Object;
     public
         function Name: String;
-        function Invoke(args: array of Object): Object;
+        function Invoke(args: array of Object): Result[Object, String];
 
         class function LoadedFunctions: array of FunctionInfo;
         class function Find(functionName: String): Option[FunctionInfo];
@@ -127,7 +127,7 @@ type
         function Owner: TypeInfo;
         function Name: String;
 
-        function Invoke(instance: Object; args: array of Object): Object;
+        function Invoke(instance: Object; args: array of Object): Result[Object, String];
 
         function FindTag(tagClass: TypeInfo): Option[Object]; overload;
         function FindTag[TTag]: Option[TTag]; overload;
@@ -251,14 +251,16 @@ implementation
 
 function InvokeMethod(
     method: MethodInfo; 
-    instance: Object; 
+    var instance: Object; 
     args: array of Object;
-): Object; external 'rt';
+    out result: Object;
+): Integer; external 'rt';
 
 function InvokeFunction(
     func: FunctionInfo;
     args: array of Object;
-): Object; external 'rt';
+    out result: Object;
+): Integer; external 'rt';
 
 {$ENDIF}
 
@@ -467,9 +469,16 @@ begin
     self.name
 end;
 
-function FunctionInfo.Invoke(args: array of Object): Object;
-begin    
-    InvokeFunction(self, args);
+function FunctionInfo.Invoke(args: array of Object): Result[Object, String];
+unsafe begin
+    var resultObj: Object := default;
+    var errorCode := InvokeFunction(self, args, resultObj);
+
+    if errorCode = 0 
+        then Result.Ok(resultObj)
+        else if errorCode = 1 
+            then Result.Error('invalid arguments')
+        else Result.Error('internal error')
 end;
 
 function FunctionInfo.Tags: TagCollection;
@@ -533,9 +542,17 @@ begin
     self.owner
 end;
 
-function MethodInfo.Invoke(instance: Object; args: array of Object): Object;
-begin
-    InvokeMethod(self, instance, args);
+function MethodInfo.Invoke(instance: Object; args: array of Object): Result[Object, String];
+unsafe begin
+    var resultObj: Object := default;
+    var errorCode := InvokeMethod(self, instance, args, resultObj);
+
+    if errorCode = 0 then
+        Result.Ok(resultObj)
+    else if errorCode = 1 then
+        Result.Error('invalid arguments')
+    else
+        Result.Error('internal error')
 end;
 
 function TagCollection.Sequence: ArraySequence[Object];

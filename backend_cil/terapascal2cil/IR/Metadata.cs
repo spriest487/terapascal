@@ -20,8 +20,8 @@ public class Metadata {
     [Key("set_aliases")]
     public required OrderedDictionary<SetAliasID, SetAliasDef> SetAliases { get; init; }
 
-    [Key("functions")]
-    public required OrderedDictionary<FunctionID, FunctionDecl> Functions { get; init; }
+    [Key("function_info")]
+    public required OrderedDictionary<FunctionID, FunctionInfo> Functions { get; init; }
 
     [Key("closures")]
     public required SortedDictionary<TypeDefID, List<TypeDefID>> Closures {
@@ -35,8 +35,8 @@ public class Metadata {
         init => field = value!.ToDictionaryNonNull();
     }
 
-    [Key("runtime_types")]
-    public required Dictionary<IType, RuntimeType> RuntimeTypes {
+    [Key("type_info")]
+    public required Dictionary<IType, TypeInfo> TypeInfo {
         get;
         init => field = value!.ToDictionaryNonNull();
     }
@@ -99,7 +99,7 @@ public class Metadata {
 }
 
 [MessagePackObject]
-public class RuntimeType {
+public class TypeInfo {
     [Key("name")]
     public StringID? Name { get; init; }
     
@@ -108,7 +108,7 @@ public class RuntimeType {
     
     [Key("dtor")]
     public FunctionID? Destructor { get; init; }
-    
+
     [Key("methods")]
     public required IReadOnlyList<RuntimeMethod> Methods {
         get;

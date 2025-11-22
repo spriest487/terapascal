@@ -129,7 +129,7 @@ public class FunctionSig : IEquatable<FunctionSig> {
 }
 
 [MessagePackObject]
-public record FunctionDecl {
+public record FunctionInfo {
     [Key("runtime_name")]
     public required StringID? RuntimeName { get; init; }
     

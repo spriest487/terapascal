@@ -243,8 +243,9 @@ pub(super) fn array_create(state: &mut Interpreter) -> ExecResult<()> {
 
 fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
     let method_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(1)))?;
-    let instance_arg = state.load(&ir::LocalID(2).to_ref())?;
+    let instance_arg_ref = load_pointer(state, &ir::Ref::Local(ir::LocalID(2)))?;
     let args_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
+    let result_out = load_pointer(state, &ir::Ref::Local(ir::LocalID(4)))?;
 
     let (method_info_val,_) = state.load_class_object(&method_ptr)?;
 
@@ -257,50 +258,26 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
         .get(method_global_index)
         .ok_or_else(|| ExecError::illegal_state("InvokeMethod called for method with invalid impl pointer"))?
         .clone();
-    
+
     let Some(func_id) = runtime_method.function else {
         return Err(ExecError::illegal_state("InvokeMethod called for abstract method"));
     };
 
-    let type_info_ptr = method_info_val[ir::METHODINFO_OWNER_FIELD]
-        .as_pointer()
-        .ok_or_else(|| {
-            let msg = format!("bad type: expected owner pointer at field {} of method info", ir::METHODINFO_OWNER_FIELD);
-            ExecError::illegal_state(msg)
-        })?;
-
-    let (type_info_val, _) = state.load_class_object(&type_info_ptr)?;
-    let type_name_ptr = type_info_val[ir::TYPEINFO_NAME_FIELD]
-        .as_pointer()
-        .ok_or_else(|| {
-            let msg = format!("bad type: expected string pointer at field {} of type info", ir::TYPEINFO_NAME_FIELD);
-            ExecError::illegal_state(msg)
-        })?;
-
-    let method_name_ptr = method_info_val[ir::METHODINFO_NAME_FIELD]
-        .as_pointer()
-        .ok_or_else(|| {
-            let msg = format!("bad type: expected string pointer at field {} of method info", ir::METHODINFO_NAME_FIELD);
-            ExecError::illegal_state(msg)
-        })?;
-    
-    let result_object = state.runtime_invoke(
+    let (result_code, result_box_ptr) = state.runtime_invoke(
         func_id,
-        Some(instance_arg),
+        instance_arg_ref,
         args_ptr,
-        &runtime_method.params,
-        &runtime_method.result_ty,
-        Some(type_name_ptr),
-        method_name_ptr,
     )?;
     
-    state.store(&ir::RETURN_REF, result_object)?;
+    state.store_indirect(&result_out, DynValue::Pointer(result_box_ptr))?;
+    state.store(&ir::RETURN_REF, DynValue::I32(result_code))?;
     Ok(())
 }
 
 fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
     let func_info_ptr = load_pointer(state, &ir::LocalID(1).to_ref())?;
     let args_array_ptr = load_pointer(state, &ir::LocalID(2).to_ref())?;
+    let result_out = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
 
     let (func_info_val,_) = state.load_class_object(&func_info_ptr)?;
     
@@ -311,26 +288,20 @@ fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
         .addr;
 
     let func_id = ir::FunctionID(impl_val);
-    let func = state.functions[&func_id].clone();
-    
-    let func_name_field_ptr = state.object_field_ptr(&func_info_ptr, ir::FUNCINFO_NAME_FIELD)?;
-    let func_name_ptr = state.load_indirect(&func_name_field_ptr)?
-        .as_pointer()
-        .cloned()
-        .ok_or_else(|| ExecError::illegal_state("name field must be a pointer"))?;
 
     // returns either an object ref or a boxed value
-    let result_object = state.runtime_invoke(
+    let (result_code, result_box_ptr) = state.runtime_invoke(
         func_id,
-        None,
+        Pointer::nil(ir::Type::Nothing),
         args_array_ptr,
-        func.func.param_tys(),
-        func.func.return_ty(),
-        None,
-        &func_name_ptr,
     )?;
-    
-    state.store(&ir::RETURN_REF, result_object)?;
+
+    if result_code != 0 {
+        unimplemented!();
+    }
+
+    state.store_indirect(&result_out, DynValue::Pointer(result_box_ptr))?;
+    state.store(&ir::RETURN_REF, DynValue::I32(result_code))?;
     
     Ok(())
 }
@@ -384,41 +355,39 @@ fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
     let obj_ptr_arg = ir::LocalID(1);
     let obj_ptr = load_pointer(state, &ir::Ref::Local(obj_ptr_arg))?;
     
+    if obj_ptr.is_null() {
+        state.store(&ir::RETURN_REF, DynValue::nil(ir::Type::Nothing))?;
+        return Ok(());
+    }
+    
     let obj_header = state.load_object_header(&obj_ptr)?;
     
-    match &obj_header.id {
-        ObjectID::Class(class_id) => {
-            let type_info_ref = state
-                .get_class_runtime_type_ref(*class_id)
-                .ok_or_else(|| {
-                    let message = format!("missing runtime type info for class struct {class_id}");
-                    ExecError::illegal_state(message)
-                })?;
-
-            let type_info_ptr = state.load(&ir::Ref::Global(type_info_ref))?;
-            state.store(&ir::RETURN_REF, type_info_ptr)?;
-            
-            Ok(())
-        }
-        
-        _ => {
-            let type_name = obj_header.id.to_pretty_name(&state.metadata);
-            let message = format!("missing runtime type info for object type {}", type_name);
-            Err(ExecError::illegal_state(message))
-        }
-    }
+    let type_info_ref =  state.typeinfo_map
+        .find_by_key(&obj_header.id)
+        .ok_or_else(|| {
+            ExecError::illegal_state(format!(
+                "missing type info for object type {}",
+                obj_header.id.to_pretty_name(&state.metadata),
+            ))
+        })?
+        .clone();
+    
+    let type_info_ptr = state.load(&ir::Ref::Global(type_info_ref))?;
+    state.store(&ir::RETURN_REF, type_info_ptr)?;
+    
+    Ok(())
 }
 
 fn find_func_info(state: &mut Interpreter) -> ExecResult<()> {
     let name_arg = state.read_string(&ir::Ref::Local(ir::LocalID(1)))?;
 
     let result = match state.funcinfo_map.find_by_name(&name_arg).cloned() {
-        Some(funcinfo_global) => {
-            state.load(&ir::Ref::Global(funcinfo_global))?
+        Some(func_info_global) => {
+            state.load(&ir::Ref::Global(func_info_global))?
         }
 
         None => {
-            DynValue::nil(ir::FUNCINFO_TYPE)
+            DynValue::nil(ir::Type::Nothing)
         }
     };
 
@@ -647,14 +616,16 @@ pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, ir::Ty
             ir::Type::any().temp_ref(), 
             ir::Type::I32, 
         ]),
-        ("InvokeMethod", invoke_method, ir::Type::any(), vec![
+        ("InvokeMethod", invoke_method, ir::Type::I32, vec![
             ir::METHODINFO_TYPE,
-            ir::Type::any(),
+            ir::Type::any().temp_ref(),
             ir::Type::any().dyn_array(),
+            ir::Type::any().temp_ref(),
         ]),
-        ("InvokeFunction", invoke_func, ir::Type::any(), vec![
+        ("InvokeFunction", invoke_func, ir::Type::I32, vec![
             ir::FUNCINFO_TYPE,
             ir::Type::any().dyn_array(),
+            ir::Type::any().temp_ref(),
         ]),
         
         ("FindTypeInfo", find_type_info, ir::TYPEINFO_TYPE, vec![ir::Type::string_ptr()]),

@@ -308,6 +308,14 @@ impl ObjectID {
         
         Some(*class_id)
     }
+    
+    pub fn to_object_type(&self) -> Type {
+        Type::Object(self.clone())
+    }
+
+    pub fn to_weak_object_type(&self) -> Type {
+        Type::WeakObject(self.clone())
+    }
 }
 
 impl fmt::Display for ObjectID {
