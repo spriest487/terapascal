@@ -59,7 +59,7 @@ pub struct Interpreter {
     diag_worker: Option<DiagnosticWorker>,
 
     // cache of RTTI info by the names/IDs used to look them up from user code
-    typeinfo_map: RttiMap<ObjectID>,
+    typeinfo_map: RttiMap<ir::Type>,
     funcinfo_map: RttiMap<ir::FunctionID>,
 
     // all methods with a corresponding MethodInfo object - the impl pointer of each
@@ -2316,10 +2316,6 @@ impl Interpreter {
     ) -> ExecResult<()> {
         // create runtime type info objects (TypeInfo and MethodInfo)
         for (ty, runtime_type) in lib.metadata.type_info() {
-            if matches!(ty, ir::Type::WeakObject(..)) {
-                continue;
-            }
-            
             let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
 
             let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
@@ -2337,9 +2333,9 @@ impl Interpreter {
                 .and_then(|str_id| self.metadata.get_string(*str_id))
                 .cloned();
 
-            let object_id = ObjectID::try_from_type(ty);
+            // let object_id = ObjectID::try_from_type(ty);
 
-            self.typeinfo_map.add(object_id, runtime_name, typeinfo_ref.clone());
+            self.typeinfo_map.add(Some(ty.clone()), runtime_name, typeinfo_ref.clone());
         }
 
         for (func_id, func_decl) in lib.metadata.functions() {

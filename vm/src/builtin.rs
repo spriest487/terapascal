@@ -359,7 +359,7 @@ fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
     let obj_header = state.load_object_header(&obj_ptr)?;
     
     let type_info_ref =  state.typeinfo_map
-        .find_by_key(&obj_header.id)
+        .find_by_key(&obj_header.id.to_type())
         .ok_or_else(|| {
             ExecError::illegal_state(format!(
                 "missing type info for object type {}",
