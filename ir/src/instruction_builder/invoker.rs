@@ -203,8 +203,10 @@ where
 
     builder.mov(result_code_ref_arg.to_deref(), Value::I32_0);
     builder.jmp(exit_label);
+
     builder.label(exit_error_label);
     builder.mov(result_code_ref_arg.to_deref(), Value::I32_1);
+    builder.mov(RETURN_REF, Value::LiteralNull);
 
     builder.label(exit_label);
 }
