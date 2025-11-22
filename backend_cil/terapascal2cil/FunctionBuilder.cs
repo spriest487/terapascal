@@ -132,8 +132,6 @@ public class FunctionBuilder {
         // implBody.Emit(OpCodes.Tail);
         implBody.Emit(OpCodes.Call, implFuncRef);
         implBody.Emit(OpCodes.Ret);
-
-        implTypeDef.Interfaces.Add(new InterfaceImplementation(ifaceTypeDef));
     }
     
     private void BuildObjectDestroyMethod(TypeDefinition typeDef, IR.TypeDefID id, IR.Library library) {

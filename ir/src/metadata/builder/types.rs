@@ -1,5 +1,4 @@
-use std::rc::Rc;
-use crate::{FunctionID, TypeInfo};
+use crate::FunctionID;
 use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceID;
@@ -12,8 +11,10 @@ use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
 use crate::TypeDefID;
+use crate::TypeInfo;
 use crate::VariantDef;
 use linked_hash_map::Entry;
+use std::rc::Rc;
 
 impl MetadataBuilder {
     pub fn type_info(&self) -> impl Iterator<Item=(&Type, &Rc<TypeInfo>)> {
@@ -213,6 +214,14 @@ impl MetadataBuilder {
                 method_name, iface_id
             ),
         }
+    }
+    
+    pub fn declare_iface_impl(&mut self, iface_id: InterfaceID, self_ty: Type) {
+        let Some(InterfaceDecl::Def(iface_def)) = self.metadata.ifaces.get_mut(&iface_id) else {
+            panic!("declare_iface_impl: interface {iface_id} has not been defined");
+        };
+
+        iface_def.declare_empty_impl(self_ty);
     }
 
     pub fn find_set_def(&self, name: &NamePath) -> Option<(SetAliasID, &SetAliasDef)> {

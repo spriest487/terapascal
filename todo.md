@@ -1,8 +1,3 @@
-# CIL gen
-demos\rtti\DynamicType.tpas
-demos\rtti\MethodTags.tpas
-demos\rtti\TypeMethods.tpas
-
 # array rework
 * C implementation could use variable sized structs instead of 2 allocations per array 
 

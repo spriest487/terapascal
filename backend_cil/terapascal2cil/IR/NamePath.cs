@@ -89,7 +89,7 @@ public sealed class NamePath : IEquatable<NamePath> {
         var result = new StringBuilder();
         result.AppendJoin(".", this.Path);
 
-        if (this.TypeArgs != null) {
+        if (this.TypeArgs is { Count: > 0 }) {
             result.Append('[');
             result.AppendJoin(", ", this.TypeArgs);
             result.Append(']');

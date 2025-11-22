@@ -28,6 +28,10 @@ impl InterfaceDef {
             impls: HashMap::new(),
         }
     }
+    
+    pub fn declare_empty_impl(&mut self, implementor: Type) {
+        self.impls.entry(implementor).or_insert_with(|| InterfaceImpl::new(0));
+    }
 
     pub fn add_impl(&mut self,
         implementor: Type,

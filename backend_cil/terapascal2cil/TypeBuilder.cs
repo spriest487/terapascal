@@ -39,6 +39,9 @@ public class TypeBuilder {
 
     private readonly Dictionary<IR.TypeDefID, FunctionPointerType> funcPointerTypes;
 
+    private readonly Dictionary<IR.TypeDefID, TypeReference> typeDefTypeRefs;
+    private readonly Dictionary<IR.InterfaceID, TypeReference> interfaceTypeRefs;
+
     private readonly Dictionary<IR.TypeDefID, StructFieldRefs> structFields;
     private readonly Dictionary<IR.TypeDefID, VariantFieldRefs> variantFields;
 
@@ -79,6 +82,9 @@ public class TypeBuilder {
 
         this.structFields = new Dictionary<IR.TypeDefID, StructFieldRefs>();
         this.variantFields = new Dictionary<IR.TypeDefID, VariantFieldRefs>();
+
+        this.typeDefTypeRefs = new Dictionary<IR.TypeDefID, TypeReference>();
+        this.interfaceTypeRefs = new Dictionary<IR.InterfaceID, TypeReference>();
         
         this.interfaceMethods = new Dictionary<(IR.InterfaceID, IR.MethodID), MethodReference>();
 
@@ -233,11 +239,11 @@ public class TypeBuilder {
         return typeDef;
     }
 
-    private static string GetTypeName(IR.TypeDefID id) {
-        return string.Intern($"Struct_{id.ID}");
-    }
-
     private TypeReference CreateStructTypeRef(IR.TypeDefID id, bool isValueType, IR.Library library) {
+        if (this.typeDefTypeRefs.TryGetValue(id, out var typeRef)) {
+            return typeRef;
+        }
+        
         // the 64-bit flags struct is remapped to a plain U64, and any field instructions on it should be
         // updated accordingly during translation
         if (library.Metadata.FindStructDef(id, out var structDef)
@@ -245,21 +251,28 @@ public class TypeBuilder {
             this.Flags64StructID = id;
             return this.assemblyBuilder.TypeSystem.UInt64;
         }
-        
+
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
 
-        return new TypeReference(ns, GetTypeName(id), module, module, isValueType);
-    }
+        typeRef = new TypeReference(ns, $"Struct_{id.ID}", module, module, isValueType);
 
-    private static string GetTypeName(IR.InterfaceID id) {
-        return string.Intern($"IInterface_{id.ID}");
+        this.typeDefTypeRefs.Add(id, typeRef);
+        return typeRef;
     }
 
     private TypeReference BuildInterfaceTypeRef(IR.InterfaceID id) {
+        if (this.interfaceTypeRefs.TryGetValue(id, out var ifaceRef)) {
+            return ifaceRef;
+        }
+        
         var module = this.assemblyBuilder.Module;
         var ns = this.assemblyBuilder.Assembly.Name.Name;
-        return new TypeReference(ns, GetTypeName(id), module, module, valueType: false);
+        
+        ifaceRef = new TypeReference(ns, $"IInterface_{id.ID}", module, module, valueType: false);
+        
+        this.interfaceTypeRefs.Add(id, ifaceRef);
+        return ifaceRef;
     }
 
     private TypeReference BuildClassTypeRef(IR.IObjectID id, IR.Library library) {
@@ -367,6 +380,16 @@ public class TypeBuilder {
             // frontend to add the correct padding bytes and decide the layout
             typeDef.PackingSize = 1;
             typeDef.ClassSize = valueSize;
+        }
+
+        var interfaceImplAsType = structDef.Identity switch {
+            IR.ClassStructIdentity => id.ToObjectType(),
+            IR.RecordStructIdentity => id.ToStructType(),
+            _ => null,
+        };
+
+        if (interfaceImplAsType != null) {
+            this.BuildInterfaceImpls(interfaceImplAsType, typeDef, library);
         }
 
         this.assemblyBuilder.Module.Types.Add(typeDef);
@@ -479,7 +502,7 @@ public class TypeBuilder {
     }
 
     public void BuildVariantDef(IR.TypeDefID id, IR.VariantDef def, IR.Library library) {
-        var typeRef = this.CreateStructTypeRef(id, isValueType: false, library);
+        var typeRef = this.CreateStructTypeRef(id, isValueType: true, library);
 
         var typeDef = new TypeDefinition(typeRef.Namespace,
             typeRef.Name,
@@ -532,6 +555,8 @@ public class TypeBuilder {
         // discriminator (pointer sized) + any value members
         typeDef.ClassSize = this.GetVariantLayoutSize(def, library);
         typeDef.PackingSize = 0;
+
+        this.BuildInterfaceImpls(new IR.VariantType(id), typeDef, library);
         
         // this.BuildDefaultConstructor(typeDef);
 
@@ -541,6 +566,19 @@ public class TypeBuilder {
             DiscriminatorFieldRef = discField,
             CaseFieldRefs = caseFieldRefs,
         };
+    }
+
+    private void BuildInterfaceImpls(IR.IType type, TypeDefinition typeDef, IR.Library library) {
+        foreach (var (interfaceID, interfaceDecl) in library.Metadata.Interfaces) {
+            if (interfaceDecl is not IR.DefInterfaceDecl(var interfaceDef)) {
+                continue;
+            }
+
+            if (interfaceDef.Implementations.TryGetValue(type, out _)) {
+                var interfaceTypeRef = this.BuildInterfaceTypeRef(interfaceID);
+                typeDef.Interfaces.Add(new InterfaceImplementation(interfaceTypeRef));
+            }
+        }
     }
 
     private TypeReference BuildBoxTypeRef(IR.IType valueType, IR.Library library) {
@@ -599,7 +637,6 @@ public class TypeBuilder {
 
     public void BuildInterfaceDef(IR.InterfaceID id, IR.InterfaceDef def, IR.Library library) {
         var module = this.assemblyBuilder.Module;
-        var ns = this.assemblyBuilder.Assembly.Name.Name;
 
         const TypeAttributes attrs = TypeAttributes.NotPublic
             | TypeAttributes.Interface
@@ -607,7 +644,9 @@ public class TypeBuilder {
             | TypeAttributes.AutoLayout
             | TypeAttributes.BeforeFieldInit;
 
-        var ifaceDef = new TypeDefinition(ns, GetTypeName(id), attrs);
+        var ifaceTypeRef = this.BuildInterfaceTypeRef(id);
+
+        var ifaceDef = new TypeDefinition(ifaceTypeRef.Namespace, ifaceTypeRef.Name, attrs);
         var ifaceSelfType = new IR.ObjectType(new IR.InterfaceObjectID(id));
 
         for (var methodIndex = 0; methodIndex < def.Methods.Count; methodIndex += 1) {

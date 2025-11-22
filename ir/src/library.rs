@@ -11,7 +11,6 @@ use crate::StructIdentity;
 use crate::Type;
 use crate::TypeDef;
 use crate::VariableID;
-use crate::ObjectID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -119,15 +118,25 @@ impl fmt::Display for Library {
                         writeln!(f)?;
                     }
 
-                    let ty_as_struct = Type::Struct(*id);
-                    let ty_as_class = Type::Object(ObjectID::Class(*id));
-                    let mut iface_impls = self.metadata.impls(&ty_as_struct);
-                    iface_impls.extend(self.metadata.impls(&ty_as_class));
+                    
+                    let impl_self_ty = match def {
+                        TypeDef::Variant(..) => Some(Type::Variant(*id)),
+                        TypeDef::Struct(struct_def) => match &struct_def.identity {
+                            StructIdentity::Record(..) => Some(id.to_struct_type()),
+                            StructIdentity::Class(..) => Some(id.to_class_ptr_type()),
+                            _ => None,
+                        }
+                        TypeDef::Function(..) => None,
+                    };
 
-                    if !iface_impls.is_empty() {
-                        writeln!(f, "  Implements:")?;
-                        for iface_id in iface_impls {
-                            writeln!(f, "    {}", self.metadata.iface_name(iface_id))?;
+                    if let Some(self_ty) = impl_self_ty {
+                        let iface_impls = self.metadata.impls(&self_ty);
+
+                        if !iface_impls.is_empty() {
+                            writeln!(f, "  Implements:")?;
+                            for iface_id in iface_impls {
+                                writeln!(f, "    {}", self.metadata.iface_name(iface_id))?;
+                            }
                         }
                     }
                 },

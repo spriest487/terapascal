@@ -140,7 +140,7 @@ impl Metadata {
             type_decls: LinkedHashMap::new(),
             string_literals: LinkedHashMap::new(),
             ifaces: LinkedHashMap::new(),
-            
+
             variables: BTreeMap::new(),
 
             set_aliases: LinkedHashMap::new(),
@@ -656,9 +656,9 @@ impl Metadata {
     pub fn impls(&self, ty: &Type) -> Vec<InterfaceID> {
         self.ifaces
             .iter()
-            .filter_map(|(id, _decl)| {
-                if self.is_impl(ty, *id) {
-                    Some(*id)
+            .filter_map(|(id, decl)| {
+                if let InterfaceDecl::Def(def) = decl {
+                    def.impls.contains_key(ty).then_some(*id)
                 } else {
                     None
                 }

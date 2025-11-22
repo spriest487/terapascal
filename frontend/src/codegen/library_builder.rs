@@ -804,11 +804,11 @@ impl<'a> LibraryBuilder<'a> {
     // interface methods may not be statically referenced for every type that implements them due to
     // dynamic dispatch, so we need to cover all possible combinations and generate function bodies for
     // every interface method implemented by a class at the end of codegen
-    fn gen_iface_impls(&mut self, self_ty: &typ::Type) {
-        let ifaces = self_ty
+    fn gen_iface_impls(&mut self, src_self_ty: &typ::Type, self_ty: &ir::Type) {
+        let ifaces = src_self_ty
             .implemented_ifaces(&self.src_metadata)
             .unwrap_or_else(|err| {
-                panic!("failed to retrieve implementation list for type {}: {}", self_ty, err)
+                panic!("failed to retrieve implementation list for type {}: {}", src_self_ty, err)
             });
 
         for iface_ty in &ifaces {
@@ -824,15 +824,15 @@ impl<'a> LibraryBuilder<'a> {
             {
                 let method_name = iface_method.func_decl.ident();
 
-                let impl_sig = iface_method.func_decl.sig().with_self(&self_ty);
-                let impl_index = self.find_method_index(&self_ty, &method_name, &impl_sig);
+                let impl_sig = iface_method.func_decl.sig().with_self(&src_self_ty);
+                let impl_index = self.find_method_index(&src_self_ty, &method_name, &impl_sig);
 
                 let virtual_key = VirtualMethodKey {
                     iface_ty: iface_ty.clone(),
                     iface_method_index,
 
                     impl_method: MethodDeclKey {
-                        self_ty: self_ty.clone(),
+                        self_ty: src_self_ty.clone(),
                         method_index: impl_index,
                     },
                 };
@@ -842,6 +842,13 @@ impl<'a> LibraryBuilder<'a> {
                     type_args: None,
                 });
             }
+
+            let iface_name = iface_ty.full_name()
+                .expect("interface types must have names");
+            let iface_id = self.find_iface_decl(iface_name.as_ref())
+                .expect("implemented interface type must already be declared");
+
+            self.metadata_mut().declare_iface_impl(iface_id, self_ty.clone());
         }
     }
 
@@ -1228,7 +1235,7 @@ impl<'a> LibraryBuilder<'a> {
                     gen_dynarray_runtime_type(self, &ty);
                 }
 
-                self.gen_iface_impls(&src_ty);
+                self.gen_iface_impls(&src_ty, &ty);
 
                 self.populate_runtime_type_info(src_ty, ty.clone());
             }

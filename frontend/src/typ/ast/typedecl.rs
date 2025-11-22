@@ -112,7 +112,7 @@ impl SupersClause {
                         })
                     }
 
-                    types.push(implements_ty)
+                    types.push(implements_ty);
                 },
 
                 _ => return Err(TypeError::InvalidBaseType {

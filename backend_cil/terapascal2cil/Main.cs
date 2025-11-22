@@ -3,6 +3,7 @@ using MessagePack;
 using MessagePack.Resolvers;
 using Mono.Cecil;
 using Terapascal.CIL;
+using Terapascal.Runtime;
 using IR = Terapascal.IR;
 
 if (!Args.Parse(args, out var parsedArgs)) {
