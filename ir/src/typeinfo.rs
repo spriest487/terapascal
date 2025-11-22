@@ -65,6 +65,7 @@ impl TypeInfo {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MethodInfo {
     pub name: StringID,
+    pub index: usize,
     
     pub instance_ty: Type,
 

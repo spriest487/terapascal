@@ -123,6 +123,9 @@ public class TypeInfo {
 public class RuntimeMethod {
     [Key("name")]
     public required StringID Name { get; init; }
+    
+    [Key("index")]
+    public required ulong Index { get; init; }
 
     [Key("instance_ty")]
     public required IType InstanceType {

@@ -1330,6 +1330,7 @@ impl<'a> LibraryBuilder<'a> {
 
         ir::MethodInfo {
             function,
+            index: method_index,
             instance_ty,
             name: method_name_id,
             params,

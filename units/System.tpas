@@ -539,7 +539,11 @@ end;
 
 function TypeInfo.Methods: array of MethodInfo;
 begin
-    self.methods
+    // backends are allowed to set this to nil
+    if self.methods is array of MethodInfo methods then 
+        methods
+    else 
+        []
 end;
 
 function TypeInfo.FindMethod(methodName: String): Option[MethodInfo];

@@ -209,6 +209,14 @@ public interface IType {
         _ => null,
     };
 
+    public TypeDefID? GetTypeDefID() => this switch {
+        ObjectType(ClassObjectID(var id)) => id,
+        WeakObjectType(ClassObjectID(var id)) => id,
+        StructType(var id) => id,
+        VariantType(var id) => id,
+        _ => null,
+    };
+
     public ITagLocation? GetTagsLocation() => this switch {
         VariantType(var id) => new TypeDefTagLocation(id),
         StructType(var id) => new TypeDefTagLocation(id),
