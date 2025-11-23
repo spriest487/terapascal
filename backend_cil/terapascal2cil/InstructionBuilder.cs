@@ -338,9 +338,80 @@ public class InstructionBuilder {
                     this.StoreRef(outRef, () => {
                         this.LoadValue(val);
 
-                        if (castToType.IsObjectType()) {
-                            var typeRef = typeBuilder.BuildTypeRef(castToType, this.library);
-                            this.body.Emit(OpCodes.Castclass, typeRef);
+                        switch (castToType) {
+                            case IR.I8Type: {
+                                this.body.Emit(OpCodes.Conv_I1);
+                                break;
+                            }
+                            case IR.BoolType:
+                            case IR.U8Type: {
+                                this.body.Emit(OpCodes.Conv_U1);
+                                break;
+                            }
+                            case IR.I16Type: {
+                                this.body.Emit(OpCodes.Conv_I2);
+                                break;
+                            }
+                            case IR.U16Type: {
+                                this.body.Emit(OpCodes.Conv_U2);
+                                break;
+                            }
+                            case IR.I32Type: {
+                                this.body.Emit(OpCodes.Conv_I4);
+                                break;
+                            }
+                            case IR.U32Type: {
+                                this.body.Emit(OpCodes.Conv_U4);
+                                break;
+                            }
+                            case IR.I64Type: {
+                                this.body.Emit(OpCodes.Conv_I8);
+                                break;
+                            }
+                            case IR.U64Type: {
+                                this.body.Emit(OpCodes.Conv_U8);
+                                break;
+                            }
+                            case IR.TempRefType:
+                            case IR.PointerType:
+                            case IR.ISizeType: {
+                                this.body.Emit(OpCodes.Conv_I);
+                                break;
+                            }
+                            case IR.USizeType: {
+                                this.body.Emit(OpCodes.Conv_U);
+                                break;
+                            }
+
+                            case IR.F32Type: {
+                                this.body.Emit(OpCodes.Conv_R4);
+                                break;
+                            }
+                            case IR.F64Type: {
+                                this.body.Emit(OpCodes.Conv_R8);
+                                break;
+                            }
+
+                            case IR.ObjectType:
+                            case IR.WeakObjectType: {
+                                var typeRef = typeBuilder.BuildTypeRef(castToType, this.library);
+                                this.body.Emit(OpCodes.Castclass, typeRef);
+                                break;
+                            }
+
+                            case IR.NothingType:
+                            case IR.FlagsType:
+                            case IR.FunctionType:
+                            case IR.StructType:
+                            case IR.VariantType:
+                            case IR.ArrayType: {
+                                // no conversion, typechecking should prevent casts like this
+                                break;
+                            }
+                            
+                            default: {
+                                throw new NotImplementedException($"conversion to {castToType.ToPrettyString(this.library.Metadata)}");
+                            }
                         }
                     });
                     break;
