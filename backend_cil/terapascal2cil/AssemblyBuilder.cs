@@ -316,7 +316,7 @@ public class AssemblyBuilder : IDisposable {
         if (count == 0) {
             return;
         }
-            
+
         const FieldAttributes tagFieldAttrs = FieldAttributes.Static | FieldAttributes.Assembly;
         var tagFieldDef = new FieldDefinition(tagLoc.GetUniqueName(), tagFieldAttrs, tagArrayTypeRef);
         this.globalsClass!.Fields.Add(tagFieldDef);
@@ -458,15 +458,13 @@ public class AssemblyBuilder : IDisposable {
             initBody.Emit(OpCodes.Ldsfld, typeInfoFieldRef);
             initBody.Emit(OpCodes.Stfld, methodOwnerField);
 
-            var typeDefID = type.GetTypeDefID();
-            if (typeDefID != null) {
-                var tagLocation = new IR.MethodTagLocation(typeDefID.Value, method.Index);
-
-                if (library.Metadata.TagCounts.TryGetValue(tagLocation, out var methodTagCount)
+            var methodTagsLoc = type.GetTagsLocation()?.MethodLocation(method.Index);
+            if (methodTagsLoc != null) {
+                if (library.Metadata.TagCounts.TryGetValue(methodTagsLoc, out var methodTagCount)
                     && methodTagCount > 0
                 ) {
                     initBody.Emit(OpCodes.Dup);
-                    initBody.Emit(OpCodes.Ldsfld, this.GetStaticTagArrayFieldRef(tagLocation));
+                    initBody.Emit(OpCodes.Ldsfld, this.GetStaticTagArrayFieldRef(methodTagsLoc));
                     initBody.Emit(OpCodes.Stfld, methodTagsField);
                 }
             }
