@@ -550,22 +550,42 @@ impl Type {
         }
     }
 
-    pub fn is_strong_rc_reference(&self) -> bool {
+    pub fn is_strong_object_ref(&self) -> bool {
         match self {
             Type::Class(..) => true,
             Type::Interface(..) => true,
+            Type::Box(..) => true,
+            Type::Function(..) => true,
             Type::Any => true,
             Type::DynArray { .. } => true,
-            Type::Function(..) => true,
 
             _ => false,
         }
     }
 
+    pub fn is_weak_object_ref(&self) -> bool {
+        match self {
+            Type::Weak(..) => true,
+
+            _ => false,
+        }
+    }
+    
+    pub fn is_any_object_ref(&self) -> bool {
+        self.is_strong_object_ref() || self.is_weak_object_ref()
+    }
+
     /// Is this a value pointer type, not including primitive pointer types and RC pointers?
-    pub fn is_pointer(&self) -> bool {
+    pub fn is_typed_pointer(&self) -> bool {
         match self {
             Type::Pointer(..) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_raw_pointer(&self) -> bool {
+        match self {
+            Type::Primitive(Primitive::Pointer) => true,
             _ => false,
         }
     }
@@ -637,6 +657,11 @@ impl Type {
     pub fn equatable(&self, other: &Self) -> bool {
         match (self, other) {
             (a, b) if a == b => a.self_equatable(),
+
+            // raw and non-raw pointers can be compared without using unsafe
+            (Type::Primitive(Primitive::Pointer), Type::Pointer(..))
+            | (Type::Pointer(..), Type::Primitive(Primitive::Pointer)) => true,
+
             _ => false,
         }
     }
@@ -1557,7 +1582,7 @@ pub fn typecheck_typename(ty: &ast::TypeName, ctx: &mut Context) -> TypeResult<T
         ast::TypeName::Weak(weak_type) => {
             let weak_type_name = typecheck_typename(&weak_type.type_name, ctx)?;
 
-            if !weak_type_name.is_strong_rc_reference() {
+            if !weak_type_name.is_strong_object_ref() {
                 return Err(TypeError::InvalidWeakType {
                     ty: weak_type_name.ty().clone(),
                     span: ty.get_span().unwrap_or(&weak_type.span).clone(),

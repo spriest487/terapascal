@@ -345,7 +345,7 @@ pub fn translate_unary_op(
                 
                 element_ref.to_deref()
             } else {
-                if !operand_type.is_pointer() {
+                if !operand_type.is_typed_pointer() {
                     panic!("operand of deref operator must be a pointer, was {operand_type} @ {}", unary_op.span());
                 }
                 

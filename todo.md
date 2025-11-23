@@ -1,13 +1,14 @@
+# refcounting cleanup pass
+* +/- entering and exiting most functions is redundant, remove them all and clean up handwritten IR
+* box contents aren't refcounted properly, backends needs to deep release structures
+  * can we generate destructors?
+
 # array rework
 * C implementation could use variable sized structs instead of 2 allocations per array 
 
 # RTTI
-* remove RTTI for class inner types
 * more detailed type kind info
 * type/method unit name info
-* can Invokers in the C backend store an arg count for validation
-* box contents aren't refcounted properly, backends needs to deep release structures
-  * maybe some IR gen helpers?
 
 # IR
 * remove forward types from metadata

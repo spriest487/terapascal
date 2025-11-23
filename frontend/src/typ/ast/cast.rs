@@ -49,60 +49,45 @@ pub fn check_implicit_conversion(
     span: &Span,
     ctx: &Context,
 ) -> TypeResult<()> {
+    use Conversion::*;
+
     if *to == *from {
         return Ok(());
     }
 
     let conversion = match to {
-        Type::Primitive(primitive_ty) => match primitive_ty {
-            Primitive::Pointer if from.is_strong_rc_reference() => Conversion::UnsafeBlittable,
-            Primitive::Pointer if from.is_pointer() => Conversion::UnsafeBlittable,
+        Type::Primitive(Primitive::Pointer) if from.is_any_object_ref() => UnsafeBlittable, 
+        to_object if to_object.is_any_object_ref() && from.is_raw_pointer() => UnsafeBlittable,
+        
+        Type::Primitive(Primitive::Pointer) if from.is_typed_pointer() => Blittable,
+        Type::Pointer(..) if from.is_raw_pointer() => Blittable,
 
-            _ => Conversion::Illegal,
-        },
+        Type::Weak(weak_ty) if weak_ty.as_ref() == from => Blittable,
 
-        Type::Pointer(..) | Type::Class(..) | Type::Interface(..) | Type::DynArray { .. }
-            if *from == Type::Primitive(Primitive::Pointer) =>
-        {
-            Conversion::UnsafeBlittable
-        },
-
-        Type::Pointer(_) if *to == *from => Conversion::Blittable,
-
-        Type::Weak(weak_ty) if weak_ty.as_ref() == from => Conversion::Blittable,
-
-        Type::Interface(..) if from.is_strong_rc_reference() => {
+        Type::Interface(..) if from.is_strong_object_ref() => {
             if ctx.is_implementation_at(from, to, span)? {
-                Conversion::Blittable
+                Blittable
             } else {
-                Conversion::Illegal
+                Illegal
             }
         },
 
-        Type::Any => match from {
-            Type::DynArray { .. } 
-            | Type::Class(..) 
-            | Type::Interface(..) 
-            | Type::Box(..) 
-            | Type::Function(..) => Conversion::Blittable,
-            
-            _ => Conversion::Illegal,
-        },
+        Type::Any if from.is_any_object_ref() => Blittable,
 
-        _ => Conversion::Illegal,
+        _ => Illegal,
     };
 
     match conversion {
-        Conversion::Blittable => Ok(()),
-        Conversion::UnsafeBlittable if ctx.allow_unsafe() => Ok(()),
+        Blittable => Ok(()),
+        UnsafeBlittable if ctx.allow_unsafe() => Ok(()),
 
-        Conversion::UnsafeBlittable => Err(TypeError::UnsafeConversionNotAllowed {
+        UnsafeBlittable => Err(TypeError::UnsafeConversionNotAllowed {
             from: from.clone(),
             to: to.clone(),
             span: span.clone(),
         }),
 
-        Conversion::Illegal => Err(TypeError::type_mismatch(
+        Illegal => Err(TypeError::type_mismatch(
             to.clone(),
             from.clone(),
             span.clone(),

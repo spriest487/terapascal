@@ -1,0 +1,10 @@
+program NilCompare;
+begin
+    var a := 1;
+
+    var pA := @a;
+    var pA2 := pA as Pointer;
+
+    if pA = nil then raise 'it shouldn''t be';
+    if pA2 = nil then raise 'it shouldn''t be';
+end.

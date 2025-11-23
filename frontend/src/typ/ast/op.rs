@@ -4,13 +4,14 @@ mod test;
 mod variant_case;
 
 use crate::ast;
-use crate::ast::{Ident, IncompleteExpr};
+use crate::ast::Ident;
 use crate::ast::IdentPath;
+use crate::ast::IncompleteExpr;
 use crate::ast::Literal;
 use crate::ast::Operator;
 use crate::ast::SemanticHint;
 use crate::typ::annotation::UfcsValue;
-use crate::typ::ast::{collection_ctor_elements};
+use crate::typ::ast::collection_ctor_elements;
 use crate::typ::ast::const_eval_integer;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
@@ -23,6 +24,7 @@ use crate::typ::ast::OverloadCandidate;
 use crate::typ::ast::SetDecl;
 use crate::typ::builtin_displayable_name;
 use crate::typ::builtin_string_name;
+use crate::typ::completion::CompletionContext;
 use crate::typ::function::FunctionValue;
 use crate::typ::method::MethodValue;
 use crate::typ::overload::OverloadValue;
@@ -49,7 +51,6 @@ use crate::IntConstant;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use crate::typ::completion::CompletionContext;
 
 pub type BinOp = ast::BinOp<Value>;
 

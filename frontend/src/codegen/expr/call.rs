@@ -25,7 +25,7 @@ fn translate_args(
         // turned into a pointer to the type, so we need to pass it by its address here
         let is_value_type_method_self_arg = arg_index == 0 
             && is_instance_method 
-            && !sig.params[0].ty.is_strong_rc_reference();
+            && !sig.params[0].ty.is_strong_object_ref();
 
         let arg_expr = if is_value_type_method_self_arg || param.is_by_ref() {
             let arg_ty = builder.translate_type(&arg.annotation().ty());
