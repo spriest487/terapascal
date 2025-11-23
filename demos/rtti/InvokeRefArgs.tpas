@@ -2,11 +2,11 @@ unit InvokeRefArgs;
 
 interface
 
-function Func1(var i: Integer; out b: Boolean);
+function Func1(var i: Integer; out b: Boolean); published;
 
 implementation
 
-function Func1(var i: Integer; out b: Boolean);
+function Func1(var i: Integer; out b: Boolean); published;
 begin
     b := i = 1;
     i := 9;
@@ -24,7 +24,7 @@ initialization
     var b: box of Boolean := [false];
 
     var args: array of Object := [i, b];
-    func1Info.Invoke(args);
+    func1Info.Invoke(args).Get;
     
     // invoking the function shouldn't modify the original boxes - it should replace them in the
     // args array with new boxes containing the updated values
