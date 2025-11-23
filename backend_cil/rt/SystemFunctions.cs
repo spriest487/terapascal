@@ -244,32 +244,32 @@ public static class SystemFunctions {
     }
 
     public static unsafe object? InvokeMethod(
-        MethodInfo? method,
+        MethodInfo? methodInfo,
         ref object? instance,
         object[]? args,
         ref int errorCode
     ) {
-        if (method?.impl == null) {
+        if (methodInfo?.impl == null || methodInfo.impl.invoker == null) {
             errorCode = 2;
             return null;
         }
 
-        var invoker = (InvokeFunc)method.impl.invoker;
+        var invoker = (InvokeFunc)methodInfo.impl.invoker;
 
         return invoker(ref instance, args, ref errorCode);
     }
 
     public static unsafe object? InvokeFunction(
-        FunctionInfo? method,
+        FunctionInfo? functionInfo,
         object[]? args,
         ref int errorCode
     ) {
-        if (method?.impl == null) {
+        if (functionInfo?.impl == null || functionInfo.impl.invoker == null) {
             errorCode = 2;
             return null;
         }
 
-        var invoker = (InvokeFunc)method.impl.invoker;
+        var invoker = (InvokeFunc)functionInfo.impl.invoker;
 
         object? self = null;
         return invoker(ref self, args, ref errorCode);
