@@ -47,15 +47,19 @@ public static class SystemFunctions {
     }
 
     public static unsafe void WriteLn(String message) {
-        var messageBytes = new Span<byte>(message.chars, message.len);
-        Console.OpenStandardOutput().Write(messageBytes);
+        var stdout = Console.OpenStandardOutput();
+        for (var i = 0; i < message.len; i += 1) {
+            stdout.WriteByte(message.chars[i]);
+        }
         Console.Out.Write(Environment.NewLine);
         Console.Out.Flush();
     }
 
     public static unsafe void Write(String message) {
-        var messageBytes = new Span<byte>(message.chars, message.len);
-        Console.OpenStandardOutput().Write(messageBytes);
+        var stdout = Console.OpenStandardOutput();
+        for (var i = 0; i < message.len; i += 1) {
+            stdout.WriteByte(message.chars[i]);
+        }
     }
 
     public static String Int8ToStr(sbyte i) {
