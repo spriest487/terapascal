@@ -5,7 +5,6 @@ use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -89,7 +88,7 @@ impl StructDef {
         self
     }
 
-    pub fn with_fields(mut self, fields: HashMap<FieldID, StructFieldDef>) -> Self {
+    pub fn with_fields(mut self, fields: BTreeMap<FieldID, StructFieldDef>) -> Self {
         self.fields.extend(fields);
         self
     }

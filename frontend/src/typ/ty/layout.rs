@@ -9,13 +9,15 @@ use crate::typ::NameResult;
 use crate::typ::Primitive;
 use crate::typ::Type;
 use crate::typ::Value;
-use std::mem::size_of;
 
-const WORD_SIZE: usize = size_of::<usize>();
+// this is hardcoded regardless of target arch 
+// to allow for 32-bit or 64-bit words in the same layout. this could possibly
+// be configurable via the -a command line option for native targets
+const TARGET_WORD_SIZE: usize = 8;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum StructLayout {
-    Auto,
+    Aligned,
     Packed,
 }
 
@@ -24,7 +26,7 @@ impl StructLayout {
         let align = match self {
             StructLayout::Packed => 1,
 
-            StructLayout::Auto => match ty {
+            StructLayout::Aligned => match ty {
                 Type::Nothing
                 | Type::Pointer(..)
                 | Type::Function(..)
@@ -97,7 +99,7 @@ impl StructLayout {
             | Type::Interface(..)
             | Type::Any
             | Type::Enum(..) // TODO: enums may be variable size later depending on their range?
-            | Type::Class(..) => WORD_SIZE,
+            | Type::Class(..) => TARGET_WORD_SIZE,
 
             Type::Array(array_ty) => self.size_of(&array_ty.element_ty, ctx)? * array_ty.dim,
 
@@ -106,7 +108,7 @@ impl StructLayout {
                 Primitive::Int16 | Primitive::UInt16 => 2,
                 Primitive::Int32 | Primitive::UInt32 | Primitive::Real32 => 4,
                 Primitive::Int64 | Primitive::UInt64 => 8,
-                Primitive::NativeInt | Primitive::NativeUInt | Primitive::Pointer => WORD_SIZE,
+                Primitive::NativeInt | Primitive::NativeUInt | Primitive::Pointer => TARGET_WORD_SIZE,
             },
             
             Type::Weak(weak_ty) => {
@@ -170,8 +172,8 @@ impl StructLayout {
             StructKind::Class => {
                 // class structs start with the RC state object which consists of the class pointer and
                 // the two ref count values (both I32), which affects their initial offset and alignment requirement
-                let max_align = WORD_SIZE;
-                let offset = WORD_SIZE + 8;
+                let max_align = TARGET_WORD_SIZE;
+                let offset = TARGET_WORD_SIZE + 8;
                 (offset, max_align)
             },
             _ => (0, 1),

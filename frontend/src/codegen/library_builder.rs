@@ -1343,7 +1343,7 @@ impl<'a> LibraryBuilder<'a> {
         let layout = if struct_def.packed {
             StructLayout::Packed
         } else {
-            StructLayout::Auto
+            StructLayout::Aligned
         };
 
         layout.members_of(&struct_def, &self.src_metadata).unwrap()
