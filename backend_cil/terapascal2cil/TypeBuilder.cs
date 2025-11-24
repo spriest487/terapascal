@@ -94,11 +94,11 @@ public class TypeBuilder {
         this.TypeType = this.ImportCoreReference(typeof(Type));
         this.MethodInfoType = this.ImportCoreReference(typeof(MethodInfo));
 
-        var typeTypeDef = this.TypeType.Resolve();
+        var typeTypeDef = this.ResolveCore(this.TypeType)!;
         this.GetTypeFromHandleMethod = this.ImportCoreReference(typeTypeDef.GetAllMethods()
             .Single(m => m.Name == nameof(Type.GetTypeFromHandle) && m.Parameters.Count == 1));
 
-        var methodInfoTypeDef = this.MethodInfoType.Resolve();
+        var methodInfoTypeDef = this.ResolveCore(this.MethodInfoType)!;
         this.GetMethodFromHandleMethod = this.ImportCoreReference(methodInfoTypeDef.GetAllMethods()
             .Single(m => m.Name == nameof(MethodInfo.GetMethodFromHandle) && m.Parameters.Count == 1));
 
