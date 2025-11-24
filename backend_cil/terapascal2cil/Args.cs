@@ -18,7 +18,10 @@ public record Args {
 
     [Option("verbose", Default = false, Required = false)]
     public bool Verbose { get; init; }
-    
+
+    [Option("sdk-version", Default = null, Required = false)]
+    public string? SDKVersion { get; init; }
+
     [Value(0, Required = false)]
     public string? LibPath { get; init; }
 

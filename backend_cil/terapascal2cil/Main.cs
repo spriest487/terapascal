@@ -3,7 +3,6 @@ using MessagePack;
 using MessagePack.Resolvers;
 using Mono.Cecil;
 using Terapascal.CIL;
-using Terapascal.Runtime;
 using IR = Terapascal.IR;
 
 if (!Args.Parse(args, out var parsedArgs)) {
@@ -32,7 +31,7 @@ if (parsedArgs.Verbose) {
     Console.WriteLine($"generating assembly: {assemblyName} {assemblyVersion} ({moduleKind})");
 }
 
-var refLibPath = SDKUtils.FindReferenceLibPath(null);
+var refLibPath = await SDKUtils.FindReferenceLibPath(parsedArgs.SDKVersion, parsedArgs.Verbose);
 
 using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
     assemblyVersion,
