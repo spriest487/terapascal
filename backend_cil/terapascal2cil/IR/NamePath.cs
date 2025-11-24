@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using MessagePack;
 
 namespace Terapascal.IR;
@@ -23,6 +24,13 @@ public sealed class NamePath : IEquatable<NamePath> {
         init => field = value!.ToArrayNonNull();
     }
 
+    [IgnoreMember]
+    [MemberNotNullWhen(true, nameof(TypeArgs))]
+    public bool HasTypeArgs => this.TypeArgs is { Count: > 0 };
+
+    [IgnoreMember]
+    public string Last => this.Path[^1];
+
     public bool Equals(NamePath? other) {
         if (other == null) {
             return false;
@@ -45,7 +53,7 @@ public sealed class NamePath : IEquatable<NamePath> {
             hashCode ^= part.GetHashCode();
         }
 
-        if (this.TypeArgs != null) {
+        if (this.HasTypeArgs) {
             foreach (var type in this.TypeArgs) {
                 hashCode ^= type.GetHashCode();
             }
@@ -109,5 +117,15 @@ public sealed class NamePath : IEquatable<NamePath> {
         }
 
         return result.ToString();
+    }
+
+    public string ToTypeName(out string ns) {
+        if (this.Path.Count > 1) {
+            ns = string.Join('.', this.Path.Take(this.Path.Count - 1));
+        } else {
+            ns = "";
+        }
+
+        return this.Last;
     }
 }

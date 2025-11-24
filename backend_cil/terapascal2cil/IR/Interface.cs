@@ -1,11 +1,24 @@
-﻿using MessagePack;
+﻿using System.Runtime.CompilerServices;
+using MessagePack;
 using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
-public interface IInterfaceDecl;
-public record ForwardInterfaceDecl(NamePath Name) : IInterfaceDecl;
-public record DefInterfaceDecl(InterfaceDef Def) : IInterfaceDecl;
+public interface IInterfaceDecl {
+    NamePath GetGlobalName();
+}
+
+public record ForwardInterfaceDecl(NamePath Name) : IInterfaceDecl {
+    public NamePath GetGlobalName() {
+        return this.Name;
+    }
+}
+
+public record DefInterfaceDecl(InterfaceDef Def) : IInterfaceDecl {
+    public NamePath GetGlobalName() {
+        return this.Def.Name;
+    }
+}
 
 [MessagePackObject]
 public record InterfaceDef {

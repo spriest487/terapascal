@@ -223,6 +223,15 @@ public class TypeBuilder {
             });
     }
 
+    private string CreateUniqueTypeName(IR.NamePath globalName, ulong id, out string ns) {
+        var name = globalName.ToTypeName(out ns);
+        if (globalName.HasTypeArgs) {
+            name += $"_<{id}>";
+        }
+
+        return name;
+    }
+
     private TypeReference BuildArrayTypeRef(IR.IType element, ulong length, IR.Library library) {
         var arraySig = new ArraySig(element, length);
 
@@ -238,38 +247,94 @@ public class TypeBuilder {
 
         return typeDef;
     }
+    
+    private TypeReference CreateVariantTypeRef(IR.TypeDefID id, IR.Library library) {
+        if (this.typeDefTypeRefs.TryGetValue(id, out var typeRef)) {
+            return typeRef;
+        }
+
+        string name;
+        string ns;
+        if (library.Metadata.FindVariantDef(id, out var def)) {
+            name = this.CreateUniqueTypeName(def.Name, id.ID, out ns);
+        } else {
+            name = $"Variant_{id.ID}";
+            ns = this.assemblyBuilder.Assembly.Name.Name;
+        }
+
+        var module = this.assemblyBuilder.Module;
+
+        typeRef = new TypeReference(ns, name, module, module, valueType: true);
+
+        this.typeDefTypeRefs.Add(id, typeRef);
+        return typeRef;
+    }
 
     private TypeReference CreateStructTypeRef(IR.TypeDefID id, bool isValueType, IR.Library library) {
         if (this.typeDefTypeRefs.TryGetValue(id, out var typeRef)) {
             return typeRef;
         }
         
-        // the 64-bit flags struct is remapped to a plain U64, and any field instructions on it should be
-        // updated accordingly during translation
-        if (library.Metadata.FindStructDef(id, out var structDef)
-            && structDef.Identity is IR.SetFlagsStructIdentity { Bits: 64 }) {
-            this.Flags64StructID = id;
-            return this.assemblyBuilder.TypeSystem.UInt64;
+        string name;
+        string ns;
+
+        var identity = library.Metadata.FindStructDef(id, out var structDef) ? structDef.Identity : null; 
+        
+        switch (identity) {
+            case IR.ArrayStructIdentity(var element, var size): {
+                return this.BuildArrayTypeRef(element, size, library);
+            }
+
+            // the 64-bit flags struct is remapped to a plain U64, and any field instructions on it should be
+            // updated accordingly during translation
+            case IR.SetFlagsStructIdentity { Bits: 64 }: {
+                this.Flags64StructID = id;
+                return this.assemblyBuilder.TypeSystem.UInt64;
+            }
+
+            case IR.ClassStructIdentity(var className): {
+                name = this.CreateUniqueTypeName(className, id.ID, out ns);
+                break;
+            }
+            
+            case IR.RecordStructIdentity(var recordName): {
+                name = this.CreateUniqueTypeName(recordName, id.ID, out ns);
+                break;
+            }
+
+            default: {
+                name = $"Struct_{id.ID}";
+                ns = this.assemblyBuilder.Assembly.Name.Name;
+                break;
+            }
         }
 
         var module = this.assemblyBuilder.Module;
-        var ns = this.assemblyBuilder.Assembly.Name.Name;
 
-        typeRef = new TypeReference(ns, $"Struct_{id.ID}", module, module, isValueType);
+        typeRef = new TypeReference(ns, name, module, module, isValueType);
 
         this.typeDefTypeRefs.Add(id, typeRef);
         return typeRef;
     }
 
-    private TypeReference BuildInterfaceTypeRef(IR.InterfaceID id) {
+    private TypeReference BuildInterfaceTypeRef(IR.InterfaceID id, IR.Library library) {
         if (this.interfaceTypeRefs.TryGetValue(id, out var ifaceRef)) {
             return ifaceRef;
         }
+
+        string name;
+        string ns;
+
+        if (library.Metadata.Interfaces.TryGetValue(id, out var decl)) {
+            name = this.CreateUniqueTypeName(decl.GetGlobalName(), id.ID, out ns);
+        } else {
+            ns = this.assemblyBuilder.Assembly.Name.Name;
+            name = $"IInterface_{id.ID}";
+        }
         
         var module = this.assemblyBuilder.Module;
-        var ns = this.assemblyBuilder.Assembly.Name.Name;
         
-        ifaceRef = new TypeReference(ns, $"IInterface_{id.ID}", module, module, valueType: false);
+        ifaceRef = new TypeReference(ns, name, module, module, valueType: false);
         
         this.interfaceTypeRefs.Add(id, ifaceRef);
         return ifaceRef;
@@ -280,7 +345,7 @@ public class TypeBuilder {
             IR.AnyObjectID => this.assemblyBuilder.Module.TypeSystem.Object,
             // in this backend, struct refs are automatically reference types if they're a class
             IR.ClassObjectID(var classID) => this.CreateStructTypeRef(classID, false, library),
-            IR.InterfaceObjectID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID),
+            IR.InterfaceObjectID(var interfaceID) => this.BuildInterfaceTypeRef(interfaceID, library),
             IR.ClosureObjectID => this.ClosureBaseType,
             IR.ArrayObjectID(var arrayElement) => this.BuildTypeRef(arrayElement, library).MakeArrayType(),
             IR.BoxObjectID(var boxValue) => this.BuildBoxTypeRef(boxValue, library),
@@ -294,10 +359,6 @@ public class TypeBuilder {
         }
 
         return typeRef;
-    }
-
-    private static string GetFieldName(IR.FieldID id) {
-        return string.Intern($"Field_{id.ID}");
     }
 
     public void BuildStructDef(IR.TypeDefID id, IR.StructDef structDef, IR.Library library) {
@@ -344,9 +405,9 @@ public class TypeBuilder {
         var fieldRefs = new Dictionary<IR.FieldID, FieldReference>();
 
         var valueSize = 0;
-        
+
         foreach (var (fieldID, structFieldDef) in structDef.Fields) {
-            var fieldName = GetFieldName(fieldID);
+            var fieldName = structFieldDef.Name ?? $"Field_{id.ID}";
 
             if (isClosure && fieldID.Equals(IR.FieldID.ClosurePointerField)) {
                 // the actual pointer field is declared as an IntPtr in the base class
@@ -502,7 +563,7 @@ public class TypeBuilder {
     }
 
     public void BuildVariantDef(IR.TypeDefID id, IR.VariantDef def, IR.Library library) {
-        var typeRef = this.CreateStructTypeRef(id, isValueType: true, library);
+        var typeRef = this.CreateVariantTypeRef(id, library);
 
         var typeDef = new TypeDefinition(typeRef.Namespace,
             typeRef.Name,
@@ -543,8 +604,7 @@ public class TypeBuilder {
                 continue;
             }
 
-            var dataFieldName = $"Case_{i}";
-            var dataField = new FieldDefinition(dataFieldName, FieldAttributes.Assembly, dataTypeRef) {
+            var dataField = new FieldDefinition(def.Cases[i].Name, FieldAttributes.Assembly, dataTypeRef) {
                 Offset = dataTypeRef.IsValueType ? valueDataOffset : PointerSize,
             };
 
@@ -575,7 +635,7 @@ public class TypeBuilder {
             }
 
             if (interfaceDef.Implementations.TryGetValue(type, out _)) {
-                var interfaceTypeRef = this.BuildInterfaceTypeRef(interfaceID);
+                var interfaceTypeRef = this.BuildInterfaceTypeRef(interfaceID, library);
                 typeDef.Interfaces.Add(new InterfaceImplementation(interfaceTypeRef));
             }
         }
@@ -631,10 +691,6 @@ public class TypeBuilder {
         this.funcPointerTypes.Add(id, pointerType);
     }
 
-    public FunctionPointerType GetFunctionPointerType(IR.TypeDefID id) {
-        return this.funcPointerTypes[id];
-    }
-
     public void BuildInterfaceDef(IR.InterfaceID id, IR.InterfaceDef def, IR.Library library) {
         var module = this.assemblyBuilder.Module;
 
@@ -644,7 +700,7 @@ public class TypeBuilder {
             | TypeAttributes.AutoLayout
             | TypeAttributes.BeforeFieldInit;
 
-        var ifaceTypeRef = this.BuildInterfaceTypeRef(id);
+        var ifaceTypeRef = this.BuildInterfaceTypeRef(id, library);
 
         var ifaceDef = new TypeDefinition(ifaceTypeRef.Namespace, ifaceTypeRef.Name, attrs);
         var ifaceSelfType = new IR.ObjectType(new IR.InterfaceObjectID(id));

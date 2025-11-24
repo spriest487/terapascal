@@ -18,7 +18,7 @@ public class Metadata {
     public required OrderedDictionary<VariableID, IType> Variables { get; init; }
 
     [Key("function_info")]
-    public required OrderedDictionary<FunctionID, FunctionInfo> Functions { get; init; }
+    public required OrderedDictionary<FunctionID, FunctionInfo> FunctionInfo { get; init; }
 
     [Key("closures")]
     public required SortedDictionary<TypeDefID, List<TypeDefID>> Closures {

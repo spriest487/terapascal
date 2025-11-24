@@ -224,9 +224,18 @@ public class FunctionBuilder {
     private MethodDefinition CreateFunctionMethod(IR.FunctionID id, IR.FunctionSig sig, IR.Library library) {
         const MethodAttributes attrs = MethodAttributes.Static | MethodAttributes.Assembly;
 
-        var typeDef = this.assemblyBuilder.GetGlobalsClass();
+        var namePath = library.Metadata.FunctionInfo.TryGetValue(id, out var funcInfo) ? funcInfo.GlobalName : null;
 
-        var methodDef = this.CreateMethodWithSig(FunctionMethodName(id), attrs, sig, library);
+        TypeDefinition typeDef;
+        if (namePath?.GetParent() is { } unitPath) {
+            typeDef = this.assemblyBuilder.GetUnitClass(unitPath);
+        } else {
+            typeDef = this.assemblyBuilder.GetInternalClass();
+        }
+
+        var name = namePath is { HasTypeArgs: false } ? namePath.Last : FunctionMethodName(id);
+
+        var methodDef = this.CreateMethodWithSig(name, attrs, sig, library);
 
         typeDef.Methods.Add(methodDef);
 

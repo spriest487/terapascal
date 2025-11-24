@@ -8,25 +8,12 @@ using TypeAttributes = Mono.Cecil.TypeAttributes;
 namespace Terapascal.CIL;
 
 public class AssemblyBuilder : IDisposable {
-    public const string GlobalsClassName = "Globals";
-
-    public AssemblyDefinition StandardLibrary { get; }
-    public AssemblyDefinition RuntimeLibrary { get; }
-    public AssemblyDefinition Assembly { get; }
-    
-    public TypeBuilder TypeBuilder { get; }
-    public FunctionBuilder FunctionBuilder { get; }
-
     private readonly List<IR.Library> libraries;
-
-    public ModuleDefinition Module => this.Assembly.MainModule;
-    public TypeSystem TypeSystem => this.Assembly.MainModule.TypeSystem;
-
     private TypeDefinition? globalsClass;
     private TypeDefinition? systemFuncsClass;
 
-    private MethodReference rttiAddTypeMethod;
-    private MethodReference rttiAddFuncMethod;
+    private readonly MethodReference rttiAddTypeMethod;
+    private readonly MethodReference rttiAddFuncMethod;
 
     private readonly Dictionary<IR.StringID, FieldDefinition> stringLitFields;
     private readonly Dictionary<IR.VariableID, FieldDefinition> globalVarFields;
@@ -39,6 +26,20 @@ public class AssemblyBuilder : IDisposable {
     private readonly Dictionary<IR.ITagLocation, FieldDefinition> tagArrayFields;
 
     private readonly List<MethodDefinition> initMethods;
+
+    private MethodDefinition? mainMethod;
+
+    public AssemblyDefinition StandardLibrary { get; }
+    public AssemblyDefinition RuntimeLibrary { get; }
+    public AssemblyDefinition Assembly { get; }
+    
+    public TypeBuilder TypeBuilder { get; }
+    public FunctionBuilder FunctionBuilder { get; }
+
+    public ModuleDefinition Module => this.Assembly.MainModule;
+    public TypeSystem TypeSystem => this.Assembly.MainModule.TypeSystem;
+
+    private bool IsExecutable => this.Module.Kind is ModuleKind.Console or ModuleKind.Windows;
 
     public AssemblyBuilder(
         string assemblyName,
@@ -90,63 +91,81 @@ public class AssemblyBuilder : IDisposable {
         this.StandardLibrary.Dispose();
     }
 
-    public TypeDefinition GetGlobalsClass() {
+    public TypeDefinition GetInternalClass() {
         if (this.globalsClass != null) {
             return this.globalsClass;
         }
 
-        var ns = this.Assembly.Name.Name;
+        this.globalsClass = this.CreateClass(this.Assembly.Name.Name,$"{this.Assembly.Name.Name}_<Internal>");
+        return this.globalsClass;
+    }
 
+    public TypeDefinition GetUnitClass(IR.NamePath unitPath) {
+        var ns = unitPath.GetParent() is { } parentPath ? parentPath.ToString() : "";
+        var name = unitPath.Last;
+
+        foreach (var typeDef in this.Module.Types) {
+            if (typeDef.Namespace == ns && typeDef.Name == name) {
+                return typeDef;
+            }
+        }
+
+        return this.CreateClass(ns, name);
+    }
+
+    private TypeDefinition CreateClass(string ns, string name) {
         var objectType = this.Module.TypeSystem.Object;
-        this.globalsClass = new TypeDefinition(
+        var newClass = new TypeDefinition(
             ns,
-            GlobalsClassName,
+            name,
             TypeAttributes.Sealed | TypeAttributes.Class | TypeAttributes.Public,
             objectType
         );
         
-        this.Module.Types.Add(this.globalsClass);
+        this.Module.Types.Add(newClass);
 
-        return this.globalsClass;
+        return newClass;
     }
 
-    private MethodDefinition GetInitMethodDef() {
-        var globalsClass = this.GetGlobalsClass();
-
-        if (this.Module.Kind is ModuleKind.Windows or ModuleKind.Console) {
-            var mainMethod = globalsClass.Methods.FirstOrDefault(m => m.Name == "Main");
-            if (mainMethod != null) {
-                return mainMethod;
-            }
-
-            var attrs = MethodAttributes.Public | MethodAttributes.Static;
-
-            var methodDef = new MethodDefinition("Main", attrs, this.TypeSystem.Void);
-
-            globalsClass.Methods.Add(methodDef);
-            return methodDef;
-        } else {
-            var cctor = globalsClass.GetStaticConstructor();
-            if (cctor != null) {
-                return cctor;
-            }
-
-            var attrs = MethodAttributes.Assembly
-                | MethodAttributes.Static
-                | MethodAttributes.HideBySig
-                | MethodAttributes.RTSpecialName
-                | MethodAttributes.SpecialName;
-
-            var methodDef = new MethodDefinition(
-                ".cctor",
-                attrs,
-                this.TypeSystem.Void
-            );
-        
-            globalsClass.Methods.Add(methodDef);
-
-            return methodDef;
+    private MethodDefinition GetMainMethod() {
+        if (this.mainMethod != null) {
+            return this.mainMethod;
         }
+        
+        var globalsClass = this.GetInternalClass();
+
+        var attrs = MethodAttributes.Public | MethodAttributes.Static;
+        var methodDef = new MethodDefinition("Main", attrs, this.TypeSystem.Void);
+
+        globalsClass.Methods.Add(methodDef);
+
+        this.mainMethod = methodDef;
+        return methodDef;
+    }
+
+    private MethodDefinition GetGlobalsCCtor() {
+        var globalsClass = this.GetInternalClass();
+
+        var cctor = globalsClass.GetStaticConstructor();
+        if (cctor != null) {
+            return cctor;
+        }
+
+        var attrs = MethodAttributes.Assembly
+            | MethodAttributes.Static
+            | MethodAttributes.HideBySig
+            | MethodAttributes.RTSpecialName
+            | MethodAttributes.SpecialName;
+
+        var methodDef = new MethodDefinition(
+            ".cctor",
+            attrs,
+            this.TypeSystem.Void
+        );
+
+        globalsClass.Methods.Add(methodDef);
+
+        return methodDef;
     }
         
     public MethodReference FindRuntimeFunction(string name) {
@@ -193,12 +212,12 @@ public class AssemblyBuilder : IDisposable {
         // TODO: native strings
         // we have to copy the string literals into pascal strings for now
 
-        var globals = this.GetGlobalsClass();
+        var globals = this.GetInternalClass();
         var stringTypeRef = this.GetRuntimeTypeRef(nameof(Runtime.String), false);
 
         var createStringMethod = this.FindRuntimeFunction(nameof(Runtime.SystemFunctions.CreateString));
 
-        var globalsInit = this.GetInitMethodDef().Body.GetILProcessor();
+        var globalsInit = this.GetGlobalsCCtor().Body.GetILProcessor();
 
         foreach (var (id, stringLit) in library.Metadata.StringLiterals) {
             var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.InitOnly | FieldAttributes.Static;
@@ -274,7 +293,7 @@ public class AssemblyBuilder : IDisposable {
             this.BuildStaticTypeInfo(type, typeInfo, globals, library);
         }
 
-        foreach (var (funcID, _) in library.Metadata.Functions) {
+        foreach (var (funcID, _) in library.Metadata.FunctionInfo) {
             this.CreateStaticFuncInfoVariable(funcID, library);
         }
 
@@ -286,7 +305,7 @@ public class AssemblyBuilder : IDisposable {
 
         this.FunctionBuilder.BuildFunctions(library);
 
-        foreach (var (funcID, funcInfo) in library.Metadata.Functions) {
+        foreach (var (funcID, funcInfo) in library.Metadata.FunctionInfo) {
             this.BuildStaticFuncInfo(funcID, funcInfo, library);
         }
 
@@ -297,15 +316,23 @@ public class AssemblyBuilder : IDisposable {
         if (library.Initialization.Count > 0) {
             var initAttrs = MethodAttributes.Private | MethodAttributes.Static;
             var initMethod = new MethodDefinition($"Init_{this.initMethods.Count}", initAttrs, this.TypeSystem.Void);
-            
+
             this.initMethods.Add(initMethod);
             globals.Methods.Add(initMethod);
 
+            // if this assembly is built as an executable, add each library's init call to the Main method,
+            // otherwise add them to the cctor directory
+            if (this.IsExecutable) {
+                var mainMethod = this.GetMainMethod();
+
+                mainMethod.Body.GetILProcessor().Emit(OpCodes.Call, initMethod);
+            } else {
+                globalsInit.Emit(OpCodes.Call, initMethod);
+            }
+            
             var initBuilder = new InstructionBuilder(this, library, initMethod);
             initBuilder.AddInstructions(library.Initialization);
             initBuilder.Finish();
-            
-            globalsInit.Emit(OpCodes.Call, initMethod);
         }
     }
 
@@ -321,7 +348,7 @@ public class AssemblyBuilder : IDisposable {
         var tagFieldDef = new FieldDefinition(tagLoc.GetUniqueName(), tagFieldAttrs, tagArrayTypeRef);
         this.globalsClass!.Fields.Add(tagFieldDef);
 
-        var initBody = this.GetInitMethodDef().Body.GetILProcessor();
+        var initBody = this.GetGlobalsCCtor().Body.GetILProcessor();
         initBody.Emit(OpCodes.Ldc_I4, (int)count);
         initBody.Emit(OpCodes.Ldc_I4_1); // immortal
         initBody.Emit(OpCodes.Call, arrayCreateInstance);
@@ -358,7 +385,7 @@ public class AssemblyBuilder : IDisposable {
         globals.Fields.Add(fieldDef);
         this.staticTypeInfoFields.Add(type, fieldDef);
 
-        var initBuilder = this.GetInitMethodDef();
+        var initBuilder = this.GetGlobalsCCtor();
         var initBody = initBuilder.Body.GetILProcessor();
 
         var createTypeInfoInst = this.TypeBuilder.GetObjectCreateMethod(typeInfoClassID, library);
@@ -412,7 +439,7 @@ public class AssemblyBuilder : IDisposable {
         var typeInfoType = IR.TypeDefID.TypeInfo.ToObjectType();
         var methodsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoMethods, library);
 
-        var initBuilder = this.GetInitMethodDef();
+        var initBuilder = this.GetGlobalsCCtor();
         var initBody = initBuilder.Body.GetILProcessor();
         
         var methodInfoClassID = new IR.ClassObjectID(IR.TypeDefID.MethodInfo);
@@ -445,7 +472,7 @@ public class AssemblyBuilder : IDisposable {
 
             // set impl field (null for abstract methods)
             if (method.Function != null
-                && library.Metadata.Functions.TryGetValue(method.Function.Value, out var methodFuncInfo)
+                && library.Metadata.FunctionInfo.TryGetValue(method.Function.Value, out var methodFuncInfo)
                 && methodFuncInfo.Invoker.HasValue
             ) {
                 initBody.Emit(OpCodes.Dup);
@@ -484,7 +511,7 @@ public class AssemblyBuilder : IDisposable {
         const FieldAttributes fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
         var fieldDef = new FieldDefinition(fieldName, fieldAttrs, funcInfoTypeRef);
 
-        this.GetGlobalsClass().Fields.Add(fieldDef);
+        this.GetInternalClass().Fields.Add(fieldDef);
         this.staticFuncInfoFields.Add(funcID, fieldDef);
     }
 
@@ -498,7 +525,7 @@ public class AssemblyBuilder : IDisposable {
         var implField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoImpl, library);
         var tagsField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoTags, library);
 
-        var initBuilder = this.GetInitMethodDef();
+        var initBuilder = this.GetGlobalsCCtor();
         var initBody = initBuilder.Body.GetILProcessor();
 
         var createTypeInfoInst = this.TypeBuilder.GetObjectCreateMethod(funcObjectID, library);
@@ -592,13 +619,14 @@ public class AssemblyBuilder : IDisposable {
     }
 
     public void Finish() {
-        var initFunction = this.GetInitMethodDef();
+        var initFunction = this.GetGlobalsCCtor();
         var globalsInit = initFunction.Body.GetILProcessor();
 
         globalsInit.Emit(OpCodes.Ret);
 
-        if (this.Assembly.MainModule.Kind is ModuleKind.Console or ModuleKind.Windows) {
-            this.Assembly.EntryPoint = initFunction;
+        if (this.IsExecutable) {
+            this.GetMainMethod().Body.GetILProcessor().Emit(OpCodes.Ret);
+            this.Assembly.EntryPoint = this.GetMainMethod();
         }
     }
 }
