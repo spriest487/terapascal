@@ -108,7 +108,7 @@ impl StructDef {
         // user-defined types will have explicit padding, so they should be packed to avoid
         // the C frontend inserting any extra padding
         let packed = match &ir_struct.identity {
-            ir::StructIdentity::Record(_) | ir::StructIdentity::Class(_) | ir::StructIdentity::Array(..) => true,
+            ir::StructIdentity::Record(_) | ir::StructIdentity::Array(..) => true,
             _ => false,
         };
 
