@@ -1,5 +1,4 @@
-﻿using System.Reflection;
-using MessagePack;
+﻿using MessagePack;
 using MessagePack.Resolvers;
 using Mono.Cecil;
 using Terapascal.CIL;
@@ -33,6 +32,11 @@ if (parsedArgs.Verbose) {
 
 var refLibPath = await SDKUtils.FindReferenceLibPath(parsedArgs.SDKVersion, parsedArgs.Verbose);
 
+var targetVersion = parsedArgs.TargetRuntimeVersion;
+if (targetVersion == null) {
+    targetVersion = await SDKUtils.FindTargetRuntimeVersion(parsedArgs.Verbose);
+}
+
 using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
     assemblyVersion,
     moduleKind,
@@ -63,7 +67,7 @@ using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
     if (parsedArgs.Verbose) {
         Console.WriteLine($"output directory: {outputDir}");
     }
-        
+
     var rtOutputPath = Path.Join(outputDir, assemblyBuilder.RuntimeLibrary.Name.Name + ".dll");
     rtOutputPath = Path.GetFullPath(rtOutputPath);
 
@@ -73,18 +77,13 @@ using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
         Console.WriteLine($"RT assembly written to {rtOutputPath}");
     }
 
-    if (moduleKind is ModuleKind.Console or ModuleKind.Windows) {
+    if (assemblyBuilder.IsExecutable) {
         // for now assume all DLLs are runnable and output a runtime config file too
-        var runtimeConfigTemplate = Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream(typeof(AssemblyBuilder), "template.runtimeconfig.json")
-            ?? throw new FileNotFoundException("missing runtimeconfig template resource");
-
         var assemblyFilename = Path.GetFileNameWithoutExtension(outputPath);
-
         var runtimeConfigPath = Path.Join(outputDir, $"{assemblyFilename}.runtimeconfig.json");
-        await using (var runtimeConfigFile = File.Create(runtimeConfigPath)) {
-            await runtimeConfigTemplate.CopyToAsync(runtimeConfigFile);
-        }
+
+        await SDKUtils.CreateTemplatedFile("template.runtimeconfig.json", runtimeConfigPath,
+            new KeyValuePair<string, string>("$TARGET_VERSION", targetVersion));
 
         if (parsedArgs.Verbose) {
             Console.WriteLine($"runtimeconfig file written to {runtimeConfigPath}");

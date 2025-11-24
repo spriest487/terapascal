@@ -39,7 +39,7 @@ public class AssemblyBuilder : IDisposable {
     public ModuleDefinition Module => this.Assembly.MainModule;
     public TypeSystem TypeSystem => this.Assembly.MainModule.TypeSystem;
 
-    private bool IsExecutable => this.Module.Kind is ModuleKind.Console or ModuleKind.Windows;
+    public bool IsExecutable => this.Module.Kind is ModuleKind.Console or ModuleKind.Windows;
 
     public AssemblyBuilder(
         string assemblyName,

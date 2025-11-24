@@ -21,6 +21,9 @@ public record Args {
 
     [Option("sdk-version", Default = null, Required = false)]
     public string? SDKVersion { get; init; }
+    
+    [Option("target-runtime-version", Default = null, Required = false)]
+    public string? TargetRuntimeVersion { get; init; }
 
     [Value(0, Required = false)]
     public string? LibPath { get; init; }
