@@ -1,10 +1,12 @@
 pub mod scope;
+pub mod util;
 mod dyn_array;
 mod invoker;
-mod util;
 
-use crate::{BinOpInstruction, FunctionID, FunctionSig};
+use crate::BinOpInstruction;
 use crate::FieldID;
+use crate::FunctionID;
+use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::InterfaceID;

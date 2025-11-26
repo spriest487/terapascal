@@ -36,6 +36,10 @@ impl TypeDefID {
         Type::Struct(self)
     }
 
+    pub fn to_variant_type(self) -> Type {
+        Type::Variant(self)
+    }
+
     pub fn to_function_type(self) -> Type {
         Type::Function(self)
     }
