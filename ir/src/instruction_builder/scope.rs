@@ -217,11 +217,11 @@ impl LocalScope {
         by_ref: bool,
     ) -> LocalID {
         if by_ref {
-            let is_ptr = match &ty {
+            let is_ref_type = match &ty {
                 Type::TempRef(..) => true,
                 _ => false,
             };
-            assert!(is_ptr, "by-ref parameters must have reference type");
+            assert!(is_ref_type, "by-ref parameters must have reference type");
         }
 
         let id = LocalID(self.next_local);
