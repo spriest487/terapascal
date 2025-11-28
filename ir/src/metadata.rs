@@ -69,8 +69,8 @@ impl fmt::Display for VariableID {
 pub const EMPTY_STRING_ID: StringID = StringID(0);
 
 pub const STRING_ID: TypeDefID = TypeDefID(1);
-pub const STRING_VTYPE_ID: ObjectID = ObjectID::Class(STRING_ID);
-pub const STRING_TYPE: Type = Type::Object(STRING_VTYPE_ID);
+pub const STRING_OBJECT_ID: ObjectID = ObjectID::Class(STRING_ID);
+pub const STRING_TYPE: Type = Type::Object(STRING_OBJECT_ID);
 pub const STRING_CHARS_FIELD: FieldID = FieldID(0);
 pub const STRING_LEN_FIELD: FieldID = FieldID(1);
 
