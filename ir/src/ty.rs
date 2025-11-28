@@ -239,6 +239,55 @@ impl Type {
             }
         }
     }
+    
+    pub fn contains_any_object_refs(&self, metadata: &impl MetadataSource) -> bool {
+        match self {
+            Type::Object(_) | Type::WeakObject(_) => true,
+
+            Type::Struct(id) => {
+                let Some(def) = metadata.get_struct_def(*id) else {
+                    return false;
+                };
+                
+                def.fields
+                    .values()
+                    .any(|f| f.ty.contains_any_object_refs(metadata))
+            }
+            Type::Variant(id) => {
+                let Some(def) = metadata.get_variant_def(*id) else {
+                    return false;
+                };
+
+                def.cases
+                    .iter()
+                    .filter_map(|case| case.ty.as_ref())
+                    .any(|ty| ty.contains_any_object_refs(metadata))
+            }
+            
+            Type::Array { element, dim } => {
+                *dim > 0 && element.contains_any_object_refs(metadata)
+            }
+
+            Type::Nothing
+            | Type::Pointer(_)
+            | Type::TempRef(_)
+            | Type::Flags(_)
+            | Type::Function(_)
+            | Type::Bool
+            | Type::U8
+            | Type::I8
+            | Type::I16
+            | Type::U16
+            | Type::I32
+            | Type::U32
+            | Type::I64
+            | Type::U64
+            | Type::USize
+            | Type::ISize
+            | Type::F32
+            | Type::F64 => false,
+        }
+    }
 }
 
 impl fmt::Display for Type {
