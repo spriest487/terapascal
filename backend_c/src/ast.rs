@@ -25,6 +25,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 use terapascal_ir::FieldID;
+use terapascal_ir::MetadataSource;
 use topological_sort::TopologicalSort;
 
 pub struct Unit<'a> {

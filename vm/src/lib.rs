@@ -41,6 +41,7 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
+use terapascal_ir::MetadataSource;
 
 #[derive(Debug)]
 pub struct Interpreter {

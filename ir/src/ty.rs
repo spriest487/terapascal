@@ -1,6 +1,7 @@
 use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
+use crate::MetadataSource;
 use crate::TagLocation;
 use crate::Value;
 use crate::IRFormatter;
