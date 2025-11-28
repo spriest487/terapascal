@@ -55,8 +55,8 @@ impl Type {
         Type::Pointer(Rc::new(self))
     }
     
-    pub fn temp_ref(self) -> Self {
-        Type::TempRef(Rc::new(self))
+    pub fn temp_ref(&self) -> Self {
+        Type::TempRef(Rc::new(self.clone()))
     }
 
     pub const fn any() -> Self {

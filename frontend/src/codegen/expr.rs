@@ -142,7 +142,7 @@ fn translate_indexer(
 ) -> ir::Ref {
     match base_ty {
         typ::Type::Array(array_ty) => {
-            let element_ref = builder.local_temp(val_ty.clone().temp_ref());
+            let element_ref = builder.local_temp(val_ty.temp_ref());
             
             let base_ty = builder.translate_type(base_ty);
             let len = i32::try_from(array_ty.dim)
@@ -156,7 +156,7 @@ fn translate_indexer(
         },
 
         typ::Type::DynArray(..) => {
-            let element_ref = builder.local_temp(val_ty.clone().temp_ref());
+            let element_ref = builder.local_temp(val_ty.temp_ref());
 
             let base_ty = builder.translate_type(base_ty);
 
@@ -166,7 +166,7 @@ fn translate_indexer(
         },
 
         typ::Type::Pointer(_) => {
-            let result_ref = builder.local_temp(val_ty.clone().temp_ref());
+            let result_ref = builder.local_temp(val_ty.temp_ref());
 
             builder.add(result_ref.clone(), base_ref, index_val);
 
