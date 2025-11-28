@@ -3,6 +3,7 @@ mod functions;
 mod rtti;
 
 use crate::dep_sort::sort_defs;
+use crate::metadata::source::MetadataSource;
 use crate::FieldID;
 use crate::FunctionID;
 use crate::IRFormatter;
@@ -11,11 +12,13 @@ use crate::Metadata;
 use crate::MethodID;
 use crate::Ref;
 use crate::StringID;
+use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDefID;
 use crate::Value;
 use crate::VariableID;
+use crate::VariantDef;
 use crate::RESERVED_STRINGS;
 use crate::RESERVED_TYPES;
 use linked_hash_map::LinkedHashMap;
@@ -208,6 +211,15 @@ impl MetadataBuilder {
     }
 }
 
+impl MetadataSource for MetadataBuilder {
+    fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
+        self.get_struct_def(struct_id)
+    }
+
+    fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
+        self.get_variant_def(struct_id)
+    }
+}
 
 impl IRFormatter for MetadataBuilder {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {

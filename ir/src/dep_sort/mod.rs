@@ -1,5 +1,6 @@
 use crate::metadata::Metadata;
 use crate::FunctionSig;
+use crate::MetadataSource;
 use crate::StructDef;
 use crate::Type;
 use crate::TypeDef;

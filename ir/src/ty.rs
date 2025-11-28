@@ -1,6 +1,7 @@
 use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
+use crate::MetadataSource;
 use crate::TagLocation;
 use crate::Value;
 use crate::IRFormatter;
@@ -54,8 +55,8 @@ impl Type {
         Type::Pointer(Rc::new(self))
     }
     
-    pub fn temp_ref(self) -> Self {
-        Type::TempRef(Rc::new(self))
+    pub fn temp_ref(&self) -> Self {
+        Type::TempRef(Rc::new(self.clone()))
     }
 
     pub const fn any() -> Self {
@@ -116,6 +117,13 @@ impl Type {
         match self {
             Type::Struct(ty_id) => *ty_id == id,
             _ => false,
+        }
+    }
+    
+    pub fn as_variant(&self) -> Option<TypeDefID> {
+        match self {
+            Type::Variant(id) => Some(*id),
+            _ => None,
         }
     }
     
@@ -229,6 +237,55 @@ impl Type {
             | Type::Nothing => {
                 None
             }
+        }
+    }
+    
+    pub fn contains_any_object_refs(&self, metadata: &impl MetadataSource) -> bool {
+        match self {
+            Type::Object(_) | Type::WeakObject(_) => true,
+
+            Type::Struct(id) => {
+                let Some(def) = metadata.get_struct_def(*id) else {
+                    return false;
+                };
+                
+                def.fields
+                    .values()
+                    .any(|f| f.ty.contains_any_object_refs(metadata))
+            }
+            Type::Variant(id) => {
+                let Some(def) = metadata.get_variant_def(*id) else {
+                    return false;
+                };
+
+                def.cases
+                    .iter()
+                    .filter_map(|case| case.ty.as_ref())
+                    .any(|ty| ty.contains_any_object_refs(metadata))
+            }
+            
+            Type::Array { element, dim } => {
+                *dim > 0 && element.contains_any_object_refs(metadata)
+            }
+
+            Type::Nothing
+            | Type::Pointer(_)
+            | Type::TempRef(_)
+            | Type::Flags(_)
+            | Type::Function(_)
+            | Type::Bool
+            | Type::U8
+            | Type::I8
+            | Type::I16
+            | Type::U16
+            | Type::I32
+            | Type::U32
+            | Type::I64
+            | Type::U64
+            | Type::USize
+            | Type::ISize
+            | Type::F32
+            | Type::F64 => false,
         }
     }
 }

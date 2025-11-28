@@ -278,7 +278,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
             let func_ptr_ty = closure_def.fields[&CLOSURE_PTR_FIELD].ty.clone();
 
-            let func_field_ref = builder.local_temp(func_ptr_ty.clone().temp_ref());
+            let func_field_ref = builder.local_temp(func_ptr_ty.temp_ref());
             builder.field(func_field_ref, closure_ref, closure_ptr_ty.clone(), CLOSURE_PTR_FIELD);
 
             // initialize closure reference to function
@@ -299,7 +299,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
                     Some(name) => name,
                 };
 
-                let capture_field_ref = builder.local_temp(field_def.ty.clone().temp_ref());
+                let capture_field_ref = builder.local_temp(field_def.ty.temp_ref());
                 builder.field(capture_field_ref, closure_ref, closure_ptr_ty.clone(), *field_id);
 
                 let captured_local_id = builder.find_local(field_name).unwrap().id();
@@ -433,7 +433,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Flags(flags_type_info.struct_id);
 
-        let a_ptr = self.local_temp(flags_type.clone().temp_ref());
+        let a_ptr = self.local_temp(flags_type.temp_ref());
         let b_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
         self.make_ref(b_ptr, b);
@@ -451,7 +451,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Flags(flags_type_info.struct_id);
 
-        let a_ptr = self.local_temp(flags_type.clone().temp_ref());
+        let a_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
 
         self.call(flags_type_info.bit_not_func, [
@@ -468,7 +468,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Flags(flags_type_info.struct_id);
 
-        let a_ptr = self.local_temp(flags_type.clone().temp_ref());
+        let a_ptr = self.local_temp(flags_type.temp_ref());
         let b_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
         self.make_ref(b_ptr, b);

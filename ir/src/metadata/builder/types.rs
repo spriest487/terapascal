@@ -3,6 +3,7 @@ use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::MetadataBuilder;
+use crate::MetadataSource;
 use crate::NamePath;
 use crate::StructDef;
 use crate::Type;

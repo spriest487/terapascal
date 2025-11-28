@@ -1663,60 +1663,42 @@ fn gen_class_dtor(
 ) {
     let class_ty = class_id.to_class_ptr_type();
 
-    let class_pretty_name = lib.metadata.pretty_ty_name(&class_ty).into_owned();
-
-    // we have to do this loop manually, because the "self" reference in a class method is
-    // meant to be immutable (it's illegal to reference it even via an immutable reference in CIL).
-    // using visit_deep on self would use references!
-    let class_struct_def = lib.metadata
-        .get_struct_def(class_id)
-        .unwrap_or_else(|| {
-            panic!("gen_class_runtime_type: missing definition for resource struct of {class_pretty_name}", )
-        })
-        .clone();
-
     let user_dtor = lib.dtors.get(&class_id).cloned();
 
     let mut dtor_builder = IRBuilder::new(lib);
-
     let self_param = dtor_builder.bind_param(class_ty.clone(), "self");
     dtor_builder.retain(self_param, false);
 
+    let mut has_dtor = false;
     if let Some(user_dtor_id) = user_dtor {
         dtor_builder.call(user_dtor_id, [self_param.value()], None);
+        has_dtor = true;
+    }
+    
+    if dtor_builder.gen_class_object_dtor_body(class_id, self_param) {
+        has_dtor = true;
     }
 
-    let mut released_any = user_dtor.is_some();
+    if !has_dtor {
+        return;
+    }
 
-    for (field_id, field_def) in class_struct_def.fields {
-        let field_rc_methods = dtor_builder.get_rc_method_info(&field_def.ty);
-        let release_field = field_def.ty.is_object() || field_rc_methods.release_elements.is_some();
+    let dtor_body = dtor_builder.finish();
 
-        if release_field {
-            let field_ref = dtor_builder.local_temp(field_def.ty.clone().temp_ref());
-            dtor_builder.field(field_ref, self_param, class_ty.clone(), field_id);
-            released_any |= dtor_builder.release_deep(field_ref.to_deref(), &field_def.ty);
+    let dtor_id = lib.metadata.insert_func(None, false);
+    runtime_type.dtor = Some(dtor_id);
+
+    let dtor_debug_name = lib.opts.debug
+        .then(|| format!("generated dtor for {}", lib.metadata.pretty_ty_name(&class_ty)));
+
+    lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
+        debug_name: dtor_debug_name,
+        body: dtor_body,
+        sig: ir::FunctionSig {
+            param_tys: vec![class_ty.clone()],
+            return_ty: ir::Type::Nothing,
         }
-    }
-
-    if released_any {
-        let dtor_body = dtor_builder.finish();
-
-        let dtor_id = lib.metadata.insert_func(None, false);
-        runtime_type.dtor = Some(dtor_id);
-
-        let dtor_debug_name = lib.opts.debug
-            .then(|| format!("generated dtor for {class_pretty_name}"));
-
-        lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
-            debug_name: dtor_debug_name,
-            body: dtor_body,
-            sig: ir::FunctionSig {
-                param_tys: vec![class_ty.clone()],
-                return_ty: ir::Type::Nothing,
-            }
-        }));
-    }
+    }));
 }
 
 fn gen_func_invokers(lib: &mut LibraryBuilder) {

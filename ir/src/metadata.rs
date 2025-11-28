@@ -1,4 +1,5 @@
 mod builder;
+mod source;
 
 use crate::ty::FieldID;
 use crate::ty::ObjectID;
@@ -36,6 +37,7 @@ use std::fmt;
 use std::rc::Rc;
 
 pub use builder::MetadataBuilder;
+pub use source::MetadataSource;
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct StringID(pub usize);
@@ -67,8 +69,8 @@ impl fmt::Display for VariableID {
 pub const EMPTY_STRING_ID: StringID = StringID(0);
 
 pub const STRING_ID: TypeDefID = TypeDefID(1);
-pub const STRING_VTYPE_ID: ObjectID = ObjectID::Class(STRING_ID);
-pub const STRING_TYPE: Type = Type::Object(STRING_VTYPE_ID);
+pub const STRING_OBJECT_ID: ObjectID = ObjectID::Class(STRING_ID);
+pub const STRING_TYPE: Type = Type::Object(STRING_OBJECT_ID);
 pub const STRING_CHARS_FIELD: FieldID = FieldID(0);
 pub const STRING_LEN_FIELD: FieldID = FieldID(1);
 
@@ -326,16 +328,6 @@ impl Metadata {
             })
     }
 
-    pub fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
-        match self.type_decls.get(&struct_id)? {
-            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
-
-            TypeDecl::Def(TypeDef::Struct(s)) => Some(s),
-
-            TypeDecl::Def(..) => None,
-        }
-    }
-
     // find the struct used as the backing type for set types with at least the given number of bits
     // the same struct definition may represent multiple defined set types
     pub fn find_set_repr_struct(&self, bits: usize) -> Option<TypeDefID> {
@@ -365,16 +357,6 @@ impl Metadata {
         }
         
         result
-    }
-
-    pub fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
-        match self.type_decls.get(&struct_id)? {
-            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
-
-            TypeDecl::Def(TypeDef::Variant(v)) => Some(v),
-
-            TypeDecl::Def(..) => None,
-        }
     }
 
     pub fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
@@ -864,6 +846,28 @@ impl IRFormatter for Metadata {
         match case_name {
             Some(name) => write!(f, "{}", name),
             _ => RawInstructionFormatter.format_variant_case(of_ty, tag, f),
+        }
+    }
+}
+
+impl MetadataSource for Metadata {
+    fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
+        match self.type_decls.get(&struct_id)? {
+            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
+
+            TypeDecl::Def(TypeDef::Struct(s)) => Some(s),
+
+            TypeDecl::Def(..) => None,
+        }
+    }
+
+    fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
+        match self.type_decls.get(&struct_id)? {
+            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
+
+            TypeDecl::Def(TypeDef::Variant(v)) => Some(v),
+
+            TypeDecl::Def(..) => None,
         }
     }
 }
