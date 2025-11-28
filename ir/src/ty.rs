@@ -120,6 +120,13 @@ impl Type {
         }
     }
     
+    pub fn as_variant(&self) -> Option<TypeDefID> {
+        match self {
+            Type::Variant(id) => Some(*id),
+            _ => None,
+        }
+    }
+    
     pub fn iface_ptr(id: InterfaceID) -> Self {
         Type::Object(ObjectID::Interface(id))
     }
