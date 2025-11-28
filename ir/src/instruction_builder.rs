@@ -2,6 +2,7 @@ pub mod scope;
 pub mod util;
 mod dyn_array;
 mod invoker;
+mod object;
 
 use crate::BinOpInstruction;
 use crate::FieldID;
@@ -28,6 +29,7 @@ use std::sync::Arc;
 use terapascal_common::span::Span;
 pub use util::jmp_exists;
 pub use util::remove_empty_blocks;
+use crate::instruction_builder::object::gen_class_object_dtor_body;
 
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
@@ -874,6 +876,10 @@ pub trait InstructionBuilder {
         let temp_at_ptr = self.local_temp(ty.clone().temp_ref());
         self.make_ref(temp_at_ptr.clone(), at);
         temp_at_ptr.value()
+    }
+    
+    fn gen_class_object_dtor_body(&mut self, class_id: TypeDefID, self_param: LocalID) -> bool {
+        gen_class_object_dtor_body(self, class_id, self_param)
     }
 
     fn gen_dyn_array_dtor_body(&mut self, self_param: LocalID, element_type: &Type) {
