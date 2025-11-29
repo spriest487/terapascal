@@ -793,9 +793,14 @@ pub trait InstructionBuilder {
     }
 
     fn vartag(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_ty: Type) {
+        let a = a.into();
+        if matches!(a, Ref::Discard) {
+            panic!("operand of vartag instruction must not be a discard");
+        }
+        
         self.emit(Instruction::VariantTag {
             out: out.into(),
-            a: a.into(),
+            a,
             of_ty,
         })
     }
@@ -827,6 +832,11 @@ pub trait InstructionBuilder {
     }
 
     fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        let at = at.into();
+        if at.is_discard() {
+            panic!("release_deep: operand must not be a discard ref");
+        }
+
         self.visit_deep(
             at,
             ty,
@@ -847,6 +857,11 @@ pub trait InstructionBuilder {
     }
 
     fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        let at = at.into();
+        if at.is_discard() {
+            panic!("retain_deep: operand must not be a discard ref");
+        }
+        
         self.visit_deep(
             at,
             ty,
