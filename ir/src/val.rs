@@ -37,6 +37,10 @@ impl Ref {
 
         string
     }
+    
+    pub fn is_discard(&self) -> bool {
+        matches!(self, Ref::Discard)
+    }
 }
 
 impl From<GlobalRef> for Ref {
