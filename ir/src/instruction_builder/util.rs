@@ -214,18 +214,19 @@ where
         },
 
         Type::Variant(id) => {
-            let cases = &builder
+            let variant_def = builder
                 .metadata()
                 .get_variant_def(*id)
-                .unwrap_or_else(|| panic!("missing variant def {}", id))
-                .cases
-                .to_vec();
+                .unwrap_or_else(|| panic!("missing variant def {}", id));
 
-            let tag_ref = builder.local_temp(Type::I32.temp_ref());
+            let tag_type = variant_def.tag_type.clone();
+            let cases = variant_def.cases.to_vec();
+
+            let tag_ref = builder.local_temp(tag_type.temp_ref());
             let is_not_case = builder.local_temp(Type::Bool);
 
             // get the tag
-            builder.vartag(tag_ref, at.clone(), Type::Variant(*id));
+            builder.vartag(tag_ref, at.clone(), id.to_variant_type());
 
             // jump out of the search loop if we find the matching case
             let break_label = builder.next_label();
