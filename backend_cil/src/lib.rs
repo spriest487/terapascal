@@ -6,7 +6,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::process::ExitStatus;
 use std::process::Stdio;
-use terapascal_build::encode_lib;
 use terapascal_ir as ir;
 use thiserror::Error;
 
@@ -36,7 +35,7 @@ pub fn build_assembly(
     out_path: &Path,
     verbose: bool,
 ) -> Result<(), BuildError> {
-    let encoded_data = encode_lib(lib)
+    let encoded_data = ir::encode_lib(lib)
         .map_err(BuildError::EncodingFailed)?;
 
     let lib_name = out_path

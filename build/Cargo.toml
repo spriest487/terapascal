@@ -10,4 +10,3 @@ terapascal-backend-c = { path = "../backend_c" }
 linked-hash-map = "0.5.6"
 topological-sort = "0.2.2"
 thiserror = "2.0.16"
-rmp-serde = "1.3.0"

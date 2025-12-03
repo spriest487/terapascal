@@ -20,8 +20,6 @@ use structopt::StructOpt;
 use terapascal_backend_c as backend_c;
 use terapascal_backend_cil as backend_cil;
 use terapascal_build::build;
-use terapascal_build::decode_lib;
-use terapascal_build::encode_lib;
 use terapascal_build::error::BuildError;
 use terapascal_build::error::BuildResult;
 use terapascal_build::BuildArtifact;
@@ -120,7 +118,7 @@ fn load_lib(path: &Path) -> BuildResult<ir::Library> {
             }
         })?;
 
-    let module: ir::Library = decode_lib(&module_bytes)?;
+    let module: ir::Library = ir::decode_lib(&module_bytes)?;
 
     Ok(module)
 }
@@ -223,7 +221,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     Ok(())
                 } else if output_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
                     // the IR object is the output
-                    let module_bytes = encode_lib(&lib)?;
+                    let module_bytes = ir::encode_lib(&lib)?;
 
                     print_output(args.output.as_ref(), |dst| {
                         dst.write_all(&module_bytes)

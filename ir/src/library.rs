@@ -15,6 +15,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::io;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
@@ -233,4 +234,18 @@ impl fmt::Display for Library {
         write_instruction_list(f, &self.metadata, &self.init)?;
         Ok(())
     }
+}
+
+
+
+pub fn encode_lib(lib: &crate::Library) -> Result<Vec<u8>, io::Error> {
+    let data = rmp_serde::encode::to_vec_named(&lib)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))?;
+
+    Ok(data)
+}
+
+pub fn decode_lib(data: &[u8]) -> Result<crate::Library, io::Error> {
+    rmp_serde::decode::from_slice(data)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))
 }
