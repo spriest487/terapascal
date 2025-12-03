@@ -188,6 +188,14 @@ impl MetadataBuilder {
         self.find_in_self_or_refs(move |metadata| metadata.get_iface_def(id))
     }
 
+    pub fn find_iface(&self, name: &NamePath) -> Option<InterfaceID> {
+        self.find_in_self_or_refs(move |metadata| metadata
+            .ifaces()
+            .find_map(|(id, def)| {
+                (def.name == *name).then_some(id)
+            }))
+    }
+
     pub fn declare_empty_impl(&mut self, iface_id: InterfaceID, implementor: Type) {
         let impl_ty_entry = self.metadata.iface_impls
             .entry(implementor)
