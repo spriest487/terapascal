@@ -119,6 +119,7 @@ pub struct Metadata {
     type_decls: LinkedHashMap<TypeDefID, TypeDecl>,
     string_literals: LinkedHashMap<StringID, String>,
     ifaces: LinkedHashMap<InterfaceID, InterfaceDecl>,
+    iface_impls: HashMap<Type, BTreeMap<InterfaceID, InterfaceImpl>>,
 
     variables: BTreeMap<VariableID, Type>,
 
@@ -139,6 +140,7 @@ impl Metadata {
             type_decls: LinkedHashMap::new(),
             string_literals: LinkedHashMap::new(),
             ifaces: LinkedHashMap::new(),
+            iface_impls: HashMap::new(),
 
             variables: BTreeMap::new(),
 
@@ -429,19 +431,23 @@ impl Metadata {
             .and_then(|decl| decl.global_name.as_ref())
             .map(NamePath::to_string)
             .or_else(|| {
-                self.ifaces().find_map(|(iface_id, iface)| {
-                    iface.impls.iter().find_map(|(impl_ty, iface_impl)| {
+                self.iface_impls.iter().find_map(|(impl_ty, impls)| {
+                    impls.iter().find_map(|(iface_id, iface_impl)| {
                         iface_impl.methods.iter().find_map(|(method, impl_id)| {
-                            if *impl_id == id {
-                                let mut desc = format!("impl of {}.", iface.name);
-                                let _ = self.format_method(iface_id, *method, &mut desc);
-                                desc.push_str(" for ");
-                                let _ = self.format_type(impl_ty, &mut desc);
-
-                                Some(desc)
-                            } else {
-                                None
+                            if *impl_id != id {
+                                return None
                             }
+
+                            let iface_name = iface_id
+                                .to_interface_ptr_type()
+                                .to_pretty_string(self);
+
+                            let mut desc = format!("impl of {}.", iface_name);
+                            let _ = self.format_method(*iface_id, *method, &mut desc);
+                            desc.push_str(" for ");
+                            let _ = self.format_type(impl_ty, &mut desc);
+
+                            Some(desc)
                         })
                     })
                 })
@@ -610,36 +616,36 @@ impl Metadata {
         iface_id: InterfaceID,
         method: MethodID,
     ) -> Option<FunctionID> {
-        let iface = self.get_iface_def(iface_id)?;
-        let ty_impl = iface.impls.get(ty)?;
+        let iface_impl = self.iface_impls
+            .get(ty)?
+            .get(&iface_id)?;
 
-        ty_impl.methods.get(&method).cloned()
+        iface_impl.methods.get(&method).cloned()
     }
 
     pub fn impls(&self, ty: &Type) -> Vec<InterfaceID> {
-        self.ifaces
-            .iter()
-            .filter_map(|(id, decl)| {
-                if let InterfaceDecl::Def(def) = decl {
-                    def.impls.contains_key(ty).then_some(*id)
-                } else {
-                    None
-                }
-            })
-            .collect()
+        let Some(impls) = self.iface_impls.get(ty) else {
+            return Vec::new();
+        };
+
+        impls.keys().cloned().collect()
     }
 
     pub fn is_impl(&self, ty: &Type, iface_id: InterfaceID) -> bool {
-        let impls = &self.get_iface_def(iface_id).unwrap().impls;
-        impls.contains_key(ty)
+        let Some(impls) = self.iface_impls.get(ty) else {
+            return false;
+        };
+        
+        impls.contains_key(&iface_id)
     }
 
     pub fn find_impls(&self, ty: &Type) -> Vec<(InterfaceID, &InterfaceImpl)> {
-        self.ifaces()
-            .filter_map(|(id, iface)| {
-                let impl_for_ty = iface.impls.get(ty)?;
-                Some((id, impl_for_ty))
-            })
+        let Some(impls) = self.iface_impls.get(ty) else {
+            return Vec::new();
+        };
+        
+        impls.iter()
+            .map(|(iface_id, iface_impl)| (*iface_id, iface_impl))
             .collect()
     }
 
@@ -762,8 +768,8 @@ impl IRFormatter for Metadata {
                     Some(name) => write!(f, "{}", name),
 
                     None => {
-                        let find_iface_impl = self.ifaces().find_map(|(_id, iface)| {
-                            iface.impls.iter().find_map(|(impl_ty, iface_impl)| {
+                        let find_iface_impl = self.iface_impls.iter().find_map(|(impl_ty, impls)| {
+                            impls.iter().find_map(|(iface_id, iface_impl)| {
                                 let method_id = iface_impl.methods.iter().find_map(
                                     |(method_id, func_id)| {
                                         if *func_id == *id {
@@ -774,6 +780,7 @@ impl IRFormatter for Metadata {
                                     },
                                 )?;
 
+                                let iface = self.get_iface_def(*iface_id).unwrap();
                                 let method = iface.get_method(*method_id).unwrap();
 
                                 Some((&iface.name, impl_ty, &method.name))

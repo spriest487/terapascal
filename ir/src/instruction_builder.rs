@@ -751,7 +751,7 @@ pub trait InstructionBuilder {
         iface_id: InterfaceID,
         method: MethodID,
         self_arg: impl Into<Value>,
-        rest_args: impl IntoIterator<Item = impl Into<Value>>,
+        rest_args: impl IntoIterator<Item = Value>,
         out: Option<Ref>,
     ) {
         self.emit(Instruction::VirtualCall {

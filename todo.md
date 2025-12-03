@@ -1,3 +1,6 @@
+# impls rework
+* update CIL: remove impls from interface defs, add new map
+
 # refcounting cleanup pass
 * +/- entering and exiting most functions is redundant, remove them all and clean up handwritten IR
 * box contents aren't refcounted properly, backends needs to deep release structures

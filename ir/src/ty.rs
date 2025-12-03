@@ -64,19 +64,19 @@ impl Type {
     }
 
     pub const fn class_ptr(id: TypeDefID) -> Self {
-        Self::rc_ptr_to(ObjectID::Class(id))
+        Self::object_ptr(ObjectID::Class(id))
     }
     
-    pub const fn rc_ptr_to(class: ObjectID) -> Self {
+    pub const fn object_ptr(class: ObjectID) -> Self {
         Type::Object(class)
     }
     
-    pub const fn rc_weak_ptr_to(class: ObjectID) -> Self {
+    pub const fn weak_object_ptr(class: ObjectID) -> Self {
         Type::WeakObject(class)
     }
 
     pub const fn string_ptr() -> Self {
-        Type::rc_ptr_to(ObjectID::Class(STRING_ID))
+        Self::class_ptr(STRING_ID)
     }
 
     pub fn deref_ty(&self) -> Option<&Self> {
