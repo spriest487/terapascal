@@ -408,7 +408,6 @@ impl Metadata {
     pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {
         // do a linear search for now because we don't want to store a redundant map of names,
         // and a user can always make a hashmap themselves if looking up names this way is too slow.
-        // this should probabl
         self.function_info
             .iter()
             .find_map(|(id, func)| {

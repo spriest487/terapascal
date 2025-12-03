@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use structopt::*;
 use terapascal_build::BuildStage;
 use terapascal_common::LanguageMode;
+use terapascal_common::StripMode;
 
 #[derive(StructOpt, Debug)]
 pub struct Args {
@@ -27,7 +28,7 @@ pub struct Args {
     #[structopt(long="define", short = "d")]
     pub define_syms: Vec<String>,
 
-    #[structopt(long="mode", short="m", default_value = "default", parse(try_from_str = parse_lang_mode))]
+    #[structopt(long="mode", default_value = "default", parse(try_from_str = parse_lang_mode))]
     pub lang_mode: LanguageMode,
 
     /// if false, runtime type information objects will not be generated
@@ -36,6 +37,9 @@ pub struct Args {
 
     #[structopt(long="unsafe", default_value = "true", parse(try_from_str = parse_bool))]
     pub allow_unsafe: bool,
+
+    #[structopt(long="strip", default_value = "unused-impl", parse(try_from_str = parse_strip_mode))]
+    pub strip: StripMode,
 
     /// additional units to compile
     #[structopt(long = "units", short = "u")]
@@ -109,6 +113,14 @@ fn parse_lang_mode(s: &str) -> Result<LanguageMode, String> {
         "fpc" | "FPC" => Ok(LanguageMode::Fpc),
         "default" | "Default" => Ok(LanguageMode::Default),
         _ => Err(format!("invalid language mode: {}", s)),
+    }
+}
+
+fn parse_strip_mode(s: &str) -> Result<StripMode, String> {
+    match s {
+        "unused-impl" | "default" => Ok(StripMode::UnusedImpl),
+        "unused" => Ok(StripMode::Unused),
+        _ => Err(format!("invalid strip mode: {}", s)),
     }
 }
 

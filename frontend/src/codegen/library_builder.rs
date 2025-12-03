@@ -54,6 +54,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
+use terapascal_common::StripMode;
 use terapascal_ir::instruction_builder::InstructionBuilder as _;
 
 #[derive(Debug)]
@@ -288,6 +289,26 @@ impl<'a> LibraryBuilder<'a> {
                 args: Vec::new(),
                 out: None,
             });
+        }
+
+        if self.opts.strip <= StripMode::UnusedImpl {
+            for iface_decl in &unit.iface_section.decls {
+                match iface_decl {
+                    typ::ast::UnitDecl::FunctionDecl { decl } 
+                    if decl.name.type_params.is_none() => {
+                        self.translate_unit_func_decl(&unit.ident, decl);
+                    }
+
+                    typ::ast::UnitDecl::FunctionDef { def } 
+                    if def.decl.name.type_params.is_none() => {
+                        self.translate_unit_func_decl(&unit.ident, &def.decl);
+                    }
+                    
+                    _ => {
+                        continue;
+                    }
+                };
+            }
         }
     }
 
@@ -775,6 +796,22 @@ impl<'a> LibraryBuilder<'a> {
         };
 
         self.instantiate_func(&mut key)
+    }
+
+    fn translate_unit_func_decl(
+        &mut self,
+        unit_name: &IdentPath,
+        decl: &typ::ast::FunctionDecl,
+    ) -> Option<FunctionInstance> {
+        if decl.type_params_len() > 0 {
+            return None;
+        }
+        
+        let func_name = unit_name.clone().child(decl.name.ident.clone());
+        let func_sig = decl.sig();
+
+        let instance = self.translate_func(func_name, Arc::new(func_sig), None);
+        Some(instance)
     }
 
     pub fn insert_function(&mut self, id: ir::FunctionID, function: ir::Function) {
