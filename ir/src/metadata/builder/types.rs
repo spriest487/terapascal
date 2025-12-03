@@ -188,7 +188,6 @@ impl MetadataBuilder {
         self.find_in_self_or_refs(move |metadata| metadata.get_iface_def(id))
     }
 
-
     pub fn declare_empty_impl(&mut self, iface_id: InterfaceID, implementor: Type) {
         let impl_ty_entry = self.metadata.iface_impls
             .entry(implementor)
@@ -209,15 +208,15 @@ impl MetadataBuilder {
         
         let iface_def = self
             .ifaces()
-            .find_map(|(iface_id, iface_def)| (iface_id == iface_id).then(|| {
-                iface_def
+            .find_map(|(id, def)| (id == iface_id).then(|| {
+                def
             }));
         
         match iface_def {
             Some(iface_def) => {
                 let index = iface_def
                     .method_index(&method_name)
-                    .unwrap_or_else(|| panic!("expected {} to contain method {}", iface_def.name, method_name));
+                    .unwrap_or_else(|| panic!("expected {} (interface {}) to contain method {}", iface_def.name, iface_id, method_name));
 
                 self.add_impl(for_ty, iface_id, index, func_id);
             },
