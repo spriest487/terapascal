@@ -295,6 +295,8 @@ impl<T: DiagnosticOutput> DiagnosticOutput for TracedError<T> {
 pub struct CompileOpts {
     pub case_sensitive: bool,
     pub lang_mode: LanguageMode,
+    
+    pub strip: StripMode,
 
     pub verbose: bool,
     
@@ -313,10 +315,12 @@ impl Default for CompileOpts {
             case_sensitive: true,
             lang_mode: LanguageMode::Default,
 
+            strip: StripMode::UnusedImpl,
+
             verbose: false,
             
             lang_server: false,
-            
+
             pp_symbols: HashSet::new(),
             switches: HashMap::new(),
             
@@ -354,6 +358,15 @@ impl CompileOpts {
     pub fn link_lib(&mut self, _lib: String) {
         unimplemented!()
     }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub enum StripMode {
+    // preserve members with usages and any non-generic item declared in an interface section
+    UnusedImpl,
+
+    // preserve only members with usages in code
+    Unused,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
