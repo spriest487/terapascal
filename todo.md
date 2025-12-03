@@ -2,6 +2,7 @@
 * +/- entering and exiting most functions is redundant, remove them all and clean up handwritten IR
 * box contents aren't refcounted properly, backends needs to deep release structures
   * can we generate destructors?
+* taking the address of any type containing rc refs should be unsafe
 
 # array rework
 * C implementation could use variable sized structs instead of 2 allocations per array 
