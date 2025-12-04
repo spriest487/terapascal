@@ -286,10 +286,12 @@ pub fn typecheck_literal(
         ast::Literal::Integer(i) => typecheck_literal_int(i, expect_ty, span.clone()),
 
         ast::Literal::Real(x) => {
-            let ty = if x.as_f32().is_some() {
+            let ty = if *expect_ty == Type::Primitive(Primitive::Real32) && x.as_f32().is_some() {
                 Type::from(Primitive::Real32)
+            } else if x.as_f64().is_some() {
+                Type::from(Primitive::Real64)
             } else {
-                unimplemented!("real literal outside range of f32")
+                unimplemented!("real literal outside range of f64");
             };
 
             let value = TypedValue::literal(ty, span.clone());
@@ -425,6 +427,9 @@ fn typecheck_literal_int(i: &IntConstant, expect_ty: &Type, span: Span) -> TypeR
 
         Type::Primitive(Primitive::Real32) => {
             try_map_primitive_int(i, Primitive::Real32, IntConstant::as_f32)
+        }
+        Type::Primitive(Primitive::Real64) => {
+            try_map_primitive_int(i, Primitive::Real32, IntConstant::as_f64)
         }
 
         _ => match i.as_i32() {

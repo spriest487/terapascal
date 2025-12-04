@@ -1103,6 +1103,10 @@ impl<'a> LibraryBuilder<'a> {
                 self.add_cached_type(src_ty.clone(), ir::Type::F32);
                 ir::Type::F32
             },
+            typ::Type::Primitive(typ::Primitive::Real64) => {
+                self.add_cached_type(src_ty.clone(), ir::Type::F64);
+                ir::Type::F64
+            },
 
             typ::Type::Primitive(typ::Primitive::Pointer) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::Nothing.ptr());

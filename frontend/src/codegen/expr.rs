@@ -291,6 +291,12 @@ pub fn literal_to_val(
                     .expect("Real-typed constant must be within range of f32");
                 ir::Value::LiteralF32(val)
             },
+            typ::Type::Primitive(typ::Primitive::Real64) => {
+                let val = i
+                    .as_f64()
+                    .expect("Real-typed constant must be within range of f64");
+                ir::Value::LiteralF64(val)
+            },
             typ::Type::Enum(..) => {
                 let val = i
                     .as_isize()
@@ -307,6 +313,12 @@ pub fn literal_to_val(
                     .as_f32()
                     .expect("Real32-typed constant must be within range of f32");
                 ir::Value::LiteralF32(val)
+            },
+            typ::Type::Primitive(typ::Primitive::Real64) => {
+                let val = r
+                    .as_f64()
+                    .expect("Real64-typed constant must be within range of f64");
+                ir::Value::LiteralF64(val)
             },
             _ => panic!("bad type for real literal: {}", ty),
         },

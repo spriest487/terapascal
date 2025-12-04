@@ -1,7 +1,6 @@
 use crate::typ::ast::Literal;
 use crate::IntConstant;
 use crate::RealConstant;
-use std::mem::size_of;
 
 #[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
 pub enum Primitive {
@@ -17,11 +16,12 @@ pub enum Primitive {
     NativeInt,
     NativeUInt,
     Real32,
+    Real64,
     Pointer,
 }
 
 impl Primitive {
-    pub const ALL: [Primitive; 13] = [
+    pub const ALL: [Primitive; 14] = [
         Primitive::Boolean,
         Primitive::UInt8,
         Primitive::Int8,
@@ -34,6 +34,7 @@ impl Primitive {
         Primitive::NativeInt,
         Primitive::NativeUInt,
         Primitive::Real32,
+        Primitive::Real64,
         Primitive::Pointer,
     ];
 
@@ -47,7 +48,7 @@ impl Primitive {
     // for types compatible with sets/range expressions
     pub fn integer_range(&self) -> Option<(IntConstant, IntConstant)> {
         match self {
-            Primitive::Pointer | Primitive::Boolean | Primitive::Real32 => None,
+            Primitive::Pointer | Primitive::Boolean | Primitive::Real32 | Primitive::Real64 => None,
             Primitive::UInt8 => {
                 Some((IntConstant::from(u8::MIN), IntConstant::from(u8::MAX)))
             },
@@ -88,7 +89,8 @@ impl Primitive {
             | Primitive::Int32
             | Primitive::Int64
             | Primitive::NativeInt
-            | Primitive::Real32 => true,
+            | Primitive::Real32
+            | Primitive::Real64 => true,
 
             _ => false,
         }
@@ -122,29 +124,12 @@ impl Primitive {
     pub const fn is_real(&self) -> bool {
         match self {
             | Primitive::Real32 => true,
+            | Primitive::Real64 => true,
             | _ => false,
         }
     }
 
-    pub const fn native_size(&self) -> usize {
-        match self {
-            | Primitive::UInt8 => size_of::<u8>(),
-            | Primitive::Int8 => size_of::<i8>(),
-            | Primitive::Int16 => size_of::<i16>(),
-            | Primitive::UInt16 => size_of::<u16>(),
-            | Primitive::Int32 => size_of::<u32>(),
-            | Primitive::UInt32 => size_of::<u32>(),
-            | Primitive::Int64 => size_of::<u64>(),
-            | Primitive::UInt64 => size_of::<u64>(),
-            | Primitive::NativeInt => size_of::<isize>(),
-            | Primitive::NativeUInt => size_of::<usize>(),
-            | Primitive::Pointer => size_of::<*const u8>(),
-            | Primitive::Boolean => size_of::<bool>(),
-            | Primitive::Real32 => size_of::<f32>(),
-        }
-    }
-
-    pub const fn name(&self) -> &str {        
+    pub const fn name(&self) -> &str {
         match self {
             Primitive::Boolean => "Boolean",
             Primitive::UInt8 => "UInt8",
@@ -158,6 +143,7 @@ impl Primitive {
             Primitive::NativeInt => "NativeInt",
             Primitive::NativeUInt => "NativeUInt",
             Primitive::Real32 => "Real32",
+            Primitive::Real64 => "Real64",
             Primitive::Pointer => "Pointer",
         }
     }
@@ -165,8 +151,11 @@ impl Primitive {
     pub fn default_val(&self) -> Literal {
         match self {
             | Primitive::Boolean => Literal::Boolean(false),
-            | Primitive::Real32 => Literal::Real(RealConstant::from(0.0)),
-            | Primitive::Pointer => Literal::Nil,
+ 
+            Primitive::Real32
+            | Primitive::Real64 => Literal::Real(RealConstant::from(0.0)),
+            
+            Primitive::Pointer => Literal::Nil,
 
             | Primitive::UInt8
             | Primitive::Int8
