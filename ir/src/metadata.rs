@@ -222,6 +222,27 @@ impl Metadata {
 
             self.ifaces.insert(*id, iface_decl.clone());
         }
+        
+        for (impl_ty, other_impls) in &other.iface_impls {
+            let impls = self.iface_impls.entry(impl_ty.clone())
+                .or_insert_with(|| BTreeMap::new());
+            
+            for (iface_id, other_iface_impl) in other_impls {
+                let iface_impl = impls.entry(*iface_id)
+                    .or_insert_with(|| InterfaceImpl::new(other_iface_impl.methods.len()));
+                
+                let conflict_name = format!("method of interface {}", iface_id);
+                for (method_id, impl_func_id) in &other_iface_impl.methods {
+                    if let Some(existing) = iface_impl.methods.get(method_id) {
+                        if *existing != *impl_func_id {
+                            panic!("incompatible function for {conflict_name}: was {existing}, linked metadata contains {impl_func_id}");
+                        }
+                    } else {
+                        iface_impl.methods.insert(*method_id, *impl_func_id);
+                    }
+                }
+            }
+        }
 
         for (id, func_info) in &other.function_info {
             if self.function_info.contains_key(id) {
@@ -242,7 +263,7 @@ impl Metadata {
                 }
             }
         }
-        
+
         for (func_id, static_closure) in &other.function_static_closures {
             if self.function_static_closures.contains_key(func_id) {
                 panic!("duplicate static closure ID for function {func_id}");
