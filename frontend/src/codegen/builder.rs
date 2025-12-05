@@ -48,6 +48,10 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         self.library.metadata()
     }
 
+    fn metadata_mut(&mut self) -> &mut MetadataBuilder {
+        self.library.metadata_mut()
+    }
+
     fn local_stack(&self) -> &LocalStack {
         &self.local_stack
     }

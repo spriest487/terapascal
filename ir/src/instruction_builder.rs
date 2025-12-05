@@ -35,6 +35,7 @@ pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
 
     fn metadata(&self) -> &MetadataBuilder;
+    fn metadata_mut(&mut self) -> &mut MetadataBuilder;
 
     fn local_stack(&self) -> &LocalStack;
     fn local_stack_mut(&mut self) -> &mut LocalStack;
