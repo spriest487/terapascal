@@ -15,8 +15,7 @@ use crate::typ::SYSTEM_UNIT_NAME;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::*;
-use terapascal_ir::instruction_builder::InstructionBuilder;
-use terapascal_ir::Value;
+use terapascal_ir::instruction_builder::InstructionBuilder as _;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Value {
     match expr.annotation() {
@@ -370,7 +369,7 @@ pub fn translate_literal_expr(
     builder: &mut IRBuilder,
 ) -> ir::Ref {
     match literal_to_val(lit, ty, builder) {
-        Value::Ref(lit_ref) => lit_ref,
+        ir::Value::Ref(lit_ref) => lit_ref,
         val => {
             let out_ty = builder.translate_type(ty);
             let out = builder.local_temp(out_ty);

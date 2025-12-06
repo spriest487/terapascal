@@ -12,7 +12,7 @@ use crate::codegen::build_func_def;
 use crate::codegen::build_func_static_closure_def;
 use crate::codegen::build_static_closure_impl;
 use crate::codegen::builder::IRBuilder;
-use crate::codegen::expr::expr_to_val;
+use crate::codegen::expr::{expr_to_val, literal_to_val};
 use crate::codegen::metadata::translate_closure_struct;
 use crate::codegen::metadata::translate_iface;
 use crate::codegen::metadata::translate_name;
@@ -20,6 +20,7 @@ use crate::codegen::metadata::translate_sig;
 use crate::codegen::metadata::translate_struct_def;
 use crate::codegen::metadata::translate_variant_def;
 use crate::codegen::metadata::ClosureInstance;
+use crate::codegen::metadata::NamePathExt;
 use crate::codegen::stmt::translate_stmt;
 use crate::codegen::typ;
 use crate::codegen::CodegenOpts;
@@ -38,12 +39,10 @@ use crate::typ::get_mem_sig;
 use crate::typ::layout::StructLayout;
 use crate::typ::layout::StructLayoutMember;
 use crate::typ::seq::TypeSequenceSupport;
-use crate::typ::GenericContext;
 use crate::typ::Specializable;
 use crate::typ::TypeArgResolver;
 use crate::typ::TypeArgsResult;
 use crate::typ::TypeParamContainer;
-use crate::typ::Value;
 use crate::typ::SYSTEM_UNIT_NAME;
 pub use function::*;
 use init::gen_tags_init;
@@ -70,8 +69,6 @@ pub struct LibraryBuilder<'a> {
     set_flags_type_info: BTreeMap<usize, SetFlagsType>,
 
     translated_funcs: HashMap<FunctionDefKey, FunctionInstance>,
-    
-    tags: HashMap<ir::TagLocation, Vec<typ::ast::TagItem>>,
 
     functions: BTreeMap<ir::FunctionID, ir::Function>,
     function_types_by_sig: HashMap<typ::FunctionSig, ir::TypeDefID>,
@@ -149,8 +146,6 @@ impl<'a> LibraryBuilder<'a> {
             type_cache,
             cached_types,
 
-            tags: HashMap::new(),
-            
             set_flags_type_info: BTreeMap::new(),
             
             functions: BTreeMap::new(),
@@ -183,7 +178,7 @@ impl<'a> LibraryBuilder<'a> {
         let mut defined_types: Vec<_> = self.src_metadata.defined_types();
 
         // exclude generic types
-        let empty_generic_ctx = GenericContext::empty();
+        let empty_generic_ctx = typ::GenericContext::empty();
 
         defined_types.retain(|ty| !ty.is_unspecialized_generic()
             && !ty.contains_unresolved_params(&self.src_metadata));
@@ -236,12 +231,13 @@ impl<'a> LibraryBuilder<'a> {
 
     pub fn translate_unit(&mut self, unit: &typ::ast::Unit) {
         for (_, var) in unit.var_decl_items() {
-            let var_ty = self.translate_type(&var.ty, &GenericContext::empty());
+            let var_ty = self.translate_type(&var.ty, &typ::GenericContext::empty());
 
             for ident in &var.idents {
-                let id = self.metadata.new_variable(var_ty.clone());
-
                 let var_name = unit.ident.clone().child(ident.clone());
+                let var_path = ir::NamePath::from_ident_path(&var_name, None);
+
+                let id = self.metadata.new_variable(var_path, var_ty.clone());
 
                 self.variables_by_name.insert(var_name, id);
                 self.variables.insert(id, var_ty.clone());
@@ -281,7 +277,7 @@ impl<'a> LibraryBuilder<'a> {
                 debug_name,
             };
 
-            let init_func_id = self.metadata.insert_func(None, false);
+            let init_func_id = self.metadata.insert_func(None, false, []);
             self.functions.insert(init_func_id, ir::Function::Local(init_func));
 
             self.init_code.push(ir::Instruction::Call {
@@ -382,6 +378,69 @@ impl<'a> LibraryBuilder<'a> {
         set_flags_type
     }
 
+    pub fn translate_tag_groups(&mut self, tags: &[typ::ast::Tag]) -> Vec<ir::TagInfo> {
+        // most groups will probably contain 1 tag
+        let mut result = Vec::with_capacity(tags.len());
+        
+        for group in tags {
+            result.extend(self.translate_tags(&group.items));
+        }
+        
+        result
+    }
+
+    pub fn translate_tags(&mut self, tags: &[typ::ast::TagItem]) -> Vec<ir::TagInfo> {
+        // tags can't be generic
+        let generic_context = typ::GenericContext::empty();
+        
+        let mut result = Vec::with_capacity(tags.len());
+        
+        for item in tags {
+            let tag_type = self.translate_type(&item.tag_type, &generic_context);
+            
+            // typechecker must ensure all tags are class objects
+            let ir::Type::Object(ir::ObjectID::Class(tag_class_id)) = tag_type else {
+                panic!("translate_tags: illegal type for tag item: {}", item.tag_type);
+            };
+            
+            let Some(tag_def) = self.metadata.get_struct_def(tag_class_id) else {
+                panic!("translate_tags: missing definition for type used as tag: {}", item.tag_type);
+            };
+            
+            let mut tag_info = ir::TagInfo::new(tag_class_id);
+
+            for arg in &item.args.members {
+                let Some((field_id, field_type)) = tag_def.fields
+                    .iter()
+                    .find_map(|(id, field_def)| {
+                        let Some(field_name) = &field_def.name else {
+                            return None;
+                        };
+
+                        (*field_name == *arg.ident.name).then_some((*id, &field_def.ty))
+                    })
+                else {
+                    panic!("translate_tags: missing definition for field {}.{}", item.tag_type, arg.ident);
+                };
+
+                match arg.value.annotation() {
+                    typ::Value::Const(const_val) => {
+                        let field_val = literal_to_val(&const_val.value, field_type,)
+                        tag_info.fields.insert(field_id, )
+                    }
+                    
+                    _ => {
+                        panic!("translate_tags: constructor of tag must only contain const values (expr {}: {} was not const)", arg.ident, arg.value);
+                    }
+                }
+            }
+            
+            result.push(tag_info);
+        }
+        
+        result
+    }
+
     fn instantiate_system_func(&mut self, name: &str, sig: Arc<typ::FunctionSig>) -> ir::FunctionID {
         let ident_path = IdentPath::new(builtin_ident(name), [
             builtin_ident(SYSTEM_UNIT_NAME),
@@ -475,9 +534,6 @@ impl<'a> LibraryBuilder<'a> {
         );
 
         self.functions.insert(id, ir::Function::Local(ir_func));
-
-        let tags_loc = ir::TagLocation::Function(id);
-        self.add_tags(tags_loc, &func_def.decl.tags);
 
         cached_func
     }
@@ -671,7 +727,7 @@ impl<'a> LibraryBuilder<'a> {
         self.functions.insert(id, ir::Function::Local(ir_func));
 
         if !method_decl.func_decl.tags.is_empty() {
-            let ir_self_ty = self.translate_type(&decl_self_ty, &GenericContext::empty());
+            let ir_self_ty = self.translate_type(&decl_self_ty, &typ::GenericContext::empty());
             
             let Some(tags_loc) = ir_self_ty
                 .tags_loc()
@@ -679,8 +735,6 @@ impl<'a> LibraryBuilder<'a> {
             else {
                 panic!("produced tags for method {} with no valid tag location!", method_decl.func_decl.name)
             };
-
-            self.add_tags(tags_loc, &method_decl.func_decl.tags);
         }
 
         cached_func
@@ -780,8 +834,10 @@ impl<'a> LibraryBuilder<'a> {
         } else {
             None
         };
+        
+        let tags = self.translate_tag_groups(&func_decl.tags);
 
-        self.metadata.insert_func(global_name, self.opts.rtti)
+        self.metadata.insert_func(global_name, self.opts.rtti, tags)
     }
 
     pub fn translate_func(
@@ -824,7 +880,7 @@ impl<'a> LibraryBuilder<'a> {
     }
 
     pub fn find_iface_decl(&mut self, iface_name: &typ::Symbol) -> Option<ir::InterfaceID> {
-        let name = translate_name(iface_name, &GenericContext::empty(), self);
+        let name = translate_name(iface_name, &typ::GenericContext::empty(), self);
 
         self.metadata
             .ifaces()
@@ -902,7 +958,7 @@ impl<'a> LibraryBuilder<'a> {
     fn insert_type_dtor(&mut self,
         type_id: ir::TypeDefID,
         src_ty: typ::Type,
-        src_def: &impl MethodOwner<Value>
+        src_def: &impl MethodOwner<typ::Value>
     ) {
         let Some(dtor_method_index) = src_def.find_dtor_index() else {
             return;
@@ -924,7 +980,7 @@ impl<'a> LibraryBuilder<'a> {
     pub fn translate_type(
         &mut self,
         src_ty: &typ::Type,
-        generic_ctx: &GenericContext,
+        generic_ctx: &typ::GenericContext,
     ) -> ir::Type {
         let src_ty = generic_ctx.apply_to_type(src_ty.clone());
         if let Some(cached) = self.type_cache.get(&src_ty) {
@@ -1416,7 +1472,7 @@ impl<'a> LibraryBuilder<'a> {
         func: &typ::ast::AnonymousFunctionDef,
         generic_ctx: &typ::GenericContext,
     ) -> ClosureInstance {
-        let id = self.metadata.insert_func(None, false);
+        let id = self.metadata.insert_func(None, false, []);
 
         // this is the signature of the *function type* of the closure, not the signature of
         // the real method implementing the closure, which has an extra type-erased parameter
@@ -1563,31 +1619,6 @@ impl<'a> LibraryBuilder<'a> {
 
         instructions.append(&mut self.init_code);
         self.init_code = instructions;
-    }
-    
-    #[allow(unused)]
-    pub(crate) fn add_tag(&mut self, loc: ir::TagLocation, tag: typ::ast::TagItem) {
-        let loc_tags = self.tags.entry(loc).or_insert_with(Vec::new);
-        
-        loc_tags.push(tag);
-    }
-
-    pub(crate) fn add_tags(&mut self, loc: ir::TagLocation, tags: &[typ::ast::Tag]) {
-        let loc_tags = self.tags.entry(loc).or_insert_with(Vec::new);
-        
-        for tag in tags {
-            loc_tags.extend(tag.items.iter().cloned());
-        }
-
-        let new_tag_count = loc_tags.len();
-
-        self.metadata_mut().alloc_tag_array(loc, new_tag_count);
-    }
-
-    pub fn tags(&self) -> impl Iterator<Item=(ir::TagLocation, &[typ::ast::TagItem])> + use <'_> {
-        self.tags
-            .iter()
-            .map(|(loc, tags)| (*loc, tags.as_slice()))
     }
 }
 
@@ -1758,7 +1789,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
             continue;
         }
         
-        let invoker_id = lib.metadata_mut().insert_func(None, false);
+        let invoker_id = lib.metadata_mut().insert_func(None, false, []);
 
         let debug_name = lib.opts.debug
             .then(|| format!("generated invoker for {}", func.id));

@@ -20,45 +20,8 @@ use std::fmt::Write;
 pub use tags::*;
 pub use variant::*;
 
-#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
-pub struct TypeDefID(pub usize);
-
-impl TypeDefID {
-    pub fn to_class_ptr_type(self) -> Type {
-        Type::class_ptr(self)
-    }
-
-    pub fn to_class_weak_type(self) -> Type {
-        Type::WeakObject(ObjectID::Class(self))
-    }
-
-    pub fn to_struct_type(self) -> Type {
-        Type::Struct(self)
-    }
-
-    pub fn to_variant_type(self) -> Type {
-        Type::Variant(self)
-    }
-
-    pub fn to_function_type(self) -> Type {
-        Type::Function(self)
-    }
-}
-
-impl fmt::Display for TypeDefID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
-pub struct InterfaceID(pub usize);
-
-impl InterfaceID {
-    pub fn to_interface_ptr_type(self) -> Type {
-        Type::Object(ObjectID::Interface(self))
-    }
-}
+pub use crate::metadata::ids::TypeDefID;
+pub use crate::metadata::ids::InterfaceID;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum StructIdentity {
@@ -71,7 +34,7 @@ pub enum StructIdentity {
     SetFlags { bits: usize }
 }
 
-impl StructIdentity {    
+impl StructIdentity {
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         let type_formatter = |ty: &Type| Cow::Owned(ty.to_pretty_string(formatter));
 

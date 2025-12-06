@@ -4,7 +4,7 @@ mod rtti;
 
 use crate::dep_sort::sort_defs;
 use crate::metadata::source::MetadataSource;
-use crate::FieldID;
+use crate::{FieldID, NamePath, VariableInfo};
 use crate::FunctionID;
 use crate::IRFormatter;
 use crate::InterfaceID;
@@ -105,13 +105,17 @@ impl MetadataBuilder {
         self.metadata.pretty_ty_name(ty)
     }
     
-    pub fn new_variable(&mut self, ty: Type) -> VariableID {
+    pub fn new_variable(&mut self, name: NamePath, ty: Type) -> VariableID {
         let id = self.next_variable_id;
 
         while let Some(..) = self.metadata.variables.get(&self.next_variable_id) {
             self.next_variable_id.0 += 1;
         }
-        self.metadata.variables.insert(id, ty);
+        
+        self.metadata.variables.insert(id, VariableInfo {
+            name,
+            r#type: ty,
+        });
 
         self.next_variable_id.0 += 1;
         

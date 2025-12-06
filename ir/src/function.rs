@@ -1,4 +1,3 @@
-use crate::IRFormatter;
 use crate::Label;
 use crate::LocalID;
 use crate::NamePath;
@@ -6,6 +5,7 @@ use crate::RawInstructionFormatter;
 use crate::Ref;
 use crate::Type;
 use crate::TypeDefID;
+use crate::{IRFormatter, TagInfo};
 use crate::{Instruction, StringID};
 use serde::Deserialize;
 use serde::Serialize;
@@ -105,6 +105,8 @@ pub struct FunctionInfo {
     pub global_name: Option<NamePath>,
     
     pub invoker: Option<FunctionID>,
+    
+    pub tags: Vec<TagInfo>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

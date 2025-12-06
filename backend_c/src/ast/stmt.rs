@@ -833,9 +833,9 @@ impl<'a, 'b> Builder<'a, 'b> {
             }
 
             ir::Ref::Global(ir::GlobalRef::Variable(var_id)) => {
-                let var_type = self.module.metadata.get_variable_type(*var_id)?;
+                let var = self.module.metadata.get_variable(*var_id)?;
                 
-                Some(var_type.clone())
+                Some(var.r#type.clone())
             }
 
             ir::Ref::Global(ir::GlobalRef::StaticClosure(static_closure_id)) => {
