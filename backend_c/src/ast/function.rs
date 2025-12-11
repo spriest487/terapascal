@@ -113,7 +113,8 @@ pub enum BuiltinName {
     NativeIntToStr,
     NativeUIntToStr,
     PointerToStr,
-    RealToStr,
+    Real32ToStr,
+    Real64ToStr,
 
     StrToInt,
     Write,
@@ -186,7 +187,8 @@ impl fmt::Display for BuiltinName {
             BuiltinName::NativeIntToStr => write!(f, "System_NativeIntToStr"),
             BuiltinName::NativeUIntToStr => write!(f, "System_NativeUIntToStr"),
             BuiltinName::PointerToStr => write!(f, "System_PointerToStr"),
-            BuiltinName::RealToStr => write!(f, "System_RealToStr"),
+            BuiltinName::Real32ToStr => write!(f, "System_Real32ToStr"),
+            BuiltinName::Real64ToStr => write!(f, "System_Real64ToStr"),
 
             BuiltinName::ArrayLengthInternal => write!(f, "System_ArrayLengthInternal"),
             BuiltinName::ArrayCreateInternal => write!(f, "System_ArrayCreateInternal"),
