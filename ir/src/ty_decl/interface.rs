@@ -1,7 +1,8 @@
+use crate::FunctionID;
 use crate::MethodID;
 use crate::NamePath;
+use crate::TagInfo;
 use crate::Type;
-use crate::FunctionID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -11,12 +12,16 @@ pub struct Method {
     pub name: String,
     pub return_ty: Type,
     pub params: Vec<Type>,
+
+    pub tags: Vec<TagInfo>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InterfaceDef {
     pub name: NamePath,
     pub methods: Vec<Method>,
+    
+    pub tags: Vec<TagInfo>,
 }
 
 impl InterfaceDef {
@@ -24,6 +29,7 @@ impl InterfaceDef {
         Self {
             name: name.into(),
             methods: methods.into(),
+            tags: Vec::new(),
         }
     }
 
@@ -36,6 +42,11 @@ impl InterfaceDef {
 
     pub fn get_method(&self, id: MethodID) -> Option<&Method> {
         self.methods.get(id.0)
+    }
+    
+    pub fn with_tags(mut self, tags: impl IntoIterator<Item=TagInfo>) -> Self {
+        self.tags.extend(tags.into_iter());
+        self
     }
 }
 

@@ -2,6 +2,7 @@
 mod test;
 
 use crate::ast as ast;
+use crate::codegen::expr::literal_to_val;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::FunctionDefKey;
 use crate::codegen::library_builder::LibraryBuilder;
@@ -174,6 +175,26 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             Some(index) => (id, index, variant_struct.cases[index].ty.as_ref()),
             None => panic!("missing case {} for {} in IR metadata", case, variant),
         }
+    }
+    
+    pub fn literal_to_val(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> Value {
+        let ty = self.translate_type(ty);
+        literal_to_val(lit, &ty, &self.generic_context, self.library)
+    }
+    
+    pub fn translate_literal(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> Ref {
+        let val = self.literal_to_val(lit, ty);
+
+        if let Value::Ref(lit_ref) = val {
+            return lit_ref
+        };
+        
+        let out_ty = self.translate_type(ty);
+        let out = self.local_temp(out_ty);
+
+        self.mov(out, val);
+
+        out.to_ref()
     }
 
     pub fn translate_name(&mut self, name: &Symbol) -> NamePath {

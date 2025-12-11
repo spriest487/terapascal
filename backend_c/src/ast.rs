@@ -92,7 +92,8 @@ impl<'a> Unit<'a> {
             .collect();
 
         let tag_arrays = metadata
-            .tag_counts()
+            .all_tags()
+            .map(|(loc, tags)| (loc, tags.len()))
             .collect();
 
         let mut unit = Unit {
@@ -160,7 +161,7 @@ impl<'a> Unit<'a> {
             unit.classes.push(class);
         } 
 
-        for (iface_id, iface_def) in metadata.ifaces() {
+        for (iface_id, iface_def) in metadata.interfaces() {
             let iface = Interface::translate(iface_id, iface_def, &mut unit);
             unit.ifaces.push(iface);
         }

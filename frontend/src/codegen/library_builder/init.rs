@@ -1,13 +1,11 @@
-use terapascal_ir::instruction_builder::InstructionBuilder;
 use crate::codegen::builder::IRBuilder;
-use crate::codegen::expr::expr_to_val;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::typ as typ;
 use crate::ir;
+use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::MetadataSource;
 
 pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
-    let locations: Vec<_> = lib
-        .tags()
+    let locations: Vec<_> = lib.metadata.all_tags()
         .map(|(loc, tags)| (loc, tags.to_vec()))
         .collect();
     
@@ -38,7 +36,7 @@ pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
 fn gen_create_tags(
     builder: &mut IRBuilder,
     tag_array: ir::Ref,
-    tags: Vec<typ::ast::TagItem>,
+    tags: Vec<ir::TagInfo>,
 ) {
     if tags.is_empty() {
         return;
@@ -50,38 +48,28 @@ fn gen_create_tags(
     let element_ref = builder.local_temp(ir::ANY_TYPE.temp_ref());
 
     for i in 0..tags.len() {
-        let tag_item = &tags[i];
+        let tag_info = &tags[i];
 
-        // should be safe, tags must be translated before their owning types
-        let tag_ty = builder.translate_type(&tag_item.tag_type)
-            .rc_resource_def_id()
-            .expect("tags must be classes!");
-
-        let tag_class = tag_ty.to_class_ptr_type();
+        let tag_class = tag_info.class_id.to_class_ptr_type();
 
         let tag_struct_def = builder
-            .get_struct(tag_ty)
+            .get_struct(tag_info.class_id)
             .expect("tag class struct must exist")
             .clone();
 
         let tag_instance = builder.local_temp(tag_class.clone());
-        builder.new_object(tag_instance, tag_ty, true);
+        builder.new_object(tag_instance, tag_info.class_id, true);
         
         let index_val = ir::Value::LiteralI32(i as i32);
         builder.element(element_ref, tag_array.clone(), index_val, tag_array_ty.clone());
         builder.cast(element_ref.to_deref(), tag_instance, ir::ANY_TYPE);
 
-        for arg in tag_item.args.members.iter() {
-            let Some(field_id) = tag_struct_def.find_field(arg.ident.as_str()) else {
-                continue;
-            };
-
+        for (field_id, field_val) in tag_info.fields.iter() {
             let field_ty = &tag_struct_def.fields[&field_id].ty;
             let field_ref = builder.local_temp(field_ty.clone().temp_ref());
-            builder.field(field_ref, tag_instance, tag_class.clone(), field_id);
+            builder.field(field_ref, tag_instance, tag_class.clone(), *field_id);
 
-            let arg_val = expr_to_val(&arg.value, builder);
-            builder.mov(field_ref.to_deref(), arg_val);
+            builder.mov(field_ref.to_deref(), field_val.clone());
         }
     }
 }

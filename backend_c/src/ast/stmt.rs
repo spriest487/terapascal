@@ -231,6 +231,10 @@ pub enum Statement {
 }
 
 impl Statement {
+    pub fn var(ty: Type, id: VariableID, null_init: bool) -> Statement {
+        Statement::VariableDecl { ty, id, null_init }
+    }
+    
     pub fn if_then(
         cond: impl Into<Expr>,
         then_branch: impl IntoIterator<Item=Statement>
@@ -345,11 +349,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         let id = VariableID::Temp(current_scope.next_temp_var);
         current_scope.next_temp_var += 1;
 
-        self.stmts.push(Statement::VariableDecl {
-            ty: var_type,
-            id: id.clone(),
-            null_init,
-        });
+        self.stmts.push(Statement::var(var_type, id.clone(), null_init));
         
         id
     }
@@ -400,7 +400,7 @@ impl<'a, 'b> Builder<'a, 'b> {
 
             ir::Instruction::Jump { dest } => self.stmts.push(Statement::Goto(*dest)),
             ir::Instruction::JumpIf { dest, test } => {
-                let cond_expr = Expr::translate_val(test, self.module);
+                let cond_expr = Expr::translate_val(test, self);
                 
                 self.stmts.push(Statement::if_then(cond_expr, [
                     Statement::Goto(*dest)
@@ -412,21 +412,13 @@ impl<'a, 'b> Builder<'a, 'b> {
             },
 
             ir::Instruction::AddrOf { out, a } | ir::Instruction::MakeRef { out, a } => {
-                let addr = Expr::translate_ref(a, self.module).addr_of();
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
-                    out,
-                    addr,
-                    self.module,
-                )));
+                let addr = Expr::translate_ref(a, self).addr_of();
+                self.assign_ref(out, addr);
             },
 
             ir::Instruction::Move { out, new_val } => {
-                let val = Expr::translate_val(new_val, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
-                    out,
-                    val,
-                    self.module,
-                )));
+                let val = Expr::translate_val(new_val, self);
+                self.assign_ref(out, val);
             },
 
             ir::Instruction::Eq(ir::BinOpInstruction { out, a, b }) => {
@@ -481,31 +473,19 @@ impl<'a, 'b> Builder<'a, 'b> {
             ir::Instruction::BitNot(ir::UnaryOpInstruction { out, a }) => {
                 let val = Expr::PrefixOp {
                     op: PrefixOp::BitNot,
-                    operand: Box::new(Expr::translate_val(a, self.module)),
+                    operand: Box::new(Expr::translate_val(a, self)),
                 };
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
-                    out,
-                    val,
-                    self.module,
-                )))
+                self.assign_ref(out, val);
             },
 
             ir::Instruction::Element { out, a, index, of_type: of_ty, .. } => {
-                let element = Expr::translate_element(a, index, of_ty, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
-                    out,
-                    element,
-                    self.module,
-                )));
+                let element = Expr::translate_element(a, index, of_ty, self);
+                self.assign_ref(out, element);
             },
 
             ir::Instruction::Length { out, a, of_type: of_ty, .. } => {
-                let element = Expr::translate_length(a, of_ty, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
-                    out,
-                    element,
-                    self.module,
-                )));
+                let element = Expr::translate_length(a, of_ty, self);
+                self.assign_ref(out, element);
             },
 
             ir::Instruction::Field {
@@ -514,30 +494,22 @@ impl<'a, 'b> Builder<'a, 'b> {
                 of_ty,
                 field,
             } => {
-                let field = Expr::translate_field(a, of_ty, *field, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
-                    out,
-                    field,
-                    self.module,
-                )))
+                let field = Expr::translate_field(a, of_ty, *field, self);
+                self.assign_ref(out, field)
             },
 
             ir::Instruction::VariantTag { out, a, .. } => {
                 let tag_field = Expr::Field {
-                    base: Box::new(Expr::translate_ref(a, self.module)),
+                    base: Box::new(Expr::translate_ref(a, self)),
                     field: FieldName::VariantTag,
                 };
 
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
-                    out,
-                    tag_field.addr_of(),
-                    self.module,
-                )));
+                self.assign_ref(out, tag_field.addr_of());
             },
 
             ir::Instruction::VariantData { out, a, tag, .. } => {
                 let data_field = Expr::Field {
-                    base: Box::new(Expr::translate_ref(a, self.module)),
+                    base: Box::new(Expr::translate_ref(a, self)),
                     field: FieldName::VariantData,
                 };
 
@@ -546,11 +518,12 @@ impl<'a, 'b> Builder<'a, 'b> {
                     field: FieldName::VariantDataCase(*tag),
                 };
 
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
+                let assign_result = Expr::translate_assign(
                     out,
                     case_field.addr_of(),
-                    self.module,
-                )));
+                    self,
+                );
+                self.stmts.push(Statement::Expr(assign_result));
             },
 
             ir::Instruction::Call {
@@ -574,76 +547,83 @@ impl<'a, 'b> Builder<'a, 'b> {
             }
 
             ir::Instruction::Gt(ir::BinOpInstruction { out, a, b }) => {
-                let gt = Expr::translate_infix_op(a, InfixOp::Gt, b, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
+                let gt = Expr::translate_infix_op(a, InfixOp::Gt, b, self);
+                let assign_result = Expr::translate_assign(
                     out,
                     gt,
-                    self.module,
-                )))
+                    self,
+                );
+                self.stmts.push(Statement::Expr(assign_result))
             },
 
             ir::Instruction::Gte(ir::BinOpInstruction { out, a, b }) => {
-                let gt = Expr::translate_infix_op(a, InfixOp::Gte, b, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
+                let gt = Expr::translate_infix_op(a, InfixOp::Gte, b, self);
+                let assign_result = Expr::translate_assign(
                     out,
                     gt,
-                    self.module,
-                )))
+                    self,
+                );
+                self.stmts.push(Statement::Expr(assign_result))
             },
 
             ir::Instruction::Lt(ir::BinOpInstruction { out, a, b }) => {
-                let gt = Expr::translate_infix_op(a, InfixOp::Lt, b, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
+                let gt = Expr::translate_infix_op(a, InfixOp::Lt, b, self);
+                let assign_result = Expr::translate_assign(
                     out,
                     gt,
-                    self.module,
-                )))
+                    self,
+                );
+                self.stmts.push(Statement::Expr(assign_result))
             },
             ir::Instruction::Lte(ir::BinOpInstruction { out, a, b }) => {
-                let gt = Expr::translate_infix_op(a, InfixOp::Lte, b, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
+                let gt = Expr::translate_infix_op(a, InfixOp::Lte, b, self);
+                let assign_result = Expr::translate_assign(
                     out,
                     gt,
-                    self.module,
-                )))
+                    self,
+                );
+                self.stmts.push(Statement::Expr(assign_result))
             },
             
 
             ir::Instruction::And(ir::BinOpInstruction { out, a, b }) => {
-                let and = Expr::translate_infix_op(a, InfixOp::And, b, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
+                let and = Expr::translate_infix_op(a, InfixOp::And, b, self);
+                let assign_result = Expr::translate_assign(
                     out,
                     and,
-                    self.module,
-                )))
+                    self,
+                );
+                self.stmts.push(Statement::Expr(assign_result))
             },
 
             ir::Instruction::Or(ir::BinOpInstruction { out, a, b }) => {
-                let or = Expr::translate_infix_op(a, InfixOp::Or, b, self.module);
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
+                let or = Expr::translate_infix_op(a, InfixOp::Or, b, self);
+                let assign_result = Expr::translate_assign(
                     out,
                     or,
-                    self.module,
-                )))
+                    self,
+                );
+                self.stmts.push(Statement::Expr(assign_result))
             },
 
             ir::Instruction::Not(ir::UnaryOpInstruction { out, a }) => {
-                let a_expr = Expr::translate_val(a, self.module);
+                let a_expr = Expr::translate_val(a, self);
                 let not = Expr::PrefixOp {
                     op: PrefixOp::Not,
                     operand: Box::new(a_expr),
                 };
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
+                let assign_result = Expr::translate_assign(
                     out,
                     not,
-                    self.module,
-                )))
+                    self,
+                );
+                self.stmts.push(Statement::Expr(assign_result))
             },
 
             ir::Instruction::Retain { at, weak } => {
                 let retain = Expr::Function(FunctionName::Builtin(BuiltinName::RcRetain));
 
-                let rc_ptr = Expr::translate_ref(at, self.module).cast(Type::object_ptr());
+                let rc_ptr = Expr::translate_ref(at, self).cast(Type::object_ptr());
                 let call_retain = retain.call([rc_ptr, Expr::LitBool(*weak)]);
 
                 self.stmts.push(Statement::Expr(call_retain));
@@ -652,11 +632,11 @@ impl<'a, 'b> Builder<'a, 'b> {
             ir::Instruction::Release { at, weak, released_out } => {
                 let release = Expr::Function(FunctionName::Builtin(BuiltinName::RcRelease));
 
-                let rc_ptr = Expr::translate_ref(at, self.module).cast(Type::object_ptr());
+                let rc_ptr = Expr::translate_ref(at, self).cast(Type::object_ptr());
                 let call_release = release.call([rc_ptr, Expr::LitBool(*weak)]);
                 
                 if *released_out != ir::Ref::Discard {
-                    let lhs = Expr::translate_ref(released_out, self.module);
+                    let lhs = Expr::translate_ref(released_out, self);
                     self.stmts.push(Statement::assign(lhs, call_release));
                 } else {
                     self.stmts.push(Statement::Expr(call_release));
@@ -672,19 +652,21 @@ impl<'a, 'b> Builder<'a, 'b> {
             } => {
                 let method_func = Expr::Function(FunctionName::Method(*iface_id, *method));
 
-                let mut args = vec![Expr::translate_val(self_arg, self.module)];
+                let mut args = vec![Expr::translate_val(self_arg, self)];
                 args.extend(
                     rest_args
                         .iter()
-                        .map(|arg| Expr::translate_val(arg, self.module)),
+                        .map(|arg| Expr::translate_val(arg, self)),
                 );
 
                 let call = method_func.call(args);
 
-                self.stmts.push(Statement::Expr(match out {
-                    Some(out) => Expr::translate_assign(out, call, self.module),
+                let result_expr = match out {
+                    Some(out) => Expr::translate_assign(out, call, self),
                     None => call,
-                }));
+                };
+
+                self.stmts.push(Statement::Expr(result_expr));
             },
 
             ir::Instruction::ClassIs { out, a, class_id } => {
@@ -692,22 +674,18 @@ impl<'a, 'b> Builder<'a, 'b> {
             },
 
             ir::Instruction::Raise { val } => {
-                let value_expr = Expr::translate_ref(val, self.module);
+                let value_expr = Expr::translate_ref(val, self);
                 self.raise(value_expr);
             },
 
             ir::Instruction::Cast { ty, out, a } => {
                 let ty = Type::from_metadata(ty, self.module);
-                let expr = Expr::translate_val(a, self.module);
+                let expr = Expr::translate_val(a, self);
 
                 // TODO: just assume any valid pascal cast is a valid C cast for now...
                 let cast_result = Expr::Cast(Box::new(expr), ty);
 
-                self.stmts.push(Statement::Expr(Expr::translate_assign(
-                    out,
-                    cast_result,
-                    self.module,
-                )));
+                self.assign_ref(out, cast_result);
             },
         }
     }
@@ -739,17 +717,20 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.stmts.push(Statement::Expr(Expr::assign(lhs.into(), rhs.into())));
     }
 
+    pub fn assign_ref(&mut self, out_ref: &ir::Ref, rhs: impl Into<Expr>) {
+        let out_expr = Expr::translate_ref(out_ref, self);
+        self.assign(out_expr, rhs.into())
+    }
+
     fn write_infix_op(&mut self, out: &ir::Ref, lhs: &ir::Value, op: InfixOp, rhs: &ir::Value) {
-        let and = Expr::translate_infix_op(lhs, op, rhs, self.module);
-        self.stmts.push(Statement::Expr(Expr::translate_assign(
-            out,
-            and,
-            self.module,
-        )))
+        let and = Expr::translate_infix_op(lhs, op, rhs, self);
+        let assign_result = Expr::translate_assign(out, and, self);
+
+        self.stmts.push(Statement::Expr(assign_result))
     }
 
     fn translate_class_is(&mut self, out: &ir::Ref, a: &ir::Value, class_id: &ir::ObjectID) {
-        let actual_expr = Expr::translate_val(a, self.module);
+        let actual_expr = Expr::translate_val(a, self);
 
         // get class ptr from rc
         let rc_ptr = actual_expr.cast(Type::Rc.ptr());
@@ -764,8 +745,8 @@ impl<'a, 'b> Builder<'a, 'b> {
 
         let is_dead = Expr::infix_op(is_null, InfixOp::Or, is_zombie);
 
-        self.stmts.push(Statement::if_then_else(is_dead, [
-            Statement::Expr(Expr::translate_assign(out, Expr::LitBool(false), self.module)),
+        let stmt = Statement::if_then_else(is_dead, [
+            Statement::Expr(Expr::translate_assign(out, Expr::LitBool(false), self)),
         ], [{
             let is = match class_id {
                 ir::ObjectID::Class(struct_id) => {
@@ -809,14 +790,28 @@ impl<'a, 'b> Builder<'a, 'b> {
                 },
             };
 
-            Statement::Expr(Expr::translate_assign(
-                out,
-                is,
-                self.module,
-            ))
-        }]));
+            Statement::Expr(Expr::translate_assign(out, is, self))
+        }]);
+
+        self.stmts.push(stmt);
     }
-    
+
+    pub fn get_dyn_array_type(&mut self, element_type: &ir::Type) -> DynArrayTypeID {
+        self.module.get_dyn_array_type(element_type)
+    }
+
+    pub fn array_class_ptr(&mut self, arr_obj: &Expr, id: &ir::ObjectID) -> Expr {
+        Expr::array_class_ptr(arr_obj, id, self.module)
+    }
+
+    pub fn function_name(&self, id: ir::FunctionID) -> FunctionName {
+        self.module.function_name(id)
+    }
+
+    pub fn get_box_type(&mut self, element_type: &ir::Type) -> BoxTypeID {
+        self.module.get_box_type(element_type)
+    }
+
     #[allow(unused)]
     fn find_ref_type(&self, at: &ir::Ref) -> Option<ir::Type> {
         match at {
@@ -881,18 +876,20 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     fn translate_call(&mut self, out: Option<&ir::Ref>, function: &ir::Value, args: &[ir::Value]) {
-        let func_expr = Expr::translate_val(function, self.module);
+        let func_expr = Expr::translate_val(function, self);
         let args = args
             .iter()
-            .map(|arg_val| Expr::translate_val(arg_val, self.module));
+            .map(|arg_val| Expr::translate_val(arg_val, self));
 
         let call = func_expr.call(args);
 
-        self.stmts.push(Statement::Expr(match out {
-            Some(out) => Expr::translate_assign(out, call, self.module),
+        let result_expr = match out {
+            Some(out) => Expr::translate_assign(out, call, self),
 
             None => call,
-        }));
+        };
+
+        self.stmts.push(Statement::Expr(result_expr));
     }
 
     fn translate_new_object(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID, immortal: bool) {
@@ -904,12 +901,8 @@ impl<'a, 'b> Builder<'a, 'b> {
             ty_class_ptr,
             Expr::LitBool(immortal),
         ]);
-
-        self.stmts.push(Statement::Expr(Expr::translate_assign(
-            out,
-            new_object.cast(Type::from_ir_struct(struct_id).ptr()),
-            self.module,
-        )))
+        
+        self.assign_ref(out, new_object.cast(Type::from_ir_struct(struct_id).ptr()));
     }
 
     fn translate_new_array(
@@ -920,7 +913,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         immortal: bool,
     ) {
         let array_id = self.module.get_dyn_array_type(element_type);
-        let count_val = Expr::translate_val(count, self.module);
+        let count_val = Expr::translate_val(count, self);
 
         let array_class_ptr = Expr::dyn_array_class(array_id).addr_of();
 
@@ -934,11 +927,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         
         let array_ptr = object_ptr.cast(Type::dyn_array_ptr(array_id));
 
-        self.stmts.push(Statement::Expr(Expr::translate_assign(
-            out,
-            array_ptr,
-            self.module,
-        )))
+        self.assign_ref(out, array_ptr);
     }
 
     fn translate_new_box(
@@ -947,7 +936,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         element_type: &ir::Type,
         immortal: bool,
     ) {
-        let out = Expr::translate_ref(out_ref, self.module);
+        let out = Expr::translate_ref(out_ref, self);
         
         self.new_box(out, element_type, immortal);
     }

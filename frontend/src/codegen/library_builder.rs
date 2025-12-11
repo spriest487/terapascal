@@ -55,6 +55,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::StripMode;
 use terapascal_ir::instruction_builder::InstructionBuilder as _;
+use terapascal_ir::MetadataSource;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -403,7 +404,7 @@ impl<'a> LibraryBuilder<'a> {
                 panic!("translate_tags: illegal type for tag item: {}", item.tag_type);
             };
             
-            let Some(tag_def) = self.metadata.get_struct_def(tag_class_id) else {
+            let Some(tag_def) = self.metadata.get_struct_def(tag_class_id).cloned() else {
                 panic!("translate_tags: missing definition for type used as tag: {}", item.tag_type);
             };
             
@@ -425,8 +426,8 @@ impl<'a> LibraryBuilder<'a> {
 
                 match arg.value.annotation() {
                     typ::Value::Const(const_val) => {
-                        let field_val = literal_to_val(&const_val.value, field_type,)
-                        tag_info.fields.insert(field_id, )
+                        let field_val = literal_to_val(&const_val.value, field_type, &generic_context, self);
+                        tag_info.fields.insert(field_id, field_val);
                     }
                     
                     _ => {
@@ -726,17 +727,6 @@ impl<'a> LibraryBuilder<'a> {
         );
         self.functions.insert(id, ir::Function::Local(ir_func));
 
-        if !method_decl.func_decl.tags.is_empty() {
-            let ir_self_ty = self.translate_type(&decl_self_ty, &typ::GenericContext::empty());
-            
-            let Some(tags_loc) = ir_self_ty
-                .tags_loc()
-                .and_then(|ty_tags_loc| ty_tags_loc.method_loc(method_key.method_index)) 
-            else {
-                panic!("produced tags for method {} with no valid tag location!", method_decl.func_decl.name)
-            };
-        }
-
         cached_func
     }
 
@@ -883,7 +873,7 @@ impl<'a> LibraryBuilder<'a> {
         let name = translate_name(iface_name, &typ::GenericContext::empty(), self);
 
         self.metadata
-            .ifaces()
+            .interfaces()
             .find_map(|(id, decl)| {
                 if decl.name == name {
                     Some(id)
@@ -1005,8 +995,6 @@ impl<'a> LibraryBuilder<'a> {
                 self.metadata.define_variant(id, variant_meta);
 
                 self.insert_type_dtor(id, src_ty, variant_def.as_ref());
-
-                self.add_tags(ir::TagLocation::TypeDef(id), &variant_def.tags);
                 
                 ty
             },
@@ -1035,8 +1023,6 @@ impl<'a> LibraryBuilder<'a> {
 
                 self.insert_type_dtor(id, src_ty, def.as_ref());
 
-                self.add_tags(ir::TagLocation::TypeDef(id), &def.tags);
-
                 ty
             },
             
@@ -1063,8 +1049,6 @@ impl<'a> LibraryBuilder<'a> {
                 let iface_meta = translate_iface(&iface_def, generic_ctx, self);
                 let def_id = self.metadata.define_iface(iface_meta);
                 assert_eq!(def_id, id);
-
-                self.add_tags(ir::TagLocation::Interface(id), &iface_def.tags);
 
                 ty
             },
@@ -1305,7 +1289,7 @@ impl<'a> LibraryBuilder<'a> {
                     && let Ok(true) = src_ty.is_sized(&self.src_metadata) 
                 {
                     let box_src_type  = src_ty.clone().boxed();
-                    let box_type = self.translate_type(&box_src_type, &GenericContext::empty());
+                    let box_type = self.translate_type(&box_src_type, &typ::GenericContext::empty());
 
                     self.gen_type_info(&box_type);
                 }
@@ -1316,10 +1300,6 @@ impl<'a> LibraryBuilder<'a> {
 
                 if src_ty.as_class().is_ok() {
                     gen_class_runtime_type(self, &ty);
-                }
-
-                if src_ty.as_iface().is_some() {
-                    gen_iface_virtual_method_info(self, &src_ty);
                 }
                 
                 if matches!(src_ty, typ::Type::DynArray { .. }) {
@@ -1396,7 +1376,7 @@ impl<'a> LibraryBuilder<'a> {
         let method_name = decl.name.ident.as_str();
         let method_name_id = self.metadata.find_or_insert_string(method_name);
 
-        let generic_ctx = GenericContext::empty();
+        let generic_ctx = typ::GenericContext::empty();
 
         let params = decl
             .params()
@@ -1518,7 +1498,7 @@ impl<'a> LibraryBuilder<'a> {
 
     pub fn build_func_static_closure_instance(&mut self,
         func: &FunctionInstance,
-        generic_ctx: &GenericContext
+        generic_ctx: &typ::GenericContext
     ) -> &ir::StaticClosure {
         if let Some(existing) = self.metadata.get_static_closure(func.id) {
             return &self.static_closures[existing.0];
@@ -1547,7 +1527,7 @@ impl<'a> LibraryBuilder<'a> {
         );
 
         // build the closure function, which is a thunk that just calls the global function
-        let thunk_id = self.metadata.insert_func(None, false);
+        let thunk_id = self.metadata.insert_func(None, false, []);
         let thunk_def = build_func_static_closure_def(self, func, &ir_func);
 
         self.functions.insert(thunk_id, ir::Function::Local(thunk_def));
@@ -1634,7 +1614,7 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
         return;
     }
 
-    let dtor_id = lib.metadata.insert_func(None, false);
+    let dtor_id = lib.metadata.insert_func(None, false, []);
 
     let mut dtor_builder = IRBuilder::new(lib);
     let self_param = dtor_builder.bind_param(array_type.clone(), "self");
@@ -1662,31 +1642,10 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
     lib.metadata.insert_type_info(array_type.clone(), runtime_type);
 }
 
-fn gen_iface_virtual_method_info(lib: &mut LibraryBuilder, iface_ty: &typ::Type) {
-    let iface_methods = iface_ty
-        .methods(&lib.src_metadata)
-        .unwrap();
-
-    let iface_id = lib.find_iface_decl(iface_ty.full_name().unwrap().as_ref()).unwrap();
-    
-    for method_index in 0..iface_methods.len() {
-        let method = &iface_methods[method_index];
-
-        if !method.func_decl.tags.is_empty() {
-            let tags_loc = ir::TagLocation::InterfaceMethod {
-                iface_id,
-                method_index,
-            };
-
-            lib.add_tags(tags_loc, &method.func_decl.tags);
-        }
-    }
-}
-
 fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID) {
     let closure_class_ty = closure_id.to_class_ptr_type();
     let closure_weak_ty = closure_id.to_class_weak_type();
-    
+
     let runtime_type = lib.gen_type_info(&closure_class_ty);
     let mut runtime_type = (*runtime_type).clone();
 
@@ -1757,7 +1716,7 @@ fn gen_class_dtor(
 
     let dtor_body = dtor_builder.finish();
 
-    let dtor_id = lib.metadata.insert_func(None, false);
+    let dtor_id = lib.metadata.insert_func(None, false, []);
     runtime_type.dtor = Some(dtor_id);
 
     let dtor_debug_name = lib.opts.debug

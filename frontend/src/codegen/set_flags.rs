@@ -44,15 +44,15 @@ impl SetFlagsType {
     pub fn define_new(lib: &mut LibraryBuilder, bit_count: usize) -> Self {        
         let word_count = set_word_count(bit_count);
 
-        let set_flags_struct = ir::StructDef {
-            identity: ir::StructIdentity::SetFlags { bits: bit_count },
-            fields: (0..word_count)
-                .map(|id| (ir::FieldID(id), ir::StructFieldDef {
-                    name: None,
-                    ty: WORD_TYPE,
-                }))
-                .collect(),
-        };
+        let word_fields = (0..word_count)
+            .map(|id| (ir::FieldID(id), ir::StructFieldDef {
+                name: None,
+                ty: WORD_TYPE,
+            }))
+            .collect();
+
+        let struct_identity = ir::StructIdentity::SetFlags { bits: bit_count };
+        let set_flags_struct = ir::StructDef::new(struct_identity).with_fields(word_fields);
 
         let struct_id = lib.metadata_mut().new_type();
         lib.metadata_mut().define_struct(struct_id, set_flags_struct);
@@ -107,7 +107,7 @@ impl SetFlagsType {
         name: String,
         body: Vec<ir::Instruction>,
         sig: ir::FunctionSig,
-        lib: &mut LibraryBuilder
+        lib: &mut LibraryBuilder,
     ) -> ir::FunctionID {
         let name = if lib.opts().debug {
             Some(name)
@@ -121,7 +121,7 @@ impl SetFlagsType {
             body,
         });
 
-        let func_id = lib.metadata_mut().insert_func(None, false);
+        let func_id = lib.metadata_mut().insert_func(None, false, []);
         lib.insert_function(func_id, func);
 
         func_id

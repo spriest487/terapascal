@@ -1,10 +1,9 @@
 use crate::ast;
-use crate::codegen::expr::literal_to_val;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::translate_block;
 use crate::codegen::typ;
-use crate::codegen::IRBuilder;
 use crate::codegen::ClosureInstance;
+use crate::codegen::IRBuilder;
 use crate::ir::*;
 use std::iter;
 use std::sync::Arc;
@@ -332,7 +331,7 @@ fn init_function_locals(locals: &[typ::ast::FunctionLocalBinding], builder: &mut
             let local_ref = builder.local_new(ty, Some(local_name));
 
             if let Some(initial_val) = &local.initial_val {
-                let init_val = literal_to_val(initial_val, &local.ty, builder);
+                let init_val = builder.literal_to_val(initial_val, &local.ty);
                 builder.mov(local_ref, init_val);
             }
         }

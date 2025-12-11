@@ -6,12 +6,11 @@ pub mod cond;
 use crate::ast;
 use crate::codegen::expr::call::translate_invocation;
 use crate::codegen::ir;
+use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::translate_stmt;
 use crate::codegen::typ;
 use crate::codegen::IRBuilder;
 use crate::typ::TypedValue;
-use crate::typ::STRING_TYPE_NAME;
-use crate::typ::SYSTEM_UNIT_NAME;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::*;
@@ -20,7 +19,7 @@ use terapascal_ir::instruction_builder::InstructionBuilder as _;
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Value {
     match expr.annotation() {
         typ::Value::Const(const_val) => {
-            literal_to_val(&const_val.value, &const_val.ty, builder)
+            builder.literal_to_val(&const_val.value, &const_val.ty)
         }
 
         _ => {
@@ -35,7 +34,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Ref
 
     let result_ref = match expr.annotation() {
         typ::Value::Const(const_val) => {
-            translate_literal_expr(&const_val.value, &const_val.ty, builder)
+            builder.translate_literal(&const_val.value, &const_val.ty)
         }
 
         typ::Value::Invocation(invocation) => {
@@ -46,7 +45,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Ref
         typ::Value::Typed(..) => {
             match expr {
                 ast::Expr::Literal(lit) => {
-                    translate_literal_expr(&lit.literal, &lit.annotation.ty(), builder)
+                    builder.translate_literal(&lit.literal, &lit.annotation.ty())
                 },
 
                 ast::Expr::BinOp(bin_op) => {
@@ -207,176 +206,51 @@ pub fn translate_if_cond_stmt(
     })
 }
 
-fn is_string_class(class: &typ::Symbol) -> bool {
-    class.full_path.len() == 2
-        && class.full_path.first().name.as_str() == SYSTEM_UNIT_NAME
-        && class.ident().name.as_str() == STRING_TYPE_NAME
-}
-
 pub fn literal_to_val(
     lit: &typ::ast::Literal,
-    ty: &typ::Type,
-    builder: &mut IRBuilder,
+    ty: &ir::Type,
+    generic_ctx: &typ::GenericContext,
+    lib: &mut LibraryBuilder,
 ) -> ir::Value {
     match lit {
         ast::Literal::Nil => ir::Value::LiteralNull,
 
         ast::Literal::Boolean(b) => ir::Value::LiteralBool(*b),
 
-        ast::Literal::Integer(i) => match ty {
-            typ::Type::Primitive(typ::Primitive::Int8) => {
-                let val = i
-                    .as_i8()
-                    .expect("Int8-typed constant must be within range of i8");
-                ir::Value::LiteralI8(val)
-            },
-            typ::Type::Primitive(typ::Primitive::UInt8) => {
-                let val = i
-                    .as_u8()
-                    .expect("UInt8-typed constant must be within range of u8");
-                ir::Value::LiteralU8(val)
-            },
-            typ::Type::Primitive(typ::Primitive::Int16) => {
-                let val = i
-                    .as_i16()
-                    .expect("Int16-typed constant must be within range of i16");
-                ir::Value::LiteralI16(val)
-            },
-            typ::Type::Primitive(typ::Primitive::UInt16) => {
-                let val = i
-                    .as_u16()
-                    .expect("Int16-typed constant must be within range of i16");
-                ir::Value::LiteralU16(val)
-            },
-            typ::Type::Primitive(typ::Primitive::Int32) => {
-                let val = i
-                    .as_i32()
-                    .expect("Int32-typed constant must be within range of i32");
-                ir::Value::LiteralI32(val)
-            },
-            typ::Type::Primitive(typ::Primitive::UInt32) => {
-                let val = i
-                    .as_u32()
-                    .expect("Int32-typed constant must be within range of u32");
-                ir::Value::LiteralU32(val)
-            },
-            typ::Type::Primitive(typ::Primitive::Int64) => {
-                let val = i
-                    .as_i64()
-                    .expect("Int64-typed constant must be within range of i64");
-                ir::Value::LiteralI64(val)
-            },
-            typ::Type::Primitive(typ::Primitive::UInt64) => {
-                let val = i
-                    .as_u64()
-                    .expect("Int64-typed constant must be within range of u64");
-                ir::Value::LiteralU64(val)
-            },
-            typ::Type::Primitive(typ::Primitive::NativeInt) => {
-                let val = i
-                    .as_isize()
-                    .expect("Int64-typed constant must be within range of isize");
-                ir::Value::LiteralISize(val)
-            },
-            typ::Type::Primitive(typ::Primitive::NativeUInt) => {
-                let val = i
-                    .as_usize()
-                    .expect("Int64-typed constant must be within range of usize");
-                ir::Value::LiteralUSize(val)
-            },
-            typ::Type::Primitive(typ::Primitive::Real32) => {
-                let val = i
-                    .as_f32()
-                    .expect("Real-typed constant must be within range of f32");
-                ir::Value::LiteralF32(val)
-            },
-            typ::Type::Primitive(typ::Primitive::Real64) => {
-                let val = i
-                    .as_f64()
-                    .expect("Real-typed constant must be within range of f64");
-                ir::Value::LiteralF64(val)
-            },
-            typ::Type::Enum(..) => {
-                let val = i
-                    .as_isize()
-                    .expect("Enum-typed constant must be within range of isize");
-                ir::Value::LiteralISize(val)
-            }
+        ast::Literal::Integer(..) | ast::Literal::Real(..) => {
+            let Some(default_val) = ty.default_literal() else {
+                panic!("bad type for literal: {}", ty)
+            };
 
-            _ => panic!("bad type for integer literal: {}", ty),
-        },
-
-        ast::Literal::Real(r) => match ty {
-            typ::Type::Primitive(typ::Primitive::Real32) => {
-                let val = r
-                    .as_f32()
-                    .expect("Real32-typed constant must be within range of f32");
-                ir::Value::LiteralF32(val)
-            },
-            typ::Type::Primitive(typ::Primitive::Real64) => {
-                let val = r
-                    .as_f64()
-                    .expect("Real64-typed constant must be within range of f64");
-                ir::Value::LiteralF64(val)
-            },
-            _ => panic!("bad type for real literal: {}", ty),
+            default_val
         },
 
         ast::Literal::String(s) => {
-            match ty {
-                typ::Type::Class(class) if is_string_class(class) => {
-                    let lit_id = builder.find_or_insert_string(s);
-                    let lit_ref = ir::GlobalRef::StringLiteral(lit_id);
-
-                    ir::Value::Ref(ir::Ref::Global(lit_ref))
-                },
-                _ => panic!("bad type for string literal: {}", ty),
+            if *ty != ir::Type::Object(ir::STRING_OBJECT_ID) {
+                panic!("bad type for string literal: {}", ty)
             }
+            
+            let lit_id = lib.metadata_mut().find_or_insert_string(s);
+            let lit_ref = ir::GlobalRef::StringLiteral(lit_id);
+
+            ir::Value::Ref(ir::Ref::Global(lit_ref))
         },
-        
+
         ast::Literal::TypeInfo(ty) => {
-            let ty = builder.translate_type(ty);
-            let type_info_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty));
+            let of_ty = lib.translate_type(ty, generic_ctx);
+            let type_info_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(of_ty));
             
             ir::Value::from(type_info_ref)
         }
 
         ast::Literal::SizeOf(ty) => {
-            let ty = builder.translate_type(ty);
-            ir::Value::SizeOf(ty)
+            let sized_ty = lib.translate_type(ty, generic_ctx);
+            ir::Value::SizeOf(sized_ty)
         },
 
         ast::Literal::DefaultValue(ty) => {
-            let ir_ty = builder.translate_type(ty);
-            match ir_ty.default_literal() {
-                Some(lit) => lit,
-                None => {
-                    let size_expr = ir::Value::SizeOf(ir_ty.clone());
-                    let temp_ref = builder.local_temp(ir_ty.clone()).to_ref();
-
-                    builder.gen_fill_byte(temp_ref.clone(), size_expr, ir::Value::LiteralU8(0));
-
-                    ir::Value::Ref(temp_ref)
-                }
-            }
-        }
-    }
-}
-
-pub fn translate_literal_expr(
-    lit: &typ::ast::Literal,
-    ty: &typ::Type,
-    builder: &mut IRBuilder,
-) -> ir::Ref {
-    match literal_to_val(lit, ty, builder) {
-        ir::Value::Ref(lit_ref) => lit_ref,
-        val => {
-            let out_ty = builder.translate_type(ty);
-            let out = builder.local_temp(out_ty);
-
-            builder.mov(out, val);
-            
-            out.to_ref()
+            let value_ty = lib.translate_type(ty, generic_ctx);
+            ir::Value::Default(value_ty)
         }
     }
 }

@@ -404,6 +404,21 @@ impl Interpreter {
 
     pub fn evaluate(&self, val: &ir::Value) -> ExecResult<DynValue> {
         match val {
+            ir::Value::LiteralU8(i) => Ok(DynValue::U8(*i)),
+            ir::Value::LiteralI8(i) => Ok(DynValue::I8(*i)),
+            ir::Value::LiteralI16(i) => Ok(DynValue::I16(*i)),
+            ir::Value::LiteralU16(i) => Ok(DynValue::U16(*i)),
+            ir::Value::LiteralI32(i) => Ok(DynValue::I32(*i)),
+            ir::Value::LiteralU32(i) => Ok(DynValue::U32(*i)),
+            ir::Value::LiteralI64(i) => Ok(DynValue::I64(*i)),
+            ir::Value::LiteralU64(i) => Ok(DynValue::U64(*i)),
+            ir::Value::LiteralISize(i) => Ok(DynValue::ISize(*i)),
+            ir::Value::LiteralUSize(i) => Ok(DynValue::USize(*i)),
+            ir::Value::LiteralF32(f) => Ok(DynValue::F32(*f)),
+            ir::Value::LiteralF64(f) => Ok(DynValue::F64(*f)),
+            ir::Value::LiteralBool(b) => Ok(DynValue::Bool(*b)),
+            ir::Value::LiteralNull => Ok(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))),
+
             ir::Value::Ref(r) => {
                 let ref_val = self.load(r)?;
                 Ok(ref_val)
@@ -421,20 +436,9 @@ impl Interpreter {
                 Ok(DynValue::I32(size))
             },
 
-            ir::Value::LiteralU8(i) => Ok(DynValue::U8(*i)),
-            ir::Value::LiteralI8(i) => Ok(DynValue::I8(*i)),
-            ir::Value::LiteralI16(i) => Ok(DynValue::I16(*i)),
-            ir::Value::LiteralU16(i) => Ok(DynValue::U16(*i)),
-            ir::Value::LiteralI32(i) => Ok(DynValue::I32(*i)),
-            ir::Value::LiteralU32(i) => Ok(DynValue::U32(*i)),
-            ir::Value::LiteralI64(i) => Ok(DynValue::I64(*i)),
-            ir::Value::LiteralU64(i) => Ok(DynValue::U64(*i)),
-            ir::Value::LiteralISize(i) => Ok(DynValue::ISize(*i)),
-            ir::Value::LiteralUSize(i) => Ok(DynValue::USize(*i)),
-            ir::Value::LiteralF32(f) => Ok(DynValue::F32(*f)),
-            ir::Value::LiteralF64(f) => Ok(DynValue::F64(*f)),
-            ir::Value::LiteralBool(b) => Ok(DynValue::Bool(*b)),
-            ir::Value::LiteralNull => Ok(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))),
+            ir::Value::Default(ty) => {
+                self.default_val(ty)
+            }
         }
     }
 
@@ -2150,7 +2154,7 @@ impl Interpreter {
             def_result.map_err(|err| self.add_stack_trace(err.into()))?;
         }
         
-        for (iface_id, _) in lib.metadata.ifaces() {
+        for (iface_id, _) in lib.metadata.interfaces() {
             marshaller.add_iface(iface_id)
         }
 
@@ -2233,8 +2237,12 @@ impl Interpreter {
             || self.metadata.get_struct_def(ir::METHODINFO_ID).is_none();
 
         if !disable_rtti {
+            let tag_counts = lib.metadata
+                .all_tags()
+                .map(|(loc, tags)| (loc, tags.len()));
+            
             // allocate static arrays for runtime tag objects (must exist before RTTI init)
-            for (tag_loc, tag_count) in lib.metadata.tag_counts() {
+            for (tag_loc, tag_count) in tag_counts {
                 let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
                 let elements = iter::repeat(nil_any).take(tag_count).collect();
 

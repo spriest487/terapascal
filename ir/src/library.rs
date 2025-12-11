@@ -6,6 +6,7 @@ use crate::FunctionID;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::Metadata;
+use crate::MetadataSource;
 use crate::StaticClosure;
 use crate::StructIdentity;
 use crate::Type;
@@ -163,7 +164,7 @@ impl fmt::Display for Library {
         }
 
         writeln!(f, "* Interfaces: ")?;
-        let mut ifaces: Vec<_> = self.metadata.ifaces().collect();
+        let mut ifaces: Vec<_> = self.metadata.interfaces().collect();
         ifaces.sort_by_key(|(id, _)| *id);
 
         for (id, iface) in &ifaces {

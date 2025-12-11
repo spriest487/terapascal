@@ -96,6 +96,7 @@ pub enum Value {
     LiteralISize(isize),
     LiteralUSize(usize),
     SizeOf(Type),
+    Default(Type),
 }
 
 impl fmt::Display for Value {
@@ -116,7 +117,8 @@ impl fmt::Display for Value {
             Value::LiteralF32(x) => write!(f, "{:.6}", x),
             Value::LiteralF64(x) => write!(f, "{:.15}", x),
             Value::LiteralNull => write!(f, "NULL"),
-            Value::SizeOf(ty) => write!(f, "SizeOf({ty})"),
+            Value::SizeOf(ty) => write!(f, "sizeof({ty})"),
+            Value::Default(ty) => write!(f, "default({ty})"),
         }
     }
 }

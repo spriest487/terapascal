@@ -172,10 +172,6 @@ impl MetadataBuilder {
         id
     }
 
-    pub fn ifaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
-        self.iter_in_self_or_refs(move |metadata| metadata.ifaces())
-    }
-
     pub fn define_iface(&mut self, iface_def: InterfaceDef) -> InterfaceID {
         let id = self.declare_iface(&iface_def.name);
 
@@ -190,7 +186,7 @@ impl MetadataBuilder {
 
     pub fn find_iface(&self, name: &NamePath) -> Option<InterfaceID> {
         self.find_in_self_or_refs(move |metadata| metadata
-            .ifaces()
+            .interfaces()
             .find_map(|(id, def)| {
                 (def.name == *name).then_some(id)
             }))
@@ -215,7 +211,7 @@ impl MetadataBuilder {
         let method_name = method_name.into();
         
         let iface_def = self
-            .ifaces()
+            .interfaces()
             .find_map(|(id, def)| (id == iface_id).then(|| {
                 def
             }));
@@ -273,9 +269,5 @@ impl MetadataBuilder {
     
     pub fn declare_iface_impl(&mut self, iface_id: InterfaceID, self_ty: Type) {
         self.declare_empty_impl(iface_id, self_ty);
-    }
-    
-    pub fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)> {
-        self.iter_in_self_or_refs(move |metadata| metadata.type_defs())
     }
 }

@@ -256,14 +256,6 @@ impl Metadata {
         }
     }
 
-    pub fn type_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)> {
-        self.type_decls.iter().filter_map(|(id, decl)| match decl {
-            TypeDecl::Def(def) => Some((*id, def)),
-
-            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
-        })
-    }
-
     pub fn get_class_def(&self, id: TypeDefID) -> Option<&StructDef> {
         let decl = self.type_decls.get(&id)?;
 
@@ -363,10 +355,6 @@ impl Metadata {
             .get(ty)
             .into_iter()
             .flat_map(|src_ty| src_ty.methods.iter())
-    }
-
-    pub fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)> + use<'_> {
-        self.function_info.iter().map(|(id, decl)| (*id, decl))
     }
 
     pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {
@@ -540,15 +528,6 @@ impl Metadata {
             TypeDecl::Def(TypeDef::Function(ptr_def)) => Some(ptr_def),
             _ => None,
         })
-    }
-
-    pub fn ifaces(&self) -> impl Iterator<Item = (InterfaceID, &InterfaceDef)> {
-        self.ifaces
-            .iter()
-            .filter_map(|(id, iface_decl)| match iface_decl {
-                InterfaceDecl::Def(iface_def) => Some((*id, iface_def)),
-                InterfaceDecl::Forward(..) => None,
-            })
     }
 
     /// Find the method instance that implements the given interface method for `ty`
@@ -808,5 +787,26 @@ impl MetadataSource for Metadata {
 
             TypeDecl::Def(..) => None,
         }
+    }
+
+    fn type_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)> {
+        self.type_decls.iter().filter_map(|(id, decl)| match decl {
+            TypeDecl::Def(def) => Some((*id, def)),
+
+            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
+        })
+    }
+
+    fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)> + use<'_> {
+        self.function_info.iter().map(|(id, decl)| (*id, decl))
+    }
+
+    fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
+        self.ifaces
+            .iter()
+            .filter_map(|(id, iface_decl)| match iface_decl {
+                InterfaceDecl::Def(iface_def) => Some((*id, iface_def)),
+                InterfaceDecl::Forward(..) => None,
+            })
     }
 }

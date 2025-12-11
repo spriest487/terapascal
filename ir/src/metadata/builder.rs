@@ -4,20 +4,25 @@ mod rtti;
 
 use crate::dep_sort::sort_defs;
 use crate::metadata::source::MetadataSource;
-use crate::{FieldID, NamePath, VariableInfo};
+use crate::FieldID;
 use crate::FunctionID;
+use crate::FunctionInfo;
 use crate::IRFormatter;
+use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::Metadata;
 use crate::MethodID;
+use crate::NamePath;
 use crate::Ref;
 use crate::StringID;
 use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
+use crate::TypeDef;
 use crate::TypeDefID;
 use crate::Value;
 use crate::VariableID;
+use crate::VariableInfo;
 use crate::VariantDef;
 use crate::RESERVED_STRINGS;
 use crate::RESERVED_TYPES;
@@ -222,6 +227,18 @@ impl MetadataSource for MetadataBuilder {
 
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
         self.get_variant_def(struct_id)
+    }
+
+    fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.type_defs())
+    }
+
+    fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.functions())
+    }
+
+    fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.interfaces())
     }
 }
 
