@@ -1336,7 +1336,7 @@ impl<'a> LibraryBuilder<'a> {
                     let method_decl = &method.func_decl;
 
                     if method.is_published() && method_decl.name.type_params.is_none() {
-                        let method_info = self.create_runtime_method(ty.clone(), &src_ty, method_index, false, method_decl);
+                        let method_info = self.create_method_info(ty.clone(), &src_ty, method_index, false, method_decl);
                         rtti.methods.push(method_info);
                     }
                 }
@@ -1351,7 +1351,7 @@ impl<'a> LibraryBuilder<'a> {
                     let method_decl = &method.decl;
 
                     if method_decl.name.type_params.is_none() {
-                        let method_info = self.create_runtime_method(ty.clone(), &src_ty, method_index, true, method_decl);
+                        let method_info = self.create_method_info(ty.clone(), &src_ty, method_index, true, method_decl);
                         rtti.methods.push(method_info);
                     }
                 }
@@ -1366,13 +1366,15 @@ impl<'a> LibraryBuilder<'a> {
         self.metadata.insert_type_info(ty, rtti);
     }
 
-    fn create_runtime_method(&mut self,
+    fn create_method_info(&mut self,
         instance_ty: ir::Type,
         src_ty: &typ::Type,
         method_index: usize,
         is_abstract: bool,
         decl: &typ::ast::FunctionDecl,
     ) -> ir::MethodInfo {
+        let tags = self.translate_tag_groups(&decl.tags);
+        
         let method_name = decl.name.ident.as_str();
         let method_name_id = self.metadata.find_or_insert_string(method_name);
 
@@ -1413,6 +1415,7 @@ impl<'a> LibraryBuilder<'a> {
             name: method_name_id,
             params,
             result_ty: self.translate_type(&decl.result_ty, &generic_ctx),
+            tags,
         }
     }
 

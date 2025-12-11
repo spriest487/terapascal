@@ -769,6 +769,10 @@ impl IRFormatter for Metadata {
 }
 
 impl MetadataSource for Metadata {
+    fn as_formatter(&self) -> &impl IRFormatter {
+        self
+    }
+    
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
         match self.type_decls.get(&struct_id)? {
             TypeDecl::Reserved | TypeDecl::Forward(..) => None,
@@ -808,5 +812,10 @@ impl MetadataSource for Metadata {
                 InterfaceDecl::Def(iface_def) => Some((*id, iface_def)),
                 InterfaceDecl::Forward(..) => None,
             })
+    }
+
+    fn methods(&self) -> impl Iterator<Item=&MethodInfo> {
+        self.type_info.iter()
+            .flat_map(|(_, type_info)| type_info.methods.iter())
     }
 }

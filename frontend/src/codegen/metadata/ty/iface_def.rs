@@ -18,8 +18,6 @@ pub fn translate_iface(
     let mut methods = Vec::with_capacity(iface_def.methods.len());
     
     for def_method in &iface_def.methods {
-        let tags = lib.translate_tag_groups(&def_method.decl.tags);
-        
         let self_ty = ir::Type::Object(ir::ObjectID::Interface(id));
 
         let method = ir::Method {
@@ -36,7 +34,6 @@ pub fn translate_iface(
                     param_ty => lib.translate_type(param_ty, generic_ctx),
                 })
                 .collect(),
-            tags,
         };
         
         methods.push(method);

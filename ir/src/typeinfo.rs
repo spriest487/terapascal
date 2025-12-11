@@ -1,4 +1,4 @@
-use crate::FunctionID;
+use crate::{FunctionID, TagInfo};
 use crate::Metadata;
 use crate::ObjectID;
 use crate::StringID;
@@ -74,4 +74,6 @@ pub struct MethodInfo {
 
     pub result_ty: Type,
     pub params: Vec<Type>,
+
+    pub tags: Vec<TagInfo>,
 }

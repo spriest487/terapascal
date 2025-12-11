@@ -12,8 +12,6 @@ pub struct Method {
     pub name: String,
     pub return_ty: Type,
     pub params: Vec<Type>,
-
-    pub tags: Vec<TagInfo>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

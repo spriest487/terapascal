@@ -4,7 +4,7 @@ mod rtti;
 
 use crate::dep_sort::sort_defs;
 use crate::metadata::source::MetadataSource;
-use crate::FieldID;
+use crate::{FieldID, MethodInfo};
 use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::IRFormatter;
@@ -221,6 +221,10 @@ impl MetadataBuilder {
 }
 
 impl MetadataSource for MetadataBuilder {
+    fn as_formatter(&self) -> &impl IRFormatter {
+        self
+    }
+
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
         self.get_struct_def(struct_id)
     }
@@ -239,6 +243,10 @@ impl MetadataSource for MetadataBuilder {
 
     fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
         self.iter_in_self_or_refs(move |metadata| metadata.interfaces())
+    }
+
+    fn methods(&self) -> impl Iterator<Item=&MethodInfo> {
+        self.iter_in_self_or_refs(move |metadata| metadata.methods())
     }
 }
 
