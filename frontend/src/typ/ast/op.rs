@@ -554,6 +554,16 @@ pub fn member_value(
             )
         }
 
+        Value::Const(const_val) => {
+            typecheck_member_value(
+                &base_expr,
+                &const_val.ty,
+                ValueKind::Immutable,
+                &member_ident,
+                ctx,
+            )
+        }
+
         Value::Invocation(invocation) => {
             typecheck_member_value(
                 &base_expr,
