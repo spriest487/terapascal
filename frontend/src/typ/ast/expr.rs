@@ -1,6 +1,7 @@
 mod init;
 mod literal;
 
+use std::sync::Arc;
 use crate::ast;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
@@ -56,11 +57,11 @@ impl Expr {
     }
 }
 
-pub fn const_eval_string(expr: &Expr, ctx: &Context) -> TypeResult<EvaluatedConstExpr<String>> {
+pub fn const_eval_string(expr: &Expr, ctx: &Context) -> TypeResult<EvaluatedConstExpr<Arc<String>>> {
     match expr.const_eval(ctx) {
         Some(Literal::String(src_str)) => {
             let evaluated = EvaluatedConstExpr {
-                value: (*src_str).clone(),
+                value: src_str.clone(),
                 expr: Box::new(expr.clone()),
             };
 
@@ -107,11 +108,17 @@ pub fn typecheck_expr(
     ctx: &mut Context,
 ) -> TypeResult<Expr> {
     match expr_node {
-        ast::Expr::Literal(lit) => typecheck_literal(&lit.literal, expect_ty, &lit.annotation, ctx),
+        ast::Expr::Literal(lit) => {
+            typecheck_literal(&lit.literal, expect_ty, &lit.annotation, ctx)
+        },
 
-        ast::Expr::Ident(ident, span) => typecheck_ident(ident, span, ctx),
+        ast::Expr::Ident(ident, span) => {
+            typecheck_ident(ident, span, ctx)
+        },
 
-        ast::Expr::BinOp(bin_op) => typecheck_bin_op(bin_op, expect_ty, ctx),
+        ast::Expr::BinOp(bin_op) => {
+            typecheck_bin_op(bin_op, expect_ty, ctx)
+        },
 
         ast::Expr::UnaryOp(unary_op) => {
             let unary_op = typecheck_unary_op(unary_op, expect_ty, ctx)?;

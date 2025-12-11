@@ -1,6 +1,5 @@
 use crate::ast;
 use crate::typ::ast::Expr;
-use crate::typ::builtin_string_type;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::string_to_char_lit;
 use crate::typ::typecheck_typename;
@@ -271,16 +270,17 @@ pub fn typecheck_literal(
                     return Ok(Expr::literal(char_lit, Value::from(val)));
                 }
             }
+            
+            let const_val = ConstValue::string_literal(s.clone(), span.clone());
 
-            let value = TypedValue::literal(builtin_string_type(), span.clone());
-
-            Ok(Expr::literal(Literal::String(s.clone()), value))
+            Ok(Expr::literal(Literal::String(s.clone()), const_val))
         }
 
         ast::Literal::Boolean(b) => {
-            let value = TypedValue::literal(Primitive::Boolean, span.clone());
+            let bool_val = Literal::Boolean(*b);
+            let const_val = ConstValue::literal(bool_val.clone(), Primitive::Boolean, span.clone());
 
-            Ok(Expr::literal(Literal::Boolean(*b), value))
+            Ok(Expr::literal(bool_val, const_val))
         }
 
         ast::Literal::Integer(i) => typecheck_literal_int(i, expect_ty, span.clone()),
@@ -294,11 +294,12 @@ pub fn typecheck_literal(
                 unimplemented!("real literal outside range of f64");
             };
 
-            let value = TypedValue::literal(ty, span.clone());
+            let real_value = ast::Literal::Real(x.clone());
+            let const_value = ConstValue::literal(real_value.clone(), ty, span.clone());
 
             Ok(ast::Expr::literal(
-                ast::Literal::Real(x.clone()),
-                value,
+                real_value,
+                const_value,
             ))
         }
 
@@ -332,9 +333,10 @@ pub fn typecheck_literal(
 
         ast::Literal::SizeOf(size_of_ty) => {
             let ty = typecheck_typename(&size_of_ty, ctx)?;
-            let value = TypedValue::literal(Primitive::Int32, span.clone());
+            let size_value = Literal::SizeOf(Box::new(ty));
+            let value = ConstValue::literal(size_value.clone(), Primitive::Int32, span.clone());
 
-            Ok(Expr::literal(Literal::SizeOf(Box::new(ty)), value))
+            Ok(Expr::literal(size_value, value))
         }
 
         ast::Literal::DefaultValue(default_of_ty) => {
@@ -384,11 +386,14 @@ pub fn typecheck_literal(
 }
 
 pub fn create_default_literal(typename: TypeName, span: Span) -> Expr {
-    let annotation = TypedValue::literal(typename.ty().clone(), span);
+    let ty = typename.ty().clone();
+    let default_lit = Literal::DefaultValue(Box::new(typename.clone()));
+
+    let value = ConstValue::literal(default_lit, ty, span);
 
     Expr::literal(
         Literal::DefaultValue(Box::new(typename)),
-        annotation,
+        value,
     )
 }
 
@@ -438,9 +443,10 @@ fn typecheck_literal_int(i: &IntConstant, expect_ty: &Type, span: Span) -> TypeR
         },
     };
 
-    let value = TypedValue::literal(ty, span);
-
-    Ok(ast::Expr::literal(ast::Literal::Integer(*i), value))
+    let int_value = ast::Literal::Integer(*i);
+    let value = ConstValue::literal(int_value.clone(), ty, span);
+    
+    Ok(ast::Expr::literal(int_value, value))
 }
 
 fn try_map_primitive_int<F, T>(i: &IntConstant, primitive_ty: Primitive, f: F) -> Type

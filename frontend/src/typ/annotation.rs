@@ -5,7 +5,6 @@ pub mod overload;
 mod symbol;
 mod ufcs;
 
-use crate::IntConstant;
 use crate::ast;
 use crate::ast::Annotation;
 use crate::ast::ConstExprValue;
@@ -13,21 +12,13 @@ use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::LiteralItem;
 use crate::ast::SemanticHint;
-use crate::typ::Context;
-use crate::typ::GenericError;
-use crate::typ::GenericTarget;
-use crate::typ::GenericTypeHint;
-use crate::typ::NameContainer;
-use crate::typ::NameError;
-use crate::typ::ValueKind;
-use crate::typ::ValueKind::Temporary;
 pub use crate::typ::annotation::invoke::Invocation;
-use crate::typ::ast::Expr;
-use crate::typ::ast::Literal;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::specialize_call_args;
 use crate::typ::ast::typecheck_type_args;
+use crate::typ::ast::Expr;
+use crate::typ::ast::Literal;
 use crate::typ::builtin_string_type;
 use crate::typ::completion::CompletionContext;
 use crate::typ::function::FunctionValue;
@@ -35,6 +26,14 @@ use crate::typ::method::MethodValue;
 use crate::typ::overload::OverloadValue;
 use crate::typ::result::*;
 use crate::typ::ty::*;
+use crate::typ::Context;
+use crate::typ::GenericError;
+use crate::typ::GenericTarget;
+use crate::typ::GenericTypeHint;
+use crate::typ::NameContainer;
+use crate::typ::NameError;
+use crate::typ::ValueKind;
+use crate::IntConstant;
 use derivative::*;
 use std::borrow::Cow;
 use std::fmt;
@@ -320,7 +319,7 @@ impl TypedValue {
         TypedValue {
             ty: ty.into(),
             span,
-            value_kind: Temporary,
+            value_kind: ValueKind::Immutable,
             semantic_hint: SemanticHint::Const,
             decl: None,
         }
@@ -347,6 +346,21 @@ pub struct ConstValue {
     pub span: Span,
 }
 
+impl ConstValue {
+    pub fn string_literal(text: Arc<String>, span: Span) -> Self {
+        Self::literal(Literal::String(text), builtin_string_type(), span)
+    }
+    
+    pub fn literal(value: Literal, ty: impl Into<Type>, span: Span) -> Self {
+        Self {
+            value,
+            ty: ty.into(),
+            span,
+            decl: None,
+        }
+    }
+}
+
 impl From<ConstValue> for Value {
     fn from(a: ConstValue) -> Self {
         Value::Const(Arc::new(a))
@@ -366,17 +380,17 @@ pub struct EvaluatedConstExpr<Val> {
     pub value: Val,
 }
 
-impl EvaluatedConstExpr<String> {
+impl EvaluatedConstExpr<Arc<String>> {
     pub fn create_string(s: impl Into<String>, span: Span) -> Self {
-        let s = s.into();
+        let s = Arc::new(s.into());
 
-        let literal = Literal::String(Arc::new(s.clone()));
-        let value = Value::from(TypedValue::literal(builtin_string_type(), span));
-
+        let literal = Literal::String(s.clone());
+        let value = ConstValue::string_literal(s.clone(), span);
+        
         EvaluatedConstExpr {
             value: s,
             expr: Box::new(Expr::Literal(LiteralItem {
-                annotation: value.clone(),
+                annotation: Value::from(value),
                 literal,
             })),
         }
@@ -846,7 +860,7 @@ impl Annotation for Value {
     type DeclName = Symbol;
     type FunctionName = crate::typ::ast::FunctionName;
 
-    type ConstStringExpr = EvaluatedConstExpr<String>;
+    type ConstStringExpr = EvaluatedConstExpr<Arc<String>>;
     type ConstIntegerExpr = EvaluatedConstExpr<IntConstant>;
     type ConstValue = Literal;
 

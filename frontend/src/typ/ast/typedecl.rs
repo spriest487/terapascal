@@ -212,7 +212,7 @@ impl TagItem {
             let member_ty = member.value.annotation().ty().into_owned();
             let member_span = member.value.span().clone();
 
-            let lit_val = TypedValue::temp(member_ty, member_span);
+            let lit_val = ConstValue::literal(const_val_expr.clone(), member_ty, member_span);
             let mut lit_expr = Expr::literal(const_val_expr, lit_val);
 
             mem::swap(&mut lit_expr, &mut member.value);

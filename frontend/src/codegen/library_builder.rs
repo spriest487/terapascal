@@ -431,7 +431,7 @@ impl<'a> LibraryBuilder<'a> {
                     }
                     
                     _ => {
-                        panic!("translate_tags: constructor of tag must only contain const values (expr {}: {} was not const)", arg.ident, arg.value);
+                        panic!("translate_tags: constructor of tag must only contain const values (field `{}`: {} was {})", arg.ident, arg.value, arg.value.annotation());
                     }
                 }
             }
@@ -582,7 +582,7 @@ impl<'a> LibraryBuilder<'a> {
         self.functions.insert(
             id,
             ir::Function::External(ir::ExternalFunctionRef {
-                src: extern_src.value.clone(),
+                src: extern_src.value.as_ref().clone(),
                 symbol: (*extern_decl.name.ident.name).clone(),
 
                 sig: ir::FunctionSig { return_ty, param_tys },
