@@ -11,7 +11,6 @@ use crate::StaticClosure;
 use crate::StructIdentity;
 use crate::Type;
 use crate::TypeDef;
-use crate::VariableID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -23,8 +22,6 @@ pub struct Library {
     pub metadata: Metadata,
 
     pub functions: BTreeMap<FunctionID, Function>,
-    
-    pub variables: BTreeMap<VariableID, Type>,
 
     pub static_closures: Vec<StaticClosure>,
 
@@ -37,8 +34,6 @@ impl Library {
             init: Vec::new(),
 
             functions: BTreeMap::new(),
-            
-            variables: BTreeMap::new(),
 
             static_closures: Vec::new(),
 
@@ -60,10 +55,6 @@ impl Library {
 
     pub fn functions(&self) -> &BTreeMap<FunctionID, Function> {
         &self.functions
-    }
-    
-    pub fn variables(&self) -> &BTreeMap<VariableID, Type> {
-        &self.variables
     }
 }
 
@@ -186,10 +177,10 @@ impl fmt::Display for Library {
             writeln!(f)?;
         }
         writeln!(f)?;
-        
+
         writeln!(f, "* Global Variables")?;
-        for (var_id, var_type) in &self.variables {
-            writeln!(f, "{}: {}", var_id.0, self.metadata.pretty_ty_name(var_type))?;
+        for (var_id, var_info) in self.metadata.variables() {
+            writeln!(f, "{}: {} ({})", var_id.0, self.metadata.pretty_ty_name(&var_info.r#type), var_info.name)?;
         }
         writeln!(f)?;
         

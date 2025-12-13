@@ -1,12 +1,19 @@
-﻿use crate::{FunctionID, IRFormatter, MethodInfo, ObjectID, Type};
+﻿use crate::FunctionID;
 use crate::FunctionInfo;
+use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
+use crate::MethodInfo;
+use crate::NamePath;
+use crate::ObjectID;
 use crate::StructDef;
 use crate::TagInfo;
 use crate::TagLocation;
+use crate::Type;
 use crate::TypeDef;
 use crate::TypeDefID;
+use crate::VariableID;
+use crate::VariableInfo;
 use crate::VariantDef;
 
 pub trait MetadataSource {
@@ -19,6 +26,9 @@ pub trait MetadataSource {
     fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)>;
     fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)>;
     fn methods(&self) -> impl Iterator<Item=&MethodInfo>;
+    
+    fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)>;
+    fn get_variable(&self, id: VariableID) -> Option<&VariableInfo>;
 
     fn all_tags(&self) -> impl Iterator<Item=(TagLocation, &[TagInfo])> {
         let type_tags = self.type_defs()

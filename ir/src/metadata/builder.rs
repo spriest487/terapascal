@@ -248,6 +248,14 @@ impl MetadataSource for MetadataBuilder {
     fn methods(&self) -> impl Iterator<Item=&MethodInfo> {
         self.iter_in_self_or_refs(move |metadata| metadata.methods())
     }
+
+    fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_variable(name))
+    }
+
+    fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_variable(id))
+    }
 }
 
 impl IRFormatter for MetadataBuilder {

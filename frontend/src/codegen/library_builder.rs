@@ -210,7 +210,6 @@ impl<'a> LibraryBuilder<'a> {
         let metadata = self.metadata.build();
 
         let mut lib = ir::Library::new(metadata);
-        lib.variables = self.variables;
         lib.functions = self.functions;
         lib.static_closures = self.static_closures;
         lib.init = self.init_code;

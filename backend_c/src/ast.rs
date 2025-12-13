@@ -368,9 +368,9 @@ impl<'a> Unit<'a> {
         init_builder.translate_instructions(library.init());
         init_func.body.extend(init_builder.stmts);
         
-        for (var_id, var_ty) in library.variables() {
-            let name = GlobalName::Variable(*var_id);
-            let ty = Type::from_metadata(var_ty, self);
+        for (var_id, var_info) in library.metadata.variables() {
+            let name = GlobalName::Variable(var_id);
+            let ty = Type::from_metadata(&var_info.r#type, self);
             
             self.global_vars.push(GlobalVar {
                 name,

@@ -818,4 +818,16 @@ impl MetadataSource for Metadata {
         self.type_info.iter()
             .flat_map(|(_, type_info)| type_info.methods.iter())
     }
+
+    fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)> {
+        self.variables.iter().find_map(|(id, var_info)|
+            (var_info.name == *name).then(|| {
+                (*id, var_info)
+            })
+        )
+    }
+
+    fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
+        self.variables.get(&id)
+    }
 }
