@@ -22,8 +22,11 @@ pub trait MetadataSource {
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef>;
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
     fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)>;
+    fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID>;
 
     fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)>;
+    fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo>;
+    
     fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)>;
     fn methods(&self) -> impl Iterator<Item=&MethodInfo>;
     

@@ -49,7 +49,7 @@ impl MetadataBuilder {
     pub fn new() -> Self {
         Self::with_refs([])
     }
-    
+
     pub fn with_refs(refs: impl IntoIterator<Item=Arc<Metadata>>) -> Self {
         let refs: Vec<_> = refs.into_iter().collect();
         
@@ -237,8 +237,16 @@ impl MetadataSource for MetadataBuilder {
         self.iter_in_self_or_refs(move |metadata| metadata.type_defs())
     }
 
+    fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_type_decl(name))
+    }
+
     fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)> {
         self.iter_in_self_or_refs(move |metadata| metadata.functions())
+    }
+
+    fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_function_info(id))
     }
 
     fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {

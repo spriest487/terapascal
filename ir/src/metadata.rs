@@ -366,10 +366,6 @@ impl Metadata {
         })
     }
 
-    pub fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo> {
-        self.function_info.get(&id)
-    }
-
     pub fn func_desc(&self, id: FunctionID) -> Option<String> {
         self.function_info
             .get(&id)
@@ -592,20 +588,6 @@ impl Metadata {
         None
     }
 
-    pub fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
-        self.type_decls.iter().find_map(|(id, def)| match def {
-            TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) => {
-                Some(*id)
-            },
-
-            TypeDecl::Def(TypeDef::Variant(variant_def)) if variant_def.name == *name => Some(*id),
-
-            TypeDecl::Forward(forward_name) if *forward_name == *name => Some(*id),
-
-            _ => None,
-        })
-    }
-
     // find the declared ID and definition of a struct. if the struct is only forward-declared
     // when this call is made, the definition part of the result will be None
     pub fn find_struct_def(&self, name: &NamePath) -> Option<(TypeDefID, &StructDef)> {
@@ -801,8 +783,26 @@ impl MetadataSource for Metadata {
         })
     }
 
+    fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
+        self.type_decls.iter().find_map(|(id, def)| match def {
+            TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) => {
+                Some(*id)
+            },
+
+            TypeDecl::Def(TypeDef::Variant(variant_def)) if variant_def.name == *name => Some(*id),
+
+            TypeDecl::Forward(forward_name) if *forward_name == *name => Some(*id),
+
+            _ => None,
+        })
+    }
+
     fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)> + use<'_> {
         self.function_info.iter().map(|(id, decl)| (*id, decl))
+    }
+
+    fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo> {
+        self.function_info.get(&id)
     }
 
     fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {

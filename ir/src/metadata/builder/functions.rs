@@ -1,17 +1,14 @@
-use crate::{FunctionID, TagInfo};
+use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::MetadataBuilder;
 use crate::NamePath;
 use crate::StaticClosureID;
 use crate::StructDef;
 use crate::StructIdentity;
+use crate::TagInfo;
 use crate::TypeDefID;
 
 impl MetadataBuilder {
-    pub fn get_function(&self, id: FunctionID) -> Option<&FunctionInfo> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_function_info(id))
-    }
-    
     pub fn insert_func(&mut self,
         global_name: Option<NamePath>,
         gen_runtime_name: bool,
@@ -57,6 +54,16 @@ impl MetadataBuilder {
         };
 
         function_info.invoker = Some(invoker_id);
+    }
+    
+    pub fn add_func_tag(&mut self, function_id: FunctionID, tag: TagInfo) {
+        let Some(function_info) = self.metadata.function_info
+            .get_mut(&function_id)
+        else {
+            panic!("function {} was not declared in this metadata collection", function_id);
+        };
+
+        function_info.tags.push(tag);
     }
 
     pub fn closures(&self) -> impl Iterator<Item=TypeDefID> {

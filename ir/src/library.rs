@@ -16,10 +16,11 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::io;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
-    pub metadata: Metadata,
+    pub metadata: Arc<Metadata>,
 
     pub functions: BTreeMap<FunctionID, Function>,
 
@@ -29,7 +30,7 @@ pub struct Library {
 }
 
 impl Library {
-    pub fn new(metadata: Metadata) -> Self {
+    pub fn new(metadata: impl Into<Arc<Metadata>>) -> Self {
         Self {
             init: Vec::new(),
 
@@ -37,7 +38,7 @@ impl Library {
 
             static_closures: Vec::new(),
 
-            metadata,
+            metadata: metadata.into(),
         }
     }
 
@@ -195,7 +196,7 @@ impl fmt::Display for Library {
 
         writeln!(f, "* Functions")?;
         for (id, func) in funcs {
-            write!(f, "{}: {}", id.0, func.sig().to_pretty_string(&self.metadata))?;
+            write!(f, "{}: {}", id.0, func.sig().to_pretty_string(self.metadata.as_ref()))?;
             match self.metadata.func_desc(*id) {
                 Some(desc_name) => {
                     writeln!(f, " ({})", desc_name)?;

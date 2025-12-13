@@ -861,7 +861,7 @@ impl<'a> LibraryBuilder<'a> {
 
     pub fn insert_function(&mut self, id: ir::FunctionID, function: ir::Function) {
         assert!(
-            self.metadata.get_function(id).is_some(),
+            self.metadata.get_function_info(id).is_some(),
             "function passed to insert_func must have been previously registered in metadata"
         );
 
