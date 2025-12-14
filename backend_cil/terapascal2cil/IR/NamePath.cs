@@ -110,7 +110,7 @@ public sealed class NamePath : IEquatable<NamePath> {
         var result = new StringBuilder();
         result.AppendJoin(".", this.Path);
 
-        if (this.TypeArgs != null) {
+        if (this.HasTypeArgs) {
             result.Append('[');
             result.AppendJoin(", ", this.TypeArgs.Select(t => t.ToPrettyString(metadata)));
             result.Append(']');
@@ -120,10 +120,6 @@ public sealed class NamePath : IEquatable<NamePath> {
     }
 
     public string ToGlobalName(out string ns) {
-        if (this.HasTypeArgs) {
-            throw new InvalidOperationException("can't create a global name from a path containing type args");
-        }
-        
         if (this.Path.Count > 1) {
             ns = string.Join('.', this.Path.Take(this.Path.Count - 1));
         } else {

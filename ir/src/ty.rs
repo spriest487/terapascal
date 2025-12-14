@@ -331,7 +331,7 @@ impl fmt::Display for Type {
                 ObjectID::Array(element) => write!(f, "weak array of {}", element),
                 ObjectID::Box(element) => write!(f, "weak box of {}", element),
             },
-            Type::Array { element, dim } => write!(f, "{}[{}]", element, dim),
+            Type::Array { element, dim } => write!(f, "array[{}] of {}", dim, element),
             Type::Function(id) => write!(f, "function {}", id),
         }
     }

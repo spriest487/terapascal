@@ -48,7 +48,7 @@ public record ClassStructIdentity(NamePath Name) : IStructIdentity {
 
 public record ArrayStructIdentity(IType ElementType, ulong Size) : IStructIdentity {
     public string ToPrettyString(Metadata metadata) {
-        return $"{this.ElementType.ToPrettyString(metadata)}[{this.Size}]";
+        return $"array[{this.Size}] of {this.ElementType.ToPrettyString(metadata)}";
     }
 }
 

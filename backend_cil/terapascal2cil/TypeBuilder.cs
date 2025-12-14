@@ -223,10 +223,12 @@ public class TypeBuilder {
             });
     }
 
-    private string CreateUniqueTypeName(IR.NamePath globalName, ulong id, out string ns) {
+    private string CreateUniqueTypeName(IR.NamePath globalName, IR.Metadata metadata, ulong id, out string ns) {
         var name = globalName.ToGlobalName(out ns);
+        
         if (globalName.HasTypeArgs) {
-            name += $"_<{id}>";
+            var argNames = globalName.TypeArgs!.Select(arg => arg.ToPrettyString(metadata));
+            name += $"_<{string.Join(",", argNames)}>";
         }
 
         return name;
