@@ -21,6 +21,12 @@ public record VariantDef {
         get;
         init => field = value!.ToArrayNonNull();
     }
+    
+    [Key("tags")]
+    public required IReadOnlyList<TagInfo> Tags {
+        get;
+        init => field = value.ToArrayNonNull();
+    }
 }
 
 [MessagePackObject]

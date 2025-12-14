@@ -10,6 +10,12 @@ public record StructDef {
     
     [Key("fields")]
     public required SortedDictionary<FieldID, StructFieldDef> Fields { get; init; }
+    
+    [Key("tags")]
+    public required IReadOnlyList<TagInfo> Tags {
+        get;
+        init => field = value.ToArrayNonNull();
+    }
 }
 
 [MessagePackObject]
@@ -42,7 +48,7 @@ public record ClassStructIdentity(NamePath Name) : IStructIdentity {
 
 public record ArrayStructIdentity(IType ElementType, ulong Size) : IStructIdentity {
     public string ToPrettyString(Metadata metadata) {
-        return $"{this.ElementType.ToPrettyString(metadata)}[{this.Size}]";
+        return $"array[{this.Size}] of {this.ElementType.ToPrettyString(metadata)}";
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::Type;
+use crate::{TagInfo, Type};
 use crate::NamePath;
 use serde::Deserialize;
 use serde::Serialize;
@@ -29,4 +29,6 @@ pub struct VariantDef {
     pub tag_type: Type,
 
     pub cases: Vec<VariantCase>,
+    
+    pub tags: Vec<TagInfo>,
 }

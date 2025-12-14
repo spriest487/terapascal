@@ -372,6 +372,7 @@ pub fn translate_unary_op(
                 typ::Type::Primitive(typ::Primitive::NativeInt) => ir::Value::LiteralISize(0),
                 typ::Type::Primitive(typ::Primitive::NativeUInt) => ir::Value::LiteralUSize(0),
                 typ::Type::Primitive(typ::Primitive::Real32) => ir::Value::LiteralF32(0.0),
+                typ::Type::Primitive(typ::Primitive::Real64) => ir::Value::LiteralF64(0.0),
                 _ => unimplemented!("IR for unary negation of {}", op_ty),
             };
 

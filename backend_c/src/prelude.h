@@ -150,7 +150,8 @@ static STRING_STRUCT* System_UInt64ToStr(uint64_t i);
 static STRING_STRUCT* System_NativeIntToStr(ptrdiff_t i);
 static STRING_STRUCT* System_NativeUIntToStr(size_t i);
 static STRING_STRUCT* System_PointerToStr(const void* i);
-static STRING_STRUCT* System_RealToStr(float f);
+static STRING_STRUCT* System_Real32ToStr(float f);
+static STRING_STRUCT* System_Real64ToStr(double f);
 
 static unsigned char* System_GetMem(int32_t len);
 static void System_FreeMem(unsigned char* mem);

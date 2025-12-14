@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using MessagePack;
+﻿using MessagePack;
 using MessagePack.Formatters;
 
 namespace Terapascal.IR;
@@ -34,10 +33,10 @@ public record InterfaceDef {
         init => field = value!.ToArrayNonNull();
     }
 
-    [Key("impls")]
-    public required Dictionary<IType, InterfaceImpl> Implementations {
+    [Key("tags")]
+    public required IReadOnlyList<TagInfo> Tags {
         get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
+        init => field = value.ToArrayNonNull();
     }
 }
 

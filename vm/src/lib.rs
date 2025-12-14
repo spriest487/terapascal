@@ -404,6 +404,21 @@ impl Interpreter {
 
     pub fn evaluate(&self, val: &ir::Value) -> ExecResult<DynValue> {
         match val {
+            ir::Value::LiteralU8(i) => Ok(DynValue::U8(*i)),
+            ir::Value::LiteralI8(i) => Ok(DynValue::I8(*i)),
+            ir::Value::LiteralI16(i) => Ok(DynValue::I16(*i)),
+            ir::Value::LiteralU16(i) => Ok(DynValue::U16(*i)),
+            ir::Value::LiteralI32(i) => Ok(DynValue::I32(*i)),
+            ir::Value::LiteralU32(i) => Ok(DynValue::U32(*i)),
+            ir::Value::LiteralI64(i) => Ok(DynValue::I64(*i)),
+            ir::Value::LiteralU64(i) => Ok(DynValue::U64(*i)),
+            ir::Value::LiteralISize(i) => Ok(DynValue::ISize(*i)),
+            ir::Value::LiteralUSize(i) => Ok(DynValue::USize(*i)),
+            ir::Value::LiteralF32(f) => Ok(DynValue::F32(*f)),
+            ir::Value::LiteralF64(f) => Ok(DynValue::F64(*f)),
+            ir::Value::LiteralBool(b) => Ok(DynValue::Bool(*b)),
+            ir::Value::LiteralNull => Ok(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))),
+
             ir::Value::Ref(r) => {
                 let ref_val = self.load(r)?;
                 Ok(ref_val)
@@ -421,20 +436,9 @@ impl Interpreter {
                 Ok(DynValue::I32(size))
             },
 
-            ir::Value::LiteralU8(i) => Ok(DynValue::U8(*i)),
-            ir::Value::LiteralI8(i) => Ok(DynValue::I8(*i)),
-            ir::Value::LiteralI16(i) => Ok(DynValue::I16(*i)),
-            ir::Value::LiteralU16(i) => Ok(DynValue::U16(*i)),
-            ir::Value::LiteralI32(i) => Ok(DynValue::I32(*i)),
-            ir::Value::LiteralU32(i) => Ok(DynValue::U32(*i)),
-            ir::Value::LiteralI64(i) => Ok(DynValue::I64(*i)),
-            ir::Value::LiteralU64(i) => Ok(DynValue::U64(*i)),
-            ir::Value::LiteralISize(i) => Ok(DynValue::ISize(*i)),
-            ir::Value::LiteralUSize(i) => Ok(DynValue::USize(*i)),
-            ir::Value::LiteralF32(f) => Ok(DynValue::F32(*f)),
-            ir::Value::LiteralF64(f) => Ok(DynValue::F64(*f)),
-            ir::Value::LiteralBool(b) => Ok(DynValue::Bool(*b)),
-            ir::Value::LiteralNull => Ok(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))),
+            ir::Value::Default(ty) => {
+                self.default_val(ty)
+            }
         }
     }
 
@@ -2150,7 +2154,7 @@ impl Interpreter {
             def_result.map_err(|err| self.add_stack_trace(err.into()))?;
         }
         
-        for (iface_id, _) in lib.metadata.ifaces() {
+        for (iface_id, _) in lib.metadata.interfaces() {
             marshaller.add_iface(iface_id)
         }
 
@@ -2212,8 +2216,6 @@ impl Interpreter {
         // builtin functions that can now be stored as globals
         self.init_stdlib_globals();
 
-        let mut string_lit_values = HashMap::new();
-
         for (id, literal) in lib.metadata().strings() {
             let str_val = self
                 .create_string(literal, true)
@@ -2228,8 +2230,6 @@ impl Interpreter {
                 value: self.marshaller.marshal_to_vec(&str_val)?.into_boxed_slice(),
                 ty: ir::STRING_ID.to_class_ptr_type(),
             });
-
-            string_lit_values.insert(id, str_val);
         }
         
         let disable_rtti = self.metadata.get_struct_def(ir::TYPEINFO_ID).is_none()
@@ -2237,8 +2237,12 @@ impl Interpreter {
             || self.metadata.get_struct_def(ir::METHODINFO_ID).is_none();
 
         if !disable_rtti {
+            let tag_counts = lib.metadata
+                .all_tags()
+                .map(|(loc, tags)| (loc, tags.len()));
+            
             // allocate static arrays for runtime tag objects (must exist before RTTI init)
-            for (tag_loc, tag_count) in lib.metadata.tag_counts() {
+            for (tag_loc, tag_count) in tag_counts {
                 let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
                 let elements = iter::repeat(nil_any).take(tag_count).collect();
 
@@ -2249,21 +2253,21 @@ impl Interpreter {
                 self.globals.insert(array_ref, array_value);
             }
 
-            self.init_rtti(lib, &string_lit_values)?;
+            self.init_rtti(lib)?;
         } else {
             eprintln!("[vm] RTTI is disabled");
         }
 
         // declare global variables
-        for (var_id, var_ty) in &lib.variables {
+        for (var_id, var) in lib.metadata.variables() {
             // global variables start zero-initialized
-            let marshal_ty = self.marshaller.get_ty(var_ty)?;
+            let marshal_ty = self.marshaller.get_ty(&var.r#type)?;
             let zero_val = vec![0u8; marshal_ty.size()];
 
             self.globals
-                .insert(ir::GlobalRef::Variable(*var_id), GlobalValue::Variable {
+                .insert(ir::GlobalRef::Variable(var_id), GlobalValue::Variable {
                     value: zero_val.into_boxed_slice(),
-                    ty: var_ty.clone(),
+                    ty: var.r#type.clone(),
                 });
         }
 
@@ -2308,14 +2312,12 @@ impl Interpreter {
     }
     
     fn init_rtti(&mut self,
-        lib: &ir::Library,
-        string_lit_values: &HashMap<ir::StringID, DynValue>
-    ) -> ExecResult<()> {
+        lib: &ir::Library) -> ExecResult<()> {
         // create runtime type info objects (TypeInfo and MethodInfo)
         for (ty, runtime_type) in lib.metadata.type_info() {
             let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
 
-            let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
+            let typeinfo_ptr = self.create_typeinfo(ty, runtime_type)?;
             let ptr_bytes = self.marshaller.marshal_to_vec(&typeinfo_ptr)?;
 
             self.globals
@@ -2342,7 +2344,7 @@ impl Interpreter {
                 .and_then(|str_id| self.metadata.get_string(*str_id))
                 .cloned();
 
-            let funcinfo_ptr = self.create_func_info_object(func_id, func_decl, &string_lit_values)?;
+            let funcinfo_ptr = self.create_func_info_object(func_id, func_decl)?;
             let ptr_bytes = self.marshaller.marshal_to_vec(&funcinfo_ptr)?;
 
             let funcinfo_ref = ir::GlobalRef::StaticFuncInfo(func_id);
@@ -2357,6 +2359,11 @@ impl Interpreter {
         }
         
         Ok(())
+    }
+
+    fn load_string_lit(&self, id: ir::StringID) -> ExecResult<DynValue> {
+        let global_ref = ir::GlobalRef::StringLiteral(id);
+        self.load(&ir::Ref::from(global_ref))
     }
 
     pub fn create_string(&mut self, content: &str, immortal: bool) -> ExecResult<DynValue> {
@@ -2585,13 +2592,9 @@ impl Interpreter {
     fn create_typeinfo(
         &mut self,
         ty: &ir::Type,
-        rtti: &ir::TypeInfo,
-        string_lit_values: &HashMap<ir::StringID, DynValue>,
+        type_info: &ir::TypeInfo,
     ) -> ExecResult<DynValue> {
-        let type_name_string = match &rtti.name {
-            None => string_lit_values[&ir::EMPTY_STRING_ID].clone(),
-            Some(name_id) => string_lit_values[name_id].clone(),
-        };
+        let type_name_string = self.load_string_lit(type_info.name.unwrap_or(ir::EMPTY_STRING_ID))?;
 
         let ty_tags_loc = match ty {
             ir::Type::Object(ir::ObjectID::Interface(iface_id)) => {
@@ -2612,7 +2615,7 @@ impl Interpreter {
         let type_flags_repr = self.metadata.find_set_repr_struct(ir::TYPEINFO_FLAGS_BITS)
             .ok_or_else(|| ExecError::illegal_state("missing flags type for TypeFlags"))?;
         let type_flags_val = StructValue::new(type_flags_repr, [
-            DynValue::U64(rtti.flags)
+            DynValue::U64(type_info.flags)
         ]);
 
         let typeinfo_methods_ptr = DynValue::Pointer(
@@ -2644,11 +2647,11 @@ impl Interpreter {
             .collect();
 
         // these should be the same method in the same order!
-        assert_eq!(method_func_ids.len(), rtti.methods.len());
+        assert_eq!(method_func_ids.len(), type_info.methods.len());
 
         let mut method_info_ptrs = Vec::new();
         for method_index in 0..method_func_ids.len() {
-            let rtti_method = &rtti.methods[method_index];
+            let method_info = &type_info.methods[method_index];
 
             let method_tags_array_ptr = ty_tags_loc
                 .and_then(|loc| loc.method_loc(method_index))
@@ -2660,11 +2663,12 @@ impl Interpreter {
                 addr: global_method_index,
                 ty: ir::Type::Nothing,
             };
+            
+            let method_name_string = self.load_string_lit(method_info.name)?;
 
-            let name_val = string_lit_values[&rtti_method.name].clone();
-            let method_info = StructValue::new(ir::METHODINFO_ID, [
+            let method_info_struct = StructValue::new(ir::METHODINFO_ID, [
                 // 0: name
-                name_val,
+                method_name_string,
                 // 1: owner
                 DynValue::Pointer(typeinfo_ptr.clone()),
                 // 2: impl
@@ -2673,10 +2677,10 @@ impl Interpreter {
                 DynValue::Pointer(method_tags_array_ptr),
             ]);
 
-            let method_info_ptr = self.new_object(method_info, true)?;
+            let method_info_ptr = self.new_object(method_info_struct, true)?;
             method_info_ptrs.push(DynValue::Pointer(method_info_ptr));
 
-            self.runtime_methods.push(rtti_method.clone());
+            self.runtime_methods.push(method_info.clone());
         }
 
         let method_array = self.new_dyn_array(&ir::METHODINFO_TYPE, method_info_ptrs, true)?;
@@ -2692,12 +2696,9 @@ impl Interpreter {
         &mut self,
         func_id: ir::FunctionID,
         func_info: &ir::FunctionInfo,
-        string_lit_values: &HashMap<ir::StringID, DynValue>,
     ) -> ExecResult<DynValue> {
-        let func_name_string = match &func_info.runtime_name {
-            None => string_lit_values[&ir::EMPTY_STRING_ID].clone(),
-            Some(name_id) => string_lit_values[name_id].clone(),
-        };
+        let func_name_string = self.load_string_lit(func_info.runtime_name
+            .unwrap_or(ir::EMPTY_STRING_ID))?;
 
         let tags_loc = ir::TagLocation::Function(func_id);
 

@@ -6,23 +6,23 @@ use crate::FunctionID;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::Metadata;
+use crate::MetadataSource;
 use crate::StaticClosure;
 use crate::StructIdentity;
 use crate::Type;
 use crate::TypeDef;
-use crate::VariableID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::io;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
-    pub metadata: Metadata,
+    pub metadata: Arc<Metadata>,
 
     pub functions: BTreeMap<FunctionID, Function>,
-    
-    pub variables: BTreeMap<VariableID, Type>,
 
     pub static_closures: Vec<StaticClosure>,
 
@@ -30,17 +30,15 @@ pub struct Library {
 }
 
 impl Library {
-    pub fn new(metadata: Metadata) -> Self {
+    pub fn new(metadata: impl Into<Arc<Metadata>>) -> Self {
         Self {
             init: Vec::new(),
 
             functions: BTreeMap::new(),
-            
-            variables: BTreeMap::new(),
 
             static_closures: Vec::new(),
 
-            metadata,
+            metadata: metadata.into(),
         }
     }
 
@@ -58,10 +56,6 @@ impl Library {
 
     pub fn functions(&self) -> &BTreeMap<FunctionID, Function> {
         &self.functions
-    }
-    
-    pub fn variables(&self) -> &BTreeMap<VariableID, Type> {
-        &self.variables
     }
 }
 
@@ -162,7 +156,7 @@ impl fmt::Display for Library {
         }
 
         writeln!(f, "* Interfaces: ")?;
-        let mut ifaces: Vec<_> = self.metadata.ifaces().collect();
+        let mut ifaces: Vec<_> = self.metadata.interfaces().collect();
         ifaces.sort_by_key(|(id, _)| *id);
 
         for (id, iface) in &ifaces {
@@ -184,10 +178,10 @@ impl fmt::Display for Library {
             writeln!(f)?;
         }
         writeln!(f)?;
-        
+
         writeln!(f, "* Global Variables")?;
-        for (var_id, var_type) in &self.variables {
-            writeln!(f, "{}: {}", var_id.0, self.metadata.pretty_ty_name(var_type))?;
+        for (var_id, var_info) in self.metadata.variables() {
+            writeln!(f, "{}: {} ({})", var_id.0, self.metadata.pretty_ty_name(&var_info.r#type), var_info.name)?;
         }
         writeln!(f)?;
         
@@ -202,7 +196,7 @@ impl fmt::Display for Library {
 
         writeln!(f, "* Functions")?;
         for (id, func) in funcs {
-            write!(f, "{}: {}", id.0, func.sig().to_pretty_string(&self.metadata))?;
+            write!(f, "{}: {}", id.0, func.sig().to_pretty_string(self.metadata.as_ref()))?;
             match self.metadata.func_desc(*id) {
                 Some(desc_name) => {
                     writeln!(f, " ({})", desc_name)?;
@@ -233,4 +227,18 @@ impl fmt::Display for Library {
         write_instruction_list(f, &self.metadata, &self.init)?;
         Ok(())
     }
+}
+
+
+
+pub fn encode_lib(lib: &crate::Library) -> Result<Vec<u8>, io::Error> {
+    let data = rmp_serde::encode::to_vec_named(&lib)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))?;
+
+    Ok(data)
+}
+
+pub fn decode_lib(data: &[u8]) -> Result<crate::Library, io::Error> {
+    rmp_serde::decode::from_slice(data)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))
 }

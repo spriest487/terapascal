@@ -92,7 +92,8 @@ impl<'a> Unit<'a> {
             .collect();
 
         let tag_arrays = metadata
-            .tag_counts()
+            .all_tags()
+            .map(|(loc, tags)| (loc, tags.len()))
             .collect();
 
         let mut unit = Unit {
@@ -160,7 +161,7 @@ impl<'a> Unit<'a> {
             unit.classes.push(class);
         } 
 
-        for (iface_id, iface_def) in metadata.ifaces() {
+        for (iface_id, iface_def) in metadata.interfaces() {
             let iface = Interface::translate(iface_id, iface_def, &mut unit);
             unit.ifaces.push(iface);
         }
@@ -367,9 +368,9 @@ impl<'a> Unit<'a> {
         init_builder.translate_instructions(library.init());
         init_func.body.extend(init_builder.stmts);
         
-        for (var_id, var_ty) in library.variables() {
-            let name = GlobalName::Variable(*var_id);
-            let ty = Type::from_metadata(var_ty, self);
+        for (var_id, var_info) in library.metadata.variables() {
+            let name = GlobalName::Variable(var_id);
+            let ty = Type::from_metadata(&var_info.r#type, self);
             
             self.global_vars.push(GlobalVar {
                 name,

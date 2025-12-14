@@ -12,6 +12,7 @@ type
     Cardinal = UInt32;
 
     Single = Real32;
+    Double = Real64;
     
     String = class;
 
@@ -205,6 +206,7 @@ function UInt64ToStr(i: UInt64): String; external 'rt';
 function NativeIntToStr(i: NativeInt): String; external 'rt';
 function NativeUIntToStr(i: NativeUInt): String; external 'rt';
 function RealToStr(value: Real32): String; external 'rt';
+function Real64ToStr(value: Real64): String; external 'rt';
 function PointerToStr(value: Pointer): String; external 'rt';
 
 function StrToInt(s: String): Int32; external 'rt';
@@ -247,6 +249,8 @@ function Infinity: Single; external 'rt';
 function IsInfinite(value: Single): Boolean; external 'rt';
 function NaN: Single; external 'rt';
 function IsNaN(value: Single): Boolean; external 'rt';
+
+function Time: Double; external 'rt';
 
 function Downcast[T](obj: Object): Option[T];
 
@@ -931,6 +935,13 @@ begin
     else 0
 end;
 
+function Real64.Compare(other: Real64): Integer;
+begin
+    if self > other then 1
+    else if self < other then -1
+    else 0
+end;
+
 function Boolean.Compare(other: Boolean): Integer;
 begin
     if self and not other then 1
@@ -1068,6 +1079,11 @@ end;
 function Real32.ToString: String;
 begin
     RealToStr(self)
+end;
+
+function Real64.ToString: String;
+begin
+    Real64ToStr(self)
 end;
 
 function Pointer.ToString: String;

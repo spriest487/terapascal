@@ -1,6 +1,7 @@
 use crate::FunctionID;
 use crate::MethodID;
 use crate::NamePath;
+use crate::TagInfo;
 use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;
@@ -17,7 +18,8 @@ pub struct Method {
 pub struct InterfaceDef {
     pub name: NamePath,
     pub methods: Vec<Method>,
-    pub impls: HashMap<Type, InterfaceImpl>,
+    
+    pub tags: Vec<TagInfo>,
 }
 
 impl InterfaceDef {
@@ -25,37 +27,8 @@ impl InterfaceDef {
         Self {
             name: name.into(),
             methods: methods.into(),
-            impls: HashMap::new(),
+            tags: Vec::new(),
         }
-    }
-    
-    pub fn declare_empty_impl(&mut self, implementor: Type) {
-        self.impls.entry(implementor).or_insert_with(|| InterfaceImpl::new(0));
-    }
-
-    pub fn add_impl(&mut self,
-        implementor: Type,
-        method: MethodID,
-        func_id: FunctionID,
-    ) {
-        assert!(method.0 < self.methods.len());
-
-        let methods_len = self.methods.len();
-        let impl_entry = self
-            .impls
-            .entry(implementor.clone())
-            .or_insert_with(|| InterfaceImpl::new(methods_len));
-        assert!(
-            !impl_entry.methods.contains_key(&method),
-            "adding duplicate impl ({}) of method {}.{} for {}, already defined as {}",
-            func_id,
-            self.name,
-            self.methods[method.0].name,
-            implementor,
-            impl_entry.methods[&method],
-        );
-
-        impl_entry.methods.insert(method, func_id);
     }
 
     pub fn method_index(&self, name: &str) -> Option<MethodID> {
@@ -68,6 +41,11 @@ impl InterfaceDef {
     pub fn get_method(&self, id: MethodID) -> Option<&Method> {
         self.methods.get(id.0)
     }
+    
+    pub fn with_tags(mut self, tags: impl IntoIterator<Item=TagInfo>) -> Self {
+        self.tags.extend(tags.into_iter());
+        self
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -77,7 +55,7 @@ pub struct InterfaceImpl {
 }
 
 impl InterfaceImpl {
-    fn new(method_count: usize) -> Self {
+    pub fn new(method_count: usize) -> Self {
         Self {
             methods: HashMap::with_capacity(method_count),
         }

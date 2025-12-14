@@ -41,7 +41,10 @@ pub fn system_funcs() -> Vec<(&'static str, BuiltinName, ir::Type, Vec<ir::Type>
         ("PointerToStr", BuiltinName::PointerToStr, string_ty.clone(), vec![
             ir::Type::Nothing.ptr()
         ]),
-        ("RealToStr", BuiltinName::RealToStr, string_ty.clone(), vec![
+        ("RealToStr", BuiltinName::Real32ToStr, string_ty.clone(), vec![
+            ir::Type::F32
+        ]),
+        ("Real64ToStr", BuiltinName::Real64ToStr, string_ty.clone(), vec![
             ir::Type::F32
         ]),
         ("StrToInt", BuiltinName::StrToInt, ir::Type::I32, vec![

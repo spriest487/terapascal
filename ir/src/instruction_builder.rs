@@ -35,6 +35,7 @@ pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
 
     fn metadata(&self) -> &MetadataBuilder;
+    fn metadata_mut(&mut self) -> &mut MetadataBuilder;
 
     fn local_stack(&self) -> &LocalStack;
     fn local_stack_mut(&mut self) -> &mut LocalStack;
@@ -751,7 +752,7 @@ pub trait InstructionBuilder {
         iface_id: InterfaceID,
         method: MethodID,
         self_arg: impl Into<Value>,
-        rest_args: impl IntoIterator<Item = impl Into<Value>>,
+        rest_args: impl IntoIterator<Item = Value>,
         out: Option<Ref>,
     ) {
         self.emit(Instruction::VirtualCall {
@@ -793,9 +794,14 @@ pub trait InstructionBuilder {
     }
 
     fn vartag(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_ty: Type) {
+        let a = a.into();
+        if matches!(a, Ref::Discard) {
+            panic!("operand of vartag instruction must not be a discard");
+        }
+        
         self.emit(Instruction::VariantTag {
             out: out.into(),
-            a: a.into(),
+            a,
             of_ty,
         })
     }
@@ -827,6 +833,11 @@ pub trait InstructionBuilder {
     }
 
     fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        let at = at.into();
+        if at.is_discard() {
+            panic!("release_deep: operand must not be a discard ref");
+        }
+
         self.visit_deep(
             at,
             ty,
@@ -847,6 +858,11 @@ pub trait InstructionBuilder {
     }
 
     fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
+        let at = at.into();
+        if at.is_discard() {
+            panic!("retain_deep: operand must not be a discard ref");
+        }
+        
         self.visit_deep(
             at,
             ty,

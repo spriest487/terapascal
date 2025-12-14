@@ -107,7 +107,7 @@ impl StructLayout {
                 Primitive::Boolean | Primitive::UInt8 | Primitive::Int8 => 1,
                 Primitive::Int16 | Primitive::UInt16 => 2,
                 Primitive::Int32 | Primitive::UInt32 | Primitive::Real32 => 4,
-                Primitive::Int64 | Primitive::UInt64 => 8,
+                Primitive::Int64 | Primitive::UInt64 | Primitive::Real64 => 8,
                 Primitive::NativeInt | Primitive::NativeUInt | Primitive::Pointer => TARGET_WORD_SIZE,
             },
             

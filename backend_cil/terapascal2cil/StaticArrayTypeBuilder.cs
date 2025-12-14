@@ -94,6 +94,8 @@ public class StaticArrayTypeBuilder {
             }
         }
         
+        this.typeBuilder.BuildDefaultConstructor(typeDef);
+        
         typeDef.Methods.Add(elementRefMethodDef);
 
         this.assemblyBuilder.Module.Types.Add(typeDef);

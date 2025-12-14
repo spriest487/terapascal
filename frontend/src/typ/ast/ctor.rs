@@ -27,6 +27,8 @@ use linked_hash_map::LinkedHashMap;
 use std::iter;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
+use crate::ast::Access;
+use crate::ast::Ident;
 use crate::result::ErrorContinue;
 
 pub type ObjectCtor = ast::ObjectCtor<Value>;
@@ -92,56 +94,21 @@ pub fn typecheck_object_ctor_args(
     let mut members: Vec<ObjectCtorMember> = Vec::new();
 
     for member in &src.members {
-        // check for duplicate items for the same field
-        let find_prev = members.iter().find(|a| a.ident == member.ident);
-
-        if let Some(prev) = find_prev {
-            return Err(TypeError::DuplicateNamedArg {
-                name: member.ident.clone(),
-                span: member.span().clone(),
-                previous: Some(prev.span().clone()),
-            });
-        }
-
-        let (member_ty, _member_span, member_access) = match expect_fields.remove(&member.ident) {
-            Some(member) => member,
-            None => {
-                // ctor has a named argument which doesn't exist in the type
-                return Err(TypeError::from_name_err(
-                    NameError::type_member_not_found(ctor_ty.clone(), member.ident.clone()),
-                    member.span().clone(),
-                ));
-            },
-        };
-
-        if ctor_ty.get_current_access(ctx) < member_access {
-            return Err(TypeError::TypeMemberInaccessible {
-                span: member.span.clone(),
-                access: member_access,
-                ty: ctor_ty.clone(),
-                member: member.ident.clone(),
-            });
-        }
-
-        let val_expr = evaluate_expr(&member.value, &member_ty, ctx)?;
-
-        let value = implicit_conversion(
-            val_expr,
-            &member_ty,
+        match typecheck_object_ctor_arg(
+            ctor_ty,
             ctx,
-        )?;
-
-        let member = ObjectCtorMember {
-            ident: member.ident.clone(),
-            value,
-            span: member.span.clone(),
-        };
-
-        members.push(member);
+            &mut expect_fields,
+            &mut members,
+            &member
+        ) {
+            Ok(member) => members.push(member),
+            Err(err) => ctx.error(err),
+        }
     }
 
     // any remaining members must have valid default values
     let mut missing_members = Vec::new();
+
     for (member_ident, (member_ty, member_span, _)) in expect_fields {
         let has_default = member_ty
             .has_default(ctx)
@@ -174,6 +141,61 @@ pub fn typecheck_object_ctor_args(
     };
 
     Ok(args)
+}
+
+fn typecheck_object_ctor_arg(
+    ctor_ty: &Type,
+    ctx: &mut Context,
+    expect_fields: &mut LinkedHashMap<Ident, (TypeName, Span, Access)>,
+    prev_members: &mut Vec<ObjectCtorMember>,
+    member: &ast::ObjectCtorMember
+) -> TypeResult<ObjectCtorMember> {
+    let (member_ty, _member_span, member_access) = match expect_fields.remove(&member.ident) {
+        Some(member) => member,
+        None => {
+            // ctor has a named argument which doesn't exist in the type
+            return Err(TypeError::from_name_err(
+                NameError::type_member_not_found(ctor_ty.clone(), member.ident.clone()),
+                member.span().clone(),
+            ));
+        },
+    };
+
+    // check for duplicate items for the same field
+    let find_prev = prev_members.iter().find(|a| a.ident == member.ident);
+
+    if let Some(prev) = find_prev {
+        return Err(TypeError::DuplicateNamedArg {
+            name: member.ident.clone(),
+            span: member.span().clone(),
+            previous: Some(prev.span().clone()),
+        });
+    }
+
+    if ctor_ty.get_current_access(ctx) < member_access {
+        return Err(TypeError::TypeMemberInaccessible {
+            span: member.span.clone(),
+            access: member_access,
+            ty: ctor_ty.clone(),
+            member: member.ident.clone(),
+        });
+    }
+
+    let val_expr = evaluate_expr(&member.value, &member_ty, ctx)?;
+
+    let value = implicit_conversion(
+        val_expr,
+        &member_ty,
+        ctx,
+    )?;
+
+    let member = ObjectCtorMember {
+        ident: member.ident.clone(),
+        value,
+        span: member.span.clone(),
+    };
+    
+    Ok(member)
 }
 
 fn typecheck_object_ctor_type(

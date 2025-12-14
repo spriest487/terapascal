@@ -1,14 +1,17 @@
 use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
+use crate::IRFormatter;
 use crate::MetadataSource;
 use crate::TagLocation;
 use crate::Value;
-use crate::IRFormatter;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
 use std::rc::Rc;
+
+pub use crate::metadata::ids::ObjectID;
+pub use crate::metadata::ids::FieldID;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Type {
@@ -64,19 +67,19 @@ impl Type {
     }
 
     pub const fn class_ptr(id: TypeDefID) -> Self {
-        Self::rc_ptr_to(ObjectID::Class(id))
+        Self::object_ptr(ObjectID::Class(id))
     }
     
-    pub const fn rc_ptr_to(class: ObjectID) -> Self {
+    pub const fn object_ptr(class: ObjectID) -> Self {
         Type::Object(class)
     }
     
-    pub const fn rc_weak_ptr_to(class: ObjectID) -> Self {
+    pub const fn weak_object_ptr(class: ObjectID) -> Self {
         Type::WeakObject(class)
     }
 
     pub const fn string_ptr() -> Self {
-        Type::rc_ptr_to(ObjectID::Class(STRING_ID))
+        Self::class_ptr(STRING_ID)
     }
 
     pub fn deref_ty(&self) -> Option<&Self> {
@@ -328,71 +331,8 @@ impl fmt::Display for Type {
                 ObjectID::Array(element) => write!(f, "weak array of {}", element),
                 ObjectID::Box(element) => write!(f, "weak box of {}", element),
             },
-            Type::Array { element, dim } => write!(f, "{}[{}]", element, dim),
+            Type::Array { element, dim } => write!(f, "array[{}] of {}", dim, element),
             Type::Function(id) => write!(f, "function {}", id),
         }
     }
 }
-
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum ObjectID {
-    // unknown type - may refer to any class type, only known at runtime
-    Any,
-
-    //instance of a known class whose layout is defined as the struct with this typedef ID
-    Class(TypeDefID),
-
-    // instance of an unknown class that implements the interface with this interface ID
-    Interface(InterfaceID),
-
-    // closure of an unknown structure that calls the function type with this typedef ID
-    Closure(TypeDefID),
-
-    // array class (dyn array)
-    Array(Rc<Type>),
-
-    // boxed value
-    Box(Rc<Type>),
-}
-
-impl ObjectID {
-    pub fn as_class(&self) -> Option<TypeDefID> {
-        let ObjectID::Class(class_id) = self else {
-            return None;  
-        };
-        
-        Some(*class_id)
-    }
-    
-    pub fn to_object_type(&self) -> Type {
-        Type::Object(self.clone())
-    }
-
-    pub fn to_weak_object_type(&self) -> Type {
-        Type::WeakObject(self.clone())
-    }
-}
-
-impl fmt::Display for ObjectID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ObjectID::Any => write!(f, "any"),
-            ObjectID::Class(class_id) => write!(f, "{}", class_id),
-            ObjectID::Interface(iface_id) => write!(f, "{}", iface_id),
-            ObjectID::Closure(closure_id) => write!(f, "{}", closure_id),
-            ObjectID::Array(element_type) => write!(f, "array of {}", element_type),
-            ObjectID::Box(element_type) => write!(f, "box of {}", element_type),
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
-pub struct FieldID(pub usize);
-
-impl fmt::Display for FieldID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-

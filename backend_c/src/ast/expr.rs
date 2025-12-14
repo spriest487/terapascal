@@ -1,10 +1,13 @@
-use crate::ast::{DynArrayTypeID, FieldName};
+use crate::ast::Builder;
+use crate::ast::BuiltinName;
+use crate::ast::DynArrayTypeID;
+use crate::ast::FieldName;
 use crate::ast::FunctionName;
 use crate::ast::GlobalName;
+use crate::ast::Statement;
 use crate::ast::Type;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
-use crate::ast::BuiltinName;
 use crate::ast::VariableID;
 use crate::ir;
 use std::fmt;
@@ -117,10 +120,10 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn translate_val(v: &ir::Value, module: &mut Unit) -> Self {
+    pub fn translate_val(v: &ir::Value, builder: &mut Builder) -> Self {
         match v {
-            ir::Value::LiteralBool(b) => Expr::LitBool(*b),
             ir::Value::LiteralNull => Expr::Null,
+            ir::Value::LiteralBool(b) => Expr::LitBool(*b),
             ir::Value::LiteralI8(i) => Expr::LitInt(*i as i128),
             ir::Value::LiteralU8(i) => Expr::LitInt(*i as i128),
             ir::Value::LiteralI16(i) => Expr::LitInt(*i as i128),
@@ -133,23 +136,73 @@ impl Expr {
             ir::Value::LiteralUSize(i) => Expr::LitInt(*i as i128),
             ir::Value::LiteralF32(f) => Expr::LitFloat(f64::from(*f)),
             ir::Value::LiteralF64(f) => Expr::LitFloat(f64::from(*f)),
-            ir::Value::Ref(r) => Expr::translate_ref(r, module),
+            
+            ir::Value::Ref(r) => {
+                Expr::translate_ref(r, builder)
+            },
+
             ir::Value::SizeOf(ty) => {
-                let ty = Type::from_metadata(ty, module);
+                let ty = builder.translate_type(ty);
                 Expr::SizeOf(ty)
+            }
+            
+            ir::Value::Default(ty) => {
+                match ty {
+                    ir::Type::Function(_)
+                    | ir::Type::TempRef(_) 
+                    | ir::Type::Pointer(_)
+                    | ir::Type::Nothing
+                    | ir::Type::Object(_)
+                    | ir::Type::WeakObject(_) => Expr::Null,
+                    
+                    ir::Type::Bool => Expr::LitBool(false),
+                    ir::Type::U8 
+                    | ir::Type::I8 
+                    | ir::Type::I16 
+                    | ir::Type::U16
+                    | ir::Type::I32
+                    | ir::Type::U32
+                    | ir::Type::I64
+                    | ir::Type::U64
+                    | ir::Type::USize
+                    | ir::Type::ISize
+                    | ir::Type::F32
+                    | ir::Type::F64 => Expr::LitInt(0),
+
+
+                    ir::Type::Struct(_)
+                    | ir::Type::Variant(_)
+                    | ir::Type::Flags(_)
+                    | ir::Type::Array { .. } => {
+                        let ty = builder.translate_type(ty);
+                        let ty_size = Expr::SizeOf(ty.clone());
+                        
+                        let val_var = builder.new_temp_var(ty, false);
+                        builder.stmts.push(Statement::Expr(
+                            Expr::Function(FunctionName::Builtin(BuiltinName::ZeroMemory)).call([
+                                Expr::Variable(val_var.clone())
+                                    .addr_of()
+                                    .cast(Type::UChar.ptr()),
+                                ty_size,
+                            ])
+                        ));
+                        
+                        Expr::Variable(val_var)
+                    }
+                }
             }
         }
     }
 
-    pub fn translate_ref(r: &ir::Ref, module: &mut Unit) -> Self {
+    pub fn translate_ref(r: &ir::Ref, builder: &mut Builder) -> Self {
         match r {
             ir::Ref::Discard => {
                 panic!("can't translate a discard ref, it should only be used in assignments")
             },
             ir::Ref::Local(local_id) => VariableID::local(*local_id).to_expr(),
-            ir::Ref::Deref(inner) => Expr::translate_val(inner.as_ref(), module).deref(),
+            ir::Ref::Deref(inner) => Expr::translate_val(inner.as_ref(), builder).deref(),
             ir::Ref::Global(ir::GlobalRef::Function(id)) => {
-                let name = module.function_name(*id);
+                let name = builder.function_name(*id);
                 Expr::Function(name)
             },
             ir::Ref::Global(ir::GlobalRef::StringLiteral(id)) => {
@@ -283,25 +336,25 @@ impl Expr {
         lhs: &ir::Value,
         op: InfixOp,
         rhs: &ir::Value,
-        module: &mut Unit,
+        builder: &mut Builder,
     ) -> Self {
-        let lhs_expr = Expr::translate_val(lhs, module);
-        let rhs_expr = Expr::translate_val(rhs, module);
+        let lhs_expr = Expr::translate_val(lhs, builder);
+        let rhs_expr = Expr::translate_val(rhs, builder);
 
         Self::infix_op(lhs_expr, op, rhs_expr)
     }
 
-    pub fn translate_assign(out: &ir::Ref, val: Self, module: &mut Unit) -> Self {
+    pub fn translate_assign(out: &ir::Ref, val: Self, builder: &mut Builder) -> Self {
         match out {
             ir::Ref::Discard => val,
             _ => {
-                let out_ref = Expr::translate_ref(out, module);
+                let out_ref = Expr::translate_ref(out, builder);
                 Self::infix_op(out_ref, InfixOp::Assign, val)
             },
         }
     }
     
-    fn array_class_ptr(arr_obj: &Expr, v_id: &ir::ObjectID, unit: &mut Unit) -> Expr {
+    pub fn array_class_ptr(arr_obj: &Expr, v_id: &ir::ObjectID, unit: &mut Unit) -> Expr {
         match v_id {
             ir::ObjectID::Array(element_ty) => {
                 let dyn_array_id = unit.get_dyn_array_type(element_ty);
@@ -319,17 +372,17 @@ impl Expr {
         arr: &ir::Ref,
         index: &ir::Value,
         of_type: &ir::Type,
-        module: &mut Unit,
+        builder: &mut Builder,
     ) -> Self {
-        let base_expr = Expr::translate_ref(arr, module);
-        let index_expr = Expr::translate_val(index, module);
+        let base_expr = Expr::translate_ref(arr, builder);
+        let index_expr = Expr::translate_val(index, builder);
         
         match of_type {
             ir::Type::Object(ir::ObjectID::Array(element_type)) => {
-                let arr_id = module.get_dyn_array_type(element_type);
+                let arr_id = builder.get_dyn_array_type(element_type);
                 let arr_as_obj = base_expr.cast(Type::object_ptr());
                 
-                let element_ptr_type = Type::from_metadata(&element_type.as_ref().clone().ptr(), module);
+                let element_ptr_type = builder.translate_type(&element_type.as_ref().clone().ptr());
 
                 arr_id.class_ptr()
                     .arrow(FieldName::DynArrayClassElement)
@@ -338,7 +391,7 @@ impl Expr {
             }
 
             ir::Type::Object(ir::ObjectID::Box(value_type)) => {
-                let box_id = module.get_box_type(value_type);
+                let box_id = builder.get_box_type(value_type);
 
                 base_expr.cast(box_id.ptr_type())
                     .arrow(FieldName::BoxValue)
@@ -364,14 +417,14 @@ impl Expr {
     pub fn translate_length(
         arr: &ir::Ref,
         of_type: &ir::Type,
-        module: &mut Unit,
+        builder: &mut Builder,
     ) -> Self {
-        let array_expr = Expr::translate_ref(arr, module);
+        let array_expr = Expr::translate_ref(arr, builder);
 
         match of_type {
             ir::Type::Object(type_id) => {
                 let arr_obj = array_expr.cast(Type::object_ptr());
-                let class_ptr = Self::array_class_ptr(&arr_obj, type_id, module);
+                let class_ptr = builder.array_class_ptr(&arr_obj, type_id);
 
                 class_ptr
                     .arrow(FieldName::DynArrayClassLength)
@@ -394,9 +447,9 @@ impl Expr {
         a: &ir::Ref,
         of_ty: &ir::Type,
         field_id: ir::FieldID,
-        module: &mut Unit,
+        builder: &mut Builder,
     ) -> Self {
-        let a_expr = Expr::translate_ref(a, module);
+        let a_expr = Expr::translate_ref(a, builder);
 
         match of_ty {
             ir::Type::Object(class_id) => {

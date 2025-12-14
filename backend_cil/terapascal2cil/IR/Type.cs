@@ -241,7 +241,11 @@ public sealed record StructType(TypeDefID ID) : IType {
 
 public sealed record VariantType(TypeDefID ID) : IType {
     public string ToPrettyString(Metadata metadata) {
-        throw new NotImplementedException();
+        if (metadata.FindVariantDef(this.ID, out var def)) {
+            return def.Name.ToPrettyString(metadata);
+        }
+        
+        return $"{{struct {this.ID.ID}}}";
     }
 }
 
@@ -358,7 +362,7 @@ public sealed record ArrayType : IType {
     public required ulong Length { get; init; }
 
     public string ToPrettyString(Metadata metadata) {
-        return $"{this.Element.ToPrettyString(metadata)}[{this.Length}]";
+        return $"array[{this.Length}] of {this.Element.ToPrettyString(metadata)}";
     }
 }
 

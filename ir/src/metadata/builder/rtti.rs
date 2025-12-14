@@ -1,6 +1,5 @@
 use crate::MetadataBuilder;
 use crate::TypeInfo;
-use crate::TagLocation;
 use crate::Type;
 use std::rc::Rc;
 
@@ -17,9 +16,5 @@ impl MetadataBuilder {
 
     pub fn get_type_info(&self, ty: &Type) -> Option<Rc<TypeInfo>> {
         self.find_in_self_or_refs(move |metadata| metadata.get_type_info(ty))
-    }
-
-    pub fn alloc_tag_array(&mut self, loc: TagLocation, len: usize) {
-        self.metadata.tag_counts.insert(loc, len);
     }
 }

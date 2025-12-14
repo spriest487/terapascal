@@ -100,7 +100,10 @@ public static class SDKUtils {
             throw new IOException("no runtime version found");
         }
 
-        Console.WriteLine($"Using latest dotnet app runtime version: {version}");
+        if (verbose) {
+            Console.WriteLine($"Using latest dotnet app runtime version: {version}");
+        }
+
         return version;
     }
 

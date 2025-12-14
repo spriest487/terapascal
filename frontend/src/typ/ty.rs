@@ -708,7 +708,7 @@ impl Type {
                 }
 
                 let rhs_valid = rhs_primitive.is_integer() || rhs_primitive.is_pointer();
-                if !rhs_valid || rhs_primitive.native_size() > Primitive::Pointer.native_size() {
+                if !rhs_valid {
                     return None;
                 }
 

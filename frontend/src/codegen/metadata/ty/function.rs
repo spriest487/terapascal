@@ -72,12 +72,10 @@ pub fn translate_closure_struct(
         field_id.0 += 1;
     }
 
+    
     lib.metadata_mut().define_closure_ty(
         id,
-        ir::StructDef {
-            identity: ir::StructIdentity::Closure(identity),
-            fields,
-        },
+        ir::StructDef::new(ir::StructIdentity::Closure(identity)).with_fields(fields),
     );
 
     id
