@@ -113,7 +113,7 @@ public static class SystemFunctions {
     }
 
     public static unsafe String PointerToStr(void* p) {
-        return CreateString(Environment.Is64BitProcess ? $"0x{(ulong)p,16}" : $"0x{(ulong)p,8}", false);
+        return CreateString(Environment.Is64BitProcess ? $"0x{(ulong)p:x16}" : $"0x{(ulong)p:x8}", false);
     }
 
     public static int StrToInt(String s) {
