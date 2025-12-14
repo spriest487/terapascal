@@ -44,17 +44,17 @@ public class FunctionBuilder {
             }
         }
 
-        foreach (var (ifaceID, ifaceDecl) in lib.Metadata.Interfaces) {
-            if (ifaceDecl is not IR.DefInterfaceDecl(var ifaceDef)) {
-                continue;
-            }
+        foreach (var (selfType, impls) in lib.Metadata.InterfaceImpls) {
+            foreach (var (ifaceID, ifaceImpl) in impls) {
+                if (lib.Metadata.Interfaces[ifaceID] is not IR.DefInterfaceDecl(var ifaceDef)) {
+                    throw new InvalidDataException($"missing interface def for implemented interface {ifaceID.ID}");
+                }
 
-            var ifaceSelfType = ifaceID.InterfacePointerType();
-            var ifaceTypeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(ifaceSelfType, lib).Resolve();
-
-            foreach (var (implType, impls) in ifaceDef.Implementations) {
-                foreach (var (methodID, implID) in impls.Methods) {
-                    this.BuildInterfaceMethodImpl(ifaceDef, ifaceTypeDef, methodID, implID, implType, lib);
+                var ifaceType = ifaceID.InterfacePointerType();
+                var ifaceTypeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(ifaceType, lib).Resolve();
+                
+                foreach (var (methodID, implID) in ifaceImpl.Methods) {
+                    this.BuildInterfaceMethodImpl(ifaceDef, ifaceTypeDef, methodID, implID, selfType, lib);
                 }
             }
         }
@@ -224,7 +224,7 @@ public class FunctionBuilder {
     private MethodDefinition CreateFunctionMethod(IR.FunctionID id, IR.FunctionSig sig, IR.Library library) {
         const MethodAttributes attrs = MethodAttributes.Static | MethodAttributes.Assembly;
 
-        var namePath = library.Metadata.FunctionInfo.TryGetValue(id, out var funcInfo) ? funcInfo.GlobalName : null;
+        var namePath = library.Metadata.Functions.TryGetValue(id, out var funcInfo) ? funcInfo.GlobalName : null;
 
         TypeDefinition typeDef;
         if (namePath?.GetParent() is { } unitPath) {

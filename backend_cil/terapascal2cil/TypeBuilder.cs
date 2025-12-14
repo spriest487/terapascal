@@ -224,7 +224,7 @@ public class TypeBuilder {
     }
 
     private string CreateUniqueTypeName(IR.NamePath globalName, ulong id, out string ns) {
-        var name = globalName.ToTypeName(out ns);
+        var name = globalName.ToGlobalName(out ns);
         if (globalName.HasTypeArgs) {
             name += $"_<{id}>";
         }
@@ -629,15 +629,14 @@ public class TypeBuilder {
     }
 
     private void BuildInterfaceImpls(IR.IType type, TypeDefinition typeDef, IR.Library library) {
-        foreach (var (interfaceID, interfaceDecl) in library.Metadata.Interfaces) {
-            if (interfaceDecl is not IR.DefInterfaceDecl(var interfaceDef)) {
-                continue;
-            }
+        if (!library.Metadata.InterfaceImpls.TryGetValue(type, out var typeImpls)) {
+            return;
+        }
+        
+        foreach (var ifaceID in typeImpls.Keys) {
+            var interfaceTypeRef = this.BuildInterfaceTypeRef(ifaceID, library);
 
-            if (interfaceDef.Implementations.TryGetValue(type, out _)) {
-                var interfaceTypeRef = this.BuildInterfaceTypeRef(interfaceID, library);
-                typeDef.Interfaces.Add(new InterfaceImplementation(interfaceTypeRef));
-            }
+            typeDef.Interfaces.Add(new InterfaceImplementation(interfaceTypeRef));
         }
     }
 

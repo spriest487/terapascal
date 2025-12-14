@@ -1058,8 +1058,8 @@ public class InstructionBuilder {
             }
             
             case IR.GlobalRef(IR.VariableGlobalRef(var varID)): {
-                if (this.library.Variables.TryGetValue(varID, out var varType)) {
-                    return varType;
+                if (this.library.Metadata.Variables.TryGetValue(varID, out var varInfo)) {
+                    return varInfo.Type;
                 }
                 break;
             }

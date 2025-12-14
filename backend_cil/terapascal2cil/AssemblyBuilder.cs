@@ -233,15 +233,22 @@ public class AssemblyBuilder : IDisposable {
             globalsInit.Emit(OpCodes.Stsfld, fieldDef);
         }
 
-        foreach (var (id, varType) in library.Variables) {
-            var typeRef = this.TypeBuilder.BuildTypeRef(varType, library);
+        const FieldAttributes globalVarFieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
+
+        foreach (var (id, varInfo) in library.Metadata.Variables) {
+            var typeRef = this.TypeBuilder.BuildTypeRef(varInfo.Type, library);
+
+            FieldDefinition varFieldDef;
+
+            if (this.GetUnitClass(varInfo.Name) is { } unitClassDef) {
+                varFieldDef = new FieldDefinition(varInfo.Name.Last, globalVarFieldAttrs, typeRef);
+                unitClassDef.Fields.Add(varFieldDef);
+            } else {
+                varFieldDef = new FieldDefinition($"Variable_{id.ID}", globalVarFieldAttrs, typeRef);
+                globals.Fields.Add(varFieldDef);
+            }
             
-            var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
-            var fieldDef = new FieldDefinition($"Variable_{id.ID}", fieldAttrs, typeRef);
-            
-            globals.Fields.Add(fieldDef);
-            
-            this.globalVarFields.Add(id, fieldDef);
+            this.globalVarFields.Add(id, varFieldDef);
         }
         
         foreach (var (id, typeDecl) in library.Metadata.TypeDecls) {
@@ -285,15 +292,15 @@ public class AssemblyBuilder : IDisposable {
             this.staticClosureFields.Add(staticClosure.ID, fieldDef);
         }
 
-        foreach (var (tagLoc, count) in library.Metadata.TagCounts) {
-            this.BuildStaticTagsArrayField(tagLoc, count, library);
+        foreach (var (tagLoc, tags) in library.Metadata.GetAllTags()) {
+            this.BuildStaticTagsArrayField(tagLoc, tags.Count, library);
         }
 
         foreach (var (type, typeInfo) in library.Metadata.TypeInfo) {
             this.BuildStaticTypeInfo(type, typeInfo, globals, library);
         }
 
-        foreach (var (funcID, _) in library.Metadata.FunctionInfo) {
+        foreach (var (funcID, _) in library.Metadata.Functions) {
             this.CreateStaticFuncInfoVariable(funcID, library);
         }
 
@@ -305,7 +312,7 @@ public class AssemblyBuilder : IDisposable {
 
         this.FunctionBuilder.BuildFunctions(library);
 
-        foreach (var (funcID, funcInfo) in library.Metadata.FunctionInfo) {
+        foreach (var (funcID, funcInfo) in library.Metadata.Functions) {
             this.BuildStaticFuncInfo(funcID, funcInfo, library);
         }
 
@@ -336,7 +343,7 @@ public class AssemblyBuilder : IDisposable {
         }
     }
 
-    private void BuildStaticTagsArrayField(IR.ITagLocation tagLoc, ulong count, IR.Library library) {
+    private void BuildStaticTagsArrayField(IR.ITagLocation tagLoc, int count, IR.Library library) {
         var tagArrayTypeRef = this.TypeBuilder.BuildTypeRef(IR.IType.Any.MakeDynArray(), library);
         var arrayCreateInstance = this.TypeBuilder.GetArrayCreateMethod(IR.IType.Any, library);
 
@@ -349,7 +356,7 @@ public class AssemblyBuilder : IDisposable {
         this.globalsClass!.Fields.Add(tagFieldDef);
 
         var initBody = this.GetGlobalsCCtor().Body.GetILProcessor();
-        initBody.Emit(OpCodes.Ldc_I4, (int)count);
+        initBody.Emit(OpCodes.Ldc_I4, count);
         initBody.Emit(OpCodes.Ldc_I4_1); // immortal
         initBody.Emit(OpCodes.Call, arrayCreateInstance);
         initBody.Emit(OpCodes.Stsfld, tagFieldDef);
@@ -472,7 +479,7 @@ public class AssemblyBuilder : IDisposable {
 
             // set impl field (null for abstract methods)
             if (method.Function != null
-                && library.Metadata.FunctionInfo.TryGetValue(method.Function.Value, out var methodFuncInfo)
+                && library.Metadata.Functions.TryGetValue(method.Function.Value, out var methodFuncInfo)
                 && methodFuncInfo.Invoker.HasValue
             ) {
                 initBody.Emit(OpCodes.Dup);
@@ -486,14 +493,10 @@ public class AssemblyBuilder : IDisposable {
             initBody.Emit(OpCodes.Stfld, methodOwnerField);
 
             var methodTagsLoc = type.GetTagsLocation()?.MethodLocation(method.Index);
-            if (methodTagsLoc != null) {
-                if (library.Metadata.TagCounts.TryGetValue(methodTagsLoc, out var methodTagCount)
-                    && methodTagCount > 0
-                ) {
-                    initBody.Emit(OpCodes.Dup);
-                    initBody.Emit(OpCodes.Ldsfld, this.GetStaticTagArrayFieldRef(methodTagsLoc));
-                    initBody.Emit(OpCodes.Stfld, methodTagsField);
-                }
+            if (methodTagsLoc != null && method.Tags.Count > 0) {
+                initBody.Emit(OpCodes.Dup);
+                initBody.Emit(OpCodes.Ldsfld, this.GetStaticTagArrayFieldRef(methodTagsLoc));
+                initBody.Emit(OpCodes.Stfld, methodTagsField);
             }
 
             initBody.Emit(OpCodes.Stelem_Any, methodInfoTypeRef);

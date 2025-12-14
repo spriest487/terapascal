@@ -10,6 +10,12 @@ public record StructDef {
     
     [Key("fields")]
     public required SortedDictionary<FieldID, StructFieldDef> Fields { get; init; }
+    
+    [Key("tags")]
+    public required IReadOnlyList<TagInfo> Tags {
+        get;
+        init => field = value.ToArrayNonNull();
+    }
 }
 
 [MessagePackObject]

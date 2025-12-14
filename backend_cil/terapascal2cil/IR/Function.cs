@@ -156,4 +156,10 @@ public record FunctionInfo {
 
     [Key("invoker")]
     public FunctionID? Invoker { get; init; }
+    
+    [Key("tags")]
+    public required IReadOnlyList<TagInfo> Tags {
+        get;
+        init => field = value.ToArrayNonNull();
+    }
 }
