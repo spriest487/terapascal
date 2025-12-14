@@ -258,7 +258,7 @@ public class TypeBuilder {
         string name;
         string ns;
         if (library.Metadata.FindVariantDef(id, out var def)) {
-            name = this.CreateUniqueTypeName(def.Name, id.ID, out ns);
+            name = this.CreateUniqueTypeName(def.Name, library.Metadata, id.ID, out ns);
         } else {
             name = $"Variant_{id.ID}";
             ns = this.assemblyBuilder.Assembly.Name.Name;
@@ -295,12 +295,12 @@ public class TypeBuilder {
             }
 
             case IR.ClassStructIdentity(var className): {
-                name = this.CreateUniqueTypeName(className, id.ID, out ns);
+                name = this.CreateUniqueTypeName(className, library.Metadata, id.ID, out ns);
                 break;
             }
             
             case IR.RecordStructIdentity(var recordName): {
-                name = this.CreateUniqueTypeName(recordName, id.ID, out ns);
+                name = this.CreateUniqueTypeName(recordName, library.Metadata, id.ID, out ns);
                 break;
             }
 
@@ -328,7 +328,7 @@ public class TypeBuilder {
         string ns;
 
         if (library.Metadata.Interfaces.TryGetValue(id, out var decl)) {
-            name = this.CreateUniqueTypeName(decl.GetGlobalName(), id.ID, out ns);
+            name = this.CreateUniqueTypeName(decl.GetGlobalName(), library.Metadata, id.ID, out ns);
         } else {
             ns = this.assemblyBuilder.Assembly.Name.Name;
             name = $"IInterface_{id.ID}";
@@ -436,9 +436,7 @@ public class TypeBuilder {
             FieldRefs = fieldRefs,
         };
 
-        if (!isValueType) {
-            this.BuildDefaultConstructor(typeDef);
-        } else {
+        if (isValueType) {
             // value types should be tightly packed by default because it should be up to the 
             // frontend to add the correct padding bytes and decide the layout
             typeDef.PackingSize = 1;
@@ -454,6 +452,8 @@ public class TypeBuilder {
         if (interfaceImplAsType != null) {
             this.BuildInterfaceImpls(interfaceImplAsType, typeDef, library);
         }
+        
+        this.BuildDefaultConstructor(typeDef);
 
         this.assemblyBuilder.Module.Types.Add(typeDef);
     }
@@ -620,7 +620,7 @@ public class TypeBuilder {
 
         this.BuildInterfaceImpls(new IR.VariantType(id), typeDef, library);
         
-        // this.BuildDefaultConstructor(typeDef);
+        this.BuildDefaultConstructor(typeDef);
 
         this.assemblyBuilder.Module.Types.Add(typeDef);
         
@@ -745,7 +745,7 @@ public class TypeBuilder {
         return this.interfaceMethods[(ifaceID, methodID)];
     }
 
-    private void BuildDefaultConstructor(TypeDefinition typeDef) {
+    public void BuildDefaultConstructor(TypeDefinition typeDef) {
         var voidType = this.assemblyBuilder.TypeSystem.Void;
         var methodDef = new MethodDefinition(
             ".ctor",
@@ -753,17 +753,21 @@ public class TypeBuilder {
             MethodAttributes.SpecialName, 
             voidType
         );
-
-        var baseType = this.ResolveCore(typeDef.BaseType) ?? typeDef.BaseType.Resolve();
-
-        var baseCtor = baseType.GetConstructors()
-            .Single(ctor => ctor.Parameters.Count == 0);
-
-        var baseCtorRef = this.assemblyBuilder.Module.ImportReference(baseCtor);
-
+        
         var body = methodDef.Body.GetILProcessor();
-        body.Emit(OpCodes.Ldarg_0);
-        body.Emit(OpCodes.Call, baseCtorRef);
+
+        if (!typeDef.IsValueType) {
+            var baseType = this.ResolveCore(typeDef.BaseType) ?? typeDef.BaseType.Resolve();
+
+            var baseCtor = baseType.GetConstructors()
+                .Single(ctor => ctor.Parameters.Count == 0);
+
+            var baseCtorRef = this.assemblyBuilder.Module.ImportReference(baseCtor);
+            
+            body.Emit(OpCodes.Ldarg_0);
+            body.Emit(OpCodes.Call, baseCtorRef);
+        }
+
         body.Emit(OpCodes.Ret);
         
         typeDef.Methods.Add(methodDef);

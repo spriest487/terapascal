@@ -758,15 +758,40 @@ public class InstructionBuilder {
             this.body.Emit(OpCodes.Ldc_I4, intrinsicSize.Value);
         }
     }
+    
+    private void EmitDefault(IR.IType type) {
+        if (type.IsObjectType() || type is IR.PointerType) {
+            this.body.Emit(OpCodes.Ldnull);
+        } else if (type.IsInteger()) {
+            this.body.Emit(OpCodes.Ldc_I4_0);
+        } else {
+            var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
+            var typeDef = this.assemblyBuilder.TypeBuilder.ResolveCore(typeRef) ?? typeRef.Resolve();
+
+            if (typeDef?.FindConstructor([]) is { } defaultCtor) {
+                this.body.Emit(OpCodes.Newobj, this.assemblyBuilder.Module.ImportReference(defaultCtor));    
+            } else {
+                var local = this.AllocLocal(typeRef);
+                this.body.Emit(OpCodes.Ldloca, local);
+                this.body.Emit(OpCodes.Initobj, typeRef);
+                
+                this.body.Emit(OpCodes.Ldloc, local);
+            }
+        }
+    }
+
+    private int AllocLocal(TypeReference typeRef) {
+        var newVar = new VariableDefinition(typeRef);
+        this.method.Body.Variables.Add(newVar);
+
+        return newVar.Index;
+    }
 
     private void BuildLocalAlloc(IR.LocalID at, IR.IType type) {
         var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
         
         if (!this.varPool.TryGetValue(type, out var pool) || !pool.TryDequeue(out var index)) {
-            var newVar = new VariableDefinition(typeRef);
-            this.method.Body.Variables.Add(newVar);
-
-            index = newVar.Index;
+            index = this.AllocLocal(typeRef);
         }
 
         var scope = this.scopes.Peek();
@@ -935,6 +960,11 @@ public class InstructionBuilder {
 
             case IR.SizeOfValue(var type): {
                 this.EmitSizeOf(type);
+                break;
+            }
+
+            case IR.DefaultValue(var type): {
+                this.EmitDefault(type);
                 break;
             }
 
