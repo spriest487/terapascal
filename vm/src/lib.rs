@@ -894,7 +894,7 @@ impl Interpreter {
                 let indent = str::repeat(
                     "    ",
                     self.current_frame()
-                        .map(|frame| frame.block_depth())
+                        .map(|frame| frame.debug_depth())
                         .unwrap_or(0)
                         .saturating_sub(2),
                 );
@@ -943,13 +943,6 @@ impl Interpreter {
 
             ir::Instruction::LocalAlloc(id, ty) => {
                 self.exec_local_alloc(*id, *pc, ty)?;
-            },
-
-            ir::Instruction::LocalBegin => {
-                self.exec_local_begin()?
-            },
-            ir::Instruction::LocalEnd => {
-                self.exec_local_end()?
             },
 
             ir::Instruction::NewObject {
@@ -1086,23 +1079,6 @@ impl Interpreter {
         let current_frame = self.current_frame_mut()?;
         current_frame
             .declare_local(id, ty.clone(), &uninit_val, pc)
-            .map_err(|err| self.add_stack_trace(err.into()))?;
-
-        Ok(())
-    }
-
-    fn exec_local_begin(&mut self) -> ExecResult<()> {
-        self.current_frame_mut()?.push_block();
-
-        Ok(())
-    }
-
-    fn exec_local_end(&mut self) -> ExecResult<()> {
-        self.current_frame_mut()
-            .and_then(|f| {
-                f.pop_block()?;
-                Ok(())
-            })
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
         Ok(())
@@ -2043,9 +2019,6 @@ impl Interpreter {
 
         *pc = location.pc_offset;
 
-        // assume all jumps are either upwards or to the same level
-        self.current_frame_mut()?.pop_block_to(location.block_depth)?;
-
         Ok(())
     }
 
@@ -2863,20 +2836,15 @@ enum GlobalValue {
 
 struct LabelLocation {
     pc_offset: usize,
-    block_depth: usize,
 }
 
 fn find_labels(instructions: &[ir::Instruction]) -> HashMap<ir::Label, LabelLocation> {
-    let mut block_depth = 0;
     let mut locations = HashMap::new();
 
     for (pc_offset, instruction) in instructions.iter().enumerate() {
         match instruction {
-            ir::Instruction::LocalBegin => block_depth += 1,
-            ir::Instruction::LocalEnd => block_depth -= 1,
             ir::Instruction::Label(label) => {
                 locations.insert(label.clone(), LabelLocation {
-                    block_depth,
                     pc_offset,
                 });
             },

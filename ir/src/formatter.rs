@@ -37,8 +37,6 @@ pub trait IRFormatter {
                 write!(f, " of ")?;
                 self.format_type(ty, f)
             }
-            Instruction::LocalBegin => write!(f, "{:>width$} ", "begin", width = IX_WIDTH),
-            Instruction::LocalEnd => write!(f, "{:>width$} ", "end", width = IX_WIDTH),
 
             Instruction::Move { out, new_val } => {
                 write!(f, "{:>width$} ", "mov", width = IX_WIDTH)?;
@@ -477,8 +475,8 @@ impl<'f, F: IRFormatter> IRFormatter for StatefulIndentedFormatter<'f, F> {
         instruction: &Instruction,
         f: &mut W,
     ) -> fmt::Result {
-        if let Instruction::LocalEnd = instruction {
-            self.tabs.set(self.tabs.get() - 1);
+        if let Instruction::DebugPop = instruction {
+            self.tabs.set(self.tabs.get().saturating_sub(1));
         }
 
         let tabs = match instruction {
@@ -490,7 +488,7 @@ impl<'f, F: IRFormatter> IRFormatter for StatefulIndentedFormatter<'f, F> {
             f.write_char(' ')?;
         }
 
-        if let Instruction::LocalBegin = instruction {
+        if let Instruction::DebugPush(..) = instruction {
             self.tabs.set(self.tabs.get() + 1);
         }
 

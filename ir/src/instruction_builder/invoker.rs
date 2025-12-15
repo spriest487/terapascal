@@ -1,12 +1,12 @@
-use crate::instruction_builder::InstructionBuilder;
+use crate::FunctionID;
 use crate::FunctionSig;
 use crate::LocalID;
 use crate::ObjectID;
+use crate::RETURN_REF;
 use crate::Ref;
 use crate::Type;
 use crate::Value;
-use crate::RETURN_REF;
-use crate::FunctionID;
+use crate::instruction_builder::InstructionBuilder;
 use std::rc::Rc;
 
 /// Build the body of an invoker function that takes the following parameters:
@@ -51,41 +51,43 @@ where
     let arg_array_type = Type::any().dyn_array();
 
     builder.comment("exit with error if arg array is null");
-    let args_null = builder.eq_to_val(args_arg, Value::LiteralNull);
-    builder.jmpif(exit_error_label, args_null);
+    
+    builder.local_begin();
+    {
+        let args_null = builder.eq_to_val(args_arg, Value::LiteralNull);
+        builder.jmpif(exit_error_label, args_null);
+    }
+    builder.local_end();
 
     builder.comment("exit with error if arg array length doesn't match");
 
-    let actual_args_len = builder.local_temp(Type::I32);
-    builder.length(actual_args_len, args_arg, arg_array_type.clone());
-
     // if self <> nil and self^ <> nil then actual_args_len += 1
-    let has_self_arg_ref = builder.local_temp(Type::Bool);
     let has_self_arg = builder.local_temp(Type::Bool);
 
-    builder.neq(has_self_arg_ref, self_arg_ref, Value::LiteralNull);
-    builder.if_then_else(has_self_arg_ref,
-        |builder| {
+    builder.local_begin();
+    {
+        let actual_args_len = builder.local_temp(Type::I32);
+        builder.length(actual_args_len, args_arg, arg_array_type.clone());
+        
+        builder.neq(has_self_arg, self_arg_ref, Value::LiteralNull);
+
+        builder.if_then(has_self_arg, |builder| {
             builder.neq(has_self_arg, self_arg_ref.to_deref(), Value::LiteralNull);
 
             builder.if_then(has_self_arg, |builder| {
                 builder.add(actual_args_len, actual_args_len, Value::LiteralI32(1));
             })
-        },
-        |builder| {
-            builder.mov(has_self_arg, Value::LiteralBool(false));
-        },
-    );
+        });
 
-    let args_len_invalid = builder.neq_to_val(actual_args_len, Value::LiteralI32(params_len));
-    builder.jmpif(exit_error_label, args_len_invalid);
-
-    builder.comment("check each arg type");
-    let arg_is_valid = builder.local_temp(Type::Bool);
-    let arg_is_invalid = builder.local_temp(Type::Bool);
-    let arg_ref = builder.local_temp(Type::any().temp_ref());
+        let args_len_invalid = builder.neq_to_val(actual_args_len, Value::LiteralI32(params_len));
+        builder.jmpif(exit_error_label, args_len_invalid);
+    }
+    builder.local_end();
 
     let mut call_args = Vec::with_capacity(func_sig.param_tys.len());
+
+    builder.comment("check each arg type");
+    let arg_ref = builder.local_temp(Type::any().temp_ref());
 
     for param_index in 0..func_sig.param_tys.len() {
         let param_ty = &func_sig.param_tys[param_index];
@@ -130,10 +132,17 @@ where
                 .to_object_type()
                 .to_pretty_string(builder.metadata())
         ));
-
-        builder.class_is(arg_is_valid, arg_ref.to_deref(), expect_object_id);
-        builder.not(arg_is_invalid, arg_is_valid);
-        builder.jmpif(exit_error_label, arg_is_invalid);
+        
+        builder.local_begin();
+        {
+            let arg_is_valid = builder.local_temp(Type::Bool);
+            let arg_is_invalid = builder.local_temp(Type::Bool);
+            
+            builder.class_is(arg_is_valid, arg_ref.to_deref(), expect_object_id);
+            builder.not(arg_is_invalid, arg_is_valid);
+            builder.jmpif(exit_error_label, arg_is_invalid);
+        }
+        builder.local_end();
 
         match param_ty {
             // object types: downcast and pass the arg directly
@@ -141,7 +150,7 @@ where
                 builder.comment("object param: copy the argument");
                 let call_arg = builder.local_temp(param_ty.clone());
                 builder.cast(call_arg, arg_ref.to_deref(), param_ty.clone());
-                
+
                 call_args.push(call_arg.value());
             },
 
@@ -150,46 +159,52 @@ where
                 let value_type = deref_type.as_ref();
                 let box_type = value_type.clone().boxed();
                 
-                let arg_box = builder.local_temp(box_type.clone());
-                builder.cast(arg_box, arg_ref.to_deref(), box_type.clone());
-
-                let arg_val = builder.element_to_val(
-                    arg_box,
-                    Value::I32_0,
-                    value_type.clone(),
-                    box_type.clone(),
-                );
-
-                builder.comment("ref param: clone the boxed argument into a new box");
-                let new_box = builder.local_temp(box_type.clone());
                 let new_val_ref = builder.local_temp(value_type.clone().temp_ref());
 
-                builder.new_box(new_box, value_type.clone(), false);
-                builder.element(new_val_ref, new_box, Value::I32_0, box_type.clone());
-                builder.mov(new_val_ref.to_deref(), arg_val);
+                builder.local_begin();
+                {
+                    let arg_box = builder.local_temp(box_type.clone());
+                    builder.cast(arg_box, arg_ref.to_deref(), box_type.clone());
 
-                builder.release(arg_ref.to_deref(), false, Ref::Discard);
-                builder.cast(arg_ref.to_deref(), new_box, Type::any());
+                    let arg_val = builder.element_to_val(
+                        arg_box,
+                        Value::I32_0,
+                        value_type.clone(),
+                        box_type.clone(),
+                    );
+
+                    builder.comment("ref param: clone the boxed argument into a new box");
+                    let new_box = builder.local_temp(box_type.clone());
+
+                    builder.new_box(new_box, value_type.clone(), false);
+                    builder.element(new_val_ref, new_box, Value::I32_0, box_type.clone());
+                    builder.mov(new_val_ref.to_deref(), arg_val);
+
+                    builder.release(arg_ref.to_deref(), false, Ref::Discard);
+                    builder.cast(arg_ref.to_deref(), new_box, Type::any());
+                }
+                builder.local_end();
 
                 // pass the ref to the new box's element (func expects a ref)
                 call_args.push(new_val_ref.value());
             },
 
             value_type => {
-                builder.comment("value param: unbox the argument");
                 // unbox the arg and pass that
-                let box_type = value_type.clone().boxed();
-                
-                let arg_box = builder.local_temp(box_type.clone());
-                builder.cast(arg_box, arg_ref.to_deref(), box_type.clone());
+                let unboxed_val = builder.local_temp(value_type.clone());
+        
+                builder.comment("value param: unbox the argument");
+                builder.local_begin();
+                {
+                    let box_type = value_type.clone().boxed();
+                    let arg_box = builder.local_temp(box_type.clone());
+                    
+                    builder.cast(arg_box, arg_ref.to_deref(), box_type.clone());
+                    builder.element_val(unboxed_val, arg_box, Value::I32_0, value_type.clone(), box_type);
+                }
+                builder.local_end();
 
-                let arg_val = builder.element_to_val(
-                    arg_box,
-                    Value::I32_0, 
-                    value_type.clone(), 
-                    box_type
-                );
-                call_args.push(arg_val.value());
+                call_args.push(unboxed_val.value());
             },
         }
     }
@@ -201,7 +216,7 @@ where
     } else {
         let call_result = builder.local_temp(func_sig.return_ty.clone());
         builder.call(func_id, call_args, Some(call_result.to_ref()));
-        
+
         if func_sig.return_ty.is_object() {
             // result is an object: replace the result ref
             builder.cast(RETURN_REF, call_result, Type::any());
@@ -213,7 +228,12 @@ where
             let result_box_value_ref = builder.local_temp(func_sig.return_ty.clone().temp_ref());
 
             builder.new_box(result_box, func_sig.return_ty.clone(), false);
-            builder.element(result_box_value_ref, result_box, Value::LiteralI32(0), result_box_type);
+            builder.element(
+                result_box_value_ref,
+                result_box,
+                Value::LiteralI32(0),
+                result_box_type,
+            );
             builder.mov(result_box_value_ref.to_deref(), call_result);
 
             builder.cast(RETURN_REF, result_box, Type::any());

@@ -13,6 +13,7 @@ use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
+use terapascal_ir::MetadataSource;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
@@ -311,18 +312,12 @@ impl fmt::Display for Statement {
     }
 }
 
-#[derive(Default)]
-struct LocalScope {
-    variable_types: BTreeMap<ir::LocalID, ir::Type>,
-    
-    next_temp_var: usize,
-}
-
 pub struct Builder<'a, 'b> {
     module: &'a mut Unit<'b>,
     pub stmts: Vec<Statement>,
-    
-    local_stack: Vec<LocalScope>,
+
+    variable_types: BTreeMap<ir::LocalID, ir::Type>,
+    next_temp_var: usize,
 }
 
 impl<'a, 'b> Builder<'a, 'b> {
@@ -330,7 +325,9 @@ impl<'a, 'b> Builder<'a, 'b> {
         Self {
             module,
             stmts: Vec::new(),
-            local_stack: vec![LocalScope::default()],
+
+            variable_types: BTreeMap::new(),
+            next_temp_var: 0,
         }
     }
     
@@ -345,9 +342,8 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
     
     pub fn new_temp_var(&mut self, var_type: Type, null_init: bool) -> VariableID {
-        let current_scope = self.local_stack.last_mut().unwrap();
-        let id = VariableID::Temp(current_scope.next_temp_var);
-        current_scope.next_temp_var += 1;
+        let id = VariableID::Temp(self.next_temp_var);
+        self.next_temp_var += 1;
 
         self.stmts.push(Statement::var(var_type, id.clone(), null_init));
         
@@ -370,8 +366,9 @@ impl<'a, 'b> Builder<'a, 'b> {
                     null_init,
                 });
                 
-                let current_scope = self.local_stack.last_mut().unwrap();
-                current_scope.variable_types.insert(*id, ty.clone());
+                if self.variable_types.insert(*id, ty.clone()).is_some() {
+                    panic!("redeclaration of variable {} ({})", *id, ty.to_pretty_string(self.module.metadata.as_formatter()));
+                }
             },
 
             ir::Instruction::DebugPush(ctx) => self
@@ -379,15 +376,6 @@ impl<'a, 'b> Builder<'a, 'b> {
                 .push(Statement::Comment(format!("context: {}", ctx))),
             ir::Instruction::DebugPop => {
                 // no-op
-            },
-
-            ir::Instruction::LocalBegin => {
-                self.stmts.push(Statement::BeginBlock);
-                self.local_stack.push(LocalScope::default());
-            },
-            ir::Instruction::LocalEnd => {
-                self.local_stack.pop();
-                self.stmts.push(Statement::EndBlock)
             },
 
             ir::Instruction::Label(label) => {
@@ -816,15 +804,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     fn find_ref_type(&self, at: &ir::Ref) -> Option<ir::Type> {
         match at {
             ir::Ref::Local(id) => {
-                let mut local_type = None;
-                for scope in self.local_stack.iter().rev() {
-                    if let Some(ty) = scope.variable_types.get(id) {
-                        local_type = Some(ty.clone());
-                        break;
-                    }
-                }
-                
-                local_type
+                self.variable_types.get(id).cloned()
             }
 
             ir::Ref::Global(ir::GlobalRef::Variable(var_id)) => {

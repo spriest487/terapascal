@@ -18,15 +18,6 @@ use terapascal_common::span::Span;
 const SENTINEL: usize = 12345678;
 
 #[derive(Debug)]
-struct Block {
-    #[allow(unused)] // is this actually needed??
-    decls: Vec<ir::LocalID>,
-
-    initial_stack_offset: usize,
-    initial_local_count: usize,
-}
-
-#[derive(Debug)]
 struct StackAlloc {
     // local vals are allocated on the fly as the vm passes LocalAlloc
     // instructions. we want to prevent IR code from alloc-ing two locals with the same
@@ -47,7 +38,6 @@ pub(super) struct StackFrame {
     name: Rc<String>,
 
     locals: Vec<StackAlloc>,
-    block_stack: Vec<Block>,
 
     stack_mem: Box<[u8]>,
     stack_offset: usize,
@@ -71,12 +61,6 @@ impl StackFrame {
             name: name.into(),
 
             locals: Vec::new(),
-            
-            block_stack: vec![Block {
-                decls: Vec::new(),
-                initial_stack_offset: 0,
-                initial_local_count: 0, 
-            }],
             
             debug_ctx_stack: Vec::new(),
 
@@ -196,64 +180,6 @@ impl StackFrame {
             }
         }
     }
-
-    pub fn push_block(&mut self) {
-        self.block_stack.push(Block {
-            decls: Vec::new(),
-            initial_stack_offset: self.stack_offset,
-            initial_local_count: self.locals.len(),
-        });
-    }
-
-    pub fn pop_block(&mut self) -> StackResult<()> {
-        let popped_block = self
-            .block_stack
-            .pop()
-            .ok_or_else(|| StackError::EmptyBlockStack)?;
-
-        let new_stack_offset = popped_block.initial_stack_offset;
-        self.stack_offset = new_stack_offset;
-
-        while self.locals.len() > popped_block.initial_local_count {
-            self.locals.pop();
-        }
-
-        Ok(())
-    }
-
-    pub fn pop_block_to(&mut self, block_depth: usize) -> StackResult<()> {
-        let current_block = self.block_stack.len() - 1;
-
-        if current_block < block_depth {
-            return Err(StackError::IllegalJmp {
-                current_block,
-                dest_block: block_depth,
-            });
-        }
-
-        let pop_block_count = current_block - block_depth;
-
-        for _ in 0..pop_block_count {
-            match self.block_stack.pop() {
-                Some(popped_block) => {
-                    self.stack_offset = popped_block.initial_stack_offset;
-                },
-
-                None => {
-                    return Err(StackError::EmptyBlockStack)
-                }
-            }
-        }
-
-        let new_stack_offset = self.stack_offset;
-        self.locals.retain(|l| l.stack_offset < new_stack_offset);
-
-        Ok(())
-    }
-    
-    pub fn block_depth(&self) -> usize {
-        self.block_stack.len()
-    }
     
     pub fn debug_push(&mut self, ctx: Span) {
         self.debug_ctx_stack.push(ctx);
@@ -263,6 +189,10 @@ impl StackFrame {
         if !self.debug_ctx_stack.pop().is_some() {
             eprintln!("Interpreter: unbalanced debug context instructions, ignoring pop on empty stack")
         }
+    }
+    
+    pub fn debug_depth(&self) -> usize {
+        self.debug_ctx_stack.len()
     }
 }
 
@@ -280,7 +210,6 @@ pub enum StackError {
         dest_block: usize,
     },
     IllegalAlloc(ir::LocalID),
-    EmptyBlockStack,
     MarshalError(MarshalError),
     BadSentinel(usize),
 }
@@ -306,9 +235,6 @@ impl fmt::Display for StackError {
                 }
 
                 write!(f, ")")
-            }
-            StackError::EmptyBlockStack => {
-                write!(f, "unbalanced block delimiters: popping empty block stack")
             }
             StackError::IllegalJmp { current_block, dest_block } => {
                 write!(f, "illegal jump from block {} to block {}", current_block, dest_block)

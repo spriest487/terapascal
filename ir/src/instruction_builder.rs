@@ -28,7 +28,6 @@ use scope::LocalStack;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 pub use util::jmp_exists;
-pub use util::remove_empty_blocks;
 use crate::instruction_builder::object::gen_class_object_dtor_body;
 
 pub trait InstructionBuilder {
@@ -87,8 +86,6 @@ pub trait InstructionBuilder {
         let stack_len = stack.len();
 
         self.comment(&format!("begin scope {}", stack_len));
-
-        self.emit(Instruction::LocalBegin);
     }
 
     fn local_end(&mut self) {
@@ -98,8 +95,6 @@ pub trait InstructionBuilder {
         self.comment(&format!("end scope {}", top_scope));
 
         self.local_stack_mut().end();
-
-        self.emit(Instruction::LocalEnd);
     }
 
     fn push_debug_context(&mut self, ctx: Span) {
@@ -673,7 +668,7 @@ pub trait InstructionBuilder {
         let element_ref = self.local_temp(element_ty.temp_ref());
 
         self.element(element_ref, a, index, of_type);
-        self.mov(out, Ref::Local(element_ref).to_deref());
+        self.mov(out, element_ref.to_deref());
     }
 
     fn element_to_val(

@@ -21,8 +21,6 @@ pub enum Instruction {
     DebugPop,
 
     LocalAlloc(LocalID, Type),
-    LocalBegin,
-    LocalEnd,
 
     Move {
         out: Ref,
@@ -182,8 +180,6 @@ impl Instruction {
             | Instruction::Comment(..)
             | Instruction::DebugPush(..)
             | Instruction::DebugPop
-            | Instruction::LocalBegin
-            | Instruction::LocalEnd
             | Instruction::Label(..)
             | Instruction::Jump { .. }
             | Instruction::JumpIf { .. }

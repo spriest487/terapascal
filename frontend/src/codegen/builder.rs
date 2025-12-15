@@ -17,7 +17,6 @@ use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use std::borrow::Cow;
 use std::sync::Arc;
-use terapascal_ir::instruction_builder::remove_empty_blocks;
 use terapascal_ir::instruction_builder::scope::LocalStack;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
@@ -126,13 +125,10 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
 
 impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn new(lib: &'m mut LibraryBuilder<'l>) -> Self {
-        let mut instructions = Vec::new();
-        instructions.push(Instruction::LocalBegin);
-
         Self {
             library: lib,
             
-            instructions,
+            instructions: Vec::new(),
 
             // the EXIT label is always reserved, so start one after that
             next_label: Label(EXIT_LABEL.0 + 1),
@@ -394,8 +390,6 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         }
 
         self.instructions.splice(0..0, local_allocs);
-
-        remove_empty_blocks(&mut self.instructions);
 
         if matches!(self.instructions.as_slice(), [
             Instruction::DebugPush(..),
