@@ -36,7 +36,7 @@ pub(super) fn new_dyn_array(
     element_type: &Type,
 ) -> Ref {
     let array_ty = element_type.clone().dyn_array();
-    let arr = builder.local_new(array_ty.clone(), None);
+    let arr = builder.local_var(array_ty.clone(), None);
 
     let elements: Vec<_> = elements.into_iter().collect();
     let len = i32::try_from(elements.len()).expect("invalid dynamic array ctor length");

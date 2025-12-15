@@ -1,17 +1,25 @@
-use crate::Label;
 use crate::LocalID;
 use crate::Ref;
 use crate::Type;
 use crate::RETURN_LOCAL;
-use crate::RETURN_REF;
-use std::collections::HashMap;
+use crate::Label;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 use terapascal_common::SharedStringKey;
 
 #[derive(Debug)]
+struct LocalSlot {
+    ty: Type,
+    expired: bool,
+}
+
+#[derive(Debug)]
 pub struct LocalStack {
     scopes: Vec<LocalScope>,
+
+    locals: BTreeMap<LocalID, LocalSlot>,
+    next_local: usize,
 
     loops: Vec<LoopScope>,
 }
@@ -19,7 +27,10 @@ pub struct LocalStack {
 impl LocalStack {
     pub fn new() -> Self {
         Self {
-            scopes: vec![LocalScope::new(0)],
+            locals: BTreeMap::new(),
+            next_local: 0,
+            
+            scopes: vec![LocalScope::new()],
 
             loops: Vec::new(),
         }
@@ -36,16 +47,20 @@ impl LocalStack {
             .find_map(|scope| scope.local_by_name(name)
                 .and_then(|id| scope.local_by_id(id)))
     }
+    
+    pub fn local_slot_count(&self) -> usize {
+        self.locals.len()
+    }
 
     // locals from all scopes up to the target scope, in order of deepest->shallowest,
     // then in reverse allocation order
-    pub fn all_locals(&self, range: impl Into<RangeInclusive<usize>>) -> impl Iterator<Item=&LocalBinding> {
+    pub fn current_local_bindings(&self, range: impl Into<RangeInclusive<usize>>) -> impl Iterator<Item=&LocalBinding> {
         self.scopes[range.into()]
             .iter()
             .rev()
             .flat_map(|scope| scope.locals().iter().rev())
     }
-    
+
     pub fn debug_ctx_count(&self, range: impl Into<RangeInclusive<usize>>) -> usize {
         self.scopes[range.into()]
             .iter()
@@ -54,20 +69,32 @@ impl LocalStack {
     }
     
     pub fn begin(&mut self) {
-        let scope = self.current_scope().new_child();
-        self.scopes.push(scope);
+        self.scopes.push(LocalScope::new());
     }
     
     pub fn end(&mut self) {
-        if self.scopes.pop().is_none() {
+        let Some(end_scope) = self.scopes.pop() else {
             panic!("mismatched begin/end scope calls, no scope to pop");
+        };
+
+        for binding in end_scope.locals {
+            // it's OK for a slot not to exist for every local, locals with implicit storage like
+            // params are ignored
+            if let Some(slot) = self.locals.get_mut(&binding.id) {
+                slot.expired = true;
+            }
         }
     }
     
-    pub fn finish(mut self) {
+    #[must_use]
+    pub fn finish(mut self) -> BTreeMap<LocalID, Type> {
         while !self.scopes.is_empty() {
             self.end();
         }
+        
+        self.locals.into_iter()
+            .map(|(id, slot)| (id, slot.ty))
+            .collect()
     }
 
     pub fn current_scope(&self) -> &LocalScope {
@@ -103,59 +130,112 @@ impl LocalStack {
     pub fn current_loop(&self) -> Option<&LoopScope> {
         self.loops.last()
     }
+    
+    pub fn bind_return(&mut self, ty: Type) -> LocalID {
+        assert!(
+            self.current_scope().local_by_id(RETURN_LOCAL).is_none(), 
+            "%0 must not already be bound in bind_return"
+        );
+
+        self.bind_local(ty, None, false, false, true)
+    }
+    
+    pub fn bind_param(&mut self, ty: Type, name: Arc<String>, by_ref: bool) -> LocalID {
+        if by_ref {
+            assert!(ty.is_temp_ref(), "by-ref parameters must have temp reference type");
+        }
+
+        // TODO: fix param RC so they aren't auto-retained *or* released
+        let autorelease = true;
+
+        self.bind_local(ty, Some(name), autorelease, by_ref, true)
+    }
+
+    // used for implicit anonymous params like closure pointer
+    pub fn bind_unnamed_param(&mut self, ty: Type) -> LocalID {
+        self.bind_local(ty, None, false, false, true)
+    }
+
+    // closure capture (by-ref because the actual value is a field ref)
+    pub fn bind_capture(&mut self, ty: Type, name: impl Into<Arc<String>>) -> LocalID {
+        self.bind_local(ty.temp_ref(), Some(name.into()), false, true, false)
+    }
+    
+    pub fn bind_temp(&mut self, ty: Type) -> LocalID {
+        self.bind_local(ty, None, false, false, false)
+    }
+
+    pub fn bind_auto_temp(&mut self, ty: Type) -> LocalID {
+        self.bind_local(ty, None, true, false, false)
+    }
+
+    pub fn bind_var(&mut self, ty: Type, name: impl Into<Arc<String>>) -> LocalID {
+        self.bind_local(ty, Some(name.into()), true, false, false)
+    }
+    
+    fn bind_local(&mut self, ty: Type, name: Option<Arc<String>>, auto_release: bool, by_ref: bool, implicit: bool) -> LocalID {
+        // if there's an existing local which is expired (out of scope), it can be reused
+        // instead of creating a new local
+        let mut existing_id = None;
+        if !implicit {
+            existing_id = self.locals
+                .iter()
+                .find_map(|(id, slot)| {
+                    (slot.expired && slot.ty == ty)
+                        .then_some(*id)
+                });
+        }
+
+        let id = existing_id.unwrap_or_else(|| {
+            let next_id = self.next_local;
+            self.next_local += 1;
+            LocalID(next_id)
+        });
+
+        assert!(
+            self.current_scope().local_by_id(id).is_none(),
+            "current scope must not already have a binding for {}",
+            Ref::Local(id),
+        );
+
+        let scope = self.current_scope_mut();
+        
+        scope.locals.push(LocalBinding {
+            id,
+            ty: ty.clone(),
+            auto_release,
+            by_ref,
+        });
+
+        if let Some(name) = name {
+            if scope.named_locals.insert(SharedStringKey(name.clone()), id).is_some() {
+                panic!("current scope must not already have a binding named {}", name);
+            }
+        }
+        
+        if !implicit {
+            self.locals.insert(id, LocalSlot {
+                ty,
+                expired: false,
+            });
+        }
+
+        id
+    }
 }
 
 #[derive(Clone, Debug)]
-pub enum LocalBinding {
-    // the builder created this local allocation and must track its lifetime to drop it
-    New {
-        id: LocalID,
-        ty: Type,
-    },
+pub struct LocalBinding {
+    pub id: LocalID,
+    pub ty: Type,
 
-    // the builder created this local allocation but we don't want to track its lifetime
-    Temp {
-        id: LocalID,
-        ty: Type,
-    },
+    // if true, insert a release of this binding automatically when the declaring scope ends 
+    pub auto_release: bool,
 
-    // function parameter slots as established by the calling convention - %1.. if the function
-    // has a return value, otherwise $0..
-
-    // by-value parameter. value is copied into the local by the caller
-    Param {
-        id: LocalID,
-        ty: Type,
-
-        // by-ref parameter?
-        // if so pointer to the value is copied into the local by the caller, and must
-        // be dereferenced every time it is used
-        by_ref: bool,
-    },
-
-    // return value: always occupies local %0 if present.
-    // the return value is not named and is not cleaned up on scope exit (if it's a
-    // rc type, the reference is owned by the caller after the function exits)
-    Return,
-}
-
-impl LocalBinding {
-    pub fn id(&self) -> LocalID {
-        match self {
-            LocalBinding::New { id, .. } | LocalBinding::Temp { id, .. } | LocalBinding::Param { id, .. } => *id,
-            LocalBinding::Return { .. } => LocalID(0),
-        }
-    }
-
-    /// if a local is by-ref, it's treated in pascal syntax like a value of this type but in the IR
-    /// it's actually a pointer. if this returns true, it's necessary to wrap Ref::Local values
-    /// that reference this local in a Ref::Deref to achieve the same effect as the pascal syntax
-    pub fn by_ref(&self) -> bool {
-        match self {
-            LocalBinding::Param { by_ref, .. } => *by_ref,
-            _ => false,
-        }
-    }
+    // TODO: represent this in the lang typesystem instead
+    // if true, hints that the variable represents a local reference, and it should be dereferenced
+    // on any usage e.g. in `find_local_ref`
+    pub by_ref: bool,
 }
 
 #[derive(Debug)]
@@ -166,24 +246,16 @@ pub struct LocalScope {
     // debug context pushes belonging to this scope - when cleaning up this scope, any un-popped
     // entries in the debug context stack that were pushed during this scope also need to be popped
     debug_ctx_depth: usize,
-
-    next_local: usize,
 }
 
 impl LocalScope {
-    pub fn new(next_local: usize) -> Self {
+    pub fn new() -> Self {
         Self {
             locals: Vec::new(),
             named_locals: HashMap::new(),
 
             debug_ctx_depth: 0,
-
-            next_local,
         }
-    }
-
-    pub fn new_child(&self) -> Self {
-        Self::new(self.next_local)
     }
 
     pub fn debug_ctx_count(&self) -> usize {
@@ -203,95 +275,11 @@ impl LocalScope {
     }
 
     pub fn local_by_id(&self, id: LocalID) -> Option<&LocalBinding> {
-        self.locals.iter().find(|l| l.id() == id)
+        self.locals.iter().find(|l| l.id == id)
     }
 
     pub fn local_by_name(&self, name: &str) -> Option<LocalID> {
         self.named_locals.get(name).cloned()
-    }
-
-    pub fn bind_param(
-        &mut self,
-        name: Option<Arc<String>>,
-        ty: Type,
-        by_ref: bool,
-    ) -> LocalID {
-        if by_ref {
-            let is_ref_type = match &ty {
-                Type::TempRef(..) => true,
-                _ => false,
-            };
-            assert!(is_ref_type, "by-ref parameters must have reference type");
-        }
-
-        let id = LocalID(self.next_local);
-
-        assert!(
-            self.local_by_id(id).is_none(),
-            "scope must not already have a binding for {}: {:?}",
-            Ref::Local(id),
-            self
-        );
-
-        self.locals.push(LocalBinding::Param { id, ty, by_ref });
-
-        if let Some(name) = name {
-            if self.named_locals.insert(SharedStringKey(name.clone()), id).is_some() {
-                panic!("scope must not already have a binding named {}", name);
-            }
-        }
-
-        self.next_local += 1;
-
-        id
-    }
-
-    pub fn bind_return(&mut self) -> Ref {
-        assert_eq!(RETURN_LOCAL.0, self.next_local, "return local must be bound first");
-
-        let slot_free = self.local_by_id(RETURN_LOCAL).is_none();
-        assert!(slot_free, "%0 must not already be bound in bind_return");
-
-        self.locals.push(LocalBinding::Return);
-        self.next_local += 1;
-
-        RETURN_REF
-    }
-
-    pub fn bind_temp(&mut self, ty: Type) -> LocalID {
-        let id = LocalID(self.next_local);
-
-        assert!(
-            self.local_by_id(id).is_none(),
-            "scope must not already have a binding for {}",
-            Ref::Local(id),
-        );
-
-        self.locals.push(LocalBinding::Temp { id, ty });
-        self.next_local += 1;
-
-        id
-    }
-
-    pub fn bind_new(&mut self, name: Option<Arc<String>>, ty: Type) -> LocalID {
-        let id = LocalID(self.next_local);
-
-        assert_ne!(Type::Nothing, ty);
-
-        if let Some(name) = &name {
-            if self.named_locals.insert(SharedStringKey(name.clone()), id).is_some() {
-                panic!("scope must not already have a binding for {}", name);
-            }
-        }
-
-        self.locals.push(LocalBinding::New {
-            id,
-            ty: ty.clone(),
-        });
-
-        self.next_local += 1;
-
-        id
     }
 }
 

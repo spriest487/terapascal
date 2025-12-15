@@ -55,22 +55,25 @@ pub trait InstructionBuilder {
     fn local_temp(&mut self, ty: Type) -> LocalID {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.local_stack_mut().current_scope_mut().bind_temp(ty.clone());
-
-        self.emit(Instruction::LocalAlloc(id, ty));
+        let id = self.local_stack_mut().bind_temp(ty.clone());
 
         id
     }
 
-    fn local_new(&mut self, ty: Type, name: Option<Arc<String>>) -> LocalID {
+    // creates an autoreleased variable with the given name
+    fn local_var(&mut self, ty: Type, name: Option<Arc<String>>) -> LocalID {
         assert_ne!(Type::Nothing, ty);
+        
+        let is_object = ty.is_object() || ty.is_weak();
 
-        let id = self
-            .local_stack_mut()
-            .current_scope_mut()
-            .bind_new(name, ty.clone());
+        let id = match name {
+            Some(name) => self.local_stack_mut().bind_var(ty, name),
+            None => self.local_stack_mut().bind_auto_temp(ty),
+        };
 
-        self.emit(Instruction::LocalAlloc(id, ty));
+        if is_object {
+            self.mov(id, Value::LiteralNull);
+        }
 
         id
     }
@@ -159,7 +162,7 @@ pub trait InstructionBuilder {
 
         let locals: Vec<_> = self
             .local_stack()
-            .all_locals(cleanup_range)
+            .current_local_bindings(cleanup_range)
             .cloned()
             .collect();
 
@@ -169,30 +172,13 @@ pub trait InstructionBuilder {
         // complex types containing RC pointers), so should never introduce new locals
         // in the scope being popped
         for local in locals {
-            self.comment(&format!("expire {}", local.id()));
-
-            match local {
-                LocalBinding::Param { id, ty, by_ref, .. } => {
-                    self.expire_local(id, &ty, !by_ref);
-                },
-
-                LocalBinding::New { id, ty, .. } => {
-                    self.expire_local(id, &ty, true);
-                },
-
-                LocalBinding::Temp { id, ty } => {
-                    self.expire_local(id, &ty, false);
-                },
-
-                LocalBinding::Return { .. } => {
-                    self.comment("expire return slot");
-                },
-            }
+            self.comment(&format!("expire {}", local.id));
+            self.expire_local(local.id, &local.ty, local.auto_release);
         }
     }
 
-    fn expire_local(&mut self, id: LocalID, ty: &Type, retained: bool) {
-        if retained {
+    fn expire_local(&mut self, id: LocalID, ty: &Type, autorelease: bool) {
+        if autorelease {
             self.release_deep(id, &ty);
         }
     }

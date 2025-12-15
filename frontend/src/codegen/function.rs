@@ -196,8 +196,10 @@ pub fn build_closure_function_def(
             Some(name) => name,
         };
 
-        let capture_val_ptr_ty = field_def.ty.clone().temp_ref();
-        let capture_val_ptr_field_ref = body_builder.local_closure_capture(capture_val_ptr_ty, field_name.clone());
+        let capture_val_ptr_field_ref = body_builder.local_closure_capture(
+            field_def.ty.clone(), 
+            field_name.clone()
+        );
 
         body_builder.field(
             capture_val_ptr_field_ref,
@@ -239,7 +241,7 @@ fn bind_function_return(return_ty: &typ::Type, builder: &mut IRBuilder) -> Type 
                 builder.pretty_ty_name(&return_ty),
             ));
 
-            builder.bind_return();
+            builder.bind_return(return_ty.clone());
             return_ty
         },
     }
@@ -328,7 +330,7 @@ fn init_function_locals(locals: &[typ::ast::FunctionLocalBinding], builder: &mut
             let ty = builder.translate_type(&local.ty);
 
             let local_name = Arc::new(local.ident.name.to_string());
-            let local_ref = builder.local_new(ty, Some(local_name));
+            let local_ref = builder.local_var(ty, Some(local_name));
 
             if let Some(initial_val) = &local.initial_val {
                 let init_val = builder.literal_to_val(initial_val, &local.ty);

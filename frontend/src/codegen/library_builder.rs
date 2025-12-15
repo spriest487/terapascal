@@ -1760,7 +1760,8 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         let sig = lib.functions[&func.id].sig().clone();
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_return();
+        builder.bind_return(sig.return_ty.clone());
+
         let _self_param = builder.bind_param(ir::ANY_TYPE.temp_ref(), "self");
         let args_param = builder.bind_param(ir::ANY_TYPE.dyn_array(), "args");
         builder.bind_param(ir::Type::I32.temp_ref(), "error_out");

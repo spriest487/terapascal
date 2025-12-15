@@ -100,7 +100,7 @@ fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut IRBuilder) {
     let bound_ty = builder.translate_type(&binding.ty);
 
     let binding_name = Some(Arc::new(binding.name.to_string()));
-    let binding_ref = builder.local_new(bound_ty.clone(), binding_name);
+    let binding_ref = builder.local_var(bound_ty.clone(), binding_name);
 
     if let Some(init_expr) = &binding.val {
         builder.scope(|builder| {
@@ -144,7 +144,7 @@ fn build_for_loop_up_to(
                 let counter_binding_name = Arc::new(name.to_string());
                 let counter_ty = builder.translate_type(ty.ty());
 
-                let counter_val = builder.local_new(counter_ty.clone(), Some(counter_binding_name)).to_ref();
+                let counter_val = builder.local_var(counter_ty.clone(), Some(counter_binding_name)).to_ref();
                 let init_val = expr_to_val(&init, builder);
 
                 (counter_val, init_val, counter_ty)
@@ -242,7 +242,7 @@ fn build_for_loop_sequence(
                 builder.comment("loop counter");
                 let counter_ref = builder.local_temp(ir::Type::I32);
                 builder.comment("loop binding");
-                let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
+                let binding_ref = builder.local_var(binding_ty.clone(), Some(binding_name));
                 
                 let base_type = builder.translate_type(&base_type);
                 let element_ty = builder.translate_type(&array_ty.element_ty);
@@ -273,7 +273,7 @@ fn build_for_loop_sequence(
                 builder.comment("loop counter");
                 let counter_ref = builder.local_temp(ir::Type::I32);
                 builder.comment("loop binding");
-                let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
+                let binding_ref = builder.local_var(binding_ty.clone(), Some(binding_name));
 
                 let element_ty = builder.translate_type(element);
                 let dynarray_ty = builder.translate_type(&range.src_expr.annotation().ty());
@@ -328,7 +328,7 @@ fn build_for_loop_sequence(
                 let seq_ty = builder.translate_type(&seq_support.sequence_type);
                 
                 builder.comment("sequence object");
-                let seq_var = builder.local_new(seq_ty.clone(), None);
+                let seq_var = builder.local_var(seq_ty.clone(), None);
 
                 // call Sequence with a ref to the source if it's a value type
                 let src_self_arg_ref = if src_ty.is_object() {
@@ -387,7 +387,7 @@ fn build_for_loop_sequence(
                     builder.jmpif(break_label, is_end_val);
 
                     builder.comment("loop variable binding");
-                    let binding_ref = builder.local_new(binding_ty.clone(), Some(binding_name));
+                    let binding_ref = builder.local_var(binding_ty.clone(), Some(binding_name));
 
                     // binding_ref := next_item_option_ref.Get()
                     builder.vardata(item_option_data_ref, next_item_option_ref, item_option_ty.clone(), OPTION_SOME_CASE);

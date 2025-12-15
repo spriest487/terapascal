@@ -31,7 +31,7 @@ pub fn build_object_ctor_invocation(
 
     // either local struct of the correct type for value types, or a rc pointer to the struct
     // type for rc class types
-    let out_val = builder.local_new(object_ty.clone(), None).to_ref();
+    let out_val = builder.local_var(object_ty.clone(), None).to_ref();
 
     if object_ty.is_object() {
         // allocate class struct at out pointer
@@ -107,7 +107,7 @@ fn translate_static_array_ctor(
     let el_ty = builder.translate_type(element);
 
     let array_ty = el_ty.clone().array(dim);
-    let arr = builder.local_new(array_ty.clone(), None);
+    let arr = builder.local_var(array_ty.clone(), None);
 
     if dim > 0 {
         builder.scope(|builder| {
@@ -155,7 +155,7 @@ fn translate_set_ctor(
     flags_type: ir::Type,
     builder: &mut IRBuilder
 ) -> ir::Ref {
-    let set_result = builder.local_new(flags_type.clone(), None);
+    let set_result = builder.local_var(flags_type.clone(), None);
 
     // zero-init the value
     let word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
@@ -195,7 +195,7 @@ fn translate_box_ctor(
     let boxed_ty = builder.translate_type(value_ty);
     let box_ty = boxed_ty.clone().boxed();
     
-    let box_var = builder.local_new(box_ty.clone(), None);
+    let box_var = builder.local_var(box_ty.clone(), None);
     
     builder.new_box(box_var, boxed_ty.clone(), false);
     

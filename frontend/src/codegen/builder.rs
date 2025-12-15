@@ -295,7 +295,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
         // virtual pointer to the closure
         let closure_virtual_ty = Type::Object(ObjectID::Closure(closure.func_ty_id));
-        let closure_virtual_ptr = self.local_new(closure_virtual_ty.clone(), None);
+        let closure_virtual_ptr = self.local_var(closure_virtual_ty.clone(), None);
 
         self.scope(|builder| {
             let closure_ref = builder.local_temp(closure_ptr_ty.clone());
@@ -327,7 +327,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
                 let capture_field_ref = builder.local_temp(field_def.ty.temp_ref());
                 builder.field(capture_field_ref, closure_ref, closure_ptr_ty.clone(), *field_id);
 
-                let captured_local_id = builder.find_local(field_name).unwrap().id();
+                let captured_local_id = builder.find_local(field_name).unwrap().id;
                 builder.mov(capture_field_ref.to_deref(), captured_local_id);
                 builder.retain_deep(capture_field_ref.to_deref(), &field_def.ty);
             }
@@ -387,9 +387,13 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     pub fn finish(mut self) -> Vec<Instruction> {
-        while self.local_stack.len() > 0 {
-            self.local_end();
+        let mut local_allocs = Vec::with_capacity(self.local_stack.local_slot_count());
+
+        for (local_id, ty) in self.local_stack.finish() {
+            local_allocs.push(Instruction::LocalAlloc(local_id, ty));
         }
+
+        self.instructions.splice(0..0, local_allocs);
 
         remove_empty_blocks(&mut self.instructions);
 
@@ -546,34 +550,21 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     pub fn bind_param(&mut self, ty: Type, name: impl Into<String>) -> LocalID {
-        let name = Some(Arc::new(name.into()));
-
-        self.local_stack_mut()
-            .current_scope_mut()
-            .bind_param(name, ty, false)
+        self.local_stack_mut().bind_param(ty, Arc::new(name.into()), false)
     }
 
     pub fn bind_ref_param(&mut self, ty: Type, name: impl Into<String>) -> LocalID {
-        let ref_ty = ty.temp_ref();
-        let name = Some(Arc::new(name.into()));
-
-        self.local_stack_mut()
-            .current_scope_mut()
-            .bind_param(name, ref_ty, true)
+        self.local_stack_mut().bind_param(ty.temp_ref(), Arc::new(name.into()), true)
     }
 
     // binds an anonymous return local in %0 with the indicated type
-    pub fn bind_return(&mut self) {
-        self.local_stack_mut()
-            .current_scope_mut()
-            .bind_return();
+    pub fn bind_return(&mut self, ty: Type) {
+        self.local_stack_mut().bind_return(ty);
     }
 
     // binds an anonymous local binding for the closure pointer of a function
     pub fn bind_closure_ptr(&mut self) -> LocalID {
-        self.local_stack_mut()
-            .current_scope_mut()
-            .bind_temp(Type::any())
+        self.local_stack_mut().bind_unnamed_param(ANY_TYPE)
     }
 
     pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {
@@ -583,12 +574,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn local_closure_capture(&mut self, ty: Type, name: String) -> Ref {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.local_stack_mut()
-            .current_scope_mut()
-            .bind_param(Some(Arc::new(name)), ty.clone(), true);
-
-        self.emit(Instruction::LocalAlloc(id, ty.clone()));
-
+        let id = self.local_stack_mut().bind_capture(ty, name);
+        
         Ref::Local(id)
     }
 

@@ -82,7 +82,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Ref
                         Some(output_expr) => builder.translate_type(&output_expr.annotation().ty()),
                         None => panic!("block used in expr must have a type"),
                     };
-                    let out_ref = builder.local_new(out_ty, None).to_ref();
+                    let out_ref = builder.local_var(out_ty, None).to_ref();
                     translate_block(block, out_ref.clone(), builder);
 
                     out_ref
@@ -307,12 +307,13 @@ fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &m
 fn find_local_ref(ident: &ast::Ident, builder: &IRBuilder) -> Option<ir::Ref> {
     let local = builder.find_local(ident.name.as_str())?;
     
-    let value_ref = ir::Ref::Local(local.id());
-    if local.by_ref() {
+    let value_ref = ir::Ref::Local(local.id);
+    let option = if local.by_ref {
         Some(value_ref.to_deref())
     } else {
         Some(value_ref)
-    }
+    };
+    option
 }
 
 fn find_global_ref(value: &TypedValue, builder: &IRBuilder) -> Option<ir::Ref> {

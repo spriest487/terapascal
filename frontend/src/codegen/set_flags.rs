@@ -186,7 +186,7 @@ impl SetFlagsType {
         let flags_ty = ir::Type::Flags(struct_id);
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_return();
+        builder.bind_return(ir::Type::Bool);
         builder.bind_param(flags_ty.temp_ref(), "flags");
         builder.bind_param(ir::Type::U8, "bit");
         
@@ -279,7 +279,7 @@ impl SetFlagsType {
         let flags_ty = ir::Type::Flags(struct_id);
         
         let mut builder = IRBuilder::new(lib);
-        builder.bind_return();
+        builder.bind_return(ir::Type::Bool);
         builder.bind_param(flags_ty.temp_ref(), "flags");
         builder.bind_param(flags_ty.temp_ref(), "other");
 
