@@ -383,6 +383,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     pub fn finish(mut self) -> Vec<Instruction> {
+        while self.local_stack.len() > 0 {
+            self.local_end();
+        }
+
         let mut local_allocs = Vec::with_capacity(self.local_stack.local_slot_count());
 
         for (local_id, ty) in self.local_stack.finish() {
