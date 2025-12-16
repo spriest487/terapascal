@@ -5,8 +5,9 @@ mod invoker;
 mod object;
 
 use crate::instruction_builder::object::gen_class_object_dtor_body;
-use crate::instruction_builder::scope::{BindingStorage, ScopedBinding};
-use crate::{ArgID, BinOpInstruction};
+use crate::instruction_builder::scope::ScopedBinding;
+use crate::ArgID;
+use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::FunctionID;
 use crate::FunctionSig;
@@ -167,16 +168,14 @@ pub trait InstructionBuilder {
         // complex types containing RC pointers), so should never introduce new locals
         // in the scope being popped
         for binding in bindings {
-            if let BindingStorage::Local(id) = binding.storage {
-                self.comment(&format!("expire {}", id));
-                self.expire_local(id, &binding.ty, binding.auto_release);
-            }
+            self.comment(&format!("expire {}", binding.to_ref()));
+            self.expire_binding(&binding);
         }
     }
 
-    fn expire_local(&mut self, id: LocalID, ty: &Type, autorelease: bool) {
-        if autorelease {
-            self.release_deep(id, &ty);
+    fn expire_binding(&mut self, binding: &ScopedBinding) {
+        if binding.auto_release {
+            self.release_deep(binding.to_ref(), &binding.ty);
         }
     }
 
