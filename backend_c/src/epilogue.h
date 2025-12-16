@@ -259,13 +259,13 @@ static bool RcRelease(OBJECT_PTR object, bool weak) {
 #endif
             }
 
-            object->class = NULL;
-
             if (object->strong_count != 1) {
                 fprintf(stderr, "destructor for %s modified the reference count of the destroyed instance\n", OBJECT_DISPLAY(object));
                 fflush(stderr);
                 abort();
             }
+
+            object->class = NULL;
         }
   
         object->strong_count -= 1;
