@@ -73,7 +73,7 @@ impl<'a> Unit<'a> {
     fn gen_box_element_method(&mut self, box_id: BoxTypeID, element_type: &ir::Type) {
         let box_ptr_ty = Type::DefinedType(TypeDefName::Box(box_id)).ptr();
 
-        let object_ptr_arg = Expr::local_var(ir::LocalID(1));
+        let object_ptr_arg = Expr::arg_var(ir::ArgID(0));
 
         let element_func_body = vec![
             Statement::ReturnValue(

@@ -207,8 +207,8 @@ impl fmt::Display for VariableID {
             VariableID::Result => write!(f, "Result"),
             VariableID::Arg(id) => write!(f, "Arg{}", id.0),
             VariableID::Local(id) => write!(f, "L{}", id.0),
-            VariableID::Named(name) => write!(f, "V_{name}"),
             VariableID::Temp(id) => write!(f, "V{id}"),
+            VariableID::Named(name) => write!(f, "V_{name}"),
         }
     }
 }
