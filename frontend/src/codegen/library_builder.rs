@@ -69,7 +69,7 @@ pub struct LibraryBuilder<'a> {
     // key is size (bits)
     set_flags_type_info: BTreeMap<usize, SetFlagsType>,
 
-    translated_funcs: HashMap<FunctionDefKey, FunctionInstance>,
+    translated_funcs: LinkedHashMap<FunctionDefKey, FunctionInstance>,
 
     functions: BTreeMap<ir::FunctionID, ir::Function>,
     function_types_by_sig: HashMap<typ::FunctionSig, ir::TypeDefID>,
@@ -1736,7 +1736,7 @@ fn gen_class_dtor(
 
 fn gen_func_invokers(lib: &mut LibraryBuilder) {
     // temporarily swap because we can't build new functions with this borrowed
-    let mut all_funcs = HashMap::new();
+    let mut all_funcs = LinkedHashMap::new();
     mem::swap(&mut all_funcs, &mut lib.translated_funcs);
 
     let invoker_sig = ir::FunctionSig::new([
