@@ -194,15 +194,23 @@ impl StackFrame {
 
     pub fn get_arg_ptr(&self, id: ir::ArgID) -> StackResult<Pointer> {
         match self.args.get(id.0) {
-            Some(alloc) => Ok(self.stack_pointer(alloc)),
-            None => Err(StackError::ArgNotAllocated(id)),
+            Some(alloc) => {
+                Ok(self.stack_pointer(alloc))
+            },
+            None => {
+                Err(StackError::ArgNotAllocated(id))
+            },
         }
     }
 
     pub fn get_local_ptr(&self, id: ir::LocalID) -> StackResult<Pointer> {
         match self.locals.get(id.0) {
-            Some(alloc) => Ok(self.stack_pointer(alloc)),
-            None => Err(StackError::LocalNotAllocated(id)),
+            Some(alloc) => {
+                Ok(self.stack_pointer(alloc))
+            },
+            None => {
+                Err(StackError::LocalNotAllocated(id))
+            },
         }
     }
     

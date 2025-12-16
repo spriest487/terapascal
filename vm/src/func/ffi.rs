@@ -48,19 +48,14 @@ impl FfiInvoker {
         let mut args: SmallVec<[u8; 64]> = smallvec![0; params_total_size];
         let mut args_ptrs: SmallVec<[*mut c_void; 4]> = smallvec![null_mut(); param_count];
 
-        let first_param_local = match self.return_ty {
-            ir::Type::Nothing => 0,
-            _ => 1,
-        };
-
         let mut arg_offset = 0;
 
         for i in 0..param_count {
-            let local_id = ir::LocalID(first_param_local + i);
+            let arg_id = ir::ArgID(i);
 
             let param_size = self.ffi_param_tys[i].size();
 
-            let arg_val = state.load(&ir::Ref::Local(local_id))?;
+            let arg_val = state.load(&arg_id.to_ref())?;
             let bytes_copied = state
                 .marshaller()
                 .marshal(&arg_val, &mut args[arg_offset..])?;
@@ -98,8 +93,7 @@ impl FfiInvoker {
                     .marshaller()
                     .unmarshal(result_slice.as_ref().unwrap(), &self.return_ty)?;
 
-                let return_local = ir::Ref::Local(ir::LocalID(0));
-                state.store(&return_local, return_val.value)?;
+                state.store(&ir::RESULT_REF, return_val.value)?;
             }
         }
 
