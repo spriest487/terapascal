@@ -79,8 +79,8 @@ impl fmt::Display for Ref {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Ref::Discard => write!(f, "_"),
-            Ref::Arg(index) => write!(f, "%Arg{index}"),
             Ref::Result => write!(f, "%Result"),
+            Ref::Arg(id) => write!(f, "{id}"),
             Ref::Local(id) => write!(f, "{}", id),
             Ref::Global(name) => write!(f, "{}", name),
             Ref::Deref(at) => write!(f, "{}^", at),
