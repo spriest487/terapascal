@@ -150,10 +150,10 @@ impl<'a> LibraryBuilder<'a> {
             set_flags_type_info: BTreeMap::new(),
             
             functions: BTreeMap::new(),
-            translated_funcs: HashMap::new(),
-            
+            translated_funcs: LinkedHashMap::new(),
+
             function_types_by_sig: HashMap::new(),
-            
+
             variables: BTreeMap::new(),
             variables_by_name: HashMap::new(),
             
@@ -1735,6 +1735,10 @@ fn gen_class_dtor(
 }
 
 fn gen_func_invokers(lib: &mut LibraryBuilder) {
+    if !lib.opts.rtti {
+        return;
+    }
+    
     // temporarily swap because we can't build new functions with this borrowed
     let mut all_funcs = LinkedHashMap::new();
     mem::swap(&mut all_funcs, &mut lib.translated_funcs);
@@ -1749,11 +1753,21 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         if !func.published {
             continue;
         }
-        
-        let invoker_id = lib.metadata_mut().insert_func(None, false, []);
 
-        let debug_name = lib.opts.debug
-            .then(|| format!("generated invoker for {}", func.id));
+        let debug_name = if lib.opts.debug {
+            let debug_name = lib.functions[&func.id].debug_name();
+            
+            let func_name_display = match debug_name {
+                Some(name) => format!("{name} ({})", func.id),
+                None => format!("{}", func.id),
+            };
+
+            Some(format!("generated invoker for {}", func_name_display))
+        } else {
+            None
+        };
+
+        let invoker_id = lib.metadata_mut().insert_func(None, false, []);
         
         // the source sig may be generic, so look up the translated sig rather than attempting
         // to translate it without a generic context

@@ -620,10 +620,6 @@ impl Metadata {
         })
     }
 
-    pub fn get_string(&self, id: StringID) -> Option<&String> {
-        self.string_literals.get(&id)
-    }
-
     pub fn strings(&self) -> impl Iterator<Item = (StringID, &str)> + '_ {
         self.string_literals.iter().map(|(id, s)| (*id, s.as_str()))
     }
@@ -753,6 +749,10 @@ impl IRFormatter for Metadata {
 impl MetadataSource for Metadata {
     fn as_formatter(&self) -> &impl IRFormatter {
         self
+    }
+
+    fn get_string(&self, id: StringID) -> Option<&String> {
+        self.string_literals.get(&id)
     }
     
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {

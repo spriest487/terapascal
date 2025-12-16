@@ -1,7 +1,9 @@
-use crate::{FunctionID, TagInfo};
+use crate::FunctionID;
 use crate::Metadata;
+use crate::MetadataSource;
 use crate::ObjectID;
 use crate::StringID;
+use crate::TagInfo;
 use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;

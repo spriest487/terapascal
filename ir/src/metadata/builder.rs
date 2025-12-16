@@ -218,11 +218,16 @@ impl MetadataBuilder {
         self.next_string_id.0 += 1;
         next_id
     }
+    
 }
 
 impl MetadataSource for MetadataBuilder {
     fn as_formatter(&self) -> &impl IRFormatter {
         self
+    }
+
+    fn get_string(&self, id: StringID) -> Option<&String> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_string(id))
     }
 
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {

@@ -6,6 +6,7 @@ use crate::InterfaceID;
 use crate::MethodInfo;
 use crate::NamePath;
 use crate::ObjectID;
+use crate::StringID;
 use crate::StructDef;
 use crate::TagInfo;
 use crate::TagLocation;
@@ -18,6 +19,8 @@ use crate::VariantDef;
 
 pub trait MetadataSource {
     fn as_formatter(&self) -> &impl IRFormatter;
+
+    fn get_string(&self, id: StringID) -> Option<&String>;
     
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef>;
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
