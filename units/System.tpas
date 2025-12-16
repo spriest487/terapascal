@@ -88,6 +88,7 @@ type
         function ToString: String;
     end;
 
+{$IFDEF RTTI}
     InvokeError = variant of IToString
         InvalidArgs;
         NotInvokable;
@@ -96,7 +97,6 @@ type
         function ToString: String;
     end;
 
-{$IFDEF RTTI}
     TagCollection = record
     private
         tags: array of Object;
@@ -315,6 +315,8 @@ begin
     arr
 end;
 
+{$IFDEF RTTI}
+
 function InvokeError.ToString: String;
 begin
     match self of
@@ -324,8 +326,6 @@ begin
         else 'Unknown error';
     end;
 end;
-
-{$IFDEF RTTI}
 
 function GetTypeInfoCount: Integer; external 'rt';
 function GetTypeInfoByIndex(typeIndex: Integer): TypeInfo; external 'rt';
