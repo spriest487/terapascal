@@ -323,8 +323,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
                 let capture_field_ref = builder.local_temp(field_def.ty.temp_ref());
                 builder.field(capture_field_ref, closure_ref, closure_ptr_ty.clone(), *field_id);
 
-                let captured_local_id = builder.find_local(field_name).unwrap().id;
-                builder.mov(capture_field_ref.to_deref(), captured_local_id);
+                let captured_local = builder.find_local(field_name).unwrap();
+                builder.mov(capture_field_ref.to_deref(), captured_local.to_ref());
                 builder.retain_deep(capture_field_ref.to_deref(), &field_def.ty);
             }
             
@@ -543,12 +543,12 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.call(function_ref, [at.into()], None);
     }
 
-    pub fn bind_param(&mut self, ty: Type, name: impl Into<String>) -> LocalID {
-        self.local_stack_mut().bind_param(ty, Arc::new(name.into()), false)
+    pub fn bind_param(&mut self, id: ArgID, ty: Type, name: impl Into<String>) {
+        self.local_stack_mut().bind_param(id, ty, Arc::new(name.into()), false)
     }
 
-    pub fn bind_ref_param(&mut self, ty: Type, name: impl Into<String>) -> LocalID {
-        self.local_stack_mut().bind_param(ty.temp_ref(), Arc::new(name.into()), true)
+    pub fn bind_ref_param(&mut self, id: ArgID, ty: Type, name: impl Into<String>) {
+        self.local_stack_mut().bind_param(id, ty.temp_ref(), Arc::new(name.into()), true)
     }
 
     // binds an anonymous return local in %0 with the indicated type
@@ -557,8 +557,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     // binds an anonymous local binding for the closure pointer of a function
-    pub fn bind_closure_ptr(&mut self) -> LocalID {
-        self.local_stack_mut().bind_unnamed_param(ANY_TYPE)
+    pub fn bind_closure_ptr(&mut self, id: ArgID) {
+        self.local_stack_mut().bind_unnamed_param(id, ANY_TYPE)
     }
 
     pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {

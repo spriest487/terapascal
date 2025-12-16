@@ -180,6 +180,8 @@ fn vtype_typeinfo_name(id: &ir::ObjectID) -> String {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum VariableID {
+    Result,
+    Arg(ir::ArgID),
     Local(ir::LocalID),
     Named(Box<String>),
     Temp(usize),
@@ -202,6 +204,8 @@ impl VariableID {
 impl fmt::Display for VariableID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            VariableID::Result => write!(f, "Result"),
+            VariableID::Arg(id) => write!(f, "Arg{}", id.0),
             VariableID::Local(id) => write!(f, "L{}", id.0),
             VariableID::Named(name) => write!(f, "V_{name}"),
             VariableID::Temp(id) => write!(f, "V{id}"),

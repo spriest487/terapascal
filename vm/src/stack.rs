@@ -12,8 +12,8 @@ use std::convert::TryInto;
 use std::fmt;
 use std::mem::size_of;
 use std::rc::Rc;
-use thiserror::Error;
 use terapascal_common::span::Span;
+use thiserror::Error;
 
 const SENTINEL: usize = 12345678;
 
@@ -37,10 +37,13 @@ struct StackAlloc {
 pub(super) struct StackFrame {
     name: Rc<String>,
 
-    locals: Vec<StackAlloc>,
-
     stack_mem: Box<[u8]>,
     stack_offset: usize,
+
+    result: Option<StackAlloc>,
+    args: Vec<StackAlloc>,
+
+    locals: Vec<StackAlloc>,
 
     marshaller: Rc<Marshaller>,
 
@@ -60,6 +63,9 @@ impl StackFrame {
         Self {
             name: name.into(),
 
+            result: None,
+            args: Vec::new(),
+
             locals: Vec::new(),
             
             debug_ctx_stack: Vec::new(),
@@ -71,25 +77,32 @@ impl StackFrame {
         }
     }
 
-    /// add a local to the stack without a local variable declaration. function params and return
-    /// values get allocated by this mechanism because they aren't ever declared as locals in the
-    /// body of the function
-    pub fn add_undeclared_local(&mut self, ty: ir::Type, value: &DynValue) -> MarshalResult<ir::LocalID> {
-        let stack_offset = self.stack_alloc(value)?;
+    /// Reserves stack space for the result value to be stored
+    pub fn declare_result(&mut self, ty: ir::Type, value: &DynValue) -> MarshalResult<()> {
+        assert!(self.result.is_none(), "result storage must not be allocated twice");
+        
+        let stack_offset = self.stack_alloc(&ty, value)?;
 
-        if cfg!(debug_assertions) {
-            let marshalled_size = self.stack_offset - stack_offset;
-            let ty_size = self.marshaller.get_ty(&ty)?.size();
-            assert_eq!(marshalled_size, ty_size, "stack space allocated ({}) did not match expected size {} for type {}", marshalled_size, ty_size, ty);
-        }
-
-        self.locals.push(StackAlloc {
+        self.result = Some(StackAlloc {
             alloc_pc: None,
             ty,
             stack_offset,
         });
 
-        let id = ir::LocalID(self.locals.len() - 1);
+        Ok(())
+    }
+
+    /// Reserves stack space for an argument value to be stored
+    pub fn declare_arg(&mut self, ty: ir::Type, value: &DynValue) -> MarshalResult<ir::ArgID> {
+        let stack_offset = self.stack_alloc(&ty, value)?;
+
+        self.args.push(StackAlloc {
+            alloc_pc: None,
+            ty,
+            stack_offset,
+        });
+
+        let id = ir::ArgID(self.args.len() - 1);
         Ok(id)
     }
 
@@ -121,7 +134,7 @@ impl StackFrame {
             return Err(StackError::IllegalAlloc(id));
         }
 
-        let stack_offset = self.stack_alloc(value)?;
+        let stack_offset = self.stack_alloc(&ty, value)?;
 
         self.locals.push(StackAlloc {
             alloc_pc: Some(alloc_pc),
@@ -146,12 +159,18 @@ impl StackFrame {
         }
     }
 
-    fn stack_alloc(&mut self, value: &DynValue) -> MarshalResult<usize> {
+    fn stack_alloc(&mut self, ty: &ir::Type, value: &DynValue) -> MarshalResult<usize> {
         let start_offset = self.stack_offset;
         let alloc_slice = &mut self.stack_mem[start_offset..];
         let size = self.marshaller.marshal(value, alloc_slice)?;
         
         self.stack_offset += size;
+
+        if cfg!(debug_assertions) {
+            let marshalled_size = self.stack_offset - start_offset;
+            let ty_size = self.marshaller.get_ty(ty)?.size();
+            assert_eq!(marshalled_size, ty_size, "stack space allocated ({}) did not match expected size {} for type {}", marshalled_size, ty_size, ty);
+        }
 
         Ok(start_offset)
     }
@@ -166,19 +185,32 @@ impl StackFrame {
             .unwrap_or_else(|| Cow::Owned(Span::zero("<unknown>")))
     }
 
+    pub fn get_result_ptr(&self) -> StackResult<Pointer> {
+        match &self.result {
+            Some(alloc) => Ok(self.stack_pointer(alloc)),
+            None => Err(StackError::ResultNotAllocated),
+        }
+    }
+
+    pub fn get_arg_ptr(&self, id: ir::ArgID) -> StackResult<Pointer> {
+        match self.args.get(id.0) {
+            Some(alloc) => Ok(self.stack_pointer(alloc)),
+            None => Err(StackError::ArgNotAllocated(id)),
+        }
+    }
+
     pub fn get_local_ptr(&self, id: ir::LocalID) -> StackResult<Pointer> {
         match self.locals.get(id.0) {
-            Some(alloc) => {
-                Ok(Pointer {
-                    ty: alloc.ty.clone(),
-                    addr: self.stack_mem.as_ptr() as usize + alloc.stack_offset,
-                })
-            }
-
-            None => {
-                Err(StackError::LocalNotAllocated(id))
-            }
+            Some(alloc) => Ok(self.stack_pointer(alloc)),
+            None => Err(StackError::LocalNotAllocated(id)),
         }
+    }
+    
+    fn stack_pointer(&self, alloc: &StackAlloc) -> Pointer {
+        let stack_mem_addr = self.stack_mem.as_ptr() as usize;
+        let addr = stack_mem_addr + alloc.stack_offset;
+
+        Pointer::new(addr, alloc.ty.clone())
     }
     
     pub fn debug_push(&mut self, ctx: Span) {
@@ -198,6 +230,8 @@ impl StackFrame {
 
 #[derive(Debug, Clone, Error)]
 pub enum StackError {
+    ResultNotAllocated,
+    ArgNotAllocated(ir::ArgID),
     LocalNotAllocated(ir::LocalID),
     DuplicateLocalAlloc {
         stack_frame: String,
@@ -223,8 +257,14 @@ impl From<MarshalError> for StackError {
 impl fmt::Display for StackError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            StackError::ResultNotAllocated => {
+                write!(f, "storage not allocated for result value")
+            }
+            StackError::ArgNotAllocated(id) => {
+                write!(f, "storage not allocated for arg: {}", id)
+            }
             StackError::LocalNotAllocated(id) => {
-                write!(f, "local is not allocated: {}", id)
+                write!(f, "storage not allocated for local: {}", id)
             }
             StackError::DuplicateLocalAlloc { id, first_pc, next_pc, stack_frame } => {
                 write!(f, "{}: local {} was reallocated by a separate instruction (", stack_frame, id)?;

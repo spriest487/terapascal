@@ -21,109 +21,103 @@ where
     T: fmt::Display,
     UnwrapFn: FnOnce(&DynValue) -> Option<T>,
 {
-    let arg_0 = ir::Ref::Local(ir::LocalID(1));
-
-    let arg_0_dyn = state.load(&arg_0)?;
+    let arg_0_dyn = state.load(&ir::ArgID(0).to_ref())?;
     let value = unwrap_fn(&arg_0_dyn).ok_or_else(|| {
         ExecError::illegal_state("primitive_to_str argument is not the correct type".to_string())
     })?;
 
     let string = state.create_string(&value.to_string(), false)?;
-    state.store(&ir::RETURN_REF, string)?;
+    state.store(&ir::RESULT_REF, string)?;
 
     Ok(())
 }
 
-/// %1: I8 -> %0: String
+/// I8 -> String
 pub(super) fn i8_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_i8)
 }
 
-/// %1: U8 -> %0: String
+/// U8 -> String
 pub(super) fn u8_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_u8)
 }
 
-/// %1: I16 -> %0: String
+/// I16 -> String
 pub(super) fn i16_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_i16)
 }
 
-/// %1: U16 -> %0: String
+/// U16 -> String
 pub(super) fn u16_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_u16)
 }
 
-/// %1: I32 -> %0: String
+/// I32 -> String
 pub(super) fn i32_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_i32)
 }
 
-/// %1: U32 -> %0: String
+/// U32 -> String
 pub(super) fn u32_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_u32)
 }
 
-/// %1: I64 -> %0: String
+/// I64 -> String
 pub(super) fn i64_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_i64)
 }
 
-/// %1: U64 -> %0: String
+/// U64 -> String
 pub(super) fn u64_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_u64)
 }
 
-/// %1: ISize -> %0: String
+/// ISize -> String
 pub(super) fn isize_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_isize)
 }
 
-/// %1: USize -> %0: String
+/// USize -> String
 pub(super) fn usize_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_usize)
 }
 
-/// %1: Pointer -> %0: String
+/// Pointer -> String
 pub(super) fn pointer_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, |val| {
         val.as_pointer().cloned()
     })
 }
 
-/// %1: F32 -> %0: String
+/// F32 -> String
 pub(super) fn real_to_str(state: &mut Interpreter) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_f32)
 }
 
-/// %1: String -> %0: I32
+/// String -> I32
 pub(super) fn str_to_int(state: &mut Interpreter) -> ExecResult<()> {
-    let arg_0 = ir::Ref::Local(ir::LocalID(1));
-
-    let string = state.read_string(&arg_0)?;
+    let string = state.read_string(&ir::ArgID(0).to_ref())?;
     let int: i32 = string.parse().map_err(|_| ExecError::Raised {
         msg: format!("could not convert `{}` to Integer", string),
     })?;
 
-    state.store(&ir::RETURN_REF, DynValue::I32(int))?;
+    state.store(&ir::RESULT_REF, DynValue::I32(int))?;
 
     Ok(())
 }
 
-/// %0: String -> Nothing
+/// String -> Nothing
 pub(super) fn write(state: &mut Interpreter) -> ExecResult<()> {
-    let arg_0 = ir::Ref::Local(ir::LocalID(0));
-    let string = state.read_string(&arg_0)?;
+    let string = state.read_string(&ir::ArgID(0).to_ref())?;
 
     _ = io::stdout().lock().write_all(string.as_bytes()).unwrap();
 
     Ok(())
 }
 
-/// %0: String -> Nothing
+/// String -> Nothing
 pub(super) fn write_ln(state: &mut Interpreter) -> ExecResult<()> {
-    let arg_0 = ir::Ref::Local(ir::LocalID(0));
-    let string = state.read_string(&arg_0)?;
+    let string = state.read_string(&ir::ArgID(0).to_ref())?;
 
     let mut stdout = io::stdout().lock();
 
@@ -137,7 +131,7 @@ pub(super) fn write_ln(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-/// %0: Nothing -> String
+/// Nothing -> String
 pub(super) fn read_ln(state: &mut Interpreter) -> ExecResult<()> {
     let stdin = io::stdin();
     let mut line = String::new();
@@ -153,17 +147,15 @@ pub(super) fn read_ln(state: &mut Interpreter) -> ExecResult<()> {
 
     let result_str = state.create_string(&line, false)?;
 
-    state.store(&ir::RETURN_REF, result_str)?;
+    state.store(&ir::RESULT_REF, result_str)?;
 
     Ok(())
 }
 
-/// %1: Integer -> %0: ^Byte
+/// Integer -> ^Byte
 pub(super) fn get_mem(state: &mut Interpreter) -> ExecResult<()> {
-    let arg_0 = ir::Ref::Local(ir::LocalID(1));
-
     let len = state
-        .load(&arg_0)?
+        .load(&ir::ArgID(0).to_ref())?
         .as_i32()
         .ok_or_else(|| ExecError::illegal_state("GetMem expected I32 argument"))?;
 
@@ -173,16 +165,14 @@ pub(super) fn get_mem(state: &mut Interpreter) -> ExecResult<()> {
         Pointer::nil(ir::Type::U8)
     };
 
-    state.store(&ir::RETURN_REF, DynValue::Pointer(mem_ptr))?;
+    state.store(&ir::RESULT_REF, DynValue::Pointer(mem_ptr))?;
 
     Ok(())
 }
 
-/// %0: ^Byte -> Nothing
+/// ^Byte -> Nothing
 pub(super) fn free_mem(state: &mut Interpreter) -> ExecResult<()> {
-    let arg_0 = ir::Ref::Local(ir::LocalID(0));
-
-    let ptr_val = state.load(&arg_0)?;
+    let ptr_val = state.load(&ir::ArgID(0).to_ref())?;
 
     let ptr = ptr_val
         .as_pointer()
@@ -195,9 +185,9 @@ pub(super) fn free_mem(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-/// %1: <any dyn array ref> -> %0: Integer
+/// Any -> Integer
 pub(super) fn array_length(state: &mut Interpreter) -> ExecResult<()> {
-    let array_arg = ir::LocalID(1);
+    let array_arg = ir::ArgID(0);
     
     let array_ptr = load_pointer(state, &array_arg.to_ref())?;
     let array_header = state.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
@@ -205,15 +195,15 @@ pub(super) fn array_length(state: &mut Interpreter) -> ExecResult<()> {
     let len = i32::try_from(array_header.len)
         .map_err(|_| ExecError::illegal_state("length of array was not an i32"))?;
     
-    state.store(&ir::RETURN_REF, DynValue::I32(len))?;
+    state.store(&ir::RESULT_REF, DynValue::I32(len))?;
 
     Ok(())
 }
 
-/// %0: &Any <any dyn array ref>; %1: I32;
+/// &Any; I32; -> Nothing
 pub(super) fn array_create(state: &mut Interpreter) -> ExecResult<()> {
-    let array_ref_arg = ir::LocalID(0);
-    let new_len_arg = ir::LocalID(1);
+    let array_ref_arg = ir::ArgID(0);
+    let new_len_arg = ir::ArgID(1);
 
     let new_len = load_integer(state, &new_len_arg.to_ref())?;
 
@@ -242,10 +232,10 @@ pub(super) fn array_create(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
-    let method_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(1)))?;
-    let instance_arg_ref = load_pointer(state, &ir::Ref::Local(ir::LocalID(2)))?;
-    let args_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
-    let error_out = load_pointer(state, &ir::Ref::Local(ir::LocalID(4)))?;
+    let method_ptr = load_pointer(state, &ir::ArgID(0).to_ref())?;
+    let instance_arg_ref = load_pointer(state, &ir::ArgID(1).to_ref())?;
+    let args_ptr = load_pointer(state, &ir::ArgID(2).to_ref())?;
+    let error_out = load_pointer(state, &ir::ArgID(3).to_ref())?;
 
     let (method_info_val,_) = state.load_class_object(&method_ptr)?;
 
@@ -270,14 +260,14 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
     )?;
     
     state.store_indirect(&error_out, DynValue::I32(error_code))?;
-    state.store(&ir::RETURN_REF, DynValue::Pointer(result_box_ptr))?;
+    state.store(&ir::RESULT_REF, DynValue::Pointer(result_box_ptr))?;
     Ok(())
 }
 
 fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
-    let func_info_ptr = load_pointer(state, &ir::LocalID(1).to_ref())?;
-    let args_array_ptr = load_pointer(state, &ir::LocalID(2).to_ref())?;
-    let error_out = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
+    let func_info_ptr = load_pointer(state, &ir::ArgID(0).to_ref())?;
+    let args_array_ptr = load_pointer(state, &ir::ArgID(1).to_ref())?;
+    let error_out = load_pointer(state, &ir::ArgID(2).to_ref())?;
 
     let (func_info_val,_) = state.load_class_object(&func_info_ptr)?;
     
@@ -297,15 +287,16 @@ fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
     )?;
 
     state.store_indirect(&error_out, DynValue::I32(error_code))?;
-    state.store(&ir::RETURN_REF, DynValue::Pointer(result_box_ptr))?;
+    state.store(&ir::RESULT_REF, DynValue::Pointer(result_box_ptr))?;
     
     Ok(())
 }
 
 fn find_type_info(state: &mut Interpreter) -> ExecResult<()> {
-    let name_arg = state.read_string(&ir::Ref::Local(ir::LocalID(1)))?;
+    let name_arg = ir::ArgID(0);
+    let name = state.read_string(&name_arg.to_ref())?;
     
-    let result = match state.typeinfo_map.find_by_name(&name_arg).cloned() {
+    let result = match state.typeinfo_map.find_by_name(&name).cloned() {
         Some(typeinfo_global) => {
             state.load(&ir::Ref::Global(typeinfo_global))?
         }
@@ -315,7 +306,7 @@ fn find_type_info(state: &mut Interpreter) -> ExecResult<()> {
         }
     };
     
-    state.store(&ir::RETURN_REF, result)?;
+    state.store(&ir::RESULT_REF, result)?;
     
     Ok(())
 }
@@ -324,13 +315,13 @@ fn get_type_info_count(state: &mut Interpreter) -> ExecResult<()> {
     let count = i32::try_from(state.typeinfo_map.items().len())
         .unwrap_or(i32::MAX);
 
-    state.store(&ir::RETURN_REF, DynValue::I32(count))
+    state.store(&ir::RESULT_REF, DynValue::I32(count))
 }
 
 fn get_type_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
-    let index_param_local = ir::Ref::Local(ir::LocalID(1));
+    let index_arg = ir::ArgID(0);
 
-    let index = state.load(&index_param_local)?
+    let index = state.load(&index_arg.to_ref())?
         .as_i32()
         .ok_or_else(|| {
             ExecError::illegal_state("parameter to get_type_info must be i32")
@@ -342,17 +333,17 @@ fn get_type_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
         .ok_or_else(|| ExecError::illegal_state(format!("illegal TypeInfo index: {index}")))?;
     
     let type_info_ptr = state.load(&ir::Ref::Global(type_info_ref))?;
-    state.store(&ir::RETURN_REF, type_info_ptr)?;
+    state.store(&ir::RESULT_REF, type_info_ptr)?;
     
     Ok(())
 }
 
 fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
-    let obj_ptr_arg = ir::LocalID(1);
-    let obj_ptr = load_pointer(state, &ir::Ref::Local(obj_ptr_arg))?;
+    let obj_ptr_arg = ir::ArgID(0);
+    let obj_ptr = load_pointer(state, &obj_ptr_arg.to_ref())?;
     
     if obj_ptr.is_null() {
-        state.store(&ir::RETURN_REF, DynValue::nil(ir::Type::Nothing))?;
+        state.store(&ir::RESULT_REF, DynValue::nil(ir::Type::Nothing))?;
         return Ok(());
     }
     
@@ -369,15 +360,16 @@ fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
         .clone();
     
     let type_info_ptr = state.load(&ir::Ref::Global(type_info_ref))?;
-    state.store(&ir::RETURN_REF, type_info_ptr)?;
+    state.store(&ir::RESULT_REF, type_info_ptr)?;
     
     Ok(())
 }
 
 fn find_func_info(state: &mut Interpreter) -> ExecResult<()> {
-    let name_arg = state.read_string(&ir::Ref::Local(ir::LocalID(1)))?;
+    let name_arg = ir::ArgID(0);
+    let name = state.read_string(&name_arg.to_ref())?;
 
-    let result = match state.funcinfo_map.find_by_name(&name_arg).cloned() {
+    let result = match state.funcinfo_map.find_by_name(&name).cloned() {
         Some(func_info_global) => {
             state.load(&ir::Ref::Global(func_info_global))?
         }
@@ -387,7 +379,7 @@ fn find_func_info(state: &mut Interpreter) -> ExecResult<()> {
         }
     };
 
-    state.store(&ir::RETURN_REF, result)?;
+    state.store(&ir::RESULT_REF, result)?;
 
     Ok(())
 }
@@ -396,13 +388,13 @@ fn get_func_info_count(state: &mut Interpreter) -> ExecResult<()> {
     let count = i32::try_from(state.funcinfo_map.items().len())
         .unwrap_or(i32::MAX);
 
-    state.store(&ir::RETURN_REF, DynValue::I32(count))
+    state.store(&ir::RESULT_REF, DynValue::I32(count))
 }
 
 fn get_func_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
-    let index_param_local = ir::Ref::Local(ir::LocalID(1));
+    let index_arg = ir::ArgID(0);
 
-    let index = state.load(&index_param_local)?
+    let index = state.load(&index_arg.to_ref())?
         .as_i32()
         .ok_or_else(|| {
             ExecError::illegal_state("parameter to get_func_info_by_index must be i32")
@@ -414,7 +406,7 @@ fn get_func_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
         .ok_or_else(|| ExecError::illegal_state(format!("illegal FunctionInfo index: {index}")))?;
 
     let funcinfo_ptr = state.load(&ir::Ref::Global(funcinfo_ref))?;
-    state.store(&ir::RETURN_REF, funcinfo_ptr)?;
+    state.store(&ir::RESULT_REF, funcinfo_ptr)?;
 
     Ok(())
 }
@@ -449,8 +441,8 @@ fn load_single(state: &mut Interpreter, at: &ir::Ref) -> ExecResult<f32> {
 }
 
 pub(super) fn random_integer(state: &mut Interpreter) -> ExecResult<()> {
-    let from = load_integer(state, &ir::Ref::Local(ir::LocalID(1)))?;
-    let to = load_integer(state, &ir::Ref::Local(ir::LocalID(2)))?;
+    let from = load_integer(state, &ir::ArgID(0).to_ref())?;
+    let to = load_integer(state, &ir::ArgID(1).to_ref())?;
 
     let range = from..to;
     let val = if range.is_empty() {
@@ -459,12 +451,12 @@ pub(super) fn random_integer(state: &mut Interpreter) -> ExecResult<()> {
         rand::rng().random_range(from..to)
     };
 
-    state.store(&ir::RETURN_REF, DynValue::I32(val))
+    state.store(&ir::RESULT_REF, DynValue::I32(val))
 }
 
 pub(super) fn random_single(state: &mut Interpreter) -> ExecResult<()> {
-    let from = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
-    let to = load_single(state, &ir::Ref::Local(ir::LocalID(2)))?;
+    let from = load_single(state, &ir::ArgID(0).to_ref())?;
+    let to = load_single(state, &ir::ArgID(1).to_ref())?;
 
     let range = from..to;
     let val = if range.is_empty() {
@@ -473,7 +465,7 @@ pub(super) fn random_single(state: &mut Interpreter) -> ExecResult<()> {
         rand::rng().random_range(from..to)
     };
 
-    state.store(&ir::RETURN_REF, DynValue::F32(val))
+    state.store(&ir::RESULT_REF, DynValue::F32(val))
 }
 
 pub(super) fn time(state: &mut Interpreter) -> ExecResult<()> {
@@ -481,74 +473,74 @@ pub(super) fn time(state: &mut Interpreter) -> ExecResult<()> {
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or(Duration::ZERO);
 
-    state.store(&ir::RETURN_REF, DynValue::F64(since_epoch.as_secs_f64()))
+    state.store(&ir::RESULT_REF, DynValue::F64(since_epoch.as_secs_f64()))
 }
 
 pub(super) fn pow(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
-    let power = load_single(state, &ir::Ref::Local(ir::LocalID(2)))?;
+    let val = load_single(state, &ir::ArgID(0).to_ref())?;
+    let power = load_single(state, &ir::ArgID(1).to_ref())?;
 
-    state.store(&ir::RETURN_REF, DynValue::F32(val.powf(power)))
+    state.store(&ir::RESULT_REF, DynValue::F32(val.powf(power)))
 }
 
 pub(super) fn sqrt(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
+    let val = load_single(state, &ir::ArgID(0).to_ref())?;
     
-    state.store(&ir::RETURN_REF, DynValue::F32(val.sqrt()))
+    state.store(&ir::RESULT_REF, DynValue::F32(val.sqrt()))
 }
 
 pub(super) fn sin(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
+    let val = load_single(state, &ir::ArgID(0).to_ref())?;
 
-    state.store(&ir::RETURN_REF, DynValue::F32(val.sin()))
+    state.store(&ir::RESULT_REF, DynValue::F32(val.sin()))
 }
 
 pub(super) fn arc_sin(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
+    let val = load_single(state, &ir::ArgID(0).to_ref())?;
 
-    state.store(&ir::RETURN_REF, DynValue::F32(val.asin()))
+    state.store(&ir::RESULT_REF, DynValue::F32(val.asin()))
 }
 
 pub(super) fn cos(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
+    let val = load_single(state, &ir::ArgID(0).to_ref())?;
 
-    state.store(&ir::RETURN_REF, DynValue::F32(val.cos()))
+    state.store(&ir::RESULT_REF, DynValue::F32(val.cos()))
 }
 
 pub(super) fn arc_cos(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
+    let val = load_single(state, &ir::ArgID(0).to_ref())?;
 
-    state.store(&ir::RETURN_REF, DynValue::F32(val.acos()))
+    state.store(&ir::RESULT_REF, DynValue::F32(val.acos()))
 }
 
 pub(super) fn tan(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
+    let val = load_single(state, &ir::ArgID(0).to_ref())?;
 
-    state.store(&ir::RETURN_REF, DynValue::F32(val.tan()))
+    state.store(&ir::RESULT_REF, DynValue::F32(val.tan()))
 }
 
 pub(super) fn arc_tan(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
+    let val = load_single(state, &ir::ArgID(0).to_ref())?;
 
-    state.store(&ir::RETURN_REF, DynValue::F32(val.atan()))
+    state.store(&ir::RESULT_REF, DynValue::F32(val.atan()))
 }
 
 pub(super) fn infinity(state: &mut Interpreter) -> ExecResult<()> {
-    state.store(&ir::RETURN_REF, DynValue::F32(f32::INFINITY))
+    state.store(&ir::RESULT_REF, DynValue::F32(f32::INFINITY))
 }
 
 pub(super) fn is_infinite(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?; 
-    state.store(&ir::RETURN_REF, DynValue::Bool(val.is_infinite()))
+    let val = load_single(state, &ir::ArgID(0).to_ref())?; 
+    state.store(&ir::RESULT_REF, DynValue::Bool(val.is_infinite()))
 }
 
 pub(super) fn nan(state: &mut Interpreter) -> ExecResult<()> {
-    state.store(&ir::RETURN_REF, DynValue::F32(f32::NAN))
+    state.store(&ir::RESULT_REF, DynValue::F32(f32::NAN))
 }
 
 pub(super) fn is_nan(state: &mut Interpreter) -> ExecResult<()> {
-    let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
-    state.store(&ir::RETURN_REF, DynValue::Bool(val.is_nan()))
+    let val = load_single(state, &ir::ArgID(0).to_ref())?;
+    state.store(&ir::RESULT_REF, DynValue::Bool(val.is_nan()))
 }
 
 pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, ir::Type, Vec<ir::Type>)> {

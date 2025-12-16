@@ -1,5 +1,4 @@
 use crate::Label;
-use crate::LocalID;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Ref;
@@ -13,8 +12,7 @@ use std::fmt;
 
 pub const BUILTIN_SRC: &str = "rt";
 
-pub const RETURN_LOCAL: LocalID = LocalID(0);
-pub const RETURN_REF: Ref = Ref::Local(RETURN_LOCAL);
+pub const RESULT_REF: Ref = Ref::Result;
 pub const EXIT_LABEL: Label = Label(0);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]

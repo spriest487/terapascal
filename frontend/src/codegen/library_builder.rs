@@ -1619,10 +1619,12 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
     let dtor_id = lib.metadata.insert_func(None, false, []);
 
     let mut dtor_builder = IRBuilder::new(lib);
-    let self_param = dtor_builder.bind_param(array_type.clone(), "self");
+    
+    let self_arg = ir::ArgID(0);
+    dtor_builder.bind_param(self_arg, array_type.clone(), "self");
 
-    dtor_builder.retain(self_param, false);
-    dtor_builder.gen_dyn_array_dtor_body(self_param, element_type);
+    dtor_builder.retain(self_arg, false);
+    dtor_builder.gen_dyn_array_dtor_body(self_arg, element_type);
     
     let dtor_body = dtor_builder.finish();
 
@@ -1699,16 +1701,18 @@ fn gen_class_dtor(
     let user_dtor = lib.dtors.get(&class_id).cloned();
 
     let mut dtor_builder = IRBuilder::new(lib);
-    let self_param = dtor_builder.bind_param(class_ty.clone(), "self");
-    dtor_builder.retain(self_param, false);
+    
+    let self_arg = ir::ArgID(0);
+    dtor_builder.bind_param(self_arg, class_ty.clone(), "self");
+    dtor_builder.retain(self_arg, false);
 
     let mut has_dtor = false;
     if let Some(user_dtor_id) = user_dtor {
-        dtor_builder.call(user_dtor_id, [self_param.value()], None);
+        dtor_builder.call(user_dtor_id, [self_arg.value()], None);
         has_dtor = true;
     }
     
-    if dtor_builder.gen_class_object_dtor_body(class_id, self_param) {
+    if dtor_builder.gen_class_object_dtor_body(class_id, self_arg) {
         has_dtor = true;
     }
 
@@ -1776,12 +1780,16 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         let mut builder = IRBuilder::new(lib);
         builder.bind_return(sig.return_ty.clone());
 
-        let _self_param = builder.bind_param(ir::ANY_TYPE.temp_ref(), "self");
-        let args_param = builder.bind_param(ir::ANY_TYPE.dyn_array(), "args");
-        builder.bind_param(ir::Type::I32.temp_ref(), "error_out");
-        builder.retain(args_param, false);
+        let self_arg = ir::ArgID(0);
+        let args_arg = ir::ArgID(1);
+        let error_out_arg = ir::ArgID(2);
         
-        builder.gen_invoker_body(func.id, &sig);
+        builder.bind_param(self_arg, ir::ANY_TYPE.temp_ref(), "self");
+        builder.bind_param(args_arg, ir::ANY_TYPE.dyn_array(), "args");
+        builder.bind_param(error_out_arg, ir::Type::I32.temp_ref(), "error_out");
+        builder.retain(args_arg, false);
+        
+        builder.gen_invoker_body(func.id, &sig, self_arg.to_ref(), args_arg.to_ref(), error_out_arg.to_deref());
         
         let body = builder.finish();
         

@@ -1,12 +1,12 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
-use crate::LocalID;
 use crate::Ref;
 use crate::Type;
 use crate::Value;
+use crate::ArgID;
 
 pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
     builder: &mut B,
-    self_param: LocalID,
+    self_param: ArgID,
     elem_ty: &Type,
 ) {
     let array_type = elem_ty.clone().dyn_array();

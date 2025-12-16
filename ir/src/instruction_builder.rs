@@ -4,7 +4,9 @@ mod dyn_array;
 mod invoker;
 mod object;
 
-use crate::BinOpInstruction;
+use crate::instruction_builder::object::gen_class_object_dtor_body;
+use crate::instruction_builder::scope::{BindingStorage, ScopedBinding};
+use crate::{ArgID, BinOpInstruction};
 use crate::FieldID;
 use crate::FunctionID;
 use crate::FunctionSig;
@@ -23,12 +25,10 @@ use crate::UnaryOpInstruction;
 use crate::Value;
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_dyn_array;
-use scope::LocalBinding;
 use scope::LocalStack;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 pub use util::jmp_exists;
-use crate::instruction_builder::object::gen_class_object_dtor_body;
 
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
@@ -45,9 +45,20 @@ pub trait InstructionBuilder {
     fn ir_formatter(&self) -> &impl IRFormatter {
         self.metadata()
     }
+    
+    fn find_named(&self, name: &str) -> Option<&ScopedBinding> {
+        self.local_stack().find_binding(name)
+    }
 
-    fn find_local(&self, name: &str) -> Option<&LocalBinding> {
-        self.local_stack().find_local(name)
+    fn find_local(&self, name: &str) -> Option<LocalBinding> {
+        let binding = self.local_stack().find_binding(name)?;
+        match binding.storage {
+            BindingStorage::Local(id) => Some(LocalBinding {
+                id,
+                by_ref: binding.by_ref,
+            }),
+            _ => None,
+        }
     }
 
     // creates an anonymous unmanaged local of this type
@@ -155,9 +166,9 @@ pub trait InstructionBuilder {
             }
         }
 
-        let locals: Vec<_> = self
+        let bindings: Vec<_> = self
             .local_stack()
-            .current_local_bindings(cleanup_range)
+            .current_bindings(cleanup_range)
             .cloned()
             .collect();
 
@@ -166,9 +177,11 @@ pub trait InstructionBuilder {
         // (for an RC pointer) or insert a call to a structural release function (for
         // complex types containing RC pointers), so should never introduce new locals
         // in the scope being popped
-        for local in locals {
-            self.comment(&format!("expire {}", local.id));
-            self.expire_local(local.id, &local.ty, local.auto_release);
+        for binding in bindings {
+            if let BindingStorage::Local(id) = binding.storage {
+                self.comment(&format!("expire {}", id));
+                self.expire_local(id, &binding.ty, binding.auto_release);
+            }
         }
     }
 
@@ -875,11 +888,11 @@ pub trait InstructionBuilder {
         temp_at_ptr.value()
     }
     
-    fn gen_class_object_dtor_body(&mut self, class_id: TypeDefID, self_param: LocalID) -> bool {
+    fn gen_class_object_dtor_body(&mut self, class_id: TypeDefID, self_param: ArgID) -> bool {
         gen_class_object_dtor_body(self, class_id, self_param)
     }
 
-    fn gen_dyn_array_dtor_body(&mut self, self_param: LocalID, element_type: &Type) {
+    fn gen_dyn_array_dtor_body(&mut self, self_param: ArgID, element_type: &Type) {
         gen_dyn_array_dtor_body(self, self_param, element_type)
     }
 
@@ -934,8 +947,14 @@ pub trait InstructionBuilder {
         util::gen_fill_byte(self, at, count, byte_val);
     }
     
-    fn gen_invoker_body(&mut self, func_id: FunctionID, func_sig: &FunctionSig) {
-        invoker::gen_invoker_body(self, func_id, func_sig);
+    fn gen_invoker_body(&mut self,
+        func_id: FunctionID,
+        func_sig: &FunctionSig,
+        self_ref: Ref,
+        args_ref: Ref,
+        error_out_ref: Ref,
+    ) {
+        invoker::gen_invoker_body(self, func_id, func_sig, self_ref, args_ref, error_out_ref);
     }
 
     fn while_do<CondFn, DoFn>(&mut self, cond_fn: CondFn, do_fn: DoFn)
@@ -958,5 +977,21 @@ pub trait InstructionBuilder {
         Visitor: Fn(&mut Self, &Type, Ref) -> bool + Copy,
     {
         util::visit_deep(self, at, ty, f)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct LocalBinding {
+    pub id: LocalID,
+    pub by_ref: bool,
+}
+
+impl LocalBinding {
+    pub fn to_ref(&self) -> Ref {
+        if self.by_ref {
+            self.id.to_deref()
+        } else {
+            self.id.to_ref()
+        }
     }
 }

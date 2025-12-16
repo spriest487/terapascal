@@ -41,7 +41,7 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
-use terapascal_ir::MetadataSource;
+use terapascal_ir::MetadataSource as _;
 
 #[derive(Debug)]
 pub struct Interpreter {
@@ -281,6 +281,28 @@ impl Interpreter {
         Ok(())
     }
 
+    pub fn store_result(&mut self, val: DynValue) -> ExecResult<()> {
+        let current_frame = self.current_frame_mut()?;
+        let local_ptr = current_frame
+            .get_result_ptr()
+            .map_err(|err| self.add_stack_trace(err.into()))?;
+
+        self.marshaller.marshal_at(&val, &local_ptr)?;
+
+        Ok(())
+    }
+
+    pub fn store_arg(&mut self, id: ir::ArgID, val: DynValue) -> ExecResult<()> {
+        let current_frame = self.current_frame_mut()?;
+        let local_ptr = current_frame
+            .get_arg_ptr(id)
+            .map_err(|err| self.add_stack_trace(err.into()))?;
+
+        self.marshaller.marshal_at(&val, &local_ptr)?;
+
+        Ok(())
+    }
+
     pub fn store_local(&mut self, id: ir::LocalID, val: DynValue) -> ExecResult<()> {
         let current_frame = self.current_frame_mut()?;
         let local_ptr = current_frame
@@ -290,6 +312,36 @@ impl Interpreter {
         self.marshaller.marshal_at(&val, &local_ptr)?;
 
         Ok(())
+    }
+
+    pub fn load_result(&self) -> ExecResult<DynValue> {
+        let current_frame = self.current_frame()?;
+        let local_ptr = current_frame
+            .get_result_ptr()
+            .map_err(|err| self.add_stack_trace(err.into()))?;
+
+        if local_ptr.addr == 0 {
+            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
+        }
+
+        let value = self.marshaller.unmarshal_at(&local_ptr)?;
+
+        Ok(value)
+    }
+
+    pub fn load_arg(&self, id: ir::ArgID) -> ExecResult<DynValue> {
+        let current_frame = self.current_frame()?;
+        let local_ptr = current_frame
+            .get_arg_ptr(id)
+            .map_err(|err| self.add_stack_trace(err.into()))?;
+
+        if local_ptr.addr == 0 {
+            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
+        }
+
+        let value = self.marshaller.unmarshal_at(&local_ptr)?;
+
+        Ok(value)
     }
 
     pub fn load_local(&self, id: ir::LocalID) -> ExecResult<DynValue> {
@@ -314,6 +366,8 @@ impl Interpreter {
                 Ok(())
             },
 
+            ir::Ref::Result => self.store_result(val),
+            ir::Ref::Arg(id) => self.store_arg(*id, val),
             ir::Ref::Local(id) => self.store_local(*id, val),
 
             ir::Ref::Global(name) => {
@@ -362,7 +416,9 @@ impl Interpreter {
                 let msg = "can't read value from discard ref";
                 Err(ExecError::illegal_state(msg))
             },
-
+            
+            ir::Ref::Result => self.load_result(),
+            ir::Ref::Arg(id) => self.load_arg(*id),
             ir::Ref::Local(id) => self.load_local(*id),
 
             ir::Ref::Global(name) => match self.globals.get(name) {
@@ -540,19 +596,13 @@ impl Interpreter {
 
         self.push_stack(func_info.name.clone(), stack_size);
 
-        // store empty result at $0 if needed
+        // store empty result if there is a result value
         let return_ty = func.return_ty();
-        let ret_id = if *return_ty != ir::Type::Nothing {
-            let result_val = self.default_val(return_ty)?;
 
-            let ret_id = self
-                .current_frame_mut()?
-                .add_undeclared_local(return_ty.clone(), &result_val)?;
-            assert_eq!(ret_id, ir::LocalID(0));
-            Some(ret_id)
-        } else {
-            None
-        };
+        if *return_ty != ir::Type::Nothing {
+            let result_val = self.default_val(return_ty)?;
+            self.current_frame_mut()?.declare_result(return_ty.clone(), &result_val)?;
+        }
 
         if args.len() != func.param_tys().len() {
             let msg = format!(
@@ -564,27 +614,21 @@ impl Interpreter {
             return Err(ExecError::illegal_state(msg));
         }
 
-        // store params in either $0.. or $1..
-        let first_arg_id = match ret_id {
-            Some(ret_id) => ir::LocalID(ret_id.0 + 1),
-            None => ir::LocalID(0),
-        };
-
-        for (arg_index, (arg_val, param_ty)) in args.iter().zip(func.param_tys()).enumerate() {
+        for (arg_num, (arg_val, param_ty)) in args.iter().zip(func.param_tys()).enumerate() {
             let arg_id = self
                 .current_frame_mut()?
-                .add_undeclared_local(param_ty.clone(), arg_val)?;
+                .declare_arg(param_ty.clone(), arg_val)?;
 
-            assert_eq!(ir::LocalID(first_arg_id.0 + arg_index), arg_id);
+            assert_eq!(ir::ArgID(arg_num), arg_id);
         }
 
         func.invoke(self)?;
 
-        let result_val = match ret_id {
-            None => None,
-            Some(ret_id) => {
-                let ret_ref = ir::Ref::Local(ret_id);
-                let return_val = self.evaluate(&ir::Value::Ref(ret_ref))?;
+        let result_val = match return_ty {
+            ir::Type::Nothing => None,
+            
+            _ => {
+                let return_val = self.evaluate(&ir::Ref::Result.value())?;
                 Some(return_val)
             },
         };
@@ -839,6 +883,16 @@ impl Interpreter {
                     Err(ExecError::illegal_state(msg))
                 },
             },
+
+            ir::Ref::Result => self.current_frame()?.get_result_ptr().map_err(|err| {
+                let msg = err.to_string();
+                ExecError::illegal_state(msg)
+            }),
+
+            ir::Ref::Arg(id) => self.current_frame()?.get_arg_ptr(*id).map_err(|err| {
+                let msg = err.to_string();
+                ExecError::illegal_state(msg)
+            }),
 
             // let int := 1;
             // @int -> stack address of int val

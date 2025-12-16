@@ -287,7 +287,7 @@ fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &m
         }
 
         typ::Value::Typed(val) => {
-            let val_ref = find_local_ref(ident, builder)
+            let val_ref = find_named_binding(ident, builder)
                 .or_else(|| find_global_ref(val, builder))
                 .unwrap_or_else(|| {
                     panic!(
@@ -304,16 +304,9 @@ fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &m
     }
 }
 
-fn find_local_ref(ident: &ast::Ident, builder: &IRBuilder) -> Option<ir::Ref> {
-    let local = builder.find_local(ident.name.as_str())?;
-    
-    let value_ref = ir::Ref::Local(local.id);
-    let option = if local.by_ref {
-        Some(value_ref.to_deref())
-    } else {
-        Some(value_ref)
-    };
-    option
+fn find_named_binding(ident: &ast::Ident, builder: &IRBuilder) -> Option<ir::Ref> {
+    let binding = builder.find_named(ident.name.as_str())?;
+    Some(binding.to_ref())
 }
 
 fn find_global_ref(value: &TypedValue, builder: &IRBuilder) -> Option<ir::Ref> {
@@ -355,11 +348,11 @@ pub fn translate_exit(exit: &typ::ast::Exit, builder: &mut IRBuilder) {
 
         // we can assume this function has a return register, otherwise an exit stmt
         // wouldn't pass typechecking
-        builder.mov(ir::RETURN_REF, value_val);
+        builder.mov(ir::RESULT_REF, value_val);
 
         // we are effectively reassigning the return ref, so like a normal assignment, we need
         // retain the new value to make it outlive the scope the exit expr appears in
-        builder.retain_deep(ir::RETURN_REF, &value_ty);
+        builder.retain_deep(ir::RESULT_REF, &value_ty);
     }
 
     builder.exit_function();
