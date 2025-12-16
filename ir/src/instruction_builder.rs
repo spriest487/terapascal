@@ -50,17 +50,6 @@ pub trait InstructionBuilder {
         self.local_stack().find_binding(name)
     }
 
-    fn find_local(&self, name: &str) -> Option<LocalBinding> {
-        let binding = self.local_stack().find_binding(name)?;
-        match binding.storage {
-            BindingStorage::Local(id) => Some(LocalBinding {
-                id,
-                by_ref: binding.by_ref,
-            }),
-            _ => None,
-        }
-    }
-
     // creates an anonymous unmanaged local of this type
     fn local_temp(&mut self, ty: Type) -> LocalID {
         assert_ne!(Type::Nothing, ty);

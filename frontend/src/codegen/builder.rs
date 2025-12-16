@@ -323,7 +323,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
                 let capture_field_ref = builder.local_temp(field_def.ty.temp_ref());
                 builder.field(capture_field_ref, closure_ref, closure_ptr_ty.clone(), *field_id);
 
-                let captured_local = builder.find_local(field_name).unwrap();
+                let captured_local = builder.find_named(field_name).unwrap();
                 builder.mov(capture_field_ref.to_deref(), captured_local.to_ref());
                 builder.retain_deep(capture_field_ref.to_deref(), &field_def.ty);
             }
