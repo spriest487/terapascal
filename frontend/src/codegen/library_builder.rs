@@ -1789,7 +1789,13 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         builder.bind_param(error_out_arg, ir::Type::I32.temp_ref(), "error_out");
         builder.retain(args_arg, false);
         
-        builder.gen_invoker_body(func.id, &sig, self_arg.to_ref(), args_arg.to_ref(), error_out_arg.to_deref());
+        builder.gen_invoker_body(
+            func.id,
+            &sig,
+            self_arg.to_ref(),
+            args_arg.to_ref(),
+            error_out_arg.to_deref(),
+        );
         
         let body = builder.finish();
         

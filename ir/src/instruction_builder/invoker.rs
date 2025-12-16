@@ -54,7 +54,7 @@ where
     let arg_array_type = Type::any().dyn_array();
 
     builder.comment("exit with error if arg array is null");
-    
+
     builder.local_begin();
     {
         let args_null = builder.eq_to_val(args_ref.clone(), Value::LiteralNull);
@@ -115,7 +115,7 @@ where
                     let index_val = Value::LiteralI32(arg_index);
 
                     builder.comment(format!("param {}: arg {}", param_index, arg_index));
-                    builder.element(arg_ref, arg_ref.clone(), index_val, arg_array_type.clone());
+                    builder.element(arg_ref, args_ref.clone(), index_val, arg_array_type.clone());
                 }
             },
             |builder| {
