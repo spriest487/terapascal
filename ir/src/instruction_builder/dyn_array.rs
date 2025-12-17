@@ -20,13 +20,13 @@ pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
     builder.length(arr_high, self_param, array_type.clone());
     builder.sub(arr_high, arr_high, Value::LiteralI32(1));
 
-    let el_ptr = builder.local_temp(elem_ty.clone().ptr());
+    let element_ref = builder.local_temp(elem_ty.clone().temp_ref());
 
     builder.comment("release every element");
     builder.counter_loop(counter, Value::LiteralI32(1), arr_high, |builder| {
-        builder.element(el_ptr, self_param, counter, array_type.clone());
+        builder.element(element_ref, self_param, counter, array_type.clone());
 
-        builder.release_deep(el_ptr.to_deref(), &elem_ty);
+        builder.release_deep(element_ref.to_deref(), &elem_ty);
     });
 }
 
