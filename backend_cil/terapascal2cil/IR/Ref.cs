@@ -7,6 +7,20 @@ public readonly record struct LocalID(ulong ID) : IComparable<LocalID> {
     public int CompareTo(LocalID other) {
         return this.ID.CompareTo(other.ID);
     }
+
+    public override string ToString() {
+        return $"%{this.ID}";
+    }
+}
+
+public readonly record struct ArgID(ulong ID) : IComparable<ArgID> {
+    public int CompareTo(ArgID other) {
+        return this.ID.CompareTo(other.ID);
+    }
+
+    public override string ToString() {
+        return $"%Arg{this.ID}";
+    }
 }
 
 public readonly record struct FunctionID(ulong ID) : IComparable<FunctionID> {
@@ -86,6 +100,10 @@ public class StaticClosureIDFormatter : IMessagePackFormatter<StaticClosureID> {
 }
 
 public interface IRef;
+
+public record ResultRef : IRef;
+
+public record ArgRef(ArgID ID) : IRef;
 public record LocalRef(LocalID ID) : IRef;
 public record GlobalRef(IGlobalRef Global) : IRef;
 public record Deref(IValue Value) : IRef;
@@ -123,6 +141,15 @@ public class RefFormatter : IMessagePackFormatter<IRef> {
         var key = reader.ReadString();
 
         switch (key) {
+            case "Result": {
+                return new ResultRef();
+            }
+
+            case "Arg": {
+                var id = new ArgID(reader.ReadUInt64());
+                return new ArgRef(id);
+            }
+            
             case "Local": {
                 var id = new LocalID(reader.ReadUInt64());
                 return new LocalRef(id);

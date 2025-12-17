@@ -15,6 +15,8 @@ public class InstructionBuilder {
     private readonly MethodDefinition method;
 
     private readonly Dictionary<IR.LocalID, LocalMapping> localMappings;
+    private readonly Dictionary<IR.ArgID, LocalMapping> argMappings;
+    private LocalMapping? resultMapping;
 
     private readonly ILProcessor body;
 
@@ -37,6 +39,8 @@ public class InstructionBuilder {
         this.assemblyBuilder = assemblyBuilder;
 
         this.localMappings = new Dictionary<IR.LocalID, LocalMapping>();
+        this.argMappings = new Dictionary<IR.ArgID, LocalMapping>();
+        this.resultMapping = null;
         
         this.body = this.method.Body.GetILProcessor();
 
@@ -54,22 +58,18 @@ public class InstructionBuilder {
             var returnVar = new VariableDefinition(this.method.ReturnType);
             this.method.Body.Variables.Add(returnVar);
 
-            var mapping = new LocalMapping(returnType, returnVar.Index);
-            this.localMappings.Add(new IR.LocalID(0), mapping);
+            this.resultMapping = new LocalMapping(returnType, returnVar.Index);
         }
 
-        var firstLocal = this.HasReturnValue ? 1UL : 0UL;
-        
         var paramTypes = function.Signature.ParameterTypes;
 
         // params don't need local vars, we can reference them with ldarg
         for (var i = 0; i < paramTypes.Count; i += 1) {
-            var paramLocal = new IR.LocalID(firstLocal + (ulong)i);
+            var paramLocal = new IR.ArgID((ulong)i);
             var paramType = paramTypes[i];
 
-            // use negative "variable" indices to indicate arg positions
-            var mapping = new LocalMapping(paramType, ~i);
-            this.localMappings.Add(paramLocal, mapping);
+            var mapping = new LocalMapping(paramType, i);
+            this.argMappings.Add(paramLocal, mapping);
         }
     }
 
@@ -934,13 +934,22 @@ public class InstructionBuilder {
 
     private void LoadRefAddr(IR.IRef ofRef) {
         switch (ofRef) {
+            case IR.ResultRef: {
+                this.body.Emit(OpCodes.Ldloca, this.GetResultIndex());
+                
+                break;
+            }
+            
+            case IR.ArgRef(var arg): {
+                var varIndex = this.GetArgIndex(arg);
+                this.body.Emit(OpCodes.Ldarga, varIndex);
+
+                break;
+            }
+            
             case IR.LocalRef(var local): {
                 var varIndex = this.GetVariableIndex(local);
-                if (varIndex >= 0) {
-                    this.body.Emit(OpCodes.Ldloca, varIndex);
-                } else {
-                    this.body.Emit(OpCodes.Ldarga, ~varIndex);
-                }
+                this.body.Emit(OpCodes.Ldloca, varIndex);
 
                 break;
             }
@@ -1016,6 +1025,22 @@ public class InstructionBuilder {
 
     private IR.IType GetRefType(IR.IRef @ref) {
         switch (@ref) {
+            case IR.ResultRef: {
+                if (this.resultMapping.HasValue) {
+                    return this.resultMapping.Value.Type;
+                }
+
+                break;
+            }
+            
+            case IR.ArgRef(var id): {
+                if (this.argMappings.TryGetValue(id, out var mapping)) {
+                    return mapping.Type;
+                }
+
+                break;
+            }
+            
             case IR.LocalRef(var id): {
                 if (this.localMappings.TryGetValue(id, out var mapping)) {
                     return mapping.Type;
@@ -1103,13 +1128,22 @@ public class InstructionBuilder {
 
     private void LoadRef(IR.IRef loadRef) {
         switch (loadRef) {
-            case IR.LocalRef localRef: {
-                var varIndex = this.GetVariableIndex(localRef.ID);
-                if (varIndex >= 0) {
-                    this.body.Emit(OpCodes.Ldloc, varIndex);
-                } else {
-                    this.body.Emit(OpCodes.Ldarg, ~varIndex);
-                }
+            case IR.ResultRef: {
+                this.body.Emit(OpCodes.Ldloc, this.GetResultIndex());
+                
+                break;
+            }
+            
+            case IR.ArgRef(var arg): {
+                var varIndex = this.GetArgIndex(arg);
+                this.body.Emit(OpCodes.Ldarg, varIndex);
+
+                break;
+            }
+            
+            case IR.LocalRef(var local): {
+                var varIndex = this.GetVariableIndex(local);
+                this.body.Emit(OpCodes.Ldloc, varIndex);
 
                 break;
             }
@@ -1190,16 +1224,29 @@ public class InstructionBuilder {
 
     private void StoreRef(IR.IRef? storeRef, Action loadValue) {
         switch (storeRef) {
-            case IR.LocalRef localRef: {
+            case IR.ResultRef: {
                 loadValue();
                 
-                var varIndex = this.GetVariableIndex(localRef.ID);
-                if (varIndex >= 0) {
-                    this.body.Emit(OpCodes.Stloc, varIndex);
-                } else {
-                    var argIndex = ~varIndex;
-                    this.body.Emit(OpCodes.Starg, argIndex);
-                }
+                var varIndex = this.GetResultIndex();
+                this.body.Emit(OpCodes.Stloc, varIndex);
+
+                break;
+            }
+            
+            case IR.ArgRef(var id): {
+                loadValue();
+                
+                var varIndex = this.GetArgIndex(id);
+                this.body.Emit(OpCodes.Starg, varIndex);
+
+                break;
+            }
+            
+            case IR.LocalRef(var id): {
+                loadValue();
+                
+                var varIndex = this.GetVariableIndex(id);
+                this.body.Emit(OpCodes.Stloc, varIndex);
 
                 break;
             }
@@ -1258,13 +1305,26 @@ public class InstructionBuilder {
             }
         }
     }
+    
+    private int GetResultIndex() {
+        return this.resultMapping?.VariableIndex ?? 
+            throw new InvalidDataException("invalid instruction: result variable was not found in this scope");
+    }
+    
+    private int GetArgIndex(IR.ArgID arg) {
+        if (this.argMappings.TryGetValue(arg, out var mapping)) {
+            return mapping.VariableIndex;
+        }
+
+        throw new InvalidDataException($"invalid instruction: {arg} was not found in this scope");
+    }
 
     private int GetVariableIndex(IR.LocalID local) {
         if (this.localMappings.TryGetValue(local, out var mapping)) {
             return mapping.VariableIndex;
         }
 
-        throw new InvalidDataException($"invalid instruction: local {local.ID} was not found in this scope");
+        throw new InvalidDataException($"invalid instruction: {local} was not found in this scope");
     }
 
     private void BuildBinOp(IR.BinOpInstruction binOp, OpCode op) {
