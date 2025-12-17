@@ -1623,7 +1623,6 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
     let self_arg = ir::ArgID(0);
     dtor_builder.bind_param(self_arg, array_type.clone(), "self");
 
-    dtor_builder.retain(self_arg, false);
     dtor_builder.gen_dyn_array_dtor_body(self_arg, element_type);
     
     let dtor_body = dtor_builder.finish();
@@ -1704,7 +1703,6 @@ fn gen_class_dtor(
     
     let self_arg = ir::ArgID(0);
     dtor_builder.bind_param(self_arg, class_ty.clone(), "self");
-    dtor_builder.retain(self_arg, false);
 
     let mut has_dtor = false;
     if let Some(user_dtor_id) = user_dtor {
@@ -1787,8 +1785,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         builder.bind_param(self_arg, ir::ANY_TYPE.temp_ref(), "self");
         builder.bind_param(args_arg, ir::ANY_TYPE.dyn_array(), "args");
         builder.bind_param(error_out_arg, ir::Type::I32.temp_ref(), "error_out");
-        builder.retain(args_arg, false);
-        
+
         builder.gen_invoker_body(
             func.id,
             &sig,

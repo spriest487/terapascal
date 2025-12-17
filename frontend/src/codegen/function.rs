@@ -330,11 +330,6 @@ fn bind_function_params(
         id.0 += 1;
     }
 
-    // TODO: func arg retain rework 
-    for (param_id, param_ty) in &bound_params {
-        builder.retain_deep(*param_id, param_ty);
-    }
-
     bound_params
 }
 

@@ -141,10 +141,7 @@ impl LocalStack {
             assert!(ty.is_temp_ref(), "by-ref parameters must have temp reference type");
         }
 
-        // TODO: fix param RC so they aren't auto-retained *or* released
-        let autorelease = true;
-
-        self.bind(ty, BindingStorage::Arg(id), Some(name), autorelease, by_ref)
+        self.bind(ty, BindingStorage::Arg(id), Some(name), false, by_ref)
     }
 
     // used for implicit anonymous params like closure pointer
