@@ -7,7 +7,7 @@ use crate::ty::ObjectID;
 use crate::ty_decl::InterfaceID;
 use crate::val::Ref;
 use crate::val::Value;
-use crate::NamePath;
+use crate::{NamePath, TypeDefID};
 use crate::UnaryOpInstruction;
 use std::cell::Cell;
 use std::fmt;
@@ -353,6 +353,7 @@ pub trait IRFormatter {
     }
 
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result;
+    fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result;
     fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result;
     fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result;
     fn format_field(&self, of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result;
@@ -420,6 +421,10 @@ pub struct RawInstructionFormatter;
 impl IRFormatter for RawInstructionFormatter {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
         write!(f, "{}", ty)
+    }
+
+    fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result {
+        write!(f, "{{type {}}}", id)
     }
 
     fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result {
@@ -497,6 +502,10 @@ impl<'f, F: IRFormatter> IRFormatter for StatefulIndentedFormatter<'f, F> {
 
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
         self.wrapped.format_type(ty, f)
+    }
+
+    fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result {
+        self.wrapped.format_type_def(id, f)
     }
 
     fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result {

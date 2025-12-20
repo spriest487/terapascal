@@ -630,6 +630,17 @@ impl IRFormatter for Metadata {
         write!(f, "{}", self.pretty_ty_name(ty))
     }
 
+    fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result {
+        match self.type_decls.get(&id) {
+            Some(TypeDecl::Def(def)) => {
+                write!(f, "{}", def.to_pretty_string(|ty| self.pretty_ty_name(ty)))
+            }
+            _ => {
+                write!(f, "{}", id)
+            },
+        }
+    }
+
     fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result {
         match val {
             Value::Ref(r) => self.format_ref(r, f),

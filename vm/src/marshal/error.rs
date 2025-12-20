@@ -83,11 +83,10 @@ impl MarshalError {
                 "tag {:?} for variant {} was out of range",
                 tag, variant_id
             ),
-            MarshalError::FieldOutOfRange { struct_id, field } => write!(
-                f,
-                "field {} for struct {} was out of range",
-                field, struct_id
-            ),
+            MarshalError::FieldOutOfRange { struct_id, field } => {
+                let type_name = struct_id.to_pretty_string(format); 
+                write!(f, "field {type_name}.{field} was out of range")
+            },
             MarshalError::InvalidRefCountValue(val) => {
                 write!(f, "value is not a valid ref count: {:?}", val)
             },

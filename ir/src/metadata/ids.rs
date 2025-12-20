@@ -1,4 +1,5 @@
-﻿use crate::Type;
+﻿use crate::IRFormatter;
+use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -53,6 +54,13 @@ impl TypeDefID {
 
     pub fn to_function_type(self) -> Type {
         Type::Function(self)
+    }
+
+    pub fn to_pretty_string(self, format: &impl IRFormatter) -> String {
+        let mut string = String::new();
+        _ = format.format_type_def(self, &mut string);
+        
+        string
     }
 }
 
