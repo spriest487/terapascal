@@ -145,6 +145,12 @@ impl From<LocalID> for Value {
     }
 }
 
+impl From<ArgID> for Value {
+    fn from(arg_id: ArgID) -> Self {
+        Self::from(Ref::Arg(arg_id))
+    }
+}
+
 impl From<GlobalRef> for Value {
     fn from(global_ref: GlobalRef) -> Self {
         Self::from(Ref::Global(global_ref))
