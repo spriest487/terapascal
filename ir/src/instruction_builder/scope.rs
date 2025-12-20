@@ -145,8 +145,8 @@ impl LocalStack {
     }
 
     // used for implicit anonymous params like closure pointer
-    pub fn bind_unnamed_param(&mut self, id: ArgID, ty: Type) {
-        self.bind(ty, BindingStorage::Arg(id), None, false, false);
+    pub fn bind_unnamed_param(&mut self, id: ArgID, ty: Type, by_ref: bool) {
+        self.bind(ty, BindingStorage::Arg(id), None, false, by_ref);
     }
 
     // closure capture (by-ref because the actual value is a field ref)

@@ -562,7 +562,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
     // binds an anonymous local binding for the closure pointer of a function
     pub fn bind_closure_ptr(&mut self, id: ArgID) {
-        self.local_stack_mut().bind_unnamed_param(id, ANY_TYPE)
+        self.local_stack_mut().bind_unnamed_param(id, ANY_TYPE, false)
     }
 
     pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {
