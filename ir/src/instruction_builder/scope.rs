@@ -49,8 +49,18 @@ impl LocalStack {
 
     // locals from all scopes up to the target scope, in order of deepest->shallowest,
     // then in reverse allocation order
-    pub fn current_bindings(&self, range: impl Into<RangeInclusive<usize>>) -> impl Iterator<Item=&ScopedBinding> {
+    pub fn bindings_in_scope(
+        &self, 
+        range: impl Into<RangeInclusive<usize>>,
+    ) -> impl Iterator<Item=&ScopedBinding> {
         self.scopes[range.into()]
+            .iter()
+            .rev()
+            .flat_map(|scope| scope.bindings().iter().rev())
+    }
+    
+    pub fn current_bindings(&self)  -> impl Iterator<Item=&ScopedBinding>{
+        self.scopes
             .iter()
             .rev()
             .flat_map(|scope| scope.bindings().iter().rev())
@@ -90,6 +100,11 @@ impl LocalStack {
         self.locals.into_iter()
             .map(|(id, slot)| (id, slot.ty))
             .collect()
+    }
+    
+    pub fn locals(&self) -> impl Iterator<Item=(LocalID, &Type)> {
+        self.locals.iter()
+            .map(|(id, slot)| (*id, &slot.ty))
     }
 
     pub fn current_scope(&self) -> &LocalScope {

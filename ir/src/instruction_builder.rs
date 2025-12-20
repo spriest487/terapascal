@@ -158,7 +158,7 @@ pub trait InstructionBuilder {
 
         let bindings: Vec<_> = self
             .local_stack()
-            .current_bindings(cleanup_range)
+            .bindings_in_scope(cleanup_range)
             .cloned()
             .collect();
 
