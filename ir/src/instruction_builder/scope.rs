@@ -136,12 +136,12 @@ impl LocalStack {
         self.bind(ty, BindingStorage::Result, None, false, false)
     }
 
-    pub fn bind_param(&mut self, id: ArgID, ty: Type, name: Arc<String>, by_ref: bool) {
+    pub fn bind_param(&mut self, id: ArgID, ty: Type, name: impl Into<Arc<String>>, by_ref: bool) {
         if by_ref {
             assert!(ty.is_temp_ref(), "by-ref parameters must have temp reference type");
         }
 
-        self.bind(ty, BindingStorage::Arg(id), Some(name), false, by_ref)
+        self.bind(ty, BindingStorage::Arg(id), Some(name.into()), false, by_ref)
     }
 
     // used for implicit anonymous params like closure pointer
