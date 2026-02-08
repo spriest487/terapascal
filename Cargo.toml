@@ -32,6 +32,7 @@ members = [
 debug-server = ["terapascal-vm/debug_server"]
 backend-cil = ["dep:terapascal-backend-cil"]
 backend-c = ["dep:terapascal-backend-c"]
+default = ["backend-c"]
 
 [profile.release]
 debug = true
