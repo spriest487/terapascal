@@ -89,7 +89,7 @@ impl TestCase {
         dump_output_buffers(&stdout, &stderr);
     }
     
-    fn run_interpreted<RunFn>(&self, opts: &Opts, run: RunFn) -> io::Result<ExitStatus> 
+    fn run_vm<RunFn>(&self, opts: &Opts, run: RunFn) -> io::Result<ExitStatus> 
         where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
     {        
         let mut build_stdout = Vec::new();
@@ -274,7 +274,7 @@ impl TestCase {
         let mut step_failed = false;
         
         let runner = match opts.exec {
-            ExecutionMethod::Interpret => Self::run_interpreted,
+            ExecutionMethod::Vm => Self::run_vm,
             ExecutionMethod::Dotnet => Self::run_dotnet,
             ExecutionMethod::Clang => Self::run_clang,
         };

@@ -1,7 +1,7 @@
 use crate::dyn_value::DynValue;
 use crate::ir;
 use crate::ExecResult;
-use crate::Interpreter;
+use crate::Vm;
 use std::cmp::Ordering;
 use std::fmt;
 use std::mem::size_of;
@@ -47,7 +47,7 @@ impl Pointer {
         self.addr == 0
     }
 
-    pub fn deref_ptr(&self, state: &Interpreter) -> ExecResult<DynValue> {
+    pub fn deref_ptr(&self, state: &Vm) -> ExecResult<DynValue> {
         state.load_indirect(self)
     }
 

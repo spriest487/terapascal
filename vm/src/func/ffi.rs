@@ -1,7 +1,7 @@
 use crate::ir;
 use crate::marshal::ForeignType;
 use crate::ExecResult;
-use crate::Interpreter;
+use crate::Vm;
 use ::libffi::middle::Cif;
 use ::libffi::raw::ffi_call as ffi_raw_call;
 use smallvec::*;
@@ -39,7 +39,7 @@ impl FfiInvoker {
         }
     }
 
-    pub fn invoke(&self, state: &mut Interpreter) -> ExecResult<()> {
+    pub fn invoke(&self, state: &mut Vm) -> ExecResult<()> {
         // marshal args into a byte vec - we need to pass pointers into this vec, so it can't
         // be reallocated, and we need to calculate the total size now
         let params_total_size = self.ffi_param_tys.iter().map(|p| p.size()).sum();

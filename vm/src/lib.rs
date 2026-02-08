@@ -44,7 +44,7 @@ use terapascal_ir::builtin::string_def;
 use terapascal_ir::MetadataSource;
 
 #[derive(Debug)]
-pub struct Interpreter {
+pub struct Vm {
     metadata: Rc<ir::Metadata>,
     stack: Vec<StackFrame>,
     globals: HashMap<ir::GlobalRef, GlobalValue>,
@@ -53,7 +53,7 @@ pub struct Interpreter {
 
     marshaller: Rc<Marshaller>,
 
-    opts: InterpreterOpts,
+    opts: ExecOpts,
 
     functions: BTreeMap<ir::FunctionID, FunctionInfo>,
 
@@ -68,8 +68,8 @@ pub struct Interpreter {
     runtime_methods: Vec<ir::MethodInfo>,
 }
 
-impl Interpreter {
-    pub fn new(opts: InterpreterOpts) -> Self {
+impl Vm {
+    pub fn new(opts: ExecOpts) -> Self {
         let globals = HashMap::new();
 
         let mut marshaller = Marshaller::new();
@@ -880,7 +880,7 @@ impl Interpreter {
         }
     }
 
-    pub fn opts(&self) -> &InterpreterOpts {
+    pub fn opts(&self) -> &ExecOpts {
         &self.opts
     }
 
@@ -2831,7 +2831,7 @@ struct FunctionInfo {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct InterpreterOpts {
+pub struct ExecOpts {
     pub trace_heap: bool,
     pub trace_rc: bool,
     pub trace_ir: bool,
@@ -2841,7 +2841,7 @@ pub struct InterpreterOpts {
     pub verbose: bool,
 }
 
-impl Default for InterpreterOpts {
+impl Default for ExecOpts {
     fn default() -> Self {
         Self {
             trace_heap: false,

@@ -1,24 +1,25 @@
 mod args;
-mod compile_error;
+mod error;
+
+#[cfg(feature = "backend-c")]
+mod clang;
+
+#[cfg(feature = "backend-cil")]
+mod dotnet;
 
 use crate::args::*;
-use crate::compile_error::*;
+use crate::error::*;
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::path::Path;
-use std::path::PathBuf;
 use std::process;
-use std::process::Command;
-use std::process::Stdio;
 use std::time::Duration;
 use structopt::StructOpt;
-use terapascal_backend_c as backend_c;
-use terapascal_backend_cil as backend_cil;
 use terapascal_build::build;
 use terapascal_build::error::BuildError;
 use terapascal_build::error::BuildResult;
@@ -37,8 +38,17 @@ use terapascal_common::CIL_LIB_EXT;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
-use terapascal_vm::Interpreter;
-use terapascal_vm::InterpreterOpts;
+use terapascal_vm::Vm;
+use terapascal_vm::ExecOpts;
+
+#[cfg(feature = "backend-c")]
+use clang::clang_compile;
+
+#[cfg(feature = "backend-c")]
+use clang::clang_print;
+
+#[cfg(feature = "backend-cil")]
+use dotnet::dotnet_build;
 
 fn compile(args: Args) -> Result<(), RunError> {
     if args.output.is_some() && args.print_stage.is_some() {
@@ -124,7 +134,7 @@ fn load_lib(path: &Path) -> BuildResult<ir::Library> {
     Ok(module)
 }
 
-fn print_output<F>(out_path: Option<&PathBuf>, f: F) -> Result<(), RunError>
+fn print_output<F>(out_path: Option<&Path>, f: F) -> Result<(), RunError>
 where
     F: FnOnce(&mut dyn io::Write) -> io::Result<()>,
 {
@@ -137,7 +147,7 @@ where
                 None => Ok(()),
             };
 
-            out_span = Span::zero(out_path.clone());
+            out_span = Span::zero(out_path);
 
             create_dirs
                 .and_then(|_| File::create(out_path))
@@ -173,7 +183,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
     }
     
     match output.artifact? {
-        BuildArtifact::PreprocessedText(units) => print_output(args.output.as_ref(), |dst| {
+        BuildArtifact::PreprocessedText(units) => print_output(args.output_path(), |dst| {
             for pp_unit in units {
                 writeln!(dst, "{}:", pp_unit.filename.display())?;
                 write!(dst, "{}", pp_unit.source)?;
@@ -181,7 +191,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
             Ok(())
         }),
 
-        BuildArtifact::ParsedUnits(parse_output) => print_output(args.output.as_ref(), |dst| {
+        BuildArtifact::ParsedUnits(parse_output) => print_output(args.output_path(), |dst| {
             for (path, unit) in parse_output.units {
                 writeln!(dst, "{}:", path.display())?;
                 write!(dst, "{}", unit)?;
@@ -190,60 +200,57 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
             Ok(())
         }),
 
-        BuildArtifact::TypedModule(module) => print_output(args.output.as_ref(), |dst| {
-            for unit in &module.units {
-                writeln!(dst, "{}:", unit.path.display())?;
-                write!(dst, "{}", unit.unit)?;
-            }
+        BuildArtifact::TypedModule(module) => {
+            print_output(
+                args.output_path(), 
+                |dst| {
+                    for unit in &module.units {
+                        writeln!(dst, "{}:", unit.path.display())?;
+                        write!(dst, "{}", unit.unit)?;
+                    }
 
-            Ok(())
-        }),
+                    Ok(())
+                }
+            )
+        },
 
         BuildArtifact::Library(lib) => {
             if let Some(BuildStage::Codegen) = args.print_stage {
-                return print_output(args.output.as_ref(), |dst| write!(dst, "{}", lib));
+                return print_output(
+                    args.output_path(), 
+                    |dst| write!(dst, "{}", lib)
+                );
             }
 
-            if let Some(output_arg) = args.output.as_ref() {
-                let output_ext = args.output.as_ref()
-                    .map(|out_path| get_extension(out_path))
-                    .unwrap_or_else(String::new);
+            if let Some(out_path) = args.output_path() {
+                let output_ext = out_path
+                    .extension()
+                    .map(|ext| ext.to_os_string())
+                    .unwrap_or_else(OsString::new);
 
                 if output_ext.eq_ignore_ascii_case("c") {
-                    // output C code
-                    let c_unit = translate_c(&lib, args);
-
-                    print_output(Some(output_arg), |dst| {
-                        write!(dst, "{}", c_unit)
-                    })?;
-
-                    try_clang_format(output_arg);
-                    
+                    clang_print(&lib, args, out_path)?;                    
                     Ok(())
                 } else if output_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
                     // the IR object is the output
                     let module_bytes = ir::encode_lib(&lib)?;
 
-                    print_output(args.output.as_ref(), |dst| {
+                    print_output(Some(out_path), |dst| {
                         dst.write_all(&module_bytes)
                     })
                 } else if output_ext.eq_ignore_ascii_case(env::consts::EXE_EXTENSION) {
-                    clang_compile(&lib, args, output_arg.as_os_str())
-                        .map_err(|err| RunError::ClangBuildFailed(err))?;
-
-                    try_clang_format(output_arg);
-                    
+                    clang_compile(&lib, args, out_path)?;
                     Ok(())
                 } else if output_ext.eq_ignore_ascii_case(CIL_LIB_EXT) && args.arch == TargetArch::Cil {
-                    backend_cil::build_assembly(&lib, output_arg.as_path(), args.verbose)?;
+                    dotnet_build(&lib, &args, out_path)?;
 
                     Ok(())
                 } else {
-                    return Err(RunError::UnknownOutputFormat(output_ext))
+                    return Err(RunError::UnknownOutputExt(output_ext))
                 }
             } else {
                 // execute the IR immediately
-                let interpret_opts = InterpreterOpts {
+                let exec_opts = ExecOpts {
                     trace_rc: args.trace_rc,
                     trace_heap: args.trace_heap,
                     trace_ir: args.trace_ir,
@@ -253,9 +260,9 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     verbose: args.verbose,
                 };
 
-                let mut interpreter = Interpreter::new(interpret_opts);
-                interpreter.load_lib(&lib)?;
-                interpreter.shutdown()?;
+                let mut vm = Vm::new(exec_opts);
+                vm.load_lib(&lib)?;
+                vm.shutdown()?;
 
                 Ok(())
             }
@@ -263,100 +270,25 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
     }
 }
 
-fn translate_c<'a>(module: &'a ir::Library, args: &Args) -> backend_c::ast::Unit<'a> {
-    let c_opts = backend_c::Options {
-        enable_rtti: args.rtti,
-        trace_heap: args.trace_heap,
-        trace_rc: args.trace_rc,
-        trace_ir: args.trace_ir,
-        debug: args.debug,
-    };
+#[cfg(not(feature = "backend-c"))]
+pub(crate) fn clang_compile(_module: &ir::Library, _args: &Args, _out_path: &Path) -> Result<(), RunError> {
+    let msg = "C backend is unavailable".to_string();
 
-    backend_c::translate(&module, c_opts)
+    Err(RunError::InvalidArguments(msg))
 }
 
-fn clang_compile(module: &ir::Library, args: &Args, out_path: &OsStr) -> io::Result<()> {
-    let c_unit = translate_c(module, args);
-    
-    let mut clang_cmd = Command::new("clang");
-    clang_cmd
-        .arg("-Werror")
-        .arg("-Wall")
-        .arg("-Wextra")
-        .arg("-Wno-unused-function")
-        .arg("-Wno-unused-parameter")
-        .arg("-Wno-unused-variable")
-        .arg("-Wno-unused-label")
-        .arg("-Wno-address-of-packed-member")
-        .arg("-x").arg("c");
-    
-    let debug = args.debug || args.debug_codeview;
-    
-    if debug {
-        // debug: generates a source file next to the output
-        let c_file_path = PathBuf::from(out_path).with_extension("c");
+#[cfg(not(feature = "backend-c"))]
+pub(crate) fn clang_print(_module: &ir::Library, _args: &Args, _out_path: &Path) -> Result<(), RunError> {
+    let msg = "C backend is unavailable".to_string();
 
-        let mut c_file = File::create(&c_file_path)?;
-        write!(c_file, "{c_unit}")?;
-
-        clang_cmd.arg(c_file_path)
-            .arg("-g")
-            .arg("-O0");
-
-        if args.debug_codeview {
-            clang_cmd.arg("-gcodeview");
-        }
-    } else {
-        // release: compile from stdin
-        clang_cmd.arg("-")
-            .arg("-O2")
-            .stdin(Stdio::piped());
-    }
-
-    clang_cmd.arg("-o").arg(out_path);
-
-    let mut clang = if debug {
-        clang_cmd.spawn()?
-    } else {
-        let mut clang = clang_cmd.spawn()?;
-
-        let mut clang_in = clang.stdin
-            .take()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "unable to write to stdin"))?;
-
-        write!(clang_in, "{}", c_unit)?;
-        clang_in.flush()?;
-        
-        clang
-    };
-
-    let status = clang.wait()?;
-
-    if !status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, status.to_string()));
-    }
-    
-    Ok(())
+    Err(RunError::InvalidArguments(msg))
 }
 
-fn try_clang_format(path: &Path) {
-    let mut clang_cmd = Command::new("clang-format");
-    clang_cmd.arg("-i").arg(path);
-    
-    let result = clang_cmd
-        .spawn()
-        .and_then(|mut child| child.wait());
-    
-    match result {
-        Ok(exit_status) if exit_status.success() => {}
+#[cfg(not(feature = "backend-cil"))]
+pub(crate) fn dotnet_build(_module: &ir::Library, _args: &Args, _out_path: &Path) -> Result<(), RunError> {
+    let msg = "CIL backend is unavailable".to_string();
 
-        Ok(bad_status) => {
-            eprintln!("clang-format failed: status {bad_status}")
-        }
-        Err(err) => {
-            eprintln!("clang-format failed: {err}")
-        }
-    }
+    Err(RunError::InvalidArguments(msg))
 }
 
 fn get_extension(path: &Path) -> String {

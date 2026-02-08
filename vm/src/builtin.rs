@@ -3,7 +3,7 @@ use crate::ir;
 use crate::DynValue;
 use crate::ExecError;
 use crate::ExecResult;
-use crate::Interpreter;
+use crate::Vm;
 use crate::ObjectID;
 use crate::Pointer;
 use rand::Rng;
@@ -16,7 +16,7 @@ use std::iter;
 use std::time::Duration;
 use std::time::SystemTime;
 
-fn primitive_to_str<T, UnwrapFn>(state: &mut Interpreter, unwrap_fn: UnwrapFn) -> ExecResult<()>
+fn primitive_to_str<T, UnwrapFn>(state: &mut Vm, unwrap_fn: UnwrapFn) -> ExecResult<()>
 where
     T: fmt::Display,
     UnwrapFn: FnOnce(&DynValue) -> Option<T>,
@@ -35,69 +35,69 @@ where
 }
 
 /// %1: I8 -> %0: String
-pub(super) fn i8_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn i8_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_i8)
 }
 
 /// %1: U8 -> %0: String
-pub(super) fn u8_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn u8_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_u8)
 }
 
 /// %1: I16 -> %0: String
-pub(super) fn i16_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn i16_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_i16)
 }
 
 /// %1: U16 -> %0: String
-pub(super) fn u16_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn u16_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_u16)
 }
 
 /// %1: I32 -> %0: String
-pub(super) fn i32_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn i32_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_i32)
 }
 
 /// %1: U32 -> %0: String
-pub(super) fn u32_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn u32_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_u32)
 }
 
 /// %1: I64 -> %0: String
-pub(super) fn i64_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn i64_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_i64)
 }
 
 /// %1: U64 -> %0: String
-pub(super) fn u64_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn u64_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_u64)
 }
 
 /// %1: ISize -> %0: String
-pub(super) fn isize_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn isize_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_isize)
 }
 
 /// %1: USize -> %0: String
-pub(super) fn usize_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn usize_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_usize)
 }
 
 /// %1: Pointer -> %0: String
-pub(super) fn pointer_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn pointer_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, |val| {
         val.as_pointer().cloned()
     })
 }
 
 /// %1: F32 -> %0: String
-pub(super) fn real_to_str(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn real_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_f32)
 }
 
 /// %1: String -> %0: I32
-pub(super) fn str_to_int(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn str_to_int(state: &mut Vm) -> ExecResult<()> {
     let arg_0 = ir::Ref::Local(ir::LocalID(1));
 
     let string = state.read_string(&arg_0)?;
@@ -111,7 +111,7 @@ pub(super) fn str_to_int(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 /// %0: String -> Nothing
-pub(super) fn write(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn write(state: &mut Vm) -> ExecResult<()> {
     let arg_0 = ir::Ref::Local(ir::LocalID(0));
     let string = state.read_string(&arg_0)?;
 
@@ -121,7 +121,7 @@ pub(super) fn write(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 /// %0: String -> Nothing
-pub(super) fn write_ln(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn write_ln(state: &mut Vm) -> ExecResult<()> {
     let arg_0 = ir::Ref::Local(ir::LocalID(0));
     let string = state.read_string(&arg_0)?;
 
@@ -138,7 +138,7 @@ pub(super) fn write_ln(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 /// %0: Nothing -> String
-pub(super) fn read_ln(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn read_ln(state: &mut Vm) -> ExecResult<()> {
     let stdin = io::stdin();
     let mut line = String::new();
 
@@ -159,7 +159,7 @@ pub(super) fn read_ln(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 /// %1: Integer -> %0: ^Byte
-pub(super) fn get_mem(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn get_mem(state: &mut Vm) -> ExecResult<()> {
     let arg_0 = ir::Ref::Local(ir::LocalID(1));
 
     let len = state
@@ -179,7 +179,7 @@ pub(super) fn get_mem(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 /// %0: ^Byte -> Nothing
-pub(super) fn free_mem(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn free_mem(state: &mut Vm) -> ExecResult<()> {
     let arg_0 = ir::Ref::Local(ir::LocalID(0));
 
     let ptr_val = state.load(&arg_0)?;
@@ -196,7 +196,7 @@ pub(super) fn free_mem(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 /// %1: <any dyn array ref> -> %0: Integer
-pub(super) fn array_length(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn array_length(state: &mut Vm) -> ExecResult<()> {
     let array_arg = ir::LocalID(1);
     
     let array_ptr = load_pointer(state, &array_arg.to_ref())?;
@@ -211,7 +211,7 @@ pub(super) fn array_length(state: &mut Interpreter) -> ExecResult<()> {
 }
 
 /// %0: &Any <any dyn array ref>; %1: I32;
-pub(super) fn array_create(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn array_create(state: &mut Vm) -> ExecResult<()> {
     let array_ref_arg = ir::LocalID(0);
     let new_len_arg = ir::LocalID(1);
 
@@ -241,7 +241,7 @@ pub(super) fn array_create(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
+fn invoke_method(state: &mut Vm) -> ExecResult<()> {
     let method_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(1)))?;
     let instance_arg_ref = load_pointer(state, &ir::Ref::Local(ir::LocalID(2)))?;
     let args_ptr = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
@@ -274,7 +274,7 @@ fn invoke_method(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
+fn invoke_func(state: &mut Vm) -> ExecResult<()> {
     let func_info_ptr = load_pointer(state, &ir::LocalID(1).to_ref())?;
     let args_array_ptr = load_pointer(state, &ir::LocalID(2).to_ref())?;
     let error_out = load_pointer(state, &ir::Ref::Local(ir::LocalID(3)))?;
@@ -302,7 +302,7 @@ fn invoke_func(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-fn find_type_info(state: &mut Interpreter) -> ExecResult<()> {
+fn find_type_info(state: &mut Vm) -> ExecResult<()> {
     let name_arg = state.read_string(&ir::Ref::Local(ir::LocalID(1)))?;
     
     let result = match state.typeinfo_map.find_by_name(&name_arg).cloned() {
@@ -320,14 +320,14 @@ fn find_type_info(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-fn get_type_info_count(state: &mut Interpreter) -> ExecResult<()> {
+fn get_type_info_count(state: &mut Vm) -> ExecResult<()> {
     let count = i32::try_from(state.typeinfo_map.items().len())
         .unwrap_or(i32::MAX);
 
     state.store(&ir::RETURN_REF, DynValue::I32(count))
 }
 
-fn get_type_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
+fn get_type_info_by_index(state: &mut Vm) -> ExecResult<()> {
     let index_param_local = ir::Ref::Local(ir::LocalID(1));
 
     let index = state.load(&index_param_local)?
@@ -347,7 +347,7 @@ fn get_type_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
+fn get_object_type_info(state: &mut Vm) -> ExecResult<()> {
     let obj_ptr_arg = ir::LocalID(1);
     let obj_ptr = load_pointer(state, &ir::Ref::Local(obj_ptr_arg))?;
     
@@ -374,7 +374,7 @@ fn get_object_type_info(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-fn find_func_info(state: &mut Interpreter) -> ExecResult<()> {
+fn find_func_info(state: &mut Vm) -> ExecResult<()> {
     let name_arg = state.read_string(&ir::Ref::Local(ir::LocalID(1)))?;
 
     let result = match state.funcinfo_map.find_by_name(&name_arg).cloned() {
@@ -392,14 +392,14 @@ fn find_func_info(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-fn get_func_info_count(state: &mut Interpreter) -> ExecResult<()> {
+fn get_func_info_count(state: &mut Vm) -> ExecResult<()> {
     let count = i32::try_from(state.funcinfo_map.items().len())
         .unwrap_or(i32::MAX);
 
     state.store(&ir::RETURN_REF, DynValue::I32(count))
 }
 
-fn get_func_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
+fn get_func_info_by_index(state: &mut Vm) -> ExecResult<()> {
     let index_param_local = ir::Ref::Local(ir::LocalID(1));
 
     let index = state.load(&index_param_local)?
@@ -419,7 +419,7 @@ fn get_func_info_by_index(state: &mut Interpreter) -> ExecResult<()> {
     Ok(())
 }
 
-fn load_pointer(state: &mut Interpreter, at: &ir::Ref) -> ExecResult<Pointer> {
+fn load_pointer(state: &mut Vm, at: &ir::Ref) -> ExecResult<Pointer> {
     let val = state.load(at)?;
 
     val.as_pointer()
@@ -430,7 +430,7 @@ fn load_pointer(state: &mut Interpreter, at: &ir::Ref) -> ExecResult<Pointer> {
         })
 }
 
-fn load_integer(state: &mut Interpreter, at: &ir::Ref) -> ExecResult<i32> {
+fn load_integer(state: &mut Vm, at: &ir::Ref) -> ExecResult<i32> {
     state.load(at)?
         .as_i32()
         .ok_or_else(|| {
@@ -439,7 +439,7 @@ fn load_integer(state: &mut Interpreter, at: &ir::Ref) -> ExecResult<i32> {
         })
 }
 
-fn load_single(state: &mut Interpreter, at: &ir::Ref) -> ExecResult<f32> {
+fn load_single(state: &mut Vm, at: &ir::Ref) -> ExecResult<f32> {
     state.load(at)?
         .as_f32()
         .ok_or_else(|| {
@@ -448,7 +448,7 @@ fn load_single(state: &mut Interpreter, at: &ir::Ref) -> ExecResult<f32> {
         })
 }
 
-pub(super) fn random_integer(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn random_integer(state: &mut Vm) -> ExecResult<()> {
     let from = load_integer(state, &ir::Ref::Local(ir::LocalID(1)))?;
     let to = load_integer(state, &ir::Ref::Local(ir::LocalID(2)))?;
 
@@ -462,7 +462,7 @@ pub(super) fn random_integer(state: &mut Interpreter) -> ExecResult<()> {
     state.store(&ir::RETURN_REF, DynValue::I32(val))
 }
 
-pub(super) fn random_single(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn random_single(state: &mut Vm) -> ExecResult<()> {
     let from = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
     let to = load_single(state, &ir::Ref::Local(ir::LocalID(2)))?;
 
@@ -476,7 +476,7 @@ pub(super) fn random_single(state: &mut Interpreter) -> ExecResult<()> {
     state.store(&ir::RETURN_REF, DynValue::F32(val))
 }
 
-pub(super) fn time(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn time(state: &mut Vm) -> ExecResult<()> {
     let since_epoch = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or(Duration::ZERO);
@@ -484,69 +484,69 @@ pub(super) fn time(state: &mut Interpreter) -> ExecResult<()> {
     state.store(&ir::RETURN_REF, DynValue::F64(since_epoch.as_secs_f64()))
 }
 
-pub(super) fn pow(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn pow(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
     let power = load_single(state, &ir::Ref::Local(ir::LocalID(2)))?;
 
     state.store(&ir::RETURN_REF, DynValue::F32(val.powf(power)))
 }
 
-pub(super) fn sqrt(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn sqrt(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
     
     state.store(&ir::RETURN_REF, DynValue::F32(val.sqrt()))
 }
 
-pub(super) fn sin(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn sin(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
 
     state.store(&ir::RETURN_REF, DynValue::F32(val.sin()))
 }
 
-pub(super) fn arc_sin(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn arc_sin(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
 
     state.store(&ir::RETURN_REF, DynValue::F32(val.asin()))
 }
 
-pub(super) fn cos(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn cos(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
 
     state.store(&ir::RETURN_REF, DynValue::F32(val.cos()))
 }
 
-pub(super) fn arc_cos(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn arc_cos(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
 
     state.store(&ir::RETURN_REF, DynValue::F32(val.acos()))
 }
 
-pub(super) fn tan(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn tan(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
 
     state.store(&ir::RETURN_REF, DynValue::F32(val.tan()))
 }
 
-pub(super) fn arc_tan(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn arc_tan(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
 
     state.store(&ir::RETURN_REF, DynValue::F32(val.atan()))
 }
 
-pub(super) fn infinity(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn infinity(state: &mut Vm) -> ExecResult<()> {
     state.store(&ir::RETURN_REF, DynValue::F32(f32::INFINITY))
 }
 
-pub(super) fn is_infinite(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn is_infinite(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?; 
     state.store(&ir::RETURN_REF, DynValue::Bool(val.is_infinite()))
 }
 
-pub(super) fn nan(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn nan(state: &mut Vm) -> ExecResult<()> {
     state.store(&ir::RETURN_REF, DynValue::F32(f32::NAN))
 }
 
-pub(super) fn is_nan(state: &mut Interpreter) -> ExecResult<()> {
+pub(super) fn is_nan(state: &mut Vm) -> ExecResult<()> {
     let val = load_single(state, &ir::Ref::Local(ir::LocalID(1)))?;
     state.store(&ir::RETURN_REF, DynValue::Bool(val.is_nan()))
 }

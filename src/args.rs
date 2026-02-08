@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::path::Path;
 use structopt::*;
 use terapascal_build::BuildStage;
 use terapascal_common::LanguageMode;
@@ -76,11 +77,19 @@ pub struct Args {
     #[structopt(short = "g", long = "debug")]
     pub debug: bool,
 
+    #[allow(unused)]
     #[structopt(long = "gcodeview")]
     pub debug_codeview: bool,
     
+    #[allow(unused)]
     #[structopt(long = "diag-port", default_value = "0")]
     pub diag_port: u16,
+}
+
+impl Args {
+    pub fn output_path(&self) -> Option<&Path> {
+        self.output.as_ref().map(PathBuf::as_path)
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
