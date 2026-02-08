@@ -5,8 +5,8 @@ use std::process::Command;
 use std::io;
 use std::io::Write;
 use crate::error::RunError;
+use crate::Args;
 use terapascal_ir as ir;
-use crate::{Args, clang};
 use terapascal_backend_c as backend_c;
 
 pub(crate) fn clang_compile(
