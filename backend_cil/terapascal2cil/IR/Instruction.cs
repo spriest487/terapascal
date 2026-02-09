@@ -13,10 +13,6 @@ public record DebugPopInstruction : IInstruction;
 
 public record LocalAllocInstruction(LocalID At, IType Type) : IInstruction;
 
-public record LocalBeginInstruction : IInstruction;
-
-public record LocalEndInstruction : IInstruction;
-
 [MessagePackObject]
 public record MoveInstruction : IInstruction {
     [Key("out")]
@@ -490,12 +486,6 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
                 return new DebugPopInstruction();
             }
 
-            case "LocalBegin": {
-                return new LocalBeginInstruction();
-            }
-            case "LocalEnd": {
-                return new LocalEndInstruction();
-            }
             case "LocalAlloc": {
                 var (at, type) = reader.ReadPair<LocalID, IType>(options);
                 return new LocalAllocInstruction(at, type);

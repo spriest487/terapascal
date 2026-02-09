@@ -2,6 +2,7 @@ unit StringConcat;
 implementation
 
 initialization
-    var message := String.Concat('hello, ', 'world!');
+    var message := String.Concat('hello', ', ');
+    message := String.Concat(message, 'world!');
     WriteLn(message);
 end.

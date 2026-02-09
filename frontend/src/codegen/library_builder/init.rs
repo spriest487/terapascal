@@ -43,33 +43,35 @@ fn gen_create_tags(
     }
 
     let tag_array_ty = ir::ANY_TYPE.dyn_array();
+    
+    builder.scope(|builder| {
+        // var to store ref to each element (ref to field of type *any)
+        let element_ref = builder.local_temp(ir::ANY_TYPE.temp_ref());
 
-    // var to store ref to each element (ref to field of type *any)
-    let element_ref = builder.local_temp(ir::ANY_TYPE.temp_ref());
+        for i in 0..tags.len() {
+            let tag_info = &tags[i];
 
-    for i in 0..tags.len() {
-        let tag_info = &tags[i];
+            let tag_class = tag_info.class_id.to_class_ptr_type();
 
-        let tag_class = tag_info.class_id.to_class_ptr_type();
+            let tag_struct_def = builder
+                .get_struct(tag_info.class_id)
+                .expect("tag class struct must exist")
+                .clone();
 
-        let tag_struct_def = builder
-            .get_struct(tag_info.class_id)
-            .expect("tag class struct must exist")
-            .clone();
+            let tag_instance = builder.local_temp(tag_class.clone());
+            builder.new_object(tag_instance, tag_info.class_id, true);
 
-        let tag_instance = builder.local_temp(tag_class.clone());
-        builder.new_object(tag_instance, tag_info.class_id, true);
-        
-        let index_val = ir::Value::LiteralI32(i as i32);
-        builder.element(element_ref, tag_array.clone(), index_val, tag_array_ty.clone());
-        builder.cast(element_ref.to_deref(), tag_instance, ir::ANY_TYPE);
+            let index_val = ir::Value::LiteralI32(i as i32);
+            builder.element(element_ref, tag_array.clone(), index_val, tag_array_ty.clone());
+            builder.cast(element_ref.to_deref(), tag_instance, ir::ANY_TYPE);
 
-        for (field_id, field_val) in tag_info.fields.iter() {
-            let field_ty = &tag_struct_def.fields[&field_id].ty;
-            let field_ref = builder.local_temp(field_ty.clone().temp_ref());
-            builder.field(field_ref, tag_instance, tag_class.clone(), *field_id);
+            for (field_id, field_val) in tag_info.fields.iter() {
+                let field_ty = &tag_struct_def.fields[&field_id].ty;
+                let field_ref = builder.local_temp(field_ty.clone().temp_ref());
+                builder.field(field_ref, tag_instance, tag_class.clone(), *field_id);
 
-            builder.mov(field_ref.to_deref(), field_val.clone());
+                builder.mov(field_ref.to_deref(), field_val.clone());
+            }
         }
-    }
+    });
 }

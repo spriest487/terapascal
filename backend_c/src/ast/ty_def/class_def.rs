@@ -11,6 +11,7 @@ use crate::ast::Statement;
 use crate::ast::Type;
 use crate::ast::TypeDefName;
 use crate::ast::Unit;
+use crate::ast::VariableID;
 use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -63,11 +64,6 @@ impl MethodImplFunc {
     }
 
     fn gen_vcall_wrapper(&self, module: &Unit) -> FunctionDef {
-        let mut next_param_local = ir::LocalID(match &self.vcall_wrapper_decl.return_ty {
-            Type::Void => 0,
-            _ => 1,
-        });
-
         let impl_func_def = module
             .functions
             .iter()
@@ -79,9 +75,10 @@ impl MethodImplFunc {
         // forward the rest of the params as-is
         for i in 0..self.vcall_wrapper_decl.params.len() {
             let concrete_ty = &impl_func_def.decl.params[i];
+            
+            let param_arg = ir::ArgID(i);
 
-            call_impl_func_args.push(Expr::local_var(next_param_local).cast(concrete_ty.clone()));
-            next_param_local.0 += 1;
+            call_impl_func_args.push(Expr::arg_var(param_arg).cast(concrete_ty.clone()));
         }
 
         let call_impl_func = Expr::Function(self.name).call(call_impl_func_args);
@@ -90,9 +87,8 @@ impl MethodImplFunc {
             Type::Void => Statement::Expr(call_impl_func),
 
             _ => {
-                let result_expr = Expr::local_var(ir::LocalID(0));
                 let casted_result = call_impl_func.cast(self.vcall_wrapper_decl.return_ty.clone());
-                Statement::Expr(Expr::assign(result_expr, casted_result))
+                Statement::Expr(Expr::assign(Expr::result_var(), casted_result))
             },
         };
 
@@ -325,7 +321,7 @@ impl Class {
             body: vec![
                 // dtor((Self*) arg0);
                 Statement::Expr(Expr::Function(FunctionName::ID(dtor_func)).call([
-                    Expr::local_var(ir::LocalID(0)).cast(self_ty.ptr())
+                    Expr::arg_var(ir::ArgID(0)).cast(self_ty.ptr())
                 ])),
             ]
         };
@@ -556,12 +552,8 @@ impl Interface {
             table.push_str(&method.to_string());
             table.push_str(" {\n");
 
-            let (self_arg_local, arg_offset) = match method.return_ty {
-                Type::Void => (Expr::local_var(ir::LocalID(0)), 0),
-                _ => (Expr::local_var(ir::LocalID(1)), 1),
-            };
-
-            let self_arg_rc = self_arg_local.cast(Type::Rc.ptr());
+            let self_arg = Expr::arg_var(ir::ArgID(0));
+            let self_arg_rc = self_arg.cast(Type::Rc.ptr());
 
             // find the matching table
             table.push_str(&format!(
@@ -593,8 +585,9 @@ impl Interface {
                 if i > 0 {
                     table.push_str(", ");
                 }
-                table.push_str("L");
-                table.push_str(&(i + arg_offset).to_string());
+
+                let arg_var = VariableID::Arg(ir::ArgID(i));
+                table.push_str(&arg_var.to_string());
             }
             table.push_str(");\n");
 

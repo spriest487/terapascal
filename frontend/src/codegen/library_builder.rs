@@ -69,7 +69,7 @@ pub struct LibraryBuilder<'a> {
     // key is size (bits)
     set_flags_type_info: BTreeMap<usize, SetFlagsType>,
 
-    translated_funcs: HashMap<FunctionDefKey, FunctionInstance>,
+    translated_funcs: LinkedHashMap<FunctionDefKey, FunctionInstance>,
 
     functions: BTreeMap<ir::FunctionID, ir::Function>,
     function_types_by_sig: HashMap<typ::FunctionSig, ir::TypeDefID>,
@@ -150,10 +150,10 @@ impl<'a> LibraryBuilder<'a> {
             set_flags_type_info: BTreeMap::new(),
             
             functions: BTreeMap::new(),
-            translated_funcs: HashMap::new(),
-            
+            translated_funcs: LinkedHashMap::new(),
+
             function_types_by_sig: HashMap::new(),
-            
+
             variables: BTreeMap::new(),
             variables_by_name: HashMap::new(),
             
@@ -1619,10 +1619,11 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
     let dtor_id = lib.metadata.insert_func(None, false, []);
 
     let mut dtor_builder = IRBuilder::new(lib);
-    let self_param = dtor_builder.bind_param(array_type.clone(), "self");
+    
+    let self_arg = ir::ArgID(0);
+    dtor_builder.bind_param(self_arg, array_type.clone(), "self");
 
-    dtor_builder.retain(self_param, false);
-    dtor_builder.gen_dyn_array_dtor_body(self_param, element_type);
+    dtor_builder.gen_dyn_array_dtor_body(self_arg, element_type);
     
     let dtor_body = dtor_builder.finish();
 
@@ -1699,16 +1700,17 @@ fn gen_class_dtor(
     let user_dtor = lib.dtors.get(&class_id).cloned();
 
     let mut dtor_builder = IRBuilder::new(lib);
-    let self_param = dtor_builder.bind_param(class_ty.clone(), "self");
-    dtor_builder.retain(self_param, false);
+    
+    let self_arg = ir::ArgID(0);
+    dtor_builder.bind_param(self_arg, class_ty.clone(), "self");
 
     let mut has_dtor = false;
     if let Some(user_dtor_id) = user_dtor {
-        dtor_builder.call(user_dtor_id, [self_param.value()], None);
+        dtor_builder.call(user_dtor_id, [self_arg.value()], None);
         has_dtor = true;
     }
     
-    if dtor_builder.gen_class_object_dtor_body(class_id, self_param) {
+    if dtor_builder.gen_class_object_dtor_body(class_id, self_arg) {
         has_dtor = true;
     }
 
@@ -1735,8 +1737,12 @@ fn gen_class_dtor(
 }
 
 fn gen_func_invokers(lib: &mut LibraryBuilder) {
+    if !lib.opts.rtti {
+        return;
+    }
+    
     // temporarily swap because we can't build new functions with this borrowed
-    let mut all_funcs = HashMap::new();
+    let mut all_funcs = LinkedHashMap::new();
     mem::swap(&mut all_funcs, &mut lib.translated_funcs);
 
     let invoker_sig = ir::FunctionSig::new([
@@ -1749,24 +1755,44 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         if !func.published {
             continue;
         }
-        
-        let invoker_id = lib.metadata_mut().insert_func(None, false, []);
 
-        let debug_name = lib.opts.debug
-            .then(|| format!("generated invoker for {}", func.id));
+        let debug_name = if lib.opts.debug {
+            let debug_name = lib.functions[&func.id].debug_name();
+            
+            let func_name_display = match debug_name {
+                Some(name) => format!("{name} ({})", func.id),
+                None => format!("{}", func.id),
+            };
+
+            Some(format!("generated invoker for {}", func_name_display))
+        } else {
+            None
+        };
+
+        let invoker_id = lib.metadata_mut().insert_func(None, false, []);
         
         // the source sig may be generic, so look up the translated sig rather than attempting
         // to translate it without a generic context
         let sig = lib.functions[&func.id].sig().clone();
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_return();
-        let _self_param = builder.bind_param(ir::ANY_TYPE.temp_ref(), "self");
-        let args_param = builder.bind_param(ir::ANY_TYPE.dyn_array(), "args");
-        builder.bind_param(ir::Type::I32.temp_ref(), "error_out");
-        builder.retain(args_param, false);
+        builder.bind_return(sig.return_ty.clone());
+
+        let self_arg = ir::ArgID(0);
+        let args_arg = ir::ArgID(1);
+        let error_out_arg = ir::ArgID(2);
         
-        builder.gen_invoker_body(func.id, &sig);
+        builder.bind_param(self_arg, ir::ANY_TYPE.temp_ref(), "self");
+        builder.bind_param(args_arg, ir::ANY_TYPE.dyn_array(), "args");
+        builder.bind_param(error_out_arg, ir::Type::I32.temp_ref(), "error_out");
+
+        builder.gen_invoker_body(
+            func.id,
+            &sig,
+            self_arg.to_ref(),
+            args_arg.to_ref(),
+            error_out_arg.to_deref(),
+        );
         
         let body = builder.finish();
         

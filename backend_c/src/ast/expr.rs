@@ -199,6 +199,12 @@ impl Expr {
             ir::Ref::Discard => {
                 panic!("can't translate a discard ref, it should only be used in assignments")
             },
+            ir::Ref::Result => {
+                VariableID::Result.to_expr()
+            }
+            ir::Ref::Arg(id) => {
+                VariableID::Arg(*id).to_expr()
+            }
             ir::Ref::Local(local_id) => VariableID::local(*local_id).to_expr(),
             ir::Ref::Deref(inner) => Expr::translate_val(inner.as_ref(), builder).deref(),
             ir::Ref::Global(ir::GlobalRef::Function(id)) => {
@@ -231,9 +237,17 @@ impl Expr {
             }
         }
     }
+
+    pub fn result_var() -> Self {
+        Expr::Variable(VariableID::Result)
+    }
     
     pub fn local_var(id: ir::LocalID) -> Self {
         Expr::Variable(VariableID::Local(id))
+    }
+    
+    pub fn arg_var(id: ir::ArgID) -> Self {
+        Expr::Variable(VariableID::Arg(id))
     }
     
     pub fn named_var(name: impl Into<String>) -> Self {

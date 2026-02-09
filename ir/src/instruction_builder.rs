@@ -4,6 +4,9 @@ mod dyn_array;
 mod invoker;
 mod object;
 
+use crate::instruction_builder::object::gen_class_object_dtor_body;
+use crate::instruction_builder::scope::ScopedBinding;
+use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::FunctionID;
@@ -23,13 +26,10 @@ use crate::UnaryOpInstruction;
 use crate::Value;
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_dyn_array;
-use scope::LocalBinding;
 use scope::LocalStack;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 pub use util::jmp_exists;
-pub use util::remove_empty_blocks;
-use crate::instruction_builder::object::gen_class_object_dtor_body;
 
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
@@ -46,31 +46,34 @@ pub trait InstructionBuilder {
     fn ir_formatter(&self) -> &impl IRFormatter {
         self.metadata()
     }
-
-    fn find_local(&self, name: &str) -> Option<&LocalBinding> {
-        self.local_stack().find_local(name)
+    
+    fn find_named(&self, name: &str) -> Option<&ScopedBinding> {
+        self.local_stack().find_binding(name)
     }
 
     // creates an anonymous unmanaged local of this type
     fn local_temp(&mut self, ty: Type) -> LocalID {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.local_stack_mut().current_scope_mut().bind_temp(ty.clone());
-
-        self.emit(Instruction::LocalAlloc(id, ty));
+        let id = self.local_stack_mut().bind_temp(ty.clone());
 
         id
     }
 
-    fn local_new(&mut self, ty: Type, name: Option<Arc<String>>) -> LocalID {
+    // creates an autoreleased variable with the given name
+    fn local_var(&mut self, ty: Type, name: Option<Arc<String>>) -> LocalID {
         assert_ne!(Type::Nothing, ty);
+        
+        let is_object = ty.is_object() || ty.is_weak();
 
-        let id = self
-            .local_stack_mut()
-            .current_scope_mut()
-            .bind_new(name, ty.clone());
+        let id = match name {
+            Some(name) => self.local_stack_mut().bind_var(ty, name),
+            None => self.local_stack_mut().bind_auto_temp(ty),
+        };
 
-        self.emit(Instruction::LocalAlloc(id, ty));
+        if is_object {
+            self.mov(id, Value::LiteralNull);
+        }
 
         id
     }
@@ -84,8 +87,6 @@ pub trait InstructionBuilder {
         let stack_len = stack.len();
 
         self.comment(&format!("begin scope {}", stack_len));
-
-        self.emit(Instruction::LocalBegin);
     }
 
     fn local_end(&mut self) {
@@ -95,8 +96,6 @@ pub trait InstructionBuilder {
         self.comment(&format!("end scope {}", top_scope));
 
         self.local_stack_mut().end();
-
-        self.emit(Instruction::LocalEnd);
     }
 
     fn push_debug_context(&mut self, ctx: Span) {
@@ -157,9 +156,9 @@ pub trait InstructionBuilder {
             }
         }
 
-        let locals: Vec<_> = self
+        let bindings: Vec<_> = self
             .local_stack()
-            .all_locals(cleanup_range)
+            .bindings_in_scope(cleanup_range)
             .cloned()
             .collect();
 
@@ -168,32 +167,15 @@ pub trait InstructionBuilder {
         // (for an RC pointer) or insert a call to a structural release function (for
         // complex types containing RC pointers), so should never introduce new locals
         // in the scope being popped
-        for local in locals {
-            self.comment(&format!("expire {}", local.id()));
-
-            match local {
-                LocalBinding::Param { id, ty, by_ref, .. } => {
-                    self.expire_local(id, &ty, !by_ref);
-                },
-
-                LocalBinding::New { id, ty, .. } => {
-                    self.expire_local(id, &ty, true);
-                },
-
-                LocalBinding::Temp { id, ty } => {
-                    self.expire_local(id, &ty, false);
-                },
-
-                LocalBinding::Return { .. } => {
-                    self.comment("expire return slot");
-                },
-            }
+        for binding in bindings {
+            self.comment(&format!("expire {}", binding.to_ref()));
+            self.expire_binding(&binding);
         }
     }
 
-    fn expire_local(&mut self, id: LocalID, ty: &Type, retained: bool) {
-        if retained {
-            self.release_deep(id, &ty);
+    fn expire_binding(&mut self, binding: &ScopedBinding) {
+        if binding.auto_release {
+            self.release_deep(binding.to_ref(), &binding.ty);
         }
     }
 
@@ -687,7 +669,7 @@ pub trait InstructionBuilder {
         let element_ref = self.local_temp(element_ty.temp_ref());
 
         self.element(element_ref, a, index, of_type);
-        self.mov(out, Ref::Local(element_ref).to_deref());
+        self.mov(out, element_ref.to_deref());
     }
 
     fn element_to_val(
@@ -894,11 +876,11 @@ pub trait InstructionBuilder {
         temp_at_ptr.value()
     }
     
-    fn gen_class_object_dtor_body(&mut self, class_id: TypeDefID, self_param: LocalID) -> bool {
+    fn gen_class_object_dtor_body(&mut self, class_id: TypeDefID, self_param: ArgID) -> bool {
         gen_class_object_dtor_body(self, class_id, self_param)
     }
 
-    fn gen_dyn_array_dtor_body(&mut self, self_param: LocalID, element_type: &Type) {
+    fn gen_dyn_array_dtor_body(&mut self, self_param: ArgID, element_type: &Type) {
         gen_dyn_array_dtor_body(self, self_param, element_type)
     }
 
@@ -953,8 +935,14 @@ pub trait InstructionBuilder {
         util::gen_fill_byte(self, at, count, byte_val);
     }
     
-    fn gen_invoker_body(&mut self, func_id: FunctionID, func_sig: &FunctionSig) {
-        invoker::gen_invoker_body(self, func_id, func_sig);
+    fn gen_invoker_body(&mut self,
+        func_id: FunctionID,
+        func_sig: &FunctionSig,
+        self_ref: Ref,
+        args_ref: Ref,
+        error_out_ref: Ref,
+    ) {
+        invoker::gen_invoker_body(self, func_id, func_sig, self_ref, args_ref, error_out_ref);
     }
 
     fn while_do<CondFn, DoFn>(&mut self, cond_fn: CondFn, do_fn: DoFn)
@@ -977,5 +965,21 @@ pub trait InstructionBuilder {
         Visitor: Fn(&mut Self, &Type, Ref) -> bool + Copy,
     {
         util::visit_deep(self, at, ty, f)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct LocalBinding {
+    pub id: LocalID,
+    pub by_ref: bool,
+}
+
+impl LocalBinding {
+    pub fn to_ref(&self) -> Ref {
+        if self.by_ref {
+            self.id.to_deref()
+        } else {
+            self.id.to_ref()
+        }
     }
 }

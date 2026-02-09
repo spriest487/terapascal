@@ -1,8 +1,8 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
-use crate::LocalID;
 use crate::TypeDefID;
+use crate::ArgID;
 
-pub fn gen_class_object_dtor_body<B>(builder: &mut B, class_id: TypeDefID, self_param: LocalID) -> bool
+pub fn gen_class_object_dtor_body<B>(builder: &mut B, class_id: TypeDefID, self_param: ArgID) -> bool
 where
     B: InstructionBuilder + ?Sized
 {

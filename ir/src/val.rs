@@ -1,10 +1,10 @@
+use crate::metadata::StringID;
+use crate::ty::Type;
+use crate::ty_decl::TagLocation;
 use crate::FunctionID;
 use crate::IRFormatter;
 use crate::StaticClosureID;
 use crate::VariableID;
-use crate::metadata::StringID;
-use crate::ty::Type;
-use crate::ty_decl::TagLocation;
 use bigdecimal::BigDecimal;
 use bigdecimal::FromPrimitive;
 use bigdecimal::ToPrimitive;
@@ -17,6 +17,8 @@ use std::rc::Rc;
 pub enum Ref {
     /// write-only ref that doesn't result in mov instructions when written to
     Discard,
+    Result,
+    Arg(ArgID),
     Local(LocalID),
     Global(GlobalRef),
     Deref(Box<Value>),
@@ -44,14 +46,20 @@ impl Ref {
 }
 
 impl From<GlobalRef> for Ref {
-    fn from(value: GlobalRef) -> Self {
-        Ref::Global(value)
+    fn from(global_ref: GlobalRef) -> Self {
+        Ref::Global(global_ref)
     }
 }
 
 impl From<LocalID> for Ref {
-    fn from(value: LocalID) -> Self {
-        Ref::Local(value)
+    fn from(id: LocalID) -> Self {
+        Ref::Local(id)
+    }
+}
+
+impl From<ArgID> for Ref {
+    fn from(id: ArgID) -> Self {
+        Ref::Arg(id)
     }
 }
 
@@ -71,6 +79,8 @@ impl fmt::Display for Ref {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Ref::Discard => write!(f, "_"),
+            Ref::Result => write!(f, "%Result"),
+            Ref::Arg(id) => write!(f, "{id}"),
             Ref::Local(id) => write!(f, "{}", id),
             Ref::Global(name) => write!(f, "{}", name),
             Ref::Deref(at) => write!(f, "{}^", at),
@@ -132,6 +142,12 @@ impl From<Ref> for Value {
 impl From<LocalID> for Value {
     fn from(local_id: LocalID) -> Self {
         Self::from(Ref::Local(local_id))
+    }
+}
+
+impl From<ArgID> for Value {
+    fn from(arg_id: ArgID) -> Self {
+        Self::from(Ref::Arg(arg_id))
     }
 }
 
@@ -262,6 +278,29 @@ impl LocalID {
         self.to_ref().to_deref()
     }
     
+    pub fn value(self) -> Value {
+        self.to_ref().value()
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+pub struct ArgID(pub usize);
+
+impl fmt::Display for ArgID {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "%Arg{}", self.0)
+    }
+}
+
+impl ArgID {
+    pub fn to_ref(self) -> Ref {
+        Ref::Arg(self)
+    }
+
+    pub fn to_deref(self) -> Ref {
+        self.to_ref().to_deref()
+    }
+
     pub fn value(self) -> Value {
         self.to_ref().value()
     }

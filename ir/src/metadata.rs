@@ -620,10 +620,6 @@ impl Metadata {
         })
     }
 
-    pub fn get_string(&self, id: StringID) -> Option<&String> {
-        self.string_literals.get(&id)
-    }
-
     pub fn strings(&self) -> impl Iterator<Item = (StringID, &str)> + '_ {
         self.string_literals.iter().map(|(id, s)| (*id, s.as_str()))
     }
@@ -632,6 +628,17 @@ impl Metadata {
 impl IRFormatter for Metadata {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
         write!(f, "{}", self.pretty_ty_name(ty))
+    }
+
+    fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result {
+        match self.type_decls.get(&id) {
+            Some(TypeDecl::Def(def)) => {
+                write!(f, "{}", def.to_pretty_string(|ty| self.pretty_ty_name(ty)))
+            }
+            _ => {
+                write!(f, "{}", id)
+            },
+        }
     }
 
     fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result {
@@ -753,6 +760,10 @@ impl IRFormatter for Metadata {
 impl MetadataSource for Metadata {
     fn as_formatter(&self) -> &impl IRFormatter {
         self
+    }
+
+    fn get_string(&self, id: StringID) -> Option<&String> {
+        self.string_literals.get(&id)
     }
     
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {

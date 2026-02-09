@@ -49,16 +49,21 @@ fn gen_release_func(
 fn gen_release_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Vec<ir::Instruction> {
     let mut release_builder = IRBuilder::new(lib);
 
-    let target_param = release_builder.bind_ref_param(ty.clone(), "target");
+    let target_ref_arg = ir::ArgID(0);
+    release_builder.bind_ref_param(target_ref_arg, ty.clone(), "target");
 
-    release_builder.visit_deep(target_param.to_deref(), ty, |builder, element_type, element_ref| {
-        if element_type.is_object() {
-            builder.release(element_ref, element_type.is_weak(), ir::Ref::Discard);
-            true
-        } else {
-            false
-        }
-    });
+    release_builder.visit_deep(
+        target_ref_arg.to_deref(),
+        ty,
+        |builder, element_type, element_ref| {
+            if element_type.is_object() {
+                builder.release(element_ref, element_type.is_weak(), ir::Ref::Discard);
+                true
+            } else {
+                false
+            }
+        },
+    );
 
     release_builder.finish()
 }
@@ -86,16 +91,22 @@ fn gen_retain_func(
 fn gen_retain_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Vec<ir::Instruction> {
     let mut retain_builder = IRBuilder::new(lib);
     
-    let target_param = retain_builder.bind_ref_param(ty.clone(), "target");
-    
-    retain_builder.visit_deep(target_param.to_deref(), ty, |builder, element_type, element_ref| {
-        if element_type.is_object() {
-            builder.retain(element_ref, element_type.is_weak());
-            true
-        } else {
-            false
-        }
-    });
+    let target_ref_arg = ir::ArgID(0);
+
+    retain_builder.bind_ref_param(target_ref_arg, ty.clone(), "target");
+
+    retain_builder.visit_deep(
+        target_ref_arg.to_deref(),
+        ty,
+        |builder, element_type, element_ref| {
+            if element_type.is_object() {
+                builder.retain(element_ref, element_type.is_weak());
+                true
+            } else {
+                false
+            }
+        },
+    );
 
     retain_builder.finish()
 }

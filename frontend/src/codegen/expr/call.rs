@@ -55,7 +55,7 @@ fn translate_call_with_args(
         typ::Type::Nothing => None,
         return_ty => {
             let out_ty = builder.translate_type(return_ty);
-            let out_val = builder.local_new(out_ty.clone(), None).to_ref();
+            let out_val = builder.local_var(out_ty.clone(), None).to_ref();
             Some(out_val)
         },
     };
@@ -260,7 +260,7 @@ fn build_variant_ctor_call(
     let variant_name = variant_ty.as_variant().unwrap();
 
     let out_ty = builder.translate_type(&variant_ty);
-    let out = builder.local_new(out_ty.clone(), None);
+    let out = builder.local_var(out_ty.clone(), None);
 
     builder.local_begin();
     {

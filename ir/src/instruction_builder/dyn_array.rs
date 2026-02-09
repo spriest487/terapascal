@@ -1,12 +1,12 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
-use crate::LocalID;
 use crate::Ref;
 use crate::Type;
 use crate::Value;
+use crate::ArgID;
 
 pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
     builder: &mut B,
-    self_param: LocalID,
+    self_param: ArgID,
     elem_ty: &Type,
 ) {
     let array_type = elem_ty.clone().dyn_array();
@@ -20,13 +20,13 @@ pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
     builder.length(arr_high, self_param, array_type.clone());
     builder.sub(arr_high, arr_high, Value::LiteralI32(1));
 
-    let el_ptr = builder.local_temp(elem_ty.clone().ptr());
+    let element_ref = builder.local_temp(elem_ty.clone().temp_ref());
 
     builder.comment("release every element");
     builder.counter_loop(counter, Value::LiteralI32(1), arr_high, |builder| {
-        builder.element(el_ptr, self_param, counter, array_type.clone());
+        builder.element(element_ref, self_param, counter, array_type.clone());
 
-        builder.release_deep(el_ptr.to_deref(), &elem_ty);
+        builder.release_deep(element_ref.to_deref(), &elem_ty);
     });
 }
 
@@ -36,7 +36,7 @@ pub(super) fn new_dyn_array(
     element_type: &Type,
 ) -> Ref {
     let array_ty = element_type.clone().dyn_array();
-    let arr = builder.local_new(array_ty.clone(), None);
+    let arr = builder.local_var(array_ty.clone(), None);
 
     let elements: Vec<_> = elements.into_iter().collect();
     let len = i32::try_from(elements.len()).expect("invalid dynamic array ctor length");

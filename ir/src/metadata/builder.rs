@@ -29,6 +29,7 @@ use crate::RESERVED_TYPES;
 use linked_hash_map::LinkedHashMap;
 use std::borrow::Cow;
 use std::fmt;
+use std::fmt::Write;
 use std::iter;
 use std::sync::Arc;
 
@@ -218,11 +219,16 @@ impl MetadataBuilder {
         self.next_string_id.0 += 1;
         next_id
     }
+    
 }
 
 impl MetadataSource for MetadataBuilder {
     fn as_formatter(&self) -> &impl IRFormatter {
         self
+    }
+
+    fn get_string(&self, id: StringID) -> Option<&String> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_string(id))
     }
 
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
@@ -269,6 +275,10 @@ impl MetadataSource for MetadataBuilder {
 impl IRFormatter for MetadataBuilder {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
         self.metadata.format_type(ty, f)
+    }
+
+    fn format_type_def(&self, id: TypeDefID, f: &mut dyn Write) -> fmt::Result {
+        self.metadata.format_type_def(id, f)
     }
 
     fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result {
