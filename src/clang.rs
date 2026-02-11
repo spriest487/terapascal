@@ -19,8 +19,6 @@ pub(crate) fn clang_compile(
     invoke_clang(&c_unit, args, out_path)
         .map_err(|err| RunError::ClangBuildFailed(err))?;
 
-    invoke_clang_format(out_path);
-
     Ok(())
 }
 
@@ -77,47 +75,52 @@ fn invoke_clang<'a>(
         clang_cmd.arg("--verbose");
     }
 
+    clang_cmd.arg("-o").arg(out_path);
+
     let debug = args.debug || args.debug_codeview;
 
-    if debug {
+    let process = if debug {
         // debug: generates a source file next to the output
         let c_file_path = out_path.with_extension("c");
 
-        let mut c_file = File::create(&c_file_path)?;
-        write!(c_file, "{c_unit}")?;
+        {
+            let mut c_file = File::create(&c_file_path)?;
+            write!(c_file, "{c_unit}")?;
+            c_file.flush()?;
+        }
 
-        clang_cmd.arg(c_file_path).arg("-g").arg("-O0");
+        invoke_clang_format(&c_file_path);
+
+        clang_cmd.arg(c_file_path);
+        clang_cmd.arg("-g");
+        clang_cmd.arg("-O0");
 
         if args.debug_codeview {
             clang_cmd.arg("-gcodeview");
         }
-    } else {
-        // release: compile from stdin
-        clang_cmd.arg("-").arg("-O2").stdin(Stdio::piped());
-    }
 
-    clang_cmd.arg("-o").arg(out_path);
-
-    let mut clang = if debug {
         clang_cmd.spawn()?
     } else {
-        let mut clang = clang_cmd.spawn()?;
+        // release: compile from stdin
+        clang_cmd.arg("-");
+        clang_cmd.arg("-O2");
+        clang_cmd.stdin(Stdio::piped());
 
-        let mut clang_in = clang
+        let mut process = clang_cmd.spawn()?;
+
+        let mut process_in = process
             .stdin
             .take()
             .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "unable to write to stdin"))?;
 
-        write!(clang_in, "{}", c_unit)?;
-        clang_in.flush()?;
-
-        clang
+        write!(process_in, "{}", c_unit)?;
+        process
     };
 
-    let status = clang.wait()?;
+    let output = process.wait_with_output()?;
 
-    if !status.success() {
-        return Err(io::Error::new(io::ErrorKind::Other, status.to_string()));
+    if !output.status.success() {
+        return Err(io::Error::new(io::ErrorKind::Other, output.status.to_string()));
     }
 
     Ok(())
