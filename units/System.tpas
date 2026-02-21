@@ -205,6 +205,7 @@ function Int64ToStr(i: Int64): String; external 'rt';
 function UInt64ToStr(i: UInt64): String; external 'rt';
 function NativeIntToStr(i: NativeInt): String; external 'rt';
 function NativeUIntToStr(i: NativeUInt): String; external 'rt';
+function BoolToStr(value: Boolean): String;
 function RealToStr(value: Real32): String; external 'rt';
 function Real64ToStr(value: Real64): String; external 'rt';
 function PointerToStr(value: Pointer): String; external 'rt';
@@ -1071,9 +1072,14 @@ begin
     NativeUIntToStr(self)
 end;
 
+function BoolToStr(value: Boolean): String;
+begin
+    if value then 'true' else 'false';
+end;
+
 function Boolean.ToString: String;
 begin
-    if self then 'true' else 'false'
+    BoolToStr(self)
 end;
 
 function Real32.ToString: String;
