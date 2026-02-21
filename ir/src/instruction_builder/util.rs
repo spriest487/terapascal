@@ -214,18 +214,19 @@ where
         },
 
         Type::Variant(id) => {
-            let cases = &builder
+            let variant_def = builder
                 .metadata()
                 .get_variant_def(*id)
-                .unwrap_or_else(|| panic!("missing variant def {}", id))
-                .cases
-                .to_vec();
+                .unwrap_or_else(|| panic!("missing variant def {}", id));
 
-            let tag_ref = builder.local_temp(Type::I32.temp_ref());
+            let tag_type = variant_def.tag_type.clone();
+            let cases = variant_def.cases.to_vec();
+
+            let tag_ref = builder.local_temp(tag_type.temp_ref());
             let is_not_case = builder.local_temp(Type::Bool);
 
             // get the tag
-            builder.vartag(tag_ref, at.clone(), Type::Variant(*id));
+            builder.vartag(tag_ref, at.clone(), id.to_variant_type());
 
             // jump out of the search loop if we find the matching case
             let break_label = builder.next_label();
@@ -298,56 +299,6 @@ where
 
         // field or element
         _ => f(builder, ty, at),
-    }
-}
-
-pub fn remove_empty_blocks(instructions: &mut Vec<Instruction>) {
-    let mut pc = 0;
-
-    // stack of instruction indices at which the current empty scope begins
-    let mut empty = vec![Some(pc)];
-
-    while pc < instructions.len() {
-        let block_empty = empty.last_mut().unwrap();
-
-        match &instructions[pc] {
-            Instruction::LocalBegin => {
-                empty.push(Some(pc));
-                pc += 1;
-            },
-
-            // end the scope
-            Instruction::LocalEnd => {
-                if let Some(empty_start) = *block_empty {
-                    // it's still empty, remove all the empty statements
-                    let remove_count = (pc + 1) - empty_start;
-                    pc = empty_start;
-                    for _ in 0..remove_count {
-                        instructions.remove(pc);
-                    }
-
-                    empty.pop();
-                } else {
-                    empty.pop();
-
-                    // containing scope is no longer empty
-                    if let Some(last) = empty.last_mut() {
-                        *last = None;
-                    }
-
-                    pc += 1;
-                }
-            },
-
-            Instruction::DebugPop | Instruction::DebugPush(..) | Instruction::Comment(..) => {
-                pc += 1;
-            },
-
-            _ => {
-                *block_empty = None;
-                pc += 1;
-            },
-        }
     }
 }
 

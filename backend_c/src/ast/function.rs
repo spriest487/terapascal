@@ -1,5 +1,6 @@
 use crate::ast::boxed::BoxTypeID;
 use crate::ast::Builder;
+use crate::ast::VariableID;
 use crate::ast::DynArrayTypeID;
 use crate::ast::Expr;
 use crate::ast::Statement;
@@ -113,7 +114,8 @@ pub enum BuiltinName {
     NativeIntToStr,
     NativeUIntToStr,
     PointerToStr,
-    RealToStr,
+    Real32ToStr,
+    Real64ToStr,
 
     StrToInt,
     Write,
@@ -186,7 +188,8 @@ impl fmt::Display for BuiltinName {
             BuiltinName::NativeIntToStr => write!(f, "System_NativeIntToStr"),
             BuiltinName::NativeUIntToStr => write!(f, "System_NativeUIntToStr"),
             BuiltinName::PointerToStr => write!(f, "System_PointerToStr"),
-            BuiltinName::RealToStr => write!(f, "System_RealToStr"),
+            BuiltinName::Real32ToStr => write!(f, "System_Real32ToStr"),
+            BuiltinName::Real64ToStr => write!(f, "System_Real64ToStr"),
 
             BuiltinName::ArrayLengthInternal => write!(f, "System_ArrayLengthInternal"),
             BuiltinName::ArrayCreateInternal => write!(f, "System_ArrayCreateInternal"),
@@ -278,14 +281,10 @@ impl fmt::Display for FunctionDecl {
                 write!(f, ", ")?;
             }
 
-            let arg_id = if self.return_ty != Type::Void {
-                i + 1
-            } else {
-                i
-            };
+            let arg_id = ir::ArgID(i);
+            let arg_name = VariableID::Arg(arg_id).to_string();
 
-            let name = format!("L{}", arg_id);
-            write!(f, "{}", param.to_decl_string(&name))?;
+            write!(f, "{}", param.to_decl_string(&arg_name))?;
         }
         write!(f, ")")
     }
@@ -314,7 +313,8 @@ impl fmt::Display for FunctionDef {
         writeln!(f, "{} {{", self.decl)?;
 
         if self.decl.return_ty != Type::Void {
-            writeln!(f, "{};", self.decl.return_ty.to_decl_string("L0"))?;
+            let result_var_name = VariableID::Result.to_string();
+            writeln!(f, "{};", self.decl.return_ty.to_decl_string(&result_var_name))?;
         }
 
         for stmt in &self.body {
@@ -322,7 +322,7 @@ impl fmt::Display for FunctionDef {
         }
 
         if self.decl.return_ty != Type::Void {
-            write!(f, "{}", Statement::ReturnValue(Expr::local_var(ir::RETURN_LOCAL)))?;
+            write!(f, "{}", Statement::ReturnValue(Expr::result_var()))?;
         }
 
         write!(f, "}}")

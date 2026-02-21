@@ -2,6 +2,7 @@
 mod test;
 
 use crate::ast as ast;
+use crate::codegen::expr::literal_to_val;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::FunctionDefKey;
 use crate::codegen::library_builder::LibraryBuilder;
@@ -16,7 +17,6 @@ use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use std::borrow::Cow;
 use std::sync::Arc;
-use terapascal_ir::instruction_builder::remove_empty_blocks;
 use terapascal_ir::instruction_builder::scope::LocalStack;
 use terapascal_ir::instruction_builder::InstructionBuilder;
 
@@ -46,6 +46,10 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
 
     fn metadata(&self) -> &MetadataBuilder {
         self.library.metadata()
+    }
+
+    fn metadata_mut(&mut self) -> &mut MetadataBuilder {
+        self.library.metadata_mut()
     }
 
     fn local_stack(&self) -> &LocalStack {
@@ -121,13 +125,10 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
 
 impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn new(lib: &'m mut LibraryBuilder<'l>) -> Self {
-        let mut instructions = Vec::new();
-        instructions.push(Instruction::LocalBegin);
-
         Self {
             library: lib,
             
-            instructions,
+            instructions: Vec::new(),
 
             // the EXIT label is always reserved, so start one after that
             next_label: Label(EXIT_LABEL.0 + 1),
@@ -170,6 +171,26 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             Some(index) => (id, index, variant_struct.cases[index].ty.as_ref()),
             None => panic!("missing case {} for {} in IR metadata", case, variant),
         }
+    }
+    
+    pub fn literal_to_val(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> Value {
+        let ty = self.translate_type(ty);
+        literal_to_val(lit, &ty, &self.generic_context, self.library)
+    }
+    
+    pub fn translate_literal(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> Ref {
+        let val = self.literal_to_val(lit, ty);
+
+        if let Value::Ref(lit_ref) = val {
+            return lit_ref
+        };
+        
+        let out_ty = self.translate_type(ty);
+        let out = self.local_temp(out_ty);
+
+        self.mov(out, val);
+
+        out.to_ref()
     }
 
     pub fn translate_name(&mut self, name: &Symbol) -> NamePath {
@@ -270,7 +291,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
         // virtual pointer to the closure
         let closure_virtual_ty = Type::Object(ObjectID::Closure(closure.func_ty_id));
-        let closure_virtual_ptr = self.local_new(closure_virtual_ty.clone(), None);
+        let closure_virtual_ptr = self.local_var(closure_virtual_ty.clone(), None);
 
         self.scope(|builder| {
             let closure_ref = builder.local_temp(closure_ptr_ty.clone());
@@ -278,7 +299,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
             let func_ptr_ty = closure_def.fields[&CLOSURE_PTR_FIELD].ty.clone();
 
-            let func_field_ref = builder.local_temp(func_ptr_ty.clone().temp_ref());
+            let func_field_ref = builder.local_temp(func_ptr_ty.temp_ref());
             builder.field(func_field_ref, closure_ref, closure_ptr_ty.clone(), CLOSURE_PTR_FIELD);
 
             // initialize closure reference to function
@@ -299,11 +320,11 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
                     Some(name) => name,
                 };
 
-                let capture_field_ref = builder.local_temp(field_def.ty.clone().temp_ref());
+                let capture_field_ref = builder.local_temp(field_def.ty.temp_ref());
                 builder.field(capture_field_ref, closure_ref, closure_ptr_ty.clone(), *field_id);
 
-                let captured_local_id = builder.find_local(field_name).unwrap().id();
-                builder.mov(capture_field_ref.to_deref(), captured_local_id);
+                let captured_local = builder.find_named(field_name).unwrap();
+                builder.mov(capture_field_ref.to_deref(), captured_local.to_ref());
                 builder.retain_deep(capture_field_ref.to_deref(), &field_def.ty);
             }
             
@@ -366,7 +387,13 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             self.local_end();
         }
 
-        remove_empty_blocks(&mut self.instructions);
+        let mut local_allocs = Vec::with_capacity(self.local_stack.local_slot_count());
+
+        for (local_id, ty) in self.local_stack.finish() {
+            local_allocs.push(Instruction::LocalAlloc(local_id, ty));
+        }
+
+        self.instructions.splice(0..0, local_allocs);
 
         if matches!(self.instructions.as_slice(), [
             Instruction::DebugPush(..),
@@ -433,7 +460,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Flags(flags_type_info.struct_id);
 
-        let a_ptr = self.local_temp(flags_type.clone().temp_ref());
+        let a_ptr = self.local_temp(flags_type.temp_ref());
         let b_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
         self.make_ref(b_ptr, b);
@@ -451,7 +478,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Flags(flags_type_info.struct_id);
 
-        let a_ptr = self.local_temp(flags_type.clone().temp_ref());
+        let a_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
 
         self.call(flags_type_info.bit_not_func, [
@@ -468,7 +495,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
         let flags_type = Type::Flags(flags_type_info.struct_id);
 
-        let a_ptr = self.local_temp(flags_type.clone().temp_ref());
+        let a_ptr = self.local_temp(flags_type.temp_ref());
         let b_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
         self.make_ref(b_ptr, b);
@@ -520,35 +547,22 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.call(function_ref, [at.into()], None);
     }
 
-    pub fn bind_param(&mut self, ty: Type, name: impl Into<String>) -> LocalID {
-        let name = Some(Arc::new(name.into()));
-
-        self.local_stack_mut()
-            .current_scope_mut()
-            .bind_param(name, ty, false)
+    pub fn bind_param(&mut self, id: ArgID, ty: Type, name: impl Into<String>) {
+        self.local_stack_mut().bind_param(id, ty, Arc::new(name.into()), false)
     }
 
-    pub fn bind_ref_param(&mut self, ty: Type, name: impl Into<String>) -> LocalID {
-        let ref_ty = ty.temp_ref();
-        let name = Some(Arc::new(name.into()));
-
-        self.local_stack_mut()
-            .current_scope_mut()
-            .bind_param(name, ref_ty, true)
+    pub fn bind_ref_param(&mut self, id: ArgID, ty: Type, name: impl Into<String>) {
+        self.local_stack_mut().bind_param(id, ty.temp_ref(), Arc::new(name.into()), true)
     }
 
     // binds an anonymous return local in %0 with the indicated type
-    pub fn bind_return(&mut self) {
-        self.local_stack_mut()
-            .current_scope_mut()
-            .bind_return();
+    pub fn bind_return(&mut self, ty: Type) {
+        self.local_stack_mut().bind_return(ty);
     }
 
     // binds an anonymous local binding for the closure pointer of a function
-    pub fn bind_closure_ptr(&mut self) -> LocalID {
-        self.local_stack_mut()
-            .current_scope_mut()
-            .bind_temp(Type::any())
+    pub fn bind_closure_ptr(&mut self, id: ArgID) {
+        self.local_stack_mut().bind_unnamed_param(id, ANY_TYPE, false)
     }
 
     pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {
@@ -558,12 +572,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn local_closure_capture(&mut self, ty: Type, name: String) -> Ref {
         assert_ne!(Type::Nothing, ty);
 
-        let id = self.local_stack_mut()
-            .current_scope_mut()
-            .bind_param(Some(Arc::new(name)), ty.clone(), true);
-
-        self.emit(Instruction::LocalAlloc(id, ty.clone()));
-
+        let id = self.local_stack_mut().bind_capture(ty, name);
+        
         Ref::Local(id)
     }
 

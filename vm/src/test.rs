@@ -1,29 +1,29 @@
 use terapascal_ir::{Library, Metadata};
-use crate::{Interpreter, InterpreterOpts};
+use crate::{Vm, ExecOpts};
 
 #[test]
 fn empty_library_executes_ok() {
     let metadata = Metadata::new();
     let lib = Library::new(metadata);
     
-    let opts = InterpreterOpts {
+    let opts = ExecOpts {
         verbose: true,
         ..Default::default()
     };
 
-    let mut vm = Interpreter::new(opts);
+    let mut vm = Vm::new(opts);
 
     vm.load_lib(&lib).expect("should load successfully");
 }
 
 #[test]
 fn created_string_has_expected_content() {
-    let opts = InterpreterOpts {
+    let opts = ExecOpts {
         verbose: true,
         ..Default::default()
     };
 
-    let mut vm = Interpreter::new(opts);
+    let mut vm = Vm::new(opts);
 
     let greeting = "hello, world";
 

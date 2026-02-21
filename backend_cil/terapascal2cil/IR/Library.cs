@@ -22,12 +22,6 @@ public class Library {
     [Key("metadata")]
     public required Metadata Metadata { get; set; }
 
-    [Key("variables")]
-    public required IReadOnlyDictionary<VariableID, IType> Variables {
-        get;
-        init => field = value!.ToDictionaryNonNull();
-    }
-
     [Key("functions")]
     public required IReadOnlyDictionary<FunctionID, IFunction> Functions {
         get;

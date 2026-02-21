@@ -23,7 +23,7 @@ impl PatternMatchBinding {
             builder.pretty_ty_name(&self.ty)
         ));
 
-        let local = builder.local_new(self.ty.clone(), Some(Arc::new(self.name.clone()))).to_ref();
+        let local = builder.local_var(self.ty.clone(), Some(Arc::new(self.name.clone()))).to_ref();
         builder.mov(local.clone(), self.binding_ref.clone());
         builder.retain_deep(local, &self.ty);
     }
@@ -176,7 +176,15 @@ fn translate_is_variant(
     case_index: usize,
     builder: &mut IRBuilder,
 ) -> ir::Ref {
-    let tag_ptr = builder.local_temp(ir::Type::I32.temp_ref());
+    let Some(variant_def) = variant_ty.as_variant()
+        .and_then(|id| builder.metadata().get_variant_def(id))
+    else {
+        panic!("translate_is_variant: couldn't find variant definition for type {}", variant_ty.to_pretty_string(builder.metadata()))
+    };
+    
+    let tag_type = variant_def.tag_type.clone();
+    
+    let tag_ptr = builder.local_temp(tag_type.temp_ref());
     builder.vartag(tag_ptr, val, variant_ty);
     
     let tag_val = ir::Value::LiteralI32(case_index as i32);

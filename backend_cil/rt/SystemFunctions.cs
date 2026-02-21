@@ -9,6 +9,8 @@ using unsafe InvokeFunc = delegate* managed<ref object?, object[]?, ref int, obj
 public static class SystemFunctions {
     private static readonly Random random = new Random();
 
+    private static readonly DateTime startTime = DateTime.UtcNow;
+
     public static unsafe string ReadString(String s) {
         if (s == null! || s.len == 0 || s.chars == null) {
             return "";
@@ -105,9 +107,13 @@ public static class SystemFunctions {
     public static String RealToStr(float f) {
         return CreateString(f.ToString(CultureInfo.InvariantCulture), false);
     }
+    
+    public static String Real64ToStr(double f) {
+        return CreateString(f.ToString(CultureInfo.InvariantCulture), false);
+    }
 
     public static unsafe String PointerToStr(void* p) {
-        return CreateString(Environment.Is64BitProcess ? $"0x{(ulong)p,16}" : $"0x{(ulong)p,8}", false);
+        return CreateString(Environment.Is64BitProcess ? $"0x{(ulong)p:x16}" : $"0x{(ulong)p:x8}", false);
     }
 
     public static int StrToInt(String s) {
@@ -166,12 +172,16 @@ public static class SystemFunctions {
         return float.IsInfinity(f);
     }
 
-    public static float Nan() {
+    public static float NaN() {
         return float.NaN;
     }
 
     public static bool IsNaN(float f) {
         return float.IsNaN(f);
+    }
+    
+    public static double Time() {
+        return DateTime.UtcNow.Subtract(startTime).TotalSeconds;
     }
 
     public static void RcRetain(object? obj, bool weak) {

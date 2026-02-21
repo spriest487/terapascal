@@ -7,7 +7,7 @@ namespace Terapascal.CIL;
 
 public static class SDKUtils {
     public static async Task<string> FindReferenceLibPath(string? requestedVersion, bool verbose) {
-        var dotnetCommand = Process.Start(new ProcessStartInfo {
+        using var dotnetCommand = Process.Start(new ProcessStartInfo {
             FileName = "dotnet",
             Arguments = "--list-sdks",
             RedirectStandardOutput = true,
@@ -16,8 +16,6 @@ public static class SDKUtils {
         if (dotnetCommand == null) {
             throw new IOException("failed to list SDKs");
         }
-
-        await dotnetCommand.WaitForExitAsync().ConfigureAwait(false);
 
         string? libPath = null;
 
@@ -46,6 +44,12 @@ public static class SDKUtils {
             }
         }
 
+        try {
+            await dotnetCommand.WaitForExitAsync();
+        } catch {
+            await Console.Error.WriteLineAsync($"dotnet process error: {dotnetCommand.ExitCode}");
+        }
+
         if (libPath == null) {
             throw new IOException("no SDK path found");
         }
@@ -58,7 +62,7 @@ public static class SDKUtils {
     }
 
     public static async Task<string> FindTargetRuntimeVersion(bool verbose) {
-        var dotnetCommand = Process.Start(new ProcessStartInfo {
+        using var dotnetCommand = Process.Start(new ProcessStartInfo {
             FileName = "dotnet",
             Arguments = "--list-runtimes",
             RedirectStandardOutput = true,
@@ -67,8 +71,6 @@ public static class SDKUtils {
         if (dotnetCommand == null) {
             throw new IOException("failed to list runtimes");
         }
-
-        await dotnetCommand.WaitForExitAsync().ConfigureAwait(false);
 
         string? version = null;
 
@@ -88,11 +90,20 @@ public static class SDKUtils {
             version = match.Groups["Version"].Value;
         }
 
+        try {
+            await dotnetCommand.WaitForExitAsync();
+        } catch {
+            await Console.Error.WriteLineAsync($"dotnet process error: {dotnetCommand.ExitCode}");
+        }
+
         if (version == null) {
             throw new IOException("no runtime version found");
         }
 
-        Console.WriteLine($"Using latest dotnet app runtime version: {version}");
+        if (verbose) {
+            Console.WriteLine($"Using latest dotnet app runtime version: {version}");
+        }
+
         return version;
     }
 
@@ -108,7 +119,7 @@ public static class SDKUtils {
             .GetManifestResourceStream(typeof(SDKUtils), filename)
             ?? throw new FileNotFoundException($"missing template resource: {filename}")
         ) {
-            using var reader = new StreamReader(templateResource);
+            using var reader = new StreamReader(templateResource, leaveOpen: true);
             template.Append(await reader.ReadToEndAsync());
         }
 

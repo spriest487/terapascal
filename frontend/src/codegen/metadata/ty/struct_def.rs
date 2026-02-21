@@ -11,6 +11,8 @@ pub fn translate_struct_def(
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::StructDef {
+    let tags = lib.translate_tag_groups(&struct_def.tags);
+    
     let name_path = translate_name(&struct_def.name, generic_ctx, lib);
 
     let mut fields = BTreeMap::new();
@@ -61,5 +63,7 @@ pub fn translate_struct_def(
         StructKind::Record => ir::StructIdentity::Record(name_path),
     };
 
-    ir::StructDef::new(identity).with_fields(fields)
+    ir::StructDef::new(identity)
+        .with_tags(tags)
+        .with_fields(fields)
 }

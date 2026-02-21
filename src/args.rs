@@ -1,7 +1,9 @@
 use std::path::PathBuf;
+use std::path::Path;
 use structopt::*;
 use terapascal_build::BuildStage;
 use terapascal_common::LanguageMode;
+use terapascal_common::StripMode;
 
 #[derive(StructOpt, Debug)]
 pub struct Args {
@@ -27,7 +29,7 @@ pub struct Args {
     #[structopt(long="define", short = "d")]
     pub define_syms: Vec<String>,
 
-    #[structopt(long="mode", short="m", default_value = "default", parse(try_from_str = parse_lang_mode))]
+    #[structopt(long="mode", default_value = "default", parse(try_from_str = parse_lang_mode))]
     pub lang_mode: LanguageMode,
 
     /// if false, runtime type information objects will not be generated
@@ -36,6 +38,9 @@ pub struct Args {
 
     #[structopt(long="unsafe", default_value = "true", parse(try_from_str = parse_bool))]
     pub allow_unsafe: bool,
+
+    #[structopt(long="strip", default_value = "unused-impl", parse(try_from_str = parse_strip_mode))]
+    pub strip: StripMode,
 
     /// additional units to compile
     #[structopt(long = "units", short = "u")]
@@ -72,11 +77,19 @@ pub struct Args {
     #[structopt(short = "g", long = "debug")]
     pub debug: bool,
 
+    #[allow(unused)]
     #[structopt(long = "gcodeview")]
     pub debug_codeview: bool,
     
+    #[allow(unused)]
     #[structopt(long = "diag-port", default_value = "0")]
     pub diag_port: u16,
+}
+
+impl Args {
+    pub fn output_path(&self) -> Option<&Path> {
+        self.output.as_ref().map(PathBuf::as_path)
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -109,6 +122,14 @@ fn parse_lang_mode(s: &str) -> Result<LanguageMode, String> {
         "fpc" | "FPC" => Ok(LanguageMode::Fpc),
         "default" | "Default" => Ok(LanguageMode::Default),
         _ => Err(format!("invalid language mode: {}", s)),
+    }
+}
+
+fn parse_strip_mode(s: &str) -> Result<StripMode, String> {
+    match s {
+        "unused-impl" | "default" => Ok(StripMode::UnusedImpl),
+        "unused" => Ok(StripMode::Unused),
+        _ => Err(format!("invalid strip mode: {}", s)),
     }
 }
 

@@ -1,11 +1,10 @@
-use crate::IRFormatter;
 use crate::Label;
-use crate::LocalID;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Ref;
 use crate::Type;
 use crate::TypeDefID;
+use crate::{IRFormatter, TagInfo};
 use crate::{Instruction, StringID};
 use serde::Deserialize;
 use serde::Serialize;
@@ -13,8 +12,7 @@ use std::fmt;
 
 pub const BUILTIN_SRC: &str = "rt";
 
-pub const RETURN_LOCAL: LocalID = LocalID(0);
-pub const RETURN_REF: Ref = Ref::Local(RETURN_LOCAL);
+pub const RESULT_REF: Ref = Ref::Result;
 pub const EXIT_LABEL: Label = Label(0);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
@@ -105,6 +103,8 @@ pub struct FunctionInfo {
     pub global_name: Option<NamePath>,
     
     pub invoker: Option<FunctionID>,
+    
+    pub tags: Vec<TagInfo>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

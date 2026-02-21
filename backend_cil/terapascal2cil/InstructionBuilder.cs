@@ -5,28 +5,20 @@ using Mono.Cecil.Rocks;
 
 namespace Terapascal.CIL;
 
-using LocalMap = Dictionary<IR.LocalID, LocalMapping>;
-using VarPoolCollection = Queue<int>;
-using VarPool = Dictionary<IR.IType, Queue<int>>;
-
 internal readonly record struct LocalMapping(IR.IType Type, int VariableIndex);
 
 public class InstructionBuilder {
-    private class LocalScope {
-        public LocalMap LocalMappings { get; } = new LocalMap();
-    }
-
     private readonly IR.Library library;
 
     private readonly AssemblyBuilder assemblyBuilder;
 
     private readonly MethodDefinition method;
 
-    private readonly Stack<LocalScope> scopes;
+    private readonly Dictionary<IR.LocalID, LocalMapping> localMappings;
+    private readonly Dictionary<IR.ArgID, LocalMapping> argMappings;
+    private LocalMapping? resultMapping;
 
     private readonly ILProcessor body;
-
-    private readonly VarPool varPool;
 
     private readonly Dictionary<IR.Label, Instruction> labelInstructions;
     private readonly Dictionary<IR.Label, List<Instruction>> unresolvedJmps;
@@ -46,11 +38,10 @@ public class InstructionBuilder {
         this.method = method;
         this.assemblyBuilder = assemblyBuilder;
 
-        this.scopes = new Stack<LocalScope>();
-        this.scopes.Push(new LocalScope());
-
-        this.varPool = new VarPool();
-
+        this.localMappings = new Dictionary<IR.LocalID, LocalMapping>();
+        this.argMappings = new Dictionary<IR.ArgID, LocalMapping>();
+        this.resultMapping = null;
+        
         this.body = this.method.Body.GetILProcessor();
 
         this.labelInstructions = new Dictionary<IR.Label, Instruction>();
@@ -59,12 +50,6 @@ public class InstructionBuilder {
 
     public void BeginFunction(IR.FunctionDef function) {
         this.method.Body.InitLocals = true;
-        
-        if (this.scopes.Count != 1) {
-            throw new InvalidOperationException("must be in the root scope");
-        }
-        
-        var currentScope = this.scopes.Peek();
 
         var returnType = function.Signature.ReturnType;
 
@@ -73,22 +58,18 @@ public class InstructionBuilder {
             var returnVar = new VariableDefinition(this.method.ReturnType);
             this.method.Body.Variables.Add(returnVar);
 
-            var mapping = new LocalMapping(returnType, returnVar.Index);
-            currentScope.LocalMappings.Add(new IR.LocalID(0), mapping);
+            this.resultMapping = new LocalMapping(returnType, returnVar.Index);
         }
 
-        var firstLocal = this.HasReturnValue ? 1UL : 0UL;
-        
         var paramTypes = function.Signature.ParameterTypes;
 
         // params don't need local vars, we can reference them with ldarg
         for (var i = 0; i < paramTypes.Count; i += 1) {
-            var paramLocal = new IR.LocalID(firstLocal + (ulong)i);
+            var paramLocal = new IR.ArgID((ulong)i);
             var paramType = paramTypes[i];
 
-            // use negative "variable" indices to indicate arg positions
-            var mapping = new LocalMapping(paramType, ~i);
-            currentScope.LocalMappings.Add(paramLocal, mapping);
+            var mapping = new LocalMapping(paramType, i);
+            this.argMappings.Add(paramLocal, mapping);
         }
     }
 
@@ -140,26 +121,6 @@ public class InstructionBuilder {
                         this.body.Append(aliveLabel);
                     });
                     
-                    break;
-                }
-
-                case IR.LocalBeginInstruction: {
-                    this.scopes.Push(new LocalScope());
-                    break;
-                }
-
-                case IR.LocalEndInstruction: {
-                    var scope = this.scopes.Pop();
-
-                    foreach (var (_, mapping) in scope.LocalMappings) {
-                        if (!this.varPool.TryGetValue(mapping.Type, out var pool)) {
-                            pool = new VarPoolCollection();
-                            this.varPool.Add(mapping.Type, pool);
-                        }
-
-                        pool.Enqueue(mapping.VariableIndex);
-                    }
-
                     break;
                 }
 
@@ -758,19 +719,41 @@ public class InstructionBuilder {
             this.body.Emit(OpCodes.Ldc_I4, intrinsicSize.Value);
         }
     }
+    
+    private void EmitDefault(IR.IType type) {
+        if (type.IsObjectType() || type is IR.PointerType) {
+            this.body.Emit(OpCodes.Ldnull);
+        } else if (type.IsInteger()) {
+            this.body.Emit(OpCodes.Ldc_I4_0);
+        } else {
+            var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
+            var typeDef = this.assemblyBuilder.TypeBuilder.ResolveCore(typeRef) ?? typeRef.Resolve();
+
+            if (typeDef?.FindConstructor([]) is { } defaultCtor) {
+                this.body.Emit(OpCodes.Newobj, this.assemblyBuilder.Module.ImportReference(defaultCtor));    
+            } else {
+                var local = this.AllocLocal(typeRef);
+                this.body.Emit(OpCodes.Ldloca, local);
+                this.body.Emit(OpCodes.Initobj, typeRef);
+                
+                this.body.Emit(OpCodes.Ldloc, local);
+            }
+        }
+    }
+
+    private int AllocLocal(TypeReference typeRef) {
+        var newVar = new VariableDefinition(typeRef);
+        this.method.Body.Variables.Add(newVar);
+
+        return newVar.Index;
+    }
 
     private void BuildLocalAlloc(IR.LocalID at, IR.IType type) {
         var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
         
-        if (!this.varPool.TryGetValue(type, out var pool) || !pool.TryDequeue(out var index)) {
-            var newVar = new VariableDefinition(typeRef);
-            this.method.Body.Variables.Add(newVar);
+        var index = this.AllocLocal(typeRef);
 
-            index = newVar.Index;
-        }
-
-        var scope = this.scopes.Peek();
-        scope.LocalMappings.Add(at, new LocalMapping(type, index));
+        this.localMappings.Add(at, new LocalMapping(type, index));
 
         // for complex types, we need to zero-initialize them immediately because we might generate code
         // that creates references to their elements without initializing them, which the CLR will not like
@@ -938,6 +921,11 @@ public class InstructionBuilder {
                 break;
             }
 
+            case IR.DefaultValue(var type): {
+                this.EmitDefault(type);
+                break;
+            }
+
             default: {
                 throw new NotSupportedException($"unsupported value: {loadValue}");
             }
@@ -946,13 +934,22 @@ public class InstructionBuilder {
 
     private void LoadRefAddr(IR.IRef ofRef) {
         switch (ofRef) {
+            case IR.ResultRef: {
+                this.body.Emit(OpCodes.Ldloca, this.GetResultIndex());
+                
+                break;
+            }
+            
+            case IR.ArgRef(var arg): {
+                var varIndex = this.GetArgIndex(arg);
+                this.body.Emit(OpCodes.Ldarga, varIndex);
+
+                break;
+            }
+            
             case IR.LocalRef(var local): {
                 var varIndex = this.GetVariableIndex(local);
-                if (varIndex >= 0) {
-                    this.body.Emit(OpCodes.Ldloca, varIndex);
-                } else {
-                    this.body.Emit(OpCodes.Ldarga, ~varIndex);
-                }
+                this.body.Emit(OpCodes.Ldloca, varIndex);
 
                 break;
             }
@@ -1028,11 +1025,25 @@ public class InstructionBuilder {
 
     private IR.IType GetRefType(IR.IRef @ref) {
         switch (@ref) {
+            case IR.ResultRef: {
+                if (this.resultMapping.HasValue) {
+                    return this.resultMapping.Value.Type;
+                }
+
+                break;
+            }
+            
+            case IR.ArgRef(var id): {
+                if (this.argMappings.TryGetValue(id, out var mapping)) {
+                    return mapping.Type;
+                }
+
+                break;
+            }
+            
             case IR.LocalRef(var id): {
-                foreach (var scope in this.scopes) {
-                    if (scope.LocalMappings.TryGetValue(id, out var mapping)) {
-                        return mapping.Type;
-                    }
+                if (this.localMappings.TryGetValue(id, out var mapping)) {
+                    return mapping.Type;
                 }
 
                 break;
@@ -1058,8 +1069,8 @@ public class InstructionBuilder {
             }
             
             case IR.GlobalRef(IR.VariableGlobalRef(var varID)): {
-                if (this.library.Variables.TryGetValue(varID, out var varType)) {
-                    return varType;
+                if (this.library.Metadata.Variables.TryGetValue(varID, out var varInfo)) {
+                    return varInfo.Type;
                 }
                 break;
             }
@@ -1117,13 +1128,22 @@ public class InstructionBuilder {
 
     private void LoadRef(IR.IRef loadRef) {
         switch (loadRef) {
-            case IR.LocalRef localRef: {
-                var varIndex = this.GetVariableIndex(localRef.ID);
-                if (varIndex >= 0) {
-                    this.body.Emit(OpCodes.Ldloc, varIndex);
-                } else {
-                    this.body.Emit(OpCodes.Ldarg, ~varIndex);
-                }
+            case IR.ResultRef: {
+                this.body.Emit(OpCodes.Ldloc, this.GetResultIndex());
+                
+                break;
+            }
+            
+            case IR.ArgRef(var arg): {
+                var varIndex = this.GetArgIndex(arg);
+                this.body.Emit(OpCodes.Ldarg, varIndex);
+
+                break;
+            }
+            
+            case IR.LocalRef(var local): {
+                var varIndex = this.GetVariableIndex(local);
+                this.body.Emit(OpCodes.Ldloc, varIndex);
 
                 break;
             }
@@ -1204,16 +1224,29 @@ public class InstructionBuilder {
 
     private void StoreRef(IR.IRef? storeRef, Action loadValue) {
         switch (storeRef) {
-            case IR.LocalRef localRef: {
+            case IR.ResultRef: {
                 loadValue();
                 
-                var varIndex = this.GetVariableIndex(localRef.ID);
-                if (varIndex >= 0) {
-                    this.body.Emit(OpCodes.Stloc, varIndex);
-                } else {
-                    var argIndex = ~varIndex;
-                    this.body.Emit(OpCodes.Starg, argIndex);
-                }
+                var varIndex = this.GetResultIndex();
+                this.body.Emit(OpCodes.Stloc, varIndex);
+
+                break;
+            }
+            
+            case IR.ArgRef(var id): {
+                loadValue();
+                
+                var varIndex = this.GetArgIndex(id);
+                this.body.Emit(OpCodes.Starg, varIndex);
+
+                break;
+            }
+            
+            case IR.LocalRef(var id): {
+                loadValue();
+                
+                var varIndex = this.GetVariableIndex(id);
+                this.body.Emit(OpCodes.Stloc, varIndex);
 
                 break;
             }
@@ -1272,15 +1305,26 @@ public class InstructionBuilder {
             }
         }
     }
-
-    private int GetVariableIndex(IR.LocalID local) {
-        foreach (var scope in this.scopes) {
-            if (scope.LocalMappings.TryGetValue(local, out var mapping)) {
-                return mapping.VariableIndex;
-            }
+    
+    private int GetResultIndex() {
+        return this.resultMapping?.VariableIndex ?? 
+            throw new InvalidDataException("invalid instruction: result variable was not found in this scope");
+    }
+    
+    private int GetArgIndex(IR.ArgID arg) {
+        if (this.argMappings.TryGetValue(arg, out var mapping)) {
+            return mapping.VariableIndex;
         }
 
-        throw new InvalidDataException($"invalid instruction: local {local.ID} was not found in this scope");
+        throw new InvalidDataException($"invalid instruction: {arg} was not found in this scope");
+    }
+
+    private int GetVariableIndex(IR.LocalID local) {
+        if (this.localMappings.TryGetValue(local, out var mapping)) {
+            return mapping.VariableIndex;
+        }
+
+        throw new InvalidDataException($"invalid instruction: {local} was not found in this scope");
     }
 
     private void BuildBinOp(IR.BinOpInstruction binOp, OpCode op) {

@@ -3,24 +3,33 @@ mod functions;
 mod rtti;
 
 use crate::dep_sort::sort_defs;
-use crate::FieldID;
+use crate::metadata::source::MetadataSource;
+use crate::{FieldID, MethodInfo};
 use crate::FunctionID;
+use crate::FunctionInfo;
 use crate::IRFormatter;
+use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::Metadata;
 use crate::MethodID;
+use crate::NamePath;
 use crate::Ref;
 use crate::StringID;
+use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
+use crate::TypeDef;
 use crate::TypeDefID;
 use crate::Value;
 use crate::VariableID;
+use crate::VariableInfo;
+use crate::VariantDef;
 use crate::RESERVED_STRINGS;
 use crate::RESERVED_TYPES;
 use linked_hash_map::LinkedHashMap;
 use std::borrow::Cow;
 use std::fmt;
+use std::fmt::Write;
 use std::iter;
 use std::sync::Arc;
 
@@ -41,7 +50,7 @@ impl MetadataBuilder {
     pub fn new() -> Self {
         Self::with_refs([])
     }
-    
+
     pub fn with_refs(refs: impl IntoIterator<Item=Arc<Metadata>>) -> Self {
         let refs: Vec<_> = refs.into_iter().collect();
         
@@ -102,13 +111,17 @@ impl MetadataBuilder {
         self.metadata.pretty_ty_name(ty)
     }
     
-    pub fn new_variable(&mut self, ty: Type) -> VariableID {
+    pub fn new_variable(&mut self, name: NamePath, ty: Type) -> VariableID {
         let id = self.next_variable_id;
 
         while let Some(..) = self.metadata.variables.get(&self.next_variable_id) {
             self.next_variable_id.0 += 1;
         }
-        self.metadata.variables.insert(id, ty);
+        
+        self.metadata.variables.insert(id, VariableInfo {
+            name,
+            r#type: ty,
+        });
 
         self.next_variable_id.0 += 1;
         
@@ -206,12 +219,66 @@ impl MetadataBuilder {
         self.next_string_id.0 += 1;
         next_id
     }
+    
 }
 
+impl MetadataSource for MetadataBuilder {
+    fn as_formatter(&self) -> &impl IRFormatter {
+        self
+    }
+
+    fn get_string(&self, id: StringID) -> Option<&String> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_string(id))
+    }
+
+    fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
+        self.get_struct_def(struct_id)
+    }
+
+    fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
+        self.get_variant_def(struct_id)
+    }
+
+    fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.type_defs())
+    }
+
+    fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_type_decl(name))
+    }
+
+    fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.functions())
+    }
+
+    fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_function_info(id))
+    }
+
+    fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.interfaces())
+    }
+
+    fn methods(&self) -> impl Iterator<Item=&MethodInfo> {
+        self.iter_in_self_or_refs(move |metadata| metadata.methods())
+    }
+
+    fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_variable(name))
+    }
+
+    fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_variable(id))
+    }
+}
 
 impl IRFormatter for MetadataBuilder {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
         self.metadata.format_type(ty, f)
+    }
+
+    fn format_type_def(&self, id: TypeDefID, f: &mut dyn Write) -> fmt::Result {
+        self.metadata.format_type_def(id, f)
     }
 
     fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result {

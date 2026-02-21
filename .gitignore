@@ -10,3 +10,4 @@ vscode-extension/terapascal/dist
 flamegraph.svg
 *.DotSettings.user
 **/.idea
+.vscode

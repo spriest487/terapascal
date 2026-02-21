@@ -8,8 +8,8 @@ edition = "2024"
 terapascal-common = { path = "common" }
 terapascal-frontend = { path = "frontend" }
 terapascal-vm = { path = "vm" }
-terapascal-backend-c = { path = "backend_c" }
-terapascal-backend-cil = { path = "backend_cil" }
+terapascal-backend-c = { path = "backend_c", optional = true }
+terapascal-backend-cil = { path = "backend_cil", optional = true }
 terapascal-ir = { path = "ir" }
 terapascal-build = { path = "build" }
 thiserror = "2.0.16"
@@ -30,6 +30,9 @@ members = [
 
 [features]
 debug-server = ["terapascal-vm/debug_server"]
+backend-cil = ["dep:terapascal-backend-cil"]
+backend-c = ["dep:terapascal-backend-c"]
+default = ["backend-c"]
 
 [profile.release]
 debug = true

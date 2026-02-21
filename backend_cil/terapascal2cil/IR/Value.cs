@@ -21,6 +21,10 @@ public record SizeOfValue(IType Type) : IValue {
     public bool IsLiteral => true;
 }
 
+public record DefaultValue(IType Type) : IValue {
+    public bool IsLiteral => true;
+}
+
 public class NullableValueFormatter : IMessagePackFormatter<IValue?> {
     private readonly ValueFormatter valueFormatter = new ValueFormatter();
 
@@ -127,6 +131,13 @@ public class ValueFormatter : IMessagePackFormatter<IValue> {
                     ?? throw new MessagePackSerializationException("missing type for SizeOfValue");
 
                 return new SizeOfValue(type);
+            }
+            
+            case "Default": {
+                var type = MessagePackSerializer.Deserialize<IType>(ref reader, options) 
+                    ?? throw new MessagePackSerializationException("missing type for DefaultValue");
+
+                return new DefaultValue(type);
             }
 
             default: {

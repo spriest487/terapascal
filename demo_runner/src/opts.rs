@@ -28,13 +28,13 @@ pub struct Opts {
     #[structopt(long = "continue")]
     pub error_continue: bool,
 
-    #[structopt(long, short, default_value = "interpret", parse(try_from_str))]
+    #[structopt(long, short, default_value = "vm", parse(try_from_str))]
     pub exec: ExecutionMethod, 
 }
 
 #[derive(Debug, Copy, Clone)]
 pub enum ExecutionMethod {
-    Interpret,
+    Vm,
     Dotnet,
     Clang,
 }
@@ -45,7 +45,7 @@ impl FromStr for ExecutionMethod {
     fn from_str(s: &str) -> Result<ExecutionMethod, String> {
         match s {
             "clang" => Ok(ExecutionMethod::Clang),
-            "interpret" => Ok(ExecutionMethod::Interpret),
+            "vm" => Ok(ExecutionMethod::Vm),
             "dotnet" => Ok(ExecutionMethod::Dotnet),
             _ => Err(s.to_string())
         }

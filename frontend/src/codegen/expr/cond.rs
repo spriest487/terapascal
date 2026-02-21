@@ -18,7 +18,7 @@ where
         typ::Type::Nothing => (None, ir::Type::Nothing),
         out_ty => {
             let out_ty = builder.translate_type(out_ty);
-            let out_val = builder.local_new(out_ty.clone(), None).to_ref();
+            let out_val = builder.local_var(out_ty.clone(), None).to_ref();
             (Some(out_val), out_ty)
         },
     };
@@ -110,7 +110,7 @@ pub fn translate_case_expr(case: &typ::ast::CaseExpr, builder: &mut IRBuilder) -
 
 pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut IRBuilder) -> ir::Ref {
     let out_ty = builder.translate_type(&match_expr.annotation.ty());
-    let out_ref = builder.local_new(out_ty.clone(), None).to_ref();
+    let out_ref = builder.local_var(out_ty.clone(), None).to_ref();
 
     builder.scope(|builder| {
         let cond_expr = expr::translate_expr(&match_expr.cond_expr, builder);

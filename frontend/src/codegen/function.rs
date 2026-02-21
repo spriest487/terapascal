@@ -1,10 +1,9 @@
 use crate::ast;
-use crate::codegen::expr::literal_to_val;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::translate_block;
 use crate::codegen::typ;
-use crate::codegen::IRBuilder;
 use crate::codegen::ClosureInstance;
+use crate::codegen::IRBuilder;
 use crate::ir::*;
 use std::iter;
 use std::sync::Arc;
@@ -65,7 +64,7 @@ pub fn build_func_def(
         .iter()
         .flat_map(|param| FunctionParam::from_ast(param, &mut body_builder))
         .collect();
-    let bound_params = bind_function_params(def_params, is_instance_method, &mut body_builder);
+    let bound_params = bind_function_params(def_params, is_instance_method, ArgID(0), &mut body_builder);
 
     init_function_locals(def_locals, &mut body_builder);
 
@@ -114,23 +113,30 @@ pub fn build_func_static_closure_def(
 
     let return_ty = bind_function_return(&target_func.src_sig.result_ty, &mut body_builder);
 
-    let closure_ptr_local_id = body_builder.bind_closure_ptr();
-
     // this method needs to be compatible with the type-erased function pointer stored in a
     // closure struct, which has the sig "(Object, ...actual params)"
-    let mut bound_params = bind_function_params(params, false, &mut body_builder);
-    bound_params.insert(0, (closure_ptr_local_id, Type::any()));
+    let closure_ptr_arg = ArgID(0);
+    let mut bound_params = vec![(closure_ptr_arg, Type::any())];
+
+    // bind the closure pointer arg at ID 0
+    body_builder.bind_closure_ptr(closure_ptr_arg);
+    
+    // bind the rest of the args at ID 1+
+    bound_params.extend(bind_function_params(params, false, ArgID(1), &mut body_builder));
 
     let func_global = Ref::Global(GlobalRef::Function(target_func.id));
-    let func_args = bound_params
+
+    // this is a static closure, so we ignore the closure pointer (it's static) and just pass
+    // the rest of the args in IDs 1+ as the args to the real function
+    let func_args: Vec<Value> = bound_params
         .iter()
         .skip(1)
-        .map(|(local_id, _)| Value::Ref(Ref::Local(*local_id)))
-        .collect::<Vec<_>>();
+        .map(|(id, _)| id.value())
+        .collect();
 
     let return_ref = match return_ty {
         Type::Nothing => None,
-        _ => Some(RETURN_REF),
+        _ => Some(RESULT_REF),
     };
 
     body_builder.call(func_global, func_args, return_ref);
@@ -164,22 +170,22 @@ pub fn build_closure_function_def(
     // the type-erased pointer to the closure struct is included as the 0th param but
     // *not* bound like a normal param since it can't be named from code, so bind it in the scope
     // of this function body now
-    let closure_ptr_param_local_id = body_builder.bind_closure_ptr();
-    let closure_ptr_param_ref = Ref::Local(closure_ptr_param_local_id);
+    let closure_arg = ArgID(0);
+    body_builder.bind_closure_ptr(closure_arg);
 
     let def_params: Vec<_> = func_def.params
         .iter()
         .flat_map(|param| FunctionParam::from_ast(param, &mut body_builder))
         .collect();
 
-    let bound_params = bind_function_params(def_params, false, &mut body_builder);
+    let bound_params = bind_function_params(def_params, false, ArgID(1), &mut body_builder);
 
     // cast the closure pointer param from the erased pointer passed in to its actual class type
     let closure_ptr_ty = closure_id.to_class_ptr_type();
     let closure_ptr_ref = body_builder.local_temp(closure_ptr_ty.clone());
     body_builder.cast(
         closure_ptr_ref.clone(),
-        closure_ptr_param_ref,
+        closure_arg.value(),
         closure_ptr_ty.clone(),
     );
 
@@ -197,8 +203,10 @@ pub fn build_closure_function_def(
             Some(name) => name,
         };
 
-        let capture_val_ptr_ty = field_def.ty.clone().temp_ref();
-        let capture_val_ptr_field_ref = body_builder.local_closure_capture(capture_val_ptr_ty, field_name.clone());
+        let capture_val_ptr_field_ref = body_builder.local_closure_capture(
+            field_def.ty.clone(), 
+            field_name.clone()
+        );
 
         body_builder.field(
             capture_val_ptr_field_ref,
@@ -240,7 +248,7 @@ fn bind_function_return(return_ty: &typ::Type, builder: &mut IRBuilder) -> Type 
                 builder.pretty_ty_name(&return_ty),
             ));
 
-            builder.bind_return();
+            builder.bind_return(return_ty.clone());
             return_ty
         },
     }
@@ -282,13 +290,15 @@ impl FunctionParam {
 fn bind_function_params(
     params: impl IntoIterator<Item=FunctionParam>,
     is_instance_method: bool,
+    first_id: ArgID,
     builder: &mut IRBuilder,
-) -> Vec<(LocalID, Type)> {
+) -> Vec<(ArgID, Type)> {
     let mut bound_params = Vec::new();
 
     // for instance methods, the first arg is the self pointer or ref
     let mut is_self_param = is_instance_method;
-
+    
+    let mut id = first_id;
     for param in params.into_iter() {
         let mut by_ref = param.by_ref;
 
@@ -301,23 +311,23 @@ fn bind_function_params(
 
             is_self_param = false;
         }
-        
-        let (id, bound_ty) = if by_ref {
+
+        let bound_ty = if by_ref {
             let ref_ty = param.ty.clone().temp_ref();
-            let id = builder.bind_ref_param(param.ty, &param.name);
-            (id, ref_ty)
+            builder.bind_ref_param(id, param.ty, &param.name);
+            
+            ref_ty
         } else {
             let bound_ty = param.ty.clone();
-            let id = builder.bind_param(param.ty, &param.name);
-            (id, bound_ty)
+            builder.bind_param(id, param.ty, &param.name);
+            
+            bound_ty
         };
 
         builder.comment(&format!("param: {} = {}", id, builder.pretty_ty_name(&bound_ty)));
         bound_params.push((id, bound_ty));
-    }
 
-    for (param_local, ty) in &bound_params {
-        builder.retain_deep(*param_local, ty);
+        id.0 += 1;
     }
 
     bound_params
@@ -329,10 +339,10 @@ fn init_function_locals(locals: &[typ::ast::FunctionLocalBinding], builder: &mut
             let ty = builder.translate_type(&local.ty);
 
             let local_name = Arc::new(local.ident.name.to_string());
-            let local_ref = builder.local_new(ty, Some(local_name));
+            let local_ref = builder.local_var(ty, Some(local_name));
 
             if let Some(initial_val) = &local.initial_val {
-                let init_val = literal_to_val(initial_val, &local.ty, builder);
+                let init_val = builder.literal_to_val(initial_val, &local.ty);
                 builder.mov(local_ref, init_val);
             }
         }
@@ -346,7 +356,7 @@ fn build_func_body(
 ) -> Vec<Instruction> {
     let body_block_out_ref = match return_ty {
         Type::Nothing => Ref::Discard,
-        _ => RETURN_REF.clone(),
+        _ => RESULT_REF.clone(),
     };
 
     translate_block(&body, body_block_out_ref, &mut builder);
@@ -383,7 +393,7 @@ pub fn build_static_closure_impl(
         None
     };
 
-    let init_func_id = library.metadata_mut().insert_func(None, false);
+    let init_func_id = library.metadata_mut().insert_func(None, false, []);
     library.insert_function(
         init_func_id,
         Function::Local(FunctionDef {

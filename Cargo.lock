@@ -1537,7 +1537,6 @@ name = "terapascal-build"
 version = "0.1.0"
 dependencies = [
  "linked-hash-map",
- "rmp-serde",
  "terapascal-backend-c",
  "terapascal-common",
  "terapascal-frontend",
@@ -1589,6 +1588,7 @@ version = "0.1.0"
 dependencies = [
  "bigdecimal",
  "linked-hash-map",
+ "rmp-serde",
  "serde",
  "terapascal-common",
  "topological-sort",

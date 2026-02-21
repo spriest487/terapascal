@@ -46,6 +46,7 @@ pub use statement::*;
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 pub use type_constraint::*;
@@ -91,7 +92,7 @@ pub trait Annotation: Spanned + Clone + PartialEq + Eq + Hash {
 
     type FunctionName: FunctionName<Self>;
 
-    type ConstStringExpr: ConstExprValue<Self, String>;
+    type ConstStringExpr: ConstExprValue<Self, Arc<String>>;
     type ConstIntegerExpr: ConstExprValue<Self, IntConstant>;
 
     type ConstValue: fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash;

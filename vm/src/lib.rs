@@ -41,9 +41,10 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
+use terapascal_ir::MetadataSource as _;
 
 #[derive(Debug)]
-pub struct Interpreter {
+pub struct Vm {
     metadata: Rc<ir::Metadata>,
     stack: Vec<StackFrame>,
     globals: HashMap<ir::GlobalRef, GlobalValue>,
@@ -52,7 +53,7 @@ pub struct Interpreter {
 
     marshaller: Rc<Marshaller>,
 
-    opts: InterpreterOpts,
+    opts: ExecOpts,
 
     functions: BTreeMap<ir::FunctionID, FunctionInfo>,
 
@@ -67,8 +68,8 @@ pub struct Interpreter {
     runtime_methods: Vec<ir::MethodInfo>,
 }
 
-impl Interpreter {
-    pub fn new(opts: InterpreterOpts) -> Self {
+impl Vm {
+    pub fn new(opts: ExecOpts) -> Self {
         let globals = HashMap::new();
 
         let mut marshaller = Marshaller::new();
@@ -280,6 +281,28 @@ impl Interpreter {
         Ok(())
     }
 
+    pub fn store_result(&mut self, val: DynValue) -> ExecResult<()> {
+        let current_frame = self.current_frame_mut()?;
+        let local_ptr = current_frame
+            .get_result_ptr()
+            .map_err(|err| self.add_stack_trace(err.into()))?;
+
+        self.marshaller.marshal_at(&val, &local_ptr)?;
+
+        Ok(())
+    }
+
+    pub fn store_arg(&mut self, id: ir::ArgID, val: DynValue) -> ExecResult<()> {
+        let current_frame = self.current_frame_mut()?;
+        let local_ptr = current_frame
+            .get_arg_ptr(id)
+            .map_err(|err| self.add_stack_trace(err.into()))?;
+
+        self.marshaller.marshal_at(&val, &local_ptr)?;
+
+        Ok(())
+    }
+
     pub fn store_local(&mut self, id: ir::LocalID, val: DynValue) -> ExecResult<()> {
         let current_frame = self.current_frame_mut()?;
         let local_ptr = current_frame
@@ -289,6 +312,36 @@ impl Interpreter {
         self.marshaller.marshal_at(&val, &local_ptr)?;
 
         Ok(())
+    }
+
+    pub fn load_result(&self) -> ExecResult<DynValue> {
+        let current_frame = self.current_frame()?;
+        let local_ptr = current_frame
+            .get_result_ptr()
+            .map_err(|err| self.add_stack_trace(err.into()))?;
+
+        if local_ptr.addr == 0 {
+            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
+        }
+
+        let value = self.marshaller.unmarshal_at(&local_ptr)?;
+
+        Ok(value)
+    }
+
+    pub fn load_arg(&self, id: ir::ArgID) -> ExecResult<DynValue> {
+        let current_frame = self.current_frame()?;
+        let local_ptr = current_frame
+            .get_arg_ptr(id)
+            .map_err(|err| self.add_stack_trace(err.into()))?;
+
+        if local_ptr.addr == 0 {
+            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
+        }
+
+        let value = self.marshaller.unmarshal_at(&local_ptr)?;
+
+        Ok(value)
     }
 
     pub fn load_local(&self, id: ir::LocalID) -> ExecResult<DynValue> {
@@ -313,6 +366,8 @@ impl Interpreter {
                 Ok(())
             },
 
+            ir::Ref::Result => self.store_result(val),
+            ir::Ref::Arg(id) => self.store_arg(*id, val),
             ir::Ref::Local(id) => self.store_local(*id, val),
 
             ir::Ref::Global(name) => {
@@ -361,7 +416,9 @@ impl Interpreter {
                 let msg = "can't read value from discard ref";
                 Err(ExecError::illegal_state(msg))
             },
-
+            
+            ir::Ref::Result => self.load_result(),
+            ir::Ref::Arg(id) => self.load_arg(*id),
             ir::Ref::Local(id) => self.load_local(*id),
 
             ir::Ref::Global(name) => match self.globals.get(name) {
@@ -403,6 +460,21 @@ impl Interpreter {
 
     pub fn evaluate(&self, val: &ir::Value) -> ExecResult<DynValue> {
         match val {
+            ir::Value::LiteralU8(i) => Ok(DynValue::U8(*i)),
+            ir::Value::LiteralI8(i) => Ok(DynValue::I8(*i)),
+            ir::Value::LiteralI16(i) => Ok(DynValue::I16(*i)),
+            ir::Value::LiteralU16(i) => Ok(DynValue::U16(*i)),
+            ir::Value::LiteralI32(i) => Ok(DynValue::I32(*i)),
+            ir::Value::LiteralU32(i) => Ok(DynValue::U32(*i)),
+            ir::Value::LiteralI64(i) => Ok(DynValue::I64(*i)),
+            ir::Value::LiteralU64(i) => Ok(DynValue::U64(*i)),
+            ir::Value::LiteralISize(i) => Ok(DynValue::ISize(*i)),
+            ir::Value::LiteralUSize(i) => Ok(DynValue::USize(*i)),
+            ir::Value::LiteralF32(f) => Ok(DynValue::F32(*f)),
+            ir::Value::LiteralF64(f) => Ok(DynValue::F64(*f)),
+            ir::Value::LiteralBool(b) => Ok(DynValue::Bool(*b)),
+            ir::Value::LiteralNull => Ok(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))),
+
             ir::Value::Ref(r) => {
                 let ref_val = self.load(r)?;
                 Ok(ref_val)
@@ -420,20 +492,9 @@ impl Interpreter {
                 Ok(DynValue::I32(size))
             },
 
-            ir::Value::LiteralU8(i) => Ok(DynValue::U8(*i)),
-            ir::Value::LiteralI8(i) => Ok(DynValue::I8(*i)),
-            ir::Value::LiteralI16(i) => Ok(DynValue::I16(*i)),
-            ir::Value::LiteralU16(i) => Ok(DynValue::U16(*i)),
-            ir::Value::LiteralI32(i) => Ok(DynValue::I32(*i)),
-            ir::Value::LiteralU32(i) => Ok(DynValue::U32(*i)),
-            ir::Value::LiteralI64(i) => Ok(DynValue::I64(*i)),
-            ir::Value::LiteralU64(i) => Ok(DynValue::U64(*i)),
-            ir::Value::LiteralISize(i) => Ok(DynValue::ISize(*i)),
-            ir::Value::LiteralUSize(i) => Ok(DynValue::USize(*i)),
-            ir::Value::LiteralF32(f) => Ok(DynValue::F32(*f)),
-            ir::Value::LiteralF64(f) => Ok(DynValue::F64(*f)),
-            ir::Value::LiteralBool(b) => Ok(DynValue::Bool(*b)),
-            ir::Value::LiteralNull => Ok(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))),
+            ir::Value::Default(ty) => {
+                self.default_val(ty)
+            }
         }
     }
 
@@ -535,19 +596,13 @@ impl Interpreter {
 
         self.push_stack(func_info.name.clone(), stack_size);
 
-        // store empty result at $0 if needed
+        // store empty result if there is a result value
         let return_ty = func.return_ty();
-        let ret_id = if *return_ty != ir::Type::Nothing {
-            let result_val = self.default_val(return_ty)?;
 
-            let ret_id = self
-                .current_frame_mut()?
-                .add_undeclared_local(return_ty.clone(), &result_val)?;
-            assert_eq!(ret_id, ir::LocalID(0));
-            Some(ret_id)
-        } else {
-            None
-        };
+        if *return_ty != ir::Type::Nothing {
+            let result_val = self.default_val(return_ty)?;
+            self.current_frame_mut()?.declare_result(return_ty.clone(), &result_val)?;
+        }
 
         if args.len() != func.param_tys().len() {
             let msg = format!(
@@ -559,27 +614,21 @@ impl Interpreter {
             return Err(ExecError::illegal_state(msg));
         }
 
-        // store params in either $0.. or $1..
-        let first_arg_id = match ret_id {
-            Some(ret_id) => ir::LocalID(ret_id.0 + 1),
-            None => ir::LocalID(0),
-        };
-
-        for (arg_index, (arg_val, param_ty)) in args.iter().zip(func.param_tys()).enumerate() {
+        for (arg_num, (arg_val, param_ty)) in args.iter().zip(func.param_tys()).enumerate() {
             let arg_id = self
                 .current_frame_mut()?
-                .add_undeclared_local(param_ty.clone(), arg_val)?;
+                .declare_arg(param_ty.clone(), arg_val)?;
 
-            assert_eq!(ir::LocalID(first_arg_id.0 + arg_index), arg_id);
+            assert_eq!(ir::ArgID(arg_num), arg_id);
         }
 
         func.invoke(self)?;
 
-        let result_val = match ret_id {
-            None => None,
-            Some(ret_id) => {
-                let ret_ref = ir::Ref::Local(ret_id);
-                let return_val = self.evaluate(&ir::Value::Ref(ret_ref))?;
+        let result_val = match return_ty {
+            ir::Type::Nothing => None,
+            
+            _ => {
+                let return_val = self.evaluate(&ir::Ref::Result.value())?;
                 Some(return_val)
             },
         };
@@ -835,6 +884,16 @@ impl Interpreter {
                 },
             },
 
+            ir::Ref::Result => self.current_frame()?.get_result_ptr().map_err(|err| {
+                let msg = err.to_string();
+                ExecError::illegal_state(msg)
+            }),
+
+            ir::Ref::Arg(id) => self.current_frame()?.get_arg_ptr(*id).map_err(|err| {
+                let msg = err.to_string();
+                ExecError::illegal_state(msg)
+            }),
+
             // let int := 1;
             // @int -> stack address of int val
             ir::Ref::Local(id) => self.current_frame()?.get_local_ptr(*id).map_err(|err| {
@@ -875,7 +934,7 @@ impl Interpreter {
         }
     }
 
-    pub fn opts(&self) -> &InterpreterOpts {
+    pub fn opts(&self) -> &ExecOpts {
         &self.opts
     }
 
@@ -889,7 +948,7 @@ impl Interpreter {
                 let indent = str::repeat(
                     "    ",
                     self.current_frame()
-                        .map(|frame| frame.block_depth())
+                        .map(|frame| frame.debug_depth())
                         .unwrap_or(0)
                         .saturating_sub(2),
                 );
@@ -938,13 +997,6 @@ impl Interpreter {
 
             ir::Instruction::LocalAlloc(id, ty) => {
                 self.exec_local_alloc(*id, *pc, ty)?;
-            },
-
-            ir::Instruction::LocalBegin => {
-                self.exec_local_begin()?
-            },
-            ir::Instruction::LocalEnd => {
-                self.exec_local_end()?
             },
 
             ir::Instruction::NewObject {
@@ -1081,23 +1133,6 @@ impl Interpreter {
         let current_frame = self.current_frame_mut()?;
         current_frame
             .declare_local(id, ty.clone(), &uninit_val, pc)
-            .map_err(|err| self.add_stack_trace(err.into()))?;
-
-        Ok(())
-    }
-
-    fn exec_local_begin(&mut self) -> ExecResult<()> {
-        self.current_frame_mut()?.push_block();
-
-        Ok(())
-    }
-
-    fn exec_local_end(&mut self) -> ExecResult<()> {
-        self.current_frame_mut()
-            .and_then(|f| {
-                f.pop_block()?;
-                Ok(())
-            })
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
         Ok(())
@@ -2038,9 +2073,6 @@ impl Interpreter {
 
         *pc = location.pc_offset;
 
-        // assume all jumps are either upwards or to the same level
-        self.current_frame_mut()?.pop_block_to(location.block_depth)?;
-
         Ok(())
     }
 
@@ -2149,7 +2181,7 @@ impl Interpreter {
             def_result.map_err(|err| self.add_stack_trace(err.into()))?;
         }
         
-        for (iface_id, _) in lib.metadata.ifaces() {
+        for (iface_id, _) in lib.metadata.interfaces() {
             marshaller.add_iface(iface_id)
         }
 
@@ -2211,8 +2243,6 @@ impl Interpreter {
         // builtin functions that can now be stored as globals
         self.init_stdlib_globals();
 
-        let mut string_lit_values = HashMap::new();
-
         for (id, literal) in lib.metadata().strings() {
             let str_val = self
                 .create_string(literal, true)
@@ -2227,8 +2257,6 @@ impl Interpreter {
                 value: self.marshaller.marshal_to_vec(&str_val)?.into_boxed_slice(),
                 ty: ir::STRING_ID.to_class_ptr_type(),
             });
-
-            string_lit_values.insert(id, str_val);
         }
         
         let disable_rtti = self.metadata.get_struct_def(ir::TYPEINFO_ID).is_none()
@@ -2236,8 +2264,12 @@ impl Interpreter {
             || self.metadata.get_struct_def(ir::METHODINFO_ID).is_none();
 
         if !disable_rtti {
+            let tag_counts = lib.metadata
+                .all_tags()
+                .map(|(loc, tags)| (loc, tags.len()));
+            
             // allocate static arrays for runtime tag objects (must exist before RTTI init)
-            for (tag_loc, tag_count) in lib.metadata.tag_counts() {
+            for (tag_loc, tag_count) in tag_counts {
                 let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
                 let elements = iter::repeat(nil_any).take(tag_count).collect();
 
@@ -2248,21 +2280,21 @@ impl Interpreter {
                 self.globals.insert(array_ref, array_value);
             }
 
-            self.init_rtti(lib, &string_lit_values)?;
-        } else {
-            eprintln!("[vm] RTTI is disabled");
+            self.init_rtti(lib)?;
+        } else if self.opts.verbose {
+            eprintln!("[vm] RTTI is disabled (required types are not loaded)");
         }
 
         // declare global variables
-        for (var_id, var_ty) in &lib.variables {
+        for (var_id, var) in lib.metadata.variables() {
             // global variables start zero-initialized
-            let marshal_ty = self.marshaller.get_ty(var_ty)?;
+            let marshal_ty = self.marshaller.get_ty(&var.r#type)?;
             let zero_val = vec![0u8; marshal_ty.size()];
 
             self.globals
-                .insert(ir::GlobalRef::Variable(*var_id), GlobalValue::Variable {
+                .insert(ir::GlobalRef::Variable(var_id), GlobalValue::Variable {
                     value: zero_val.into_boxed_slice(),
-                    ty: var_ty.clone(),
+                    ty: var.r#type.clone(),
                 });
         }
 
@@ -2307,14 +2339,12 @@ impl Interpreter {
     }
     
     fn init_rtti(&mut self,
-        lib: &ir::Library,
-        string_lit_values: &HashMap<ir::StringID, DynValue>
-    ) -> ExecResult<()> {
+        lib: &ir::Library) -> ExecResult<()> {
         // create runtime type info objects (TypeInfo and MethodInfo)
         for (ty, runtime_type) in lib.metadata.type_info() {
             let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
 
-            let typeinfo_ptr = self.create_typeinfo(ty, runtime_type, &string_lit_values)?;
+            let typeinfo_ptr = self.create_typeinfo(ty, runtime_type)?;
             let ptr_bytes = self.marshaller.marshal_to_vec(&typeinfo_ptr)?;
 
             self.globals
@@ -2341,7 +2371,7 @@ impl Interpreter {
                 .and_then(|str_id| self.metadata.get_string(*str_id))
                 .cloned();
 
-            let funcinfo_ptr = self.create_func_info_object(func_id, func_decl, &string_lit_values)?;
+            let funcinfo_ptr = self.create_func_info_object(func_id, func_decl)?;
             let ptr_bytes = self.marshaller.marshal_to_vec(&funcinfo_ptr)?;
 
             let funcinfo_ref = ir::GlobalRef::StaticFuncInfo(func_id);
@@ -2356,6 +2386,11 @@ impl Interpreter {
         }
         
         Ok(())
+    }
+
+    fn load_string_lit(&self, id: ir::StringID) -> ExecResult<DynValue> {
+        let global_ref = ir::GlobalRef::StringLiteral(id);
+        self.load(&ir::Ref::from(global_ref))
     }
 
     pub fn create_string(&mut self, content: &str, immortal: bool) -> ExecResult<DynValue> {
@@ -2584,13 +2619,9 @@ impl Interpreter {
     fn create_typeinfo(
         &mut self,
         ty: &ir::Type,
-        rtti: &ir::TypeInfo,
-        string_lit_values: &HashMap<ir::StringID, DynValue>,
+        type_info: &ir::TypeInfo,
     ) -> ExecResult<DynValue> {
-        let type_name_string = match &rtti.name {
-            None => string_lit_values[&ir::EMPTY_STRING_ID].clone(),
-            Some(name_id) => string_lit_values[name_id].clone(),
-        };
+        let type_name_string = self.load_string_lit(type_info.name.unwrap_or(ir::EMPTY_STRING_ID))?;
 
         let ty_tags_loc = match ty {
             ir::Type::Object(ir::ObjectID::Interface(iface_id)) => {
@@ -2611,7 +2642,7 @@ impl Interpreter {
         let type_flags_repr = self.metadata.find_set_repr_struct(ir::TYPEINFO_FLAGS_BITS)
             .ok_or_else(|| ExecError::illegal_state("missing flags type for TypeFlags"))?;
         let type_flags_val = StructValue::new(type_flags_repr, [
-            DynValue::U64(rtti.flags)
+            DynValue::U64(type_info.flags)
         ]);
 
         let typeinfo_methods_ptr = DynValue::Pointer(
@@ -2643,11 +2674,11 @@ impl Interpreter {
             .collect();
 
         // these should be the same method in the same order!
-        assert_eq!(method_func_ids.len(), rtti.methods.len());
+        assert_eq!(method_func_ids.len(), type_info.methods.len());
 
         let mut method_info_ptrs = Vec::new();
         for method_index in 0..method_func_ids.len() {
-            let rtti_method = &rtti.methods[method_index];
+            let method_info = &type_info.methods[method_index];
 
             let method_tags_array_ptr = ty_tags_loc
                 .and_then(|loc| loc.method_loc(method_index))
@@ -2659,11 +2690,12 @@ impl Interpreter {
                 addr: global_method_index,
                 ty: ir::Type::Nothing,
             };
+            
+            let method_name_string = self.load_string_lit(method_info.name)?;
 
-            let name_val = string_lit_values[&rtti_method.name].clone();
-            let method_info = StructValue::new(ir::METHODINFO_ID, [
+            let method_info_struct = StructValue::new(ir::METHODINFO_ID, [
                 // 0: name
-                name_val,
+                method_name_string,
                 // 1: owner
                 DynValue::Pointer(typeinfo_ptr.clone()),
                 // 2: impl
@@ -2672,10 +2704,10 @@ impl Interpreter {
                 DynValue::Pointer(method_tags_array_ptr),
             ]);
 
-            let method_info_ptr = self.new_object(method_info, true)?;
+            let method_info_ptr = self.new_object(method_info_struct, true)?;
             method_info_ptrs.push(DynValue::Pointer(method_info_ptr));
 
-            self.runtime_methods.push(rtti_method.clone());
+            self.runtime_methods.push(method_info.clone());
         }
 
         let method_array = self.new_dyn_array(&ir::METHODINFO_TYPE, method_info_ptrs, true)?;
@@ -2691,12 +2723,9 @@ impl Interpreter {
         &mut self,
         func_id: ir::FunctionID,
         func_info: &ir::FunctionInfo,
-        string_lit_values: &HashMap<ir::StringID, DynValue>,
     ) -> ExecResult<DynValue> {
-        let func_name_string = match &func_info.runtime_name {
-            None => string_lit_values[&ir::EMPTY_STRING_ID].clone(),
-            Some(name_id) => string_lit_values[name_id].clone(),
-        };
+        let func_name_string = self.load_string_lit(func_info.runtime_name
+            .unwrap_or(ir::EMPTY_STRING_ID))?;
 
         let tags_loc = ir::TagLocation::Function(func_id);
 
@@ -2829,7 +2858,7 @@ struct FunctionInfo {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct InterpreterOpts {
+pub struct ExecOpts {
     pub trace_heap: bool,
     pub trace_rc: bool,
     pub trace_ir: bool,
@@ -2839,7 +2868,7 @@ pub struct InterpreterOpts {
     pub verbose: bool,
 }
 
-impl Default for InterpreterOpts {
+impl Default for ExecOpts {
     fn default() -> Self {
         Self {
             trace_heap: false,
@@ -2861,20 +2890,15 @@ enum GlobalValue {
 
 struct LabelLocation {
     pc_offset: usize,
-    block_depth: usize,
 }
 
 fn find_labels(instructions: &[ir::Instruction]) -> HashMap<ir::Label, LabelLocation> {
-    let mut block_depth = 0;
     let mut locations = HashMap::new();
 
     for (pc_offset, instruction) in instructions.iter().enumerate() {
         match instruction {
-            ir::Instruction::LocalBegin => block_depth += 1,
-            ir::Instruction::LocalEnd => block_depth -= 1,
             ir::Instruction::Label(label) => {
                 locations.insert(label.clone(), LabelLocation {
-                    block_depth,
                     pc_offset,
                 });
             },

@@ -23,12 +23,12 @@ pub fn translate_bin_op(
     // the functions to translate IR and member operators return pointers to the value
     let (out_val, out_is_ref) = match bin_op.op {
         ast::Operator::Period | ast::Operator::Index => {
-            let out_val = builder.local_new(result_ty.clone().temp_ref(), None);
+            let out_val = builder.local_var(result_ty.clone().temp_ref(), None);
             (out_val, true)
         },
 
         _ => {
-            let out_val = builder.local_new(result_ty.clone(), None);
+            let out_val = builder.local_var(result_ty.clone(), None);
             (out_val, false)
         },
     };
@@ -322,7 +322,7 @@ pub fn translate_unary_op(
             let out_ty = builder.translate_type(out_ty);
             assert!(matches!(out_ty, ir::Type::Pointer(..)), "address-of expression must result in a pointer type");
             
-            let out_val = builder.local_new(out_ty.clone(), None);
+            let out_val = builder.local_var(out_ty.clone(), None);
 
             builder.addr_of(out_val, operand_ref);
             
@@ -356,7 +356,7 @@ pub fn translate_unary_op(
 
         ast::Operator::Sub => {
             let out_ty = builder.translate_type(out_ty);
-            let out_val = builder.local_new(out_ty.clone(), None);
+            let out_val = builder.local_var(out_ty.clone(), None);
 
             let op_ty = unary_op.annotation.ty();
 
@@ -372,6 +372,7 @@ pub fn translate_unary_op(
                 typ::Type::Primitive(typ::Primitive::NativeInt) => ir::Value::LiteralISize(0),
                 typ::Type::Primitive(typ::Primitive::NativeUInt) => ir::Value::LiteralUSize(0),
                 typ::Type::Primitive(typ::Primitive::Real32) => ir::Value::LiteralF32(0.0),
+                typ::Type::Primitive(typ::Primitive::Real64) => ir::Value::LiteralF64(0.0),
                 _ => unimplemented!("IR for unary negation of {}", op_ty),
             };
 
@@ -383,14 +384,14 @@ pub fn translate_unary_op(
         ast::Operator::Add => {
             // just turns its operand into a temporary value
             let out_ty = builder.translate_type(out_ty);
-            let out_val = builder.local_new(out_ty.clone(), None);
+            let out_val = builder.local_var(out_ty.clone(), None);
             builder.mov(out_val.clone(), operand_ref);
 
             out_val.to_ref()
         },
 
         ast::Operator::Not => {
-            let out_val = builder.local_new(ir::Type::Bool, None);
+            let out_val = builder.local_var(ir::Type::Bool, None);
 
             builder.not(out_val.clone(), operand_ref);
 
@@ -399,7 +400,7 @@ pub fn translate_unary_op(
         
         ast::Operator::BitNot => {
             let result_ty = builder.translate_type(out_ty);
-            let result_val = builder.local_new(result_ty, None);
+            let result_val = builder.local_var(result_ty, None);
             
             match out_ty {
                 typ::Type::Set(set_type) => {

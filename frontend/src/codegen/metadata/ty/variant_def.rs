@@ -9,6 +9,8 @@ pub fn translate_variant_def(
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::VariantDef {
+    let tags = lib.translate_tag_groups(&variant_def.tags);
+    
     let name_path = translate_name(&variant_def.name, generic_ctx, lib);
     
     let tag_type = lib.translate_type(&VARIANT_TAG_TYPE, generic_ctx);
@@ -33,6 +35,7 @@ pub fn translate_variant_def(
     ir::VariantDef {
         name: name_path,
         tag_type,
+        tags,
         cases,
     }
 }

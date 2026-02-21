@@ -1,7 +1,9 @@
 use crate::FunctionID;
 use crate::Metadata;
+use crate::MetadataSource;
 use crate::ObjectID;
 use crate::StringID;
+use crate::TagInfo;
 use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;
@@ -74,4 +76,6 @@ pub struct MethodInfo {
 
     pub result_ty: Type,
     pub params: Vec<Type>,
+
+    pub tags: Vec<TagInfo>,
 }

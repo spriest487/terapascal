@@ -101,7 +101,8 @@ INT_TO_STR_IMPL(System_Int64ToStr,      int64_t,        PRId64, 24 + 1)
 INT_TO_STR_IMPL(System_NativeUIntToStr, size_t,         "zu",   24 + 0)
 INT_TO_STR_IMPL(System_NativeIntToStr,  ptrdiff_t,      "zd",   24 + 1)
 INT_TO_STR_IMPL(System_PointerToStr,    const void*,    "p",    24 + 0)
-INT_TO_STR_IMPL(System_RealToStr,       float,          "f",    3 + FLT_MANT_DIG - FLT_MIN_EXP)
+INT_TO_STR_IMPL(System_Real32ToStr,     float,          "f",    3 + DBL_MANT_DIG - DBL_MIN_EXP)
+INT_TO_STR_IMPL(System_Real64ToStr,     double,         "f",    3 + DBL_MANT_DIG - DBL_MIN_EXP)
 
 static void* Alloc(size_t len) {
     void* mem = calloc((size_t) len, 1);
@@ -258,13 +259,13 @@ static bool RcRelease(OBJECT_PTR object, bool weak) {
 #endif
             }
 
-            object->class = NULL;
-
             if (object->strong_count != 1) {
                 fprintf(stderr, "destructor for %s modified the reference count of the destroyed instance\n", OBJECT_DISPLAY(object));
                 fflush(stderr);
                 abort();
             }
+
+            object->class = NULL;
         }
   
         object->strong_count -= 1;

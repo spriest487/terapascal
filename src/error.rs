@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::io;
 use terapascal_build::error::BuildError;
 use terapascal_common::span::Span;
@@ -27,15 +28,17 @@ pub enum RunError {
     #[error("internal compiler error")]
     InternalError(String),
 
-    #[error("unknown output format")]
-    UnknownOutputFormat(String),
-
-    #[error("clang invocation failed")]
-    ClangBuildFailed(io::Error),
+    #[error("unknown output extension")]
+    UnknownOutputExt(OsString),
 
     #[error("invalid arguments")]
     InvalidArguments(String),
 
+    #[cfg(feature = "backend-c")]
+    #[error("clang invocation failed")]
+    ClangBuildFailed(io::Error),
+
+    #[cfg(feature = "backend-cil")]
     #[error(transparent)]
     CilBuildError(#[from] terapascal_backend_cil::BuildError),
 }
@@ -114,17 +117,11 @@ impl DiagnosticOutput for RunError {
                 label: None,
                 notes: Vec::new(),
             },
-            RunError::UnknownOutputFormat(ext) => DiagnosticMessage {
+            RunError::UnknownOutputExt(ext) => DiagnosticMessage {
                 severity,
-                title: format!("extension {} is not supported on this platform", ext),
+                title: format!("extension {} is not supported on this platform", ext.display()),
                 label: None,
                 notes: Vec::new(),
-            },
-            RunError::ClangBuildFailed(err) => DiagnosticMessage {
-                severity,
-                title: err.to_string(),
-                notes: Vec::new(),
-                label: None,
             },
             RunError::InvalidArguments(err) => DiagnosticMessage {
                 severity,
@@ -132,6 +129,14 @@ impl DiagnosticOutput for RunError {
                 notes: Vec::new(),
                 label: None,
             },
+            #[cfg(feature = "backend-c")]
+            RunError::ClangBuildFailed(err) => DiagnosticMessage {
+                severity,
+                title: format!("clang invocation failed: {err}"),
+                notes: Vec::new(),
+                label: None,
+            },
+            #[cfg(feature = "backend-cil")]
             RunError::CilBuildError(err) => DiagnosticMessage {
                 severity,
                 title: err.to_string(),

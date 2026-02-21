@@ -3,12 +3,12 @@ use crate::ir;
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::ExecResult;
-use crate::Interpreter;
+use crate::Vm;
 use std::fmt;
 
 pub mod ffi;
 
-pub type BuiltinFn = fn(state: &mut Interpreter) -> ExecResult<()>;
+pub type BuiltinFn = fn(state: &mut Vm) -> ExecResult<()>;
 
 pub struct BuiltinFunction {
     pub func: BuiltinFn,
@@ -76,7 +76,7 @@ impl Function {
         }
     }
 
-    pub fn invoke(&self, state: &mut Interpreter) -> ExecResult<()> {
+    pub fn invoke(&self, state: &mut Vm) -> ExecResult<()> {
         match self {
             Function::Builtin(def) => {
                 if state.opts().trace_ir {

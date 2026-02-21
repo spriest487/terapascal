@@ -86,7 +86,7 @@ impl<'a> Unit<'a> {
     }
 
     fn gen_dyn_array_length_method(&mut self, array_id: DynArrayTypeID, element_type: &ir::Type) {
-        let arr_arg = Expr::local_var(ir::LocalID(1));
+        let arr_arg = Expr::arg_var(ir::ArgID(0));
 
         let array_ptr_ty = Type::DefinedType(TypeDefName::DynArray(array_id)).ptr();
 
@@ -113,8 +113,8 @@ impl<'a> Unit<'a> {
     fn gen_dyn_array_element_method(&mut self, array_id: DynArrayTypeID, element_type: &ir::Type) {
         let array_ptr_ty = Type::DefinedType(TypeDefName::DynArray(array_id)).ptr();
 
-        let arr_arg = Expr::local_var(ir::LocalID(1));
-        let index_arg = Expr::local_var(ir::LocalID(2));
+        let arr_arg = Expr::arg_var(ir::ArgID(0));
+        let index_arg = Expr::arg_var(ir::ArgID(1));
 
         let element_func_body = vec![
             Statement::Expr(Expr::Function(FunctionName::DynArrayBoundsCheck)
@@ -146,8 +146,8 @@ impl<'a> Unit<'a> {
     }
 
     fn gen_dyn_array_alloc_method(&mut self, array_id: DynArrayTypeID, element_type: &ir::Type) {
-        let arr_arg = Expr::local_var(ir::LocalID(0));
-        let len_arg = Expr::local_var(ir::LocalID(1));
+        let arr_arg = Expr::arg_var(ir::ArgID(0));
+        let len_arg = Expr::arg_var(ir::ArgID(1));
 
         let array_ptr_ty = Type::DefinedType(TypeDefName::DynArray(array_id)).ptr();
 

@@ -1,15 +1,18 @@
 use crate::FieldID;
 use crate::NamePath;
 use crate::StructIdentity;
+use crate::TagInfo;
 use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StructDef {
     pub identity: StructIdentity,
+    pub tags: Vec<TagInfo>,
+    
     pub fields: BTreeMap<FieldID, StructFieldDef>,
 }
 
@@ -55,6 +58,7 @@ impl StructDef {
         Self {
             identity,
             fields: BTreeMap::new(),
+            tags: Vec::new(),
         }
     }
 
@@ -68,14 +72,18 @@ impl StructDef {
             | StructIdentity::SetFlags { .. } => None,
         }
     }
-
-    pub fn with_field(mut self, name: impl Into<String>, ty: Type) -> Self {
-        let id = self
+    
+    fn next_field_id(&self) -> FieldID {
+        self
             .fields
             .keys()
             .max_by_key(|id| id.0)
             .map(|id| FieldID(id.0 + 1))
-            .unwrap_or(FieldID(0));
+            .unwrap_or(FieldID(0))
+    }
+
+    pub fn with_field(mut self, name: impl Into<String>, ty: Type) -> Self {
+        let id = self.next_field_id();
 
         self.fields.insert(
             id,
@@ -90,6 +98,11 @@ impl StructDef {
 
     pub fn with_fields(mut self, fields: BTreeMap<FieldID, StructFieldDef>) -> Self {
         self.fields.extend(fields);
+        self
+    }
+    
+    pub fn with_tags(mut self, tags: impl IntoIterator<Item=TagInfo>) -> Self {
+        self.tags.extend(tags.into_iter());
         self
     }
 }

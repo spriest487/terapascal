@@ -11,6 +11,7 @@ use crate::ast::MemberDeclSection;
 use crate::ast::MethodOwner;
 use crate::ast::SetDeclRange;
 use crate::ast::TypeMemberDeclRef;
+use crate::result::ErrorContinue;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::const_eval_integer;
 use crate::typ::ast::typecheck_expr;
@@ -38,7 +39,6 @@ use crate::typ::Type;
 use crate::typ::TypeError;
 use crate::typ::TypeName;
 use crate::typ::TypeResult;
-use crate::typ::TypedValue;
 use crate::typ::Value;
 use crate::typ::MAX_FLAGS_BITS;
 use crate::IntConstant;
@@ -48,7 +48,6 @@ use std::sync::Arc;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use crate::result::ErrorContinue;
 
 pub type StructDecl = ast::StructDecl<Value>;
 pub type StructMemberDecl = ast::TypeMemberDecl<Value>;
@@ -212,7 +211,7 @@ impl TagItem {
             let member_ty = member.value.annotation().ty().into_owned();
             let member_span = member.value.span().clone();
 
-            let lit_val = TypedValue::temp(member_ty, member_span);
+            let lit_val = ConstValue::literal(const_val_expr.clone(), member_ty, member_span);
             let mut lit_expr = Expr::literal(const_val_expr, lit_val);
 
             mem::swap(&mut lit_expr, &mut member.value);
