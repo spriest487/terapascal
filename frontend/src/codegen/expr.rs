@@ -14,8 +14,8 @@ use crate::typ::TypedValue;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::*;
-use terapascal_ir::instruction_builder::InstructionBuilder as _;
 use terapascal_ir::Type;
+use terapascal_ir::InstructionBuilder as _;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Value {
     match expr.annotation() {

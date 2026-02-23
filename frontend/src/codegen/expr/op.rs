@@ -6,7 +6,7 @@ use crate::ir;
 use crate::IntConstant;
 use bigdecimal::BigDecimal;
 use terapascal_common::span::Spanned;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::InstructionBuilder;
 
 pub fn translate_bin_op(
     bin_op: &typ::ast::BinOp,

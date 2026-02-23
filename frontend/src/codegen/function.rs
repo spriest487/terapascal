@@ -7,8 +7,8 @@ use crate::codegen::IRBuilder;
 use crate::ir::*;
 use std::iter;
 use std::sync::Arc;
-use terapascal_ir::instruction_builder::jmp_exists;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::jmp_exists;
+use terapascal_ir::InstructionBuilder;
 
 #[derive(Clone, Debug)]
 pub struct FunctionInstance {

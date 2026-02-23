@@ -10,7 +10,7 @@ use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::{evaluate_expr, handle_incomplete_expr};
 use crate::typ::ast::evaluate_no_args_function_call;
 use crate::typ::ast::expr::typecheck_call;
-use crate::typ::ast::member_value;
+use crate::typ::ast::named_member_value;
 use crate::typ::ast::stmt::assign::typecheck_assignment;
 use crate::typ::ast::stmt::assign::typecheck_compound_assignment;
 use crate::typ::ast::typecheck_block;
@@ -282,7 +282,7 @@ pub fn typecheck_stmt(
 fn typecheck_member_stmt(member: &ast::MemberStmt, expect_ty: &Type, ctx: &mut Context) -> Result<Result<Stmt, TypeError>, TypeError> {
     let base = evaluate_expr(&member.base, expect_ty, ctx)?;
 
-    let mut value = member_value(&base, &member.name, expect_ty, ctx)?;
+    let mut value = named_member_value(&base, &member.name, expect_ty, ctx)?;
     
     value.evaluate(expect_ty, ctx)?;
 

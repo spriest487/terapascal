@@ -8,21 +8,25 @@ mod val;
 mod library;
 pub mod dep_sort;
 pub mod typeinfo;
-pub mod instruction_builder;
+mod instruction_builder;
 pub mod builtin;
 
 pub use formatter::*;
 pub use function::*;
 pub use instruction::*;
+pub use instruction_builder::scope::*;
+pub use instruction_builder::InstructionBuilder;
+pub use instruction_builder::LocalBinding;
+pub use instruction_builder::util::jmp_exists;
 pub use library::*;
 pub use metadata::*;
-pub use typeinfo::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::fmt;
 pub use ty::*;
 pub use ty_decl::*;
+pub use typeinfo::*;
 pub use val::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -82,6 +86,11 @@ impl NamePath {
         }
 
         buf
+    }
+
+    pub fn child(mut self, name: impl Into<String>) -> Self {
+        self.path.push(name.into());
+        self
     }
 }
 

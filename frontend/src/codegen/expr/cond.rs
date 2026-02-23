@@ -3,7 +3,7 @@ use crate::codegen::expr;
 use crate::codegen::ir;
 use crate::codegen::stmt::build_case_block;
 use crate::codegen::typ;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::InstructionBuilder;
 use crate::codegen::pattern::{translate_pattern_match_bindings, translate_pattern_match_is};
 
 pub fn translate_if_cond<B, BranchTranslateFn>(

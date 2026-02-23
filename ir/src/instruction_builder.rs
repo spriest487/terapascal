@@ -29,7 +29,6 @@ use dyn_array::new_dyn_array;
 use scope::LocalStack;
 use std::sync::Arc;
 use terapascal_common::span::Span;
-pub use util::jmp_exists;
 
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);

@@ -427,11 +427,10 @@ fn typecheck_member_op(
     match &bin_op.rhs {
         // x.y
         ast::Expr::Ident(member_ident, ..) => {
-            let rhs_value = member_value(&lhs, member_ident, expect_ty, ctx)?;
+            let rhs_value = named_member_value(&lhs, member_ident, expect_ty, ctx)?;
             let op_value = rhs_value.with_span(span.clone());
 
             let rhs = Expr::Ident(member_ident.clone(), rhs_value);
-
 
             let member_op = BinOp {
                 lhs,
@@ -518,7 +517,7 @@ fn typecheck_type_member(
     Ok(annotation)
 }
 
-pub fn member_value(
+pub fn named_member_value(
     base_expr: &Expr,
     member_ident: &Ident,
     expect_ty: &Type,

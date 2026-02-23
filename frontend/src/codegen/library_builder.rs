@@ -54,7 +54,7 @@ use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::StripMode;
-use terapascal_ir::instruction_builder::InstructionBuilder as _;
+use terapascal_ir::InstructionBuilder as _;
 use terapascal_ir::MetadataSource;
 
 #[derive(Debug)]
@@ -1322,8 +1322,8 @@ impl<'a> LibraryBuilder<'a> {
         }
         
         // should fetch from the cache at this point
-        let mut rtti = (*self.gen_type_info(&ty)).clone();
-        rtti.name = Some(self.metadata.find_or_insert_string(&src_ty.to_string()));
+        let mut type_info = (*self.gen_type_info(&ty)).clone();
+        type_info.name = Some(self.metadata.find_or_insert_string(&src_ty.to_string()));
 
         match &src_ty {
             typ::Type::Record(name) | typ::Type::Class(name) => {
@@ -1336,7 +1336,7 @@ impl<'a> LibraryBuilder<'a> {
 
                     if method.is_published() && method_decl.name.type_params.is_none() {
                         let method_info = self.create_method_info(ty.clone(), &src_ty, method_index, false, method_decl);
-                        rtti.methods.push(method_info);
+                        type_info.methods.push(method_info);
                     }
                 }
             }
@@ -1351,7 +1351,7 @@ impl<'a> LibraryBuilder<'a> {
 
                     if method_decl.name.type_params.is_none() {
                         let method_info = self.create_method_info(ty.clone(), &src_ty, method_index, true, method_decl);
-                        rtti.methods.push(method_info);
+                        type_info.methods.push(method_info);
                     }
                 }
             }
@@ -1362,7 +1362,7 @@ impl<'a> LibraryBuilder<'a> {
         };
 
         // replace the existing RTTI
-        self.metadata.insert_type_info(ty, rtti);
+        self.metadata.insert_type_info(ty, type_info);
     }
 
     fn create_method_info(&mut self,

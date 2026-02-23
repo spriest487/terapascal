@@ -260,6 +260,12 @@ impl fmt::Display for GlobalRef {
     }
 }
 
+impl GlobalRef {
+    pub fn to_ref(self) -> Ref {
+        Ref::from(self)
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct LocalID(pub usize);
 

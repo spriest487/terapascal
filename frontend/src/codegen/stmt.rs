@@ -15,8 +15,8 @@ use crate::typ::OPTION_NONE_CASE;
 use crate::typ::OPTION_SOME_CASE;
 use std::sync::Arc;
 use terapascal_common::span::Spanned;
-use terapascal_ir::instruction_builder::jmp_exists;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::jmp_exists;
+use terapascal_ir::InstructionBuilder;
 use crate::codegen::pattern::{translate_pattern_match_bindings, translate_pattern_match_is};
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut IRBuilder) {
