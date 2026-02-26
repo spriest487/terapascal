@@ -199,6 +199,14 @@ impl Metadata {
             self.function_info.insert(*id, func_info.clone());
         }
 
+        for (id, var) in &other.variables {
+            if let Some(old_def) = self.variables.get(id) {
+                Self::check_conflict("variable ID", id, Some(&var.name), Some(&old_def.name));
+            };
+
+            self.variables.insert(*id, var.clone());
+        }
+
         for (func_type_id, other_closure_ids) in &other.closures {
             let func_closures = self.closures.entry(*func_type_id).or_insert_with(Vec::new);
 
