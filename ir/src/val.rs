@@ -11,6 +11,8 @@ use bigdecimal::ToPrimitive;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
+use std::ops::Add;
+use std::ops::AddAssign;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -268,6 +270,34 @@ impl GlobalRef {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct LocalID(pub usize);
+
+impl Add<usize> for LocalID {
+    type Output = Self;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        LocalID(self.0 + rhs)
+    }
+}
+
+impl Add<Self> for LocalID {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        LocalID(self.0 + rhs.0)
+    }
+}
+
+impl AddAssign<usize> for LocalID {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs
+    }
+}
+
+impl AddAssign<Self> for LocalID {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0
+    }
+}
 
 impl fmt::Display for LocalID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
