@@ -234,6 +234,159 @@ impl Instruction {
             | Instruction::Cast { out, .. } => *out == Ref::Discard,
         }
     }
+
+    pub fn visit_refs<F>(&mut self, f: &F)
+    where
+        F: Fn(&mut Ref) + Sized,
+    {
+        match self {
+            Instruction::Comment(..)
+            | Instruction::DebugPush(..)
+            | Instruction::DebugPop
+            | Instruction::LocalAlloc(..)
+            | Instruction::Label(..)
+            | Instruction::Jump { .. } => {},
+
+            Instruction::Move { out, new_val } => {
+                Self::visit_ref(out, f);
+                Self::visit_val(new_val, f);
+            },
+
+            Instruction::Add(bin_op)
+            | Instruction::Sub(bin_op)
+            | Instruction::Mul(bin_op)
+            | Instruction::IDiv(bin_op)
+            | Instruction::FDiv(bin_op)
+            | Instruction::Mod(bin_op)
+            | Instruction::Shl(bin_op)
+            | Instruction::Shr(bin_op)
+            | Instruction::BitAnd(bin_op)
+            | Instruction::BitOr(bin_op)
+            | Instruction::BitXor(bin_op)
+            | Instruction::Eq(bin_op)
+            | Instruction::Gt(bin_op)
+            | Instruction::Lt(bin_op)
+            | Instruction::Lte(bin_op)
+            | Instruction::Gte(bin_op)
+            | Instruction::And(bin_op)
+            | Instruction::Or(bin_op) => {
+                Self::visit_ref(&mut bin_op.out, f);
+                Self::visit_val(&mut bin_op.a, f);
+                Self::visit_val(&mut bin_op.b, f);
+            },
+
+            | Instruction::BitNot(unary_op) | Instruction::Not(unary_op) => {
+                Self::visit_ref(&mut unary_op.out, f);
+                Self::visit_val(&mut unary_op.a, f);
+            },
+
+            Instruction::Element { out, a, index, .. } => {
+                Self::visit_ref(out, f);
+                Self::visit_ref(a, f);
+                Self::visit_val(index, f);
+            },
+
+            Instruction::Length { out, a, .. } => {
+                Self::visit_ref(out, f);
+                Self::visit_ref(a, f);
+            }
+
+            Instruction::VariantTag { out, a, .. }
+            | Instruction::AddrOf { out, a }
+            | Instruction::MakeRef { out, a }
+            | Instruction::VariantData { out, a, .. }
+            | Instruction::Field { out, a, .. } => {
+                Self::visit_ref(out, f);
+                Self::visit_ref(a, f);
+            },
+
+            Instruction::Cast { out, a, .. } | Instruction::ClassIs { out, a, .. } => {
+                Self::visit_ref(out, f);
+                Self::visit_val(a, f);
+            },
+
+            Instruction::Call {
+                out,
+                function,
+                args,
+            } => {
+                if let Some(out_ref) = out {
+                    Self::visit_ref(out_ref, f);
+                }
+
+                Self::visit_val(function, f);
+
+                for arg in args {
+                    Self::visit_val(arg, f);
+                }
+            },
+
+            Instruction::VirtualCall {
+                out,
+                self_arg,
+                rest_args,
+                ..
+            } => {
+                if let Some(out_ref) = out {
+                    Self::visit_ref(out_ref, f);
+                }
+
+                Self::visit_val(self_arg, f);
+
+                for arg in rest_args {
+                    Self::visit_val(arg, f);
+                }
+            },
+
+            Instruction::JumpIf { test, .. } => Self::visit_val(test, f),
+
+            Instruction::NewObject { out, .. } => {
+                Self::visit_ref(out, f);
+            },
+            Instruction::NewArray { out, count, .. } => {
+                Self::visit_ref(out, f);
+                Self::visit_val(count, f);
+            },
+            Instruction::NewBox { out, .. } => {
+                Self::visit_ref(out, f);
+            },
+
+            Instruction::Release { at, released_out, .. }  => {
+                Self::visit_ref(at, f);
+                Self::visit_ref(released_out, f);
+            },
+            Instruction::Retain { at, .. } => {
+                Self::visit_ref(at, f);
+            },
+
+            Instruction::Raise { val } => {
+                Self::visit_ref(val, f);
+            },
+        }
+    }
+
+    fn visit_ref<F>(r: &mut Ref, f: F)
+    where
+        F: Fn(&mut Ref),
+    {
+        if let Ref::Deref(inner) = r {
+            Self::visit_val(inner.as_mut(), f);
+            return;
+        }
+
+        f(r);
+    }
+
+    fn visit_val<F>(val: &mut Value, f: F)
+    where
+        F: Fn(&mut Ref),
+    {
+        let Value::Ref(val_ref) = val else {
+            return;
+        };
+
+        Self::visit_ref(val_ref, f);
+    }
 }
 
 impl fmt::Display for Instruction {
