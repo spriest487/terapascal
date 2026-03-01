@@ -31,8 +31,8 @@ impl Ref {
         Ref::Deref(Box::new(Value::Ref(self)))
     }
 
-    pub fn value(self) -> Value {
-        Value::Ref(self)
+    pub fn value(&self) -> Value {
+        Value::Ref(self.clone())
     }
 
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
