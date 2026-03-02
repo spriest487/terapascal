@@ -1,7 +1,7 @@
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::ir;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::InstructionBuilder;
 use terapascal_ir::MetadataSource;
 
 pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {

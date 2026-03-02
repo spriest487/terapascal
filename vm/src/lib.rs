@@ -2281,8 +2281,8 @@ impl Vm {
             }
 
             self.init_rtti(lib)?;
-        } else {
-            eprintln!("[vm] RTTI is disabled");
+        } else if self.opts.verbose {
+            eprintln!("[vm] RTTI is disabled (required types are not loaded)");
         }
 
         // declare global variables

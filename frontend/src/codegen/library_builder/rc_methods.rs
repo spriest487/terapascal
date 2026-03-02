@@ -2,7 +2,7 @@ use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
 use std::collections::HashMap;
 use terapascal_ir as ir;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::InstructionBuilder;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct RcMethodInfo {

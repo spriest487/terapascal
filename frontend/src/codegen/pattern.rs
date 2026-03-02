@@ -5,7 +5,7 @@ use crate::typ;
 use crate::typ::MatchPattern;
 use crate::typ::Specializable;
 use std::sync::Arc;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::InstructionBuilder;
 
 pub struct PatternMatchBinding {
     pub name: String,

@@ -8,7 +8,7 @@ use crate::typ::Specializable as _;
 use crate::typ::Value;
 use std::borrow::Cow;
 use std::sync::Arc;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::InstructionBuilder;
 
 fn translate_args(
     args: &[typ::ast::Expr],

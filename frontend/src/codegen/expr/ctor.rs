@@ -7,7 +7,7 @@ use crate::ir;
 use crate::typ;
 use bigdecimal::BigDecimal;
 use bigdecimal::Zero;
-use terapascal_ir::instruction_builder::InstructionBuilder as _;
+use terapascal_ir::InstructionBuilder as _;
 
 pub fn build_object_ctor_invocation(
     object_ty: &typ::Type,

@@ -17,8 +17,8 @@ use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use std::borrow::Cow;
 use std::sync::Arc;
-use terapascal_ir::instruction_builder::scope::LocalStack;
-use terapascal_ir::instruction_builder::InstructionBuilder;
+use terapascal_ir::LocalStack;
+use terapascal_ir::InstructionBuilder;
 
 #[derive(Debug)]
 pub struct IRBuilder<'m, 'l: 'm> {
