@@ -1,6 +1,7 @@
 use serde::Serialize;
 use std::fmt;
 use std::fmt::Formatter;
+use std::path::PathBuf;
 use std::slice;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
@@ -87,7 +88,7 @@ impl StackTraceFrame {
     }
 
     pub fn to_span(&self) -> Span {
-        Span::new(&self.name, self.start_loc, self.end_loc)
+        Span::new(PathBuf::from(&self.name), self.start_loc, self.end_loc)
     }
 }
 

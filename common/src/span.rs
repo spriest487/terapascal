@@ -53,9 +53,9 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn new(file: impl Into<PathBuf>, start: Location, end: Location) -> Self {
+    pub fn new(file: impl Into<Arc<PathBuf>>, start: Location, end: Location) -> Self {
         Self {
-            file: Arc::new(file.into()),
+            file: file.into(),
             start,
             end,
         }
