@@ -101,8 +101,12 @@ public class AssemblyBuilder : IDisposable {
     }
 
     public TypeDefinition GetUnitClass(IR.NamePath unitPath) {
-        var ns = unitPath.GetParent() is { } parentPath ? parentPath.ToString() : "";
-        var name = unitPath.Last;
+        var ns = unitPath.ToString();
+        
+        // we use the unit name as the namespace for type declared within it, so the unit class for free functions
+        // etc must be differently named. we don't expect these to be accessible to other CLR code (since free
+        // functions don't exist in CLR), so use an internal name
+        const string name = "<Internal>";
 
         foreach (var typeDef in this.Module.Types) {
             if (typeDef.Namespace == ns && typeDef.Name == name) {
