@@ -76,12 +76,8 @@ impl Span {
             end: other.span().end,
         }
     }
-    
-    pub fn extend(&mut self, other: &impl Spanned) {
-        self.end = other.span().end;
-    }
 
-    pub fn maybe_extend(&mut self, other: &impl MaybeSpanned) {
+    pub fn extend(&mut self, other: &impl MaybeSpanned) {
         if let Some(other_span) = other.get_span() {
             self.end = other_span.end;
         }

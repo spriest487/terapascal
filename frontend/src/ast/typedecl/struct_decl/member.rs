@@ -218,7 +218,7 @@ fn parse_field(tokens: &mut TokenStream, access: Access) -> ParseResult<FieldDec
     let ty = TypeName::parse(tokens)?;
 
     let mut span = first_ident.span.clone();
-    span.maybe_extend(&ty);
+    span.extend(&ty);
 
     rest_idents.insert(0, first_ident);
 

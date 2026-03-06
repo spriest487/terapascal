@@ -206,7 +206,7 @@ impl VariantCase {
                 let ty = TypeName::parse(parser.tokens())?;
 
                 let mut case_span = ident.span.clone();
-                case_span.maybe_extend(&ty);
+                case_span.extend(&ty);
 
                 VariantCase {
                     ident,

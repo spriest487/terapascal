@@ -26,7 +26,7 @@ impl AliasDecl<Span> {
         let ty = TypeName::parse(tokens)?;
         
         let mut span = name.span.clone();
-        span.maybe_extend(&ty);
+        span.extend(&ty);
 
         Ok(Self {
             name,

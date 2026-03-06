@@ -42,7 +42,7 @@ impl SupersClause {
         }
         
         let mut span = of_tt.span().clone();
-        span.maybe_extend(&types.last().and_then(|ty| ty.get_span()));
+        span.extend(&types.last().and_then(|ty| ty.get_span()));
 
         Ok(Some(SupersClause {
             span,

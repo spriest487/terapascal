@@ -55,7 +55,7 @@ impl LocalBinding {
 
         if tokens.match_one_maybe(Separator::Colon).is_some() {
             binding.ty = TypeName::parse(tokens)?;
-            binding.annotation.maybe_extend(&binding.ty);
+            binding.annotation.extend(&binding.ty);
         }
 
         if let Some(tt) = tokens.match_one_maybe(Operator::Assignment) {

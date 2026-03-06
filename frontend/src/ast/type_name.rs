@@ -277,7 +277,7 @@ impl Parse for TypeName {
                     return Err(TracedError::trace(err))
                 }
 
-                span.maybe_extend(&weak_ty);
+                span.extend(&weak_ty);
                 
                 let weak_ty_name = WeakTypeName {
                     weak_kw: weak_kw_span,
@@ -495,7 +495,7 @@ impl TypeName {
         let return_ty = match tokens.match_one_maybe(Separator::Colon) {
             Some(..) => {
                 let return_ty = TypeName::parse(tokens)?;
-                span.maybe_extend(&return_ty);
+                span.extend(&return_ty);
 
                 Some(Box::new(return_ty))
             },
