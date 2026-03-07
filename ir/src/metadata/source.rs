@@ -13,9 +13,11 @@ use crate::TagLocation;
 use crate::Type;
 use crate::TypeDef;
 use crate::TypeDefID;
+use crate::TypeInfo;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
+use std::rc::Rc;
 
 pub trait MetadataSource {
     fn as_formatter(&self) -> &impl IRFormatter;
@@ -26,6 +28,7 @@ pub trait MetadataSource {
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
     fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)>;
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID>;
+    fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>>;
 
     fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)>;
     fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo>;

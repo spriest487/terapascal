@@ -328,10 +328,6 @@ impl Metadata {
         }
     }
 
-    pub fn get_type_info(&self, ty: &Type) -> Option<Rc<TypeInfo>> {
-        self.type_info.get(ty).cloned()
-    }
-
     pub fn type_info(&self) -> impl Iterator<Item = (&Type, &Rc<TypeInfo>)> {
         self.type_info.iter()
     }
@@ -814,6 +810,10 @@ impl MetadataSource for Metadata {
 
             _ => None,
         })
+    }
+
+    fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>> {
+        self.type_info.get(of_type).cloned()
     }
 
     fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)> + use<'_> {

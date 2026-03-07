@@ -13,6 +13,7 @@ use crate::ast::TypeDefName;
 use crate::ast::Unit;
 use crate::ast::VariableID;
 use crate::ir;
+use ir::MetadataSource as _;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write;

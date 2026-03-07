@@ -1,6 +1,7 @@
 use crate::MetadataBuilder;
-use crate::TypeInfo;
+use crate::MetadataSource;
 use crate::Type;
+use crate::TypeInfo;
 use std::rc::Rc;
 
 impl MetadataBuilder {

@@ -3,15 +3,16 @@ mod functions;
 mod rtti;
 
 use crate::dep_sort::sort_defs;
-use crate::metadata::source::MetadataSource;
-use crate::{FieldID, MethodInfo};
+use crate::FieldID;
 use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::Metadata;
+use crate::MetadataSource;
 use crate::MethodID;
+use crate::MethodInfo;
 use crate::NamePath;
 use crate::Ref;
 use crate::StringID;
@@ -20,6 +21,7 @@ use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
 use crate::TypeDefID;
+use crate::TypeInfo;
 use crate::Value;
 use crate::VariableID;
 use crate::VariableInfo;
@@ -31,6 +33,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Write;
 use std::iter;
+use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -245,6 +248,10 @@ impl MetadataSource for MetadataBuilder {
 
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
         self.find_in_self_or_refs(move |metadata| metadata.find_type_decl(name))
+    }
+
+    fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_type_info(of_type))
     }
 
     fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)> {
