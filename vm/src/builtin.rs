@@ -106,6 +106,11 @@ pub(super) fn real_to_str(state: &mut Vm) -> ExecResult<()> {
     primitive_to_str(state, DynValue::as_f32)
 }
 
+/// F64 -> String
+pub(super) fn real64_to_str(state: &mut Vm) -> ExecResult<()> {
+    primitive_to_str(state, DynValue::as_f64)
+}
+
 /// String -> Nothing
 pub(super) fn write(state: &mut Vm) -> ExecResult<()> {
     let string = state.read_string(&ir::ArgID(0).to_ref())?;
@@ -579,6 +584,9 @@ pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, ir::Ty
         ]),
         ("RealToStr", real_to_str, ir::Type::string_ptr(), vec![
             ir::Type::F32
+        ]),
+        ("Real64ToStr", real64_to_str, ir::Type::string_ptr(), vec![
+            ir::Type::F64
         ]),
         ("StrToInt", str_to_int, ir::Type::I32, vec![
             ir::STRING_TYPE
