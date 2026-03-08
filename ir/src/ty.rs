@@ -215,7 +215,7 @@ impl Type {
             | Type::Object(_)
             | Type::WeakObject(_)
             | Type::Function(_) => {
-                Some(Value::LiteralNull)
+                Some(Value::LiteralNil)
             },
 
             Type::Bool => Some(Value::LiteralBool(false)),

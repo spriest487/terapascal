@@ -214,7 +214,7 @@ pub fn literal_to_val(
     lib: &mut LibraryBuilder,
 ) -> ir::Value {
     match lit {
-        ast::Literal::Nil => ir::Value::LiteralNull,
+        ast::Literal::Nil => ir::Value::LiteralNil,
 
         ast::Literal::Boolean(b) => ir::Value::LiteralBool(*b),
 

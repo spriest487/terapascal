@@ -93,7 +93,7 @@ impl fmt::Display for Ref {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     Ref(Ref),
-    LiteralNull,
+    LiteralNil,
     LiteralBool(bool),
     LiteralU8(u8),
     LiteralI8(i8),
@@ -128,7 +128,7 @@ impl fmt::Display for Value {
             Value::LiteralBool(b) => write!(f, "{}", b),
             Value::LiteralF32(x) => write!(f, "{:.6}", x),
             Value::LiteralF64(x) => write!(f, "{:.15}", x),
-            Value::LiteralNull => write!(f, "NULL"),
+            Value::LiteralNil => write!(f, "NIL"),
             Value::SizeOf(ty) => write!(f, "sizeof({ty})"),
             Value::Default(ty) => write!(f, "default({ty})"),
         }
@@ -168,6 +168,18 @@ impl From<FunctionID> for Value {
 impl From<bool> for Value {
     fn from(value: bool) -> Self {
         Self::LiteralBool(value)
+    }
+}
+
+impl From<i32> for Value {
+    fn from(value: i32) -> Self {
+        Self::LiteralI32(value)
+    }
+}
+
+impl From<f32> for Value {
+    fn from(value: f32) -> Self {
+        Self::LiteralF32(value)
     }
 }
 
@@ -236,6 +248,8 @@ impl Value {
         }
     }
 }
+
+pub const NIL: Value = Value::LiteralNil;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum GlobalRef {

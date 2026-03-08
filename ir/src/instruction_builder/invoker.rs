@@ -57,7 +57,7 @@ where
 
     builder.local_begin();
     {
-        let args_null = builder.eq_to_val(args_ref.clone(), Value::LiteralNull);
+        let args_null = builder.eq_to_val(args_ref.clone(), Value::LiteralNil);
         builder.jmpif(exit_error_label, args_null);
     }
     builder.local_end();
@@ -72,10 +72,10 @@ where
         let actual_args_len = builder.local_temp(Type::I32);
         builder.length(actual_args_len, args_ref.clone(), arg_array_type.clone());
         
-        builder.neq(has_self_arg, self_ref.clone(), Value::LiteralNull);
+        builder.neq(has_self_arg, self_ref.clone(), Value::LiteralNil);
 
         builder.if_then(has_self_arg, |builder| {
-            builder.neq(has_self_arg, self_ref.clone().to_deref(), Value::LiteralNull);
+            builder.neq(has_self_arg, self_ref.clone().to_deref(), Value::LiteralNil);
 
             builder.if_then(has_self_arg, |builder| {
                 builder.add(actual_args_len, actual_args_len, Value::LiteralI32(1));
@@ -197,7 +197,7 @@ where
     if func_sig.return_ty == Type::Nothing {
         // no result: set result ref to nil
         builder.call(func_id, call_args, None);
-        builder.mov(RESULT_REF, Value::LiteralNull);
+        builder.mov(RESULT_REF, Value::LiteralNil);
     } else {
         let call_result = builder.local_temp(func_sig.return_ty.clone());
         builder.call(func_id, call_args, Some(call_result.to_ref()));
@@ -210,7 +210,7 @@ where
 
     builder.label(exit_error_label);
     builder.mov(error_out_ref.clone(), Value::I32_1);
-    builder.mov(RESULT_REF, Value::LiteralNull);
+    builder.mov(RESULT_REF, Value::LiteralNil);
 
     builder.label(exit_label);
 }

@@ -122,7 +122,7 @@ pub enum Expr {
 impl Expr {
     pub fn translate_val(v: &ir::Value, builder: &mut Builder) -> Self {
         match v {
-            ir::Value::LiteralNull => Expr::Null,
+            ir::Value::LiteralNil => Expr::Null,
             ir::Value::LiteralBool(b) => Expr::LitBool(*b),
             ir::Value::LiteralI8(i) => Expr::LitInt(*i as i128),
             ir::Value::LiteralU8(i) => Expr::LitInt(*i as i128),

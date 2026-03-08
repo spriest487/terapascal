@@ -71,7 +71,7 @@ pub trait InstructionBuilder {
         };
 
         if is_object {
-            self.mov(id, Value::LiteralNull);
+            self.mov(id, Value::LiteralNil);
         }
 
         id

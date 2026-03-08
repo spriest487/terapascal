@@ -475,7 +475,7 @@ impl Vm {
             ir::Value::LiteralF32(f) => Ok(DynValue::F32(*f)),
             ir::Value::LiteralF64(f) => Ok(DynValue::F64(*f)),
             ir::Value::LiteralBool(b) => Ok(DynValue::Bool(*b)),
-            ir::Value::LiteralNull => Ok(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))),
+            ir::Value::LiteralNil => Ok(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))),
 
             ir::Value::Ref(r) => {
                 let ref_val = self.load(r)?;
