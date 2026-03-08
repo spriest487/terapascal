@@ -54,8 +54,8 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn ptr(self) -> Self {
-        Type::Pointer(Rc::new(self))
+    pub fn ptr(&self) -> Self {
+        Type::Pointer(Rc::new(self.clone()))
     }
     
     pub fn temp_ref(&self) -> Self {
