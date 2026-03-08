@@ -242,6 +242,10 @@ impl Type {
             }
         }
     }
+
+    pub fn default_value(&self) -> Value {
+        Value::Default(self.clone())
+    }
     
     pub fn contains_any_object_refs(&self, metadata: &impl MetadataSource) -> bool {
         match self {
