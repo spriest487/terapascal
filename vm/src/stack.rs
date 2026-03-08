@@ -237,7 +237,7 @@ impl StackFrame {
 }
 
 #[derive(Debug, Clone, Error)]
-pub enum StackError {
+pub enum StackError<Ty: fmt::Display = ir::Type> {
     ResultNotAllocated,
     ArgNotAllocated(ir::ArgID),
     LocalNotAllocated(ir::LocalID),
@@ -252,17 +252,17 @@ pub enum StackError {
         dest_block: usize,
     },
     IllegalAlloc(ir::LocalID),
-    MarshalError(MarshalError),
+    MarshalError(MarshalError<Ty>),
     BadSentinel(usize),
 }
 
-impl From<MarshalError> for StackError {
-    fn from(err: MarshalError) -> Self {
+impl<Ty: fmt::Display> From<MarshalError<Ty>> for StackError<Ty> {
+    fn from(err: MarshalError<Ty>) -> Self {
         StackError::MarshalError(err)
     }
 }
 
-impl fmt::Display for StackError {
+impl<Ty: fmt::Display> fmt::Display for StackError<Ty> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             StackError::ResultNotAllocated => {
@@ -300,4 +300,4 @@ impl fmt::Display for StackError {
     }
 }
 
-pub type StackResult<T> = Result<T, StackError>;
+pub type StackResult<T, Ty = ir::Type> = Result<T, StackError<Ty>>;

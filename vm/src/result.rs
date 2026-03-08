@@ -4,20 +4,19 @@ use crate::marshal::MarshalError;
 use crate::stack::StackError;
 use crate::stack::StackTrace;
 use crate::Pointer;
-use ir::IRFormatter;
-use ir::RawInstructionFormatter;
 use std::fmt;
-use thiserror::Error;
 use terapascal_common::span::Span;
-use terapascal_common::{DiagnosticLabel, Severity};
+use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::Severity;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ExecError {
+pub enum ExecError<Ty: fmt::Display = ir::Type> {
     Raised {
         msg: String,
     },
-    MarshalError(#[from] MarshalError),
+    MarshalError(#[from] MarshalError<Ty>),
     StackError(#[from] StackError),
     ExternSymbolLoadFailed {
         msg: String,
@@ -31,15 +30,15 @@ pub enum ExecError {
     IllegalState {
         msg: String,
     },
-    NativeHeapError(#[from] NativeHeapError),
+    NativeHeapError(#[from] NativeHeapError<Ty>),
     ZeroLengthAllocation,
     WithStackTrace {
-        err: Box<ExecError>,
+        err: Box<ExecError<Ty>>,
         stack_trace: StackTrace,
     }
 }
 
-impl ExecError {
+impl<Ty: fmt::Display> ExecError<Ty> {
     pub fn illegal_state(msg: impl Into<String>) -> Self {
         Self::IllegalState {
             msg: msg.into(),
@@ -70,13 +69,51 @@ impl ExecError {
         }
     }
 
-    pub fn fmt_pretty<Pretty>(&self, f: &mut fmt::Formatter, pretty: &Pretty) -> fmt:: Result
+    pub fn map_types<F, ToTy>(self, f: F) -> ExecError<ToTy>
     where
-        Pretty: IRFormatter
+        F: Fn(Ty) -> ToTy,
+        ToTy: fmt::Display,
     {
         match self {
+            ExecError::Raised { msg } => {
+                ExecError::Raised { msg }
+            },
+            ExecError::MarshalError(err) => {
+                ExecError::MarshalError(err.map_types(f))
+            },
+            ExecError::StackError(err) => {
+                ExecError::StackError(err)
+            },
+            ExecError::ExternSymbolLoadFailed { msg, lib, symbol } => {
+                ExecError::ExternSymbolLoadFailed { msg, lib, symbol }
+            },
+            ExecError::IllegalDereference { ptr } => {
+                ExecError::IllegalDereference { ptr }
+            },
+            ExecError::IllegalInstruction(illegal) => {
+                ExecError::IllegalInstruction(illegal)
+            },
+            ExecError::IllegalState { msg } => {
+                ExecError::IllegalState { msg }
+            },
+            ExecError::NativeHeapError(err) => {
+                ExecError::NativeHeapError(err.map_types(f))
+            },
+            ExecError::ZeroLengthAllocation => {
+                ExecError::ZeroLengthAllocation
+            },
+            ExecError::WithStackTrace { err, stack_trace } => {
+                ExecError::WithStackTrace { err: Box::new((*err).map_types(f)), stack_trace }
+            },
+        }
+    }
+}
+
+impl<Ty: fmt::Display> fmt::Display for ExecError<Ty> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
             ExecError::WithStackTrace { err, stack_trace, .. } => {
-                err.fmt_pretty(f, pretty)?;
+                write!(f, "{}", err)?;
                 for stack_trace_line in stack_trace {
                     writeln!(f)?;
                     write!(f, "\tat {}", stack_trace_line)?;
@@ -86,7 +123,7 @@ impl ExecError {
             _ => {
                 match self {
                     ExecError::Raised { .. } => write!(f, "Runtime error raised"),
-                    ExecError::MarshalError(err) => err.fmt_pretty(f, pretty),
+                    ExecError::MarshalError(err) => write!(f, "{err}"),
                     ExecError::StackError(err) => write!(f, "{}", err),
                     ExecError::ExternSymbolLoadFailed { lib, symbol, .. } => {
                         write!(f, "Failed to load {}::{}", lib, symbol)
@@ -103,7 +140,7 @@ impl ExecError {
                 if let (Some(label_text), None) = (self.label_text(), self.label_span()) {
                     write!(f, ": {}", label_text)?;
                 }
-                
+
                 Ok(())
             },
         }?;
@@ -112,13 +149,7 @@ impl ExecError {
     }
 }
 
-impl fmt::Display for ExecError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.fmt_pretty(f, &RawInstructionFormatter)
-    }
-}
-
-impl DiagnosticOutput for ExecError {
+impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
     fn severity(&self) -> Severity {
         Severity::Error
     }
@@ -146,4 +177,4 @@ impl DiagnosticOutput for ExecError {
     }
 }
 
-pub type ExecResult<T> = Result<T, ExecError>;
+pub type ExecResult<T, Ty = ir::Type> = Result<T, ExecError<Ty>>;

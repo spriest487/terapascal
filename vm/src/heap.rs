@@ -1,20 +1,21 @@
+use crate::ir;
 use crate::marshal::MarshalError;
 use crate::marshal::Marshaller;
 use crate::ptr::POINTER_FMT_WIDTH;
 use crate::DynValue;
-use crate::Pointer;
-use crate::ir;
 use crate::ObjectValue;
+use crate::Pointer;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::mem::forget;
 use std::rc::Rc;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
-pub enum NativeHeapError {
+pub enum NativeHeapError<Ty: fmt::Display> {
     #[error(transparent)]
-    MarshallingError(MarshalError),
+    MarshallingError(MarshalError<Ty>),
 
     #[error("null pointer dereference")]
     NullPointerDeref,
@@ -24,18 +25,41 @@ pub enum NativeHeapError {
 
     #[error("zero-sized allocation of {count} element(s) of type {ty}")]
     ZeroSizedAllocation {
-        ty: ir::Type,
+        ty: Ty,
         count: usize,
     },
 }
 
-impl From<MarshalError> for NativeHeapError {
-    fn from(err: MarshalError) -> Self {
+impl<Ty: fmt::Display> NativeHeapError<Ty> {
+    pub fn map_types<F, ToTy>(self, f: F) -> NativeHeapError<ToTy>
+    where
+        F: Fn(Ty) -> ToTy,
+        ToTy: fmt::Display,
+    {
+        match self {
+            NativeHeapError::MarshallingError(err) => {
+                NativeHeapError::MarshallingError(err.map_types(f))
+            }
+            NativeHeapError::NullPointerDeref => {
+                NativeHeapError::NullPointerDeref
+            }
+            NativeHeapError::BadFree(ptr) => {
+                NativeHeapError::BadFree(ptr)
+            }
+            NativeHeapError::ZeroSizedAllocation { ty, count } => {
+                NativeHeapError::ZeroSizedAllocation { ty: f(ty), count }
+            }
+        }
+    }
+}
+
+impl<Ty: fmt::Display> From<MarshalError<Ty>> for NativeHeapError<Ty> {
+    fn from(err: MarshalError<Ty>) -> Self {
         NativeHeapError::MarshallingError(err)
     }
 }
 
-pub type NativeHeapResult<T> = Result<T, NativeHeapError>;
+pub type NativeHeapResult<Res, Ty = ir::Type> = Result<Res, NativeHeapError<Ty>>;
 
 #[derive(Debug)]
 pub struct NativeHeap {

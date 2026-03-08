@@ -272,12 +272,14 @@ impl Vm {
 
     pub fn load_indirect(&self, ptr: &Pointer) -> ExecResult<DynValue> {
         let val = self.native_heap.load(ptr)?;
+
         Ok(val)
     }
 
     /// dereference a pointer and set the value it points to
     pub fn store_indirect(&mut self, ptr: &Pointer, val: DynValue) -> ExecResult<()> {
         self.native_heap.store(ptr, val)?;
+
         Ok(())
     }
 
@@ -1990,10 +1992,10 @@ impl Vm {
                 return self.exec_field(out, a, field, &ir::Type::Struct(*repr_id));
             },
 
-            ir::Type::Struct(struct_id) => {
+            ir::Type::Struct(..) => {
                 let struct_ptr = self.addr_of_ref(a)?;
 
-                let field_info = self.marshaller.get_field_info(*struct_id, *field)?;
+                let field_info = self.marshaller.get_field_info(of_ty, *field)?;
 
                 Pointer {
                     ty: field_info.ty.clone(),
@@ -2054,7 +2056,7 @@ impl Vm {
         };
 
         let fields_addr = object_ptr.addr + Marshaller::object_header_size();
-        let field_info = self.marshaller.get_field_info(*struct_id, field)?;
+        let field_info = self.marshaller.get_field_info(&struct_id.to_class_ptr_type(), field)?;
 
         Ok(Pointer {
             ty: field_info.ty.clone(),

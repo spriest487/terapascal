@@ -458,17 +458,25 @@ impl Marshaller {
         }
     }
 
-    pub fn get_field_info(&self, type_id: ir::TypeDefID, field: ir::FieldID) -> MarshalResult<&StructFieldInfo> {
-        let fields = self.struct_field_maps
-            .get(&type_id)
+    pub fn get_field_info(&self, struct_type: &ir::Type, field: ir::FieldID) -> MarshalResult<&StructFieldInfo> {
+        let struct_id = match struct_type {
+            ir::Type::Struct(id) => Some(*id),
+            ir::Type::Object(ir::ObjectID::Class(id)) => Some(*id),
+            _ => None,
+        };
+
+        let fields = struct_id
+            .and_then(|id| {
+                self.struct_field_maps.get(&id)
+            })
             .ok_or_else(|| {
-                MarshalError::UnsupportedType(ir::Type::Struct(type_id))
+                MarshalError::UnsupportedType(struct_type.clone())
             })?;
 
         let field_info = fields
             .get(&field)
             .ok_or_else(|| {
-                MarshalError::FieldOutOfRange { struct_id: type_id, field }
+                MarshalError::FieldOutOfRange { struct_type: struct_type.clone(), field }
             })?;
 
         Ok(field_info)
@@ -1078,7 +1086,7 @@ impl Marshaller {
         let tag = tag_val.value.as_i32().unwrap();
 
         let case_index = cast::usize(tag).map_err(|_| MarshalError::VariantTagOutOfRange {
-            variant_id,
+            variant_type: ir::Type::Variant(variant_id),
             tag: tag_val.value.clone(),
         })?;
 
@@ -1094,7 +1102,7 @@ impl Marshaller {
         let case_ty = case_tys
             .get(case_index)
             .ok_or_else(|| MarshalError::VariantTagOutOfRange {
-                variant_id,
+                variant_type: ir::Type::Variant(variant_id),
                 tag: tag_val.value.clone(),
             })?
             .as_ref();

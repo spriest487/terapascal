@@ -20,7 +20,7 @@ pub enum RunError {
     BuildError(BuildError),
 
     #[error(transparent)]
-    ExecError(ExecError),
+    ExecError(#[from] ExecError<String>),
 
     #[error("writing to file {} failed: {}", .0.file.display(), .1)]
     OutputFailed(Span, io::Error),
@@ -70,12 +70,6 @@ impl From<PreprocessorError> for RunError {
 impl From<BuildError> for RunError {
     fn from(value: BuildError) -> Self {
         Self::BuildError(value)
-    }
-}
-
-impl From<ExecError> for RunError {
-    fn from(err: ExecError) -> Self {
-        RunError::ExecError(err)
     }
 }
 

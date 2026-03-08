@@ -49,6 +49,7 @@ use clang::clang_print;
 
 #[cfg(feature = "backend-cil")]
 use dotnet::dotnet_build;
+use terapascal_vm::result::ExecResult;
 
 fn compile(args: Args) -> Result<(), RunError> {
     if args.output.is_some() && args.print_stage.is_some() {
@@ -249,25 +250,33 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     return Err(RunError::UnknownOutputExt(output_ext))
                 }
             } else {
-                // execute the IR immediately
-                let exec_opts = ExecOpts {
-                    trace_rc: args.trace_rc,
-                    trace_heap: args.trace_heap,
-                    trace_ir: args.trace_ir,
-                    
-                    diag_port: args.diag_port,
-                    
-                    verbose: args.verbose,
-                };
-
-                let mut vm = Vm::new(exec_opts);
-                vm.load_lib(&lib)?;
-                vm.shutdown()?;
+                exec_vm(args, &lib).map_err(|err| err.map_types(|ty| {
+                    ty.to_pretty_string(lib.metadata.as_ref())
+                }))?;
 
                 Ok(())
             }
         }
     }
+}
+
+fn exec_vm(args: &Args, lib: &ir::Library) -> ExecResult<()> {
+    // execute the IR immediately
+    let exec_opts = ExecOpts {
+        trace_rc: args.trace_rc,
+        trace_heap: args.trace_heap,
+        trace_ir: args.trace_ir,
+
+        diag_port: args.diag_port,
+
+        verbose: args.verbose,
+    };
+
+    let mut vm = Vm::new(exec_opts);
+    vm.load_lib(lib)?;
+    vm.shutdown()?;
+
+    Ok(())
 }
 
 #[cfg(not(feature = "backend-c"))]

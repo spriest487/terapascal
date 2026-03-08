@@ -3,9 +3,9 @@ use crate::ir;
 use crate::DynValue;
 use crate::ExecError;
 use crate::ExecResult;
-use crate::Vm;
 use crate::ObjectID;
 use crate::Pointer;
+use crate::Vm;
 use rand::Rng;
 use std::env::consts::OS;
 use std::fmt;
@@ -194,7 +194,8 @@ pub(super) fn array_length(state: &mut Vm) -> ExecResult<()> {
     let array_arg = ir::ArgID(0);
     
     let array_ptr = load_pointer(state, &array_arg.to_ref())?;
-    let array_header = state.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
+    let array_header = state.marshaller
+        .unmarshal_dyn_array_header_at(&array_ptr)?;
     
     let len = i32::try_from(array_header.len)
         .map_err(|_| ExecError::illegal_state("length of array was not an i32"))?;
@@ -212,7 +213,8 @@ pub(super) fn array_create(state: &mut Vm) -> ExecResult<()> {
     let new_len = load_integer(state, &new_len_arg.to_ref())?;
 
     let mut array_ptr = load_pointer(state, &array_ref_arg.to_deref())?;
-    let array_header = state.marshaller().unmarshal_dyn_array_header_at(&array_ptr)?;
+    let array_header = state.marshaller()
+        .unmarshal_dyn_array_header_at(&array_ptr)?;
     
     if array_header.object_header.is_immortal() {
         return Err(ExecError::illegal_state("array_create: array is immortal and cannot be resized"));

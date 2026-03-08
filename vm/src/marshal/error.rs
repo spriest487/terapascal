@@ -1,23 +1,21 @@
 use crate::DynValue;
 use std::fmt;
 use terapascal_ir as ir;
-use terapascal_ir::IRFormatter;
-use terapascal_ir::RawInstructionFormatter;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
-pub enum MarshalError {
+pub enum MarshalError<Ty: fmt::Display = ir::Type> {
     InvalidData,
 
-    UnsupportedType(ir::Type),
+    UnsupportedType(Ty),
     UnsupportedValue(DynValue),
 
     VariantTagOutOfRange {
-        variant_id: ir::TypeDefID,
+        variant_type: Ty,
         tag: DynValue,
     },
     FieldOutOfRange {
-        struct_id: ir::TypeDefID,
+        struct_type: Ty,
         field: ir::FieldID,
     },
     InvalidTypeIndex {
@@ -25,8 +23,8 @@ pub enum MarshalError {
     },
 
     InvalidStructID {
-        expected: ir::TypeDefID,
-        actual: ir::TypeDefID,
+        expected: Ty,
+        actual: Ty,
     },
 
     InvalidRefCountValue(DynValue),
@@ -42,24 +40,53 @@ pub enum MarshalError {
     },
 }
 
-impl fmt::Display for MarshalError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.fmt_pretty(f, &RawInstructionFormatter)
+impl<Ty: fmt::Display> MarshalError<Ty> {
+    pub fn map_types<F, ToTy>(self, f: F) -> MarshalError<ToTy>
+    where
+        F: Fn(Ty) -> ToTy,
+        ToTy: fmt::Display,
+    {
+        match self {
+            MarshalError::UnsupportedType(ty) => {
+                MarshalError::UnsupportedType(f(ty))
+            },
+            MarshalError::VariantTagOutOfRange { variant_type, tag } => {
+                MarshalError::VariantTagOutOfRange { variant_type: f(variant_type), tag }
+            },
+            MarshalError::FieldOutOfRange { struct_type, field } => {
+                MarshalError::FieldOutOfRange { struct_type: f(struct_type), field }
+            },
+            MarshalError::InvalidStructID { expected, actual } => {
+                MarshalError::InvalidStructID { expected: f(expected), actual: f(actual) }
+            },
+            MarshalError::InvalidData => {
+                MarshalError::InvalidData
+            },
+            MarshalError::UnsupportedValue(val) => {
+                MarshalError::UnsupportedValue(val)
+            },
+            MarshalError::InvalidTypeIndex { type_index } => {
+                MarshalError::InvalidTypeIndex { type_index }
+            },
+            MarshalError::InvalidRefCountValue(val) => {
+                MarshalError::InvalidRefCountValue(val)
+            },
+            MarshalError::ExternSymbolLoadFailed { lib, symbol, msg } => {
+                MarshalError::ExternSymbolLoadFailed { lib, symbol, msg }
+            },
+            MarshalError::InvalidWrite { dest_size, data_size } => {
+                MarshalError::InvalidWrite { dest_size, data_size }
+            },
+        }
     }
 }
 
-impl MarshalError {
-    pub fn fmt_pretty<Fmt>(&self, f: &mut fmt::Formatter, format: &Fmt) -> fmt::Result
-    where
-        Fmt: IRFormatter,
-    {
+impl<T: fmt::Display> fmt::Display for MarshalError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             MarshalError::InvalidData => write!(f, "invalid data"),
             MarshalError::InvalidStructID { expected, actual } => {
-                write!(f, "expected struct ")?;
-                format.format_type(&ir::Type::Struct(*expected), f)?;
-                write!(f, ", got ")?;
-                format.format_type(&ir::Type::Struct(*actual), f)?;
+                write!(f, "expected struct {expected}, got {actual}")?;
                 Ok(())
             },
             MarshalError::InvalidTypeIndex { type_index: id }  => {
@@ -69,23 +96,16 @@ impl MarshalError {
                 write!(f, "unable to marshal value: {:?}", val)
             },
             MarshalError::UnsupportedType(ty) => {
-                write!(f, "unable to marshal type: ")?;
-                format.format_type(ty, f)?;
-                Ok(())
+                write!(f, "unable to marshal type: {ty}")
             },
-            MarshalError::ExternSymbolLoadFailed { lib, symbol, msg } => write!(
-                f,
-                "external symbol {}!{} failed to load ({})",
-                lib, symbol, msg
-            ),
-            MarshalError::VariantTagOutOfRange { variant_id, tag } => write!(
-                f,
-                "tag {:?} for variant {} was out of range",
-                tag, variant_id
-            ),
-            MarshalError::FieldOutOfRange { struct_id, field } => {
-                let type_name = struct_id.to_pretty_string(format); 
-                write!(f, "field {type_name}.{field} was out of range")
+            MarshalError::ExternSymbolLoadFailed { lib, symbol, msg } => {
+                write!(f, "external symbol {lib}!{symbol} failed to load: {msg}")
+            },
+            MarshalError::VariantTagOutOfRange { variant_type, tag } => {
+                write!(f, "tag {tag:?} for variant {variant_type} was out of range")
+            },
+            MarshalError::FieldOutOfRange { struct_type, field } => {
+                write!(f, "field {struct_type}.{field} was out of range")
             },
             MarshalError::InvalidRefCountValue(val) => {
                 write!(f, "value is not a valid ref count: {:?}", val)
@@ -97,4 +117,4 @@ impl MarshalError {
     }
 }
 
-pub type MarshalResult<T> = Result<T, MarshalError>;
+pub type MarshalResult<T, Ty = ir::Type> = Result<T, MarshalError<Ty>>;
