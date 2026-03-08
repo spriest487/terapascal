@@ -84,15 +84,7 @@ impl StructDef {
 
     pub fn with_field(mut self, name: impl Into<String>, ty: Type) -> Self {
         let id = self.next_field_id();
-
-        self.fields.insert(
-            id,
-            StructFieldDef {
-                name: Some(name.into()),
-                ty,
-            },
-        );
-
+        self.fields.insert(id, StructFieldDef::new(ty).with_name(name));
         self
     }
 
@@ -126,4 +118,18 @@ impl fmt::Display for StructDef {
 pub struct StructFieldDef {
     pub name: Option<String>,
     pub ty: Type,
+}
+
+impl StructFieldDef {
+    pub fn new(ty: Type) -> Self {
+        Self {
+            ty,
+            name: None,
+        }
+    }
+
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
 }

@@ -45,10 +45,7 @@ impl SetFlagsType {
         let word_count = set_word_count(bit_count);
 
         let word_fields = (0..word_count)
-            .map(|id| (ir::FieldID(id), ir::StructFieldDef {
-                name: None,
-                ty: WORD_TYPE,
-            }))
+            .map(|id| (ir::FieldID(id), ir::StructFieldDef::new(WORD_TYPE)))
             .collect();
 
         let struct_identity = ir::StructIdentity::SetFlags { bits: bit_count };

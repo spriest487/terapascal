@@ -26,10 +26,7 @@ pub fn translate_struct_def(
                 let name = field_decl.idents[i].to_string();
                 let ty = lib.translate_type(&field_decl.ty, generic_ctx);
 
-                fields.insert(next_id, ir::StructFieldDef {
-                    name: Some(name),
-                    ty,
-                });
+                fields.insert(next_id, ir::StructFieldDef::new(ty).with_name(name));
 
                 next_id.0 += 1;
             }
@@ -41,17 +38,11 @@ pub fn translate_struct_def(
                     let name = member.idents[decl_index].to_string();
                     let ty = lib.translate_type(&member.ty, generic_ctx);
 
-                    fields.insert(next_id, ir::StructFieldDef {
-                        name: Some(name),
-                        ty,
-                    });
+                    fields.insert(next_id, ir::StructFieldDef::new(ty).with_name(name));
                 }
 
                 StructLayoutMember::PaddingByte => {
-                    fields.insert(next_id, ir::StructFieldDef {
-                        name: None,
-                        ty: ir::Type::U8,
-                    });
+                    fields.insert(next_id, ir::StructFieldDef::new(ir::Type::I8));
                 }
             }
             next_id.0 += 1;

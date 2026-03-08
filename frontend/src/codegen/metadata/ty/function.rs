@@ -50,10 +50,7 @@ pub fn translate_closure_struct(
     let mut fields = BTreeMap::new();
     fields.insert(
         ir::CLOSURE_PTR_FIELD,
-        ir::StructFieldDef {
-            name: None,
-            ty: ir::Type::Function(identity.virt_func_ty),
-        },
+        ir::StructFieldDef::new(ir::Type::Function(identity.virt_func_ty)),
     );
 
     let mut field_id = ir::FieldID(ir::CLOSURE_PTR_FIELD.0 + 1);
@@ -63,10 +60,7 @@ pub fn translate_closure_struct(
 
         fields.insert(
             field_id,
-            ir::StructFieldDef {
-                name: Some((*capture_name.name).clone()),
-                ty,
-            },
+            ir::StructFieldDef::new(ty).with_name((*capture_name.name).clone()),
         );
 
         field_id.0 += 1;

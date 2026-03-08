@@ -11,14 +11,8 @@ pub fn string_def() -> StructDef {
 
     let mut def = StructDef::new(StructIdentity::Class(name.clone()));
 
-    def.fields.insert(STRING_CHARS_FIELD, StructFieldDef {
-        name: None,
-        ty: Type::U8.ptr(),
-    });
-    def.fields.insert(STRING_LEN_FIELD, StructFieldDef {
-        name: None,
-        ty: Type::I32,
-    });
+    def.fields.insert(STRING_CHARS_FIELD, StructFieldDef::new(Type::U8.ptr()));
+    def.fields.insert(STRING_LEN_FIELD, StructFieldDef::new(Type::I32));
     
     def
 }
