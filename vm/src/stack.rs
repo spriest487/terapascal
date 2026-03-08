@@ -227,7 +227,7 @@ impl StackFrame {
     
     pub fn debug_pop(&mut self) {
         if !self.debug_ctx_stack.pop().is_some() {
-            eprintln!("vm: unbalanced debug context instructions, ignoring pop on empty stack")
+            eprintln!("[vm] unbalanced debug context instructions, ignoring pop on empty stack")
         }
     }
     
