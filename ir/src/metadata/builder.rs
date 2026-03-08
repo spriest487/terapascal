@@ -246,6 +246,10 @@ impl MetadataSource for MetadataBuilder {
         self.iter_in_self_or_refs(move |metadata| metadata.type_defs())
     }
 
+    fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_type_decl(id))
+    }
+
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
         self.find_in_self_or_refs(move |metadata| metadata.find_type_decl(name))
     }

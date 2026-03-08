@@ -11,6 +11,7 @@ use crate::StructDef;
 use crate::TagInfo;
 use crate::TagLocation;
 use crate::Type;
+use crate::TypeDecl;
 use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
@@ -27,6 +28,7 @@ pub trait MetadataSource {
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef>;
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
     fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)>;
+    fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl>;
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID>;
     fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>>;
 

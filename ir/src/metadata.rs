@@ -798,6 +798,10 @@ impl MetadataSource for Metadata {
         })
     }
 
+    fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {
+        self.type_decls.get(&id)
+    }
+
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
         self.type_decls.iter().find_map(|(id, def)| match def {
             TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) => {
