@@ -21,7 +21,7 @@ fn build_with_mappings(
             Location { line: mapping.start.0, col: mapping.start.1 },
             Location { line: mapping.end.0, col: mapping.end.1 },
             Span::new(
-                mapping.src_file,
+                PathBuf::from(mapping.src_file),
                 Location { line: mapping.src_start.0, col: mapping.src_start.1 },
                 Location { line: mapping.src_end.0, col: mapping.src_end.1 },
             )
