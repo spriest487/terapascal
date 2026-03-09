@@ -433,7 +433,7 @@ fn load_integer(state: &mut Vm, at: &ir::Ref) -> ExecResult<i32> {
         .as_i32()
         .ok_or_else(|| {
             let msg = format!("bad type: expected i32 at {}", at);
-            ExecError::IllegalState { msg }
+            ExecError::InternalError { msg }
         })
 }
 
@@ -442,7 +442,7 @@ fn load_single(state: &mut Vm, at: &ir::Ref) -> ExecResult<f32> {
         .as_f32()
         .ok_or_else(|| {
             let msg = format!("bad type: expected f32 at {}", at);
-            ExecError::IllegalState { msg }
+            ExecError::InternalError { msg }
         })
 }
 

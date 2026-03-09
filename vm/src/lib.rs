@@ -144,7 +144,13 @@ impl Vm {
             .stack
             .iter()
             .rev()
-            .map(|s| StackTraceFrame::new(s.name().to_string(), &s.debug_location()));
+            .map(|s| {
+                let frame = StackTraceFrame::new(s.name().to_string());
+                let Some(span) = s.debug_location() else {
+                    return frame;
+                };
+                frame.with_span(span.into_owned())
+            });
 
         StackTrace::new(frames)
     }

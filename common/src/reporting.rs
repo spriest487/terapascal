@@ -29,6 +29,8 @@ fn output_to_report_diag(
 
     let mut labels = Vec::new();
 
+    let mut title = diag.title;
+
     if let Some(label) = diag.label {
         // if the label can't be created (eg because the file its span references can't be read)
         // then skip it
@@ -37,11 +39,15 @@ fn output_to_report_diag(
                 Some(text) => report_label.with_message(text),
                 None => report_label,
             });
+        } else if let Some(label_text) = label.text {
+            // otherwise just append the label text to the main title
+            title.push('\n');
+            title.push_str(&label_text);
         }
     }
 
     Ok(Diagnostic::new(severity)
-        .with_message(diag.title)
+        .with_message(title)
         .with_labels(labels)
         .with_notes(diag.notes))
 }

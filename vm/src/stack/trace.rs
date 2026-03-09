@@ -1,9 +1,7 @@
 use serde::Serialize;
 use std::fmt;
 use std::fmt::Formatter;
-use std::path::PathBuf;
 use std::slice;
-use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
@@ -19,18 +17,12 @@ impl StackTrace {
 
         if stack_trace.frames.is_empty() {
             stack_trace.frames.push(StackTraceFrame {
-                file: String::new(),
-                start_loc: Location::zero(),
-                end_loc: Location::zero(),
+                span: None,
                 name: String::new(),
             });
         }
 
         stack_trace
-    }
-
-    pub fn top(&self) -> &StackTraceFrame {
-        &self.frames[0]
     }
 
     pub fn frames(&self) -> impl Iterator<Item = &StackTraceFrame> {
@@ -39,6 +31,11 @@ impl StackTrace {
 
     pub fn is_empty(&self) -> bool {
         self.frames.len() == 1 && self.frames[0].name == ""
+    }
+
+    pub fn top_span(&self) -> Option<Span> {
+        self.frames.iter()
+            .find_map(|frame| frame.span.as_ref().cloned())
     }
 }
 
@@ -62,7 +59,7 @@ impl fmt::Display for StackTrace {
                 writeln!(f)?;
             }
 
-            write!(f, "{}", self.frames[i])?;
+            write!(f, "at {}", self.frames[i])?;
         }
 
         Ok(())
@@ -72,28 +69,29 @@ impl fmt::Display for StackTrace {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct StackTraceFrame {
     pub name: String,
-    pub file: String,
-    pub start_loc: Location,
-    pub end_loc: Location,
+    pub span: Option<Span>,
 }
 
 impl StackTraceFrame {
-    pub fn new(name: String, span: &Span) -> Self {
+    pub fn new(name: String) -> Self {
         Self {
             name,
-            file: span.file.display().to_string(),
-            start_loc: span.start,
-            end_loc: span.end,
+            span: None,
         }
     }
 
-    pub fn to_span(&self) -> Span {
-        Span::new(PathBuf::from(&self.name), self.start_loc, self.end_loc)
+    pub fn with_span(mut self, span: Span) -> Self {
+        self.span = Some(span);
+        self
     }
 }
 
 impl fmt::Display for StackTraceFrame {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({}:{})", self.name, self.file, self.start_loc)
+        write!(f, "{}", self.name)?;
+        if let Some(span) = &self.span {
+            write!(f, " ({}:{})", span.file.display(), span.start)?;
+        }
+        Ok(())
     }
 }
