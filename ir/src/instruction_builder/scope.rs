@@ -1,9 +1,9 @@
-use crate::ArgID;
 use crate::Label;
 use crate::LocalID;
 use crate::Ref;
 use crate::Type;
 use crate::RESULT_REF;
+use crate::ArgID;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;

@@ -187,7 +187,9 @@ where
 
     match ty {
         Type::Struct(struct_id) => {
-            let struct_def = builder.metadata().get_struct_def(*struct_id).unwrap();
+            let Some(struct_def) = builder.metadata().get_struct_def(*struct_id) else {
+                panic!("visit_deep: missing definition for struct {struct_id}")
+            };
 
             let fields: Vec<_> = struct_def
                 .fields
