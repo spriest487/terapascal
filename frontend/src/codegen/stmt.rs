@@ -353,9 +353,6 @@ fn build_for_loop_sequence(
                 let next_result_ty = system_option_type_of(seq_support.item_type.clone());
                 let item_option_ty = builder.translate_type(&typ::Type::variant(next_result_ty));
                 
-                // vardata gives us a ref so we can't copy the value straight into the binding
-                let item_option_data_ref = builder.local_temp(binding_ty.clone().temp_ref());
-
                 // seq_ref := src_ref.Sequence();
                 builder.call(seq_method.id, [src_self_arg_ref.value()], Some(seq_var.to_ref()));
 
@@ -364,8 +361,6 @@ fn build_for_loop_sequence(
                 // or return None and will never need retaining in that case
                 builder.comment("next item option");
                 let next_item_option_ref = builder.local_temp(item_option_ty.clone());
-                builder.comment("next item tag");
-                let next_item_tag_ptr_ref = builder.local_temp(ir::Type::I32.temp_ref());
                 
                 let continue_label = builder.next_label();
                 let break_label = builder.next_label();
@@ -380,7 +375,7 @@ fn build_for_loop_sequence(
 
                     // if the case is None, break
                     // next_item_tag_ref := next_item_option_ref.tag
-                    builder.vartag(next_item_tag_ptr_ref, next_item_option_ref, item_option_ty.clone());
+                    let next_item_tag_ptr_ref = next_item_option_ref.to_ref().vartag_ref(item_option_ty.clone());
 
                     let none_case_val = ir::Value::LiteralI32(OPTION_NONE_CASE as i32);
                     let is_end_val = builder.eq_to_val(next_item_tag_ptr_ref.to_deref(), none_case_val);
@@ -390,7 +385,7 @@ fn build_for_loop_sequence(
                     let binding_ref = builder.local_var(binding_ty.clone(), Some(binding_name));
 
                     // binding_ref := next_item_option_ref.Get()
-                    builder.vardata(item_option_data_ref, next_item_option_ref, item_option_ty.clone(), OPTION_SOME_CASE);
+                    let item_option_data_ref = next_item_option_ref.to_ref().vardata_ref(OPTION_SOME_CASE, item_option_ty.clone());
                     builder.mov(binding_ref, item_option_data_ref.to_deref());
 
                     let body_instructions = builder.loop_body_scope(continue_label, break_label, |builder| {

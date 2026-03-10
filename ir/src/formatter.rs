@@ -205,27 +205,6 @@ pub trait IRFormatter {
                 self.format_type(of_type, f)
             }
 
-            Instruction::VariantTag { out, a, of_ty } => {
-                write!(f, "{:>width$} ", "vartag", width = IX_WIDTH)?;
-                self.format_ref(out, f)?;
-                write!(f, " := &(")?;
-                self.format_ref(a, f)?;
-                write!(f, " as ")?;
-                self.format_type(of_ty, f)?;
-                write!(f, ").tag")
-            }
-
-            Instruction::VariantData { out, a, of_ty, tag } => {
-                write!(f, "{:>width$} ", "vardata", width = IX_WIDTH)?;
-                self.format_ref(out, f)?;
-                write!(f, " := &(")?;
-                self.format_ref(a, f)?;
-                write!(f, " as ")?;
-                self.format_type(of_ty, f)?;
-                write!(f, ").")?;
-                self.format_variant_case(of_ty, *tag, f)
-            }
-
             Instruction::Label(label) => {
                 write!(f, "{:>width$} {}", "label", label, width = IX_WIDTH)
             }

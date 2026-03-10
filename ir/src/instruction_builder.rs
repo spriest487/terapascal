@@ -6,7 +6,7 @@ mod object;
 
 use crate::instruction_builder::object::gen_class_object_dtor_body;
 use crate::instruction_builder::scope::ScopedBinding;
-use crate::ArgID;
+use crate::{ArgID, FieldID};
 use crate::BinOpInstruction;
 use crate::FunctionID;
 use crate::FunctionSig;
@@ -584,6 +584,30 @@ pub trait InstructionBuilder {
         self.mov(out, Value::SizeOf(ty));
     }
 
+    #[deprecated]
+    fn field(
+        &mut self,
+        out: impl Into<Ref>,
+        a: impl Into<Ref>,
+        field: FieldID,
+        a_type: impl Into<Type>,
+    ) {
+        let field_ref = a.into().field_ref(a_type.into(), field);
+        self.mov(out, field_ref)
+    }
+
+    #[deprecated]
+    fn element(
+        &mut self,
+        out: impl Into<Ref>,
+        a: impl Into<Ref>,
+        index: impl Into<Value>,
+        a_type: impl Into<Type>,
+    ) {
+        let element_ref = a.into().element_ref(a_type.into(), index);
+        self.mov(out, element_ref)
+    }
+
     fn element_val(
         &mut self,
         out: impl Into<Ref>,
@@ -697,26 +721,25 @@ pub trait InstructionBuilder {
         })
     }
 
-    fn vartag(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_ty: Type) {
-        let a = a.into();
-        if matches!(a, Ref::Discard) {
-            panic!("operand of vartag instruction must not be a discard");
-        }
-        
-        self.emit(Instruction::VariantTag {
-            out: out.into(),
-            a,
-            of_ty,
-        })
+    #[deprecated]
+    fn vartag(
+        &mut self,
+        out: impl Into<Ref>,
+        instance: impl Into<Ref>,
+        instance_type: Type,
+    ) {
+        self.mov(out, instance.into().vartag_ref(instance_type));
     }
 
-    fn vardata(&mut self, out: impl Into<Ref>, a: impl Into<Ref>, of_ty: Type, tag: usize) {
-        self.emit(Instruction::VariantData {
-            out: out.into(),
-            a: a.into(),
-            of_ty,
-            tag,
-        })
+    #[deprecated]
+    fn vardata(
+        &mut self,
+        out: impl Into<Ref>,
+        instance: impl Into<Ref>,
+        instance_type: Type,
+        tag: usize,
+    ) {
+        self.mov(out, instance.into().vardata_ref(tag, instance_type));
     }
     
     fn release(&mut self, at: impl Into<Ref>, weak: bool, released_out: impl Into<Ref>) {

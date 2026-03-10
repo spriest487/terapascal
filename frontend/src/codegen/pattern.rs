@@ -122,8 +122,7 @@ pub fn translate_pattern_match_bindings(
                         .cloned()
                         .expect("variant pattern with binding must refer to a case with data");
 
-                    let data_ref = builder.local_temp(case_ty.clone().temp_ref());
-                    builder.vardata(data_ref, target_val.clone(), variant_ty.clone(), case_index);
+                    let data_ref = target_val.vardata_ref(case_index, variant_ty.clone());
 
                     vec![PatternMatchBinding {
                         name: binding_name,
@@ -176,17 +175,8 @@ fn translate_is_variant(
     case_index: usize,
     builder: &mut IRBuilder,
 ) -> ir::Ref {
-    let Some(variant_def) = variant_ty.as_variant()
-        .and_then(|id| builder.metadata().get_variant_def(id))
-    else {
-        panic!("translate_is_variant: couldn't find variant definition for type {}", variant_ty.to_pretty_string(builder.metadata()))
-    };
-    
-    let tag_type = variant_def.tag_type.clone();
-    
-    let tag_ptr = builder.local_temp(tag_type.temp_ref());
-    builder.vartag(tag_ptr, val, variant_ty);
-    
+    let tag_ptr = val.vartag_ref(variant_ty);
+
     let tag_val = ir::Value::LiteralI32(case_index as i32);
 
     let is = builder.local_temp(ir::Type::Bool);

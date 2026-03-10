@@ -417,13 +417,19 @@ impl Vm {
             },
 
             ir::Ref::Field(..) => {
-                let msg = "field pointer cannot be assigned to";
-                Err(ExecError::illegal_state(msg))
+                Err(ExecError::illegal_state("field pointer cannot be assigned to"))
             }
 
             ir::Ref::Element(..) => {
-                let msg = "element pointer cannot be assigned to";
-                Err(ExecError::illegal_state(msg))
+                Err(ExecError::illegal_state("element pointer cannot be assigned to"))
+            }
+
+            ir::Ref::VariantTag(..) => {
+                Err(ExecError::illegal_state("variant tag pointer cannot be assigned to"))
+            }
+
+            ir::Ref::VariantData(..) => {
+                Err(ExecError::illegal_state("variant data pointer cannot be assigned to"))
             }
         }
     }
@@ -482,6 +488,20 @@ impl Vm {
             ir::Ref::Element(el_ref) => {
                 let element_ptr = self.element_ptr(&el_ref.instance, &el_ref.instance_type, &el_ref.index)?;
                 Ok(DynValue::Pointer(element_ptr))
+            }
+
+            ir::Ref::VariantTag(tag_ref) => {
+                let tag_ptr = self.variant_tag_ptr(&tag_ref.instance)?;
+                Ok(DynValue::Pointer(tag_ptr))
+            }
+
+            ir::Ref::VariantData(data_ref) => {
+                let data_ptr = self.variant_data_ptr(
+                    &data_ref.instance,
+                    &data_ref.instance_type,
+                    data_ref.case_index,
+                )?;
+                Ok(DynValue::Pointer(data_ptr))
             }
         }
     }
@@ -967,6 +987,18 @@ impl Vm {
             ir::Ref::Element(element_ref) => {
                 self.element_ptr(&element_ref.instance, &element_ref.instance_type, &element_ref.index)
             }
+
+            ir::Ref::VariantTag(tag_ref) => {
+                self.variant_tag_ptr(&tag_ref.instance)
+            }
+
+            ir::Ref::VariantData(data_ref) => {
+                self.variant_data_ptr(
+                    &data_ref.instance,
+                    &data_ref.instance_type,
+                    data_ref.case_index,
+                )
+            }
         }
     }
 
@@ -1119,12 +1151,6 @@ impl Vm {
             } => {
                 self.exec_length(out, a, of_type)?;
             }
-
-            ir::Instruction::VariantTag { out, a, .. } => self.exec_variant_tag(out, a)?,
-
-            ir::Instruction::VariantData { out, a, tag, of_ty } => {
-                self.exec_variant_data(out, a, tag, of_ty)?
-            },
 
             ir::Instruction::Label(_) => {
                 // noop
@@ -1327,14 +1353,13 @@ impl Vm {
         }
     }
 
-    fn exec_variant_data(
-        &mut self,
-        out: &ir::Ref,
-        a: &ir::Ref,
-        tag: &usize,
-        of_ty: &ir::Type,
-    ) -> ExecResult<()> {
-        let variant_id = match of_ty {
+    fn variant_data_ptr(
+        &self,
+        instance: &ir::Ref,
+        instance_type: &ir::Type,
+        case_index: usize,
+    ) -> ExecResult<Pointer> {
+        let variant_id = match instance_type {
             ir::Type::Variant(id) => *id,
             other => {
                 let msg = format!(
@@ -1345,16 +1370,16 @@ impl Vm {
             },
         };
 
-        let a_ptr = self.addr_of_ref(a)?;
+        let a_ptr = self.addr_of_ref(instance)?;
 
         let case_def = self
             .metadata
             .get_variant_def(variant_id)
-            .and_then(|def| def.cases.get(*tag))
+            .and_then(|def| def.cases.get(case_index))
             .ok_or_else(|| {
                 let msg = format!(
                     "missing definition for variant case {}.{}",
-                    variant_id, *tag
+                    variant_id, case_index
                 );
                 ExecError::illegal_state(msg)
             })?;
@@ -1364,25 +1389,23 @@ impl Vm {
         // after the fixed-size tag
         let data_offset = self.marshaller.variant_tag_type().size();
 
-        self.store(
-            out,
-            DynValue::Pointer(Pointer {
-                addr: a_ptr.addr + data_offset,
-                ty: case_ty,
-            }),
-        )?;
-
-        Ok(())
+        Ok(Pointer {
+            addr: a_ptr.addr + data_offset,
+            ty: case_ty,
+        })
     }
 
-    fn exec_variant_tag(&mut self, out: &ir::Ref, a: &ir::Ref) -> ExecResult<()> {
+    fn variant_tag_ptr(&self, instance: &ir::Ref) -> ExecResult<Pointer> {
         // the variant tag is actually just the first member of the variant, so we just need to
         // output a pointer to the variant
-        let tag_ptr = self.addr_of_ref(a)?;
+        let variant_ptr = self.addr_of_ref(instance)?;
 
-        self.store(out, DynValue::Pointer(tag_ptr))?;
+        let tag_type = variant_ptr.ty.as_variant()
+            .and_then(|id| self.metadata.get_variant_def(id))
+            .map(|def| def.tag_type.clone())
+            .unwrap_or(ir::Type::Nothing);
 
-        Ok(())
+        Ok(variant_ptr.reinterpret(tag_type))
     }
     
     fn find_element_type<'a, 'b: 'a>(&'a self, of_type: &'b ir::Type) -> Option<&'a ir::Type> {
@@ -1415,14 +1438,14 @@ impl Vm {
             .evaluate(index)?
             .as_i32()
             .ok_or_else(|| {
-                let msg = "element instruction has non-integer illegal index value";
+                let msg = "element ref has non-integer illegal index value";
                 ExecError::illegal_state(msg)
             })?;
 
         let pointer = match instance_type {
             ir::Type::Object(ir::ObjectID::Array(..)) => {
                 let DynValue::Pointer(array_ptr) = self.load(instance)? else {
-                    return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
+                    return Err(ExecError::illegal_state("element ref does not refer to a pointer"));
                 };
 
                 self.dyn_array_element_pointer(&array_ptr, index_value)?
@@ -1431,7 +1454,7 @@ impl Vm {
 
             ir::Type::Object(ir::ObjectID::Box(..)) => {
                 let DynValue::Pointer(box_ptr) = self.load(instance)? else {
-                    return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
+                    return Err(ExecError::illegal_state("element ref does not refer to a pointer"));
                 };
 
                 if index_value != 0 {
@@ -1454,7 +1477,7 @@ impl Vm {
 
             other => {
                 return Err(ExecError::illegal_state(format!(
-                    "exec_element: argument type {} is not an array or box",
+                    "element ref instance type {} is not an array or box",
                     other.to_pretty_string(self.metadata.as_ref())
                 )));
             }
@@ -1477,7 +1500,7 @@ impl Vm {
         };
         
         let element_size = self.marshaller.get_ty(&element_type)?.size();
-        
+
         let index_offset = element_size * usize::try_from(index)
             .map_err(|_| {
                 let msg = "element instruction has non-integer illegal index value";

@@ -658,15 +658,16 @@ impl IRFormatter for Metadata {
     fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result {
         match r {
             Ref::Deref(inner) => {
+                write!(f, "(")?;
                 self.format_val(inner, f)?;
-                write!(f, "^")?;
+                write!(f, ")^")?;
                 Ok(())
             }
 
             Ref::Field(field_ref) => {
                 write!(f, "(as ")?;
                 self.format_type(&field_ref.instance_type, f)?;
-                write!(f, ") ")?;
+                write!(f, ") &(")?;
 
                 self.format_ref(&field_ref.instance, f)?;
                 write!(f, ".")?;
@@ -685,6 +686,7 @@ impl IRFormatter for Metadata {
                 } else {
                     write!(f, "{}", field_ref.field.0)?;
                 }
+                write!(f, ")")?;
 
                 Ok(())
             }
@@ -692,13 +694,44 @@ impl IRFormatter for Metadata {
             Ref::Element(el_ref) => {
                 write!(f, "(as ")?;
                 self.format_type(&el_ref.instance_type, f)?;
-                write!(f, ") ")?;
+                write!(f, ") &(")?;
 
                 self.format_ref(&el_ref.instance, f)?;
                 write!(f, "[")?;
                 self.format_val(&el_ref.index, f)?;
-                write!(f, "]")?;
+                write!(f, "])")?;
 
+                Ok(())
+            }
+
+            Ref::VariantTag(tag_ref) => {
+                write!(f, "(as ")?;
+                self.format_type(&tag_ref.instance_type, f)?;
+                write!(f, ") &(tag of ")?;
+
+                self.format_ref(&tag_ref.instance, f)?;
+                write!(f, ")")?;
+                Ok(())
+            }
+
+            Ref::VariantData(data_ref) => {
+                write!(f, "(as ")?;
+                self.format_type(&data_ref.instance_type, f)?;
+                write!(f, ") &(")?;
+
+                self.format_ref(&data_ref.instance, f)?;
+                write!(f, ".")?;
+
+                let case_name = data_ref.instance_type.as_variant()
+                    .and_then(|id| self.get_variant_def(id))
+                    .and_then(|def| def.cases.get(data_ref.case_index))
+                    .map(|case_def| &case_def.name);
+                match case_name {
+                    Some(name) => write!(f, "{}", name)?,
+                    None => write!(f, "{}", data_ref.case_index)?,
+                }
+
+                write!(f, ")")?;
                 Ok(())
             }
 

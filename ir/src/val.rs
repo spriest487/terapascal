@@ -27,6 +27,8 @@ pub enum Ref {
     Deref(Box<Value>),
     Field(Box<FieldRef>),
     Element(Box<ElementRef>),
+    VariantData(Box<VariantDataRef>),
+    VariantTag(Box<VariantTagRef>),
 }
 
 impl Ref {
@@ -51,6 +53,21 @@ impl Ref {
             instance: self.clone(),
             instance_type: instance_type.into(),
             index: index.into(),
+        }))
+    }
+
+    pub fn vartag_ref(&self, instance_type: impl Into<Type>) -> Self {
+        Self::VariantTag(Box::new(VariantTagRef {
+            instance: self.clone(),
+            instance_type: instance_type.into(),
+        }))
+    }
+
+    pub fn vardata_ref(&self, case_index: usize, instance_type: impl Into<Type>) -> Self {        
+        Self::VariantData(Box::new(VariantDataRef {
+            instance: self.clone(),
+            instance_type: instance_type.into(),
+            case_index,
         }))
     }
 
@@ -96,6 +113,30 @@ impl From<VariableID> for Ref {
     }
 }
 
+impl From<FieldRef> for Ref {
+    fn from(value: FieldRef) -> Self {
+        Ref::Field(Box::new(value))
+    }
+}
+
+impl From<ElementRef> for Ref {
+    fn from(value: ElementRef) -> Self {
+        Ref::Element(Box::new(value))
+    }
+}
+
+impl From<VariantDataRef> for Ref {
+    fn from(value: VariantDataRef) -> Self {
+        Ref::VariantData(Box::new(value))
+    }
+}
+
+impl From<VariantTagRef> for Ref {
+    fn from(value: VariantTagRef) -> Self {
+        Ref::VariantTag(Box::new(value))
+    }
+}
+
 impl fmt::Display for Ref {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -107,6 +148,8 @@ impl fmt::Display for Ref {
             Ref::Deref(at) => write!(f, "{}^", at),
             Ref::Field(field_ref) => write!(f, "{}", field_ref),
             Ref::Element(el_ref) => write!(f, "{}", el_ref),
+            Ref::VariantTag(tag_ref) => write!(f, "{}", tag_ref),
+            Ref::VariantData(data_ref) => write!(f, "{}", data_ref),
         }
     }
 }
@@ -312,7 +355,7 @@ pub struct FieldRef {
 
 impl fmt::Display for FieldRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "(as {}) {}.{}", self.instance_type, self.instance, self.field)
+        write!(f, "(as {}) &({}.{})", self.instance_type, self.instance, self.field)
     }
 }
 
@@ -325,7 +368,32 @@ pub struct ElementRef {
 
 impl fmt::Display for ElementRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "(as {}) {}[{}]", self.instance_type, self.instance, self.index)
+        write!(f, "(as {}) &({}[{}])", self.instance_type, self.instance, self.index)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VariantTagRef {
+    pub instance: Ref,
+    pub instance_type: Type,
+}
+
+impl fmt::Display for VariantTagRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "(as {}) &(tag of {})", self.instance_type, self.instance)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VariantDataRef {
+    pub instance: Ref,
+    pub instance_type: Type,
+    pub case_index: usize,
+}
+
+impl fmt::Display for VariantDataRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "(as {}.{}) &({})", self.instance_type, self.case_index, self.instance)
     }
 }
 

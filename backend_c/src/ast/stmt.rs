@@ -475,30 +475,9 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.assign_ref(out, element);
             },
 
-            ir::Instruction::VariantTag { out, a, .. } => {
-                let tag_expr = Expr::translate_variant_tag(a, self);
-
-                self.assign_ref(out, tag_expr.addr_of());
-            },
-
-            ir::Instruction::VariantData { out, a, tag, .. } => {
-                let data_addr = Expr::translate_variant_data(a, *tag, self);
-
-                let assign_result = Expr::translate_assign(
-                    out,
-                    data_addr,
-                    self,
-                );
-                self.stmts.push(Statement::Expr(assign_result));
-            },
-
-            ir::Instruction::Call {
-                out,
-                function,
-                args,
-            } => {
+            ir::Instruction::Call { out, function, args } => {
                 self.translate_call(out.as_ref(), function, args);
-            },
+            }
 
             ir::Instruction::NewObject { out, type_id, immortal } => {
                 self.translate_new_object(out, *type_id, *immortal);

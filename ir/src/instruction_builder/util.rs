@@ -216,14 +216,9 @@ where
                 .get_variant_def(*id)
                 .unwrap_or_else(|| panic!("missing variant def {}", id));
 
-            let tag_type = variant_def.tag_type.clone();
             let cases = variant_def.cases.to_vec();
 
-            let tag_ref = builder.local_temp(tag_type.temp_ref());
             let is_not_case = builder.local_temp(Type::Bool);
-
-            // get the tag
-            builder.vartag(tag_ref, at.clone(), id.to_variant_type());
 
             // jump out of the search loop if we find the matching case
             let break_label = builder.next_label();
@@ -242,9 +237,12 @@ where
 
                     let skip_case_label = builder.next_label();
 
-                    // is_not_case := tag_ptr^ != tag
-                    let tag_val = Value::LiteralI32(tag as i32);
-                    builder.neq(is_not_case, tag_ref.to_deref(), tag_val);
+                    // get the tag
+                    let tag_ref = at.clone().vartag_ref(id.to_variant_type());
+
+                    // is_not_case := at.tag != tag
+                    let case_tag_val = Value::LiteralI32(tag as i32);
+                    builder.neq(is_not_case, tag_ref.to_deref(), case_tag_val);
                     builder.jmpif(skip_case_label, is_not_case.clone());
 
                     // get ptr into case data and visit it
@@ -254,9 +252,7 @@ where
                     // incremented once per case
                     builder.local_begin();
                     {
-                        let data_ref = builder.local_temp(data_ty.clone().temp_ref());
-
-                        builder.vardata(data_ref, at.clone(), Type::Variant(*id), tag);
+                        let data_ref = at.clone().vardata_ref(tag, id.to_variant_type());
 
                         result |= builder.visit_deep(data_ref.to_deref(), &data_ty, f);
                     }

@@ -245,8 +245,8 @@ fn build_variant_ctor_call(
     arg: Option<&typ::ast::Expr>,
     builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
-    let variant_ty =
-        variant_ty.clone().apply_type_args(builder.generic_context(), builder.generic_context());
+    let generic_ctx = builder.generic_context();
+    let variant_ty = variant_ty.clone().apply_type_args(generic_ctx, generic_ctx);
 
     let variant_name = variant_ty.as_variant().unwrap();
 
@@ -255,21 +255,18 @@ fn build_variant_ctor_call(
 
     builder.local_begin();
     {
-        let tag_ref = builder.local_temp(ir::Type::I32.temp_ref());
-        builder.vartag(tag_ref, out, out_ty.clone());
-
         let (_, case_index, _) = builder.translate_variant_case(variant_name, &case_name);
 
         // todo: proper index type
+        let tag_ref = out.to_ref().vartag_ref(out_ty.clone());
         builder.mov(tag_ref.to_deref(), ir::Value::LiteralI32(case_index as i32));
 
         if let Some(arg) = arg {
             let arg_val = expr::expr_to_val(arg, builder);
 
             let arg_ty = builder.translate_type(&arg.annotation().ty());
-            let data_ref = builder.local_temp(arg_ty.clone().temp_ref());
+            let data_ref = out.to_ref().vardata_ref(case_index, out_ty.clone());
 
-            builder.vardata(data_ref, out, out_ty.clone(), case_index);
             builder.mov(data_ref.to_deref(), arg_val);
             builder.retain_deep(data_ref.to_deref(), &arg_ty);
         }

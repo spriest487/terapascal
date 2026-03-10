@@ -71,20 +71,6 @@ pub enum Instruction {
         of_type: Type,
     },
 
-    /// stores a pointer to the tag of a variant at `a` into `out`
-    VariantTag {
-        out: Ref,
-        a: Ref,
-        of_ty: Type,
-    },
-    /// stores a pointer to the data for a variant case of index `tag` at `a` into `out`
-    VariantData {
-        out: Ref,
-        a: Ref,
-        tag: usize,
-        of_ty: Type,
-    },
-
     Call {
         out: Option<Ref>,
         function: Value,
@@ -204,8 +190,6 @@ impl Instruction {
             | Instruction::AddrOf { out, .. }
             | Instruction::MakeRef { out, .. }
             | Instruction::Length { out, .. }
-            | Instruction::VariantTag { out, .. }
-            | Instruction::VariantData { out, .. }
             | Instruction::ClassIs { out, .. }
             | Instruction::NewObject { out, .. }
             | Instruction::NewArray { out, .. }
@@ -264,10 +248,8 @@ impl Instruction {
                 Self::visit_ref(a, f);
             }
 
-            Instruction::VariantTag { out, a, .. }
             | Instruction::AddrOf { out, a }
-            | Instruction::MakeRef { out, a }
-            | Instruction::VariantData { out, a, .. } => {
+            | Instruction::MakeRef { out, a } => {
                 Self::visit_ref(out, f);
                 Self::visit_ref(a, f);
             },
