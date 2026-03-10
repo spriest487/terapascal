@@ -385,7 +385,7 @@ fn build_for_loop_sequence(
                     let binding_ref = builder.local_var(binding_ty.clone(), Some(binding_name));
 
                     // binding_ref := next_item_option_ref.Get()
-                    let item_option_data_ref = next_item_option_ref.to_ref().vardata_ref(OPTION_SOME_CASE, item_option_ty.clone());
+                    let item_option_data_ref = next_item_option_ref.to_ref().vardata_ref(item_option_ty.clone(), OPTION_SOME_CASE);
                     builder.mov(binding_ref, item_option_data_ref.to_deref());
 
                     let body_instructions = builder.loop_body_scope(continue_label, break_label, |builder| {

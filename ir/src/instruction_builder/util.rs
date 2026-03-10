@@ -252,7 +252,7 @@ where
                     // incremented once per case
                     builder.local_begin();
                     {
-                        let data_ref = at.clone().vardata_ref(tag, id.to_variant_type());
+                        let data_ref = at.clone().vardata_ref(id.to_variant_type(), tag);
 
                         result |= builder.visit_deep(data_ref.to_deref(), &data_ty, f);
                     }

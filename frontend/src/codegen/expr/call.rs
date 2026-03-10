@@ -265,7 +265,7 @@ fn build_variant_ctor_call(
             let arg_val = expr::expr_to_val(arg, builder);
 
             let arg_ty = builder.translate_type(&arg.annotation().ty());
-            let data_ref = out.to_ref().vardata_ref(case_index, out_ty.clone());
+            let data_ref = out.to_ref().vardata_ref(out_ty.clone(), case_index);
 
             builder.mov(data_ref.to_deref(), arg_val);
             builder.retain_deep(data_ref.to_deref(), &arg_ty);

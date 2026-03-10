@@ -739,7 +739,7 @@ pub trait InstructionBuilder {
         instance_type: Type,
         tag: usize,
     ) {
-        self.mov(out, instance.into().vardata_ref(tag, instance_type));
+        self.mov(out, instance.into().vardata_ref(instance_type, tag));
     }
     
     fn release(&mut self, at: impl Into<Ref>, weak: bool, released_out: impl Into<Ref>) {
