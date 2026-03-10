@@ -138,24 +138,27 @@ where
 
         builder.local_begin();
         {
-            let arg_is_valid = builder.local_temp(Type::Bool);
-            let arg_is_invalid = builder.local_temp(Type::Bool);
+            let invalid_arg = builder.local_temp(Type::Bool);
 
-            builder.class_is(arg_is_valid, arg_ref.to_deref(), expect_object_id);
-            builder.not(arg_is_invalid, arg_is_valid);
-            builder.jmpif(exit_error_label, arg_is_invalid);
+            builder.class_is(invalid_arg, arg_ref.to_deref(), expect_object_id);
+            builder.not(invalid_arg, invalid_arg);
+            builder.jmpif(exit_error_label, invalid_arg);
         }
         builder.local_end();
 
         match param_ty {
             // object types: downcast and pass the arg directly
             Type::Object(..) | Type::WeakObject(..) => {
-                builder.comment("object param: copy the argument");
-                let call_arg = builder.local_temp(param_ty.clone());
-                builder.cast(call_arg, arg_ref.to_deref(), param_ty.clone());
+                builder.local_begin();
+                {
+                    builder.comment("object param: copy the argument");
+                    let call_arg = builder.local_temp(param_ty.clone());
+                    builder.cast(call_arg, arg_ref.to_deref(), param_ty.clone());
 
-                call_args.push(call_arg.value());
-            },
+                    call_args.push(call_arg.value());
+                }
+                builder.local_end();
+            }
 
             Type::TempRef(deref_type) => {
                 // unbox...
