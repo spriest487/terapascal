@@ -6,7 +6,7 @@ use crate::ExecResult;
 use crate::ObjectID;
 use crate::Pointer;
 use crate::Vm;
-use rand::Rng;
+use rand::RngExt;
 use std::env::consts::OS;
 use std::fmt;
 use std::io;
