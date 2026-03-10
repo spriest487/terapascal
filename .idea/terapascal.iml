@@ -11,6 +11,8 @@
       <sourceFolder url="file://$MODULE_DIR$/terapascal_ls/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/test_runner/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/vm/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/backend_cil/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/demo_runner/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

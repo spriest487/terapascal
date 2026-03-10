@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/pascal2.iml" filepath="$PROJECT_DIR$/.idea/pascal2.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/terapascal.iml" filepath="$PROJECT_DIR$/.idea/terapascal.iml" />
     </modules>
   </component>
 </project>
