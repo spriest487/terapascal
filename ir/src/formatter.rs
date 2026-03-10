@@ -399,13 +399,13 @@ impl IRFormatter for RawInstructionFormatter {
     }
 }
 
-pub struct StatefulIndentedFormatter<'f, F: IRFormatter> {
+pub struct DebugFormatter<'f, F: IRFormatter> {
     wrapped: &'f F,
     tabs: Cell<usize>,
     tab_width: usize,
 }
 
-impl<'f, F: IRFormatter> StatefulIndentedFormatter<'f, F> {
+impl<'f, F: IRFormatter> DebugFormatter<'f, F> {
     pub fn new(wrapped: &'f F, tab_width: usize) -> Self {
         Self {
             wrapped,
@@ -415,7 +415,7 @@ impl<'f, F: IRFormatter> StatefulIndentedFormatter<'f, F> {
     }
 }
 
-impl<'f, F: IRFormatter> IRFormatter for StatefulIndentedFormatter<'f, F> {
+impl<'f, F: IRFormatter> IRFormatter for DebugFormatter<'f, F> {
     fn format_instruction<W: fmt::Write>(
         &self,
         instruction: &Instruction,

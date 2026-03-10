@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::mem::forget;
 use std::rc::Rc;
+use terapascal_ir::MetadataSource;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
