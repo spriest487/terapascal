@@ -122,7 +122,7 @@ pub fn translate_pattern_match_bindings(
                         .cloned()
                         .expect("variant pattern with binding must refer to a case with data");
 
-                    let data_ref = target_val.vardata_ref(case_index, variant_ty.clone());
+                    let data_ref = target_val.vardata_ref(variant_ty.clone(), case_index);
 
                     vec![PatternMatchBinding {
                         name: binding_name,
