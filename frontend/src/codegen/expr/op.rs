@@ -20,15 +20,24 @@ pub fn translate_bin_op(
 
     let result_ty = builder.translate_type(out_ty);
 
-    // the functions to translate IR and member operators return direct refs to the value,
-    // while other operations return local temp values
-    let out_is_ref = matches!(bin_op.op, ast::Operator::Period | ast::Operator::Index);
+    // the functions to translate IR and member operators return pointers to the value
+    let (out_val, out_is_ref) = match bin_op.op {
+        ast::Operator::Period | ast::Operator::Index => {
+            let out_val = builder.local_var(result_ty.clone().temp_ref(), None);
+            (out_val, true)
+        },
+
+        _ => {
+            let out_val = builder.local_var(result_ty.clone(), None);
+            (out_val, false)
+        },
+    };
 
     builder.local_begin();
 
     let lhs_val = expr::translate_expr(&bin_op.lhs, builder);
 
-    let out_val = match &bin_op.op {
+    match &bin_op.op {
         ast::Operator::Period => {
             // auto-deref for rc types
             let of_ty = builder.translate_type(&bin_op.lhs.annotation().ty());
@@ -56,34 +65,31 @@ pub fn translate_bin_op(
                 .find_field(&member_name)
                 .expect("referenced field must exist");
 
-            lhs_val.field_ref(of_ty, field).to_deref()
+            let field_ref = lhs_val.field_ref(of_ty, field);
+            builder.mov(out_val, field_ref)
         },
 
         ast::Operator::Index => {
             let index_val = expr::expr_to_val(&bin_op.rhs, builder);
 
-            expr::translate_indexer(
+            let element_ref = expr::translate_indexer(
                 &result_ty,
                 lhs_val,
                 index_val,
                 &bin_op.lhs.annotation().ty(),
                 builder,
-            ).to_deref()
+            );
+
+            builder.mov(out_val, element_ref)
         },
 
         ast::Operator::NotEquals => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.eq(out_val, lhs_val, b);
             builder.not(out_val, out_val);
-
-            out_val.to_ref()
         },
 
         ast::Operator::Equals => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             match out_ty {
                 typ::Type::Set(set_type) => {
                     let b = expr::translate_expr(&bin_op.rhs, builder);
@@ -95,121 +101,69 @@ pub fn translate_bin_op(
                     builder.eq(out_val, lhs_val, b);
                 }
             }
-
-            out_val.to_ref()
         },
 
         ast::Operator::Add => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.add(out_val, lhs_val, b);
-
-            out_val.to_ref()
         },
 
         ast::Operator::Mul => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.mul(out_val, lhs_val, b);
-
-            out_val.to_ref()
         }
 
         ast::Operator::Mod => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.modulo(out_val, lhs_val, b);
-
-            out_val.to_ref()
         }
 
         ast::Operator::FDiv => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.fdiv(out_val, lhs_val, b);
-
-            out_val.to_ref()
         }
 
         ast::Operator::IDiv => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.idiv(out_val, lhs_val, b);
-
-            out_val.to_ref()
         }
 
         ast::Operator::Gt => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.gt(out_val, lhs_val, b);
-
-            out_val.to_ref()
         },
 
         ast::Operator::Gte => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.gte(out_val, lhs_val, b);
-
-            out_val.to_ref()
         },
 
         ast::Operator::Lt => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.lt(out_val, lhs_val, b);
-
-            out_val.to_ref()
         },
 
         ast::Operator::Lte => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.lte(out_val, lhs_val, b);
-
-            out_val.to_ref()
         },
 
         ast::Operator::Sub => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.sub(out_val, lhs_val, b);
-
-            out_val.to_ref()
         },
 
         ast::Operator::Shl => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.shl(out_val, lhs_val, b);
-
-            out_val.to_ref()
         },
 
         ast::Operator::Shr => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let b = expr::expr_to_val(&bin_op.rhs, builder);
             builder.shr(out_val, lhs_val, b);
-
-            out_val.to_ref()
         },
 
         ast::Operator::And => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let short_circuit = builder.next_label();
             let exit = builder.next_label();
 
@@ -227,13 +181,9 @@ pub fn translate_bin_op(
             builder.mov(out_val, false);
             
             builder.label(exit);
-
-            out_val.to_ref()
         },
 
         ast::Operator::Or => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let short_circuit = builder.next_label();
             let exit = builder.next_label();
             
@@ -250,13 +200,9 @@ pub fn translate_bin_op(
             builder.mov(out_val, true);
             
             builder.label(exit);
-
-            out_val.to_ref()
         },
 
         ast::Operator::BitAnd => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             match out_ty {
                 typ::Type::Set(set_type) => {
                     let b = expr::translate_expr(&bin_op.rhs, builder);
@@ -269,13 +215,9 @@ pub fn translate_bin_op(
                     builder.bit_and(out_val, lhs_val, b);
                 }
             }
-
-            out_val.to_ref()
         },
 
         ast::Operator::BitOr => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             match out_ty {
                 typ::Type::Set(set_type) => {
                     let b = expr::translate_expr(&bin_op.rhs, builder);
@@ -288,13 +230,9 @@ pub fn translate_bin_op(
                     builder.bit_or(out_val, lhs_val, b);
                 }
             }
-
-            out_val.to_ref()
         },
 
         ast::Operator::Caret => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             match out_ty {
                 typ::Type::Set(set_type) => {
                     let b = expr::translate_expr(&bin_op.rhs, builder);
@@ -307,13 +245,9 @@ pub fn translate_bin_op(
                     builder.bit_xor(out_val, lhs_val, b);
                 }
             }
-
-            out_val.to_ref()
         },
         
         ast::Operator::In => {
-            let out_val = builder.local_var(result_ty.clone(), None);
-
             let break_label = builder.next_label();
             let fail_label = builder.next_label();
             
@@ -349,8 +283,6 @@ pub fn translate_bin_op(
             builder.mov(out_val, ir::Value::LiteralBool(false));
 
             builder.label(break_label);
-
-            out_val.to_ref()
         }
 
         _ => unimplemented!("IR for op {}", bin_op.op),
@@ -362,7 +294,11 @@ pub fn translate_bin_op(
 
     builder.local_end();
 
-    out_val
+    if out_is_ref {
+        out_val.to_deref()
+    } else {
+        out_val.to_ref()
+    }
 }
 
 fn set_bound_to_literal(value: IntConstant, value_type: &ir::Type) -> ir::Value {
