@@ -476,28 +476,17 @@ impl<'a, 'b> Builder<'a, 'b> {
             },
 
             ir::Instruction::VariantTag { out, a, .. } => {
-                let tag_field = Expr::Field {
-                    base: Box::new(Expr::translate_ref(a, self)),
-                    field: FieldName::VariantTag,
-                };
+                let tag_expr = Expr::translate_variant_tag(a, self);
 
-                self.assign_ref(out, tag_field.addr_of());
+                self.assign_ref(out, tag_expr.addr_of());
             },
 
             ir::Instruction::VariantData { out, a, tag, .. } => {
-                let data_field = Expr::Field {
-                    base: Box::new(Expr::translate_ref(a, self)),
-                    field: FieldName::VariantData,
-                };
-
-                let case_field = Expr::Field {
-                    base: Box::new(data_field),
-                    field: FieldName::VariantDataCase(*tag),
-                };
+                let data_addr = Expr::translate_variant_data(a, *tag, self);
 
                 let assign_result = Expr::translate_assign(
                     out,
-                    case_field.addr_of(),
+                    data_addr,
                     self,
                 );
                 self.stmts.push(Statement::Expr(assign_result));

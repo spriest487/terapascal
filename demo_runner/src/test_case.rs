@@ -6,7 +6,6 @@ use crate::test_script::TestScriptStep;
 use regex::Regex;
 use std::env;
 use std::ffi::OsStr;
-use std::ffi::OsString;
 use std::fs;
 use std::fs::DirEntry;
 use std::io;
@@ -96,7 +95,7 @@ impl TestCase {
         let mut build_stderr = Vec::new();
         
         let module_path = target_file_path(&self.path, opts, "lib")?;
-        if is_target_outdated(&module_path, &self.path, opts) {
+        if is_dirty(&module_path, &self.path, opts)? {
             let mut build_command = Command::new(&opts.compiler);
             build_command.arg(&self.path);
             build_command.arg("-o").arg(&module_path);
@@ -117,12 +116,7 @@ impl TestCase {
             }
         }
 
-        let mut compiler_path = opts.compiler.clone();
-        if opts.compiler.is_relative() {
-            compiler_path = env::current_dir()?.join(compiler_path);
-        }
-        
-        let mut run_command = Command::new(compiler_path);
+        let mut run_command = find_command(&opts.compiler)?;
         run_command.arg(module_path.canonicalize()?)
             .current_dir(self.working_dir());
         
@@ -146,12 +140,12 @@ impl TestCase {
         let mut build_stderr = Vec::new();
 
         let dll_path = target_file_path(&self.path, opts, "dll")?;
-        if is_target_outdated(&dll_path, &self.path, opts) {
+        if is_dirty(&dll_path, &self.path, opts)? {
             if dll_path.exists() {
                 fs::remove_file(&dll_path)?;
             }
 
-            let mut build_command = Command::new(&opts.compiler);
+            let mut build_command = find_command(&opts.compiler)?;
             build_command.arg(&self.path);
             build_command.arg("-o").arg(&dll_path);
             build_command.arg("-a").arg("cil");
@@ -195,14 +189,15 @@ impl TestCase {
         build_stderr: &mut Vec<u8>,
         opts: &Opts
     ) -> io::Result<Option<ExitStatus>> {
-        if !is_target_outdated(exe_path, &self.path, opts) {
+        if !is_dirty(exe_path, &self.path, opts)? {
             return Ok(None);
         }
-        
+
         let mut c_file_path = exe_path.clone();
         c_file_path.set_extension("c");
-        
-        let mut compile_command = Command::new(&opts.compiler);
+
+        let mut compile_command = find_command(&opts.compiler)?;
+
         compile_command.arg(&self.path);
         compile_command.arg("-o").arg(&c_file_path);
         
@@ -263,8 +258,7 @@ impl TestCase {
         }
 
         try_run_interactive(
-            Command::new(exe_path)
-                .current_dir(self.working_dir()),
+            find_command(&exe_path)?.current_dir(self.working_dir()),
             |stdin, stdout, stderr| {
                 let mut concat_stdout = ConcatReader::new(build_stdout.as_slice(), stdout);
                 let mut concat_stderr = ConcatReader::new(build_stderr.as_slice(), stderr);
@@ -485,16 +479,27 @@ fn target_file_path(src_path: &Path, opts: &Opts, target_ext: impl AsRef<OsStr>)
     Ok(target_path)
 }
 
-fn is_target_outdated(target: &Path, source: &Path, opts: &Opts) -> bool {
+fn find_command(command: &Path) -> io::Result<Command> {
+    if command.is_relative() {
+        let command = env::current_dir()?.join(command);
+        Ok(Command::new(command))
+    } else {
+        Ok(Command::new(command))
+    }
+}
+
+fn is_dirty(target: &Path, source: &Path, opts: &Opts) -> io::Result<bool> {
     if opts.clean {
-        return true;
+        return Ok(true);
     }
     
     if !target.exists() {
-        return true;
+        return Ok(true);
     }
-    
-    let compiler_path = OsString::from(Command::new(&opts.compiler).get_program());
+
+    let compiler_path = find_command(&opts.compiler)?
+        .get_program()
+        .to_os_string();
 
     let target_timestamp = target.metadata()
         .and_then(|meta| meta.modified()).ok();
@@ -512,9 +517,12 @@ fn is_target_outdated(target: &Path, source: &Path, opts: &Opts) -> bool {
     };
 
     match (target_timestamp, modified_timestamp) {
-        (Some(target_modified), Some(source_modified)) =>
-            source_modified > target_modified,
-        _ => true,
+        (Some(target_modified), Some(source_modified)) => {
+            Ok(source_modified > target_modified)
+        },
+        _ => {
+            Ok(true)
+        },
     }
 }
 

@@ -135,33 +135,6 @@ public record MakeRefInstruction : IInstruction {
 }
 
 [MessagePackObject]
-public record ElementInstruction : IInstruction {
-    [Key("out")]
-    public required IRef Out {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("a")]
-    public required IRef Arg {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("index")]
-    public required IValue Index {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("of_type")]
-    public required IType BaseType {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-}
-
-[MessagePackObject]
 public record LengthInstruction : IInstruction {
     [Key("out")]
     public required IRef Out {
@@ -225,30 +198,6 @@ public record VariantDataInstruction : IInstruction {
 
     [Key("tag")]
     public required ulong Tag { get; init; }
-}
-
-[MessagePackObject]
-public record FieldInstruction : IInstruction {
-    [Key("out")]
-    public required IRef Out {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("a")]
-    public required IRef Arg {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("of_ty")]
-    public required IType BaseType {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("field")]
-    public required FieldID Field { get; init; }
 }
 
 [MessagePackObject]
@@ -584,10 +533,6 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
                 return MessagePackSerializer.Deserialize<MakeRefInstruction>(ref reader, options);
             }
 
-            case "Element": {
-                return MessagePackSerializer.Deserialize<ElementInstruction>(ref reader, options);
-            }
-
             case "Length": {
                 return MessagePackSerializer.Deserialize<LengthInstruction>(ref reader, options);
             }
@@ -598,10 +543,6 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
 
             case "VariantData": {
                 return MessagePackSerializer.Deserialize<VariantDataInstruction>(ref reader, options);
-            }
-
-            case "Field": {
-                return MessagePackSerializer.Deserialize<FieldInstruction>(ref reader, options);
             }
 
             case "Call": {

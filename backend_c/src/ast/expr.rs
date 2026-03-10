@@ -169,7 +169,6 @@ impl Expr {
                     | ir::Type::F32
                     | ir::Type::F64 => Expr::LitInt(0),
 
-
                     ir::Type::Struct(_)
                     | ir::Type::Variant(_)
                     | ir::Type::Flags(_)
@@ -240,6 +239,12 @@ impl Expr {
             }
             ir::Ref::Element(el_ref) => {
                 Self::translate_element(&el_ref.instance, &el_ref.index, &el_ref.instance_type, builder)
+            }
+            ir::Ref::VariantTag(tag_ref) => {
+                Self::translate_variant_tag(&tag_ref.instance, builder)
+            }
+            ir::Ref::VariantData(data_ref) => {
+                Self::translate_variant_data(&data_ref.instance, data_ref.case_index, builder)
             }
         }
     }
@@ -508,6 +513,38 @@ impl Expr {
                 field.addr_of()
             },
         }
+    }
+
+    pub fn translate_variant_tag(
+        instance: &ir::Ref,
+        builder: &mut Builder
+    ) -> Expr {
+        let instance_expr = Expr::translate_ref(instance, builder);
+
+        let tag_field_expr = Expr::Field {
+            base: Box::new(instance_expr),
+            field: FieldName::VariantTag,
+        };
+
+        tag_field_expr.addr_of()
+    }
+
+    pub fn translate_variant_data(
+        instance: &ir::Ref,
+        case_index: usize,
+        builder: &mut Builder
+    ) -> Expr {
+        let data_field = Expr::Field {
+            base: Box::new(Expr::translate_ref(instance, builder)),
+            field: FieldName::VariantData,
+        };
+
+        let case_field = Expr::Field {
+            base: Box::new(data_field),
+            field: FieldName::VariantDataCase(case_index),
+        };
+
+        case_field.addr_of()
     }
 
     pub fn class_ptr(class_id: ir::TypeDefID) -> Self {

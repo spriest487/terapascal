@@ -109,6 +109,49 @@ public record GlobalRef(IGlobalRef Global) : IRef;
 public record Deref(IValue Value) : IRef;
 public record DiscardRef : IRef;
 
+public record FieldRef(FieldRefData Data) : IRef;
+
+[MessagePackObject]
+public record FieldRefData {
+    [Key("instance")]
+    public required IRef Instance {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("instance_type")]
+    public required IType InstanceType {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("field")]
+    public required FieldID FieldID { get; init; }
+}
+
+public record ElementRef(ElementRefData Data) : IRef;
+
+[MessagePackObject]
+public record ElementRefData {
+    [Key("instance")]
+    public required IRef Instance {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("instance_type")]
+    public required IType InstanceType {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("index")]
+    public required IValue Index {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+}
+
 public class NullableRefFormatter : IMessagePackFormatter<IRef?> {
     private readonly RefFormatter refFormatter = new RefFormatter();
 
@@ -167,6 +210,16 @@ public class RefFormatter : IMessagePackFormatter<IRef> {
 
             case "Discard": {
                 return new DiscardRef();
+            }
+            
+            case "Element": {
+                var value = MessagePackSerializer.Deserialize<ElementRefData>(ref reader, options);
+                return new ElementRef(value);
+            }
+            
+            case "Field": {
+                var value = MessagePackSerializer.Deserialize<FieldRefData>(ref reader, options);
+                return new FieldRef(value);
             }
             
             default: {

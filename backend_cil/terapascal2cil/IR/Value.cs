@@ -9,7 +9,7 @@ public interface IValue {
 
 public record RefValue(IRef Ref) : IValue {}
 
-public record LiteralNullValue : IValue {
+public record LiteralNilValue : IValue {
     public bool IsLiteral => true;
 }
 
@@ -62,8 +62,8 @@ public class ValueFormatter : IMessagePackFormatter<IValue> {
                 return new RefValue(@ref);
             }
 
-            case "LiteralNull": {
-                return new LiteralNullValue();
+            case "LiteralNil": {
+                return new LiteralNilValue();
             }
 
             case "LiteralBool": {

@@ -131,86 +131,6 @@ public class InstructionBuilder {
                     break;
                 }
 
-                case IR.FieldInstruction {
-                    Out: var outRef,
-                    Arg: var argRef,
-                    Field: var fieldID,
-                    BaseType: var baseType,
-                }: {
-                    // the 64-bit flags struct gets translated to a plain U64, so its "field" is just itself
-                    if (baseType is IR.FlagsType { ID: var structID }
-                        && structID == this.assemblyBuilder.TypeBuilder.Flags64StructID
-                        && fieldID.ID == 0
-                    ) {
-                        this.StoreRef(outRef, () => {
-                            this.LoadRefAddr(argRef);
-                        });
-
-                        break;
-                    }
-                    
-                    var fieldRef = typeBuilder.GetFieldRef(baseType, fieldID, this.library);
-
-                    this.StoreRef(outRef, () => {
-                        // for object types Ldfld(a) expects an object ref on the stack so load it directly, but for
-                        // value types we need to load a reference (address) to the object
-                        if (baseType.IsObjectType()) {
-                            this.LoadRef(argRef);
-                        } else {
-                            this.LoadRefAddr(argRef);
-                        }
-                        
-                        this.body.Emit(OpCodes.Ldflda, fieldRef);
-                    });
-
-                    break;
-                }
-
-                case IR.ElementInstruction {
-                    Out: var outRef,
-                    Arg: var baseRef,
-                    Index: var indexVal,
-                    BaseType: var baseType,
-                }: {
-                    this.StoreRef(outRef, () => {
-                        switch (baseType) {
-                            case IR.ArrayType { Element: var elementType, Length: var length }: {
-                                this.LoadRefAddr(baseRef);
-                                this.LoadValue(indexVal);
-                            
-                                var elementMethod = typeBuilder.GetStaticArrayElementMethodRef(elementType, length);
-                            
-                                this.body.Emit(OpCodes.Call, elementMethod);
-                                break;
-                            }
-
-                            case IR.ObjectType(IR.ArrayObjectID(var elementType)): {
-                                var elementTypeRef = typeBuilder.BuildTypeRef(elementType, this.library);
-
-                                this.LoadRef(baseRef);
-                                this.LoadValue(indexVal);
-                                this.body.Emit(OpCodes.Ldelema, elementTypeRef);
-                                break;
-                            }
-
-                            case IR.ObjectType(IR.BoxObjectID(var valueType)): {
-                                var boxTypeInfo = typeBuilder.GetBoxTypeInfo(valueType);
-
-                                this.LoadRef(baseRef);
-                                this.body.Emit(OpCodes.Ldflda, boxTypeInfo.ValueFieldRef);
-                                break;
-                            }
-
-                            default: {
-                                var msg = $"illegal base type for element instruction: {baseType}";
-                                throw new InvalidDataException(msg);
-                            }
-                        }
-                    });
-
-                    break;
-                }
-
                 case IR.LengthInstruction {
                     Out: var outRef,
                     Arg: var argRef,
@@ -578,6 +498,70 @@ public class InstructionBuilder {
         }
     }
 
+    private void LoadFieldRef(IR.IRef argRef, IR.FieldID fieldID, IR.IType baseType) {
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
+
+        // the 64-bit flags struct gets translated to a plain U64, so its "field" is just itself
+        if (baseType is IR.FlagsType { ID: var structID }
+            && structID == typeBuilder.Flags64StructID
+            && fieldID.ID == 0
+           ) {
+            this.LoadRefAddr(argRef);
+
+            return;
+        }
+                    
+        var fieldRef = typeBuilder.GetFieldRef(baseType, fieldID, this.library);
+
+        // for object types Ldfld(a) expects an object ref on the stack so load it directly, but for
+        // value types we need to load a reference (address) to the object
+        if (baseType.IsObjectType()) {
+            this.LoadRef(argRef);
+        } else {
+            this.LoadRefAddr(argRef);
+        }
+                    
+        this.body.Emit(OpCodes.Ldflda, fieldRef);
+    }
+
+    private void LoadElementRef(IR.IRef baseRef, IR.IValue indexVal, IR.IType baseType) {
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
+        
+        switch (baseType) {
+            case IR.ArrayType { Element: var elementType, Length: var length }: {
+                this.LoadRefAddr(baseRef);
+                this.LoadValue(indexVal);
+                        
+                var elementMethod = typeBuilder.GetStaticArrayElementMethodRef(elementType, length);
+                        
+                this.body.Emit(OpCodes.Call, elementMethod);
+                break;
+            }
+
+            case IR.ObjectType(IR.ArrayObjectID(var elementType)): {
+                var elementTypeRef = typeBuilder.BuildTypeRef(elementType, this.library);
+
+                this.LoadRef(baseRef);
+                this.LoadValue(indexVal);
+                this.body.Emit(OpCodes.Ldelema, elementTypeRef);
+                break;
+            }
+
+            case IR.ObjectType(IR.BoxObjectID(var valueType)): {
+                var boxTypeInfo = typeBuilder.GetBoxTypeInfo(valueType);
+
+                this.LoadRef(baseRef);
+                this.body.Emit(OpCodes.Ldflda, boxTypeInfo.ValueFieldRef);
+                break;
+            }
+
+            default: {
+                var msg = $"illegal base type for element instruction: {baseType}";
+                throw new InvalidDataException(msg);
+            }
+        }
+    }
+
     private void BuildAdd(IR.BinOpInstruction op) {
         this.body.Emit(OpCodes.Nop);
         this.body.Emit(OpCodes.Nop);
@@ -855,7 +839,7 @@ public class InstructionBuilder {
 
     private void LoadValue(IR.IValue loadValue) {
         switch (loadValue) {
-            case IR.LiteralNullValue: {
+            case IR.LiteralNilValue: {
                 this.body.Emit(OpCodes.Ldnull);
                 break;
             }
@@ -1099,6 +1083,46 @@ public class InstructionBuilder {
 
                 break;
             }
+
+            case IR.ElementRef(var elementRef): {
+                var elementType = elementRef.InstanceType.GetElementType();
+                if (elementType == null) {
+                    throw new InvalidDataException($"invalid element instruction - {elementRef.InstanceType} is not an indexable type");
+                }
+
+                return elementType.MakeTempRef();
+            }
+            
+            case IR.FieldRef(var fieldRef): {
+                if (fieldRef.InstanceType is IR.ObjectType(IR.ClosureObjectID(var funcTypeID))
+                    && fieldRef.FieldID == IR.FieldID.ClosurePointerField) {
+                    var funcPtrType = (IR.IType)new IR.FunctionType(funcTypeID);
+                    return funcPtrType.MakeTempRef();
+                }
+                
+                IR.StructDef? structDef;
+
+                var found = fieldRef.InstanceType switch {
+                    IR.StructType(var id) => this.library.Metadata.FindStructDef(id, out structDef),
+                    IR.FlagsType(var id) => this.library.Metadata.FindStructDef(id, out structDef),
+                    IR.ObjectType(IR.ClassObjectID(var id)) => this.library.Metadata.FindStructDef(id, out structDef),
+
+                    _ => throw new InvalidDataException($"invalid field instruction - {fieldRef.InstanceType.ToPrettyString(this.library.Metadata)} does not have fields")
+                };
+
+                if (!found) {
+                    throw new InvalidDataException($"invalid field instruction - missing definition for type {fieldRef.InstanceType}");
+                }
+
+                var fieldID = fieldRef.FieldID;
+
+                if (!structDef!.Fields.TryGetValue(fieldID, out var fieldDef)) {
+                    var typeName = fieldRef.InstanceType.ToPrettyString(this.library.Metadata);
+                    throw new InvalidDataException($"invalid field instruction - missing definition for field {fieldID} of type {typeName}");
+                }
+                
+                return fieldDef.Type.MakeTempRef();
+            }
         }
 
         throw new InvalidDataException($"invalid instruction - type of {@ref} could not be determined this context");
@@ -1106,7 +1130,7 @@ public class InstructionBuilder {
 
     public IR.IType GetValueType(IR.IValue val) {
         return val switch {
-            IR.LiteralNullValue => IR.IType.Nothing.MakePointer(),
+            IR.LiteralNilValue => IR.IType.Nothing.MakePointer(),
             IR.LiteralValue<bool> => IR.IType.Bool,
             IR.LiteralValue<sbyte> => IR.IType.I8,
             IR.LiteralValue<byte> => IR.IType.U8,
@@ -1205,6 +1229,16 @@ public class InstructionBuilder {
 
             case IR.DiscardRef: {
                 throw new InvalidDataException("invalid instruction: can't load a discard");
+            }
+
+            case IR.FieldRef(var fieldRef): {
+                this.LoadFieldRef(fieldRef.Instance, fieldRef.FieldID, fieldRef.InstanceType);
+                return;
+            }
+
+            case IR.ElementRef(var elementRef): {
+                this.LoadElementRef(elementRef.Instance, elementRef.Index, elementRef.InstanceType);
+                return;
             }
 
             default: {

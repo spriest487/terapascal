@@ -171,6 +171,16 @@ public interface IType {
             _ => null,
         };
     }
+    
+    public IType? GetElementType() {
+        return this switch {
+            PointerType(var inner) => inner,
+            ArrayType { Element: var elementType } => elementType,
+            ObjectType(ArrayObjectID(var elementType)) => elementType,
+            ObjectType(BoxObjectID(var valueType)) => valueType,
+            _ => null,
+        };
+    }
 
     public IType MakeDynArray() {
         return new ObjectType(new ArrayObjectID(this));
@@ -182,6 +192,10 @@ public interface IType {
 
     public IType MakePointer() {
         return new PointerType(this);
+    }
+    
+    public IType MakeTempRef() {
+        return new TempRefType(this);
     }
 
     public int? IntrinsicSize() => this switch {
