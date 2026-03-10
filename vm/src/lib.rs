@@ -1111,18 +1111,6 @@ impl Vm {
                 let a_ptr = self.addr_of_ref(a)?;
                 self.store(out, DynValue::Pointer(a_ptr))?;
             },
-
-            ir::Instruction::Element {
-                out,
-                a,
-                // not used because the vm doesn't need to know element type to
-                // calculate the pointer offset
-                index,
-                of_type,
-                ..
-            } => {
-                self.exec_element(out, a, index, of_type)?;
-            }
             
             ir::Instruction::Length {
                 out,
@@ -1411,18 +1399,6 @@ impl Vm {
 
             _ => None,
         }
-    }
-
-    fn exec_element(
-        &mut self,
-        out: &ir::Ref,
-        a: &ir::Ref,
-        index: &ir::Value,
-        of_type: &ir::Type,
-    ) -> ExecResult<()> {
-        let element_ptr = self.element_ptr(a, of_type, index)?;
-
-        self.store(out, DynValue::Pointer(element_ptr))
     }
 
     fn element_ptr(

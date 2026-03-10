@@ -111,15 +111,12 @@ fn translate_static_array_ctor(
 
     if dim > 0 {
         builder.scope(|builder| {
-            let element_ref = builder.local_temp(el_ty.clone().temp_ref());
-
             for (i, el) in ctor.elements.iter().enumerate() {
                 builder.scope(|builder| {
                     let index = i32::try_from(i).expect("invalid array index in array ctor");
                     let index_val = ir::Value::LiteralI32(index);
 
-                    builder.element(element_ref, arr, index_val, array_ty.clone());
-
+                    let element_ref = arr.to_ref().element_ref(array_ty.clone(), index_val);
                     let el_init = translate_expr(&el.value, builder);
 
                     builder.mov(element_ref.to_deref(), el_init);
@@ -200,8 +197,7 @@ fn translate_box_ctor(
     
     builder.local_begin();
     {
-        let element_ref = builder.local_temp(boxed_ty.temp_ref());
-        builder.element(element_ref, box_var, ir::Value::LiteralI32(0), box_ty);
+        let element_ref = box_var.to_ref().element_ref(box_ty, ir::Value::I32_0);
         builder.mov(element_ref.to_deref(), value);
     }
     builder.local_end();

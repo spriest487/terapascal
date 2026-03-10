@@ -470,11 +470,6 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.assign_ref(out, val);
             },
 
-            ir::Instruction::Element { out, a, index, of_type: of_ty, .. } => {
-                let element = Expr::translate_element(a, index, of_ty, self);
-                self.assign_ref(out, element);
-            },
-
             ir::Instruction::Length { out, a, of_type: of_ty, .. } => {
                 let element = Expr::translate_length(a, of_ty, self);
                 self.assign_ref(out, element);

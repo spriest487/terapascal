@@ -280,15 +280,14 @@ where
                 return false;
             }
 
-            let element_ty = (**element).clone();
-            let element_ptr = Ref::Local(builder.local_temp(element_ty.clone().temp_ref()));
             let mut result = false;
 
             for i in 0..*dim {
                 let index = Value::LiteralI32(i as i32);
-                builder.element(element_ptr.clone(), at.clone(), index, ty.clone());
 
-                result |= builder.visit_deep(element_ptr.clone().to_deref(), element, f);
+                let element_ref = at.clone().element_ref(ty.clone(), index);
+
+                result |= builder.visit_deep(element_ref.to_deref(), element, f);
             }
 
             result

@@ -115,17 +115,14 @@ where
                     let index_val = Value::LiteralI32(arg_index);
 
                     builder.comment(format!("param {}: arg {}", param_index, arg_index));
-                    builder.element(arg_ref, args_ref.clone(), index_val, arg_array_type.clone());
+                    builder.mov(arg_ref, args_ref.clone().element_ref(arg_array_type.clone(), index_val));
                 }
             },
             |builder| {
+                let index_val = Value::LiteralI32(param_index as i32);
+
                 builder.comment(format!("param {}: arg {}", param_index, param_index));
-                builder.element(
-                    arg_ref,
-                    args_ref.clone(),
-                    Value::LiteralI32(param_index as i32),
-                    arg_array_type.clone(),
-                );
+                builder.mov(arg_ref, args_ref.clone().element_ref(arg_array_type.clone(), index_val));
             },
         );
 
@@ -188,7 +185,7 @@ where
                     let arg_box = builder.local_temp(box_type.clone());
 
                     builder.cast(arg_box, arg_ref.to_deref(), box_type.clone());
-                    builder.element_val(unboxed_val, arg_box, Value::I32_0, value_type.clone(), box_type);
+                    builder.mov(unboxed_val, arg_box.to_ref().element_ref(box_type, Value::I32_0).to_deref());
                 }
                 builder.local_end();
 
@@ -246,7 +243,8 @@ where
     let new_box = builder.local_temp(box_type.clone());
 
     builder.new_box(new_box, value_type.clone(), false);
-    builder.element(ref_out, new_box, Value::I32_0, box_type.clone());
+
+    builder.mov(ref_out, new_box.to_ref().element_ref(box_type.clone(), Value::I32_0));
     builder.mov(ref_out.to_deref(), boxed_value);
 
     builder.release(boxed_arg.to_deref(), false, Ref::Discard);
@@ -267,16 +265,10 @@ where
     let result_box_type = return_type.clone().boxed();
 
     let result_box = builder.local_temp(result_box_type.clone());
-    let result_box_value_ref = builder.local_temp(return_type.clone().temp_ref());
-
     builder.new_box(result_box, return_type.clone(), false);
-    builder.element(
-        result_box_value_ref,
-        result_box,
-        Value::LiteralI32(0),
-        result_box_type,
-    );
-    builder.mov(result_box_value_ref.to_deref(), call_result);
+
+    let result_box_element_ref = result_box.to_ref().element_ref(result_box_type, Value::I32_0);
+    builder.mov(result_box_element_ref.to_deref(), call_result);
 
     builder.cast(RESULT_REF, result_box, Type::any());
 }

@@ -190,27 +190,6 @@ pub trait IRFormatter {
                 write!(f, " := &")?;
                 self.format_ref(a, f)
             }
-
-            Instruction::Element {
-                out,
-                a,
-                index,
-                of_type,
-                ..
-            } => {
-                write!(f, "{:>width$} ", "el", width = IX_WIDTH)?;
-
-                self.format_ref(out, f)?;
-                write!(f, " := &(")?;
-
-                self.format_ref(a, f)?;
-                write!(f, " as ")?;
-                self.format_type(of_type, f)?;
-
-                write!(f, ")[")?;
-                self.format_val(index, f)?;
-                write!(f, "]")
-            }
             
             Instruction::Length {
                 out,

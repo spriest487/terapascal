@@ -45,9 +45,6 @@ fn gen_create_tags(
     let tag_array_ty = ir::ANY_TYPE.dyn_array();
     
     builder.scope(|builder| {
-        // var to store ref to each element (ref to field of type *any)
-        let element_ref = builder.local_temp(ir::ANY_TYPE.temp_ref());
-
         for i in 0..tags.len() {
             let tag_info = &tags[i];
 
@@ -57,7 +54,8 @@ fn gen_create_tags(
             builder.new_object(tag_instance, tag_info.class_id, true);
 
             let index_val = ir::Value::LiteralI32(i as i32);
-            builder.element(element_ref, tag_array.clone(), index_val, tag_array_ty.clone());
+
+            let element_ref = tag_array.clone().element_ref(tag_array_ty.clone(), index_val);
             builder.cast(element_ref.to_deref(), tag_instance, ir::ANY_TYPE);
 
             for (field_id, field_val) in tag_info.fields.iter() {

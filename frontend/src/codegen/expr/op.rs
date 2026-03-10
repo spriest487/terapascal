@@ -338,13 +338,10 @@ pub fn translate_unary_op(
             let operand_type = unary_op.operand.annotation().ty();
 
             // deref syntax is overloaded for box types
-            if let typ::Type::Box(value_type) = operand_type.as_ref() {
-                let element_type = builder.translate_type(value_type.as_ref());
-                let element_ref = builder.local_temp(element_type.clone().temp_ref());
-                
+            if let typ::Type::Box(..) = operand_type.as_ref() {
                 let box_type = builder.translate_type(operand_type.as_ref());
-                builder.element(element_ref, operand_ref, ir::Value::LiteralI32(0), box_type);
-                
+                let element_ref = operand_ref.element_ref(box_type, ir::Value::I32_0);
+
                 element_ref.to_deref()
             } else {
                 if !operand_type.is_typed_pointer() {

@@ -584,34 +584,14 @@ pub trait InstructionBuilder {
         self.mov(out, Value::SizeOf(ty));
     }
 
-    fn element(
-        &mut self,
-        out: impl Into<Ref>,
-        a: impl Into<Ref>,
-        index: impl Into<Value>,
-        of_type: impl Into<Type>,
-    ) {
-        self.emit(Instruction::Element {
-            out: out.into(),
-            a: a.into(),
-            index: index.into(),
-            of_type: of_type.into(),
-        });
-    }
-
     fn element_val(
         &mut self,
         out: impl Into<Ref>,
         a: impl Into<Ref>,
         index: impl Into<Value>,
-        element_ty: impl Into<Type>,
         of_type: impl Into<Type>,
     ) {
-        let element_ty = element_ty.into();
-        let element_ref = self.local_temp(element_ty.temp_ref());
-
-        self.element(element_ref, a, index, of_type);
-        self.mov(out, element_ref.to_deref());
+        self.mov(out, a.into().element_ref(of_type.into(), index).to_deref());
     }
 
     fn element_to_val(
@@ -623,7 +603,7 @@ pub trait InstructionBuilder {
     ) -> Ref {
         let element_ty = element_ty.into();
         let result = self.local_temp(element_ty.clone());
-        self.element_val(result.clone(), a, index, element_ty, of_type);
+        self.element_val(result.clone(), a, index, of_type);
 
         Ref::Local(result)
     }

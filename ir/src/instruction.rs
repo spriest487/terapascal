@@ -62,14 +62,6 @@ pub enum Instruction {
         a: Ref,
     },
 
-    /// Stores the address of an array element from array at `a` into `out`
-    Element {
-        out: Ref,
-        a: Ref,
-        index: Value,
-        of_type: Type,
-    },
-
     /// Get the length (number of elements) contained in the value at `a` of the given type,
     /// storing the result into `out`.
     /// If the type is not an array, the result is 1.
@@ -211,7 +203,6 @@ impl Instruction {
             | Instruction::BitNot(UnaryOpInstruction { out, .. })
             | Instruction::AddrOf { out, .. }
             | Instruction::MakeRef { out, .. }
-            | Instruction::Element { out, .. }
             | Instruction::Length { out, .. }
             | Instruction::VariantTag { out, .. }
             | Instruction::VariantData { out, .. }
@@ -266,12 +257,6 @@ impl Instruction {
             | Instruction::BitNot(unary_op) | Instruction::Not(unary_op) => {
                 Self::visit_ref(&mut unary_op.out, f);
                 Self::visit_val(&mut unary_op.a, f);
-            },
-
-            Instruction::Element { out, a, index, .. } => {
-                Self::visit_ref(out, f);
-                Self::visit_ref(a, f);
-                Self::visit_val(index, f);
             },
 
             Instruction::Length { out, a, .. } => {
