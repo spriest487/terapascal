@@ -2053,11 +2053,10 @@ impl Vm {
             },
 
             _ => {
-                let msg = format!(
+                Err(ExecError::illegal_state(format!(
                     "invalid base type referenced in Field instruction: {}.{}",
                     instance_type, field
-                );
-                return Err(ExecError::illegal_state(msg));
+                )))
             },
         }
     }

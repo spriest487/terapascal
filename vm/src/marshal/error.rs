@@ -91,7 +91,7 @@ impl<T: fmt::Display> fmt::Display for MarshalError<T> {
                 Ok(())
             },
             MarshalError::InvalidTypeIndex { type_index: id }  => {
-                write!(f, "unknown type ID in array: {}", id)
+                write!(f, "unknown type ID: {}", id)
             }
             MarshalError::UnsupportedValue(val) => {
                 write!(f, "unable to marshal value: {:?}", val)
