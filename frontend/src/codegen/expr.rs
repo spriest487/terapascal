@@ -14,7 +14,6 @@ use crate::typ::TypedValue;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::*;
-use terapascal_ir::Type;
 use terapascal_ir::InstructionBuilder as _;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Value {
@@ -219,24 +218,24 @@ pub fn literal_to_val(
         ast::Literal::Boolean(b) => ir::Value::LiteralBool(*b),
 
         ast::Literal::Integer(int_val) => match ty {
-            Type::U8 => ir::Value::LiteralU8(int_val.as_u8().expect("invalid u8 literal value")),
-            Type::I8 => ir::Value::LiteralI8(int_val.as_i8().expect("invalid i8 literal value")),
-            Type::I16 => ir::Value::LiteralI16(int_val.as_i16().expect("invalid i16 literal value")),
-            Type::U16 => ir::Value::LiteralU16(int_val.as_u16().expect("invalid u16 literal value")),
-            Type::I32 => ir::Value::LiteralI32(int_val.as_i32().expect("invalid i32 literal value")),
-            Type::U32 => ir::Value::LiteralU32(int_val.as_u32().expect("invalid u32 literal value")),
-            Type::I64 => ir::Value::LiteralI64(int_val.as_i64().expect("invalid i64 literal value")),
-            Type::U64 => ir::Value::LiteralU64(int_val.as_u64().expect("invalid u64 literal value")),
-            Type::USize => ir::Value::LiteralUSize(int_val.as_usize().expect("invalid usize literal value")),
-            Type::ISize => ir::Value::LiteralISize(int_val.as_isize().expect("invalid isize literal value")),
-            Type::F32 => ir::Value::LiteralF32(int_val.as_f32().expect("invalid f32 literal value")),
-            Type::F64 => ir::Value::LiteralF64(int_val.as_f64().expect("invalid f64 literal value")),
+            ir::Type::U8 => ir::Value::LiteralU8(int_val.as_u8().expect("invalid u8 literal value")),
+            ir::Type::I8 => ir::Value::LiteralI8(int_val.as_i8().expect("invalid i8 literal value")),
+            ir::Type::I16 => ir::Value::LiteralI16(int_val.as_i16().expect("invalid i16 literal value")),
+            ir::Type::U16 => ir::Value::LiteralU16(int_val.as_u16().expect("invalid u16 literal value")),
+            ir::Type::I32 => ir::Value::LiteralI32(int_val.as_i32().expect("invalid i32 literal value")),
+            ir::Type::U32 => ir::Value::LiteralU32(int_val.as_u32().expect("invalid u32 literal value")),
+            ir::Type::I64 => ir::Value::LiteralI64(int_val.as_i64().expect("invalid i64 literal value")),
+            ir::Type::U64 => ir::Value::LiteralU64(int_val.as_u64().expect("invalid u64 literal value")),
+            ir::Type::USize => ir::Value::LiteralUSize(int_val.as_usize().expect("invalid usize literal value")),
+            ir::Type::ISize => ir::Value::LiteralISize(int_val.as_isize().expect("invalid isize literal value")),
+            ir::Type::F32 => ir::Value::LiteralF32(int_val.as_f32().expect("invalid f32 literal value")),
+            ir::Type::F64 => ir::Value::LiteralF64(int_val.as_f64().expect("invalid f64 literal value")),
             _ => panic!("bad type for integer literal: {}", ty),
         },
 
         ast::Literal::Real(real_val) => match ty {
-            Type::F32 => ir::Value::LiteralF32(real_val.as_f32().expect("invalid f32 literal value")),
-            Type::F64 => ir::Value::LiteralF64(real_val.as_f64().expect("invalid f64 literal value")),
+            ir::Type::F32 => ir::Value::LiteralF32(real_val.as_f32().expect("invalid f32 literal value")),
+            ir::Type::F64 => ir::Value::LiteralF64(real_val.as_f64().expect("invalid f64 literal value")),
             _ => panic!("bad type for real literal: {}", ty),
         }
 

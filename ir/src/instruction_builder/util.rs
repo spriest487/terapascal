@@ -203,8 +203,8 @@ where
                     continue;
                 }
 
-                let field_ref = at.field(Type::Struct(*struct_id), field);
-                result |= builder.visit_deep(field_ref, &field_ty, f);
+                let field_ref = at.field_ref(Type::Struct(*struct_id), field);
+                result |= builder.visit_deep(field_ref.to_deref(), &field_ty, f);
             }
 
             result

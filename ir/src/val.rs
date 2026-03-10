@@ -26,22 +26,31 @@ pub enum Ref {
     Global(GlobalRef),
     Deref(Box<Value>),
     Field(Box<FieldRef>),
+    Element(Box<ElementRef>),
 }
 
 impl Ref {
-    pub fn to_deref(self) -> Self {
-        Ref::Deref(Box::new(Value::Ref(self)))
+    pub fn to_deref(&self) -> Self {
+        Ref::Deref(Box::new(self.value()))
     }
 
     pub fn value(&self) -> Value {
         Value::Ref(self.clone())
     }
     
-    pub fn field(&self, instance_type: impl Into<Type>, field: FieldID) -> Self {
+    pub fn field_ref(&self, instance_type: impl Into<Type>, field: FieldID) -> Self {
         Self::Field(Box::new(FieldRef {
             instance: self.clone(),
             instance_type: instance_type.into(),
             field,
+        }))
+    }
+
+    pub fn element_ref(&self, instance_type: impl Into<Type>, index: impl Into<Value>) -> Self {
+        Self::Element(Box::new(ElementRef {
+            instance: self.clone(),
+            instance_type: instance_type.into(),
+            index: index.into(),
         }))
     }
 
@@ -97,6 +106,7 @@ impl fmt::Display for Ref {
             Ref::Global(name) => write!(f, "{}", name),
             Ref::Deref(at) => write!(f, "{}^", at),
             Ref::Field(field_ref) => write!(f, "{}", field_ref),
+            Ref::Element(el_ref) => write!(f, "{}", el_ref),
         }
     }
 }
@@ -299,9 +309,23 @@ pub struct FieldRef {
     pub instance_type: Type,
     pub field: FieldID,
 }
+
 impl fmt::Display for FieldRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({} as {}).{}", self.instance, self.instance_type, self.field)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ElementRef {
+    pub instance: Ref,
+    pub instance_type: Type,
+    pub index: Value,
+}
+
+impl fmt::Display for ElementRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({} as {})[{}]", self.instance, self.instance_type, self.index)
     }
 }
 

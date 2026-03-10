@@ -680,6 +680,16 @@ impl IRFormatter for Metadata {
                 }
             }
 
+            Ref::Element(el_ref) => {
+                write!(f, "(")?;
+                self.format_ref(&el_ref.instance, f)?;
+                write!(f, " as ")?;
+                self.format_type(&el_ref.instance_type, f)?;
+                write!(f, ")[")?;
+                self.format_val(&el_ref.index, f)?;
+                write!(f, "]")
+            }
+
             Ref::Global(GlobalRef::StringLiteral(string_id)) => match self.get_string(*string_id) {
                 Some(string_lit) => write!(f, "'{}'", string_lit.escape_default()),
                 None => write!(f, "{}", r),

@@ -416,9 +416,14 @@ impl Vm {
                 },
             },
 
-            ir::Ref::Field(field_ref) => {
-                let field_ptr = self.field_ptr(&field_ref.instance, &field_ref.instance_type, field_ref.field)?;
-                self.store_indirect(&field_ptr, val)
+            ir::Ref::Field(..) => {
+                let msg = "field pointer cannot be assigned to";
+                Err(ExecError::illegal_state(msg))
+            }
+
+            ir::Ref::Element(..) => {
+                let msg = "element pointer cannot be assigned to";
+                Err(ExecError::illegal_state(msg))
             }
         }
     }
@@ -471,7 +476,12 @@ impl Vm {
 
             ir::Ref::Field(field_ref) => {
                 let field_ptr = self.field_ptr(&field_ref.instance, &field_ref.instance_type, field_ref.field)?;
-                self.load_indirect(&field_ptr)
+                Ok(DynValue::Pointer(field_ptr))
+            }
+
+            ir::Ref::Element(el_ref) => {
+                let element_ptr = self.element_ptr(&el_ref.instance, &el_ref.instance_type, &el_ref.index)?;
+                Ok(DynValue::Pointer(element_ptr))
             }
         }
     }
@@ -953,6 +963,10 @@ impl Vm {
             ir::Ref::Field(field_ref) => {
                 self.field_ptr(&field_ref.instance, &field_ref.instance_type, field_ref.field)
             }
+
+            ir::Ref::Element(element_ref) => {
+                self.element_ptr(&element_ref.instance, &element_ref.instance_type, &element_ref.index)
+            }
         }
     }
 
@@ -1406,8 +1420,19 @@ impl Vm {
         index: &ir::Value,
         of_type: &ir::Type,
     ) -> ExecResult<()> {
-        let Some(element_type) = self.find_element_type(of_type) else {
-            return Err(ExecError::illegal_state(&format!("type {} is not an array type", of_type)));  
+        let element_ptr = self.element_ptr(a, of_type, index)?;
+
+        self.store(out, DynValue::Pointer(element_ptr))
+    }
+
+    fn element_ptr(
+        &self,
+        instance: &ir::Ref,
+        instance_type: &ir::Type,
+        index: &ir::Value,
+    ) -> ExecResult<Pointer> {
+        let Some(element_type) = self.find_element_type(instance_type) else {
+            return Err(ExecError::illegal_state(&format!("type {} is not an array type", instance_type)));
         };
 
         let index_value = self
@@ -1418,18 +1443,18 @@ impl Vm {
                 ExecError::illegal_state(msg)
             })?;
 
-        let element_ptr = match of_type {
+        let pointer = match instance_type {
             ir::Type::Object(ir::ObjectID::Array(..)) => {
-                let DynValue::Pointer(array_ptr) = self.load(a)? else {
+                let DynValue::Pointer(array_ptr) = self.load(instance)? else {
                     return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
                 };
-                
+
                 self.dyn_array_element_pointer(&array_ptr, index_value)?
                     .reinterpret(element_type.clone())
             }
 
             ir::Type::Object(ir::ObjectID::Box(..)) => {
-                let DynValue::Pointer(box_ptr) = self.load(a)? else {
+                let DynValue::Pointer(box_ptr) = self.load(instance)? else {
                     return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
                 };
 
@@ -1442,11 +1467,11 @@ impl Vm {
                 self.box_value_ptr(&box_ptr)?
                     .reinterpret(element_type.clone())
             }
-            
+
             ir::Type::Array { .. } => {
-                let at_ptr = self.addr_of_ref(a)?;
-                let array_ptr = at_ptr.reinterpret(of_type.clone());
-                
+                let at_ptr = self.addr_of_ref(instance)?;
+                let array_ptr = at_ptr.reinterpret(instance_type.clone());
+
                 self.static_array_element_pointer(&array_ptr, index_value)?
                     .reinterpret(element_type.clone())
             }
@@ -1459,7 +1484,7 @@ impl Vm {
             }
         };
 
-        self.store(out, DynValue::Pointer(element_ptr))
+        Ok(pointer)
     }
     
     fn static_array_element_pointer(&self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {

@@ -61,9 +61,9 @@ fn gen_create_tags(
             builder.cast(element_ref.to_deref(), tag_instance, ir::ANY_TYPE);
 
             for (field_id, field_val) in tag_info.fields.iter() {
-                let field = tag_instance.to_ref().field(tag_class.clone(), *field_id);
+                let field_ref = tag_instance.to_ref().field_ref(tag_class.clone(), *field_id);
 
-                builder.mov(field, field_val.clone());
+                builder.mov(field_ref.to_deref(), field_val.clone());
             }
         }
     });

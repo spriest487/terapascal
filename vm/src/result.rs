@@ -107,18 +107,7 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
             ExecError::NativeHeapError(..) => "Heap error".to_string(),
             ExecError::ZeroLengthAllocation => "Dynamic allocation with length 0".to_string(),
             ExecError::IllegalInstruction(..) => "Illegal instruction".to_string(),
-            ExecError::WithStackTrace { err, stack_trace, .. } => {
-                let mut title = err.title();
-
-                // stack traces without location info won't have a label, so print them in the
-                // title instead
-                if stack_trace.top_span().is_none() {
-                    title.push('\n');
-                    title.push_str(&stack_trace.to_string());
-                }
-
-                title
-            },
+            ExecError::WithStackTrace { err, .. } => err.title(),
         }
     }
 
@@ -128,7 +117,7 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
                 let span = stack_trace.top_span()?;
 
                 Some(DiagnosticLabel {
-                    text: Some(stack_trace.to_string()),
+                    text: None,
                     span,
                 })
             },
@@ -171,8 +160,12 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
                 i.to_string()
             ],
 
-            ExecError::WithStackTrace { err, .. } => {
-                err.notes()
+            ExecError::WithStackTrace { err, stack_trace } => {
+                let mut notes = err.notes();
+                if !stack_trace.is_empty() {
+                    notes.push(stack_trace.to_string());
+                }
+                notes
             },
 
             | ExecError::ZeroLengthAllocation => Vec::new(),

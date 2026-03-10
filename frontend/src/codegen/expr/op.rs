@@ -56,7 +56,7 @@ pub fn translate_bin_op(
                 .find_field(&member_name)
                 .expect("referenced field must exist");
 
-            lhs_val.field(of_ty, field)
+            lhs_val.field_ref(of_ty, field).to_deref()
         },
 
         ast::Operator::Index => {
@@ -68,7 +68,7 @@ pub fn translate_bin_op(
                 index_val,
                 &bin_op.lhs.annotation().ty(),
                 builder,
-            )
+            ).to_deref()
         },
 
         ast::Operator::NotEquals => {

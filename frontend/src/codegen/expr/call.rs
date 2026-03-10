@@ -154,10 +154,10 @@ fn build_func_val_invocation(
 
     // retrieve the actual function value
     let closure_ptr_ty = func_ty_id.to_closure_ptr_type();
-    let func_field = target_expr_val.clone().field(closure_ptr_ty, ir::CLOSURE_PTR_FIELD);
+    let func_field_ref = target_expr_val.clone().field_ref(closure_ptr_ty, ir::CLOSURE_PTR_FIELD);
 
     let call_target = CallTarget::Closure {
-        function: func_field.value(),
+        function: func_field_ref.to_deref().value(),
         closure_ptr: target_expr_val.clone().into(),
     };
 

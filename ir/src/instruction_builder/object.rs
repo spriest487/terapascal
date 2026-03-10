@@ -27,8 +27,8 @@ where
             continue;
         }
 
-        let field = self_param.to_ref().field(class_ty.clone(), field_id);
-        released_any |= builder.release_deep(field, &field_def.ty);
+        let field_ref = self_param.to_ref().field_ref(class_ty.clone(), field_id);
+        released_any |= builder.release_deep(field_ref.to_deref(), &field_def.ty);
 
         assert!(released_any, "if contains_any_object_refs returns true, release_deep should find a reference to release")
     }

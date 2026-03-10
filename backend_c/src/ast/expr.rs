@@ -236,10 +236,10 @@ impl Expr {
                 Expr::Global(name).addr_of()
             }
             ir::Ref::Field(field_ref) => {
-                Expr::Field {
-                    base: Box::new(Self::translate_ref(&field_ref.instance, builder)),
-                    field: FieldName::ID(field_ref.field),
-                }
+                Self::translate_field(&field_ref.instance, &field_ref.instance_type, field_ref.field, builder)
+            }
+            ir::Ref::Element(el_ref) => {
+                Self::translate_element(&el_ref.instance, &el_ref.index, &el_ref.instance_type, builder)
             }
         }
     }

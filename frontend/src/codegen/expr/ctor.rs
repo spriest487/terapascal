@@ -58,10 +58,10 @@ pub fn build_object_ctor_invocation(
                 member.ident, member.value, field_def.ty
             ));
 
-            let field = out_val.clone().field(object_ty.clone(), field_id);
+            let field_ref = out_val.clone().field_ref(object_ty.clone(), field_id);
 
-            builder.mov(field.clone(), member_val);
-            builder.retain_deep(field, &field_def.ty);
+            builder.mov(field_ref.to_deref(), member_val);
+            builder.retain_deep(field_ref.to_deref(), &field_def.ty);
         }
     });
 
@@ -161,8 +161,8 @@ fn translate_set_ctor(
     let zero_word = ir::Value::from_literal_val(BigDecimal::zero(), &WORD_TYPE).unwrap();
 
     for word in 0..set_word_count(set_type.flags_type_bits()) {
-        let word_field = set_result.to_ref().field(flags_type.clone(), ir::FieldID(word));
-        builder.mov(word_field, zero_word.clone());
+        let word_field_ref = set_result.to_ref().field_ref(flags_type.clone(), ir::FieldID(word));
+        builder.mov(word_field_ref.to_deref(), zero_word.clone());
     }
     
     let item_type = builder.translate_type(&set_type.item_type);

@@ -297,12 +297,12 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             let closure_ref = builder.local_temp(closure_ptr_ty.clone());
             builder.new_object(closure_ref, closure.closure_id, immortal);
 
-            let func_field = closure_ref.to_ref().field(closure_ptr_ty.clone(), CLOSURE_PTR_FIELD);
+            let func_field_ref = closure_ref.to_ref().field_ref(closure_ptr_ty.clone(), CLOSURE_PTR_FIELD);
 
             // initialize closure reference to function
             let func_ref = Ref::Global(GlobalRef::Function(closure.func_instance.id));
             // builder.cast(func_field_ptr.clone().to_deref(), func_ref, func_ptr_ty.clone());
-            builder.mov(func_field, func_ref);
+            builder.mov(func_field_ref.to_deref(), func_ref);
             
             // initialize closure capture fields - copy from local scope into closure object
             for (field_id, field_def) in closure_def.fields.iter() {
@@ -317,11 +317,11 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
                     Some(name) => name,
                 };
 
-                let capture_field = closure_ref.to_ref().field(closure_ptr_ty.clone(), *field_id);
+                let capture_field_ref = closure_ref.to_ref().field_ref(closure_ptr_ty.clone(), *field_id);
 
                 let captured_local = builder.find_named(field_name).unwrap();
-                builder.mov(capture_field.clone(), captured_local.to_ref());
-                builder.retain_deep(capture_field, &field_def.ty);
+                builder.mov(capture_field_ref.to_deref(), captured_local.to_ref());
+                builder.retain_deep(capture_field_ref.to_deref(), &field_def.ty);
             }
             
             builder.cast(closure_virtual_ptr, closure_ref, closure_virtual_ty);
