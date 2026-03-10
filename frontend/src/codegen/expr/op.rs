@@ -65,7 +65,7 @@ pub fn translate_bin_op(
                 .find_field(&member_name)
                 .expect("referenced field must exist");
 
-            builder.field(out_val, lhs_val, of_ty, field);
+            builder.make_ref(out_val, lhs_val.field(of_ty, field));
         },
 
         ast::Operator::Index => {

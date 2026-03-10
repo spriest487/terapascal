@@ -480,16 +480,6 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.assign_ref(out, element);
             },
 
-            ir::Instruction::Field {
-                out,
-                a,
-                of_ty,
-                field,
-            } => {
-                let field = Expr::translate_field(a, of_ty, *field, self);
-                self.assign_ref(out, field)
-            },
-
             ir::Instruction::VariantTag { out, a, .. } => {
                 let tag_field = Expr::Field {
                     base: Box::new(Expr::translate_ref(a, self)),

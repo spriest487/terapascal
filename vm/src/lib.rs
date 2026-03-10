@@ -23,8 +23,8 @@ use crate::func::Function;
 use crate::heap::NativeHeap;
 use crate::heap::NativeHeapError;
 use crate::marshal::Marshaller;
-use crate::result::ExecResult;
 use crate::result::ExecError;
+use crate::result::ExecResult;
 use crate::rtti_map::RttiMap;
 use crate::stack::StackFrame;
 use crate::stack::StackTrace;
@@ -415,6 +415,11 @@ impl Vm {
                     Err(ExecError::illegal_state(msg))
                 },
             },
+
+            ir::Ref::Field(field_ref) => {
+                let field_ptr = self.field_ptr(&field_ref.instance, &field_ref.instance_type, field_ref.field)?;
+                self.store_indirect(&field_ptr, val)
+            }
         }
     }
 
@@ -463,6 +468,11 @@ impl Vm {
                     Err(ExecError::illegal_state(msg))
                 },
             },
+
+            ir::Ref::Field(field_ref) => {
+                let field_ptr = self.field_ptr(&field_ref.instance, &field_ref.instance_type, field_ref.field)?;
+                self.load_indirect(&field_ptr)
+            }
         }
     }
 
@@ -939,6 +949,10 @@ impl Vm {
                 let msg = format!("can't take address of global ref ({})", global_ref);
                 Err(ExecError::illegal_state(msg))
             },
+            
+            ir::Ref::Field(field_ref) => {
+                self.field_ptr(&field_ref.instance, &field_ref.instance_type, field_ref.field)
+            }
         }
     }
 
@@ -1083,13 +1097,6 @@ impl Vm {
                 let a_ptr = self.addr_of_ref(a)?;
                 self.store(out, DynValue::Pointer(a_ptr))?;
             },
-
-            ir::Instruction::Field {
-                out,
-                a,
-                field,
-                of_ty,
-            } => self.exec_field(out, &a, field, of_ty)?,
 
             ir::Instruction::Element {
                 out,
@@ -1986,54 +1993,49 @@ impl Vm {
         Ok(())
     }
 
-    fn exec_field(
-        &mut self,
-        out: &ir::Ref,
-        a: &ir::Ref,
-        field: &ir::FieldID,
-        of_ty: &ir::Type,
-    ) -> ExecResult<()> {
-        let field_ptr = match of_ty {
+    fn field_ptr(
+        &self,
+        instance: &ir::Ref,
+        instance_type: &ir::Type,
+        field: ir::FieldID,
+    ) -> ExecResult<Pointer> {
+        match instance_type {
             ir::Type::Flags(repr_id, ..) => {
-                return self.exec_field(out, a, field, &ir::Type::Struct(*repr_id));
+                self.field_ptr(instance, &ir::Type::Struct(*repr_id), field)
             },
 
             ir::Type::Struct(..) => {
-                let struct_ptr = self.addr_of_ref(a)?;
+                let struct_ptr = self.addr_of_ref(instance)?;
 
-                let field_info = self.marshaller.get_field_info(of_ty, *field)?;
+                let field_info = self.marshaller.get_field_info(instance_type, field)?;
 
-                Pointer {
+                Ok(Pointer {
                     ty: field_info.ty.clone(),
                     addr: struct_ptr.addr + field_info.offset,
-                }
+                })
             },
 
             // virtual reference, we need to load the actual value behind the pointer to get the
             // concrete type ID. we assume it's a class or closure, the only types to have fields
             ir::Type::Object(ir::ObjectID::Class(..) | ir::ObjectID::Closure(..)) => {
-                let DynValue::Pointer(object_ptr) = self.load(a)? else {
+                let DynValue::Pointer(object_ptr) = self.load(instance)? else {
                     return Err(ExecError::illegal_state(format!(
                         "exec_field: expected base value to be an object pointer ({})",
-                        of_ty.to_pretty_string(self.metadata.as_ref())
+                        instance_type.to_pretty_string(self.metadata.as_ref())
                     )));
                 };
 
-                self.object_field_ptr(&object_ptr, *field)?
+                self.object_field_ptr(&object_ptr, field)
             },
 
             _ => {
                 let msg = format!(
                     "invalid base type referenced in Field instruction: {}.{}",
-                    of_ty, field
+                    instance_type, field
                 );
                 return Err(ExecError::illegal_state(msg));
             },
-        };
-
-        self.store(out, DynValue::Pointer(field_ptr))?;
-
-        Ok(())
+        }
     }
     
     fn box_value_ptr(&self, box_ptr: &Pointer) -> ExecResult<Pointer> {
@@ -2051,7 +2053,7 @@ impl Vm {
         Ok(Pointer::new(addr, value_type.as_ref().clone()))
     }
     
-    fn object_field_ptr(&mut self, object_ptr: &Pointer, field: ir::FieldID) -> ExecResult<Pointer> {
+    fn object_field_ptr(&self, object_ptr: &Pointer, field: ir::FieldID) -> ExecResult<Pointer> {
         let header = self.load_object_header(&object_ptr)?;
 
         let ObjectID::Class(struct_id) = &header.id else {
@@ -2208,7 +2210,7 @@ impl Vm {
                 ir::Function::External(external_ref) => {
                     let ffi_func = Function::new_ffi(external_ref, &mut marshaller, &self.metadata)
                         .map_err(|err| ExecError::WithStackTrace {
-                            err: Box::new(ExecError::MarshalError(err)),
+                            err: Box::new(ExecError::from(err)),
                             stack_trace: self.stack_trace(),
                         })?;
                     Some(ffi_func)

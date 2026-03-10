@@ -203,13 +203,8 @@ where
                     continue;
                 }
 
-                // store the field pointer in a temp slot
-                let field_val = Ref::Local(builder.local_temp(field_ty.clone().temp_ref()));
-
-                let of_ty = Type::Struct(*struct_id);
-                builder.field(field_val.clone(), at.clone(), of_ty, field);
-
-                result |= builder.visit_deep(field_val.to_deref(), &field_ty, f);
+                let field_ref = at.field(Type::Struct(*struct_id), field);
+                result |= builder.visit_deep(field_ref, &field_ty, f);
             }
 
             result

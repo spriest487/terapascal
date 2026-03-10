@@ -44,6 +44,10 @@ impl TypeDefID {
         Type::WeakObject(ObjectID::Class(self))
     }
 
+    pub fn to_closure_ptr_type(self) -> Type {
+        Type::Object(ObjectID::Closure(self))
+    }
+
     pub fn to_struct_type(self) -> Type {
         Type::Struct(self)
     }

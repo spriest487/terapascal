@@ -1,6 +1,7 @@
 use crate::metadata::StringID;
 use crate::ty::Type;
 use crate::ty_decl::TagLocation;
+use crate::FieldID;
 use crate::FunctionID;
 use crate::IRFormatter;
 use crate::StaticClosureID;
@@ -24,6 +25,7 @@ pub enum Ref {
     Local(LocalID),
     Global(GlobalRef),
     Deref(Box<Value>),
+    Field(Box<FieldRef>),
 }
 
 impl Ref {
@@ -33,6 +35,14 @@ impl Ref {
 
     pub fn value(&self) -> Value {
         Value::Ref(self.clone())
+    }
+    
+    pub fn field(&self, instance_type: impl Into<Type>, field: FieldID) -> Self {
+        Self::Field(Box::new(FieldRef {
+            instance: self.clone(),
+            instance_type: instance_type.into(),
+            field,
+        }))
     }
 
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
@@ -86,6 +96,7 @@ impl fmt::Display for Ref {
             Ref::Local(id) => write!(f, "{}", id),
             Ref::Global(name) => write!(f, "{}", name),
             Ref::Deref(at) => write!(f, "{}^", at),
+            Ref::Field(field_ref) => write!(f, "{}", field_ref),
         }
     }
 }
@@ -279,6 +290,18 @@ impl fmt::Display for GlobalRef {
 impl GlobalRef {
     pub fn to_ref(self) -> Ref {
         Ref::from(self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FieldRef {
+    pub instance: Ref,
+    pub instance_type: Type,
+    pub field: FieldID,
+}
+impl fmt::Display for FieldRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({} as {}).{}", self.instance, self.instance_type, self.field)
     }
 }
 

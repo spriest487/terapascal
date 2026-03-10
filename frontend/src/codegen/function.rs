@@ -208,11 +208,9 @@ pub fn build_closure_function_def(
             field_name.clone()
         );
 
-        body_builder.field(
+        body_builder.make_ref(
             capture_val_ptr_field_ref,
-            closure_ptr_ref,
-            closure_ptr_ty.clone(),
-            *field_id,
+            closure_ptr_ref.to_ref().field(closure_ptr_ty.clone(), *field_id)
         );
     }
 

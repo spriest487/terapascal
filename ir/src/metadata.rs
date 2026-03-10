@@ -657,6 +657,29 @@ impl IRFormatter for Metadata {
 
     fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result {
         match r {
+            Ref::Field(field_ref) => {
+                write!(f, "(")?;
+                self.format_ref(&field_ref.instance, f)?;
+                write!(f, " as ")?;
+                self.format_type(&field_ref.instance_type, f)?;
+                write!(f, ").")?;
+
+                let struct_def = match &field_ref.instance_type {
+                    Type::Struct(id) | Type::Flags(id) => self.get_struct_def(*id),
+                    Type::Object(ObjectID::Class(id)) => self.get_struct_def(*id),
+                    _ => None,
+                };
+                let field_name = struct_def
+                    .and_then(|def| def.fields.get(&field_ref.field))
+                    .and_then(|field_def| field_def.name.as_ref());
+
+                if let Some(name) = field_name {
+                    write!(f, "{}", name)
+                } else {
+                    write!(f, "{}", field_ref.field.0)
+                }
+            }
+
             Ref::Global(GlobalRef::StringLiteral(string_id)) => match self.get_string(*string_id) {
                 Some(string_lit) => write!(f, "'{}'", string_lit.escape_default()),
                 None => write!(f, "{}", r),

@@ -235,6 +235,12 @@ impl Expr {
                 let name = GlobalName::StaticFuncInfo(*id);
                 Expr::Global(name).addr_of()
             }
+            ir::Ref::Field(field_ref) => {
+                Expr::Field {
+                    base: Box::new(Self::translate_ref(&field_ref.instance, builder)),
+                    field: FieldName::ID(field_ref.field),
+                }
+            }
         }
     }
 

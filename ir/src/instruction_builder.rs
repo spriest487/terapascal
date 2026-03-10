@@ -8,7 +8,6 @@ use crate::instruction_builder::object::gen_class_object_dtor_body;
 use crate::instruction_builder::scope::ScopedBinding;
 use crate::ArgID;
 use crate::BinOpInstruction;
-use crate::FieldID;
 use crate::FunctionID;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -583,62 +582,6 @@ pub trait InstructionBuilder {
 
     fn size_of(&mut self, out: impl Into<Ref>, ty: Type) {
         self.mov(out, Value::SizeOf(ty));
-    }
-
-    fn field(
-        &mut self,
-        out: impl Into<Ref>,
-        base: impl Into<Ref>,
-        base_ty: impl Into<Type>,
-        field: FieldID,
-    ) {
-        self.emit(Instruction::Field {
-            out: out.into(),
-            a: base.into(),
-            of_ty: base_ty.into(),
-            field,
-        })
-    }
-
-    fn field_val(
-        &mut self,
-        out: impl Into<Ref>,
-        base: impl Into<Ref>,
-        base_ty: impl Into<Type>,
-        field: FieldID,
-        field_ty: Type,
-    ) {
-        let field_ptr = self.local_temp(field_ty.temp_ref());
-        self.field(field_ptr.clone(), base, base_ty, field);
-
-        self.mov(out, Ref::from(field_ptr).to_deref());
-    }
-
-    fn field_to_val(
-        &mut self,
-        base: impl Into<Ref>,
-        base_ty: impl Into<Type>,
-        field: FieldID,
-        field_ty: Type,
-    ) -> Ref {
-        let result = self.local_temp(field_ty.clone());
-        self.field_val(result.clone(), base, base_ty, field, field_ty);
-
-        Ref::Local(result)
-    }
-
-    fn assign_field(
-        &mut self,
-        base: impl Into<Ref>,
-        base_ty: impl Into<Type>,
-        field: FieldID,
-        field_ty: Type,
-        val: impl Into<Value>,
-    ) {
-        let field_ref = self.local_temp(field_ty.temp_ref());
-
-        self.field(field_ref.clone(), base, base_ty, field);
-        self.mov(field_ref.to_deref(), val);
     }
 
     fn element(

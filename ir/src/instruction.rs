@@ -1,9 +1,8 @@
 use crate::formatter::IRFormatter;
 use crate::formatter::RawInstructionFormatter;
 use crate::metadata::MethodID;
-use crate::ty::FieldID;
-use crate::ty::Type;
 use crate::ty::ObjectID;
+use crate::ty::Type;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
 use crate::val::LocalID;
@@ -92,16 +91,6 @@ pub enum Instruction {
         a: Ref,
         tag: usize,
         of_ty: Type,
-    },
-
-    /// Stores the address of an object field from object of type `of_ty` at location `a` into `out`.
-    /// `of_ty` must match the type of the value stored at `a` and must also be a structured type
-    /// i.e. one that has fields (struct or RC-pointer to struct).
-    Field {
-        out: Ref,
-        a: Ref,
-        of_ty: Type,
-        field: FieldID,
     },
 
     Call {
@@ -226,7 +215,6 @@ impl Instruction {
             | Instruction::Length { out, .. }
             | Instruction::VariantTag { out, .. }
             | Instruction::VariantData { out, .. }
-            | Instruction::Field { out, .. }
             | Instruction::ClassIs { out, .. }
             | Instruction::NewObject { out, .. }
             | Instruction::NewArray { out, .. }
@@ -294,8 +282,7 @@ impl Instruction {
             Instruction::VariantTag { out, a, .. }
             | Instruction::AddrOf { out, a }
             | Instruction::MakeRef { out, a }
-            | Instruction::VariantData { out, a, .. }
-            | Instruction::Field { out, a, .. } => {
+            | Instruction::VariantData { out, a, .. } => {
                 Self::visit_ref(out, f);
                 Self::visit_ref(a, f);
             },

@@ -226,23 +226,6 @@ pub trait IRFormatter {
                 self.format_type(of_type, f)
             }
 
-            Instruction::Field {
-                out,
-                a,
-                of_ty,
-                field,
-            } => {
-                write!(f, "{:>width$} ", "field", width = IX_WIDTH)?;
-
-                self.format_ref(out, f)?;
-                write!(f, " := &(")?;
-                self.format_ref(a, f)?;
-                write!(f, " as ")?;
-                self.format_type(of_ty, f)?;
-                write!(f, ").")?;
-                self.format_field(of_ty, *field, f)
-            }
-
             Instruction::VariantTag { out, a, of_ty } => {
                 write!(f, "{:>width$} ", "vartag", width = IX_WIDTH)?;
                 self.format_ref(out, f)?;

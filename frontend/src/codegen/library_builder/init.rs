@@ -53,11 +53,6 @@ fn gen_create_tags(
 
             let tag_class = tag_info.class_id.to_class_ptr_type();
 
-            let tag_struct_def = builder
-                .get_struct(tag_info.class_id)
-                .expect("tag class struct must exist")
-                .clone();
-
             let tag_instance = builder.local_temp(tag_class.clone());
             builder.new_object(tag_instance, tag_info.class_id, true);
 
@@ -66,11 +61,9 @@ fn gen_create_tags(
             builder.cast(element_ref.to_deref(), tag_instance, ir::ANY_TYPE);
 
             for (field_id, field_val) in tag_info.fields.iter() {
-                let field_ty = &tag_struct_def.fields[&field_id].ty;
-                let field_ref = builder.local_temp(field_ty.clone().temp_ref());
-                builder.field(field_ref, tag_instance, tag_class.clone(), *field_id);
+                let field = tag_instance.to_ref().field(tag_class.clone(), *field_id);
 
-                builder.mov(field_ref.to_deref(), field_val.clone());
+                builder.mov(field, field_val.clone());
             }
         }
     });

@@ -153,20 +153,11 @@ fn build_func_val_invocation(
     let func_ty_id = builder.translate_func_ty(&func_sig);
 
     // retrieve the actual function value
-    let func_field_ptr = ir::Ref::Local(builder.local_temp(ir::Type::Function(func_ty_id).ptr()));
-
-    builder.scope(|builder| {
-        let closure_ptr_ty = ir::Type::Object(ir::ObjectID::Closure(func_ty_id));
-        builder.field(
-            func_field_ptr.clone(),
-            target_expr_val.clone(),
-            closure_ptr_ty,
-            ir::CLOSURE_PTR_FIELD,
-        );
-    });
+    let closure_ptr_ty = func_ty_id.to_closure_ptr_type();
+    let func_field = target_expr_val.clone().field(closure_ptr_ty, ir::CLOSURE_PTR_FIELD);
 
     let call_target = CallTarget::Closure {
-        function: func_field_ptr.to_deref().into(),
+        function: func_field.value(),
         closure_ptr: target_expr_val.clone().into(),
     };
 

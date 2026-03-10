@@ -1,6 +1,7 @@
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr;
-use crate::codegen::expr::{expr_to_val, translate_expr};
+use crate::codegen::expr::expr_to_val;
+use crate::codegen::expr::translate_expr;
 use crate::codegen::set_word_count;
 use crate::codegen::WORD_TYPE;
 use crate::ir;
@@ -57,11 +58,10 @@ pub fn build_object_ctor_invocation(
                 member.ident, member.value, field_def.ty
             ));
 
-            let field_ref = builder.local_temp(field_def.ty.clone().temp_ref());
-            builder.field(field_ref, out_val.clone(), object_ty.clone(), field_id);
+            let field = out_val.clone().field(object_ty.clone(), field_id);
 
-            builder.mov(field_ref.to_deref(), member_val);
-            builder.retain_deep(field_ref.to_deref(), &field_def.ty);
+            builder.mov(field.clone(), member_val);
+            builder.retain_deep(field, &field_def.ty);
         }
     });
 
@@ -158,12 +158,11 @@ fn translate_set_ctor(
     let set_result = builder.local_var(flags_type.clone(), None);
 
     // zero-init the value
-    let word_field_ref = builder.local_temp(WORD_TYPE.temp_ref());
     let zero_word = ir::Value::from_literal_val(BigDecimal::zero(), &WORD_TYPE).unwrap();
 
     for word in 0..set_word_count(set_type.flags_type_bits()) {
-        builder.field(word_field_ref, set_result, flags_type.clone(), ir::FieldID(word));
-        builder.mov(word_field_ref.to_deref(), zero_word.clone());
+        let word_field = set_result.to_ref().field(flags_type.clone(), ir::FieldID(word));
+        builder.mov(word_field, zero_word.clone());
     }
     
     let item_type = builder.translate_type(&set_type.item_type);
