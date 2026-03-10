@@ -116,8 +116,13 @@ impl TestCase {
                 return Ok(build_status);
             }
         }
+
+        let mut compiler_path = opts.compiler.clone();
+        if opts.compiler.is_relative() {
+            compiler_path = env::current_dir()?.join(compiler_path);
+        }
         
-        let mut run_command = Command::new(&opts.compiler);
+        let mut run_command = Command::new(compiler_path);
         run_command.arg(module_path.canonicalize()?)
             .current_dir(self.working_dir());
         
