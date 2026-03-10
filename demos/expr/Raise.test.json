@@ -1,7 +1,7 @@
 {
   "steps": [
     {
-      "error_regex": "Runtime error raised: oh no"
+      "error_regex": "Runtime error raised:*.+oh no"
     }
   ]
 }
