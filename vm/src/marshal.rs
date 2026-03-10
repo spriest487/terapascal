@@ -24,6 +24,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::env;
+use std::error::Error;
 use std::iter;
 use std::mem::size_of;
 use std::ptr::slice_from_raw_parts;
@@ -314,7 +315,9 @@ impl Marshaller {
         let sym_load_err = |err: DlopenError| MarshalError::ExternSymbolLoadFailed {
             lib: func_ref.src.clone(),
             symbol: func_ref.symbol.clone(),
-            msg: err.to_string(),
+            #[allow(deprecated)]
+            msg: err.description().to_string(),
+            cause: err.source().map(|e| e.to_string())
         };
 
         // the "nothing" type is usually not allowed by the marshaller because it can't be

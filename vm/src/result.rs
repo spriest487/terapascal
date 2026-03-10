@@ -11,16 +11,17 @@ use terapascal_common::Severity;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ExecError<Ty: fmt::Display = ir::Type> {
+pub enum ExecError<Ty = ir::Type> {
     Raised {
         msg: String,
     },
-    MarshalError(#[from] MarshalError<Ty>),
+    MarshalError(MarshalError<Ty>),
     StackError(#[from] StackError),
     ExternSymbolLoadFailed {
-        msg: String,
         lib: String,
         symbol: String,
+        msg: String,
+        cause: Option<String>,
     },
     IllegalDereference {
         ptr: Pointer,
@@ -59,8 +60,8 @@ impl<Ty: fmt::Display> ExecError<Ty> {
             ExecError::StackError(err) => {
                 ExecError::StackError(err)
             },
-            ExecError::ExternSymbolLoadFailed { msg, lib, symbol } => {
-                ExecError::ExternSymbolLoadFailed { msg, lib, symbol }
+            ExecError::ExternSymbolLoadFailed { msg, lib, symbol, cause } => {
+                ExecError::ExternSymbolLoadFailed { msg, lib, symbol, cause }
             },
             ExecError::IllegalDereference { ptr } => {
                 ExecError::IllegalDereference { ptr }
@@ -141,9 +142,16 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
             ExecError::Raised { msg } => vec![
                 msg.clone()
             ],
-            ExecError::ExternSymbolLoadFailed { msg, lib, symbol, .. } => vec![
-                format!("Failed to load {lib}!{symbol}: {msg}")
-            ],
+            ExecError::ExternSymbolLoadFailed { lib, symbol, msg, cause, .. } => {
+                let mut notes = vec![
+                    format!("Failed to load {lib}::{symbol}"),
+                    msg.to_string()
+                ];
+                if let Some(cause) = cause {
+                    notes.push(cause.clone());
+                };
+                notes
+            }
             ExecError::MarshalError(err) => vec![
                 err.to_string()
             ],
@@ -168,6 +176,20 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
             },
 
             | ExecError::ZeroLengthAllocation => Vec::new(),
+        }
+    }
+}
+
+impl<Ty> From<MarshalError<Ty>> for ExecError<Ty> {
+    fn from(value: MarshalError<Ty>) -> Self {
+        match value {
+            MarshalError::ExternSymbolLoadFailed { lib, symbol, msg, cause } => {
+                ExecError::ExternSymbolLoadFailed { lib, symbol, msg, cause }
+            }
+
+            err => {
+                ExecError::MarshalError(err)
+            }
         }
     }
 }

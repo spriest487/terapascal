@@ -13,7 +13,7 @@ use std::rc::Rc;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
-pub enum NativeHeapError<Ty: fmt::Display> {
+pub enum NativeHeapError<Ty> {
     #[error(transparent)]
     MarshallingError(MarshalError<Ty>),
 
