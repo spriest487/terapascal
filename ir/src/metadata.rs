@@ -657,12 +657,19 @@ impl IRFormatter for Metadata {
 
     fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result {
         match r {
+            Ref::Deref(inner) => {
+                self.format_val(inner, f)?;
+                write!(f, "^")?;
+                Ok(())
+            }
+
             Ref::Field(field_ref) => {
-                write!(f, "(")?;
-                self.format_ref(&field_ref.instance, f)?;
-                write!(f, " as ")?;
+                write!(f, "(as ")?;
                 self.format_type(&field_ref.instance_type, f)?;
-                write!(f, ").")?;
+                write!(f, ") ")?;
+
+                self.format_ref(&field_ref.instance, f)?;
+                write!(f, ".")?;
 
                 let struct_def = match &field_ref.instance_type {
                     Type::Struct(id) | Type::Flags(id) => self.get_struct_def(*id),
@@ -674,20 +681,25 @@ impl IRFormatter for Metadata {
                     .and_then(|field_def| field_def.name.as_ref());
 
                 if let Some(name) = field_name {
-                    write!(f, "{}", name)
+                    write!(f, "{}", name)?;
                 } else {
-                    write!(f, "{}", field_ref.field.0)
+                    write!(f, "{}", field_ref.field.0)?;
                 }
+
+                Ok(())
             }
 
             Ref::Element(el_ref) => {
-                write!(f, "(")?;
-                self.format_ref(&el_ref.instance, f)?;
-                write!(f, " as ")?;
+                write!(f, "(as ")?;
                 self.format_type(&el_ref.instance_type, f)?;
-                write!(f, ")[")?;
+                write!(f, ") ")?;
+
+                self.format_ref(&el_ref.instance, f)?;
+                write!(f, "[")?;
                 self.format_val(&el_ref.index, f)?;
-                write!(f, "]")
+                write!(f, "]")?;
+
+                Ok(())
             }
 
             Ref::Global(GlobalRef::StringLiteral(string_id)) => match self.get_string(*string_id) {

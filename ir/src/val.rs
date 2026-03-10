@@ -312,7 +312,7 @@ pub struct FieldRef {
 
 impl fmt::Display for FieldRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({} as {}).{}", self.instance, self.instance_type, self.field)
+        write!(f, "(as {}) {}.{}", self.instance_type, self.instance, self.field)
     }
 }
 
@@ -325,7 +325,7 @@ pub struct ElementRef {
 
 impl fmt::Display for ElementRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({} as {})[{}]", self.instance, self.instance_type, self.index)
+        write!(f, "(as {}) {}[{}]", self.instance_type, self.instance, self.index)
     }
 }
 
