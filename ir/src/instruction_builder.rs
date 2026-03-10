@@ -589,8 +589,8 @@ pub trait InstructionBuilder {
         &mut self,
         out: impl Into<Ref>,
         a: impl Into<Ref>,
-        field: FieldID,
         a_type: impl Into<Type>,
+        field: FieldID,
     ) {
         let field_ref = a.into().field_ref(a_type.into(), field);
         self.mov(out, field_ref)
