@@ -66,7 +66,24 @@ pub fn typecheck_local_binding(
                     
                     Err(err) => {
                         ctx.error(err);
-                        (None, (TypeName::inferred(Type::Nothing)))
+
+                        // going any further won't produce useful errors because we don't know the
+                        // type, so give up here and create an uninitialized binding
+                        ctx.declare_local_var(binding.name.clone(), Binding {
+                            kind: ValueKind::Uninitialized,
+                            ty: Type::Nothing,
+                            def: None,
+                            semantic_hint: SemanticHint::Variable,
+                        }).or_continue(ctx, ());
+
+                        return Ok(LocalBinding {
+                            name: binding.name.clone(),
+                            kw_span: binding.kw_span.clone(),
+                            assign_op_span: binding.assign_op_span.clone(),
+                            annotation: Value::Untyped(binding.span().clone()),
+                            ty: TypeName::inferred(Type::Nothing),
+                            val: None,
+                        });
                     }
                 }
             },
