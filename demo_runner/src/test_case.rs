@@ -99,9 +99,10 @@ impl TestCase {
             let mut build_command = Command::new(&opts.compiler);
             build_command.arg(&self.path);
             build_command.arg("-o").arg(&module_path);
-            
+
             if opts.debug {
                 build_command.arg("--debug");
+                build_command.arg("--leak-check");
             }
             
             let build_status = try_run_command(

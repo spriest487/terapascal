@@ -7,7 +7,7 @@ use terapascal_common::StripMode;
 
 #[derive(StructOpt, Debug)]
 pub struct Args {
-    /// source file of program/library main unit
+    /// Path to the source file of the program or library unit to compile
     #[structopt(name = "FILE", parse(from_os_str))]
     pub file: PathBuf,
 
@@ -26,16 +26,18 @@ pub struct Args {
     )]
     pub arch: TargetArch,
 
+    /// Additional symbols to define in all compiled units
     #[structopt(long="define", short = "d")]
     pub define_syms: Vec<String>,
 
     #[structopt(long="mode", default_value = "default", parse(try_from_str = parse_lang_mode))]
     pub lang_mode: LanguageMode,
 
-    /// if false, runtime type information objects will not be generated
+    /// If false, runtime type information objects will not be generated
     #[structopt(long="rtti", default_value = "true", parse(try_from_str = parse_bool))]
     pub rtti: bool,
 
+    /// If false, code using `unsafe` blocks will produce an error
     #[structopt(long="unsafe", default_value = "true", parse(try_from_str = parse_bool))]
     pub allow_unsafe: bool,
 
@@ -55,32 +57,41 @@ pub struct Args {
     #[structopt(short = "p", long = "print-stage", parse(try_from_str = parse_build_stage_arg))]
     pub print_stage: Option<BuildStage>,
 
-    /// vm: log RC heap usage
+    /// Log RC heap usage to stderr
     #[structopt(long = "trace-heap")]
     pub trace_heap: bool,
 
-    /// vm: log RC retain/release operations
+    /// Log RC retain/release operations to stderr
     #[structopt(long = "trace-rc")]
     pub trace_rc: bool,
 
-    /// vm: log executed IR instructions
+    /// VM only: log all executed IR instructions
     #[structopt(long = "trace-ir")]
     pub trace_ir: bool,
 
-    /// print frontend backtrace on compilation failure
+    /// VM only: check for memory leaks on shutdown and emit an error if any are found
+    #[structopt(long = "leak-check")]
+    pub leak_check: bool,
+
+    /// Print compiler backtrace on certain compilation errors
     #[structopt(long = "backtrace", short = "bt")]
     pub backtrace: bool,
 
+    /// Print extra information during the compilation process
     #[structopt(long = "verbose", short = "v")]
     pub verbose: bool,
 
+    /// Preserve debug information, names, and comments in compiled objects
     #[structopt(short = "g", long = "debug")]
     pub debug: bool,
 
+    /// Clang only: compile with -g-codeview for Visual Studio debugging
     #[allow(unused)]
     #[structopt(long = "gcodeview")]
     pub debug_codeview: bool,
-    
+
+    /// VM only: if the debug_server feature is enabled, run an HTTP server serving debug
+    /// information about the current execution state on localhost at this port
     #[allow(unused)]
     #[structopt(long = "diag-port", default_value = "0")]
     pub diag_port: u16,

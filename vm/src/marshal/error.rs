@@ -43,11 +43,10 @@ pub enum MarshalError<Ty = ir::Type> {
     },
 }
 
-impl<Ty: fmt::Display> MarshalError<Ty> {
+impl<Ty> MarshalError<Ty> {
     pub fn map_types<F, ToTy>(self, f: F) -> MarshalError<ToTy>
     where
         F: Fn(Ty) -> ToTy,
-        ToTy: fmt::Display,
     {
         match self {
             MarshalError::UnsupportedType(ty) => {

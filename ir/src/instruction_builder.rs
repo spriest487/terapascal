@@ -741,7 +741,7 @@ pub trait InstructionBuilder {
     ) {
         self.mov(out, instance.into().vardata_ref(instance_type, tag));
     }
-    
+
     fn release(&mut self, at: impl Into<Ref>, weak: bool, released_out: impl Into<Ref>) {
         self.emit(Instruction::Release {
             at: at.into(),

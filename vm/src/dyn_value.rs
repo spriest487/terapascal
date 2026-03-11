@@ -682,13 +682,17 @@ impl ObjectID {
             _ => None,
         }
     }
+
+    pub fn to_object_type_id(&self) -> ir::ObjectID {
+        match self {
+            ObjectID::Class(id) => ir::ObjectID::Class(*id),
+            ObjectID::Array(element) => ir::ObjectID::Array(element.clone()),
+            ObjectID::Box(value) => ir::ObjectID::Box(value.clone()),
+        }
+    }
     
     pub fn to_type(&self) -> ir::Type {
-        match self {
-            ObjectID::Class(id) => id.to_class_ptr_type(),
-            ObjectID::Array(element) => ir::Type::Object(ir::ObjectID::Array(element.clone())),
-            ObjectID::Box(value) => ir::Type::Object(ir::ObjectID::Box(value.clone())),
-        }
+        self.to_object_type_id().to_object_type()
     }
 
     pub(crate) fn to_pretty_name(&self, metadata: &ir::Metadata) -> String {

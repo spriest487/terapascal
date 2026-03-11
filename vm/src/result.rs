@@ -106,7 +106,7 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
             ExecError::ExternSymbolLoadFailed { .. } => "Symbol load failed".to_string(),
             ExecError::IllegalDereference { .. } => "Illegal dereference".to_string(),
             ExecError::InternalError { .. } => "Internal VM error".to_string(),
-            ExecError::NativeHeapError(..) => "Heap error".to_string(),
+            ExecError::NativeHeapError(err) => err.to_string(),
             ExecError::ZeroLengthAllocation => "Dynamic allocation with length 0".to_string(),
             ExecError::IllegalInstruction(..) => "Illegal instruction".to_string(),
             ExecError::WithStackTrace { err, .. } => err.title(),
@@ -152,9 +152,9 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
             ExecError::InternalError { msg } => vec![
                 msg.clone()
             ],
-            ExecError::NativeHeapError(err) => vec![
-                err.to_string()
-            ],
+            ExecError::NativeHeapError(err) => {
+                err.notes()
+            },
             ExecError::StackError(err) => vec![
                 err.to_string()
             ],

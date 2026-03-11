@@ -2155,10 +2155,8 @@ impl Vm {
         let fields_type = fields.type_id.to_struct_type();
         let fields_size = self.marshaller.get_ty(&fields_type)?.size();
 
-        let alloc_size = Marshaller::object_header_size() + fields_size;
-
-        let object_ptr = self.dynalloc(&ir::Type::U8, alloc_size)?
-            .reinterpret(ir::Type::Nothing);
+        let object_id = ObjectID::Class(fields.type_id);
+        let object_ptr = self.native_heap.alloc_object(fields_size, object_id.clone())?;
 
         if immortal {
             self.native_heap.forget(&object_ptr)?;
@@ -2166,13 +2164,14 @@ impl Vm {
             eprintln!("[rc] alloc @ {}", object_ptr.to_pretty_string(&self.metadata))
         }
 
-        let object_id = ObjectID::Class(fields.type_id);
         let header = ObjectHeader::new(object_id, immortal);
         
-        self.marshaller.marshal_object_at(&object_ptr, &ObjectValue {
+        let offset = self.marshaller.marshal_object_at(&object_ptr, &ObjectValue {
             header,
             value: DynValue::Structure(Box::new(fields)),
         })?;
+
+        assert_eq!(offset, fields_size + Marshaller::object_header_size());
 
         Ok(object_ptr)
     }
@@ -2542,16 +2541,13 @@ impl Vm {
         immortal: bool,
     ) -> ExecResult<Pointer> {
         let object_id = ObjectID::Box(Rc::new(value_ty.clone()));
-        let header = ObjectHeader::new(object_id, immortal);
+        let header = ObjectHeader::new(object_id.clone(), immortal);
 
         let immortal = header.is_immortal();
 
         let value_size = self.marshaller.get_ty(value_ty)?.size();
-        let alloc_size = Marshaller::object_header_size() + value_size;
 
-        // we can't allocate a fixed-size object here so allocate bytes and reinterpret the pointer
-        let box_ptr = self.dynalloc(&ir::Type::U8, alloc_size)?
-            .reinterpret(ir::Type::Nothing);
+        let box_ptr = self.native_heap.alloc_object(value_size, object_id)?;
 
         if immortal {
             self.native_heap.forget(&box_ptr)?;
@@ -2559,17 +2555,12 @@ impl Vm {
             eprintln!("[rc] alloc @ {}", box_ptr.to_pretty_string(&self.metadata))
         }
 
-        let mut offset = 0;
-        offset += self.marshaller.marshal_object_header(&header, unsafe {
-            box_ptr.as_slice_mut(alloc_size)
+        let offset = self.marshaller.marshal_object_at(&box_ptr, &ObjectValue {
+            header,
+            value,
         })?;
 
-        let value_ptr = box_ptr.addr_add(offset)
-            .reinterpret(value_ty.clone());
-
-        offset += self.marshaller.marshal_at(&value, &value_ptr)?;
-
-        assert_eq!(offset, alloc_size);
+        assert_eq!(offset, value_size + Marshaller::object_header_size());
 
         Ok(box_ptr)
     }
@@ -2593,21 +2584,15 @@ impl Vm {
         header: ObjectHeader,
     ) -> ExecResult<Pointer> {
         let immortal = header.is_immortal();
-        
+
         let array_len = elements.len();
 
-        let array_val = ArrayValue {
-            element_type: element_ty.clone(),
-            elements,
-        };
-
         let element_size = self.marshaller.get_ty(&element_ty)?.size();
-        let alloc_size = Marshaller::array_header_size()
-            + element_size * array_len;
-        
+        let data_size = element_size * array_len;
+
         // we can't allocate a fixed-size object here so allocate bytes and reinterpret the pointer
-        let array_ptr = self.dynalloc(&ir::Type::U8, alloc_size)?
-            .reinterpret(ir::Type::Nothing);
+        let object_id = ObjectID::Array(Rc::new(element_ty.clone()));
+        let array_ptr = self.native_heap.alloc_object(data_size, object_id.clone())?;
 
         if immortal {
             self.native_heap.forget(&array_ptr)?;
@@ -2615,21 +2600,15 @@ impl Vm {
             eprintln!("[rc] alloc @ {}", array_ptr.to_pretty_string(&self.metadata))
         }
 
-        let mut offset = 0;
-        offset += self.marshaller.marshal_array_object_header(&header, array_len, unsafe {
-            array_ptr.as_slice_mut(alloc_size)
+        let offset = self.marshaller.marshal_object_at(&array_ptr, &ObjectValue {
+            header: ObjectHeader::new(object_id, immortal),
+            value: DynValue::Array(Box::new(ArrayValue {
+                element_type: element_ty.clone(),
+                elements,
+            })),
         })?;
 
-        let elements_ptr = array_ptr.addr_add(offset);
-        offset += self.marshaller.marshal_array(&array_val, unsafe {
-            elements_ptr.as_slice_mut(alloc_size - offset)
-        })?;
-        
-        assert_eq!(offset, alloc_size);
-        
-        let rev = self.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
-        assert_eq!(rev.object_header.id, header.id);
-        assert_eq!(rev.len as usize, array_len);
+        assert_eq!(offset, Marshaller::array_header_size() + data_size);
 
         Ok(array_ptr)
     }
@@ -2868,6 +2847,10 @@ impl Vm {
             }
         }
 
+        if self.opts.leak_check {
+            self.native_heap.check_leaks()?;
+        }
+
         if self.opts.trace_heap {
             self.native_heap.print_trace();
         }
@@ -2896,6 +2879,8 @@ pub struct ExecOpts {
     pub trace_rc: bool,
     pub trace_ir: bool,
 
+    pub leak_check: bool,
+
     pub diag_port: u16,
 
     pub verbose: bool,
@@ -2907,7 +2892,9 @@ impl Default for ExecOpts {
             trace_heap: false,
             trace_rc: false,
             trace_ir: false,
-            
+
+            leak_check: false,
+
             diag_port: 0,
             verbose: false,
         }

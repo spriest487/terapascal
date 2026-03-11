@@ -331,7 +331,7 @@ impl Marshaller {
             .args(ffi_param_tys.iter().map(|t| t.0.clone()))
             .res(ffi_return_ty.0.clone())
             .into_cif();
-        
+
         let lib_filename = format!("{}{}{}", env::consts::DLL_PREFIX, func_ref.src, env::consts::DLL_SUFFIX);
         let lib_path = match env::current_dir() {
             Ok(cwd) => cwd.join(lib_filename),
@@ -626,7 +626,7 @@ impl Marshaller {
 
     pub fn marshal_object_at(&self, pointer: &Pointer, object: &ObjectValue) -> MarshalResult<usize> {
         let mut offset = 0;
-        
+
         offset += unsafe {
             let header_mem = pointer.as_slice_mut(Self::object_header_size());
             self.marshal_object_header(&object.header, header_mem)?
@@ -925,16 +925,6 @@ impl Marshaller {
             + ForeignType::i32().size(); // element count
         
         header_size
-    }
-
-    pub(crate) fn marshal_array(&self, array_value: &ArrayValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
-        let mut offset = 0;
-        
-        for element in &array_value.elements {
-            offset += self.marshal(element, &mut out_bytes[offset..])?;
-        }
-        
-        Ok(offset)
     }
     
     fn unmarshal_dyn_array_header(&self, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<DynArrayHeader>> {
