@@ -10,7 +10,7 @@ pub struct StringID(pub usize);
 
 impl fmt::Display for StringID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "string literal #{}", self.0)
+        write!(f, "string literal {}", self.0)
     }
 }
 
@@ -28,7 +28,7 @@ pub struct VariableID(pub usize);
 
 impl fmt::Display for VariableID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "%Var{}", self.0)
     }
 }
 

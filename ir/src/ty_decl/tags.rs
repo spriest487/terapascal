@@ -45,7 +45,7 @@ impl TagLocation {
 
 impl fmt::Display for TagLocation {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "tags(")?;
+        write!(f, "tagarray(")?;
         match self {
             TagLocation::TypeDef(id) => write!(f, "type {}", id.0)?,
             TagLocation::Interface(id) => write!(f, "interface {}", id.0)?,

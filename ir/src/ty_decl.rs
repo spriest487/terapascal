@@ -46,7 +46,7 @@ impl StructIdentity {
                 format!("closure ({})", func_ty.to_pretty_string(formatter))
             }
             StructIdentity::SetFlags { bits } => {
-                format!("{bits}-bit set")
+                format!("set{bits}")
             },
         }
     }

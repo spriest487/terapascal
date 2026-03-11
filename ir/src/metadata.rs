@@ -780,6 +780,29 @@ impl<T: MetadataSource> IRFormatter for T {
                 }
             },
 
+            Ref::Global(GlobalRef::Variable(var)) => {
+                match self.get_variable(*var) {
+                    Some(var_info) => {
+                        write!(f, "{}", var_info.name.to_pretty_string(self.as_formatter()))
+                    },
+                    None => {
+                        write!(f, "{var}")
+                    },
+                }
+            }
+
+            Ref::Global(GlobalRef::StaticTypeInfo(ty)) => {
+                write!(f, "typeinfo(")?;
+                self.format_type(ty, f)?;
+                write!(f, ")")
+            }
+
+            Ref::Global(GlobalRef::StaticFuncInfo(id)) => {
+                write!(f, "funcinfo(")?;
+                self.format_ref(&Ref::Global(GlobalRef::Function(*id)), f)?;
+                write!(f, ")")
+            }
+
             _ => RawInstructionFormatter.format_ref(r, f),
         }
     }

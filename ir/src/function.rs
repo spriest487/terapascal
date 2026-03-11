@@ -29,7 +29,7 @@ pub struct StaticClosureID(pub usize);
 
 impl fmt::Display for StaticClosureID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "static closure #{}", self.0)
+        write!(f, "static closure {}", self.0)
     }
 }
 

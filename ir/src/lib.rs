@@ -66,7 +66,7 @@ impl NamePath {
         &mut self.path[index]
     }
 
-    pub fn to_pretty_string(&self, formatter: &(impl IRFormatter + ?Sized)) -> String {
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         let mut buf = self.path.join(".");
 
         if let Some(type_args) = self.type_args.as_ref() {

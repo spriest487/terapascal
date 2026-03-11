@@ -63,7 +63,7 @@ impl Ref {
         }))
     }
 
-    pub fn vardata_ref(&self, instance_type: impl Into<Type>, case_index: usize) -> Self {        
+    pub fn vardata_ref(&self, instance_type: impl Into<Type>, case_index: usize) -> Self {
         Self::VariantData(Box::new(VariantDataRef {
             instance: self.clone(),
             instance_type: instance_type.into(),

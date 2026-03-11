@@ -26,15 +26,15 @@ pub trait MetadataSource {
     fn as_formatter(&self) -> &impl IRFormatter;
 
     fn get_string(&self, id: StringID) -> Option<&String>;
-    
+
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef>;
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
-    fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)>;
+    fn type_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)>;
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl>;
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID>;
     fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>>;
 
-    fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)>;
+    fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)>;
     fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo>;
 
     fn get_func_ptr_ty(&self, id: TypeDefID) -> Option<&FunctionSig> {
@@ -43,8 +43,8 @@ pub trait MetadataSource {
             _ => None,
         })
     }
-    
-    fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)>;
+
+    fn interfaces(&self) -> impl Iterator<Item = (InterfaceID, &InterfaceDef)>;
     fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef>;
     fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>>;
 
@@ -54,62 +54,56 @@ pub trait MetadataSource {
             .unwrap_or_else(|| format!("interface({})", iface_id))
     }
 
-    fn methods(&self) -> impl Iterator<Item=&MethodInfo>;
-    
+    fn methods(&self) -> impl Iterator<Item = &MethodInfo>;
+
     fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)>;
     fn get_variable(&self, id: VariableID) -> Option<&VariableInfo>;
 
-    fn all_tags(&self) -> impl Iterator<Item=(TagLocation, &[TagInfo])> {
-        let type_tags = self.type_defs()
-            .map(|(id, def)| {
-                let tags = match def {
-                    TypeDef::Struct(struct_def) => struct_def.tags.as_slice(),
-                    TypeDef::Variant(struct_def) => struct_def.tags.as_slice(),
-                    TypeDef::Function(_alias_sig) => &[],
-                };
+    fn all_tags(&self) -> impl Iterator<Item = (TagLocation, &[TagInfo])> {
+        let type_tags = self.type_defs().map(|(id, def)| {
+            let tags = match def {
+                TypeDef::Struct(struct_def) => struct_def.tags.as_slice(),
+                TypeDef::Variant(struct_def) => struct_def.tags.as_slice(),
+                TypeDef::Function(_alias_sig) => &[],
+            };
 
-                (TagLocation::TypeDef(id), tags)
-            });
+            (TagLocation::TypeDef(id), tags)
+        });
 
-        let iface_tags = self.interfaces()
-            .map(|(id, iface_def)| {
-                (TagLocation::Interface(id), iface_def.tags.as_slice())
-            });
+        let iface_tags = self
+            .interfaces()
+            .map(|(id, iface_def)| (TagLocation::Interface(id), iface_def.tags.as_slice()));
 
-        let func_tags = self.functions()
-            .map(|(id, func_info)| {
-                (TagLocation::Function(id), func_info.tags.as_slice())
-            });
+        let func_tags = self
+            .functions()
+            .map(|(id, func_info)| (TagLocation::Function(id), func_info.tags.as_slice()));
 
-        let method_tags = self.methods()
-            .map(|method_info| {
-                let loc = match &method_info.instance_ty {
-                    Type::Object(ObjectID::Interface(iface_id)) => {
-                        TagLocation::InterfaceMethod {
-                            iface_id: *iface_id,
-                            method_index: method_info.index,
-                        }
-                    }
-                    
-                    Type::Object(ObjectID::Class(type_id)) 
-                    | Type::Variant(type_id)
-                    | Type::Struct(type_id)
-                    | Type::Flags(type_id)=> {
-                        TagLocation::Method {
-                            type_id: *type_id,
-                            method_index: method_info.index,
-                        }
-                    }
-                    
-                    _ => {
-                        let instance_ty_name = method_info.instance_ty.to_pretty_string(self.as_formatter());
-                        panic!("unexpected base type for method: {}", instance_ty_name)
-                    }
-                };
-                
-                (loc, method_info.tags.as_slice())
-            });
-        
+        let method_tags = self.methods().map(|method_info| {
+            let loc = match &method_info.instance_ty {
+                Type::Object(ObjectID::Interface(iface_id)) => TagLocation::InterfaceMethod {
+                    iface_id: *iface_id,
+                    method_index: method_info.index,
+                },
+
+                Type::Object(ObjectID::Class(type_id))
+                | Type::Variant(type_id)
+                | Type::Struct(type_id)
+                | Type::Flags(type_id) => TagLocation::Method {
+                    type_id: *type_id,
+                    method_index: method_info.index,
+                },
+
+                _ => {
+                    let instance_ty_name = method_info
+                        .instance_ty
+                        .to_pretty_string(self.as_formatter());
+                    panic!("unexpected base type for method: {}", instance_ty_name)
+                },
+            };
+
+            (loc, method_info.tags.as_slice())
+        });
+
         type_tags
             .chain(iface_tags)
             .chain(func_tags)
@@ -118,18 +112,16 @@ pub trait MetadataSource {
 
     fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
         match ty {
-            Type::Struct(id) | Type::Variant(id) => {
-                match self.get_type_decl(*id) {
-                    Some(TypeDecl::Forward(name)) => {
-                        let pretty_name = name.to_pretty_string(self.as_formatter());
-                        Cow::Owned(pretty_name)
-                    },
-                    Some(TypeDecl::Def(def)) => {
-                        let pretty_name = def.to_pretty_string(self.as_formatter());
-                        Cow::Owned(pretty_name)
-                    },
-                    Some(TypeDecl::Reserved) | None => Cow::Owned(id.to_string()),
-                }
+            Type::Struct(id) | Type::Variant(id) => match self.get_type_decl(*id) {
+                Some(TypeDecl::Forward(name)) => {
+                    let pretty_name = name.to_pretty_string(self.as_formatter());
+                    Cow::Owned(pretty_name)
+                },
+                Some(TypeDecl::Def(def)) => {
+                    let pretty_name = def.to_pretty_string(self.as_formatter());
+                    Cow::Owned(pretty_name)
+                },
+                Some(TypeDecl::Reserved) | None => Cow::Owned(id.to_string()),
             },
 
             Type::Array { element, dim } => {
@@ -156,7 +148,19 @@ pub trait MetadataSource {
             },
 
             Type::Pointer(ty) => Cow::Owned(format!("^{}", self.pretty_ty_name(ty))),
+
             Type::TempRef(ty) => Cow::Owned(format!("&{}", self.pretty_ty_name(ty))),
+
+            Type::Flags(id) => {
+                let name = match self.get_type_decl(*id) {
+                    Some(TypeDecl::Def(def)) => {
+                        format!("flags[{}]", def.to_pretty_string(self.as_formatter()))
+                    },
+
+                    _ => ty.to_string(),
+                };
+                Cow::Owned(name)
+            },
 
             ty => Cow::Owned(ty.to_string()),
         }
