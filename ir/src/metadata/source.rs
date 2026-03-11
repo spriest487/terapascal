@@ -1,5 +1,6 @@
 ﻿use crate::FunctionID;
 use crate::FunctionInfo;
+use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
@@ -18,6 +19,7 @@ use crate::TypeInfo;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
+use std::borrow::Cow;
 use std::rc::Rc;
 
 pub trait MetadataSource {
@@ -34,8 +36,24 @@ pub trait MetadataSource {
 
     fn functions(&self) -> impl Iterator<Item=(FunctionID, &FunctionInfo)>;
     fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo>;
+
+    fn get_func_ptr_ty(&self, id: TypeDefID) -> Option<&FunctionSig> {
+        self.get_type_decl(id).and_then(|decl| match decl {
+            TypeDecl::Def(TypeDef::Function(ptr_def)) => Some(ptr_def),
+            _ => None,
+        })
+    }
     
     fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)>;
+    fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef>;
+    fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>>;
+
+    fn iface_name(&self, iface_id: InterfaceID) -> String {
+        self.get_iface_def(iface_id)
+            .map(|def| def.name.to_pretty_string(|ty| self.pretty_ty_name(ty)))
+            .unwrap_or_else(|| format!("interface({})", iface_id))
+    }
+
     fn methods(&self) -> impl Iterator<Item=&MethodInfo>;
     
     fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)>;
@@ -97,4 +115,99 @@ pub trait MetadataSource {
             .chain(func_tags)
             .chain(method_tags)
     }
+
+    fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
+        match ty {
+            Type::Struct(id) | Type::Variant(id) => {
+                match self.get_type_decl(*id) {
+                    Some(TypeDecl::Forward(name)) => {
+                        let pretty_name = name.to_pretty_string(|ty| self.pretty_ty_name(ty));
+                        Cow::Owned(pretty_name)
+                    },
+                    Some(TypeDecl::Def(def)) => {
+                        let pretty_name = def.to_pretty_string(|ty| self.pretty_ty_name(ty));
+                        Cow::Owned(pretty_name)
+                    },
+                    Some(TypeDecl::Reserved) | None => Cow::Owned(id.to_string()),
+                }
+            },
+
+            Type::Array { element, dim } => {
+                let elem_name = self.pretty_ty_name(element);
+                Cow::Owned(format!("array [{}] of {}", dim, elem_name))
+            },
+
+            Type::WeakObject(class_id) => {
+                let resource_name = self.pretty_object_type_name(class_id);
+                Cow::Owned(format!("*weak {}", resource_name))
+            },
+
+            Type::Object(class_id) => {
+                let resource_name = self.pretty_object_type_name(class_id);
+                Cow::Owned(format!("*{}", resource_name))
+            },
+
+            Type::Function(func_ty_id) => {
+                let text = match self.get_func_ptr_ty(*func_ty_id) {
+                    Some(sig) => self.pretty_func_sig(sig),
+                    None => format!("function pointer {}", *func_ty_id),
+                };
+                Cow::Owned(text)
+            },
+
+            Type::Pointer(ty) => Cow::Owned(format!("^{}", self.pretty_ty_name(ty))),
+            Type::TempRef(ty) => Cow::Owned(format!("&{}", self.pretty_ty_name(ty))),
+
+            ty => Cow::Owned(ty.to_string()),
+        }
+    }
+
+    fn pretty_object_type_name(&self, id: &ObjectID) -> Cow<'_, str> {
+        match id {
+            ObjectID::Any => Cow::Borrowed("any"),
+
+            ObjectID::Interface(iface_id) => Cow::Owned(self.iface_name(*iface_id)),
+
+            ObjectID::Closure(func_ty_id) => Cow::Owned(match self.get_func_ptr_ty(*func_ty_id) {
+                Some(sig) => format!("closure of {}", self.pretty_func_sig(sig)),
+                None => format!("closure of {}", func_ty_id),
+            }),
+
+            ObjectID::Class(struct_id) => self.pretty_ty_name(&Type::Struct(*struct_id)),
+
+            ObjectID::Array(element_type) => {
+                Cow::Owned(format!("array of {}", self.pretty_ty_name(element_type)))
+            },
+
+            ObjectID::Box(element_type) => {
+                Cow::Owned(format!("box of {}", self.pretty_ty_name(element_type)))
+            },
+        }
+    }
+
+    fn pretty_func_sig(&self, sig: &FunctionSig) -> String {
+        let mut pretty = String::new();
+
+        pretty.push_str("function(");
+
+        for (i, param_ty) in sig.param_tys.iter().enumerate() {
+            if i > 0 {
+                pretty.push_str("; ");
+            }
+
+            pretty.push_str(self.pretty_ty_name(param_ty).as_ref());
+        }
+
+        pretty.push_str("): ");
+        pretty.push_str(self.pretty_ty_name(&sig.return_ty).as_ref());
+
+        pretty
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Hash)]
+pub struct InterfaceMethodImplRef<'a> {
+    pub interface: &'a NamePath,
+    pub impl_type: &'a Type,
+    pub method_name: &'a str,
 }

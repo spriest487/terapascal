@@ -319,19 +319,39 @@ impl Instruction {
         }
     }
 
-    fn visit_ref<F>(r: &mut Ref, f: F)
+    fn visit_ref<F>(r: &mut Ref, f: &F)
     where
         F: Fn(&mut Ref),
     {
-        if let Ref::Deref(inner) = r {
-            Self::visit_val(inner.as_mut(), f);
-            return;
-        }
+        match r {
+            Ref::Deref(inner) => {
+                Self::visit_val(inner.as_mut(), f);
+            }
 
-        f(r);
+            Ref::Field(field_ref) => {
+                Self::visit_ref(&mut field_ref.instance, f);
+            }
+
+            Ref::Element(element_ref) => {
+                Self::visit_ref(&mut element_ref.instance, f);
+                Self::visit_val(&mut element_ref.index, f);
+            }
+
+            Ref::VariantTag(tag_ref) => {
+                Self::visit_ref(&mut tag_ref.instance, f);
+            }
+
+            Ref::VariantData(data_ref) => {
+                Self::visit_ref(&mut data_ref.instance, f);
+            }
+
+            r => {
+                f(r);
+            },
+        }
     }
 
-    fn visit_val<F>(val: &mut Value, f: F)
+    fn visit_val<F>(val: &mut Value, f: &F)
     where
         F: Fn(&mut Ref),
     {

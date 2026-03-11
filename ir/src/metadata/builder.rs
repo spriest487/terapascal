@@ -3,18 +3,16 @@ mod functions;
 mod rtti;
 
 use crate::dep_sort::sort_defs;
-use crate::FieldID;
 use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
+use crate::InterfaceMethodImplRef;
 use crate::Metadata;
 use crate::MetadataSource;
-use crate::MethodID;
 use crate::MethodInfo;
 use crate::NamePath;
-use crate::Ref;
 use crate::StringID;
 use crate::StructDef;
 use crate::Type;
@@ -22,7 +20,6 @@ use crate::TypeDecl;
 use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
-use crate::Value;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
@@ -30,8 +27,6 @@ use crate::RESERVED_STRINGS;
 use crate::RESERVED_TYPES;
 use linked_hash_map::LinkedHashMap;
 use std::borrow::Cow;
-use std::fmt;
-use std::fmt::Write;
 use std::iter;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -270,6 +265,14 @@ impl MetadataSource for MetadataBuilder {
         self.iter_in_self_or_refs(move |metadata| metadata.interfaces())
     }
 
+    fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_iface_def(iface_id))
+    }
+
+    fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_iface_impl(func_id))
+    }
+
     fn methods(&self) -> impl Iterator<Item=&MethodInfo> {
         self.iter_in_self_or_refs(move |metadata| metadata.methods())
     }
@@ -280,35 +283,5 @@ impl MetadataSource for MetadataBuilder {
 
     fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
         self.find_in_self_or_refs(move |metadata| metadata.get_variable(id))
-    }
-}
-
-impl IRFormatter for MetadataBuilder {
-    fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.metadata.format_type(ty, f)
-    }
-
-    fn format_type_def(&self, id: TypeDefID, f: &mut dyn Write) -> fmt::Result {
-        self.metadata.format_type_def(id, f)
-    }
-
-    fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.metadata.format_val(val, f)
-    }
-
-    fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.metadata.format_ref(r, f)
-    }
-
-    fn format_field(&self, of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.metadata.format_field(of_ty, field, f)
-    }
-
-    fn format_method(&self, iface: InterfaceID, method: MethodID, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.metadata.format_method(iface, method, f)
-    }
-
-    fn format_variant_case(&self, of_ty: &Type, tag: usize, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.metadata.format_variant_case(of_ty, tag, f)
     }
 }

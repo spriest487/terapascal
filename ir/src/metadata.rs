@@ -4,10 +4,10 @@ mod source;
 mod tags;
 mod vars;
 
+pub use self::source::InterfaceMethodImplRef;
 use crate::typeinfo::TypeInfo;
 use crate::FunctionID;
 use crate::FunctionInfo;
-use crate::FunctionSig;
 use crate::GlobalRef;
 use crate::IRFormatter;
 use crate::InterfaceDecl;
@@ -25,18 +25,17 @@ use crate::TypeDecl;
 use crate::TypeDef;
 use crate::Value;
 use crate::VariantDef;
+pub use builder::MetadataBuilder;
+pub use ids::*;
 use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 use serde::Serialize;
+pub use source::MetadataSource;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
-
-pub use builder::MetadataBuilder;
-pub use ids::*;
-pub use source::MetadataSource;
 pub use tags::TagInfo;
 pub use vars::VariableInfo;
 
@@ -321,13 +320,6 @@ impl Metadata {
         result
     }
 
-    pub fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
-        match self.ifaces.get(&iface_id)? {
-            InterfaceDecl::Def(def) => Some(def),
-            InterfaceDecl::Forward(..) => None,
-        }
-    }
-
     pub fn type_info(&self) -> impl Iterator<Item = (&Type, &Rc<TypeInfo>)> {
         self.type_info.iter()
     }
@@ -408,104 +400,6 @@ impl Metadata {
         self.variables.get(&id)
     }
 
-    pub fn iface_name(&self, iface_id: InterfaceID) -> String {
-        self.get_iface_def(iface_id)
-            .map(|def| def.name.to_pretty_string(self))
-            .unwrap_or_else(|| format!("interface({})", iface_id))
-    }
-
-    pub fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
-        match ty {
-            Type::Struct(id) | Type::Variant(id) => match self.type_decls.get(id) {
-                Some(TypeDecl::Forward(name)) => {
-                    let pretty_name = name.to_pretty_string(self);
-                    Cow::Owned(pretty_name)
-                },
-                Some(TypeDecl::Def(def)) => {
-                    let pretty_name = def.to_pretty_string(self);
-                    Cow::Owned(pretty_name)
-                },
-                Some(TypeDecl::Reserved) | None => Cow::Owned(id.to_string()),
-            },
-
-            Type::Array { element, dim } => {
-                let elem_name = self.pretty_ty_name(element);
-                Cow::Owned(format!("array [{}] of {}", dim, elem_name))
-            },
-
-            Type::WeakObject(class_id) => {
-                let resource_name = self.pretty_object_type_name(class_id);
-                Cow::Owned(format!("*weak {}", resource_name))
-            },
-
-            Type::Object(class_id) => {
-                let resource_name = self.pretty_object_type_name(class_id);
-                Cow::Owned(format!("*{}", resource_name))
-            },
-
-            Type::Function(func_ty_id) => {
-                Cow::Owned(match self.get_func_ptr_ty(*func_ty_id) {
-                    Some(sig) => self.pretty_func_sig(sig),
-                    None => format!("function pointer {}", *func_ty_id),
-                })
-            },
-
-            Type::Pointer(ty) => {
-                Cow::Owned(format!("^{}", self.pretty_ty_name(ty)))
-            },
-
-            Type::TempRef(ty) => {
-                Cow::Owned(format!("&{}", self.pretty_ty_name(ty)))
-            },
-
-            ty => {
-                Cow::Owned(ty.to_string())
-            },
-        }
-    }
-
-    fn pretty_object_type_name(&self, id: &ObjectID) -> Cow<'_, str> {
-        match id {
-            ObjectID::Any => Cow::Borrowed("any"),
-
-            ObjectID::Interface(iface_id) => Cow::Owned(self.iface_name(*iface_id)),
-
-            ObjectID::Closure(func_ty_id) => Cow::Owned(match self.get_func_ptr_ty(*func_ty_id) {
-                Some(sig) => format!("closure of {}", self.pretty_func_sig(sig)),
-                None => format!("closure of {}", func_ty_id),
-            }),
-
-            ObjectID::Class(struct_id) => self.pretty_ty_name(&Type::Struct(*struct_id)),
-
-            ObjectID::Array(element_type) => {
-                Cow::Owned(format!("array of {}", self.pretty_ty_name(element_type)))
-            },
-
-            ObjectID::Box(element_type) => {
-                Cow::Owned(format!("box of {}", self.pretty_ty_name(element_type)))
-            },
-        }
-    }
-
-    pub fn pretty_func_sig(&self, sig: &FunctionSig) -> String {
-        let mut pretty = String::new();
-
-        pretty.push_str("function(");
-
-        for (i, param_ty) in sig.param_tys.iter().enumerate() {
-            if i > 0 {
-                pretty.push_str("; ");
-            }
-
-            pretty.push_str(self.pretty_ty_name(param_ty).as_ref());
-        }
-
-        pretty.push_str("): ");
-        pretty.push_str(self.pretty_ty_name(&sig.return_ty).as_ref());
-
-        pretty
-    }
-
     pub fn is_defined(&self, ty: &Type) -> bool {
         let id = match ty {
             Type::Struct(id) | Type::Variant(id) | Type::Function(id) | Type::Flags(id, ..) => *id,
@@ -530,13 +424,6 @@ impl Metadata {
 
     pub fn get_static_closure(&self, func_id: FunctionID) -> Option<StaticClosureID> {
         self.function_static_closures.get(&func_id).cloned()
-    }
-
-    pub fn get_func_ptr_ty(&self, id: TypeDefID) -> Option<&FunctionSig> {
-        self.type_decls.get(&id).and_then(|decl| match decl {
-            TypeDecl::Def(TypeDef::Function(ptr_def)) => Some(ptr_def),
-            _ => None,
-        })
     }
 
     /// Find the method instance that implements the given interface method for `ty`
@@ -638,13 +525,135 @@ impl Metadata {
     }
 }
 
-impl IRFormatter for Metadata {
+impl MetadataSource for Metadata {
+    fn as_formatter(&self) -> &impl IRFormatter {
+        self
+    }
+
+    fn get_string(&self, id: StringID) -> Option<&String> {
+        self.string_literals.get(&id)
+    }
+
+    fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
+        match self.type_decls.get(&struct_id)? {
+            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
+
+            TypeDecl::Def(TypeDef::Struct(s)) => Some(s),
+
+            TypeDecl::Def(..) => None,
+        }
+    }
+
+    fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
+        match self.type_decls.get(&struct_id)? {
+            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
+
+            TypeDecl::Def(TypeDef::Variant(v)) => Some(v),
+
+            TypeDecl::Def(..) => None,
+        }
+    }
+
+    fn type_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)> {
+        self.type_decls.iter().filter_map(|(id, decl)| match decl {
+            TypeDecl::Def(def) => Some((*id, def)),
+
+            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
+        })
+    }
+
+    fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {
+        self.type_decls.get(&id)
+    }
+
+    fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
+        self.type_decls.iter().find_map(|(id, def)| match def {
+            TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) => {
+                Some(*id)
+            },
+
+            TypeDecl::Def(TypeDef::Variant(variant_def)) if variant_def.name == *name => Some(*id),
+
+            TypeDecl::Forward(forward_name) if *forward_name == *name => Some(*id),
+
+            _ => None,
+        })
+    }
+
+    fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>> {
+        self.type_info.get(of_type).cloned()
+    }
+
+    fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)> + use<'_> {
+        self.function_info.iter().map(|(id, decl)| (*id, decl))
+    }
+
+    fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo> {
+        self.function_info.get(&id)
+    }
+
+    fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
+        self.ifaces
+            .iter()
+            .filter_map(|(id, iface_decl)| match iface_decl {
+                InterfaceDecl::Def(iface_def) => Some((*id, iface_def)),
+                InterfaceDecl::Forward(..) => None,
+            })
+    }
+
+    fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
+        match self.ifaces.get(&iface_id)? {
+            InterfaceDecl::Def(def) => Some(def),
+            InterfaceDecl::Forward(..) => None,
+        }
+    }
+
+    fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {
+        for (impl_type, impls) in &self.iface_impls {
+            for (iface_id, iface_impl) in impls {
+                for (method_id, method_func_id) in &iface_impl.methods {
+                    if *method_func_id == func_id {
+                        let iface = self.get_iface_def(*iface_id).unwrap();
+                        let method = iface.get_method(*method_id).unwrap();
+
+                        return Some(InterfaceMethodImplRef {
+                            interface: &iface.name,
+                            impl_type,
+                            method_name: method.name.as_str(),
+                        });
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    fn methods(&self) -> impl Iterator<Item=&MethodInfo> {
+        self.type_info.iter()
+            .flat_map(|(_, type_info)| type_info.methods.iter())
+    }
+
+    fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)> {
+        self.variables.iter().find_map(|(id, var_info)|
+            (var_info.name == *name).then(|| {
+                (*id, var_info)
+            })
+        )
+    }
+
+    fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
+        self.variables.get(&id)
+    }
+}
+
+impl<T: MetadataSource> IRFormatter for T {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
         write!(f, "{}", self.pretty_ty_name(ty))
     }
 
     fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result {
-        match self.type_decls.get(&id) {
+        match self.get_type_decl(id) {
             Some(TypeDecl::Def(def)) => {
                 write!(f, "{}", def.to_pretty_string(self))
             }
@@ -758,30 +767,14 @@ impl IRFormatter for Metadata {
                     Some(name) => write!(f, "{}", name),
 
                     None => {
-                        let find_iface_impl =
-                            self.iface_impls.iter().find_map(|(impl_ty, impls)| {
-                                impls.iter().find_map(|(iface_id, iface_impl)| {
-                                    let method_id = iface_impl.methods.iter().find_map(
-                                        |(method_id, func_id)| {
-                                            if *func_id == *id {
-                                                Some(method_id)
-                                            } else {
-                                                None
-                                            }
-                                        },
-                                    )?;
+                        match self.find_iface_impl(*id) {
+                            Some(impl_ref) => {
+                                let iface_pretty_name = impl_ref.interface.to_pretty_string(|ty| {
+                                    self.pretty_ty_name(ty)
+                                });
+                                write!(f, "{}.{} impl for ", iface_pretty_name, impl_ref.method_name)?;
 
-                                    let iface = self.get_iface_def(*iface_id).unwrap();
-                                    let method = iface.get_method(*method_id).unwrap();
-
-                                    Some((&iface.name, impl_ty, &method.name))
-                                })
-                            });
-
-                        match find_iface_impl {
-                            Some((iface_name, impl_ty, method_name)) => {
-                                write!(f, "{}.{} impl for ", iface_name, method_name)?;
-                                self.format_type(impl_ty, f)
+                                self.format_type(impl_ref.impl_type, f)
                             },
 
                             None => write!(f, "{}", r),
@@ -845,99 +838,5 @@ impl IRFormatter for Metadata {
             Some(name) => write!(f, "{}", name),
             _ => RawInstructionFormatter.format_variant_case(of_ty, tag, f),
         }
-    }
-}
-
-impl MetadataSource for Metadata {
-    fn as_formatter(&self) -> &impl IRFormatter {
-        self
-    }
-
-    fn get_string(&self, id: StringID) -> Option<&String> {
-        self.string_literals.get(&id)
-    }
-    
-    fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
-        match self.type_decls.get(&struct_id)? {
-            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
-
-            TypeDecl::Def(TypeDef::Struct(s)) => Some(s),
-
-            TypeDecl::Def(..) => None,
-        }
-    }
-
-    fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
-        match self.type_decls.get(&struct_id)? {
-            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
-
-            TypeDecl::Def(TypeDef::Variant(v)) => Some(v),
-
-            TypeDecl::Def(..) => None,
-        }
-    }
-
-    fn type_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)> {
-        self.type_decls.iter().filter_map(|(id, decl)| match decl {
-            TypeDecl::Def(def) => Some((*id, def)),
-
-            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
-        })
-    }
-
-    fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {
-        self.type_decls.get(&id)
-    }
-
-    fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
-        self.type_decls.iter().find_map(|(id, def)| match def {
-            TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) => {
-                Some(*id)
-            },
-
-            TypeDecl::Def(TypeDef::Variant(variant_def)) if variant_def.name == *name => Some(*id),
-
-            TypeDecl::Forward(forward_name) if *forward_name == *name => Some(*id),
-
-            _ => None,
-        })
-    }
-
-    fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>> {
-        self.type_info.get(of_type).cloned()
-    }
-
-    fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)> + use<'_> {
-        self.function_info.iter().map(|(id, decl)| (*id, decl))
-    }
-
-    fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo> {
-        self.function_info.get(&id)
-    }
-
-    fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
-        self.ifaces
-            .iter()
-            .filter_map(|(id, iface_decl)| match iface_decl {
-                InterfaceDecl::Def(iface_def) => Some((*id, iface_def)),
-                InterfaceDecl::Forward(..) => None,
-            })
-    }
-
-    fn methods(&self) -> impl Iterator<Item=&MethodInfo> {
-        self.type_info.iter()
-            .flat_map(|(_, type_info)| type_info.methods.iter())
-    }
-
-    fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)> {
-        self.variables.iter().find_map(|(id, var_info)|
-            (var_info.name == *name).then(|| {
-                (*id, var_info)
-            })
-        )
-    }
-
-    fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
-        self.variables.get(&id)
     }
 }
