@@ -27,6 +27,7 @@ use std::env;
 use std::error::Error;
 use std::iter;
 use std::mem::size_of;
+use std::path::PathBuf;
 use std::ptr::slice_from_raw_parts;
 use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
@@ -312,14 +313,6 @@ impl Marshaller {
         func_ref: &ir::ExternalFunctionRef,
         metadata: &ir::Metadata,
     ) -> MarshalResult<FfiInvoker> {
-        let sym_load_err = |err: DlopenError| MarshalError::ExternSymbolLoadFailed {
-            lib: func_ref.src.clone(),
-            symbol: func_ref.symbol.clone(),
-            #[allow(deprecated)]
-            msg: err.description().to_string(),
-            cause: err.source().map(|e| e.to_string())
-        };
-
         // the "nothing" type is usually not allowed by the marshaller because it can't be
         // instantiated, but here we need to map it to the void ffi type
         let ffi_return_ty = match &func_ref.sig.return_ty {
@@ -338,12 +331,26 @@ impl Marshaller {
             .args(ffi_param_tys.iter().map(|t| t.0.clone()))
             .res(ffi_return_ty.0.clone())
             .into_cif();
+        
+        let lib_filename = format!("{}{}{}", env::consts::DLL_PREFIX, func_ref.src, env::consts::DLL_SUFFIX);
+        let lib_path = match env::current_dir() {
+            Ok(cwd) => cwd.join(lib_filename),
+            Err(..) => PathBuf::from(lib_filename),
+        };
+
+        let sym_load_err = |err: DlopenError| MarshalError::ExternSymbolLoadFailed {
+            lib: func_ref.src.clone(),
+            symbol: func_ref.symbol.clone(),
+            path: lib_path.clone(),
+            #[allow(deprecated)]
+            msg: err.description().to_string(),
+            cause: err.source().map(|e| e.to_string())
+        };
 
         let lib = match self.libs.get(&func_ref.src) {
             Some(lib_rc) => lib_rc.clone(),
             None => {
-                let lib_filename = format!("{}{}{}", env::consts::DLL_PREFIX, func_ref.src, env::consts::DLL_SUFFIX);
-                let lib = dlopen::Library::open(lib_filename)
+                let lib = dlopen::Library::open(&lib_path)
                     .map_err(sym_load_err)?;
 
                 let lib_rc = Rc::new(lib);

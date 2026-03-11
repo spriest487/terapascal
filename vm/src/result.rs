@@ -5,6 +5,7 @@ use crate::stack::StackError;
 use crate::stack::StackTrace;
 use crate::Pointer;
 use std::fmt;
+use std::path::PathBuf;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::Severity;
@@ -20,6 +21,7 @@ pub enum ExecError<Ty = ir::Type> {
     ExternSymbolLoadFailed {
         lib: String,
         symbol: String,
+        path: PathBuf,
         msg: String,
         cause: Option<String>,
     },
@@ -60,8 +62,8 @@ impl<Ty: fmt::Display> ExecError<Ty> {
             ExecError::StackError(err) => {
                 ExecError::StackError(err)
             },
-            ExecError::ExternSymbolLoadFailed { msg, lib, symbol, cause } => {
-                ExecError::ExternSymbolLoadFailed { msg, lib, symbol, cause }
+            ExecError::ExternSymbolLoadFailed { msg, lib, path, symbol, cause } => {
+                ExecError::ExternSymbolLoadFailed { msg, lib, path, symbol, cause }
             },
             ExecError::IllegalDereference { ptr } => {
                 ExecError::IllegalDereference { ptr }
@@ -131,9 +133,9 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
             ExecError::Raised { msg } => vec![
                 msg.clone()
             ],
-            ExecError::ExternSymbolLoadFailed { lib, symbol, msg, cause, .. } => {
+            ExecError::ExternSymbolLoadFailed { lib, symbol, path, msg, cause, .. } => {
                 let mut notes = vec![
-                    format!("Failed to load {lib}::{symbol}"),
+                    format!("Failed to load {lib}::{symbol} ({})", path.display()),
                     msg.to_string()
                 ];
                 if let Some(cause) = cause {
@@ -176,8 +178,8 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
 impl<Ty> From<MarshalError<Ty>> for ExecError<Ty> {
     fn from(value: MarshalError<Ty>) -> Self {
         match value {
-            MarshalError::ExternSymbolLoadFailed { lib, symbol, msg, cause } => {
-                ExecError::ExternSymbolLoadFailed { lib, symbol, msg, cause }
+            MarshalError::ExternSymbolLoadFailed { lib, symbol, path: filename, msg, cause } => {
+                ExecError::ExternSymbolLoadFailed { lib, symbol, path: filename, msg, cause }
             }
 
             err => {

@@ -1,5 +1,6 @@
 use crate::DynValue;
 use std::fmt;
+use std::path::PathBuf;
 use terapascal_ir as ir;
 use thiserror::Error;
 
@@ -32,6 +33,7 @@ pub enum MarshalError<Ty = ir::Type> {
     ExternSymbolLoadFailed {
         lib: String,
         symbol: String,
+        path: PathBuf,
         msg: String,
         cause: Option<String>,
     },
@@ -72,8 +74,8 @@ impl<Ty: fmt::Display> MarshalError<Ty> {
             MarshalError::InvalidRefCountValue(val) => {
                 MarshalError::InvalidRefCountValue(val)
             },
-            MarshalError::ExternSymbolLoadFailed { lib, symbol, msg, cause } => {
-                MarshalError::ExternSymbolLoadFailed { lib, symbol, msg, cause }
+            MarshalError::ExternSymbolLoadFailed { lib, symbol, path: filename, msg, cause } => {
+                MarshalError::ExternSymbolLoadFailed { lib, symbol, path: filename, msg, cause }
             },
             MarshalError::InvalidWrite { dest_size, data_size } => {
                 MarshalError::InvalidWrite { dest_size, data_size }
@@ -99,8 +101,8 @@ impl<T: fmt::Display> fmt::Display for MarshalError<T> {
             MarshalError::UnsupportedType(ty) => {
                 write!(f, "unable to marshal type: {ty}")
             },
-            MarshalError::ExternSymbolLoadFailed { lib, symbol, msg, cause } => {
-                write!(f, "external symbol {lib}!{symbol} failed to load: {msg}")?;
+            MarshalError::ExternSymbolLoadFailed { lib, symbol, path, msg, cause } => {
+                write!(f, "external symbol {lib}::{symbol} ({}) failed to load: {msg}", path.display())?;
                 if let Some(cause) = cause {
                     write!(f, " ({cause})")?;
                 }
