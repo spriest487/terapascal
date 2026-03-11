@@ -152,6 +152,43 @@ public record ElementRefData {
     }
 }
 
+public record VariantTagRef(VariantTagRefData Data) : IRef;
+
+[MessagePackObject]
+public record VariantTagRefData {
+    [Key("instance")]
+    public required IRef Instance {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("instance_type")]
+    public required IType InstanceType {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+}
+
+public record VariantDataRef(VariantDataRefData Data) : IRef;
+
+[MessagePackObject]
+public record VariantDataRefData {
+    [Key("instance")]
+    public required IRef Instance {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("instance_type")]
+    public required IType InstanceType {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+    
+    [Key("case_index")]
+    public required ulong CaseIndex { get; init; }
+}
+
 public class NullableRefFormatter : IMessagePackFormatter<IRef?> {
     private readonly RefFormatter refFormatter = new RefFormatter();
 
@@ -220,6 +257,16 @@ public class RefFormatter : IMessagePackFormatter<IRef> {
             case "Field": {
                 var value = MessagePackSerializer.Deserialize<FieldRefData>(ref reader, options);
                 return new FieldRef(value);
+            }
+            
+            case "VariantTag": {
+                var value = MessagePackSerializer.Deserialize<VariantTagRefData>(ref reader, options);
+                return new VariantTagRef(value);
+            }
+            
+            case "VariantData": {
+                var value = MessagePackSerializer.Deserialize<VariantDataRefData>(ref reader, options);
+                return new VariantDataRef(value);
             }
             
             default: {

@@ -156,51 +156,6 @@ public record LengthInstruction : IInstruction {
 }
 
 [MessagePackObject]
-public record VariantTagInstruction : IInstruction {
-    [Key("out")]
-    public required IRef Out {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("a")]
-    public required IRef Arg {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("of_ty")]
-    public required IType VariantType {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-}
-
-[MessagePackObject]
-public record VariantDataInstruction : IInstruction {
-    [Key("out")]
-    public required IRef Out {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("a")]
-    public required IRef Arg {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("of_ty")]
-    public required IType VariantType {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    [Key("tag")]
-    public required ulong Tag { get; init; }
-}
-
-[MessagePackObject]
 public record CallInstruction : IInstruction {
     [Key("out")]
     [MessagePackFormatter(typeof(NullableRefFormatter))]
@@ -535,14 +490,6 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
 
             case "Length": {
                 return MessagePackSerializer.Deserialize<LengthInstruction>(ref reader, options);
-            }
-
-            case "VariantTag": {
-                return MessagePackSerializer.Deserialize<VariantTagInstruction>(ref reader, options);
-            }
-
-            case "VariantData": {
-                return MessagePackSerializer.Deserialize<VariantDataInstruction>(ref reader, options);
             }
 
             case "Call": {

@@ -151,37 +151,6 @@ public class InstructionBuilder {
                     break;
                 }
 
-                case IR.VariantTagInstruction {
-                    Out: var outRef,
-                    Arg: var argRef,
-                    VariantType: var variantType,
-                }: {
-                    var fieldRef = typeBuilder.GetVariantDiscriminatorFieldRef(variantType);
-                    
-                    this.StoreRef(outRef, () => {
-                        this.LoadRefAddr(argRef);
-                        this.body.Emit(OpCodes.Ldflda, fieldRef);
-                    });
-
-                    break;
-                }
-
-                case IR.VariantDataInstruction {
-                    Out: var outRef,
-                    Arg: var argRef,
-                    VariantType: var variantType,
-                    Tag: var tag,
-                }: {
-                    var fieldRef = typeBuilder.GetVariantDataFieldRef(variantType, tag);
-
-                    this.StoreRef(outRef, () => {
-                        this.LoadRefAddr(argRef);
-                        this.body.Emit(OpCodes.Ldflda, fieldRef);
-                    });
-
-                    break;
-                }
-
                 case IR.NewInstruction {
                     Out: var outRef,
                     TypeID: var typeID,
@@ -520,7 +489,7 @@ public class InstructionBuilder {
         } else {
             this.LoadRefAddr(argRef);
         }
-                    
+
         this.body.Emit(OpCodes.Ldflda, fieldRef);
     }
 
@@ -1008,6 +977,8 @@ public class InstructionBuilder {
     }
 
     private IR.IType GetRefType(IR.IRef @ref) {
+        var metadata = this.library.Metadata;
+
         switch (@ref) {
             case IR.ResultRef: {
                 if (this.resultMapping.HasValue) {
@@ -1045,7 +1016,7 @@ public class InstructionBuilder {
 
             case IR.GlobalRef(IR.FunctionGlobalRef(var funcID)): {
                 if (this.library.Functions.TryGetValue(funcID, out var func) 
-                    && this.library.Metadata.FindFunctionType(func.Signature(), out var typeID)) {
+                    && metadata.FindFunctionType(func.Signature(), out var typeID)) {
                     return new IR.FunctionType(typeID);
                 }
 
@@ -1053,7 +1024,7 @@ public class InstructionBuilder {
             }
             
             case IR.GlobalRef(IR.VariableGlobalRef(var varID)): {
-                if (this.library.Metadata.Variables.TryGetValue(varID, out var varInfo)) {
+                if (metadata.Variables.TryGetValue(varID, out var varInfo)) {
                     return varInfo.Type;
                 }
                 break;
@@ -1103,11 +1074,11 @@ public class InstructionBuilder {
                 IR.StructDef? structDef;
 
                 var found = fieldRef.InstanceType switch {
-                    IR.StructType(var id) => this.library.Metadata.FindStructDef(id, out structDef),
-                    IR.FlagsType(var id) => this.library.Metadata.FindStructDef(id, out structDef),
-                    IR.ObjectType(IR.ClassObjectID(var id)) => this.library.Metadata.FindStructDef(id, out structDef),
+                    IR.StructType(var id) => metadata.FindStructDef(id, out structDef),
+                    IR.FlagsType(var id) => metadata.FindStructDef(id, out structDef),
+                    IR.ObjectType(IR.ClassObjectID(var id)) => metadata.FindStructDef(id, out structDef),
 
-                    _ => throw new InvalidDataException($"invalid field instruction - {fieldRef.InstanceType.ToPrettyString(this.library.Metadata)} does not have fields")
+                    _ => throw new InvalidDataException($"invalid field instruction - {fieldRef.InstanceType.ToPrettyString(metadata)} does not have fields")
                 };
 
                 if (!found) {
@@ -1117,11 +1088,44 @@ public class InstructionBuilder {
                 var fieldID = fieldRef.FieldID;
 
                 if (!structDef!.Fields.TryGetValue(fieldID, out var fieldDef)) {
-                    var typeName = fieldRef.InstanceType.ToPrettyString(this.library.Metadata);
+                    var typeName = fieldRef.InstanceType.ToPrettyString(metadata);
                     throw new InvalidDataException($"invalid field instruction - missing definition for field {fieldID} of type {typeName}");
                 }
                 
                 return fieldDef.Type.MakeTempRef();
+            }
+
+            case IR.VariantTagRef(var tagRef): {
+                if (tagRef.InstanceType is not IR.VariantType(var id)) {
+                    throw new InvalidDataException($"invalid variant tag ref - {tagRef.InstanceType.ToPrettyString(metadata)} is not a variant");
+                }
+
+                if (!metadata.FindVariantDef(id, out var def)) {
+                    throw new InvalidDataException($"invalid variant tag ref - missing definition for variant type {tagRef.InstanceType.ToPrettyString(metadata)}");
+                }
+
+                return def.TagType.MakeTempRef();
+            }
+            
+            case IR.VariantDataRef(var dataRef): {
+                if (dataRef.InstanceType is not IR.VariantType(var id)) {
+                    throw new InvalidDataException($"invalid variant data ref - {dataRef.InstanceType.ToPrettyString(metadata)} is not a variant");
+                }
+
+                if (!metadata.FindVariantDef(id, out var def)) {
+                    throw new InvalidDataException($"invalid variant data ref - missing definition for variant type {dataRef.InstanceType.ToPrettyString(metadata)}");
+                }
+                
+                if ((int)dataRef.CaseIndex >= def.Cases.Count) {
+                    throw new InvalidDataException($"invalid variant data ref - missing definition for variant case {dataRef.InstanceType.ToPrettyString(metadata)}.{dataRef.CaseIndex}");
+                }
+
+                var caseDef = def.Cases[(int)dataRef.CaseIndex];
+                if (caseDef.Type == null) {
+                    throw new InvalidDataException($"invalid variant data ref - variant case {dataRef.InstanceType.ToPrettyString(metadata)}.{caseDef.Name} has no data");
+                }
+
+                return caseDef.Type.MakeTempRef();
             }
         }
 
@@ -1209,10 +1213,6 @@ public class InstructionBuilder {
                 break;
             }
 
-            case IR.GlobalRef(var globalRef): {
-                throw new NotImplementedException(globalRef.ToString());
-            }
-
             case IR.Deref(var atRef): {
                 if (atRef is not IR.RefValue(var targetRef) 
                     || this.GetRefType(targetRef).GetDerefType() is not {} derefType) {
@@ -1238,6 +1238,20 @@ public class InstructionBuilder {
 
             case IR.ElementRef(var elementRef): {
                 this.LoadElementRef(elementRef.Instance, elementRef.Index, elementRef.InstanceType);
+                return;
+            }
+
+            case IR.VariantTagRef(var tagRef): {
+                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDiscriminatorFieldRef(tagRef.InstanceType);
+                this.LoadRefAddr(tagRef.Instance);
+                this.body.Emit(OpCodes.Ldflda, fieldRef);
+                return;
+            }
+            
+            case IR.VariantDataRef(var tagRef): {
+                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(tagRef.InstanceType, tagRef.CaseIndex);
+                this.LoadRefAddr(tagRef.Instance);
+                this.body.Emit(OpCodes.Ldflda, fieldRef);
                 return;
             }
 
@@ -1335,7 +1349,7 @@ public class InstructionBuilder {
             }
 
             default: {
-                throw new ArgumentOutOfRangeException(nameof(storeRef));
+                throw new ArgumentOutOfRangeException(nameof(storeRef), "reference is not mutable");
             }
         }
     }
