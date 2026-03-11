@@ -31,7 +31,6 @@ use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 use serde::Serialize;
 pub use source::MetadataSource;
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
@@ -769,9 +768,7 @@ impl<T: MetadataSource> IRFormatter for T {
                     None => {
                         match self.find_iface_impl(*id) {
                             Some(impl_ref) => {
-                                let iface_pretty_name = impl_ref.interface.to_pretty_string(|ty| {
-                                    self.pretty_ty_name(ty)
-                                });
+                                let iface_pretty_name = impl_ref.interface.to_pretty_string(self);
                                 write!(f, "{}.{} impl for ", iface_pretty_name, impl_ref.method_name)?;
 
                                 self.format_type(impl_ref.impl_type, f)

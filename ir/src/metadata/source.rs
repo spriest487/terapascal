@@ -50,7 +50,7 @@ pub trait MetadataSource {
 
     fn iface_name(&self, iface_id: InterfaceID) -> String {
         self.get_iface_def(iface_id)
-            .map(|def| def.name.to_pretty_string(|ty| self.pretty_ty_name(ty)))
+            .map(|def| def.name.to_pretty_string(self.as_formatter()))
             .unwrap_or_else(|| format!("interface({})", iface_id))
     }
 
@@ -121,11 +121,11 @@ pub trait MetadataSource {
             Type::Struct(id) | Type::Variant(id) => {
                 match self.get_type_decl(*id) {
                     Some(TypeDecl::Forward(name)) => {
-                        let pretty_name = name.to_pretty_string(|ty| self.pretty_ty_name(ty));
+                        let pretty_name = name.to_pretty_string(self.as_formatter());
                         Cow::Owned(pretty_name)
                     },
                     Some(TypeDecl::Def(def)) => {
-                        let pretty_name = def.to_pretty_string(|ty| self.pretty_ty_name(ty));
+                        let pretty_name = def.to_pretty_string(self.as_formatter());
                         Cow::Owned(pretty_name)
                     },
                     Some(TypeDecl::Reserved) | None => Cow::Owned(id.to_string()),

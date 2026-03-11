@@ -10,8 +10,8 @@ use serde::Serialize;
 use std::fmt;
 use std::rc::Rc;
 
-pub use crate::metadata::ids::ObjectID;
 pub use crate::metadata::ids::FieldID;
+pub use crate::metadata::ids::ObjectID;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Type {
@@ -203,7 +203,7 @@ impl Type {
         }
     }
     
-    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
+    pub fn to_pretty_string(&self, formatter: &(impl IRFormatter + ?Sized)) -> String {
         let mut result = String::new();
         _ = formatter.format_type(self, &mut result);
         result
