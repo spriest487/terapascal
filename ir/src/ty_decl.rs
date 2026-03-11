@@ -7,21 +7,19 @@ use crate::FunctionID;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::NamePath;
+use crate::ObjectID;
 use crate::RawInstructionFormatter;
 use crate::Type;
-use crate::ObjectID;
 pub use interface::*;
 pub use r#struct::*;
 use serde::Deserialize;
 use serde::Serialize;
-use std::borrow::Cow;
 use std::fmt;
-use std::fmt::Write;
 pub use tags::*;
 pub use variant::*;
 
-pub use crate::metadata::ids::TypeDefID;
 pub use crate::metadata::ids::InterfaceID;
+pub use crate::metadata::ids::TypeDefID;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum StructIdentity {
@@ -36,21 +34,19 @@ pub enum StructIdentity {
 
 impl StructIdentity {
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
-        let type_formatter = |ty: &Type| Cow::Owned(ty.to_pretty_string(formatter));
-
         match self {
             StructIdentity::Record(name) | StructIdentity::Class(name) => {
-                name.to_pretty_string(type_formatter)
+                name.to_pretty_string(formatter)
             },
             StructIdentity::Array(element, size) => {
-                format!("{}[{}]", type_formatter(element), size)
+                format!("{}[{}]", element.to_pretty_string(formatter), size)
             },
             StructIdentity::Closure(id) => {
                 let func_ty = Type::Function(id.virt_func_ty);
-                format!("closure ({})", type_formatter(&func_ty))
+                format!("closure ({})", func_ty.to_pretty_string(formatter))
             }
             StructIdentity::SetFlags { bits } => {
-                format!("{bits}-bit set type")
+                format!("{bits}-bit set")
             },
         }
     }
@@ -137,45 +133,30 @@ impl TypeDef {
         }
     }
     
-    pub fn to_pretty_string<'a, TyFormat>(&self, ty_format: TyFormat) -> String
-    where
-        TyFormat: Fn(&Type) -> Cow<'a, str>
-    {
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         match self {
-            TypeDef::Struct(def) => match &def.identity {
-                StructIdentity::Class(name) | StructIdentity::Record(name) => {
-                    name.to_pretty_string(ty_format)
-                },
-                StructIdentity::Closure(identity) => {
-                    let func_ty_name = ty_format(&Type::Function(identity.virt_func_ty));
-                    format!("closure of {} ({})", func_ty_name, identity.id)
-                },
-                StructIdentity::Array(ty, dim) => {
-                    let ty_name = ty_format(ty);
-                    format!("array[{}] of {}", dim, ty_name)
-                }
-                StructIdentity::SetFlags { bits } => {
-                    format!("set<{bits}>")
-                }
+            TypeDef::Struct(def) => {
+                def.identity.to_pretty_string(formatter)
             },
             
             TypeDef::Variant(def) => {
-                def.name.to_pretty_string(ty_format)
+                def.name.to_pretty_string(formatter)
             },
             
             TypeDef::Function(def) => {
                 let mut string = String::new();
-                let f = &mut string;
-                write!(f, "function (").unwrap();
+                string.push_str("function (");
 
                 for (i, param_ty) in def.param_tys.iter().enumerate() {
                     if i > 0 {
-                        write!(f, "; ").unwrap();
+                        string.push_str("; ");
                     }
-                    write!(f, "{}", ty_format(param_ty).as_ref()).unwrap();
+
+                    string.push_str(&param_ty.to_pretty_string(formatter));
                 }
 
-                write!(f, "): {}", ty_format(&def.return_ty).as_ref()).unwrap();
+                string.push_str("): ");
+                string.push_str(&def.return_ty.to_pretty_string(formatter));
 
                 string
             },

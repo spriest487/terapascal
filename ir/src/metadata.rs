@@ -117,7 +117,7 @@ impl Metadata {
                     let def_name = def
                         .name()
                         .map(|path| {
-                            path.to_pretty_string(|ty| Cow::Owned(ty.to_pretty_string(self)))
+                            path.to_pretty_string(self)
                         })
                         .unwrap_or_else(|| "<unnamed>".to_string());
 
@@ -410,7 +410,7 @@ impl Metadata {
 
     pub fn iface_name(&self, iface_id: InterfaceID) -> String {
         self.get_iface_def(iface_id)
-            .map(|def| def.name.to_pretty_string(|ty| self.pretty_ty_name(ty)))
+            .map(|def| def.name.to_pretty_string(self))
             .unwrap_or_else(|| format!("interface({})", iface_id))
     }
 
@@ -418,11 +418,11 @@ impl Metadata {
         match ty {
             Type::Struct(id) | Type::Variant(id) => match self.type_decls.get(id) {
                 Some(TypeDecl::Forward(name)) => {
-                    let pretty_name = name.to_pretty_string(|ty| self.pretty_ty_name(ty));
+                    let pretty_name = name.to_pretty_string(self);
                     Cow::Owned(pretty_name)
                 },
                 Some(TypeDecl::Def(def)) => {
-                    let pretty_name = def.to_pretty_string(|ty| self.pretty_ty_name(ty));
+                    let pretty_name = def.to_pretty_string(self);
                     Cow::Owned(pretty_name)
                 },
                 Some(TypeDecl::Reserved) | None => Cow::Owned(id.to_string()),
@@ -443,15 +443,24 @@ impl Metadata {
                 Cow::Owned(format!("*{}", resource_name))
             },
 
-            Type::Function(func_ty_id) => Cow::Owned(match self.get_func_ptr_ty(*func_ty_id) {
-                Some(sig) => self.pretty_func_sig(sig),
-                None => format!("function pointer {}", *func_ty_id),
-            }),
+            Type::Function(func_ty_id) => {
+                Cow::Owned(match self.get_func_ptr_ty(*func_ty_id) {
+                    Some(sig) => self.pretty_func_sig(sig),
+                    None => format!("function pointer {}", *func_ty_id),
+                })
+            },
 
-            Type::Pointer(ty) => Cow::Owned(format!("^{}", self.pretty_ty_name(ty))),
-            Type::TempRef(ty) => Cow::Owned(format!("&{}", self.pretty_ty_name(ty))),
+            Type::Pointer(ty) => {
+                Cow::Owned(format!("^{}", self.pretty_ty_name(ty)))
+            },
 
-            ty => Cow::Owned(ty.to_string()),
+            Type::TempRef(ty) => {
+                Cow::Owned(format!("&{}", self.pretty_ty_name(ty)))
+            },
+
+            ty => {
+                Cow::Owned(ty.to_string())
+            },
         }
     }
 
@@ -637,7 +646,7 @@ impl IRFormatter for Metadata {
     fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result {
         match self.type_decls.get(&id) {
             Some(TypeDecl::Def(def)) => {
-                write!(f, "{}", def.to_pretty_string(|ty| self.pretty_ty_name(ty)))
+                write!(f, "{}", def.to_pretty_string(self))
             }
             _ => {
                 write!(f, "{}", id)

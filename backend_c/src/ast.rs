@@ -181,7 +181,7 @@ impl<'a> Unit<'a> {
     }
 
     pub fn pretty_name(&self, name_path: &ir::NamePath) -> String {
-        name_path.to_pretty_string(|ty| self.pretty_type(ty))
+        name_path.to_pretty_string(self.metadata)
     }
 
     fn make_array_type(&mut self, element: Type, dim: usize) -> Type {

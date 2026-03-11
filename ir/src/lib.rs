@@ -15,14 +15,13 @@ pub use formatter::*;
 pub use function::*;
 pub use instruction::*;
 pub use instruction_builder::scope::*;
+pub use instruction_builder::util::jmp_exists;
 pub use instruction_builder::InstructionBuilder;
 pub use instruction_builder::LocalBinding;
-pub use instruction_builder::util::jmp_exists;
 pub use library::*;
 pub use metadata::*;
 use serde::Deserialize;
 use serde::Serialize;
-use std::borrow::Cow;
 use std::fmt;
 pub use ty::*;
 pub use ty_decl::*;
@@ -67,9 +66,7 @@ impl NamePath {
         &mut self.path[index]
     }
 
-    pub fn to_pretty_string<'a, TyFormat>(&self, ty_format: TyFormat) -> String
-    where TyFormat: Fn(&Type) -> Cow<'a, str>,
-    {
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         let mut buf = self.path.join(".");
 
         if let Some(type_args) = self.type_args.as_ref() {
@@ -79,7 +76,7 @@ impl NamePath {
                     buf.push_str(", ");
                 }
 
-                let ty_name = ty_format(ty_arg);
+                let ty_name = ty_arg.to_pretty_string(formatter);
                 buf.push_str(&ty_name);
             }
             buf.push(']');

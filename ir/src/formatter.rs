@@ -209,7 +209,9 @@ pub trait IRFormatter {
                 write!(f, "{:>width$} {}", "label", label, width = IX_WIDTH)
             }
 
-            Instruction::Jump { dest } => write!(f, "{:>width$} {}", "jmp", dest, width = IX_WIDTH),
+            Instruction::Jump { dest } => {
+                write!(f, "{:>width$} {}", "jmp", dest, width = IX_WIDTH)
+            },
 
             Instruction::JumpIf { dest, test } => {
                 write!(f, "{:>width$} {} if ", "jmpif", dest, width = IX_WIDTH)?;
@@ -271,23 +273,38 @@ pub trait IRFormatter {
                     write!(f, " := ")?;
                 }
 
+                self.format_ref(at, f)?;
+
                 let ref_kind = if *weak { "weak" } else { "strong" };
-                write!(f, "{} (-{})", at, ref_kind)?;
+                write!(f, " (-{})", ref_kind)?;
 
                 Ok(())
             }
 
             Instruction::Retain { at, weak } => {
+                write!(f, "{:>width$} ", "retain", width = IX_WIDTH)?;
+
+                self.format_ref(at, f)?;
+
                 let ref_kind = if *weak { "weak" } else { "strong" };
-                write!(f, "{:>width$} {} (+{})", "retain", at, ref_kind, width = IX_WIDTH)
+                write!(f, " (+{})", ref_kind)?;
+
+                Ok(())
             }
 
             Instruction::Raise { val } => {
-                write!(f, "{:>width$} {}", "raise", val, width = IX_WIDTH)
+                write!(f, "{:>width$} ", "raise", width = IX_WIDTH)?;
+                self.format_ref(val, f)
             }
 
             Instruction::Cast { out, ty, a } => {
-                write!(f, "{:>width$} {} := {} as ", "cast", out, a, width = IX_WIDTH)?;
+                write!(f, "{:>width$} ", "cast", width = IX_WIDTH)?;
+
+                self.format_ref(out, f)?;
+                write!(f, " := ")?;
+                self.format_val(a, f)?;
+
+                write!(f, " as ")?;
                 self.format_type(ty, f)
             }
         }

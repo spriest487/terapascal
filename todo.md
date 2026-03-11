@@ -2,7 +2,6 @@
 * update CIL: remove impls from interface defs, add new map
 
 # refcounting cleanup pass
-* +/- entering and exiting most functions is redundant, remove them all and clean up handwritten IR
 * box contents aren't refcounted properly, backends needs to deep release structures
   * can we generate destructors?
 * taking the address of any type containing rc refs should be unsafe
@@ -13,6 +12,7 @@
 # RTTI
 * more detailed type kind info
 * type/method unit name info
+* published methods shouldn't ever be stripped
 
 # IR
 * remove forward types from metadata
@@ -42,4 +42,3 @@
 * use tags instead of pascal-style modifiers for external etc
 * add a named type case to typ::Type for all the things that use full_path, full_name etc
 * type cache so we don't need to construct/pass around type objects all the time in the typechecker (This is really slow)
-* named matchers e.g. "expected start of type name (one of: ...)"
