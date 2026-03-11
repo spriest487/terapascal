@@ -15,9 +15,6 @@
     "directory": "vscode-extension/terapascal",
     "type": "bitbucket"
   },
-  "activationEvents": [
-    "onLanguage:terapascal"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "languages": [{
