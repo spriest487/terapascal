@@ -90,15 +90,15 @@ impl Type {
         }
     }
 
-    pub fn array(self, dim: usize) -> Self {
+    pub fn array(&self, dim: usize) -> Self {
         Type::Array {
             dim,
-            element: Rc::new(self),
+            element: Rc::new(self.clone()),
         }
     }
 
-    pub fn dyn_array(self) -> Self {
-        Type::Object(ObjectID::Array(Rc::new(self)))
+    pub fn dyn_array(&self) -> Self {
+        Type::Object(ObjectID::Array(Rc::new(self.clone())))
     }
 
     pub fn weak_dyn_array(self) -> Self {
