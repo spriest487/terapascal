@@ -86,38 +86,40 @@ impl<Ty> MarshalError<Ty> {
 impl<T: fmt::Display> fmt::Display for MarshalError<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            MarshalError::InvalidData => write!(f, "invalid data"),
+            MarshalError::InvalidData => {
+                write!(f, "Invalid data")
+            },
             MarshalError::InvalidStructID { expected, actual } => {
-                write!(f, "expected struct {expected}, got {actual}")?;
+                write!(f, "Expected struct {expected}, got {actual}")?;
                 Ok(())
             },
             MarshalError::InvalidTypeIndex { type_index: id }  => {
-                write!(f, "unknown type ID: {}", id)
+                write!(f, "Illegal object pointer (unknown type ID: {})", id)
             }
             MarshalError::UnsupportedValue(val) => {
-                write!(f, "unable to marshal value: {:?}", val)
+                write!(f, "Unable to marshal value: {:?}", val)
             },
             MarshalError::UnsupportedType(ty) => {
-                write!(f, "unable to marshal type: {ty}")
+                write!(f, "Unable to marshal type: {ty}")
             },
             MarshalError::ExternSymbolLoadFailed { lib, symbol, path, msg, cause } => {
-                write!(f, "external symbol {lib}::{symbol} ({}) failed to load: {msg}", path.display())?;
+                write!(f, "External symbol {lib}::{symbol} ({}) failed to load: {msg}", path.display())?;
                 if let Some(cause) = cause {
                     write!(f, " ({cause})")?;
                 }
                 Ok(())
             },
             MarshalError::VariantTagOutOfRange { variant_type, tag } => {
-                write!(f, "tag {tag:?} for variant {variant_type} was out of range")
+                write!(f, "Tag {tag:?} for variant {variant_type} was out of range")
             },
             MarshalError::FieldOutOfRange { struct_type, field } => {
-                write!(f, "field {struct_type}.{field} was out of range")
+                write!(f, "Field {struct_type}.{field} was out of range")
             },
             MarshalError::InvalidRefCountValue(val) => {
-                write!(f, "value is not a valid ref count: {:?}", val)
+                write!(f, "Value is not a valid ref count: {:?}", val)
             },
             MarshalError::InvalidWrite { dest_size, data_size } => {
-                write!(f, "writing {} bytes to buffer of size {}", data_size, dest_size)
+                write!(f, "Writing {} bytes to buffer of size {}", data_size, dest_size)
             }
         }
     }
