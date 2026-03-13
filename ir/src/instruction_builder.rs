@@ -24,7 +24,7 @@ use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use dyn_array::gen_dyn_array_dtor_body;
-use dyn_array::new_dyn_array;
+use dyn_array::new_array_from;
 use scope::LocalStack;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -829,7 +829,8 @@ pub trait InstructionBuilder {
         gen_dyn_array_dtor_body(self, self_param, element_type)
     }
 
-    fn new_dyn_array(
+    /// Builds a dynamic array from the given elements
+    fn new_array_from(
         &mut self,
         elements: impl IntoIterator<Item = Value>,
         element_type: &Type,
@@ -837,7 +838,7 @@ pub trait InstructionBuilder {
     where
         Self: Sized,
     {
-        new_dyn_array(self, elements, element_type)
+        new_array_from(self, elements, element_type)
     }
 
     fn if_then<Branch>(&mut self, cond: impl Into<Value>, then_branch: Branch)

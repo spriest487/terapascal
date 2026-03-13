@@ -28,7 +28,7 @@ pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
     });
 }
 
-pub(super) fn new_dyn_array(
+pub(super) fn new_array_from(
     builder: &mut impl InstructionBuilder,
     elements: impl IntoIterator<Item=Value>,
     element_type: &Type,

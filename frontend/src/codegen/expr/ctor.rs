@@ -143,7 +143,7 @@ fn translate_dyn_array_ctor(
         elements.push(element_val.value());
     }
 
-    builder.new_dyn_array(elements, &elem_ty)
+    builder.new_array_from(elements, &elem_ty)
 }
 
 fn translate_set_ctor(
