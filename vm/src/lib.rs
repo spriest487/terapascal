@@ -2159,7 +2159,7 @@ impl Vm {
         let object_id = ObjectID::Class(fields.type_id);
         let object_ptr = self.native_heap.alloc_object(fields_size, object_id.clone(), !immortal)?;
 
-        if !immortal {
+        if !immortal && self.opts.trace_rc {
             eprintln!("[rc] alloc @ {}", object_ptr.to_pretty_string(&self.metadata))
         }
 
@@ -2544,7 +2544,7 @@ impl Vm {
 
         let box_ptr = self.native_heap.alloc_object(value_size, object_id, !immortal)?;
 
-        if !immortal {
+        if !immortal && self.opts.trace_rc {
             eprintln!("[rc] alloc @ {}", box_ptr.to_pretty_string(&self.metadata))
         }
 
@@ -2587,7 +2587,7 @@ impl Vm {
         let object_id = ObjectID::Array(Rc::new(element_ty.clone()));
         let array_ptr = self.native_heap.alloc_object(data_size, object_id.clone(), !immortal)?;
 
-        if !immortal {
+        if !immortal && self.opts.trace_rc {
             eprintln!("[rc] alloc @ {}", array_ptr.to_pretty_string(&self.metadata))
         }
 
