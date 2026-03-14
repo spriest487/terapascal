@@ -1274,6 +1274,7 @@ impl Vm {
         &mut self,
         ty: &ir::Type,
         values: Values,
+        trace: bool,
     ) -> ExecResult<Pointer>
     where
         Values: IntoIterator<Item = DynValue, IntoIter = ValuesIter>,
@@ -1287,7 +1288,7 @@ impl Vm {
         let marshal_ty = self.marshaller.get_ty(&ty)?;
         let marshal_size = marshal_ty.size();
 
-        let alloc_ptr = self.dynalloc(ty, values.len())?;
+        let alloc_ptr = self.dynalloc(ty, values.len(), trace)?;
 
         for (i, value) in values.enumerate() {
             let element_offset = i * marshal_size;
@@ -1301,12 +1302,12 @@ impl Vm {
         Ok(alloc_ptr)
     }
 
-    pub fn dynalloc(&mut self, ty: &ir::Type, len: usize) -> ExecResult<Pointer> {
+    pub fn dynalloc(&mut self, ty: &ir::Type, len: usize, trace: bool) -> ExecResult<Pointer> {
         if len == 0 {
             return Err(ExecError::ZeroLengthAllocation);
         }
 
-        let ptr = self.native_heap.alloc(ty.clone(), len)?;
+        let ptr = self.native_heap.alloc(ty.clone(), len, trace)?;
 
         Ok(ptr)
     }
@@ -2156,11 +2157,9 @@ impl Vm {
         let fields_size = self.marshaller.get_ty(&fields_type)?.size();
 
         let object_id = ObjectID::Class(fields.type_id);
-        let object_ptr = self.native_heap.alloc_object(fields_size, object_id.clone())?;
+        let object_ptr = self.native_heap.alloc_object(fields_size, object_id.clone(), !immortal)?;
 
-        if immortal {
-            self.native_heap.forget(&object_ptr)?;
-        } else if self.opts.trace_rc {
+        if !immortal {
             eprintln!("[rc] alloc @ {}", object_ptr.to_pretty_string(&self.metadata))
         }
 
@@ -2435,11 +2434,7 @@ impl Vm {
         // add a null-terminator, not included in the char count
         chars.push(DynValue::U8(0));
 
-        let chars_ptr = self.dynalloc_init(&ir::Type::U8, chars)?;
-
-        if immortal {
-            self.native_heap.forget(&chars_ptr)?;
-        }
+        let chars_ptr = self.dynalloc_init(&ir::Type::U8, chars, !immortal)?;
 
         let mut string_struct = self.default_struct(ir::STRING_ID)?;
         string_struct[ir::STRING_LEN_FIELD] = DynValue::I32(chars_len);
@@ -2547,11 +2542,9 @@ impl Vm {
 
         let value_size = self.marshaller.get_ty(value_ty)?.size();
 
-        let box_ptr = self.native_heap.alloc_object(value_size, object_id)?;
+        let box_ptr = self.native_heap.alloc_object(value_size, object_id, !immortal)?;
 
-        if immortal {
-            self.native_heap.forget(&box_ptr)?;
-        } else if self.opts.trace_rc {
+        if !immortal {
             eprintln!("[rc] alloc @ {}", box_ptr.to_pretty_string(&self.metadata))
         }
 
@@ -2592,11 +2585,9 @@ impl Vm {
 
         // we can't allocate a fixed-size object here so allocate bytes and reinterpret the pointer
         let object_id = ObjectID::Array(Rc::new(element_ty.clone()));
-        let array_ptr = self.native_heap.alloc_object(data_size, object_id.clone())?;
+        let array_ptr = self.native_heap.alloc_object(data_size, object_id.clone(), !immortal)?;
 
-        if immortal {
-            self.native_heap.forget(&array_ptr)?;
-        } else if self.opts.trace_rc {
+        if !immortal {
             eprintln!("[rc] alloc @ {}", array_ptr.to_pretty_string(&self.metadata))
         }
 

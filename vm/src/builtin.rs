@@ -164,7 +164,7 @@ pub(super) fn get_mem(state: &mut Vm) -> ExecResult<()> {
         .ok_or_else(|| ExecError::illegal_state("GetMem expected I32 argument"))?;
 
     let mem_ptr = if len != 0 {
-        state.dynalloc(&ir::Type::U8, len as usize)?
+        state.dynalloc(&ir::Type::U8, len as usize, true)?
     } else {
         Pointer::nil(ir::Type::U8)
     };

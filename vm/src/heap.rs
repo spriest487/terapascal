@@ -9,7 +9,6 @@ use crate::Pointer;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
-use std::mem::forget;
 use std::rc::Rc;
 use terapascal_ir::MetadataSource;
 use thiserror::Error;
@@ -115,6 +114,7 @@ struct NativeAlloc {
     alloc_type: ir::Type,
     alloc_count: usize,
     memory: Box<[u8]>,
+    trace: bool,
 }
 
 #[derive(Debug)]
@@ -151,25 +151,25 @@ impl NativeHeap {
         self.marshaller = marshaller;
     }
 
-    pub fn alloc(&mut self, ty: ir::Type, count: usize) -> NativeHeapResult<Pointer> {
+    pub fn alloc(&mut self, ty: ir::Type, count: usize, trace: bool) -> NativeHeapResult<Pointer> {
         let ty_size = self.marshaller.get_ty(&ty)?.size();
         if ty_size == 0 || count == 0 {
             return Err(NativeHeapError::ZeroSizedAllocation { ty, count });
         }
 
         let total_len = ty_size * count;
-        let addr = self.alloc_with_len(ty.clone(), count, total_len);
+        let addr = self.alloc_with_len(ty.clone(), count, total_len, trace);
 
         Ok(Pointer { addr, ty })
     }
 
-    pub fn alloc_object(&mut self, data_size: usize, id: ObjectID) -> NativeHeapResult<Pointer> {
+    pub fn alloc_object(&mut self, data_size: usize, id: ObjectID, trace: bool) -> NativeHeapResult<Pointer> {
         let header_size = match id {
             ObjectID::Class(..) | ObjectID::Box(..) => Marshaller::object_header_size(),
             ObjectID::Array(..) => Marshaller::array_header_size(),
         };
 
-        let addr = self.alloc_with_len(id.to_type(), 1, header_size + data_size);
+        let addr = self.alloc_with_len(id.to_type(), 1, header_size + data_size, trace);
 
         Ok(Pointer {
             addr,
@@ -177,13 +177,21 @@ impl NativeHeap {
         })
     }
 
-    fn alloc_with_len(&mut self, alloc_type: ir::Type, count: usize, total_len: usize) -> usize {
+    fn alloc_with_len(&mut self,
+        alloc_type: ir::Type,
+        count: usize,
+        total_len: usize,
+        trace: bool,
+    ) -> usize {
         let alloc_mem = vec![0; total_len].into_boxed_slice();
         let addr = alloc_mem.as_ptr() as usize;
 
-        if self.trace_allocs {
-            let ty_name = self.metadata.pretty_ty_name(&alloc_type);
-            eprintln!("[heap] alloc {} bytes @ 0x{:0width$x} ({})", total_len, addr, ty_name, width=POINTER_FMT_WIDTH);
+        if trace && self.trace_allocs {
+            if trace {
+                let ty_name = self.metadata.pretty_ty_name(&alloc_type);
+                eprintln!("[heap] alloc {} bytes @ 0x{:0width$x} ({})", total_len, addr, ty_name, width = POINTER_FMT_WIDTH);
+            }
+
             self.stats.alloc_count += 1;
 
             self.stats.peak_alloc = usize::max(self.stats.peak_alloc, self.allocs.iter()
@@ -195,41 +203,26 @@ impl NativeHeap {
             alloc_type,
             alloc_count: count,
             memory: alloc_mem,
+            trace,
         };
 
+        // if this happens, the previous allocation that resulted in this address must have
+        // been freed without properly being removed from the alloc map
         if self.allocs.insert(addr, alloc).is_some() {
-            unreachable!();
+            panic!("illegal vm state: bad heap");
         }
 
         addr
     }
 
     pub fn free(&mut self, ptr: &Pointer) -> NativeHeapResult<()> {
-        if self.allocs.remove(&ptr.addr).is_none() {
-            return Err(NativeHeapError::BadFree(ptr.clone()));
-        }
-
-        if self.trace_allocs {
-            let ty_name = self.metadata.pretty_ty_name(&ptr.ty);
-            eprintln!("[heap] free @ 0x{:0width$x} ({ty_name})", ptr.addr, width=POINTER_FMT_WIDTH);
-            self.stats.free_count += 1;
-        }
-
-        Ok(())
-    }
-    
-    /// remove an allocation from tracking, indicating that it will never be freed
-    /// e.g. used for immortal data like TypeInfo and string literals.
-    pub fn forget(&mut self, ptr: &Pointer) -> NativeHeapResult<()> {
-        let Some(mem) = self.allocs.remove(&ptr.addr) else {
+        let Some(alloc) = self.allocs.remove(&ptr.addr) else {
             return Err(NativeHeapError::BadFree(ptr.clone()));
         };
 
-        forget(mem.memory);
-        
-        if self.trace_allocs {
+        if self.trace_allocs && alloc.trace {
             let ty_name = self.metadata.pretty_ty_name(&ptr.ty);
-            eprintln!("[heap] forget @ 0x{:0width$x} ({ty_name})", ptr.addr, width=POINTER_FMT_WIDTH);
+            eprintln!("[heap] free @ 0x{:0width$x} ({ty_name})", ptr.addr, width=POINTER_FMT_WIDTH);
             self.stats.free_count += 1;
         }
 
@@ -271,7 +264,11 @@ impl NativeHeap {
         eprintln!("[heap] free count = {}", self.stats.free_count);
         eprintln!("[heap] peak alloc size = {}", self.stats.peak_alloc);
         
-        for addr in self.allocs.keys() {
+        for (addr, alloc) in &self.allocs {
+            if !alloc.trace {
+                continue;
+            }
+
             eprintln!("[heap] remaining alloc @ 0x{:0width$x}", addr, width=POINTER_FMT_WIDTH);
         } 
     }
@@ -281,7 +278,7 @@ impl NativeHeap {
     }
 
     pub fn check_leaks(&self) -> NativeHeapResult<()> {
-        if self.allocs.is_empty() {
+        if !self.allocs.values().any(|a| a.trace) {
             return Ok(());
         }
 
