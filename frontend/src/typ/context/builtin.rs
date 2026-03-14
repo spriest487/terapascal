@@ -343,7 +343,7 @@ pub fn declare_builtin_ty(
 
             methods.insert(display_method.name.ident.clone(), ast::MethodDecl {
                 func_decl: display_method,
-                access: Access::Published,
+                access: Access::Public,
             });
         }
 
@@ -353,7 +353,7 @@ pub fn declare_builtin_ty(
             
             methods.insert(compare_method.name.ident.clone(), ast::MethodDecl {
                 func_decl: compare_method,
-                access: Access::Published,
+                access: Access::Public,
             });
         }
 

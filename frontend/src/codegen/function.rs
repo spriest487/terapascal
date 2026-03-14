@@ -14,7 +14,7 @@ use terapascal_ir::InstructionBuilder;
 pub struct FunctionInstance {
     pub id: FunctionID,
     pub src_sig: Arc<typ::FunctionSig>,
-    
+
     pub published: bool,
 }
 
