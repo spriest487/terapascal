@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use crate::ir;
 use crate::marshal::MarshalError;
 use crate::marshal::Marshaller;
@@ -188,8 +189,13 @@ impl NativeHeap {
 
         if trace && self.trace_allocs {
             if trace {
-                let ty_name = self.metadata.pretty_ty_name(&alloc_type);
-                eprintln!("[heap] alloc {} bytes @ 0x{:0width$x} ({})", total_len, addr, ty_name, width = POINTER_FMT_WIDTH);
+                let ty_name = if count > 1 {
+                    Cow::Owned(format!("array[{count}] of {}", self.metadata.pretty_ty_name(&alloc_type)))
+                } else {
+                    self.metadata.pretty_ty_name(&alloc_type)
+                };
+
+                eprintln!("[heap] alloc @ 0x{:0width$x} ({ty_name}: {total_len} bytes)", addr, width = POINTER_FMT_WIDTH);
             }
 
             self.stats.alloc_count += 1;
@@ -221,8 +227,16 @@ impl NativeHeap {
         };
 
         if self.trace_allocs && alloc.trace {
-            let ty_name = self.metadata.pretty_ty_name(&ptr.ty);
-            eprintln!("[heap] free @ 0x{:0width$x} ({ty_name})", ptr.addr, width=POINTER_FMT_WIDTH);
+            let count = alloc.alloc_count;
+            let len = alloc.memory.len();
+
+            let ty_name = if count > 1 {
+                Cow::Owned(format!("array[{count}] of {}", self.metadata.pretty_ty_name(&alloc.alloc_type)))
+            } else {
+                self.metadata.pretty_ty_name(&alloc.alloc_type)
+            };
+
+            eprintln!("[heap] free @ 0x{:0width$x} ({ty_name}: {len} bytes)", ptr.addr, width = POINTER_FMT_WIDTH);
             self.stats.free_count += 1;
         }
 
