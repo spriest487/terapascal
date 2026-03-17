@@ -97,11 +97,12 @@ pub fn parse(
 }
 
 pub fn typecheck<'a>(
+    module_name: String,
     units: impl DoubleEndedIterator<Item = (&'a PathBuf, &'a ast::Unit)>,
     opts: CompileOpts,
     log: &mut BuildLog,
 ) -> Module {
-    let module = Module::typecheck(units, opts, log);
+    let module = Module::typecheck(module_name, units, opts, log);
 
     for error in module.root_ctx.errors() {
         log.diagnostic(error.clone());

@@ -59,6 +59,9 @@ use terapascal_ir::MetadataSource;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
+    name: String,
+    references: Vec<String>,
+
     src_metadata: &'a typ::Context,
     
     opts: CodegenOpts,
@@ -112,6 +115,7 @@ thread_local! {
 
 impl<'a> LibraryBuilder<'a> {
     pub fn new(
+        name: impl Into<String>,
         src_metadata: &'a typ::Context,
         metadata_refs: impl IntoIterator<Item=Arc<ir::Metadata>>,
         opts: CodegenOpts
@@ -139,6 +143,9 @@ impl<'a> LibraryBuilder<'a> {
             .collect();
 
         let builder = LibraryBuilder {
+            name: name.into(),
+            references: Vec::new(),
+
             metadata,
 
             opts,
@@ -209,7 +216,7 @@ impl<'a> LibraryBuilder<'a> {
 
         let metadata = self.metadata.build();
 
-        let mut lib = ir::Library::new(metadata);
+        let mut lib = ir::Library::new(self.name, self.references, metadata);
         lib.functions = self.functions;
         lib.static_closures = self.static_closures;
         lib.init = self.init_code;

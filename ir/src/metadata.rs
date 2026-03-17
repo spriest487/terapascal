@@ -39,7 +39,7 @@ pub use tags::TagInfo;
 pub use vars::VariableInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Metadata {
+pub struct Metadata {    
     type_decls: LinkedHashMap<TypeDefID, TypeDecl>,
     string_literals: LinkedHashMap<StringID, String>,
     ifaces: LinkedHashMap<InterfaceID, InterfaceDecl>,

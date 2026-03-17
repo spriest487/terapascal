@@ -121,7 +121,8 @@ impl Project {
 
         // todo: make search dirs and compiler options configurable
         let input = BuildInput {
-            units: vec![self.main_file.clone()],
+            main_path: self.main_file.clone(),
+            unit_paths: vec![],
             compile_opts: opts,
             codegen_opts: CodegenOpts::default(),
             output_stage: BuildStage::Codegen,
@@ -140,10 +141,15 @@ impl Project {
             .duration_since(parse_start_time)
             .as_millis());
 
+        let project_name = self.main_file.file_stem()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "ls".to_string());
+
         match parse_result {
             Ok(parsed_output) => {
                 let typecheck_start_time = Instant::now();
                 let module = typecheck(
+                    project_name,
                     parsed_output.units.iter(),
                     input.compile_opts,
                     &mut log,

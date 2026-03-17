@@ -12,13 +12,17 @@ pub use self::annotation::*;
 pub use self::context::*;
 pub use self::result::*;
 pub use self::ty::*;
+use crate::ast::Ident;
+use crate::ast::IdentPath;
+use crate::ast::TypeList;
 use crate::ast::Unit;
+use crate::result::ErrorContinue;
 use ast::typecheck_unit;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::build_log::BuildLog;
+use terapascal_common::span::Span;
 use terapascal_common::CompileOpts;
-use crate::result::ErrorContinue;
 
 #[derive(Debug, Clone)]
 pub struct ModuleUnit {
@@ -30,21 +34,28 @@ pub struct ModuleUnit {
 
 #[derive(Debug, Clone)]
 pub struct Module {
+    pub name: String,
+
     pub units: Vec<ModuleUnit>,
     pub root_ctx: Box<Context>,
 }
 
 impl Module {
-    pub fn typecheck<'a>(units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>, opts: CompileOpts, log: &mut BuildLog) -> Self {
-        // eprintln!("function sig size: {}", std::mem::size_of::<sig::FunctionSig>());
-        // eprintln!("type size: {}", std::mem::size_of::<Type>());
-        // eprintln!("type annotation size: {}", std::mem::size_of::<TypeAnnotation>());
-        // eprintln!("expr size: {}", std::mem::size_of::<ast::Expression>());
-        // eprintln!("stmt size: {}", std::mem::size_of::<ast::Statement>());
-        // eprintln!("type list size: {}", std::mem::size_of::<TypeList>());
-        // eprintln!("ident size: {}", std::mem::size_of::<frontend::Ident>());
-        // eprintln!("ident path size: {}", std::mem::size_of::<IdentPath>());
-        // eprintln!("span size: {}", std::mem::size_of::<Span>());
+    pub fn typecheck<'a>(
+        name: String,
+        units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>,
+        opts: CompileOpts,
+        log: &mut BuildLog,
+    ) -> Self {
+        eprintln!("function sig size: {}", std::mem::size_of::<sig::FunctionSig>());
+        eprintln!("type size: {}", std::mem::size_of::<Type>());
+        eprintln!("type annotation size: {}", std::mem::size_of::<TypedValue>());
+        eprintln!("expr size: {}", std::mem::size_of::<ast::Expr>());
+        eprintln!("stmt size: {}", std::mem::size_of::<ast::Stmt>());
+        eprintln!("type list size: {}", std::mem::size_of::<TypeList<Type>>());
+        eprintln!("ident size: {}", std::mem::size_of::<Ident>());
+        eprintln!("ident path size: {}", std::mem::size_of::<IdentPath>());
+        eprintln!("span size: {}", std::mem::size_of::<Span>());
 
         let verbose = opts.verbose;
 
@@ -68,6 +79,7 @@ impl Module {
         module_units.reverse();
 
         Module {
+            name,
             units: module_units,
             root_ctx: Box::new(root_ctx),
         }

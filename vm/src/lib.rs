@@ -2352,7 +2352,7 @@ impl Vm {
 
         if !lib.init.is_empty() {
             if self.opts.verbose {
-                println!("[vm] entering library init");
+                println!("[vm] entering library init: {}", lib.name);
             }
 
             self.push_stack(Rc::new("<init>".to_string()), init_stack_size);
@@ -2362,7 +2362,7 @@ impl Vm {
             self.pop_stack()?;
 
             if self.opts.verbose {
-                println!("[vm] exiting library init");
+                println!("[vm] exiting library init: {}", lib.name);
             }
         }
 

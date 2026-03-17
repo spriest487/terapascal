@@ -98,17 +98,13 @@ fn compile(args: Args) -> Result<(), RunError> {
         }, &args);
     }
     
-    let mut units = args.units.clone();
-
-    // add main source unit
-    units.push(args.file.clone());
-    
     let input = BuildInput {
         compile_opts,
         codegen_opts,
         search_dirs: args.search_dirs.clone(),
         output_stage: args.print_stage.unwrap_or(BuildStage::Codegen),
-        units,
+        main_path: args.file.clone(),
+        unit_paths: args.units.clone(),
     };
     
     let output = build(&DefaultFilesystem, input);

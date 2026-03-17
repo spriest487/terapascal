@@ -21,6 +21,9 @@ use std::sync::Arc;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
+    pub name: String,
+    pub references: Vec<String>,
+
     pub metadata: Arc<Metadata>,
 
     pub functions: BTreeMap<FunctionID, Function>,
@@ -31,9 +34,16 @@ pub struct Library {
 }
 
 impl Library {
-    pub fn new(metadata: impl Into<Arc<Metadata>>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        references: impl IntoIterator<Item=String>,
+        metadata: impl Into<Arc<Metadata>>,
+    ) -> Self {
         Self {
             init: Vec::new(),
+
+            name: name.into(),
+            references: references.into_iter().collect(),
 
             functions: BTreeMap::new(),
 

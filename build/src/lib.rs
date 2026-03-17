@@ -38,7 +38,9 @@ pub enum BuildStage {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BuildInput {
-    pub units: Vec<PathBuf>,
+    pub main_path: PathBuf,
+    pub unit_paths: Vec<PathBuf>,
+
     pub search_dirs: Vec<PathBuf>,
 
     pub output_stage: BuildStage,
@@ -60,6 +62,7 @@ pub struct BuildOutput {
 }
 
 pub struct ParseOutput {
+    pub project_name: String,
     pub units: LinkedHashMap<PathBuf, ast::Unit>,
 }
 
@@ -70,11 +73,11 @@ pub fn create_source_collection<'fs, Fs: Filesystem>(
 ) -> BuildResult<SourceCollection<'fs, Fs>> {
     let mut sources = SourceCollection::new(fs, &input.search_dirs, input.compile_opts.verbose)?;
 
-    // add extra referenced units
-    for unit_arg in input.units.iter() {
-        let unit_filename = PathBuf::from(unit_arg.clone());
-        sources.add(&unit_filename, None, log)?;
+    for unit_path in input.unit_paths.iter() {
+        sources.add(&unit_path, None, log)?;
     }
+
+    sources.add(&input.main_path, None, log)?;
 
     if input.compile_opts.verbose {
         log.trace("Unit source directories:");
@@ -202,21 +205,17 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
 
         let is_main_unit = matches!(unit.kind, UnitKind::Program | UnitKind::Library);
 
-        main_ident = match (main_ident, is_main_unit) {
-            (None, true) => Some(Some(unit.ident.clone())),
-
-            (None, false) => Some(None),
-
-            (Some(prev_ident), true) => {
+        if is_main_unit {
+            if let Some(prev_ident) = main_ident {
                 return Err(BuildError::UnexpectedMainUnit {
-                    existing_ident: prev_ident,
+                    existing_ident: Some(prev_ident),
                     unit_path: unit_filename,
                     unit_kind: unit.kind,
                 });
-            },
+            }
 
-            (existing @ Some(..), false) => existing,
-        };
+            main_ident = Some(unit.ident.clone());
+        }
 
         let uses_units: Vec<_> = unit
             .all_decls()
@@ -282,8 +281,27 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
             log.trace(format!("\t{} in '{}'", unit.ident, unit_path.display()));
         }
     }
+
+    let project_name = match main_ident {
+        Some(main_ident) => main_ident.to_string(),
+        None => {
+            let unit_filename = input.main_path.file_stem().ok_or_else(|| {
+                BuildError::ReadSourceFileFailed {
+                    path: input.main_path.clone(),
+                    msg: "unable to determine project name from unit path".to_string(),
+                }
+            })?;
+
+            let name_from_filename = unit_filename.to_string_lossy().to_string();
+            if input.compile_opts.verbose {
+                eprintln!("no main unit found, inferring project name from filename: {}", name_from_filename);
+            }
+            name_from_filename
+        }
+    };
     
     Ok(ParseOutput {
+        project_name,
         units: sorted_units,
     })
 }
@@ -375,7 +393,7 @@ fn build_with_log(fs: &impl Filesystem, input: BuildInput, log: &mut BuildLog) -
 
     // reverse the compilation order for typechecking, modules should be processed after all their
     // dependencies
-    let typed_module = typecheck(parse_output.units.iter(), input.compile_opts, log);
+    let typed_module = typecheck(parse_output.project_name, parse_output.units.iter(), input.compile_opts, log);
 
     if input.output_stage == BuildStage::Typecheck {
         return Ok(BuildArtifact::TypedModule(typed_module));
