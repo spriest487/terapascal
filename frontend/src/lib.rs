@@ -19,11 +19,6 @@ pub use self::token_tree::TokenStream;
 pub use self::token_tree::TokenTree;
 pub use self::token_tree::TokenizeError;
 pub use self::token_tree::TokenizeResult;
-pub use ast::keyword::Keyword;
-pub use ast::operators::CompoundAssignmentOperator;
-pub use ast::operators::Operator;
-pub use ast::operators::Position;
-
 use crate::codegen::CodegenOpts;
 use crate::parse::AggregateParseError;
 use crate::parse::ParseError;
@@ -32,6 +27,10 @@ use crate::parse::Parser;
 use crate::pp::error::PreprocessorError;
 use crate::pp::PreprocessedUnit;
 use crate::typ::Module;
+pub use ast::keyword::Keyword;
+pub use ast::operators::CompoundAssignmentOperator;
+pub use ast::operators::Operator;
+pub use ast::operators::Position;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::aggregate_err::AggregateError;
@@ -39,6 +38,7 @@ use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::Filesystem;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
+use terapascal_common::version::Version;
 use terapascal_common::CompileOpts;
 use terapascal_common::TracedError;
 use terapascal_ir as ir;
@@ -98,11 +98,12 @@ pub fn parse(
 
 pub fn typecheck<'a>(
     module_name: String,
+    module_version: Version,
     units: impl DoubleEndedIterator<Item = (&'a PathBuf, &'a ast::Unit)>,
     opts: CompileOpts,
     log: &mut BuildLog,
 ) -> Module {
-    let module = Module::typecheck(module_name, units, opts, log);
+    let module = Module::typecheck(module_name, module_version, units, opts, log);
 
     for error in module.root_ctx.errors() {
         log.diagnostic(error.clone());

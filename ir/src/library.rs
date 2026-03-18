@@ -18,10 +18,13 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::io;
 use std::sync::Arc;
+use terapascal_common::version::Version;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Library {
     pub name: String,
+    pub version: Version,
+
     pub references: Vec<String>,
 
     pub metadata: Arc<Metadata>,
@@ -36,20 +39,22 @@ pub struct Library {
 impl Library {
     pub fn new(
         name: impl Into<String>,
+        version: Version,
         references: impl IntoIterator<Item=String>,
         metadata: impl Into<Arc<Metadata>>,
     ) -> Self {
         Self {
-            init: Vec::new(),
-
             name: name.into(),
+            version,
+
             references: references.into_iter().collect(),
 
-            functions: BTreeMap::new(),
+            metadata: metadata.into(),
 
+            functions: BTreeMap::new(),
             static_closures: Vec::new(),
 
-            metadata: metadata.into(),
+            init: Vec::new(),
         }
     }
 

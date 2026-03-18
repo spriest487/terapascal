@@ -1,7 +1,8 @@
-use std::path::PathBuf;
 use std::path::Path;
+use std::path::PathBuf;
 use structopt::*;
 use terapascal_build::BuildStage;
+use terapascal_common::version::Version;
 use terapascal_common::LanguageMode;
 use terapascal_common::StripMode;
 
@@ -17,6 +18,12 @@ pub struct Args {
     /// If no output path is provided the vm will be invoked.
     #[structopt(name = "OUTPUT", short = "o", parse(from_os_str))]
     pub output: Option<PathBuf>,
+
+    #[structopt(name = "project-name")]
+    pub project_name: Option<String>,
+
+    #[structopt(name = "project-version")]
+    pub project_version: Option<Version>,
 
     #[structopt(
         name = "arch",

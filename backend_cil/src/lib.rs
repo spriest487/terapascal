@@ -38,14 +38,6 @@ pub fn build_assembly(
     let encoded_data = ir::encode_lib(lib)
         .map_err(BuildError::EncodingFailed)?;
 
-    let lib_name = out_path
-        .file_stem()
-        .ok_or_else(|| {
-            BuildError::BadAssemblyPath(out_path.to_path_buf())
-        })?
-        .to_string_lossy()
-        .to_string();
-
     let tool_dir = env::current_exe()
         .and_then(|exe_path| {
             let parent = exe_path.parent().ok_or_else(|| {
@@ -70,7 +62,6 @@ pub fn build_assembly(
     let mut tool_command = Command::new(tool_dir.join("terapascal2cil"));
 
     tool_command.current_dir(tool_dir);
-    tool_command.arg("--assembly-name").arg(lib_name);
     tool_command.arg("--module-kind").arg("Console");
     tool_command.arg("--output-path").arg(out_path);
     

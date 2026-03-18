@@ -41,7 +41,7 @@ impl Default for CodegenOpts {
 }
 
 pub fn gen_lib(module: &typ::Module, opts: CodegenOpts) -> ir::Library {
-    let mut lib = LibraryBuilder::new(module.name.as_str(), module.root_ctx.as_ref(), [], opts);
+    let mut lib = LibraryBuilder::new(module.name.as_str(), module.version, module.root_ctx.as_ref(), [], opts);
 
     translate_builtin_class(&module, &mut lib, &typ::builtin_string_name(), ir::STRING_ID);
 

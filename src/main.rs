@@ -101,6 +101,8 @@ fn compile(args: Args) -> Result<(), RunError> {
     let input = BuildInput {
         compile_opts,
         codegen_opts,
+        project_version: args.project_version,
+        project_name: args.project_name.clone(),
         search_dirs: args.search_dirs.clone(),
         output_stage: args.print_stage.unwrap_or(BuildStage::Codegen),
         main_path: args.file.clone(),

@@ -3,22 +3,22 @@
 namespace Terapascal.IR;
 
 [MessagePackObject]
-public class StaticClosure {
-    [Key("id")]
-    public required StaticClosureID ID { get; init; }
-
-    [Key("init_func")]
-    public required FunctionID InitFunction { get; init; }
-
-    [Key("closure_id")]
-    public required TypeDefID ClosureID { get; init; }
-    
-    [Key("func_ty_id")]
-    public required TypeDefID FunctionTypeID { get; init; }
-}
-
-[MessagePackObject]
 public class Library {
+    [Key("name")]
+    public required string Name {
+        get;
+        init => field = value ?? "";
+    }
+
+    [Key("version")]
+    public required Version Version { get; init; }
+    
+    [Key("references")]
+    public required IReadOnlyList<string> References {
+        get;
+        init => field = value!.ToArrayNonNull();
+    }
+    
     [Key("metadata")]
     public required Metadata Metadata { get; set; }
 

@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::Filesystem;
+use terapascal_common::version::Version;
 use terapascal_common::CompileOpts;
 use terapascal_common::{TracedError, SRC_FILE_DEFAULT_EXT};
 use terapascal_frontend::ast;
@@ -43,6 +44,9 @@ pub struct BuildInput {
 
     pub search_dirs: Vec<PathBuf>,
 
+    pub project_name: Option<String>,
+    pub project_version: Option<Version>,
+
     pub output_stage: BuildStage,
 
     pub compile_opts: CompileOpts,
@@ -63,6 +67,7 @@ pub struct BuildOutput {
 
 pub struct ParseOutput {
     pub project_name: String,
+    pub project_version: Version,
     pub units: LinkedHashMap<PathBuf, ast::Unit>,
 }
 
@@ -282,28 +287,44 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
         }
     }
 
-    let project_name = match main_ident {
-        Some(main_ident) => main_ident.to_string(),
+    let project_name = match input.project_name.clone() {
         None => {
-            let unit_filename = input.main_path.file_stem().ok_or_else(|| {
-                BuildError::ReadSourceFileFailed {
-                    path: input.main_path.clone(),
-                    msg: "unable to determine project name from unit path".to_string(),
-                }
-            })?;
-
-            let name_from_filename = unit_filename.to_string_lossy().to_string();
-            if input.compile_opts.verbose {
-                eprintln!("no main unit found, inferring project name from filename: {}", name_from_filename);
-            }
-            name_from_filename
+            project_name_from_main_unit(input, main_ident.as_ref())?
         }
+
+        Some(name) if name.is_empty() || name.chars().all(char::is_whitespace) => {
+            project_name_from_main_unit(input, main_ident.as_ref())?
+        }
+
+        Some(name) => name.trim().to_string(),
     };
-    
+
+    let project_version = input.project_version.unwrap_or_else(|| Version::new(0, 1, 0));
+
     Ok(ParseOutput {
         project_name,
+        project_version,
         units: sorted_units,
     })
+}
+
+fn project_name_from_main_unit(input: &BuildInput, main_ident: Option<&IdentPath>) -> BuildResult<String> {
+    if let Some(main_ident) = main_ident {
+        return Ok(main_ident.to_string());
+    }
+
+    let unit_filename = input.main_path.file_stem().ok_or_else(|| {
+        BuildError::ReadSourceFileFailed {
+            path: input.main_path.clone(),
+            msg: "unable to determine project name from unit path".to_string(),
+        }
+    })?;
+
+    let name_from_filename = unit_filename.to_string_lossy().to_string();
+    if input.compile_opts.verbose {
+        eprintln!("no main unit found, inferring project name from filename: {}", name_from_filename);
+    }
+    Ok(name_from_filename)
 }
 
 fn add_unit_dep(
@@ -377,7 +398,11 @@ pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
     }
 }
 
-fn build_with_log(fs: &impl Filesystem, input: BuildInput, log: &mut BuildLog) -> BuildResult<BuildArtifact> {
+fn build_with_log(
+    fs: &impl Filesystem,
+    input: BuildInput,
+    log: &mut BuildLog,
+) -> BuildResult<BuildArtifact> {
     // if we just want preprocessor output, no unit refs need to be looked up, just process and
     // print the units provided on the cli in that order
     if input.output_stage == BuildStage::Preprocess {
@@ -393,7 +418,13 @@ fn build_with_log(fs: &impl Filesystem, input: BuildInput, log: &mut BuildLog) -
 
     // reverse the compilation order for typechecking, modules should be processed after all their
     // dependencies
-    let typed_module = typecheck(parse_output.project_name, parse_output.units.iter(), input.compile_opts, log);
+    let typed_module = typecheck(
+        parse_output.project_name,
+        parse_output.project_version,
+        parse_output.units.iter(),
+        input.compile_opts,
+        log,
+    );
 
     if input.output_stage == BuildStage::Typecheck {
         return Ok(BuildArtifact::TypedModule(typed_module));

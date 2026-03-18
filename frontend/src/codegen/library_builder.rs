@@ -53,6 +53,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
+use terapascal_common::version::Version;
 use terapascal_common::StripMode;
 use terapascal_ir::InstructionBuilder as _;
 use terapascal_ir::MetadataSource;
@@ -60,6 +61,8 @@ use terapascal_ir::MetadataSource;
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
     name: String,
+    version: Version,
+
     references: Vec<String>,
 
     src_metadata: &'a typ::Context,
@@ -116,6 +119,7 @@ thread_local! {
 impl<'a> LibraryBuilder<'a> {
     pub fn new(
         name: impl Into<String>,
+        version: Version,
         src_metadata: &'a typ::Context,
         metadata_refs: impl IntoIterator<Item=Arc<ir::Metadata>>,
         opts: CodegenOpts
@@ -145,6 +149,8 @@ impl<'a> LibraryBuilder<'a> {
         let builder = LibraryBuilder {
             name: name.into(),
             references: Vec::new(),
+
+            version,
 
             metadata,
 
@@ -216,7 +222,7 @@ impl<'a> LibraryBuilder<'a> {
 
         let metadata = self.metadata.build();
 
-        let mut lib = ir::Library::new(self.name, self.references, metadata);
+        let mut lib = ir::Library::new(self.name, self.version, self.references, metadata);
         lib.functions = self.functions;
         lib.static_closures = self.static_closures;
         lib.init = self.init_code;

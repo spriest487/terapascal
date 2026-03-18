@@ -19,15 +19,12 @@ await using (var input = OpenInputStream(parsedArgs.LibPath)) {
     library = await MessagePackSerializer.DeserializeAsync<IR.Library>(input, mpOptions);
 }
 
-var assemblyName = parsedArgs.AssemblyName;
-var assemblyVersion = parsedArgs.Version ?? new Version(1, 0, 0, 0);
-
 if (!Enum.TryParse(parsedArgs.ModuleKind, out ModuleKind moduleKind)) {
     moduleKind = ModuleKind.Dll;
 }
 
 if (parsedArgs.Verbose) {
-    Console.WriteLine($"generating assembly: {assemblyName} {assemblyVersion} ({moduleKind})");
+    Console.WriteLine($"generating assembly: {library.Name} {library.Version} ({moduleKind})");
 }
 
 var refLibPath = await SDKUtils.FindReferenceLibPath(parsedArgs.SDKVersion, parsedArgs.Verbose);
@@ -37,8 +34,8 @@ if (targetVersion == null) {
     targetVersion = await SDKUtils.FindTargetRuntimeVersion(parsedArgs.Verbose);
 }
 
-using (var assemblyBuilder = new AssemblyBuilder(assemblyName,
-    assemblyVersion,
+using (var assemblyBuilder = new AssemblyBuilder(library.Name,
+    library.Version,
     moduleKind,
     "Terapascal.Runtime.dll",
     refLibPath)

@@ -4,6 +4,7 @@ pub mod build_log;
 pub mod fs;
 pub mod aggregate_err;
 pub mod reporting;
+pub mod version;
 
 use crate::span::*;
 pub use backtrace::Backtrace;

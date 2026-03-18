@@ -4,9 +4,6 @@ using CommandLine;
 namespace Terapascal.CIL;
 
 public record Args {
-    [Option("assembly-name", Required = true)]
-    public required string AssemblyName { get; init; }
-
     [Option("assembly-version", Required = false)]
     public Version? Version { get; init; }
 
