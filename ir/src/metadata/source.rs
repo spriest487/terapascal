@@ -22,7 +22,7 @@ use crate::VariantDef;
 use std::borrow::Cow;
 use std::rc::Rc;
 
-pub trait MetadataSource {
+pub trait MetadataSource : Sized {
     fn as_formatter(&self) -> &impl IRFormatter;
 
     fn get_string(&self, id: StringID) -> Option<&String>;
@@ -31,6 +31,7 @@ pub trait MetadataSource {
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
     fn type_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)>;
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl>;
+    fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath>;
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID>;
     fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>>;
 
@@ -112,16 +113,11 @@ pub trait MetadataSource {
 
     fn pretty_type_name(&self, ty: &Type) -> Cow<'_, str> {
         match ty {
-            Type::Struct(id) | Type::Variant(id) => match self.get_type_decl(*id) {
-                Some(TypeDecl::Forward(name)) => {
-                    let pretty_name = name.to_pretty_string(self.as_formatter());
-                    Cow::Owned(pretty_name)
-                },
-                Some(TypeDecl::Def(def)) => {
-                    let pretty_name = def.to_pretty_string(self.as_formatter());
-                    Cow::Owned(pretty_name)
-                },
-                Some(TypeDecl::Reserved) | None => Cow::Owned(id.to_string()),
+            Type::Struct(id) | Type::Variant(id) => {
+                match self.get_type_name(*id) {
+                    Some(name) => Cow::Owned(name.to_pretty_string(self)),
+                    None => Cow::Owned(id.to_string())
+                }
             },
 
             Type::Array { element, dim } => {
@@ -147,9 +143,13 @@ pub trait MetadataSource {
                 Cow::Owned(text)
             },
 
-            Type::Pointer(ty) => Cow::Owned(format!("^{}", self.pretty_type_name(ty))),
+            Type::Pointer(ty) => {
+                Cow::Owned(format!("^{}", self.pretty_type_name(ty)))
+            },
 
-            Type::TempRef(ty) => Cow::Owned(format!("&{}", self.pretty_type_name(ty))),
+            Type::TempRef(ty) => {
+                Cow::Owned(format!("&{}", self.pretty_type_name(ty)))
+            },
 
             Type::Flags(id) => {
                 let name = match self.get_type_decl(*id) {

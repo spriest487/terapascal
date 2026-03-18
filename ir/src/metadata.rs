@@ -58,7 +58,7 @@ pub struct Metadata {
 
 impl Metadata {
     pub fn new() -> Self {
-        let mut metadata = Self {
+        Self {
             type_decls: LinkedHashMap::new(),
             string_literals: LinkedHashMap::new(),
             ifaces: LinkedHashMap::new(),
@@ -72,17 +72,7 @@ impl Metadata {
             function_static_closures: HashMap::new(),
 
             type_info: HashMap::new(),
-        };
-
-        metadata
-            .string_literals
-            .insert(EMPTY_STRING_ID, String::new());
-
-        for reserved_id in RESERVED_TYPES {
-            metadata.type_decls.insert(reserved_id, TypeDecl::Reserved);
         }
-
-        metadata
     }
 
     pub fn merge_from(&mut self, other: &Metadata) {
@@ -563,6 +553,11 @@ impl MetadataSource for Metadata {
 
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {
         self.type_decls.get(&id)
+    }
+
+    fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath> {
+        let decl = self.get_type_decl(id)?;
+        decl.name()
     }
 
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {

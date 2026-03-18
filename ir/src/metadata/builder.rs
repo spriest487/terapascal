@@ -23,6 +23,7 @@ use crate::TypeInfo;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
+use crate::EMPTY_STRING_ID;
 use crate::RESERVED_STRINGS;
 use crate::RESERVED_TYPES;
 use linked_hash_map::LinkedHashMap;
@@ -87,6 +88,15 @@ impl MetadataBuilder {
             }
         }
 
+        let mut metadata = Metadata::new();
+        metadata
+            .string_literals
+            .insert(EMPTY_STRING_ID, String::new());
+
+        for reserved_id in RESERVED_TYPES {
+            metadata.type_decls.insert(reserved_id, TypeDecl::Reserved);
+        }
+
         Self {
             next_type_id,
             next_iface_id,
@@ -96,7 +106,7 @@ impl MetadataBuilder {
             
             refs,
 
-            metadata: Metadata::new()
+            metadata,
         }
     }
     
@@ -253,6 +263,10 @@ impl MetadataSource for MetadataBuilder {
 
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {
         self.find_in_self_or_refs(move |metadata| metadata.get_type_decl(id))
+    }
+
+    fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_type_name(id))
     }
 
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
