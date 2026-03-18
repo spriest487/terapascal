@@ -267,7 +267,7 @@ impl Vm {
             ir::Type::Function(..) => DynValue::Function(ir::FunctionID(usize::MAX)),
 
             _ => {
-                let pretty_type = self.metadata.pretty_ty_name(ty);
+                let pretty_type = self.metadata.pretty_type_name(ty);
                 let msg = format!("can't initialize default value of type {pretty_type}");
                 return Err(ExecError::illegal_state(msg));
             },
@@ -705,7 +705,7 @@ impl Vm {
 
             self.call_and_store(func_id, &[val.clone()], None)?;
         } else if self.opts.trace_rc {
-            eprintln!("[rc] no dtor for {}", self.metadata.pretty_ty_name(ty));
+            eprintln!("[rc] no dtor for {}", self.metadata.pretty_type_name(ty));
         }
 
         Ok(())

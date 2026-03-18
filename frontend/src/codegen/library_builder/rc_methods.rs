@@ -3,6 +3,7 @@ use crate::codegen::library_builder::LibraryBuilder;
 use std::collections::HashMap;
 use terapascal_ir as ir;
 use terapascal_ir::InstructionBuilder;
+use terapascal_ir::MetadataSource;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct RcMethodInfo {
@@ -37,7 +38,7 @@ fn gen_release_func(
 
     let debug_name = lib
         .opts().debug
-        .then(|| format!("<generated RC release for {}>", lib.metadata().pretty_ty_name(ty)));
+        .then(|| format!("<generated RC release for {}>", lib.metadata().pretty_type_name(ty)));
 
     let func_id = create_rc_func(lib, ty, body, debug_name);
 
@@ -81,7 +82,7 @@ fn gen_retain_func(
 
     let debug_name = lib
         .opts().debug
-        .then(|| format!("<generated RC retain for {}>", lib.metadata().pretty_ty_name(ty)));
+        .then(|| format!("<generated RC retain for {}>", lib.metadata().pretty_type_name(ty)));
 
     let func_id = create_rc_func(lib, ty, body, debug_name);
 

@@ -228,7 +228,7 @@ impl Metadata {
             if self.type_info.contains_key(ty) {
                 panic!(
                     "duplicate RTTI definitions for type {}",
-                    self.pretty_ty_name(ty)
+                    self.pretty_type_name(ty)
                 );
             }
 
@@ -648,7 +648,7 @@ impl MetadataSource for Metadata {
 
 impl<T: MetadataSource> IRFormatter for T {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
-        write!(f, "{}", self.pretty_ty_name(ty))
+        write!(f, "{}", self.pretty_type_name(ty))
     }
 
     fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result {
@@ -666,7 +666,7 @@ impl<T: MetadataSource> IRFormatter for T {
         match val {
             Value::Ref(r) => self.format_ref(r, f),
             Value::SizeOf(ty) => {
-                write!(f, "sizeof({})", self.pretty_ty_name(ty))
+                write!(f, "sizeof({})", self.pretty_type_name(ty))
             },
             _ => RawInstructionFormatter.format_val(val, f),
         }

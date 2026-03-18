@@ -1250,7 +1250,7 @@ impl<'a> LibraryBuilder<'a> {
             return existing;
         }
 
-        assert!(self.metadata().is_defined(ty), "gen_runtime_type: type {} ({:?}) is not defined yet", self.metadata().pretty_ty_name(ty), ty);
+        assert!(self.metadata().is_defined(ty), "gen_runtime_type: type {} ({:?}) is not defined yet", self.metadata().pretty_type_name(ty), ty);
         
         let flags = ir::TypeInfo::type_runtime_flags(ty);
 
@@ -1258,7 +1258,7 @@ impl<'a> LibraryBuilder<'a> {
         let mut rtti = ir::TypeInfo::new(None, flags);
         
         if self.opts.debug && self.opts.rtti {
-            rtti.debug_name = Some(self.metadata().pretty_ty_name(&ty).into_owned());
+            rtti.debug_name = Some(self.metadata().pretty_type_name(&ty).into_owned());
         }
 
         self.metadata.insert_type_info(ty.clone(), rtti)
@@ -1641,7 +1641,7 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
     let dtor_body = dtor_builder.finish();
 
     let dtor_debug_name = lib.opts.debug.then(|| {
-        format!("generated dtor for {}", lib.metadata.pretty_ty_name(array_type))
+        format!("generated dtor for {}", lib.metadata.pretty_type_name(array_type))
     });
 
     lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
@@ -1737,7 +1737,7 @@ fn gen_class_dtor(
     runtime_type.dtor = Some(dtor_id);
 
     let dtor_debug_name = lib.opts.debug
-        .then(|| format!("generated dtor for {}", lib.metadata.pretty_ty_name(&class_ty)));
+        .then(|| format!("generated dtor for {}", lib.metadata.pretty_type_name(&class_ty)));
 
     lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
         debug_name: dtor_debug_name,

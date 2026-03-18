@@ -53,9 +53,9 @@ impl MethodImplFunc {
             vcall_wrapper_decl: FunctionDecl {
                 comment: Some(format!(
                     "virtual call wrapper impl of {}.{} for {}",
-                    metadata.pretty_ty_name(&iface_ty),
+                    metadata.pretty_type_name(&iface_ty),
                     iface_method.name,
-                    metadata.pretty_ty_name(&self_class.to_ir_type(module)),
+                    metadata.pretty_type_name(&self_class.to_ir_type(module)),
                 )),
                 name: vcall_wrapper_name,
                 params: wrapper_param_tys,
@@ -230,13 +230,13 @@ impl Class {
         let runtime_type = metadata
             .get_type_info(&class_ty)
             .unwrap_or_else(|| {
-                panic!("missing runtime type for class {}", metadata.pretty_ty_name(&class_ty))
+                panic!("missing runtime type for class {}", metadata.pretty_type_name(&class_ty))
             });
 
         let comment = runtime_type
             .get_name_string(metadata)
             .map(|name| name.clone())
-            .unwrap_or_else(|| metadata.pretty_ty_name(&class_ty).to_string());
+            .unwrap_or_else(|| metadata.pretty_type_name(&class_ty).to_string());
 
         let typeinfo_name = global_typeinfo_decl_name(metadata, &class_ty);
 

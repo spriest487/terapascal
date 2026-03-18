@@ -110,7 +110,7 @@ pub trait MetadataSource {
             .chain(method_tags)
     }
 
-    fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
+    fn pretty_type_name(&self, ty: &Type) -> Cow<'_, str> {
         match ty {
             Type::Struct(id) | Type::Variant(id) => match self.get_type_decl(*id) {
                 Some(TypeDecl::Forward(name)) => {
@@ -125,7 +125,7 @@ pub trait MetadataSource {
             },
 
             Type::Array { element, dim } => {
-                let elem_name = self.pretty_ty_name(element);
+                let elem_name = self.pretty_type_name(element);
                 Cow::Owned(format!("array [{}] of {}", dim, elem_name))
             },
 
@@ -147,9 +147,9 @@ pub trait MetadataSource {
                 Cow::Owned(text)
             },
 
-            Type::Pointer(ty) => Cow::Owned(format!("^{}", self.pretty_ty_name(ty))),
+            Type::Pointer(ty) => Cow::Owned(format!("^{}", self.pretty_type_name(ty))),
 
-            Type::TempRef(ty) => Cow::Owned(format!("&{}", self.pretty_ty_name(ty))),
+            Type::TempRef(ty) => Cow::Owned(format!("&{}", self.pretty_type_name(ty))),
 
             Type::Flags(id) => {
                 let name = match self.get_type_decl(*id) {
@@ -177,14 +177,14 @@ pub trait MetadataSource {
                 None => format!("closure of {}", func_ty_id),
             }),
 
-            ObjectID::Class(struct_id) => self.pretty_ty_name(&Type::Struct(*struct_id)),
+            ObjectID::Class(struct_id) => self.pretty_type_name(&Type::Struct(*struct_id)),
 
             ObjectID::Array(element_type) => {
-                Cow::Owned(format!("array of {}", self.pretty_ty_name(element_type)))
+                Cow::Owned(format!("array of {}", self.pretty_type_name(element_type)))
             },
 
             ObjectID::Box(element_type) => {
-                Cow::Owned(format!("box of {}", self.pretty_ty_name(element_type)))
+                Cow::Owned(format!("box of {}", self.pretty_type_name(element_type)))
             },
         }
     }
@@ -199,11 +199,11 @@ pub trait MetadataSource {
                 pretty.push_str("; ");
             }
 
-            pretty.push_str(self.pretty_ty_name(param_ty).as_ref());
+            pretty.push_str(self.pretty_type_name(param_ty).as_ref());
         }
 
         pretty.push_str("): ");
-        pretty.push_str(self.pretty_ty_name(&sig.return_ty).as_ref());
+        pretty.push_str(self.pretty_type_name(&sig.return_ty).as_ref());
 
         pretty
     }

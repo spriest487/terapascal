@@ -88,7 +88,7 @@ impl Pointer {
         let width = size_of::<usize>() * 2;
 
         if self.ty != ir::Type::Nothing {
-            let ty_pretty_name = metadata.pretty_ty_name(&self.ty);
+            let ty_pretty_name = metadata.pretty_type_name(&self.ty);
 
             format!("0x{:0WIDTH$x} ({})", self.addr, ty_pretty_name, WIDTH = width)
         } else {

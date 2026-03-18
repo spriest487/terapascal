@@ -26,7 +26,6 @@ use crate::VariantDef;
 use crate::RESERVED_STRINGS;
 use crate::RESERVED_TYPES;
 use linked_hash_map::LinkedHashMap;
-use std::borrow::Cow;
 use std::iter;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -104,10 +103,6 @@ impl MetadataBuilder {
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
     }
-
-    pub fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
-        self.metadata.pretty_ty_name(ty)
-    }
     
     pub fn new_variable(&mut self, name: NamePath, ty: Type) -> VariableID {
         let id = self.next_variable_id;
@@ -127,6 +122,21 @@ impl MetadataBuilder {
     }
     
     pub fn build(mut self) -> Metadata {
+        // remove reserved type decls - if they weren't defined, they must either be unused
+        // or defined in another library
+        let reserved_type_ids: Vec<_> = self.metadata.type_decls
+            .iter()
+            .filter_map(|(id, decl)| {
+                match decl {
+                    TypeDecl::Reserved => Some(*id),
+                    _ => None,
+                }
+            })
+            .collect();
+        for type_id in reserved_type_ids {
+            self.metadata.type_decls.remove(&type_id);
+        }
+
         self.sort_type_defs_by_deps();
         
         self.metadata

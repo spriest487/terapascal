@@ -165,9 +165,9 @@ impl fmt::Display for Library {
                 let sig_params: Vec<_> = method
                     .params
                     .iter()
-                    .map(|param| self.metadata.pretty_ty_name(param))
+                    .map(|param| self.metadata.pretty_type_name(param))
                     .collect();
-                let return_ty = self.metadata.pretty_ty_name(&method.return_ty);
+                let return_ty = self.metadata.pretty_type_name(&method.return_ty);
 
                 let sig = format!("function ({}): {}", sig_params.join("; "), return_ty);
 
@@ -180,7 +180,7 @@ impl fmt::Display for Library {
 
         writeln!(f, "* Global Variables")?;
         for (var_id, var_info) in self.metadata.variables() {
-            writeln!(f, "{}: {} ({})", var_id.0, self.metadata.pretty_ty_name(&var_info.r#type), var_info.name)?;
+            writeln!(f, "{}: {} ({})", var_id.0, self.metadata.pretty_type_name(&var_info.r#type), var_info.name)?;
         }
         writeln!(f)?;
         

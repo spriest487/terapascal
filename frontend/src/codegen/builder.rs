@@ -77,7 +77,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
     fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         if ty.is_object() {
             if self.opts().debug {
-                self.comment(format!("release: {}", self.metadata().pretty_ty_name(ty)));
+                self.comment(format!("release: {}", self.metadata().pretty_type_name(ty)));
             }
 
             self.release(at, ty.is_weak(), Ref::Discard);
@@ -90,7 +90,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         };
 
         if self.opts().debug {
-            self.comment(format!("release_deep: {}", self.metadata().pretty_ty_name(ty)));
+            self.comment(format!("release_deep: {}", self.metadata().pretty_type_name(ty)));
         }
 
         let at_ref = self.make_ref_local(at, ty);
@@ -101,7 +101,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
     fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         if ty.is_object() {
             if self.opts().debug {
-                self.comment(format!("retain: {}", self.metadata().pretty_ty_name(ty)));
+                self.comment(format!("retain: {}", self.metadata().pretty_type_name(ty)));
             }
             
             self.retain(at, ty.is_weak());
@@ -114,7 +114,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         };
 
         if self.opts().debug {
-            self.comment(format!("retain_deep: {}", self.metadata().pretty_ty_name(ty)));
+            self.comment(format!("retain_deep: {}", self.metadata().pretty_type_name(ty)));
         }
 
         let at_ref = self.make_ref_local(at, ty);
@@ -358,7 +358,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     pub fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
-        self.library.metadata().pretty_ty_name(ty)
+        self.library.metadata().pretty_type_name(ty)
     }
 
     pub fn find_or_insert_string(&mut self, s: &str) -> StringID {

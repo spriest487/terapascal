@@ -190,9 +190,9 @@ impl NativeHeap {
         if trace && self.trace_allocs {
             if trace {
                 let ty_name = if count > 1 {
-                    Cow::Owned(format!("array[{count}] of {}", self.metadata.pretty_ty_name(&alloc_type)))
+                    Cow::Owned(format!("array[{count}] of {}", self.metadata.pretty_type_name(&alloc_type)))
                 } else {
-                    self.metadata.pretty_ty_name(&alloc_type)
+                    self.metadata.pretty_type_name(&alloc_type)
                 };
 
                 eprintln!("[heap] alloc @ 0x{:0width$x} ({ty_name}: {total_len} bytes)", addr, width = POINTER_FMT_WIDTH);
@@ -231,9 +231,9 @@ impl NativeHeap {
             let len = alloc.memory.len();
 
             let ty_name = if count > 1 {
-                Cow::Owned(format!("array[{count}] of {}", self.metadata.pretty_ty_name(&alloc.alloc_type)))
+                Cow::Owned(format!("array[{count}] of {}", self.metadata.pretty_type_name(&alloc.alloc_type)))
             } else {
-                self.metadata.pretty_ty_name(&alloc.alloc_type)
+                self.metadata.pretty_type_name(&alloc.alloc_type)
             };
 
             eprintln!("[heap] free @ 0x{:0width$x} ({ty_name}: {len} bytes)", ptr.addr, width = POINTER_FMT_WIDTH);
@@ -298,6 +298,7 @@ impl NativeHeap {
 
         Err(NativeHeapError::Leak(self.allocs
             .iter()
+            .filter(|(_, alloc)| alloc.trace)
             .map(|(addr, alloc)| {
                 LeakDetails {
                     addr: *addr,

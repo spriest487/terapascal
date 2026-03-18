@@ -1,6 +1,7 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
-use crate::TypeDefID;
 use crate::ArgID;
+use crate::MetadataSource;
+use crate::TypeDefID;
 
 pub fn gen_class_object_dtor_body<B>(builder: &mut B, class_id: TypeDefID, self_param: ArgID) -> bool
 where
@@ -8,7 +9,7 @@ where
 {
     let class_ty = class_id.to_class_ptr_type();
 
-    let class_pretty_name = builder.metadata().pretty_ty_name(&class_ty).into_owned();
+    let class_pretty_name = builder.metadata().pretty_type_name(&class_ty);
 
     // we have to do this loop manually, because the "self" reference in a class method is
     // meant to be immutable (it's illegal to reference it even via an immutable reference in CIL).
