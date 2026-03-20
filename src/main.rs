@@ -105,8 +105,7 @@ fn compile(args: Args) -> Result<(), RunError> {
         project_name: args.project_name.clone(),
         search_dirs: args.search_dirs.clone(),
         output_stage: args.print_stage.unwrap_or(BuildStage::Codegen),
-        main_path: args.file.clone(),
-        unit_paths: args.units.clone(),
+        source_path: args.file.clone(),
     };
     
     let output = build(&DefaultFilesystem, input);

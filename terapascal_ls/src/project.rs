@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use terapascal_build::error::BuildError;
-use terapascal_build::parse_units;
+use terapascal_build::parse_sources;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildStage;
 use terapascal_build::ParseOutput;
@@ -121,7 +121,7 @@ impl Project {
 
         // todo: make search dirs and compiler options configurable
         let input = BuildInput {
-            main_path: self.main_file.clone(),
+            source_path: self.main_file.clone(),
             unit_paths: vec![],
             compile_opts: opts,
             codegen_opts: CodegenOpts::default(),
@@ -136,7 +136,7 @@ impl Project {
         };
 
         let parse_start_time = Instant::now();
-        let parse_result = parse_units(filesystem, &input, &mut log);
+        let parse_result = parse_sources(filesystem, &input, &mut log);
         eprintln!("[build] parsing complete: {}ms", Instant::now()
             .duration_since(parse_start_time)
             .as_millis());

@@ -22,6 +22,7 @@ mod type_name_pattern;
 pub mod typedecl;
 pub mod unit;
 pub mod util;
+pub mod package;
 
 use crate::IntConstant;
 pub use block::*;

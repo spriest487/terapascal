@@ -53,7 +53,7 @@ pub fn build_assembly(
         let cwd = env::current_dir()?;
         out_path = cwd.join(out_path);
     }
-    
+
     if verbose {
         println!("terapascal2cil tool directory: {}", tool_dir.display());
         println!("terapascal2cil output path: {}", out_path.display());

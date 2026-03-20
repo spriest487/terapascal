@@ -10,7 +10,7 @@ use terapascal_common::DiagnosticOutput;
 use terapascal_common::Severity;
 use terapascal_common::TracedError;
 use terapascal_frontend::ast::IdentPath;
-use terapascal_frontend::ast::UnitKind;
+use terapascal_frontend::ast::MainUnitKind;
 use terapascal_frontend::parse::ParseError;
 use terapascal_frontend::pp::error::PreprocessorError;
 use terapascal_frontend::typ::TypeError;
@@ -38,7 +38,7 @@ pub enum BuildError {
     },
     UnexpectedMainUnit {
         unit_path: PathBuf,
-        unit_kind: UnitKind,
+        unit_kind: MainUnitKind,
         existing_ident: Option<IdentPath>,
     },
     CircularDependency {

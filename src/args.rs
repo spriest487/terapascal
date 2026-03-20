@@ -51,10 +51,6 @@ pub struct Args {
     #[structopt(long="strip", default_value = "unused-impl", parse(try_from_str = parse_strip_mode))]
     pub strip: StripMode,
 
-    /// additional units to compile
-    #[structopt(long = "units", short = "u")]
-    pub units: Vec<PathBuf>,
-
     /// source dir for unit source files
     #[structopt(long = "search-dir", short = "s", parse(from_os_str))]
     pub search_dirs: Vec<PathBuf>,

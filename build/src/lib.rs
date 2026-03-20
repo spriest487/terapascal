@@ -11,22 +11,28 @@ use std::path::PathBuf;
 use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::Filesystem;
+use terapascal_common::span::Span;
 use terapascal_common::version::Version;
 use terapascal_common::CompileOpts;
-use terapascal_common::{TracedError, SRC_FILE_DEFAULT_EXT};
+use terapascal_common::TracedError;
+use terapascal_common::SRC_FILE_DEFAULT_EXT;
 use terapascal_frontend::ast;
-use terapascal_frontend::ast::IdentPath;
+use terapascal_frontend::ast::package::PackageUnit;
 use terapascal_frontend::ast::UnitKind;
+use terapascal_frontend::ast::UseDeclItem;
+use terapascal_frontend::ast::{IdentPath, MainUnitKind};
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::codegen_ir;
 use terapascal_frontend::parse;
 use terapascal_frontend::parse::ParseError;
+use terapascal_frontend::parse::Parser;
 use terapascal_frontend::pp::PreprocessedUnit;
 use terapascal_frontend::tokenize;
 use terapascal_frontend::typ;
 use terapascal_frontend::typ::builtin_ident;
 use terapascal_frontend::typ::SYSTEM_UNIT_NAME;
 use terapascal_frontend::typecheck;
+use terapascal_frontend::TokenStream;
 use topological_sort::TopologicalSort;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
@@ -39,8 +45,7 @@ pub enum BuildStage {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BuildInput {
-    pub main_path: PathBuf,
-    pub unit_paths: Vec<PathBuf>,
+    pub source_path: PathBuf,
 
     pub search_dirs: Vec<PathBuf>,
 
@@ -71,49 +76,229 @@ pub struct ParseOutput {
     pub units: LinkedHashMap<PathBuf, ast::Unit>,
 }
 
-pub fn create_source_collection<'fs, Fs: Filesystem>(
-    fs: &'fs Fs,
-    input: &BuildInput,
-    log: &mut BuildLog,
-) -> BuildResult<SourceCollection<'fs, Fs>> {
-    let mut sources = SourceCollection::new(fs, &input.search_dirs, input.compile_opts.verbose)?;
+struct ProjectLoader<'a, Fs: Filesystem> {
+    main_unit_name: Option<IdentPath>,
 
-    for unit_path in input.unit_paths.iter() {
-        sources.add(&unit_path, None, log)?;
+    input: &'a BuildInput,
+    log: &'a mut BuildLog,
+
+    sources: SourceCollection<'a, Fs>,
+
+    used_unit_paths: HashMap<IdentPath, PathBuf>,
+    dep_sort: TopologicalSort<IdentPath>,
+}
+
+impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
+    fn new(
+        fs: &'a Fs,
+        input: &'a BuildInput,
+        log: &'a mut BuildLog,
+    ) -> BuildResult<Self> {
+        let mut sources = SourceCollection::new(fs, &input.search_dirs, input.compile_opts.verbose)?;
+        sources.add(&input.source_path, None, log)?;
+
+        if input.compile_opts.verbose {
+            log.trace("Unit source directories:");
+            for path in sources.source_dirs() {
+                log.trace(format!("\t{}", path.display()));
+            }
+        }
+
+        Ok(Self {
+            main_unit_name: None,
+
+            input,
+            log,
+
+            sources,
+
+            used_unit_paths: HashMap::new(),
+            dep_sort: TopologicalSort::new(),
+        })
     }
 
-    sources.add(&input.main_path, None, log)?;
+    fn process_used_units(
+        &mut self,
+        unit_filename: &PathBuf,
+        unit_ident: &IdentPath,
+        is_main_unit: bool,
+        uses_units: impl IntoIterator<Item=UseDeclItem>,
+    ) -> BuildResult<()> {
+        for used_unit in uses_units {
+            // project units can load other units. without a project unit, each unit to be included
+            // in compilation must be included in the units compiler arg
+            if !self.used_unit_paths.contains_key(&used_unit.ident) {
+                if !is_main_unit {
+                    return Err(BuildError::UnitNotLoaded {
+                        unit_name: used_unit.ident.clone(),
+                    });
+                }
 
-    if input.compile_opts.verbose {
-        log.trace("Unit source directories:");
-        for path in sources.source_dirs() {
-            log.trace(format!("\t{}", path.display()));
+                if self.input.compile_opts.verbose {
+                    self.log.trace(format!("unit {} used from {}", used_unit, unit_ident));
+                }
+
+                let used_unit_path = match used_unit.path {
+                    Some(path) => {
+                        let filename = PathBuf::from(path);
+                        self.sources.add_used_unit_in_file(
+                            &unit_filename,
+                            &used_unit.ident,
+                            &filename,
+                            self.log,
+                        )?
+                    },
+
+                    None => {
+                        self.sources.add_used_unit(&unit_filename, &used_unit.ident, self.log)?
+                    },
+                };
+
+                self.add_unit_path(&used_unit.ident, &used_unit_path)?;
+            }
+
+            self.add_unit_dep(&unit_ident, &used_unit.ident)?;
+        }
+
+        Ok(())
+    }
+
+    fn add_unit_dep(
+        &mut self,
+        unit_ident: &IdentPath,
+        used_unit: &IdentPath,
+    ) -> BuildResult<()> {
+        if self.input.compile_opts.verbose {
+            self.log.trace(format!("Unit dependency: {unit_ident} -> {used_unit}"));
+        }
+
+        self.dep_sort.add_dependency(used_unit.clone(), unit_ident.clone());
+
+        // check for cycles
+        if self.dep_sort.peek().is_none() {
+            return Err(BuildError::CircularDependency {
+                unit_ident: unit_ident.clone(),
+                used_unit: used_unit.clone(),
+                span: used_unit.path_span(),
+            });
+        }
+
+        Ok(())
+    }
+
+    fn add_unit_path(&mut self,
+        unit_ident: &IdentPath,
+        unit_path: &PathBuf,
+    ) -> Result<(), BuildError> {
+        match self.used_unit_paths.entry(unit_ident.clone()) {
+            Entry::Occupied(occupied_ident_filename) => {
+                // the same unit can't be loaded from two separate filenames. it might
+                // already be in the filename map because we insert the builtin units ahead
+                // of time
+                if *occupied_ident_filename.get() != *unit_path {
+                    Err(BuildError::DuplicateUnit {
+                        unit_ident: occupied_ident_filename.key().clone(),
+                        new_path: unit_path.clone(),
+                        existing_path: occupied_ident_filename.get().to_path_buf(),
+                    })
+                } else {
+                    Ok(())
+                }
+            },
+
+            Entry::Vacant(vacant_ident_filename) => {
+                if self.input.compile_opts.verbose {
+                    self.log.trace(format!("{}: adding filename {}", vacant_ident_filename.key(), unit_path.display()))
+                }
+
+                vacant_ident_filename.insert(unit_path.clone());
+
+                Ok(())
+            },
         }
     }
-    
-    Ok(sources)
+
+    fn try_set_main_unit(&mut self,
+        unit_path: &PathBuf,
+        unit_ident: &IdentPath,
+        kind: MainUnitKind,
+    ) -> BuildResult<()> {
+        if let Some(prev_ident) = &self.main_unit_name {
+            return Err(BuildError::UnexpectedMainUnit {
+                existing_ident: Some(prev_ident.clone()),
+                unit_path: unit_path.clone(),
+                unit_kind: kind,
+            });
+        }
+
+        self.main_unit_name = Some(unit_ident.clone());
+        Ok(())
+    }
+
+    fn version(&self) -> Version {
+        self.input.project_version.unwrap_or_else(|| Version::new(0, 1, 0))
+    }
+
+    fn name(&self) -> BuildResult<String> {
+        match self.input.project_name.clone() {
+            None => {
+                self.project_name_from_main_unit()
+            }
+
+            Some(name) if name.is_empty() || name.chars().all(char::is_whitespace) => {
+                self.project_name_from_main_unit()
+            }
+
+            Some(name) => {
+                Ok(name.trim().to_string())
+            },
+        }
+    }
+
+    fn project_name_from_main_unit(&self) -> BuildResult<String> {
+        if let Some(name) = &self.main_unit_name {
+            return Ok(name.to_string());
+        }
+
+        let unit_filename = self.input.source_path.file_stem().ok_or_else(|| {
+            BuildError::ReadSourceFileFailed {
+                path: self.input.source_path.clone(),
+                msg: "unable to determine project name from unit path".to_string(),
+            }
+        })?;
+
+        let name_from_filename = unit_filename.to_string_lossy().to_string();
+        if self.input.compile_opts.verbose {
+            eprintln!("no main unit found, inferring project name from filename: {}", name_from_filename);
+        }
+        Ok(name_from_filename)
+    }
 }
 
 pub fn preprocess_project(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog) -> BuildResult<Vec<PreprocessedUnit>> {
-    let mut sources = create_source_collection(fs, input, log)?;
+    let mut loader = ProjectLoader::new(fs, input, log)?;
 
     let mut pp_units = Vec::new();
-    while let Some(source_path) = sources.next() {
+    while let Some(source_path) = loader.sources.next() {
         let pp_unit = preprocess(fs, &source_path, input.compile_opts.clone())?;
         pp_units.push(pp_unit);
     }
-    
+
     Ok(pp_units)
 }
 
-pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog) -> BuildResult<ParseOutput> {
+pub fn parse_sources(
+    fs: &impl Filesystem,
+    input: &BuildInput,
+    log: &mut BuildLog,
+) -> BuildResult<ParseOutput> {
     let verbose = input.compile_opts.verbose;
 
-    let mut sources = create_source_collection(fs, input, log)?;
+    let mut project = ProjectLoader::new(fs, input, log)?;
 
     // auto-add system units if we're going beyond parsing
     let include_system = input.output_stage >= BuildStage::Typecheck;
-    
+
     let system_units = [
         IdentPath::from_parts([builtin_ident(SYSTEM_UNIT_NAME)])  
     ];
@@ -125,7 +310,7 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
             let filename = PathBuf::from(stdlib_unit.to_string())
                 .with_extension(SRC_FILE_DEFAULT_EXT);
 
-            let unit_path = sources.add(&filename, None, log)?;
+            let unit_path = project.sources.add(&filename, None, &mut project.log)?;
             
             system_paths.push(unit_path);
         }
@@ -133,10 +318,6 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
 
     // files parsed in the order specified, either by the project unit or on the command line
     let mut parsed_units: LinkedHashMap<PathBuf, ast::Unit> = LinkedHashMap::new();
-
-    let mut dep_sort = TopologicalSort::<IdentPath>::new();
-
-    let mut main_ident = None;
 
     // map of canonical paths by unit names. each unit must have exactly one source path, to ensure
     // we don't try to load two units with the same name at different locations
@@ -147,7 +328,7 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
     }
 
     loop {
-        let unit_filename = match sources.next() {
+        let unit_filename = match project.sources.next() {
             None => break,
             Some(f) => f,
         };
@@ -163,16 +344,34 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
 
             None => {
                 if verbose {
-                    log.trace(format!("parsing unit @ `{}`", unit_filename.display()));
+                    project.log.trace(format!("parsing unit @ `{}`", unit_filename.display()));
                 }
 
                 let pp_unit = preprocess(fs, &unit_filename, input.compile_opts.clone())?;
 
                 for warning in pp_unit.warnings.clone() {
-                    log.diagnostic(warning);
+                    project.log.diagnostic(warning);
                 }
 
                 let tokens = tokenize(pp_unit)?;
+
+                if PackageUnit::is_package(&tokens) {
+                    let file_span = Span::zero(unit_filename.clone());
+                    let parser = Parser::new(TokenStream::new(tokens, file_span));
+                    let package_unit = PackageUnit::parse(parser)?;
+
+                    project.try_set_main_unit(&unit_filename, &package_unit.name, MainUnitKind::Package)?;
+
+                    if let Some(package_contains) = package_unit.contains {
+                        project.process_used_units(
+                            &unit_filename,
+                            &package_unit.name,
+                            true,
+                            package_contains.units,
+                        )?;
+                    }
+                    continue;
+                }
 
                 // if the unit is parsed to completion with errors, add the errors to the log
                 // and continue with the partially parsed unit
@@ -182,7 +381,7 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
                         ParseError::UnitWithErrors(err) => {
                             let (unit, errors) = err.unwrap();
                             for error in errors {
-                                log.diagnostic(error);
+                                project.log.diagnostic(error);
                             }
                             
                             unit
@@ -197,9 +396,8 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
                     }
                 };
 
-                add_unit_path(&parsed_unit.ident, &unit_filename, &mut used_unit_paths, verbose, log)?;
-
-                dep_sort.insert(parsed_unit.ident.clone());
+                project.add_unit_path(&parsed_unit.ident, &unit_filename)?;
+                project.dep_sort.insert(parsed_unit.ident.clone());
 
                 parsed_units.insert(unit_filename.clone(), parsed_unit);
                 &parsed_units[&unit_filename]
@@ -211,15 +409,10 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
         let is_main_unit = matches!(unit.kind, UnitKind::Program | UnitKind::Library);
 
         if is_main_unit {
-            if let Some(prev_ident) = main_ident {
-                return Err(BuildError::UnexpectedMainUnit {
-                    existing_ident: Some(prev_ident),
-                    unit_path: unit_filename,
-                    unit_kind: unit.kind,
-                });
-            }
-
-            main_ident = Some(unit.ident.clone());
+            project.try_set_main_unit(&unit_filename, &unit.ident, match unit.kind {
+                UnitKind::Library => MainUnitKind::Library,
+                _ => MainUnitKind::Program,
+            })?;
         }
 
         let uses_units: Vec<_> = unit
@@ -231,44 +424,13 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
             .flat_map(|uses| uses.units)
             .collect();
 
-        for used_unit in uses_units {
-            // project units can load other units. without a project unit, each unit to be included
-            // in compilation must be included in the units compiler arg
-            if !used_unit_paths.contains_key(&used_unit.ident) {
-                if is_main_unit {
-                    if input.compile_opts.verbose {
-                        log.trace(format!("unit {} used from {}", used_unit, unit_ident));
-                    }
-
-                    let used_unit_path = match used_unit.path {
-                        Some(path) => {
-                            let filename = PathBuf::from(path);
-                            sources.add_used_unit_in_file(
-                                &unit_filename,
-                                &used_unit.ident,
-                                &filename,
-                                log,
-                            )?
-                        },
-
-                        None => {
-                            sources.add_used_unit(&unit_filename, &used_unit.ident, log)?
-                        },
-                    };
-
-                    add_unit_path(&used_unit.ident, &used_unit_path, &mut used_unit_paths, verbose, log)?;
-                } else {
-                    return Err(BuildError::UnitNotLoaded {
-                        unit_name: used_unit.ident.clone(),
-                    });
-                }
-            }
-
-            add_unit_dep(&unit_ident, &used_unit.ident, &mut dep_sort, log, verbose)?;
-        }
+        project.process_used_units(&unit_filename, &unit_ident, is_main_unit, uses_units)?;
     }
+
+    let project_name = project.name()?;
+    let project_version = project.version();
     
-    let mut sorted_unit_names: Vec<_> = dep_sort.collect();
+    let mut sorted_unit_names: Vec<_> = project.dep_sort.collect();
     sorted_unit_names.reverse();
 
     let mut sorted_units = LinkedHashMap::new();    
@@ -281,110 +443,17 @@ pub fn parse_units(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog)
     drop(parsed_units);
 
     if verbose {
-        log.trace("Compilation units:");
+        project.log.trace("Compilation units:");
         for (unit_path, unit) in &sorted_units {
-            log.trace(format!("\t{} in '{}'", unit.ident, unit_path.display()));
+            project.log.trace(format!("\t{} in '{}'", unit.ident, unit_path.display()));
         }
     }
-
-    let project_name = match input.project_name.clone() {
-        None => {
-            project_name_from_main_unit(input, main_ident.as_ref())?
-        }
-
-        Some(name) if name.is_empty() || name.chars().all(char::is_whitespace) => {
-            project_name_from_main_unit(input, main_ident.as_ref())?
-        }
-
-        Some(name) => name.trim().to_string(),
-    };
-
-    let project_version = input.project_version.unwrap_or_else(|| Version::new(0, 1, 0));
 
     Ok(ParseOutput {
         project_name,
         project_version,
         units: sorted_units,
     })
-}
-
-fn project_name_from_main_unit(input: &BuildInput, main_ident: Option<&IdentPath>) -> BuildResult<String> {
-    if let Some(main_ident) = main_ident {
-        return Ok(main_ident.to_string());
-    }
-
-    let unit_filename = input.main_path.file_stem().ok_or_else(|| {
-        BuildError::ReadSourceFileFailed {
-            path: input.main_path.clone(),
-            msg: "unable to determine project name from unit path".to_string(),
-        }
-    })?;
-
-    let name_from_filename = unit_filename.to_string_lossy().to_string();
-    if input.compile_opts.verbose {
-        eprintln!("no main unit found, inferring project name from filename: {}", name_from_filename);
-    }
-    Ok(name_from_filename)
-}
-
-fn add_unit_dep(
-    unit_ident: &IdentPath,
-    used_unit: &IdentPath,
-    dep_sort: &mut TopologicalSort<IdentPath>,
-    log: &mut BuildLog,
-    verbose: bool,
-) -> BuildResult<()> {
-    if verbose {
-        log.trace(format!("Unit dependency: {unit_ident} -> {used_unit}"));
-    }
-    
-    dep_sort.add_dependency(used_unit.clone(), unit_ident.clone());
-
-    // check for cycles
-    if dep_sort.peek().is_none() {
-        return Err(BuildError::CircularDependency {
-            unit_ident: unit_ident.clone(),
-            used_unit: used_unit.clone(),
-            span: used_unit.path_span(),
-        });
-    }
-
-    Ok(())
-}
-
-fn add_unit_path(
-    unit_ident: &IdentPath,
-    unit_path: &PathBuf,
-    unit_paths: &mut HashMap<IdentPath, PathBuf>,
-    verbose: bool,
-    log: &mut BuildLog,
-) -> Result<(), BuildError> {
-    match unit_paths.entry(unit_ident.clone()) {
-        Entry::Occupied(occupied_ident_filename) => {
-            // the same unit can't be loaded from two separate filenames. it might
-            // already be in the filename map because we insert the builtin units ahead
-            // of time
-            if *occupied_ident_filename.get() != *unit_path {
-                Err(BuildError::DuplicateUnit {
-                    unit_ident: occupied_ident_filename.key().clone(),
-                    new_path: unit_path.clone(),
-                    existing_path: occupied_ident_filename.get().to_path_buf(),
-                })
-            } else {
-                Ok(())
-            }
-        },
-
-        Entry::Vacant(vacant_ident_filename) => {
-            if verbose {
-                log.trace(format!("{}: adding filename {}", vacant_ident_filename.key(), unit_path.display()))
-            }
-            
-            vacant_ident_filename.insert(unit_path.clone());
-
-            Ok(())
-        },
-    }
 }
 
 pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
@@ -410,7 +479,7 @@ fn build_with_log(
         return Ok(BuildArtifact::PreprocessedText(units));
     }
 
-    let parse_output = parse_units(fs, &input, log)?;
+    let parse_output = parse_sources(fs, &input, log)?;
 
     if input.output_stage == BuildStage::Parse {
         return Ok(BuildArtifact::ParsedUnits(parse_output));

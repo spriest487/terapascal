@@ -59,6 +59,23 @@ impl fmt::Display for UnitKind {
     }
 }
 
+#[derive(Eq, PartialEq, Hash, Copy, Clone, Debug)]
+pub enum MainUnitKind {
+    Library,
+    Program,
+    Package,
+}
+
+impl fmt::Display for MainUnitKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MainUnitKind::Program => write!(f, "program"),
+            MainUnitKind::Library => write!(f, "library"),
+            MainUnitKind::Package => write!(f, "package"),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Unit<A: Annotation = Span> {
     pub unit_kw: Option<Span>,
@@ -213,11 +230,11 @@ impl Unit<Span> {
                         let illegal = IllegalStatement(Box::new(bad_output));
                         parser.error(TracedError::trace(ParseError::ExprIsIllegal(illegal)));
                     }
-                    
+
                     let (block_begin, block_end) = block.begin_end
                         .as_ref()
                         .expect("parsed block must have delimiters");
-                    
+
                     let end_kw = match parser.tokens().match_one_maybe(Operator::Period) {
                         Some(tt) => block_end.to(&tt),
                         None => block_end.clone(),

@@ -1,7 +1,8 @@
+use crate::ast::package::PackageUnit;
 use crate::ast::Annotation;
 use crate::ast::Block;
-use crate::ast::FunctionDeclMod;
 use crate::ast::Expr;
+use crate::ast::FunctionDeclMod;
 use crate::ast::Stmt;
 use crate::ast::TypeArgList;
 use crate::ast::TypeIdentList;
@@ -9,6 +10,7 @@ use crate::ast::TypeName;
 use crate::ast::Unit;
 use crate::ast::WhereClause;
 use crate::parse::Matcher;
+use crate::result::ErrorContinue;
 use crate::TokenTree;
 use std::fmt;
 use terapascal_common::aggregate_err::AggregateError;
@@ -21,7 +23,6 @@ use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::Severity;
 use terapascal_common::TracedError;
-use crate::result::ErrorContinue;
 
 #[derive(Debug, Clone)]
 pub struct IllegalStatement<A: Annotation = Span>(pub Box<Expr<A>>);
@@ -110,6 +111,7 @@ pub enum ParseError {
     // item was parsable, but some of its internal items failed to parse
     BlockWithErrors(AggregateParseError<Block>),
     UnitWithErrors(AggregateParseError<Unit>),
+    PackageWithErrors(AggregateParseError<PackageUnit>),
 }
 
 impl ParseError {
@@ -189,6 +191,7 @@ impl Spanned for ParseError {
 
             ParseError::BlockWithErrors(err) => err.first.span(),
             ParseError::UnitWithErrors(err) => err.first.span(),
+            ParseError::PackageWithErrors(err) => err.first.span(),
         }
     }
 }
@@ -242,6 +245,7 @@ impl fmt::Display for ParseError {
 
             ParseError::BlockWithErrors(agg) => write!(f, "{}", agg.first.err),
             ParseError::UnitWithErrors(agg) => write!(f, "{}", agg.first.err),
+            ParseError::PackageWithErrors(agg) => write!(f, "{}", agg.first.err),
         }
     }
 }
@@ -354,6 +358,10 @@ impl DiagnosticOutput for ParseError {
             }
 
             ParseError::UnitWithErrors(agg) => {
+                agg.first_label_text()
+            }
+
+            ParseError::PackageWithErrors(agg) => {
                 agg.first_label_text()
             }
         };
