@@ -66,7 +66,7 @@ pub(crate) fn build_args_for_params(
 ) -> TypeResult<Vec<Expr>> {
     let mut checked_args = Vec::new();
 
-    let rest_params = if let Some(self_arg) = self_arg {
+    let rest_params = if let Some(self_arg) = self_arg && !params.is_empty() {
         if self_arg.annotation().value_kind().is_none() {
             panic!("build_args_for_params: self arg {} is not a value (at {})", self_arg, span)
         }
