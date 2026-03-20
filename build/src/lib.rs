@@ -18,9 +18,10 @@ use terapascal_common::TracedError;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
 use terapascal_frontend::ast;
 use terapascal_frontend::ast::package::PackageUnit;
+use terapascal_frontend::ast::IdentPath;
+use terapascal_frontend::ast::MainUnitKind;
 use terapascal_frontend::ast::UnitKind;
 use terapascal_frontend::ast::UseDeclItem;
-use terapascal_frontend::ast::{IdentPath, MainUnitKind};
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::codegen_ir;
 use terapascal_frontend::parse;
@@ -84,7 +85,13 @@ struct ProjectLoader<'a, Fs: Filesystem> {
 
     sources: SourceCollection<'a, Fs>,
 
+    // files parsed in the order specified, either by the project unit or on the command line
+    parsed_units: LinkedHashMap<PathBuf, ast::Unit>,
+
+    // map of canonical paths by unit names. each unit must have exactly one source path, to ensure
+    // we don't try to load two units with the same name at different locations
     used_unit_paths: HashMap<IdentPath, PathBuf>,
+
     dep_sort: TopologicalSort<IdentPath>,
 }
 
@@ -112,6 +119,8 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
 
             sources,
 
+            parsed_units: LinkedHashMap::new(),
+
             used_unit_paths: HashMap::new(),
             dep_sort: TopologicalSort::new(),
         })
@@ -121,21 +130,28 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
         &mut self,
         unit_filename: &PathBuf,
         unit_ident: &IdentPath,
-        is_main_unit: bool,
+        main_unit_kind: Option<MainUnitKind>,
         uses_units: impl IntoIterator<Item=UseDeclItem>,
     ) -> BuildResult<()> {
+        let is_package_unit = matches!(main_unit_kind, Some(MainUnitKind::Package));
+
         for used_unit in uses_units {
-            // project units can load other units. without a project unit, each unit to be included
-            // in compilation must be included in the units compiler arg
+            // only project units can load other units. if this isn't the main project unit,
+            // the unit we're trying to load must already have been declared in the project unit
+            // or a package it references
             if !self.used_unit_paths.contains_key(&used_unit.ident) {
-                if !is_main_unit {
+                if main_unit_kind.is_none() {
                     return Err(BuildError::UnitNotLoaded {
                         unit_name: used_unit.ident.clone(),
                     });
                 }
 
                 if self.input.compile_opts.verbose {
-                    self.log.trace(format!("unit {} used from {}", used_unit, unit_ident));
+                    if is_package_unit {
+                        self.log.trace(format!("package {} contains unit {}", unit_filename.display(), used_unit));
+                    } else {
+                        self.log.trace(format!("unit {} uses unit {}", unit_filename.display(), used_unit));
+                    }
                 }
 
                 let used_unit_path = match used_unit.path {
@@ -157,7 +173,10 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
                 self.add_unit_path(&used_unit.ident, &used_unit_path)?;
             }
 
-            self.add_unit_dep(&unit_ident, &used_unit.ident)?;
+            let is_package_unit = matches!(main_unit_kind, Some(MainUnitKind::Package));
+            if !is_package_unit {
+                self.add_unit_dep(&unit_ident, &used_unit.ident)?;
+            }
         }
 
         Ok(())
@@ -239,7 +258,7 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
         self.input.project_version.unwrap_or_else(|| Version::new(0, 1, 0))
     }
 
-    fn name(&self) -> BuildResult<String> {
+    fn name(&mut self) -> BuildResult<String> {
         match self.input.project_name.clone() {
             None => {
                 self.project_name_from_main_unit()
@@ -255,7 +274,7 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
         }
     }
 
-    fn project_name_from_main_unit(&self) -> BuildResult<String> {
+    fn project_name_from_main_unit(&mut self) -> BuildResult<String> {
         if let Some(name) = &self.main_unit_name {
             return Ok(name.to_string());
         }
@@ -269,7 +288,7 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
 
         let name_from_filename = unit_filename.to_string_lossy().to_string();
         if self.input.compile_opts.verbose {
-            eprintln!("no main unit found, inferring project name from filename: {}", name_from_filename);
+            self.log.trace(format!("no main unit found, inferring project name from filename: {}", name_from_filename));
         }
         Ok(name_from_filename)
     }
@@ -311,20 +330,13 @@ pub fn parse_sources(
                 .with_extension(SRC_FILE_DEFAULT_EXT);
 
             let unit_path = project.sources.add(&filename, None, &mut project.log)?;
-            
+
             system_paths.push(unit_path);
         }
     }
 
-    // files parsed in the order specified, either by the project unit or on the command line
-    let mut parsed_units: LinkedHashMap<PathBuf, ast::Unit> = LinkedHashMap::new();
-
-    // map of canonical paths by unit names. each unit must have exactly one source path, to ensure
-    // we don't try to load two units with the same name at different locations
-    let mut used_unit_paths: HashMap<IdentPath, PathBuf> = HashMap::new();
-
     for (unit_name, path) in system_units.iter().zip(system_paths.into_iter()) {
-        used_unit_paths.insert(unit_name.clone(), path);
+        project.used_unit_paths.insert(unit_name.clone(), path);
     }
 
     loop {
@@ -333,98 +345,97 @@ pub fn parse_sources(
             Some(f) => f,
         };
 
-        let unit = match parsed_units.get(&unit_filename) {
-            Some(unit) => {
-                return Err(BuildError::DuplicateUnit {
-                    unit_ident: unit.ident.clone(),
-                    new_path: unit_filename.clone(),
-                    existing_path: unit_filename.clone(),
-                });
-            },
+        if !project.parsed_units.contains_key(&unit_filename) {
+            if verbose {
+                project.log.trace(format!("parsing unit @ `{}`", unit_filename.display()));
+            }
 
-            None => {
-                if verbose {
-                    project.log.trace(format!("parsing unit @ `{}`", unit_filename.display()));
+            let pp_unit = preprocess(fs, &unit_filename, input.compile_opts.clone())?;
+
+            for warning in pp_unit.warnings.clone() {
+                project.log.diagnostic(warning);
+            }
+
+            let tokens = tokenize(pp_unit)?;
+
+            if PackageUnit::is_package(&tokens) {
+                let file_span = Span::zero(unit_filename.clone());
+                let parser = Parser::new(TokenStream::new(tokens, file_span));
+                let package_unit = PackageUnit::parse(parser)?;
+
+                project.try_set_main_unit(&unit_filename, &package_unit.name, MainUnitKind::Package)?;
+
+                if let Some(package_contains) = package_unit.contains {
+                    project.process_used_units(
+                        &unit_filename,
+                        &package_unit.name,
+                        Some(MainUnitKind::Package),
+                        package_contains.units,
+                    )?;
                 }
+                continue;
+            }
 
-                let pp_unit = preprocess(fs, &unit_filename, input.compile_opts.clone())?;
+            // if the unit is parsed to completion with errors, add the errors to the log
+            // and continue with the partially parsed unit
+            let parsed_unit = match parse(unit_filename.clone(), tokens) {
+                Ok(unit) => unit,
+                Err(err) => match err.err {
+                    ParseError::UnitWithErrors(err) => {
+                        let (unit, errors) = err.unwrap();
+                        for error in errors {
+                            project.log.diagnostic(error);
+                        }
 
-                for warning in pp_unit.warnings.clone() {
-                    project.log.diagnostic(warning);
+                        unit
+                    },
+
+                    other => {
+                        return Err(BuildError::from(TracedError {
+                            err: other,
+                            bt: err.bt
+                        }));
+                    },
                 }
+            };
 
-                let tokens = tokenize(pp_unit)?;
+            project.add_unit_path(&parsed_unit.ident, &unit_filename)?;
+            project.dep_sort.insert(parsed_unit.ident.clone());
 
-                if PackageUnit::is_package(&tokens) {
-                    let file_span = Span::zero(unit_filename.clone());
-                    let parser = Parser::new(TokenStream::new(tokens, file_span));
-                    let package_unit = PackageUnit::parse(parser)?;
+            project.parsed_units.insert(unit_filename.clone(), parsed_unit);
 
-                    project.try_set_main_unit(&unit_filename, &package_unit.name, MainUnitKind::Package)?;
+            let unit = &project.parsed_units[&unit_filename];
+            if verbose {
+                project.log.trace(format!("{}: parsed unit @ {}", unit.ident, unit_filename.display()));
+            }
 
-                    if let Some(package_contains) = package_unit.contains {
-                        project.process_used_units(
-                            &unit_filename,
-                            &package_unit.name,
-                            true,
-                            package_contains.units,
-                        )?;
-                    }
-                    continue;
-                }
+            let is_main_unit = MainUnitKind::try_from(unit.kind).is_ok();
+            let unit_ident = unit.ident.clone();
+            let unit_kind = unit.kind;
 
-                // if the unit is parsed to completion with errors, add the errors to the log
-                // and continue with the partially parsed unit
-                let parsed_unit = match parse(unit_filename.clone(), tokens) {
-                    Ok(unit) => unit,
-                    Err(err) => match err.err {
-                        ParseError::UnitWithErrors(err) => {
-                            let (unit, errors) = err.unwrap();
-                            for error in errors {
-                                project.log.diagnostic(error);
-                            }
-                            
-                            unit
-                        },
+            let uses_units: Vec<_> = unit
+                .all_decls()
+                .filter_map(|(_vis, decl)| match decl {
+                    ast::UnitDecl::Uses { decl } => Some(decl.clone()),
+                    _ => None,
+                })
+                .flat_map(|uses| uses.units)
+                .collect();
 
-                        other => {
-                            return Err(BuildError::from(TracedError {
-                                err: other,
-                                bt: err.bt
-                            }));
-                        },
-                    }
-                };
+            project.process_used_units(
+                &unit_filename,
+                &unit_ident,
+                MainUnitKind::try_from(unit_kind).ok(),
+                uses_units,
+            )?;
 
-                project.add_unit_path(&parsed_unit.ident, &unit_filename)?;
-                project.dep_sort.insert(parsed_unit.ident.clone());
-
-                parsed_units.insert(unit_filename.clone(), parsed_unit);
-                &parsed_units[&unit_filename]
-            },
-        };
-
-        let unit_ident = unit.ident.clone();
-
-        let is_main_unit = matches!(unit.kind, UnitKind::Program | UnitKind::Library);
-
-        if is_main_unit {
-            project.try_set_main_unit(&unit_filename, &unit.ident, match unit.kind {
-                UnitKind::Library => MainUnitKind::Library,
-                _ => MainUnitKind::Program,
-            })?;
+            if is_main_unit {
+                project.try_set_main_unit(&unit_filename, &unit_ident, match unit_kind {
+                    UnitKind::Library => MainUnitKind::Library,
+                    _ => MainUnitKind::Program,
+                })?;
+            }
         }
-
-        let uses_units: Vec<_> = unit
-            .all_decls()
-            .filter_map(|(_vis, decl)| match decl {
-                ast::UnitDecl::Uses { decl } => Some(decl.clone()),
-                _ => None,
-            })
-            .flat_map(|uses| uses.units)
-            .collect();
-
-        project.process_used_units(&unit_filename, &unit_ident, is_main_unit, uses_units)?;
     }
 
     let project_name = project.name()?;
@@ -435,12 +446,13 @@ pub fn parse_sources(
 
     let mut sorted_units = LinkedHashMap::new();    
     for unit_name in sorted_unit_names {
-        let unit_path = &used_unit_paths[&unit_name];
-        let unit = parsed_units.remove(unit_path).unwrap();
+        let unit_path = &project.used_unit_paths[&unit_name];
+        let unit = project.parsed_units.remove(unit_path).ok_or_else(|| {
+            let err = format!("unit {} was found in the dependency map but no parsed unit was present in the output", unit_path.display());
+            BuildError::InternalError(err)
+        })?;
         sorted_units.insert(unit_path.clone(), unit);
     }
-
-    drop(parsed_units);
 
     if verbose {
         project.log.trace("Compilation units:");
@@ -458,7 +470,7 @@ pub fn parse_sources(
 
 pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
     let mut log = BuildLog::new();
-    
+
     let artifact = build_with_log(fs, input, &mut log);
 
     BuildOutput {

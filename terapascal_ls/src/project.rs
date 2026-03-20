@@ -29,6 +29,7 @@ use terapascal_frontend::typ;
 use terapascal_frontend::typ::completion::CompletionHint;
 use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types as lsp;
+use terapascal_common::version::Version;
 
 pub struct FileDiagnostics {
     pub messages: Vec<DiagnosticMessage>,
@@ -122,11 +123,14 @@ impl Project {
         // todo: make search dirs and compiler options configurable
         let input = BuildInput {
             source_path: self.main_file.clone(),
-            unit_paths: vec![],
             compile_opts: opts,
             codegen_opts: CodegenOpts::default(),
             output_stage: BuildStage::Codegen,
             search_dirs: Vec::new(),
+
+            // TODO
+            project_name: None,
+            project_version: None,
         };
 
         let mut log = BuildLog::new();
@@ -150,6 +154,7 @@ impl Project {
                 let typecheck_start_time = Instant::now();
                 let module = typecheck(
                     project_name,
+                    Version::new(0, 0, 0),
                     parsed_output.units.iter(),
                     input.compile_opts,
                     &mut log,

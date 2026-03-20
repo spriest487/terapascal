@@ -66,6 +66,18 @@ pub enum MainUnitKind {
     Package,
 }
 
+impl TryFrom<UnitKind> for MainUnitKind {
+    type Error = UnitKind;
+
+    fn try_from(value: UnitKind) -> Result<Self, UnitKind> {
+        match value {
+            UnitKind::Program => Ok(MainUnitKind::Program),
+            UnitKind::Library => Ok(MainUnitKind::Library),
+            UnitKind::Unit => Err(value)
+        }
+    }
+}
+
 impl fmt::Display for MainUnitKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

@@ -9,7 +9,6 @@ mod dotnet;
 
 use crate::args::*;
 use crate::error::*;
-use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::fs::File;
@@ -19,6 +18,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process;
 use std::time::Duration;
+use std::env;
 use structopt::StructOpt;
 use terapascal_build::build;
 use terapascal_build::error::BuildError;
@@ -38,8 +38,8 @@ use terapascal_common::CIL_LIB_EXT;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
-use terapascal_vm::Vm;
 use terapascal_vm::ExecOpts;
+use terapascal_vm::Vm;
 
 #[cfg(feature = "backend-c")]
 use clang::clang_compile;
@@ -91,7 +91,7 @@ fn compile(args: Args) -> Result<(), RunError> {
 
         let artifact = load_lib(&args.file)
             .map(BuildArtifact::Library);
-        
+
         return handle_output(BuildOutput {
             artifact,
             log,

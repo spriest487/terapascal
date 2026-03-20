@@ -50,6 +50,8 @@ pub enum BuildError {
         unit_name: IdentPath,
     },
     IOError(#[from] io::Error),
+
+    InternalError(String),
 }
 
 impl DiagnosticOutput for BuildError {
@@ -132,6 +134,11 @@ impl DiagnosticOutput for BuildError {
             Self::IOError(..) => {
                 DiagnosticMessage::new(Severity::Error, "IO error")
             }
+
+            Self::InternalError(msg) => {
+                DiagnosticMessage::new(Severity::Error, "Internal compiler error")
+                    .with_note(msg.clone())
+            }
         }
     }
 
@@ -169,6 +176,7 @@ impl fmt::Display for BuildError {
             Self::UnexpectedMainUnit { .. } => write!(f, "unexpected main unit"),
             Self::UnitNotLoaded { .. } => write!(f, "unit not loaded"),
             Self::IOError(err) => write!(f, "{}", err),
+            Self::InternalError(err) => write!(f, "{}", err),
         }
     }
 }

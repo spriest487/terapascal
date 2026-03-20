@@ -1,13 +1,17 @@
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::UseDeclItem;
-use crate::parse::{AggregateParseError, Matcher, ParseError, ParseResult};
+use crate::parse::AggregateParseError;
+use crate::parse::Matcher;
+use crate::parse::ParseError;
+use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::Parser;
 use crate::result::ErrorContinue;
-use crate::{Operator, TokenTree};
 use crate::Keyword;
+use crate::Operator;
 use crate::Separator;
+use crate::TokenTree;
 use derivative::Derivative;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
@@ -68,7 +72,7 @@ impl PackageUnit {
                 parser.advance_until(Matcher::from("requires") | "contains" | Keyword::End);
 
                 IdentPath::new(Ident::new("", kw.span().clone()), [])
-            }
+            },
         };
 
         Self::expect_semicolon(&mut parser);
@@ -92,8 +96,8 @@ impl PackageUnit {
         }
 
         if let Some(contains_kw) = parser.match_one_maybe("contains") {
-            let units = UseDeclItem::parse_seq(&mut parser)
-                .or_continue_with(parser.errors(), Vec::new);
+            let units =
+                UseDeclItem::parse_seq(&mut parser).or_continue_with(parser.errors(), Vec::new);
 
             package.contains = Some(PackageContains {
                 kw: contains_kw.into_span(),
@@ -130,7 +134,7 @@ impl PackageUnit {
                     parser.error(err);
                     parser.advance_until(Separator::Comma);
                     continue;
-                }
+                },
             };
 
             package_names.push(package_name);
@@ -140,7 +144,8 @@ impl PackageUnit {
     }
 
     fn expect_semicolon(parser: &mut Parser) {
-        parser.match_one(Separator::Semicolon)
+        parser
+            .match_one(Separator::Semicolon)
             .map(|_| ())
             .or_continue(parser.errors(), ());
     }

@@ -84,25 +84,26 @@ impl<'fs, Fs: Filesystem> SourceCollection<'fs, Fs> {
     }
 
     pub fn add_used_unit(&mut self,
-        base_unit_path: &PathBuf,
+        from_unit_path: &PathBuf,
         used_unit: &IdentPath,
         log: &mut BuildLog
     ) -> Result<PathBuf, BuildError> {
-        let unit_filename = PathBuf::from(used_unit.to_string() + "." + SRC_FILE_DEFAULT_EXT);
+        let unit_filename = PathBuf::from(used_unit.to_string())
+            .with_added_extension(SRC_FILE_DEFAULT_EXT);
 
-        self.add_used_unit_in_file(base_unit_path, used_unit, &unit_filename, log)
+        self.add_used_unit_in_file(from_unit_path, used_unit, &unit_filename, log)
     }
 
     pub fn add_used_unit_in_file(
         &mut self,
-        unit_dir: &PathBuf,
+        from_unit_path: &PathBuf,
         used_unit: &IdentPath,
         filename: &PathBuf,
         log: &mut BuildLog,
     ) -> BuildResult<PathBuf> {
-        if let Some(unit_dir) = unit_dir.parent() {
+        if let Some(unit_dir) = from_unit_path.parent() {
             if self.verbose {
-                eprintln!("searching unit dir: {}", unit_dir.display());
+                log.trace(format!("searching unit dir: {}", unit_dir.display()));
             }
 
             if let Some(used_path) = self.find_in_path(filename, unit_dir) {
