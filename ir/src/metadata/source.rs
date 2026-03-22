@@ -1,4 +1,4 @@
-﻿use crate::FunctionID;
+﻿use crate::{FunctionID, MethodID};
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -48,6 +48,15 @@ pub trait MetadataSource : Sized {
     fn interfaces(&self) -> impl Iterator<Item = (InterfaceID, &InterfaceDef)>;
     fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef>;
     fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>>;
+    fn find_virtual_impl(&self, impl_type: &Type, iface_id: InterfaceID, method_id: MethodID) -> Option<FunctionID>;
+
+    fn find_iface(&self, name: &NamePath) -> Option<InterfaceID> {
+        self.interfaces()
+            .filter_map(|(id, def)| {
+                (def.name == *name).then_some(id)
+            })
+            .next()
+    }
 
     fn iface_name(&self, iface_id: InterfaceID) -> String {
         self.get_iface_def(iface_id)

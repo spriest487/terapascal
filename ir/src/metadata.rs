@@ -415,18 +415,6 @@ impl Metadata {
         self.function_static_closures.get(&func_id).cloned()
     }
 
-    /// Find the method instance that implements the given interface method for `ty`
-    pub fn find_virtual_impl(
-        &self,
-        ty: &Type,
-        iface_id: InterfaceID,
-        method: MethodID,
-    ) -> Option<FunctionID> {
-        let iface_impl = self.iface_impls.get(ty)?.get(&iface_id)?;
-
-        iface_impl.methods.get(&method).cloned()
-    }
-
     pub fn impls(&self, ty: &Type) -> Vec<InterfaceID> {
         let Some(impls) = self.iface_impls.get(ty) else {
             return Vec::new();
@@ -621,6 +609,20 @@ impl MetadataSource for Metadata {
         }
 
         None
+    }
+
+
+
+    /// Find the method instance that implements the given interface method for `ty`
+    fn find_virtual_impl(
+        &self,
+        ty: &Type,
+        iface_id: InterfaceID,
+        method: MethodID,
+    ) -> Option<FunctionID> {
+        let iface_impl = self.iface_impls.get(ty)?.get(&iface_id)?;
+
+        iface_impl.methods.get(&method).cloned()
     }
 
     fn methods(&self) -> impl Iterator<Item=&MethodInfo> {

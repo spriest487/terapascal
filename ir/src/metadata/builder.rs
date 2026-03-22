@@ -3,7 +3,7 @@ mod functions;
 mod rtti;
 
 use crate::dep_sort::sort_defs;
-use crate::FunctionID;
+use crate::{FunctionID, MethodID};
 use crate::FunctionInfo;
 use crate::IRFormatter;
 use crate::InterfaceDef;
@@ -295,6 +295,10 @@ impl MetadataSource for MetadataBuilder {
 
     fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {
         self.find_in_self_or_refs(move |metadata| metadata.find_iface_impl(func_id))
+    }
+
+    fn find_virtual_impl(&self, impl_type: &Type, iface_id: InterfaceID, method_id: MethodID) -> Option<FunctionID> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_virtual_impl(impl_type, iface_id, method_id))
     }
 
     fn methods(&self) -> impl Iterator<Item=&MethodInfo> {
