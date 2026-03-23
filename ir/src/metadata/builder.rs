@@ -69,22 +69,22 @@ impl MetadataBuilder {
         let mut next_variable_id = VariableID(1);
         let mut next_function_id = FunctionID(1);
         let mut next_string_id = StringID(first_user_string);
-        
+
         for ref_metadata in &refs {
             if let Some(max_id) = ref_metadata.type_decls.keys().max() {
-                next_type_id.0 = max_id.0 + 1;
+                next_type_id.0 = usize::max(max_id.0 + 1, next_type_id.0);
             }
             if let Some(max_id) = ref_metadata.ifaces.keys().max() {
-                next_iface_id.0 = max_id.0 + 1;
+                next_iface_id.0 = usize::max(max_id.0 + 1, next_iface_id.0);
             }
             if let Some(max_id) = ref_metadata.variables.keys().max() {
-                next_variable_id.0 = max_id.0 + 1;
+                next_variable_id.0 = usize::max(max_id.0 + 1, next_variable_id.0);
             }
             if let Some(max_id) = ref_metadata.function_info.keys().max() {
-                next_function_id.0 = max_id.0 + 1;
+                next_function_id.0 = usize::max(max_id.0 + 1, next_function_id.0);
             }
             if let Some(max_id) = ref_metadata.string_literals.keys().max() {
-                next_string_id.0 = max_id.0 + 1;
+                next_string_id.0 = usize::max(max_id.0 + 1, next_string_id.0);
             }
         }
 
@@ -229,7 +229,7 @@ impl MetadataBuilder {
     pub fn find_or_insert_string(&mut self, s: &str) -> StringID {
         if let Some(existing) = self.all_metadata().find_map(|m| m.find_string_id(s)) {
             return existing;
-        } 
+        }
 
         let next_id = self.next_string_id;
         self.metadata.string_literals.insert(next_id, s.to_string());
