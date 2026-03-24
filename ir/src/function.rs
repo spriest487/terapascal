@@ -107,6 +107,12 @@ pub struct FunctionInfo {
     pub tags: Vec<TagInfo>,
 }
 
+impl FunctionInfo {
+    pub fn tags_of_class(&self, id: TypeDefID) -> impl Iterator<Item=&TagInfo> {
+        self.tags.iter().filter(move |t| t.class_id == id)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FunctionDef {
     pub debug_name: Option<String>,
