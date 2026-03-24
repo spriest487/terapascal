@@ -9,6 +9,7 @@ use crate::IRFormatter;
 use crate::NamePath;
 use crate::ObjectID;
 use crate::RawInstructionFormatter;
+use crate::TagInfo;
 use crate::Type;
 pub use interface::*;
 pub use r#struct::*;
@@ -130,6 +131,14 @@ impl TypeDef {
             TypeDef::Struct(s) => s.name(),
             TypeDef::Variant(v) => Some(&v.name),
             TypeDef::Function(..) => None,
+        }
+    }
+    
+    pub fn tags(&self) -> &[TagInfo] {
+        match self {
+            TypeDef::Struct(def) => &def.tags,
+            TypeDef::Variant(def) => &def.tags,
+            TypeDef::Function(..) => &[],
         }
     }
     
