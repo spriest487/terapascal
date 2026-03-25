@@ -21,7 +21,6 @@ use crate::func::BuiltinFn;
 use crate::func::BuiltinFunction;
 use crate::func::Function;
 use crate::heap::NativeHeap;
-use crate::heap::NativeHeapError;
 use crate::marshal::Marshaller;
 use crate::result::ExecError;
 use crate::result::ExecResult;
@@ -328,13 +327,8 @@ impl Vm {
             .get_result_ptr()
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
-        if local_ptr.addr == 0 {
-            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
-        }
-
-        let value = self.marshaller.unmarshal_at(&local_ptr)?;
-
-        Ok(value)
+        let val = self.native_heap.load(&local_ptr)?;
+        Ok(val)
     }
 
     pub fn load_arg(&self, id: ir::ArgID) -> ExecResult<DynValue> {
@@ -343,13 +337,8 @@ impl Vm {
             .get_arg_ptr(id)
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
-        if local_ptr.addr == 0 {
-            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
-        }
-
-        let value = self.marshaller.unmarshal_at(&local_ptr)?;
-
-        Ok(value)
+        let val = self.native_heap.load(&local_ptr)?;
+        Ok(val)
     }
 
     pub fn load_local(&self, id: ir::LocalID) -> ExecResult<DynValue> {
@@ -358,13 +347,8 @@ impl Vm {
             .get_local_ptr(id)
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
-        if local_ptr.addr == 0 {
-            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
-        }
-
-        let value = self.marshaller.unmarshal_at(&local_ptr)?;
-
-        Ok(value)
+        let val = self.native_heap.load(&local_ptr)?;
+        Ok(val)
     }
 
     pub fn store(&mut self, at: &ir::Ref, val: DynValue) -> ExecResult<()> {
@@ -586,7 +570,7 @@ impl Vm {
             ExecError::illegal_state(msg)
         })?;
         
-        let instance_ty = self.load_object_header(self_ptr)?.id.to_type();
+        let instance_ty = self.native_heap.load_object_header(self_ptr)?.id.to_type();
 
         self.metadata
             .find_virtual_impl(&instance_ty, iface_id, method)
@@ -714,7 +698,7 @@ impl Vm {
     // load a pointer, expected to point to an RC struct
     // guarantees that the struct value returned has some value for its rc field
     fn load_dyn_array_ptr(&self, ptr: &Pointer) -> ExecResult<(ArrayValue, ObjectHeader)> {
-        let object_value = self.marshaller.unmarshal_object_at(ptr)?;
+        let object_value = self.native_heap.load_object(ptr)?;
 
         let elements_array = match object_value.value {
             DynValue::Array(array_val) => *array_val,
@@ -728,32 +712,6 @@ impl Vm {
         };
 
         Ok((elements_array, object_value.header))
-    }
-    
-    // TODO: move to NativeHeap
-    fn load_object_header(&self, ptr: &Pointer) -> ExecResult<ObjectHeader> {
-        if ptr.is_null() {
-            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
-        }
-        
-        let rc = self.marshaller.unmarshal_object_header(unsafe {
-            ptr.as_slice(Marshaller::object_header_size())
-        })?;
-
-        Ok(rc.value)
-    }
-
-    // TODO: move to NativeHeap
-    fn store_object_header(&self, header: &ObjectHeader, ptr: &Pointer) -> ExecResult<()> {
-        if ptr.is_null() {
-            return Err(ExecError::NativeHeapError(NativeHeapError::NullPointerDeref));
-        }
-        
-        self.marshaller.marshal_object_header(header, unsafe {
-            ptr.as_slice_mut(Marshaller::object_header_size())
-        })?;
-
-        Ok(())
     }
 
     // load a pointer, expected to point to an RC class object
@@ -784,7 +742,7 @@ impl Vm {
             return Ok(false);
         }
         
-        let mut rc = self.load_object_header(ptr)?;
+        let mut rc = self.native_heap.load_object_header(ptr)?;
 
         // release calls are totally ignored for immortal refs
         if rc.strong_count < 0 {
@@ -858,7 +816,7 @@ impl Vm {
             return Ok(true);
         }
 
-        self.store_object_header(&rc, &ptr)?;
+        self.native_heap.store_object_header(&rc, &ptr)?;
 
         Ok(false)
     }
@@ -875,7 +833,7 @@ impl Vm {
             return Ok(());
         }
 
-        let mut rc = self.load_object_header(ptr)?;
+        let mut rc = self.native_heap.load_object_header(ptr)?;
 
         // don't retain immortal refs
         if rc.strong_count < 0 {
@@ -908,7 +866,7 @@ impl Vm {
             );
         }
 
-        self.store_object_header(&rc, ptr)?;
+        self.native_heap.store_object_header(&rc, ptr)?;
 
         Ok(())
     }
@@ -1553,9 +1511,9 @@ impl Vm {
 
         let value_addr = box_ptr.addr + header.byte_count;
         let value_ptr = Pointer::new(value_addr, (*value_type).clone());
-        
-        let value = self.marshaller.unmarshal_at(&value_ptr)?;
-        Ok(value)
+
+        let val = self.native_heap.load(&value_ptr)?;
+        Ok(val)
     }
 
     fn exec_length(
@@ -1571,7 +1529,7 @@ impl Vm {
                     return Err(ExecError::illegal_state("argument of element instruction does not refer to a pointer"));
                 };
 
-                let header = self.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
+                let header = self.native_heap.load_array_header(&array_ptr)?;
                 header.len
             }
             
@@ -1959,7 +1917,7 @@ impl Vm {
             return self.store(out, DynValue::Bool(false));
         }
 
-        let object_header = self.load_object_header(&a_ptr)?;
+        let object_header = self.native_heap.load_object_header(&a_ptr)?;
 
         if object_header.strong_count == 0 {
             // zombie references never count as castable to any type 
@@ -2063,7 +2021,7 @@ impl Vm {
     }
     
     fn box_value_ptr(&self, box_ptr: &Pointer) -> ExecResult<Pointer> {
-        let header = self.load_object_header(box_ptr)?;
+        let header = self.native_heap.load_object_header(box_ptr)?;
 
         let ObjectID::Box(value_type) = &header.id else {
             return Err(ExecError::illegal_state(format!(
@@ -2078,7 +2036,7 @@ impl Vm {
     }
     
     fn object_field_ptr(&self, object_ptr: &Pointer, field: ir::FieldID) -> ExecResult<Pointer> {
-        let header = self.load_object_header(&object_ptr)?;
+        let header = self.native_heap.load_object_header(&object_ptr)?;
 
         let ObjectID::Class(struct_id) = &header.id else {
             return Err(ExecError::illegal_state(format!(
@@ -2162,9 +2120,9 @@ impl Vm {
         if !immortal && self.opts.trace_rc {
             eprintln!("[rc] alloc @ {}", object_ptr.to_pretty_string(&self.metadata))
         }
-
-        let header = ObjectHeader::new(object_id, immortal);
         
+        let header = ObjectHeader::new(object_id, immortal);
+
         let offset = self.marshaller.marshal_object_at(&object_ptr, &ObjectValue {
             header,
             value: DynValue::Structure(Box::new(fields)),

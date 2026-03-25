@@ -353,7 +353,7 @@ fn get_object_type_info(state: &mut Vm) -> ExecResult<()> {
         return Ok(());
     }
     
-    let obj_header = state.load_object_header(&obj_ptr)?;
+    let obj_header = state.native_heap.load_object_header(&obj_ptr)?;
     
     let type_info_ref =  state.typeinfo_map
         .find_by_key(&obj_header.id.to_type())

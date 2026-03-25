@@ -1,17 +1,19 @@
-use std::borrow::Cow;
 use crate::ir;
+use crate::marshal::DynArrayHeader;
 use crate::marshal::MarshalError;
 use crate::marshal::Marshaller;
 use crate::ptr::POINTER_FMT_WIDTH;
+use crate::result::ExecResult;
 use crate::DynValue;
+use crate::ObjectHeader;
 use crate::ObjectID;
 use crate::ObjectValue;
 use crate::Pointer;
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::borrow::Cow;
 use std::fmt;
 use std::rc::Rc;
-use terapascal_ir::MetadataSource;
+use terapascal_ir::MetadataSource as _;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]
@@ -112,6 +114,7 @@ pub type NativeHeapResult<Res, Ty = ir::Type> = Result<Res, NativeHeapError<Ty>>
 
 #[derive(Debug)]
 struct NativeAlloc {
+    addr: usize,
     alloc_type: ir::Type,
     alloc_count: usize,
     memory: Box<[u8]>,
@@ -123,7 +126,7 @@ pub struct NativeHeap {
     marshaller: Rc<Marshaller>,
     metadata: Rc<ir::Metadata>,
 
-    allocs: BTreeMap<usize, NativeAlloc>,
+    allocs: Vec<NativeAlloc>,
 
     trace_allocs: bool,
 
@@ -137,7 +140,7 @@ impl NativeHeap {
             metadata,
             marshaller,
             trace_allocs,
-            allocs: BTreeMap::new(),
+            allocs: Vec::new(),
             
             stats: HeapStats {
                 alloc_count: 0,
@@ -201,29 +204,39 @@ impl NativeHeap {
             self.stats.alloc_count += 1;
 
             self.stats.peak_alloc = usize::max(self.stats.peak_alloc, self.allocs.iter()
-                .map(|(_, alloc)| alloc.memory.len())
+                .map(|alloc| alloc.memory.len())
                 .sum())
         }
 
         let alloc = NativeAlloc {
+            addr: addr,
             alloc_type,
             alloc_count: count,
             memory: alloc_mem,
             trace,
         };
-
-        // if this happens, the previous allocation that resulted in this address must have
-        // been freed without properly being removed from the alloc map
-        if self.allocs.insert(addr, alloc).is_some() {
-            panic!("illegal vm state: bad heap");
+        
+        match self.allocs.binary_search_by_key(&addr, |alloc| alloc.addr) {
+            Ok(..) => {
+                // if this happens, the previous allocation that resulted in this address must have
+                // been freed without properly being removed from the alloc map
+                panic!("illegal vm state: bad heap"); 
+            }
+            
+            Err(insert_at) => {
+                self.allocs.insert(insert_at, alloc);
+            }
         }
 
         addr
     }
 
     pub fn free(&mut self, ptr: &Pointer) -> NativeHeapResult<()> {
-        let Some(alloc) = self.allocs.remove(&ptr.addr) else {
-            return Err(NativeHeapError::BadFree(ptr.clone()));
+        let alloc = match self.allocs.binary_search_by_key(&ptr.addr, |alloc| alloc.addr) {
+            Ok(index) => self.allocs.remove(index),
+            Err(..) => {
+                return Err(NativeHeapError::BadFree(ptr.clone()));
+            }
         };
 
         if self.trace_allocs && alloc.trace {
@@ -243,10 +256,16 @@ impl NativeHeap {
         Ok(())
     }
 
-    pub fn load(&self, pointer: &Pointer) -> NativeHeapResult<DynValue> {
-        if pointer.addr == 0 {
+    fn validate_pointer(&self, pointer: &Pointer) -> NativeHeapResult<()> {
+        if pointer.is_null() {
             return Err(NativeHeapError::NullPointerDeref);
         }
+
+        Ok(())
+    }
+
+    pub fn load(&self, pointer: &Pointer) -> NativeHeapResult<DynValue> {
+        self.validate_pointer(pointer)?;
 
         let val = self.marshaller.unmarshal_at(pointer)?;
 
@@ -254,19 +273,43 @@ impl NativeHeap {
     }
 
     pub fn load_object(&self, pointer: &Pointer) -> NativeHeapResult<ObjectValue> {
-        if pointer.addr == 0 {
-            return Err(NativeHeapError::NullPointerDeref);
-        }
+        self.validate_pointer(pointer)?;
 
         let object_val = self.marshaller.unmarshal_object_at(pointer)?;
 
         Ok(object_val)
     }
 
+    pub fn load_object_header(&self, pointer: &Pointer) -> NativeHeapResult<ObjectHeader> {
+        self.validate_pointer(pointer)?;
+
+        let header = self.marshaller.unmarshal_object_header(unsafe {
+            pointer.as_slice(Marshaller::object_header_size())
+        })?;
+
+        Ok(header.value)
+    }
+
+    pub fn store_object_header(&self, header: &ObjectHeader, pointer: &Pointer) -> ExecResult<()> {
+        self.validate_pointer(pointer)?;
+
+        self.marshaller.marshal_object_header(header, unsafe {
+            pointer.as_slice_mut(Marshaller::object_header_size())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn load_array_header(&self, pointer: &Pointer) -> NativeHeapResult<DynArrayHeader> {
+        self.validate_pointer(pointer)?;
+
+        let header = self.marshaller.unmarshal_dyn_array_header_at(pointer)?;
+
+        Ok(header)
+    }
+
     pub fn store(&mut self, pointer: &Pointer, val: DynValue) -> NativeHeapResult<()> {
-        if pointer.addr == 0 {
-            return Err(NativeHeapError::NullPointerDeref);
-        }
+        self.validate_pointer(pointer)?;
 
         self.marshaller.marshal_at(&val, pointer)?;
 
@@ -278,12 +321,12 @@ impl NativeHeap {
         eprintln!("[heap] free count = {}", self.stats.free_count);
         eprintln!("[heap] peak alloc size = {}", self.stats.peak_alloc);
         
-        for (addr, alloc) in &self.allocs {
+        for alloc in &self.allocs {
             if !alloc.trace {
                 continue;
             }
 
-            eprintln!("[heap] remaining alloc @ 0x{:0width$x}", addr, width=POINTER_FMT_WIDTH);
+            eprintln!("[heap] remaining alloc @ 0x{:0width$x}", alloc.addr, width=POINTER_FMT_WIDTH);
         } 
     }
     
@@ -292,16 +335,16 @@ impl NativeHeap {
     }
 
     pub fn check_leaks(&self) -> NativeHeapResult<()> {
-        if !self.allocs.values().any(|a| a.trace) {
+        if !self.allocs.iter().any(|a| a.trace) {
             return Ok(());
         }
 
         Err(NativeHeapError::Leak(self.allocs
             .iter()
-            .filter(|(_, alloc)| alloc.trace)
-            .map(|(addr, alloc)| {
+            .filter(|alloc| alloc.trace)
+            .map(|alloc| {
                 LeakDetails {
-                    addr: *addr,
+                    addr: alloc.addr,
                     alloc_type: alloc.alloc_type.clone(),
                     alloc_count: alloc.alloc_count,
                     size: alloc.memory.len(),
