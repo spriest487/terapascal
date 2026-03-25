@@ -241,8 +241,7 @@ where
                     let tag_ref = at.clone().vartag_ref(id.to_variant_type());
 
                     // is_not_case := at.tag != tag
-                    let case_tag_val = Value::LiteralI32(tag as i32);
-                    builder.neq(is_not_case, tag_ref.to_deref(), case_tag_val);
+                    builder.neq(is_not_case, tag_ref.to_deref(), case.tag.clone());
                     builder.jmpif(skip_case_label, is_not_case.clone());
 
                     // get ptr into case data and visit it

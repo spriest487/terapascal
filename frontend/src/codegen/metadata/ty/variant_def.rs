@@ -14,9 +14,10 @@ pub fn translate_variant_def(
     let name_path = translate_name(&variant_def.name, generic_ctx, lib);
     
     let tag_type = lib.translate_type(&VARIANT_TAG_TYPE, generic_ctx);
+    assert_eq!(ir::Type::I32, tag_type);
 
     let mut cases = Vec::new();
-    for case in &variant_def.cases {
+    for (case_index, case) in variant_def.cases.iter().enumerate() {
         let case_ty = match case.data.as_ref() {
             Some(data) => {
                 let case_ty = lib.translate_type(&data.ty, generic_ctx);
@@ -28,6 +29,7 @@ pub fn translate_variant_def(
 
         cases.push(ir::VariantCase {
             name: case.ident.to_string(),
+            tag: ir::Value::LiteralI32(case_index as i32),
             ty: case_ty,
         });
     }

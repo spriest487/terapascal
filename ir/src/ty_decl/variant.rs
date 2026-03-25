@@ -1,18 +1,22 @@
-use crate::{TagInfo, Type};
 use crate::NamePath;
+use crate::TagInfo;
+use crate::Type;
+use crate::Value;
 use serde::Deserialize;
 use serde::Serialize;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VariantCase {
     pub name: String,
+    pub tag: Value,
     pub ty: Option<Type>,
 }
 
 impl VariantCase {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, tag: Value) -> Self {
         Self {
             name: name.into(),
+            tag,
             ty: None,
         }
     }
