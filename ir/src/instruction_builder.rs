@@ -424,7 +424,7 @@ pub trait InstructionBuilder {
         }));
     }
 
-    fn or_to_value(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
+    fn or_to_val(&mut self, a: impl Into<Value>, b: impl Into<Value>) -> Value {
         let a = a.into();
         let b = b.into();
 

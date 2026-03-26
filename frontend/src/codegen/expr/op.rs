@@ -268,7 +268,7 @@ pub fn translate_bin_op(
             // if bit is not in range
             let lt_min = builder.lt_to_val(item.clone(), min_lit.clone());
             let gt_max = builder.gt_to_val(item.clone(), max_lit);
-            let out_of_range = builder.or_to_value(lt_min, gt_max);
+            let out_of_range = builder.or_to_val(lt_min, gt_max);
             builder.jmpif(fail_label, out_of_range.clone());
 
             // calc bit number
