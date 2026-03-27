@@ -141,36 +141,8 @@ impl CaseStmt {
                     // if the first branch is only valid as an expression, convert it into a case-expr
                     // branch and parse the rest of the branches as expressions too
                     Err(TracedError { err: ParseError::IsExpr(illegal), .. }) => {
-                        let mut expr_branches = Vec::new();
-                        for branch in branches {
-                            match branch.item.to_expr() {
-                                Some(branch_expr) => {
-                                    expr_branches.push(CaseBranch::new(branch.case_values, branch_expr))
-                                },
-
-                                // if any previous branch was not a valid expression, this case block
-                                // cannot be a valid expression at all
-                                None => {
-                                    return Err(ParseError::illegal_expr(illegal.0).into());
-                                }
-                            }
-                        }
-
-                        expr_branches.push(CaseBranch::new(values, *illegal.0));
-
-                        let else_branch = match MatchExpr::match_end_of_branches(&mut group.tokens) {
-                            MatchBranchNextItem::Branch => {
-                                CaseExpr::parse_branches(&mut group.tokens, &mut expr_branches)?
-                            }
-                            MatchBranchNextItem::ElseBranch => {
-                                Some(MatchExpr::parse_else_item(&mut group.tokens)?)
-                            }
-                            MatchBranchNextItem::End => None,
-                        };
-
-                        let match_expr = group.finish_block(expr_branches, else_branch)?;
-
-                        return Err(ParseError::is_expr(Expr::from(match_expr)).into());
+                        let illegal_branch = CaseBranch::new(values, *illegal.0);
+                        return Err(Self::fail_as_expr_with_branch(group, illegal_branch, branches));
                     }
 
                     Err(other) => {
@@ -187,15 +159,107 @@ impl CaseStmt {
         };
 
         let else_branch = if expect_else {
-            let else_branch = ElseBranch::parse(&mut group.tokens)?;
-            group.tokens.match_one_maybe(Separator::Semicolon);
+            let else_kw = group.tokens.match_one(Keyword::Else)?;
 
-            Some(else_branch)
+            match Stmt::parse(&mut group.tokens) {
+                Err(TracedError { err: ParseError::IsExpr(illegal), .. }) => {
+                    let illegal_else = ElseBranch::new(else_kw.into_span(), *illegal.0);
+                    group.tokens.match_one_maybe(Separator::Semicolon);
+                    return Err(Self::fail_as_expr_with_else(group, illegal_else, branches));
+                }
+                Err(err) => {
+                    return Err(err);
+                }
+                Ok(else_stmt) => {
+                    group.tokens.match_one_maybe(Separator::Semicolon);
+                    Some(ElseBranch::new(else_kw.into_span(), else_stmt))
+                },
+            }
         } else {
             None
         };
 
         group.finish_block(branches, else_branch)
+    }
+
+    fn branches_to_exprs(
+        illegal: &Expr,
+        stmt_branches: Vec<CaseBranch<Stmt>>,
+    ) -> ParseResult<Vec<CaseBranch<Expr>>> {
+        let mut expr_branches = Vec::new();
+
+        for branch in stmt_branches {
+            match branch.item.to_expr() {
+                Some(branch_expr) => {
+                    expr_branches.push(CaseBranch::new(branch.case_values, branch_expr));
+                },
+
+                // if any previous branch was not a valid expression, this match block
+                // cannot be a valid expression at all
+                None => {
+                    return Err(ParseError::illegal_expr(illegal.clone()).into());
+                }
+            }
+        }
+
+        Ok(expr_branches)
+    }
+
+    // parsing failed because an item expected to be a statement was an expression. attempt to
+    // reinterpret all previously parsed statement branches as expressions, and if they are
+    // valid, return an IsExpr indicating the caller may attempt to continue with this expression.
+    fn fail_as_expr_with_branch(
+        mut group: CaseBlockGroup,
+        illegal_branch: CaseBranch<Expr>,
+        branches: Vec<CaseBranch<Stmt>>,
+    ) -> TracedError<ParseError> {
+        let mut expr_branches = match Self::branches_to_exprs(&illegal_branch.item, branches) {
+            Err(err) => return err,
+            Ok(branches) => branches,
+        };
+
+        expr_branches.push(illegal_branch);
+
+        let else_branch = match MatchStmt::match_end_of_branches(&mut group.tokens) {
+            MatchBranchNextItem::Branch => {
+                match CaseExpr::parse_branches(&mut group.tokens, &mut expr_branches) {
+                    Err(err) => return err,
+                    Ok(expr) => expr,
+                }
+            }
+            MatchBranchNextItem::ElseBranch => {
+                match MatchExpr::parse_else_item(&mut group.tokens) {
+                    Ok(else_branch) => Some(else_branch),
+                    Err(err) => return err,
+                }
+            }
+            MatchBranchNextItem::End => None,
+        };
+
+        let match_expr = match group.finish_block(expr_branches, else_branch) {
+            Err(err) => return err,
+            Ok(expr) => expr,
+        };
+
+        ParseError::is_expr(Expr::from(match_expr)).into()
+    }
+
+    fn fail_as_expr_with_else(
+        group: CaseBlockGroup,
+        illegal_else: ElseBranch<Expr>,
+        branches: Vec<CaseBranch<Stmt>>,
+    ) -> TracedError<ParseError> {
+        let expr_branches = match Self::branches_to_exprs(&illegal_else.item, branches) {
+            Err(err) => return err,
+            Ok(branches) => branches,
+        };
+
+        let match_expr = match group.finish_block(expr_branches, Some(illegal_else)) {
+            Err(err) => return err,
+            Ok(expr) => expr,
+        };
+
+        ParseError::is_expr(Expr::from(match_expr)).into()
     }
 }
 

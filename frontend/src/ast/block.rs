@@ -182,38 +182,41 @@ fn parse_block_stmt(tokens: &mut TokenStream) -> ParseResult<BlockStatementParse
             Ok(BlockStatementParsedItem::Stmt(stmt))
         },
 
-        Err(traced_err) => match traced_err.err {
-            // if the final stmt is invalid as a stmt but still a valid
-            // expr, assume it's the block output. some expressions (eg calls) are
-            // always valid as statements regardless of type, so in some cases the block
-            // output can't be determined until typechecking
-            err @ ParseError::IsExpr(..) => {
-                let mut ahead = tokens.look_ahead();
+        Err(traced_err) => {
+            match traced_err.err {
+                // if the final stmt is invalid as a stmt but still a valid
+                // expr, assume it's the block output. some expressions (eg calls) are
+                // always valid as statements regardless of type, so in some cases the block
+                // output can't be determined until typechecking
+                err @ ParseError::IsExpr(..) => {
+                    let mut ahead = tokens.look_ahead();
 
-                // if there's more statements after this, we can't use it as the output
-                let stmt_after_tokens = ahead
-                    .match_sequence(Separator::Semicolon + Matcher::AnyToken);
+                    // if there's more statements after this, we can't use it as the output
+                    let stmt_after_tokens = ahead
+                        .match_sequence(Separator::Semicolon + Matcher::AnyToken);
 
-                if stmt_after_tokens.is_some() {
-                    return Err(TracedError::trace(err));
+                    if stmt_after_tokens.is_some() {
+                        return Err(TracedError::trace(err));
+                    }
+
+                    let ParseError::IsExpr(IllegalStatement(bad_expr)) = err else {
+                        unreachable!()
+                    };
+
+                    assert_eq!(
+                        Some(bad_expr.span().start),
+                        stmt_start,
+                        "expression @ {} used as block output has the wrong position (child statement failed to handle invalid statement correctly): {}",
+                        bad_expr.span(),
+                        traced_err.bt,
+                    );
+
+                    Ok(BlockStatementParsedItem::OutputExpr(*bad_expr))
                 }
 
-                let ParseError::IsExpr(IllegalStatement(bad_expr)) = err else {
-                    unreachable!()
-                };
-
-                assert_eq!(
-                    Some(bad_expr.span().start),
-                    stmt_start,
-                    "expression @ {} used as block output has the wrong position (child statement failed to handle invalid statement correctly)",
-                    bad_expr.span()
-                );
-
-                Ok(BlockStatementParsedItem::OutputExpr(*bad_expr))
+                // failed for other reasons, this is an actual error
+                _ => Err(traced_err),
             }
-
-            // failed for other reasons, this is an actual error
-            _ => Err(traced_err),
         },
     }
 }

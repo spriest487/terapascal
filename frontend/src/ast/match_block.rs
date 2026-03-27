@@ -1,11 +1,14 @@
-use crate::ast::{Annotation, Ident, MatchPattern};
+use crate::ast::Annotation;
 use crate::ast::ElseBranch;
 use crate::ast::Expr;
+use crate::ast::Ident;
+use crate::ast::MatchPattern;
 use crate::ast::Stmt;
-use crate::parse::{Parse, TryParse};
+use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
+use crate::parse::TryParse;
 use crate::token_tree::DelimitedGroup;
 use crate::DelimiterPair;
 use crate::Keyword;
@@ -111,40 +114,8 @@ impl MatchStmt {
                     // if the first branch is only valid as an expression, convert it into a match-expr
                     // branch and parse the rest of the branches as expressions too
                     Err(TracedError { err: ParseError::IsExpr(illegal), .. }) => {
-                        let mut expr_branches = Vec::new();
-                        for branch in branches {
-                            match branch.item.to_expr() {
-                                Some(branch_expr) => {
-                                    expr_branches.push(MatchBlockBranch::new(
-                                        branch.pattern, 
-                                        branch.binding,
-                                        branch_expr
-                                    ));
-                                },
-
-                                // if any previous branch was not a valid expression, this match block
-                                // cannot be a valid expression at all
-                                None => {
-                                    return Err(ParseError::illegal_expr(illegal.0).into());
-                                }
-                            }
-                        }
-
-                        expr_branches.push(MatchBlockBranch::new(pattern, binding, *illegal.0));
-
-                        let else_branch = match Self::match_end_of_branches(&mut group.tokens) {
-                            MatchBranchNextItem::Branch => {
-                                MatchExpr::parse_branches(&mut group.tokens, &mut expr_branches)?
-                            }
-                            MatchBranchNextItem::ElseBranch => {
-                                Some(MatchExpr::parse_else_item(&mut group.tokens)?)
-                            }
-                            MatchBranchNextItem::End => None,
-                        };
-
-                        let match_expr = group.finish_block(expr_branches, else_branch)?;
-
-                        return Err(ParseError::is_expr(Expr::from(match_expr)).into());
+                        let illegal_branch = MatchBlockBranch::new(pattern, binding, *illegal.0);
+                        return Err(Self::fail_as_expr_with_branch(group, illegal_branch, branches));
                     }
 
                     Err(other) => {
@@ -161,12 +132,111 @@ impl MatchStmt {
         };
 
         let else_branch = if expect_else {
-            Some(Self::parse_else_item(&mut group.tokens)?)
+            let else_kw = group.tokens.match_one(Keyword::Else)?;
+
+            match Stmt::parse(&mut group.tokens) {
+                Err(TracedError { err: ParseError::IsExpr(illegal), .. }) => {
+                    let illegal_else = ElseBranch::new(else_kw.into_span(), *illegal.0);
+                    group.tokens.match_one_maybe(Separator::Semicolon);
+                    return Err(Self::fail_as_expr_with_else(group, illegal_else, branches));
+                }
+                Err(err) => {
+                    return Err(err);
+                }
+                Ok(else_stmt) => {
+                    group.tokens.match_one_maybe(Separator::Semicolon);
+                    Some(ElseBranch::new(else_kw.into_span(), else_stmt))
+                },
+            }
         } else {
             None
         };
         
         group.finish_block(branches, else_branch)
+    }
+
+    fn branches_to_exprs(
+        illegal: &Expr,
+        stmt_branches: Vec<MatchBlockBranch<Stmt>>,
+    ) -> ParseResult<Vec<MatchBlockBranch<Expr>>> {
+        let mut expr_branches = Vec::new();
+
+        for branch in stmt_branches {
+            match branch.item.to_expr() {
+                Some(branch_expr) => {
+                    expr_branches.push(MatchBlockBranch::new(
+                        branch.pattern,
+                        branch.binding,
+                        branch_expr
+                    ));
+                },
+
+                // if any previous branch was not a valid expression, this match block
+                // cannot be a valid expression at all
+                None => {
+                    return Err(ParseError::illegal_expr(illegal.clone()).into());
+                }
+            }
+        }
+
+        Ok(expr_branches)
+    }
+
+    // parsing failed because an item expected to be a statement was an expression. attempt to
+    // reinterpret all previously parsed statement branches as expressions, and if they are
+    // valid, return an IsExpr indicating the caller may attempt to continue with this expression.
+    fn fail_as_expr_with_branch(
+        mut group: MatchBlockGroup,
+        illegal_branch: MatchBlockBranch<Expr>,
+        branches: Vec<MatchBlockBranch<Stmt>>,
+    ) -> TracedError<ParseError> {
+        let mut expr_branches = match Self::branches_to_exprs(&illegal_branch.item, branches) {
+            Err(err) => return err,
+            Ok(branches) => branches,
+        };
+
+        expr_branches.push(illegal_branch);
+
+        let else_branch = match Self::match_end_of_branches(&mut group.tokens) {
+            MatchBranchNextItem::Branch => {
+                match MatchExpr::parse_branches(&mut group.tokens, &mut expr_branches) {
+                    Err(err) => return err,
+                    Ok(expr) => expr,
+                }
+            }
+            MatchBranchNextItem::ElseBranch => {
+                match MatchExpr::parse_else_item(&mut group.tokens) {
+                    Ok(else_branch) => Some(else_branch),
+                    Err(err) => return err,
+                }
+            }
+            MatchBranchNextItem::End => None,
+        };
+
+        let match_expr = match group.finish_block(expr_branches, else_branch) {
+            Err(err) => return err,
+            Ok(expr) => expr,
+        };
+
+        ParseError::is_expr(Expr::from(match_expr)).into()
+    }
+
+    fn fail_as_expr_with_else(
+        group: MatchBlockGroup,
+        illegal_else: ElseBranch<Expr>,
+        branches: Vec<MatchBlockBranch<Stmt>>,
+    ) -> TracedError<ParseError> {
+        let expr_branches = match Self::branches_to_exprs(&illegal_else.item, branches) {
+            Err(err) => return err,
+            Ok(branches) => branches,
+        };
+
+        let match_expr = match group.finish_block(expr_branches, Some(illegal_else)) {
+            Err(err) => return err,
+            Ok(expr) => expr,
+        };
+
+        ParseError::is_expr(Expr::from(match_expr)).into()
     }
 }
 
