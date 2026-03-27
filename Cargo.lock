@@ -1648,7 +1648,6 @@ dependencies = [
 name = "terapascal-common"
 version = "0.1.0"
 dependencies = [
- "backtrace",
  "codespan-reporting",
  "dunce",
  "encoding_rs",

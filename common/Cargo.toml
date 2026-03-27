@@ -5,7 +5,6 @@ authors = ["spriest487 <spriest487@googlemail.com>"]
 edition = "2024"
 
 [dependencies]
-backtrace = "0.3.75"
 encoding_rs = "0.8.35"
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 dunce = { version = "1.0.5" }

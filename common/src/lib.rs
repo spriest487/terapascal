@@ -7,7 +7,7 @@ pub mod reporting;
 pub mod version;
 
 use crate::span::*;
-pub use backtrace::Backtrace;
+pub use std::backtrace::Backtrace;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::hash_map::HashMap;
@@ -15,6 +15,7 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 use std::ops::Deref;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub const IR_LIB_EXT: &str = "lib";
@@ -194,33 +195,24 @@ impl fmt::Display for DiagnosticMessage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TracedError<T> {
     pub err: T,
-    pub bt: Backtrace,
+    pub bt: Rc<Backtrace>,
 }
 
 impl<T: fmt::Debug + fmt::Display> Error for TracedError<T> {
 }
 
 impl<T> TracedError<T> {
-    pub const SKIP_FRAMES: usize = 4;
-
     #[inline(always)]
-    pub fn trace_skip(err: T, skip_frames: usize) -> Self {
-        let mut frames: Vec<_> = Backtrace::new_unresolved().into();
-        frames.rotate_left(skip_frames);
-        frames.truncate(frames.len() - skip_frames);
+    pub fn trace(err: T) -> Self {
+        let bt = Backtrace::capture();
 
         Self {
             err,
-            bt: frames.into(),
+            bt: Rc::new(bt),
         }
-    }
-    
-    #[inline(always)]
-    pub fn trace(err: T) -> Self {
-        Self::trace_skip(err, Self::SKIP_FRAMES)
     }
 
     pub fn chain<TNext: From<T>>(self) -> TracedError<TNext> {
@@ -244,7 +236,7 @@ impl<T> TracedError<T> {
 
 impl<T> From<T> for TracedError<T> {
     fn from(value: T) -> Self {
-        Self::trace_skip(value, 4)
+        Self::trace(value)
     }
 }
 

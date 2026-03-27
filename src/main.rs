@@ -317,8 +317,7 @@ fn main() {
         }
 
         if print_bt {
-            if let Some(mut bt) = err.backtrace().cloned() {
-                bt.resolve();
+            if let Some(bt) = err.backtrace() {
                 println!("{:?}", bt);
             }
         }
