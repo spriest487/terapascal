@@ -13,6 +13,7 @@ use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::typecheck_block;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::where_clause::WhereClause;
+use crate::typ::ast::Block;
 use crate::typ::ast::Tag;
 use crate::typ::typecheck_type_params;
 use crate::typ::typecheck_type_path;
@@ -713,7 +714,7 @@ pub fn typecheck_func_def(
         self_ty: decl.method_declaring_type().cloned(),
     };
 
-    ctx.scope(body_env, |ctx| {
+    let body_result: TypeResult<(Block, Vec<_>)> = ctx.scope(body_env, |ctx| {
         // declare type parameters from the owning type, if this is a method
         if let Some(owning_ty) = decl.method_declaring_type() {
             if let Some(enclosing_ty_params) = owning_ty.type_params() {
@@ -729,15 +730,33 @@ pub fn typecheck_func_def(
         declare_func_params_in_body(&decl.param_groups, &decl.name.span, ctx)?;
 
         let locals = declare_locals_in_body(&def, ctx)?;
+        let block = typecheck_block(&def.body, &decl.result_ty, ctx);
 
-        let body = typecheck_block(&def.body, &decl.result_ty, ctx);
+        Ok((block, locals))
+    });
 
-        Ok(FunctionDef {
-            decl,
-            locals,
-            body,
-            span: def.span.clone(),
-        })
+    let (body, locals) = match body_result {
+        Ok((block, locals)) => (block, locals),
+        Err(err) => {
+            ctx.error(err);
+
+            let block = Block {
+                begin_end: def.body.begin_end.clone(),
+                unsafe_kw: def.body.unsafe_kw.clone(),
+                annotation: Value::from(TypedValue::temp(Type::Nothing, def.body.span().clone())),
+                output: None,
+                stmts: Vec::new(),
+            };
+
+            (block, Vec::new())
+        }
+    };
+
+    Ok(FunctionDef {
+        decl,
+        locals,
+        body,
+        span: def.span.clone(),
     })
 }
 
