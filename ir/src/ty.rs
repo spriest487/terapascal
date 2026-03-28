@@ -158,6 +158,10 @@ impl Type {
         matches!(self, Type::Variant(..) | Type::Array { .. } | Type::Struct(..))
     }
 
+    pub fn is_float(&self) -> bool {
+        matches!(self, Type::F32 | Type::F64)
+    }
+
     pub fn rc_resource_class_id(&self) -> Option<&ObjectID> {
         match self {
             Type::Object(class_id) => Some(class_id),
