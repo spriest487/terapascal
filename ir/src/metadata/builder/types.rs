@@ -47,6 +47,12 @@ impl MetadataBuilder {
         id
     }
 
+    pub fn declare_new_type(&mut self, name: &NamePath) -> TypeDefID {
+        let id = self.new_type();
+        self.declare_type(id, name);
+        id
+    }
+
     pub fn reserve_type(&mut self, id: TypeDefID) {
         match self.metadata.type_decls.entry(id) {
             Entry::Occupied(entry) => {
