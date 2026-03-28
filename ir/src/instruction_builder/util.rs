@@ -57,7 +57,7 @@ pub fn counter_loop<B, F>(
     f: F,
 ) where
     B: InstructionBuilder + ?Sized,
-    F: Fn(&mut B),
+    F: FnOnce(&mut B),
 {
     let break_label = builder.next_label();
     let loop_label = builder.next_label();

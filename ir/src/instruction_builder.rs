@@ -867,7 +867,7 @@ pub trait InstructionBuilder {
         high_val: impl Into<Value>,
         f: F,
     ) where
-        F: Fn(&mut Self),
+        F: FnOnce(&mut Self),
     {
         util::counter_loop(self, counter, inc_val, high_val, f);
     }
