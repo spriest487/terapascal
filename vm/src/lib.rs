@@ -2852,11 +2852,11 @@ struct LabelLocation {
 fn find_labels(instructions: &[ir::Instruction]) -> HashMap<ir::Label, LabelLocation> {
     let mut locations = HashMap::new();
 
-    for (pc_offset, instruction) in instructions.iter().enumerate() {
+    for (pc, instruction) in instructions.iter().enumerate() {
         match instruction {
             ir::Instruction::Label(label) => {
                 locations.insert(label.clone(), LabelLocation {
-                    pc_offset,
+                    pc_offset: pc.saturating_sub(1),
                 });
             },
             _ => continue,
