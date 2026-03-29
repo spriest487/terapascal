@@ -37,6 +37,12 @@ public readonly record struct VariantCase {
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
+    [Key("tag")]
+    public required IValue Tag {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
     [Key("ty")]
     [MessagePackFormatter(typeof(NullableTypeFormatter))]
     public required IType? Type { get; init; }
