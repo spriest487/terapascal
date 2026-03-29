@@ -52,7 +52,7 @@ pub(super) struct StackFrame {
 
 impl StackFrame {
     pub fn new(
-        name: Rc<String>,
+        name: impl Into<Rc<String>>,
         marshaller: Rc<Marshaller>,
         stack_size: usize,
     ) -> Self {
@@ -225,10 +225,8 @@ impl StackFrame {
         self.debug_ctx_stack.push(ctx);
     }
     
-    pub fn debug_pop(&mut self) {
-        if !self.debug_ctx_stack.pop().is_some() {
-            eprintln!("[vm] unbalanced debug context instructions, ignoring pop on empty stack")
-        }
+    pub fn debug_pop(&mut self) -> bool {
+        self.debug_ctx_stack.pop().is_some()
     }
     
     pub fn debug_depth(&self) -> usize {

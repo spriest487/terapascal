@@ -27,13 +27,35 @@ pub struct FfiFunction {
     invoker: FfiInvoker,
 }
 
+pub struct IRFunction {
+    def: ir::FunctionDef,
+
+    debug_name: String,
+}
+
 pub enum Function {
     Builtin(BuiltinFunction),
     External(FfiFunction),
-    IR(ir::FunctionDef),
+    IR(IRFunction),
 }
 
 impl Function {
+    pub fn new(id: ir::FunctionID, def: ir::FunctionDef, metadata: &ir::Metadata) -> Self {
+        let func_name = def.debug_name
+            .clone()
+            .unwrap_or_else(|| id.to_string());
+        let debug_name = Function::make_debug_name(
+            &func_name,
+            &def.sig.param_tys,
+            metadata,
+        );
+
+        Self::IR(IRFunction {
+            debug_name,
+            def: def.clone(),
+        })
+    }
+
     pub fn new_ffi(
         func_ref: &ir::ExternalFunctionRef,
         marshaller: &mut Marshaller,
@@ -41,8 +63,11 @@ impl Function {
     ) -> MarshalResult<Self> {
         let invoker = marshaller.build_ffi_invoker(&func_ref, metadata)?;
 
+        let func_name =  format!("{}::{}", func_ref.src, func_ref.symbol);
+        let debug_name = Self::make_debug_name(&func_name, &func_ref.sig.param_tys, metadata);
+
         let func = Function::External(FfiFunction {
-            debug_name: format!("{}::{}", func_ref.src, func_ref.symbol),
+            debug_name,
             return_ty: func_ref.sig.return_ty.clone(),
             param_tys: func_ref.sig.param_tys.clone(),
 
@@ -54,9 +79,9 @@ impl Function {
 
     pub fn return_ty(&self) -> &ir::Type {
         match self {
-            Function::Builtin(def) => &def.return_ty,
-            Function::External(def) => &def.return_ty,
-            Function::IR(def) => &def.sig.return_ty,
+            Function::Builtin(func) => &func.return_ty,
+            Function::External(func) => &func.return_ty,
+            Function::IR(func) => &func.def.sig.return_ty,
         }
     }
 
@@ -64,16 +89,38 @@ impl Function {
         match self {
             Function::Builtin(builtin_fn) => &builtin_fn.param_tys,
             Function::External(external_fn) => &external_fn.param_tys,
-            Function::IR(func_def) => &func_def.sig.param_tys,
+            Function::IR(func) => &func.def.sig.param_tys,
         }
     }
 
-    pub fn debug_name(&self) -> Option<&str> {
+    pub fn debug_name(&self) -> &str {
         match self {
-            Function::Builtin(def) => Some(def.debug_name.as_str()),
-            Function::External(def) => Some(def.debug_name.as_str()),
-            Function::IR(def) => def.debug_name.as_ref().map(|s| s.as_str()),
+            Function::Builtin(def) => def.debug_name.as_str(),
+            Function::External(def) => def.debug_name.as_str(),
+            Function::IR(func) => func.debug_name.as_str(),
         }
+    }
+
+    fn make_debug_name(
+        func_name: &str,
+        params: &[ir::Type],
+        formatter: &impl ir::IRFormatter,
+    ) -> String {
+        let mut name = format!("{}", func_name);
+
+        if !params.is_empty() {
+            name.push('(');
+            for (i, param) in params.iter().enumerate() {
+                if i > 0 {
+                    name.push_str("; ");
+                }
+
+                name.push_str(&param.to_pretty_string(formatter));
+            }
+            name.push(')');
+        }
+
+        name
     }
 
     pub fn invoke(&self, state: &mut Vm) -> ExecResult<()> {
@@ -87,18 +134,15 @@ impl Function {
 
             Function::External(def) => def.invoker.invoke(state)?,
             
-            Function::IR(def) => {
-                let display_name = match &def.debug_name {
-                    Some(name) => name.as_str(),
-                    None => "function",
-                };
+            Function::IR(func) => {
+                if state.opts().trace_ir {
+                    println!("[vm] entering {}", func.debug_name);
+                }
+
+                state.execute(&func.def.body)?;
 
                 if state.opts().trace_ir {
-                    println!("[vm] entering {}", display_name);
-                }
-                state.execute(&def.body)?;
-                if state.opts().trace_ir {
-                    println!("[vm] exiting {}", display_name);
+                    println!("[vm] exiting {}", func.debug_name);
                 }
             }
         };
@@ -119,8 +163,8 @@ impl Function {
         };
 
         match self {
-            Function::IR(def) => {
-                let body_size = marshaller.stack_alloc_size(&def.body)?;
+            Function::IR(func) => {
+                let body_size = marshaller.stack_alloc_size(&func.def.body)?;
                 Ok(body_size + args_size + return_size)
             }
 
@@ -132,9 +176,9 @@ impl Function {
 impl fmt::Debug for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Function::Builtin { .. } => write!(f, "<native code>"),
-            Function::IR(func) => write!(f, "<function with {} instructions>", func.body.len()),
-            Function::External(func) => write!(f, "<{}>", func.debug_name),
+            Function::Builtin(func) => write!(f, "<native function: {}>", func.debug_name),
+            Function::IR(func) => write!(f, "<function: {}>", func.debug_name),
+            Function::External(func) => write!(f, "<ffi function: {}>", func.debug_name),
         }
     }
 }

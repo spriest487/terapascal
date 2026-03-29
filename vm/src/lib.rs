@@ -17,9 +17,9 @@ pub use self::ptr::Pointer;
 
 use crate::diag::DiagnosticOutput;
 use crate::diag::DiagnosticWorker;
-use crate::func::BuiltinFn;
 use crate::func::BuiltinFunction;
 use crate::func::Function;
+use crate::func::BuiltinFn;
 use crate::heap::NativeHeap;
 use crate::marshal::Marshaller;
 use crate::result::ExecError;
@@ -530,7 +530,7 @@ impl Vm {
         }
     }
 
-    fn push_stack(&mut self, name: Rc<String>, stack_size: usize) {
+    fn push_stack(&mut self, name: impl Into<Rc<String>>, stack_size: usize) {
         let stack_frame = StackFrame::new(name, self.marshaller.clone(), stack_size);
         self.stack.push(stack_frame);
     }
@@ -1018,7 +1018,12 @@ impl Vm {
             },
 
             ir::Instruction::DebugPop => {
-                self.current_frame_mut()?.debug_pop();
+                if !self.current_frame_mut()?.debug_pop() {
+                    eprintln!(
+                        "[vm] unbalanced debug context instructions, ignoring pop on empty stack!\n{}",
+                        self.stack_trace_formatted()
+                    )
+                }
             },
 
             ir::Instruction::LocalAlloc(id, ty) => {
@@ -2177,17 +2182,16 @@ impl Vm {
         for (func_id, ir_func) in lib.functions() {
             let func = match ir_func {
                 ir::Function::Local(ir_func_def) => {
-                    let ir_func = Function::IR(ir_func_def.clone());
-                    Some(ir_func)
+                    Some(Function::new(*func_id, ir_func_def.clone(), &metadata))
                 },
-                
-                ir::Function::External(external_ref) 
+
+                ir::Function::External(external_ref)
                 if external_ref.src == ir::BUILTIN_SRC => {
                     None
                 },
 
                 ir::Function::External(external_ref) => {
-                    let ffi_func = Function::new_ffi(external_ref, &mut marshaller, &self.metadata)
+                    let ffi_func = Function::new_ffi(external_ref, &mut marshaller, &metadata)
                         .map_err(|err| ExecError::WithStackTrace {
                             err: Box::new(ExecError::from(err)),
                             stack_trace: self.stack_trace(),
@@ -2196,7 +2200,7 @@ impl Vm {
                 }
             };
 
-            let invoker = lib.metadata
+            let invoker = metadata
                 .get_function_info(*func_id)
                 .and_then(|f| f.invoker);
             
@@ -2207,10 +2211,7 @@ impl Vm {
                 );
 
                 self.functions.insert(*func_id, FunctionInfo {
-                    name: Rc::new(match func.debug_name() {
-                        Some(name) => name.to_string(),
-                        None => format!("{}", func_id),
-                    }),
+                    name: Rc::new(func.debug_name().to_string()),
                     func: Rc::new(func),
                     invoker,
                 });
