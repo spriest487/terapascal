@@ -30,7 +30,7 @@ pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Value 
 
 pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Ref {
     builder.comment(expr.to_string());
-    builder.push_debug_context(expr.annotation().span().clone());
+    builder.push_source(expr.annotation().span().clone());
 
     let result_ref = match expr.annotation() {
         typ::Value::Const(const_val) => {
@@ -126,7 +126,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Ref
         }
     };
 
-    builder.pop_debug_context();
+    builder.pop_source();
 
     result_ref
 }

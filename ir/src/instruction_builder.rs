@@ -96,8 +96,8 @@ pub trait InstructionBuilder {
         self.local_stack_mut().end();
     }
 
-    fn push_debug_context(&mut self, ctx: Span);
-    fn pop_debug_context(&mut self);
+    fn push_source(&mut self, ctx: Span);
+    fn pop_source(&mut self);
 
     /// release locals in all scopes after the position indicated by
     /// `to_scope` in the scope stack

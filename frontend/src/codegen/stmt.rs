@@ -20,7 +20,7 @@ use terapascal_ir::InstructionBuilder;
 use crate::codegen::pattern::{translate_pattern_match_bindings, translate_pattern_match_is};
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut IRBuilder) {
-    builder.push_debug_context(stmt.annotation().span().clone());
+    builder.push_source(stmt.annotation().span().clone());
     builder.comment(stmt.to_string());
     
     match stmt {
@@ -93,7 +93,7 @@ pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut IRBuilder) {
         }
     }
 
-    builder.pop_debug_context()
+    builder.pop_source()
 }
 
 fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut IRBuilder) {

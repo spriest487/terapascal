@@ -92,7 +92,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         label
     }
 
-    fn push_debug_context(&mut self, ctx: Span) {
+    fn push_source(&mut self, ctx: Span) {
         if !self.opts().debug {
             return;
         }
@@ -100,7 +100,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         self.debug_stack.push(ctx);
     }
 
-    fn pop_debug_context(&mut self) {
+    fn pop_source(&mut self) {
         if !self.opts().debug {
             return;
         }
