@@ -17,8 +17,9 @@ use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Symbol;
 use std::borrow::Cow;
 use std::sync::Arc;
-use terapascal_ir::LocalStack;
+use terapascal_common::span::Span;
 use terapascal_ir::InstructionBuilder;
+use terapascal_ir::LocalStack;
 
 #[derive(Debug)]
 pub struct IRBuilder<'m, 'l: 'm> {
@@ -29,10 +30,24 @@ pub struct IRBuilder<'m, 'l: 'm> {
     // anything, so combining them into a single list and ignoring positions is OK
     generic_context: typ::GenericContext,
 
-    instructions: Vec<Instruction>,
+    instructions: Vec<DebugInstruction>,
     next_label: Label,
-    
+
     local_stack: LocalStack,
+
+    debug_stack: Vec<Span>,
+}
+
+#[derive(Debug)]
+pub struct DebugInstruction {
+    instruction: Instruction,
+    debug_span: Option<Span>,
+}
+
+impl AsInstruction for DebugInstruction {
+    fn as_instruction(&self) -> &Instruction {
+        &self.instruction
+    }
 }
 
 impl InstructionBuilder for IRBuilder<'_, '_> {
@@ -41,7 +56,10 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
             return;
         }
 
-        self.instructions.push(instruction);
+        self.instructions.push(DebugInstruction {
+            instruction,
+            debug_span: self.debug_stack.last().cloned(),
+        });
     }
 
     fn metadata(&self) -> &MetadataBuilder {
@@ -72,6 +90,24 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         let label = self.next_label;
         self.next_label = Label(self.next_label.0 + 1);
         label
+    }
+
+    fn push_debug_context(&mut self, ctx: Span) {
+        if !self.opts().debug {
+            return;
+        }
+
+        self.debug_stack.push(ctx);
+    }
+
+    fn pop_debug_context(&mut self) {
+        if !self.opts().debug {
+            return;
+        }
+
+        if self.debug_stack.pop().is_none() {
+            eprintln!("pop_debug_context: debug context stack is empty");
+        }
     }
 
     fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
@@ -134,6 +170,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             next_label: Label(EXIT_LABEL.0 + 1),
             local_stack: LocalStack::new(),
             generic_context: typ::GenericContext::empty(),
+
+            debug_stack: Vec::new(),
         }
     }
 
@@ -378,27 +416,31 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.library.find_type_seq_support(src_ty)
     }
 
-    pub fn finish(mut self) -> Vec<Instruction> {
+    pub fn finish(mut self) -> InstructionList {
         while self.local_stack.len() > 0 {
             self.local_end();
         }
 
-        let mut local_allocs = Vec::with_capacity(self.local_stack.local_slot_count());
+        let var_count = self.local_stack.local_slot_count();
+        let instruction_count = self.instructions.len() + var_count;
+
+        let mut instructions = Vec::with_capacity(instruction_count);
+        let mut sources = Vec::with_capacity(instruction_count);
 
         for (local_id, ty) in self.local_stack.finish() {
-            local_allocs.push(Instruction::LocalAlloc(local_id, ty));
+            instructions.push(Instruction::LocalAlloc(local_id, ty));
+            sources.push(None);
         }
 
-        self.instructions.splice(0..0, local_allocs);
-
-        if matches!(self.instructions.as_slice(), [
-            Instruction::DebugPush(..),
-            Instruction::DebugPop,
-        ]) {
-            self.instructions.pop();
+        for instruction in self.instructions {
+            instructions.push(instruction.instruction);
+            sources.push(instruction.debug_span);
         }
 
-        self.instructions
+        InstructionList {
+            instructions,
+            sources,
+        }
     }
     
     pub fn set_include(&mut self, set_ref: impl Into<Ref>, bit_val: impl Into<Value>, set_type: &typ::SetType) {
@@ -588,7 +630,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         continue_label: Label,
         break_label: Label,
         f: F,
-    ) -> &[Instruction]
+    ) -> &[DebugInstruction]
     where
         F: FnOnce(&mut Self),
     {
@@ -603,7 +645,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         &self.instructions[start_instruction..]
     }
 
-    pub fn scope<F>(&mut self, f: F) -> &[Instruction]
+    pub fn scope<F>(&mut self, f: F) -> &[DebugInstruction]
     where
         F: FnOnce(&mut Self),
     {

@@ -353,7 +353,7 @@ fn build_func_body(
     body: &typ::ast::Block,
     return_ty: &Type,
     mut builder: IRBuilder,
-) -> Vec<Instruction> {
+) -> InstructionList {
     let body_block_out_ref = match return_ty {
         Type::Nothing => Ref::Discard,
         _ => RESULT_REF.clone(),
@@ -361,16 +361,16 @@ fn build_func_body(
 
     translate_block(&body, body_block_out_ref, &mut builder);
 
-    let mut instructions = builder.finish();
+    let mut body = builder.finish();
 
     // all functions should finish with the reserved EXIT label but to
     // avoid writing unused label instructions, if none of the other instructions in the body
     // are jumps to the exit label, we can elide it
-    if jmp_exists(&instructions, EXIT_LABEL) {
-        instructions.push(Instruction::Label(EXIT_LABEL));
+    if jmp_exists(&body.instructions, EXIT_LABEL) {
+        body.push(Instruction::Label(EXIT_LABEL), None);
     }
 
-    instructions
+    body
 }
 
 pub fn build_static_closure_impl(

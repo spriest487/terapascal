@@ -55,8 +55,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::version::Version;
 use terapascal_common::StripMode;
-use terapascal_ir::InstructionBuilder as _;
 use terapascal_ir::MetadataSource;
+use terapascal_ir::{InstructionBuilder as _, InstructionList};
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -95,7 +95,7 @@ pub struct LibraryBuilder<'a> {
     // user-defined destructors by class ID
     dtors: BTreeMap<ir::TypeDefID, ir::FunctionID>,
 
-    init_code: Vec<ir::Instruction>,
+    init_code: ir::InstructionList,
     
     metadata: ir::MetadataBuilder,
 }
@@ -180,7 +180,7 @@ impl<'a> LibraryBuilder<'a> {
             free_mem_func: None,
             get_mem_func: None,
             
-            init_code: Vec::new(),
+            init_code: ir::InstructionList::new(),
         };
 
         builder
@@ -297,7 +297,7 @@ impl<'a> LibraryBuilder<'a> {
                 function: ir::Ref::Global(ir::GlobalRef::Function(init_func_id)).into(),
                 args: Vec::new(),
                 out: None,
-            });
+            }, None);
         }
 
         if self.opts.strip <= StripMode::UnusedImpl {
@@ -1589,27 +1589,27 @@ impl<'a> LibraryBuilder<'a> {
 
     /// Add static closure init function calls at top of init block
     fn gen_static_closure_init(&mut self) {
-        let mut static_closures_init = Vec::new();
+        let mut static_closures_init = InstructionList::new();
         for static_closure in &self.static_closures {
             static_closures_init.push(ir::Instruction::Call {
                 function: ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(static_closure.init_func))),
                 args: Vec::new(),
                 out: None,
-            });
+            }, None);
         }
         static_closures_init.append(&mut self.init_code);
         self.init_code = static_closures_init;
     }
 
     fn gen_static_type_init(&mut self) {
-        let mut instructions = Vec::new();
+        let mut instructions = InstructionList::new();
 
         if self.opts.rtti && let Some(tag_init_func) = gen_tags_init(self) {
             instructions.push(ir::Instruction::Call {
                 args: Vec::new(),
                 out: None,
                 function: ir::Value::from(tag_init_func),
-            });
+            }, None);
         };
 
         instructions.append(&mut self.init_code);

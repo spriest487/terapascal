@@ -1,9 +1,9 @@
+use crate::ArgID;
 use crate::Label;
 use crate::LocalID;
 use crate::Ref;
 use crate::Type;
 use crate::RESULT_REF;
-use crate::ArgID;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
@@ -64,13 +64,6 @@ impl LocalStack {
             .iter()
             .rev()
             .flat_map(|scope| scope.bindings().iter().rev())
-    }
-
-    pub fn debug_ctx_count(&self, range: impl Into<RangeInclusive<usize>>) -> usize {
-        self.scopes[range.into()]
-            .iter()
-            .map(|scope| scope.debug_ctx_count())
-            .sum()
     }
     
     pub fn begin(&mut self) {
@@ -288,10 +281,6 @@ impl ScopedBinding {
 pub struct LocalScope {
     bindings: Vec<ScopedBinding>,
     named_bindings: HashMap<SharedStringKey, BindingStorage>,
-
-    // debug context pushes belonging to this scope - when cleaning up this scope, any un-popped
-    // entries in the debug context stack that were pushed during this scope also need to be popped
-    debug_ctx_depth: usize,
 }
 
 impl LocalScope {
@@ -299,21 +288,7 @@ impl LocalScope {
         Self {
             bindings: Vec::new(),
             named_bindings: HashMap::new(),
-
-            debug_ctx_depth: 0,
         }
-    }
-
-    pub fn debug_ctx_count(&self) -> usize {
-        self.debug_ctx_depth
-    }
-
-    pub fn inc_debug_ctx_count(&mut self) {
-        self.debug_ctx_depth += 1;
-    }
-
-    pub fn dec_debug_ctx_count(&mut self) {
-        self.debug_ctx_depth -= 1;
     }
 
     pub fn bindings(&self) -> &[ScopedBinding] {

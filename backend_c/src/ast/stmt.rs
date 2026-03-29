@@ -12,6 +12,7 @@ use crate::ast::Unit;
 use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::iter;
 use std::rc::Rc;
 use terapascal_ir::MetadataSource;
 
@@ -339,8 +340,24 @@ impl<'a, 'b> Builder<'a, 'b> {
         Type::from_metadata(ir_ty, self.module)
     }
 
-    pub fn translate_instructions(&mut self, instructions: &[ir::Instruction]) {
-        for instruction in instructions {
+    pub fn translate_instructions(&mut self, instruction_list: &ir::InstructionList) {
+        let mut last_source_span = None;
+
+        for (instruction, source_span) in instruction_list.instructions
+            .iter()
+            .zip(instruction_list.sources.iter()
+                .map(|span| span.as_ref())
+                .chain(iter::repeat(None)))
+        {
+            // print the source location each time it changes
+            if source_span != last_source_span {
+                if let Some(span) = source_span {
+                    self.stmts.push(Statement::Comment(span.to_string()));
+                }
+
+                last_source_span = source_span;
+            }
+
             self.translate_instruction(instruction);
         }
     }
@@ -373,13 +390,6 @@ impl<'a, 'b> Builder<'a, 'b> {
                 if self.variable_types.insert(*id, ty.clone()).is_some() {
                     panic!("redeclaration of variable {} ({})", *id, ty.to_pretty_string(self.module.metadata.as_formatter()));
                 }
-            },
-
-            ir::Instruction::DebugPush(ctx) => self
-                .stmts
-                .push(Statement::Comment(format!("context: {}", ctx))),
-            ir::Instruction::DebugPop => {
-                // no-op
             },
 
             ir::Instruction::Label(label) => {

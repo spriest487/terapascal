@@ -16,9 +16,9 @@ pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
         let array_ref = ir::Ref::Global(ir::GlobalRef::StaticTagArray(loc));
         gen_create_tags(&mut builder, array_ref, tags);
     }
-    
+
     let body = builder.finish();
-    if body.is_empty() {
+    if body.instructions.is_empty() {
         return None;
     }
     

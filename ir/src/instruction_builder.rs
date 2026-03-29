@@ -6,7 +6,6 @@ mod object;
 
 use crate::instruction_builder::object::gen_class_object_dtor_body;
 use crate::instruction_builder::scope::ScopedBinding;
-use crate::{ArgID, FieldID};
 use crate::BinOpInstruction;
 use crate::FunctionID;
 use crate::FunctionSig;
@@ -23,6 +22,7 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
+use crate::{ArgID, FieldID};
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_array_from;
 use scope::LocalStack;
@@ -96,29 +96,8 @@ pub trait InstructionBuilder {
         self.local_stack_mut().end();
     }
 
-    fn push_debug_context(&mut self, ctx: Span) {
-        if !self.is_debug() {
-            return;
-        }
-
-        self.local_stack_mut()
-            .current_scope_mut()
-            .inc_debug_ctx_count();
-
-        self.emit(Instruction::DebugPush(ctx));
-    }
-
-    fn pop_debug_context(&mut self) {
-        if !self.is_debug() {
-            return;
-        }
-
-        self.local_stack_mut()
-            .current_scope_mut()
-            .dec_debug_ctx_count();
-
-        self.emit(Instruction::DebugPop);
-    }
+    fn push_debug_context(&mut self, ctx: Span);
+    fn pop_debug_context(&mut self);
 
     /// release locals in all scopes after the position indicated by
     /// `to_scope` in the scope stack
@@ -144,15 +123,6 @@ pub trait InstructionBuilder {
         }
 
         let cleanup_range = to_scope..=last_scope;
-
-        if self.is_debug() {
-            let debug_pops: usize = self.local_stack().debug_ctx_count(cleanup_range.clone());
-
-            for _ in 0..debug_pops {
-                // don't call the helper func to do this, we don't want to modify the scope here
-                self.emit(Instruction::DebugPop);
-            }
-        }
 
         let bindings: Vec<_> = self
             .local_stack()

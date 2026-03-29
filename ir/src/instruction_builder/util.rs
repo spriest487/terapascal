@@ -1,9 +1,10 @@
+use crate::instruction_builder::InstructionBuilder;
+use crate::AsInstruction;
 use crate::Instruction;
 use crate::Label;
 use crate::Ref;
 use crate::Type;
 use crate::Value;
-use crate::instruction_builder::InstructionBuilder;
 
 pub fn if_then<B, Branch>(builder: &mut B, cond: impl Into<Value>, then_branch: Branch)
 where
@@ -293,8 +294,8 @@ where
     }
 }
 
-pub fn jmp_exists(instructions: &[Instruction], to_label: Label) -> bool {
-    instructions.iter().any(|i| match i {
+pub fn jmp_exists(instructions: &[impl AsInstruction], to_label: Label) -> bool {
+    instructions.iter().any(|i| match i.as_instruction() {
         Instruction::Jump { dest } | Instruction::JumpIf { dest, .. } => *dest == to_label,
         _ => false,
     })

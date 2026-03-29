@@ -38,6 +38,7 @@ use std::ops::BitAnd;
 use std::ops::BitOr;
 use std::ops::BitXor;
 use std::rc::Rc;
+use terapascal_common::span::Span;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
 use terapascal_ir::MetadataSource as _;
@@ -964,34 +965,30 @@ impl Vm {
         &self.opts
     }
 
-    pub fn execute(&mut self, instructions: &[ir::Instruction]) -> ExecResult<()> {
-        let labels = find_labels(instructions);
-        let line_count_width = instructions.len().to_string().len().max(4);
+    pub fn execute(&mut self, instruction_list: &ir::InstructionList) -> ExecResult<()> {
+        let labels = find_labels(&instruction_list.instructions);
+        let line_count_width = instruction_list.instructions.len().to_string().len().max(4);
 
         let mut pc = 0;
-        while pc < instructions.len() {
+        while pc < instruction_list.instructions.len() {
             if self.opts.trace_ir {
-                let indent = str::repeat(
-                    "    ",
-                    self.current_frame()
-                        .map(|frame| frame.debug_depth())
-                        .unwrap_or(0)
-                        .saturating_sub(2),
-                );
-
                 let mut instruction_str = String::new();
                 self.metadata
-                    .format_instruction(&instructions[pc], &mut instruction_str)
+                    .format_instruction(&instruction_list.instructions[pc], &mut instruction_str)
                     .unwrap();
                 println!(
-                    "[vm] {:>width$}| {indent}{}",
+                    "[vm] {:>width$}| {}",
                     pc,
                     instruction_str,
                     width = line_count_width
                 );
             }
 
-            self.exec_instruction(&instructions[pc], &mut pc, &labels)
+            let instruction = &instruction_list.instructions[pc];
+            let source_info = instruction_list.sources.get(pc)
+                .and_then(|span| span.as_ref());
+
+            self.exec_instruction(instruction, source_info, &mut pc, &labels)
                 .map_err(|err| self.add_stack_trace(err))?;
 
             self.update_diagnostics();
@@ -1005,25 +1002,15 @@ impl Vm {
     fn exec_instruction(
         &mut self,
         instruction: &ir::Instruction,
+        source: Option<&Span>,
         pc: &mut usize,
         labels: &HashMap<ir::Label, LabelLocation>,
     ) -> ExecResult<()> {
+        self.current_frame_mut()?.set_debug_source(source.cloned());
+
         match instruction {
             ir::Instruction::Comment(_) => {
                 // noop
-            },
-
-            ir::Instruction::DebugPush(ctx) => {
-                self.current_frame_mut()?.debug_push(ctx.clone());
-            },
-
-            ir::Instruction::DebugPop => {
-                if !self.current_frame_mut()?.debug_pop() {
-                    eprintln!(
-                        "[vm] unbalanced debug context instructions, ignoring pop on empty stack!\n{}",
-                        self.stack_trace_formatted()
-                    )
-                }
             },
 
             ir::Instruction::LocalAlloc(id, ty) => {
@@ -2306,10 +2293,10 @@ impl Vm {
 
         let init_stack_size = self
             .marshaller
-            .stack_alloc_size(lib.init())
+            .stack_alloc_size(&lib.init().instructions)
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
-        if !lib.init.is_empty() {
+        if !lib.init.instructions.is_empty() {
             if self.opts.verbose {
                 println!("[vm] entering library init: {}", lib.name);
             }

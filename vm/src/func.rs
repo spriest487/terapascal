@@ -164,7 +164,7 @@ impl Function {
 
         match self {
             Function::IR(func) => {
-                let body_size = marshaller.stack_alloc_size(&func.def.body)?;
+                let body_size = marshaller.stack_alloc_size(&func.def.body.instructions)?;
                 Ok(body_size + args_size + return_size)
             }
 

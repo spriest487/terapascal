@@ -1,10 +1,8 @@
-use crate::write_instruction_list;
 use crate::ExternalFunctionRef;
 use crate::Function;
 use crate::FunctionDef;
 use crate::FunctionID;
 use crate::IRFormatter;
-use crate::Instruction;
 use crate::Metadata;
 use crate::MetadataSource;
 use crate::StaticClosure;
@@ -12,6 +10,7 @@ use crate::StructIdentity;
 use crate::TagInfo;
 use crate::Type;
 use crate::TypeDef;
+use crate::{write_instruction_list, InstructionList};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -33,7 +32,7 @@ pub struct Library {
 
     pub static_closures: Vec<StaticClosure>,
 
-    pub init: Vec<Instruction>,
+    pub init: InstructionList,
 }
 
 impl Library {
@@ -54,7 +53,7 @@ impl Library {
             functions: BTreeMap::new(),
             static_closures: Vec::new(),
 
-            init: Vec::new(),
+            init: InstructionList::new(),
         }
     }
 
@@ -62,8 +61,8 @@ impl Library {
         &self.static_closures
     }
 
-    pub fn init(&self) -> &[Instruction] {
-        self.init.as_slice()
+    pub fn init(&self) -> &InstructionList {
+        &self.init
     }
 
     pub fn metadata(&self) -> &Metadata {
@@ -217,7 +216,7 @@ impl fmt::Display for Library {
 
             match func {
                 Function::Local(FunctionDef { body, .. }) => {
-                    write_instruction_list(f, &self.metadata, body)?;
+                    write_instruction_list(f, &self.metadata, &body.instructions)?;
                 },
 
                 Function::External(ExternalFunctionRef { symbol, src, .. }) => {
@@ -228,7 +227,7 @@ impl fmt::Display for Library {
         }
 
         writeln!(f, "* Init:")?;
-        write_instruction_list(f, &self.metadata, &self.init)?;
+        write_instruction_list(f, &self.metadata, &self.init.instructions)?;
         Ok(())
     }
 }

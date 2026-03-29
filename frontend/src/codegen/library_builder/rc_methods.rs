@@ -47,7 +47,7 @@ fn gen_release_func(
 
 // generate deep release/retain funcs for non-RC types, 
 // including the internal structures of RC types
-fn gen_release_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Vec<ir::Instruction> {
+fn gen_release_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> ir::InstructionList {
     let mut release_builder = IRBuilder::new(lib);
 
     let target_ref_arg = ir::ArgID(0);
@@ -89,7 +89,7 @@ fn gen_retain_func(
     Some(func_id)
 }
 
-fn gen_retain_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Vec<ir::Instruction> {
+fn gen_retain_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> ir::InstructionList {
     let mut retain_builder = IRBuilder::new(lib);
     
     let target_ref_arg = ir::ArgID(0);
@@ -115,7 +115,7 @@ fn gen_retain_body(lib: &mut LibraryBuilder, ty: &ir::Type) -> Vec<ir::Instructi
 fn create_rc_func(
     lib: &mut LibraryBuilder,
     ty: &ir::Type,
-    body: Vec<ir::Instruction>,
+    body: ir::InstructionList,
     debug_name: Option<String>
 ) -> ir::FunctionID {
     let func_id = lib.metadata_mut().insert_func(None, false, []);

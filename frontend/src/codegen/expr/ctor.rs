@@ -1,5 +1,4 @@
 use crate::codegen::builder::IRBuilder;
-use crate::codegen::expr;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::expr::translate_expr;
 use crate::codegen::set_word_count;
@@ -41,7 +40,7 @@ pub fn build_object_ctor_invocation(
 
     builder.scope(|builder| {
         for member in members {
-            let member_val = expr::translate_expr(&member.value, builder);
+            let member_val = translate_expr(&member.value, builder);
             let field_id = struct_def
                 .find_field(&member.ident.name)
                 .unwrap_or_else(|| {

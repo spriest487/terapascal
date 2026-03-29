@@ -47,7 +47,7 @@ pub(super) struct StackFrame {
 
     marshaller: Rc<Marshaller>,
 
-    debug_ctx_stack: Vec<Span>,
+    current_debug_source: Option<Span>,
 }
 
 impl StackFrame {
@@ -67,8 +67,8 @@ impl StackFrame {
             args: Vec::new(),
 
             locals: Vec::new(),
-            
-            debug_ctx_stack: Vec::new(),
+
+            current_debug_source: None,
 
             marshaller,
 
@@ -180,8 +180,8 @@ impl StackFrame {
     }
     
     pub fn debug_location(&self) -> Option<Cow<'_, Span>> {
-        self.debug_ctx_stack
-            .last()
+        self.current_debug_source
+            .as_ref()
             .map(|span| Cow::Borrowed(span))
     }
 
@@ -220,17 +220,9 @@ impl StackFrame {
 
         Pointer::new(addr, alloc.ty.clone())
     }
-    
-    pub fn debug_push(&mut self, ctx: Span) {
-        self.debug_ctx_stack.push(ctx);
-    }
-    
-    pub fn debug_pop(&mut self) -> bool {
-        self.debug_ctx_stack.pop().is_some()
-    }
-    
-    pub fn debug_depth(&self) -> usize {
-        self.debug_ctx_stack.len()
+
+    pub fn set_debug_source(&mut self, source: Option<Span>) {
+        self.current_debug_source = source;
     }
 }
 

@@ -2,14 +2,13 @@ use crate::instruction::BinOpInstruction;
 use crate::instruction::Instruction;
 use crate::metadata::MethodID;
 use crate::ty::FieldID;
-use crate::ty::Type;
 use crate::ty::ObjectID;
+use crate::ty::Type;
 use crate::ty_decl::InterfaceID;
 use crate::val::Ref;
 use crate::val::Value;
-use crate::{NamePath, TypeDefID};
 use crate::UnaryOpInstruction;
-use std::cell::Cell;
+use crate::{NamePath, TypeDefID};
 use std::fmt;
 
 const IX_WIDTH: usize = 8;
@@ -22,14 +21,6 @@ pub trait IRFormatter {
     ) -> fmt::Result {
         match instruction {
             Instruction::Comment(comment) => write!(f, "{:>width$} {}", "//", comment, width = IX_WIDTH),
-
-            Instruction::DebugPush(span) => {
-                write!(f, "{:>width$} {}", "dbgpush", span, width = IX_WIDTH)
-            }
-
-            Instruction::DebugPop => {
-                write!(f, "{:>width$}", "dbgpop", width = IX_WIDTH)
-            }
 
             Instruction::LocalAlloc(id, ty) => {
                 write!(f, "{:>width$} ", "local", width = IX_WIDTH)?;
@@ -413,81 +404,5 @@ impl IRFormatter for RawInstructionFormatter {
         f: &mut dyn fmt::Write,
     ) -> fmt::Result {
         write!(f, "data_{}", tag)
-    }
-}
-
-pub struct DebugFormatter<'f, F: IRFormatter> {
-    wrapped: &'f F,
-    tabs: Cell<usize>,
-    tab_width: usize,
-}
-
-impl<'f, F: IRFormatter> DebugFormatter<'f, F> {
-    pub fn new(wrapped: &'f F, tab_width: usize) -> Self {
-        Self {
-            wrapped,
-            tabs: Cell::new(0),
-            tab_width,
-        }
-    }
-}
-
-impl<'f, F: IRFormatter> IRFormatter for DebugFormatter<'f, F> {
-    fn format_instruction<W: fmt::Write>(
-        &self,
-        instruction: &Instruction,
-        f: &mut W,
-    ) -> fmt::Result {
-        if let Instruction::DebugPop = instruction {
-            self.tabs.set(self.tabs.get().saturating_sub(1));
-        }
-
-        let tabs = match instruction {
-            Instruction::Label(..) => 0,
-            _ => self.tabs.get(),
-        };
-
-        for _ in 0..tabs * self.tab_width {
-            f.write_char(' ')?;
-        }
-
-        if let Instruction::DebugPush(..) = instruction {
-            self.tabs.set(self.tabs.get() + 1);
-        }
-
-        self.wrapped.format_instruction(instruction, f)
-    }
-
-    fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.wrapped.format_type(ty, f)
-    }
-
-    fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.wrapped.format_type_def(id, f)
-    }
-
-    fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.wrapped.format_val(val, f)
-    }
-
-    fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.wrapped.format_ref(r, f)
-    }
-
-    fn format_field(&self, of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.wrapped.format_field(of_ty, field, f)
-    }
-
-    fn format_method(
-        &self,
-        iface: InterfaceID,
-        method: MethodID,
-        f: &mut dyn fmt::Write,
-    ) -> fmt::Result {
-        self.wrapped.format_method(iface, method, f)
-    }
-
-    fn format_variant_case(&self, of_ty: &Type, tag: usize, f: &mut dyn fmt::Write) -> fmt::Result {
-        self.wrapped.format_variant_case(of_ty, tag, f)
     }
 }

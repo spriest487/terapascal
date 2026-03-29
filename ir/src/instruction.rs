@@ -16,8 +16,6 @@ use terapascal_common::span::Span;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Instruction {
     Comment(String),
-    DebugPush(Span),
-    DebugPop,
 
     LocalAlloc(LocalID, Type),
 
@@ -145,8 +143,6 @@ impl Instruction {
         match self {
             // never discard
             | Instruction::Comment(..)
-            | Instruction::DebugPush(..)
-            | Instruction::DebugPop
             | Instruction::Label(..)
             | Instruction::Jump { .. }
             | Instruction::JumpIf { .. }
@@ -204,8 +200,6 @@ impl Instruction {
     {
         match self {
             Instruction::Comment(..)
-            | Instruction::DebugPush(..)
-            | Instruction::DebugPop
             | Instruction::LocalAlloc(..)
             | Instruction::Label(..)
             | Instruction::Jump { .. } => {},
@@ -394,4 +388,52 @@ pub struct BinOpInstruction {
 pub struct UnaryOpInstruction {
     pub out: Ref,
     pub a: Value,
+}
+
+/// Contains a list of instructions and, if present, a list of source info spans where each entry
+/// corresponds to the instruction at the same index in the instruction list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstructionList {
+    pub instructions: Vec<Instruction>,
+
+    pub sources: Vec<Option<Span>>,
+}
+
+impl InstructionList {
+    pub fn new() -> Self {
+        InstructionList {
+            instructions: Vec::new(),
+            sources: Vec::new(),
+        }
+    }
+
+    pub fn append(&mut self, other: &mut Self) {
+        self.instructions.append(&mut other.instructions);
+
+        self.sources.resize(self.instructions.len(), None);
+        self.sources.append(&mut other.sources);
+    }
+
+    pub fn push(&mut self, instruction: Instruction, source: Option<Span>) {
+        self.instructions.push(instruction);
+
+        self.sources.resize(self.instructions.len() - 1, None);
+        self.sources.push(source);
+    }
+}
+
+pub trait AsInstruction {
+    fn as_instruction(&self) -> &Instruction;
+}
+
+impl AsInstruction for Instruction {
+    fn as_instruction(&self) -> &Instruction {
+        self
+    }
+}
+
+impl AsInstruction for &Instruction {
+    fn as_instruction(&self) -> &Instruction {
+        *self
+    }
 }

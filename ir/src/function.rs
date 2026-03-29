@@ -1,11 +1,12 @@
-use crate::Label;
+use crate::IRFormatter;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Ref;
+use crate::StringID;
+use crate::TagInfo;
 use crate::Type;
 use crate::TypeDefID;
-use crate::{IRFormatter, TagInfo};
-use crate::{Instruction, StringID};
+use crate::{InstructionList, Label};
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -117,7 +118,7 @@ impl FunctionInfo {
 pub struct FunctionDef {
     pub debug_name: Option<String>,
 
-    pub body: Vec<Instruction>,
+    pub body: InstructionList,
 
     pub sig: FunctionSig,
 }
@@ -132,7 +133,7 @@ impl Function {
     pub fn new_local_def(
         debug_name: Option<String>,
         sig: FunctionSig,
-        body: Vec<Instruction>
+        body: InstructionList,
     ) -> Self {
         Function::Local(FunctionDef {
             debug_name,

@@ -104,11 +104,9 @@ pub fn write_instruction_list(
 ) -> fmt::Result {
     let num_len = instructions.len().to_string().len();
 
-    let formatter = DebugFormatter::new(metadata, 4);
-
     for (i, instruction) in instructions.iter().enumerate() {
         write!(f, "{:>width$}|", i, width = num_len)?;
-        formatter.format_instruction(instruction, f)?;
+        metadata.format_instruction(instruction, f)?;
         writeln!(f)?;
     }
 
