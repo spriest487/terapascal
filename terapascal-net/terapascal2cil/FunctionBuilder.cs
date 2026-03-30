@@ -198,7 +198,7 @@ public class FunctionBuilder {
     private void BuildFunctionBody(IR.Library lib, MethodDefinition method, IR.FunctionDef def) {
         var builder = new InstructionBuilder(this.assemblyBuilder, lib, method);
         builder.BeginFunction(def);
-        builder.AddInstructions(def.Body);
+        builder.AddInstructions(def.Body.Instructions);
         builder.Finish();
     }
 

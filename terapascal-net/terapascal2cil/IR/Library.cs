@@ -35,8 +35,8 @@ public class Library {
     }
 
     [Key("init")]
-    public required IReadOnlyList<IInstruction> Initialization {
+    public required InstructionList Initialization {
         get;
-        init => field = value!.ToArrayNonNull();
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 }

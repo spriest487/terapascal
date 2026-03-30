@@ -75,7 +75,7 @@ public record FunctionDef {
     public string? DebugName { get; init; }
 
     [Key("body")]
-    public required IReadOnlyList<IInstruction> Body {
+    public required InstructionList Body {
         get;
         init => field = value ?? throw new ArgumentException(nameof(value));
     }

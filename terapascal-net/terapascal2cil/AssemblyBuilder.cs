@@ -324,7 +324,7 @@ public class AssemblyBuilder : IDisposable {
             this.BuildTypeInfoMethodsInit(type, typeInfo, library);
         }
 
-        if (library.Initialization.Count > 0) {
+        if (library.Initialization.Instructions.Count > 0) {
             var initAttrs = MethodAttributes.Private | MethodAttributes.Static;
             var initMethod = new MethodDefinition($"Init_{this.initMethods.Count}", initAttrs, this.TypeSystem.Void);
 
@@ -342,7 +342,7 @@ public class AssemblyBuilder : IDisposable {
             }
             
             var initBuilder = new InstructionBuilder(this, library, initMethod);
-            initBuilder.AddInstructions(library.Initialization);
+            initBuilder.AddInstructions(library.Initialization.Instructions);
             initBuilder.Finish();
         }
     }
