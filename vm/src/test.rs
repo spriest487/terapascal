@@ -1,10 +1,11 @@
+use terapascal_common::version::Version;
 use terapascal_ir::{Library, Metadata};
 use crate::{Vm, ExecOpts};
 
 #[test]
 fn empty_library_executes_ok() {
     let metadata = Metadata::new();
-    let lib = Library::new(metadata);
+    let lib = Library::new("test", Version::default(), [], metadata);
     
     let opts = ExecOpts {
         verbose: true,

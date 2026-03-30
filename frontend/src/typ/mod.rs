@@ -40,7 +40,7 @@ pub struct Module {
 
 impl Module {
     pub fn typecheck<'a>(
-        name: String,
+        name: impl Into<String>,
         version: Version,
         units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>,
         opts: CompileOpts,
@@ -78,7 +78,7 @@ impl Module {
         module_units.reverse();
 
         Module {
-            name,
+            name: name.into(),
             version,
             units: module_units,
             root_ctx: Box::new(root_ctx),

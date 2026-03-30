@@ -1,14 +1,14 @@
 use terapascal_common::CompileOpts;
+use terapascal_common::version::Version;
 use super::*;
 
-fn instructions_without_comments(actual: &[Instruction], count: usize) -> Vec<Instruction> {
+fn instructions_without_comments(actual: &[DebugInstruction], count: usize) -> Vec<Instruction> {
     actual
         .iter()
-        .filter(|i| match i {
-            Instruction::Comment(..) => false,
-            _ => true,
+        .filter_map(|i| match &i.instruction {
+            Instruction::Comment(..) => None,
+            instruction => Some(instruction.clone()),
         })
-        .cloned()
         .take(count)
         .collect::<Vec<_>>()
 }
@@ -16,7 +16,7 @@ fn instructions_without_comments(actual: &[Instruction], count: usize) -> Vec<In
 #[test]
 fn end_loop_scope_ends_at_right_scope_level() {
     let ctx = typ::Context::root(CompileOpts::default());
-    let mut library = LibraryBuilder::new(&ctx, [], CodegenOpts::default());
+    let mut library = LibraryBuilder::new("test", Version::default(), &ctx, [], CodegenOpts::default());
     let mut builder = IRBuilder::new(&mut library);
 
     let initial_scope = builder.local_stack.len();
@@ -32,7 +32,7 @@ fn end_loop_scope_ends_at_right_scope_level() {
 #[test]
 fn break_cleans_up_loop_locals() {
     let ctx = typ::Context::root(CompileOpts::default());
-    let mut library = LibraryBuilder::new(&ctx, [], CodegenOpts::default());
+    let mut library = LibraryBuilder::new("test", Version::default(), &ctx, [], CodegenOpts::default());
     let mut builder = IRBuilder::new(&mut library);
 
     let continue_label = builder.next_label();
@@ -54,30 +54,38 @@ fn break_cleans_up_loop_locals() {
     let from = builder
         .instructions
         .iter()
-        .position(|i| match i {
+        .position(|i| match &i.instruction {
             Instruction::Comment(c) => c == "before_break",
             _ => false,
         })
         .unwrap();
 
-    // Both locals should be released
+    // Both locals should be released and cleared
     let expect = &[
         Instruction::Release {
             at: Ref::Local(LocalID(1)),
             weak: false,
             released_out: Ref::Discard,
         },
+        Instruction::Move {
+            out: Ref::Local(LocalID(1)),
+            new_val: Value::Default(Type::Object(ObjectID::Any)),
+        },
         Instruction::Release {
             at: Ref::Local(LocalID(0)),
             weak: false,
             released_out: Ref::Discard,
+        },
+        Instruction::Move {
+            out: Ref::Local(LocalID(0)),
+            new_val: Value::Default(Type::Object(ObjectID::Any)),
         },
         // and the final jmp for the break
         Instruction::Jump { dest: break_label },
     ];
     
     let actual = instructions_without_comments(
-        &builder.instructions[from + 1..], 
+        &builder.instructions[from + 1..],
         expect.len()
     );
 

@@ -38,7 +38,7 @@ pub struct IRBuilder<'m, 'l: 'm> {
     debug_stack: Vec<Span>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DebugInstruction {
     instruction: Instruction,
     debug_span: Option<Span>,

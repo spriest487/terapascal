@@ -14,7 +14,9 @@ use std::path::PathBuf;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::fs::Filesystem;
-use terapascal_common::{CompileOpts, DiagnosticOutput};
+use terapascal_common::version::Version;
+use terapascal_common::CompileOpts;
+use terapascal_common::DiagnosticOutput;
 
 const INT32: Type = Type::Primitive(Primitive::Int32);
 const BOOL: Type = Type::Primitive(Primitive::Boolean);
@@ -63,7 +65,7 @@ where
 
     let units_by_path = units.iter().map(|(p, u)| (p, u));
 
-    let module = Module::typecheck(units_by_path, CompileOpts::default(), &mut log);
+    let module = Module::typecheck("test", Version::default(), units_by_path, CompileOpts::default(), &mut log);
 
     if !module.root_ctx.errors().is_empty() {
         Err(module.root_ctx.errors().to_vec())
