@@ -7,14 +7,17 @@
 * taking the address of any type containing rc refs should be unsafe
 
 # array rework
-* C implementation could use variable sized structs instead of 2 allocations per array 
+* C implementation could use variable sized structs instead of 2 allocations per array
+* strings should be implemented as arrays
 
 # RTTI
 * more detailed type kind info
 * type/method unit name info
-* published methods shouldn't ever be stripped
+* published methods/types shouldn't ever be stripped
 
 # IR
+* generics
+* include consts in generated libs
 * remove forward types from metadata
 * undefined symbol checking can probably be moved to IR codegen rather than during typechecking
 * make IR function src spans optional?? some builtins don't have them
@@ -41,4 +44,3 @@
 # improvements
 * use tags instead of pascal-style modifiers for external etc
 * add a named type case to typ::Type for all the things that use full_path, full_name etc
-* type cache so we don't need to construct/pass around type objects all the time in the typechecker (This is really slow)
