@@ -40,7 +40,7 @@ pub enum RunError {
 
     #[cfg(feature = "backend-cil")]
     #[error(transparent)]
-    CilBuildError(#[from] terapascal_backend_cil::BuildError),
+    CilBuildError(#[from] terapascal_backend_net::BuildError),
 }
 
 impl From<TracedError<TokenizeError>> for RunError {
