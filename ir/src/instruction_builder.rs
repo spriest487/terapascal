@@ -145,6 +145,16 @@ pub trait InstructionBuilder {
         if binding.auto_release {
             self.release_deep(binding.to_ref(), &binding.ty);
         }
+
+        // inside a loop scope, these locals may be reused without being reinitialized.
+        // this is fine for primitive values, but autoreleased locals need to have their
+        // previous values cleared so that they don't get autoreleased again if they aren't
+        // reassigned in the next iteration
+        if self.local_stack().current_loop().is_some()
+            && binding.auto_release
+        {
+            self.mov(binding.to_ref(), Value::Default(binding.ty.clone()));
+        }
     }
 
     fn break_loop(&mut self) {
