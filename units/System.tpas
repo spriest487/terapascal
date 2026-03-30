@@ -229,7 +229,7 @@ function Min[T](a, b: T): T where T is IComparable;
 function Length[T](arr: array of T): Integer;
 function SetLength[T](var arr: array of T; len: Integer; defaultVal: T);
 
-function CreateArray[T](item: T; element: Integer): array of T;
+function CreateArray[T](item: T; length: Integer): array of T;
 function BinarySearch[T](arr: array of T; item: T): Integer
     where T is IComparable;
 

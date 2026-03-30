@@ -96,8 +96,8 @@ pub trait InstructionBuilder {
         self.local_stack_mut().end();
     }
 
-    fn push_debug_context(&mut self, ctx: Span);
-    fn pop_debug_context(&mut self);
+    fn push_source(&mut self, ctx: Span);
+    fn pop_source(&mut self);
 
     /// release locals in all scopes after the position indicated by
     /// `to_scope` in the scope stack
@@ -144,6 +144,16 @@ pub trait InstructionBuilder {
     fn expire_binding(&mut self, binding: &ScopedBinding) {
         if binding.auto_release {
             self.release_deep(binding.to_ref(), &binding.ty);
+        }
+
+        // inside a loop scope, these locals may be reused without being reinitialized.
+        // this is fine for primitive values, but autoreleased locals need to have their
+        // previous values cleared so that they don't get autoreleased again if they aren't
+        // reassigned in the next iteration
+        if self.local_stack().current_loop().is_some()
+            && binding.auto_release
+        {
+            self.mov(binding.to_ref(), Value::Default(binding.ty.clone()));
         }
     }
 

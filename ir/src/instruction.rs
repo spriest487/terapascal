@@ -10,7 +10,8 @@ use crate::val::Ref;
 use crate::val::Value;
 use serde::Deserialize;
 use serde::Serialize;
-use std::fmt;
+use std::{fmt, iter};
+use std::ops::RangeBounds;
 use terapascal_common::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -419,6 +420,17 @@ impl InstructionList {
 
         self.sources.resize(self.instructions.len() - 1, None);
         self.sources.push(source);
+    }
+
+    pub fn splice(&mut self,
+        range: impl RangeBounds<usize> + Clone,
+        instructions: impl IntoIterator<Item=Instruction>,
+    ) {
+        let instructions: Vec<_> = instructions.into_iter().collect();
+        let sources = iter::repeat_n(None, instructions.len());
+
+        self.instructions.splice(range.clone(), instructions);
+        self.sources.splice(range, sources);
     }
 }
 
