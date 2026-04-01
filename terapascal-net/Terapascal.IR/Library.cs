@@ -1,4 +1,5 @@
 ﻿using MessagePack;
+using MessagePack.Resolvers;
 
 namespace Terapascal.IR;
 
@@ -39,4 +40,9 @@ public class Library {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
+
+    public static IFormatterResolver FormatterResolver => CompositeResolver.Create(
+        CustomCollectionsResolver.Instance,
+        GeneratedMessagePackResolver.Instance
+    );
 }

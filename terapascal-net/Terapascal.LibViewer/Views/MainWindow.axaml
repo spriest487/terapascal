@@ -1,0 +1,170 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Terapascal.LibViewer.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:models="clr-namespace:Terapascal.LibViewer.Models"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="Terapascal.LibViewer.Views.MainWindow"
+        x:DataType="vm:LibraryViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Terapascal.LibViewer"
+        WindowStartupLocation="CenterScreen"
+        WindowState="Normal"
+        Width="1280"
+        Height="720">
+
+    <Design.DataContext>
+        <vm:LibraryViewModel />
+    </Design.DataContext>
+    
+    <Window.Styles>
+        <Style Selector="TextBlock.DetailCaption">
+            <Setter Property="FontWeight" Value="Bold"></Setter>
+            <Setter Property="HorizontalAlignment" Value="Right"></Setter>
+            <Setter Property="VerticalAlignment" Value="Center"></Setter>
+        </Style>
+        <Style Selector="TextBlock.DetailValue">
+            <Setter Property="HorizontalAlignment" Value="Left"></Setter>
+            <Setter Property="VerticalAlignment" Value="Center"></Setter>
+            <Setter Property="Margin" Value="8 0 0 0"></Setter>
+        </Style>
+        <Style Selector="TextBlock.Code">
+            <Setter Property="FontFamily" Value="{StaticResource NotoSansMono}"></Setter>
+        </Style>
+        <Style Selector="TextBox.Code">
+            <Setter Property="FontFamily" Value="{StaticResource NotoSansMono}"></Setter>
+        </Style>
+    </Window.Styles>
+
+    <Panel>
+        <DockPanel>
+            <Menu DockPanel.Dock="Top">
+                <MenuItem Header="_File" Name="File">
+                    <MenuItem Header="_Open" Name="Open" Click="Open_OnClick" />
+                    <MenuItem Header="_Quit" Name="Quit" Click="Quit_OnClick" />
+                </MenuItem>
+            </Menu>
+
+            <Grid DockPanel.Dock="Right">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="0.33*" MinWidth="200" />
+                    <ColumnDefinition Width="2" />
+                    <ColumnDefinition Width="1*" />
+                </Grid.ColumnDefinitions>
+
+                <TreeView
+                    Name="LibraryItemsView"
+                    Grid.Column="0"
+                    Margin="2"
+                    ItemsSource="{Binding LibraryItems}"
+                    SelectionMode="Single"
+                    AutoScrollToSelectedItem="true"
+                    SelectedItem="{Binding SelectedItem}"
+                    SelectionChanged="LibraryItemsView_OnSelectionChanged">
+                    <TreeView.Styles>
+                        <Style Selector="TreeViewItem" x:DataType="models:LibraryTreeNode">
+                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                        </Style>
+                    </TreeView.Styles>
+
+                    <TreeView.ItemTemplate>
+                        <TreeDataTemplate ItemsSource="{Binding Children}">
+                            <Panel>
+                                <TextBlock>
+                                    <TextBlock.Inlines>
+                                        <Run Text="{Binding ID}" FontWeight="Bold" />
+                                        <Run Text="{Binding IDSeparator}" ></Run>
+                                        <Run Text="{Binding Title}" />
+                                    </TextBlock.Inlines>
+                                </TextBlock>
+                            </Panel>
+                        </TreeDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+
+                <GridSplitter
+                    Grid.Column="1"
+                    Padding="2"
+                    VerticalAlignment="Stretch" />
+
+                <Grid
+                    Grid.Column="2"
+                    Margin="8,2"
+                    IsVisible="{Binding HasSelectedItem}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="0.25*" MinWidth="80" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock 
+                                Grid.Column="0" 
+                                Classes="DetailCaption"
+                                Text="Title" />
+                            <TextBlock 
+                                Grid.Column="1" 
+                                Classes="DetailValue Code"
+                                Text="{Binding SelectedItem.MainContentItem.Title}" />
+                        </Grid>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="0.25*" MinWidth="160" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock
+                                Grid.Column="0"
+                                Classes="DetailCaption"
+                                IsVisible="{Binding SelectedItem.HasID}"
+                                Text="ID" />
+                            <TextBlock
+                                Grid.Column="1"
+                                Classes="DetailValue Code"
+                                IsVisible="{Binding SelectedItem.HasID}"
+                                Text="{Binding SelectedItem.ID}" />
+                        </Grid>
+
+                        <ItemsControl
+                            IsVisible="{Binding SelectedItem.HasMainContentItem}"
+                            ItemsSource="{Binding SelectedItem.MainContentItem.Details}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="models:LibraryContentDetailRow">
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="0.25*" MinWidth="160" />
+                                            <ColumnDefinition Width="1*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock
+                                            Grid.Column="0"
+                                            Classes="DetailCaption"
+                                            Text="{Binding Header}" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            Classes="DetailValue Code"
+                                            Text="{Binding Content}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <TextBox
+                        IsVisible="{Binding SelectedItem.HasFormattedCode}"
+                        Classes="Code"
+                        Grid.Row="1"
+                        Text="{Binding SelectedItem.MainContentItem.FormattedCode}" />
+                </Grid>
+            </Grid>
+        </DockPanel>
+    </Panel>
+
+
+</Window>

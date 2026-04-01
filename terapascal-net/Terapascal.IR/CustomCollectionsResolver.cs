@@ -1,7 +1,9 @@
-﻿using MessagePack;
+﻿using System;
+using System.Collections.Generic;
+using MessagePack;
 using MessagePack.Formatters;
 
-namespace Terapascal.CIL;
+namespace Terapascal.IR;
 
 internal class CustomCollectionsResolver : IFormatterResolver {
     public static CustomCollectionsResolver Instance { get; } = new CustomCollectionsResolver();

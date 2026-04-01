@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AvaloniaProject">
+    <option name="projectPerEditor">
+      <map>
+        <entry key="Terapascal.LibViewer/App.axaml" value="Terapascal.LibViewer/Terapascal.LibViewer.csproj" />
+        <entry key="Terapascal.LibViewer/Views/FunctionItem.axaml" value="Terapascal.LibViewer/Terapascal.LibViewer.csproj" />
+        <entry key="Terapascal.LibViewer/Views/MainWindow.axaml" value="Terapascal.LibViewer/Terapascal.LibViewer.csproj" />
+      </map>
+    </option>
+  </component>
+</project>

@@ -4,6 +4,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "terapascal2cil", "terapasca
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Terapascal.Runtime", "rt\Terapascal.Runtime.csproj", "{ECAADD36-29E2-4587-B482-8F250586E455}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Terapascal.LibViewer", "Terapascal.LibViewer\Terapascal.LibViewer.csproj", "{77FD0956-C5D4-489B-9681-5BAFAE2B54EA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Terapascal.IR", "Terapascal.IR\Terapascal.IR.csproj", "{BF3CC26E-80CB-4A7A-AC3D-7ED5C81EC9B0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +22,13 @@ Global
 		{ECAADD36-29E2-4587-B482-8F250586E455}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ECAADD36-29E2-4587-B482-8F250586E455}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ECAADD36-29E2-4587-B482-8F250586E455}.Release|Any CPU.Build.0 = Release|Any CPU
+		{77FD0956-C5D4-489B-9681-5BAFAE2B54EA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{77FD0956-C5D4-489B-9681-5BAFAE2B54EA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{77FD0956-C5D4-489B-9681-5BAFAE2B54EA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{77FD0956-C5D4-489B-9681-5BAFAE2B54EA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BF3CC26E-80CB-4A7A-AC3D-7ED5C81EC9B0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BF3CC26E-80CB-4A7A-AC3D-7ED5C81EC9B0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BF3CC26E-80CB-4A7A-AC3D-7ED5C81EC9B0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BF3CC26E-80CB-4A7A-AC3D-7ED5C81EC9B0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

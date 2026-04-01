@@ -212,7 +212,7 @@ pub trait IRFormatter {
             Instruction::NewObject { out, type_id, immortal } => {
                 write!(f, "{:>width$} ", "new", width = IX_WIDTH)?;
                 self.format_type(&Type::Struct(*type_id), f)?;
-                
+
                 write!(f, " at ")?;
                 self.format_ref(out, f)?;
                 

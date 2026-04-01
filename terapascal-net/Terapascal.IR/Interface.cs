@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Diagnostics.CodeAnalysis;
+using MessagePack;
 using MessagePack.Formatters;
 
 namespace Terapascal.IR;
@@ -37,6 +38,28 @@ public record InterfaceDef {
     public required IReadOnlyList<TagInfo> Tags {
         get;
         init => field = value.ToArrayNonNull();
+    }
+
+    public bool TryFindMethod(string name, [NotNullWhen(true)] out Method? result) {
+        foreach (var method in this.Methods) {
+            if (method.Name == name) {
+                result = method;
+                return true;
+            }
+        }
+
+        result = null;
+        return false;
+    }
+    
+    public bool TryFindMethod(MethodID id, [NotNullWhen(true)] out Method? result) {
+        if (id.ID >= (ulong)this.Methods.Count) {
+            result = null;
+            return false;
+        }
+        
+        result = this.Methods[(int)id.ID];
+        return true;
     }
 }
 
@@ -99,4 +122,10 @@ public class InterfaceDeclFormatter : IMessagePackFormatter<IInterfaceDecl> {
             }
         }
     }
+}
+
+public readonly record struct InterfaceMethodImplRef {
+    public required NamePath Interface { get; init; }
+    public required IType ImplType { get; init; }
+    public required string MethodName { get; init; }
 }

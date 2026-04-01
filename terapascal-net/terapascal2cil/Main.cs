@@ -9,8 +9,7 @@ if (!Args.Parse(args, out var parsedArgs)) {
 }
 
 var mpOptions = MessagePackSerializerOptions.Standard.WithResolver(CompositeResolver.Create([
-    CustomCollectionsResolver.Instance,
-    GeneratedMessagePackResolver.Instance,
+    IR.Library.FormatterResolver,
     StandardResolver.Instance,
 ]));
 
