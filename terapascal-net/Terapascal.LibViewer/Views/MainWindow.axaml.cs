@@ -8,9 +8,13 @@ using Avalonia.Interactivity;
 using Avalonia.Logging;
 using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
+using AvaloniaEdit;
+using AvaloniaEdit.TextMate;
 using Terapascal.LibViewer.Models;
 using Terapascal.LibViewer.Services;
 using Terapascal.LibViewer.ViewModels;
+using TextMateSharp.Grammars;
+using TextMateSharp.Registry;
 
 namespace Terapascal.LibViewer.Views;
 
@@ -19,12 +23,14 @@ public partial class MainWindow : Window {
     
     private readonly TreeView itemsView;
 
-    public required LibraryLoader LibraryLoader { get; init; }
+    private readonly IRegistryOptions textMateOptions;
 
     private readonly List<LibraryLink> historyItems;
 
     private bool pauseHistory;
     private int historyPosition;
+
+    public required LibraryLoader LibraryLoader { get; init; }
     
     public MainWindow() {
         this.InitializeComponent();
@@ -38,6 +44,9 @@ public partial class MainWindow : Window {
         this.itemsView = this.Find<TreeView>("LibraryItemsView")
             ?? throw new NullReferenceException("missing reference: LibraryItemsView");
 
+        var textMateOptions = new CodeViewerRegistryOptions(new RegistryOptions(ThemeName.VisualStudioDark));
+        this.textMateOptions = textMateOptions;
+        
         this.historyItems = new List<LibraryLink>();
     }
 
@@ -96,6 +105,8 @@ public partial class MainWindow : Window {
         }
         
         this.DataContext = viewModel;
+        
+        this.LibraryItemsView_OnSelectionChanged(this, null);
     }
 
     private void AddHistoryItem(LibraryLink item) {
@@ -166,10 +177,10 @@ public partial class MainWindow : Window {
         }
     }
 
-    private void LibraryItemsView_OnSelectionChanged(object? sender, SelectionChangedEventArgs e) {
+    private void LibraryItemsView_OnSelectionChanged(object? sender, SelectionChangedEventArgs? e) {
         this.FixScrollBars();
 
-        if (!this.pauseHistory) {
+        if (!this.pauseHistory && e != null) {
             foreach (var selected in e.AddedItems.OfType<LibraryTreeNode>()) {
                 if (selected.MainContentItem?.ToLink() is { } link) {
                     this.AddHistoryItem(link);
@@ -208,5 +219,15 @@ public partial class MainWindow : Window {
         this.pauseHistory = true;
         this.SelectNextHistoryItem();
         this.pauseHistory = false;
+    }
+
+    private void TextEditor_Initialized(object? sender, EventArgs e) {
+        if (sender is TextEditor editor) {
+            var textMate = editor.InstallTextMate(this.textMateOptions);
+
+            if (editor.DataContext is CodeItem codeItem) {
+                textMate.SetGrammar(codeItem.Scope);
+            }
+        }
     }
 }

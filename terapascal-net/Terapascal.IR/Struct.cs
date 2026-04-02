@@ -20,11 +20,6 @@ public record StructDef {
 
     public string ToPrettyString(Metadata metadata) {
         var result = new StringBuilder();
-        
-        foreach (var tag in this.Tags) {
-            tag.ToPrettyString(metadata, result);
-            result.AppendLine();
-        }
 
         foreach (var (fieldID, fieldDef) in this.Fields) {
             result.Append($"{fieldID.ID}: {fieldDef.Name}");

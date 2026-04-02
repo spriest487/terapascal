@@ -484,24 +484,23 @@ public class Metadata {
                     this.FormatOutputRef(releaseInstruction.ReleasedOut, result);
                 }
 
-                result.Append("release ");
+                result.Append("--");
+                result.Append(releaseInstruction.Weak ? "weak" : "strong");
+                result.Append(' ');
+                
                 this.FormatRef(releaseInstruction.At, result);
 
-                result.Append(" (-");
-                result.Append(releaseInstruction.Weak ? "weak" : "strong");
-                result.Append(')');
                 break;
             }
 
             case RetainInstruction retainInstruction: {
                 this.FormatInstructionPrefix("retain", result);
 
-                result.Append("retain ");
-                this.FormatRef(retainInstruction.At, result);
-
-                result.Append(" (-");
+                result.Append("++");
                 result.Append(retainInstruction.Weak ? "weak" : "strong");
-                result.Append(')');
+                result.Append(' ');
+
+                this.FormatRef(retainInstruction.At, result);
                 break;
             }
 
@@ -717,7 +716,7 @@ public class Metadata {
 
             case GlobalRef(StringLiteralGlobalRef(var id)): {
                 if (this.StringLiterals.TryGetValue(id, out var text)) {
-                    result.Append($"\"{text}\"");
+                    result.Append($"'{text}'");
                 } else {
                     result.Append(id.ToString());
                 }

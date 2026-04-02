@@ -1,6 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using AvaloniaEdit.Document;
-using AvaloniaEdit.Highlighting;
 using JetBrains.Annotations;
 
 namespace Terapascal.LibViewer.Models;
@@ -16,10 +14,8 @@ public class LibraryContentItem {
     public bool HasID => this.ID.HasValue;
 
     public LibraryContentDetailRow[]? Details { get; init; }
-    
-    // public string? Code { get; init; }
-    public TextDocument? Code { get; init; }
-    public IHighlightingDefinition? CodeHighlighting { get; init; }
+
+    public CodeItem[] CodeItems { get; init; }
 
     public LibraryLink? ToLink() {
         if (!this.HasID) {

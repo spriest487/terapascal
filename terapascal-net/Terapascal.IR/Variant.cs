@@ -32,11 +32,6 @@ public record VariantDef {
     public string ToPrettyString(Metadata metadata) {
         var result = new StringBuilder();
 
-        foreach (var tag in this.Tags) {
-            tag.ToPrettyString(metadata, result);
-            result.AppendLine();
-        }
-
         for (var caseIndex = 0; caseIndex < this.Cases.Count; caseIndex += 1) {
             var caseDef = this.Cases[caseIndex];
             

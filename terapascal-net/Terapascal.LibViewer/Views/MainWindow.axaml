@@ -43,7 +43,7 @@
         <Style Selector="TextBox.Code, ae|TextEditor.Code">
             <Setter Property="FontFamily" Value="{StaticResource NotoSansMono}" />
         </Style>
-        
+
         <Style Selector="#ToolBar Button">
             <Setter Property="Width" Value="24" />
             <Setter Property="Height" Value="24" />
@@ -59,17 +59,17 @@
                     <MenuItem Header="_Quit" Name="Quit" Click="Quit_OnClick" />
                 </MenuItem>
             </Menu>
-            
+
             <Panel DockPanel.Dock="Top" Name="ToolBar">
                 <StackPanel Orientation="Horizontal">
                     <Button
-                        Name="BackButton" 
+                        Name="BackButton"
                         IsEnabled="{Binding HasBackItem}"
                         Click="BackButton_OnClick">
                         &lt;
                     </Button>
 
-                    <Button 
+                    <Button
                         Name="ForwardButton"
                         IsEnabled="{Binding HasForwardItem}"
                         Click="ForwardButton_OnClick">
@@ -84,13 +84,13 @@
                     <ColumnDefinition Width="2" />
                     <ColumnDefinition Width="1*" />
                 </Grid.ColumnDefinitions>
-                
+
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <TextBox 
+                <TextBox
                     Watermark="Search..."
                     Grid.Column="0"
                     Grid.Row="0"
@@ -196,42 +196,49 @@
                                             Grid.Column="0"
                                             Classes="DetailCaption"
                                             Text="{Binding Header}" />
-                                        
+
                                         <TextBlock
                                             Grid.Column="1"
                                             IsVisible="{Binding !HasLink}"
                                             Classes="DetailValue Code"
                                             Text="{Binding Content}" />
-                                        <Button 
-                                            Name="DetailLinkButton"
-                                            Grid.Column="1"
-                                            IsVisible="{Binding HasLink}"
-                                            IsDefault="false"
-                                            Click="DetailLinkButton_OnClick">
+                                        <HyperlinkButton Name="DetailLinkButton"
+                                                Grid.Column="1"
+                                                IsVisible="{Binding HasLink}"
+                                                IsDefault="false"
+                                                Click="DetailLinkButton_OnClick">
                                             <TextBlock
                                                 Classes="DetailValue Code"
                                                 Text="{Binding Content}" />
-                                        </Button>
+                                        </HyperlinkButton>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </StackPanel>
 
-                    <Border
+                    <TabControl
                         Grid.Row="1"
-                        BorderThickness="1"
-                        CornerRadius="1"
-                        BorderBrush="Black"
-                        IsVisible="{Binding SelectedItem.HasCode}">
-                        <ae:TextEditor
-                            IsReadOnly="true"
-                            Classes="Code"
-                            ShowLineNumbers="True"
-                            Document="{Binding SelectedItem.MainContentItem.Code}"
-                            SyntaxHighlighting="{Binding SelectedItem.MainContentItem.CodeHighlighting}"
-                            VerticalAlignment="Top" />
-                    </Border>
+                        IsVisible="{Binding SelectedItem.HasCode}"
+                        ItemsSource="{Binding SelectedItem.MainContentItem.CodeItems}">
+                        <TabControl.ItemTemplate>
+                            <DataTemplate DataType="models:CodeItem">
+                                <TextBlock Text="{Binding Title}"/>
+                            </DataTemplate>
+                        </TabControl.ItemTemplate>
+                        
+                        <TabControl.ContentTemplate>
+                            <DataTemplate DataType="models:CodeItem">
+                                <ae:TextEditor
+                                    IsReadOnly="true"
+                                    Classes="Code"
+                                    ShowLineNumbers="True"
+                                    Document="{Binding CodeDocument}"
+                                    VerticalAlignment="Top"
+                                    Initialized="TextEditor_Initialized"/>
+                            </DataTemplate>
+                        </TabControl.ContentTemplate>
+                    </TabControl>
                 </Grid>
             </Grid>
         </DockPanel>

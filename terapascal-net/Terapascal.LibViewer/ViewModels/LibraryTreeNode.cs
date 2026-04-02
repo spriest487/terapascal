@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Text;
 using Avalonia.Controls;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -25,8 +26,7 @@ public partial class LibraryTreeNode : ObservableObject {
     public LibraryContentItem? MainContentItem { get; init; }
 
     public bool HasMainContentItem => this.MainContentItem != null;
-    // public bool HasFormattedCode => !string.IsNullOrEmpty(this.MainContentItem?.Code);
-    public bool HasCode => this.MainContentItem?.Code != null;
+    public bool HasCode => (this.MainContentItem?.CodeItems.Length ?? 0) > 0;
 
     public Classes? StyleClasses { get; init; }
 
@@ -36,42 +36,56 @@ public partial class LibraryTreeNode : ObservableObject {
         string? funcTitle = null;
 
         var details = new List<LibraryContentDetailRow>();
+        var codeItems = new List<CodeItem>(2);
         
         if (metadata.Functions.TryGetValue(id, out var funcInfo) && funcInfo.GlobalName != null) {
             funcTitle = funcInfo.GlobalName.ToPrettyString(metadata);
         } else {
-            switch (func) {
-                case IR.LocalFunction(var def): {
-                    funcTitle = def.DebugName;
-                    break;
-                }
+            funcInfo = null;
+        }
 
-                case IR.ExternalFunction(var externRef): {
-                    funcTitle = $"{externRef.Source}!{externRef.Symbol}";
-
-                    details.Add(new LibraryContentDetailRow("Source", externRef.Source));
-                    details.Add(new LibraryContentDetailRow("Symbol", externRef.Symbol));
-
-                    break;
-                } 
+        switch (func) {
+            case IR.LocalFunction(var def): {
+                funcTitle ??= def.DebugName;
+                
+                details.Add(new LibraryContentDetailRow("Debug Name", def.DebugName ?? "-"));
+                
+                var code = IR.InstructionList.FormatInstructions(def.Body.Instructions, metadata);
+                codeItems.Add(new CodeItem {
+                    Title = "Body",
+                    CodeDocument = new TextDocument(code),
+                    Scope = CodeViewerRegistryOptions.CodeScope,
+                });
+                break;
             }
+
+            case IR.ExternalFunction(var externRef): {
+                funcTitle = $"{externRef.Source}!{externRef.Symbol}";
+
+                details.Add(new LibraryContentDetailRow("Source", externRef.Source));
+                details.Add(new LibraryContentDetailRow("Symbol", externRef.Symbol));
+
+                break;
+            } 
+        }
+        
+        funcTitle ??= id.ToString();
+
+        if (funcInfo is { Tags.Count: > 0 }) {
+            var tagsCode = new StringBuilder();
+            foreach (var tag in funcInfo.Tags) {
+                tag.ToPrettyString(metadata, tagsCode);
+                tagsCode.AppendLine();
+            }
+            
+            codeItems.Add(new CodeItem {
+                Title = "Tags",
+                CodeDocument = new TextDocument(tagsCode.ToString()),
+            });
         }
 
         var sig = func.Signature();
         CreateFunctionSigDetails(sig, details, metadata);
-
-        funcTitle ??= id.ToString();
-
-        TextDocument? codeDocument;
-        switch (func) {
-            case IR.LocalFunction(var def):
-                var code = IR.InstructionList.FormatInstructions(def.Body.Instructions, metadata);
-                codeDocument = new TextDocument(code);
-                break;
-            default:
-                codeDocument = null;
-                break;
-        }
 
         return new LibraryTreeNode {
             ID = id.ID,
@@ -82,7 +96,7 @@ public partial class LibraryTreeNode : ObservableObject {
                 ContentType = LibraryContentType.Function,
                 ID = id.ID,
                 Details = details.ToArray(),
-                Code = codeDocument,
+                CodeItems = codeItems.ToArray(),
             },
         };
     }
@@ -106,7 +120,12 @@ public partial class LibraryTreeNode : ObservableObject {
                 Title = $"string {id.ID}",
                 ContentType = LibraryContentType.StringLiteral,
                 ID = id.ID,
-                Code = new TextDocument(text),
+                CodeItems = [
+                    new CodeItem {
+                        Title = "Contents",
+                        CodeDocument = new TextDocument(text), 
+                    },
+                ],
                 Details = [
                     new LibraryContentDetailRow("Length", text.Length.ToString())
                 ],
@@ -135,11 +154,16 @@ public partial class LibraryTreeNode : ObservableObject {
         var details = new List<LibraryContentDetailRow>(8);
         
         string? title;
-        TextDocument? codeDocument;
+
+        var codeItems = new List<CodeItem>(2);
+
+        IReadOnlyCollection<IR.TagInfo>? tags = null;
         
         switch (decl) {
             case IR.DefTypeDecl(IR.StructTypeDef(var structDef)): {
                 title = structDef.Identity.ToPrettyString(metadata);
+
+                tags = structDef.Tags;
 
                 details.Add(new LibraryContentDetailRow("Kind", "Struct"));
                 
@@ -153,7 +177,10 @@ public partial class LibraryTreeNode : ObservableObject {
                     _ => structDef.Identity.GetType().Name,
                 }));
 
-                codeDocument = new TextDocument(structDef.ToPrettyString(metadata));
+                codeItems.Add(new CodeItem {
+                    Title = "Definition",
+                    CodeDocument = new TextDocument(structDef.ToPrettyString(metadata)), 
+                });
 
                 break;
             }
@@ -161,21 +188,24 @@ public partial class LibraryTreeNode : ObservableObject {
             case IR.DefTypeDecl(IR.VariantTypeDef(var variantDef)): {
                 title = variantDef.Name.ToPrettyString(metadata);
 
+                tags = variantDef.Tags;
+
                 details.Add(new LibraryContentDetailRow("Kind", "Variant"));
                 
                 details.Add(new LibraryContentDetailRow("Tag Type", variantDef.TagType.ToPrettyString(metadata)) {
                     Link = LibraryLink.FromType(variantDef.TagType),
                 });
-                
-                codeDocument = new TextDocument(variantDef.ToPrettyString(metadata));
+
+                codeItems.Add(new CodeItem {
+                    Title = "Definition",
+                    CodeDocument = new TextDocument(variantDef.ToPrettyString(metadata)), 
+                });
                 break;
             }
 
             case IR.DefTypeDecl(IR.FunctionTypeDef(var sig)): {
                 details.Add(new LibraryContentDetailRow("Kind", "Function"));
                 CreateFunctionSigDetails(sig, details, metadata);
-                
-                codeDocument = null;
 
                 title = sig.ToPrettyString(metadata); 
                 break;
@@ -183,7 +213,6 @@ public partial class LibraryTreeNode : ObservableObject {
             
             case IR.ForwardTypeDecl(var name): {
                 title = name.ToPrettyString(metadata);
-                codeDocument = null;
                 
                 details.Add(new LibraryContentDetailRow("Kind", "Forward"));
                 break;
@@ -191,9 +220,21 @@ public partial class LibraryTreeNode : ObservableObject {
 
             default: {
                 title = $"type {id.ID}";
-                codeDocument = null;
                 break;
             }
+        }
+
+        if (tags != null) {
+            var tagsCode = new StringBuilder();
+            foreach (var tag in tags) {
+                tag.ToPrettyString(metadata, tagsCode);
+                tagsCode.AppendLine();
+            }
+            
+            codeItems.Add(new CodeItem {
+                Title = "Tags",
+                CodeDocument = new TextDocument(tagsCode.ToString()),
+            });
         }
 
         return new LibraryTreeNode {
@@ -205,7 +246,7 @@ public partial class LibraryTreeNode : ObservableObject {
                 ContentType = LibraryContentType.Type,
                 ID = id.ID,
                 Details = details.ToArray(),
-                Code = codeDocument,
+                CodeItems = codeItems.ToArray(),
             },
         };
     }

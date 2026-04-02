@@ -22,6 +22,7 @@
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="AvaloniaEdit.TextMate" Version="11.4.1" />
     <PackageReference Include="Classic.Avalonia.Theme" Version="11.3.0.3" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.2.1" />
     <PackageReference Include="JetBrains.Annotations" Version="2025.2.4" />
@@ -40,5 +41,13 @@
     <AdditionalFiles Include="Assets\OFL.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </AdditionalFiles>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\vscode-extension\terapascal\syntaxes\terapascal.tmLanguage.json">
+      <Link>Grammars\terapascal.tmLanguage.json</Link>
+    </EmbeddedResource>
+    <None Remove="Grammars\ircode.tmLanguage.json" />
+    <EmbeddedResource Include="Grammars\ircode.tmLanguage.json" />
   </ItemGroup>
 </Project>

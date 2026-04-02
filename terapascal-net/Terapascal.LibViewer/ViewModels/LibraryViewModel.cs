@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Terapascal.IR;
 using Terapascal.LibViewer.Models;
 
 namespace Terapascal.LibViewer.ViewModels;
@@ -38,7 +36,7 @@ public partial class LibraryViewModel : ViewModelBase {
         this.rootItems = [];
     }
 
-    public LibraryViewModel(Library lib) {
+    public LibraryViewModel(IR.Library lib) {
         var funcItems = lib.Functions
             .OrderBy(entry => entry.Key)
             .Select(entry => LibraryTreeNode.FromFunction(entry.Key, entry.Value, lib.Metadata))
@@ -69,7 +67,7 @@ public partial class LibraryViewModel : ViewModelBase {
             .Select(entry => LibraryTreeNode.FromStaticClosure(entry, lib.Metadata))
             .ToList();
 
-        var code = InstructionList.FormatInstructions(lib.Initialization.Instructions, lib.Metadata);
+        var code = IR.InstructionList.FormatInstructions(lib.Initialization.Instructions, lib.Metadata);
         
         this.selectedItem = new LibraryTreeNode {
             Title = "Library",
@@ -79,7 +77,12 @@ public partial class LibraryViewModel : ViewModelBase {
                 Details = [
                     new LibraryContentDetailRow("Version", lib.Version.ToString()),
                 ],
-                Code = new TextDocument(code),
+                CodeItems = [
+                    new CodeItem {
+                        Title = "Initialization",
+                        CodeDocument = new TextDocument(code), 
+                    },
+                ],
             },
         };
 
