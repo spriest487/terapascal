@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Text;
+using MessagePack;
 
 namespace Terapascal.IR;
 
@@ -26,6 +27,30 @@ public record VariantDef {
     public required IReadOnlyList<TagInfo> Tags {
         get;
         init => field = value.ToArrayNonNull();
+    }
+
+    public string ToPrettyString(Metadata metadata) {
+        var result = new StringBuilder();
+
+        foreach (var tag in this.Tags) {
+            tag.ToPrettyString(metadata, result);
+            result.AppendLine();
+        }
+
+        for (var caseIndex = 0; caseIndex < this.Cases.Count; caseIndex += 1) {
+            var caseDef = this.Cases[caseIndex];
+            
+            result.Append($"{caseIndex}: {caseDef.Name} = ");
+            metadata.FormatValue(caseDef.Tag, result);
+            
+            if (caseDef.Type != null) {
+                result.Append($"({caseDef.Type.ToPrettyString(metadata)})");
+            }
+
+            result.AppendLine();
+        }
+
+        return result.ToString();
     }
 }
 

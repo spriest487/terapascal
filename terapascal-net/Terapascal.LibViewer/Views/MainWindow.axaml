@@ -90,7 +90,8 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <TextBox
+                <TextBox 
+                    Watermark="Search..."
                     Grid.Column="0"
                     Grid.Row="0"
                     Name="ItemSearchBox"

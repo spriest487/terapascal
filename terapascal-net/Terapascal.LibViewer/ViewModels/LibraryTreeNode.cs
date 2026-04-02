@@ -4,7 +4,6 @@ using System.Collections.ObjectModel;
 using Avalonia.Controls;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Terapascal.IR;
 using Terapascal.LibViewer.Models;
 
 namespace Terapascal.LibViewer.ViewModels;
@@ -33,7 +32,7 @@ public partial class LibraryTreeNode : ObservableObject {
 
     public IReadOnlyList<LibraryTreeNode>? Children { get; set; }
 
-    public static LibraryTreeNode FromFunction(FunctionID id, IFunction func, Metadata metadata) {
+    public static LibraryTreeNode FromFunction(IR.FunctionID id, IR.IFunction func, IR.Metadata metadata) {
         string? funcTitle = null;
 
         var details = new List<LibraryContentDetailRow>();
@@ -42,12 +41,12 @@ public partial class LibraryTreeNode : ObservableObject {
             funcTitle = funcInfo.GlobalName.ToPrettyString(metadata);
         } else {
             switch (func) {
-                case LocalFunction(var def): {
+                case IR.LocalFunction(var def): {
                     funcTitle = def.DebugName;
                     break;
                 }
 
-                case ExternalFunction(var externRef): {
+                case IR.ExternalFunction(var externRef): {
                     funcTitle = $"{externRef.Source}!{externRef.Symbol}";
 
                     details.Add(new LibraryContentDetailRow("Source", externRef.Source));
@@ -59,23 +58,14 @@ public partial class LibraryTreeNode : ObservableObject {
         }
 
         var sig = func.Signature();
-        details.Add(new LibraryContentDetailRow("Result Type", sig.ReturnType.ToPrettyString(metadata)));
-
-        for (var param = 0; param < sig.ParameterTypes.Count; param += 1) {
-            var paramType = sig.ParameterTypes[param];
-            var paramTypeName = paramType.ToPrettyString(metadata);
-            
-            details.Add(new LibraryContentDetailRow($"Parameter Type {param}", paramTypeName) {
-                Link = LibraryLink.FromType(paramType),
-            });
-        }
+        CreateFunctionSigDetails(sig, details, metadata);
 
         funcTitle ??= id.ToString();
 
         TextDocument? codeDocument;
         switch (func) {
-            case LocalFunction(var def):
-                var code = InstructionList.FormatInstructions(def.Body.Instructions, metadata);
+            case IR.LocalFunction(var def):
+                var code = IR.InstructionList.FormatInstructions(def.Body.Instructions, metadata);
                 codeDocument = new TextDocument(code);
                 break;
             default:
@@ -97,7 +87,7 @@ public partial class LibraryTreeNode : ObservableObject {
         };
     }
 
-    public static LibraryTreeNode FromStringLit(StringID id, string text) {
+    public static LibraryTreeNode FromStringLit(IR.StringID id, string text) {
         const int maxLength = 32;
         const string ellipsis = "...";
 
@@ -124,7 +114,7 @@ public partial class LibraryTreeNode : ObservableObject {
         };
     }
 
-    public static LibraryTreeNode FromInterfaceDecl(InterfaceID id, IInterfaceDecl decl, Metadata metadata) {
+    public static LibraryTreeNode FromInterfaceDecl(IR.InterfaceID id, IR.IInterfaceDecl decl, IR.Metadata metadata) {
         var title = decl.GetGlobalName().ToPrettyString(metadata);
 
         return new LibraryTreeNode {
@@ -141,13 +131,70 @@ public partial class LibraryTreeNode : ObservableObject {
         };
     }
 
-    public static LibraryTreeNode FromTypeDecl(TypeDefID id, ITypeDecl decl, Metadata metadata) {
-        var title = decl switch {
-            DefTypeDecl(StructTypeDef(var structDef)) => structDef.Identity.ToPrettyString(metadata),
-            DefTypeDecl(VariantTypeDef(var variantDef)) => variantDef.Name.ToPrettyString(metadata),
-            DefTypeDecl(FunctionTypeDef(var sig)) => sig.ToPrettyString(metadata),
-            _ => $"type {id.ID}",
-        };
+    public static LibraryTreeNode FromTypeDecl(IR.TypeDefID id, IR.ITypeDecl decl, IR.Metadata metadata) {
+        var details = new List<LibraryContentDetailRow>(8);
+        
+        string? title;
+        TextDocument? codeDocument;
+        
+        switch (decl) {
+            case IR.DefTypeDecl(IR.StructTypeDef(var structDef)): {
+                title = structDef.Identity.ToPrettyString(metadata);
+
+                details.Add(new LibraryContentDetailRow("Kind", "Struct"));
+                
+                details.Add(new LibraryContentDetailRow("Identity Type", structDef.Identity switch {
+                    IR.ArrayStructIdentity => "array",
+                    IR.ClassStructIdentity => "class",
+                    IR.ClosureStructIdentity => "closure",
+                    IR.DynArrayStructIdentity => "dynamic array",
+                    IR.RecordStructIdentity => "record",
+                    IR.SetFlagsStructIdentity => "flags",
+                    _ => structDef.Identity.GetType().Name,
+                }));
+
+                codeDocument = new TextDocument(structDef.ToPrettyString(metadata));
+
+                break;
+            }
+
+            case IR.DefTypeDecl(IR.VariantTypeDef(var variantDef)): {
+                title = variantDef.Name.ToPrettyString(metadata);
+
+                details.Add(new LibraryContentDetailRow("Kind", "Variant"));
+                
+                details.Add(new LibraryContentDetailRow("Tag Type", variantDef.TagType.ToPrettyString(metadata)) {
+                    Link = LibraryLink.FromType(variantDef.TagType),
+                });
+                
+                codeDocument = new TextDocument(variantDef.ToPrettyString(metadata));
+                break;
+            }
+
+            case IR.DefTypeDecl(IR.FunctionTypeDef(var sig)): {
+                details.Add(new LibraryContentDetailRow("Kind", "Function"));
+                CreateFunctionSigDetails(sig, details, metadata);
+                
+                codeDocument = null;
+
+                title = sig.ToPrettyString(metadata); 
+                break;
+            }
+            
+            case IR.ForwardTypeDecl(var name): {
+                title = name.ToPrettyString(metadata);
+                codeDocument = null;
+                
+                details.Add(new LibraryContentDetailRow("Kind", "Forward"));
+                break;
+            }
+
+            default: {
+                title = $"type {id.ID}";
+                codeDocument = null;
+                break;
+            }
+        }
 
         return new LibraryTreeNode {
             ID = id.ID,
@@ -157,11 +204,13 @@ public partial class LibraryTreeNode : ObservableObject {
                 Title = title,
                 ContentType = LibraryContentType.Type,
                 ID = id.ID,
+                Details = details.ToArray(),
+                Code = codeDocument,
             },
         };
     }
     
-    public static LibraryTreeNode FromVariable(VariableID id, VariableInfo decl, Metadata metadata) {
+    public static LibraryTreeNode FromVariable(IR.VariableID id, IR.VariableInfo decl, IR.Metadata metadata) {
         var title = decl.Name.ToPrettyString(metadata);
 
         return new LibraryTreeNode {
@@ -183,10 +232,10 @@ public partial class LibraryTreeNode : ObservableObject {
         };
     }
     
-    public static LibraryTreeNode FromStaticClosure(StaticClosure staticClosure, Metadata metadata) {
+    public static LibraryTreeNode FromStaticClosure(IR.StaticClosure staticClosure, IR.Metadata metadata) {
         string funcTypeName;
         if (metadata.TypeDecls.TryGetValue(staticClosure.FunctionTypeID, out var funcTypeDecl)
-            && funcTypeDecl is DefTypeDecl(FunctionTypeDef def)
+            && funcTypeDecl is IR.DefTypeDecl(IR.FunctionTypeDef def)
         ) {
             funcTypeName = def.Sig.ToPrettyString(metadata);
         } else {
@@ -243,5 +292,18 @@ public partial class LibraryTreeNode : ObservableObject {
         }
 
         return visibleSelf;
+    }
+
+    private static void CreateFunctionSigDetails(IR.FunctionSig sig, List<LibraryContentDetailRow> details, IR.Metadata metadata) {
+        details.Add(new LibraryContentDetailRow("Result Type", sig.ReturnType.ToPrettyString(metadata)));
+
+        for (var param = 0; param < sig.ParameterTypes.Count; param += 1) {
+            var paramType = sig.ParameterTypes[param];
+            var paramTypeName = paramType.ToPrettyString(metadata);
+            
+            details.Add(new LibraryContentDetailRow($"Parameter Type {param}", paramTypeName) {
+                Link = LibraryLink.FromType(paramType),
+            });
+        }
     }
 }

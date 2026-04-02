@@ -124,7 +124,7 @@ public partial class LibraryViewModel : ViewModelBase {
             new LibraryTreeNode {
                 Title = $"Static Closures ({staticClosureItems.Count})",
                 StyleClasses = ["Category", "StaticClosures"],
-                Children = new ObservableCollection<LibraryTreeNode>(stringItems),
+                Children = new ObservableCollection<LibraryTreeNode>(staticClosureItems),
                 IsExpanded = false,
             },
         ];
@@ -152,10 +152,6 @@ public partial class LibraryViewModel : ViewModelBase {
 
     public void ApplyItemSearch() {
         this.VisibleItems = new ObservableCollection<LibraryTreeNode>(this.rootItems.Where(rootItem => {
-            if (rootItem.Children == null) {
-                return false;
-            }
-
             return rootItem.ApplySearch(this.ItemSearchText);
         }));
     }

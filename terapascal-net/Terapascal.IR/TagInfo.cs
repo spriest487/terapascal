@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Text;
+using MessagePack;
 
 namespace Terapascal.IR;
 
@@ -11,5 +12,43 @@ public class TagInfo {
     public required SortedDictionary<FieldID, IValue> Fields {
         get;
         init => field = value!.ToDictionaryNonNull();
+    }
+
+    public void ToPrettyString(Metadata metadata, StringBuilder result) {
+        result.Append('[');
+        result.Append(this.ClassID.ToObjectType().ToPrettyString(metadata));
+        
+        if (this.Fields.Count > 0) {
+            result.Append('(');
+
+            if (!metadata.FindStructDef(this.ClassID, out var classDef)) {
+                classDef = null;
+            }
+            
+            var fieldNum = 0;
+            foreach (var (fieldID, fieldVal) in this.Fields) {
+                if (fieldNum > 0) {
+                    result.Append("; ");
+                }
+                
+                if (classDef != null 
+                    && classDef.Fields.TryGetValue(fieldID, out var fieldDef)
+                    && fieldDef.Name != null
+                ) {
+                    result.Append(fieldDef.Name);
+                } else {
+                    result.Append(fieldID.ID);
+                }
+
+                result.Append(": ");
+                metadata.FormatValue(fieldVal, result);
+                
+                fieldNum += 1;
+            }
+
+            result.Append(')');
+        }
+
+        result.Append(']');
     }
 }
