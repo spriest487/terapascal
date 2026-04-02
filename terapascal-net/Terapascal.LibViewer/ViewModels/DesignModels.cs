@@ -6,7 +6,7 @@ public static class Designer {
     public static LibraryViewModel LibraryViewModel {
         get {
             var viewModel = new LibraryViewModel {
-                LibraryItems = [
+                VisibleItems = [
                     new LibraryTreeNode {
                         Title = "Strings",
                         Children = [

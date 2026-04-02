@@ -28,14 +28,9 @@ public class InstructionList {
         Metadata metadata,
         StringBuilder result
     ) {
-        var pc = 0;
-        
         foreach (var instruction in instructions) {
-            result.Append($"{pc,8}| ");
             metadata.FormatInstruction(instruction, result);
             result.AppendLine();
-
-            pc += 1;
         }
     }
 }

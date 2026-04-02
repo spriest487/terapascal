@@ -1,7 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Terapascal.IR;
 using Terapascal.LibViewer.Models;
 
 namespace Terapascal.LibViewer.ViewModels;
@@ -9,18 +12,33 @@ namespace Terapascal.LibViewer.ViewModels;
 // ReSharper disable once PartialTypeWithSinglePart
 public partial class LibraryViewModel : ViewModelBase {
     [ObservableProperty]
-    private ObservableCollection<LibraryTreeNode>? libraryItems;
+    private ObservableCollection<LibraryTreeNode>? visibleItems;
 
     [ObservableProperty]
     private LibraryTreeNode? selectedItem;
 
+    [ObservableProperty]
+    private string? codeSearchText;
+    
+    [ObservableProperty]
+    private string? itemSearchText;
+
+    [ObservableProperty]
+    private bool hasBackItem;
+    
+    [ObservableProperty]
+    private bool hasForwardItem;
+
+    private readonly List<LibraryTreeNode> rootItems;
+    
     public bool HasSelectedItem => this.SelectedItem != null;
 
     public LibraryViewModel() {
-        this.libraryItems = [];
+        this.visibleItems = [];
+        this.rootItems = [];
     }
 
-    public LibraryViewModel(IR.Library lib) {
+    public LibraryViewModel(Library lib) {
         var funcItems = lib.Functions
             .OrderBy(entry => entry.Key)
             .Select(entry => LibraryTreeNode.FromFunction(entry.Key, entry.Value, lib.Metadata))
@@ -51,6 +69,8 @@ public partial class LibraryViewModel : ViewModelBase {
             .Select(entry => LibraryTreeNode.FromStaticClosure(entry, lib.Metadata))
             .ToList();
 
+        var code = InstructionList.FormatInstructions(lib.Initialization.Instructions, lib.Metadata);
+        
         this.selectedItem = new LibraryTreeNode {
             Title = "Library",
             MainContentItem = new LibraryContentItem {
@@ -59,11 +79,11 @@ public partial class LibraryViewModel : ViewModelBase {
                 Details = [
                     new LibraryContentDetailRow("Version", lib.Version.ToString()),
                 ],
-                FormattedCode = IR.InstructionList.FormatInstructions(lib.Initialization.Instructions, lib.Metadata),
+                Code = new TextDocument(code),
             },
         };
 
-        this.libraryItems = [
+        this.rootItems = [
             this.selectedItem,
             
             new LibraryTreeNode {
@@ -108,10 +128,12 @@ public partial class LibraryViewModel : ViewModelBase {
                 IsExpanded = false,
             },
         ];
+        
+        this.ApplyItemSearch();
     }
 
     public IEnumerable<LibraryTreeNode> GetAllNodes() {
-        return GetAllNodes(this.LibraryItems);
+        return GetAllNodes(this.VisibleItems);
     }
     
     private static IEnumerable<LibraryTreeNode> GetAllNodes(IEnumerable<LibraryTreeNode>? nodes) {
@@ -124,6 +146,29 @@ public partial class LibraryViewModel : ViewModelBase {
             
             foreach (var child in GetAllNodes(node.Children)) {
                 yield return child;
+            }
+        }
+    }
+
+    public void ApplyItemSearch() {
+        this.VisibleItems = new ObservableCollection<LibraryTreeNode>(this.rootItems.Where(rootItem => {
+            if (rootItem.Children == null) {
+                return false;
+            }
+
+            return rootItem.ApplySearch(this.ItemSearchText);
+        }));
+    }
+
+    public void SelectLink(LibraryLink link) {
+        this.SelectedItem = this.GetAllNodes()
+            .Where(node => node.ID == link.ID)
+            .FirstOrDefault(node => 
+                node.MainContentItem != null && node.MainContentItem.ContentType == link.ContentType);
+
+        foreach (var rootNode in this.rootItems) {
+            if (rootNode.Children != null && rootNode.Children.Contains(this.SelectedItem)) {
+                rootNode.IsExpanded = true;
             }
         }
     }

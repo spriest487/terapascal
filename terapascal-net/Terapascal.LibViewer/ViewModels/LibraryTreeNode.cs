@@ -1,15 +1,21 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Avalonia.Controls;
+using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Terapascal.IR;
+using Terapascal.LibViewer.Models;
 
-namespace Terapascal.LibViewer.Models;
+namespace Terapascal.LibViewer.ViewModels;
 
 public partial class LibraryTreeNode : ObservableObject {
     [ObservableProperty]
     private bool isExpanded = true;
-    
+
+    [ObservableProperty]
+    private ObservableCollection<LibraryTreeNode>? visibleChildren;
+
     public ulong? ID { get; init; }
 
     public bool HasID => this.ID != null;
@@ -20,11 +26,12 @@ public partial class LibraryTreeNode : ObservableObject {
     public LibraryContentItem? MainContentItem { get; init; }
 
     public bool HasMainContentItem => this.MainContentItem != null;
-    public bool HasFormattedCode => this.MainContentItem?.FormattedCode != null;
+    // public bool HasFormattedCode => !string.IsNullOrEmpty(this.MainContentItem?.Code);
+    public bool HasCode => this.MainContentItem?.Code != null;
 
     public Classes? StyleClasses { get; init; }
 
-    public ObservableCollection<LibraryTreeNode>? Children { get; init; }
+    public IReadOnlyList<LibraryTreeNode>? Children { get; set; }
 
     public static LibraryTreeNode FromFunction(FunctionID id, IFunction func, Metadata metadata) {
         string? funcTitle = null;
@@ -65,15 +72,16 @@ public partial class LibraryTreeNode : ObservableObject {
 
         funcTitle ??= id.ToString();
 
-        string? formattedCode;
+        TextDocument? codeDocument;
         switch (func) {
             case LocalFunction(var def):
-                formattedCode = InstructionList.FormatInstructions(def.Body.Instructions, metadata);
+                var code = InstructionList.FormatInstructions(def.Body.Instructions, metadata);
+                codeDocument = new TextDocument(code);
                 break;
             default:
-                formattedCode = null;
+                codeDocument = null;
                 break;
-        }   
+        }
 
         return new LibraryTreeNode {
             ID = id.ID,
@@ -84,7 +92,7 @@ public partial class LibraryTreeNode : ObservableObject {
                 ContentType = LibraryContentType.Function,
                 ID = id.ID,
                 Details = details.ToArray(),
-                FormattedCode = formattedCode,
+                Code = codeDocument,
             },
         };
     }
@@ -108,7 +116,7 @@ public partial class LibraryTreeNode : ObservableObject {
                 Title = $"string {id.ID}",
                 ContentType = LibraryContentType.StringLiteral,
                 ID = id.ID,
-                FormattedCode = text,
+                Code = new TextDocument(text),
                 Details = [
                     new LibraryContentDetailRow("Length", text.Length.ToString())
                 ],
@@ -206,5 +214,34 @@ public partial class LibraryTreeNode : ObservableObject {
                 ],
             },
         };
+    }
+
+    public bool ApplySearch(string? term) {
+        var visibleChildren = new ObservableCollection<LibraryTreeNode>();
+
+        if (this.Children != null) {
+            foreach (var child in this.Children) {
+                if (child.ApplySearch(term)) {
+                    visibleChildren.Add(child);
+                }
+            }
+        }
+
+        this.VisibleChildren = visibleChildren;
+
+        if (this.VisibleChildren.Count > 0) {
+            return true;
+        }
+        
+        if (term == null) {
+            return true;
+        }
+        
+        var visibleSelf = this.Title.Contains(term, StringComparison.InvariantCultureIgnoreCase);
+        if (this.ID?.ToString() is { } itemID) {
+            visibleSelf |= itemID.Contains(term, StringComparison.InvariantCultureIgnoreCase);
+        }
+
+        return visibleSelf;
     }
 }

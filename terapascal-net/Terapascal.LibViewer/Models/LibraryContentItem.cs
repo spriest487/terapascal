@@ -1,3 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
+using AvaloniaEdit.Document;
+using AvaloniaEdit.Highlighting;
+using JetBrains.Annotations;
+
 namespace Terapascal.LibViewer.Models;
 
 public class LibraryContentItem {
@@ -5,11 +10,24 @@ public class LibraryContentItem {
     public required LibraryContentType ContentType { get; init; }
     
     public ulong? ID { get; init; }
+    
+    [MemberNotNullWhen(true, nameof(ID))]
+    [UsedImplicitly]
     public bool HasID => this.ID.HasValue;
 
     public LibraryContentDetailRow[]? Details { get; init; }
     
-    public string? FormattedCode { get; init; }
+    // public string? Code { get; init; }
+    public TextDocument? Code { get; init; }
+    public IHighlightingDefinition? CodeHighlighting { get; init; }
+
+    public LibraryLink? ToLink() {
+        if (!this.HasID) {
+            return null;
+        }
+
+        return new LibraryLink(this.ContentType, this.ID.Value);
+    }
 }
 
 public enum LibraryContentType {
@@ -22,7 +40,7 @@ public enum LibraryContentType {
     StaticClosure,
 }
 
-public record LibraryLink(LibraryContentType ContentType, ulong ID) {
+public readonly record struct LibraryLink(LibraryContentType ContentType, ulong ID) {
     public static LibraryLink? FromType(IR.IType type) {
         var id = type.GetTypeDefID();
         if (id == null) {
@@ -35,4 +53,6 @@ public record LibraryLink(LibraryContentType ContentType, ulong ID) {
 
 public record LibraryContentDetailRow(string Header, string Content) {
     public LibraryLink? Link { get; init; }
+    
+    public bool HasLink => this.Link != null;
 }
