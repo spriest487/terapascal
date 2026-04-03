@@ -19,6 +19,7 @@ use std::fmt::Write as _;
 use std::ops::Add;
 use std::ops::BitOr;
 use std::sync::Arc;
+use thiserror::Error;
 use terapascal_common::span::*;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::TracedError;
@@ -336,37 +337,32 @@ impl fmt::Display for TokenTree {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TokenizeError {
+    #[error("Illegal token: `{0}`")]
     IllegalToken(String, Span),
+
+    #[error("Unmatched delimiter")]
     UnmatchedDelimiter {
         delim: DelimiterPair,
         to_match: Span,
         span: Span,
     },
+
+    #[error("Unexpected close delimiter")]
     UnexpectedCloseDelimited {
         delim: DelimiterPair,
         span: Span,
     },
+
+    #[error("Unterminated string literal")]
     UnterminatedStringLiteral(Span),
+
+    #[error("Invalid escape sequence")]
+    BadEscapeSeq(Span, String),
+
+    #[error("Illegal character code")]
     IllegalChar(Span),
-}
-
-impl fmt::Display for TokenizeError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            TokenizeError::IllegalToken(token, ..) => write!(f, "Illegal token: `{}`", token),
-
-            TokenizeError::UnmatchedDelimiter { .. } => write!(f, "unmatched delimiter"),
-
-            TokenizeError::UnexpectedCloseDelimited { .. } => {
-                write!(f, "unexpected close delimiter")
-            },
-
-            TokenizeError::UnterminatedStringLiteral(..) => write!(f, "Unterminated string literal"),
-            TokenizeError::IllegalChar(..) => write!(f, "Illegal character code"),
-        }
-    }
 }
 
 impl Spanned for TokenizeError {
@@ -376,6 +372,7 @@ impl Spanned for TokenizeError {
             TokenizeError::UnmatchedDelimiter { span, .. } => span,
             TokenizeError::UnexpectedCloseDelimited { span, .. } => span,
             TokenizeError::UnterminatedStringLiteral(span) => span,
+            TokenizeError::BadEscapeSeq(span, _) => span,
             TokenizeError::IllegalChar(span) => span,
         }
     }
@@ -420,6 +417,11 @@ impl DiagnosticOutput for TokenizeError {
             TokenizeError::UnterminatedStringLiteral(span) => {
                 Some(DiagnosticLabel::new(span.clone()))
             },
+            
+            TokenizeError::BadEscapeSeq(span, seq) => {
+                Some(DiagnosticLabel::new(span.clone())
+                    .with_text(format!("{seq} is not a recognized escape sequence")))
+            }
         }
     }
 }

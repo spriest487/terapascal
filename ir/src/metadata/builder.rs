@@ -3,7 +3,8 @@ mod functions;
 mod rtti;
 
 use crate::dep_sort::sort_defs;
-use crate::{FunctionID, MethodID};
+use crate::metadata::vars::ConstInfo;
+use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::IRFormatter;
 use crate::InterfaceDef;
@@ -11,6 +12,7 @@ use crate::InterfaceID;
 use crate::InterfaceMethodImplRef;
 use crate::Metadata;
 use crate::MetadataSource;
+use crate::MethodID;
 use crate::MethodInfo;
 use crate::NamePath;
 use crate::StringID;
@@ -20,6 +22,7 @@ use crate::TypeDecl;
 use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
+use crate::Value;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
@@ -129,6 +132,13 @@ impl MetadataBuilder {
         self.next_variable_id.0 += 1;
         
         id
+    }
+
+    pub fn new_const(&mut self, name: NamePath, value: Value) {
+        self.metadata.constants.insert(name.clone(), ConstInfo {
+            name,
+            value,
+        });
     }
     
     pub fn build(mut self) -> Metadata {

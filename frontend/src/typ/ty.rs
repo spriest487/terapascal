@@ -595,6 +595,26 @@ impl Type {
         Ok(!is_unsized)
     }
 
+    pub fn is_integer(&self) -> bool {
+        let Type::Primitive(primitive) = self else {
+            return false;
+        };
+
+        match primitive {
+            Primitive::UInt8
+            | Primitive::Int8
+            | Primitive::Int16
+            | Primitive::UInt16
+            | Primitive::Int32
+            | Primitive::UInt32
+            | Primitive::Int64
+            | Primitive::UInt64
+            | Primitive::NativeInt
+            | Primitive::NativeUInt => true,
+            _ => false,
+        }
+    }
+
     pub fn expect_sized(&self, ctx: &Context, at: &Span) -> TypeResult<()> {
         let sized = self.is_sized(ctx).map_err(|e| TypeError::from_name_err(e, at.clone()))?;
 

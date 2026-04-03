@@ -46,6 +46,8 @@ pub enum UnitDecl<A: Annotation = Span> {
     FunctionDef { def: Arc<FunctionDef<A>> },
     Type { decl: TypeDecl<A> },
     Uses { decl: UseDecl },
+    
+    // var or const
     Binding { decl: UnitBinding<A> },
 }
 

@@ -162,20 +162,18 @@ impl<A: Annotation> Unit<A> {
             .flat_map(|(vis, decl)| decl.items.iter().map(move |item| (vis, item)))
     }
 
-    pub fn var_decl_items(&self) -> impl Iterator<Item = (Visibility, &UnitBindingItem<A>)> {
+    pub fn binding_items(&self, kind: BindingDeclKind) -> impl Iterator<Item = (Visibility, &UnitBindingItem<A>)> {
         self.all_decls()
-            .filter_map(|(vis, decl)| match decl {
-                UnitDecl::Binding {
-                    decl:
-                        binding @ UnitBinding {
-                            kind: BindingDeclKind::Var,
-                            ..
-                        },
-                } => Some((vis, binding)),
+            .filter_map(move |(vis, decl)| match decl {
+                UnitDecl::Binding { decl: binding, .. } if binding.kind == kind => {
+                    Some((vis, binding))
+                },
 
                 _ => None,
             })
-            .flat_map(|(vis, binding)| binding.items.iter().map(move |item| (vis, item)))
+            .flat_map(|(vis, binding)| {
+                binding.items.iter().map(move |item| (vis, item))
+            })
     }
 }
 

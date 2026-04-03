@@ -169,6 +169,19 @@ impl Type {
         matches!(self, Type::F32 | Type::F64)
     }
 
+    pub fn is_integer(&self) -> bool {
+        match self {
+            Type::U8 | Type::I8
+            | Type::I16 | Type::U16
+            | Type::I32 | Type::U32
+            | Type::I64 | Type::U64
+            | Type::USize | Type::ISize
+            => true,
+
+            _ => false,
+        }
+    }
+
     pub fn rc_resource_class_id(&self) -> Option<&ObjectID> {
         match self {
             Type::Object(class_id) => Some(class_id),

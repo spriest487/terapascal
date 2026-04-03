@@ -11,6 +11,7 @@ use crate::ast::UnitBindingItemInitializer;
 use crate::ast::UnitDeclSection;
 use crate::ast::Visibility;
 use crate::result::ErrorContinue;
+use crate::typ::ast::check_implicit_conversion;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::expr::expect_stmt_initialized;
 use crate::typ::ast::typecheck_expr;
@@ -19,6 +20,7 @@ use crate::typ::ast::unit::task::UnitDeclTask;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDeclContext;
+use crate::typ::ast::Literal;
 use crate::typ::ast::WhereClause;
 use crate::typ::typecheck_typename;
 use crate::typ::Binding;
@@ -39,6 +41,7 @@ use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::ValueKind;
+use crate::IntConstant;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -118,7 +121,7 @@ fn typecheck_unit_decl(
             let item = ast::UnitDecl::Binding { decl };
 
             Ok(UnitDeclTask::Done(item))
-        },
+        }
     }
 }
 
@@ -240,7 +243,7 @@ fn typecheck_global_binding_item(
 
     let (ty, val) = match kind {
         BindingDeclKind::Const => {
-            let (typename, mut const_val_init) = match (&item.ty, &item.init) {
+            let (typename, const_val_literal, mut const_val_init) = match (&item.ty, &item.init) {
                 (_, None) => {
                     return Err(TypeError::ConstDeclWithNoValue { span: decl_span });
                 },
@@ -250,7 +253,9 @@ fn typecheck_global_binding_item(
                     let init_expr = typecheck_expr(&init.expr, &Type::Nothing, ctx)?;
                     let ty = init_expr.annotation().ty().into_owned();
 
-                    (TypeName::inferred(ty), UnitBindingItemInitializer {
+                    let val_literal = const_init_expr_to_literal(&init_expr, ctx);
+
+                    (TypeName::inferred(ty), val_literal, UnitBindingItemInitializer {
                         expr: Box::new(init_expr),
                         eq_span: init.eq_span.clone(),
                     })
@@ -259,23 +264,32 @@ fn typecheck_global_binding_item(
                 (explicit_ty, Some(init)) => {
                     // use explicitly provided type
                     let ty = typecheck_typename(explicit_ty, ctx)?;
-                    let const_val_expr = typecheck_expr(&init.expr, &ty, ctx)?;
+                    let init_expr = typecheck_expr(&init.expr, &ty, ctx)?;
 
-                    (ty, UnitBindingItemInitializer {
-                        expr: Box::new(const_val_expr),
+                    let mut val_literal = const_init_expr_to_literal(&init_expr, ctx);
+                    let mut val_ty = init_expr.annotation().ty().into_owned();
+
+                    // special case for single-char string literals which can be reinterpreted
+                    // as numeric character literals
+                    if let Some(string_lit) = val_literal.as_string()
+                        && ty.is_integer()
+                        && string_lit.len() == 1
+                        && let Some(ascii_char) = string_lit.chars().next().filter(char::is_ascii)
+                    {
+                        val_literal = Literal::Integer(IntConstant::from(ascii_char as u32));
+                        val_ty = ty.ty().clone();
+                    }
+
+                    check_implicit_conversion(&val_ty, ty.ty(), init.expr.span(), ctx)?;
+
+                    (ty, val_literal, UnitBindingItemInitializer {
+                        expr: Box::new(init_expr),
                         eq_span: init.eq_span.clone(),
                     })
                 },
             };
 
             let val_span = const_val_init.expr.span().clone();
-
-            let const_val_literal = match const_val_init.expr.const_eval(ctx) {
-                Some(const_val) => Ok(const_val),
-                None => Err(TypeError::InvalidConstExpr {
-                    expr: const_val_init.expr,
-                }),
-            }?;
 
             assert_eq!(
                 1,
@@ -299,7 +313,7 @@ fn typecheck_global_binding_item(
                 ty: typename.ty().clone(),
             };
 
-            const_val_init.expr = Box::new(Expr::literal(const_val_literal.clone(), value));
+            const_val_init.expr = Box::new(Expr::literal(const_val_literal, value));
             (typename, Some(const_val_init))
         },
 
@@ -389,6 +403,20 @@ fn typecheck_global_binding_item(
         init: val,
         span: decl_span,
     })
+}
+
+fn const_init_expr_to_literal(init_expr: &Expr, ctx: &mut Context) -> Literal {
+    match init_expr.const_eval(ctx) {
+        Some(const_val) => {
+            const_val
+        },
+        None => {
+            ctx.error(TypeError::InvalidConstExpr {
+                expr: Box::new(init_expr.clone()),
+            });
+            Literal::Nil
+        },
+    }
 }
 
 pub fn typecheck_unit(

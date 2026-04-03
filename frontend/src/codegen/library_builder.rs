@@ -2,6 +2,7 @@ mod init;
 mod function;
 mod rc_methods;
 
+use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
@@ -28,6 +29,7 @@ use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
 use crate::ir;
 use crate::typ::ast::apply_func_decl_named_ty_args;
+use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::FunctionDeclContext;
 use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
@@ -55,8 +57,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::version::Version;
 use terapascal_common::StripMode;
+use terapascal_ir::InstructionBuilder as _;
+use terapascal_ir::InstructionList;
 use terapascal_ir::MetadataSource;
-use terapascal_ir::{InstructionBuilder as _, InstructionList};
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -243,8 +246,28 @@ impl<'a> LibraryBuilder<'a> {
     }
 
     pub fn translate_unit(&mut self, unit: &typ::ast::Unit) {
-        for (_, var) in unit.var_decl_items() {
-            let var_ty = self.translate_type(&var.ty, &typ::GenericContext::empty());
+        let unit_generic_ctx = typ::GenericContext::empty();
+
+        for (_, const_binding) in unit.binding_items(BindingDeclKind::Const) {
+            let literal_val = const_binding.init
+                .as_ref()
+                .and_then(|init| init.expr.const_eval(&self.src_metadata))
+                .expect("const binding must always have a const value");
+
+            let binding_ty = self.translate_type(&const_binding.ty, &unit_generic_ctx);
+
+            for ident in &const_binding.idents {
+                let binding_name = unit.ident.clone().child(ident.clone());
+                let binding_path = ir::NamePath::from_ident_path(&binding_name, None);
+
+                let value = literal_to_val(&literal_val, &binding_ty, &unit_generic_ctx, self);
+
+                self.metadata.new_const(binding_path, value);
+            }
+        }
+
+        for (_, var) in unit.binding_items(BindingDeclKind::Var) {
+            let var_ty = self.translate_type(&var.ty, &unit_generic_ctx);
 
             for ident in &var.idents {
                 let var_name = unit.ident.clone().child(ident.clone());
@@ -254,6 +277,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 self.variables_by_name.insert(var_name, id);
                 self.variables.insert(id, var_ty.clone());
+
                 if let Some(var_init) = &var.init {
                     let mut var_init_builder = IRBuilder::new(self);
 

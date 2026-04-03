@@ -5,6 +5,7 @@ mod tags;
 mod vars;
 
 pub use self::source::InterfaceMethodImplRef;
+use crate::metadata::vars::ConstInfo;
 use crate::typeinfo::TypeInfo;
 use crate::FunctionID;
 use crate::FunctionInfo;
@@ -46,6 +47,7 @@ pub struct Metadata {
     iface_impls: HashMap<Type, BTreeMap<InterfaceID, InterfaceImpl>>,
 
     variables: BTreeMap<VariableID, VariableInfo>,
+    constants: HashMap<NamePath, ConstInfo>,
 
     type_info: HashMap<Type, Rc<TypeInfo>>,
     function_info: LinkedHashMap<FunctionID, FunctionInfo>,
@@ -65,6 +67,7 @@ impl Metadata {
             iface_impls: HashMap::new(),
 
             variables: BTreeMap::new(),
+            constants: HashMap::new(),
 
             function_info: LinkedHashMap::new(),
 
@@ -386,6 +389,14 @@ impl Metadata {
     }
 
     pub fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
+        self.variables.get(&id)
+    }
+
+    pub fn constants(&self) -> impl Iterator<Item = &ConstInfo> {
+        self.constants.values()
+    }
+
+    pub fn get_constant(&self, id: VariableID) -> Option<&VariableInfo> {
         self.variables.get(&id)
     }
 

@@ -16,6 +16,13 @@ use terapascal_common::source_map::SourceMap;
 use terapascal_common::span::*;
 use terapascal_common::TracedError;
 
+const STRING_DELIM: char = '\'';
+const STRING_ESCAPE: char = '\\';
+const STRING_ESCAPE_NEWLINE: char = 'n';
+const STRING_ESCAPE_CR: char = 'r';
+const STRING_ESCAPE_TAB: char = 't';
+const STRING_ESCAPE_BACKSPACE: char = 'b';
+
 pub fn lex(
     unit: PreprocessedUnit,
 ) -> TokenizeResult<Vec<TokenTree>> {
@@ -251,66 +258,109 @@ impl Lexer {
         let start_loc = self.location;
 
         self.location.col += 1;
+        let first_char_loc = self.location;
+
+        let mut escape = false;
 
         'whole_string: loop {
-            match self.line.get(self.location.col) {
-                // todo: better error for unterminated string literal
-                None => {
-                    let span = self.src_span_from(start_loc);
-                    return Err(TracedError::trace(TokenizeError::UnterminatedStringLiteral(span)));
-                }
+            // todo: better error for unterminated string literal
+            let Some(next) = self.line.get(self.location.col) else {
+                let span = self.src_span_from(start_loc);
+                return Err(TracedError::trace(TokenizeError::UnterminatedStringLiteral(span)));
+            };
 
-                // depends on the token after this one
-                Some('\'') => match self.line.get(self.location.col + 1) {
-                    // it's quoted quote, add it to the contents and advance an extra col
-                    Some('\'') => {
-                        contents.push('\'');
-                        self.location.col += 2;
+            self.location.col += 1;
+
+            if !escape {
+                match *next {
+                    STRING_ESCAPE => {
+                        escape = true;
                     }
 
-                    // this string part ends but is followed by a char literal (e.g. `'hello'#10`)
-                    Some('#') => {
-                        self.location.col += 1;
-
-                        'char_codes: loop {
-                            let char_start_loc = self.location;
-                            let char_token = self.literal_int(true)?;
-                            match char_token.as_literal_int().and_then(|i| i.as_u32()).and_then(char::from_u32) {
-                                Some(char_val) => {
-                                    contents.push(char_val);
-                                }
-
-                                None => {
-                                    let err_span = self.src_span_from(char_start_loc);
-                                    return Err(TracedError::trace(TokenizeError::IllegalChar(err_span)));
-                                }
+                    STRING_DELIM => {
+                        match self.line.get(self.location.col + 1).cloned() {
+                            // two single quotes becomes an escaped single quote
+                            Some(STRING_DELIM) => {
+                                contents.push(STRING_DELIM);
+                                self.location.col += 1;
                             }
 
-                            match self.line.get(self.location.col) {
-                                Some('#') => {
-                                    // another char follows this one
-                                },
-                                Some('\'') => {
-                                    // the string resumes
+                            // this string part ends but is followed by a char literal (e.g. `'hello'#10`)
+                            Some('#') => {
+                                'char_codes: loop {
                                     self.location.col += 1;
-                                    break 'char_codes;
+                                    let char_start_loc = self.location;
+                                    let char_token = self.literal_int(true)?;
+
+                                    match char_token.as_literal_int().and_then(|i| i.as_u32()).and_then(char::from_u32) {
+                                        Some(char_val) => {
+                                            contents.push(char_val);
+                                        }
+
+                                        None => {
+                                            let err_span = self.src_span_from(char_start_loc);
+                                            return Err(TracedError::trace(TokenizeError::IllegalChar(err_span)));
+                                        }
+                                    }
+
+                                    match self.line.get(self.location.col).cloned() {
+                                        Some('#') => {
+                                            self.location.col += 1;
+                                            // another char follows this one
+                                        },
+                                        Some(STRING_DELIM) => {
+                                            // the string resumes
+                                            self.location.col += 1;
+                                            break 'char_codes;
+                                        }
+                                        _ => {
+                                            break 'whole_string
+                                        },
+                                    }
                                 }
-                                _ => break 'whole_string,
                             }
+
+                            // it's something else, this string ends here
+                            _ => {
+                                break 'whole_string;
+                            },
                         }
                     }
 
-                    // it's something else, this string ends here
-                    _ => {
-                        self.location.col += 1;
-                        break 'whole_string;
+                    other => {
+                        contents.push(other);
                     },
-                },
+                }
+            } else {
+                escape = false;
 
-                Some(c) => {
-                    contents.push(*c);
-                    self.location.col += 1;
-                },
+                match *next {
+                    STRING_ESCAPE | STRING_DELIM => {
+                        contents.push(*next);
+                    }
+
+                    STRING_ESCAPE_NEWLINE => {
+                        contents.push('\n');
+                    }
+
+                    STRING_ESCAPE_CR => {
+                        contents.push('\r');
+                    }
+
+                    STRING_ESCAPE_TAB => {
+                        contents.push('\t');
+                    }
+
+                    STRING_ESCAPE_BACKSPACE => {
+                        contents.push(8 as char);
+                    }
+
+                    bad => {
+                        let seq = format!("{}{}", STRING_ESCAPE, bad);
+                        let span = self.src_span_from(first_char_loc);
+                        return Err(TokenizeError::BadEscapeSeq(span, seq).into());
+                    }
+                }
             }
         }
 

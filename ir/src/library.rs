@@ -1,8 +1,10 @@
+use crate::write_instruction_list;
 use crate::ExternalFunctionRef;
 use crate::Function;
 use crate::FunctionDef;
 use crate::FunctionID;
 use crate::IRFormatter;
+use crate::InstructionList;
 use crate::Metadata;
 use crate::MetadataSource;
 use crate::StaticClosure;
@@ -10,7 +12,6 @@ use crate::StructIdentity;
 use crate::TagInfo;
 use crate::Type;
 use crate::TypeDef;
-use crate::{write_instruction_list, InstructionList};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -122,7 +123,8 @@ impl fmt::Display for Library {
                     }
                 },
 
-                TypeDef::Function(..) => {
+                TypeDef::Function(sig) => {
+                    writeln!(f, "{}", sig.to_pretty_string(self.metadata()))?;
                 },
             }
 
@@ -177,9 +179,17 @@ impl fmt::Display for Library {
         }
         writeln!(f)?;
 
-        writeln!(f, "* Global Variables")?;
+        writeln!(f, "* Constants")?;
+        for const_info in self.metadata.constants() {
+            writeln!(f, "{} = ", const_info.name)?;
+            self.metadata.format_val(&const_info.value, f)?;
+        }
+        writeln!(f)?;
+        
+        writeln!(f, "* Variables")?;
         for (var_id, var_info) in self.metadata.variables() {
-            writeln!(f, "{}: {} ({})", var_id.0, self.metadata.pretty_type_name(&var_info.r#type), var_info.name)?;
+            writeln!(f, "{}: {}", var_id.0, self.metadata.pretty_type_name(&var_info.r#type))?;
+            writeln!(f, " ({})", var_info.name)?;
         }
         writeln!(f)?;
         
