@@ -590,6 +590,10 @@ impl Type {
         }
     }
 
+    pub fn is_pointer(&self) -> bool {
+        self.is_raw_pointer() || self.is_raw_pointer()
+    }
+
     pub fn is_sized(&self, ctx: &Context) -> NameResult<bool> {
         let is_unsized = ctx.is_unsized_ty(self)?;
         Ok(!is_unsized)
@@ -600,19 +604,7 @@ impl Type {
             return false;
         };
 
-        match primitive {
-            Primitive::UInt8
-            | Primitive::Int8
-            | Primitive::Int16
-            | Primitive::UInt16
-            | Primitive::Int32
-            | Primitive::UInt32
-            | Primitive::Int64
-            | Primitive::UInt64
-            | Primitive::NativeInt
-            | Primitive::NativeUInt => true,
-            _ => false,
-        }
+        primitive.is_integer()
     }
 
     pub fn expect_sized(&self, ctx: &Context, at: &Span) -> TypeResult<()> {

@@ -2,7 +2,7 @@ mod task;
 mod unit_typedecl;
 
 pub use self::unit_typedecl::*;
-use crate::ast;
+use crate::{ast, RealConstant};
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionName;
 use crate::ast::IdentPath;
@@ -22,7 +22,7 @@ use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDeclContext;
 use crate::typ::ast::Literal;
 use crate::typ::ast::WhereClause;
-use crate::typ::typecheck_typename;
+use crate::typ::{typecheck_typename, Primitive};
 use crate::typ::Binding;
 use crate::typ::ConstValue;
 use crate::typ::Context;
@@ -269,18 +269,41 @@ fn typecheck_global_binding_item(
                     let mut val_literal = const_init_expr_to_literal(&init_expr, ctx);
                     let mut val_ty = init_expr.annotation().ty().into_owned();
 
-                    // special case for single-char string literals which can be reinterpreted
-                    // as numeric character literals
-                    if let Some(string_lit) = val_literal.as_string()
-                        && ty.is_integer()
-                        && string_lit.len() == 1
-                        && let Some(ascii_char) = string_lit.chars().next().filter(char::is_ascii)
-                    {
-                        val_literal = Literal::Integer(IntConstant::from(ascii_char as u32));
-                        val_ty = ty.ty().clone();
-                    }
+                    match (&val_ty, &mut val_literal) {
+                        (int_ty, Literal::String(string_lit))
+                        if int_ty.is_integer() => {
+                            if string_lit.len() == 1
+                                && let Some(ascii_char) = string_lit.chars().next().filter(char::is_ascii)
+                            {
+                                val_literal = Literal::Integer(IntConstant::from(ascii_char as u32));
+                                val_ty = ty.ty().clone();
+                            } else {
+                                check_implicit_conversion(&val_ty, ty.ty(), init.expr.span(), ctx)?;
+                            }
+                        }
 
-                    check_implicit_conversion(&val_ty, ty.ty(), init.expr.span(), ctx)?;
+                        (num_ty, Literal::Integer(int_lit)) => {
+                            if !lit_int_has_value_of_type(int_lit, num_ty) {
+                                ctx.error(TypeError::InvalidConstValue {
+                                    expr: Box::new(init_expr.clone()),
+                                    as_type: val_ty.clone(),
+                                })
+                            }
+                        }
+
+                        (num_ty, Literal::Real(int_lit)) => {
+                            if !lit_real_has_value_of_type(int_lit, num_ty) {
+                                ctx.error(TypeError::InvalidConstValue {
+                                    expr: Box::new(init_expr.clone()),
+                                    as_type: val_ty.clone(),
+                                })
+                            }
+                        }
+
+                        _ => {
+                            check_implicit_conversion(&val_ty, ty.ty(), init.expr.span(), ctx)?;
+                        }
+                    }
 
                     (ty, val_literal, UnitBindingItemInitializer {
                         expr: Box::new(init_expr),
@@ -403,6 +426,39 @@ fn typecheck_global_binding_item(
         init: val,
         span: decl_span,
     })
+}
+
+fn lit_int_has_value_of_type(lit: &IntConstant, of_type: &Type) -> bool {
+    match of_type {
+        Type::Primitive(p) => match p {
+            Primitive::UInt8 => lit.as_u8().is_some(),
+            Primitive::Int8 => lit.as_i8().is_some(),
+            Primitive::UInt16 => lit.as_u16().is_some(),
+            Primitive::Int16 => lit.as_i16().is_some(),
+            Primitive::UInt32 => lit.as_u32().is_some(),
+            Primitive::Int32 => lit.as_i32().is_some(),
+            Primitive::UInt64 => lit.as_u64().is_some(),
+            Primitive::Int64 => lit.as_i64().is_some(),
+            Primitive::NativeInt => lit.as_isize().is_some(),
+            Primitive::NativeUInt | Primitive::Pointer => lit.as_usize().is_some(),
+            Primitive::Real32 => lit.as_f32().is_some(),
+            Primitive::Real64 => lit.as_f64().is_some(),
+            _ => false,
+        }
+        Type::Pointer(..) => lit.as_usize().is_some(),
+        _ => false,
+    }
+}
+
+fn lit_real_has_value_of_type(lit: &RealConstant, of_type: &Type) -> bool {
+    match of_type {
+        Type::Primitive(p) => match p {
+            Primitive::Real32 => lit.as_f32().is_some(),
+            Primitive::Real64 => lit.as_f64().is_some(),
+            _ => false,
+        }
+        _ => false,
+    }
 }
 
 fn const_init_expr_to_literal(init_expr: &Expr, ctx: &mut Context) -> Literal {

@@ -355,6 +355,10 @@ pub enum TypeError {
     InvalidConstExpr {
         expr: Box<Expr>,
     },
+    InvalidConstValue {
+        expr: Box<Expr>,
+        as_type: Type,
+    },
 
     InvalidCaseExprBlock {
         span: Span,
@@ -597,6 +601,7 @@ impl Spanned for TypeError {
             TypeError::RTTIDisabled { span } => span,
             
             TypeError::InvalidConstExpr { expr } => expr.span(),
+            TypeError::InvalidConstValue { expr, .. } => expr.span(),
             TypeError::InvalidCaseExprBlock { span } => span,
             TypeError::InvalidCast { span, .. } => span,
             TypeError::EmptyMatchBlock { span, .. } => span,
@@ -759,6 +764,7 @@ impl DiagnosticOutput for TypeError {
             }
 
             TypeError::InvalidConstExpr { .. } => "Invalid constant expression",
+            TypeError::InvalidConstValue { .. } => "Invalid constant value",
 
             TypeError::InvalidCaseExprBlock { .. } => "Case block invalid as expression",
 
@@ -1562,6 +1568,10 @@ impl fmt::Display for TypeError {
 
             TypeError::InvalidConstExpr { expr } => {
                 write!(f, "expr `{}` is not a constant value", expr)
+            },
+
+            TypeError::InvalidConstValue { expr, as_type  } => {
+                write!(f, "value `{}` is not a valid constant value of type {}", expr, as_type)
             },
 
             TypeError::InvalidCaseExprBlock { .. } => {
