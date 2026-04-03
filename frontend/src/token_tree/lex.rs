@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod test;
+
 use crate::ast::keyword::Keyword;
 use crate::ast::operators::CompoundAssignmentOperator;
 use crate::ast::operators::Operator;
@@ -278,7 +281,7 @@ impl Lexer {
                     }
 
                     STRING_DELIM => {
-                        match self.line.get(self.location.col + 1).cloned() {
+                        match self.line.get(self.location.col).cloned() {
                             // two single quotes becomes an escaped single quote
                             Some(STRING_DELIM) => {
                                 contents.push(STRING_DELIM);
