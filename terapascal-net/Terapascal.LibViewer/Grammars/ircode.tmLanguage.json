@@ -1,0 +1,69 @@
+{
+  "scopeName": "source.terapascal.ir",
+  "patterns": [
+    {
+      "include": "#instruction"
+    }
+  ],
+  "repository": {
+    "instruction": {
+      "patterns": [
+        { "include": "#comment-line" },
+        { "include": "#label-line" },
+  
+        { "include": "#logic-op" },
+        { "include": "#ref-op" },
+        { "include": "#arith-op" },
+        { "include": "#call-op" },
+        { "include": "#object-op" },
+
+        { "include": "#local-id" },
+        { "include": "#lit-number" },
+        { "include": "#lit-string" }
+      ]
+    },
+    "comment-line": {
+      "match": "\/\/.+$",
+      "name": "comment.line.double-slash"
+    },
+    "label-line": {
+      "match": "\\b\\d+:\\b",
+      "name": "keyword.control"
+    },
+    
+    "logic-op": {
+      "match": "\\b(bitand|bitor|bitxor|bitnot|eq|gt|lt|jte|gte|not|and|or)\\b",
+      "name": "keyword.other.function"
+    },
+    "ref-op": {
+      "match": "\\b(local|mov|addrof|makeref|length|is|cast)\\b",
+      "name": "keyword.other.function"
+    },
+    "arith-op": {
+      "match": "\\b(add|sub|mul|idiv|fdiv|mod|shl|shr)\\b",
+      "name": "keyword.other.function"
+    },
+    "call-op": {
+      "match": "\\b(call|vcall|raise)\\b",
+      "name": "keyword.other.function"
+    },
+    "object-op": {
+      "match": "\\b(new|newarr|newbox|release|retain)\\b",
+      "name": "keyword.other.function"
+    },
+
+    "local-id": {
+      "match": "%(((Arg)?\\d+)|Result)\\b",
+      "name": "keyword.other.variable"
+    },
+    "lit-string": {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single"
+    },
+    "lit-number": {
+      "match": "\\b\\d+(\\.\\d+)?\\b",
+      "name": "constant.numeric"
+    }
+  }
+}

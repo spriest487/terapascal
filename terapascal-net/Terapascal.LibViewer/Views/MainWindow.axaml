@@ -1,0 +1,248 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Terapascal.LibViewer.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:models="clr-namespace:Terapascal.LibViewer.Models"
+        xmlns:ae="clr-namespace:AvaloniaEdit;assembly=AvaloniaEdit"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="Terapascal.LibViewer.Views.MainWindow"
+        x:DataType="vm:LibraryViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Terapascal.LibViewer"
+        WindowStartupLocation="CenterScreen"
+        WindowState="Normal"
+        Width="1280"
+        Height="720">
+
+    <Design.DataContext>
+        <vm:LibraryViewModel />
+    </Design.DataContext>
+
+    <Window.Styles>
+        <Style Selector="TextBlock.ItemTitle">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style Selector="TextBlock.DetailCaption">
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.DetailValue">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="8 0 0 0" />
+        </Style>
+        <Style Selector="TextBlock.Code">
+            <Setter Property="FontFamily" Value="{StaticResource NotoSansMono}" />
+        </Style>
+        <Style Selector="TextBox.Code, ae|TextEditor.Code">
+            <Setter Property="FontFamily" Value="{StaticResource NotoSansMono}" />
+        </Style>
+
+        <Style Selector="#ToolBar Button">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Margin" Value="4" />
+        </Style>
+    </Window.Styles>
+
+    <Panel>
+        <DockPanel>
+            <Menu DockPanel.Dock="Top">
+                <MenuItem Header="_File" Name="File">
+                    <MenuItem Header="_Open" Name="Open" Click="Open_OnClick" />
+                    <MenuItem Header="_Quit" Name="Quit" Click="Quit_OnClick" />
+                </MenuItem>
+            </Menu>
+
+            <Panel DockPanel.Dock="Top" Name="ToolBar">
+                <StackPanel Orientation="Horizontal">
+                    <Button
+                        Name="BackButton"
+                        IsEnabled="{Binding HasBackItem}"
+                        Click="BackButton_OnClick">
+                        &lt;
+                    </Button>
+
+                    <Button
+                        Name="ForwardButton"
+                        IsEnabled="{Binding HasForwardItem}"
+                        Click="ForwardButton_OnClick">
+                        &gt;
+                    </Button>
+                </StackPanel>
+            </Panel>
+
+            <Grid DockPanel.Dock="Bottom" Name="MainContent" Margin="4 4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="0.33*" MinWidth="200" />
+                    <ColumnDefinition Width="2" />
+                    <ColumnDefinition Width="1*" />
+                </Grid.ColumnDefinitions>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <TextBox
+                    Watermark="Search..."
+                    Grid.Column="0"
+                    Grid.Row="0"
+                    Name="ItemSearchBox"
+                    Margin="1,0"
+                    Text="{Binding ItemSearchText}"
+                    TextChanged="ItemSearchBox_OnTextChanged"
+                    FontFamily="{StaticResource NotoSansMono}" />
+                <TreeView
+                    Name="LibraryItemsView"
+                    Grid.Column="0"
+                    Grid.Row="1"
+                    Margin="1"
+                    ItemsSource="{Binding VisibleItems}"
+                    SelectionMode="Single"
+                    AutoScrollToSelectedItem="true"
+                    SelectedItem="{Binding SelectedItem}"
+                    SelectionChanged="LibraryItemsView_OnSelectionChanged">
+                    <TreeView.Styles>
+                        <Style Selector="TreeViewItem" x:DataType="vm:LibraryTreeNode">
+                            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                        </Style>
+                    </TreeView.Styles>
+
+                    <TreeView.ItemTemplate>
+                        <TreeDataTemplate ItemsSource="{Binding VisibleChildren}">
+                            <Panel>
+                                <TextBlock>
+                                    <TextBlock.Inlines>
+                                        <Run Text="{Binding ID}" FontWeight="Bold" />
+                                        <Run Text="{Binding IDSeparator}" />
+                                        <Run Text="{Binding Title}"
+                                             FontFamily="{StaticResource NotoSansMono}" />
+                                    </TextBlock.Inlines>
+                                </TextBlock>
+                            </Panel>
+                        </TreeDataTemplate>
+                    </TreeView.ItemTemplate>
+                </TreeView>
+
+                <GridSplitter
+                    Grid.Row="0"
+                    Grid.Column="1"
+                    Grid.RowSpan="2"
+                    Padding="2"
+                    VerticalAlignment="Stretch" />
+
+                <Grid
+                    Grid.Row="0"
+                    Grid.RowSpan="2"
+                    Grid.Column="2"
+                    Margin="8,2"
+                    IsVisible="{Binding HasSelectedItem}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Column="0" Grid.Row="0">
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="0.25*" MinWidth="80" />
+                                <ColumnDefinition Width="1*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock
+                                Grid.Row="0"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="2"
+                                Classes="ItemTitle"
+                                Text="{Binding SelectedItem.MainContentItem.Title}" />
+
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                Classes="DetailCaption"
+                                IsVisible="{Binding SelectedItem.HasID}"
+                                Text="ID" />
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Classes="DetailValue Code"
+                                IsVisible="{Binding SelectedItem.HasID}"
+                                Text="{Binding SelectedItem.ID}" />
+                        </Grid>
+
+                        <ItemsControl
+                            IsVisible="{Binding SelectedItem.HasMainContentItem}"
+                            ItemsSource="{Binding SelectedItem.MainContentItem.Details}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="models:LibraryContentDetailRow">
+                                    <Grid Margin="0,0,0,8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="0.25*" MinWidth="80" />
+                                            <ColumnDefinition Width="1*" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock
+                                            Grid.Column="0"
+                                            Classes="DetailCaption"
+                                            Text="{Binding Header}" />
+
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            IsVisible="{Binding !HasLink}"
+                                            Classes="DetailValue Code"
+                                            Text="{Binding Content}" />
+                                        <HyperlinkButton Name="DetailLinkButton"
+                                                Grid.Column="1"
+                                                IsVisible="{Binding HasLink}"
+                                                IsDefault="false"
+                                                Click="DetailLinkButton_OnClick">
+                                            <TextBlock
+                                                Classes="DetailValue Code"
+                                                Text="{Binding Content}" />
+                                        </HyperlinkButton>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <TabControl
+                        Grid.Row="1"
+                        IsVisible="{Binding SelectedItem.HasCode}"
+                        ItemsSource="{Binding SelectedItem.MainContentItem.CodeItems}">
+                        <TabControl.ItemTemplate>
+                            <DataTemplate DataType="models:CodeItem">
+                                <TextBlock Text="{Binding Title}"/>
+                            </DataTemplate>
+                        </TabControl.ItemTemplate>
+                        
+                        <TabControl.ContentTemplate>
+                            <DataTemplate DataType="models:CodeItem">
+                                <ae:TextEditor
+                                    IsReadOnly="true"
+                                    Classes="Code"
+                                    ShowLineNumbers="True"
+                                    Document="{Binding CodeDocument}"
+                                    VerticalAlignment="Top"
+                                    Initialized="TextEditor_Initialized"/>
+                            </DataTemplate>
+                        </TabControl.ContentTemplate>
+                    </TabControl>
+                </Grid>
+            </Grid>
+        </DockPanel>
+    </Panel>
+
+
+</Window>

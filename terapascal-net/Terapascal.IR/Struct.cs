@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Text;
+using MessagePack;
 using MessagePack.Formatters;
 
 namespace Terapascal.IR;
@@ -15,6 +16,19 @@ public record StructDef {
     public required IReadOnlyList<TagInfo> Tags {
         get;
         init => field = value.ToArrayNonNull();
+    }
+
+    public string ToPrettyString(Metadata metadata) {
+        var result = new StringBuilder();
+
+        foreach (var (fieldID, fieldDef) in this.Fields) {
+            result.Append($"{fieldID.ID}: {fieldDef.Name}");
+            result.Append($"({fieldDef.Type.ToPrettyString(metadata)})");
+
+            result.AppendLine();
+        }
+
+        return result.ToString();
     }
 }
 

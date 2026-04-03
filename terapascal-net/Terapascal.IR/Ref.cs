@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Text;
+using MessagePack;
 using MessagePack.Formatters;
 
 namespace Terapascal.IR;
@@ -27,11 +28,25 @@ public readonly record struct FunctionID(ulong ID) : IComparable<FunctionID> {
     public int CompareTo(FunctionID other) {
         return this.ID.CompareTo(other.ID);
     }
+
+    public override string ToString() {
+        return $"function {this.ID}";
+    }
+
+    public string ToPrettyString(Metadata metadata) {
+        var result = new StringBuilder();
+        metadata.FormatFunctionName(this, result);
+        return result.ToString();
+    }
 }
 
 public readonly record struct VariableID(ulong ID) : IComparable<VariableID> {
     public int CompareTo(VariableID other) {
         return this.ID.CompareTo(other.ID);
+    }
+
+    public override string ToString() {
+        return $"variable {this.ID}";
     }
 }
 
@@ -41,11 +56,19 @@ public readonly record struct StringID(ulong ID) : IComparable<StringID> {
     public int CompareTo(StringID other) {
         return this.ID.CompareTo(other.ID);
     }
+
+    public override string ToString() {
+        return $"string {this.ID}";
+    }
 }
 
 public readonly record struct StaticClosureID(ulong ID) : IComparable<StaticClosureID> {
     public int CompareTo(StaticClosureID other) {
         return this.ID.CompareTo(other.ID);
+    }
+
+    public override string ToString() {
+        return $"static closure {this.ID}";
     }
 }
 
@@ -101,13 +124,22 @@ public class StaticClosureIDFormatter : IMessagePackFormatter<StaticClosureID> {
 
 public interface IRef;
 
-public record ResultRef : IRef;
+public record ResultRef : IRef {
+    public override string ToString() {
+        return "%Result";
+    }
+}
 
 public record ArgRef(ArgID ID) : IRef;
 public record LocalRef(LocalID ID) : IRef;
 public record GlobalRef(IGlobalRef Global) : IRef;
 public record Deref(IValue Value) : IRef;
-public record DiscardRef : IRef;
+
+public record DiscardRef : IRef {
+    public override string ToString() {
+        return "_";
+    }
+}
 
 public record FieldRef(FieldRefData Data) : IRef;
 

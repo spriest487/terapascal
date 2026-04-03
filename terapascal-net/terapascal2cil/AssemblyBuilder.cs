@@ -242,15 +242,15 @@ public class AssemblyBuilder : IDisposable {
         foreach (var (id, varInfo) in library.Metadata.Variables) {
             var typeRef = this.TypeBuilder.BuildTypeRef(varInfo.Type, library);
 
-            FieldDefinition varFieldDef;
-
-            if (this.GetUnitClass(varInfo.Name) is { } unitClassDef) {
-                varFieldDef = new FieldDefinition(varInfo.Name.Last, globalVarFieldAttrs, typeRef);
-                unitClassDef.Fields.Add(varFieldDef);
+            TypeDefinition typeDef;
+            if (varInfo.Name.GetParent() is { } unitPath) {
+                typeDef = this.GetUnitClass(unitPath);
             } else {
-                varFieldDef = new FieldDefinition($"Variable_{id.ID}", globalVarFieldAttrs, typeRef);
-                globals.Fields.Add(varFieldDef);
+                typeDef = globals;
             }
+
+            var varFieldDef = new FieldDefinition(varInfo.Name.Last, globalVarFieldAttrs, typeRef);
+            typeDef.Fields.Add(varFieldDef);
             
             this.globalVarFields.Add(id, varFieldDef);
         }

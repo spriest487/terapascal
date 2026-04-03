@@ -7,10 +7,6 @@ public interface IInstruction;
 
 public record CommentInstruction(string Text) : IInstruction;
 
-public record DebugPushInstruction(Span Context) : IInstruction;
-
-public record DebugPopInstruction : IInstruction;
-
 public record LocalAllocInstruction(LocalID At, IType Type) : IInstruction;
 
 [MessagePackObject]
@@ -65,7 +61,7 @@ public record AndInstruction(BinOpInstruction Op) : IInstruction;
 public record OrInstruction(BinOpInstruction Op) : IInstruction;
 
 [MessagePackObject]
-public record BinOpInstruction : IInstruction {
+public record BinOpInstruction {
     [Key("out")]
     public required IRef Out {
         get;
@@ -90,7 +86,7 @@ public record NotInstruction(UnaryOpInstruction Op) : IInstruction;
 public record BitNotInstruction(UnaryOpInstruction Op) : IInstruction;
 
 [MessagePackObject]
-public sealed record UnaryOpInstruction : IInstruction {
+public sealed record UnaryOpInstruction {
     [Key("out")]
     public required IRef Out {
         get;
@@ -222,7 +218,11 @@ public record ClassIsInstruction : IInstruction {
 
 public record LabelInstruction(Label Label) : IInstruction;
 
-public readonly record struct Label(ulong ID);
+public readonly record struct Label(ulong ID) {
+    public override string ToString() {
+        return $"{this.ID}:";
+    }
+}
 
 public class LabelFormatter : IMessagePackFormatter<Label> {
     public void Serialize(ref MessagePackWriter writer, Label value, MessagePackSerializerOptions options) {
@@ -380,14 +380,6 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
         switch (key) {
             case "Comment": {
                 return new CommentInstruction(reader.ReadString()!);
-            }
-            case "DebugPush": {
-                var span = MessagePackSerializer.Deserialize<Span>(ref reader, options);
-                return new DebugPushInstruction(span);
-            }
-
-            case "DebugPop": {
-                return new DebugPopInstruction();
             }
 
             case "LocalAlloc": {

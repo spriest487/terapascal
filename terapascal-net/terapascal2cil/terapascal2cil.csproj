@@ -38,11 +38,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\rt\Terapascal.Runtime.csproj" />
+    <ProjectReference Include="..\Terapascal.IR\Terapascal.IR.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <None Remove="template.runtimeconfig.json" />
     <EmbeddedResource Include="template.runtimeconfig.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="IR\" />
   </ItemGroup>
 
 </Project>

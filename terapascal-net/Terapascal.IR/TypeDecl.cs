@@ -4,6 +4,7 @@ using MessagePack.Formatters;
 namespace Terapascal.IR;
 
 public interface ITypeDecl;
+
 public record ReservedTypeDecl : ITypeDecl;
 public record ForwardTypeDecl(NamePath Name) : ITypeDecl;
 public record DefTypeDecl(ITypeDef Def) : ITypeDecl;

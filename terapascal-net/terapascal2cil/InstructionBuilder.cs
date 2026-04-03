@@ -80,9 +80,7 @@ public class InstructionBuilder {
             var instruction = instructions[pc];
 
             switch (instruction) {
-                case IR.CommentInstruction:
-                case IR.DebugPushInstruction:
-                case IR.DebugPopInstruction: {
+                case IR.CommentInstruction: {
                     // ignored
                     break;
                 }

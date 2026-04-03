@@ -1,0 +1,23 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Terapascal.LibViewer.App"
+             xmlns:local="using:Terapascal.LibViewer"
+             RequestedThemeVariant="Default">
+             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+
+    <Application.Resources>
+        <FontFamily x:Key="NotoSansMono">avares://Terapascal.LibViewer/Assets/NotoSansMono.ttf#Noto Sans Mono, Regular</FontFamily>
+    </Application.Resources>
+  
+    <Application.Styles>
+        <!-- <ClassicTheme FontAliasing="false" /> -->
+        <SimpleTheme />
+        <!-- <FluentTheme DensityStyle="Compact" /> -->
+        <StyleInclude Source="avares://AvaloniaEdit/Themes/Simple/AvaloniaEdit.xaml"></StyleInclude>
+        <!-- <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"></StyleInclude> -->
+    </Application.Styles>
+</Application>
