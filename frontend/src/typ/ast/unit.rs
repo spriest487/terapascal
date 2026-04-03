@@ -22,7 +22,7 @@ use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDeclContext;
 use crate::typ::ast::Literal;
 use crate::typ::ast::WhereClause;
-use crate::typ::{typecheck_typename, Primitive};
+use crate::typ::{typecheck_typename, Primitive, TypedValue};
 use crate::typ::Binding;
 use crate::typ::ConstValue;
 use crate::typ::Context;
@@ -263,30 +263,17 @@ fn typecheck_global_binding_item(
 
                 (explicit_ty, Some(init)) => {
                     // use explicitly provided type
-                    let ty = typecheck_typename(explicit_ty, ctx)?;
-                    let init_expr = typecheck_expr(&init.expr, &ty, ctx)?;
+                    let expect_ty = typecheck_typename(explicit_ty, ctx)?;
+                    let mut init_expr = typecheck_expr(&init.expr, &expect_ty, ctx)?;
 
                     let mut val_literal = const_init_expr_to_literal(&init_expr, ctx);
-                    let mut val_ty = init_expr.annotation().ty().into_owned();
 
-                    match (&val_ty, &mut val_literal) {
-                        (int_ty, Literal::String(string_lit))
-                        if int_ty.is_integer() => {
-                            if string_lit.len() == 1
-                                && let Some(ascii_char) = string_lit.chars().next().filter(char::is_ascii)
-                            {
-                                val_literal = Literal::Integer(IntConstant::from(ascii_char as u32));
-                                val_ty = ty.ty().clone();
-                            } else {
-                                check_implicit_conversion(&val_ty, ty.ty(), init.expr.span(), ctx)?;
-                            }
-                        }
-
+                    match (expect_ty.ty(), &mut val_literal) {
                         (num_ty, Literal::Integer(int_lit)) => {
                             if !lit_int_has_value_of_type(int_lit, num_ty) {
                                 ctx.error(TypeError::InvalidConstValue {
                                     expr: Box::new(init_expr.clone()),
-                                    as_type: val_ty.clone(),
+                                    as_type: expect_ty.ty().clone(),
                                 })
                             }
                         }
@@ -295,17 +282,25 @@ fn typecheck_global_binding_item(
                             if !lit_real_has_value_of_type(int_lit, num_ty) {
                                 ctx.error(TypeError::InvalidConstValue {
                                     expr: Box::new(init_expr.clone()),
-                                    as_type: val_ty.clone(),
+                                    as_type: expect_ty.ty().clone(),
                                 })
                             }
                         }
 
                         _ => {
-                            check_implicit_conversion(&val_ty, ty.ty(), init.expr.span(), ctx)?;
+                            check_implicit_conversion(
+                                &init_expr.annotation().ty(),
+                                expect_ty.ty(),
+                                init.expr.span(),
+                                ctx,
+                            )?;
                         }
                     }
 
-                    (ty, val_literal, UnitBindingItemInitializer {
+                    let literal_value = TypedValue::literal(expect_ty.clone(), init_expr.span().clone());
+                    *init_expr.annotation_mut() = Value::from(literal_value);
+
+                    (expect_ty, val_literal, UnitBindingItemInitializer {
                         expr: Box::new(init_expr),
                         eq_span: init.eq_span.clone(),
                     })

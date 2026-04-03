@@ -262,15 +262,15 @@ pub fn typecheck_literal(
 ) -> TypeResult<Expr> {
     match lit {
         ast::Literal::String(s) => {
-            // if we're expecting a char, and the literal is one char long, we can do that instead
-            let char_ty = Type::from(STRING_CHAR_TYPE);
-            if *expect_ty == char_ty {
+            // if we're expecting a number, and the literal is one char long, we treat the string
+            // as a character literal of its first character
+            if expect_ty.is_integer() {
                 if let Some(char_lit) = string_to_char_lit(s.as_str()) {
-                    let val = TypedValue::temp(char_ty, span.clone());
+                    let val = TypedValue::literal(expect_ty.clone(), span.clone());
                     return Ok(Expr::literal(char_lit, Value::from(val)));
                 }
             }
-            
+
             let const_val = ConstValue::string_literal(s.clone(), span.clone());
 
             Ok(Expr::literal(Literal::String(s.clone()), const_val))
@@ -283,7 +283,9 @@ pub fn typecheck_literal(
             Ok(Expr::literal(bool_val, const_val))
         }
 
-        ast::Literal::Integer(i) => typecheck_literal_int(i, expect_ty, span.clone()),
+        ast::Literal::Integer(i) => {
+            typecheck_literal_int(i, expect_ty, span.clone())
+        },
 
         ast::Literal::Real(x) => {
             let ty = if *expect_ty == Type::Primitive(Primitive::Real32) && x.as_f32().is_some() {
