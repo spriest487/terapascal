@@ -12,7 +12,6 @@ use crate::typ::TypeName;
 use crate::typ::TypeResult;
 use crate::typ::TypedValue;
 use crate::typ::Value;
-use crate::typ::STRING_CHAR_TYPE;
 use crate::IntConstant;
 use crate::RealConstant;
 use std::sync::Arc;
