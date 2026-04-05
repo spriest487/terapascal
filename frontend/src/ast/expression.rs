@@ -95,6 +95,8 @@ pub enum Expr<A: Annotation = Span> {
     Cast(Box<Cast<A>>),
     AnonymousFunction(Box<AnonymousFunctionDef<A>>),
     ExplicitSpec(Box<ExplicitSpecExpr<A>>),
+
+    Group(Box<ExprGroup<A>>),
     
     /// Expression generated when the parser, in language server mode, encounters an invalid
     /// expression ending with a completion-triggering character. For example, the tokens
@@ -233,6 +235,7 @@ impl<A: Annotation> Expr<A> {
             Expr::AnonymousFunction(_) => "anonymous function",
             Expr::ExplicitSpec(_) => "with expr",
             Expr::Incomplete(_) => "incomplete expr",
+            Expr::Group(group) => group.expr.name(),
         }
     }
     
@@ -255,6 +258,7 @@ impl<A: Annotation> Expr<A> {
             Expr::AnonymousFunction(def) => &def.annotation,
             Expr::ExplicitSpec(expr) => &expr.annotation,
             Expr::Incomplete(incomplete) => incomplete.target.annotation(),
+            Expr::Group(group) => &group.annotation,
         }
     }
 
@@ -277,6 +281,7 @@ impl<A: Annotation> Expr<A> {
             Expr::AnonymousFunction(def) => &mut def.annotation,
             Expr::ExplicitSpec(expr) => &mut expr.annotation,
             Expr::Incomplete(incomplete) => incomplete.target.annotation_mut(),
+            Expr::Group(group) => &mut group.annotation,
         }
     }
 
@@ -414,6 +419,7 @@ impl<A: Annotation> fmt::Display for Expr<A> {
             Expr::AnonymousFunction(def) => write!(f, "{}", def),
             Expr::ExplicitSpec(with_expr) => write!(f, "{}", with_expr),
             Expr::Incomplete(incomplete) => write!(f, "{}", incomplete),
+            Expr::Group(group) => write!(f, "({})", group.expr)
         }
     }
 }
@@ -422,6 +428,27 @@ impl<A: Annotation> Spanned for Expr<A> {
     fn span(&self) -> &Span {
         self.annotation().span()
     }
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, Hash, PartialEq)]
+pub struct ExprGroup<A: Annotation = Span> {
+    pub expr: Expr<A>,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub open: Span,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub close: Span,
+
+    #[derivative(Debug = "ignore")]
+    #[derivative(PartialEq = "ignore")]
+    #[derivative(Hash = "ignore")]
+    pub annotation: A,
 }
 
 #[derive(Clone, Eq, Derivative)]

@@ -206,7 +206,8 @@ fn parse_block_stmt(tokens: &mut TokenStream) -> ParseResult<BlockStatementParse
                     assert_eq!(
                         Some(bad_expr.span().start),
                         stmt_start,
-                        "expression @ {} used as block output has the wrong position (child statement failed to handle invalid statement correctly): {}",
+                        "expression {} @ {} used as block output has the wrong position (child statement failed to handle invalid statement correctly): {}",
+                        bad_expr,
                         bad_expr.span(),
                         traced_err.bt,
                     );

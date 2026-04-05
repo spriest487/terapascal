@@ -1,8 +1,8 @@
 mod init;
 mod literal;
 
-use std::sync::Arc;
 use crate::ast;
+use crate::ast::ExprGroup;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::IncompleteExpr;
@@ -40,6 +40,7 @@ use crate::typ::Value;
 use crate::IntConstant;
 pub use init::*;
 pub use literal::*;
+use std::sync::Arc;
 use terapascal_common::span::*;
 
 pub type Expr = ast::Expr<Value>;
@@ -203,6 +204,19 @@ pub fn typecheck_expr(
         },
 
         ast::Expr::Incomplete(incomplete) => Err(handle_incomplete_expr(&incomplete, ctx)?),
+
+        ast::Expr::Group(group) => {
+            let expr = typecheck_expr(&group.expr, expect_ty, ctx)?;
+            let annotation = expr.annotation()
+                .clone()
+                .with_span(group.open.to(&group.close));
+            Ok(Expr::Group(Box::new(ExprGroup {
+                expr,
+                open: group.open.clone(),
+                close: group.close.clone(),
+                annotation,
+            })))
+        }
     }
 }
 

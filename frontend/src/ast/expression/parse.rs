@@ -13,6 +13,7 @@ use crate::ast::CaseExpr;
 use crate::ast::CollectionCtor;
 use crate::ast::Exit;
 use crate::ast::Expr;
+use crate::ast::ExprGroup;
 use crate::ast::Ident;
 use crate::ast::IfCond;
 use crate::ast::IncompleteExpr;
@@ -419,6 +420,7 @@ impl<'a> CompoundExpressionParser<'a> {
     fn parse_bracket_group(&mut self, group: DelimitedGroup) -> ParseResult<()> {
         let open_bracket = group.open.clone();
         let close_bracket = group.close.clone();
+        let group_span = group.span.clone();
 
         let mut tokens = group.into_inner_tokens();
 
@@ -471,7 +473,12 @@ impl<'a> CompoundExpressionParser<'a> {
         tokens.finish()?;
 
         self.tokens.advance(1);
-        self.push_operand(sub_expr);
+        self.push_operand(Expr::Group(Box::new(ExprGroup {
+            expr: sub_expr,
+            annotation: group_span,
+            open: open_bracket,
+            close: close_bracket,
+        })));
 
         Ok(())
     }

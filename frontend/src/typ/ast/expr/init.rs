@@ -155,6 +155,8 @@ pub fn expect_expr_initialized(expr: &Expr, ctx: &Context) -> TypeResult<()> {
 
         ast::Expr::AnonymousFunction(_) => Ok(()),
 
+        ast::Expr::Group(group) => expect_expr_initialized(&group.expr, ctx),
+
         ast::Expr::ExplicitSpec(..) => unreachable!("should be resolved to specialized expression during expression typechecking"),
         ast::Expr::Incomplete(..) => unreachable!("should be discarded during expression typechecking"),
     }?;
