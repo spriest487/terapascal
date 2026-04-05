@@ -392,14 +392,6 @@ impl Metadata {
         self.variables.get(&id)
     }
 
-    pub fn constants(&self) -> impl Iterator<Item = &ConstInfo> {
-        self.constants.values()
-    }
-
-    pub fn get_constant(&self, id: VariableID) -> Option<&VariableInfo> {
-        self.variables.get(&id)
-    }
-
     pub fn is_defined(&self, ty: &Type) -> bool {
         let id = match ty {
             Type::Struct(id) | Type::Variant(id) | Type::Function(id) | Type::Flags(id, ..) => *id,
@@ -651,6 +643,14 @@ impl MetadataSource for Metadata {
 
     fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
         self.variables.get(&id)
+    }
+
+    fn find_constant(&self, name: &NamePath) -> Option<&ConstInfo> {
+        self.constants.get(name)
+    }
+
+    fn constants(&self) -> impl Iterator<Item=&ConstInfo> {
+        self.constants.values()
     }
 }
 

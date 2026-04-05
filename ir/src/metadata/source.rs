@@ -21,6 +21,7 @@ use crate::VariableInfo;
 use crate::VariantDef;
 use std::borrow::Cow;
 use std::rc::Rc;
+use crate::metadata::vars::ConstInfo;
 
 pub trait MetadataSource : Sized {
     fn as_formatter(&self) -> &impl IRFormatter;
@@ -68,6 +69,9 @@ pub trait MetadataSource : Sized {
 
     fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)>;
     fn get_variable(&self, id: VariableID) -> Option<&VariableInfo>;
+    
+    fn find_constant(&self, name: &NamePath) -> Option<&ConstInfo>;
+    fn constants(&self) -> impl Iterator<Item = &ConstInfo>;
 
     fn all_tags(&self) -> impl Iterator<Item = (TagLocation, &[TagInfo])> {
         let type_tags = self.type_defs().map(|(id, def)| {

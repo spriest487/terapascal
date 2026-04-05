@@ -322,4 +322,12 @@ impl MetadataSource for MetadataBuilder {
     fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
         self.find_in_self_or_refs(move |metadata| metadata.get_variable(id))
     }
+
+    fn find_constant(&self, name: &NamePath) -> Option<&ConstInfo> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_constant(name))
+    }
+
+    fn constants(&self) -> impl Iterator<Item=&ConstInfo> {
+        self.iter_in_self_or_refs(move |metadata| metadata.constants())
+    }
 }
