@@ -117,7 +117,8 @@ impl fmt::Display for Library {
                         write!(f, "{:8>} ({})", format!("  .{}", i), case.name,)?;
 
                         if let Some(ty) = &case.ty {
-                            write!(f, ": {}", ty)?;
+                            write!(f, ": ")?;
+                            self.metadata.format_type(ty, f)?;
                         }
                         writeln!(f)?;
                     }
