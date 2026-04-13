@@ -113,12 +113,12 @@ impl SetFlagsType {
         };
 
         let func = ir::Function::Local(ir::FunctionDef {
-            sig,
+            sig: sig.clone(),
             debug_name: name,
             body,
         });
 
-        let func_id = lib.metadata_mut().insert_func(None, false, []);
+        let func_id = lib.metadata_mut().insert_func(None, sig, false, []);
         lib.insert_function(func_id, func);
 
         func_id

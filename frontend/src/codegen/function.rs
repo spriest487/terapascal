@@ -393,16 +393,21 @@ pub fn build_static_closure_impl(
         None
     };
 
-    let init_func_id = library.metadata_mut().insert_func(None, false, []);
+    let init_sig = FunctionSig {
+        param_tys: Vec::new(),
+        return_ty: Type::Nothing,
+    };
+
+    let init_func_id = library
+        .metadata_mut()
+        .insert_func(None, init_sig.clone(), false, []);
+
     library.insert_function(
         init_func_id,
         Function::Local(FunctionDef {
             body: init_body,
             debug_name,
-            sig: FunctionSig {
-                param_tys: Vec::new(),
-                return_ty: Type::Nothing,
-            },
+            sig: init_sig,
         }),
     );
 

@@ -154,6 +154,9 @@ public record FunctionInfo {
     [Key("global_name")]
     public required NamePath? GlobalName { get; init; }
 
+    [Key("sig")]
+    public required FunctionSig Sig { get; init; }
+
     [Key("invoker")]
     public FunctionID? Invoker { get; init; }
     

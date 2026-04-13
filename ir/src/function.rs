@@ -99,12 +99,13 @@ pub struct ExternalFunctionRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionInfo {
-    pub runtime_name: Option<StringID>,
-    
     pub global_name: Option<NamePath>,
-    
+
+    pub runtime_name: Option<StringID>,
+    pub sig: FunctionSig,
+
     pub invoker: Option<FunctionID>,
-    
+
     pub tags: Vec<TagInfo>,
 }
 

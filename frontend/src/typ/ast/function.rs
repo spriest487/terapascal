@@ -1050,3 +1050,26 @@ pub fn typecheck_func_expr(
         captures: closure_env.captures,
     })
 }
+
+impl AnonymousFunctionDef {
+    pub fn sig(&self) -> FunctionSig {
+        let sig_params = self.params
+            .iter()
+            .flat_map(|group| {
+                group.param_items
+                    .iter()
+                    .map(|_| FunctionSigParam {
+                        ty: group.ty.ty().clone(),
+                        modifier: group.modifier.as_ref()
+                            .map(|m| m.param_mod.clone())
+                    })
+            })
+            .collect();
+
+        FunctionSig {
+            result_ty: self.result_ty.ty().clone(),
+            params: sig_params,
+            type_params: None,
+        }
+    }
+}

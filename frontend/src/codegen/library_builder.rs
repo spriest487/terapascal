@@ -41,6 +41,7 @@ use crate::typ::get_mem_sig;
 use crate::typ::layout::StructLayout;
 use crate::typ::layout::StructLayoutMember;
 use crate::typ::seq::TypeSequenceSupport;
+use crate::typ::GenericContext;
 use crate::typ::Specializable;
 use crate::typ::TypeArgResolver;
 use crate::typ::TypeArgsResult;
@@ -58,8 +59,7 @@ use std::sync::Arc;
 use terapascal_common::version::Version;
 use terapascal_common::StripMode;
 use terapascal_ir::InstructionBuilder as _;
-use terapascal_ir::InstructionList;
-use terapascal_ir::MetadataSource;
+use terapascal_ir::MetadataSource as _;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -305,16 +305,17 @@ impl<'a> LibraryBuilder<'a> {
                 None
             };
 
+            let init_sig = ir::FunctionSig {
+                param_tys: Vec::new(),
+                return_ty: ir::Type::Nothing
+            };
             let init_func = ir::FunctionDef {
                 body: unit_init,
-                sig: ir::FunctionSig {
-                    param_tys: Vec::new(),
-                    return_ty: ir::Type::Nothing
-                },
+                sig: init_sig.clone(),
                 debug_name,
             };
 
-            let init_func_id = self.metadata.insert_func(None, false, []);
+            let init_func_id = self.metadata.insert_func(None, init_sig, false, []);
             self.functions.insert(init_func_id, ir::Function::Local(init_func));
 
             self.init_code.push(ir::Instruction::Call {
@@ -540,7 +541,7 @@ impl<'a> LibraryBuilder<'a> {
         let sig = specialized_decl.sig();
         let ns = key.decl_key.namespace().into_owned();
 
-        let id = self.declare_func(&specialized_decl, ns);
+        let id = self.declare_func(&specialized_decl, &generic_ctx, ns);
 
         // cache the function before translating the instantiation, because
         // it may recurse and instantiate itself in its own body
@@ -588,7 +589,7 @@ impl<'a> LibraryBuilder<'a> {
         let generic_ctx = typ::GenericContext::empty();
 
         let decl_namespace = key.decl_key.namespace().into_owned();
-        let id = self.declare_func(&extern_decl, decl_namespace);
+        let id = self.declare_func(&extern_decl, &generic_ctx, decl_namespace);
 
         let sig = extern_decl.sig();
         let return_ty = self.translate_type(&sig.result_ty, &generic_ctx);
@@ -728,7 +729,7 @@ impl<'a> LibraryBuilder<'a> {
             enclosing_type: method_key.self_ty.clone(), 
         };
 
-        let id = self.declare_func(&specialized_decl, ns);
+        let id = self.declare_func(&specialized_decl, &generic_ctx, ns);
 
         // cache the function before translating the instantiation, because
         // it may recurse and instantiate itself in its own body
@@ -843,6 +844,7 @@ impl<'a> LibraryBuilder<'a> {
     pub fn declare_func(
         &mut self,
         func_decl: &typ::ast::FunctionDecl,
+        generic_ctx: &typ::GenericContext,
         namespace: IdentPath,
     ) -> ir::FunctionID {
         let has_global_name = func_decl.name.context == FunctionDeclContext::FreeFunction
@@ -863,7 +865,9 @@ impl<'a> LibraryBuilder<'a> {
         
         let tags = self.translate_tag_groups(&func_decl.tags);
 
-        self.metadata.insert_func(global_name, self.opts.rtti, tags)
+        let sig = translate_sig(&func_decl.sig(), generic_ctx, self);
+
+        self.metadata.insert_func(global_name, sig, self.opts.rtti, tags)
     }
 
     pub fn translate_func(
@@ -1491,14 +1495,19 @@ impl<'a> LibraryBuilder<'a> {
         func: &typ::ast::AnonymousFunctionDef,
         generic_ctx: &typ::GenericContext,
     ) -> ClosureInstance {
-        let id = self.metadata.insert_func(None, false, []);
-
         // this is the signature of the *function type* of the closure, not the signature of
         // the real method implementing the closure, which has an extra type-erased parameter
         // for the closure itself
         let func_ty_sig = typ::FunctionSig::of_anonymous_func(func);
 
         let func_ty_id = self.translate_func_ty(&func_ty_sig, generic_ctx);
+
+        // since we're translating a closure function, the sig needs to include the implicit
+        // closure object parameter
+        let mut sig = translate_sig(&func.sig(), &typ::GenericContext::empty(), self);
+        sig.param_tys.insert(0, ir::Type::any());
+
+        let id = self.metadata.insert_func(None, sig, false, []);
 
         let closure_identity = ir::ClosureIdentity {
             virt_func_ty: func_ty_id,
@@ -1518,18 +1527,16 @@ impl<'a> LibraryBuilder<'a> {
             None
         };
 
-        let cached_func = FunctionInstance { 
-            id, 
-            src_sig: func_ty_sig,
-            published: false,
-        };
+        let func_def = build_closure_function_def(self, &func, closure_id, debug_name);
 
-        let ir_func = build_closure_function_def(self, &func, closure_id, debug_name);
-
-        self.functions.insert(id, ir::Function::Local(ir_func));
+        self.functions.insert(id, ir::Function::Local(func_def));
 
         ClosureInstance {
-            func_instance: cached_func,
+            func_instance: FunctionInstance {
+                id,
+                src_sig: func_ty_sig,
+                published: false,
+            },
             func_ty_id,
             closure_id,
         }
@@ -1566,7 +1573,12 @@ impl<'a> LibraryBuilder<'a> {
         );
 
         // build the closure function, which is a thunk that just calls the global function
-        let thunk_id = self.metadata.insert_func(None, false, []);
+        let mut closure_func_sig = translate_sig(&func.src_sig, &GenericContext::empty(), self);
+
+        // closure parameter (unused for static closures)
+        closure_func_sig.param_tys.insert(0, ir::Type::any());
+
+        let thunk_id = self.metadata.insert_func(None, closure_func_sig, false, []);
         let thunk_def = build_func_static_closure_def(self, func, &ir_func);
 
         self.functions.insert(thunk_id, ir::Function::Local(thunk_def));
@@ -1613,7 +1625,7 @@ impl<'a> LibraryBuilder<'a> {
 
     /// Add static closure init function calls at top of init block
     fn gen_static_closure_init(&mut self) {
-        let mut static_closures_init = InstructionList::new();
+        let mut static_closures_init = ir::InstructionList::new();
         for static_closure in &self.static_closures {
             static_closures_init.push(ir::Instruction::Call {
                 function: ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(static_closure.init_func))),
@@ -1626,7 +1638,7 @@ impl<'a> LibraryBuilder<'a> {
     }
 
     fn gen_static_type_init(&mut self) {
-        let mut instructions = InstructionList::new();
+        let mut instructions = ir::InstructionList::new();
 
         if self.opts.rtti && let Some(tag_init_func) = gen_tags_init(self) {
             instructions.push(ir::Instruction::Call {
@@ -1652,8 +1664,12 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
     if element_release.is_none() && !element_type.is_object() {
         return;
     }
+    let dtor_sig = ir::FunctionSig {
+        param_tys: vec![array_type.clone()],
+        return_ty: ir::Type::Nothing,
+    };
 
-    let dtor_id = lib.metadata.insert_func(None, false, []);
+    let dtor_id = lib.metadata.insert_func(None, dtor_sig.clone(), false, []);
 
     let mut dtor_builder = IRBuilder::new(lib);
     
@@ -1670,10 +1686,7 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
 
     lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
         debug_name: dtor_debug_name,
-        sig: ir::FunctionSig {
-            param_tys: vec![array_type.clone()],
-            return_ty: ir::Type::Nothing,
-        },
+        sig: dtor_sig,
         body: dtor_body,
     }));
 
@@ -1757,7 +1770,12 @@ fn gen_class_dtor(
 
     let dtor_body = dtor_builder.finish();
 
-    let dtor_id = lib.metadata.insert_func(None, false, []);
+    let dtor_sig = ir::FunctionSig {
+        param_tys: vec![class_ty.clone()],
+        return_ty: ir::Type::Nothing,
+    };
+
+    let dtor_id = lib.metadata.insert_func(None, dtor_sig.clone(), false, []);
     runtime_type.dtor = Some(dtor_id);
 
     let dtor_debug_name = lib.opts.debug
@@ -1766,10 +1784,7 @@ fn gen_class_dtor(
     lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
         debug_name: dtor_debug_name,
         body: dtor_body,
-        sig: ir::FunctionSig {
-            param_tys: vec![class_ty.clone()],
-            return_ty: ir::Type::Nothing,
-        }
+        sig: dtor_sig
     }));
 }
 
@@ -1806,7 +1821,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
             None
         };
 
-        let invoker_id = lib.metadata_mut().insert_func(None, false, []);
+        let invoker_id = lib.metadata_mut().insert_func(None, invoker_sig.clone(), false, []);
         
         // the source sig may be generic, so look up the translated sig rather than attempting
         // to translate it without a generic context

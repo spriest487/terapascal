@@ -4,13 +4,20 @@ use crate::ty_decl::TagLocation;
 use crate::FieldID;
 use crate::FunctionID;
 use crate::IRFormatter;
+use crate::LocalStack;
+use crate::MetadataSource;
+use crate::ObjectID;
 use crate::StaticClosureID;
 use crate::VariableID;
+use crate::FUNCINFO_TYPE;
+use crate::STRING_TYPE;
+use crate::TYPEINFO_TYPE;
 use bigdecimal::BigDecimal;
 use bigdecimal::FromPrimitive;
 use bigdecimal::ToPrimitive;
 use serde::Deserialize;
 use serde::Serialize;
+use std::borrow::Cow;
 use std::fmt;
 use std::ops::Add;
 use std::ops::AddAssign;
@@ -80,6 +87,81 @@ impl Ref {
     
     pub fn is_discard(&self) -> bool {
         matches!(self, Ref::Discard)
+    }
+
+    pub fn find_type<'a: 'b, 'b>(
+        &'a self,
+        local_stack: &'a LocalStack,
+        metadata: &'a impl MetadataSource
+    ) -> Option<Cow<'b, Type>> {
+        match self {
+            Ref::Discard => None,
+            Ref::Result => {
+                let result_binding = local_stack.find_result_binding()?;
+                Some(Cow::Borrowed(&result_binding.ty))
+            }
+            Ref::Arg(id) => {
+                let arg_binding = local_stack.find_arg_binding(*id)?;
+                Some(Cow::Borrowed(&arg_binding.ty))
+            }
+            Ref::Local(id) => {
+                let local_binding = local_stack.find_local_binding(*id)?;
+                Some(Cow::Borrowed(&local_binding.ty))
+            }
+            Ref::Global(GlobalRef::StringLiteral(..)) => {
+                Some(Cow::Borrowed(&STRING_TYPE))
+            }
+            Ref::Global(GlobalRef::Variable(id)) => {
+                let var_info = metadata.get_variable(*id)?;
+                Some(Cow::Borrowed(&var_info.r#type))
+            }
+            Ref::Global(GlobalRef::StaticClosure(_id)) => {
+                // TODO - static closure types should be available from metadata alone
+                // replace them with global vars?
+                None
+            }
+            Ref::Global(GlobalRef::StaticTagArray(..)) => {
+                Some(Cow::Owned(Type::Object(ObjectID::Any).dyn_array()))
+            }
+            Ref::Global(GlobalRef::StaticTypeInfo(..)) => {
+                Some(Cow::Borrowed(&TYPEINFO_TYPE))
+            }
+            Ref::Global(GlobalRef::StaticFuncInfo(..)) => {
+                Some(Cow::Borrowed(&FUNCINFO_TYPE))
+            }
+            Ref::Global(GlobalRef::Function(id)) => {
+                let func_info = metadata.get_function_info(*id)?;
+                let ptr_type_id = metadata.get_function_ptr_type(&func_info.sig)?;
+                Some(Cow::Owned(Type::Function(ptr_type_id)))
+            }
+            Ref::Deref(target) => {
+                let target_type = target.find_type(local_stack, metadata)?;
+                let deref_type = target_type.deref_ty()?;
+                Some(Cow::Owned(deref_type.clone()))
+            }
+            Ref::Field(field_ref) => {
+                let struct_id = field_ref.instance_type.field_struct_id()?;
+                let struct_def = metadata.get_struct_def(struct_id)?;
+                let field_def = &struct_def.fields.get(&field_ref.field)?;
+                Some(Cow::Borrowed(&field_def.ty))
+            }
+            Ref::Element(element_ref) => {
+                let element_type = element_ref.instance_type.element_type()?;
+                Some(Cow::Borrowed(element_type))
+            }
+            Ref::VariantData(data_ref) => {
+                let variant_id = data_ref.instance_type.as_variant()?;
+                let variant_def = metadata.get_variant_def(variant_id)?;
+                let case_def = variant_def.cases.get(data_ref.case_index)?;
+                let data_ty = case_def.ty.as_ref()?;
+                Some(Cow::Borrowed(data_ty))
+            }
+            Ref::VariantTag(tag_ref) => {
+                let variant_id = tag_ref.instance_type.as_variant()?;
+                let variant_def = metadata.get_variant_def(variant_id)?;
+                Some(Cow::Borrowed(&variant_def.tag_type))
+            }
+        }
     }
 }
 
@@ -309,6 +391,28 @@ impl Value {
             Type::F32 => Some(Value::LiteralF32(val.to_f32()?)),
 
             _ => None,
+        }
+    }
+
+    pub fn find_type<'a: 'b, 'b>(&'a self, local_stack: &'a LocalStack, metadata: &'a impl MetadataSource) -> Option<Cow<'b, Type>> {
+        match self {
+            Value::Ref(r) => r.find_type(local_stack, metadata),
+            Value::LiteralNil => Some(Cow::Owned(Type::Nothing.ptr())),
+            Value::LiteralBool(_) => Some(Cow::Owned(Type::Bool)),
+            Value::LiteralU8(_) => Some(Cow::Owned(Type::U8)),
+            Value::LiteralI8(_) => Some(Cow::Owned(Type::I8)),
+            Value::LiteralI16(_) => Some(Cow::Owned(Type::I16)),
+            Value::LiteralU16(_) => Some(Cow::Owned(Type::U16)),
+            Value::LiteralI32(_) => Some(Cow::Owned(Type::I32)),
+            Value::LiteralU32(_) => Some(Cow::Owned(Type::U32)),
+            Value::LiteralI64(_) => Some(Cow::Owned(Type::I64)),
+            Value::LiteralU64(_) => Some(Cow::Owned(Type::U64)),
+            Value::LiteralF32(_) => Some(Cow::Owned(Type::F32)),
+            Value::LiteralF64(_) => Some(Cow::Owned(Type::F64)),
+            Value::LiteralISize(_) => Some(Cow::Owned(Type::ISize)),
+            Value::LiteralUSize(_) => Some(Cow::Owned(Type::USize)),
+            Value::SizeOf(_) => Some(Cow::Owned(Type::I32)),
+            Value::Default(val_ty) => Some(Cow::Borrowed(val_ty)),
         }
     }
 }

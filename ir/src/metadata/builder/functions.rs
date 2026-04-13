@@ -1,5 +1,6 @@
 use crate::FunctionID;
 use crate::FunctionInfo;
+use crate::FunctionSig;
 use crate::MetadataBuilder;
 use crate::NamePath;
 use crate::StaticClosureID;
@@ -9,8 +10,10 @@ use crate::TagInfo;
 use crate::TypeDefID;
 
 impl MetadataBuilder {
-    pub fn insert_func(&mut self,
+    pub fn insert_func(
+        &mut self,
         global_name: Option<NamePath>,
+        sig: FunctionSig,
         gen_runtime_name: bool,
         tags: impl IntoIterator<Item=TagInfo>,
     ) -> FunctionID {
@@ -30,7 +33,9 @@ impl MetadataBuilder {
         };
 
         let func_info = FunctionInfo { 
-            global_name: global_name.clone(), 
+            global_name: global_name.clone(),
+
+            sig,
             runtime_name,
             
             tags: tags.into_iter().collect(),
