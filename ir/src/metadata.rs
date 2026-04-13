@@ -534,12 +534,8 @@ impl MetadataSource for Metadata {
         }
     }
 
-    fn type_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)> {
-        self.type_decls.iter().filter_map(|(id, decl)| match decl {
-            TypeDecl::Def(def) => Some((*id, def)),
-
-            TypeDecl::Reserved | TypeDecl::Forward(..) => None,
-        })
+    fn type_decls(&self) -> impl Iterator<Item=(TypeDefID, &TypeDecl)> {
+        self.type_decls.iter().map(|(id, decl)| (*id, decl))
     }
 
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {

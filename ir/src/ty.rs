@@ -193,6 +193,28 @@ impl Type {
     pub fn is_weak(&self) -> bool {
         matches!(self, Type::WeakObject(..))
     }
+
+    // when a value of this type is the target of a field reference, the id of the struct
+    // definition that contains the field that can be accessed through this type, or None if the
+    // type does not have fields
+    pub fn field_struct_id(&self) -> Option<TypeDefID> {
+        match self {
+            Type::Struct(id) => Some(*id),
+            Type::Object(ObjectID::Class(id)) => Some(*id),
+            _ => None,
+        }
+    }
+
+    // when a value of this type is the target of an element reference, the type of element ref
+    // that will be created
+    pub fn element_type(&self) -> Option<&Self> {
+        match self {
+            Type::Array { element, .. } => Some(element.as_ref()),
+            Type::Object(ObjectID::Box(value_type)) => Some(value_type.as_ref()),
+            Type::Object(ObjectID::Array(element_type)) => Some(element_type.as_ref()),
+            _ => None,
+        }
+    }
     
     pub fn def_id(&self) -> Option<TypeDefID> {
         match self {

@@ -1,9 +1,9 @@
-use crate::ArgID;
 use crate::Label;
 use crate::LocalID;
 use crate::Ref;
 use crate::Type;
 use crate::RESULT_REF;
+use crate::ArgID;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::ops::RangeInclusive;
@@ -41,6 +41,27 @@ impl LocalStack {
             .iter()
             .rev()
             .find_map(|scope| scope.find_named_binding(name))
+    }
+
+    pub fn find_result_binding(&self) -> Option<&ScopedBinding> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.find_result_binding())
+    }
+
+    pub fn find_arg_binding(&self, id: ArgID) -> Option<&ScopedBinding> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.find_arg_binding(id))
+    }
+
+    pub fn find_local_binding(&self, id: LocalID) -> Option<&ScopedBinding> {
+        self.scopes
+            .iter()
+            .rev()
+            .find_map(|scope| scope.find_local_binding(id))
     }
     
     pub fn local_slot_count(&self) -> usize {

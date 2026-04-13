@@ -19,7 +19,6 @@ use crate::StringID;
 use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
-use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
 use crate::Value;
@@ -267,8 +266,8 @@ impl MetadataSource for MetadataBuilder {
         self.get_variant_def(struct_id)
     }
 
-    fn type_defs(&self) -> impl Iterator<Item=(TypeDefID, &TypeDef)> {
-        self.iter_in_self_or_refs(move |metadata| metadata.type_defs())
+    fn type_decls(&self) -> impl Iterator<Item=(TypeDefID, &TypeDecl)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.type_decls())
     }
 
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {

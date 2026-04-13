@@ -30,7 +30,8 @@ pub trait MetadataSource : Sized {
 
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef>;
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
-    fn type_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)>;
+
+    fn type_decls(&self) -> impl Iterator<Item = (TypeDefID, &TypeDecl)>;
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl>;
     fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath>;
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID>;
@@ -39,7 +40,15 @@ pub trait MetadataSource : Sized {
     fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)>;
     fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo>;
 
-    fn get_func_ptr_ty(&self, id: TypeDefID) -> Option<&FunctionSig> {
+    fn get_function_ptr_type(&self, sig: &FunctionSig) -> Option<TypeDefID> {
+        self.type_defs()
+            .find_map(|(id, def)| match def {
+                TypeDef::Function(decl_sig) => (*decl_sig == *sig).then_some(id),
+                _ => None,
+            })
+    }
+
+    fn get_function_ptr_sig(&self, id: TypeDefID) -> Option<&FunctionSig> {
         self.get_type_decl(id).and_then(|decl| match decl {
             TypeDecl::Def(TypeDef::Function(ptr_def)) => Some(ptr_def),
             _ => None,
@@ -124,6 +133,15 @@ pub trait MetadataSource : Sized {
             .chain(method_tags)
     }
 
+    fn type_defs(&self) -> impl Iterator<Item = (TypeDefID, &TypeDef)> {
+        self.type_decls().filter_map(|(id, decl)| {
+            match decl {
+                TypeDecl::Def(def) => Some((id, def)),
+                TypeDecl::Reserved | TypeDecl::Forward(..) => None,
+            }
+        })
+    }
+
     fn pretty_type_name(&self, ty: &Type) -> Cow<'_, str> {
         match ty {
             Type::Struct(id) | Type::Variant(id) => {
@@ -149,7 +167,7 @@ pub trait MetadataSource : Sized {
             },
 
             Type::Function(func_ty_id) => {
-                let text = match self.get_func_ptr_ty(*func_ty_id) {
+                let text = match self.get_function_ptr_sig(*func_ty_id) {
                     Some(sig) => self.pretty_func_sig(sig),
                     None => format!("function pointer {}", *func_ty_id),
                 };
@@ -185,7 +203,7 @@ pub trait MetadataSource : Sized {
 
             ObjectID::Interface(iface_id) => Cow::Owned(self.iface_name(*iface_id)),
 
-            ObjectID::Closure(func_ty_id) => Cow::Owned(match self.get_func_ptr_ty(*func_ty_id) {
+            ObjectID::Closure(func_ty_id) => Cow::Owned(match self.get_function_ptr_sig(*func_ty_id) {
                 Some(sig) => format!("closure of {}", self.pretty_func_sig(sig)),
                 None => format!("closure of {}", func_ty_id),
             }),

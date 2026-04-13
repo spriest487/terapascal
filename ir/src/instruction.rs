@@ -432,6 +432,17 @@ impl InstructionList {
         self.instructions.splice(range.clone(), instructions);
         self.sources.splice(range, sources);
     }
+    
+    pub fn iter(&self) -> impl Iterator<Item=(&Instruction, Option<&Span>)> {
+        let sources = self.sources
+            .iter()
+            .map(|span| span.as_ref())
+            .chain(iter::repeat(None));
+
+        self.instructions
+            .iter()
+            .zip(sources)
+    }
 }
 
 pub trait AsInstruction {

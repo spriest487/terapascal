@@ -1002,8 +1002,8 @@ public class InstructionBuilder {
                 break;
             }
 
-            case IR.Deref(IR.RefValue(var targetRef)): {
-                var targetType = this.GetRefType(targetRef);
+            case IR.Deref(var target): {
+                var targetType = this.GetValueType(target);
                 var derefType = targetType.GetDerefType(); 
                 if (derefType == null) {
                     break;
