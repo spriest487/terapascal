@@ -739,6 +739,7 @@ where
 
     fn add_expr(&mut self, expr: &ast::Expr<A>) {
         match expr {
+            ast::Expr::Group(group) => self.add_group(group),
             ast::Expr::BinOp(op) => self.add_bin_op(op),
             ast::Expr::UnaryOp(op) => self.add_unary_op(op),
             ast::Expr::Literal(item) => self.add_literal(item),
@@ -763,6 +764,12 @@ where
         if let Some(token_type) = semantic_hint_to_token_type(value.semantic_hint()) {
             self.add(display_span, token_type, debug_desc);
         }
+    }
+
+    fn add_group(&mut self, group: &ast::ExprGroup<A>) {
+        self.add(&group.open, SEMANTIC_OPERATOR, "open group bracket");
+        self.add_expr(&group.expr);
+        self.add(&group.close, SEMANTIC_OPERATOR, "close group bracket");
     }
 
     fn add_bin_op(&mut self, bin_op: &ast::BinOp<A>) {

@@ -668,6 +668,9 @@ impl DefinitionMap {
 
     fn add_expr(&mut self, expr: &Expr, ctx: &Context) {
         match expr {
+            Expr::Group(group_expr) => {
+                self.add_expr(&group_expr.expr, ctx);
+            }
             Expr::BinOp(bin_op) => {
                 self.add_expr(&bin_op.lhs, ctx);
                 self.add_expr(&bin_op.rhs, ctx);
