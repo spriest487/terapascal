@@ -148,6 +148,10 @@ impl Expr {
             
             ir::Value::Default(ty) => {
                 match ty {
+                    ir::Type::Generic(..) => {
+                        panic!("code output should never contain generic placeholders")
+                    },
+
                     ir::Type::Function(_)
                     | ir::Type::TempRef(_) 
                     | ir::Type::Pointer(_)

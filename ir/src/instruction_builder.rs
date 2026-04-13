@@ -3,6 +3,7 @@ pub mod util;
 mod dyn_array;
 mod invoker;
 mod object;
+mod generic_builder;
 
 use crate::instruction_builder::object::gen_class_object_dtor_body;
 use crate::instruction_builder::scope::ScopedBinding;
@@ -749,14 +750,20 @@ pub trait InstructionBuilder {
             at,
             ty,
             |builder, element_ty, element_ref| {
-                if !element_ty.is_object() {
-                    return false;
+                match element_ty {
+                    Type::Object(..) | Type::WeakObject(..) => {
+                        let type_name = ty.to_pretty_string(builder.ir_formatter());
+                        builder.comment(format!("release: {}", type_name));
+                    }
+
+                    Type::Generic(name) => {
+                        builder.comment(format!("release (generic): {name}"))
+                    }
+
+                    _ => {
+                        return false;
+                    }
                 }
-                
-                builder.comment(format!(
-                    "release: {}",
-                    ty.to_pretty_string(builder.ir_formatter())
-                ));
 
                 builder.release(element_ref, element_ty.is_weak(), Ref::Discard);
                 true
@@ -774,14 +781,18 @@ pub trait InstructionBuilder {
             at,
             ty,
             |builder, element_ty, element_ref| {
-                if !element_ty.is_object() {
-                    return false;
+                match element_ty {
+                    Type::Object(..) | Type::WeakObject(..) => {
+                        let type_name = ty.to_pretty_string(builder.ir_formatter());
+                        builder.comment(format!("retain: {}", type_name));
+                    }
+                    
+                    Type::Generic(name) => {
+                        builder.comment(format!("retain (generic): {name}"));
+                    }
+                    
+                    _ => return false,
                 }
-
-                builder.comment(format!(
-                    "retain: {}",
-                    ty.to_pretty_string(builder.ir_formatter())
-                ));
                 
                 builder.retain(element_ref, element_ty.is_weak());
                 true

@@ -68,6 +68,10 @@ impl Type {
     
     pub fn from_metadata(ty: &ir::Type, module: &mut Unit) -> Type {
         match ty {
+            ir::Type::Generic(..) => {
+                panic!("code output should never contain generic placeholders")
+            },
+
             ir::Type::Pointer(target) | ir::Type::TempRef(target) => {
                 Type::from_metadata(target.as_ref(), module).ptr()
             },

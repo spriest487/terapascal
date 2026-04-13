@@ -1,3 +1,5 @@
+pub use crate::metadata::ids::FieldID;
+pub use crate::metadata::ids::ObjectID;
 use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
@@ -10,13 +12,13 @@ use serde::Serialize;
 use std::fmt;
 use std::rc::Rc;
 
-pub use crate::metadata::ids::FieldID;
-pub use crate::metadata::ids::ObjectID;
-
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Type {
     /// no type (used for raw pointers like void*)
     Nothing,
+
+    /// Named generic placeholder
+    Generic(Rc<String>),
 
     Pointer(Rc<Type>),
     TempRef(Rc<Type>),
@@ -278,7 +280,8 @@ impl Type {
             Type::F32 => Some(Value::LiteralF32(0.0)),
             Type::F64 => Some(Value::LiteralF64(0.0)),
 
-            Type::Struct(..)
+            Type::Generic(..)
+            | Type::Struct(..)
             | Type::TempRef(..)
             | Type::Flags(..)
             | Type::Variant(..)
@@ -297,11 +300,15 @@ impl Type {
         match self {
             Type::Object(_) | Type::WeakObject(_) => true,
 
+            // generics may contain object pointers, and we should emit retain/release instructions
+            // for them, to be replaced as appropriate later
+            Type::Generic(..) => true,
+
             Type::Struct(id) => {
                 let Some(def) = metadata.get_struct_def(*id) else {
                     return false;
                 };
-                
+
                 def.fields
                     .values()
                     .any(|f| f.ty.contains_any_object_refs(metadata))
@@ -347,6 +354,7 @@ impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Type::Nothing => write!(f, "none"),
+            Type::Generic(name) => write!(f, "{}", name),
             Type::F32 => write!(f, "f32"),
             Type::F64 => write!(f, "f64"),
             Type::Bool => write!(f, "bool"),

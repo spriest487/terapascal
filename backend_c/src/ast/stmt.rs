@@ -117,6 +117,10 @@ pub fn global_typeinfo_decl_name(metadata: &ir::Metadata, ty: &ir::Type) -> Opti
 
 fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
     match ty {
+        ir::Type::Generic(..) => {
+            panic!("code output should never contain generic placeholders")
+        },
+
         // primitives
         ir::Type::Bool => String::from("Bool"),
         ir::Type::U8 => String::from("U8"),
