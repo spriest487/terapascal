@@ -57,6 +57,9 @@ impl DynValue {
 
     pub fn try_cast(&self, ty: &ir::Type) -> Option<Self> {
         match ty {
+            ir::Type::Nothing => None,
+            ir::Type::Generic(..) => None,
+
             ir::Type::I8 => self.to_bigint().map(|x| x as i8).map(DynValue::I8),
             ir::Type::U8 => self.to_bigint().map(|x| x as u8).map(DynValue::U8),
             ir::Type::I16 => self.to_bigint().map(|x| x as i16).map(DynValue::I16),
@@ -92,8 +95,6 @@ impl DynValue {
                 };
                 Some(DynValue::Pointer(ptr))
             },
-
-            ir::Type::Nothing => None,
 
             ir::Type::Object(..) | ir::Type::WeakObject(..) => {
                 // assume self is a pointer-compatible type, its int value be the address
