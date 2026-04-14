@@ -7,7 +7,6 @@ use crate::IRFormatter;
 use crate::InstructionList;
 use crate::Metadata;
 use crate::MetadataSource;
-use crate::StaticClosure;
 use crate::StructIdentity;
 use crate::TagInfo;
 use crate::Type;
@@ -31,8 +30,6 @@ pub struct Library {
 
     pub functions: BTreeMap<FunctionID, Function>,
 
-    pub static_closures: Vec<StaticClosure>,
-
     pub init: InstructionList,
 }
 
@@ -52,14 +49,9 @@ impl Library {
             metadata: metadata.into(),
 
             functions: BTreeMap::new(),
-            static_closures: Vec::new(),
 
             init: InstructionList::new(),
         }
-    }
-
-    pub fn static_closures(&self) -> &[StaticClosure] {
-        &self.static_closures
     }
 
     pub fn init(&self) -> &InstructionList {
@@ -190,7 +182,10 @@ impl fmt::Display for Library {
         writeln!(f, "* Variables")?;
         for (var_id, var_info) in self.metadata.variables() {
             writeln!(f, "{}: {}", var_id.0, self.metadata.pretty_type_name(&var_info.r#type))?;
-            writeln!(f, " ({})", var_info.name)?;
+
+            if let Some(name) = &var_info.name {
+                writeln!(f, " ({})", name)?;
+            }
         }
         writeln!(f)?;
         

@@ -116,13 +116,13 @@ impl MetadataBuilder {
         &self.metadata
     }
     
-    pub fn new_variable(&mut self, name: NamePath, ty: Type) -> VariableID {
+    pub fn new_variable(&mut self, name: Option<NamePath>, ty: Type) -> VariableID {
         let id = self.next_variable_id;
 
         while let Some(..) = self.metadata.variables.get(&self.next_variable_id) {
             self.next_variable_id.0 += 1;
         }
-        
+
         self.metadata.variables.insert(id, VariableInfo {
             name,
             r#type: ty,

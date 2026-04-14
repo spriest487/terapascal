@@ -294,7 +294,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         if func.captures.len() == 0 {
             let static_closure = self.library
                 .build_static_closure_instance(closure);
-            let static_closure_ref = Ref::Global(GlobalRef::StaticClosure(static_closure.id));
+            let static_closure_ref = Ref::Global(GlobalRef::Variable(static_closure.id));
 
             // closure objects have a specific type, but refs to closures are type erased so
             // we need to cast to Object. we know static closures are immortal, so this can be
@@ -313,7 +313,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             .library
             .build_func_static_closure_instance(func, &self.generic_context);
 
-        Ref::Global(GlobalRef::StaticClosure(static_closure.id))
+        Ref::Global(GlobalRef::Variable(static_closure.id))
     }
 
     pub fn build_closure_instance(&mut self, closure: ClosureInstance, immortal: bool) -> Ref {

@@ -1,4 +1,6 @@
 use crate::IRFormatter;
+use crate::InstructionList;
+use crate::Label;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Ref;
@@ -6,7 +8,7 @@ use crate::StringID;
 use crate::TagInfo;
 use crate::Type;
 use crate::TypeDefID;
-use crate::{InstructionList, Label};
+use crate::VariableID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -36,7 +38,7 @@ impl fmt::Display for StaticClosureID {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct StaticClosure {
-    pub id: StaticClosureID,
+    pub id: VariableID,
     pub init_func: FunctionID,
 
     pub closure_id: TypeDefID,

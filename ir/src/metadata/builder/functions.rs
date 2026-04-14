@@ -3,11 +3,11 @@ use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::MetadataBuilder;
 use crate::NamePath;
-use crate::StaticClosureID;
 use crate::StructDef;
 use crate::StructIdentity;
 use crate::TagInfo;
 use crate::TypeDefID;
+use crate::VariableID;
 
 impl MetadataBuilder {
     pub fn insert_func(
@@ -90,11 +90,11 @@ impl MetadataBuilder {
         })
     }
     
-    pub fn get_static_closure(&self, func_id: FunctionID) -> Option<StaticClosureID> {
+    pub fn get_static_closure(&self, func_id: FunctionID) -> Option<VariableID> {
         self.find_in_self_or_refs(move |metadata| metadata.get_static_closure(func_id))
     }
 
-    pub fn insert_static_closure(&mut self, func_id: FunctionID, closure: StaticClosureID) {
+    pub fn insert_static_closure(&mut self, func_id: FunctionID, closure: VariableID) {
         let replaced = self.metadata.function_static_closures.insert(func_id, closure);
         assert!(replaced.is_none(), "static closure for function {func_id} must not have been inserted already");
     }

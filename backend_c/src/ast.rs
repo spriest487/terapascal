@@ -51,7 +51,6 @@ pub struct Unit<'a> {
     ifaces: Vec<Interface>,
 
     string_literals: HashMap<StringLiteralKey, StringLiteral>,
-    static_closures: Vec<ir::StaticClosure>,
 
     tag_arrays: HashMap<ir::TagLocation, usize>,
     
@@ -116,7 +115,6 @@ impl<'a> Unit<'a> {
             global_vars: Vec::new(),
 
             string_literals,
-            static_closures: Vec::new(),
 
             classes: Vec::new(),
             ifaces: Vec::new(),
@@ -287,10 +285,6 @@ impl<'a> Unit<'a> {
             for member_dep in member_deps {
                 self.type_defs_order.add_dependency(member_dep, c_def_name);
             }
-        }
-
-        for static_closure in library.static_closures() {
-            self.static_closures.push(static_closure.clone());
         }
 
         for (func_id, func) in library.functions() {
@@ -831,16 +825,6 @@ impl<'a> fmt::Display for Unit<'a> {
             writeln!(f, "MAKE_STRING_LIT(\"{}\");", lit.as_str().escape_default())?;
         }
 
-        for static_closure in &self.static_closures {
-            let global_name = GlobalName::StaticClosure(static_closure.id);
-            let decl_string = Type::DefinedType(TypeDefName::Struct(static_closure.closure_id))
-                .ptr()
-                .to_decl_string(&global_name);
-
-            writeln!(f, "{};", decl_string)?;
-        }
-        writeln!(f)?;
-        
         for global_var in &self.global_vars {
             writeln!(f, "static {};", global_var.ty.to_decl_string(&global_var.name))?;
         }

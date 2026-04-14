@@ -2275,22 +2275,6 @@ impl Vm {
                 });
         }
 
-        // declare (uninitialized) global vars for static closure pointers
-        for static_closure in &lib.static_closures {
-            let closure_ptr_ref = ir::GlobalRef::StaticClosure(static_closure.id);
-            let closure_ptr_ty =
-                ir::Type::Object(ir::ObjectID::Closure(static_closure.func_ty_id));
-
-            // we only need to set a null pointer here, init code will set the actual value
-            let default_val = self.default_val(&closure_ptr_ty)?;
-            let default_val_bytes = self.marshaller.marshal_to_vec(&default_val)?;
-
-            self.globals.insert(closure_ptr_ref, GlobalValue::Variable {
-                ty: closure_ptr_ty,
-                value: default_val_bytes.into_boxed_slice(),
-            });
-        }
-
         let init_stack_size = self
             .marshaller
             .stack_alloc_size(&lib.init().instructions)

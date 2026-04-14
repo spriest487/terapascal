@@ -783,15 +783,6 @@ impl<'a, 'b> Builder<'a, 'b> {
                 
                 Some(var.r#type.clone())
             }
-
-            ir::Ref::Global(ir::GlobalRef::StaticClosure(static_closure_id)) => {
-                self.module.static_closures.iter()
-                    .find_map(|closure| {
-                        (closure.id == *static_closure_id)
-                            .then(|| closure.func_ty_id)
-                            .map(ir::Type::Function)
-                    })
-            }
             
             ir::Ref::Global(ir::GlobalRef::StaticTagArray(..)) => {
                 Some(ir::Type::any().dyn_array())

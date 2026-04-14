@@ -85,7 +85,7 @@ pub struct LibraryBuilder<'a> {
     variables: BTreeMap<ir::VariableID, ir::Type>,
     variables_by_name: HashMap<IdentPath, ir::VariableID>,
 
-    static_closures: Vec<ir::StaticClosure>,
+    static_closures: BTreeMap<ir::VariableID, ir::StaticClosure>,
     
     // looked up on first use
     free_mem_func: Option<ir::FunctionID>,
@@ -172,7 +172,7 @@ impl<'a> LibraryBuilder<'a> {
             variables: BTreeMap::new(),
             variables_by_name: HashMap::new(),
             
-            static_closures: Vec::new(),
+            static_closures: BTreeMap::new(),
             
             rc_methods: HashMap::new(),
             
@@ -226,7 +226,6 @@ impl<'a> LibraryBuilder<'a> {
 
         let mut lib = ir::Library::new(self.name, self.version, self.references, metadata);
         lib.functions = self.functions;
-        lib.static_closures = self.static_closures;
         lib.init = self.init_code;
 
         lib
@@ -272,7 +271,7 @@ impl<'a> LibraryBuilder<'a> {
                 let var_name = unit.ident.clone().child(ident.clone());
                 let var_path = ir::NamePath::from_ident_path(&var_name, None);
 
-                let id = self.metadata.new_variable(var_path, var_ty.clone());
+                let id = self.metadata.new_variable(Some(var_path), var_ty.clone());
 
                 self.variables_by_name.insert(var_name, id);
                 self.variables.insert(id, var_ty.clone());
@@ -1546,7 +1545,7 @@ impl<'a> LibraryBuilder<'a> {
         generic_ctx: &typ::GenericContext
     ) -> &ir::StaticClosure {
         if let Some(existing) = self.metadata.get_static_closure(func.id) {
-            return &self.static_closures[existing.0];
+            return self.static_closures.get(&existing).unwrap();
         }
 
         // function reference closures can never have a capture list or type args
@@ -1592,42 +1591,41 @@ impl<'a> LibraryBuilder<'a> {
             },
         };
 
-        let static_closure_id = self.build_static_closure_instance(closure).id;
+        let static_closure = self.build_static_closure_instance(closure);
+        let static_closure_id = static_closure.id;
         self.metadata.insert_static_closure(func.id, static_closure_id);
 
-        &self.static_closures[static_closure_id.0]
+        &self.static_closures[&static_closure_id]
     }
 
     pub fn build_static_closure_instance(&mut self, closure: ClosureInstance) -> &ir::StaticClosure {
-        let existing_index = self.static_closures.iter()
-            .enumerate()
-            .filter_map(|(i, static_closure)| {
+        let existing_id = self.static_closures.iter()
+            .filter_map(|(var_id, static_closure)| {
                 if static_closure.closure_id == closure.closure_id {
-                    Some(i)
+                    Some(var_id)
                 } else {
                     None
                 }
             })
             .next();
 
-        if let Some(existing_index) = existing_index {
-            return &self.static_closures[existing_index];
+        if let Some(id) = existing_id {
+            return self.static_closures.get(id).unwrap();
         }
 
-        let id = ir::StaticClosureID(self.static_closures.len());
+        let id = self.metadata.new_variable(None, closure.func_ty_id.to_closure_ptr_type());
         let instance = build_static_closure_impl(closure, id, self);
 
-        self.static_closures.push(instance);
-
-        &self.static_closures[self.static_closures.len() - 1]
+        self.static_closures.insert(id, instance);
+        self.static_closures.get(&id).unwrap()
     }
 
     /// Add static closure init function calls at top of init block
     fn gen_static_closure_init(&mut self) {
         let mut static_closures_init = ir::InstructionList::new();
-        for static_closure in &self.static_closures {
+        for (_id, static_closure) in &self.static_closures {
             static_closures_init.push(ir::Instruction::Call {
-                function: ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(static_closure.init_func))),
+                function: ir::Ref::from(static_closure.init_func).value(),
                 args: Vec::new(),
                 out: None,
             }, None);

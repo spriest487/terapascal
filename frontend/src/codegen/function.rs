@@ -375,12 +375,12 @@ fn build_func_body(
 
 pub fn build_static_closure_impl(
     closure: ClosureInstance,
-    id: StaticClosureID,
+    id: VariableID,
     library: &mut LibraryBuilder,
 ) -> StaticClosure {
     let mut init_builder = IRBuilder::new(library);
 
-    let static_closure_ptr_ref = Ref::Global(GlobalRef::StaticClosure(id));
+    let static_closure_ptr_ref = Ref::Global(GlobalRef::Variable(id));
 
     let closure_ref = init_builder.build_closure_instance(closure.clone(), true);
     init_builder.cast(static_closure_ptr_ref, closure_ref, closure.closure_class_type());

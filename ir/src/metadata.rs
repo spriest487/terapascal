@@ -18,7 +18,6 @@ use crate::MethodInfo;
 use crate::NamePath;
 use crate::RawInstructionFormatter;
 use crate::Ref;
-use crate::StaticClosureID;
 use crate::StructDef;
 use crate::StructIdentity;
 use crate::Type;
@@ -55,7 +54,7 @@ pub struct Metadata {
     // function pointer type ID -> closure class IDs
     closures: BTreeMap<TypeDefID, Vec<TypeDefID>>,
 
-    function_static_closures: HashMap<FunctionID, StaticClosureID>,
+    function_static_closures: HashMap<FunctionID, VariableID>,
 }
 
 impl Metadata {
@@ -192,7 +191,7 @@ impl Metadata {
 
         for (id, var) in &other.variables {
             if let Some(old_def) = self.variables.get(id) {
-                Self::check_conflict("variable ID", id, Some(&var.name), Some(&old_def.name));
+                Self::check_conflict("variable ID", id, var.name.as_ref(), old_def.name.as_ref());
             };
 
             self.variables.insert(*id, var.clone());
@@ -414,7 +413,7 @@ impl Metadata {
         !self.type_decls[&id].is_forward()
     }
 
-    pub fn get_static_closure(&self, func_id: FunctionID) -> Option<StaticClosureID> {
+    pub fn get_static_closure(&self, func_id: FunctionID) -> Option<VariableID> {
         self.function_static_closures.get(&func_id).cloned()
     }
 
@@ -630,11 +629,17 @@ impl MetadataSource for Metadata {
     }
 
     fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)> {
-        self.variables.iter().find_map(|(id, var_info)|
-            (var_info.name == *name).then(|| {
-                (*id, var_info)
-            })
-        )
+        self.variables.iter().find_map(|(id, var_info)| {
+            let Some(var_name) = var_info.name.as_ref() else {
+                return None;
+            };
+
+            if *var_name != *name {
+                return None;
+            }
+
+            Some((*id, var_info))
+        })
     }
 
     fn get_variable(&self, id: VariableID) -> Option<&VariableInfo> {
@@ -784,13 +789,14 @@ impl<T: MetadataSource> IRFormatter for T {
                 }
             },
 
-            Ref::Global(GlobalRef::Variable(var)) => {
-                match self.get_variable(*var) {
-                    Some(var_info) => {
-                        write!(f, "{}", var_info.name.to_pretty_string(self.as_formatter()))
+            Ref::Global(GlobalRef::Variable(id)) => {
+                match self.get_variable(*id) {
+                    Some(VariableInfo { name: Some(var_name), .. }) => {
+                        write!(f, "{}", var_name.to_pretty_string(self.as_formatter()))
                     },
-                    None => {
-                        write!(f, "{var}")
+
+                    _ => {
+                        write!(f, "{id}")
                     },
                 }
             }

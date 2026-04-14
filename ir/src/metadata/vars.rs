@@ -6,7 +6,7 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VariableInfo {
-    pub name: NamePath,
+    pub name: Option<NamePath>,
     pub r#type: Type,
 }
 
