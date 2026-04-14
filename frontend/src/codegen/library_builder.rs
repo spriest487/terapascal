@@ -41,7 +41,6 @@ use crate::typ::get_mem_sig;
 use crate::typ::layout::StructLayout;
 use crate::typ::layout::StructLayoutMember;
 use crate::typ::seq::TypeSequenceSupport;
-use crate::typ::GenericContext;
 use crate::typ::Specializable;
 use crate::typ::TypeArgResolver;
 use crate::typ::TypeArgsResult;
@@ -1219,7 +1218,7 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             typ::Type::GenericParam(param) => {
-                panic!("translate_type: unresolved generic type {}", param.name)
+                ir::Type::Generic(Rc::new(param.name.name.to_string()))
             }
 
             typ::Type::MethodSelf => {
@@ -1573,7 +1572,7 @@ impl<'a> LibraryBuilder<'a> {
         );
 
         // build the closure function, which is a thunk that just calls the global function
-        let mut closure_func_sig = translate_sig(&func.src_sig, &GenericContext::empty(), self);
+        let mut closure_func_sig = translate_sig(&func.src_sig, &typ::GenericContext::empty(), self);
 
         // closure parameter (unused for static closures)
         closure_func_sig.param_tys.insert(0, ir::Type::any());
