@@ -1,10 +1,10 @@
-use std::collections::BTreeMap;
-use crate::ir;
 use crate::ast;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::typ;
 use crate::codegen::FunctionInstance;
+use crate::ir;
 use linked_hash_map::LinkedHashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -80,11 +80,6 @@ pub fn translate_sig(
     generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::FunctionSig {
-    assert!(
-        sig.type_params.is_none(),
-        "cannot create type for a generic function pointer"
-    );
-
     let return_ty = lib.translate_type(&sig.result_ty, generic_ctx);
     let mut param_tys = Vec::new();
     for param in &sig.params {

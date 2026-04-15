@@ -5,7 +5,6 @@ use crate::typ::ast::Call;
 use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionParamGroup;
-use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericResult;
 use crate::typ::GenericTarget;
@@ -17,6 +16,7 @@ use crate::typ::TypeParamContainer;
 use crate::typ::TypeParamList;
 use crate::typ::TypedValue;
 use crate::typ::Value;
+use crate::typ::Context;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Span;
@@ -203,8 +203,8 @@ impl FunctionSig {
             .iter()
             .any(|param| param.ty.contains_unresolved_params(ctx))
     }
-    
-    pub fn validate_generic_args(&self, args: &TypeArgList, ctx: &Context) -> GenericResult<()> {
+
+    pub fn validate_generic_args(&self, args: &impl TypeArgResolver, ctx: &Context) -> GenericResult<()> {
         let Some(type_params) = &self.type_params else {
             return Err(GenericError::ArgsLenMismatch {
                 target: GenericTarget::FunctionSig(self.clone()),
@@ -212,7 +212,7 @@ impl FunctionSig {
                 expected: 0,
             })
         };
-        
+
         if args.len() != type_params.len() {
             return Err(GenericError::ArgsLenMismatch {
                 target: GenericTarget::FunctionSig(self.clone()),
@@ -222,13 +222,13 @@ impl FunctionSig {
         }
 
         for pos in 0..type_params.len() {
-            let ty_arg = &args.items[pos];
+            let ty_arg = args.get(pos).unwrap();
             let constraint_ty = &type_params[pos].is_ty;
 
             if !ty_arg.match_constraint(constraint_ty, ctx) {
                 return Err(GenericError::ConstraintNotSatisfied {
                     is_not_ty: constraint_ty.clone(),
-                    actual_ty: Some(ty_arg.ty().clone()),
+                    actual_ty: Some(ty_arg.clone()),
                 });
             }
         }

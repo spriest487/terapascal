@@ -29,9 +29,9 @@ use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
 use crate::ir;
-use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::FunctionDeclContext;
+use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
@@ -861,12 +861,13 @@ impl<'a> LibraryBuilder<'a> {
         } else {
             None
         };
-        
+
         let tags = self.translate_tag_groups(&func_decl.tags);
 
-        let sig = translate_sig(&func_decl.sig(), generic_ctx, self);
+        let sig = func_decl.sig();
+        let ir_sig = translate_sig(&sig, generic_ctx, self);
 
-        self.metadata.insert_func(global_name, sig, self.opts.rtti, tags)
+        self.metadata.insert_func(global_name, ir_sig, self.opts.rtti, tags)
     }
 
     pub fn translate_func(

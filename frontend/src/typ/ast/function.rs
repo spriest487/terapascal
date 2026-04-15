@@ -484,7 +484,7 @@ impl FunctionDecl {
     pub fn method_declaring_type(&self) -> Option<&Type> {
         self.name.context.method_declaring_type()
     }
-    
+
     pub fn sig(&self) -> FunctionSig {
         FunctionSig::from_decl(self.clone())
     }

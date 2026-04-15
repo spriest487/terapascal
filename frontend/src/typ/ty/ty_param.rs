@@ -1,6 +1,5 @@
 use crate::ast;
 use crate::result::ErrorContinue;
-use crate::typ::typecheck_typename;
 use crate::typ::Context;
 use crate::typ::GenericError;
 use crate::typ::GenericResult;
@@ -8,6 +7,7 @@ use crate::typ::Specializable;
 use crate::typ::Type;
 use crate::typ::TypeName;
 use crate::typ::Value;
+use crate::typ::typecheck_typename;
 use std::fmt;
 use std::sync::Arc;
 use terapascal_common::span::Spanned;
