@@ -18,8 +18,6 @@ public class AssemblyBuilder : IDisposable {
     private readonly Dictionary<IR.StringID, FieldDefinition> stringLitFields;
     private readonly Dictionary<IR.VariableID, FieldDefinition> globalVarFields;
 
-    private readonly Dictionary<IR.StaticClosureID, FieldDefinition> staticClosureFields;
-
     private readonly Dictionary<IR.IType, FieldDefinition> staticTypeInfoFields;
     private readonly Dictionary<IR.FunctionID, FieldDefinition> staticFuncInfoFields;
 
@@ -66,8 +64,6 @@ public class AssemblyBuilder : IDisposable {
 
         this.stringLitFields = new Dictionary<IR.StringID, FieldDefinition>();
         this.globalVarFields = new Dictionary<IR.VariableID, FieldDefinition>();
-
-        this.staticClosureFields = new Dictionary<IR.StaticClosureID, FieldDefinition>();
 
         this.staticTypeInfoFields = new Dictionary<IR.IType, FieldDefinition>();
         this.staticFuncInfoFields = new Dictionary<IR.FunctionID, FieldDefinition>();
@@ -243,13 +239,15 @@ public class AssemblyBuilder : IDisposable {
             var typeRef = this.TypeBuilder.BuildTypeRef(varInfo.Type, library);
 
             TypeDefinition typeDef;
-            if (varInfo.Name.GetParent() is { } unitPath) {
+            if (varInfo.Name?.GetParent() is { } unitPath) {
                 typeDef = this.GetUnitClass(unitPath);
             } else {
                 typeDef = globals;
             }
 
-            var varFieldDef = new FieldDefinition(varInfo.Name.Last, globalVarFieldAttrs, typeRef);
+            var varName = varInfo.Name?.Last ?? $"<variable{id.ID}>";
+
+            var varFieldDef = new FieldDefinition(varName, globalVarFieldAttrs, typeRef);
             typeDef.Fields.Add(varFieldDef);
             
             this.globalVarFields.Add(id, varFieldDef);
@@ -284,16 +282,6 @@ public class AssemblyBuilder : IDisposable {
                     break;
                 }
             }
-        }
-
-        foreach (var staticClosure in library.StaticClosures) {
-            var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
-            var fieldName = $"StaticClosure_{staticClosure.ID.ID}";
-            var fieldDef = new FieldDefinition(fieldName, fieldAttrs, this.TypeBuilder.ClosureBaseType);
-            
-            globals.Fields.Add(fieldDef);
-            
-            this.staticClosureFields.Add(staticClosure.ID, fieldDef);
         }
 
         foreach (var (tagLoc, tags) in library.Metadata.GetAllTags()) {
@@ -604,10 +592,6 @@ public class AssemblyBuilder : IDisposable {
         return null;
     }
 
-    public FieldReference GetStaticClosureFieldRef(IR.StaticClosureID id) {
-        return this.staticClosureFields[id];
-    }
-    
     public FieldReference? GetStaticTypeInfoFieldRef(IR.IType type) {
         return this.staticTypeInfoFields.GetValueOrDefault(type);
     }

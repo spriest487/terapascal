@@ -29,12 +29,6 @@ public class Library {
         init => field = value!.ToDictionaryNonNull();
     }
 
-    [Key("static_closures")]
-    public required IReadOnlyList<StaticClosure> StaticClosures {
-        get;
-        init => field = value!.ToArrayNonNull();
-    }
-
     [Key("init")]
     public required InstructionList Initialization {
         get;

@@ -924,10 +924,6 @@ public class InstructionBuilder {
                 throw new InvalidDataException("invalid instruction: can't address a function global");
             }
             
-            case IR.GlobalRef(IR.StaticClosureGlobalRef): {
-                throw new InvalidDataException("invalid instruction: can't address a closure global");
-            }
-            
             case IR.GlobalRef(IR.VariableGlobalRef(var id)): {
                 var fieldRef = this.assemblyBuilder.GetGlobalVariableRef(id);
                 this.body.Emit(OpCodes.Ldsflda, fieldRef);
@@ -1042,15 +1038,6 @@ public class InstructionBuilder {
             
             case IR.GlobalRef(IR.StaticTagArrayGlobalRef): {
                 return IR.IType.Any.MakeDynArray();
-            }
-
-            case IR.GlobalRef(IR.StaticClosureGlobalRef(var id)): {
-                var closureInfo = this.library.StaticClosures.FirstOrDefault(closure => closure.ID == id);
-                if (closureInfo != null) {
-                    return new IR.FunctionType(closureInfo.FunctionTypeID);
-                }
-
-                break;
             }
 
             case IR.ElementRef(var elementRef): {
@@ -1171,11 +1158,6 @@ public class InstructionBuilder {
                 var varIndex = this.GetVariableIndex(local);
                 this.body.Emit(OpCodes.Ldloc, varIndex);
 
-                break;
-            }
-
-            case IR.GlobalRef(IR.StaticClosureGlobalRef(var closureID)): {
-                this.body.Emit(OpCodes.Ldsfld, this.assemblyBuilder.GetStaticClosureFieldRef(closureID));
                 break;
             }
 
@@ -1302,15 +1284,6 @@ public class InstructionBuilder {
 
                 var field = this.assemblyBuilder.GetGlobalVariableRef(varID);
                 this.body.Emit(OpCodes.Stsfld, field);
-                break;
-            }
-            
-            case IR.GlobalRef(IR.StaticClosureGlobalRef(var closureID)): {
-                loadValue();
-
-                var field = this.assemblyBuilder.GetStaticClosureFieldRef(closureID);
-                this.body.Emit(OpCodes.Stsfld, field);
-
                 break;
             }
 

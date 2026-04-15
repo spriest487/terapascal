@@ -62,16 +62,6 @@ public readonly record struct StringID(ulong ID) : IComparable<StringID> {
     }
 }
 
-public readonly record struct StaticClosureID(ulong ID) : IComparable<StaticClosureID> {
-    public int CompareTo(StaticClosureID other) {
-        return this.ID.CompareTo(other.ID);
-    }
-
-    public override string ToString() {
-        return $"static closure {this.ID}";
-    }
-}
-
 public class LocalIDFormatter : IMessagePackFormatter<LocalID> {
     public void Serialize(ref MessagePackWriter writer, LocalID value, MessagePackSerializerOptions options) {
         throw new NotImplementedException();
@@ -109,16 +99,6 @@ public class StringIDFormatter : IMessagePackFormatter<StringID> {
 
     public StringID Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
         return new StringID(reader.ReadUInt64());
-    }
-}
-
-public class StaticClosureIDFormatter : IMessagePackFormatter<StaticClosureID> {
-    public void Serialize(ref MessagePackWriter writer, StaticClosureID value, MessagePackSerializerOptions options) {
-        throw new NotImplementedException();
-    }
-
-    public StaticClosureID Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
-        return new StaticClosureID(reader.ReadUInt64());
     }
 }
 
@@ -311,7 +291,6 @@ public class RefFormatter : IMessagePackFormatter<IRef> {
 public interface IGlobalRef;
 public record FunctionGlobalRef(FunctionID ID) : IGlobalRef;
 public record StringLiteralGlobalRef(StringID ID) : IGlobalRef;
-public record StaticClosureGlobalRef(StaticClosureID ID) : IGlobalRef;
 public record StaticTypeInfoGlobalRef(IType Type) : IGlobalRef;
 public record StaticFuncInfoGlobalRef(FunctionID ID) : IGlobalRef;
 public record VariableGlobalRef(VariableID ID) : IGlobalRef;
@@ -338,10 +317,6 @@ public class GlobalRefFormatter : IMessagePackFormatter<IGlobalRef> {
             case "StringLiteral": {
                 var id = reader.ReadUInt64();
                 return new StringLiteralGlobalRef(new StringID(id));
-            }
-            case "StaticClosure": {
-                var id = reader.ReadUInt64();
-                return new StaticClosureGlobalRef(new StaticClosureID(id));
             }
             case "StaticTypeInfo": {
                 var type = MessagePackSerializer.Deserialize<IType?>(ref reader, options);

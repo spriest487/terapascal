@@ -62,11 +62,6 @@ public partial class LibraryViewModel : ViewModelBase {
             .Select(entry => LibraryTreeNode.FromVariable(entry.Key, entry.Value, lib.Metadata))
             .ToList();
 
-        var staticClosureItems = lib.StaticClosures
-            .OrderBy(entry => entry.ID)
-            .Select(entry => LibraryTreeNode.FromStaticClosure(entry, lib.Metadata))
-            .ToList();
-
         var code = IR.InstructionList.FormatInstructions(lib.Initialization.Instructions, lib.Metadata);
         
         this.selectedItem = new LibraryTreeNode {
@@ -121,13 +116,6 @@ public partial class LibraryViewModel : ViewModelBase {
                 Title = $"Strings ({stringItems.Count})",
                 StyleClasses = ["Category", "Strings"],
                 Children = new ObservableCollection<LibraryTreeNode>(stringItems),
-                IsExpanded = false,
-            },
-
-            new LibraryTreeNode {
-                Title = $"Static Closures ({staticClosureItems.Count})",
-                StyleClasses = ["Category", "StaticClosures"],
-                Children = new ObservableCollection<LibraryTreeNode>(staticClosureItems),
                 IsExpanded = false,
             },
         ];

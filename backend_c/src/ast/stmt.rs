@@ -28,8 +28,6 @@ pub enum GlobalName {
 
     StringLiteral(ir::StringID),
 
-    StaticClosure(ir::StaticClosureID),
-    
     TypeInfoList,
     TypeInfoCount,
     StaticTypeInfo(Rc<ir::Type>),
@@ -61,7 +59,6 @@ impl fmt::Display for GlobalName {
             GlobalName::BoxClassInstance(id) => write!(f, "BoxClass_{}", id.0),
 
             GlobalName::StringLiteral(id) => write!(f, "String_{}", id.0),
-            GlobalName::StaticClosure(id) => write!(f, "StaticClosure_{}", id.0),
             GlobalName::StaticTagArray(loc) => {
                 write!(f, "StaticTagArray_")?;
                 match loc {

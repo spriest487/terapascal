@@ -218,10 +218,6 @@ impl Expr {
                 let name = GlobalName::StringLiteral(*id);
                 Expr::Global(name).addr_of()
             },
-            ir::Ref::Global(ir::GlobalRef::StaticClosure(id)) => {
-                let name = GlobalName::StaticClosure(*id);
-                Expr::Global(name)
-            },
             ir::Ref::Global(ir::GlobalRef::Variable(id)) => {
                 let name = GlobalName::Variable(*id);
                 Expr::Global(name)

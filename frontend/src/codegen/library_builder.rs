@@ -13,7 +13,8 @@ use crate::codegen::build_func_def;
 use crate::codegen::build_func_static_closure_def;
 use crate::codegen::build_static_closure_impl;
 use crate::codegen::builder::IRBuilder;
-use crate::codegen::expr::{expr_to_val, literal_to_val};
+use crate::codegen::expr::expr_to_val;
+use crate::codegen::expr::literal_to_val;
 use crate::codegen::metadata::translate_closure_struct;
 use crate::codegen::metadata::translate_iface;
 use crate::codegen::metadata::translate_name;
@@ -1544,8 +1545,13 @@ impl<'a> LibraryBuilder<'a> {
         func: &FunctionInstance,
         generic_ctx: &typ::GenericContext
     ) -> &ir::StaticClosure {
-        if let Some(existing) = self.metadata.get_static_closure(func.id) {
-            return self.static_closures.get(&existing).unwrap();
+        if let Some(existing_id) = self.static_closures
+            .iter()
+            .find_map(|(id, static_closure)| {
+                (static_closure.func == func.id).then_some(*id)
+            })
+        {
+            return &self.static_closures[&existing_id];
         }
 
         // function reference closures can never have a capture list or type args
@@ -1593,7 +1599,6 @@ impl<'a> LibraryBuilder<'a> {
 
         let static_closure = self.build_static_closure_instance(closure);
         let static_closure_id = static_closure.id;
-        self.metadata.insert_static_closure(func.id, static_closure_id);
 
         &self.static_closures[&static_closure_id]
     }

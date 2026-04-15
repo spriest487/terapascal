@@ -413,6 +413,7 @@ pub fn build_static_closure_impl(
 
     StaticClosure {
         id,
+        func: closure.func_instance.id,
         init_func: init_func_id,
         closure_id: closure.closure_id,
         func_ty_id: closure.func_ty_id,

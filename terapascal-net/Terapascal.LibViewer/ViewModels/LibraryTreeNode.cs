@@ -252,7 +252,7 @@ public partial class LibraryTreeNode : ObservableObject {
     }
     
     public static LibraryTreeNode FromVariable(IR.VariableID id, IR.VariableInfo decl, IR.Metadata metadata) {
-        var title = decl.Name.ToPrettyString(metadata);
+        var title = decl.Name?.ToPrettyString(metadata) ?? id.ToString();
 
         return new LibraryTreeNode {
             ID = id.ID,

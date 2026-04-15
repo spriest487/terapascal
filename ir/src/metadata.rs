@@ -53,8 +53,6 @@ pub struct Metadata {
 
     // function pointer type ID -> closure class IDs
     closures: BTreeMap<TypeDefID, Vec<TypeDefID>>,
-
-    function_static_closures: HashMap<FunctionID, VariableID>,
 }
 
 impl Metadata {
@@ -71,7 +69,6 @@ impl Metadata {
             function_info: LinkedHashMap::new(),
 
             closures: BTreeMap::new(),
-            function_static_closures: HashMap::new(),
 
             type_info: HashMap::new(),
         }
@@ -205,15 +202,6 @@ impl Metadata {
                     func_closures.push(*id);
                 }
             }
-        }
-
-        for (func_id, static_closure) in &other.function_static_closures {
-            if self.function_static_closures.contains_key(func_id) {
-                panic!("duplicate static closure ID for function {func_id}");
-            }
-
-            self.function_static_closures
-                .insert(*func_id, *static_closure);
         }
 
         for (ty, funcs) in &other.type_info {
@@ -411,10 +399,6 @@ impl Metadata {
         };
 
         !self.type_decls[&id].is_forward()
-    }
-
-    pub fn get_static_closure(&self, func_id: FunctionID) -> Option<VariableID> {
-        self.function_static_closures.get(&func_id).cloned()
     }
 
     pub fn impls(&self, ty: &Type) -> Vec<InterfaceID> {

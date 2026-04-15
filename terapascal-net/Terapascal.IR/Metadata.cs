@@ -32,12 +32,6 @@ public class Metadata {
         init => field = value!.ToDictionaryNonNull();
     }
 
-    [Key("function_static_closures")]
-    public required IReadOnlyDictionary<FunctionID, StaticClosureID> FunctionStaticClosures {
-        get;
-        init => field = value!.ToDictionaryNonNull();
-    }
-
     [Key("type_info")]
     public required Dictionary<IType, TypeInfo> TypeInfo {
         get;
@@ -687,16 +681,11 @@ public class Metadata {
             }
 
             case GlobalRef(VariableGlobalRef(var id)): {
-                if (this.Variables.TryGetValue(id, out var variableInfo)) {
+                if (this.Variables.TryGetValue(id, out var variableInfo) && variableInfo.Name != null) {
                     result.Append(variableInfo.Name.ToPrettyString(this));
                 } else {
                     result.Append(id.ToString());
                 }
-                break;
-            }
-            
-            case GlobalRef(StaticClosureGlobalRef(var id)): {
-                result.Append(id.ToString());
                 break;
             }
 
@@ -813,7 +802,7 @@ public class MethodInfo {
 [MessagePackObject]
 public class VariableInfo {
     [Key("name")]
-    public required NamePath Name { get; init; }
+    public NamePath? Name { get; init; }
     
     [Key("type")]
     public required IType Type { get; init; }

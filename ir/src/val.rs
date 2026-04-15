@@ -7,7 +7,6 @@ use crate::IRFormatter;
 use crate::LocalStack;
 use crate::MetadataSource;
 use crate::ObjectID;
-use crate::StaticClosureID;
 use crate::VariableID;
 use crate::FUNCINFO_TYPE;
 use crate::STRING_TYPE;
@@ -114,11 +113,6 @@ impl Ref {
             Ref::Global(GlobalRef::Variable(id)) => {
                 let var_info = metadata.get_variable(*id)?;
                 Some(Cow::Borrowed(&var_info.r#type))
-            }
-            Ref::Global(GlobalRef::StaticClosure(_id)) => {
-                // TODO - static closure types should be available from metadata alone
-                // replace them with global vars?
-                None
             }
             Ref::Global(GlobalRef::StaticTagArray(..)) => {
                 Some(Cow::Owned(Type::Object(ObjectID::Any).dyn_array()))
@@ -423,7 +417,6 @@ pub const NIL: Value = Value::LiteralNil;
 pub enum GlobalRef {
     Function(FunctionID),
     StringLiteral(StringID),
-    StaticClosure(StaticClosureID),
     StaticTypeInfo(Rc<Type>),
     StaticFuncInfo(FunctionID),
     Variable(VariableID),
@@ -435,7 +428,6 @@ impl fmt::Display for GlobalRef {
         match self {
             GlobalRef::Function(func_id) => write!(f, "{}", func_id),
             GlobalRef::StringLiteral(id) => write!(f, "{}", id),
-            GlobalRef::StaticClosure(id) => write!(f, "{}", id),
             GlobalRef::Variable(id) => write!(f, "{}", id),
             GlobalRef::StaticTypeInfo(ty) => write!(f, "typeinfo({})", ty),
             GlobalRef::StaticFuncInfo(id) => write!(f, "funcinfo({})", id),

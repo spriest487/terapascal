@@ -27,18 +27,10 @@ impl fmt::Display for FunctionID {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
-pub struct StaticClosureID(pub usize);
-
-impl fmt::Display for StaticClosureID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "static closure {}", self.0)
-    }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct StaticClosure {
     pub id: VariableID,
+    pub func: FunctionID,
     pub init_func: FunctionID,
 
     pub closure_id: TypeDefID,

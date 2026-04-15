@@ -5,7 +5,7 @@ namespace Terapascal.IR;
 [MessagePackObject]
 public class StaticClosure {
     [Key("id")]
-    public required StaticClosureID ID { get; init; }
+    public required VariableID ID { get; init; }
 
     [Key("init_func")]
     public required FunctionID InitFunction { get; init; }
