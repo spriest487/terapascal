@@ -42,7 +42,6 @@ impl fmt::Display for ClosureInstance {
 pub fn translate_closure_struct(
     identity: ir::ClosureIdentity,
     captures: &LinkedHashMap<ast::Ident, typ::Type>,
-    generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::TypeDefID {
     let id = lib.metadata_mut().new_type();
@@ -56,7 +55,7 @@ pub fn translate_closure_struct(
     let mut field_id = ir::FieldID(ir::CLOSURE_PTR_FIELD.0 + 1);
 
     for (capture_name, capture_ty) in captures {
-        let ty = lib.translate_type(capture_ty, generic_ctx);
+        let ty = lib.translate_type(capture_ty);
 
         fields.insert(
             field_id,
@@ -75,15 +74,11 @@ pub fn translate_closure_struct(
     id
 }
 
-pub fn translate_sig(
-    sig: &typ::FunctionSig,
-    generic_ctx: &typ::GenericContext,
-    lib: &mut LibraryBuilder,
-) -> ir::FunctionSig {
-    let return_ty = lib.translate_type(&sig.result_ty, generic_ctx);
+pub fn translate_sig(sig: &typ::FunctionSig, lib: &mut LibraryBuilder) -> ir::FunctionSig {
+    let return_ty = lib.translate_type(&sig.result_ty);
     let mut param_tys = Vec::new();
     for param in &sig.params {
-        let mut ty = lib.translate_type(&param.ty, generic_ctx);
+        let mut ty = lib.translate_type(&param.ty);
         if param.is_by_ref() {
             ty = ty.ptr();
         }

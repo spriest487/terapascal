@@ -70,13 +70,11 @@ fn translate_builtin_class(
         return;
     };
 
-    let generic_ctx = typ::GenericContext::empty();
-
-    let name = translate_name(name, &generic_ctx, lib);
+    let name = translate_name(name, lib);
 
     lib.metadata_mut().declare_type(id, &name);
 
-    let resource_ty = translate_struct_def(class_def.as_ref(), &generic_ctx, lib);
+    let resource_ty = translate_struct_def(class_def.as_ref(), lib);
 
     lib.metadata_mut().define_struct(id, resource_ty);
     lib.gen_type_info(&id.to_class_ptr_type());

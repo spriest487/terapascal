@@ -205,13 +205,16 @@ pub fn translate_if_cond_stmt(
 pub fn literal_to_val(
     lit: &typ::ast::Literal,
     ty: &ir::Type,
-    generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::Value {
     match lit {
-        ast::Literal::Nil => ir::Value::LiteralNil,
+        ast::Literal::Nil => {
+            ir::Value::LiteralNil
+        },
 
-        ast::Literal::Boolean(b) => ir::Value::LiteralBool(*b),
+        ast::Literal::Boolean(b) => {
+            ir::Value::LiteralBool(*b)
+        },
 
         ast::Literal::Integer(int_val) => match ty {
             ir::Type::U8 => ir::Value::LiteralU8(int_val.as_u8().expect("invalid u8 literal value")),
@@ -247,19 +250,19 @@ pub fn literal_to_val(
         },
 
         ast::Literal::TypeInfo(ty) => {
-            let of_ty = lib.translate_type(ty, generic_ctx);
+            let of_ty = lib.translate_type(ty);
             let type_info_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(of_ty));
             
             ir::Value::from(type_info_ref)
         }
 
         ast::Literal::SizeOf(ty) => {
-            let sized_ty = lib.translate_type(ty, generic_ctx);
+            let sized_ty = lib.translate_type(ty);
             ir::Value::SizeOf(sized_ty)
         },
 
         ast::Literal::DefaultValue(ty) => {
-            let value_ty = lib.translate_type(ty, generic_ctx);
+            let value_ty = lib.translate_type(ty);
             ir::Value::Default(value_ty)
         }
     }

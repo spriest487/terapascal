@@ -3,10 +3,9 @@ use crate::codegen::expr;
 use crate::codegen::expr::ctor::build_object_ctor_invocation;
 use crate::codegen::typ;
 use crate::ir;
+use crate::typ::GenericContext;
 use crate::typ::Invocation;
-use crate::typ::Specializable as _;
 use crate::typ::Value;
-use std::borrow::Cow;
 use std::sync::Arc;
 use terapascal_ir::InstructionBuilder;
 
@@ -172,9 +171,6 @@ pub fn build_method_invocation(
     ty_args: Option<typ::TypeArgList>,
     builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
-    let iface_ty = builder.generic_context().apply_to_type(iface_ty);
-    let self_ty = builder.generic_context().apply_to_type(self_ty);
-
     // for static methods, the self-type is nothing, and the interface type is the real type
     let method_decl_ty = if self_ty == typ::Type::Nothing {
         &iface_ty
@@ -207,9 +203,9 @@ pub fn build_method_invocation(
             .as_ref()
             .expect("call with type args must have type params");
 
-        Cow::Owned(builder.generic_context().child_context(ty_params_list, ty_args_list))
+        GenericContext::new(ty_params_list, ty_args_list)
     } else {
-        Cow::Borrowed(builder.generic_context())
+        GenericContext::empty()
     };
 
     let method_call_sig = call_generic_ctx.apply_to_sig(&method_decl_sig);
@@ -229,8 +225,8 @@ pub fn build_method_invocation(
         _ => {
             // eprintln!("method call ({}){}.{}: invoking method {}", iface_ty, self_ty, method_decl.func_decl.ident(), method_decl_index);
 
-            let func_instance =
-                builder.translate_method(method_decl_ty.clone(), method_decl_index, ty_args);
+            let self_type = method_decl_ty.clone();
+            let func_instance = builder.translate_method(self_type, method_decl_index, ty_args);
 
             CallTarget::InstanceMethod(func_instance.id)
         },
@@ -245,9 +241,6 @@ fn build_variant_ctor_call(
     arg: Option<&typ::ast::Expr>,
     builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
-    let generic_ctx = builder.generic_context();
-    let variant_ty = variant_ty.clone().apply_type_args(generic_ctx, generic_ctx);
-
     let variant_name = variant_ty.as_variant().unwrap();
 
     let out_ty = builder.translate_type(&variant_ty);

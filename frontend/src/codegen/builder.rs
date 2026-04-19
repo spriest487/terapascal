@@ -25,11 +25,6 @@ use terapascal_ir::LocalStack;
 pub struct IRBuilder<'m, 'l: 'm> {
     library: &'m mut LibraryBuilder<'l>,
 
-    // positional list of type args that can be used to reify types in the current context
-    // during this stage we only need to be able to substitute args, we don't need to validate
-    // anything, so combining them into a single list and ignoring positions is OK
-    generic_context: typ::GenericContext,
-
     instructions: Vec<DebugInstruction>,
     next_label: Label,
 
@@ -169,7 +164,6 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             // the EXIT label is always reserved, so start one after that
             next_label: Label(EXIT_LABEL.0 + 1),
             local_stack: LocalStack::new(),
-            generic_context: typ::GenericContext::empty(),
 
             debug_stack: Vec::new(),
         }
@@ -177,15 +171,6 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
     pub fn opts(&self) -> &CodegenOpts {
         &self.library.opts()
-    }
-    
-    pub fn with_generic_ctx(mut self, ctx: typ::GenericContext) -> Self {
-        self.generic_context = ctx;
-        self
-    }
-    
-    pub fn generic_context(&self) -> &typ::GenericContext {
-        &self.generic_context
     }
 
     pub fn translate_variant_case<'ty>(
@@ -213,7 +198,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     
     pub fn literal_to_val(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> Value {
         let ty = self.translate_type(ty);
-        literal_to_val(lit, &ty, &self.generic_context, self.library)
+        literal_to_val(lit, &ty, self.library)
     }
     
     pub fn translate_literal(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> Ref {
@@ -232,29 +217,23 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     pub fn translate_name(&mut self, name: &Symbol) -> NamePath {
-        translate_name(name, &self.generic_context, self.library)
+        translate_name(name, self.library)
     }
 
     pub fn translate_iface(&mut self, iface_def: &typ::ast::InterfaceDecl) -> InterfaceDef {
-        translate_iface(iface_def, &self.generic_context, self.library)
+        translate_iface(iface_def, self.library)
     }
 
     pub fn translate_type(&mut self, src_ty: &typ::Type) -> Type {
-        self.library.translate_type(src_ty, &self.generic_context)
+        self.library.translate_type(src_ty)
     }
 
     pub fn translate_method(
         &mut self,
         self_ty: typ::Type,
         self_ty_method_index: usize,
-        mut call_ty_args: Option<typ::TypeArgList>
+        call_ty_args: Option<typ::TypeArgList>
     ) -> FunctionInstance {
-        if let Some(args_list) = &mut call_ty_args {
-            *args_list = args_list
-                .clone()
-                .apply_type_args(&self.generic_context, &self.generic_context);
-        }
-
         self.library.translate_method(self_ty, self_ty_method_index, call_ty_args)
     }
 
@@ -262,14 +241,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         &mut self,
         decl_name: &Symbol,
         decl_sig: &Arc<typ::FunctionSig>,
-        mut call_ty_args: Option<typ::TypeArgList>,
+        call_ty_args: Option<typ::TypeArgList>,
     ) -> FunctionInstance {
-        if let Some(args_list) = &mut call_ty_args {
-            *args_list = args_list
-                .clone()
-                .apply_type_args(&self.generic_context, &self.generic_context);
-        }
-
         let mut key = FunctionDefKey {
             type_args: call_ty_args,
             decl_key: FunctionDeclKey::Function { 
@@ -282,18 +255,16 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     pub fn translate_func_ty(&mut self, func_sig: &typ::FunctionSig) -> TypeDefID {
-        self.library
-            .translate_func_ty(func_sig, &self.generic_context)
+        self.library.translate_func_ty(func_sig)
     }
 
     pub fn build_closure_expr(&mut self, func: &typ::ast::AnonymousFunctionDef) -> Ref {
         let closure = self
             .library
-            .build_closure_instance(func, &self.generic_context);
+            .build_closure_instance(func);
 
         if func.captures.len() == 0 {
-            let static_closure = self.library
-                .build_static_closure_instance(closure);
+            let static_closure = self.library.build_static_closure_instance(closure);
             let static_closure_ref = Ref::Global(GlobalRef::Variable(static_closure.id));
 
             // closure objects have a specific type, but refs to closures are type erased so
@@ -311,7 +282,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn build_function_closure(&mut self, func: &FunctionInstance) -> Ref {
         let static_closure = self
             .library
-            .build_func_static_closure_instance(func, &self.generic_context);
+            .build_func_static_closure_instance(func);
 
         Ref::Global(GlobalRef::Variable(static_closure.id))
     }

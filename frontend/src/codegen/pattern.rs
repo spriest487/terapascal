@@ -3,7 +3,6 @@ use crate::codegen::ir;
 use crate::codegen::IRBuilder;
 use crate::typ;
 use crate::typ::MatchPattern;
-use crate::typ::Specializable;
 use std::sync::Arc;
 use terapascal_ir::InstructionBuilder;
 
@@ -50,11 +49,8 @@ pub fn translate_pattern_match_is(
         },
 
         MatchPattern::Name { annotation: typ::Value::VariantCase(case_val), .. } => {
-            let variant = case_val.variant_name.as_ref().clone()
-                .apply_type_args(builder.generic_context(), builder.generic_context());
-
             let (struct_id, case_index, _) = builder
-                .translate_variant_case(&variant, &case_val.case.name);
+                .translate_variant_case(&case_val.variant_name, &case_val.case.name);
 
             let variant_ty = ir::Type::Variant(struct_id);
 
@@ -106,11 +102,8 @@ pub fn translate_pattern_match_bindings(
         },
 
         MatchPattern::Name { annotation: typ::Value::VariantCase(case_val), .. } => {
-            let variant = case_val.variant_name.as_ref().clone()
-                .apply_type_args(builder.generic_context(), builder.generic_context());
-
             let (struct_id, case_index, case_ty) = builder
-                .translate_variant_case(&variant, &case_val.case.name);
+                .translate_variant_case(&case_val.variant_name, &case_val.case.name);
 
             let variant_ty = ir::Type::Variant(struct_id);
 

@@ -1283,8 +1283,12 @@ impl Context {
         let generic_def = self.find_struct_def(&name.full_path, kind)?;
 
         let specialized_def = match &name.type_args {
-            Some(type_args) => specialize_struct_def(generic_def, type_args, self)?,
-            None => generic_def.clone(),
+            Some(type_args) => {
+                specialize_struct_def(generic_def, type_args, self)?
+            },
+            None => {
+                generic_def.clone()
+            },
         };
 
         Ok(specialized_def)

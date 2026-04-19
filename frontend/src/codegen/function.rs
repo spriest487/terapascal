@@ -20,20 +20,13 @@ pub struct FunctionInstance {
 
 fn create_function_body_builder<'m, 'l: 'm>(
     lib: &'m mut LibraryBuilder<'l>,
-    generic_ctx: typ::GenericContext,
     debug_name: Option<String>,
 ) -> IRBuilder<'m, 'l> {
     let debug_comment = debug_name.map(|name| {
-        let mut comment = format!("function def body of {}", name);
-        if !generic_ctx.is_empty() {
-            comment += format!(" with generic context {}", generic_ctx).as_str();
-        }
-        
-        comment
+        format!("function def body of {}", name)
     });
 
-    let mut builder = IRBuilder::new(lib)
-        .with_generic_ctx(generic_ctx);
+    let mut builder = IRBuilder::new(lib);
     
     if let Some(comment) = debug_comment {
         builder.comment(&comment);
@@ -44,7 +37,6 @@ fn create_function_body_builder<'m, 'l: 'm>(
 
 pub fn build_func_def(
     module: &mut LibraryBuilder,
-    generic_ctx: typ::GenericContext,
     def_params: &[typ::ast::FunctionParamGroup],
     def_return_ty: &typ::Type,
     def_locals: &[typ::ast::FunctionLocalBinding],
@@ -54,7 +46,6 @@ pub fn build_func_def(
 ) -> FunctionDef {
     let mut body_builder = create_function_body_builder(
         module,
-        generic_ctx,
         debug_name.clone()
     );
 
@@ -85,8 +76,6 @@ pub fn build_func_static_closure_def(
     target_func: &FunctionInstance,
     target_ir_func: &Function,
 ) -> FunctionDef {
-    let generic_ctx = typ::GenericContext::empty();
-
     let params = target_func
         .src_sig
         .params
@@ -95,7 +84,7 @@ pub fn build_func_static_closure_def(
         .map(|(index, sig_param)| {
             FunctionParam {
                 by_ref: matches!(sig_param.modifier, Some(ast::FunctionParamMod::Var | ast::FunctionParamMod::Out)),
-                ty: library.translate_type(&sig_param.ty, &generic_ctx),
+                ty: library.translate_type(&sig_param.ty),
                 name: format!("P{index}"),
             }
         })
@@ -109,7 +98,7 @@ pub fn build_func_static_closure_def(
         _ => None,
     };
 
-    let mut body_builder = create_function_body_builder(library, generic_ctx, debug_name.clone());
+    let mut body_builder = create_function_body_builder(library, debug_name.clone());
 
     let return_ty = bind_function_return(&target_func.src_sig.result_ty, &mut body_builder);
 
@@ -162,8 +151,7 @@ pub fn build_closure_function_def(
 ) -> FunctionDef {
     let closure_def = lib.metadata().get_struct_def(closure_id).cloned().unwrap();
 
-    let generic_ctx = typ::GenericContext::empty();
-    let mut body_builder = create_function_body_builder(lib, generic_ctx, debug_name.clone());
+    let mut body_builder = create_function_body_builder(lib, debug_name.clone());
 
     let return_ty = bind_function_return(&func_def.result_ty, &mut body_builder);
 

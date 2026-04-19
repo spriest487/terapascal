@@ -8,12 +8,11 @@ use typ::layout::StructLayoutMember;
 
 pub fn translate_struct_def(
     struct_def: &typ::ast::StructDecl,
-    generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::StructDef {
     let tags = lib.translate_tag_groups(&struct_def.tags);
     
-    let name_path = translate_name(&struct_def.name, generic_ctx, lib);
+    let name_path = translate_name(&struct_def.name, lib);
 
     let mut fields = BTreeMap::new();
     let mut next_id = ir::FieldID(0);
@@ -24,7 +23,7 @@ pub fn translate_struct_def(
         for field_decl in struct_def.fields() {
             for i in 0..field_decl.idents.len() {
                 let name = field_decl.idents[i].to_string();
-                let ty = lib.translate_type(&field_decl.ty, generic_ctx);
+                let ty = lib.translate_type(&field_decl.ty);
 
                 fields.insert(next_id, ir::StructFieldDef::new(ty).with_name(name));
 
@@ -36,7 +35,7 @@ pub fn translate_struct_def(
             match member {
                 StructLayoutMember::Data { field_decl: member, decl_index, .. } => {
                     let name = member.idents[decl_index].to_string();
-                    let ty = lib.translate_type(&member.ty, generic_ctx);
+                    let ty = lib.translate_type(&member.ty);
 
                     fields.insert(next_id, ir::StructFieldDef::new(ty).with_name(name));
                 }

@@ -1,7 +1,6 @@
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::typ;
 use crate::{ast, ir};
-use typ::Specializable;
 
 pub trait NamePathExt {
     fn from_ident_path(ident: &ast::IdentPath, type_args: Option<Vec<ir::Type>>) -> Self;
@@ -27,24 +26,8 @@ impl NamePathExt for ir::NamePath {
 
 pub fn translate_name(
     name: &typ::Symbol,
-    generic_ctx: &typ::GenericContext,
     lib: &mut LibraryBuilder,
 ) -> ir::NamePath {
-    let name = name.clone().apply_type_args(generic_ctx, generic_ctx);
-
-    if name.is_unspecialized_generic() {
-        panic!("can't translate unspecialized generic name: {}", name);
-    }
-
-    if let Some(name_type_args) = name.type_args.as_ref() {
-        if let Some(t) = name_type_args.items.iter().find(|t| t.is_generic_param()) {
-            panic!(
-                "can't translate name containing generic parameters (found {}): {}",
-                t, name
-            );
-        }
-    }
-
     let path = ast::IdentPath::to_string_path(&name.full_path).into_vec();
 
     let type_args = name.type_args
@@ -53,7 +36,7 @@ pub fn translate_name(
             name_type_args_list
                 .items
                 .iter()
-                .map(|arg| lib.translate_type(arg, generic_ctx))
+                .map(|arg| lib.translate_type(arg))
                 .collect()
         });
 
