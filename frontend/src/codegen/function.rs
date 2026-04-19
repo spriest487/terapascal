@@ -38,6 +38,7 @@ fn create_function_body_builder<'m, 'l: 'm>(
 pub fn build_func_def(
     module: &mut LibraryBuilder,
     def_params: &[typ::ast::FunctionParamGroup],
+    def_type_params: Option<&typ::TypeParamList>,
     def_return_ty: &typ::Type,
     def_locals: &[typ::ast::FunctionLocalBinding],
     def_body: &typ::ast::Block,
@@ -57,6 +58,12 @@ pub fn build_func_def(
         .collect();
     let bound_params = bind_function_params(def_params, is_instance_method, ArgID(0), &mut body_builder);
 
+    let type_params = def_type_params
+        .map(|param_list| param_list.items.iter()
+            .map(|param| Arc::new(param.name.to_string()))
+            .collect())
+        .unwrap_or_else(Vec::new);
+
     init_function_locals(def_locals, &mut body_builder);
 
     let body = build_func_body(def_body, &return_ty, body_builder);
@@ -67,6 +74,7 @@ pub fn build_func_def(
             param_tys: bound_params.into_iter().map(|(_id, ty)| ty).collect(),
             return_ty,
         },
+        type_params,
         debug_name,
     }
 }
@@ -128,7 +136,7 @@ pub fn build_func_static_closure_def(
         _ => Some(RESULT_REF),
     };
 
-    body_builder.call(func_global, func_args, return_ref);
+    body_builder.call(func_global, func_args, [], return_ref);
 
     FunctionDef {
         sig: FunctionSig {
@@ -138,6 +146,7 @@ pub fn build_func_static_closure_def(
                 .collect(),
             return_ty,
         },
+        type_params: Vec::new(),
         debug_name,
         body: body_builder.finish(),
     }
@@ -218,6 +227,7 @@ pub fn build_closure_function_def(
             param_tys: actual_params,
             return_ty,
         },
+        type_params: Vec::new(),
         debug_name,
     }
 }
@@ -396,6 +406,7 @@ pub fn build_static_closure_impl(
             body: init_body,
             debug_name,
             sig: init_sig,
+            type_params: Vec::new(),
         }),
     );
 

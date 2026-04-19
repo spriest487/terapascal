@@ -486,7 +486,11 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.assign_ref(out, element);
             },
 
-            ir::Instruction::Call { out, function, args } => {
+            ir::Instruction::Call { out, function, args, type_args } => {
+                if !type_args.is_empty() {
+                    todo!("generic method translation")
+                }
+
                 self.translate_call(out.as_ref(), function, args);
             }
 

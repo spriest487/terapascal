@@ -17,9 +17,11 @@ pub use self::ptr::Pointer;
 
 use crate::diag::DiagnosticOutput;
 use crate::diag::DiagnosticWorker;
-use crate::func::BuiltinFunction;
-use crate::func::Function;
+use crate::func::instantiate_generic_func;
 use crate::func::BuiltinFn;
+use crate::func::BuiltinFunction;
+use crate::func::FuncInstanceKey;
+use crate::func::Function;
 use crate::heap::NativeHeap;
 use crate::marshal::Marshaller;
 use crate::result::ExecError;
@@ -55,7 +57,7 @@ pub struct Vm {
 
     opts: ExecOpts,
 
-    functions: BTreeMap<ir::FunctionID, FunctionInfo>,
+    functions: HashMap<FuncInstanceKey, FunctionInfo>,
 
     diag_worker: Option<DiagnosticWorker>,
 
@@ -118,7 +120,7 @@ impl Vm {
 
             opts,
 
-            functions: BTreeMap::new(),
+            functions: HashMap::new(),
 
             diag_worker,
 
@@ -593,9 +595,10 @@ impl Vm {
         &mut self,
         id: ir::FunctionID,
         args: &[DynValue],
+        type_args: &[ir::Type],
         out: Option<&ir::Ref>,
     ) -> ExecResult<()> {
-        let result_val = self.call(id, args)?;
+        let result_val = self.call(id, args, type_args)?;
 
         match (result_val, out) {
             (Some(v), Some(out_at)) => {
@@ -614,20 +617,20 @@ impl Vm {
         Ok(())
     }
 
-    pub fn call(&mut self, id: ir::FunctionID, args: &[DynValue]) -> ExecResult<Option<DynValue>> {
-        let func_info = self
-            .functions
-            .get(&id)
-            .ok_or_else(|| {
-                let msg = format!("missing function: {id}");
-                ExecError::illegal_state(msg)
-            })?
-            .clone();
+    pub fn call(
+        &mut self,
+        id: ir::FunctionID,
+        args: &[DynValue],
+        type_args: &[ir::Type],
+    ) -> ExecResult<Option<DynValue>> {
+        let func_key = FuncInstanceKey::new(id).with_args(type_args.to_vec());
+        let func_info = instantiate_generic_func(self, func_key)?;
 
-        let func = &func_info.func;
+        let func_name = func_info.name.clone();
+        let func = &func_info.func.clone();
         let stack_size = func.stack_alloc_size(self.marshaller())?;
 
-        self.push_stack(func_info.name.clone(), stack_size);
+        self.push_stack(func_name, stack_size);
 
         // store empty result if there is a result value
         let return_ty = func.return_ty();
@@ -688,7 +691,7 @@ impl Vm {
                 eprintln!("[rc] invoking dtor {}", func_desc);
             }
 
-            self.call_and_store(func_id, &[val.clone()], None)?;
+            self.call_and_store(func_id, &[val.clone()], &[], None)?;
         } else if self.opts.trace_rc {
             eprintln!("[rc] no dtor for {}", self.metadata.pretty_type_name(ty));
         }
@@ -1075,7 +1078,10 @@ impl Vm {
                 out,
                 function,
                 args,
-            } => self.exec_call(out, function, args)?,
+                type_args,
+            } => {
+                self.exec_call(out, function, args, type_args)?
+            },
 
             ir::Instruction::VirtualCall {
                 out,
@@ -1843,6 +1849,7 @@ impl Vm {
         out: &Option<ir::Ref>,
         function: &ir::Value,
         args: &Vec<ir::Value>,
+        type_args: &Vec<ir::Type>,
     ) -> ExecResult<()> {
         let arg_vals: Vec<_> = args
             .iter()
@@ -1851,7 +1858,7 @@ impl Vm {
 
         match self.evaluate(function)? {
             DynValue::Function(function) => {
-                self.call_and_store(function, &arg_vals, out.as_ref())?
+                self.call_and_store(function, &arg_vals, type_args, out.as_ref())?
             },
 
             _ => {
@@ -1889,7 +1896,7 @@ impl Vm {
             },
         };
 
-        self.call_and_store(func, &arg_vals, out)?;
+        self.call_and_store(func, &arg_vals, &[], out)?;
 
         Ok(())
     }
@@ -2095,7 +2102,7 @@ impl Vm {
             .get_function_info(func_id)
             .and_then(|f| f.invoker);
 
-        self.functions.insert(func_id, FunctionInfo {
+        self.functions.insert(FuncInstanceKey::new(func_id), FunctionInfo {
             func: Rc::new(func),
             name: Rc::new(name.to_string()),
             invoker,
@@ -2201,7 +2208,7 @@ impl Vm {
                     GlobalValue::Function(*func_id),
                 );
 
-                self.functions.insert(*func_id, FunctionInfo {
+                self.functions.insert(FuncInstanceKey::new(*func_id), FunctionInfo {
                     name: Rc::new(func.debug_name().to_string()),
                     func: Rc::new(func),
                     invoker,
@@ -2695,7 +2702,7 @@ impl Vm {
         args_array_ptr: Pointer,
     ) -> ExecResult<(i32, Pointer)> {
         let Some(invoker_id) = self.functions
-            .get(&func_id)
+            .get(&FuncInstanceKey::new(func_id))
             .and_then(|f| f.invoker) 
         else {
             // not invokable
@@ -2724,7 +2731,7 @@ impl Vm {
 
         // result is a box pointer
         let result_ptr = self
-            .call(invoker_id, &invoker_args)?
+            .call(invoker_id, &invoker_args, &[])?
             .and_then(|val| val.as_pointer().cloned())
             .ok_or_else(|| ExecError::illegal_state("expected invoker to return a pointer"))?;
 
@@ -2803,6 +2810,7 @@ pub struct ExecOpts {
     pub trace_heap: bool,
     pub trace_rc: bool,
     pub trace_ir: bool,
+    pub trace_generics: bool,
 
     pub leak_check: bool,
 
@@ -2817,6 +2825,7 @@ impl Default for ExecOpts {
             trace_heap: false,
             trace_rc: false,
             trace_ir: false,
+            trace_generics: false,
 
             leak_check: false,
 

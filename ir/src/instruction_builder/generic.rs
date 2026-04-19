@@ -16,7 +16,7 @@ type LocalMap = BTreeMap<LocalID, LocalID>;
 
 pub fn instantiate_generic(
     def: &FunctionDef,
-    types: &HashMap<SharedStringKey, Type>,
+    types: &TypeMap,
     builder: &mut impl InstructionBuilder,
 ) {
     let mut locals = LocalMap::new();
@@ -162,17 +162,25 @@ pub fn instantiate_generic(
                 builder.emit(Instruction::Length { out, a, of_type });
             },
 
-            Instruction::Call { out, args, function } => {
+            Instruction::Call { out, args, function, type_args } => {
                 let function = remap_val(function, &locals, &types);
-                let out = out.as_ref().map(|r| remap_ref(r, &locals, &types));
-                let args = args.iter()
+                let out = out
+                    .as_ref()
+                    .map(|r| remap_ref(r, &locals, &types));
+                let args = args
+                    .iter()
                     .map(|v| remap_val(v, &locals, &types))
+                    .collect();
+                let type_args = type_args
+                    .iter()
+                    .map(|t| remap_type(t, &types))
                     .collect();
 
                 builder.emit(Instruction::Call {
                     out,
                     args,
                     function,
+                    type_args,
                 })
             },
 

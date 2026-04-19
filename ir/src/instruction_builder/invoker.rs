@@ -196,11 +196,11 @@ where
 
     if func_sig.return_ty == Type::Nothing {
         // no result: set result ref to nil
-        builder.call(func_id, call_args, None);
+        builder.call(func_id, call_args, [], None);
         builder.mov(RESULT_REF, Value::LiteralNil);
     } else {
         let call_result = builder.local_temp(func_sig.return_ty.clone());
-        builder.call(func_id, call_args, Some(call_result.to_ref()));
+        builder.call(func_id, call_args, [], Some(call_result.to_ref()));
 
         gen_box_result(builder, &func_sig.return_ty, call_result.value());
     }

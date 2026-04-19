@@ -352,9 +352,9 @@ fn build_for_loop_sequence(
                 
                 let next_result_ty = system_option_type_of(seq_support.item_type.clone());
                 let item_option_ty = builder.translate_type(&typ::Type::variant(next_result_ty));
-                
+
                 // seq_ref := src_ref.Sequence();
-                builder.call(seq_method.id, [src_self_arg_ref.value()], Some(seq_var.to_ref()));
+                builder.call(seq_method.id, [src_self_arg_ref.value()], [], Some(seq_var.to_ref()));
 
                 // stores the option resulting from calling Next. don't need to RC this,
                 // it'll either return an item and be stored in the binding local and retained there,
@@ -371,7 +371,7 @@ fn build_for_loop_sequence(
 
                     // next item in the sequence
                     // next_item_option_ref := sequence.Next();
-                    builder.call(next_method.id, [seq_self_arg_var.value()], Some(next_item_option_ref.to_ref()));
+                    builder.call(next_method.id, [seq_self_arg_var.value()], [], Some(next_item_option_ref.to_ref()));
 
                     // if the case is None, break
                     // next_item_tag_ref := next_item_option_ref.tag

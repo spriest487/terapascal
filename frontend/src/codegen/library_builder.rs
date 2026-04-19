@@ -320,6 +320,7 @@ impl<'a> LibraryBuilder<'a> {
             let init_func = ir::FunctionDef {
                 body: unit_init,
                 sig: init_sig.clone(),
+                type_params: Vec::new(),
                 debug_name,
             };
 
@@ -329,6 +330,7 @@ impl<'a> LibraryBuilder<'a> {
             self.init_code.push(ir::Instruction::Call {
                 function: ir::Ref::Global(ir::GlobalRef::Function(init_func_id)).into(),
                 args: Vec::new(),
+                type_args: Vec::new(),
                 out: None,
             }, None);
         }
@@ -565,6 +567,7 @@ impl<'a> LibraryBuilder<'a> {
                 let def = build_func_def(
                     self,
                     &func_def.decl.param_groups,
+                    func_def.decl.name.type_params.as_ref(),
                     &func_def.decl.result_ty,
                     &func_def.locals,
                     &func_def.body,
@@ -631,6 +634,7 @@ impl<'a> LibraryBuilder<'a> {
             body,
             sig,
             debug_name,
+            type_params: Vec::new(),
         }
     }
 
@@ -775,6 +779,7 @@ impl<'a> LibraryBuilder<'a> {
         let def = build_func_def(
             self,
             &method_def.decl.param_groups,
+            method_def.decl.name.type_params.as_ref(),
             &method_def.decl.result_ty,
             &method_def.locals,
             &method_def.body,
@@ -1637,6 +1642,7 @@ impl<'a> LibraryBuilder<'a> {
             static_closures_init.push(ir::Instruction::Call {
                 function: ir::Ref::from(static_closure.init_func).value(),
                 args: Vec::new(),
+                type_args: Vec::new(),
                 out: None,
             }, None);
         }
@@ -1650,6 +1656,7 @@ impl<'a> LibraryBuilder<'a> {
         if self.opts.rtti && let Some(tag_init_func) = gen_tags_init(self) {
             instructions.push(ir::Instruction::Call {
                 args: Vec::new(),
+                type_args: Vec::new(),
                 out: None,
                 function: ir::Value::from(tag_init_func),
             }, None);
@@ -1693,6 +1700,7 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
 
     lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
         debug_name: dtor_debug_name,
+        type_params: Vec::new(),
         sig: dtor_sig,
         body: dtor_body,
     }));
@@ -1763,7 +1771,7 @@ fn gen_class_dtor(
 
     let mut has_dtor = false;
     if let Some(user_dtor_id) = user_dtor {
-        dtor_builder.call(user_dtor_id, [self_arg.value()], None);
+        dtor_builder.call(user_dtor_id, [self_arg.value()], [], None);
         has_dtor = true;
     }
     
@@ -1791,7 +1799,8 @@ fn gen_class_dtor(
     lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
         debug_name: dtor_debug_name,
         body: dtor_body,
-        sig: dtor_sig
+        sig: dtor_sig,
+        type_params: Vec::new(),
     }));
 }
 
@@ -1859,6 +1868,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
             sig: invoker_sig.clone(),
             debug_name,
             body,
+            type_params: Vec::new(),
         };
 
         lib.functions.insert(invoker_id, ir::Function::Local(invoker_func));

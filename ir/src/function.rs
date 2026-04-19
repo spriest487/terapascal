@@ -12,6 +12,7 @@ use crate::VariableID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
+use std::sync::Arc;
 
 pub const BUILTIN_SRC: &str = "rt";
 
@@ -113,6 +114,8 @@ impl FunctionInfo {
 pub struct FunctionDef {
     pub debug_name: Option<String>,
 
+    pub type_params: Vec<Arc<String>>,
+
     pub body: InstructionList,
 
     pub sig: FunctionSig,
@@ -127,11 +130,13 @@ pub enum Function {
 impl Function {
     pub fn new_local_def(
         debug_name: Option<String>,
+        type_params: Vec<Arc<String>>,
         sig: FunctionSig,
         body: InstructionList,
     ) -> Self {
         Function::Local(FunctionDef {
             debug_name,
+            type_params,
             sig,
             body,
         })

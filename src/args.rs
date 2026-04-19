@@ -68,11 +68,15 @@ pub struct Args {
     #[structopt(long = "trace-rc")]
     pub trace_rc: bool,
 
-    /// VM only: log all executed IR instructions
+    /// VM: log all executed IR instructions
     #[structopt(long = "trace-ir")]
     pub trace_ir: bool,
 
-    /// VM only: check for memory leaks on shutdown and emit an error if any are found
+    /// VM: log runtime generic instantiations
+    #[structopt(long = "trace-generics")]
+    pub trace_generics: bool,
+
+    /// VM: check for memory leaks on shutdown and emit an error if any are found
     #[structopt(long = "leak-check")]
     pub leak_check: bool,
 

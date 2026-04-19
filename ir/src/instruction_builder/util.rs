@@ -5,6 +5,7 @@ use crate::Label;
 use crate::Ref;
 use crate::Type;
 use crate::Value;
+use crate::MetadataSource as _;
 
 pub fn if_then<B, Branch>(builder: &mut B, cond: impl Into<Value>, then_branch: Branch)
 where

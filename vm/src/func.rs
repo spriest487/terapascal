@@ -2,9 +2,18 @@ use crate::func::ffi::FfiInvoker;
 use crate::ir;
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
+use crate::result::ExecError;
 use crate::ExecResult;
+use crate::FunctionInfo;
 use crate::Vm;
+use std::collections::HashMap;
 use std::fmt;
+use std::rc::Rc;
+use terapascal_common::span::Span;
+use terapascal_common::SharedStringKey;
+use ir::generic::instantiate_generic;
+use ir::generic::instantiate_sig;
+use ir::MetadataSource as _;
 
 pub mod ffi;
 
@@ -181,4 +190,160 @@ impl fmt::Debug for Function {
             Function::External(func) => write!(f, "<ffi function: {}>", func.debug_name),
         }
     }
+}
+
+struct RawFuncBuilder<'a> {
+    vm: &'a Vm,
+
+    local_stack: ir::LocalStack,
+
+    debug_stack: Vec<Span>,
+
+    next_label: ir::Label,
+
+    body: ir::InstructionList,
+}
+
+impl<'a> ir::InstructionBuilder for RawFuncBuilder<'a> {
+    fn emit(&mut self, instruction: ir::Instruction) {
+        let source = self.debug_stack.last().cloned();
+        self.body.push(instruction, source);
+    }
+
+    fn metadata(&self) -> &impl ir::MetadataSource {
+        self.vm.metadata.as_ref()
+    }
+
+    fn local_stack(&self) -> &ir::LocalStack {
+        &self.local_stack
+    }
+
+    fn local_stack_mut(&mut self) -> &mut ir::LocalStack {
+        &mut self.local_stack
+    }
+
+    fn is_debug(&self) -> bool {
+        true
+    }
+
+    fn next_label(&mut self) -> ir::Label {
+        let next = self.next_label;
+        self.next_label.0 += 1;
+        next
+    }
+
+    fn push_source(&mut self, ctx: Span) {
+        self.debug_stack.push(ctx);
+    }
+
+    fn pop_source(&mut self) {
+        self.debug_stack.pop();
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct FuncInstanceKey {
+    pub id: ir::FunctionID,
+    pub args: Vec<ir::Type>
+}
+
+impl FuncInstanceKey {
+    pub fn new(id: ir::FunctionID) -> Self {
+        Self {
+            id: id,
+            args: Vec::new(),
+        }
+    }
+
+    pub fn with_args(self, args: impl IntoIterator<Item=ir::Type>) -> Self {
+        Self {
+            id: self.id,
+            args: args.into_iter().collect(),
+        }
+    }
+}
+
+pub fn instantiate_generic_func(
+    vm: &mut Vm,
+    key: FuncInstanceKey,
+) -> ExecResult<FunctionInfo> {
+    if let Some(func_info) = vm.functions.get(&key).cloned() {
+        return Ok(func_info);
+    }
+
+    let generic_func = vm.functions
+        .get(&FuncInstanceKey::new(key.id))
+        .ok_or_else(|| {
+            let msg = format!("missing generic function definition: {}", key.id);
+            ExecError::illegal_state(msg)
+        })?;
+
+    let generic_def = match generic_func.func.as_ref() {
+        Function::IR(func) => &func.def,
+        _ => {
+            let msg = "definition of generic function must not be external";
+            return Err(ExecError::illegal_state(msg))
+        }
+    };
+
+    if key.args.len() != generic_def.type_params.len() {
+        let msg = format!(
+            "incorrect number of type parameters for function {} (invocation has {}, expected: {})",
+            generic_func.name,
+            key.args.len(),
+            generic_def.type_params.len(),
+        );
+        return Err(ExecError::illegal_state(msg))
+    }
+
+    let mut types = HashMap::new();
+    for (param, arg) in key.args.iter().zip(generic_def.type_params.iter()) {
+        if types.insert(SharedStringKey(arg.clone()), param.clone()).is_some() {
+            return Err(ExecError::illegal_state("invalid function def: type param names are not unique"));
+        }
+    }
+
+    if vm.opts.trace_generics {
+        eprint!("vm: instantiating function {} with arguments [", generic_func.name);
+        for (i, arg) in generic_def.type_params.iter().enumerate() {
+            if i > 0 {
+                eprint!(", ");
+            }
+
+            eprint!("{}={}", arg, types[arg].to_pretty_string(vm.metadata.as_formatter()));
+        }
+        eprintln!("]");
+    }
+
+    let mut builder = RawFuncBuilder {
+        local_stack: ir::LocalStack::new(),
+        vm,
+        next_label: ir::Label(ir::EXIT_LABEL.0 + 1),
+        debug_stack: Vec::new(),
+        body: ir::InstructionList::new(),
+    };
+
+    let sig = instantiate_sig(&generic_def.sig, &types);
+
+    instantiate_generic(&generic_def, &types, &mut builder);
+
+    let def = ir::FunctionDef {
+        body: builder.body,
+        debug_name: generic_def.debug_name.clone(),
+        type_params: Vec::new(),
+        sig,
+    };
+
+    let func_info = FunctionInfo {
+        name: generic_func.name.clone(),
+        invoker: None,
+        func: Rc::new(Function::IR(IRFunction {
+            debug_name: generic_func.name.to_string(),
+            def,
+        }))
+    };
+
+    vm.functions.insert(key.clone(), func_info.clone());
+
+    Ok(func_info)
 }

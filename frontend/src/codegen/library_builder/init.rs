@@ -25,7 +25,7 @@ pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
     let name = "<generated tag init function>".to_string();
 
     let sig = ir::FunctionSig::new([], ir::Type::Nothing);
-    let func = ir::Function::new_local_def(Some(name), sig.clone(), body);
+    let func = ir::Function::new_local_def(Some(name), Vec::new(), sig.clone(), body);
 
     let func_id = lib.metadata_mut().insert_func(None, sig, false, []);
     lib.insert_function(func_id, func);

@@ -114,6 +114,7 @@ impl SetFlagsType {
 
         let func = ir::Function::Local(ir::FunctionDef {
             sig: sig.clone(),
+            type_params: Vec::new(),
             debug_name: name,
             body,
         });

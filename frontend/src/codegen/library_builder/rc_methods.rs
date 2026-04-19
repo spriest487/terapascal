@@ -121,7 +121,7 @@ fn create_rc_func(
     let sig = ir::FunctionSig::new([ty.clone().temp_ref()], ir::Type::Nothing);
 
     let func_id = lib.metadata_mut().insert_func(None, sig.clone(), false, []);
-    lib.insert_function(func_id, ir::Function::new_local_def(debug_name, sig, body));
+    lib.insert_function(func_id, ir::Function::new_local_def(debug_name, Vec::new(), sig, body));
 
     func_id
 }

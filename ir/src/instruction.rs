@@ -74,6 +74,7 @@ pub enum Instruction {
         out: Option<Ref>,
         function: Value,
         args: Vec<Value>,
+        type_args: Vec<Type>,
     },
     VirtualCall {
         out: Option<Ref>,
@@ -258,6 +259,7 @@ impl Instruction {
                 out,
                 function,
                 args,
+                type_args: _,
             } => {
                 if let Some(out_ref) = out {
                     Self::visit_ref(out_ref, f, arg);

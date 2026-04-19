@@ -3,6 +3,7 @@ use crate::codegen::expr;
 use crate::codegen::expr::ctor::build_object_ctor_invocation;
 use crate::codegen::typ;
 use crate::ir;
+use crate::typ::ast::apply_func_decl_ty_args;
 use crate::typ::GenericContext;
 use crate::typ::Invocation;
 use crate::typ::Value;
@@ -44,9 +45,27 @@ fn translate_args(
     arg_vals
 }
 
+fn translate_call_type_args(
+    type_args: Option<&typ::TypeArgList>,
+    builder: &mut IRBuilder,
+) -> Vec<ir::Type> {
+    let mut types = Vec::new();
+
+    if let Some(type_arg_list) = type_args {
+        types.reserve(type_arg_list.len());
+
+        for t in type_arg_list.iter() {
+            types.push(builder.translate_type(t.ty()));
+        }
+    }
+
+    types
+}
+
 fn translate_call_with_args(
     call_target: CallTarget,
     args: &[typ::ast::Expr],
+    type_args: Option<&typ::TypeArgList>,
     sig: &typ::FunctionSig,
     builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
@@ -63,6 +82,8 @@ fn translate_call_with_args(
     {
         let is_instance_method = matches!(call_target, CallTarget::InstanceMethod(..));
 
+        let type_args = translate_call_type_args(type_args, builder);
+
         let mut arg_vals = translate_args(args, sig, is_instance_method, builder);
 
         if let CallTarget::Closure { closure_ptr, .. } = &call_target {
@@ -72,11 +93,11 @@ fn translate_call_with_args(
         match call_target {
             | CallTarget::Function(function)
             | CallTarget::InstanceMethod(function) => {
-                builder.call(function, arg_vals.clone(), out_val.clone());
+                builder.call(function, arg_vals.clone(), type_args, out_val.clone());
             },
 
             CallTarget::Closure { function, .. } => {
-                builder.call(function, arg_vals.clone(), out_val.clone());
+                builder.call(function, arg_vals.clone(), type_args, out_val.clone());
             },
 
             CallTarget::Virtual {
@@ -85,6 +106,8 @@ fn translate_call_with_args(
             } => {
                 let self_arg = arg_vals[0].clone();
                 let rest_args = arg_vals[1..].to_vec();
+
+                assert_eq!(0, type_args.len(), "not supported yet: generic virtual call");
 
                 // eprintln!("({sig}) => building vcall: {iface_id}.{} vs for type {self_ty}/{iface_ty}", iface_method_id.0);
 
@@ -136,16 +159,8 @@ fn build_func_val_invocation(
     func_expr: &typ::ast::Expr,
     func_ty: &typ::Type,
     args: &[typ::ast::Expr],
-    call_ty_args: Option<typ::TypeArgList>,
     builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
-    // it's impossible to invoke a closure with type args, so the typechecker should
-    // ensure this never happens
-    assert!(
-        call_ty_args.is_none(),
-        "closure invocation cannot include type args"
-    );
-
     // expr that evaluates to a closure pointer
     let target_expr_val = expr::translate_expr(func_expr, builder);
     let func_sig = func_ty.as_func().expect("target value of invocation must have function type");
@@ -160,7 +175,7 @@ fn build_func_val_invocation(
         closure_ptr: target_expr_val.clone().into(),
     };
 
-    translate_call_with_args(call_target, args, &func_sig, builder)
+    translate_call_with_args(call_target, args, None, &func_sig, builder)
 }
 
 pub fn build_method_invocation(
@@ -177,7 +192,7 @@ pub fn build_method_invocation(
     } else {
         &self_ty
     };
-    // 
+
     // eprintln!("## method invocation");
     // eprintln!("  iface_ty = {iface_ty}");
     // eprintln!("   self_ty = {self_ty}");
@@ -208,8 +223,6 @@ pub fn build_method_invocation(
         GenericContext::empty()
     };
 
-    let method_call_sig = call_generic_ctx.apply_to_sig(&method_decl_sig);
-
     let call_target = match builder.translate_type(&self_ty) {
         ir::Type::Object(ir::ObjectID::Interface(iface_id)) => {
             if ty_args.is_some() {
@@ -226,13 +239,15 @@ pub fn build_method_invocation(
             // eprintln!("method call ({}){}.{}: invoking method {}", iface_ty, self_ty, method_decl.func_decl.ident(), method_decl_index);
 
             let self_type = method_decl_ty.clone();
-            let func_instance = builder.translate_method(self_type, method_decl_index, ty_args);
+            let func_instance = builder.translate_method(self_type, method_decl_index, ty_args.clone());
 
             CallTarget::InstanceMethod(func_instance.id)
         },
     };
 
-    translate_call_with_args(call_target, &args, &method_call_sig, builder)
+    let method_call_sig = call_generic_ctx.apply_to_sig(&method_decl_sig);
+
+    translate_call_with_args(call_target, &args, ty_args.as_ref(), &method_call_sig, builder)
 }
 
 fn build_variant_ctor_call(
@@ -284,13 +299,25 @@ pub fn translate_invocation(
             // this needs to be the name and signature *as declared*, not the invoked signature,
             // so the function builder can apply the type args to the source type properly
             let decl_sig = Arc::new(function.decl.sig());
+
+            // the sig of the function as it's called, after generic specialization
+            let invocation_sig = match type_args {
+                Some(args) => {
+                    let invoked_decl = apply_func_decl_ty_args(&function.decl, args);
+                    Arc::new(invoked_decl.sig())
+                }
+                None => {
+                    decl_sig.clone()
+                },
+            };
+
             let func = builder.translate_func(&function.name, &decl_sig, type_args.clone());
             let args: Vec<_> = invocation.args()
                 .cloned()
                 .collect();
 
             let call_target = CallTarget::Function(func.id);
-            translate_call_with_args(call_target, &args, &func.src_sig, builder)
+            translate_call_with_args(call_target, &args, type_args.as_ref(), &invocation_sig, builder)
         },
 
         Invocation::Method {
@@ -325,7 +352,7 @@ pub fn translate_invocation(
 
         Invocation::FunctionValue { value, args, .. } => {
             let value_ty = value.annotation().ty();
-            build_func_val_invocation(value, value_ty.as_ref(), args, None, builder)
+            build_func_val_invocation(value, value_ty.as_ref(), args, builder)
         }
     }
 }

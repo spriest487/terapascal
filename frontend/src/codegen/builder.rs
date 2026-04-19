@@ -57,12 +57,8 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         });
     }
 
-    fn metadata(&self) -> &MetadataBuilder {
+    fn metadata(&self) -> &impl MetadataSource {
         self.library.metadata()
-    }
-
-    fn metadata_mut(&mut self) -> &mut MetadataBuilder {
-        self.library.metadata_mut()
     }
 
     fn local_stack(&self) -> &LocalStack {
@@ -125,7 +121,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         }
 
         let at_ref = self.make_ref_local(at, ty);
-        self.call(func_id, [at_ref.value()], None);
+        self.call(func_id, [at_ref.value()], [], None);
         true
     }
 
@@ -149,7 +145,7 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         }
 
         let at_ref = self.make_ref_local(at, ty);
-        self.call(func_id, [at_ref.value()], None);
+        self.call(func_id, [at_ref.value()], [], None);
         true
     }
 }
@@ -241,10 +237,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         &mut self,
         decl_name: &Symbol,
         decl_sig: &Arc<typ::FunctionSig>,
-        call_ty_args: Option<typ::TypeArgList>,
+        _call_ty_args: Option<typ::TypeArgList>,
     ) -> FunctionInstance {
         let mut key = FunctionDefKey {
-            type_args: call_ty_args,
+            type_args: None,
             decl_key: FunctionDeclKey::Function { 
                 name: decl_name.full_path.clone(),
                 sig: decl_sig.clone(),
@@ -424,7 +420,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.call(flags_type_info.include_func, [
             flags_ptr.value(),
             bit_val.into(),
-        ], None);
+        ], [], None);
     }
 
     // todo: what is this for
@@ -439,7 +435,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.call(flags_type_info.exclude_func, [
             flags_ptr.value(),
             bit_val.into(),
-        ], None);
+        ], [], None);
     }
 
     pub fn set_contains(&mut self,
@@ -457,7 +453,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.call(flags_type_info.contains_func, [
             flags_ptr.value(),
             bit_val.into(),
-        ], Some(out.into()));
+        ], [], Some(out.into()));
     }
     
     pub fn set_eq(&mut self,
@@ -477,7 +473,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.call(flags_type_info.eq_func, [
             a_ptr.value(),
             b_ptr.value(),
-        ], Some(out.into()));
+        ], [], Some(out.into()));
     }
 
     pub fn set_bit_not(&mut self,
@@ -492,7 +488,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
         self.call(flags_type_info.bit_not_func, [
             a_ptr.value(),
-        ], None);
+        ], [], None);
     }
 
     fn set_bitwise_op(&mut self,
@@ -512,7 +508,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.call(get_func_id(&flags_type_info), [
             a_ptr.value(),
             b_ptr.value(),
-        ], None);
+        ], [], None);
     }
 
     pub fn set_bit_and(&mut self,
@@ -542,7 +538,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     #[expect(unused)]
     pub fn get_mem(&mut self, count: impl Into<Value>, out: impl Into<Ref>) {
         let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_get_mem_func()));
-        self.call(function_ref, [count.into()], Some(out.into()));
+        self.call(function_ref, [count.into()], [], Some(out.into()));
     }
 
     #[expect(unused)]
@@ -553,7 +549,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     #[expect(unused)]
     pub fn free_mem(&mut self, at: impl Into<Value>) {
         let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_free_mem_func()));
-        self.call(function_ref, [at.into()], None);
+        self.call(function_ref, [at.into()], [], None);
     }
 
     pub fn bind_param(&mut self, id: ArgID, ty: Type, name: impl Into<String>) {

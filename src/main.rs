@@ -263,6 +263,7 @@ fn exec_vm(args: &Args, lib: &ir::Library) -> ExecResult<()> {
         trace_rc: args.trace_rc,
         trace_heap: args.trace_heap,
         trace_ir: args.trace_ir,
+        trace_generics: args.trace_generics,
         
         leak_check: args.leak_check,
 

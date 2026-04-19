@@ -7,6 +7,7 @@ mod object;
 
 use self::object::gen_class_object_dtor_body;
 use self::scope::ScopedBinding;
+use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::FunctionID;
@@ -16,7 +17,7 @@ use crate::Instruction;
 use crate::InterfaceID;
 use crate::Label;
 use crate::LocalID;
-use crate::MetadataBuilder;
+use crate::MetadataSource;
 use crate::MethodID;
 use crate::ObjectID;
 use crate::Ref;
@@ -24,7 +25,6 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
-use crate::ArgID;
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_array_from;
 use scope::LocalStack;
@@ -34,8 +34,7 @@ use terapascal_common::span::Span;
 pub trait InstructionBuilder {
     fn emit(&mut self, instruction: Instruction);
 
-    fn metadata(&self) -> &MetadataBuilder;
-    fn metadata_mut(&mut self) -> &mut MetadataBuilder;
+    fn metadata(&self) -> &impl MetadataSource;
 
     fn local_stack(&self) -> &LocalStack;
     fn local_stack_mut(&mut self) -> &mut LocalStack;
@@ -648,11 +647,13 @@ pub trait InstructionBuilder {
         &mut self,
         function: impl Into<Value>,
         args: impl IntoIterator<Item = Value>,
+        type_args: impl IntoIterator<Item = Type>,
         out: Option<Ref>,
     ) {
         self.emit(Instruction::Call {
             function: function.into(),
             args: args.into_iter().collect(),
+            type_args: type_args.into_iter().collect(),
             out,
         })
     }
