@@ -12,6 +12,7 @@ use ir::MetadataSource as _;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::SharedStringKey;
 
@@ -327,16 +328,14 @@ pub fn instantiate_func(
         }
     }
 
-    if vm.opts.trace_generics {
-        eprint!("vm: instantiating function {} with arguments [", generic_func.name);
-        for (i, arg) in generic_def.type_params.iter().enumerate() {
-            if i > 0 {
-                eprint!(", ");
-            }
+    let type_args_formatted = format_type_arg_list(&generic_def.type_params, &types, vm.metadata.as_formatter());
 
-            eprint!("{}={}", arg, types[arg].to_pretty_string(vm.metadata.as_formatter()));
-        }
-        eprintln!("]");
+    if vm.opts.trace_generics {
+        eprintln!(
+            "vm: instantiating function {} with arguments {}",
+            generic_func.name,
+            type_args_formatted,
+        );
     }
 
     let mut builder = RuntimeFuncBuilder::new(vm);
@@ -351,11 +350,13 @@ pub fn instantiate_func(
         sig,
     };
 
+    let func_name = format!("{} {}", generic_func.name, type_args_formatted);
+
     let func_info = FunctionInfo {
-        name: generic_func.name.clone(),
+        name: Rc::new(func_name.clone()),
         invoker: None,
         func: Rc::new(Function::IR(IRFunction {
-            debug_name: generic_func.name.to_string(),
+            debug_name: func_name,
             def,
         }))
     };
@@ -363,4 +364,26 @@ pub fn instantiate_func(
     vm.functions.insert(key.clone(), func_info.clone());
 
     Ok(func_info)
+}
+
+fn format_type_arg_list(
+    params: &[Arc<String>],
+    types: &HashMap<SharedStringKey, ir::Type>,
+    formatter: &impl ir::IRFormatter,
+) -> String {
+    let mut result = String::from("[");
+
+    for (i, param) in params.iter().enumerate() {
+        if i > 0 {
+            result.push_str(", ");
+        }
+
+        result.push_str(param.as_str());
+        result.push_str("=");
+        result.push_str(&types[param].to_pretty_string(formatter));
+    }
+
+    result.push_str("]");
+
+    result
 }
