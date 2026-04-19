@@ -6,7 +6,6 @@ begin
     id
 end;
 
-{
 function Identity2[T](id: T): T;
 begin
     id.Identity
@@ -16,7 +15,6 @@ function Void[T](msg: String);
 begin
     WriteLn('void! ' + msg);
 end;
-}
 
 initialization
     var greeting := Identity('hello');
@@ -25,7 +23,6 @@ initialization
     var two := Identity(2);
     WriteLn('two is ' + two);
 
-{
     var one := Identity2[Integer](1);
     WriteLn('one is: ' + IntToStr(one));
 
@@ -49,5 +46,4 @@ initialization
     
     // this is not
     // funcs[1]();
-    }
 end

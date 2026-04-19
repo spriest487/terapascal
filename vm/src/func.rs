@@ -6,14 +6,14 @@ use crate::result::ExecError;
 use crate::ExecResult;
 use crate::FunctionInfo;
 use crate::Vm;
+use ir::generic::instantiate_generic;
+use ir::generic::instantiate_sig;
+use ir::MetadataSource as _;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use terapascal_common::span::Span;
 use terapascal_common::SharedStringKey;
-use ir::generic::instantiate_generic;
-use ir::generic::instantiate_sig;
-use ir::MetadataSource as _;
 
 pub mod ffi;
 
@@ -192,7 +192,7 @@ impl fmt::Debug for Function {
     }
 }
 
-struct RawFuncBuilder<'a> {
+struct RuntimeFuncBuilder<'a> {
     vm: &'a Vm,
 
     local_stack: ir::LocalStack,
@@ -204,7 +204,31 @@ struct RawFuncBuilder<'a> {
     body: ir::InstructionList,
 }
 
-impl<'a> ir::InstructionBuilder for RawFuncBuilder<'a> {
+impl<'a> RuntimeFuncBuilder<'a> {
+    pub fn new(vm: &'a Vm) -> Self {
+        Self {
+            vm,
+            local_stack: ir::LocalStack::new(),
+            debug_stack: Vec::new(),
+            next_label: ir::Label(ir::EXIT_LABEL.0 + 1),
+            body: ir::InstructionList::new()
+        }
+    }
+
+    pub fn finish(mut self) -> ir::InstructionList {
+        let local_count = self.local_stack.local_slot_count();
+        let mut init_instructions = Vec::with_capacity(local_count);
+
+        for (local_id, ty) in self.local_stack.finish() {
+            init_instructions.push(ir::Instruction::LocalAlloc(local_id, ty));
+        }
+
+        self.body.splice(0..0, init_instructions);
+        self.body
+    }
+}
+
+impl<'a> ir::InstructionBuilder for RuntimeFuncBuilder<'a> {
     fn emit(&mut self, instruction: ir::Instruction) {
         let source = self.debug_stack.last().cloned();
         self.body.push(instruction, source);
@@ -250,7 +274,7 @@ pub struct FuncInstanceKey {
 impl FuncInstanceKey {
     pub fn new(id: ir::FunctionID) -> Self {
         Self {
-            id: id,
+            id,
             args: Vec::new(),
         }
     }
@@ -263,7 +287,7 @@ impl FuncInstanceKey {
     }
 }
 
-pub fn instantiate_generic_func(
+pub fn instantiate_func(
     vm: &mut Vm,
     key: FuncInstanceKey,
 ) -> ExecResult<FunctionInfo> {
@@ -315,20 +339,13 @@ pub fn instantiate_generic_func(
         eprintln!("]");
     }
 
-    let mut builder = RawFuncBuilder {
-        local_stack: ir::LocalStack::new(),
-        vm,
-        next_label: ir::Label(ir::EXIT_LABEL.0 + 1),
-        debug_stack: Vec::new(),
-        body: ir::InstructionList::new(),
-    };
-
+    let mut builder = RuntimeFuncBuilder::new(vm);
     let sig = instantiate_sig(&generic_def.sig, &types);
 
     instantiate_generic(&generic_def, &types, &mut builder);
 
     let def = ir::FunctionDef {
-        body: builder.body,
+        body: builder.finish(),
         debug_name: generic_def.debug_name.clone(),
         type_params: Vec::new(),
         sig,

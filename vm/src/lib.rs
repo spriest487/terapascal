@@ -17,7 +17,7 @@ pub use self::ptr::Pointer;
 
 use crate::diag::DiagnosticOutput;
 use crate::diag::DiagnosticWorker;
-use crate::func::instantiate_generic_func;
+use crate::func::instantiate_func;
 use crate::func::BuiltinFn;
 use crate::func::BuiltinFunction;
 use crate::func::FuncInstanceKey;
@@ -624,7 +624,7 @@ impl Vm {
         type_args: &[ir::Type],
     ) -> ExecResult<Option<DynValue>> {
         let func_key = FuncInstanceKey::new(id).with_args(type_args.to_vec());
-        let func_info = instantiate_generic_func(self, func_key)?;
+        let func_info = instantiate_func(self, func_key)?;
 
         let func_name = func_info.name.clone();
         let func = &func_info.func.clone();
