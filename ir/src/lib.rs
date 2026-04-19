@@ -90,6 +90,15 @@ impl NamePath {
         self.path.push(name.into());
         self
     }
+    
+    pub fn contains_generic_params(&self) -> bool {
+        match &self.type_args {
+            None => false,
+            Some(args) => {
+                args.iter().any(|ty| ty.as_generic_param().is_some())
+            }
+        }
+    }
 }
 
 impl fmt::Display for NamePath {

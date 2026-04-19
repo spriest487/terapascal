@@ -387,7 +387,7 @@ impl Marshaller {
                 let def = metadata
                     .get_variant_def(*id)
                     .ok_or_else(|| {
-                        MarshalError::UnsupportedType(ty.clone())
+                        MarshalError::unsupported_type(ty.clone())
                     })?;
 
                 self.add_variant(*id, def, metadata)
@@ -397,7 +397,7 @@ impl Marshaller {
                 let def = metadata
                     .get_struct_def(*id)
                     .ok_or_else(|| {
-                        MarshalError::UnsupportedType(ty.clone())
+                        MarshalError::unsupported_type(ty.clone())
                     })?;
 
                 self.add_struct(*id, def, metadata)
@@ -434,7 +434,7 @@ impl Marshaller {
 
             // all primitives/builtins should be in the cache already
             _ => {
-                Err(MarshalError::UnsupportedType(ty.clone()))
+                Err(MarshalError::unsupported_type(ty.clone()))
             },
         }
     }
@@ -443,7 +443,7 @@ impl Marshaller {
         match ty {
             ir::Type::Nothing => {
                 // "nothing" is not a marshallable type!
-                Err(MarshalError::UnsupportedType(ir::Type::Nothing))
+                Err(MarshalError::unsupported_type(ir::Type::Nothing))
             },
 
             // we can't cache array types so always build them on demand
@@ -463,7 +463,7 @@ impl Marshaller {
 
             ty => match self.types.get(ty) {
                 Some(cached_ty) => Ok(cached_ty.clone()),
-                None => Err(MarshalError::UnsupportedType(ty.clone())),
+                None => Err(MarshalError::unsupported_type(ty.clone())),
             },
         }
     }
@@ -480,7 +480,7 @@ impl Marshaller {
                 self.struct_field_maps.get(&id)
             })
             .ok_or_else(|| {
-                MarshalError::UnsupportedType(struct_type.clone())
+                MarshalError::unsupported_type(struct_type.clone())
             })?;
 
         let field_info = fields
@@ -655,7 +655,7 @@ impl Marshaller {
                 let size_ptr = Pointer::new(pointer.addr + offset, ir::Type::I32);
                 let size = i32::try_from(element_count)
                     .map_err(|_| {
-                        MarshalError::UnsupportedType(element.as_ref().clone().array(element_count))
+                        MarshalError::unsupported_type(element.as_ref().clone().array(element_count))
                     })?;
                 
                 offset += unsafe {
@@ -821,7 +821,7 @@ impl Marshaller {
             },
 
             _ => {
-                return Err(MarshalError::UnsupportedType(ty.clone()));
+                return Err(MarshalError::unsupported_type(ty.clone()));
             },
         };
 
@@ -850,7 +850,7 @@ impl Marshaller {
         let id_index = *self.object_id_indices
             .get_by_right(&header.id)
             .ok_or_else(|| {
-                MarshalError::UnsupportedType(header.id.to_type())
+                MarshalError::unsupported_type(header.id.to_type())
             })?;
         
         let mut offset = 0;
@@ -878,7 +878,7 @@ impl Marshaller {
 
         let size = i32::try_from(count)
             .map_err(|_| {
-                MarshalError::UnsupportedType(element_ty.as_ref().clone().array(count))
+                MarshalError::unsupported_type(element_ty.as_ref().clone().array(count))
             })?;
 
         offset += marshal_bytes(&size.to_ne_bytes(), &mut out_bytes[offset..])?;
@@ -974,7 +974,7 @@ impl Marshaller {
         
         let Some(fields) = self.struct_field_maps.get(&struct_val.type_id) else {
             // struct type is not in metadata
-            return Err(MarshalError::UnsupportedType(struct_val.type_id.to_struct_type()));
+            return Err(MarshalError::unsupported_type(struct_val.type_id.to_struct_type()));
         };
 
         for (field_id, field_info) in fields {
@@ -1000,7 +1000,7 @@ impl Marshaller {
         let field_map = self.struct_field_maps
             .get(&struct_id)
             .ok_or_else(|| {
-                MarshalError::UnsupportedType(ir::Type::Struct(struct_id))
+                MarshalError::unsupported_type(ir::Type::Struct(struct_id))
             })?;
 
         let fields_len = field_map.keys()
@@ -1035,7 +1035,7 @@ impl Marshaller {
             .variant_case_types
             .get(&variant_val.type_id)
             .ok_or_else(|| {
-                MarshalError::UnsupportedType(ir::Type::Variant(variant_val.type_id))
+                MarshalError::unsupported_type(ir::Type::Variant(variant_val.type_id))
             })?;
 
         let tag = variant_val
@@ -1096,7 +1096,7 @@ impl Marshaller {
             .variant_case_types
             .get(&variant_id)
             .ok_or_else(|| {
-                MarshalError::UnsupportedType(ir::Type::Variant(variant_id))
+                MarshalError::unsupported_type(ir::Type::Variant(variant_id))
             })?;
 
         let case_ty = case_tys

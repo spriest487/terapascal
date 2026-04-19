@@ -117,6 +117,13 @@ impl Type {
     pub fn boxed(self) -> Self {
         Type::Object(ObjectID::Box(Rc::new(self)))
     }
+
+    pub fn as_generic_param(&self) -> Option<&Rc<String>> {
+        match self {
+            Type::Generic(name) => Some(name),
+            _ => None,
+        }
+    }
     
     pub fn as_struct(&self) -> Option<TypeDefID> {
         match self {

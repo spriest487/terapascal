@@ -22,7 +22,6 @@ use crate::ir;
 use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::FunctionDeclContext;
-use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
@@ -34,6 +33,7 @@ use crate::typ::layout::StructLayoutMember;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::TypeParamContainer;
 use crate::typ::SYSTEM_UNIT_NAME;
+use crate::typ::builtin_funcinfo_name;
 pub use function::*;
 use init::gen_tags_init;
 use linked_hash_map::LinkedHashMap;
@@ -183,7 +183,36 @@ impl<'a> LibraryBuilder<'a> {
         // for all types defined in this module, ensure RTTI info is generated, even if they
         // were unused
         for defined_type in self.src_metadata.defined_types() {
-            self.translate_type(&defined_type);
+            // defined generic types need to be translated with their placeholders
+            let translate_type = match &defined_type {
+                typ::Type::Record(sym) if let Some(params) = &sym.type_params => {
+                    let type_args = params.clone().into_type_args();
+                    let sym = sym.specialize(&type_args, &self.src_metadata).unwrap();
+                    typ::Type::Record(Arc::new(sym.into_owned()))
+                }
+
+                typ::Type::Class(sym) if let Some(params) = &sym.type_params => {
+                    let type_args = params.clone().into_type_args();
+                    let sym = sym.specialize(&type_args, &self.src_metadata).unwrap();
+                    typ::Type::Class(Arc::new(sym.into_owned()))
+                }
+
+                typ::Type::Variant(sym) if let Some(params) = &sym.type_params => {
+                    let type_args = params.clone().into_type_args();
+                    let sym = sym.specialize(&type_args, &self.src_metadata).unwrap();
+                    typ::Type::Variant(Arc::new(sym.into_owned()))
+                }
+
+                typ::Type::Interface(sym) if let Some(params) = &sym.type_params => {
+                    let type_args = params.clone().into_type_args();
+                    let sym = sym.specialize(&type_args, &self.src_metadata).unwrap();
+                    typ::Type::Interface(Arc::new(sym.into_owned()))
+                }
+
+                _ => defined_type,
+            };
+
+            self.translate_type(&translate_type);
         }
 
         // builtin classes are added manually to the type cache but their methods (and therefore 

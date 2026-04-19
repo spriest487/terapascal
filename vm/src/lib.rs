@@ -2144,14 +2144,18 @@ impl Vm {
         for (id, type_def) in lib.metadata().type_defs() {
             let def_result = match type_def {
                 ir::TypeDef::Struct(struct_def) => {
-                    marshaller
-                        .add_struct(id, struct_def, lib.metadata())
-                        .map(Some)
+                    if !struct_def.is_generic() {
+                        marshaller.add_struct(id, struct_def, lib.metadata()).map(Some)
+                    } else {
+                        Ok(None)
+                    }
                 }
                 ir::TypeDef::Variant(variant_def) => {
-                    marshaller
-                        .add_variant(id, variant_def, lib.metadata())
-                        .map(Some)
+                    if !variant_def.is_generic() {
+                        marshaller.add_variant(id, variant_def, lib.metadata()).map(Some)
+                    } else {
+                        Ok(None)
+                    }
                 },
                 ir::TypeDef::Function(_func_def) => {
                     // functions don't need special marshalling, we only marshal pointers to them

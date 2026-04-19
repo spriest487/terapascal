@@ -36,3 +36,9 @@ pub struct VariantDef {
     
     pub tags: Vec<TagInfo>,
 }
+
+impl VariantDef {
+    pub fn is_generic(&self) -> bool {
+        self.name.contains_generic_params()
+    }
+}

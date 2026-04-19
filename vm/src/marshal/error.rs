@@ -44,6 +44,10 @@ pub enum MarshalError<Ty = ir::Type> {
 }
 
 impl<Ty> MarshalError<Ty> {
+    pub fn unsupported_type(ty: Ty) -> Self {
+        Self::UnsupportedType(ty)
+    }
+
     pub fn map_types<F, ToTy>(self, f: F) -> MarshalError<ToTy>
     where
         F: Fn(Ty) -> ToTy,

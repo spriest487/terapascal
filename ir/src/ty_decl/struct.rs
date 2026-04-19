@@ -32,6 +32,15 @@ impl StructDef {
         self.fields.get(&id)
     }
     
+    pub fn is_generic(&self) -> bool {
+        match self.name() {
+            Some(name) => {
+                name.contains_generic_params()
+            }
+            None => false,
+        }
+    }
+    
     pub fn is_class(&self) -> bool {
         matches!(self.identity, StructIdentity::Class(..))
     }
