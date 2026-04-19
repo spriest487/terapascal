@@ -3,11 +3,13 @@ pub mod util;
 mod dyn_array;
 mod invoker;
 mod object;
-mod generic_builder;
+pub mod generic_builder;
 
-use crate::instruction_builder::object::gen_class_object_dtor_body;
-use crate::instruction_builder::scope::ScopedBinding;
+use self::object::gen_class_object_dtor_body;
+use self::scope::ScopedBinding;
+use crate::ArgID;
 use crate::BinOpInstruction;
+use crate::FieldID;
 use crate::FunctionID;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -23,7 +25,6 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
-use crate::{ArgID, FieldID};
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_array_from;
 use scope::LocalStack;
@@ -786,11 +787,11 @@ pub trait InstructionBuilder {
                         let type_name = ty.to_pretty_string(builder.ir_formatter());
                         builder.comment(format!("retain: {}", type_name));
                     }
-                    
+
                     Type::Generic(name) => {
                         builder.comment(format!("retain (generic): {name}"));
                     }
-                    
+
                     _ => return false,
                 }
                 

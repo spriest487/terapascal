@@ -10,8 +10,8 @@ use crate::val::Ref;
 use crate::val::Value;
 use serde::Deserialize;
 use serde::Serialize;
-use std::{fmt, iter};
 use std::ops::RangeBounds;
+use std::{fmt, iter};
 use terapascal_common::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -195,9 +195,9 @@ impl Instruction {
         }
     }
 
-    pub fn visit_refs<F>(&mut self, f: &F)
+    pub fn visit_refs<'a, F, Arg>(&'a mut self, arg: &mut Arg, f: &F)
     where
-        F: Fn(&mut Ref) + Sized,
+        F: Fn(&'a mut Ref, &mut Arg) + Sized,
     {
         match self {
             Instruction::Comment(..)
@@ -206,8 +206,8 @@ impl Instruction {
             | Instruction::Jump { .. } => {},
 
             Instruction::Move { out, new_val } => {
-                Self::visit_ref(out, f);
-                Self::visit_val(new_val, f);
+                Self::visit_ref(out, f, arg);
+                Self::visit_val(new_val, f, arg);
             },
 
             Instruction::Add(bin_op)
@@ -228,30 +228,30 @@ impl Instruction {
             | Instruction::Gte(bin_op)
             | Instruction::And(bin_op)
             | Instruction::Or(bin_op) => {
-                Self::visit_ref(&mut bin_op.out, f);
-                Self::visit_val(&mut bin_op.a, f);
-                Self::visit_val(&mut bin_op.b, f);
+                Self::visit_ref(&mut bin_op.out, f, arg);
+                Self::visit_val(&mut bin_op.a, f, arg);
+                Self::visit_val(&mut bin_op.b, f, arg);
             },
 
             | Instruction::BitNot(unary_op) | Instruction::Not(unary_op) => {
-                Self::visit_ref(&mut unary_op.out, f);
-                Self::visit_val(&mut unary_op.a, f);
+                Self::visit_ref(&mut unary_op.out, f, arg);
+                Self::visit_val(&mut unary_op.a, f, arg);
             },
 
             Instruction::Length { out, a, .. } => {
-                Self::visit_ref(out, f);
-                Self::visit_ref(a, f);
+                Self::visit_ref(out, f, arg);
+                Self::visit_ref(a, f, arg);
             }
 
             | Instruction::AddrOf { out, a }
             | Instruction::MakeRef { out, a } => {
-                Self::visit_ref(out, f);
-                Self::visit_ref(a, f);
+                Self::visit_ref(out, f, arg);
+                Self::visit_ref(a, f, arg);
             },
 
             Instruction::Cast { out, a, .. } | Instruction::ClassIs { out, a, .. } => {
-                Self::visit_ref(out, f);
-                Self::visit_val(a, f);
+                Self::visit_ref(out, f, arg);
+                Self::visit_val(a, f, arg);
             },
 
             Instruction::Call {
@@ -260,13 +260,13 @@ impl Instruction {
                 args,
             } => {
                 if let Some(out_ref) = out {
-                    Self::visit_ref(out_ref, f);
+                    Self::visit_ref(out_ref, f, arg);
                 }
 
-                Self::visit_val(function, f);
+                Self::visit_val(function, f, arg);
 
-                for arg in args {
-                    Self::visit_val(arg, f);
+                for call_arg in args {
+                    Self::visit_val(call_arg, f, arg);
                 }
             },
 
@@ -277,84 +277,86 @@ impl Instruction {
                 ..
             } => {
                 if let Some(out_ref) = out {
-                    Self::visit_ref(out_ref, f);
+                    Self::visit_ref(out_ref, f, arg);
                 }
 
-                Self::visit_val(self_arg, f);
+                Self::visit_val(self_arg, f, arg);
 
-                for arg in rest_args {
-                    Self::visit_val(arg, f);
+                for call_arg in rest_args {
+                    Self::visit_val(call_arg, f, arg);
                 }
             },
 
-            Instruction::JumpIf { test, .. } => Self::visit_val(test, f),
+            Instruction::JumpIf { test, .. } => {
+                Self::visit_val(test, f, arg)
+            },
 
             Instruction::NewObject { out, .. } => {
-                Self::visit_ref(out, f);
+                Self::visit_ref(out, f, arg);
             },
             Instruction::NewArray { out, count, .. } => {
-                Self::visit_ref(out, f);
-                Self::visit_val(count, f);
+                Self::visit_ref(out, f, arg);
+                Self::visit_val(count, f, arg);
             },
             Instruction::NewBox { out, .. } => {
-                Self::visit_ref(out, f);
+                Self::visit_ref(out, f, arg);
             },
 
             Instruction::Release { at, released_out, .. }  => {
-                Self::visit_ref(at, f);
-                Self::visit_ref(released_out, f);
+                Self::visit_ref(at, f, arg);
+                Self::visit_ref(released_out, f, arg);
             },
             Instruction::Retain { at, .. } => {
-                Self::visit_ref(at, f);
+                Self::visit_ref(at, f, arg);
             },
 
             Instruction::Raise { val } => {
-                Self::visit_ref(val, f);
+                Self::visit_ref(val, f, arg);
             },
         }
     }
 
-    fn visit_ref<F>(r: &mut Ref, f: &F)
+    fn visit_ref<'a, F, Arg>(r: &'a mut Ref, f: &F, arg: &mut Arg)
     where
-        F: Fn(&mut Ref),
+        F: Fn(&'a mut Ref, &mut Arg),
     {
         match r {
             Ref::Deref(inner) => {
-                Self::visit_val(inner.as_mut(), f);
+                Self::visit_val(inner.as_mut(), f, arg);
             }
 
             Ref::Field(field_ref) => {
-                Self::visit_ref(&mut field_ref.instance, f);
+                Self::visit_ref(&mut field_ref.instance, f, arg);
             }
 
             Ref::Element(element_ref) => {
-                Self::visit_ref(&mut element_ref.instance, f);
-                Self::visit_val(&mut element_ref.index, f);
+                Self::visit_ref(&mut element_ref.instance, f, arg);
+                Self::visit_val(&mut element_ref.index, f, arg);
             }
 
             Ref::VariantTag(tag_ref) => {
-                Self::visit_ref(&mut tag_ref.instance, f);
+                Self::visit_ref(&mut tag_ref.instance, f, arg);
             }
 
             Ref::VariantData(data_ref) => {
-                Self::visit_ref(&mut data_ref.instance, f);
+                Self::visit_ref(&mut data_ref.instance, f, arg);
             }
 
             r => {
-                f(r);
+                f(r, arg);
             },
         }
     }
 
-    fn visit_val<F>(val: &mut Value, f: &F)
+    fn visit_val<'a, F, Arg>(val: &'a mut Value, f: &F, arg: &mut Arg)
     where
-        F: Fn(&mut Ref),
+        F: Fn(&'a mut Ref, &mut Arg),
     {
         let Value::Ref(val_ref) = val else {
             return;
         };
 
-        Self::visit_ref(val_ref, f);
+        Self::visit_ref(val_ref, f, arg);
     }
 }
 

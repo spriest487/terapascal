@@ -91,7 +91,7 @@ impl Ref {
     pub fn find_type<'a: 'b, 'b>(
         &'a self,
         local_stack: &'a LocalStack,
-        metadata: &'a impl MetadataSource
+        metadata: &'a impl MetadataSource,
     ) -> Option<Cow<'b, Type>> {
         match self {
             Ref::Discard => None,

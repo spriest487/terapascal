@@ -8,30 +8,20 @@ use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::MethodOwner;
 use crate::ast::StructKind;
-use crate::codegen::build_closure_function_def;
-use crate::codegen::build_func_def;
-use crate::codegen::build_func_static_closure_def;
-use crate::codegen::build_static_closure_impl;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::expr::literal_to_val;
-use crate::codegen::metadata::translate_closure_struct;
-use crate::codegen::metadata::translate_iface;
-use crate::codegen::metadata::translate_name;
-use crate::codegen::metadata::translate_sig;
-use crate::codegen::metadata::translate_struct_def;
-use crate::codegen::metadata::translate_variant_def;
-use crate::codegen::metadata::ClosureInstance;
-use crate::codegen::metadata::NamePathExt;
+use crate::codegen::metadata::*;
 use crate::codegen::stmt::translate_stmt;
 use crate::codegen::typ;
 use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
+use crate::codegen::*;
 use crate::ir;
+use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::FunctionDeclContext;
-use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
@@ -42,9 +32,7 @@ use crate::typ::get_mem_sig;
 use crate::typ::layout::StructLayout;
 use crate::typ::layout::StructLayoutMember;
 use crate::typ::seq::TypeSequenceSupport;
-use crate::typ::Specializable;
-use crate::typ::TypeArgResolver;
-use crate::typ::TypeArgsResult;
+use crate::typ::Specializable as _;
 use crate::typ::TypeParamContainer;
 use crate::typ::SYSTEM_UNIT_NAME;
 pub use function::*;
@@ -57,7 +45,10 @@ use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::version::Version;
+use terapascal_common::SharedStringKey;
 use terapascal_common::StripMode;
+use terapascal_ir::generic_builder::instantiate_generic;
+use terapascal_ir::generic_builder::instantiate_sig;
 use terapascal_ir::InstructionBuilder as _;
 use terapascal_ir::MetadataSource as _;
 
@@ -521,58 +512,112 @@ impl<'a> LibraryBuilder<'a> {
         key: FunctionDefKey,
     ) -> FunctionInstance {
         // eprintln!("instantiate_func_def: {}", func_def.decl.name);
-        
-        let generic_ctx = match key.type_args.as_ref() {
+
+        let ns = key.decl_key.namespace().into_owned();
+
+        let debug_name = func_def.decl.name.to_debug_string(key.type_args.as_ref());
+        let published = func_def.decl.is_published();
+
+        let generic_ctx = match &key.type_args {
             Some(type_args) => {
                 let type_params = func_def.decl.name.type_params
                     .as_ref()
                     .expect("instantiate_func_def: function referenced with type args must have type params");
+                typ::GenericContext::new(type_params, &type_args)
+            }
 
-                typ::GenericContext::new(type_params, type_args)
-            }
-            None => {
-                typ::GenericContext::empty()
-            }
+            None => typ::GenericContext::empty(),
         };
-        
-        let specialized_decl = apply_func_decl_named_ty_args((*func_def.decl).clone(), &generic_ctx, &generic_ctx);
 
-        let sig = specialized_decl.sig();
-        let ns = key.decl_key.namespace().into_owned();
+        let specialized_decl = apply_func_decl_named_ty_args((*func_def.decl).clone(), &generic_ctx, &generic_ctx);
+        let src_sig = Arc::new(specialized_decl.sig());
 
         let id = self.declare_func(&specialized_decl, &generic_ctx, ns);
 
         // cache the function before translating the instantiation, because
         // it may recurse and instantiate itself in its own body
-        let cached_func = FunctionInstance {
+        let func_instance = FunctionInstance {
             id,
-            src_sig: Arc::new(sig),
-            
-            published: func_def.decl.is_published(),
+            src_sig,
+
+            published,
         };
 
-        let debug_name = if self.opts.debug {
-            Some(specialized_decl.name.to_debug_string(key.type_args.as_ref()))
-        } else {
-            None
-        };
+        match key.type_args {
+            None => {
+                self.translated_funcs.insert(key, func_instance.clone());
 
-        self.translated_funcs.insert(key, cached_func.clone());
+                let def = build_func_def(
+                    self,
+                    generic_ctx,
+                    &func_def.decl.param_groups,
+                    &func_def.decl.result_ty,
+                    &func_def.locals,
+                    &func_def.body,
+                    false,
+                    Some(debug_name),
+                );
 
-        let ir_func = build_func_def(
-            self,
-            generic_ctx,
-            &specialized_decl.param_groups,
-            &specialized_decl.result_ty,
-            &func_def.locals,
-            &func_def.body,
-            false,
+                self.functions.insert(id, ir::Function::Local(def));
+            }
+
+            Some(type_args) => {
+                // ensure the generic version of this specialized instantiation exists
+                let generic_key = FunctionDefKey {
+                    type_args: None,
+                    decl_key: key.decl_key.clone(),
+                };
+
+                let generic_instance = self.instantiate_func_def(func_def, generic_key);
+
+                let generic_def = match &self.functions[&generic_instance.id] {
+                    ir::Function::Local(def) => def.clone(),
+                    _ => unreachable!(),
+                };
+
+                // now create the specialized version as an instantiation of the generic def
+                let type_params = func_def.decl.name.type_params
+                    .as_ref()
+                    .expect("instantiate_func_def: function referenced with type args must have type params");
+
+                let generic_ctx = typ::GenericContext::new(type_params, &type_args);
+                let def = self.specialize_func_def(&generic_def, &generic_ctx, Some(debug_name));
+
+                self.functions.insert(id, ir::Function::Local(def));
+            }
+        }
+
+        func_instance
+    }
+
+    fn specialize_func_def(&mut self,
+        generic_def: &ir::FunctionDef,
+        generic_ctx: &typ::GenericContext,
+        debug_name: Option<String>,
+    ) -> ir::FunctionDef {
+        if generic_ctx.is_empty() {
+            return generic_def.clone();
+        }
+
+        let mut types = HashMap::new();
+        for item in generic_ctx.items() {
+            let param_name = SharedStringKey(Arc::new(item.param.name.to_string()));
+            let arg_type = self.translate_type(&item.arg, generic_ctx);
+
+            types.insert(param_name, arg_type);
+        }
+
+        let mut builder = IRBuilder::new(self);
+        instantiate_generic(generic_def, &types, &mut builder);
+        let body = builder.finish();
+
+        let sig = instantiate_sig(&generic_def.sig, &types);
+
+        ir::FunctionDef {
+            body,
+            sig,
             debug_name,
-        );
-
-        self.functions.insert(id, ir::Function::Local(ir_func));
-
-        cached_func
+        }
     }
 
     fn instantiate_func_external(
@@ -669,7 +714,7 @@ impl<'a> LibraryBuilder<'a> {
             // nothing to do if the type isn't parameterized
             _ => {
                 assert_eq!(
-                    TypeArgsResult::NotGeneric,
+                    typ::TypeArgsResult::NotGeneric,
                     method_key.self_ty.type_args(),
                     "expected non-generic self type for instantiation of {} method {} without type args",
                     method_key.self_ty,
@@ -977,10 +1022,10 @@ impl<'a> LibraryBuilder<'a> {
     pub fn apply_ty_args<Generic>(&self,
         target: Generic,
         params: &impl TypeParamContainer,
-        args: &impl TypeArgResolver
+        args: &impl typ::TypeArgResolver
     ) -> Generic 
     where 
-        Generic: Specializable,
+        Generic: typ::Specializable,
     {
         target.apply_type_args(params, args)
     }

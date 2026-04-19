@@ -78,6 +78,10 @@ impl GenericContext {
         self.items.iter().find(|i| i.param.name.as_str() == name).map(|i| &i.arg)
     }
 
+    pub fn items(&self) -> &[ResolvedTypeArg] {
+        &self.items
+    }
+
     pub fn into_items(self) -> Vec<ResolvedTypeArg> {
         self.items
     }

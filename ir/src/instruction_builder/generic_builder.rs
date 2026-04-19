@@ -1,4 +1,4 @@
-use crate::BinOpInstruction;
+use crate::{BinOpInstruction, FunctionSig};
 use crate::FunctionDef;
 use crate::Instruction;
 use crate::InstructionBuilder;
@@ -14,10 +14,9 @@ use terapascal_common::SharedStringKey;
 type TypeMap = HashMap<SharedStringKey, Type>;
 type LocalMap = BTreeMap<LocalID, LocalID>;
 
-#[expect(unused)]
-fn instantiate_generic(
-    def: FunctionDef,
-    types: HashMap<SharedStringKey, Type>,
+pub fn instantiate_generic(
+    def: &FunctionDef,
+    types: &HashMap<SharedStringKey, Type>,
     builder: &mut impl InstructionBuilder,
 ) {
     let mut locals = LocalMap::new();
@@ -77,7 +76,7 @@ fn instantiate_generic(
 
             Instruction::LocalAlloc(id, ty) => {
                 // remapped locals don't need any autorelease behaviour
-                let remapped_id = builder.local_temp(ty.clone());
+                let remapped_id = builder.local_temp(remap_type(ty, types));
                 locals.insert(*id, remapped_id);
             },
 
@@ -274,6 +273,18 @@ fn instantiate_generic(
         if source.is_some() {
             builder.pop_source();
         }
+    }
+}
+
+pub fn instantiate_sig(generic_sig: &FunctionSig, types: &TypeMap) -> FunctionSig {
+    let param_tys = generic_sig.param_tys
+        .iter()
+        .map(|t| remap_type(t, types))
+        .collect();
+
+    FunctionSig {
+        param_tys,
+        return_ty: remap_type(&generic_sig.return_ty, types),
     }
 }
 

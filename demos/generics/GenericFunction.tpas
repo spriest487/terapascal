@@ -17,14 +17,17 @@ begin
 end;
 
 initialization
+    var greeting := Identity('hello');
+    WriteLn('greeting is: ' + greeting);
+
     var two := Identity(2);
-    
+
     var one := Identity2[Integer](1);
     WriteLn('one is: ' + IntToStr(one));
-    
+
     var t := Identity2[Boolean](true);
     WriteLn('t is: ' + t);
-    
+
     Void[array of Integer]('array of Integer');
     
     // the syntax of explicit type args could be ambiguous when calling a value returned
