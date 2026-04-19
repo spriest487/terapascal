@@ -1,13 +1,12 @@
 pub mod scope;
 pub mod util;
+pub mod generic;
 mod dyn_array;
 mod invoker;
 mod object;
-pub mod generic_builder;
 
 use self::object::gen_class_object_dtor_body;
 use self::scope::ScopedBinding;
-use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::FunctionID;
@@ -25,6 +24,7 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
+use crate::ArgID;
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_array_from;
 use scope::LocalStack;

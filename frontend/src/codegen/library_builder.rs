@@ -36,6 +36,10 @@ use crate::typ::SYSTEM_UNIT_NAME;
 use crate::typ::builtin_funcinfo_name;
 pub use function::*;
 use init::gen_tags_init;
+use ir::generic::instantiate_generic;
+use ir::generic::instantiate_sig;
+use ir::InstructionBuilder as _;
+use ir::MetadataSource as _;
 use linked_hash_map::LinkedHashMap;
 pub use rc_methods::RcMethodInfo;
 use std::collections::BTreeMap;
@@ -46,10 +50,6 @@ use std::sync::Arc;
 use terapascal_common::version::Version;
 use terapascal_common::SharedStringKey;
 use terapascal_common::StripMode;
-use terapascal_ir::generic_builder::instantiate_generic;
-use terapascal_ir::generic_builder::instantiate_sig;
-use terapascal_ir::InstructionBuilder as _;
-use terapascal_ir::MetadataSource as _;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
