@@ -10,7 +10,7 @@ pub fn translate_variant_def(
 ) -> ir::VariantDef {
     let tags = lib.translate_tag_groups(&variant_def.tags);
     
-    let name_path = translate_name(&variant_def.name, lib);
+    let name_path = translate_name(&variant_def.name.as_ref().clone().to_generic_name(), lib);
     
     let tag_type = lib.translate_type(&VARIANT_TAG_TYPE);
     assert_eq!(ir::Type::I32, tag_type);

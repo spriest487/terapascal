@@ -18,7 +18,6 @@ use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
 use crate::codegen::*;
-use crate::ir;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::FunctionDeclContext;
 use crate::typ::builtin_funcinfo_name;
@@ -33,6 +32,7 @@ use crate::typ::layout::StructLayoutMember;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::TypeParamContainer;
 use crate::typ::SYSTEM_UNIT_NAME;
+use crate::ir;
 pub use function::*;
 use init::gen_tags_init;
 use ir::InstructionBuilder as _;
@@ -928,51 +928,52 @@ impl<'a> LibraryBuilder<'a> {
 
         // instantiate types which may contain generic params
         let ty = match &src_ty {
-            typ::Type::Variant(variant) => {
-                let variant_def = self.src_metadata.instantiate_variant_def(variant).unwrap();
+            typ::Type::Variant(name) => {
+                // the definition uses the generic (unspecialized) type, which is
+                // shared between all specializations
+                let def_name = (**name).clone().to_generic_name();
+                let def_path = translate_name(&def_name, self);
 
-                let id = self.metadata.new_type();
-                let ty = ir::Type::Variant(id);
+                let def_id = match self.metadata.find_variant_def(&def_path) {
+                    Some((def_id, _)) => {
+                        def_id
+                    }
 
-                self.add_cached_type(src_ty.clone(), ty.clone());
+                    None => {
+                        let src_def = self.src_metadata
+                            .find_variant_def(&def_name.full_path)
+                            .unwrap();
 
-                let name_path = translate_name(&variant, self);
-                self.metadata.declare_type(id, &name_path);
+                        let def_id = self.metadata.new_type();
 
-                let variant_meta = translate_variant_def(&variant_def, self);
-                self.metadata.define_variant(id, variant_meta);
+                        let def_type = typ::Type::variant(def_name);
+                        let variant_type = ir::Type::Variant(def_id);
 
-                self.insert_type_dtor(id, src_ty.clone(), variant_def.as_ref());
-                
-                ty
-            },
+                        self.add_cached_type(def_type.clone(), variant_type.clone());
 
-            typ::Type::Record(name) | typ::Type::Class(name) => {
-                let kind = src_ty.struct_kind().unwrap();
-                let def = self.src_metadata.instantiate_struct_def(name, kind).unwrap();
+                        self.metadata.declare_type(def_id, &def_path);
 
-                let id = self.metadata.new_type();
-                let ty = match def.kind {
-                    StructKind::Class => {
-                        ir::Type::Object(ir::ObjectID::Class(id))
-                    },
-                    StructKind::Record => {
-                        ir::Type::Struct(id)
-                    },
+                        let def = translate_variant_def(&src_def, self);
+                        self.metadata.define_variant(def_id, def);
+
+                        self.insert_type_dtor(def_id, def_type.clone(), src_def.as_ref());
+
+                        def_id
+                    }
                 };
 
-                self.add_cached_type(src_ty.clone(), ty.clone());
+                let variant_type = ir::Type::Variant(def_id);
+                self.add_cached_type(src_ty.clone(), variant_type.clone());
+                variant_type
+            }
 
-                let name_path = translate_name(&name, self);
-                self.metadata.declare_type(id, &name_path);
-
-                let struct_meta = translate_struct_def(&def, self);
-                self.metadata.define_struct(id, struct_meta);
-
-                self.insert_type_dtor(id, src_ty.clone(), def.as_ref());
-
-                ty
+            typ::Type::Record(name) => {
+                self.translate_struct_type(src_ty, name, StructKind::Record)
             },
+
+            typ::Type::Class(name) => {
+                self.translate_struct_type(src_ty, name, StructKind::Class)
+            }
             
             typ::Type::Weak(weak_ty) => {
                 let ty = match self.translate_type(weak_ty) {
@@ -1141,6 +1142,56 @@ impl<'a> LibraryBuilder<'a> {
         }
 
         ty
+    }
+
+    fn translate_struct_type(
+        &mut self,
+        src_type: &typ::Type,
+        name: &typ::Symbol,
+        kind: StructKind,
+    ) -> ir::Type {
+        let def_name = name.clone().to_generic_name();
+        let def_path = translate_name(&def_name, self);
+
+        let type_ctor = match kind {
+            StructKind::Class => {
+                |id| ir::Type::Object(ir::ObjectID::Class(id))
+            },
+            StructKind::Record => {
+                |id| ir::Type::Struct(id)
+            },
+        };
+
+        let def_id = match self.metadata.find_struct_def(&def_path) {
+            Some((def_id, _)) => {
+                def_id
+            }
+
+            None => {
+                let src_def = self.src_metadata
+                    .find_struct_def(&name.full_path, kind)
+                    .unwrap();
+
+                let def_src_type = typ::Type::from_struct_type(def_name.clone(), kind);
+
+                let def_id = self.metadata.new_type();
+                let def_tye = type_ctor(def_id);
+
+                self.add_cached_type(def_src_type.clone(), def_tye);
+
+                self.metadata.declare_type(def_id, &def_path);
+
+                let def = translate_struct_def(&src_def, self);
+                self.metadata.define_struct(def_id, def);
+
+                self.insert_type_dtor(def_id, def_src_type, src_def.as_ref());
+                def_id
+            }
+        };
+
+        let instance_type = type_ctor(def_id);
+        self.add_cached_type(src_type.clone(), instance_type.clone());
+        instance_type
     }
 
     pub fn find_func_ty(&self, sig: &typ::FunctionSig) -> Option<ir::TypeDefID> {

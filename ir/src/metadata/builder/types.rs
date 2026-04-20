@@ -100,6 +100,10 @@ impl MetadataBuilder {
         removed
     }
 
+    pub fn find_struct_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &StructDef)> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_struct_def(name_path))
+    }
+
     pub fn define_struct(&mut self, id: TypeDefID, struct_def: StructDef) {
         match self.metadata.type_decls.get(&id) {
             Some(TypeDecl::Forward(name)) => {

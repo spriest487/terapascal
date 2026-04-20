@@ -12,7 +12,7 @@ pub fn translate_struct_def(
 ) -> ir::StructDef {
     let tags = lib.translate_tag_groups(&struct_def.tags);
     
-    let name_path = translate_name(&struct_def.name, lib);
+    let name_path = translate_name(&struct_def.name.clone().to_generic_name(), lib);
 
     let mut fields = BTreeMap::new();
     let mut next_id = ir::FieldID(0);
