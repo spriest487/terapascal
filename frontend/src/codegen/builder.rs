@@ -103,11 +103,14 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
 
     fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         if ty.is_object() {
-            if self.opts().debug {
-                self.comment(format!("release: {}", self.metadata().pretty_type_name(ty)));
-            }
-
+            self.comment(format!("release: {}", self.metadata().pretty_type_name(ty)));
             self.release(at, ty.is_weak(), Ref::Discard);
+            return true;
+        }
+
+        if let Type::Generic(param_name) = ty {
+            // placeholder release to be expanded during instantiation
+            self.comment(format!("release (generic): {}", param_name));
             return true;
         }
 
@@ -127,11 +130,14 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
 
     fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
         if ty.is_object() {
-            if self.opts().debug {
-                self.comment(format!("retain: {}", self.metadata().pretty_type_name(ty)));
-            }
-            
+            self.comment(format!("retain: {}", self.metadata().pretty_type_name(ty)));
             self.retain(at, ty.is_weak());
+            return true;
+        }
+
+        if let Type::Generic(param_name) = ty {
+            // placeholder release to be expanded during instantiation
+            self.comment(format!("retain (generic): {}", param_name));
             return true;
         }
 
