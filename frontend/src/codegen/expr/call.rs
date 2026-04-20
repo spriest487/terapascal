@@ -239,7 +239,7 @@ pub fn build_method_invocation(
             // eprintln!("method call ({}){}.{}: invoking method {}", iface_ty, self_ty, method_decl.func_decl.ident(), method_decl_index);
 
             let self_type = method_decl_ty.clone();
-            let func_instance = builder.translate_method(self_type, method_decl_index, ty_args.clone());
+            let func_instance = builder.translate_method(self_type, method_decl_index);
 
             CallTarget::InstanceMethod(func_instance.id)
         },
@@ -311,7 +311,7 @@ pub fn translate_invocation(
                 },
             };
 
-            let func = builder.translate_func(&function.name, &decl_sig, type_args.clone());
+            let func = builder.translate_func(&function.name, &decl_sig);
             let args: Vec<_> = invocation.args()
                 .cloned()
                 .collect();

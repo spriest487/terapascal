@@ -111,7 +111,7 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Ref
         
         typ::Value::Function(func_val) => {
             let decl_sig = Arc::new(func_val.decl.sig());
-            let func = builder.translate_func(&func_val.name, &decl_sig, None);
+            let func = builder.translate_func(&func_val.name, &decl_sig);
             
             // wrap the function reference in an invokable static closure
             builder.build_function_closure(&func)
@@ -271,7 +271,7 @@ pub fn literal_to_val(
 fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &mut IRBuilder) -> ir::Ref {
     match annotation {
         typ::Value::Function(func) => {
-            let func = builder.translate_func(&func.name, &func.sig, None);
+            let func = builder.translate_func(&func.name, &func.sig);
             
             // references to functions by value are turned into references to the static
             // closure for that function

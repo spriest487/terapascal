@@ -46,9 +46,3 @@ pub struct VirtualMethodKey {
 
     pub impl_method: MethodDeclKey,
 }
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub(crate) struct FunctionDefKey {
-    pub decl_key: FunctionDeclKey,
-    pub type_args: Option<typ::TypeArgList>,
-}

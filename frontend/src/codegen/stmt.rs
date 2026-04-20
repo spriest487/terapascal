@@ -313,14 +313,11 @@ fn build_for_loop_sequence(
 
                 let seq_method = builder.translate_method(
                     src_ty.clone(),
-                    seq_support.sequence_method_index,
-                    None
-                );
+                    seq_support.sequence_method_index);
 
                 let next_method = builder.translate_method(
                     seq_support.sequence_type.clone(),
                     seq_support.item_next_method_index,
-                    None,
                 );
 
                 let src_ty = builder.translate_type(src_ty);

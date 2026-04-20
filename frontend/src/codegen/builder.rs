@@ -4,7 +4,6 @@ mod test;
 use crate::ast as ast;
 use crate::codegen::expr::literal_to_val;
 use crate::codegen::library_builder::FunctionDeclKey;
-use crate::codegen::library_builder::FunctionDefKey;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::library_builder::RcMethodInfo;
 use crate::codegen::metadata::*;
@@ -234,26 +233,21 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         &mut self,
         self_ty: typ::Type,
         self_ty_method_index: usize,
-        call_ty_args: Option<typ::TypeArgList>
     ) -> FunctionInstance {
-        self.library.translate_method(self_ty, self_ty_method_index, call_ty_args)
+        self.library.translate_method(self_ty, self_ty_method_index)
     }
 
     pub fn translate_func(
         &mut self,
         decl_name: &Symbol,
         decl_sig: &Arc<typ::FunctionSig>,
-        _call_ty_args: Option<typ::TypeArgList>,
     ) -> FunctionInstance {
-        let mut key = FunctionDefKey {
-            type_args: None,
-            decl_key: FunctionDeclKey::Function { 
-                name: decl_name.full_path.clone(),
-                sig: decl_sig.clone(),
-            },
+        let key = FunctionDeclKey::Function {
+            name: decl_name.full_path.clone(),
+            sig: decl_sig.clone(),
         };
 
-        self.library.instantiate_func(&mut key)
+        self.library.instantiate_func(&key)
     }
 
     pub fn translate_func_ty(&mut self, func_sig: &typ::FunctionSig) -> TypeDefID {

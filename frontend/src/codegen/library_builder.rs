@@ -19,9 +19,9 @@ use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
 use crate::codegen::*;
 use crate::ir;
-use crate::typ::ast::apply_func_decl_named_ty_args;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::FunctionDeclContext;
+use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
@@ -33,11 +33,8 @@ use crate::typ::layout::StructLayoutMember;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::TypeParamContainer;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::builtin_funcinfo_name;
 pub use function::*;
 use init::gen_tags_init;
-use ir::generic::instantiate_generic;
-use ir::generic::instantiate_sig;
 use ir::InstructionBuilder as _;
 use ir::MetadataSource as _;
 use linked_hash_map::LinkedHashMap;
@@ -48,7 +45,6 @@ use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::version::Version;
-use terapascal_common::SharedStringKey;
 use terapascal_common::StripMode;
 
 #[derive(Debug)]
@@ -68,7 +64,7 @@ pub struct LibraryBuilder<'a> {
     // key is size (bits)
     set_flags_type_info: BTreeMap<usize, SetFlagsType>,
 
-    translated_funcs: LinkedHashMap<FunctionDefKey, FunctionInstance>,
+    translated_funcs: LinkedHashMap<FunctionDeclKey, FunctionInstance>,
 
     functions: BTreeMap<ir::FunctionID, ir::Function>,
     function_types_by_sig: HashMap<typ::FunctionSig, ir::TypeDefID>,
@@ -356,12 +352,12 @@ impl<'a> LibraryBuilder<'a> {
         }
     }
 
-    pub(crate) fn instantiate_func(&mut self, key: &FunctionDefKey) -> FunctionInstance {
+    pub(crate) fn instantiate_func(&mut self, key: &FunctionDeclKey) -> FunctionInstance {
         if let Some(cached_func) = self.translated_funcs.get(&key) {
             return cached_func.clone();
         }
 
-        match &key.decl_key {
+        match key {
             FunctionDeclKey::Function { name, sig } => {
                 match self.src_metadata.find_func_def(&name, sig.clone()).cloned() {
                     Some(typ::Def::Function(func_def)) => {
@@ -381,7 +377,7 @@ impl<'a> LibraryBuilder<'a> {
             },
 
             FunctionDeclKey::Method(method_key) => {
-                self.instantiate_method(method_key, key.type_args.as_ref())
+                self.instantiate_method(method_key)
             },
 
             FunctionDeclKey::VirtualMethod(virtual_key) => {
@@ -491,13 +487,11 @@ impl<'a> LibraryBuilder<'a> {
             builtin_ident(SYSTEM_UNIT_NAME),
         ]);
 
-        let instance = self.instantiate_func(&mut FunctionDefKey {
-            decl_key: FunctionDeclKey::Function {
-                name: ident_path,
-                sig,
-            },
-            type_args: None,
+        let instance = self.instantiate_func(&FunctionDeclKey::Function {
+            name: ident_path,
+            sig,
         });
+
         instance.id
     }
     
@@ -526,30 +520,18 @@ impl<'a> LibraryBuilder<'a> {
     fn instantiate_func_def(
         &mut self,
         func_def: &typ::ast::FunctionDef,
-        key: FunctionDefKey,
+        key: FunctionDeclKey,
     ) -> FunctionInstance {
         // eprintln!("instantiate_func_def: {}", func_def.decl.name);
 
-        let ns = key.decl_key.namespace().into_owned();
+        let ns = key.namespace().into_owned();
 
-        let debug_name = func_def.decl.name.to_debug_string(key.type_args.as_ref());
+        let debug_name = func_def.decl.name.to_debug_string(None);
         let published = func_def.decl.is_published();
 
-        let generic_ctx = match &key.type_args {
-            Some(type_args) => {
-                let type_params = func_def.decl.name.type_params
-                    .as_ref()
-                    .expect("instantiate_func_def: function referenced with type args must have type params");
-                typ::GenericContext::new(type_params, &type_args)
-            }
+        let src_sig = Arc::new(func_def.decl.sig());
 
-            None => typ::GenericContext::empty(),
-        };
-
-        let specialized_decl = apply_func_decl_named_ty_args((*func_def.decl).clone(), &generic_ctx, &generic_ctx);
-        let src_sig = Arc::new(specialized_decl.sig());
-
-        let id = self.declare_func(&specialized_decl, ns);
+        let id = self.declare_func(&func_def.decl, ns);
 
         // cache the function before translating the instantiation, because
         // it may recurse and instantiate itself in its own body
@@ -560,95 +542,30 @@ impl<'a> LibraryBuilder<'a> {
             published,
         };
 
-        match key.type_args {
-            None => {
-                self.translated_funcs.insert(key, func_instance.clone());
+        self.translated_funcs.insert(key, func_instance.clone());
 
-                let def = build_func_def(
-                    self,
-                    &func_def.decl.param_groups,
-                    func_def.decl.name.type_params.as_ref(),
-                    &func_def.decl.result_ty,
-                    &func_def.locals,
-                    &func_def.body,
-                    false,
-                    Some(debug_name),
-                );
+        let def = build_func_def(
+            self,
+            &func_def.decl.param_groups,
+            func_def.decl.name.type_params.as_ref(),
+            &func_def.decl.result_ty,
+            &func_def.locals,
+            &func_def.body,
+            false,
+            Some(debug_name),
+        );
 
-                self.functions.insert(id, ir::Function::Local(def));
-            }
-
-            Some(type_args) => {
-                // ensure the generic version of this specialized instantiation exists
-                let generic_key = FunctionDefKey {
-                    type_args: None,
-                    decl_key: key.decl_key.clone(),
-                };
-
-                let generic_instance = self.instantiate_func_def(func_def, generic_key);
-
-                let generic_def = match &self.functions[&generic_instance.id] {
-                    ir::Function::Local(def) => def.clone(),
-                    _ => unreachable!(),
-                };
-
-                // now create the specialized version as an instantiation of the generic def
-                let type_params = func_def.decl.name.type_params
-                    .as_ref()
-                    .expect("instantiate_func_def: function referenced with type args must have type params");
-
-                let generic_ctx = typ::GenericContext::new(type_params, &type_args);
-                let def = self.specialize_func_def(&generic_def, &generic_ctx, Some(debug_name));
-
-                self.functions.insert(id, ir::Function::Local(def));
-            }
-        }
+        self.functions.insert(id, ir::Function::Local(def));
 
         func_instance
-    }
-
-    fn specialize_func_def(&mut self,
-        generic_def: &ir::FunctionDef,
-        generic_ctx: &typ::GenericContext,
-        debug_name: Option<String>,
-    ) -> ir::FunctionDef {
-        if generic_ctx.is_empty() {
-            return generic_def.clone();
-        }
-
-        let mut types = HashMap::new();
-        for item in generic_ctx.items() {
-            let param_name = SharedStringKey(Arc::new(item.param.name.to_string()));
-            let arg_type = self.translate_type(&item.arg);
-
-            types.insert(param_name, arg_type);
-        }
-
-        let mut builder = IRBuilder::new(self);
-        instantiate_generic(generic_def, &types, &mut builder);
-        let body = builder.finish();
-
-        let sig = instantiate_sig(&generic_def.sig, &types);
-
-        ir::FunctionDef {
-            body,
-            sig,
-            debug_name,
-            type_params: Vec::new(),
-        }
     }
 
     fn instantiate_func_external(
         &mut self,
         extern_decl: &typ::ast::FunctionDecl,
-        key: FunctionDefKey,
+        key: FunctionDeclKey,
     ) -> FunctionInstance {
-        assert!(
-            key.type_args.is_none(),
-            "external function must not be generic"
-        );
-
-        let decl_namespace = key.decl_key.namespace().into_owned();
+        let decl_namespace = key.namespace().into_owned();
         let id = self.declare_func(&extern_decl, decl_namespace);
 
         let sig = extern_decl.sig();
@@ -691,11 +608,7 @@ impl<'a> LibraryBuilder<'a> {
         cached_func
     }
 
-    fn instantiate_method(
-        &mut self,
-        method_key: &MethodDeclKey,
-        type_args: Option<&typ::TypeArgList>,
-    ) -> FunctionInstance {
+    fn instantiate_method(&mut self, method_key: &MethodDeclKey) -> FunctionInstance {
         // eprintln!("instantiate_method: {:#?}", method_key);
 
         // if the self type is a parameterized generic, we'll need to instantiate the specialized
@@ -763,16 +676,9 @@ impl<'a> LibraryBuilder<'a> {
             published: method_decl.is_published(),
         };
 
-        let key = FunctionDefKey {
-            decl_key: FunctionDeclKey::Method(method_key.clone()),
-            type_args: type_args.cloned(),
-        };
+        let key = FunctionDeclKey::Method(method_key.clone());
 
-        let debug_name = if self.opts.debug {
-            Some(method_def.decl.name.to_debug_string(key.type_args.as_ref()))
-        } else {
-            None
-        };
+        let debug_name = method_def.decl.name.to_debug_string(None);
         
         self.translated_funcs.insert(key, func_instance.clone());
 
@@ -784,7 +690,7 @@ impl<'a> LibraryBuilder<'a> {
             &method_def.locals,
             &method_def.body,
             true,
-            debug_name,
+            Some(debug_name),
         );
         self.functions.insert(id, ir::Function::Local(def));
 
@@ -798,8 +704,7 @@ impl<'a> LibraryBuilder<'a> {
         let self_ty = self.translate_type(&impl_method.self_ty);
 
         // virtual calls can't have type args yet
-        let type_args = None;
-        let impl_func = self.instantiate_method(&impl_method, type_args);
+        let impl_func = self.instantiate_method(&impl_method);
 
         let iface_ty_name = virtual_key
             .iface_ty
@@ -832,10 +737,7 @@ impl<'a> LibraryBuilder<'a> {
 
         self.metadata.impl_method(iface_id, self_ty, method_name, impl_func.id);
 
-        let key = FunctionDefKey {
-            decl_key: FunctionDeclKey::VirtualMethod(virtual_key.clone()),
-            type_args: None,
-        };
+        let key = FunctionDeclKey::VirtualMethod(virtual_key.clone());
 
         self.translated_funcs.insert(key.clone(), impl_func.clone());
 
@@ -849,19 +751,14 @@ impl<'a> LibraryBuilder<'a> {
         &mut self,
         self_ty: typ::Type, 
         self_ty_method_index: usize,
-        type_args: Option<typ::TypeArgList>,
     ) -> FunctionInstance {
-        let mut key = FunctionDefKey {
-            decl_key: FunctionDeclKey::Method(MethodDeclKey {
-                method_index: self_ty_method_index,
-                self_ty,
-            }),
-
-            type_args: type_args.clone(),
-        };
+        let key = FunctionDeclKey::Method(MethodDeclKey {
+            method_index: self_ty_method_index,
+            self_ty,
+        });
 
         // methods must always be present so make sure they're immediately instantiated
-        self.instantiate_func(&mut key)
+        self.instantiate_func(&key)
     }
 
     pub fn declare_func(
@@ -897,14 +794,10 @@ impl<'a> LibraryBuilder<'a> {
         &mut self,
         func_name: IdentPath,
         func_sig: Arc<typ::FunctionSig>,
-        type_args: Option<typ::TypeArgList>,
     ) -> FunctionInstance {
-        let mut key = FunctionDefKey {
-            type_args,
-            decl_key: FunctionDeclKey::Function { name: func_name, sig: func_sig },
-        };
+        let key = FunctionDeclKey::Function { name: func_name, sig: func_sig };
 
-        self.instantiate_func(&mut key)
+        self.instantiate_func(&key)
     }
 
     fn translate_unit_func_decl(
@@ -919,7 +812,7 @@ impl<'a> LibraryBuilder<'a> {
         let func_name = unit_name.clone().child(decl.name.ident.clone());
         let func_sig = decl.sig();
 
-        let instance = self.translate_func(func_name, Arc::new(func_sig), None);
+        let instance = self.translate_func(func_name, Arc::new(func_sig));
         Some(instance)
     }
 
@@ -982,10 +875,7 @@ impl<'a> LibraryBuilder<'a> {
                     },
                 };
 
-                self.instantiate_func(&mut FunctionDefKey {
-                    decl_key: FunctionDeclKey::VirtualMethod(virtual_key),
-                    type_args: None,
-                });
+                self.instantiate_func(&FunctionDeclKey::VirtualMethod(virtual_key));
             }
 
             let iface_name = iface_ty.full_name()
@@ -1020,7 +910,7 @@ impl<'a> LibraryBuilder<'a> {
         let dtor = self.instantiate_method(&MethodDeclKey {
             self_ty: src_ty,
             method_index: dtor_method_index,
-        }, None);
+        });
         
         self.dtors.insert(type_id, dtor.id);
     }
@@ -1460,7 +1350,7 @@ impl<'a> LibraryBuilder<'a> {
                 self_ty: src_ty.clone(),
                 method_index,
             };
-            let method_instance = self.instantiate_method(&method_key, None);
+            let method_instance = self.instantiate_method(&method_key);
             Some(method_instance.id)
         };
 
