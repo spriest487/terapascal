@@ -174,8 +174,9 @@ impl fmt::Display for Library {
 
         writeln!(f, "* Constants")?;
         for const_info in self.metadata.constants() {
-            writeln!(f, "{} = ", const_info.name)?;
+            write!(f, "{} = ", const_info.name)?;
             self.metadata.format_val(&const_info.value, f)?;
+            writeln!(f)?;
         }
         writeln!(f)?;
         
