@@ -58,7 +58,10 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn from_ir_struct(id: ir::TypeDefID) -> Type {
+    pub fn from_ir_struct(id: ir::TypeDefID, type_args: &[ir::Type]) -> Type {
+        if !type_args.is_empty() {
+            todo!("C backend type args")
+        }
         Type::DefinedType(TypeDefName::Struct(id))
     }
 
@@ -96,9 +99,9 @@ impl Type {
             
             ir::Type::Object(..) | ir::Type::WeakObject(..) => Type::Rc.ptr(),
             
-            ir::Type::Struct(id) => Type::from_ir_struct(*id),
+            ir::Type::Struct { id, args } => Type::from_ir_struct(*id, args),
             ir::Type::Variant(id) => Type::from_ir_variant(*id),
-            ir::Type::Flags(repr_id) => Type::from_ir_struct(*repr_id),
+            ir::Type::Flags(repr_id) => Type::from_ir_struct(*repr_id, &[]),
             
             ir::Type::Nothing => Type::Void,
             ir::Type::Bool => Type::Bool,
@@ -130,8 +133,8 @@ impl Type {
         Type::Rc.ptr()
     }
 
-    pub fn class_instance_ptr(class_id: ir::TypeDefID) -> Type {
-        Type::from_ir_struct(class_id).ptr()
+    pub fn class_instance_ptr(class_id: ir::TypeDefID, type_args: &[ir::Type]) -> Type {
+        Type::from_ir_struct(class_id, type_args).ptr()
     }
 
     pub fn dyn_array_ptr(array_id: DynArrayTypeID) -> Type {

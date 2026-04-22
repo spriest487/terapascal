@@ -4,6 +4,7 @@ use cast::i128;
 use std::ops::Index;
 use std::ops::IndexMut;
 use std::rc::Rc;
+use crate::marshal::{MarshalResult, Marshaller, TypeIndex};
 
 #[derive(Debug, Clone)]
 pub enum DynValue {
@@ -55,7 +56,7 @@ impl DynValue {
         DynValue::Pointer(Pointer::nil(ty))
     }
 
-    pub fn try_cast(&self, ty: &ir::Type) -> Option<Self> {
+    pub fn try_cast(&self, ty: &ir::Type, marshaller: &Marshaller) -> Option<Self> {
         match ty {
             ir::Type::Nothing => None,
             ir::Type::Generic(..) => None,
@@ -109,14 +110,24 @@ impl DynValue {
                 Some(DynValue::Pointer(ptr))
             },
 
-            ir::Type::Struct(id) => match self {
-                DynValue::Structure(s) if s.type_id == *id => Some(self.clone()),
-                _ => None,
+            ir::Type::Struct { .. } => {
+                let DynValue::Structure(s) = self else {
+                    return None;
+                };
+
+                let struct_type_index = marshaller.get_type_index(ty).ok()?;
+
+                (s.type_index == struct_type_index).then(|| self.clone())
             },
 
-            ir::Type::Variant(id) => match self {
-                DynValue::Variant(v) if v.type_id == *id => Some(self.clone()),
-                _ => None,
+            ir::Type::Variant(..) => {
+                let DynValue::Variant(v) = self else {
+                    return None;
+                };
+
+                let variant_type_index = marshaller.get_type_index(ty).ok()?;
+
+                (v.type_index == variant_type_index).then(|| self.clone())
             },
 
             ir::Type::Array { element, dim } => match self {
@@ -126,9 +137,13 @@ impl DynValue {
                 _ => None,
             },
 
-            ir::Type::Flags(repr_id) => match self {
-                DynValue::Structure(s) if s.type_id == *repr_id => Some(self.clone()),
-                _ => None,
+            ir::Type::Flags(..) => {
+                let DynValue::Structure(s) = self else {
+                    return None;
+                };
+
+                let flags_type_index = marshaller.get_type_index(ty).ok()?;
+                (s.type_index == flags_type_index).then(|| self.clone())
             },
 
             ir::Type::Function(..) => None,
@@ -433,16 +448,20 @@ impl DynValue {
         }
     }
 
-    pub fn as_struct_mut(&mut self, struct_id: ir::TypeDefID) -> Option<&mut StructValue> {
+    pub fn as_struct_mut(&mut self, type_index: TypeIndex) -> Option<&mut StructValue> {
         match self {
-            DynValue::Structure(struct_val) if struct_id == struct_val.type_id => Some(struct_val),
+            DynValue::Structure(struct_val) if type_index == struct_val.type_index => {
+                Some(struct_val)
+            },
             _ => None,
         }
     }
 
-    pub fn as_struct(&self, struct_id: ir::TypeDefID) -> Option<&StructValue> {
+    pub fn as_struct(&self, type_index: TypeIndex) -> Option<&StructValue> {
         match self {
-            DynValue::Structure(struct_val) if struct_id == struct_val.type_id => Some(struct_val),
+            DynValue::Structure(struct_val) if type_index == struct_val.type_index => {
+                Some(struct_val)
+            },
             _ => None,
         }
     }
@@ -461,9 +480,9 @@ impl DynValue {
         }
     }
 
-    pub fn as_variant(&self, struct_id: ir::TypeDefID) -> Option<&VariantValue> {
+    pub fn as_variant(&self, type_index: TypeIndex) -> Option<&VariantValue> {
         match self {
-            DynValue::Variant(var_val) if struct_id == var_val.type_id => Some(var_val),
+            DynValue::Variant(var_val) if type_index == var_val.type_index => Some(var_val),
             _ => None,
         }
     }
@@ -610,20 +629,16 @@ impl From<Pointer> for DynValue {
 
 #[derive(Debug, Clone)]
 pub struct StructValue {
-    pub type_id: ir::TypeDefID,
+    pub type_index: TypeIndex,
     pub fields: Vec<DynValue>,
 }
 
 impl StructValue {
-    pub fn new(id: ir::TypeDefID, fields: impl IntoIterator<Item = DynValue>) -> Self {
+    pub fn new(type_index: TypeIndex, fields: impl IntoIterator<Item = DynValue>) -> Self {
         Self {
-            type_id: id,
+            type_index,
             fields: fields.into_iter().collect(),
         }
-    }
-
-    pub fn struct_ty(&self) -> ir::Type {
-        ir::Type::Struct(self.type_id)
     }
 }
 
@@ -643,7 +658,7 @@ impl IndexMut<ir::FieldID> for StructValue {
 
 impl PartialEq<Self> for StructValue {
     fn eq(&self, other: &Self) -> bool {
-        if self.type_id != other.type_id || self.fields.len() != other.fields.len() {
+        if self.type_index != other.type_index || self.fields.len() != other.fields.len() {
             return false;
         }
 
@@ -660,44 +675,53 @@ impl PartialEq<Self> for StructValue {
 // subset of ir::ObjectID that only includes concrete types
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum ObjectID {
-    Class(ir::TypeDefID),
+    Class(TypeIndex),
     Array(Rc<ir::Type>),
     Box(Rc<ir::Type>),
 }
 
 impl ObjectID {
-    pub fn try_from_type(ty: &ir::Type) -> Option<Self> {
+    pub fn try_from_type(ty: &ir::Type, marshaller: &Marshaller) -> Option<Self> {
         match ty {
-            ir::Type::Object(id) | ir::Type::WeakObject(id) => match id {
-                // real types
-                ir::ObjectID::Class(class_id) => Some(ObjectID::Class(*class_id)),
-                ir::ObjectID::Array(element_type) => Some(ObjectID::Array(element_type.clone())),
-                ir::ObjectID::Box(value_type) => Some(ObjectID::Box(value_type.clone())),
+            ir::Type::Object(id) | ir::Type::WeakObject(id) => {
+                match id {
+                    // real types
+                    ir::ObjectID::Class(..) => {
+                        let type_index = marshaller.get_type_index(ty).ok()?;
+                        Some(ObjectID::Class(type_index))
+                    },
+                    ir::ObjectID::Array(element_type) => Some(ObjectID::Array(element_type.clone())),
+                    ir::ObjectID::Box(value_type) => Some(ObjectID::Box(value_type.clone())),
 
-                // abstract types
-                ir::ObjectID::Any
-                | ir::ObjectID::Interface(_)
-                | ir::ObjectID::Closure(_) => None,
+                    // abstract types
+                    ir::ObjectID::Any
+                    | ir::ObjectID::Interface(_)
+                    | ir::ObjectID::Closure(_) => None,
+                }
             },
 
             _ => None,
         }
     }
-
-    pub fn to_object_type_id(&self) -> ir::ObjectID {
+    
+    pub fn to_type(&self, marshaller: &Marshaller) -> MarshalResult<ir::Type> {
         match self {
-            ObjectID::Class(id) => ir::ObjectID::Class(*id),
-            ObjectID::Array(element) => ir::ObjectID::Array(element.clone()),
-            ObjectID::Box(value) => ir::ObjectID::Box(value.clone()),
+            ObjectID::Class(id) => {
+                marshaller.get_type(*id).cloned()
+            },
+            ObjectID::Array(element) => {
+                Ok(ir::ObjectID::Array(element.clone()).to_object_type())
+            },
+            ObjectID::Box(value) => {
+                Ok(ir::ObjectID::Box(value.clone()).to_object_type())
+            },
         }
     }
-    
-    pub fn to_type(&self) -> ir::Type {
-        self.to_object_type_id().to_object_type()
-    }
 
-    pub(crate) fn to_pretty_name(&self, metadata: &ir::Metadata) -> String {
-        self.to_type().to_pretty_string(metadata)
+    pub(crate) fn to_pretty_name(&self, marshaller: &Marshaller, metadata: &impl ir::IRFormatter) -> String {
+        self.to_type(marshaller)
+            .map(|t| t.to_pretty_string(metadata))
+            .unwrap_or_else(|_| format!("{:?}", self))
     }
 }
 
@@ -741,15 +765,9 @@ pub struct ObjectValue {
 
 #[derive(Debug, Clone)]
 pub struct VariantValue {
-    pub type_id: ir::TypeDefID,
+    pub type_index: TypeIndex,
     pub tag: Box<DynValue>,
     pub data: Box<DynValue>,
-}
-
-impl VariantValue {
-    pub fn variant_ty(&self) -> ir::Type {
-        ir::Type::Variant(self.type_id)
-    }
 }
 
 #[derive(Debug, Clone)]

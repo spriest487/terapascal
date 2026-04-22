@@ -1,4 +1,5 @@
-use crate::{BinOpInstruction, FunctionSig};
+use std::borrow::Cow;
+use crate::{BinOpInstruction, FunctionSig, StructDef, StructFieldDef};
 use crate::FunctionDef;
 use crate::Instruction;
 use crate::InstructionBuilder;
@@ -9,11 +10,13 @@ use crate::UnaryOpInstruction;
 use crate::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::sync::Arc;
 use terapascal_common::SharedStringKey;
 
 type TypeMap = HashMap<SharedStringKey, Type>;
 type LocalMap = BTreeMap<LocalID, LocalID>;
 
+// TODO: errors
 pub fn instantiate_generic(
     def: &FunctionDef,
     types: &TypeMap,
@@ -227,10 +230,16 @@ pub fn instantiate_generic(
                 });
             },
 
-            Instruction::NewObject { out, type_id, immortal } => {
+            Instruction::NewObject { out, type_id, type_args, immortal } => {
                 let out = remap_ref(out, &locals, &types);
+                let type_args = type_args
+                    .iter()
+                    .map(|t| remap_type(t, &types))
+                    .collect();
+
                 builder.emit(Instruction::NewObject {
                     out,
+                    type_args,
                     type_id: *type_id,
                     immortal: *immortal,
                 });
@@ -294,6 +303,46 @@ pub fn instantiate_sig(generic_sig: &FunctionSig, types: &TypeMap) -> FunctionSi
         param_tys,
         return_ty: remap_type(&generic_sig.return_ty, types),
     }
+}
+
+pub fn instantiate_struct_def<'a>(generic_struct: &'a StructDef, type_args: &[Type]) -> Cow<'a, StructDef> {
+    if !generic_struct.is_generic() {
+        assert_eq!(0, type_args.len(), "specializing struct def: type is not generic");
+        return Cow::Borrowed(generic_struct);
+    }
+
+    let mut types = HashMap::new();
+
+    let mut identity = generic_struct.identity.clone();
+    let name_params = match identity.name_mut() {
+        Some(name) => name.type_args.as_mut_slice(),
+        None => &mut [],
+    };
+
+    assert_eq!(type_args.len(), name_params.len(), "specializing struct def: type arg count mismatch");
+
+    for (param, arg) in name_params.iter_mut().zip(type_args.iter()) {
+        let Type::Generic(param_name) = param else {
+            panic!("generic name must only contain named parameter types");
+        };
+
+        types.insert(SharedStringKey(Arc::new(param_name.to_string())), arg.clone());
+        *param = arg.clone();
+    }
+
+    let mut fields = BTreeMap::new();
+    for (field_id, field_def) in &generic_struct.fields {
+        fields.insert(*field_id, StructFieldDef {
+            ty: remap_type(&field_def.ty, &types),
+            name: field_def.name.clone(),
+        });
+    }
+
+    Cow::Owned(StructDef {
+        fields,
+        tags: generic_struct.tags.clone(),
+        identity,
+    })
 }
 
 fn remap_bin_op(

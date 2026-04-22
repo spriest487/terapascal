@@ -163,13 +163,13 @@ impl Function {
     pub fn stack_alloc_size(&self, marshaller: &Marshaller) -> MarshalResult<usize> {
         let mut args_size = 0;
         for arg_ty in self.param_tys() {
-            let arg_size = marshaller.get_ty(arg_ty)?.size();
+            let arg_size = marshaller.get_marshal_type(arg_ty)?.size();
             args_size += arg_size;
         }
 
         let return_size = match self.return_ty() {
             ir::Type::Nothing => 0,
-            return_ty => marshaller.get_ty(return_ty)?.size(),
+            return_ty => marshaller.get_marshal_type(return_ty)?.size(),
         };
 
         match self {

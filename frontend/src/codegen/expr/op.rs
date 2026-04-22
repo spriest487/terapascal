@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use crate::ast;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr;
@@ -6,6 +7,7 @@ use crate::ir;
 use crate::IntConstant;
 use bigdecimal::BigDecimal;
 use terapascal_common::span::Spanned;
+use terapascal_ir::generic::instantiate_struct_def;
 use terapascal_ir::InstructionBuilder;
 
 pub fn translate_bin_op(
@@ -42,18 +44,24 @@ pub fn translate_bin_op(
             // auto-deref for rc types
             let of_ty = builder.translate_type(&bin_op.lhs.annotation().ty());
 
-            let struct_id = match &of_ty {
-                ir::Type::Struct(id) => *id,
-                ir::Type::Object(ir::ObjectID::Class(id)) => *id,
+            let struct_def = match &of_ty {
+                ir::Type::Struct { id, args } => {
+                    let generic_def = builder
+                        .get_struct(*id)
+                        .unwrap_or_else(|| panic!("struct {id} referenced in expression {bin_op} must exist"));
+                    instantiate_struct_def(generic_def, args)
+                },
+                ir::Type::Object(ir::ObjectID::Class(id)) => {
+                    let class_def = builder
+                        .get_struct(*id)
+                        .unwrap_or_else(|| panic!("class {id} referenced in expression {bin_op} must exist"));
+                    Cow::Borrowed(class_def)
+                },
                 other => panic!(
                     "lhs ty_def of member binop must be a struct or class, was: {}",
                     other
                 ),
             };
-
-            let struct_def = builder
-                .get_struct(struct_id)
-                .unwrap_or_else(|| panic!("struct {struct_id} referenced in expression {bin_op} must exist"));
 
             let member_name = bin_op
                 .rhs

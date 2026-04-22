@@ -204,9 +204,16 @@ pub trait InstructionBuilder {
         });
     }
 
-    fn new_object(&mut self, out: impl Into<Ref>, type_id: TypeDefID, immortal: bool) {
+    fn new_object(
+        &mut self,
+        out: impl Into<Ref>,
+        type_id: TypeDefID,
+        type_args: impl IntoIterator<Item=Type>,
+        immortal: bool,
+    ) {
         self.emit(Instruction::NewObject {
             out: out.into(),
+            type_args: type_args.into_iter().collect(),
             type_id,
             immortal,
         });

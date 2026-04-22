@@ -124,7 +124,7 @@ impl fmt::Display for Library {
             let impl_self_ty = match def {
                 TypeDef::Variant(..) => Some(Type::Variant(*id)),
                 TypeDef::Struct(struct_def) => match &struct_def.identity {
-                    StructIdentity::Record(..) => Some(id.to_struct_type()),
+                    StructIdentity::Record(path) => Some(id.to_struct_type(path.type_args.clone())),
                     StructIdentity::Class(..) => Some(id.to_class_ptr_type()),
                     _ => None,
                 }

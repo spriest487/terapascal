@@ -48,8 +48,15 @@ impl TypeDefID {
         Type::Object(ObjectID::Closure(self))
     }
 
-    pub fn to_struct_type(self) -> Type {
-        Type::Struct(self)
+    pub fn to_struct_type(self, args: impl IntoIterator<Item=Type>) -> Type {
+        Type::Struct {
+            id: self,
+            args: args.into_iter().collect(),
+        }
+    }
+
+    pub fn to_flags_type(self) -> Type {
+        Type::Flags(self)
     }
 
     pub fn to_variant_type(self) -> Type {

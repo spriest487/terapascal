@@ -1,8 +1,18 @@
 use libffi::low::ffi_type;
+use libffi::middle::Type as FfiType;
 use libffi::raw::FFI_TYPE_STRUCT;
+use std::fmt;
 use std::mem::transmute;
 use std::ptr::slice_from_raw_parts;
-use libffi::middle::Type as FfiType;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct TypeIndex(pub u64);
+
+impl fmt::Display for TypeIndex {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[repr(transparent)]
 #[derive(Clone, Debug)]

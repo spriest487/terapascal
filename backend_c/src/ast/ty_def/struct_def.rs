@@ -76,6 +76,7 @@ impl StructDef {
     pub fn translate(
         id: ir::TypeDefID,
         ir_struct: &ir::StructDef,
+        type_args: &[ir::Type],
         module: &mut Unit,
     ) -> Self {
         let mut members = Vec::new();
@@ -102,7 +103,7 @@ impl StructDef {
             });
         }
 
-        let struct_ty = ir::Type::Struct(id);
+        let struct_ty = id.to_struct_type(type_args.to_vec());
         let comment = module.pretty_type(&struct_ty).to_string();
 
         // user-defined types will have explicit padding, so they should be packed to avoid

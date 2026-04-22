@@ -101,6 +101,7 @@ pub enum Instruction {
     NewObject {
         out: Ref,
         type_id: TypeDefID,
+        type_args: Vec<Type>,
         immortal: bool,
     },
     NewArray {

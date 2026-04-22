@@ -23,7 +23,10 @@ pub enum Type {
     Pointer(Rc<Type>),
     TempRef(Rc<Type>),
 
-    Struct(TypeDefID),
+    Struct {
+        id: TypeDefID,
+        args: Vec<Type>,
+    },
     Variant(TypeDefID),
     Flags(TypeDefID),
     Array {
@@ -124,17 +127,17 @@ impl Type {
             _ => None,
         }
     }
-    
+
     pub fn as_struct(&self) -> Option<TypeDefID> {
         match self {
-            Type::Struct(struct_id) => Some(*struct_id),
+            Type::Struct { id: struct_id, .. } => Some(*struct_id),
             _ => None,
         }
     }
 
     pub fn is_struct(&self, id: TypeDefID) -> bool {
         match self {
-            Type::Struct(ty_id) => *ty_id == id,
+            Type::Struct { id: struct_id, .. } => *struct_id == id,
             _ => false,
         }
     }
@@ -171,7 +174,7 @@ impl Type {
     }
 
     pub fn is_complex(&self) -> bool {
-        matches!(self, Type::Variant(..) | Type::Array { .. } | Type::Struct(..))
+        matches!(self, Type::Variant(..) | Type::Array { .. } | Type::Struct { .. })
     }
 
     pub fn is_float(&self) -> bool {
@@ -208,7 +211,7 @@ impl Type {
     // type does not have fields
     pub fn field_struct_id(&self) -> Option<TypeDefID> {
         match self {
-            Type::Struct(id) => Some(*id),
+            Type::Struct { id, .. } => Some(*id),
             Type::Object(ObjectID::Class(id)) => Some(*id),
             _ => None,
         }
@@ -230,7 +233,7 @@ impl Type {
             Type::Variant(id)
             | Type::Function(id)
             | Type::Flags(id, ..)
-            | Type::Struct(id) => {
+            | Type::Struct { id, .. } => {
                 Some(*id)
             }
 
@@ -248,7 +251,7 @@ impl Type {
     pub fn tags_loc(&self) -> Option<TagLocation> {
         match self {
             | Type::Object(ObjectID::Class(id))
-            | Type::Struct(id)
+            | Type::Struct { id, .. }
             | Type::Flags(id)
             | Type::Variant(id) => Some(TagLocation::TypeDef(*id)),
 
@@ -288,7 +291,7 @@ impl Type {
             Type::F64 => Some(Value::LiteralF64(0.0)),
 
             Type::Generic(..)
-            | Type::Struct(..)
+            | Type::Struct { .. }
             | Type::TempRef(..)
             | Type::Flags(..)
             | Type::Variant(..)
@@ -311,7 +314,7 @@ impl Type {
             // for them, to be replaced as appropriate later
             Type::Generic(..) => true,
 
-            Type::Struct(id) => {
+            Type::Struct { id, .. } => {
                 let Some(def) = metadata.get_struct_def(*id) else {
                     return false;
                 };
@@ -377,7 +380,10 @@ impl fmt::Display for Type {
             Type::USize => write!(f, "usize"),
             Type::Pointer(target) => write!(f, "^{}", target),
             Type::TempRef(target) => write!(f, "&{}", target),
-            Type::Struct(id) => write!(f, "{{struct {}}}", id),
+            Type::Struct{ id, args } => {
+                write!(f, "{{struct {}}}", id)?;
+                format_type_args(f, args)
+            },
             Type::Variant(id) => write!(f, "{{variant {}}}", id),
             Type::Flags(repr_id) => write!(f, "{{flags {}}}", repr_id),
             Type::Object(id) => match id {
@@ -400,4 +406,21 @@ impl fmt::Display for Type {
             Type::Function(id) => write!(f, "function {}", id),
         }
     }
+}
+
+fn format_type_args(f: &mut fmt::Formatter, args: &[Type]) -> fmt::Result {
+    if args.is_empty() {
+        return Ok(());
+    }
+
+    write!(f, "[")?;
+
+    for (i, arg) in args.iter().enumerate() {
+        if i > 0 {
+            write!(f, ", ")?;
+        }
+        write!(f, "{}", arg)?;
+    }
+
+    write!(f, "]")
 }

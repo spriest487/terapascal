@@ -32,7 +32,7 @@ pub use val::*;
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct NamePath {
     pub path: Vec<String>,
-    pub type_args: Option<Vec<Type>>,
+    pub type_args: Vec<Type>,
 }
 
 impl NamePath {
@@ -42,19 +42,19 @@ impl NamePath {
 
         NamePath {
             path,
-            type_args: None,
+            type_args: Vec::new(),
         }
     }
 
     pub fn with_ty_args(self, args: impl IntoIterator<Item = Type>) -> Self {
         assert!(
-            self.type_args.is_none(),
+            self.type_args.is_empty(),
             "with_type_args: name must not already have a type argument list"
         );
 
         Self {
             path: self.path,
-            type_args: Some(args.into_iter().collect()),
+            type_args: args.into_iter().collect(),
         }
     }
     
@@ -70,9 +70,9 @@ impl NamePath {
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         let mut buf = self.path.join(".");
 
-        if let Some(type_args) = self.type_args.as_ref() {
+        if !self.type_args.is_empty() {
             buf.push('[');
-            for (i, ty_arg) in type_args.iter().enumerate() {
+            for (i, ty_arg) in self.type_args.iter().enumerate() {
                 if i > 0 {
                     buf.push_str(", ");
                 }
@@ -91,13 +91,14 @@ impl NamePath {
         self
     }
     
-    pub fn contains_generic_params(&self) -> bool {
-        match &self.type_args {
-            None => false,
-            Some(args) => {
-                args.iter().any(|ty| ty.as_generic_param().is_some())
-            }
+    pub fn is_generic(&self) -> bool {
+        if self.type_args.is_empty() {
+            return false;
         }
+
+        self.type_args.iter().all(|ty| {
+            ty.as_generic_param().is_some()
+        })
     }
 }
 

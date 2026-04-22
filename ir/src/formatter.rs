@@ -221,9 +221,9 @@ pub trait IRFormatter {
                 self.format_val(test, f)
             }
 
-            Instruction::NewObject { out, type_id, immortal } => {
+            Instruction::NewObject { out, type_id, type_args, immortal } => {
                 write!(f, "{:>width$} ", "new", width = IX_WIDTH)?;
-                self.format_type(&Type::Struct(*type_id), f)?;
+                self.format_type(&type_id.to_struct_type(type_args.clone()), f)?;
 
                 write!(f, " at ")?;
                 self.format_ref(out, f)?;
@@ -362,9 +362,9 @@ pub trait IRFormatter {
     fn format_name(&self, name: &NamePath, f: &mut dyn fmt::Write) -> fmt::Result {
         write!(f, "{}", name.path.join("."))?;
 
-        if let Some(name_type_args) = name.type_args.as_ref() {
+        if !name.type_args.is_empty() {
             write!(f, "[")?;
-            for (i, arg) in name_type_args.iter().enumerate() {
+            for (i, arg) in name.type_args.iter().enumerate() {
                 if i > 0 {
                     write!(f, ", ")?;
                 }

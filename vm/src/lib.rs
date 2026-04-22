@@ -14,6 +14,7 @@ mod test;
 
 pub use self::dyn_value::*;
 pub use self::ptr::Pointer;
+use std::borrow::Cow;
 
 use crate::diag::DiagnosticOutput;
 use crate::diag::DiagnosticWorker;
@@ -23,7 +24,7 @@ use crate::func::BuiltinFunction;
 use crate::func::FuncInstanceKey;
 use crate::func::Function;
 use crate::heap::NativeHeap;
-use crate::marshal::Marshaller;
+use crate::marshal::{Marshaller, TypeIndex};
 use crate::result::ExecError;
 use crate::result::ExecResult;
 use crate::rtti_map::RttiMap;
@@ -43,6 +44,7 @@ use std::rc::Rc;
 use terapascal_common::span::Span;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
+use terapascal_ir::generic::instantiate_struct_def;
 use terapascal_ir::MetadataSource as _;
 
 #[derive(Debug)]
@@ -58,6 +60,7 @@ pub struct Vm {
     opts: ExecOpts,
 
     functions: HashMap<FuncInstanceKey, FunctionInfo>,
+    structs: BTreeMap<TypeIndex, Rc<ir::StructDef>>,
 
     diag_worker: Option<DiagnosticWorker>,
 
@@ -79,9 +82,9 @@ impl Vm {
         let builtin_structs: BTreeMap<_, _> = [
             (ir::STRING_ID, string_def()),
         ].into_iter().collect();
-        
-        let mut metadata = ir::MetadataBuilder::new(); 
-        
+
+        let mut metadata = ir::MetadataBuilder::new();
+
         for (id, struct_def) in &builtin_structs {
             metadata.reserve_type(*id);
             match &struct_def.identity {
@@ -101,7 +104,7 @@ impl Vm {
 
         let metadata = Rc::new(metadata.build());
         let marshaller = Rc::new(marshaller);
-        
+
         let native_heap = NativeHeap::new(metadata.clone(), marshaller.clone(), opts.trace_heap);
 
         let diag_worker = match opts.diag_port {
@@ -121,6 +124,7 @@ impl Vm {
             opts,
 
             functions: HashMap::new(),
+            structs: BTreeMap::new(),
 
             diag_worker,
 
@@ -169,11 +173,60 @@ impl Vm {
         &self.marshaller
     }
 
-    pub fn default_struct(&self, id: ir::TypeDefID) -> ExecResult<StructValue> {
-        let struct_def = self.metadata.get_struct_def(id).cloned().ok_or_else(|| {
-            let msg = format!("missing struct definition in metadata: {}", id);
-            ExecError::illegal_state(msg)
-        })?;
+    fn runtime_instantiate_struct(
+        &self,
+        struct_type: &ir::Type,
+    ) -> ExecResult<TypeIndex> {
+        let ir::Type::Struct { id, args } = struct_type else {
+            let msg = format!("runtime_instantiate_struct: {} is not a struct", struct_type);
+            return Err(ExecError::illegal_state(msg));
+        };
+
+        if let Ok(type_index) = self.marshaller.get_type_index(struct_type)
+            && self.structs.contains_key(&type_index)
+        {
+            return Ok(type_index);
+        }
+
+        let generic_def = self.metadata
+            .get_struct_def(*id)
+            .ok_or_else(|| {
+                let msg = format!("runtime_instantiate_struct: missing definition for struct {}", *id);
+                ExecError::illegal_state(msg)
+            })?;
+
+        let new_def = match instantiate_struct_def(generic_def, args) {
+            Cow::Borrowed(..) => {
+                // it's not generic, so it must have been registered when the library was loaded
+                let type_index = self.marshaller.get_type_index(struct_type)?;
+                assert!(self.structs.contains_key(&type_index));
+
+                return Ok(type_index);
+            },
+            Cow::Owned(def) => def,
+        };
+
+        if self.opts.trace_generics {
+            let new_name = new_def.identity.to_pretty_string(self.metadata.as_formatter());
+            eprintln!("[vm] new instantiation of struct {}: {}",*id, new_name);
+        }
+
+        let mut marshaller = self.marshaller.as_ref().clone();
+        let (_, type_index) = marshaller.add_struct(*id, &new_def, &self.metadata)?;
+
+        self.marshaller = Rc::new(marshaller);
+        self.native_heap.set_metadata(self.metadata.clone(), self.marshaller.clone());
+
+        self.structs.insert(type_index, Rc::new(new_def));
+        Ok(type_index)
+    }
+
+    pub fn default_struct(
+        &self,
+        struct_type: &ir::Type,
+    ) -> ExecResult<StructValue> {
+        let type_index = self.runtime_instantiate_struct(struct_type)?;
+        let struct_def = self.structs[&type_index].clone();
 
         let mut fields = Vec::with_capacity(struct_def.fields.len());
         for (&id, field) in &struct_def.fields {
@@ -185,14 +238,14 @@ impl Vm {
         }
 
         let struct_val = StructValue {
-            type_id: id,
+            type_index,
             fields,
         };
 
         Ok(struct_val)
     }
 
-    pub fn default_val(&self, ty: &ir::Type) -> ExecResult<DynValue> {
+    pub fn default_val(&mut self, ty: &ir::Type) -> ExecResult<DynValue> {
         let val = match ty {
             ir::Type::I8 => DynValue::I8(i8::MIN),
             ir::Type::U8 => DynValue::U8(u8::MAX),
@@ -209,17 +262,17 @@ impl Vm {
             ir::Type::F32 => DynValue::F32(f32::NAN),
             ir::Type::F64 => DynValue::F64(f64::NAN),
 
-            ir::Type::Struct(id) => DynValue::from(self.default_struct(*id)?),
+            ir::Type::Struct { .. } => DynValue::from(self.default_struct(ty)?),
 
-            ir::Type::Flags(repr_id, ..) => DynValue::from(self.default_struct(*repr_id)?),
+            ir::Type::Flags(..) => DynValue::from(self.default_struct(ty)?),
 
             ir::Type::Object(..) | ir::Type::WeakObject(..) => {
                 DynValue::Pointer(Pointer::nil(ir::Type::Nothing))
-            },
+            }
 
             ir::Type::Pointer(target) | ir::Type::TempRef(target) => {
                 DynValue::Pointer(Pointer::nil((**target).clone()))
-            },
+            }
 
             ir::Type::Array { element, dim } => {
                 let mut elements = Vec::with_capacity(*dim);
@@ -233,9 +286,11 @@ impl Vm {
                     element_type: (**element).clone(),
                     elements,
                 }))
-            },
+            }
 
             ir::Type::Variant(id) => {
+                let type_index = self.marshaller.get_type_index(ty)?;
+
                 let default_tag = 0;
                 let cases = &self
                     .metadata
@@ -244,35 +299,37 @@ impl Vm {
                         ExecError::illegal_state(format!("missing variant definition {}", *id))
                     })?
                     .cases;
-                let case_ty = &cases
+                let case_ty = cases
                     .get(default_tag as usize)
+                    .map(|case| case.ty.clone())
                     .ok_or_else(|| {
                         ExecError::illegal_state(format!(
                             "missing default case definition for variant {}",
                             *id
                         ))
-                    })?
-                    .ty;
+                    })?;
 
                 let default_val = match case_ty {
-                    Some(case_ty) => self.default_val(case_ty)?,
+                    Some(case_ty) => self.default_val(&case_ty)?,
                     None => DynValue::Pointer(Pointer::nil(ir::Type::Nothing)),
                 };
 
                 DynValue::Variant(Box::new(VariantValue {
-                    type_id: *id,
+                    type_index,
                     tag: Box::new(DynValue::I32(default_tag)),
                     data: Box::new(default_val),
                 }))
-            },
+            }
 
-            ir::Type::Function(..) => DynValue::Function(ir::FunctionID(usize::MAX)),
+            ir::Type::Function(..) => {
+                DynValue::Function(ir::FunctionID(usize::MAX))
+            },
 
             _ => {
                 let pretty_type = self.metadata.pretty_type_name(ty);
                 let msg = format!("can't initialize default value of type {pretty_type}");
                 return Err(ExecError::illegal_state(msg));
-            },
+            }
         };
 
         Ok(val)
@@ -359,7 +416,7 @@ impl Vm {
             ir::Ref::Discard => {
                 // do nothing with this value
                 Ok(())
-            },
+            }
 
             ir::Ref::Result => self.store_result(val),
             ir::Ref::Arg(id) => self.store_arg(*id, val),
@@ -374,33 +431,33 @@ impl Vm {
                     GlobalValue::Variable { value, .. } => {
                         let byte_count = self.marshaller.marshal(&val, value.as_mut())?;
                         assert_eq!(byte_count, value.len());
-                    },
+                    }
 
                     GlobalValue::Function(..) => {
                         let msg = "global function value cannot be assigned to";
                         return Err(ExecError::illegal_state(msg));
-                    },
+                    }
 
                     GlobalValue::StaticTagArray(..) => {
                         let msg = "global tag array value cannot be assigned to";
                         return Err(ExecError::illegal_state(msg));
-                    },
+                    }
                 }
 
                 Ok(())
-            },
+            }
 
             ir::Ref::Deref(inner) => match self.evaluate(inner)? {
                 DynValue::Pointer(ptr) => {
                     self.store_indirect(&ptr, val)?;
 
                     Ok(())
-                },
+                }
 
                 x => {
                     let msg = format!("can't dereference non-pointer val with value {:?}", x);
                     Err(ExecError::illegal_state(msg))
-                },
+                }
             },
 
             ir::Ref::Field(..) => {
@@ -421,13 +478,13 @@ impl Vm {
         }
     }
 
-    pub fn load(&self, at: &ir::Ref) -> ExecResult<DynValue> {
+    pub fn load(&mut self, at: &ir::Ref) -> ExecResult<DynValue> {
         match at {
             ir::Ref::Discard => {
                 let msg = "can't read value from discard ref";
                 Err(ExecError::illegal_state(msg))
-            },
-            
+            }
+
             ir::Ref::Result => self.load_result(),
             ir::Ref::Arg(id) => self.load_arg(*id),
             ir::Ref::Local(id) => self.load_local(*id),
@@ -438,7 +495,7 @@ impl Vm {
                 Some(GlobalValue::Variable { value, ty }) => {
                     let val = self.marshaller.unmarshal(value, ty)?;
                     Ok(val.value)
-                },
+                }
 
                 Some(GlobalValue::StaticTagArray(loc)) => Ok(DynValue::from(loc.clone())),
 
@@ -446,7 +503,7 @@ impl Vm {
                     let ref_name = at.to_pretty_string(self.metadata.as_ref());
                     let msg = format!("global `{ref_name}` is not allocated");
                     Err(ExecError::illegal_state(msg))
-                },
+                }
             },
 
             ir::Ref::Deref(inner) => match self.evaluate(inner)? {
@@ -456,15 +513,15 @@ impl Vm {
                         let msg = format!("can't deref untyped pointer: {ref_name}");
                         return Err(ExecError::illegal_state(msg));
                     }
-                    
+
                     self.load_indirect(&ptr)
-                },
+                }
 
                 x => {
                     let ref_name = at.to_pretty_string(self.metadata.as_ref());
                     let msg = format!("can't dereference value: {ref_name} ({})", x.value_type_category());
                     Err(ExecError::illegal_state(msg))
-                },
+                }
             },
 
             ir::Ref::Field(field_ref) => {
@@ -493,7 +550,7 @@ impl Vm {
         }
     }
 
-    pub fn evaluate(&self, val: &ir::Value) -> ExecResult<DynValue> {
+    pub fn evaluate(&mut self, val: &ir::Value) -> ExecResult<DynValue> {
         match val {
             ir::Value::LiteralU8(i) => Ok(DynValue::U8(*i)),
             ir::Value::LiteralI8(i) => Ok(DynValue::I8(*i)),
@@ -513,10 +570,10 @@ impl Vm {
             ir::Value::Ref(r) => {
                 let ref_val = self.load(r)?;
                 Ok(ref_val)
-            },
+            }
 
             ir::Value::SizeOf(ty) => {
-                let marshal_ty = self.marshaller.get_ty(ty)?;
+                let marshal_ty = self.marshaller.get_marshal_type(ty)?;
                 let size = cast::i32(marshal_ty.size()).map_err(|_| {
                     ExecError::illegal_state(format!(
                         "type has illegal size: {}",
@@ -525,7 +582,7 @@ impl Vm {
                 })?;
 
                 Ok(DynValue::I32(size))
-            },
+            }
 
             ir::Value::Default(ty) => {
                 self.default_val(ty)
@@ -572,8 +629,10 @@ impl Vm {
             let msg = "expected target of vcall to be a pointer";
             ExecError::illegal_state(msg)
         })?;
-        
-        let instance_ty = self.native_heap.load_object_header(self_ptr)?.id.to_type();
+
+        let instance_ty = self.native_heap
+            .load_object_header(self_ptr)?.id
+            .to_type(self.marshaller())?;
 
         self.metadata
             .find_virtual_impl(&instance_ty, iface_id, method)
@@ -603,15 +662,15 @@ impl Vm {
         match (result_val, out) {
             (Some(v), Some(out_at)) => {
                 self.store(&out_at, v)?;
-            },
+            }
 
             (None, Some(_)) => {
                 let msg = "called function which has no return type in a context where a return value was expected";
                 return Err(ExecError::illegal_state(msg));
-            },
+            }
 
             // ok, no output expected, ignore result if there is one
-            (_, None) => {},
+            (_, None) => {}
         }
 
         Ok(())
@@ -662,11 +721,11 @@ impl Vm {
 
         let result_val = match return_ty {
             ir::Type::Nothing => None,
-            
+
             _ => {
                 let return_val = self.evaluate(&ir::Ref::Result.value())?;
                 Some(return_val)
-            },
+            }
         };
 
         self.pop_stack()?;
@@ -708,11 +767,10 @@ impl Vm {
             DynValue::Array(array_val) => *array_val,
 
             _ => {
-                return Err(ExecError::illegal_state(format!(
-                    "loaded val was not an array, found: {}",
-                    object_value.header.id.to_type().to_pretty_string(self.metadata.as_ref())
-                )));
-            },
+                let type_name = object_value.header.id.to_pretty_name(&self.marshaller, self.metadata.as_formatter());
+                let msg = format!("loaded val was not an array, found: {type_name}");
+                return Err(ExecError::illegal_state(msg));
+            }
         };
 
         Ok((elements_array, object_value.header))
@@ -728,7 +786,7 @@ impl Vm {
             other => {
                 let msg = format!("loaded val was not a structure, found: {:?}", other);
                 return Err(ExecError::illegal_state(msg));
-            },
+            }
         };
 
         Ok((struct_val, object_val.header))
@@ -739,79 +797,81 @@ impl Vm {
             let msg = format!("released val was not a pointer, found: {:?}", val);
             ExecError::illegal_state(msg)
         })?;
-        
+
         // NULL is a valid release target because we release uninitialized local RC pointers
         // just do nothing
         if ptr.is_null() {
             return Ok(false);
         }
-        
-        let mut rc = self.native_heap.load_object_header(ptr)?;
+
+        let mut header = self.native_heap.load_object_header(ptr)?;
 
         // release calls are totally ignored for immortal refs
-        if rc.strong_count < 0 {
+        if header.strong_count < 0 {
             return Ok(false);
         }
 
+        let object_type = header.id.to_type(&self.marshaller)?;
+
         if weak {
-            if rc.weak_count == 0 {
+            if header.weak_count == 0 {
                 panic!(
                     "releasing with 0 weak refs remaining @ {} <{}> (+{} weak refs remain)\n{}",
                     ptr.to_pretty_string(&self.metadata),
-                    rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
-                    rc.weak_count,
+                    object_type.to_pretty_string(self.metadata.as_formatter()),
+                    header.weak_count,
                     self.stack_trace_formatted(),
                 );
             }
 
-            rc.weak_count -= 1;
+            header.weak_count -= 1;
         } else {
-            if rc.strong_count == 0 {
+            if header.strong_count == 0 {
                 panic!(
                     "releasing with 0 strong refs remaining @ {} <{}> (+{} strong refs remain)\n{}",
                     ptr.to_pretty_string(&self.metadata),
-                    rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
-                    rc.strong_count,
+                    object_type.to_pretty_string(self.metadata.as_formatter()),
+                    header.strong_count,
                     self.stack_trace_formatted(),
                 );
             }
 
             // if we just removed the last strong reference, destroy the object, making it a zombie
             // until the last weak ref is removed, if there are any
-            if rc.strong_count == 1 {
+            if header.strong_count == 1 {
                 if self.opts.trace_rc {
                     eprintln!(
                         "[rc] destroy @ {} <{}> ({}+{} refs will remain)",
                         ptr.to_pretty_string(&self.metadata),
-                        rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
-                        rc.strong_count - 1,
-                        rc.weak_count,
+                        object_type.to_pretty_string(self.metadata.as_formatter()),
+                        header.strong_count - 1,
+                        header.weak_count,
                     );
                 }
 
-                self.invoke_dtor(&val, &rc.id.to_type())?;
+                self.invoke_dtor(&val, &object_type)?;
             }
 
-            rc.strong_count -= 1;
+            header.strong_count -= 1;
         }
 
         if self.opts.trace_rc {
             eprintln!(
                 "[rc] release @ {} <{}> ({}+{} refs remain)",
                 ptr.to_pretty_string(&self.metadata),
-                rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
-                rc.strong_count,
-                rc.weak_count,
+                object_type.to_pretty_string(self.metadata.as_ref()),
+                header.strong_count,
+                header.weak_count,
             )
         }
 
-        if rc.strong_count == 0 && rc.weak_count == 0 {
+        if header.strong_count == 0 && header.weak_count == 0 {
             // no more refs, free the object
             if self.opts.trace_rc {
                 eprintln!(
-                    "[rc] free @ {} <{}>", 
-                    ptr.to_pretty_string(&self.metadata), 
-                    rc.id.to_type().to_pretty_string(self.metadata.as_ref())
+                    "[rc] free @ {} <{}>",
+                    ptr.to_pretty_string(&self.metadata),
+                    object_type.to_pretty_string(self.metadata.as_ref())
                 )
             }
 
@@ -820,7 +880,7 @@ impl Vm {
             return Ok(true);
         }
 
-        self.native_heap.store_object_header(&rc, &ptr)?;
+        self.native_heap.store_object_header(&header, &ptr)?;
 
         Ok(false)
     }
@@ -837,40 +897,42 @@ impl Vm {
             return Ok(());
         }
 
-        let mut rc = self.native_heap.load_object_header(ptr)?;
+        let mut header = self.native_heap.load_object_header(ptr)?;
+
+        let object_type = header.id.to_type(&self.marshaller)?;
 
         // don't retain immortal refs
-        if rc.strong_count < 0 {
+        if header.strong_count < 0 {
             return Ok(());
         }
 
         if weak {
-            rc.weak_count += 1;
+            header.weak_count += 1;
         } else {
-            if rc.strong_count == 0 {
+            if header.strong_count == 0 {
                 panic!(
                     "resurrecting with 0 strong refs @ {} <{}> (+{} weak refs remain)\n{}",
                     ptr.to_pretty_string(&self.metadata),
-                    rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
-                    rc.strong_count,
+                    object_type.to_pretty_string(self.metadata.as_ref()),
+                    header.strong_count,
                     self.stack_trace_formatted(),
                 );
             }
 
-            rc.strong_count += 1;
+            header.strong_count += 1;
         }
 
         if self.opts.trace_rc {
             eprintln!(
                 "[rc] retain @ {} <{}> ({}+{} refs)",
                 ptr.to_pretty_string(&self.metadata),
-                rc.id.to_type().to_pretty_string(self.metadata.as_ref()),
-                rc.strong_count,
-                rc.weak_count
+                object_type.to_pretty_string(self.metadata.as_ref()),
+                header.strong_count,
+                header.weak_count
             );
         }
 
-        self.native_heap.store_object_header(&rc, ptr)?;
+        self.native_heap.store_object_header(&header, ptr)?;
 
         Ok(())
     }
@@ -880,7 +942,7 @@ impl Vm {
             ir::Ref::Discard => {
                 let msg = "can't take address of discard ref";
                 Err(ExecError::illegal_state(msg))
-            },
+            }
 
             // let int := 1;
             // let intPtr := @int;
@@ -891,7 +953,7 @@ impl Vm {
                 _ => {
                     let msg = format!("deref of non-pointer value @ {}", val);
                     Err(ExecError::illegal_state(msg))
-                },
+                }
             },
 
             ir::Ref::Result => self.current_frame()?.get_result_ptr().map_err(|err| {
@@ -920,7 +982,7 @@ impl Vm {
                         };
 
                         Ok(ptr)
-                    },
+                    }
 
                     other => {
                         assert!(
@@ -933,15 +995,15 @@ impl Vm {
                             var_ref
                         );
                         Err(ExecError::illegal_state(msg))
-                    },
+                    }
                 }
-            },
+            }
 
             ir::Ref::Global(global_ref) => {
                 let msg = format!("can't take address of global ref ({})", global_ref);
                 Err(ExecError::illegal_state(msg))
-            },
-            
+            }
+
             ir::Ref::Field(field_ref) => {
                 self.field_ptr(&field_ref.instance, &field_ref.instance_type, field_ref.field)
             }
@@ -1014,19 +1076,20 @@ impl Vm {
         match instruction {
             ir::Instruction::Comment(_) => {
                 // noop
-            },
+            }
 
             ir::Instruction::LocalAlloc(id, ty) => {
                 self.exec_local_alloc(*id, *pc, ty)?;
-            },
+            }
 
             ir::Instruction::NewObject {
                 out,
                 type_id,
+                type_args,
                 immortal,
             } => {
-                self.exec_new_object(out, *type_id, *immortal)?
-            },
+                self.exec_new_object(out, *type_id, type_args, *immortal)?
+            }
 
             ir::Instruction::NewArray {
                 out,
@@ -1035,8 +1098,8 @@ impl Vm {
                 immortal,
             } => {
                 self.exec_new_array(out, element_type, count, *immortal)?
-            },
-            
+            }
+
             ir::Instruction::NewBox { out, value_type, immortal } => {
                 self.exec_new_box(out, value_type, *immortal)?;
             }
@@ -1061,19 +1124,19 @@ impl Vm {
 
             ir::Instruction::BitAnd(op) => {
                 self.exec_bitwise(op, u64::bitand, ir::Instruction::BitAnd)?
-            },
+            }
             ir::Instruction::BitOr(op) => {
                 self.exec_bitwise(op, u64::bitor, ir::Instruction::BitOr)?
-            },
+            }
             ir::Instruction::BitXor(op) => {
                 self.exec_bitwise(op, u64::bitxor, ir::Instruction::BitXor)?
-            },
+            }
             ir::Instruction::BitNot(op) => self.exec_bitwise_not(op)?,
 
             ir::Instruction::Move { out, new_val } => {
                 let val = self.evaluate(new_val)?;
                 self.store(out, val)?
-            },
+            }
             ir::Instruction::Call {
                 out,
                 function,
@@ -1081,7 +1144,7 @@ impl Vm {
                 type_args,
             } => {
                 self.exec_call(out, function, args, type_args)?
-            },
+            }
 
             ir::Instruction::VirtualCall {
                 out,
@@ -1093,13 +1156,13 @@ impl Vm {
 
             ir::Instruction::ClassIs { out, a, class_id } => {
                 self.exec_class_is(out, a, class_id)?
-            },
+            }
 
             ir::Instruction::AddrOf { out, a } | ir::Instruction::MakeRef { out, a } => {
                 let a_ptr = self.addr_of_ref(a)?;
                 self.store(out, DynValue::Pointer(a_ptr))?;
-            },
-            
+            }
+
             ir::Instruction::Length {
                 out,
                 a,
@@ -1110,7 +1173,7 @@ impl Vm {
 
             ir::Instruction::Label(_) => {
                 // noop
-            },
+            }
 
             ir::Instruction::Jump { dest } => self.exec_jump(pc, *dest, labels)?,
             ir::Instruction::JumpIf { dest, test } => self.exec_jmpif(pc, &labels, *dest, test)?,
@@ -1141,9 +1204,11 @@ impl Vm {
         &mut self,
         out: &ir::Ref,
         struct_id: ir::TypeDefID,
+        type_args: &[ir::Type],
         immortal: bool,
     ) -> ExecResult<()> {
-        let struct_val = self.default_struct(struct_id)?;
+        let struct_type = struct_id.to_struct_type(type_args.to_vec());
+        let struct_val = self.default_struct(&struct_type)?;
         let rc_ptr = self.new_object(struct_val, immortal)?;
 
         self.store(out, DynValue::Pointer(rc_ptr))?;
@@ -1190,7 +1255,7 @@ impl Vm {
     }
 
     fn offset_ptr(&self, ptr: Pointer, offset: isize) -> ExecResult<Pointer> {
-        let marshal_ty = self.marshaller.get_ty(&ptr.ty)?;
+        let marshal_ty = self.marshaller.get_marshal_type(&ptr.ty)?;
         let ty_size = marshal_ty.size() as isize;
 
         Ok(Pointer {
@@ -1207,11 +1272,11 @@ impl Vm {
 
     fn exec_cast(&mut self, out: &ir::Ref, ty: &ir::Type, a: &ir::Value) -> ExecResult<()> {
         let val = self.evaluate(a)?;
-        match val.try_cast(ty) {
+        match val.try_cast(ty, self.marshaller()) {
             Some(new_val) => {
                 self.store(out, new_val)?;
                 Ok(())
-            },
+            }
 
             None => Err(ExecError::IllegalInstruction(ir::Instruction::Cast {
                 out: out.clone(),
@@ -1233,15 +1298,15 @@ impl Vm {
         trace: bool,
     ) -> ExecResult<Pointer>
     where
-        Values: IntoIterator<Item = DynValue, IntoIter = ValuesIter>,
-        ValuesIter: ExactSizeIterator<Item = DynValue>,
+        Values: IntoIterator<Item=DynValue, IntoIter=ValuesIter>,
+        ValuesIter: ExactSizeIterator<Item=DynValue>,
     {
         let values = values.into_iter();
         if values.len() == 0 {
             return Err(ExecError::ZeroLengthAllocation);
         }
 
-        let marshal_ty = self.marshaller.get_ty(&ty)?;
+        let marshal_ty = self.marshaller.get_marshal_type(&ty)?;
         let marshal_size = marshal_ty.size();
 
         let alloc_ptr = self.dynalloc(ty, values.len(), trace)?;
@@ -1311,7 +1376,7 @@ impl Vm {
     }
 
     fn variant_data_ptr(
-        &self,
+        &mut self,
         instance: &ir::Ref,
         instance_type: &ir::Type,
         case_index: usize,
@@ -1324,7 +1389,7 @@ impl Vm {
                     other
                 );
                 return Err(ExecError::illegal_state(msg));
-            },
+            }
         };
 
         let a_ptr = self.addr_of_ref(instance)?;
@@ -1352,7 +1417,7 @@ impl Vm {
         })
     }
 
-    fn variant_tag_ptr(&self, instance: &ir::Ref) -> ExecResult<Pointer> {
+    fn variant_tag_ptr(&mut self, instance: &ir::Ref) -> ExecResult<Pointer> {
         // the variant tag is actually just the first member of the variant, so we just need to
         // output a pointer to the variant
         let variant_ptr = self.addr_of_ref(instance)?;
@@ -1364,11 +1429,11 @@ impl Vm {
 
         Ok(variant_ptr.reinterpret(tag_type))
     }
-    
+
     fn find_element_type<'a, 'b: 'a>(&'a self, of_type: &'b ir::Type) -> Option<&'a ir::Type> {
         match of_type {
             ir::Type::Array { element, .. } => Some(element.as_ref()),
-            
+
             ir::Type::Object(ir::ObjectID::Array(element_type)) => {
                 Some(element_type.as_ref())
             }
@@ -1382,7 +1447,7 @@ impl Vm {
     }
 
     fn element_ptr(
-        &self,
+        &mut self,
         instance: &ir::Ref,
         instance_type: &ir::Type,
         index: &ir::Value,
@@ -1442,7 +1507,7 @@ impl Vm {
 
         Ok(pointer)
     }
-    
+
     fn static_array_element_pointer(&self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
         let ir::Type::Array { element: element_type, .. } = &array_ptr.ty else {
             return Err(ExecError::illegal_state(&format!(
@@ -1450,13 +1515,13 @@ impl Vm {
                 array_ptr.ty.to_pretty_string(self.metadata.as_ref()),
             )));
         };
-        
+
         let elements_pointer = Pointer {
             addr: array_ptr.addr,
             ty: element_type.as_ref().clone(),
         };
-        
-        let element_size = self.marshaller.get_ty(&element_type)?.size();
+
+        let element_size = self.marshaller.get_marshal_type(&element_type)?.size();
 
         let index_offset = element_size * usize::try_from(index)
             .map_err(|_| {
@@ -1469,13 +1534,13 @@ impl Vm {
 
     fn dyn_array_element_pointer(&self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
         let array_header = self.marshaller.unmarshal_dyn_array_header_at(&array_ptr)?;
-        
+
         let element_type = match &array_header.object_header.id {
             ObjectID::Array(t) => t.as_ref().clone(),
             _ => return Err(ExecError::illegal_state("dyn_array_element_pointer: object was not an array")),
         };
 
-        let element_marshal_type = self.marshaller.get_ty(&element_type)?;
+        let element_marshal_type = self.marshaller.get_marshal_type(&element_type)?;
 
         // dynarray access isn't statically bounds checked
         if index < 0 || index >= array_header.len {
@@ -1489,7 +1554,7 @@ impl Vm {
 
         let index_offset = element_marshal_type.size() * (index as usize);
         let element_addr = elements_addr + index_offset;
-        
+
         Ok(Pointer::new(element_addr, element_type))
     }
 
@@ -1498,11 +1563,11 @@ impl Vm {
         let DynValue::Pointer(box_ptr) = boxed_value else {
             return Err(ExecError::illegal_state("unbox: argument is not a box pointer"));
         };
-        
+
         let header = self.marshaller.unmarshal_object_header(unsafe {
             box_ptr.as_slice(Marshaller::object_header_size())
         })?;
-        
+
         let ObjectID::Box(value_type) = header.value.id else {
             return Err(ExecError::illegal_state("unbox: object is not a box"));
         };
@@ -1530,15 +1595,15 @@ impl Vm {
                 let header = self.native_heap.load_array_header(&array_ptr)?;
                 header.len
             }
-            
+
             ir::Type::Array { dim, .. } => {
                 let Ok(val) = i32::try_from(*dim) else {
-                    return Err(ExecError::illegal_state(format!("couldn't convert array size {dim} to a length literal")));  
+                    return Err(ExecError::illegal_state(format!("couldn't convert array size {dim} to a length literal")));
                 };
-                
+
                 val
             }
-            
+
             _ => 1,
         };
 
@@ -1556,7 +1621,7 @@ impl Vm {
                 let offset_ptr = self.offset_ptr(ptr, offset as isize)?;
 
                 Ok(DynValue::Pointer(offset_ptr))
-            },
+            }
 
             // value addition
             (a_val, b_val) => match a_val.try_add(&b_val) {
@@ -1630,7 +1695,7 @@ impl Vm {
                 let ptr = self.offset_ptr(ptr, -offset as isize)?;
 
                 Ok(DynValue::Pointer(ptr))
-            },
+            }
 
             // value addition
             (a_val, b_val) => match a_val.try_sub(&b_val) {
@@ -1802,7 +1867,7 @@ impl Vm {
                 );
 
                 return Err(ExecError::illegal_state(msg));
-            },
+            }
         })
     }
 
@@ -1819,13 +1884,13 @@ impl Vm {
         let a_cell = self.evaluate(&op.a)?;
 
         let a_val = a_cell
-            .try_cast(&ir::Type::U64)
+            .try_cast(&ir::Type::U64, self.marshaller())
             .and_then(|val| val.as_u64())
             .ok_or_else(|| ExecError::IllegalInstruction(to_instruction(op.clone())))?;
 
         let b_val = self
             .evaluate(&op.b)?
-            .try_cast(&ir::Type::U64)
+            .try_cast(&ir::Type::U64, self.marshaller())
             .and_then(|val| val.as_u64())
             .ok_or_else(|| ExecError::IllegalInstruction(to_instruction(op.clone())))?;
 
@@ -1836,7 +1901,7 @@ impl Vm {
     fn exec_bitwise_not(&mut self, op: &ir::UnaryOpInstruction) -> ExecResult<()> {
         let a_cell = self.evaluate(&op.a)?;
         let a_val = a_cell
-            .try_cast(&ir::Type::U64)
+            .try_cast(&ir::Type::U64, self.marshaller())
             .and_then(|val| val.as_u64())
             .ok_or_else(|| ExecError::IllegalInstruction(ir::Instruction::BitNot(op.clone())))?;
 
@@ -1859,12 +1924,12 @@ impl Vm {
         match self.evaluate(function)? {
             DynValue::Function(function) => {
                 self.call_and_store(function, &arg_vals, type_args, out.as_ref())?
-            },
+            }
 
             _ => {
                 let msg = format!("{} does not reference a function", function);
                 return Err(ExecError::illegal_state(msg));
-            },
+            }
         }
 
         Ok(())
@@ -1893,7 +1958,7 @@ impl Vm {
             unexpected => {
                 let msg = format!("invalid function val: {:?}", unexpected);
                 return Err(ExecError::illegal_state(msg));
-            },
+            }
         };
 
         self.call_and_store(func, &arg_vals, &[], out)?;
@@ -1922,41 +1987,52 @@ impl Vm {
             // zombie references never count as castable to any type 
             // and "is" ops always return false
             self.store(out, DynValue::Bool(false))?;
-            return Ok(())
+            return Ok(());
         }
-        
+
         let is = match object_id {
             ir::ObjectID::Any => true,
 
             ir::ObjectID::Class(class_id) => {
-                object_header.id == ObjectID::Class(*class_id)
-            },
+                let class_type = class_id.to_class_ptr_type();
+                let class_type_index = self.marshaller.get_type_index(&class_type)?;
+
+                object_header.id == ObjectID::Class(class_type_index)
+            }
 
             ir::ObjectID::Interface(iface_id) => {
                 match &object_header.id {
                     // out of all the types a struct might represent, only a class can
                     // implement any interfaces
-                    ObjectID::Class(class_id) => {
-                        let class_type = class_id.to_class_ptr_type();
-                        self.metadata.is_impl(&class_type, *iface_id)
-                    },
+                    ObjectID::Class(class_index) => {
+                        let class_type = self.marshaller().get_type(*class_index)?;
+                        self.metadata.is_impl(class_type, *iface_id)
+                    }
 
                     _ => false,
                 }
-            },
+            }
 
             ir::ObjectID::Closure(func_type_id) => {
                 match object_header.id {
-                    ObjectID::Class(class_id) => {
-                        self.metadata
-                            .closures_by_function()
-                            .get(&func_type_id)
-                            .map(|func_closures| {
-                                func_closures.contains(&class_id)
-                            })
-                            .unwrap_or(false)
+                    ObjectID::Class(class_index) => {
+                        let class_type = self.marshaller.get_type(class_index)?;
+
+                        match class_type {
+                            ir::Type::Object(ir::ObjectID::Closure(id)) => {
+                                self.metadata
+                                    .closures_by_function()
+                                    .get(&func_type_id)
+                                    .map(|func_closures| {
+                                        func_closures.contains(id)
+                                    })
+                                    .unwrap_or(false)
+                            }
+
+                            _ => false,
+                        }
                     }
-                    
+
                     _ => false,
                 }
             }
@@ -1982,11 +2058,7 @@ impl Vm {
         field: ir::FieldID,
     ) -> ExecResult<Pointer> {
         match instance_type {
-            ir::Type::Flags(repr_id, ..) => {
-                self.field_ptr(instance, &ir::Type::Struct(*repr_id), field)
-            },
-
-            ir::Type::Struct(..) => {
+            ir::Type::Flags(..) | ir::Type::Struct { .. } => {
                 let struct_ptr = self.addr_of_ref(instance)?;
 
                 let field_info = self.marshaller.get_field_info(instance_type, field)?;
@@ -1995,7 +2067,7 @@ impl Vm {
                     ty: field_info.ty.clone(),
                     addr: struct_ptr.addr + field_info.offset,
                 })
-            },
+            }
 
             // virtual reference, we need to load the actual value behind the pointer to get the
             // concrete type ID. we assume it's a class or closure, the only types to have fields
@@ -2008,44 +2080,46 @@ impl Vm {
                 };
 
                 self.object_field_ptr(&object_ptr, field)
-            },
+            }
 
             _ => {
                 Err(ExecError::illegal_state(format!(
                     "invalid base type referenced in Field instruction: {}.{}",
                     instance_type, field
                 )))
-            },
+            }
         }
     }
-    
+
     fn box_value_ptr(&self, box_ptr: &Pointer) -> ExecResult<Pointer> {
         let header = self.native_heap.load_object_header(box_ptr)?;
 
         let ObjectID::Box(value_type) = &header.id else {
             return Err(ExecError::illegal_state(format!(
                 "exec_field: loading a box object returned the wrong type of object ({})",
-                header.id.to_type().to_pretty_string(self.metadata.as_ref())
+                header.id.to_pretty_name(self.marshaller(), self.metadata.as_formatter())
             )));
         };
 
         let addr = box_ptr.addr + Marshaller::object_header_size();
-        
+
         Ok(Pointer::new(addr, value_type.as_ref().clone()))
     }
-    
+
     fn object_field_ptr(&self, object_ptr: &Pointer, field: ir::FieldID) -> ExecResult<Pointer> {
         let header = self.native_heap.load_object_header(&object_ptr)?;
 
-        let ObjectID::Class(struct_id) = &header.id else {
+        let ObjectID::Class(type_index) = &header.id else {
             return Err(ExecError::illegal_state(format!(
                 "exec_field: loading a class object returned the wrong type of object ({})",
-                header.id.to_type().to_pretty_string(self.metadata.as_ref())
+                header.id.to_pretty_name(self.marshaller(), self.metadata.as_formatter())
             )));
         };
 
+        let struct_type = self.marshaller.get_type(*type_index)?;
+
         let fields_addr = object_ptr.addr + Marshaller::object_header_size();
-        let field_info = self.marshaller.get_field_info(&struct_id.to_class_ptr_type(), field)?;
+        let field_info = self.marshaller.get_field_info(struct_type, field)?;
 
         Ok(Pointer {
             ty: field_info.ty.clone(),
@@ -2097,7 +2171,7 @@ impl Vm {
             param_tys: params,
             debug_name: name.to_string(),
         });
-        
+
         let invoker = self.metadata
             .get_function_info(func_id)
             .and_then(|f| f.invoker);
@@ -2110,16 +2184,16 @@ impl Vm {
     }
 
     fn new_object(&mut self, fields: StructValue, immortal: bool) -> ExecResult<Pointer> {
-        let fields_type = fields.type_id.to_struct_type();
-        let fields_size = self.marshaller.get_ty(&fields_type)?.size();
+        let fields_type = self.marshaller.get_type(fields.type_index)?;
+        let fields_size = self.marshaller.get_marshal_type(&fields_type)?.size();
 
-        let object_id = ObjectID::Class(fields.type_id);
+        let object_id = ObjectID::Class(fields.type_index);
         let object_ptr = self.native_heap.alloc_object(fields_size, object_id.clone(), !immortal)?;
 
         if !immortal && self.opts.trace_rc {
             eprintln!("[rc] alloc @ {}", object_ptr.to_pretty_string(&self.metadata))
         }
-        
+
         let header = ObjectHeader::new(object_id, immortal);
 
         let offset = self.marshaller.marshal_object_at(&object_ptr, &ObjectValue {
@@ -2163,16 +2237,16 @@ impl Vm {
                     } else {
                         Ok(None)
                     }
-                },
+                }
                 ir::TypeDef::Function(_func_def) => {
                     // functions don't need special marshalling, we only marshal pointers to them
                     Ok(None)
-                },
+                }
             };
 
             def_result.map_err(|err| self.add_stack_trace(err.into()))?;
         }
-        
+
         for (iface_id, _) in lib.metadata.interfaces() {
             marshaller.add_iface(iface_id)
         }
@@ -2181,12 +2255,12 @@ impl Vm {
             let func = match ir_func {
                 ir::Function::Local(ir_func_def) => {
                     Some(Function::new(*func_id, ir_func_def.clone(), &metadata))
-                },
+                }
 
                 ir::Function::External(external_ref)
                 if external_ref.src == ir::BUILTIN_SRC => {
                     None
-                },
+                }
 
                 ir::Function::External(external_ref) => {
                     let ffi_func = Function::new_ffi(external_ref, &mut marshaller, &metadata)
@@ -2201,7 +2275,7 @@ impl Vm {
             let invoker = metadata
                 .get_function_info(*func_id)
                 .and_then(|f| f.invoker);
-            
+
             if let Some(func) = func {
                 self.globals.insert(
                     ir::GlobalRef::Function(*func_id),
@@ -2215,7 +2289,7 @@ impl Vm {
                 });
             }
         }
-        
+
         for (ty, _) in lib.metadata.type_info() {
             if ty.is_object() {
                 marshaller.register_object_type(ty.clone());
@@ -2246,7 +2320,7 @@ impl Vm {
                 ty: ir::STRING_ID.to_class_ptr_type(),
             });
         }
-        
+
         let disable_rtti = self.metadata.get_struct_def(ir::TYPEINFO_ID).is_none()
             || self.metadata.get_struct_def(ir::FUNCINFO_ID).is_none()
             || self.metadata.get_struct_def(ir::METHODINFO_ID).is_none();
@@ -2255,7 +2329,7 @@ impl Vm {
             let tag_counts = lib.metadata
                 .all_tags()
                 .map(|(loc, tags)| (loc, tags.len()));
-            
+
             // allocate static arrays for runtime tag objects (must exist before RTTI init)
             for (tag_loc, tag_count) in tag_counts {
                 let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
@@ -2276,7 +2350,7 @@ impl Vm {
         // declare global variables
         for (var_id, var) in lib.metadata.variables() {
             // global variables start zero-initialized
-            let marshal_ty = self.marshaller.get_ty(&var.r#type)?;
+            let marshal_ty = self.marshaller.get_marshal_type(&var.r#type)?;
             let zero_val = vec![0u8; marshal_ty.size()];
 
             self.globals
@@ -2309,7 +2383,7 @@ impl Vm {
 
         Ok(())
     }
-    
+
     fn init_rtti(&mut self,
         lib: &ir::Library) -> ExecResult<()> {
         // create runtime type info objects (TypeInfo and MethodInfo)
@@ -2356,7 +2430,7 @@ impl Vm {
             self.funcinfo_map
                 .add(Some(func_id), runtime_name, funcinfo_ref);
         }
-        
+
         Ok(())
     }
 
@@ -2377,7 +2451,7 @@ impl Vm {
 
         let chars_ptr = self.dynalloc_init(&ir::Type::U8, chars, !immortal)?;
 
-        let mut string_struct = self.default_struct(ir::STRING_ID)?;
+        let mut string_struct = self.default_struct(&ir::STRING_ID.to_struct_type([]))?;
         string_struct[ir::STRING_LEN_FIELD] = DynValue::I32(chars_len);
         string_struct[ir::STRING_CHARS_FIELD] = DynValue::Pointer(chars_ptr);
 
@@ -2460,7 +2534,7 @@ impl Vm {
             })?;
 
         DynValue::USize(case_index)
-            .try_cast(&variant.tag_type)
+            .try_cast(&variant.tag_type, self.marshaller())
             .ok_or_else(|| {
                 let msg = format!(
                     "failed to cast tag value {} for {}.{} case",
@@ -2481,7 +2555,7 @@ impl Vm {
 
         let immortal = header.is_immortal();
 
-        let value_size = self.marshaller.get_ty(value_ty)?.size();
+        let value_size = self.marshaller.get_marshal_type(value_ty)?.size();
 
         let box_ptr = self.native_heap.alloc_object(value_size, object_id, !immortal)?;
 
@@ -2521,7 +2595,7 @@ impl Vm {
 
         let array_len = elements.len();
 
-        let element_size = self.marshaller.get_ty(&element_ty)?.size();
+        let element_size = self.marshaller.get_marshal_type(&element_ty)?.size();
         let data_size = element_size * array_len;
 
         // we can't allocate a fixed-size object here so allocate bytes and reinterpret the pointer
@@ -2565,15 +2639,25 @@ impl Vm {
         ty: &ir::Type,
         type_info: &ir::TypeInfo,
     ) -> ExecResult<DynValue> {
+        let typeinfo_index = self.runtime_instantiate_struct(&ir::TYPEINFO_ID.to_struct_type([]))?;
+
+        let type_flags_repr = self.metadata
+            .find_set_repr_struct(ir::TYPEINFO_FLAGS_BITS)
+            .ok_or_else(|| ExecError::illegal_state("missing flags type for TypeFlags"))?;
+        let type_flags_index = self.marshaller.get_type_index(&type_flags_repr.to_flags_type())?;
+
+        let methodinfo_index = self.runtime_instantiate_struct(&ir::METHODINFO_ID.to_struct_type([]))?;
+        let methodinfo_type = ir::METHODINFO_ID.to_class_ptr_type();
+
         let type_name_string = self.load_string_lit(type_info.name.unwrap_or(ir::EMPTY_STRING_ID))?;
 
         let ty_tags_loc = match ty {
             ir::Type::Object(ir::ObjectID::Interface(iface_id)) => {
                 Some(ir::TagLocation::Interface(*iface_id))
-            },
+            }
 
             ir::Type::Object(ir::ObjectID::Class(id))
-            | ir::Type::Struct(id)
+            | ir::Type::Struct { id, .. }
             | ir::Type::Variant(id) => Some(ir::TagLocation::TypeDef(*id)),
 
             _ => None,
@@ -2582,20 +2666,18 @@ impl Vm {
         let ty_tags_array_ptr = ty_tags_loc
             .and_then(|loc| self.get_tags_array_ptr(loc))
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
-        
-        let type_flags_repr = self.metadata.find_set_repr_struct(ir::TYPEINFO_FLAGS_BITS)
-            .ok_or_else(|| ExecError::illegal_state("missing flags type for TypeFlags"))?;
-        let type_flags_val = StructValue::new(type_flags_repr, [
+
+        let type_flags_val = StructValue::new(type_flags_index, [
             DynValue::U64(type_info.flags)
         ]);
 
         let typeinfo_methods_ptr = DynValue::Pointer(
-            Pointer::nil(ir::Type::Struct(ir::METHODINFO_ID))
+            Pointer::nil(methodinfo_type)
         );
 
         // allocate and store the typeinfo before populating methods, so we can easily
         // get a real heap pointer to use for the "owner" field
-        let typeinfo_struct = StructValue::new(ir::TYPEINFO_ID, [
+        let typeinfo_struct = StructValue::new(typeinfo_index, [
             // 0: name
             type_name_string,
             // 1: methods
@@ -2634,10 +2716,10 @@ impl Vm {
                 addr: global_method_index,
                 ty: ir::Type::Nothing,
             };
-            
+
             let method_name_string = self.load_string_lit(method_info.name)?;
 
-            let method_info_struct = StructValue::new(ir::METHODINFO_ID, [
+            let method_info_struct = StructValue::new(methodinfo_index, [
                 // 0: name
                 method_name_string,
                 // 1: owner
@@ -2677,12 +2759,14 @@ impl Vm {
             .get_tags_array_ptr(tags_loc)
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
 
+        let funcinfo_index = self.runtime_instantiate_struct(&ir::FUNCINFO_ID.to_struct_type([]))?;
+
         let impl_ptr = Pointer {
             addr: func_id.0,
             ty: ir::Type::Nothing,
         };
 
-        let fields = StructValue::new(ir::FUNCINFO_ID, [
+        let fields = StructValue::new(funcinfo_index, [
             // 0: name
             func_name_string,
             // 1: impl
@@ -2703,7 +2787,7 @@ impl Vm {
     ) -> ExecResult<(i32, Pointer)> {
         let Some(invoker_id) = self.functions
             .get(&FuncInstanceKey::new(func_id))
-            .and_then(|f| f.invoker) 
+            .and_then(|f| f.invoker)
         else {
             // not invokable
             const NOT_INVOKABLE_CODE: i32 = 2;
@@ -2711,12 +2795,12 @@ impl Vm {
         };
 
         // zeroed memory where a boxed result pointer may be stored
-        let error_code_size = self.marshaller.get_ty(&ir::Type::I32)?.size();
+        let error_code_size = self.marshaller.get_marshal_type(&ir::Type::I32)?.size();
         let mut error_code_mem: SmallVec<[u8; size_of::<i32>()]> = SmallVec::new();
         error_code_mem.resize(error_code_size, 0);
 
         let mut invoker_args = Vec::with_capacity(3);
-        
+
         // self arg
         invoker_args.push(DynValue::Pointer(instance_arg_ref));
 
@@ -2801,7 +2885,7 @@ struct FunctionInfo {
 
     // cached debug name for stack frame
     name: Rc<String>,
-    
+
     invoker: Option<ir::FunctionID>,
 }
 
@@ -2855,7 +2939,7 @@ fn find_labels(instructions: &[ir::Instruction]) -> HashMap<ir::Label, LabelLoca
                 locations.insert(label.clone(), LabelLocation {
                     pc_offset: pc.saturating_sub(1),
                 });
-            },
+            }
             _ => continue,
         }
     }

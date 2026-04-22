@@ -46,6 +46,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::version::Version;
 use terapascal_common::StripMode;
+use terapascal_ir::TypeDefID;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -262,7 +263,7 @@ impl<'a> LibraryBuilder<'a> {
 
             for ident in &const_binding.idents {
                 let binding_name = unit.ident.clone().child(ident.clone());
-                let binding_path = ir::NamePath::from_ident_path(&binding_name, None);
+                let binding_path = ir::NamePath::from_ident_path(&binding_name, []);
 
                 let value = literal_to_val(&literal_val, &binding_ty, self);
 
@@ -417,7 +418,7 @@ impl<'a> LibraryBuilder<'a> {
         let set_flags_type = SetFlagsType::define_new(self, bits);
         self.set_flags_type_info.insert(bits, set_flags_type);
 
-        self.gen_type_info(&ir::Type::Struct(set_flags_type.struct_id));
+        self.gen_type_info(&set_flags_type.struct_id.to_struct_type([]));
 
         set_flags_type
     }
@@ -1153,12 +1154,12 @@ impl<'a> LibraryBuilder<'a> {
         let def_name = name.clone().to_generic_name();
         let def_path = translate_name(&def_name, self);
 
-        let type_ctor = match kind {
+        let type_ctor = |id: TypeDefID| match kind {
             StructKind::Class => {
-                |id| ir::Type::Object(ir::ObjectID::Class(id))
+                id.to_class_ptr_type()
             },
             StructKind::Record => {
-                |id| ir::Type::Struct(id)
+                id.to_struct_type(def_path.type_args.clone())
             },
         };
 

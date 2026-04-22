@@ -25,8 +25,12 @@ impl TagInfo {
         self.fields.insert(field_id, val.into());
     }
 
-    pub fn format_pretty(&self, formatter: &impl IRFormatter, f: &mut impl fmt::Write) -> fmt::Result {
-        let class_type = self.class_id.to_struct_type();
+    pub fn format_pretty(
+        &self,
+        formatter: &impl IRFormatter,
+        f: &mut impl fmt::Write,
+    ) -> fmt::Result {
+        let class_type = self.class_id.to_struct_type([]);
 
         write!(f, "[")?;
         formatter.format_type(&class_type, f)?;

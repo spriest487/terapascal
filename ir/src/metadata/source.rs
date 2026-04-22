@@ -110,7 +110,7 @@ pub trait MetadataSource : Sized {
 
                 Type::Object(ObjectID::Class(type_id))
                 | Type::Variant(type_id)
-                | Type::Struct(type_id)
+                | Type::Struct { id: type_id, .. }
                 | Type::Flags(type_id) => TagLocation::Method {
                     type_id: *type_id,
                     method_index: method_info.index,
@@ -144,7 +144,7 @@ pub trait MetadataSource : Sized {
 
     fn pretty_type_name(&self, ty: &Type) -> Cow<'_, str> {
         match ty {
-            Type::Struct(id) | Type::Variant(id) => {
+            Type::Struct { id, .. } | Type::Variant(id) => {
                 match self.get_type_name(*id) {
                     Some(name) => Cow::Owned(name.to_pretty_string(self)),
                     None => Cow::Owned(id.to_string())
@@ -208,7 +208,9 @@ pub trait MetadataSource : Sized {
                 None => format!("closure of {}", func_ty_id),
             }),
 
-            ObjectID::Class(struct_id) => self.pretty_type_name(&Type::Struct(*struct_id)),
+            ObjectID::Class(struct_id) => {
+                self.pretty_type_name(&struct_id.to_struct_type([]))
+            },
 
             ObjectID::Array(element_type) => {
                 Cow::Owned(format!("array of {}", self.pretty_type_name(element_type)))

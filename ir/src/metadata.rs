@@ -381,18 +381,25 @@ impl Metadata {
 
     pub fn is_defined(&self, ty: &Type) -> bool {
         let id = match ty {
-            Type::Struct(id) | Type::Variant(id) | Type::Function(id) | Type::Flags(id, ..) => *id,
+            Type::Struct { id, .. }
+            | Type::Variant(id)
+            | Type::Function(id)
+            | Type::Flags(id, ..) => {
+                *id
+            },
 
-            Type::Object(virt_id) | Type::WeakObject(virt_id) => match virt_id {
-                ObjectID::Class(id) | ObjectID::Closure(id) => *id,
+            Type::Object(virt_id) | Type::WeakObject(virt_id) => {
+                match virt_id {
+                    ObjectID::Class(id) | ObjectID::Closure(id) => *id,
 
-                ObjectID::Interface(id) => {
-                    return self.ifaces.contains_key(id);
-                },
+                    ObjectID::Interface(id) => {
+                        return self.ifaces.contains_key(id);
+                    },
 
-                ObjectID::Any | ObjectID::Array(..) | ObjectID::Box(..) => {
-                    return true;
-                },
+                    ObjectID::Any | ObjectID::Array(..) | ObjectID::Box(..) => {
+                        return true;
+                    },
+                }
             },
 
             _ => return true,
@@ -683,9 +690,15 @@ impl<T: MetadataSource> IRFormatter for T {
                 write!(f, ".")?;
 
                 let struct_def = match &field_ref.instance_type {
-                    Type::Struct(id) | Type::Flags(id) => self.get_struct_def(*id),
-                    Type::Object(ObjectID::Class(id)) => self.get_struct_def(*id),
-                    _ => None,
+                    Type::Struct { id, .. } | Type::Flags(id) => {
+                        self.get_struct_def(*id)
+                    },
+                    Type::Object(ObjectID::Class(id)) => {
+                        self.get_struct_def(*id)
+                    },
+                    _ => {
+                        None
+                    },
                 };
                 let field_name = struct_def
                     .and_then(|def| def.fields.get(&field_ref.field))

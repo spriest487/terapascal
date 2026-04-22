@@ -173,8 +173,8 @@ impl Expr {
                     | ir::Type::F32
                     | ir::Type::F64 => Expr::LitInt(0),
 
-                    ir::Type::Struct(_)
-                    | ir::Type::Variant(_)
+                    ir::Type::Struct { .. }
+                    | ir::Type::Variant { .. }
                     | ir::Type::Flags(_)
                     | ir::Type::Array { .. } => {
                         let ty = builder.translate_type(ty);
@@ -272,7 +272,7 @@ impl Expr {
         }
     }
 
-    pub fn call_new(class_id: ir::TypeDefID, immortal: bool) -> Self {
+    pub fn call_new(class_id: ir::TypeDefID, type_args: &[ir::Type], immortal: bool) -> Self {
         let new = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
         let class_ptr = Expr::class_ptr(class_id);
 
@@ -281,7 +281,7 @@ impl Expr {
             Expr::LitBool(immortal),
         ]);
 
-        instance.cast(Type::class_instance_ptr(class_id))
+        instance.cast(Type::class_instance_ptr(class_id, type_args))
     }
 
     pub fn call_newarray(array_id: DynArrayTypeID, len: impl Into<Expr>, immortal: bool) -> Self {

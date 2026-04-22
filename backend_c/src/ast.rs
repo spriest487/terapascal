@@ -234,7 +234,11 @@ impl<'a> Unit<'a> {
 
             let c_type_def = match type_def {
                 ir::TypeDef::Struct(struct_def) => {
-                    let struct_def = StructDef::translate(id, struct_def, self);
+                    if struct_def.is_generic() {
+                        continue; 
+                    }
+                    
+                    let struct_def = StructDef::translate(id, struct_def, &[], self);
                     for member in &struct_def.members {
                         member.ty.collect_type_def_deps(&mut member_deps);
                     }
@@ -449,14 +453,14 @@ impl<'a> Unit<'a> {
 
         const METHODINFO_NAME: &str = "methodinfo";
         init_stmts.push(Statement::VariableDecl {
-            ty: Type::from_ir_struct(ir::METHODINFO_ID).ptr().ptr(),
+            ty: Type::from_ir_struct(ir::METHODINFO_ID, &[]).ptr().ptr(),
             id: VariableID::named(METHODINFO_NAME),
             null_init: false,
         });
 
         const METHODNULL_NAME: &str = "method_null";
         init_stmts.push(Statement::VariableDecl {
-            ty: Type::from_ir_struct(ir::METHODINFO_ID).ptr(),
+            ty: Type::from_ir_struct(ir::METHODINFO_ID, &[]).ptr(),
             id: VariableID::named(METHODNULL_NAME),
             null_init: true,
         });
@@ -497,13 +501,13 @@ impl<'a> Unit<'a> {
                             methods_array_var.clone().cast(Type::object_ptr()),
                             Expr::LitInt(method_index as i128)
                         ])
-                        .cast(Type::class_instance_ptr(ir::METHODINFO_ID).ptr())
+                        .cast(Type::class_instance_ptr(ir::METHODINFO_ID, &[]).ptr())
                 )));
                 
                 // *methodinfo = RcNew(..method info class, immortal: true)
                 let method_info = Expr::named_var(METHODINFO_NAME).deref();
                 init_stmts.push(Statement::Expr(
-                    method_info.clone().assign_from(Expr::call_new(ir::METHODINFO_ID, true)))
+                    method_info.clone().assign_from(Expr::call_new(ir::METHODINFO_ID, &[], true)))
                 );
 
                 let method = &typeinfo.methods[method_index];

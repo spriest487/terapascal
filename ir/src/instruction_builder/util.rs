@@ -188,9 +188,9 @@ where
     let at = at.into();
 
     match ty {
-        Type::Struct(struct_id) => {
-            let Some(struct_def) = builder.metadata().get_struct_def(*struct_id) else {
-                panic!("visit_deep: missing definition for struct {struct_id}")
+        Type::Struct { id, .. } => {
+            let Some(struct_def) = builder.metadata().get_struct_def(*id) else {
+                panic!("visit_deep: missing definition for struct {id}")
             };
 
             let fields: Vec<_> = struct_def
@@ -205,7 +205,7 @@ where
                     continue;
                 }
 
-                let field_ref = at.field_ref(Type::Struct(*struct_id), field);
+                let field_ref = at.field_ref(ty.clone(), field);
                 result |= builder.visit_deep(field_ref.to_deref(), &field_ty, f);
             }
 
@@ -240,7 +240,7 @@ where
                     let skip_case_label = builder.next_label();
 
                     // get the tag
-                    let tag_ref = at.clone().vartag_ref(id.to_variant_type());
+                    let tag_ref = at.clone().vartag_ref(ty.clone());
 
                     // is_not_case := at.tag != tag
                     builder.neq(is_not_case, tag_ref.to_deref(), case.tag.clone());
@@ -253,7 +253,7 @@ where
                     // incremented once per case
                     builder.local_begin();
                     {
-                        let data_ref = at.clone().vardata_ref(id.to_variant_type(), tag);
+                        let data_ref = at.clone().vardata_ref(ty.clone(), tag);
 
                         result |= builder.visit_deep(data_ref.to_deref(), &data_ty, f);
                     }

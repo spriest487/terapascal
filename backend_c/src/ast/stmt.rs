@@ -134,7 +134,12 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
         ir::Type::F64 => String::from("F64"),
 
         // aggregates
-        ir::Type::Struct(id) => format!("Struct_{id}"),
+        ir::Type::Struct { id, args } => {
+            if !args.is_empty() {
+                todo!("C backend type args")
+            }
+            format!("Struct_{id}")
+        },
         ir::Type::Variant(id) => format!("Variant_{id}"),
         ir::Type::Flags(repr_id) => format!("Flags_{repr_id}"),
 
@@ -494,8 +499,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.translate_call(out.as_ref(), function, args);
             }
 
-            ir::Instruction::NewObject { out, type_id, immortal } => {
-                self.translate_new_object(out, *type_id, *immortal);
+            ir::Instruction::NewObject { out, type_id, type_args, immortal } => {
+                self.translate_new_object(out, *type_id, type_args, *immortal);
             }
 
             ir::Instruction::NewArray { out, element_type, count, immortal } => {
@@ -835,7 +840,17 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.stmts.push(Statement::Expr(result_expr));
     }
 
-    fn translate_new_object(&mut self, out: &ir::Ref, struct_id: ir::TypeDefID, immortal: bool) {
+    fn translate_new_object(
+        &mut self,
+        out: &ir::Ref,
+        struct_id: ir::TypeDefID,
+        type_args: &[ir::Type],
+        immortal: bool,
+    ) {
+        if !type_args.is_empty() {
+            todo!("C backend type args")
+        }
+
         let ty_class_ptr = Expr::class_ptr(struct_id);
         
         let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
@@ -844,8 +859,10 @@ impl<'a, 'b> Builder<'a, 'b> {
             ty_class_ptr,
             Expr::LitBool(immortal),
         ]);
-        
-        self.assign_ref(out, new_object.cast(Type::from_ir_struct(struct_id).ptr()));
+
+        let struct_type = Type::from_ir_struct(struct_id, type_args);
+
+        self.assign_ref(out, new_object.cast(struct_type.ptr()));
     }
 
     fn translate_new_array(

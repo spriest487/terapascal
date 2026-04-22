@@ -19,14 +19,13 @@ public sealed class NamePath : IEquatable<NamePath> {
     }
 
     [Key("type_args")]
-    public required IReadOnlyList<IType>? TypeArgs {
+    public required IReadOnlyList<IType> TypeArgs {
         get;
         init => field = value!.ToArrayNonNull();
     }
 
     [IgnoreMember]
-    [MemberNotNullWhen(true, nameof(TypeArgs))]
-    public bool HasTypeArgs => this.TypeArgs is { Count: > 0 };
+    public bool HasTypeArgs => this.TypeArgs.Count > 0;
 
     [IgnoreMember]
     public string Last => this.Path[^1];
@@ -40,7 +39,7 @@ public sealed class NamePath : IEquatable<NamePath> {
             return false;
         }
 
-        return (this.TypeArgs ?? []).SequenceEqual(other.TypeArgs ?? []);
+        return this.TypeArgs.SequenceEqual(other.TypeArgs);
     }
 
     public override bool Equals(object? obj) {
@@ -53,10 +52,8 @@ public sealed class NamePath : IEquatable<NamePath> {
             hashCode ^= part.GetHashCode();
         }
 
-        if (this.HasTypeArgs) {
-            foreach (var type in this.TypeArgs) {
-                hashCode ^= type.GetHashCode();
-            }
+        foreach (var type in this.TypeArgs) {
+            hashCode ^= type.GetHashCode();
         }
 
         return hashCode;
@@ -97,7 +94,7 @@ public sealed class NamePath : IEquatable<NamePath> {
         var result = new StringBuilder();
         result.AppendJoin(".", this.Path);
 
-        if (this.TypeArgs is { Count: > 0 }) {
+        if (this.TypeArgs.Count > 0) {
             result.Append('[');
             result.AppendJoin(", ", this.TypeArgs);
             result.Append(']');

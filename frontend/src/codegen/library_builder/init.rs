@@ -51,7 +51,7 @@ fn gen_create_tags(
             let tag_class = tag_info.class_id.to_class_ptr_type();
 
             let tag_instance = builder.local_temp(tag_class.clone());
-            builder.new_object(tag_instance, tag_info.class_id, true);
+            builder.new_object(tag_instance, tag_info.class_id, [], true);
 
             let index_val = ir::Value::LiteralI32(i as i32);
 

@@ -35,7 +35,7 @@ impl StructDef {
     pub fn is_generic(&self) -> bool {
         match self.name() {
             Some(name) => {
-                name.contains_generic_params()
+                name.is_generic()
             }
             None => false,
         }
@@ -72,14 +72,7 @@ impl StructDef {
     }
 
     pub fn name(&self) -> Option<&NamePath> {
-        match &self.identity {
-            StructIdentity::Class(name) 
-            | StructIdentity::Record(name) => Some(name),
-            
-            StructIdentity::Closure(..) 
-            | StructIdentity::Array(..) 
-            | StructIdentity::SetFlags { .. } => None,
-        }
+        self.identity.name()
     }
     
     fn next_field_id(&self) -> FieldID {

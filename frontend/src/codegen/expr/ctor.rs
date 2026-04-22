@@ -7,6 +7,7 @@ use crate::ir;
 use crate::typ;
 use bigdecimal::BigDecimal;
 use bigdecimal::Zero;
+use terapascal_ir::generic::instantiate_struct_def;
 use terapascal_ir::InstructionBuilder as _;
 
 pub fn build_object_ctor_invocation(
@@ -16,18 +17,20 @@ pub fn build_object_ctor_invocation(
 ) -> ir::Ref {
     let object_ty = builder.translate_type(object_ty);
 
-    let struct_id = match &object_ty {
-        ir::Type::Object(ir::ObjectID::Class(struct_id)) => *struct_id,
-        ir::Type::Struct(struct_id) => *struct_id,
+    let (struct_id, type_args) = match &object_ty {
+        ir::Type::Struct { id, args } => (*id, args.as_slice()),
+        ir::Type::Object(ir::ObjectID::Class(struct_id)) => (*struct_id, &[] as &[ir::Type]),
         _ => panic!("type of object ctor expr must be a record or class"),
     };
 
-    let struct_def = builder
+    let generic_def = builder
         .get_struct(struct_id)
         .unwrap_or_else(|| {
             panic!("target type {} referenced in object ctor must exist", object_ty)
         })
         .clone();
+
+    let struct_def = instantiate_struct_def(&generic_def, type_args);
 
     // either local struct of the correct type for value types, or a rc pointer to the struct
     // type for rc class types
@@ -35,7 +38,7 @@ pub fn build_object_ctor_invocation(
 
     if object_ty.is_object() {
         // allocate class struct at out pointer
-        builder.new_object(out_val.clone(), struct_id, false);
+        builder.new_object(out_val.clone(), struct_id, type_args.to_vec(), false);
     }
 
     builder.scope(|builder| {

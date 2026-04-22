@@ -3,6 +3,7 @@ use std::fmt;
 use std::path::PathBuf;
 use terapascal_ir as ir;
 use thiserror::Error;
+use crate::marshal::TypeIndex;
 
 #[derive(Clone, Debug, Error)]
 pub enum MarshalError<Ty = ir::Type> {
@@ -20,7 +21,7 @@ pub enum MarshalError<Ty = ir::Type> {
         field: ir::FieldID,
     },
     InvalidTypeIndex {
-        type_index: u64,
+        type_index: TypeIndex,
     },
 
     InvalidStructID {
@@ -97,8 +98,8 @@ impl<T: fmt::Display> fmt::Display for MarshalError<T> {
                 write!(f, "Expected struct {expected}, got {actual}")?;
                 Ok(())
             },
-            MarshalError::InvalidTypeIndex { type_index: id }  => {
-                write!(f, "Illegal object pointer (unknown type ID: {})", id)
+            MarshalError::InvalidTypeIndex { type_index }  => {
+                write!(f, "Illegal object pointer (unknown type index: {})", type_index)
             }
             MarshalError::UnsupportedValue(val) => {
                 write!(f, "Unable to marshal value: {:?}", val)

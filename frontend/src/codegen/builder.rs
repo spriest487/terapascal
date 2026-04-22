@@ -300,7 +300,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
         self.scope(|builder| {
             let closure_ref = builder.local_temp(closure_ptr_ty.clone());
-            builder.new_object(closure_ref, closure.closure_id, immortal);
+            builder.new_object(closure_ref, closure.closure_id, [], immortal);
 
             let func_field_ref = closure_ref.to_ref().field_ref(closure_ptr_ty.clone(), CLOSURE_PTR_FIELD);
 

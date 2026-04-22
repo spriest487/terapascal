@@ -15,6 +15,7 @@ use std::io::Write;
 use std::iter;
 use std::time::Duration;
 use std::time::SystemTime;
+use terapascal_ir::MetadataSource;
 
 fn primitive_to_str<T, UnwrapFn>(state: &mut Vm, unwrap_fn: UnwrapFn) -> ExecResult<()>
 where
@@ -356,11 +357,11 @@ fn get_object_type_info(state: &mut Vm) -> ExecResult<()> {
     let obj_header = state.native_heap.load_object_header(&obj_ptr)?;
     
     let type_info_ref =  state.typeinfo_map
-        .find_by_key(&obj_header.id.to_type())
+        .find_by_key(&obj_header.id.to_type(state.marshaller())?)
         .ok_or_else(|| {
             ExecError::illegal_state(format!(
                 "missing type info for object type {}",
-                obj_header.id.to_pretty_name(&state.metadata),
+                obj_header.id.to_pretty_name(state.marshaller(), state.metadata.as_formatter()),
             ))
         })?
         .clone();

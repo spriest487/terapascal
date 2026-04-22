@@ -96,11 +96,15 @@ fn add_dep(ty: &Type, deps: &mut HashSet<TypeDefID>, metadata: &Metadata) {
             add_variant_deps(def, deps, metadata);
         }
 
-        Type::Struct(id) => {
+        Type::Struct { id, args } => {
             deps.insert(*id);
 
             let def = metadata.get_struct_def(*id).unwrap();
             add_struct_deps(def, deps, metadata);
+
+            for arg in args {
+                add_dep(arg, deps, metadata);
+            }
         }
 
         Type::Array { element, .. } => {

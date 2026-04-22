@@ -51,6 +51,28 @@ impl StructIdentity {
             },
         }
     }
+
+    pub fn name(&self) -> Option<&NamePath> {
+        match self {
+            StructIdentity::Class(name)
+            | StructIdentity::Record(name) => Some(name),
+
+            StructIdentity::Closure(..)
+            | StructIdentity::Array(..)
+            | StructIdentity::SetFlags { .. } => None,
+        }
+    }
+
+    pub fn name_mut(&mut self) -> Option<&mut NamePath> {
+        match self {
+            StructIdentity::Class(name)
+            | StructIdentity::Record(name) => Some(name),
+
+            StructIdentity::Closure(..)
+            | StructIdentity::Array(..)
+            | StructIdentity::SetFlags { .. } => None,
+        }
+    }
 }
 
 impl fmt::Display for StructIdentity {

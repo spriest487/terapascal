@@ -156,7 +156,7 @@ impl NativeHeap {
     }
 
     pub fn alloc(&mut self, ty: ir::Type, count: usize, trace: bool) -> NativeHeapResult<Pointer> {
-        let ty_size = self.marshaller.get_ty(&ty)?.size();
+        let ty_size = self.marshaller.get_marshal_type(&ty)?.size();
         if ty_size == 0 || count == 0 {
             return Err(NativeHeapError::ZeroSizedAllocation { ty, count });
         }
@@ -173,7 +173,7 @@ impl NativeHeap {
             ObjectID::Array(..) => Marshaller::array_header_size(),
         };
 
-        let addr = self.alloc_with_len(id.to_type(), 1, header_size + data_size, trace);
+        let addr = self.alloc_with_len(id.to_type(&self.marshaller)?, 1, header_size + data_size, trace);
 
         Ok(Pointer {
             addr,

@@ -39,6 +39,6 @@ pub struct VariantDef {
 
 impl VariantDef {
     pub fn is_generic(&self) -> bool {
-        self.name.contains_generic_params()
+        self.name.is_generic()
     }
 }
