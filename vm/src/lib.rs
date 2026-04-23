@@ -66,7 +66,7 @@ pub struct Vm {
 }
 
 impl Vm {
-    pub fn new(opts: ExecOpts) -> Self {
+    pub fn new(opts: ExecOpts) -> ExecResult<Self> {
         let globals = HashMap::new();
 
         let builtin_structs: BTreeMap<_, _> = [
@@ -77,23 +77,34 @@ impl Vm {
 
         for (id, struct_def) in &builtin_structs {
             metadata.reserve_type(*id);
-            match &struct_def.identity {
-                ir::StructIdentity::Class(name) => {
-                    metadata.declare_type(*id, name)
-                }
-                ir::StructIdentity::Record(name) => {
-                    metadata.declare_type(*id, name)
-                }
-                _ => {}
+
+            if let Some(name) = struct_def.identity.name() {
+                metadata.declare_type(*id, name);
             }
 
             metadata.define_struct(*id, struct_def.clone());
         }
 
-        let mut marshaller = Marshaller::new(metadata.build(), opts.trace_generics);
+        let mut marshaller = Marshaller::new(metadata.build(), opts.trace_generics)?;
 
         for (id, struct_def) in &builtin_structs {
-            marshaller.add_struct(*id, struct_def)
+            let ty = match &struct_def.identity {
+                ir::StructIdentity::Class(..) => {
+                    id.to_class_ptr_type()
+                }
+                ir::StructIdentity::Record(name) => {
+                    id.to_struct_type(name.type_args.clone())
+                }
+                ir::StructIdentity::SetFlags { .. } => {
+                    id.to_flags_type()
+                }
+                ir::StructIdentity::Closure(..) => {
+                    id.to_closure_ptr_type()
+                }
+                ir::StructIdentity::Array(..) => unimplemented!()
+            };
+
+            marshaller.instantiate_struct_type(&ty)
                 .expect("builtin type definition raised a marshalling error");
         }
 
@@ -104,7 +115,7 @@ impl Vm {
             port => DiagnosticWorker::new(port),
         };
 
-        Self {
+        Ok(Self {
             heap,
 
             globals,
@@ -120,7 +131,7 @@ impl Vm {
             funcinfo_map: RttiMap::new(),
 
             runtime_methods: Vec::new(),
-        }
+        })
     }
 
     fn add_stack_trace(&self, err: ExecError) -> ExecError {
@@ -145,7 +156,7 @@ impl Vm {
         &mut self,
         struct_type: &ir::Type,
     ) -> ExecResult<StructValue> {
-        let (struct_def, type_index) = self.heap.marshaller.runtime_instantiate_struct(struct_type)?;
+        let (struct_def, type_index) = self.heap.marshaller.instantiate_struct_type(struct_type)?;
 
         let mut fields = Vec::with_capacity(struct_def.fields.len());
         for (&id, field) in &struct_def.fields {
@@ -2144,7 +2155,7 @@ impl Vm {
         }
 
         for (iface_id, _) in lib.metadata.interfaces() {
-            self.heap.marshaller.add_iface(iface_id)
+            self.heap.marshaller.add_iface(iface_id)?;
         }
 
         for (func_id, ir_func) in lib.functions() {
@@ -2188,7 +2199,7 @@ impl Vm {
 
         for (ty, _) in lib.metadata.type_info() {
             if ty.is_object() {
-                self.heap.marshaller.register_object_type(ty.clone());
+                self.heap.marshaller.register_object_type(ty.clone())?;
             }
         }
 
@@ -2530,7 +2541,7 @@ impl Vm {
         ty: &ir::Type,
         type_info: &ir::TypeInfo,
     ) -> ExecResult<DynValue> {
-        let (_, typeinfo_index) = self.heap.marshaller.runtime_instantiate_struct(&ir::TYPEINFO_ID.to_struct_type([]))?;
+        let (_, typeinfo_index) = self.heap.marshaller.instantiate_struct_type(&ir::TYPEINFO_TYPE)?;
 
         let type_flags_repr = self
             .metadata()
@@ -2538,8 +2549,7 @@ impl Vm {
             .ok_or_else(|| ExecError::illegal_state("missing flags type for TypeFlags"))?;
         let type_flags_index = self.marshaller().get_type_index(&type_flags_repr.to_flags_type())?;
 
-        let (_, methodinfo_index) = self.heap.marshaller.runtime_instantiate_struct(&ir::METHODINFO_ID.to_struct_type([]))?;
-        let methodinfo_type = ir::METHODINFO_ID.to_class_ptr_type();
+        let (_, methodinfo_index) = self.heap.marshaller.instantiate_struct_type(&ir::METHODINFO_TYPE)?;
 
         let type_name_string = self.load_string_lit(type_info.name.unwrap_or(ir::EMPTY_STRING_ID))?;
 
@@ -2564,7 +2574,7 @@ impl Vm {
         ]);
 
         let typeinfo_methods_ptr = DynValue::Pointer(
-            Pointer::nil(methodinfo_type)
+            Pointer::nil(ir::METHODINFO_TYPE)
         );
 
         // allocate and store the typeinfo before populating methods, so we can easily
@@ -2651,7 +2661,8 @@ impl Vm {
             .get_tags_array_ptr(tags_loc)
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
 
-        let (_, funcinfo_index) = self.heap.marshaller.runtime_instantiate_struct(&ir::FUNCINFO_ID.to_struct_type([]))?;
+        let (_, funcinfo_index) = self.heap.marshaller
+            .instantiate_struct_type(&ir::FUNCINFO_TYPE)?;
 
         let impl_ptr = Pointer {
             addr: func_id.0,

@@ -1681,7 +1681,7 @@ fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID)
 // dynamically from the rc cell's class pointer/class ID
 fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
     let class_id = class_ty
-        .rc_resource_class_id()
+        .as_object()
         .and_then(|class_id| class_id.as_class())
         .expect("resource class of translated class type was not a struct");
 

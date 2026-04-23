@@ -272,7 +272,7 @@ fn exec_vm(args: &Args, lib: &ir::Library) -> ExecResult<()> {
         verbose: args.verbose,
     };
 
-    let mut vm = Vm::new(exec_opts);
+    let mut vm = Vm::new(exec_opts)?;
     vm.load_lib(lib)?;
     vm.shutdown()?;
 

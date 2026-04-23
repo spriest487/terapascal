@@ -3,8 +3,6 @@ mod marshal_type;
 
 use crate::func::ffi::FfiInvoker;
 use crate::ir;
-use crate::result::ExecError;
-use crate::result::ExecResult;
 use crate::ArrayValue;
 use crate::DynValue;
 use crate::ObjectHeader;
@@ -100,7 +98,7 @@ pub struct Marshaller {
 }
 
 impl Marshaller {
-    pub fn new(metadata: ir::Metadata, trace_generics: bool) -> Self {
+    pub fn new(metadata: ir::Metadata, trace_generics: bool) -> MarshalResult<Self> {
         let mut marshaller = Self {
             metadata,
 
@@ -139,13 +137,13 @@ impl Marshaller {
         ];
 
         for (primitive_type, ffi_type) in primitive_types {
-            marshaller.register_type(primitive_type.clone(), ffi_type.clone());
-            marshaller.register_type(primitive_type.clone().ptr(), ForeignType::pointer());
+            marshaller.register_type(primitive_type.clone(), ffi_type.clone())?;
+            marshaller.register_type(primitive_type.clone().ptr(), ForeignType::pointer())?;
             
-            marshaller.add_dyn_array_type(primitive_type);
+            marshaller.add_dyn_array_type(primitive_type)?;
         }
 
-        marshaller
+        Ok(marshaller)
     }
 
     pub fn metadata(&self) -> &ir::Metadata {
@@ -160,9 +158,9 @@ impl Marshaller {
         ForeignType::i32()
     }
     
-    fn register_type(&mut self, ty: ir::Type, ffi_ty: ForeignType) -> TypeIndex {
+    fn register_type(&mut self, ty: ir::Type, ffi_ty: ForeignType) -> MarshalResult<TypeIndex> {
         if let Some(type_index) = self.type_indices.get_by_right(&ty) {
-            return *type_index;
+            return Ok(*type_index);
         }
 
         self.types.insert(ty.clone(), ffi_ty);
@@ -174,7 +172,9 @@ impl Marshaller {
 
         let object_id = match &ty {
             ir::Type::WeakObject(id) | ir::Type::Object(id) => match id {
-                ir::ObjectID::Class(..) => Some(ObjectID::Class(type_index)),
+                ir::ObjectID::Class(..) => {
+                    Some(ObjectID::Class(type_index))
+                },
                 ir::ObjectID::Array(element) => Some(ObjectID::Array(element.clone())),
                 ir::ObjectID::Box(value) => Some(ObjectID::Box(value.clone())),
                 _ => None,
@@ -184,25 +184,27 @@ impl Marshaller {
         };
  
         if let Some(object_id) = object_id {
-            self.object_id_indices.insert(self.next_type_index, object_id);
+            self.object_id_indices.insert(type_index, object_id);
         } else {
             // register the box type for non-object types so all known value types also
             // have a boxed version if we need to use them via RTTI
-            self.register_object_type(ty.clone().boxed());
+            self.register_object_type(ty.clone().boxed())?;
         }
 
-        type_index
+        Ok(type_index)
     }
 
-    pub fn register_object_type(&mut self, ty: ir::Type) {
-        self.register_type(ty, ForeignType::pointer());
+    pub fn register_object_type(&mut self, ty: ir::Type) -> MarshalResult<TypeIndex> {
+        if let Some(ir::ObjectID::Class(..)) = ty.as_object() {
+            let (_, index) = self.instantiate_struct_type(&ty)?;
+            Ok(index)
+        } else {
+            self.register_type(ty, ForeignType::pointer())
+        }
     }
 
-    fn add_dyn_array_type(&mut self, element_type: ir::Type) {
-        self.register_type(element_type.clone().dyn_array(), ForeignType::pointer());
-
-        // this will never be marshalled directly, but is used to tag dynamic array objects
-        self.register_type(element_type.array(0), ForeignType(FfiType::void()));
+    fn add_dyn_array_type(&mut self, element_type: ir::Type) -> MarshalResult<TypeIndex> {
+        self.register_type(element_type.clone().dyn_array(), ForeignType::pointer())
     }
 
     pub fn add_struct(
@@ -267,21 +269,21 @@ impl Marshaller {
             ir::StructIdentity::Record(..) 
             | ir::StructIdentity::SetFlags { .. } 
             | ir::StructIdentity::Array(..) => {
-                self.add_dyn_array_type(struct_ty.clone());
+                self.add_dyn_array_type(struct_ty.clone())?;
             }
             
             // class types: array contains object pointers
             ir::StructIdentity::Class(..) => {
-                self.add_dyn_array_type(id.to_class_ptr_type());
+                self.add_dyn_array_type(id.to_class_ptr_type())?;
             }
             
             ir::StructIdentity::Closure(identity) => {
-                self.add_dyn_array_type(identity.to_closure_ptr_type());
+                self.add_dyn_array_type(identity.to_closure_ptr_type())?;
             }
         }
 
         let struct_ffi_ty = ForeignType::structure(field_ffi_tys);
-        let type_index = self.register_type(struct_ty, struct_ffi_ty.clone());
+        let type_index = self.register_type(struct_ty, struct_ffi_ty.clone())?;
 
         self.struct_field_maps.insert(type_index, def_field_tys);
 
@@ -322,15 +324,15 @@ impl Marshaller {
 
         let variant_ffi_ty = ForeignType::structure(variant_layout);
 
-        self.add_dyn_array_type(variant_ty.clone());
-        let type_index = self.register_type(variant_ty, variant_ffi_ty.clone());
+        self.add_dyn_array_type(variant_ty.clone())?;
+        let type_index = self.register_type(variant_ty, variant_ffi_ty.clone())?;
 
         self.variant_case_types.insert(type_index, case_tys);
 
         Ok((variant_ffi_ty, type_index))
     }
 
-    pub fn add_iface(&mut self, id: ir::InterfaceID) {
+    pub fn add_iface(&mut self, id: ir::InterfaceID) -> MarshalResult<TypeIndex> {
         let iface_ty = id.to_interface_ptr_type();
         
         self.add_dyn_array_type(iface_ty)
@@ -344,8 +346,8 @@ impl Marshaller {
 
         let flags_type = ir::Type::Flags(repr_ty_id);
         
-        self.add_dyn_array_type(flags_type.clone());
-        self.register_type(flags_type, repr_ffi_ty.clone());
+        self.add_dyn_array_type(flags_type.clone())?;
+        self.register_type(flags_type, repr_ffi_ty.clone())?;
         
         Ok(repr_ffi_ty)
     }
@@ -456,8 +458,8 @@ impl Marshaller {
             | ir::Type::Function(..) => {
                 let pointer_type = ForeignType::pointer();
                 
-                self.add_dyn_array_type(ty.clone());
-                self.register_type(ty.clone(), pointer_type.clone());
+                self.add_dyn_array_type(ty.clone())?;
+                self.register_type(ty.clone(), pointer_type.clone())?;
                 
                 Ok(pointer_type)
             },
@@ -468,8 +470,8 @@ impl Marshaller {
                 
                 let array_struct = ForeignType::structure(el_tys);
 
-                self.add_dyn_array_type(ty.clone());
-                self.register_type(ty.clone(), array_struct.clone());
+                self.add_dyn_array_type(ty.clone())?;
+                self.register_type(ty.clone(), array_struct.clone())?;
 
                 Ok(array_struct)
             },
@@ -546,26 +548,32 @@ impl Marshaller {
         Ok(field_info)
     }
 
-    pub fn runtime_instantiate_struct(
+    pub fn instantiate_struct_type(
         &mut self,
         struct_type: &ir::Type,
-    ) -> ExecResult<(Rc<StructDef>, TypeIndex)> {
-        let ir::Type::Struct { id, args } = struct_type else {
-            let msg = format!("runtime_instantiate_struct: {} is not a struct", struct_type);
-            return Err(ExecError::illegal_state(msg));
-        };
-
+    ) -> MarshalResult<(Rc<StructDef>, TypeIndex)> {
         if let Ok(type_index) = self.get_type_index(struct_type)
             && let Some(def) = self.struct_instantiations.get(&type_index)
         {
             return Ok((def.clone(), type_index));
         }
 
+        let (id, args): (_, &[ir::Type]) = match struct_type {
+            ir::Type::Struct { id, args } => (*id, args.as_slice()),
+
+            // TODO class type args
+            ir::Type::Object(ir::ObjectID::Class(id)) => (*id, &[]),
+            ir::Type::WeakObject(ir::ObjectID::Class(id)) => (*id, &[]),
+
+            _ => {
+                return Err(MarshalError::unsupported_type(struct_type.clone()));
+            }
+        };
+
         let generic_def = self.metadata()
-            .get_struct_def(*id)
+            .get_struct_def(id)
             .ok_or_else(|| {
-                let msg = format!("runtime_instantiate_struct: missing definition for struct {}", *id);
-                ExecError::illegal_state(msg)
+                MarshalError::MissingStructDef(struct_type.clone())
             })?;
 
         let new_def = match instantiate_struct_def(generic_def, args) {
@@ -586,15 +594,23 @@ impl Marshaller {
 
         if self.trace_generics {
             let new_name = new_def.identity.to_pretty_string(self.metadata().as_formatter());
-            eprintln!("[vm] new instantiation of struct {}: {}",*id, new_name);
+            eprintln!("[vm] new instantiation of struct {}: {}", id, new_name);
         }
 
-        let (_, type_index) = self.add_struct(*id, &new_def)?;
-
+        let (_, struct_index) = self.add_struct(id, &new_def)?;
         let def = Rc::new(new_def);
-        self.struct_instantiations.insert(type_index, def.clone());
 
-        Ok((def, type_index))
+        // for class objects, the type used in code is the object type, which is marshaled as a
+        // plain pointer, and the struct definition is associated with that type
+        if struct_type.is_object() {
+            let class_index = self.register_type(struct_type.clone(), ForeignType::pointer())?;
+            self.struct_instantiations.insert(class_index, def.clone());
+
+            Ok((def, class_index))
+        } else {
+            self.struct_instantiations.insert(struct_index, def.clone());
+            Ok((def, struct_index))
+        }
     }
 
     pub fn marshal(&self, val: &DynValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {

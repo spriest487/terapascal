@@ -9,6 +9,8 @@ use crate::marshal::TypeIndex;
 pub enum MarshalError<Ty = ir::Type> {
     InvalidData,
 
+    MissingStructDef(Ty),
+
     UnsupportedType(Ty),
     UnsupportedValue(DynValue),
 
@@ -54,6 +56,9 @@ impl<Ty> MarshalError<Ty> {
         F: Fn(Ty) -> ToTy,
     {
         match self {
+            MarshalError::MissingStructDef(ty) => {
+                MarshalError::MissingStructDef(f(ty))
+            },
             MarshalError::UnsupportedType(ty) => {
                 MarshalError::UnsupportedType(f(ty))
             },
@@ -125,6 +130,10 @@ impl<T: fmt::Display> fmt::Display for MarshalError<T> {
             },
             MarshalError::InvalidWrite { dest_size, data_size } => {
                 write!(f, "Writing {} bytes to buffer of size {}", data_size, dest_size)
+            }
+
+            MarshalError::MissingStructDef(ty) => {
+                write!(f, "Missing definition for struct type {} in loaded metadata", ty)
             }
         }
     }

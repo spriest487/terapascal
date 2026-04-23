@@ -194,14 +194,14 @@ impl Type {
         }
     }
 
-    pub fn rc_resource_class_id(&self) -> Option<&ObjectID> {
+    pub fn as_object(&self) -> Option<&ObjectID> {
         match self {
             Type::Object(class_id) => Some(class_id),
             Type::WeakObject(class_id) => Some(class_id),
             _ => None,
         }
     }
-    
+
     pub fn is_weak(&self) -> bool {
         matches!(self, Type::WeakObject(..))
     }
@@ -237,13 +237,6 @@ impl Type {
                 Some(*id)
             }
 
-            _ => None,
-        }
-    }
-
-    pub fn rc_resource_def_id(&self) -> Option<TypeDefID> {
-        match self.rc_resource_class_id()? {
-            ObjectID::Class(id) => Some(*id),
             _ => None,
         }
     }

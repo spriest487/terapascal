@@ -817,7 +817,7 @@ impl<T: MetadataSource> IRFormatter for T {
     fn format_field(&self, of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result {
         let field_name = of_ty
             .as_struct()
-            .or_else(|| match of_ty.rc_resource_class_id()? {
+            .or_else(|| match of_ty.as_object()? {
                 ObjectID::Class(struct_id) => Some(*struct_id),
                 _ => None,
             })
