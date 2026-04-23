@@ -162,7 +162,7 @@ impl NativeHeap {
 
     pub fn alloc_object(&mut self, data_size: usize, id: ObjectID, trace: bool) -> NativeHeapResult<Pointer> {
         let header_size = match id {
-            ObjectID::Class(..) | ObjectID::Box(..) => Marshaller::object_header_size(),
+            ObjectID::Struct(..) | ObjectID::Box(..) => Marshaller::object_header_size(),
             ObjectID::Array(..) => Marshaller::array_header_size(),
         };
 

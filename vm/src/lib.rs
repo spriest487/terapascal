@@ -87,24 +87,8 @@ impl Vm {
 
         let mut marshaller = Marshaller::new(metadata.build(), opts.trace_generics)?;
 
-        for (id, struct_def) in &builtin_structs {
-            let ty = match &struct_def.identity {
-                ir::StructIdentity::Class(..) => {
-                    id.to_class_ptr_type()
-                }
-                ir::StructIdentity::Record(name) => {
-                    id.to_struct_type(name.type_args.clone())
-                }
-                ir::StructIdentity::SetFlags { .. } => {
-                    id.to_flags_type()
-                }
-                ir::StructIdentity::Closure(..) => {
-                    id.to_closure_ptr_type()
-                }
-            };
-
-            marshaller.instantiate_struct_type(&ty)
-                .expect("builtin type definition raised a marshalling error");
+        for id in builtin_structs.keys() {
+            marshaller.instantiate_struct_type(&id.to_struct_type([]))?;
         }
 
         let heap = NativeHeap::new(marshaller, opts.trace_heap);
@@ -155,7 +139,8 @@ impl Vm {
         &mut self,
         struct_type: &ir::Type,
     ) -> ExecResult<StructValue> {
-        let (struct_def, type_index) = self.heap.marshaller.instantiate_struct_type(struct_type)?;
+        let (struct_def, type_index) = self.heap.marshaller
+            .instantiate_struct_type(struct_type)?;
 
         let mut fields = Vec::with_capacity(struct_def.fields.len());
         for (&id, field) in &struct_def.fields {
@@ -1114,11 +1099,12 @@ impl Vm {
         &mut self,
         out: &ir::Ref,
         struct_id: ir::TypeDefID,
-        type_args: &[ir::Type],
+        type_args: &[ir::Type], // TODO
         immortal: bool,
     ) -> ExecResult<()> {
         let struct_type = struct_id.to_struct_type(type_args.to_vec());
         let struct_val = self.default_struct(&struct_type)?;
+
         let rc_ptr = self.new_object(struct_val, immortal)?;
 
         self.store(out, DynValue::Pointer(rc_ptr))?;
@@ -1907,14 +1893,14 @@ impl Vm {
                 let class_type = class_id.to_class_ptr_type();
                 let class_type_index = self.marshaller().get_type_index(&class_type)?;
 
-                object_header.id == ObjectID::Class(class_type_index)
+                object_header.id == ObjectID::Struct(class_type_index)
             }
 
             ir::ObjectID::Interface(iface_id) => {
                 match &object_header.id {
                     // out of all the types a struct might represent, only a class can
                     // implement any interfaces
-                    ObjectID::Class(class_index) => {
+                    ObjectID::Struct(class_index) => {
                         let class_type = self.marshaller().get_type(*class_index)?;
                         self.metadata().is_impl(class_type, *iface_id)
                     }
@@ -1925,7 +1911,7 @@ impl Vm {
 
             ir::ObjectID::Closure(func_type_id) => {
                 match object_header.id {
-                    ObjectID::Class(class_index) => {
+                    ObjectID::Struct(class_index) => {
                         let class_type = self.marshaller().get_type(class_index)?;
 
                         match class_type {
@@ -2019,7 +2005,7 @@ impl Vm {
     fn object_field_ptr(&self, object_ptr: &Pointer, field: ir::FieldID) -> ExecResult<Pointer> {
         let header = self.heap.load_object_header(&object_ptr)?;
 
-        let ObjectID::Class(type_index) = &header.id else {
+        let ObjectID::Struct(type_index) = &header.id else {
             return Err(ExecError::illegal_state(format!(
                 "exec_field: loading a class object returned the wrong type of object ({})",
                 header.id.to_pretty_name(self.marshaller())
@@ -2097,7 +2083,7 @@ impl Vm {
         let fields_type = self.marshaller().get_type(fields.type_index)?;
         let fields_size = self.marshaller().get_marshal_type(&fields_type)?.size();
 
-        let object_id = ObjectID::Class(fields.type_index);
+        let object_id = ObjectID::Struct(fields.type_index);
         let object_ptr = self.heap.alloc_object(fields_size, object_id.clone(), !immortal)?;
 
         if !immortal && self.opts.trace_rc {
@@ -2132,7 +2118,8 @@ impl Vm {
             let def_result = match type_def {
                 ir::TypeDef::Struct(struct_def) => {
                     if !struct_def.is_generic() {
-                        self.heap.marshaller.add_struct(id, struct_def).map(Some)
+                        let struct_type = struct_def.identity.to_type(id);
+                        self.heap.marshaller.add_struct(&struct_type, struct_def).map(Some)
                     } else {
                         Ok(None)
                     }
@@ -2145,7 +2132,7 @@ impl Vm {
                     }
                 }
                 ir::TypeDef::Function(_func_def) => {
-                    // functions don't need special marshalling, we only marshal pointers to them
+                    // functions don't need special marshaling, we only marshal pointers to them
                     Ok(None)
                 }
             };
@@ -2540,7 +2527,8 @@ impl Vm {
         ty: &ir::Type,
         type_info: &ir::TypeInfo,
     ) -> ExecResult<DynValue> {
-        let (_, typeinfo_index) = self.heap.marshaller.instantiate_struct_type(&ir::TYPEINFO_TYPE)?;
+        let (_, typeinfo_index) = self.heap.marshaller
+            .instantiate_struct_type(&ir::TYPEINFO_ID.to_struct_type([]))?;
 
         let type_flags_repr = self
             .metadata()
@@ -2548,7 +2536,8 @@ impl Vm {
             .ok_or_else(|| ExecError::illegal_state("missing flags type for TypeFlags"))?;
         let type_flags_index = self.marshaller().get_type_index(&type_flags_repr.to_flags_type())?;
 
-        let (_, methodinfo_index) = self.heap.marshaller.instantiate_struct_type(&ir::METHODINFO_TYPE)?;
+        let (_, methodinfo_index) = self.heap.marshaller
+            .instantiate_struct_type(&ir::METHODINFO_ID.to_struct_type([]))?;
 
         let type_name_string = self.load_string_lit(type_info.name.unwrap_or(ir::EMPTY_STRING_ID))?;
 
@@ -2661,7 +2650,7 @@ impl Vm {
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
 
         let (_, funcinfo_index) = self.heap.marshaller
-            .instantiate_struct_type(&ir::FUNCINFO_TYPE)?;
+            .instantiate_struct_type(&ir::FUNCINFO_ID.to_struct_type([]))?;
 
         let impl_ptr = Pointer {
             addr: func_id.0,

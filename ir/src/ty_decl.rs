@@ -48,6 +48,15 @@ impl StructIdentity {
         }
     }
 
+    pub fn to_type(&self, id: TypeDefID) -> Type {
+        match self {
+            StructIdentity::Record(name) => id.to_struct_type(name.type_args.clone()),
+            StructIdentity::Class(_name) => id.to_class_ptr_type(), // TODO: class type args
+            StructIdentity::Closure(..) => id.to_closure_ptr_type(),
+            StructIdentity::SetFlags { .. } => id.to_flags_type(),
+        }
+    }
+
     pub fn name(&self) -> Option<&NamePath> {
         match self {
             StructIdentity::Class(name)

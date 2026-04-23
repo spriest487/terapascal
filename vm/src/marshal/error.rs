@@ -9,7 +9,7 @@ use crate::marshal::TypeIndex;
 pub enum MarshalError<Ty = ir::Type> {
     InvalidData,
 
-    MissingStructDef(Ty),
+    MissingTypeDef(Ty),
 
     UnsupportedType(Ty),
     UnsupportedValue(DynValue),
@@ -25,10 +25,8 @@ pub enum MarshalError<Ty = ir::Type> {
     InvalidTypeIndex {
         type_index: TypeIndex,
     },
-
-    InvalidStructID {
-        expected: Ty,
-        actual: Ty,
+    InvalidStructType {
+        ty: Ty,
     },
 
     InvalidRefCountValue(DynValue),
@@ -51,13 +49,17 @@ impl<Ty> MarshalError<Ty> {
         Self::UnsupportedType(ty)
     }
 
+    pub fn invalid_type_index(type_index: TypeIndex) -> Self {
+        Self::InvalidTypeIndex { type_index }
+    }
+
     pub fn map_types<F, ToTy>(self, f: F) -> MarshalError<ToTy>
     where
         F: Fn(Ty) -> ToTy,
     {
         match self {
-            MarshalError::MissingStructDef(ty) => {
-                MarshalError::MissingStructDef(f(ty))
+            MarshalError::MissingTypeDef(ty) => {
+                MarshalError::MissingTypeDef(f(ty))
             },
             MarshalError::UnsupportedType(ty) => {
                 MarshalError::UnsupportedType(f(ty))
@@ -68,9 +70,6 @@ impl<Ty> MarshalError<Ty> {
             MarshalError::FieldOutOfRange { struct_type, field } => {
                 MarshalError::FieldOutOfRange { struct_type: f(struct_type), field }
             },
-            MarshalError::InvalidStructID { expected, actual } => {
-                MarshalError::InvalidStructID { expected: f(expected), actual: f(actual) }
-            },
             MarshalError::InvalidData => {
                 MarshalError::InvalidData
             },
@@ -80,6 +79,9 @@ impl<Ty> MarshalError<Ty> {
             MarshalError::InvalidTypeIndex { type_index } => {
                 MarshalError::InvalidTypeIndex { type_index }
             },
+            MarshalError::InvalidStructType { ty } => {
+                MarshalError::InvalidStructType { ty: f(ty) }
+            }
             MarshalError::InvalidRefCountValue(val) => {
                 MarshalError::InvalidRefCountValue(val)
             },
@@ -99,12 +101,11 @@ impl<T: fmt::Display> fmt::Display for MarshalError<T> {
             MarshalError::InvalidData => {
                 write!(f, "Invalid data")
             },
-            MarshalError::InvalidStructID { expected, actual } => {
-                write!(f, "Expected struct {expected}, got {actual}")?;
-                Ok(())
-            },
             MarshalError::InvalidTypeIndex { type_index }  => {
                 write!(f, "Illegal object pointer (unknown type index: {})", type_index)
+            },
+            MarshalError::InvalidStructType { ty }  => {
+                write!(f, "Type {} is not a struct", ty)
             }
             MarshalError::UnsupportedValue(val) => {
                 write!(f, "Unable to marshal value: {:?}", val)
@@ -132,8 +133,8 @@ impl<T: fmt::Display> fmt::Display for MarshalError<T> {
                 write!(f, "Writing {} bytes to buffer of size {}", data_size, dest_size)
             }
 
-            MarshalError::MissingStructDef(ty) => {
-                write!(f, "Missing definition for struct type {} in loaded metadata", ty)
+            MarshalError::MissingTypeDef(ty) => {
+                write!(f, "Missing definition for type {} in loaded metadata", ty)
             }
         }
     }

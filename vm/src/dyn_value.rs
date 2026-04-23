@@ -115,7 +115,7 @@ impl DynValue {
                     return None;
                 };
 
-                let struct_type_index = marshaller.get_type_index(ty).ok()?;
+                let struct_type_index = marshaller.try_get_type_index(ty)?;
 
                 (s.type_index == struct_type_index).then(|| self.clone())
             },
@@ -125,7 +125,7 @@ impl DynValue {
                     return None;
                 };
 
-                let variant_type_index = marshaller.get_type_index(ty).ok()?;
+                let variant_type_index = marshaller.try_get_type_index(ty)?;
 
                 (v.type_index == variant_type_index).then(|| self.clone())
             },
@@ -675,7 +675,7 @@ impl PartialEq<Self> for StructValue {
 // subset of ir::ObjectID that only includes concrete types
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum ObjectID {
-    Class(TypeIndex),
+    Struct(TypeIndex),
     Array(Rc<ir::Type>),
     Box(Rc<ir::Type>),
 }
@@ -687,8 +687,8 @@ impl ObjectID {
                 match id {
                     // real types
                     ir::ObjectID::Class(..) => {
-                        let type_index = marshaller.get_type_index(ty).ok()?;
-                        Some(ObjectID::Class(type_index))
+                        let type_index = marshaller.try_get_type_index(ty)?;
+                        Some(ObjectID::Struct(type_index))
                     },
                     ir::ObjectID::Array(element_type) => Some(ObjectID::Array(element_type.clone())),
                     ir::ObjectID::Box(value_type) => Some(ObjectID::Box(value_type.clone())),
@@ -706,7 +706,7 @@ impl ObjectID {
     
     pub fn to_type(&self, marshaller: &Marshaller) -> MarshalResult<ir::Type> {
         match self {
-            ObjectID::Class(id) => {
+            ObjectID::Struct(id) => {
                 marshaller.get_type(*id).cloned()
             },
             ObjectID::Array(element) => {

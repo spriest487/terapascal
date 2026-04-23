@@ -305,7 +305,10 @@ pub fn instantiate_sig(generic_sig: &FunctionSig, types: &TypeMap) -> FunctionSi
     }
 }
 
-pub fn instantiate_struct_def<'a>(generic_struct: &'a StructDef, type_args: &[Type]) -> Cow<'a, StructDef> {
+pub fn instantiate_struct_def<'a>(
+    generic_struct: &'a StructDef,
+    type_args: &[Type],
+) -> Cow<'a, StructDef> {
     if !generic_struct.is_generic() {
         assert_eq!(0, type_args.len(), "specializing struct def: type is not generic");
         return Cow::Borrowed(generic_struct);
