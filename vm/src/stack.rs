@@ -18,6 +18,70 @@ use thiserror::Error;
 const SENTINEL: usize = 12345678;
 
 #[derive(Debug)]
+pub struct NativeStack {
+    frames: Vec<StackFrame>,
+}
+
+impl NativeStack {
+    pub fn new() -> Self {
+        Self { frames: Vec::new() }
+    }
+
+    pub fn push(&mut self, name: impl Into<Rc<String>>, stack_size: usize) {
+        let stack_frame = StackFrame::new(name, stack_size);
+        self.frames.push(stack_frame);
+    }
+
+    pub fn pop(&mut self) -> StackResult<()> {
+        let popped = self.frames
+            .pop()
+            .ok_or_else(|| StackError::Empty)?;
+        popped.check_sentinel()?;
+        Ok(())
+    }
+    
+    pub fn frames(&self) -> &[StackFrame] {
+        self.frames.as_slice()
+    }
+    
+    pub fn current_frame(&self) -> StackResult<&StackFrame> {
+        self.frames
+            .last()
+            .ok_or_else(|| StackError::Empty)
+    }
+
+    pub fn current_frame_mut(&mut self) -> StackResult<&mut StackFrame> {
+        match self.frames.last_mut() {
+            Some(frame) => Ok(frame),
+            None => Err(StackError::Empty),
+        }
+    }
+
+    pub fn trace(&self) -> StackTrace {
+        let frames = self.frames
+            .iter()
+            .rev()
+            .map(|s| {
+                let frame = StackTraceFrame::new(s.name().to_string());
+                let Some(span) = s.debug_location() else {
+                    return frame;
+                };
+                frame.with_span(span.into_owned())
+            });
+
+        StackTrace::new(frames)
+    }
+
+    pub fn trace_formatted(&self) -> String {
+        self.trace()
+            .into_iter()
+            .map(|frame| format!("\t at {}", frame))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+#[derive(Debug)]
 struct StackAlloc {
     // local vals are allocated on the fly as the vm passes LocalAlloc
     // instructions. we want to prevent IR code from alloc-ing two locals with the same
@@ -45,15 +109,12 @@ pub(super) struct StackFrame {
 
     locals: Vec<StackAlloc>,
 
-    marshaller: Rc<Marshaller>,
-
     current_debug_source: Option<Span>,
 }
 
 impl StackFrame {
     pub fn new(
         name: impl Into<Rc<String>>,
-        marshaller: Rc<Marshaller>,
         stack_size: usize,
     ) -> Self {
         let sentinel_size = size_of::<usize>();
@@ -70,18 +131,16 @@ impl StackFrame {
 
             current_debug_source: None,
 
-            marshaller,
-
             stack_mem: stack_mem.into_boxed_slice(),
             stack_offset: 0,
         }
     }
 
     /// Reserves stack space for the result value to be stored
-    pub fn declare_result(&mut self, ty: ir::Type, value: &DynValue) -> MarshalResult<()> {
+    pub fn declare_result(&mut self, ty: ir::Type, value: &DynValue, marshaller: &Marshaller) -> MarshalResult<()> {
         assert!(self.result.is_none(), "result storage must not be allocated twice");
         
-        let stack_offset = self.stack_alloc(&ty, value)?;
+        let stack_offset = self.stack_alloc(&ty, value, marshaller)?;
 
         self.result = Some(StackAlloc {
             alloc_pc: None,
@@ -93,8 +152,8 @@ impl StackFrame {
     }
 
     /// Reserves stack space for an argument value to be stored
-    pub fn declare_arg(&mut self, ty: ir::Type, value: &DynValue) -> MarshalResult<ir::ArgID> {
-        let stack_offset = self.stack_alloc(&ty, value)?;
+    pub fn declare_arg(&mut self, ty: ir::Type, value: &DynValue, marshaller: &Marshaller) -> MarshalResult<ir::ArgID> {
+        let stack_offset = self.stack_alloc(&ty, value, marshaller)?;
 
         self.args.push(StackAlloc {
             alloc_pc: None,
@@ -106,7 +165,14 @@ impl StackFrame {
         Ok(id)
     }
 
-    pub fn declare_local(&mut self, id: ir::LocalID, ty: ir::Type, value: &DynValue, alloc_pc: usize) -> StackResult<()> {
+    pub fn declare_local(
+        &mut self,
+        id: ir::LocalID,
+        ty: ir::Type,
+        value: &DynValue,
+        alloc_pc: usize,
+        marshaller: &Marshaller,
+    ) -> StackResult<()> {
         // we only need to allocate new variables the first time the block is executed, so if
         // we try to allocate twice from the same instruction, just do nothing
         // todo: this could be cleaned up by allocating everything at the start of the block
@@ -134,7 +200,7 @@ impl StackFrame {
             return Err(StackError::IllegalAlloc(id));
         }
 
-        let stack_offset = self.stack_alloc(&ty, value)?;
+        let stack_offset = self.stack_alloc(&ty, value, marshaller)?;
 
         self.locals.push(StackAlloc {
             alloc_pc: Some(alloc_pc),
@@ -159,16 +225,16 @@ impl StackFrame {
         }
     }
 
-    fn stack_alloc(&mut self, ty: &ir::Type, value: &DynValue) -> MarshalResult<usize> {
+    fn stack_alloc(&mut self, ty: &ir::Type, value: &DynValue, marshaller: &Marshaller) -> MarshalResult<usize> {
         let start_offset = self.stack_offset;
         let alloc_slice = &mut self.stack_mem[start_offset..];
-        let size = self.marshaller.marshal(value, alloc_slice)?;
+        let size = marshaller.marshal(value, alloc_slice)?;
         
         self.stack_offset += size;
 
         if cfg!(debug_assertions) {
             let marshalled_size = self.stack_offset - start_offset;
-            let ty_size = self.marshaller.get_marshal_type(ty)?.size();
+            let ty_size = marshaller.get_marshal_type(ty)?.size();
             assert_eq!(marshalled_size, ty_size, "stack space allocated ({}) did not match expected size {} for type {}", marshalled_size, ty_size, ty);
         }
 
@@ -228,6 +294,7 @@ impl StackFrame {
 
 #[derive(Debug, Clone, Error)]
 pub enum StackError<Ty: fmt::Display = ir::Type> {
+    Empty,
     ResultNotAllocated,
     ArgNotAllocated(ir::ArgID),
     LocalNotAllocated(ir::LocalID),
@@ -255,6 +322,10 @@ impl<Ty: fmt::Display> From<MarshalError<Ty>> for StackError<Ty> {
 impl<Ty: fmt::Display> fmt::Display for StackError<Ty> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            StackError::Empty => {
+                write!(f, "stack was unexpectedly empty")
+            }
+            
             StackError::ResultNotAllocated => {
                 write!(f, "storage not allocated for result value")
             }

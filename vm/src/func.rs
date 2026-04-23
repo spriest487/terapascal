@@ -8,7 +8,6 @@ use crate::FunctionInfo;
 use crate::Vm;
 use ir::generic::instantiate_generic;
 use ir::generic::instantiate_sig;
-use ir::MetadataSource as _;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
@@ -69,12 +68,11 @@ impl Function {
     pub fn new_ffi(
         func_ref: &ir::ExternalFunctionRef,
         marshaller: &mut Marshaller,
-        metadata: &ir::Metadata,
     ) -> MarshalResult<Self> {
-        let invoker = marshaller.build_ffi_invoker(&func_ref, metadata)?;
+        let invoker = marshaller.build_ffi_invoker(&func_ref)?;
 
         let func_name =  format!("{}::{}", func_ref.src, func_ref.symbol);
-        let debug_name = Self::make_debug_name(&func_name, &func_ref.sig.param_tys, metadata);
+        let debug_name = Self::make_debug_name(&func_name, &func_ref.sig.param_tys, marshaller.metadata());
 
         let func = Function::External(FfiFunction {
             debug_name,
@@ -236,7 +234,7 @@ impl<'a> ir::InstructionBuilder for RuntimeFuncBuilder<'a> {
     }
 
     fn metadata(&self) -> &impl ir::MetadataSource {
-        self.vm.metadata.as_ref()
+        self.vm.marshaller().metadata()
     }
 
     fn local_stack(&self) -> &ir::LocalStack {
@@ -328,7 +326,7 @@ pub fn instantiate_func(
         }
     }
 
-    let type_args_formatted = format_type_arg_list(&generic_def.type_params, &types, vm.metadata.as_formatter());
+    let type_args_formatted = format_type_arg_list(&generic_def.type_params, &types, vm.metadata());
 
     if vm.opts.trace_generics {
         eprintln!(

@@ -3,6 +3,8 @@ mod marshal_type;
 
 use crate::func::ffi::FfiInvoker;
 use crate::ir;
+use crate::result::ExecError;
+use crate::result::ExecResult;
 use crate::ArrayValue;
 use crate::DynValue;
 use crate::ObjectHeader;
@@ -19,6 +21,7 @@ use ir::MetadataSource as _;
 use libffi::middle::Builder as FfiBuilder;
 use libffi::middle::Type as FfiType;
 pub use marshal_type::*;
+use std::borrow::Cow;
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -32,6 +35,7 @@ use std::ptr::slice_from_raw_parts;
 use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
 use terapascal_ir::generic::instantiate_struct_def;
+use terapascal_ir::StructDef;
 
 const RC_ELEMENT_COUNT: usize = 3;
 
@@ -76,6 +80,8 @@ pub struct StructFieldInfo {
 
 #[derive(Debug, Clone)]
 pub struct Marshaller {
+    metadata: ir::Metadata,
+
     types: HashMap<ir::Type, ForeignType>,
     libs: HashMap<String, Rc<dlopen::Library>>,
 
@@ -86,11 +92,18 @@ pub struct Marshaller {
     next_type_index: TypeIndex,
     type_indices: BiHashMap<TypeIndex, ir::Type>,
     object_id_indices: BiHashMap<TypeIndex, ObjectID>,
+
+    // cache of struct definitions for generic structs instantiated at runtime
+    struct_instantiations: BTreeMap<TypeIndex, Rc<ir::StructDef>>,
+
+    trace_generics: bool,
 }
 
 impl Marshaller {
-    pub fn new() -> Self {
+    pub fn new(metadata: ir::Metadata, trace_generics: bool) -> Self {
         let mut marshaller = Self {
+            metadata,
+
             types: HashMap::new(),
             libs: HashMap::new(),
 
@@ -100,6 +113,10 @@ impl Marshaller {
             next_type_index: TypeIndex(0),
             object_id_indices: BiHashMap::new(),
             type_indices: BiHashMap::new(),
+
+            struct_instantiations: BTreeMap::new(),
+
+            trace_generics,
         };
 
         let primitive_types = [
@@ -129,6 +146,14 @@ impl Marshaller {
         }
 
         marshaller
+    }
+
+    pub fn metadata(&self) -> &ir::Metadata {
+        &self.metadata
+    }
+
+    pub fn load_metadata(&mut self, metadata: &ir::Metadata) {
+        self.metadata.merge_from(metadata);
     }
 
     pub fn variant_tag_type(&self) -> ForeignType {
@@ -184,7 +209,6 @@ impl Marshaller {
         &mut self,
         id: ir::TypeDefID,
         def: &ir::StructDef,
-        metadata: &ir::Metadata,
     ) -> MarshalResult<(ForeignType, TypeIndex)> {
         let struct_ty = match &def.identity {
             ir::StructIdentity::SetFlags { .. } => {
@@ -224,7 +248,7 @@ impl Marshaller {
             .sum::<usize>();
 
         for (field_id, field_def) in def_fields {
-            let foreign_ty = self.build_marshalled_type(&field_def.ty, metadata)?;
+            let foreign_ty = self.build_marshalled_type(&field_def.ty)?;
             field_ffi_tys.push(foreign_ty.clone());
             
             let size = foreign_ty.size();
@@ -268,7 +292,6 @@ impl Marshaller {
         &mut self,
         id: ir::TypeDefID,
         def: &ir::VariantDef,
-        metadata: &ir::Metadata,
     ) -> MarshalResult<(ForeignType, TypeIndex)> {
         let variant_ty = ir::Type::Variant(id);
 
@@ -285,7 +308,7 @@ impl Marshaller {
 
         for case_ty in &case_tys {
             if let Some(case_ty) = case_ty.as_ref() {
-                let case_ffi_ty = self.build_marshalled_type(case_ty, metadata)?;
+                let case_ffi_ty = self.build_marshalled_type(case_ty)?;
 
                 max_case_size = max(case_ffi_ty.size(), max_case_size);
 
@@ -315,11 +338,9 @@ impl Marshaller {
     
     pub fn add_flags_type(
         &mut self,
-        repr_ty_id: ir::TypeDefID,
-        metadata: &ir::Metadata
-    ) -> MarshalResult<ForeignType> {
+        repr_ty_id: ir::TypeDefID) -> MarshalResult<ForeignType> {
         let repr_struct_ty = repr_ty_id.to_struct_type([]);
-        let repr_ffi_ty = self.build_marshalled_type(&repr_struct_ty, metadata)?;
+        let repr_ffi_ty = self.build_marshalled_type(&repr_struct_ty)?;
 
         let flags_type = ir::Type::Flags(repr_ty_id);
         
@@ -332,20 +353,19 @@ impl Marshaller {
     pub fn build_ffi_invoker(
         &mut self,
         func_ref: &ir::ExternalFunctionRef,
-        metadata: &ir::Metadata,
     ) -> MarshalResult<FfiInvoker> {
         // the "nothing" type is usually not allowed by the marshaller because it can't be
         // instantiated, but here we need to map it to the void ffi type
         let ffi_return_ty = match &func_ref.sig.return_ty {
             ir::Type::Nothing => ForeignType(FfiType::void()),
-            return_ty => self.build_marshalled_type(return_ty, metadata)?,
+            return_ty => self.build_marshalled_type(return_ty)?,
         };
 
         let ffi_param_tys: Vec<_> = func_ref
             .sig
             .param_tys
             .iter()
-            .map(|ty| self.build_marshalled_type(ty, metadata))
+            .map(|ty| self.build_marshalled_type(ty))
             .collect::<MarshalResult<_>>()?;
 
         let cif = FfiBuilder::new()
@@ -397,7 +417,6 @@ impl Marshaller {
     fn build_marshalled_type(
         &mut self,
         ty: &ir::Type,
-        metadata: &ir::Metadata,
     ) -> MarshalResult<ForeignType> {
         if let Some(cached) = self.types.get(ty) {
             return Ok(cached.clone());
@@ -405,26 +424,28 @@ impl Marshaller {
 
         match ty {
             ir::Type::Variant(id) => {
-                let def = metadata
+                let def = self.metadata
                     .get_variant_def(*id)
+                    .cloned()
                     .ok_or_else(|| {
                         MarshalError::unsupported_type(ty.clone())
                     })?;
 
-                let (marshalled_type, _) = self.add_variant(*id, def, metadata)?;
+                let (marshalled_type, _) = self.add_variant(*id, &def)?;
                 Ok(marshalled_type)
             },
 
             ir::Type::Struct { id, args } => {
-                let def = metadata
+                let def = self.metadata
                     .get_struct_def(*id)
+                    .cloned()
                     .ok_or_else(|| {
                         MarshalError::unsupported_type(ty.clone())
                     })?;
 
                 let def = instantiate_struct_def(&def, args);
 
-                let (foreign_type, _) = self.add_struct(*id, &def, metadata)?;
+                let (foreign_type, _) = self.add_struct(*id, &def)?;
                 Ok(foreign_type)
             },
 
@@ -442,7 +463,7 @@ impl Marshaller {
             },
 
             ir::Type::Array { element, dim } => {
-                let el_ty = self.build_marshalled_type(&element, metadata)?;
+                let el_ty = self.build_marshalled_type(&element)?;
                 let el_tys = vec![el_ty; *dim];
                 
                 let array_struct = ForeignType::structure(el_tys);
@@ -454,7 +475,7 @@ impl Marshaller {
             },
 
             ir::Type::Flags(ty_id) => {
-                Ok(self.add_flags_type(*ty_id, metadata)?)
+                Ok(self.add_flags_type(*ty_id)?)
             }
 
             // all primitives/builtins should be in the cache already
@@ -523,6 +544,57 @@ impl Marshaller {
             })?;
 
         Ok(field_info)
+    }
+
+    pub fn runtime_instantiate_struct(
+        &mut self,
+        struct_type: &ir::Type,
+    ) -> ExecResult<(Rc<StructDef>, TypeIndex)> {
+        let ir::Type::Struct { id, args } = struct_type else {
+            let msg = format!("runtime_instantiate_struct: {} is not a struct", struct_type);
+            return Err(ExecError::illegal_state(msg));
+        };
+
+        if let Ok(type_index) = self.get_type_index(struct_type)
+            && let Some(def) = self.struct_instantiations.get(&type_index)
+        {
+            return Ok((def.clone(), type_index));
+        }
+
+        let generic_def = self.metadata()
+            .get_struct_def(*id)
+            .ok_or_else(|| {
+                let msg = format!("runtime_instantiate_struct: missing definition for struct {}", *id);
+                ExecError::illegal_state(msg)
+            })?;
+
+        let new_def = match instantiate_struct_def(generic_def, args) {
+            Cow::Borrowed(..) => {
+                // it's not generic, so it must have been registered when the library was loaded
+                let type_index = self.get_type_index(struct_type)?;
+
+                let def = Rc::new(generic_def.clone());
+                self.struct_instantiations.insert(type_index, def.clone());
+
+                return Ok((def, type_index));
+            },
+
+            Cow::Owned(def) => {
+                def
+            },
+        };
+
+        if self.trace_generics {
+            let new_name = new_def.identity.to_pretty_string(self.metadata().as_formatter());
+            eprintln!("[vm] new instantiation of struct {}: {}",*id, new_name);
+        }
+
+        let (_, type_index) = self.add_struct(*id, &new_def)?;
+
+        let def = Rc::new(new_def);
+        self.struct_instantiations.insert(type_index, def.clone());
+
+        Ok((def, type_index))
     }
 
     pub fn marshal(&self, val: &DynValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {

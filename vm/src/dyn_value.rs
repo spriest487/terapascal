@@ -718,9 +718,9 @@ impl ObjectID {
         }
     }
 
-    pub(crate) fn to_pretty_name(&self, marshaller: &Marshaller, metadata: &impl ir::IRFormatter) -> String {
+    pub(crate) fn to_pretty_name(&self, marshaller: &Marshaller) -> String {
         self.to_type(marshaller)
-            .map(|t| t.to_pretty_string(metadata))
+            .map(|t| t.to_pretty_string(marshaller.metadata()))
             .unwrap_or_else(|_| format!("{:?}", self))
     }
 }

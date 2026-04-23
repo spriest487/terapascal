@@ -12,7 +12,6 @@ use crate::Pointer;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::fmt;
-use std::rc::Rc;
 use terapascal_ir::MetadataSource as _;
 use thiserror::Error;
 
@@ -122,9 +121,8 @@ struct NativeAlloc {
 }
 
 #[derive(Debug)]
-pub struct NativeHeap {
-    marshaller: Rc<Marshaller>,
-    metadata: Rc<ir::Metadata>,
+pub struct NativeHeap { 
+    pub(super) marshaller: Marshaller,
 
     allocs: Vec<NativeAlloc>,
 
@@ -135,10 +133,10 @@ pub struct NativeHeap {
 }
 
 impl NativeHeap {
-    pub fn new(metadata: Rc<ir::Metadata>, marshaller: Rc<Marshaller>, trace_allocs: bool) -> Self {
+    pub fn new(marshaller: Marshaller, trace_allocs: bool) -> Self {
         Self {
-            metadata,
             marshaller,
+
             trace_allocs,
             allocs: Vec::new(),
             
@@ -148,11 +146,6 @@ impl NativeHeap {
                 peak_alloc: 0,
             },
         }
-    }
-
-    pub fn set_metadata(&mut self, metadata: Rc<ir::Metadata>, marshaller: Rc<Marshaller>) {
-        self.metadata = metadata;
-        self.marshaller = marshaller;
     }
 
     pub fn alloc(&mut self, ty: ir::Type, count: usize, trace: bool) -> NativeHeapResult<Pointer> {
@@ -193,9 +186,9 @@ impl NativeHeap {
         if trace && self.trace_allocs {
             if trace {
                 let ty_name = if count > 1 {
-                    Cow::Owned(format!("array[{count}] of {}", self.metadata.pretty_type_name(&alloc_type)))
+                    Cow::Owned(format!("array[{count}] of {}", self.marshaller.metadata().pretty_type_name(&alloc_type)))
                 } else {
-                    self.metadata.pretty_type_name(&alloc_type)
+                    self.marshaller.metadata().pretty_type_name(&alloc_type)
                 };
 
                 eprintln!("[heap] alloc @ 0x{:0width$x} ({ty_name}: {total_len} bytes)", addr, width = POINTER_FMT_WIDTH);
@@ -244,9 +237,9 @@ impl NativeHeap {
             let len = alloc.memory.len();
 
             let ty_name = if count > 1 {
-                Cow::Owned(format!("array[{count}] of {}", self.metadata.pretty_type_name(&alloc.alloc_type)))
+                Cow::Owned(format!("array[{count}] of {}", self.marshaller.metadata().pretty_type_name(&alloc.alloc_type)))
             } else {
-                self.metadata.pretty_type_name(&alloc.alloc_type)
+                self.marshaller.metadata().pretty_type_name(&alloc.alloc_type)
             };
 
             eprintln!("[heap] free @ 0x{:0width$x} ({ty_name}: {len} bytes)", ptr.addr, width = POINTER_FMT_WIDTH);

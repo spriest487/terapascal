@@ -15,7 +15,6 @@ use std::io::Write;
 use std::iter;
 use std::time::Duration;
 use std::time::SystemTime;
-use terapascal_ir::MetadataSource;
 
 fn primitive_to_str<T, UnwrapFn>(state: &mut Vm, unwrap_fn: UnwrapFn) -> ExecResult<()>
 where
@@ -195,7 +194,8 @@ pub(super) fn array_length(state: &mut Vm) -> ExecResult<()> {
     let array_arg = ir::ArgID(0);
     
     let array_ptr = load_pointer(state, &array_arg.to_ref())?;
-    let array_header = state.marshaller
+    let array_header = state
+        .marshaller()
         .unmarshal_dyn_array_header_at(&array_ptr)?;
     
     let len = i32::try_from(array_header.len)
@@ -354,14 +354,14 @@ fn get_object_type_info(state: &mut Vm) -> ExecResult<()> {
         return Ok(());
     }
     
-    let obj_header = state.native_heap.load_object_header(&obj_ptr)?;
+    let obj_header = state.heap.load_object_header(&obj_ptr)?;
     
     let type_info_ref =  state.typeinfo_map
         .find_by_key(&obj_header.id.to_type(state.marshaller())?)
         .ok_or_else(|| {
             ExecError::illegal_state(format!(
                 "missing type info for object type {}",
-                obj_header.id.to_pretty_name(state.marshaller(), state.metadata.as_formatter()),
+                obj_header.id.to_pretty_name(state.marshaller()),
             ))
         })?
         .clone();
