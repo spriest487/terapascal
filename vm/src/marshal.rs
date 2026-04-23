@@ -267,8 +267,7 @@ impl Marshaller {
         match &def.identity {
             // value types: array contains this type directly as an element
             ir::StructIdentity::Record(..) 
-            | ir::StructIdentity::SetFlags { .. } 
-            | ir::StructIdentity::Array(..) => {
+            | ir::StructIdentity::SetFlags { .. } => {
                 self.add_dyn_array_type(struct_ty.clone())?;
             }
             

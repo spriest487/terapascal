@@ -101,7 +101,6 @@ impl Vm {
                 ir::StructIdentity::Closure(..) => {
                     id.to_closure_ptr_type()
                 }
-                ir::StructIdentity::Array(..) => unimplemented!()
             };
 
             marshaller.instantiate_struct_type(&ty)

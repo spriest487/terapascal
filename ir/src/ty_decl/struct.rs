@@ -104,7 +104,6 @@ impl StructDef {
 impl fmt::Display for StructDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.identity {
-            StructIdentity::Array(ty, dim) => write!(f, "array[{}] of {}", dim, ty),
             StructIdentity::Class(name) | StructIdentity::Record(name) => write!(f, "{}", name),
             StructIdentity::SetFlags { bits, .. } => write!(f, "set<{bits}>"),
             StructIdentity::Closure(identity) => write!(

@@ -26,7 +26,6 @@ pub use crate::metadata::ids::TypeDefID;
 pub enum StructIdentity {
     Record(NamePath),
     Class(NamePath),
-    Array(Type, usize),
     Closure(ClosureIdentity),
     
     // bitmask type for set flag collections. value is the number of bits
@@ -38,9 +37,6 @@ impl StructIdentity {
         match self {
             StructIdentity::Record(name) | StructIdentity::Class(name) => {
                 name.to_pretty_string(formatter)
-            },
-            StructIdentity::Array(element, size) => {
-                format!("{}[{}]", element.to_pretty_string(formatter), size)
             },
             StructIdentity::Closure(id) => {
                 let func_ty = Type::Function(id.virt_func_ty);
@@ -58,7 +54,6 @@ impl StructIdentity {
             | StructIdentity::Record(name) => Some(name),
 
             StructIdentity::Closure(..)
-            | StructIdentity::Array(..)
             | StructIdentity::SetFlags { .. } => None,
         }
     }
@@ -69,7 +64,6 @@ impl StructIdentity {
             | StructIdentity::Record(name) => Some(name),
 
             StructIdentity::Closure(..)
-            | StructIdentity::Array(..)
             | StructIdentity::SetFlags { .. } => None,
         }
     }
@@ -99,8 +93,7 @@ impl ClosureIdentity {
 impl StructIdentity {
     pub fn is_ref_type(&self) -> bool {
         match self {
-            StructIdentity::Array(..) 
-            | StructIdentity::Record(..) 
+            | StructIdentity::Record(..)
             | StructIdentity::SetFlags { .. } => false,
 
             StructIdentity::Class(..)
