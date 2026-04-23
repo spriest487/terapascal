@@ -39,11 +39,7 @@ impl NativeStack {
         popped.check_sentinel()?;
         Ok(())
     }
-    
-    pub fn frames(&self) -> &[StackFrame] {
-        self.frames.as_slice()
-    }
-    
+
     pub fn current_frame(&self) -> StackResult<&StackFrame> {
         self.frames
             .last()
@@ -325,7 +321,7 @@ impl<Ty: fmt::Display> fmt::Display for StackError<Ty> {
             StackError::Empty => {
                 write!(f, "stack was unexpectedly empty")
             }
-            
+
             StackError::ResultNotAllocated => {
                 write!(f, "storage not allocated for result value")
             }

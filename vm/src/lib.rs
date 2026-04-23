@@ -142,7 +142,7 @@ impl Vm {
     }
 
     pub fn default_struct(
-        &self,
+        &mut self,
         struct_type: &ir::Type,
     ) -> ExecResult<StructValue> {
         let (struct_def, type_index) = self.heap.marshaller.runtime_instantiate_struct(struct_type)?;
@@ -164,7 +164,7 @@ impl Vm {
         Ok(struct_val)
     }
 
-    pub fn default_val(&self, ty: &ir::Type) -> ExecResult<DynValue> {
+    pub fn default_val(&mut self, ty: &ir::Type) -> ExecResult<DynValue> {
         let val = match ty {
             ir::Type::I8 => DynValue::I8(i8::MIN),
             ir::Type::U8 => DynValue::U8(u8::MAX),
@@ -397,7 +397,7 @@ impl Vm {
         }
     }
 
-    pub fn load(&self, at: &ir::Ref) -> ExecResult<DynValue> {
+    pub fn load(&mut self, at: &ir::Ref) -> ExecResult<DynValue> {
         match at {
             ir::Ref::Discard => {
                 let msg = "can't read value from discard ref";
@@ -469,7 +469,7 @@ impl Vm {
         }
     }
 
-    pub fn evaluate(&self, val: &ir::Value) -> ExecResult<DynValue> {
+    pub fn evaluate(&mut self, val: &ir::Value) -> ExecResult<DynValue> {
         match val {
             ir::Value::LiteralU8(i) => Ok(DynValue::U8(*i)),
             ir::Value::LiteralI8(i) => Ok(DynValue::I8(*i)),
@@ -829,7 +829,7 @@ impl Vm {
         Ok(())
     }
 
-    fn addr_of_ref(&self, target: &ir::Ref) -> ExecResult<Pointer> {
+    fn addr_of_ref(&mut self, target: &ir::Ref) -> ExecResult<Pointer> {
         match target {
             ir::Ref::Discard => {
                 let msg = "can't take address of discard ref";
@@ -1276,7 +1276,7 @@ impl Vm {
     }
 
     fn variant_data_ptr(
-        &self,
+        &mut self,
         instance: &ir::Ref,
         instance_type: &ir::Type,
         case_index: usize,
@@ -1317,7 +1317,7 @@ impl Vm {
         })
     }
 
-    fn variant_tag_ptr(&self, instance: &ir::Ref) -> ExecResult<Pointer> {
+    fn variant_tag_ptr(&mut self, instance: &ir::Ref) -> ExecResult<Pointer> {
         // the variant tag is actually just the first member of the variant, so we just need to
         // output a pointer to the variant
         let variant_ptr = self.addr_of_ref(instance)?;
@@ -1347,12 +1347,12 @@ impl Vm {
     }
 
     fn element_ptr(
-        &self,
+        &mut self,
         instance: &ir::Ref,
         instance_type: &ir::Type,
         index: &ir::Value,
     ) -> ExecResult<Pointer> {
-        let Some(element_type) = self.find_element_type(instance_type) else {
+        let Some(element_type) = self.find_element_type(instance_type).cloned() else {
             return Err(ExecError::illegal_state(&format!("type {} is not an array type", instance_type)));
         };
 
@@ -1952,7 +1952,7 @@ impl Vm {
     }
 
     fn field_ptr(
-        &self,
+        &mut self,
         instance: &ir::Ref,
         instance_type: &ir::Type,
         field: ir::FieldID,
@@ -2325,7 +2325,7 @@ impl Vm {
         Ok(())
     }
 
-    fn load_string_lit(&self, id: ir::StringID) -> ExecResult<DynValue> {
+    fn load_string_lit(&mut self, id: ir::StringID) -> ExecResult<DynValue> {
         let global_ref = ir::GlobalRef::StringLiteral(id);
         self.load(&ir::Ref::from(global_ref))
     }
@@ -2357,7 +2357,7 @@ impl Vm {
     }
 
     // reads the string value stored in the string object that `str_ref` is a pointer to
-    pub fn read_string(&self, str_ref: &ir::Ref) -> ExecResult<String> {
+    pub fn read_string(&mut self, str_ref: &ir::Ref) -> ExecResult<String> {
         let str_ptr_val = self.load(str_ref)?;
         let str_ptr = str_ptr_val
             .as_pointer()
