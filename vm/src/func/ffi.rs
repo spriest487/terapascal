@@ -1,5 +1,5 @@
 use crate::ir;
-use crate::marshal::ForeignType;
+use crate::marshal::NativeType;
 use crate::ExecResult;
 use crate::Vm;
 use ::libffi::middle::Cif;
@@ -14,19 +14,19 @@ pub struct FfiInvoker {
 
     symbol: *const (),
 
-    ffi_param_tys: Vec<ForeignType>,
+    ffi_param_tys: Vec<NativeType>,
 
     return_ty: ir::Type,
-    ffi_return_ty: ForeignType,
+    ffi_return_ty: NativeType,
 }
 
 impl FfiInvoker {
     pub fn new(
         cif: Cif,
         symbol: *const (),
-        ffi_param_tys: Vec<ForeignType>,
+        ffi_param_tys: Vec<NativeType>,
         return_ty: ir::Type,
-        ffi_return_ty: ForeignType,
+        ffi_return_ty: NativeType,
     ) -> Self {
         Self {
             cif,

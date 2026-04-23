@@ -1,6 +1,9 @@
+mod util;
 mod error;
-mod marshal_type;
+mod native_type;
 
+use self::util::unmarshal_from_ne_bytes;
+use self::util::UnmarshalledValue;
 use crate::func::ffi::FfiInvoker;
 use crate::ir;
 use crate::ArrayValue;
@@ -18,7 +21,7 @@ pub use error::*;
 use ir::MetadataSource as _;
 use libffi::middle::Builder as FfiBuilder;
 use libffi::middle::Type as FfiType;
-pub use marshal_type::*;
+pub use native_type::*;
 use std::borrow::Cow;
 use std::cmp::max;
 use std::collections::BTreeMap;
@@ -36,30 +39,6 @@ use terapascal_ir::generic::instantiate_struct_def;
 
 const RC_ELEMENT_COUNT: usize = 3;
 
-#[derive(Debug, Clone)]
-pub struct UnmarshalledValue<T> {
-    pub value: T,
-    pub byte_count: usize,
-}
-
-impl From<UnmarshalledValue<DynValue>> for DynValue {
-    fn from(val: UnmarshalledValue<DynValue>) -> Self {
-        val.value
-    }
-}
-
-impl<T> UnmarshalledValue<T> {
-    pub fn map<U, F>(self, f: F) -> UnmarshalledValue<U>
-    where
-        F: FnOnce(T) -> U,
-    {
-        UnmarshalledValue {
-            value: f(self.value),
-            byte_count: self.byte_count,
-        }
-    }
-}
-
 // dynamic array values in memory are marshalled as a set of header fields followed by a variably
 // sized sequence of elements
 #[derive(Clone, Debug)]
@@ -72,14 +51,14 @@ pub struct DynArrayHeader {
 pub struct StructFieldInfo {
     pub offset: usize,
     pub ty: ir::Type,
-    pub foreign_ty: ForeignType,
+    pub foreign_ty: NativeType,
 }
 
 #[derive(Debug, Clone)]
 pub struct Marshaller {
     metadata: ir::Metadata,
 
-    types: HashMap<TypeIndex, ForeignType>,
+    types: HashMap<TypeIndex, NativeType>,
     libs: HashMap<String, Rc<dlopen::Library>>,
 
     struct_field_maps: BTreeMap<TypeIndex, BTreeMap<ir::FieldID, StructFieldInfo>>,
@@ -117,27 +96,27 @@ impl Marshaller {
         };
 
         let primitive_types = [
-            (ir::Type::Nothing.ptr(), ForeignType::pointer()),
-            (ir::Type::I8, ForeignType::i8()),
-            (ir::Type::U8, ForeignType::u8()),
-            (ir::Type::I16, ForeignType::i16()),
-            (ir::Type::U16, ForeignType::u16()),
-            (ir::Type::I32, ForeignType::i32()),
-            (ir::Type::U32, ForeignType::u32()),
-            (ir::Type::I64, ForeignType::i64()),
-            (ir::Type::U64, ForeignType::u64()),
-            (ir::Type::ISize, ForeignType::isize()),
-            (ir::Type::USize, ForeignType::usize()),
-            (ir::Type::F32, ForeignType::f32()),
-            (ir::Type::F64, ForeignType::f64()),
-            (ir::Type::Bool, ForeignType::u8()),
-            (ir::Type::any(), ForeignType::pointer()),
-            (ir::STRING_TYPE, ForeignType::pointer()),
+            (ir::Type::Nothing.ptr(), NativeType::pointer()),
+            (ir::Type::I8, NativeType::i8()),
+            (ir::Type::U8, NativeType::u8()),
+            (ir::Type::I16, NativeType::i16()),
+            (ir::Type::U16, NativeType::u16()),
+            (ir::Type::I32, NativeType::i32()),
+            (ir::Type::U32, NativeType::u32()),
+            (ir::Type::I64, NativeType::i64()),
+            (ir::Type::U64, NativeType::u64()),
+            (ir::Type::ISize, NativeType::isize()),
+            (ir::Type::USize, NativeType::usize()),
+            (ir::Type::F32, NativeType::f32()),
+            (ir::Type::F64, NativeType::f64()),
+            (ir::Type::Bool, NativeType::u8()),
+            (ir::Type::any(), NativeType::pointer()),
+            (ir::STRING_TYPE, NativeType::pointer()),
         ];
 
         for (primitive_type, ffi_type) in primitive_types {
             marshaller.register_type(primitive_type.clone(), ffi_type.clone())?;
-            marshaller.register_type(primitive_type.clone().ptr(), ForeignType::pointer())?;
+            marshaller.register_type(primitive_type.clone().ptr(), NativeType::pointer())?;
             
             marshaller.add_dyn_array_type(primitive_type)?;
         }
@@ -153,11 +132,11 @@ impl Marshaller {
         self.metadata.merge_from(metadata);
     }
 
-    pub fn variant_tag_type(&self) -> ForeignType {
-        ForeignType::i32()
+    pub fn variant_tag_type(&self) -> NativeType {
+        NativeType::i32()
     }
     
-    fn register_type(&mut self, ty: ir::Type, ffi_ty: ForeignType) -> MarshalResult<TypeIndex> {
+    fn register_type(&mut self, ty: ir::Type, ffi_ty: NativeType) -> MarshalResult<TypeIndex> {
         if let Some(type_index) = self.type_indices.get_by_right(&ty) {
             return Ok(*type_index);
         }
@@ -208,15 +187,15 @@ impl Marshaller {
             let (_, index) = self.instantiate_struct_type(&class_struct_type)?;
             Ok(index)
         } else {
-            self.register_type(ty, ForeignType::pointer())
+            self.register_type(ty, NativeType::pointer())
         }
     }
 
     fn add_dyn_array_type(&mut self, element_type: ir::Type) -> MarshalResult<TypeIndex> {
-        self.register_type(element_type.clone().dyn_array(), ForeignType::pointer())
+        self.register_type(element_type.clone().dyn_array(), NativeType::pointer())
     }
 
-    fn get_cached_type(&self, t: &ir::Type) -> Option<(ForeignType, TypeIndex)> {
+    fn get_cached_type(&self, t: &ir::Type) -> Option<(NativeType, TypeIndex)> {
         let type_index = self.type_indices.get_by_right(t)?;
         let cached = self.types.get(type_index)?;
 
@@ -227,7 +206,7 @@ impl Marshaller {
         &mut self,
         struct_type: &ir::Type,
         def: &ir::StructDef,
-    ) -> MarshalResult<(ForeignType, TypeIndex)> {
+    ) -> MarshalResult<(NativeType, TypeIndex)> {
         if let Some(cached) = self.get_cached_type(struct_type) {
             return Ok(cached);
         }
@@ -243,7 +222,7 @@ impl Marshaller {
             element_count += RC_ELEMENT_COUNT;
         }
 
-        let mut field_ffi_tys: Vec<ForeignType> = Vec::with_capacity(element_count);
+        let mut field_ffi_tys: Vec<NativeType> = Vec::with_capacity(element_count);
         let mut def_field_tys = BTreeMap::new();
         
         let mut offset = field_ffi_tys.iter()
@@ -267,7 +246,7 @@ impl Marshaller {
 
         self.add_dyn_array_type(struct_type.clone())?;
 
-        let native_type = ForeignType::structure(field_ffi_tys);
+        let native_type = NativeType::structure(field_ffi_tys);
         let type_index = self.register_type(struct_type.clone(), native_type.clone())?;
 
         self.struct_field_maps.insert(type_index, def_field_tys);
@@ -279,7 +258,7 @@ impl Marshaller {
         &mut self,
         id: ir::TypeDefID,
         def: &ir::VariantDef,
-    ) -> MarshalResult<(ForeignType, TypeIndex)> {
+    ) -> MarshalResult<(NativeType, TypeIndex)> {
         let variant_type = ir::Type::Variant(id);
 
         if let Some(cached) = self.get_cached_type(&variant_type) {
@@ -301,10 +280,10 @@ impl Marshaller {
         }
 
         let variant_layout: Vec<_> = iter::once(self.variant_tag_type())
-            .chain(iter::repeat(ForeignType::u8()).take(max_case_size))
+            .chain(iter::repeat(NativeType::u8()).take(max_case_size))
             .collect();
 
-        let variant_ffi_ty = ForeignType::structure(variant_layout);
+        let variant_ffi_ty = NativeType::structure(variant_layout);
 
         self.add_dyn_array_type(variant_type.clone())?;
         let type_index = self.register_type(variant_type, variant_ffi_ty.clone())?;
@@ -320,7 +299,7 @@ impl Marshaller {
         self.add_dyn_array_type(iface_ty)
     }
     
-    pub fn add_flags_type(&mut self, id: ir::TypeDefID) -> MarshalResult<ForeignType> {
+    pub fn add_flags_type(&mut self, id: ir::TypeDefID) -> MarshalResult<NativeType> {
         let flags_type = id.to_flags_type();
         let (_, type_index) = self.instantiate_struct_type(&flags_type)?;
 
@@ -335,7 +314,7 @@ impl Marshaller {
         // the "nothing" type is usually not allowed by the marshaller because it can't be
         // instantiated, but here we need to map it to the void ffi type
         let ffi_return_ty = match &func_ref.sig.return_ty {
-            ir::Type::Nothing => ForeignType(FfiType::void()),
+            ir::Type::Nothing => NativeType(FfiType::void()),
             return_ty => self.build_marshalled_type(return_ty)?,
         };
 
@@ -395,7 +374,7 @@ impl Marshaller {
     fn build_marshalled_type(
         &mut self,
         ty: &ir::Type,
-    ) -> MarshalResult<ForeignType> {
+    ) -> MarshalResult<NativeType> {
         if let Some(type_index) = self.try_get_type_index(ty) {
             let cached = self.types[&type_index].clone();
             return Ok(cached);
@@ -425,7 +404,7 @@ impl Marshaller {
             | ir::Type::Pointer(..) 
             | ir::Type::TempRef(..) 
             | ir::Type::Function(..) => {
-                let pointer_type = ForeignType::pointer();
+                let pointer_type = NativeType::pointer();
                 
                 self.add_dyn_array_type(ty.clone())?;
                 self.register_type(ty.clone(), pointer_type.clone())?;
@@ -437,7 +416,7 @@ impl Marshaller {
                 let el_ty = self.build_marshalled_type(&element)?;
                 let el_tys = vec![el_ty; *dim];
                 
-                let array_struct = ForeignType::structure(el_tys);
+                let array_struct = NativeType::structure(el_tys);
 
                 self.add_dyn_array_type(ty.clone())?;
                 self.register_type(ty.clone(), array_struct.clone())?;
@@ -473,7 +452,7 @@ impl Marshaller {
     }
 
     // TODO: should probably change this to take a TypeIndex
-    pub fn get_marshal_type(&self, ty: &ir::Type) -> MarshalResult<ForeignType> {
+    pub fn get_marshal_type(&self, ty: &ir::Type) -> MarshalResult<NativeType> {
         match ty {
             ir::Type::Nothing => {
                 // "nothing" is not a marshalable type!
@@ -486,14 +465,14 @@ impl Marshaller {
                 let el_ty = self.get_marshal_type(&element)?;
                 let el_tys = vec![el_ty; *dim];
 
-                Ok(ForeignType::structure(el_tys))
+                Ok(NativeType::structure(el_tys))
             },
 
             ir::Type::Pointer(..) 
             | ir::Type::TempRef(..) 
             | ir::Type::Object(..) 
             | ir::Type::WeakObject(..) 
-            | ir::Type::Function(..) => Ok(ForeignType::pointer()),
+            | ir::Type::Function(..) => Ok(NativeType::pointer()),
 
             ty => {
                 let type_index = self.get_type_index(ty)?;
@@ -743,7 +722,7 @@ impl Marshaller {
                     })?;
                 
                 offset += unsafe {
-                    let size_mem = size_ptr.as_slice_mut(ForeignType::i32().size());
+                    let size_mem = size_ptr.as_slice_mut(NativeType::i32().size());
                     marshal_bytes(&size.to_ne_bytes(), size_mem)?
                 };
 
@@ -793,7 +772,7 @@ impl Marshaller {
             ObjectID::Array(element) => {
                 let size_ptr = Pointer { addr: body_addr, ty: ir::Type::I32 };
                 let size = unmarshal_from_ne_bytes(unsafe {
-                    size_ptr.as_slice(ForeignType::i32().size())
+                    size_ptr.as_slice(NativeType::i32().size())
                 }, i32::from_ne_bytes)?;
                 
                 let array_dim = usize::try_from(size.value)
@@ -1009,15 +988,15 @@ impl Marshaller {
     }
 
     pub fn object_header_size() -> usize {
-        ForeignType::u64().size() // type index
-            + ForeignType::i32().size() // strong ref count
-            + ForeignType::i32().size() // weak ref count
+        NativeType::u64().size() // type index
+            + NativeType::i32().size() // strong ref count
+            + NativeType::i32().size() // weak ref count
     }
     
     // the array header is the region of memory preceding the elements of a dynamic array
     pub fn array_header_size() -> usize {
         let header_size = Self::object_header_size()
-            + ForeignType::i32().size(); // element count
+            + NativeType::i32().size(); // element count
         
         header_size
     }
@@ -1247,20 +1226,4 @@ fn unmarshal_bytes<const COUNT: usize>(in_bytes: &[u8]) -> MarshalResult<[u8; CO
         Ok(bytes) => Ok(bytes),
         Err(..) => Err(MarshalError::InvalidData),
     }
-}
-
-fn unmarshal_from_ne_bytes<T, FUn, const COUNT: usize>(
-    in_bytes: &[u8],
-    f_un: FUn,
-) -> MarshalResult<UnmarshalledValue<T>>
-where
-    FUn: Fn([u8; COUNT]) -> T,
-{
-    let bytes = unmarshal_bytes(in_bytes)?;
-    let value = f_un(bytes);
-
-    Ok(UnmarshalledValue {
-        value,
-        byte_count: bytes.len(),
-    })
 }

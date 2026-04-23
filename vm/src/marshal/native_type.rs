@@ -16,13 +16,13 @@ impl fmt::Display for TypeIndex {
 
 #[repr(transparent)]
 #[derive(Clone, Debug)]
-pub struct ForeignType(pub(super) FfiType);
+pub struct NativeType(pub(super) FfiType);
 
-impl ForeignType {
+impl NativeType {
     pub fn structure<I>(fields: I) -> Self
     where
-        I: IntoIterator<Item = ForeignType>,
-        I::IntoIter: ExactSizeIterator<Item = ForeignType>,
+        I: IntoIterator<Item =NativeType>,
+        I::IntoIter: ExactSizeIterator<Item =NativeType>,
     {
         Self(FfiType::structure(fields.into_iter().map(|t| t.0)))
     }
@@ -97,7 +97,7 @@ impl ForeignType {
         }
     }
 
-    pub fn elements(&self) -> &[ForeignType] {
+    pub fn elements(&self) -> &[NativeType] {
         let raw_ty = self.0.as_raw_ptr();
 
         unsafe {
@@ -111,7 +111,7 @@ impl ForeignType {
                 }
             };
 
-            let slice = slice_from_raw_parts::<ForeignType>(transmute((*raw_ty).elements), count);
+            let slice = slice_from_raw_parts::<NativeType>(transmute((*raw_ty).elements), count);
             slice.as_ref().unwrap()
         }
     }
