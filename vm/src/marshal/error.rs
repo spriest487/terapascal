@@ -25,9 +25,8 @@ pub enum MarshalError<Ty = ir::Type> {
     InvalidTypeIndex {
         type_index: TypeIndex,
     },
-    InvalidStructType {
-        ty: Ty,
-    },
+    InvalidStructType(Ty),
+    InvalidObjectType(Ty),
 
     InvalidRefCountValue(DynValue),
 
@@ -64,6 +63,9 @@ impl<Ty> MarshalError<Ty> {
             MarshalError::UnsupportedType(ty) => {
                 MarshalError::UnsupportedType(f(ty))
             },
+            MarshalError::InvalidObjectType(ty) => {
+                MarshalError::InvalidObjectType(f(ty))
+            }
             MarshalError::VariantTagOutOfRange { variant_type, tag } => {
                 MarshalError::VariantTagOutOfRange { variant_type: f(variant_type), tag }
             },
@@ -79,8 +81,8 @@ impl<Ty> MarshalError<Ty> {
             MarshalError::InvalidTypeIndex { type_index } => {
                 MarshalError::InvalidTypeIndex { type_index }
             },
-            MarshalError::InvalidStructType { ty } => {
-                MarshalError::InvalidStructType { ty: f(ty) }
+            MarshalError::InvalidStructType(ty) => {
+                MarshalError::InvalidStructType(f(ty))
             }
             MarshalError::InvalidRefCountValue(val) => {
                 MarshalError::InvalidRefCountValue(val)
@@ -104,8 +106,11 @@ impl<T: fmt::Display> fmt::Display for MarshalError<T> {
             MarshalError::InvalidTypeIndex { type_index }  => {
                 write!(f, "Illegal object pointer (unknown type index: {})", type_index)
             },
-            MarshalError::InvalidStructType { ty }  => {
+            MarshalError::InvalidStructType(ty)  => {
                 write!(f, "Type {} is not a struct", ty)
+            }
+            MarshalError::InvalidObjectType(ty)  => {
+                write!(f, "Type {} is not an object type", ty)
             }
             MarshalError::UnsupportedValue(val) => {
                 write!(f, "Unable to marshal value: {:?}", val)

@@ -521,6 +521,16 @@ impl Marshaller {
         }
     }
 
+    pub fn get_object_id(&self, index: TypeIndex) -> MarshalResult<&ObjectID> {
+        match self.object_id_indices.get_by_left(&index) {
+            Some(id) => Ok(id),
+            None => {
+                let object_type = self.get_type(index)?;
+                Err(MarshalError::InvalidObjectType(object_type.clone()))
+            }
+        }
+    }
+
     pub fn get_field_info(&self, struct_type: &ir::Type, field: ir::FieldID) -> MarshalResult<&StructFieldInfo> {
         let type_index = self.get_type_index(struct_type)?;
 
@@ -976,7 +986,7 @@ impl Marshaller {
             .get_by_right(&header.id)
             .ok_or_else(|| {
                 match header.id.to_type(self) {
-                    Ok(object_type) => MarshalError::unsupported_type(object_type),
+                    Ok(object_type) => MarshalError::InvalidObjectType(object_type),
                     Err(err) => err,
                 }
             })?;
@@ -1024,12 +1034,8 @@ impl Marshaller {
 
         let weak_count = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
         offset += weak_count.byte_count;
-        
-        let object_id = self.object_id_indices
-            .get_by_left(&TypeIndex(type_index.value))
-            .ok_or_else(|| {
-                MarshalError::invalid_type_index(TypeIndex(type_index.value))
-            })?;
+
+        let object_id = self.get_object_id(TypeIndex(type_index.value))?;
 
         Ok(UnmarshalledValue {
             value: ObjectHeader {
@@ -1103,7 +1109,7 @@ impl Marshaller {
         let Some(layout) = self.struct_layouts.get(&struct_val.type_index) else {
             // struct type is not in metadata
             let struct_type = self.get_type(struct_val.type_index)?;
-            return Err(MarshalError::InvalidStructType { ty: struct_type.clone() });
+            return Err(MarshalError::InvalidStructType(struct_type.clone()));
         };
 
         for (field_id, field_info) in &layout.fields {

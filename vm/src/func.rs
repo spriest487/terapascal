@@ -330,7 +330,7 @@ pub fn instantiate_func(
 
     if vm.opts.trace_generics {
         eprintln!(
-            "vm: instantiating function {} with arguments {}",
+            "[vm] instantiating function {} with arguments {}",
             generic_func.name,
             type_args_formatted,
         );

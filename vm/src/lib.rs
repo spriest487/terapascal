@@ -1889,13 +1889,6 @@ impl Vm {
         let is = match object_id {
             ir::ObjectID::Any => true,
 
-            ir::ObjectID::Class(class_id) => {
-                let class_type = class_id.to_class_ptr_type();
-                let class_type_index = self.marshaller().get_type_index(&class_type)?;
-
-                object_header.id == ObjectID::Struct(class_type_index)
-            }
-
             ir::ObjectID::Interface(iface_id) => {
                 match &object_header.id {
                     // out of all the types a struct might represent, only a class can
@@ -1907,6 +1900,13 @@ impl Vm {
 
                     _ => false,
                 }
+            }
+
+            ir::ObjectID::Class(class_id) => {
+                let class_type = class_id.to_struct_type([]); // TODO: class type args
+                let class_type_index = self.marshaller().get_type_index(&class_type)?;
+
+                object_header.id == ObjectID::Struct(class_type_index)
             }
 
             ir::ObjectID::AnyClosure(func_type_id) => {
