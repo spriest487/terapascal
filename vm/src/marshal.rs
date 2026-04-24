@@ -136,7 +136,7 @@ impl Marshaller {
             match type_def {
                 ir::TypeDef::Struct(struct_def) => {
                     if !struct_def.is_generic() {
-                        self.add_struct_type(&struct_def.identity.to_type(id))?;
+                        self.add_struct_type(&struct_def.identity.to_definition_type(id))?;
                     }
                 }
                 ir::TypeDef::Variant(variant_def) => {
@@ -180,7 +180,6 @@ impl Marshaller {
 
         let object_id = match &ty {
             ir::Type::WeakObject(id) | ir::Type::Object(id) => match id {
-                ir::ObjectID::Closure(class_id)
                 | ir::ObjectID::Class(class_id) => {
                     // TODO: class type args
                     let struct_type = class_id.to_struct_type([]);
@@ -556,8 +555,7 @@ impl Marshaller {
 
             // for object types that are pointers to an inner struct, instantiate that inner
             // struct and register the object type separately
-            ir::Type::Object(ir::ObjectID::Closure(..))
-            | ir::Type::Object(ir::ObjectID::Class(..))
+            ir::Type::Object(ir::ObjectID::Class(..))
             | ir::Type::WeakObject(ir::ObjectID::Class(..)) => {
                 let type_index = self.register_type(struct_type.clone(), NativeType::pointer())?;
 

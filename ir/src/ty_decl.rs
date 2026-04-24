@@ -48,11 +48,16 @@ impl StructIdentity {
         }
     }
 
-    pub fn to_type(&self, id: TypeDefID) -> Type {
+    pub fn to_definition_type(&self, id: TypeDefID) -> Type {
         match self {
             StructIdentity::Record(name) => id.to_struct_type(name.type_args.clone()),
+
             StructIdentity::Class(_name) => id.to_class_ptr_type(), // TODO: class type args
-            StructIdentity::Closure(..) => id.to_closure_ptr_type(),
+
+            // the type of a closure definition is not a (virtual) closure pointer object, it's
+            // an anonymous class
+            StructIdentity::Closure(..) => id.to_class_ptr_type(),
+
             StructIdentity::SetFlags { .. } => id.to_flags_type(),
         }
     }
