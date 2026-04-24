@@ -696,7 +696,7 @@ impl ObjectID {
                     // abstract types
                     ir::ObjectID::Any
                     | ir::ObjectID::Interface(_)
-                    | ir::ObjectID::Closure(_) => None,
+                    | ir::ObjectID::AnyClosure(_) => None,
                 }
             },
 

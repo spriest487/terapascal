@@ -1021,7 +1021,7 @@ impl<'a> LibraryBuilder<'a> {
 
             typ::Type::Function(func_sig) => {
                 let func_ty_id = self.translate_func_ty(func_sig);
-                let ty = ir::Type::Object(ir::ObjectID::Closure(func_ty_id));
+                let ty = ir::Type::Object(ir::ObjectID::AnyClosure(func_ty_id));
 
                 self.add_cached_type(src_ty.clone(), ty.clone());
 

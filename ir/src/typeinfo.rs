@@ -56,7 +56,7 @@ impl TypeInfo {
             flags |= Self::type_runtime_flags(&Type::Object(class_id.clone()));
             flags |= TYPE_FLAG_WEAK;
         }
-        if matches!(ty, Type::Function(..) | Type::Object(ObjectID::Closure(..))) {
+        if matches!(ty, Type::Function(..) | Type::Object(ObjectID::AnyClosure(..))) {
             flags |= TYPE_FLAG_FUNCTION;
         }
 

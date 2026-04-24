@@ -106,7 +106,7 @@ impl fmt::Display for StructDef {
         match &self.identity {
             StructIdentity::Class(name) | StructIdentity::Record(name) => write!(f, "{}", name),
             StructIdentity::SetFlags { bits, .. } => write!(f, "set<{bits}>"),
-            StructIdentity::Closure(identity) => write!(
+            StructIdentity::ClosureObject(identity) => write!(
                 f,
                 "closure of function type {} ({})",
                 identity.virt_func_ty, identity.id

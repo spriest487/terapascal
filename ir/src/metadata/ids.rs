@@ -45,7 +45,7 @@ impl TypeDefID {
     }
 
     pub fn to_closure_ptr_type(self) -> Type {
-        Type::Object(ObjectID::Closure(self))
+        Type::Object(ObjectID::AnyClosure(self))
     }
 
     pub fn to_struct_type(self, args: impl IntoIterator<Item=Type>) -> Type {
@@ -102,7 +102,7 @@ pub enum ObjectID {
     Interface(InterfaceID),
 
     // closure of an unknown structure that calls the function type with this typedef ID
-    Closure(TypeDefID),
+    AnyClosure(TypeDefID),
 
     // array class (dyn array)
     Array(Rc<Type>),
@@ -135,7 +135,7 @@ impl fmt::Display for ObjectID {
             ObjectID::Any => write!(f, "any"),
             ObjectID::Class(class_id) => write!(f, "{}", class_id),
             ObjectID::Interface(iface_id) => write!(f, "{}", iface_id),
-            ObjectID::Closure(closure_id) => write!(f, "{}", closure_id),
+            ObjectID::AnyClosure(closure_id) => write!(f, "{}", closure_id),
             ObjectID::Array(element_type) => write!(f, "array of {}", element_type),
             ObjectID::Box(element_type) => write!(f, "box of {}", element_type),
         }

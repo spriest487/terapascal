@@ -1909,13 +1909,13 @@ impl Vm {
                 }
             }
 
-            ir::ObjectID::Closure(func_type_id) => {
+            ir::ObjectID::AnyClosure(func_type_id) => {
                 match object_header.id {
                     ObjectID::Struct(class_index) => {
                         let class_type = self.marshaller().get_type(class_index)?;
 
                         match class_type {
-                            ir::Type::Object(ir::ObjectID::Closure(id)) => {
+                            ir::Type::Object(ir::ObjectID::AnyClosure(id)) => {
                                 self.metadata()
                                     .closures_by_function()
                                     .get(&func_type_id)
@@ -1967,7 +1967,7 @@ impl Vm {
 
             // virtual reference, we need to load the actual value behind the pointer to get the
             // concrete type ID. we assume it's a class or closure, the only types to have fields
-            ir::Type::Object(ir::ObjectID::Class(..) | ir::ObjectID::Closure(..)) => {
+            ir::Type::Object(ir::ObjectID::Class(..) | ir::ObjectID::AnyClosure(..)) => {
                 let DynValue::Pointer(object_ptr) = self.load(instance)? else {
                     return Err(ExecError::illegal_state(format!(
                         "exec_field: expected base value to be an object pointer ({})",

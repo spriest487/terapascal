@@ -175,7 +175,7 @@ fn vtype_typeinfo_name(id: &ir::ObjectID) -> String {
         ir::ObjectID::Any => String::from("VType_Any"),
         ir::ObjectID::Class(id) => format!("VType_Class_{id}"),
         ir::ObjectID::Interface(id) => format!("VType_Interface_{id}"),
-        ir::ObjectID::Closure(id) => format!("VType_Closure_{id}"),
+        ir::ObjectID::AnyClosure(id) => format!("VType_Closure_{id}"),
         ir::ObjectID::Array(element) => {
             format!("DynArray_{}", global_typeinfo_decl_name_type(&element))
         }
@@ -740,7 +740,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                     Expr::LitBool(true)
                 },
 
-                ir::ObjectID::Closure(_func_ty_id) => {
+                ir::ObjectID::AnyClosure(_func_ty_id) => {
                     // TODO - can you use `is` on a function type?
                     Expr::LitBool(false)
                 },

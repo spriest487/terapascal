@@ -390,7 +390,7 @@ impl Metadata {
 
             Type::Object(virt_id) | Type::WeakObject(virt_id) => {
                 match virt_id {
-                    ObjectID::Class(id) | ObjectID::Closure(id) => *id,
+                    ObjectID::Class(id) | ObjectID::AnyClosure(id) => *id,
 
                     ObjectID::Interface(id) => {
                         return self.ifaces.contains_key(id);

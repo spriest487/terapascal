@@ -90,7 +90,7 @@ impl MetadataBuilder {
     }
 
     pub fn define_closure_ty(&mut self, id: TypeDefID, closure_def: StructDef) {
-        let StructIdentity::Closure(identity) = &closure_def.identity else {
+        let StructIdentity::ClosureObject(identity) = &closure_def.identity else {
             panic!("define_closure_ty: definition struct did not have a closure identity");
         };
 

@@ -21,7 +21,7 @@ pub struct ClosureInstance {
 
 impl ClosureInstance {
     pub fn function_pointer_type(&self) -> ir::Type {
-        ir::Type::Object(ir::ObjectID::Closure(self.func_ty_id))
+        ir::Type::Object(ir::ObjectID::AnyClosure(self.func_ty_id))
     }
 
     pub fn closure_class_type(&self) -> ir::Type {
@@ -68,7 +68,7 @@ pub fn translate_closure_struct(
     
     lib.metadata_mut().define_closure_ty(
         id,
-        ir::StructDef::new(ir::StructIdentity::Closure(identity)).with_fields(fields),
+        ir::StructDef::new(ir::StructIdentity::ClosureObject(identity)).with_fields(fields),
     );
 
     id

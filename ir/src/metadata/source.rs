@@ -203,7 +203,7 @@ pub trait MetadataSource : Sized {
 
             ObjectID::Interface(iface_id) => Cow::Owned(self.iface_name(*iface_id)),
 
-            ObjectID::Closure(func_ty_id) => Cow::Owned(match self.get_function_ptr_sig(*func_ty_id) {
+            ObjectID::AnyClosure(func_ty_id) => Cow::Owned(match self.get_function_ptr_sig(*func_ty_id) {
                 Some(sig) => format!("closure of {}", self.pretty_func_sig(sig)),
                 None => format!("closure of {}", func_ty_id),
             }),

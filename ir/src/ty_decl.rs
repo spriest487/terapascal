@@ -26,7 +26,7 @@ pub use crate::metadata::ids::TypeDefID;
 pub enum StructIdentity {
     Record(NamePath),
     Class(NamePath),
-    Closure(ClosureIdentity),
+    ClosureObject(ClosureIdentity),
     
     // bitmask type for set flag collections. value is the number of bits
     SetFlags { bits: usize }
@@ -38,7 +38,7 @@ impl StructIdentity {
             StructIdentity::Record(name) | StructIdentity::Class(name) => {
                 name.to_pretty_string(formatter)
             },
-            StructIdentity::Closure(id) => {
+            StructIdentity::ClosureObject(id) => {
                 let func_ty = Type::Function(id.virt_func_ty);
                 format!("closure ({})", func_ty.to_pretty_string(formatter))
             }
@@ -56,7 +56,7 @@ impl StructIdentity {
 
             // the type of a closure definition is not a (virtual) closure pointer object, it's
             // an anonymous class
-            StructIdentity::Closure(..) => id.to_class_ptr_type(),
+            StructIdentity::ClosureObject(..) => id.to_class_ptr_type(),
 
             StructIdentity::SetFlags { .. } => id.to_flags_type(),
         }
@@ -67,7 +67,7 @@ impl StructIdentity {
             StructIdentity::Class(name)
             | StructIdentity::Record(name) => Some(name),
 
-            StructIdentity::Closure(..)
+            StructIdentity::ClosureObject(..)
             | StructIdentity::SetFlags { .. } => None,
         }
     }
@@ -77,7 +77,7 @@ impl StructIdentity {
             StructIdentity::Class(name)
             | StructIdentity::Record(name) => Some(name),
 
-            StructIdentity::Closure(..)
+            StructIdentity::ClosureObject(..)
             | StructIdentity::SetFlags { .. } => None,
         }
     }
@@ -100,7 +100,7 @@ pub struct ClosureIdentity {
 
 impl ClosureIdentity {
     pub fn to_closure_ptr_type(&self) -> Type {
-        Type::Object(ObjectID::Closure(self.virt_func_ty))
+        Type::Object(ObjectID::AnyClosure(self.virt_func_ty))
     }
 }
 
@@ -111,7 +111,7 @@ impl StructIdentity {
             | StructIdentity::SetFlags { .. } => false,
 
             StructIdentity::Class(..)
-            | StructIdentity::Closure(..) => true,
+            | StructIdentity::ClosureObject(..) => true,
         }
     }
 }
