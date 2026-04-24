@@ -55,22 +55,25 @@ pub struct StructFieldInfo {
 }
 
 #[derive(Debug, Clone)]
+struct StructLayout {
+    def: Rc<ir::StructDef>,
+    fields: BTreeMap<ir::FieldID, StructFieldInfo>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Marshaller {
     metadata: ir::Metadata,
 
     types: HashMap<TypeIndex, NativeType>,
     libs: HashMap<String, Rc<dlopen::Library>>,
 
-    struct_field_maps: BTreeMap<TypeIndex, BTreeMap<ir::FieldID, StructFieldInfo>>,
+    struct_layouts: BTreeMap<TypeIndex, StructLayout>,
     variant_case_types: BTreeMap<TypeIndex, Vec<Option<ir::Type>>>,
 
     // map of known object IDs to serializable indices
     next_type_index: TypeIndex,
     type_indices: BiHashMap<TypeIndex, ir::Type>,
     object_id_indices: BiHashMap<TypeIndex, ObjectID>,
-
-    // cache of struct definitions for generic structs instantiated at runtime
-    struct_instantiations: BTreeMap<TypeIndex, Rc<ir::StructDef>>,
 
     trace_generics: bool,
 }
@@ -83,14 +86,12 @@ impl Marshaller {
             types: HashMap::new(),
             libs: HashMap::new(),
 
-            struct_field_maps: BTreeMap::new(),
+            struct_layouts: BTreeMap::new(),
             variant_case_types: BTreeMap::new(),
             
             next_type_index: TypeIndex(0),
             object_id_indices: BiHashMap::new(),
             type_indices: BiHashMap::new(),
-
-            struct_instantiations: BTreeMap::new(),
 
             trace_generics,
         };
@@ -128,8 +129,38 @@ impl Marshaller {
         &self.metadata
     }
 
-    pub fn load_metadata(&mut self, metadata: &ir::Metadata) {
+    pub fn load_metadata(&mut self, metadata: &ir::Metadata) -> MarshalResult<()> {
         self.metadata.merge_from(metadata);
+
+        for (id, type_def) in metadata.type_defs() {
+            match type_def {
+                ir::TypeDef::Struct(struct_def) => {
+                    if !struct_def.is_generic() {
+                        self.add_struct_type(&struct_def.identity.to_type(id))?;
+                    }
+                }
+                ir::TypeDef::Variant(variant_def) => {
+                    if !variant_def.is_generic() {
+                        self.add_variant(id, variant_def)?;
+                    }
+                }
+                ir::TypeDef::Function(_func_def) => {
+                    // functions don't need special marshaling, we only marshal pointers to them
+                }
+            };
+        }
+
+        for (iface_id, _) in metadata.interfaces() {
+            self.add_iface(iface_id)?;
+        }
+
+        for (ty, _) in metadata.type_info() {
+            if ty.is_object() {
+                self.register_object_type(ty.clone())?;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn variant_tag_type(&self) -> NativeType {
@@ -149,10 +180,11 @@ impl Marshaller {
 
         let object_id = match &ty {
             ir::Type::WeakObject(id) | ir::Type::Object(id) => match id {
-                ir::ObjectID::Class(class_id) => {
+                ir::ObjectID::Closure(class_id)
+                | ir::ObjectID::Class(class_id) => {
                     // TODO: class type args
                     let struct_type = class_id.to_struct_type([]);
-                    let (_, struct_index) = &self.instantiate_struct_type(&struct_type)?;
+                    let (_, struct_index) = &self.add_struct_type(&struct_type)?;
 
                     Some(ObjectID::Struct(*struct_index))
                 },
@@ -184,7 +216,7 @@ impl Marshaller {
             // TODO: class type args
             let class_struct_type = class_id.to_struct_type([]);
 
-            let (_, index) = self.instantiate_struct_type(&class_struct_type)?;
+            let (_, index) = self.add_struct_type(&class_struct_type)?;
             Ok(index)
         } else {
             self.register_type(ty, NativeType::pointer())
@@ -202,14 +234,16 @@ impl Marshaller {
         Some((cached.clone(), *type_index))
     }
 
-    pub fn add_struct(
+    pub fn define_struct(
         &mut self,
         struct_type: &ir::Type,
-        def: &ir::StructDef,
+        def: Rc<ir::StructDef>,
     ) -> MarshalResult<(NativeType, TypeIndex)> {
         if let Some(cached) = self.get_cached_type(struct_type) {
             return Ok(cached);
         }
+
+        assert!(matches!(struct_type, ir::Type::Struct {..} | ir::Type::Flags(..)), "not a struct: {}", struct_type);
 
         let mut def_fields: Vec<_> = def.fields.iter().collect();
         def_fields.sort_by_key(|(id, _)| **id);
@@ -222,20 +256,20 @@ impl Marshaller {
             element_count += RC_ELEMENT_COUNT;
         }
 
-        let mut field_ffi_tys: Vec<NativeType> = Vec::with_capacity(element_count);
-        let mut def_field_tys = BTreeMap::new();
+        let mut field_native_types: Vec<NativeType> = Vec::with_capacity(element_count);
+        let mut field_layout = BTreeMap::new();
         
-        let mut offset = field_ffi_tys.iter()
+        let mut offset = field_native_types.iter()
             .map(|ty| ty.size())
             .sum::<usize>();
 
         for (field_id, field_def) in def_fields {
             let foreign_ty = self.build_marshalled_type(&field_def.ty)?;
-            field_ffi_tys.push(foreign_ty.clone());
+            field_native_types.push(foreign_ty.clone());
             
             let size = foreign_ty.size();
 
-            def_field_tys.insert(*field_id, StructFieldInfo {
+            field_layout.insert(*field_id, StructFieldInfo {
                 offset,
                 ty: field_def.ty.clone(),
                 foreign_ty,
@@ -246,10 +280,15 @@ impl Marshaller {
 
         self.add_dyn_array_type(struct_type.clone())?;
 
-        let native_type = NativeType::structure(field_ffi_tys);
+        let native_type = NativeType::structure(field_native_types);
         let type_index = self.register_type(struct_type.clone(), native_type.clone())?;
 
-        self.struct_field_maps.insert(type_index, def_field_tys);
+        self.struct_layouts.insert(type_index, StructLayout {
+            fields: field_layout,
+            def,
+        });
+
+        // eprintln!("add_struct: {}={} (size {})", type_index.0, struct_type.to_pretty_string(&self.metadata), native_type.size());
 
         Ok((native_type, type_index))
     }
@@ -301,7 +340,7 @@ impl Marshaller {
     
     pub fn add_flags_type(&mut self, id: ir::TypeDefID) -> MarshalResult<NativeType> {
         let flags_type = id.to_flags_type();
-        let (_, type_index) = self.instantiate_struct_type(&flags_type)?;
+        let (_, type_index) = self.add_struct_type(&flags_type)?;
 
         let native_type = self.types[&type_index].clone();
         Ok(native_type)
@@ -394,7 +433,7 @@ impl Marshaller {
             },
 
             ir::Type::Struct { .. } => {
-                let (_, type_index) = self.instantiate_struct_type(ty)?;
+                let (_, type_index) = self.add_struct_type(ty)?;
                 let marshalled_type = self.types[&type_index].clone();
                 Ok(marshalled_type)
             },
@@ -452,7 +491,7 @@ impl Marshaller {
     }
 
     // TODO: should probably change this to take a TypeIndex
-    pub fn get_marshal_type(&self, ty: &ir::Type) -> MarshalResult<NativeType> {
+    pub fn get_native_type(&self, ty: &ir::Type) -> MarshalResult<NativeType> {
         match ty {
             ir::Type::Nothing => {
                 // "nothing" is not a marshalable type!
@@ -462,7 +501,7 @@ impl Marshaller {
             // we can't cache array types so always build them on demand
             // pascal static arrays are treated as a struct of elements laid out sequentially
             ir::Type::Array { element, dim } => {
-                let el_ty = self.get_marshal_type(&element)?;
+                let el_ty = self.get_native_type(&element)?;
                 let el_tys = vec![el_ty; *dim];
 
                 Ok(NativeType::structure(el_tys))
@@ -472,7 +511,9 @@ impl Marshaller {
             | ir::Type::TempRef(..) 
             | ir::Type::Object(..) 
             | ir::Type::WeakObject(..) 
-            | ir::Type::Function(..) => Ok(NativeType::pointer()),
+            | ir::Type::Function(..) => {
+                Ok(NativeType::pointer())
+            },
 
             ty => {
                 let type_index = self.get_type_index(ty)?;
@@ -484,13 +525,13 @@ impl Marshaller {
     pub fn get_field_info(&self, struct_type: &ir::Type, field: ir::FieldID) -> MarshalResult<&StructFieldInfo> {
         let type_index = self.get_type_index(struct_type)?;
 
-        let fields = self.struct_field_maps
+        let struct_layout = self.struct_layouts
             .get(&type_index)
             .ok_or_else(|| {
                 MarshalError::unsupported_type(struct_type.clone())
             })?;
 
-        let field_info = fields
+        let field_info = struct_layout.fields
             .get(&field)
             .ok_or_else(|| {
                 MarshalError::FieldOutOfRange { struct_type: struct_type.clone(), field }
@@ -499,19 +540,37 @@ impl Marshaller {
         Ok(field_info)
     }
 
-    pub fn instantiate_struct_type(
+    pub fn add_struct_type(
         &mut self,
         struct_type: &ir::Type,
     ) -> MarshalResult<(Rc<ir::StructDef>, TypeIndex)> {
         if let Some(type_index) = self.try_get_type_index(struct_type)
-            && let Some(def) = self.struct_instantiations.get(&type_index)
+            && let Some(layout) = self.struct_layouts.get(&type_index)
         {
-            return Ok((def.clone(), type_index));
+            return Ok((layout.def.clone(), type_index));
         }
 
-        let (id, args): (_, &[ir::Type]) = match struct_type {
+        let (def_id, args): (_, &[ir::Type]) = match struct_type {
             ir::Type::Struct { id, args } => (*id, args),
             ir::Type::Flags(id) => (*id, &[]),
+
+            // for object types that are pointers to an inner struct, instantiate that inner
+            // struct and register the object type separately
+            ir::Type::Object(ir::ObjectID::Closure(..))
+            | ir::Type::Object(ir::ObjectID::Class(..))
+            | ir::Type::WeakObject(ir::ObjectID::Class(..)) => {
+                let type_index = self.register_type(struct_type.clone(), NativeType::pointer())?;
+
+                let def = match self.object_id_indices.get_by_left(&type_index) {
+                    Some(ObjectID::Struct(struct_index)) => {
+                        self.struct_layouts[&struct_index].def.clone()
+                    },
+                    _ => unreachable!("{} must have a registered struct object ID after register_object_type was called", struct_type),
+                };
+
+                return Ok((def, type_index));
+            }
+
             _ => {
                 return Err(MarshalError::unsupported_type(struct_type.clone()));
             }
@@ -519,7 +578,7 @@ impl Marshaller {
 
         let generic_def = self
             .metadata()
-            .get_struct_def(id)
+            .get_struct_def(def_id)
             .cloned()
             .ok_or_else(|| {
                 MarshalError::MissingTypeDef(struct_type.clone())
@@ -528,10 +587,8 @@ impl Marshaller {
         match instantiate_struct_def(&generic_def, args) {
             Cow::Borrowed(..) => {
                 // not generic
-                let (_, type_index) = self.add_struct(struct_type, &generic_def)?;
-
-                let def = Rc::new(generic_def.clone());
-                self.struct_instantiations.insert(type_index, def.clone());
+                let def = Rc::new(generic_def);
+                let (_, type_index) = self.define_struct(struct_type, def.clone())?;
 
                 Ok((def, type_index))
             },
@@ -539,13 +596,11 @@ impl Marshaller {
             Cow::Owned(new_def) => {
                 if self.trace_generics {
                     let new_name = new_def.identity.to_pretty_string(self.metadata().as_formatter());
-                    eprintln!("[vm] new instantiation of struct {}: {}", id, new_name);
+                    eprintln!("[vm] new instantiation of struct {}: {}", def_id, new_name);
                 }
 
-                let (_, struct_index) = self.add_struct(struct_type, &new_def)?;
                 let def = Rc::new(new_def);
-
-                self.struct_instantiations.insert(struct_index, def.clone());
+                let (_, struct_index) = self.define_struct(struct_type, def.clone())?;
 
                 Ok((def, struct_index))
             },
@@ -615,18 +670,18 @@ impl Marshaller {
     
             DynValue::Structure(structure) => {
                 let struct_type = self.get_type(structure.type_index)?;
-                let ty = self.get_marshal_type(&struct_type)?;
+                let ty = self.get_native_type(&struct_type)?;
                 ty.size()
             }
 
             DynValue::Variant(variant) => {
                 let variant_type = self.get_type(variant.type_index)?;
-                let ty = self.get_marshal_type(&variant_type)?;
+                let ty = self.get_native_type(&variant_type)?;
                 ty.size()
             }
 
             DynValue::Array(array) => {
-                let el_size = self.get_marshal_type(&array.element_type)?.size();
+                let el_size = self.get_native_type(&array.element_type)?.size();
                 array.elements.len() * el_size
             }
         };
@@ -677,7 +732,7 @@ impl Marshaller {
     pub fn unmarshal_at(&self, pointer: &Pointer) -> MarshalResult<DynValue> {
         assert_ne!(0, pointer.addr);
 
-        let marshal_ty = self.get_marshal_type(&pointer.ty)?;
+        let marshal_ty = self.get_native_type(&pointer.ty)?;
 
         let result = self.unmarshal(unsafe {
             pointer.as_slice(marshal_ty.size())
@@ -801,7 +856,7 @@ impl Marshaller {
         
         // eprintln!("marshal_at: {into_ptr} <- {:?}", val);
 
-        let marshal_ty = self.get_marshal_type(&into_ptr.ty)?;
+        let marshal_ty = self.get_native_type(&into_ptr.ty)?;
         let type_size = marshal_ty.size();
 
         let mem_slice = slice_from_raw_parts_mut(into_ptr.addr as *mut u8, type_size);
@@ -904,7 +959,7 @@ impl Marshaller {
                     local_sizes.push(0);
                 }
 
-                let ty_size = self.get_marshal_type(ty)?.size();
+                let ty_size = self.get_native_type(ty)?.size();
                 let local_size = &mut local_sizes[id.0];
                 *local_size = max(ty_size, *local_size);
             }
@@ -914,7 +969,8 @@ impl Marshaller {
         Ok(size_sum)
     }
 
-    pub fn marshal_object_header(&self,
+    pub fn marshal_object_header(
+        &self,
         header: &ObjectHeader,
         out_bytes: &mut [u8],
     ) -> MarshalResult<usize> {
@@ -1046,13 +1102,13 @@ impl Marshaller {
     fn marshal_struct(&self, struct_val: &StructValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
         let mut offset = 0;
         
-        let Some(fields) = self.struct_field_maps.get(&struct_val.type_index) else {
+        let Some(layout) = self.struct_layouts.get(&struct_val.type_index) else {
             // struct type is not in metadata
             let struct_type = self.get_type(struct_val.type_index)?;
             return Err(MarshalError::InvalidStructType { ty: struct_type.clone() });
         };
 
-        for (field_id, field_info) in fields {
+        for (field_id, field_info) in &layout.fields {
             match struct_val.fields.get(field_id.0) {
                 Some(field_val) => {
                     offset += self.marshal(field_val, &mut out_bytes[offset..])?;
@@ -1060,7 +1116,7 @@ impl Marshaller {
                 
                 // skip this field
                 None => {
-                    let field_foreign_ty = self.get_marshal_type(&field_info.ty)?;
+                    let field_foreign_ty = self.get_native_type(&field_info.ty)?;
                     offset += field_foreign_ty.size();
                 }
             };
@@ -1072,11 +1128,11 @@ impl Marshaller {
     fn unmarshal_struct(&self, type_index: TypeIndex, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<StructValue>> {
         let mut offset = 0;
 
-        let field_map = self.struct_field_maps
+        let layout = self.struct_layouts
             .get(&type_index)
             .ok_or_else(|| MarshalError::invalid_type_index(type_index))?;
 
-        let fields_len = field_map.keys()
+        let fields_len = layout.fields.keys()
             .map(|id| id.0)
             .max()
             .map(|max_id| max_id + 1)
@@ -1084,7 +1140,7 @@ impl Marshaller {
 
         let mut fields = vec![DynValue::I32(-1); fields_len];
 
-        for (id, field_info) in field_map {
+        for (id, field_info) in &layout.fields {
             let field_val = self.unmarshal(&in_bytes[offset..], &field_info.ty)?;
             offset += field_val.byte_count;
             fields[id.0] = field_val.value;
@@ -1124,7 +1180,7 @@ impl Marshaller {
 
         // we still need to refer to the type size, because we always marshal/unmarshal
         // the entire size of the variant regardless of which case is active
-        let variant_size = self.get_marshal_type(&variant_type)?.size();
+        let variant_size = self.get_native_type(&variant_type)?.size();
 
         let tag_size = self.marshal(&variant_val.tag, out_bytes)?;
 
@@ -1133,7 +1189,7 @@ impl Marshaller {
             None => 0,
             Some(case_ty) => {
                 let data_size = self.marshal(&variant_val.data, &mut out_bytes[tag_size..])?;
-                let ty_size = self.get_marshal_type(case_ty)?.size();
+                let ty_size = self.get_native_type(case_ty)?.size();
                 assert_eq!(ty_size, data_size);
 
                 data_size
@@ -1167,7 +1223,7 @@ impl Marshaller {
             tag: tag_val.value.clone(),
         })?;
 
-        let variant_size = self.get_marshal_type(&variant_type)?.size();
+        let variant_size = self.get_native_type(&variant_type)?.size();
 
         let case_tys = self
             .variant_case_types

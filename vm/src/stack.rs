@@ -230,7 +230,7 @@ impl StackFrame {
 
         if cfg!(debug_assertions) {
             let marshalled_size = self.stack_offset - start_offset;
-            let ty_size = marshaller.get_marshal_type(ty)?.size();
+            let ty_size = marshaller.get_native_type(ty)?.size();
             assert_eq!(marshalled_size, ty_size, "stack space allocated ({}) did not match expected size {} for type {}", marshalled_size, ty_size, ty);
         }
 

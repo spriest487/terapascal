@@ -88,7 +88,7 @@ impl Vm {
         let mut marshaller = Marshaller::new(metadata.build(), opts.trace_generics)?;
 
         for id in builtin_structs.keys() {
-            marshaller.instantiate_struct_type(&id.to_struct_type([]))?;
+            marshaller.add_struct_type(&id.to_struct_type([]))?;
         }
 
         let heap = NativeHeap::new(marshaller, opts.trace_heap);
@@ -140,7 +140,7 @@ impl Vm {
         struct_type: &ir::Type,
     ) -> ExecResult<StructValue> {
         let (struct_def, type_index) = self.heap.marshaller
-            .instantiate_struct_type(struct_type)?;
+            .add_struct_type(struct_type)?;
 
         let mut fields = Vec::with_capacity(struct_def.fields.len());
         for (&id, field) in &struct_def.fields {
@@ -487,7 +487,7 @@ impl Vm {
             }
 
             ir::Value::SizeOf(ty) => {
-                let marshal_ty = self.marshaller().get_marshal_type(ty)?;
+                let marshal_ty = self.marshaller().get_native_type(ty)?;
                 let size = cast::i32(marshal_ty.size()).map_err(|_| {
                     ExecError::illegal_state(format!(
                         "type has illegal size: {}",
@@ -1151,7 +1151,7 @@ impl Vm {
     }
 
     fn offset_ptr(&self, ptr: Pointer, offset: isize) -> ExecResult<Pointer> {
-        let marshal_ty = self.marshaller().get_marshal_type(&ptr.ty)?;
+        let marshal_ty = self.marshaller().get_native_type(&ptr.ty)?;
         let ty_size = marshal_ty.size() as isize;
 
         Ok(Pointer {
@@ -1202,7 +1202,7 @@ impl Vm {
             return Err(ExecError::ZeroLengthAllocation);
         }
 
-        let marshal_ty = self.marshaller().get_marshal_type(&ty)?;
+        let marshal_ty = self.marshaller().get_native_type(&ty)?;
         let marshal_size = marshal_ty.size();
 
         let alloc_ptr = self.dynalloc(ty, values.len(), trace)?;
@@ -1417,7 +1417,7 @@ impl Vm {
             ty: element_type.as_ref().clone(),
         };
 
-        let element_size = self.marshaller().get_marshal_type(&element_type)?.size();
+        let element_size = self.marshaller().get_native_type(&element_type)?.size();
 
         let index_offset = element_size * usize::try_from(index)
             .map_err(|_| {
@@ -1436,7 +1436,7 @@ impl Vm {
             _ => return Err(ExecError::illegal_state("dyn_array_element_pointer: object was not an array")),
         };
 
-        let element_marshal_type = self.marshaller().get_marshal_type(&element_type)?;
+        let element_marshal_type = self.marshaller().get_native_type(&element_type)?;
 
         // dynarray access isn't statically bounds checked
         if index < 0 || index >= array_header.len {
@@ -2080,10 +2080,13 @@ impl Vm {
     }
 
     fn new_object(&mut self, fields: StructValue, immortal: bool) -> ExecResult<Pointer> {
-        let fields_type = self.marshaller().get_type(fields.type_index)?;
-        let fields_size = self.marshaller().get_marshal_type(&fields_type)?.size();
+        let struct_index = fields.type_index;
 
-        let object_id = ObjectID::Struct(fields.type_index);
+        let fields_type = self.marshaller().get_type(struct_index)?;
+        let fields_native_type = self.marshaller().get_native_type(&fields_type)?;
+        let fields_size = fields_native_type.size();
+
+        let object_id = ObjectID::Struct(struct_index);
         let object_ptr = self.heap.alloc_object(fields_size, object_id.clone(), !immortal)?;
 
         if !immortal && self.opts.trace_rc {
@@ -2097,7 +2100,15 @@ impl Vm {
             value: DynValue::Structure(Box::new(fields)),
         })?;
 
-        assert_eq!(offset, fields_size + Marshaller::object_header_size());
+        let expected_size = fields_size + Marshaller::object_header_size();
+        assert_eq!(
+            offset,
+            expected_size,
+            "new_object: expected size {}, was {} for object of type {}",
+            expected_size,
+            offset,
+            self.marshaller().get_type(struct_index).unwrap().to_pretty_string(self.metadata())
+        );
 
         Ok(object_ptr)
     }
@@ -2112,37 +2123,9 @@ impl Vm {
     }
 
     pub fn load_lib(&mut self, lib: &ir::Library) -> ExecResult<()> {
-        self.heap.marshaller.load_metadata(&lib.metadata);
-
-        for (id, type_def) in lib.metadata().type_defs() {
-            let def_result = match type_def {
-                ir::TypeDef::Struct(struct_def) => {
-                    if !struct_def.is_generic() {
-                        let struct_type = struct_def.identity.to_type(id);
-                        self.heap.marshaller.add_struct(&struct_type, struct_def).map(Some)
-                    } else {
-                        Ok(None)
-                    }
-                }
-                ir::TypeDef::Variant(variant_def) => {
-                    if !variant_def.is_generic() {
-                        self.heap.marshaller.add_variant(id, variant_def).map(Some)
-                    } else {
-                        Ok(None)
-                    }
-                }
-                ir::TypeDef::Function(_func_def) => {
-                    // functions don't need special marshaling, we only marshal pointers to them
-                    Ok(None)
-                }
-            };
-
-            def_result.map_err(|err| self.add_stack_trace(err.into()))?;
-        }
-
-        for (iface_id, _) in lib.metadata.interfaces() {
-            self.heap.marshaller.add_iface(iface_id)?;
-        }
+        self.heap.marshaller
+            .load_metadata(&lib.metadata)
+            .map_err(|err| self.add_stack_trace(err.into()))?;
 
         for (func_id, ir_func) in lib.functions() {
             let func = match ir_func {
@@ -2180,12 +2163,6 @@ impl Vm {
                     func: Rc::new(func),
                     invoker,
                 });
-            }
-        }
-
-        for (ty, _) in lib.metadata.type_info() {
-            if ty.is_object() {
-                self.heap.marshaller.register_object_type(ty.clone())?;
             }
         }
 
@@ -2238,7 +2215,7 @@ impl Vm {
         // declare global variables
         for (var_id, var) in lib.metadata.variables() {
             // global variables start zero-initialized
-            let marshal_ty = self.marshaller().get_marshal_type(&var.r#type)?;
+            let marshal_ty = self.marshaller().get_native_type(&var.r#type)?;
             let zero_val = vec![0u8; marshal_ty.size()];
 
             self.globals
@@ -2443,7 +2420,7 @@ impl Vm {
 
         let immortal = header.is_immortal();
 
-        let value_size = self.marshaller().get_marshal_type(value_ty)?.size();
+        let value_size = self.marshaller().get_native_type(value_ty)?.size();
 
         let box_ptr = self.heap.alloc_object(value_size, object_id, !immortal)?;
 
@@ -2483,7 +2460,7 @@ impl Vm {
 
         let array_len = elements.len();
 
-        let element_size = self.marshaller().get_marshal_type(&element_ty)?.size();
+        let element_size = self.marshaller().get_native_type(&element_ty)?.size();
         let data_size = element_size * array_len;
 
         // we can't allocate a fixed-size object here so allocate bytes and reinterpret the pointer
@@ -2528,7 +2505,7 @@ impl Vm {
         type_info: &ir::TypeInfo,
     ) -> ExecResult<DynValue> {
         let (_, typeinfo_index) = self.heap.marshaller
-            .instantiate_struct_type(&ir::TYPEINFO_ID.to_struct_type([]))?;
+            .add_struct_type(&ir::TYPEINFO_ID.to_struct_type([]))?;
 
         let type_flags_repr = self
             .metadata()
@@ -2537,7 +2514,7 @@ impl Vm {
         let type_flags_index = self.marshaller().get_type_index(&type_flags_repr.to_flags_type())?;
 
         let (_, methodinfo_index) = self.heap.marshaller
-            .instantiate_struct_type(&ir::METHODINFO_ID.to_struct_type([]))?;
+            .add_struct_type(&ir::METHODINFO_ID.to_struct_type([]))?;
 
         let type_name_string = self.load_string_lit(type_info.name.unwrap_or(ir::EMPTY_STRING_ID))?;
 
@@ -2650,7 +2627,7 @@ impl Vm {
             .unwrap_or_else(|| Pointer::nil(ir::Type::Nothing));
 
         let (_, funcinfo_index) = self.heap.marshaller
-            .instantiate_struct_type(&ir::FUNCINFO_ID.to_struct_type([]))?;
+            .add_struct_type(&ir::FUNCINFO_ID.to_struct_type([]))?;
 
         let impl_ptr = Pointer {
             addr: func_id.0,
@@ -2686,7 +2663,7 @@ impl Vm {
         };
 
         // zeroed memory where a boxed result pointer may be stored
-        let error_code_size = self.marshaller().get_marshal_type(&ir::Type::I32)?.size();
+        let error_code_size = self.marshaller().get_native_type(&ir::Type::I32)?.size();
         let mut error_code_mem: SmallVec<[u8; size_of::<i32>()]> = SmallVec::new();
         error_code_mem.resize(error_code_size, 0);
 
