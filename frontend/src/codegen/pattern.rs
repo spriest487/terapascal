@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::ast::Ident;
 use crate::codegen::ir;
 use crate::codegen::IRBuilder;
@@ -49,10 +50,10 @@ pub fn translate_pattern_match_is(
         },
 
         MatchPattern::Name { annotation: typ::Value::VariantCase(case_val), .. } => {
-            let (struct_id, case_index, _) = builder
+            let (id, case_index, _) = builder
                 .translate_variant_case(&case_val.variant_name, &case_val.case.name);
 
-            let variant_ty = ir::Type::Variant(struct_id);
+            let variant_ty = id.to_variant_type();
 
             let is = translate_is_variant(target_val.clone(), variant_ty, case_index, builder);
 
@@ -102,17 +103,17 @@ pub fn translate_pattern_match_bindings(
         },
 
         MatchPattern::Name { annotation: typ::Value::VariantCase(case_val), .. } => {
-            let (struct_id, case_index, case_ty) = builder
+            let (type_id, case_index, case_ty) = builder
                 .translate_variant_case(&case_val.variant_name, &case_val.case.name);
 
-            let variant_ty = ir::Type::Variant(struct_id);
+            let variant_ty = Rc::new(type_id).to_variant_type();
 
             match binding {
                 Some(binding) => {
                     let binding_name = binding.name.to_string();
 
                     let case_ty = case_ty
-                        .cloned()
+                        .clone()
                         .expect("variant pattern with binding must refer to a case with data");
 
                     let data_ref = target_val.vardata_ref(variant_ty.clone(), case_index);

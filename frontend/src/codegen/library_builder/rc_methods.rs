@@ -2,7 +2,6 @@ use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
 use std::collections::HashMap;
 use terapascal_ir as ir;
-use terapascal_ir::generic::instantiate_struct_def;
 use terapascal_ir::InstructionBuilder;
 use terapascal_ir::MetadataSource;
 
@@ -137,13 +136,12 @@ fn has_rc_members_rec(
     }
 
     let result = match ty {
-        ir::Type::Struct { id, args, .. } => {
+        ir::Type::Struct(id) => {
             let def = lib
                 .metadata()
-                .get_struct_def(*id)
+                .instantiate_struct_def(id.def_id, &id.args)
                 .unwrap_or_else(|| panic!("has_rc_members_rec: missing def for struct {}", id))
-                .clone();
-            let def = instantiate_struct_def(&def, args);
+                .into_owned();
 
             let mut any_rc = false;
             for (_, field_def) in &def.fields {
@@ -158,9 +156,9 @@ fn has_rc_members_rec(
         ir::Type::Variant(id) => {
             let def = lib
                 .metadata()
-                .get_variant_def(*id)
+                .instantiate_variant_def(id.def_id, &id.args)
                 .unwrap_or_else(|| panic!("has_rc_members_rec: missing def for variant {}", id))
-                .clone();
+                .into_owned();
             
             let mut any_rc = false;
             for case in &def.cases {

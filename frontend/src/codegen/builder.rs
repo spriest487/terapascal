@@ -13,8 +13,8 @@ use crate::codegen::SetFlagsType;
 use crate::ir::*;
 use crate::typ as typ;
 use crate::typ::seq::TypeSequenceSupport;
-use crate::typ::Symbol;
 use std::borrow::Cow;
+use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_ir::InstructionBuilder;
@@ -174,27 +174,33 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         &self.library.opts()
     }
 
-    pub fn translate_variant_case<'ty>(
-        &'ty mut self,
+    pub fn translate_variant_case(
+        &mut self,
         variant: &typ::Symbol,
         case: &str,
-    ) -> (TypeDefID, usize, Option<&'ty Type>) {
-        let name_path = self.translate_name(variant);
+    ) -> (Rc<GenericTypeID>, usize, Option<Type>) {
+        let variant_src_type = typ::Type::variant(variant.clone());
 
-        let (id, variant_struct) = match self.library.metadata().find_variant_def(&name_path) {
-            Some((id, variant_struct)) => (id, variant_struct),
-            None => panic!("missing IR metadata definition for variant {}", variant),
+        let Type::Variant(id) = self.translate_type(&variant_src_type) else {
+            unreachable!("result of translating variant must be variant");
         };
 
-        let case_index = variant_struct
+        let variant_def = self.library
+            .metadata()
+            .instantiate_variant_def(id.def_id, &id.args)
+            .unwrap_or_else(|| {
+                panic!("missing IR metadata definition for variant {}", variant)
+            });
+
+        let Some(case_index) = variant_def
             .cases
             .iter()
-            .position(|c| c.name.as_str() == case);
+            .position(|c| c.name.as_str() == case)
+        else {
+            panic!("missing case {} for {} in IR metadata", case, variant)
+        };
 
-        match case_index {
-            Some(index) => (id, index, variant_struct.cases[index].ty.as_ref()),
-            None => panic!("missing case {} for {} in IR metadata", case, variant),
-        }
+        (id, case_index, variant_def.cases[case_index].ty.clone())
     }
     
     pub fn literal_to_val(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> Value {
@@ -217,7 +223,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         out.to_ref()
     }
 
-    pub fn translate_name(&mut self, name: &Symbol) -> NamePath {
+    #[expect(unused)]
+    pub fn translate_name(&mut self, name: &typ::Symbol) -> NamePath {
         translate_name(name, self.library)
     }
 
@@ -239,7 +246,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
     pub fn translate_func(
         &mut self,
-        decl_name: &Symbol,
+        decl_name: &typ::Symbol,
         decl_sig: &Arc<typ::FunctionSig>,
     ) -> FunctionInstance {
         let key = FunctionDeclKey::Function {
@@ -292,7 +299,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             .unwrap();
 
         // this is a *specific* closure class, not a virtual (function typed) pointer
-        let closure_ptr_ty = closure.closure_id.to_class_ptr_type();
+        let closure_ptr_ty = closure.closure_id.to_class_ptr_type([]);
 
         // virtual pointer to the closure
         let closure_virtual_ty = Type::Object(ObjectID::AnyClosure(closure.func_ty_id));
@@ -370,11 +377,12 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.library.metadata_mut().find_or_insert_string(s)
     }
 
+    #[expect(unused)]
     pub fn get_struct(&self, id: TypeDefID) -> Option<&StructDef> {
         self.library.metadata().get_struct_def(id)
     }
 
-    #[allow(unused)]
+    #[expect(unused)]
     pub fn get_iface(&self, id: InterfaceID) -> Option<&InterfaceDef> {
         self.library.metadata().get_iface_def(id)
     }

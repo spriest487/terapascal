@@ -1686,6 +1686,7 @@ name = "terapascal-ir"
 version = "0.1.0"
 dependencies = [
  "bigdecimal",
+ "lazy_static",
  "linked-hash-map",
  "rmp-serde",
  "serde",

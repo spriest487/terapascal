@@ -77,6 +77,8 @@ fn translate_builtin_class(
     let resource_ty = translate_struct_def(class_def.as_ref(), lib);
 
     lib.metadata_mut().define_struct(id, resource_ty);
-    lib.gen_type_info(&id.to_class_ptr_type());
-    lib.gen_type_info(&id.to_class_weak_type());
+
+    // assume builtin classes don't have type params
+    lib.gen_type_info(&id.to_class_ptr_type([]));
+    lib.gen_type_info(&id.to_class_weak_type([]));
 }

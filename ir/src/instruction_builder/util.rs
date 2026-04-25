@@ -188,8 +188,11 @@ where
     let at = at.into();
 
     match ty {
-        Type::Struct { id, .. } => {
-            let Some(struct_def) = builder.metadata().get_struct_def(*id) else {
+        Type::Struct(id) => {
+            let Some(struct_def) = builder
+                .metadata()
+                .instantiate_struct_def(id.def_id, &id.args)
+            else {
                 panic!("visit_deep: missing definition for struct {id}")
             };
 
@@ -215,7 +218,7 @@ where
         Type::Variant(id) => {
             let variant_def = builder
                 .metadata()
-                .get_variant_def(*id)
+                .instantiate_variant_def(id.def_id, &id.args)
                 .unwrap_or_else(|| panic!("missing variant def {}", id));
 
             let cases = variant_def.cases.to_vec();

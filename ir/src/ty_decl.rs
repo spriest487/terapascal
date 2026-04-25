@@ -52,11 +52,11 @@ impl StructIdentity {
         match self {
             StructIdentity::Record(name) => id.to_struct_type(name.type_args.clone()),
 
-            StructIdentity::Class(_name) => id.to_class_ptr_type(), // TODO: class type args
+            StructIdentity::Class(name) => id.to_class_ptr_type(name.type_args.clone()),
 
             // the type of a closure definition is not a (virtual) closure pointer object, it's
             // an anonymous class
-            StructIdentity::ClosureObject(..) => id.to_class_ptr_type(),
+            StructIdentity::ClosureObject(..) => id.to_class_ptr_type([]),
 
             StructIdentity::SetFlags { .. } => id.to_flags_type(),
         }

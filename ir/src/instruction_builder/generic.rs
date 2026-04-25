@@ -1,13 +1,20 @@
-use std::borrow::Cow;
-use crate::{BinOpInstruction, FunctionSig, StructDef, StructFieldDef};
+use crate::BinOpInstruction;
 use crate::FunctionDef;
+use crate::FunctionSig;
+use crate::GenericTypeID;
 use crate::Instruction;
 use crate::InstructionBuilder;
 use crate::LocalID;
+use crate::ObjectID;
 use crate::Ref;
+use crate::StructDef;
+use crate::StructFieldDef;
 use crate::Type;
 use crate::UnaryOpInstruction;
 use crate::Value;
+use crate::VariantCase;
+use crate::VariantDef;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -310,7 +317,7 @@ pub fn instantiate_struct_def<'a>(
     type_args: &[Type],
 ) -> Cow<'a, StructDef> {
     if !generic_struct.is_generic() {
-        assert_eq!(0, type_args.len(), "specializing struct def: type is not generic");
+        assert_eq!(0, type_args.len(), "instantiate_struct_def: type is not generic but {} type args were provided", type_args.len());
         return Cow::Borrowed(generic_struct);
     }
 
@@ -322,11 +329,11 @@ pub fn instantiate_struct_def<'a>(
         None => &mut [],
     };
 
-    assert_eq!(type_args.len(), name_params.len(), "specializing struct def: type arg count mismatch");
+    assert_eq!(type_args.len(), name_params.len(), "instantiate_struct_def: type arg count mismatch");
 
     for (param, arg) in name_params.iter_mut().zip(type_args.iter()) {
         let Type::Generic(param_name) = param else {
-            panic!("generic name must only contain named parameter types");
+            panic!("instantiate_struct_def: generic name must only contain named parameter types");
         };
 
         types.insert(SharedStringKey(Arc::new(param_name.to_string())), arg.clone());
@@ -345,6 +352,52 @@ pub fn instantiate_struct_def<'a>(
         fields,
         tags: generic_struct.tags.clone(),
         identity,
+    })
+}
+
+pub fn instantiate_variant_def<'a>(
+    generic_variant: &'a VariantDef,
+    type_args: &[Type],
+) -> Cow<'a, VariantDef> {
+    if !generic_variant.is_generic() {
+        assert_eq!(0, type_args.len(), "instantiate_variant_def: type is not generic");
+        return Cow::Borrowed(generic_variant);
+    }
+
+    let mut types = HashMap::new();
+
+    let mut name = generic_variant.name.clone();
+    assert_eq!(type_args.len(), name.type_args.len(), "instantiate_variant_def: type arg count mismatch");
+
+    for (param, arg) in name.type_args.iter_mut().zip(type_args.iter()) {
+        let Type::Generic(param_name) = param else {
+            panic!("instantiate_variant_def: generic name must only contain named parameter types");
+        };
+
+        types.insert(SharedStringKey(Arc::new(param_name.to_string())), arg.clone());
+        *param = arg.clone();
+    }
+
+    let tag_type = remap_type(&generic_variant.tag_type, &types);
+
+    let mut cases = Vec::new();
+    for case_def in &generic_variant.cases {
+        let data_type = case_def.ty
+            .as_ref()
+            .map(|t| remap_type(t, &types));
+
+        cases.push(VariantCase {
+            tag: case_def.tag.clone(),
+            name: case_def.name.clone(),
+            ty: data_type,
+        });
+    }
+
+    Cow::Owned(VariantDef {
+        name,
+        cases,
+        tags: generic_variant.tags.clone(),
+        tag_type,
     })
 }
 
@@ -422,6 +475,32 @@ fn remap_type(t: &Type, types: &TypeMap) -> Type {
                 .unwrap_or_else(|| panic!("missing generic type in type map: {name}"));
             real_type.clone()
         },
+
+        Type::Struct(id) => {
+            let args = id.args.iter()
+                .map(|t| remap_type(t, types));
+
+            GenericTypeID::new(id.def_id, args).to_struct_type()
+        }
+
+        Type::Variant(id) => {
+            let args = id.args.iter()
+                .map(|t| remap_type(t, types));
+
+            GenericTypeID::new(id.def_id, args).to_variant_type()
+        }
+
+        Type::Object(ObjectID::Class(id)) | Type::WeakObject(ObjectID::Class(id)) => {
+            let args = id.args.iter()
+                .map(|t| remap_type(t, types));
+            let id = GenericTypeID::new(id.def_id, args);
+
+            if t.is_weak() {
+                id.to_weak_class_object_type()
+            } else {
+                id.to_class_object_type()
+            }
+        }
 
         _ => t.clone(),
     }

@@ -1,34 +1,41 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
 use crate::ArgID;
+use crate::GenericTypeID;
 use crate::MetadataSource;
-use crate::TypeDefID;
+use std::rc::Rc;
 
-pub fn gen_class_object_dtor_body<B>(builder: &mut B, class_id: TypeDefID, self_param: ArgID) -> bool
+pub fn gen_class_object_dtor_body<B>(
+    builder: &mut B,
+    class_id: &Rc<GenericTypeID>,
+    self_param: ArgID,
+) -> bool
 where
     B: InstructionBuilder + ?Sized
 {
-    let class_ty = class_id.to_class_ptr_type();
-
-    let class_pretty_name = builder.metadata().pretty_type_name(&class_ty);
-
     // we have to do this loop manually, because the "self" reference in a class method is
     // meant to be immutable (it's illegal to reference it even via an immutable reference in CIL).
     // using visit_deep on self would use references!
-    let class_struct_def = builder.metadata()
-        .get_struct_def(class_id)
+    let class_struct_def = builder
+        .metadata()
+        .instantiate_struct_def(class_id.def_id, &class_id.args)
         .unwrap_or_else(|| {
+            let class_ty = class_id.to_class_object_type();
+            let class_pretty_name = builder.metadata().pretty_type_name(&class_ty);
+
             panic!("gen_class_object_dtor_body: missing definition for resource struct of {class_pretty_name}", )
         })
-        .clone();
+        .into_owned();
+
+    let class_ty = class_id.to_class_object_type();
     
     let mut released_any = false;
 
-    for (field_id, field_def) in class_struct_def.fields {
+    for (field_id, field_def) in &class_struct_def.fields {
         if !field_def.ty.contains_any_object_refs(builder.metadata()) {
             continue;
         }
 
-        let field_ref = self_param.to_ref().field_ref(class_ty.clone(), field_id);
+        let field_ref = self_param.to_ref().field_ref(class_ty.clone(), *field_id);
         released_any |= builder.release_deep(field_ref.to_deref(), &field_def.ty);
 
         assert!(released_any, "if contains_any_object_refs returns true, release_deep should find a reference to release")

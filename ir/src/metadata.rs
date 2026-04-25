@@ -381,16 +381,21 @@ impl Metadata {
 
     pub fn is_defined(&self, ty: &Type) -> bool {
         let id = match ty {
-            Type::Struct { id, .. }
-            | Type::Variant(id)
-            | Type::Function(id)
-            | Type::Flags(id, ..) => {
+            Type::Struct(id)
+            | Type::Variant(id) => {
+                id.def_id
+            }
+
+            Type::Flags(id, ..)
+            | Type::Function(id) => {
                 *id
             },
 
-            Type::Object(virt_id) | Type::WeakObject(virt_id) => {
-                match virt_id {
-                    ObjectID::Class(id) | ObjectID::AnyClosure(id) => *id,
+            Type::Object(object_id) | Type::WeakObject(object_id) => {
+                match object_id {
+                    ObjectID::Class(generic_id) => generic_id.def_id,
+
+                    ObjectID::AnyClosure(func_type_id) => *func_type_id,
 
                     ObjectID::Interface(id) => {
                         return self.ifaces.contains_key(id);
@@ -400,7 +405,7 @@ impl Metadata {
                         return true;
                     },
                 }
-            },
+            }
 
             _ => return true,
         };
@@ -690,16 +695,21 @@ impl<T: MetadataSource> IRFormatter for T {
                 write!(f, ".")?;
 
                 let struct_def = match &field_ref.instance_type {
-                    Type::Struct { id, .. } | Type::Flags(id) => {
+                    Type::Flags(id) => {
                         self.get_struct_def(*id)
+                    }
+
+                    Type::Struct(id)
+                    | Type::Object(ObjectID::Class(id))
+                    | Type::WeakObject(ObjectID::Class(id)) => {
+                        self.get_struct_def(id.def_id)
                     },
-                    Type::Object(ObjectID::Class(id)) => {
-                        self.get_struct_def(*id)
-                    },
+
                     _ => {
                         None
                     },
                 };
+
                 let field_name = struct_def
                     .and_then(|def| def.fields.get(&field_ref.field))
                     .and_then(|field_def| field_def.name.as_ref());
@@ -745,10 +755,12 @@ impl<T: MetadataSource> IRFormatter for T {
                 self.format_ref(&data_ref.instance, f)?;
                 write!(f, ".")?;
 
-                let case_name = data_ref.instance_type.as_variant()
-                    .and_then(|id| self.get_variant_def(id))
+                let case_name = data_ref.instance_type
+                    .as_variant()
+                    .and_then(|id| self.get_variant_def(id.def_id))
                     .and_then(|def| def.cases.get(data_ref.case_index))
                     .map(|case_def| &case_def.name);
+
                 match case_name {
                     Some(name) => write!(f, "{}", name)?,
                     None => write!(f, "{}", data_ref.case_index)?,
@@ -818,10 +830,10 @@ impl<T: MetadataSource> IRFormatter for T {
         let field_name = of_ty
             .as_struct()
             .or_else(|| match of_ty.as_object()? {
-                ObjectID::Class(struct_id) => Some(*struct_id),
+                ObjectID::Class(id) => Some(&id),
                 _ => None,
             })
-            .and_then(|struct_id| self.get_struct_def(struct_id))
+            .and_then(|type_id| self.get_struct_def(type_id.def_id))
             .and_then(|struct_def| struct_def.fields.get(&field))
             .and_then(|field| field.name.as_ref());
 
@@ -855,7 +867,7 @@ impl<T: MetadataSource> IRFormatter for T {
     fn format_variant_case(&self, of_ty: &Type, tag: usize, f: &mut dyn fmt::Write) -> fmt::Result {
         let case_name = match of_ty {
             Type::Variant(id) => self
-                .get_variant_def(*id)
+                .get_variant_def(id.def_id)
                 .and_then(|variant| variant.cases.get(tag))
                 .map(|case| &case.name),
             _ => None,

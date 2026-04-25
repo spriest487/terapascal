@@ -27,6 +27,8 @@ impl NativeType {
         Self(FfiType::structure(fields.into_iter().map(|t| t.0)))
     }
 
+    pub fn void() -> Self { Self(FfiType::void()) }
+
     pub fn pointer() -> Self {
         Self(FfiType::pointer())
     }

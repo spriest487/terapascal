@@ -2,10 +2,10 @@ use crate::ast::BuiltinName;
 use crate::ir;
 
 pub fn system_funcs() -> Vec<(&'static str, BuiltinName, ir::Type, Vec<ir::Type>)> {
-    let string_ty = ir::STRING_ID.to_class_ptr_type();
+    let string_ty = ir::Type::string();
 
-    let typeinfo_ty = ir::TYPEINFO_ID.to_class_ptr_type();
-    let funcinfo_ty = ir::FUNCINFO_ID.to_class_ptr_type();
+    let typeinfo_ty = ir::Type::type_info();
+    let funcinfo_ty = ir::Type::func_info();
 
     vec![
         ("Int8ToStr", BuiltinName::Int8ToStr, string_ty.clone(), vec![
@@ -80,13 +80,13 @@ pub fn system_funcs() -> Vec<(&'static str, BuiltinName, ir::Type, Vec<ir::Type>
         ("GetFunctionInfoCount", BuiltinName::GetFuncInfoCount, ir::Type::I32, vec![]),
         ("GetFunctionInfoByIndex", BuiltinName::GetFuncInfoByIndex, funcinfo_ty.clone(), vec![ir::Type::I32]),
         ("InvokeMethod", BuiltinName::InvokeMethod, ir::ANY_TYPE, vec![
-            ir::METHODINFO_ID.to_class_ptr_type(),
+            ir::Type::method_info(),
             ir::ANY_TYPE.temp_ref(),
             ir::ANY_TYPE.dyn_array(),
             ir::Type::I32.temp_ref(),
         ]),
         ("InvokeFunction", BuiltinName::InvokeFunction, ir::ANY_TYPE, vec![
-            ir::FUNCINFO_ID.to_class_ptr_type(),
+            ir::Type::func_info(),
             ir::ANY_TYPE.dyn_array(),
             ir::Type::I32.temp_ref(),
         ]),

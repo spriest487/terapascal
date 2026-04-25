@@ -1,8 +1,8 @@
 use crate::ast::FieldName;
-use crate::ast::Unit;
 use crate::ast::Type;
 use crate::ast::TypeDecl;
 use crate::ast::TypeDefName;
+use crate::ast::Unit;
 use crate::ir;
 use std::fmt;
 use std::hash::Hash;
@@ -64,7 +64,7 @@ impl VariantDef {
             })
             .collect();
 
-        let variant_ty = ir::Type::Variant(id);
+        let variant_ty = id.to_variant_type(variant.name.type_args.clone());
         let comment = module.pretty_type(&variant_ty).to_string();
 
         Self {

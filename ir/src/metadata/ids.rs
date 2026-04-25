@@ -3,6 +3,7 @@ use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
+use std::fmt::Formatter;
 use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
@@ -36,12 +37,12 @@ impl fmt::Display for VariableID {
 pub struct TypeDefID(pub usize);
 
 impl TypeDefID {
-    pub fn to_class_ptr_type(self) -> Type {
-        Type::class_ptr(self)
+    pub fn to_class_ptr_type(self, args: impl IntoIterator<Item=Type>) -> Type {
+        Type::class_ptr(self, args)
     }
 
-    pub fn to_class_weak_type(self) -> Type {
-        Type::WeakObject(ObjectID::Class(self))
+    pub fn to_class_weak_type(self, args: impl IntoIterator<Item=Type>) -> Type {
+        Type::WeakObject(ObjectID::Class(GenericTypeID::new(self, args)))
     }
 
     pub fn to_closure_ptr_type(self) -> Type {
@@ -49,18 +50,15 @@ impl TypeDefID {
     }
 
     pub fn to_struct_type(self, args: impl IntoIterator<Item=Type>) -> Type {
-        Type::Struct {
-            id: self,
-            args: args.into_iter().collect(),
-        }
+        Type::Struct(GenericTypeID::new(self, args))
     }
 
     pub fn to_flags_type(self) -> Type {
         Type::Flags(self)
     }
 
-    pub fn to_variant_type(self) -> Type {
-        Type::Variant(self)
+    pub fn to_variant_type(self, args: impl IntoIterator<Item=Type>) -> Type {
+        Type::Variant(GenericTypeID::new(self, args))
     }
 
     pub fn to_function_type(self) -> Type {
@@ -81,6 +79,56 @@ impl fmt::Display for TypeDefID {
     }
 }
 
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct GenericTypeID {
+    pub def_id: TypeDefID,
+    pub args: Vec<Type>,
+}
+
+impl GenericTypeID {
+    pub fn new(def_id: TypeDefID, args: impl IntoIterator<Item=Type>) -> Rc<Self> {
+        Rc::new(Self {
+            def_id,
+            args: args.into_iter().collect(),
+        })
+    }
+
+    pub fn to_struct_type(self: &Rc<Self>) -> Type {
+        Type::Struct(self.clone())
+    }
+
+    pub fn to_variant_type(self: &Rc<Self>) -> Type {
+        Type::Variant(self.clone())
+    }
+
+    pub fn to_class_object_type(self: &Rc<Self>) -> Type {
+        Type::Object(ObjectID::Class(self.clone()))
+    }
+
+    pub fn to_weak_class_object_type(self: &Rc<Self>) -> Type {
+        Type::WeakObject(ObjectID::Class(self.clone()))
+    }
+}
+
+impl fmt::Display for GenericTypeID {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.def_id)?;
+
+        if !self.args.is_empty() {
+            write!(f, "[")?;
+            for (i, arg) in self.args.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{arg}")?;
+            }
+            write!(f, "]")?;
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct InterfaceID(pub usize);
 
@@ -96,7 +144,7 @@ pub enum ObjectID {
     Any,
 
     //instance of a known class whose layout is defined as the struct with this typedef ID
-    Class(TypeDefID),
+    Class(Rc<GenericTypeID>),
 
     // instance of an unknown class that implements the interface with this interface ID
     Interface(InterfaceID),
@@ -112,12 +160,12 @@ pub enum ObjectID {
 }
 
 impl ObjectID {
-    pub fn as_class(&self) -> Option<TypeDefID> {
-        let ObjectID::Class(class_id) = self else {
+    pub fn as_class(&self) -> Option<&Rc<GenericTypeID>> {
+        let ObjectID::Class(type_id) = self else {
             return None;
         };
 
-        Some(*class_id)
+        Some(type_id)
     }
 
     pub fn to_object_type(&self) -> Type {
@@ -154,16 +202,12 @@ impl fmt::Display for FieldID {
 pub const EMPTY_STRING_ID: StringID = StringID(0);
 
 pub const STRING_ID: TypeDefID = TypeDefID(1);
-pub const STRING_OBJECT_ID: ObjectID = ObjectID::Class(STRING_ID);
-pub const STRING_TYPE: Type = Type::Object(STRING_OBJECT_ID);
 pub const STRING_CHARS_FIELD: FieldID = FieldID(0);
 pub const STRING_LEN_FIELD: FieldID = FieldID(1);
 
 pub const CLOSURE_PTR_FIELD: FieldID = FieldID(0);
 
 pub const TYPEINFO_ID: TypeDefID = TypeDefID(2);
-pub const TYPEINFO_VTYPE_ID: ObjectID = ObjectID::Class(TYPEINFO_ID);
-pub const TYPEINFO_TYPE: Type = Type::Object(TYPEINFO_VTYPE_ID);
 pub const TYPEINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const TYPEINFO_METHODS_FIELD: FieldID = FieldID(1);
 pub const TYPEINFO_TAGS_FIELD: FieldID = FieldID(2);
@@ -172,16 +216,12 @@ pub const TYPEINFO_FLAGS_FIELD: FieldID = FieldID(4);
 pub const TYPEINFO_FLAGS_BITS: usize = 64;
 
 pub const METHODINFO_ID: TypeDefID = TypeDefID(3);
-pub const METHODINFO_VTYPE_ID: ObjectID = ObjectID::Class(METHODINFO_ID);
-pub const METHODINFO_TYPE: Type = Type::Object(METHODINFO_VTYPE_ID);
 pub const METHODINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const METHODINFO_OWNER_FIELD: FieldID = FieldID(1);
 pub const METHODINFO_IMPL_FIELD: FieldID = FieldID(2);
 pub const METHODINFO_TAGS_FIELD: FieldID = FieldID(3);
 
 pub const FUNCINFO_ID: TypeDefID = TypeDefID(4);
-pub const FUNCINFO_VTYPE_ID: ObjectID = ObjectID::Class(FUNCINFO_ID);
-pub const FUNCINFO_TYPE: Type = Type::Object(FUNCINFO_VTYPE_ID);
 pub const FUNCINFO_NAME_FIELD: FieldID = FieldID(0);
 pub const FUNCINFO_IMPL_FIELD: FieldID = FieldID(1);
 pub const FUNCINFO_TAGS_FIELD: FieldID = FieldID(2);
@@ -198,3 +238,44 @@ pub const RESERVED_TYPES: [TypeDefID; 4] = [
 pub const RESERVED_STRINGS: [StringID; 1] = [
     EMPTY_STRING_ID,
 ];
+
+thread_local!{
+    static STRING_OBJECT_ID: Rc<GenericTypeID> = GenericTypeID::new(STRING_ID, []);
+    static TYPEINFO_OBJECT_ID: Rc<GenericTypeID> = GenericTypeID::new(TYPEINFO_ID, []);
+    static FUNCINFO_OBJECT_ID: Rc<GenericTypeID> = GenericTypeID::new(FUNCINFO_ID, []);
+    static METHODINFO_OBJECT_ID: Rc<GenericTypeID> = GenericTypeID::new(METHODINFO_ID, []);
+
+    static STRING_TYPE: Type = STRING_OBJECT_ID
+        .try_with(|id| id.to_class_object_type())
+        .unwrap();
+
+    static TYPEINFO_TYPE: Type = TYPEINFO_OBJECT_ID
+        .try_with(|id| id.to_class_object_type())
+        .unwrap();
+
+    static FUNCINFO_TYPE: Type = FUNCINFO_OBJECT_ID
+        .try_with(|id| id.to_class_object_type())
+        .unwrap();
+
+    static METHODINFO_TYPE: Type = METHODINFO_OBJECT_ID
+        .try_with(|id| id.to_class_object_type())
+        .unwrap();
+}
+
+impl Type {
+    pub fn string() -> Type {
+        STRING_TYPE.try_with(|t| t.clone()).unwrap()
+    }
+
+    pub fn type_info() -> Type {
+        TYPEINFO_TYPE.try_with(|t| t.clone()).unwrap()
+    }
+
+    pub fn func_info() -> Type {
+        FUNCINFO_TYPE.try_with(|t| t.clone()).unwrap()
+    }
+
+    pub fn method_info() -> Type {
+        METHODINFO_TYPE.try_with(|t| t.clone()).unwrap()
+    }
+}

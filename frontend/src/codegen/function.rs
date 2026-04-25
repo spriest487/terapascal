@@ -178,7 +178,7 @@ pub fn build_closure_function_def(
     let bound_params = bind_function_params(def_params, false, ArgID(1), &mut body_builder);
 
     // cast the closure pointer param from the erased pointer passed in to its actual class type
-    let closure_ptr_ty = closure_id.to_class_ptr_type();
+    let closure_ptr_ty = closure_id.to_class_ptr_type([]);
     let closure_ptr_ref = body_builder.local_temp(closure_ptr_ty.clone());
     body_builder.cast(
         closure_ptr_ref.clone(),

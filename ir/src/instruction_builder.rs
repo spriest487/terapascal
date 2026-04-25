@@ -12,6 +12,7 @@ use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::FunctionID;
 use crate::FunctionSig;
+use crate::GenericTypeID;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::InterfaceID;
@@ -28,6 +29,7 @@ use crate::Value;
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_array_from;
 use scope::LocalStack;
+use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 
@@ -821,7 +823,7 @@ pub trait InstructionBuilder {
         temp_at_ptr.value()
     }
     
-    fn gen_class_object_dtor_body(&mut self, class_id: TypeDefID, self_param: ArgID) -> bool {
+    fn gen_class_object_dtor_body(&mut self, class_id: &Rc<GenericTypeID>, self_param: ArgID) -> bool {
         gen_class_object_dtor_body(self, class_id, self_param)
     }
 

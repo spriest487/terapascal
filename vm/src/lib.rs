@@ -203,36 +203,7 @@ impl Vm {
             }
 
             ir::Type::Variant(id) => {
-                let type_index = self.marshaller().get_type_index(ty)?;
-
-                let default_tag = 0;
-                let cases = &self
-                    .metadata()
-                    .get_variant_def(*id)
-                    .ok_or_else(|| {
-                        ExecError::illegal_state(format!("missing variant definition {}", *id))
-                    })?
-                    .cases;
-                let case_ty = cases
-                    .get(default_tag as usize)
-                    .map(|case| case.ty.clone())
-                    .ok_or_else(|| {
-                        ExecError::illegal_state(format!(
-                            "missing default case definition for variant {}",
-                            *id
-                        ))
-                    })?;
-
-                let default_val = match case_ty {
-                    Some(case_ty) => self.default_val(&case_ty)?,
-                    None => DynValue::Pointer(Pointer::nil(ir::Type::Nothing)),
-                };
-
-                DynValue::Variant(Box::new(VariantValue {
-                    type_index,
-                    tag: Box::new(DynValue::I32(default_tag)),
-                    data: Box::new(default_val),
-                }))
+                self.default_variant(ty, &id)?
             }
 
             ir::Type::Function(..) => {
@@ -247,6 +218,37 @@ impl Vm {
         };
 
         Ok(val)
+    }
+
+    fn default_variant(
+        &mut self,
+        ty: &ir::Type,
+        id: &Rc<ir::GenericTypeID>,
+    ) -> ExecResult<DynValue> {
+        let (def, type_index) = self.heap.marshaller.add_variant_type(ty)?;
+
+        let default_tag = 0;
+
+        let case_ty = def.cases
+            .get(default_tag as usize)
+            .map(|case| case.ty.clone())
+            .ok_or_else(|| {
+                ExecError::illegal_state(format!(
+                    "missing default case definition for variant {}",
+                    *id
+                ))
+            })?;
+
+        let default_val = match case_ty {
+            Some(case_ty) => self.default_val(&case_ty)?,
+            None => DynValue::Pointer(Pointer::nil(ir::Type::Nothing)),
+        };
+
+        Ok(DynValue::Variant(Box::new(VariantValue {
+            type_index,
+            tag: Box::new(DynValue::I32(default_tag)),
+            data: Box::new(default_val),
+        })))
     }
 
     pub fn load_indirect(&self, ptr: &Pointer) -> ExecResult<DynValue> {
@@ -1277,23 +1279,21 @@ impl Vm {
         instance_type: &ir::Type,
         case_index: usize,
     ) -> ExecResult<Pointer> {
-        let variant_id = match instance_type {
-            ir::Type::Variant(id) => *id,
-            other => {
-                let msg = format!(
-                    "cannot execute variant data instruction for non-variant type: {}",
-                    other
-                );
-                return Err(ExecError::illegal_state(msg));
-            }
+        let ir::Type::Variant(variant_id) = instance_type else {
+            let msg = format!(
+                "cannot execute variant data instruction for non-variant type: {}",
+                instance_type.to_pretty_string(self.metadata())
+            );
+            return Err(ExecError::illegal_state(msg));
         };
 
         let a_ptr = self.addr_of_ref(instance)?;
 
-        let case_def = self
+        let case_type = self
             .metadata()
-            .get_variant_def(variant_id)
-            .and_then(|def| def.cases.get(case_index))
+            .instantiate_variant_def(variant_id.def_id, &variant_id.args)
+            .and_then(|def| def.cases.get(case_index)
+                .map(|case_def| case_def.ty.clone().unwrap_or(ir::Type::Nothing)))
             .ok_or_else(|| {
                 let msg = format!(
                     "missing definition for variant case {}.{}",
@@ -1301,7 +1301,6 @@ impl Vm {
                 );
                 ExecError::illegal_state(msg)
             })?;
-        let case_ty = case_def.ty.clone().unwrap_or(ir::Type::Nothing);
 
         // we don't need to actually look this up, the variant data always appears right
         // after the fixed-size tag
@@ -1309,7 +1308,7 @@ impl Vm {
 
         Ok(Pointer {
             addr: a_ptr.addr + data_offset,
-            ty: case_ty,
+            ty: case_type,
         })
     }
 
@@ -1318,8 +1317,11 @@ impl Vm {
         // output a pointer to the variant
         let variant_ptr = self.addr_of_ref(instance)?;
 
-        let tag_type = variant_ptr.ty.as_variant()
-            .and_then(|id| self.metadata().get_variant_def(id))
+        let tag_type = variant_ptr.ty
+            .as_variant()
+            .and_then(|id| self
+                .metadata()
+                .instantiate_variant_def(id.def_id, &id.args))
             .map(|def| def.tag_type.clone())
             .unwrap_or(ir::Type::Nothing);
 
@@ -1903,7 +1905,7 @@ impl Vm {
             }
 
             ir::ObjectID::Class(class_id) => {
-                let class_type = class_id.to_struct_type([]); // TODO: class type args
+                let class_type = class_id.to_struct_type();
                 let class_type_index = self.marshaller().get_type_index(&class_type)?;
 
                 object_header.id == ObjectID::Struct(class_type_index)
@@ -2182,7 +2184,7 @@ impl Vm {
 
             self.globals.insert(str_ref, GlobalValue::Variable {
                 value: self.marshaller().marshal_to_vec(&str_val)?.into_boxed_slice(),
-                ty: ir::STRING_ID.to_class_ptr_type(),
+                ty: ir::Type::string(),
             });
         }
 
@@ -2261,7 +2263,7 @@ impl Vm {
             self.globals
                 .insert(typeinfo_ref.clone(), GlobalValue::Variable {
                     value: ptr_bytes.into_boxed_slice(),
-                    ty: ir::TYPEINFO_TYPE,
+                    ty: ir::Type::type_info(),
                 });
 
             let runtime_name = runtime_type
@@ -2289,7 +2291,7 @@ impl Vm {
             self.globals
                 .insert(funcinfo_ref.clone(), GlobalValue::Variable {
                     value: ptr_bytes.into_boxed_slice(),
-                    ty: ir::FUNCINFO_TYPE,
+                    ty: ir::Type::func_info(),
                 });
 
             self.funcinfo_map
@@ -2524,8 +2526,8 @@ impl Vm {
             }
 
             ir::Type::Object(ir::ObjectID::Class(id))
-            | ir::Type::Struct { id, .. }
-            | ir::Type::Variant(id) => Some(ir::TagLocation::TypeDef(*id)),
+            | ir::Type::Struct(id)
+            | ir::Type::Variant(id) => Some(ir::TagLocation::TypeDef(id.def_id)),
 
             _ => None,
         };
@@ -2539,7 +2541,7 @@ impl Vm {
         ]);
 
         let typeinfo_methods_ptr = DynValue::Pointer(
-            Pointer::nil(ir::METHODINFO_TYPE)
+            Pointer::nil(ir::Type::method_info())
         );
 
         // allocate and store the typeinfo before populating methods, so we can easily
@@ -2603,7 +2605,7 @@ impl Vm {
             self.runtime_methods.push(method_info.clone());
         }
 
-        let method_array = self.new_dyn_array(&ir::METHODINFO_TYPE, method_info_ptrs, true)?;
+        let method_array = self.new_dyn_array(&ir::Type::method_info(), method_info_ptrs, true)?;
 
         // update the typeinfo instance's methods field with the circular reference
         let methods_field_ptr = self.object_field_ptr(&typeinfo_ptr, ir::TYPEINFO_METHODS_FIELD)?;

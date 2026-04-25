@@ -440,7 +440,7 @@ impl<'a> Unit<'a> {
             Expr::LitCString("forget".to_string()),
         ])));
         
-        let method_info_class_type = ir::METHODINFO_ID.to_class_ptr_type();
+        let method_info_class_type = ir::Type::method_info();
         let method_info_array_id = self.get_dyn_array_type(&method_info_class_type);
 
         // initialize type info fields that can't be statically initialized
@@ -717,7 +717,7 @@ impl<'a> fmt::Display for Unit<'a> {
             // should be a set struct
             let flags_type_name = flags_field.ty
                 .def_id()
-                .map(|id| TypeDefName::Struct(id))
+                .map(|id| TypeDefName::Struct(id.def_id))
                 .unwrap_or_else(|| panic!("invalid type for TypeInfo flags field: {}", flags_field.ty));
 
             for (ty, typeinfo) in &self.type_infos {

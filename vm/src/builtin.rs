@@ -309,7 +309,7 @@ fn find_type_info(state: &mut Vm) -> ExecResult<()> {
         }
         
         None => {
-            DynValue::nil(ir::TYPEINFO_TYPE)
+            DynValue::nil(ir::Type::type_info())
         }
     };
     
@@ -552,55 +552,55 @@ pub(super) fn is_nan(state: &mut Vm) -> ExecResult<()> {
 
 pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, ir::Type, Vec<ir::Type>)> {
     let items = [
-        ("Int8ToStr", i8_to_str as BuiltinFn, ir::Type::string_ptr(), vec![
+        ("Int8ToStr", i8_to_str as BuiltinFn, ir::Type::string(), vec![
             ir::Type::I8
         ]),
-        ("UInt8ToStr", u8_to_str, ir::Type::string_ptr(), vec![
+        ("UInt8ToStr", u8_to_str, ir::Type::string(), vec![
             ir::Type::U8
         ]),
-        ("Int16ToStr", i16_to_str, ir::Type::string_ptr(), vec![
+        ("Int16ToStr", i16_to_str, ir::Type::string(), vec![
             ir::Type::I16
         ]),
-        ("UInt16ToStr", u16_to_str, ir::Type::string_ptr(), vec![
+        ("UInt16ToStr", u16_to_str, ir::Type::string(), vec![
             ir::Type::U16
         ]),
-        ("Int32ToStr", i32_to_str, ir::Type::string_ptr(), vec![
+        ("Int32ToStr", i32_to_str, ir::Type::string(), vec![
             ir::Type::I32
         ]),
-        ("UInt32ToStr", u32_to_str, ir::Type::string_ptr(), vec![
+        ("UInt32ToStr", u32_to_str, ir::Type::string(), vec![
             ir::Type::U32
         ]),
-        ("Int64ToStr", i64_to_str, ir::Type::string_ptr(), vec![
+        ("Int64ToStr", i64_to_str, ir::Type::string(), vec![
             ir::Type::I64
         ]),
-        ("UInt64ToStr", u64_to_str, ir::Type::string_ptr(), vec![
+        ("UInt64ToStr", u64_to_str, ir::Type::string(), vec![
             ir::Type::U64
         ]),
-        ("NativeIntToStr", isize_to_str, ir::Type::string_ptr(), vec![
+        ("NativeIntToStr", isize_to_str, ir::Type::string(), vec![
             ir::Type::ISize
         ]),
-        ("NativeUIntToStr", usize_to_str, ir::Type::string_ptr(), vec![
+        ("NativeUIntToStr", usize_to_str, ir::Type::string(), vec![
             ir::Type::USize
         ]),
-        ("PointerToStr", pointer_to_str, ir::Type::string_ptr(), vec![
+        ("PointerToStr", pointer_to_str, ir::Type::string(), vec![
             ir::Type::Nothing.ptr()
         ]),
-        ("RealToStr", real_to_str, ir::Type::string_ptr(), vec![
+        ("RealToStr", real_to_str, ir::Type::string(), vec![
             ir::Type::F32
         ]),
-        ("Real64ToStr", real64_to_str, ir::Type::string_ptr(), vec![
+        ("Real64ToStr", real64_to_str, ir::Type::string(), vec![
             ir::Type::F64
         ]),
         ("StrToInt", str_to_int, ir::Type::I32, vec![
-            ir::STRING_TYPE
+            ir::Type::string()
         ]),
         ("Write", write, ir::Type::Nothing, vec![
-            ir::STRING_TYPE
+            ir::Type::string()
         ]),
         ("WriteLn", write_ln, ir::Type::Nothing, vec![
-            ir::STRING_TYPE
+            ir::Type::string()
         ]),
-        ("ReadLn", read_ln, ir::Type::string_ptr(), vec![]), 
+        ("ReadLn", read_ln, ir::Type::string(), vec![]), 
         ("GetMem", get_mem, ir::Type::U8.ptr(), vec![
             ir::Type::I32
         ]),
@@ -615,25 +615,25 @@ pub fn system_funcs() -> impl IntoIterator<Item=(&'static str, BuiltinFn, ir::Ty
             ir::Type::I32, 
         ]),
         ("InvokeMethod", invoke_method, ir::ANY_TYPE, vec![
-            ir::METHODINFO_TYPE,
+            ir::Type::method_info(),
             ir::Type::any().temp_ref(),
             ir::Type::any().dyn_array(),
             ir::Type::I32.temp_ref(),
         ]),
         ("InvokeFunction", invoke_func, ir::ANY_TYPE, vec![
-            ir::FUNCINFO_TYPE,
+            ir::Type::func_info(),
             ir::Type::any().dyn_array(),
             ir::Type::I32.temp_ref(),
         ]),
         
-        ("FindTypeInfo", find_type_info, ir::TYPEINFO_TYPE, vec![ir::Type::string_ptr()]),
+        ("FindTypeInfo", find_type_info, ir::Type::type_info(), vec![ir::Type::string()]),
         ("GetTypeInfoCount", get_type_info_count, ir::Type::I32, vec![]),
-        ("GetTypeInfoByIndex", get_type_info_by_index, ir::TYPEINFO_TYPE, vec![ir::Type::I32]),
-        ("GetObjectTypeInfo", get_object_type_info, ir::TYPEINFO_TYPE, vec![ir::Type::any()]),
+        ("GetTypeInfoByIndex", get_type_info_by_index, ir::Type::type_info(), vec![ir::Type::I32]),
+        ("GetObjectTypeInfo", get_object_type_info, ir::Type::type_info(), vec![ir::Type::any()]),
         
-        ("FindFunctionInfo", find_func_info, ir::FUNCINFO_TYPE, vec![ir::Type::string_ptr()]),
+        ("FindFunctionInfo", find_func_info, ir::Type::func_info(), vec![ir::Type::string()]),
         ("GetFunctionInfoCount", get_func_info_count, ir::Type::I32, vec![]),
-        ("GetFunctionInfoByIndex", get_func_info_by_index, ir::FUNCINFO_TYPE, vec![ir::Type::I32]),
+        ("GetFunctionInfoByIndex", get_func_info_by_index, ir::Type::func_info(), vec![ir::Type::I32]),
 
         ("RandomInteger", random_integer, ir::Type::I32, vec![
             ir::Type::I32, ir::Type::I32

@@ -133,7 +133,9 @@ impl ClassIdentity {
 
     pub fn to_ir_type(&self, unit: &Unit) -> ir::Type {
         match self {
-            ClassIdentity::Class(id) => id.to_class_ptr_type(),
+            ClassIdentity::Class(id) => {
+                id.to_class_ptr_type([]) // TODO: C backend type args
+            },
             ClassIdentity::DynArrayClass(id) => {
                 let element = unit.dyn_array_types_by_element.iter()
                     .find_map(|(element, element_array_id)| {
@@ -195,7 +197,7 @@ impl Class {
         metadata: &ir::Metadata,
         module: &mut Unit,
     ) -> Self {
-        let class_ty = ir::Type::Object(ir::ObjectID::Class(struct_id));
+        let class_ty = struct_id.to_class_ptr_type([]); // TODO: C backend type args
 
         let mut impls = BTreeMap::new();
 
@@ -282,7 +284,7 @@ impl Class {
     }
     
     pub fn gen_closure_class(metadata: &ir::Metadata, closure_struct_id: ir::TypeDefID) -> Self {
-        let ty = closure_struct_id.to_class_ptr_type();
+        let ty = closure_struct_id.to_class_ptr_type([]);
 
         Class {
             identity: ClassIdentity::Class(closure_struct_id),

@@ -1,14 +1,15 @@
 pub use crate::metadata::ids::FieldID;
 pub use crate::metadata::ids::ObjectID;
-use crate::metadata::STRING_ID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
+use crate::GenericTypeID;
 use crate::IRFormatter;
 use crate::MetadataSource;
 use crate::TagLocation;
 use crate::Value;
 use serde::Deserialize;
 use serde::Serialize;
+use std::borrow::Cow;
 use std::fmt;
 use std::rc::Rc;
 
@@ -23,11 +24,8 @@ pub enum Type {
     Pointer(Rc<Type>),
     TempRef(Rc<Type>),
 
-    Struct {
-        id: TypeDefID,
-        args: Vec<Type>,
-    },
-    Variant(TypeDefID),
+    Struct(Rc<GenericTypeID>),
+    Variant(Rc<GenericTypeID>),
     Flags(TypeDefID),
     Array {
         element: Rc<Type>,
@@ -71,8 +69,8 @@ impl Type {
         Type::Object(ObjectID::Any)
     }
 
-    pub const fn class_ptr(id: TypeDefID) -> Self {
-        Self::object_ptr(ObjectID::Class(id))
+    pub fn class_ptr(id: TypeDefID, args: impl IntoIterator<Item=Type>) -> Self {
+        Self::object_ptr(ObjectID::Class(GenericTypeID::new(id, args)))
     }
     
     pub const fn object_ptr(class: ObjectID) -> Self {
@@ -81,10 +79,6 @@ impl Type {
     
     pub const fn weak_object_ptr(class: ObjectID) -> Self {
         Type::WeakObject(class)
-    }
-
-    pub const fn string_ptr() -> Self {
-        Self::class_ptr(STRING_ID)
     }
 
     pub fn deref_ty(&self) -> Option<&Self> {
@@ -128,23 +122,16 @@ impl Type {
         }
     }
 
-    pub fn as_struct(&self) -> Option<TypeDefID> {
+    pub fn as_struct(&self) -> Option<&GenericTypeID> {
         match self {
-            Type::Struct { id: struct_id, .. } => Some(*struct_id),
+            Type::Struct(id) => Some(id),
             _ => None,
         }
     }
-
-    pub fn is_struct(&self, id: TypeDefID) -> bool {
-        match self {
-            Type::Struct { id: struct_id, .. } => *struct_id == id,
-            _ => false,
-        }
-    }
     
-    pub fn as_variant(&self) -> Option<TypeDefID> {
+    pub fn as_variant(&self) -> Option<&GenericTypeID> {
         match self {
-            Type::Variant(id) => Some(*id),
+            Type::Variant(id) => Some(id),
             _ => None,
         }
     }
@@ -209,10 +196,10 @@ impl Type {
     // when a value of this type is the target of a field reference, the id of the struct
     // definition that contains the field that can be accessed through this type, or None if the
     // type does not have fields
-    pub fn field_struct_id(&self) -> Option<TypeDefID> {
+    pub fn field_struct_id(&self) -> Option<&GenericTypeID> {
         match self {
-            Type::Struct { id, .. } => Some(*id),
-            Type::Object(ObjectID::Class(id)) => Some(*id),
+            Type::Struct(id) => Some(id.as_ref()),
+            Type::Object(ObjectID::Class(id)) => Some(id.as_ref()),
             _ => None,
         }
     }
@@ -228,13 +215,16 @@ impl Type {
         }
     }
     
-    pub fn def_id(&self) -> Option<TypeDefID> {
+    pub fn def_id(&'_ self) -> Option<Cow<'_, Rc<GenericTypeID>>> {
         match self {
             Type::Variant(id)
+            | Type::Struct(id) => {
+                Some(Cow::Borrowed(id))
+            },
+
             | Type::Function(id)
-            | Type::Flags(id, ..)
-            | Type::Struct { id, .. } => {
-                Some(*id)
+            | Type::Flags(id, ..) => {
+                Some(Cow::Owned(GenericTypeID::new(*id, [])))
             }
 
             _ => None,
@@ -243,12 +233,19 @@ impl Type {
     
     pub fn tags_loc(&self) -> Option<TagLocation> {
         match self {
+            | Type::Variant(id)
             | Type::Object(ObjectID::Class(id))
-            | Type::Struct { id, .. }
-            | Type::Flags(id)
-            | Type::Variant(id) => Some(TagLocation::TypeDef(*id)),
+            | Type::Struct(id) => {
+                Some(TagLocation::TypeDef(id.def_id))
+            },
 
-            | Type::Object(ObjectID::Interface(id)) => Some(TagLocation::Interface(*id)),
+            | Type::Flags(id) => {
+                Some(TagLocation::TypeDef(*id))
+            },
+
+            | Type::Object(ObjectID::Interface(id)) => {
+                Some(TagLocation::Interface(*id))
+            },
 
             | _ => None,
         }
@@ -307,8 +304,8 @@ impl Type {
             // for them, to be replaced as appropriate later
             Type::Generic(..) => true,
 
-            Type::Struct { id, .. } => {
-                let Some(def) = metadata.get_struct_def(*id) else {
+            Type::Struct(id) => {
+                let Some(def) = metadata.get_struct_def(id.def_id) else {
                     return false;
                 };
 
@@ -316,8 +313,9 @@ impl Type {
                     .values()
                     .any(|f| f.ty.contains_any_object_refs(metadata))
             }
+
             Type::Variant(id) => {
-                let Some(def) = metadata.get_variant_def(*id) else {
+                let Some(def) = metadata.get_variant_def(id.def_id) else {
                     return false;
                 };
 
@@ -371,33 +369,51 @@ impl fmt::Display for Type {
             Type::U64 => write!(f, "u64"),
             Type::ISize => write!(f, "isize"),
             Type::USize => write!(f, "usize"),
-            Type::Pointer(target) => write!(f, "^{}", target),
-            Type::TempRef(target) => write!(f, "&{}", target),
-            Type::Struct{ id, args } => {
-                write!(f, "{{struct {}}}", id)?;
-                format_type_args(f, args)
+            Type::Pointer(target) => {
+                write!(f, "^{}", target)
             },
-            Type::Variant(id) => write!(f, "{{variant {}}}", id),
-            Type::Flags(repr_id) => write!(f, "{{flags {}}}", repr_id),
-            Type::Object(id) => match id {
-                ObjectID::Any => write!(f, "any"),
-                ObjectID::Class(id) => write!(f, "class {}", id),
-                ObjectID::Interface(id) => write!(f, "iface {}", id),
-                ObjectID::AnyClosure(id) => write!(f, "closure {}", id),
-                ObjectID::Array(element) => write!(f, "array of {}", element),
-                ObjectID::Box(element) => write!(f, "box of {}", element),
+            Type::TempRef(target) => {
+                write!(f, "&{}", target)
             },
-            Type::WeakObject(id) => match id {
-                ObjectID::Any => write!(f, "weak any"),
-                ObjectID::Class(id) => write!(f, "weak class {}", id),
-                ObjectID::Interface(id) => write!(f, "weak iface {}", id),
-                ObjectID::AnyClosure(id) => write!(f, "weak closure {}", id),
-                ObjectID::Array(element) => write!(f, "weak array of {}", element),
-                ObjectID::Box(element) => write!(f, "weak box of {}", element),
+            Type::Struct(id) => {
+                write!(f, "{{struct {}}}", id.def_id)?;
+                format_type_args(f, &id.args)
             },
-            Type::Array { element, dim } => write!(f, "array[{}] of {}", dim, element),
-            Type::Function(id) => write!(f, "function {}", id),
+            Type::Variant(id) => {
+                write!(f, "{{variant {}}}", id.def_id)?;
+                format_type_args(f, &id.args)
+            },
+            Type::Flags(repr_id) => {
+                write!(f, "{{flags {}}}", repr_id)
+            },
+            Type::Object(id) => {
+                format_object_id(f, id)
+            },
+            Type::WeakObject(id) => {
+                write!(f, "weak ")?;
+                format_object_id(f, id)
+            },
+            Type::Array { element, dim } => {
+                write!(f, "array[{}] of {}", dim, element)
+            },
+            Type::Function(id) => {
+                write!(f, "function {}", id)
+            },
         }
+    }
+}
+
+fn format_object_id(f: &mut fmt::Formatter, id: &ObjectID) -> fmt::Result {
+    match id {
+        ObjectID::Any => write!(f, "any"),
+        ObjectID::Class(id) => {
+            write!(f, "class {}", id.def_id)?;
+            format_type_args(f, &id.args)
+        },
+        ObjectID::Interface(id) => write!(f, "iface {}", id),
+        ObjectID::AnyClosure(id) => write!(f, "closure {}", id),
+        ObjectID::Array(element) => write!(f, "array of {}", element),
+        ObjectID::Box(element) => write!(f, "box of {}", element),
     }
 }
 

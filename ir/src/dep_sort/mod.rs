@@ -90,19 +90,23 @@ fn add_func_ty_deps(func_ty_def: &FunctionSig, deps: &mut HashSet<TypeDefID>, me
 fn add_dep(ty: &Type, deps: &mut HashSet<TypeDefID>, metadata: &Metadata) {
     match ty {
         Type::Variant(id) => {
-            deps.insert(*id);
+            deps.insert(id.def_id);
 
-            let def = metadata.get_variant_def(*id).unwrap();
+            let def = metadata.get_variant_def(id.def_id).unwrap();
             add_variant_deps(def, deps, metadata);
+
+            for arg in &id.args {
+                add_dep(arg, deps, metadata);
+            }
         }
 
-        Type::Struct { id, args } => {
-            deps.insert(*id);
+        Type::Struct(id) => {
+            deps.insert(id.def_id);
 
-            let def = metadata.get_struct_def(*id).unwrap();
+            let def = metadata.get_struct_def(id.def_id).unwrap();
             add_struct_deps(def, deps, metadata);
 
-            for arg in args {
+            for arg in &id.args {
                 add_dep(arg, deps, metadata);
             }
         }

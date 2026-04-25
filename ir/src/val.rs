@@ -1,3 +1,5 @@
+use crate::generic::instantiate_struct_def;
+use crate::generic::instantiate_variant_def;
 use crate::metadata::StringID;
 use crate::ty::Type;
 use crate::ty_decl::TagLocation;
@@ -8,9 +10,6 @@ use crate::LocalStack;
 use crate::MetadataSource;
 use crate::ObjectID;
 use crate::VariableID;
-use crate::FUNCINFO_TYPE;
-use crate::STRING_TYPE;
-use crate::TYPEINFO_TYPE;
 use bigdecimal::BigDecimal;
 use bigdecimal::FromPrimitive;
 use bigdecimal::ToPrimitive;
@@ -95,39 +94,49 @@ impl Ref {
     ) -> Option<Cow<'b, Type>> {
         match self {
             Ref::Discard => None,
+
             Ref::Result => {
                 let result_binding = local_stack.find_result_binding()?;
                 Some(Cow::Borrowed(&result_binding.ty))
             }
+
             Ref::Arg(id) => {
                 let arg_binding = local_stack.find_arg_binding(*id)?;
                 Some(Cow::Borrowed(&arg_binding.ty))
             }
+
             Ref::Local(id) => {
                 let local_binding = local_stack.find_local_binding(*id)?;
                 Some(Cow::Borrowed(&local_binding.ty))
             }
+
             Ref::Global(GlobalRef::StringLiteral(..)) => {
-                Some(Cow::Borrowed(&STRING_TYPE))
+                Some(Cow::Owned(Type::string()))
             }
+
             Ref::Global(GlobalRef::Variable(id)) => {
                 let var_info = metadata.get_variable(*id)?;
                 Some(Cow::Borrowed(&var_info.r#type))
             }
+
             Ref::Global(GlobalRef::StaticTagArray(..)) => {
                 Some(Cow::Owned(Type::Object(ObjectID::Any).dyn_array()))
             }
+
             Ref::Global(GlobalRef::StaticTypeInfo(..)) => {
-                Some(Cow::Borrowed(&TYPEINFO_TYPE))
+                Some(Cow::Owned(Type::type_info()))
             }
+
             Ref::Global(GlobalRef::StaticFuncInfo(..)) => {
-                Some(Cow::Borrowed(&FUNCINFO_TYPE))
+                Some(Cow::Owned(Type::func_info()))
             }
+
             Ref::Global(GlobalRef::Function(id)) => {
                 let func_info = metadata.get_function_info(*id)?;
                 let ptr_type_id = metadata.get_function_ptr_type(&func_info.sig)?;
                 Some(Cow::Owned(Type::Function(ptr_type_id)))
             }
+
             Ref::Deref(target) => {
                 let target_type = target.find_type(local_stack, metadata)?;
                 let deref_type = target_type.deref_ty()?;
@@ -135,25 +144,68 @@ impl Ref {
             }
             Ref::Field(field_ref) => {
                 let struct_id = field_ref.instance_type.field_struct_id()?;
-                let struct_def = metadata.get_struct_def(struct_id)?;
-                let field_def = &struct_def.fields.get(&field_ref.field)?;
-                Some(Cow::Borrowed(&field_def.ty))
+
+                let generic_def = metadata.get_struct_def(struct_id.def_id)?;
+
+                let field_type = match instantiate_struct_def(generic_def, &struct_id.args) {
+                    Cow::Owned(mut def) => {
+                        let field_def = def.fields.remove(&field_ref.field)?;
+                        Cow::Owned(field_def.ty)
+                    }
+                    Cow::Borrowed(def) => {
+                        let field_def = def.fields.get(&field_ref.field)?;
+                        Cow::Borrowed(&field_def.ty)
+                    }
+                };
+
+                Some(field_type)
             }
+
             Ref::Element(element_ref) => {
                 let element_type = element_ref.instance_type.element_type()?;
                 Some(Cow::Borrowed(element_type))
             }
+
             Ref::VariantData(data_ref) => {
                 let variant_id = data_ref.instance_type.as_variant()?;
-                let variant_def = metadata.get_variant_def(variant_id)?;
-                let case_def = variant_def.cases.get(data_ref.case_index)?;
-                let data_ty = case_def.ty.as_ref()?;
-                Some(Cow::Borrowed(data_ty))
+
+                let generic_def = metadata.get_variant_def(variant_id.def_id)?;
+
+                let data_type = match instantiate_variant_def(generic_def, &variant_id.args) {
+                    Cow::Owned(mut def) => {
+                        if data_ref.case_index >= def.cases.len() {
+                            return None;
+                        }
+
+                        let case_def = def.cases.remove(data_ref.case_index);
+                        let data_type = case_def.ty?;
+                        Cow::Owned(data_type)
+                    }
+                    Cow::Borrowed(def) => {
+                        let case_def = def.cases.get(data_ref.case_index)?;
+                        let data_type = case_def.ty.as_ref()?;
+                        Cow::Borrowed(data_type)
+                    }
+                };
+
+                Some(data_type)
             }
+
             Ref::VariantTag(tag_ref) => {
                 let variant_id = tag_ref.instance_type.as_variant()?;
-                let variant_def = metadata.get_variant_def(variant_id)?;
-                Some(Cow::Borrowed(&variant_def.tag_type))
+
+                let generic_def = metadata.get_variant_def(variant_id.def_id)?;
+
+                let tag_type = match instantiate_variant_def(generic_def, &variant_id.args) {
+                    Cow::Owned(def) => {
+                        Cow::Owned(def.tag_type)
+                    }
+                    Cow::Borrowed(def) => {
+                        Cow::Borrowed(&def.tag_type)
+                    }
+                };
+
+                Some(tag_type)
             }
         }
     }

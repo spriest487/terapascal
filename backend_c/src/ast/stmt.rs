@@ -134,13 +134,19 @@ fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
         ir::Type::F64 => String::from("F64"),
 
         // aggregates
-        ir::Type::Struct { id, args } => {
-            if !args.is_empty() {
+        ir::Type::Struct(id) => {
+            if !id.args.is_empty() {
                 todo!("C backend type args")
             }
-            format!("Struct_{id}")
+            format!("Struct_{}", id.def_id)
         },
-        ir::Type::Variant(id) => format!("Variant_{id}"),
+        ir::Type::Variant(id) => {
+            if !id.args.is_empty() {
+                todo!("C backend type args")
+            }
+
+            format!("Variant_{}", id.def_id)
+        },
         ir::Type::Flags(repr_id) => format!("Flags_{repr_id}"),
 
         // reference types
@@ -714,11 +720,14 @@ impl<'a, 'b> Builder<'a, 'b> {
             Statement::Expr(Expr::translate_assign(out, Expr::LitBool(false), self)),
         ], [{
             let is = match class_id {
-                ir::ObjectID::Class(struct_id) => {
-                    let is_class_ptr = Expr::class_ptr(*struct_id);
+                ir::ObjectID::Class(id) => {
+                    if !id.args.is_empty() {
+                        todo!("C backend type args")
+                    }
+                    let is_class_ptr = Expr::class_ptr(id.def_id);
                     
                     Expr::infix_op(actual_class_ptr, InfixOp::Eq, is_class_ptr)
-                },
+                }
 
                 ir::ObjectID::Array(element) => {
                     let array_id = self.module.get_dyn_array_type(element);
@@ -800,15 +809,15 @@ impl<'a, 'b> Builder<'a, 'b> {
             }
 
             ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(..)) => {
-                Some(ir::TYPEINFO_TYPE)
+                Some(ir::Type::type_info())
             }
 
             ir::Ref::Global(ir::GlobalRef::StaticFuncInfo(..)) => {
-                Some(ir::FUNCINFO_TYPE)
+                Some(ir::Type::func_info())
             }
 
             ir::Ref::Global(ir::GlobalRef::StringLiteral(..)) => {
-                Some(ir::STRING_TYPE)
+                Some(ir::Type::string())
             }
 
             ir::Ref::Deref(deref_val) => {

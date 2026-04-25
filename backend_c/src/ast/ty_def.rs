@@ -7,7 +7,8 @@ pub use self::class_def::*;
 pub use self::struct_def::*;
 pub use self::type_def::*;
 pub use self::variant_def::*;
-use crate::ast::{DynArrayTypeID, Expr};
+use crate::ast::DynArrayTypeID;
+use crate::ast::Expr;
 use crate::ast::Unit;
 use crate::ir;
 use std::fmt;
@@ -65,7 +66,11 @@ impl Type {
         Type::DefinedType(TypeDefName::Struct(id))
     }
 
-    pub fn from_ir_variant(id: ir::TypeDefID) -> Type {
+    pub fn from_ir_variant(id: ir::TypeDefID, type_args: &[ir::Type]) -> Type {
+        if !type_args.is_empty() {
+            todo!("C backend type args")
+        }
+
         Type::DefinedType(TypeDefName::Variant(id))
     }
     
@@ -82,7 +87,10 @@ impl Type {
             
             ir::Type::Object(ir::ObjectID::Class(id))
             | ir::Type::WeakObject(ir::ObjectID::Class(id)) => {
-                Type::DefinedType(TypeDefName::Struct(*id)).ptr()
+                if !id.args.is_empty() {
+                    todo!("C backend type args")
+                }
+                Type::DefinedType(TypeDefName::Struct(id.def_id)).ptr()
             },
 
             ir::Type::Object(ir::ObjectID::Array(element_type))
@@ -99,8 +107,8 @@ impl Type {
             
             ir::Type::Object(..) | ir::Type::WeakObject(..) => Type::Rc.ptr(),
             
-            ir::Type::Struct { id, args } => Type::from_ir_struct(*id, args),
-            ir::Type::Variant(id) => Type::from_ir_variant(*id),
+            ir::Type::Struct(id) => Type::from_ir_struct(id.def_id, &id.args),
+            ir::Type::Variant(id) => Type::from_ir_variant(id.def_id, &id.args),
             ir::Type::Flags(repr_id) => Type::from_ir_struct(*repr_id, &[]),
             
             ir::Type::Nothing => Type::Void,

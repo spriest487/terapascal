@@ -18,9 +18,9 @@ use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
 use crate::codegen::*;
+use crate::ir;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::FunctionDeclContext;
-use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
@@ -32,7 +32,7 @@ use crate::typ::layout::StructLayoutMember;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::TypeParamContainer;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::ir;
+use crate::typ::builtin_funcinfo_name;
 pub use function::*;
 use init::gen_tags_init;
 use ir::InstructionBuilder as _;
@@ -46,7 +46,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::version::Version;
 use terapascal_common::StripMode;
-use terapascal_ir::TypeDefID;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -114,7 +113,8 @@ impl<'a> LibraryBuilder<'a> {
         metadata_refs: impl IntoIterator<Item=Arc<ir::Metadata>>,
         opts: CodegenOpts
     ) -> Self {
-        let builtin_classes = BUILTIN_CLASS_INFO.with(|class_infos| class_infos.to_vec());
+        let builtin_classes = BUILTIN_CLASS_INFO
+            .with(|class_infos| class_infos.to_vec());
 
         let mut metadata = ir::MetadataBuilder::with_refs(metadata_refs);
 
@@ -125,10 +125,12 @@ impl<'a> LibraryBuilder<'a> {
         let type_cache: LinkedHashMap<_, _> = builtin_classes
             .iter()
             .filter(|class_info| !class_info.rtti || opts.rtti)
-            .map(|class_info| (
-                typ::Type::class(class_info.name.clone()), 
-                ir::Type::class_ptr(class_info.id)
-            ))
+            .map(|class_info| {
+                let src_type = typ::Type::class(class_info.name.clone());
+                let result_type = class_info.id.to_class_ptr_type([]);
+
+                (src_type, result_type)
+            })
             .collect();
         
         let cached_types = type_cache
@@ -445,11 +447,11 @@ impl<'a> LibraryBuilder<'a> {
                 panic!("translate_tags: illegal type for tag item: {}", item.tag_type);
             };
             
-            let Some(tag_def) = self.metadata.get_struct_def(tag_class_id).cloned() else {
+            let Some(tag_def) = self.metadata.get_struct_def(tag_class_id.def_id).cloned() else {
                 panic!("translate_tags: missing definition for type used as tag: {}", item.tag_type);
             };
             
-            let mut tag_info = ir::TagInfo::new(tag_class_id);
+            let mut tag_info = ir::TagInfo::new(tag_class_id.def_id);
 
             for arg in &item.args.members {
                 let Some((field_id, field_type)) = tag_def.fields
@@ -930,42 +932,7 @@ impl<'a> LibraryBuilder<'a> {
         // instantiate types which may contain generic params
         let ty = match &src_ty {
             typ::Type::Variant(name) => {
-                // the definition uses the generic (unspecialized) type, which is
-                // shared between all specializations
-                let def_name = (**name).clone().to_generic_name();
-                let def_path = translate_name(&def_name, self);
-
-                let def_id = match self.metadata.find_variant_def(&def_path) {
-                    Some((def_id, _)) => {
-                        def_id
-                    }
-
-                    None => {
-                        let src_def = self.src_metadata
-                            .find_variant_def(&def_name.full_path)
-                            .unwrap();
-
-                        let def_id = self.metadata.new_type();
-
-                        let def_type = typ::Type::variant(def_name);
-                        let variant_type = ir::Type::Variant(def_id);
-
-                        self.add_cached_type(def_type.clone(), variant_type.clone());
-
-                        self.metadata.declare_type(def_id, &def_path);
-
-                        let def = translate_variant_def(&src_def, self);
-                        self.metadata.define_variant(def_id, def);
-
-                        self.insert_type_dtor(def_id, def_type.clone(), src_def.as_ref());
-
-                        def_id
-                    }
-                };
-
-                let variant_type = ir::Type::Variant(def_id);
-                self.add_cached_type(src_ty.clone(), variant_type.clone());
-                variant_type
+                self.translate_variant_type(src_ty, name)
             }
 
             typ::Type::Record(name) => {
@@ -1145,6 +1112,50 @@ impl<'a> LibraryBuilder<'a> {
         ty
     }
 
+    fn translate_variant_type(&mut self, src_type: &typ::Type, name: &typ::Symbol) -> ir::Type {
+        // the definition uses the generic (unspecialized) type, which is
+        // shared between all specializations
+        let def_name = name.clone().to_generic_name();
+        let def_path = translate_name(&def_name, self);
+
+        let def_id = match self.metadata.find_variant_def(&def_path) {
+            Some((def_id, _)) => {
+                def_id
+            }
+
+            None => {
+                let src_def = self.src_metadata
+                    .find_variant_def(&def_name.full_path)
+                    .unwrap();
+
+                let def_id = self.metadata.new_type();
+
+                let def_type = typ::Type::variant(def_name);
+                let variant_type = def_id.to_variant_type(def_path.type_args.clone());
+
+                self.add_cached_type(def_type.clone(), variant_type.clone());
+
+                self.metadata.declare_type(def_id, &def_path);
+
+                let def = translate_variant_def(&src_def, self);
+                self.metadata.define_variant(def_id, def);
+
+                self.insert_type_dtor(def_id, def_type.clone(), src_def.as_ref());
+
+                def_id
+            }
+        };
+
+        let name_path = translate_name(name, self);
+        if name_path == def_path {
+            return def_id.to_variant_type(def_path.type_args.clone());
+        }
+
+        let instance_type = def_id.to_variant_type(name_path.type_args.clone());
+        self.add_cached_type(src_type.clone(), instance_type.clone());
+        instance_type
+    }
+
     fn translate_struct_type(
         &mut self,
         src_type: &typ::Type,
@@ -1154,12 +1165,12 @@ impl<'a> LibraryBuilder<'a> {
         let def_name = name.clone().to_generic_name();
         let def_path = translate_name(&def_name, self);
 
-        let type_ctor = |id: TypeDefID| match kind {
+        let type_ctor = |id: ir::TypeDefID, args: &[ir::Type]| match kind {
             StructKind::Class => {
-                id.to_class_ptr_type()
+                id.to_class_ptr_type(args.to_vec())
             },
             StructKind::Record => {
-                id.to_struct_type(def_path.type_args.clone())
+                id.to_struct_type(args.to_vec())
             },
         };
 
@@ -1176,10 +1187,9 @@ impl<'a> LibraryBuilder<'a> {
                 let def_src_type = typ::Type::from_struct_type(def_name.clone(), kind);
 
                 let def_id = self.metadata.new_type();
-                let def_tye = type_ctor(def_id);
+                let def_type = type_ctor(def_id, &def_path.type_args);
 
-                self.add_cached_type(def_src_type.clone(), def_tye);
-
+                self.add_cached_type(def_src_type.clone(), def_type);
                 self.metadata.declare_type(def_id, &def_path);
 
                 let def = translate_struct_def(&src_def, self);
@@ -1190,7 +1200,12 @@ impl<'a> LibraryBuilder<'a> {
             }
         };
 
-        let instance_type = type_ctor(def_id);
+        let name_path = translate_name(name, self);
+        if name_path == def_path {
+            return type_ctor(def_id, &def_path.type_args);
+        }
+
+        let instance_type = type_ctor(def_id, &name_path.type_args);
         self.add_cached_type(src_type.clone(), instance_type.clone());
         instance_type
     }
@@ -1274,8 +1289,8 @@ impl<'a> LibraryBuilder<'a> {
             
             for closure_id in populate_closures.drain(0..) {
                 gen_closure_runtime_type(self, closure_id);
-                self.gen_type_info(&closure_id.to_class_ptr_type());
-                self.gen_type_info(&closure_id.to_class_weak_type());
+                self.gen_type_info(&closure_id.to_class_ptr_type([]));
+                self.gen_type_info(&closure_id.to_class_weak_type([]));
                 done_closures += 1;
             }
 
@@ -1653,8 +1668,9 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
 }
 
 fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID) {
-    let closure_class_ty = closure_id.to_class_ptr_type();
-    let closure_weak_ty = closure_id.to_class_weak_type();
+    let type_id = ir::GenericTypeID::new(closure_id, []);
+    let closure_class_ty = type_id.to_class_object_type();
+    let closure_weak_ty = type_id.to_weak_class_object_type();
 
     let runtime_type = lib.gen_type_info(&closure_class_ty);
     let mut runtime_type = (*runtime_type).clone();
@@ -1663,7 +1679,7 @@ fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID)
         .as_ref()
         .clone();
 
-    gen_class_dtor(lib, closure_id, &mut runtime_type);
+    gen_class_dtor(lib, &type_id, &mut runtime_type);
 
     // this type is the unnamed class implementing a closure, give it the function flag too
     runtime_type.flags |= ir::TYPE_FLAG_FUNCTION;
@@ -1686,7 +1702,7 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
         .expect("resource class of translated class type was not a struct");
 
     lib.gen_type_info(&class_ty);
-    lib.gen_type_info(&class_id.to_class_weak_type());
+    lib.gen_type_info(&class_id.to_class_object_type());
 
     let mut runtime_type = lib.gen_type_info(&class_ty)
         .as_ref()
@@ -1699,12 +1715,12 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
 
 fn gen_class_dtor(
     lib: &mut LibraryBuilder,
-    class_id: ir::TypeDefID,
+    class_id: &Rc<ir::GenericTypeID>,
     runtime_type: &mut ir::TypeInfo,
 ) {
-    let class_ty = class_id.to_class_ptr_type();
+    let class_ty = class_id.to_class_object_type();
 
-    let user_dtor = lib.dtors.get(&class_id).cloned();
+    let user_dtor = lib.dtors.get(&class_id.def_id).cloned();
 
     let mut dtor_builder = IRBuilder::new(lib);
     

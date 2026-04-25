@@ -7,9 +7,7 @@ use crate::IRFormatter;
 use crate::InstructionList;
 use crate::Metadata;
 use crate::MetadataSource;
-use crate::StructIdentity;
 use crate::TagInfo;
-use crate::Type;
 use crate::TypeDef;
 use serde::Deserialize;
 use serde::Serialize;
@@ -122,12 +120,12 @@ impl fmt::Display for Library {
             }
 
             let impl_self_ty = match def {
-                TypeDef::Variant(..) => Some(Type::Variant(*id)),
-                TypeDef::Struct(struct_def) => match &struct_def.identity {
-                    StructIdentity::Record(path) => Some(id.to_struct_type(path.type_args.clone())),
-                    StructIdentity::Class(..) => Some(id.to_class_ptr_type()),
-                    _ => None,
-                }
+                TypeDef::Variant(def) => {
+                    Some(id.to_variant_type(def.name.type_args.clone()))
+                },
+                TypeDef::Struct(struct_def) => {
+                    Some(struct_def.identity.to_definition_type(*id))
+                },
                 TypeDef::Function(..) => None,
             };
 

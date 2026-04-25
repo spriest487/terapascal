@@ -239,7 +239,7 @@ pub fn literal_to_val(
         }
 
         ast::Literal::String(s) => {
-            if *ty != ir::Type::Object(ir::STRING_OBJECT_ID) {
+            if *ty != ir::Type::string() {
                 panic!("bad type for string literal: {}", ty)
             }
             

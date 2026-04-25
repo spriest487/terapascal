@@ -1,9 +1,13 @@
-﻿use crate::{FunctionID, MethodID};
+﻿use crate::generic::instantiate_struct_def;
+use crate::generic::instantiate_variant_def;
+use crate::metadata::vars::ConstInfo;
+use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
+use crate::MethodID;
 use crate::MethodInfo;
 use crate::NamePath;
 use crate::ObjectID;
@@ -21,7 +25,6 @@ use crate::VariableInfo;
 use crate::VariantDef;
 use std::borrow::Cow;
 use std::rc::Rc;
-use crate::metadata::vars::ConstInfo;
 
 pub trait MetadataSource : Sized {
     fn as_formatter(&self) -> &impl IRFormatter;
@@ -30,6 +33,16 @@ pub trait MetadataSource : Sized {
 
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef>;
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
+
+    fn instantiate_struct_def(&'_ self, id: TypeDefID, args: &[Type]) -> Option<Cow<'_, StructDef>> {
+        let def = self.get_struct_def(id)?;
+        Some(instantiate_struct_def(def, args))
+    }
+
+    fn instantiate_variant_def(&'_ self, id: TypeDefID, args: &[Type]) -> Option<Cow<'_, VariantDef>> {
+        let def = self.get_variant_def(id)?;
+        Some(instantiate_variant_def(def, args))
+    }
 
     fn type_decls(&self) -> impl Iterator<Item = (TypeDefID, &TypeDecl)>;
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl>;
@@ -110,10 +123,18 @@ pub trait MetadataSource : Sized {
 
                 Type::Object(ObjectID::Class(type_id))
                 | Type::Variant(type_id)
-                | Type::Struct { id: type_id, .. }
-                | Type::Flags(type_id) => TagLocation::Method {
-                    type_id: *type_id,
-                    method_index: method_info.index,
+                | Type::Struct(type_id) => {
+                    TagLocation::Method {
+                        type_id: type_id.def_id,
+                        method_index: method_info.index,
+                    }
+                }
+
+                | Type::Flags(type_id) => {
+                    TagLocation::Method {
+                        type_id: *type_id,
+                        method_index: method_info.index,
+                    }
                 },
 
                 _ => {
@@ -144,12 +165,25 @@ pub trait MetadataSource : Sized {
 
     fn pretty_type_name(&self, ty: &Type) -> Cow<'_, str> {
         match ty {
-            Type::Struct { id, .. } | Type::Variant(id) => {
-                match self.get_type_name(*id) {
-                    Some(name) => Cow::Owned(name.to_pretty_string(self)),
-                    None => Cow::Owned(id.to_string())
+            Type::Struct(def_id) | Type::Variant(def_id) => {
+                match self.get_type_name(def_id.def_id) {
+                    Some(name) => {
+                        if def_id.args == name.type_args {
+                            return Cow::Owned(name.to_pretty_string(self))
+                        }
+
+                        let name = NamePath {
+                            path: name.path.clone(),
+                            type_args: def_id.args.clone()
+                        };
+
+                        Cow::Owned(name.to_pretty_string(self))
+                    },
+                    None => {
+                        Cow::Owned(def_id.to_string())
+                    }
                 }
-            },
+            }
 
             Type::Array { element, dim } => {
                 let elem_name = self.pretty_type_name(element);
@@ -209,7 +243,7 @@ pub trait MetadataSource : Sized {
             }),
 
             ObjectID::Class(struct_id) => {
-                self.pretty_type_name(&struct_id.to_struct_type([]))
+                self.pretty_type_name(&struct_id.to_struct_type())
             },
 
             ObjectID::Array(element_type) => {
