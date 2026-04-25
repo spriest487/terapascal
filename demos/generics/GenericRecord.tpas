@@ -1,0 +1,22 @@
+unit GenericRecord;
+implementation
+
+type
+    MyRecord[TA, TB] = record
+        First: TA;
+        Second: TB;
+    end;
+    
+function PrintFields(r: MyRecord[String, Boolean]);
+begin
+    WriteLn(r.First);
+    WriteLn(r.Second.ToString);
+end;
+
+initialization
+    var r1: MyRecord[String, Boolean] := (First: 'Hello'; Second: true);
+    var r2: MyRecord[String, Boolean] := (First: 'Goodbye'; Second: false);
+    
+    PrintFields(r1);
+    PrintFields(r2);
+end
