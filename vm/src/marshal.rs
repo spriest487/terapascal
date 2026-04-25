@@ -514,6 +514,74 @@ impl Marshaller {
             .ok_or_else(|| MarshalError::invalid_type_index(index))
     }
 
+    // get or create a native type corresponding to a type referenced in code.
+    // for non-generic type, this is just a lookup to the corresponding type defined in metadata.
+    // for generic types, this may instantiate a new instance of the generic definition if
+    // necessary, creating a new native layout with a unique type index
+    pub fn create_native_type(&mut self, ty: &ir::Type) -> MarshalResult<NativeType> {
+        if let Some(type_index) = self.try_get_type_index(ty) {
+            let native_type = self.types[&type_index].clone();
+            return Ok(native_type);
+        }
+
+        match ty {
+            ir::Type::Nothing => {
+                // "nothing" is not a marshalable type!
+                Err(MarshalError::unsupported_type(ir::Type::Nothing))
+            },
+
+            // static arrays are treated as a struct of elements laid out sequentially
+            ir::Type::Array { element, dim } => {
+                let el_ty = self.get_native_type(&element)?;
+                let el_tys = vec![el_ty; *dim];
+
+                let native_type = NativeType::structure(el_tys);
+                self.register_type(ty.clone(), native_type.clone())?;
+
+                Ok(native_type)
+            },
+
+            // struct types (potentially generic)
+            ir::Type::Struct(..) => {
+                let (_, type_index) = self.add_struct_type(ty)?;
+                let native_type = self.types[&type_index].clone();
+                Ok(native_type)
+            }
+
+            // variant types (potentially generic)
+            ir::Type::Variant(..) => {
+                let (_, type_index) = self.add_variant_type(ty)?;
+                let native_type = self.types[&type_index].clone();
+                Ok(native_type)
+            }
+
+            // object pointers to classes
+            ir::Type::Object(ir::ObjectID::Class(..))
+            | ir::Type::WeakObject(ir::ObjectID::Class(..)) => {
+                // instantiate the generic type if necessary
+                self.add_struct_type(ty)?;
+                Ok(NativeType::pointer())
+            }
+
+            // simple pointer types
+            ir::Type::Pointer(..)
+            | ir::Type::TempRef(..)
+            | ir::Type::Object(..)
+            | ir::Type::WeakObject(..)
+            | ir::Type::Function(..) => {
+                self.register_type(ty.clone(), NativeType::pointer())?;
+                Ok(NativeType::pointer())
+            }
+
+            // all other types must exist in the cache already
+            ty => {
+                let type_index = self.get_type_index(ty)?;
+                let native_type = self.types[&type_index].clone();
+                Ok(native_type)
+            },
+        }
+    }
+
     // TODO: should probably change this to take a TypeIndex
     pub fn get_native_type(&self, ty: &ir::Type) -> MarshalResult<NativeType> {
         match ty {
@@ -986,7 +1054,7 @@ impl Marshaller {
         Ok(dyn_val)
     }
 
-    pub fn stack_alloc_size(&self, instructions: &[ir::Instruction]) -> MarshalResult<usize> {
+    pub fn stack_alloc_size(&mut self, instructions: &[ir::Instruction]) -> MarshalResult<usize> {
         let mut local_sizes = Vec::new();
         for instruction in instructions {
             if let ir::Instruction::LocalAlloc(id, ty) = instruction {
@@ -994,7 +1062,7 @@ impl Marshaller {
                     local_sizes.push(0);
                 }
 
-                let ty_size = self.get_native_type(ty)?.size();
+                let ty_size = self.create_native_type(ty)?.size();
                 let local_size = &mut local_sizes[id.0];
                 *local_size = max(ty_size, *local_size);
             }

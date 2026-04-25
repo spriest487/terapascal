@@ -574,7 +574,7 @@ impl Vm {
 
         let func_name = func_info.name.clone();
         let func = &func_info.func.clone();
-        let stack_size = func.stack_alloc_size(self.marshaller())?;
+        let stack_size = func.stack_alloc_size(&mut self.heap.marshaller)?;
 
         self.stack.push(func_name, stack_size);
 
@@ -2227,8 +2227,7 @@ impl Vm {
                 });
         }
 
-        let init_stack_size = self
-            .marshaller()
+        let init_stack_size = self.heap.marshaller
             .stack_alloc_size(&lib.init().instructions)
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
