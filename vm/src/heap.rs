@@ -149,7 +149,7 @@ impl NativeHeap {
     }
 
     pub fn alloc(&mut self, ty: ir::Type, count: usize, trace: bool) -> NativeHeapResult<Pointer> {
-        let ty_size = self.marshaller.get_native_type(&ty)?.size();
+        let ty_size = self.marshaller.create_native_type(&ty)?.size();
         if ty_size == 0 || count == 0 {
             return Err(NativeHeapError::ZeroSizedAllocation { ty, count });
         }

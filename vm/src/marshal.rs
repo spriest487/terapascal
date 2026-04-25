@@ -22,6 +22,7 @@ use ir::MetadataSource as _;
 use libffi::middle::Builder as FfiBuilder;
 use libffi::middle::Type as FfiType;
 pub use native_type::*;
+use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::cmp::max;
 use std::collections::BTreeMap;
@@ -51,7 +52,7 @@ pub struct DynArrayHeader {
 pub struct StructFieldInfo {
     pub offset: usize,
     pub ty: ir::Type,
-    pub foreign_ty: NativeType,
+    pub native_type: NativeType,
 }
 
 #[derive(Debug, Clone)]
@@ -109,7 +110,7 @@ impl Marshaller {
         };
 
         let primitive_types = [
-            (ir::Type::Nothing.ptr(), NativeType::pointer()),
+            (ir::Type::Nothing, NativeType::void()),
             (ir::Type::I8, NativeType::i8()),
             (ir::Type::U8, NativeType::u8()),
             (ir::Type::I16, NativeType::i16()),
@@ -283,7 +284,7 @@ impl Marshaller {
             field_layout.insert(*field_id, StructFieldInfo {
                 offset,
                 ty: field_def.ty.clone(),
-                foreign_ty,
+                native_type: foreign_ty,
             });
 
             offset += size;
@@ -532,7 +533,7 @@ impl Marshaller {
 
             // static arrays are treated as a struct of elements laid out sequentially
             ir::Type::Array { element, dim } => {
-                let el_ty = self.get_native_type(&element)?;
+                let el_ty = self.create_native_type(&element)?;
                 let el_tys = vec![el_ty; *dim];
 
                 let native_type = NativeType::structure(el_tys);
@@ -583,35 +584,12 @@ impl Marshaller {
     }
 
     // TODO: should probably change this to take a TypeIndex
-    pub fn get_native_type(&self, ty: &ir::Type) -> MarshalResult<NativeType> {
-        match ty {
-            ir::Type::Nothing => {
-                // "nothing" is not a marshalable type!
-                Err(MarshalError::unsupported_type(ir::Type::Nothing))
-            },
-
-            // we can't cache array types so always build them on demand
-            // pascal static arrays are treated as a struct of elements laid out sequentially
-            ir::Type::Array { element, dim } => {
-                let el_ty = self.get_native_type(&element)?;
-                let el_tys = vec![el_ty; *dim];
-
-                Ok(NativeType::structure(el_tys))
-            },
-
-            ir::Type::Pointer(..) 
-            | ir::Type::TempRef(..) 
-            | ir::Type::Object(..) 
-            | ir::Type::WeakObject(..) 
-            | ir::Type::Function(..) => {
-                Ok(NativeType::pointer())
-            },
-
-            ty => {
-                let type_index = self.get_type_index(ty)?;
-                Ok(self.types[&type_index].clone())
-            },
-        }
+    pub fn get_native_type(&self, type_index: TypeIndex) -> MarshalResult<&NativeType> {
+        self.types
+            .get(&type_index)
+            .ok_or_else(|| {
+                MarshalError::invalid_type_index(type_index)
+            })
     }
 
     pub fn get_object_id(&self, index: TypeIndex) -> MarshalResult<&ObjectID> {
@@ -710,7 +688,7 @@ impl Marshaller {
         }
     }
 
-    pub fn marshal(&self, val: &DynValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
+    pub fn marshal(&mut self, val: &DynValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
         let size = match val {
             DynValue::I8(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
             DynValue::U8(x) => marshal_bytes(&x.to_ne_bytes(), out_bytes)?,
@@ -757,7 +735,7 @@ impl Marshaller {
         Ok(size)
     }
     
-    pub fn marshal_to_vec(&self, val: &DynValue) -> MarshalResult<Vec<u8>> {
+    pub fn marshal_to_vec(&mut self, val: &DynValue) -> MarshalResult<Vec<u8>> {
         // have to calculate the size before writing
         let capacity = match &val {
             DynValue::Bool(..) => 1,
@@ -772,19 +750,18 @@ impl Marshaller {
             | DynValue::USize(..) => size_of::<usize>(),
     
             DynValue::Structure(structure) => {
-                let struct_type = self.get_type(structure.type_index)?;
-                let ty = self.get_native_type(&struct_type)?;
+                let ty = self.get_native_type(structure.type_index)?;
                 ty.size()
             }
 
             DynValue::Variant(variant) => {
-                let variant_type = self.get_type(variant.type_index)?;
-                let ty = self.get_native_type(&variant_type)?;
+                let ty = self.get_native_type(variant.type_index)?;
                 ty.size()
             }
 
             DynValue::Array(array) => {
-                let el_size = self.get_native_type(&array.element_type)?.size();
+                let el_size = self.create_native_type(&array.element_type)?.size();
+
                 array.elements.len() * el_size
             }
         };
@@ -835,7 +812,8 @@ impl Marshaller {
     pub fn unmarshal_at(&self, pointer: &Pointer) -> MarshalResult<DynValue> {
         assert_ne!(0, pointer.addr);
 
-        let marshal_ty = self.get_native_type(&pointer.ty)?;
+        let type_index = self.get_type_index(&pointer.ty)?;
+        let marshal_ty = self.get_native_type(type_index)?;
 
         let result = self.unmarshal(unsafe {
             pointer.as_slice(marshal_ty.size())
@@ -844,7 +822,11 @@ impl Marshaller {
         Ok(result.value)
     }
 
-    pub fn marshal_object_at(&self, pointer: &Pointer, object: &ObjectValue) -> MarshalResult<usize> {
+    pub fn marshal_object_at(
+        &mut self,
+        pointer: &Pointer,
+        object: &ObjectValue,
+    ) -> MarshalResult<usize> {
         let mut offset = 0;
 
         offset += unsafe {
@@ -952,14 +934,14 @@ impl Marshaller {
         })
     }
 
-    pub fn marshal_at(&self, val: &DynValue, into_ptr: &Pointer) -> MarshalResult<usize> {
+    pub fn marshal_at(&mut self, val: &DynValue, into_ptr: &Pointer) -> MarshalResult<usize> {
         if into_ptr.addr == 0 {
             return Err(MarshalError::InvalidData);
         }
         
         // eprintln!("marshal_at: {into_ptr} <- {:?}", val);
 
-        let marshal_ty = self.get_native_type(&into_ptr.ty)?;
+        let marshal_ty = self.create_native_type(&into_ptr.ty)?;
         let type_size = marshal_ty.size();
 
         let mem_slice = slice_from_raw_parts_mut(into_ptr.addr as *mut u8, type_size);
@@ -1198,7 +1180,7 @@ impl Marshaller {
         })
     }
 
-    fn marshal_struct(&self, struct_val: &StructValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
+    fn marshal_struct(&mut self, struct_val: &StructValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
         let mut offset = 0;
         
         let Some(layout) = self.struct_layouts.get(&struct_val.type_index) else {
@@ -1207,16 +1189,20 @@ impl Marshaller {
             return Err(MarshalError::InvalidStructType(struct_type.clone()));
         };
 
+        let mut field_types: SmallVec<[_; 4]> = SmallVec::new();
         for (field_id, field_info) in &layout.fields {
-            match struct_val.fields.get(field_id.0) {
+            field_types.push((field_id.0, field_info.native_type.clone()));
+        }
+
+        for (field_index, native_type) in field_types {
+            match struct_val.fields.get(field_index) {
                 Some(field_val) => {
                     offset += self.marshal(field_val, &mut out_bytes[offset..])?;
                 }
                 
                 // skip this field
                 None => {
-                    let field_foreign_ty = self.get_native_type(&field_info.ty)?;
-                    offset += field_foreign_ty.size();
+                    offset += native_type.size();
                 }
             };
         }
@@ -1255,7 +1241,7 @@ impl Marshaller {
     }
 
     fn marshal_variant(
-        &self,
+        &mut self,
         variant_val: &VariantValue,
         out_bytes: &mut [u8],
     ) -> MarshalResult<usize> {
@@ -1273,22 +1259,25 @@ impl Marshaller {
             .as_i32()
             .ok_or_else(|| MarshalError::InvalidData)?;
 
-        let case_ty = layout.cases
+        let data_native_type = layout.cases
             .get(tag as usize)
+            .map(|case| {
+                case.as_ref().map(|data| data.native_type.clone())
+            })
             .ok_or_else(|| MarshalError::InvalidData)?;
 
         // we still need to refer to the type size, because we always marshal/unmarshal
         // the entire size of the variant regardless of which case is active
-        let variant_size = self.get_native_type(&variant_type)?.size();
+        let variant_size = self.get_native_type(variant_val.type_index)?.size();
 
         let tag_size = self.marshal(&variant_val.tag, out_bytes)?;
 
         // don't marshal anything for data-less cases
-        let data_size = match case_ty {
+        let data_size = match data_native_type {
             None => 0,
-            Some(case_data) => {
+            Some(native_type) => {
                 let data_size = self.marshal(&variant_val.data, &mut out_bytes[tag_size..])?;
-                let ty_size = case_data.native_type.size();
+                let ty_size = native_type.size();
                 assert_eq!(ty_size, data_size);
 
                 data_size
@@ -1301,7 +1290,7 @@ impl Marshaller {
             "marshalled size {} <= type size {} for variant {}",
             marshalled_size,
             variant_size,
-            variant_type,
+            self.get_type(variant_val.type_index)?,
         );
 
         Ok(variant_size)
@@ -1322,7 +1311,7 @@ impl Marshaller {
             tag: tag_val.value.clone(),
         })?;
 
-        let variant_size = self.get_native_type(&variant_type)?.size();
+        let variant_size = self.get_native_type(type_index)?.size();
 
         let layout = self
             .variant_layouts

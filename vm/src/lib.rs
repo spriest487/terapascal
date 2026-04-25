@@ -23,7 +23,7 @@ use crate::func::BuiltinFunction;
 use crate::func::FuncInstanceKey;
 use crate::func::Function;
 use crate::heap::NativeHeap;
-use crate::marshal::Marshaller;
+use crate::marshal::{Marshaller, NativeType};
 use crate::result::ExecError;
 use crate::result::ExecResult;
 use crate::rtti_map::RttiMap;
@@ -270,7 +270,7 @@ impl Vm {
             .get_result_ptr()
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
-        self.marshaller().marshal_at(&val, &local_ptr)?;
+        self.heap.marshaller.marshal_at(&val, &local_ptr)?;
 
         Ok(())
     }
@@ -281,7 +281,7 @@ impl Vm {
             .get_arg_ptr(id)
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
-        self.marshaller().marshal_at(&val, &local_ptr)?;
+        self.heap.marshaller.marshal_at(&val, &local_ptr)?;
 
         Ok(())
     }
@@ -292,7 +292,7 @@ impl Vm {
             .get_local_ptr(id)
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
-        self.marshaller().marshal_at(&val, &local_ptr)?;
+        self.heap.marshaller.marshal_at(&val, &local_ptr)?;
 
         Ok(())
     }
@@ -489,11 +489,12 @@ impl Vm {
             }
 
             ir::Value::SizeOf(ty) => {
-                let marshal_ty = self.marshaller().get_native_type(ty)?;
-                let size = cast::i32(marshal_ty.size()).map_err(|_| {
+                let native_type = self.heap.marshaller.create_native_type(ty)?;
+
+                let size = cast::i32(native_type.size()).map_err(|_| {
                     ExecError::illegal_state(format!(
                         "type has illegal size: {}",
-                        marshal_ty.size()
+                        native_type.size()
                     ))
                 })?;
 
@@ -584,7 +585,7 @@ impl Vm {
         if *return_ty != ir::Type::Nothing {
             let result_val = self.default_val(return_ty)?;
             let stack_frame = self.stack.current_frame_mut()?;
-            stack_frame.declare_result(return_ty.clone(), &result_val, &self.heap.marshaller)?;
+            stack_frame.declare_result(return_ty.clone(), &result_val, &mut self.heap.marshaller)?;
         }
 
         if args.len() != func.param_tys().len() {
@@ -597,10 +598,14 @@ impl Vm {
             return Err(ExecError::illegal_state(msg));
         }
 
-        for (arg_num, (arg_val, param_ty)) in args.iter().zip(func.param_tys()).enumerate() {
+        for (arg_num, (arg_val, param_ty)) in args
+            .iter()
+            .zip(func.param_tys())
+            .enumerate()
+        {
             let arg_id = self.stack
                 .current_frame_mut()?
-                .declare_arg(param_ty.clone(), arg_val, &self.heap.marshaller)?;
+                .declare_arg(param_ty.clone(), arg_val, &mut self.heap.marshaller)?;
 
             assert_eq!(ir::ArgID(arg_num), arg_id);
         }
@@ -1091,7 +1096,7 @@ impl Vm {
 
         let current_frame = self.stack.current_frame_mut()?;
         current_frame
-            .declare_local(id, ty.clone(), &uninit_val, pc, &self.heap.marshaller)
+            .declare_local(id, ty.clone(), &uninit_val, pc, &mut self.heap.marshaller)
             .map_err(|err| self.add_stack_trace(err.into()))?;
 
         Ok(())
@@ -1152,8 +1157,8 @@ impl Vm {
         Ok(())
     }
 
-    fn offset_ptr(&self, ptr: Pointer, offset: isize) -> ExecResult<Pointer> {
-        let marshal_ty = self.marshaller().get_native_type(&ptr.ty)?;
+    fn offset_ptr(&mut self, ptr: Pointer, offset: isize) -> ExecResult<Pointer> {
+        let marshal_ty = self.heap.marshaller.create_native_type(&ptr.ty)?;
         let ty_size = marshal_ty.size() as isize;
 
         Ok(Pointer {
@@ -1204,7 +1209,7 @@ impl Vm {
             return Err(ExecError::ZeroLengthAllocation);
         }
 
-        let marshal_ty = self.marshaller().get_native_type(&ty)?;
+        let marshal_ty = self.heap.marshaller.create_native_type(&ty)?;
         let marshal_size = marshal_ty.size();
 
         let alloc_ptr = self.dynalloc(ty, values.len(), trace)?;
@@ -1406,7 +1411,7 @@ impl Vm {
         Ok(pointer)
     }
 
-    fn static_array_element_pointer(&self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
+    fn static_array_element_pointer(&mut self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
         let ir::Type::Array { element: element_type, .. } = &array_ptr.ty else {
             return Err(ExecError::illegal_state(&format!(
                 "type {} is not an array",
@@ -1419,7 +1424,7 @@ impl Vm {
             ty: element_type.as_ref().clone(),
         };
 
-        let element_size = self.marshaller().get_native_type(&element_type)?.size();
+        let element_size = self.heap.marshaller.create_native_type(&element_type)?.size();
 
         let index_offset = element_size * usize::try_from(index)
             .map_err(|_| {
@@ -1430,7 +1435,7 @@ impl Vm {
         Ok(elements_pointer.addr_add(index_offset))
     }
 
-    fn dyn_array_element_pointer(&self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
+    fn dyn_array_element_pointer(&mut self, array_ptr: &Pointer, index: i32) -> ExecResult<Pointer> {
         let array_header = self.marshaller().unmarshal_dyn_array_header_at(&array_ptr)?;
 
         let element_type = match &array_header.object_header.id {
@@ -1438,7 +1443,7 @@ impl Vm {
             _ => return Err(ExecError::illegal_state("dyn_array_element_pointer: object was not an array")),
         };
 
-        let element_marshal_type = self.marshaller().get_native_type(&element_type)?;
+        let element_marshal_type = self.heap.marshaller.create_native_type(&element_type)?;
 
         // dynarray access isn't statically bounds checked
         if index < 0 || index >= array_header.len {
@@ -2084,8 +2089,7 @@ impl Vm {
     fn new_object(&mut self, fields: StructValue, immortal: bool) -> ExecResult<Pointer> {
         let struct_index = fields.type_index;
 
-        let fields_type = self.marshaller().get_type(struct_index)?;
-        let fields_native_type = self.marshaller().get_native_type(&fields_type)?;
+        let fields_native_type = self.heap.marshaller.get_native_type(struct_index)?;
         let fields_size = fields_native_type.size();
 
         let object_id = ObjectID::Struct(struct_index);
@@ -2097,7 +2101,7 @@ impl Vm {
 
         let header = ObjectHeader::new(object_id, immortal);
 
-        let offset = self.marshaller().marshal_object_at(&object_ptr, &ObjectValue {
+        let offset = self.heap.marshaller.marshal_object_at(&object_ptr, &ObjectValue {
             header,
             value: DynValue::Structure(Box::new(fields)),
         })?;
@@ -2183,7 +2187,7 @@ impl Vm {
             let str_ref = ir::GlobalRef::StringLiteral(id);
 
             self.globals.insert(str_ref, GlobalValue::Variable {
-                value: self.marshaller().marshal_to_vec(&str_val)?.into_boxed_slice(),
+                value: self.heap.marshaller.marshal_to_vec(&str_val)?.into_boxed_slice(),
                 ty: ir::Type::string(),
             });
         }
@@ -2217,7 +2221,7 @@ impl Vm {
         // declare global variables
         for (var_id, var) in lib.metadata.variables() {
             // global variables start zero-initialized
-            let marshal_ty = self.marshaller().get_native_type(&var.r#type)?;
+            let marshal_ty = self.heap.marshaller.create_native_type(&var.r#type)?;
             let zero_val = vec![0u8; marshal_ty.size()];
 
             self.globals
@@ -2257,7 +2261,7 @@ impl Vm {
             let typeinfo_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone()));
 
             let typeinfo_ptr = self.create_typeinfo(ty, runtime_type)?;
-            let ptr_bytes = self.marshaller().marshal_to_vec(&typeinfo_ptr)?;
+            let ptr_bytes = self.heap.marshaller.marshal_to_vec(&typeinfo_ptr)?;
 
             self.globals
                 .insert(typeinfo_ref.clone(), GlobalValue::Variable {
@@ -2284,7 +2288,7 @@ impl Vm {
                 .cloned();
 
             let funcinfo_ptr = self.create_func_info_object(func_id, func_decl)?;
-            let ptr_bytes = self.marshaller().marshal_to_vec(&funcinfo_ptr)?;
+            let ptr_bytes = self.heap.marshaller.marshal_to_vec(&funcinfo_ptr)?;
 
             let funcinfo_ref = ir::GlobalRef::StaticFuncInfo(func_id);
             self.globals
@@ -2421,7 +2425,7 @@ impl Vm {
 
         let immortal = header.is_immortal();
 
-        let value_size = self.marshaller().get_native_type(value_ty)?.size();
+        let value_size = self.heap.marshaller.create_native_type(value_ty)?.size();
 
         let box_ptr = self.heap.alloc_object(value_size, object_id, !immortal)?;
 
@@ -2429,7 +2433,7 @@ impl Vm {
             eprintln!("[rc] alloc @ {}", box_ptr.to_pretty_string(self.metadata()))
         }
 
-        let offset = self.marshaller().marshal_object_at(&box_ptr, &ObjectValue {
+        let offset = self.heap.marshaller.marshal_object_at(&box_ptr, &ObjectValue {
             header,
             value,
         })?;
@@ -2461,7 +2465,7 @@ impl Vm {
 
         let array_len = elements.len();
 
-        let element_size = self.marshaller().get_native_type(&element_ty)?.size();
+        let element_size = self.heap.marshaller.create_native_type(&element_ty)?.size();
         let data_size = element_size * array_len;
 
         // we can't allocate a fixed-size object here so allocate bytes and reinterpret the pointer
@@ -2472,7 +2476,7 @@ impl Vm {
             eprintln!("[rc] alloc @ {}", array_ptr.to_pretty_string(self.metadata()))
         }
 
-        let offset = self.marshaller().marshal_object_at(&array_ptr, &ObjectValue {
+        let offset = self.heap.marshaller.marshal_object_at(&array_ptr, &ObjectValue {
             header: ObjectHeader::new(object_id, immortal),
             value: DynValue::Array(Box::new(ArrayValue {
                 element_type: element_ty.clone(),
@@ -2608,7 +2612,7 @@ impl Vm {
 
         // update the typeinfo instance's methods field with the circular reference
         let methods_field_ptr = self.object_field_ptr(&typeinfo_ptr, ir::TYPEINFO_METHODS_FIELD)?;
-        self.marshaller().marshal_at(&DynValue::from(method_array), &methods_field_ptr)?;
+        self.heap.marshaller.marshal_at(&DynValue::from(method_array), &methods_field_ptr)?;
 
         Ok(DynValue::Pointer(typeinfo_ptr))
     }
@@ -2664,7 +2668,7 @@ impl Vm {
         };
 
         // zeroed memory where a boxed result pointer may be stored
-        let error_code_size = self.marshaller().get_native_type(&ir::Type::I32)?.size();
+        let error_code_size = NativeType::i32().size();
         let mut error_code_mem: SmallVec<[u8; size_of::<i32>()]> = SmallVec::new();
         error_code_mem.resize(error_code_size, 0);
 

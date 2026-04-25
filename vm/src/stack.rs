@@ -133,7 +133,11 @@ impl StackFrame {
     }
 
     /// Reserves stack space for the result value to be stored
-    pub fn declare_result(&mut self, ty: ir::Type, value: &DynValue, marshaller: &Marshaller) -> MarshalResult<()> {
+    pub fn declare_result(&mut self,
+        ty: ir::Type,
+        value: &DynValue,
+        marshaller: &mut Marshaller,
+    ) -> MarshalResult<()> {
         assert!(self.result.is_none(), "result storage must not be allocated twice");
         
         let stack_offset = self.stack_alloc(&ty, value, marshaller)?;
@@ -148,7 +152,11 @@ impl StackFrame {
     }
 
     /// Reserves stack space for an argument value to be stored
-    pub fn declare_arg(&mut self, ty: ir::Type, value: &DynValue, marshaller: &Marshaller) -> MarshalResult<ir::ArgID> {
+    pub fn declare_arg(&mut self,
+        ty: ir::Type,
+        value: &DynValue,
+        marshaller: &mut Marshaller,
+    ) -> MarshalResult<ir::ArgID> {
         let stack_offset = self.stack_alloc(&ty, value, marshaller)?;
 
         self.args.push(StackAlloc {
@@ -167,7 +175,7 @@ impl StackFrame {
         ty: ir::Type,
         value: &DynValue,
         alloc_pc: usize,
-        marshaller: &Marshaller,
+        marshaller: &mut Marshaller,
     ) -> StackResult<()> {
         // we only need to allocate new variables the first time the block is executed, so if
         // we try to allocate twice from the same instruction, just do nothing
@@ -221,7 +229,7 @@ impl StackFrame {
         }
     }
 
-    fn stack_alloc(&mut self, ty: &ir::Type, value: &DynValue, marshaller: &Marshaller) -> MarshalResult<usize> {
+    fn stack_alloc(&mut self, ty: &ir::Type, value: &DynValue, marshaller: &mut Marshaller) -> MarshalResult<usize> {
         let start_offset = self.stack_offset;
         let alloc_slice = &mut self.stack_mem[start_offset..];
         let size = marshaller.marshal(value, alloc_slice)?;
@@ -230,7 +238,7 @@ impl StackFrame {
 
         if cfg!(debug_assertions) {
             let marshalled_size = self.stack_offset - start_offset;
-            let ty_size = marshaller.get_native_type(ty)?.size();
+            let ty_size = marshaller.create_native_type(ty)?.size();
             assert_eq!(marshalled_size, ty_size, "stack space allocated ({}) did not match expected size {} for type {}", marshalled_size, ty_size, ty);
         }
 

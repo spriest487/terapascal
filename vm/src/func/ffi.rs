@@ -56,9 +56,7 @@ impl FfiInvoker {
             let param_size = self.ffi_param_tys[i].size();
 
             let arg_val = state.load(&arg_id.to_ref())?;
-            let bytes_copied = state
-                .marshaller()
-                .marshal(&arg_val, &mut args[arg_offset..])?;
+            let bytes_copied = state.heap.marshaller.marshal(&arg_val, &mut args[arg_offset..])?;
 
             assert_eq!(bytes_copied, param_size);
 

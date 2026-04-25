@@ -1713,6 +1713,7 @@ dependencies = [
  "cast",
  "dlopen",
  "libffi",
+ "log",
  "rand 0.10.0",
  "rouille",
  "serde",
