@@ -509,8 +509,8 @@ impl MetadataSource for Metadata {
         self.string_literals.get(&id)
     }
 
-    fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef> {
-        match self.type_decls.get(&struct_id)? {
+    fn get_struct_def(&self, id: TypeDefID) -> Option<&StructDef> {
+        match self.type_decls.get(&id)? {
             TypeDecl::Reserved | TypeDecl::Forward(..) => None,
 
             TypeDecl::Def(TypeDef::Struct(s)) => Some(s),
@@ -519,8 +519,8 @@ impl MetadataSource for Metadata {
         }
     }
 
-    fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef> {
-        match self.type_decls.get(&struct_id)? {
+    fn get_variant_def(&self, id: TypeDefID) -> Option<&VariantDef> {
+        match self.type_decls.get(&id)? {
             TypeDecl::Reserved | TypeDecl::Forward(..) => None,
 
             TypeDecl::Def(TypeDef::Variant(v)) => Some(v),

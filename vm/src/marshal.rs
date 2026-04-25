@@ -37,6 +37,7 @@ use std::ptr::slice_from_raw_parts;
 use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
 use terapascal_ir::generic::instantiate_struct_def;
+use terapascal_ir::generic::instantiate_variant_def;
 
 const RC_ELEMENT_COUNT: usize = 3;
 
@@ -319,13 +320,41 @@ impl Marshaller {
             return Err(MarshalError::unsupported_type(variant_type.clone()));
         };
 
-        let def = self.metadata
-            .instantiate_variant_def(id.def_id, &id.args)
+        let generic_def = self.metadata
+            .get_variant_def(id.def_id)
             .ok_or_else(|| {
                 MarshalError::MissingTypeDef(variant_type.clone())
-            })?
-            .into_owned();
+            })?;
 
+        match instantiate_variant_def(&generic_def, &id.args) {
+            Cow::Borrowed(def) => {
+                let def = Rc::new(def.clone());
+                let type_index = self.define_variant(variant_type, def.clone())?;
+
+                Ok((def, type_index))
+            }
+
+            Cow::Owned(new_def) => {
+                if self.trace_generics {
+                    let generic_name = generic_def.name.to_pretty_string(self.metadata());
+                    let new_name = new_def.name.to_pretty_string(self.metadata());
+
+                    eprintln!("[vm] new instantiation of variant {}: {}", generic_name, new_name);
+                }
+
+                let def = Rc::new(new_def);
+                let type_index = self.define_variant(variant_type, def.clone())?;
+
+                Ok((def, type_index))
+            }
+        }
+    }
+
+    fn define_variant(
+        &mut self,
+        variant_type: &ir::Type,
+        def: Rc<ir::VariantDef>,
+    ) -> MarshalResult<TypeIndex> {
         let mut cases = Vec::with_capacity(def.cases.len());
 
         let mut max_case_size = 0;
@@ -353,14 +382,12 @@ impl Marshaller {
         self.add_dyn_array_type(variant_type.clone())?;
         let type_index = self.register_type(variant_type.clone(), variant_ffi_ty.clone())?;
 
-        let def = Rc::new(def);
-
         self.variant_layouts.insert(type_index, VariantLayout {
             def: def.clone(),
             cases,
         });
 
-        Ok((def, type_index))
+        Ok(type_index)
     }
 
     pub fn add_iface(&mut self, id: ir::InterfaceID) -> MarshalResult<TypeIndex> {
@@ -676,8 +703,10 @@ impl Marshaller {
 
             Cow::Owned(new_def) => {
                 if self.trace_generics {
-                    let new_name = new_def.identity.to_pretty_string(self.metadata().as_formatter());
-                    eprintln!("[vm] new instantiation of struct {}: {}", def_id, new_name);
+                    let generic_name = generic_def.identity.to_pretty_string(self.metadata());
+                    let new_name = new_def.identity.to_pretty_string(self.metadata());
+
+                    eprintln!("[vm] new instantiation of struct {}: {}", generic_name, new_name);
                 }
 
                 let def = Rc::new(new_def);
@@ -723,9 +752,13 @@ impl Marshaller {
                 self.marshal_struct(struct_val, out_bytes)?
             },
 
-            DynValue::Variant(variant_val) => self.marshal_variant(variant_val, out_bytes)?,
+            DynValue::Variant(variant_val) => {
+                self.marshal_variant(variant_val, out_bytes)?
+            },
 
-            DynValue::Pointer(ptr) => self.marshal_ptr(ptr, out_bytes)?,
+            DynValue::Pointer(ptr) => {
+                self.marshal_ptr(ptr, out_bytes)?
+            },
 
             DynValue::Function(func_id) => {
                 marshal_bytes(&func_id.0.to_ne_bytes(), out_bytes)?
