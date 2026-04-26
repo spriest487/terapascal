@@ -261,7 +261,7 @@ pub trait MetadataSource : Sized {
 
         pretty.push_str("function(");
 
-        for (i, param_ty) in sig.param_tys.iter().enumerate() {
+        for (i, param_ty) in sig.param_types.iter().enumerate() {
             if i > 0 {
                 pretty.push_str("; ");
             }
@@ -270,7 +270,7 @@ pub trait MetadataSource : Sized {
         }
 
         pretty.push_str("): ");
-        pretty.push_str(self.pretty_type_name(&sig.return_ty).as_ref());
+        pretty.push_str(self.pretty_type_name(&sig.result_type).as_ref());
 
         pretty
     }

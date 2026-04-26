@@ -1,3 +1,4 @@
+use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FunctionDef;
 use crate::FunctionSig;
@@ -30,6 +31,16 @@ pub fn instantiate_generic(
     builder: &mut impl InstructionBuilder,
 ) {
     let mut locals = LocalMap::new();
+
+    let result_type = remap_type(&def.sig.result_type, types);
+    if result_type != Type::Nothing {
+        builder.local_stack_mut().bind_result(def.sig.result_type.clone());
+    }
+
+    for (i, param_type) in def.sig.param_types.iter().enumerate() {
+        let param_type = remap_type(param_type, types);
+        builder.local_stack_mut().bind_unnamed_param(ArgID(i), param_type, false);
+    }
 
     for (instruction, source) in def.body.iter() {
         if let Some(span) = source {
@@ -301,14 +312,14 @@ pub fn instantiate_generic(
 }
 
 pub fn instantiate_sig(generic_sig: &FunctionSig, types: &TypeMap) -> FunctionSig {
-    let param_tys = generic_sig.param_tys
+    let param_tys = generic_sig.param_types
         .iter()
         .map(|t| remap_type(t, types))
         .collect();
 
     FunctionSig {
-        param_tys,
-        return_ty: remap_type(&generic_sig.return_ty, types),
+        param_types: param_tys,
+        result_type: remap_type(&generic_sig.result_type, types),
     }
 }
 

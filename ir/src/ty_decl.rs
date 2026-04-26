@@ -185,7 +185,7 @@ impl TypeDef {
                 let mut string = String::new();
                 string.push_str("function (");
 
-                for (i, param_ty) in def.param_tys.iter().enumerate() {
+                for (i, param_ty) in def.param_types.iter().enumerate() {
                     if i > 0 {
                         string.push_str("; ");
                     }
@@ -194,7 +194,7 @@ impl TypeDef {
                 }
 
                 string.push_str("): ");
-                string.push_str(&def.return_ty.to_pretty_string(formatter));
+                string.push_str(&def.result_type.to_pretty_string(formatter));
 
                 string
             },
@@ -225,14 +225,14 @@ impl fmt::Display for TypeDef {
             TypeDef::Function(func_ty) => {
                 write!(f, "function (")?;
 
-                for (i, param_ty) in func_ty.param_tys.iter().enumerate() {
+                for (i, param_ty) in func_ty.param_types.iter().enumerate() {
                     if i > 0 {
                         write!(f, "; ")?;
                     }
                     write!(f, "{}", param_ty)?;
                 }
 
-                write!(f, "): {}", func_ty.return_ty)
+                write!(f, "): {}", func_ty.result_type)
             },
         }
     }

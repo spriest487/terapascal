@@ -40,25 +40,25 @@ pub struct StaticClosure {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct FunctionSig {
-    pub return_ty: Type,
-    pub param_tys: Vec<Type>,
+    pub result_type: Type,
+    pub param_types: Vec<Type>,
 }
 
 impl FunctionSig {
     pub fn new(param_tys: impl IntoIterator<Item=Type>, return_ty: Type) -> Self {
         Self {
-            return_ty,
-            param_tys: param_tys.into_iter().collect(),
+            result_type: return_ty,
+            param_types: param_tys.into_iter().collect(),
         }
     }
     
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         let mut result = String::from("function");
 
-        if !self.param_tys.is_empty() {
+        if !self.param_types.is_empty() {
             result.push('(');
 
-            for (i, param_ty) in self.param_tys.iter().enumerate() {
+            for (i, param_ty) in self.param_types.iter().enumerate() {
                 if i > 0 {
                     result.push_str("; ");
                 }
@@ -69,9 +69,9 @@ impl FunctionSig {
             result.push(')');
         }
 
-        if self.return_ty != Type::Nothing {
+        if self.result_type != Type::Nothing {
             result.push_str(": ");
-            formatter.format_type(&self.return_ty, &mut result).unwrap();
+            formatter.format_type(&self.result_type, &mut result).unwrap();
         }
         
         result

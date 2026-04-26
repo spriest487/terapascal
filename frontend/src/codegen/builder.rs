@@ -350,14 +350,22 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     // for a given interface type and method index, get the method index from the self-type that
     // implements that method. panics on any error retrieving the methods, if the method index is
     // not valid for the interface type, or if the self-type is not an implementor of the interface
-    pub fn get_impl_method_index(
+    pub fn get_impl_method_index<'a>(
         &self,
-        self_ty: &typ::Type,
-        iface_ty: &typ::Type,
+        self_ty: &'a typ::Type,
+        iface_ty: &'a typ::Type,
         iface_method_index: usize,
-    ) -> usize {
+    ) -> (&'a typ::Type, usize) {
         if self_ty == iface_ty {
-            return iface_method_index;
+            return (iface_ty, iface_method_index);
+        }
+        
+        // a method invocation on a generic type is always translated as a virtual call - if
+        // it's not an object type, the call will be devirtualized when the code is instantiated
+        if let typ::Type::GenericParam(param) = self_ty {
+            assert_eq!(param.is_ty.ty(), iface_ty);
+            
+            return (iface_ty, iface_method_index);
         }
         
         let iface_method = self.get_method(&iface_ty, iface_method_index);
@@ -366,7 +374,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
         let impl_sig = iface_method.func_decl.sig().with_self(&self_ty);
         
-        self.library.find_method_index(self_ty, method_name, &impl_sig)
+        let method_index = self.library.find_method_index(self_ty, method_name, &impl_sig);
+        (self_ty, method_index)
     }
 
     pub fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
@@ -570,7 +579,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
     // binds an anonymous return local in %0 with the indicated type
     pub fn bind_return(&mut self, ty: Type) {
-        self.local_stack_mut().bind_return(ty);
+        self.local_stack_mut().bind_result(ty);
     }
 
     // binds an anonymous local binding for the closure pointer of a function

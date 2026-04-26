@@ -81,8 +81,8 @@ fn add_variant_deps(variant_def: &VariantDef, deps: &mut HashSet<TypeDefID>, met
 }
 
 fn add_func_ty_deps(func_ty_def: &FunctionSig, deps: &mut HashSet<TypeDefID>, metadata: &Metadata) {
-    add_dep(&func_ty_def.return_ty, deps, metadata);
-    for param_ty in &func_ty_def.param_tys {
+    add_dep(&func_ty_def.result_type, deps, metadata);
+    for param_ty in &func_ty_def.param_types {
         add_dep(param_ty, deps, metadata);
     }
 }

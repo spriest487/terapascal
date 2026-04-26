@@ -228,10 +228,10 @@ pub struct FunctionDecl {
 impl FunctionDecl {
     pub fn translate(id: ir::FunctionID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
         let name = FunctionName::ID(id);
-        let return_ty = Type::from_metadata(&func.sig.return_ty, module);
+        let return_ty = Type::from_metadata(&func.sig.result_type, module);
         let params = func
             .sig
-            .param_tys
+            .param_types
             .iter()
             .map(|param| Type::from_metadata(param, module))
             .collect();
@@ -242,14 +242,14 @@ impl FunctionDecl {
         };
 
         comment.push_str(": (");
-        for (i, arg) in func.sig.param_tys.iter().enumerate() {
+        for (i, arg) in func.sig.param_types.iter().enumerate() {
             if i > 0 {
                 comment.push_str(", ");
             }
             comment.push_str(&arg.to_string());
         }
         comment.push_str(") -> ");
-        comment.push_str(&func.sig.return_ty.to_string());
+        comment.push_str(&func.sig.result_type.to_string());
 
         Self {
             name,
@@ -341,9 +341,9 @@ impl FfiFunction {
         func_ref: &ir::ExternalFunctionRef,
         module: &mut Unit,
     ) -> Self {
-        let return_ty = Type::from_metadata(&func_ref.sig.return_ty, module);
+        let return_ty = Type::from_metadata(&func_ref.sig.result_type, module);
         let mut params = Vec::new();
-        for param in &func_ref.sig.param_tys {
+        for param in &func_ref.sig.param_types {
             params.push(Type::from_metadata(param, module));
         }
 

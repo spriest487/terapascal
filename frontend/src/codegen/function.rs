@@ -71,8 +71,8 @@ pub fn build_func_def(
     FunctionDef {
         body,
         sig: FunctionSig {
-            param_tys: bound_params.into_iter().map(|(_id, ty)| ty).collect(),
-            return_ty,
+            param_types: bound_params.into_iter().map(|(_id, ty)| ty).collect(),
+            result_type: return_ty,
         },
         type_params,
         debug_name,
@@ -140,11 +140,11 @@ pub fn build_func_static_closure_def(
 
     FunctionDef {
         sig: FunctionSig {
-            param_tys: bound_params
+            param_types: bound_params
                 .into_iter()
                 .map(|(_, param_ty)| param_ty)
                 .collect(),
-            return_ty,
+            result_type: return_ty,
         },
         type_params: Vec::new(),
         debug_name,
@@ -224,8 +224,8 @@ pub fn build_closure_function_def(
     FunctionDef {
         body,
         sig: FunctionSig {
-            param_tys: actual_params,
-            return_ty,
+            param_types: actual_params,
+            result_type: return_ty,
         },
         type_params: Vec::new(),
         debug_name,
@@ -392,8 +392,8 @@ pub fn build_static_closure_impl(
     };
 
     let init_sig = FunctionSig {
-        param_tys: Vec::new(),
-        return_ty: Type::Nothing,
+        param_types: Vec::new(),
+        result_type: Type::Nothing,
     };
 
     let init_func_id = library

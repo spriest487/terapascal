@@ -88,7 +88,7 @@ pub fn translate_sig(sig: &typ::FunctionSig, lib: &mut LibraryBuilder) -> ir::Fu
     }
 
     ir::FunctionSig {
-        return_ty,
-        param_tys,
+        result_type: return_ty,
+        param_types: param_tys,
     }
 }

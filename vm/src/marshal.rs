@@ -314,14 +314,14 @@ impl Marshaller {
     ) -> MarshalResult<FfiInvoker> {
         // the "nothing" type is usually not allowed by the marshaller because it can't be
         // instantiated, but here we need to map it to the void ffi type
-        let ffi_return_ty = match &func_ref.sig.return_ty {
+        let ffi_return_ty = match &func_ref.sig.result_type {
             ir::Type::Nothing => NativeType(FfiType::void()),
             return_ty => self.build_marshalled_type(return_ty)?,
         };
 
         let ffi_param_tys: Vec<_> = func_ref
             .sig
-            .param_tys
+            .param_types
             .iter()
             .map(|ty| self.build_marshalled_type(ty))
             .collect::<MarshalResult<_>>()?;
@@ -367,7 +367,7 @@ impl Marshaller {
             cif,
             symbol,
             ffi_param_tys,
-            func_ref.sig.return_ty.clone(),
+            func_ref.sig.result_type.clone(),
             ffi_return_ty,
         ))
     }

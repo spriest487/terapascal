@@ -155,7 +155,7 @@ impl LocalStack {
         self.loops.last()
     }
     
-    pub fn bind_return(&mut self, ty: Type) {
+    pub fn bind_result(&mut self, ty: Type) {
         assert!(
             self.current_scope().find_result_binding().is_none(), 
             "bind_return: {} must not already be bound",

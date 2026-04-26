@@ -258,12 +258,12 @@ impl<'a> Unit<'a> {
                 },
 
                 ir::TypeDef::Function(func_def) => {
-                    let return_ty = Type::from_metadata(&func_def.return_ty, self);
+                    let return_ty = Type::from_metadata(&func_def.result_type, self);
                     return_ty.collect_type_def_deps(&mut member_deps);
 
                     let mut param_tys = Vec::new();
 
-                    for param_ty in &func_def.param_tys {
+                    for param_ty in &func_def.param_types {
                         let param_ty = Type::from_metadata(param_ty, self);
                         param_ty.collect_type_def_deps(&mut member_deps);
                         param_tys.push(param_ty);

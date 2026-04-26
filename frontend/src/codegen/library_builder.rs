@@ -311,8 +311,8 @@ impl<'a> LibraryBuilder<'a> {
             };
 
             let init_sig = ir::FunctionSig {
-                param_tys: Vec::new(),
-                return_ty: ir::Type::Nothing
+                param_types: Vec::new(),
+                result_type: ir::Type::Nothing
             };
             let init_func = ir::FunctionDef {
                 body: unit_init,
@@ -600,7 +600,7 @@ impl<'a> LibraryBuilder<'a> {
                 src: extern_src.value.as_ref().clone(),
                 symbol: (*extern_decl.name.ident.name).clone(),
 
-                sig: ir::FunctionSig { return_ty, param_tys },
+                sig: ir::FunctionSig { result_type: return_ty, param_types: param_tys },
             }),
         );
 
@@ -1438,7 +1438,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 // any reference to a function value creates a closure, which has an extra param
                 // for the reference to itself
-                ir_sig.param_tys.insert(0, ir::Type::any());
+                ir_sig.param_types.insert(0, ir::Type::any());
 
                 self.define_func_ty(func_sig.clone(), ir_sig)
             },
@@ -1461,7 +1461,7 @@ impl<'a> LibraryBuilder<'a> {
         // since we're translating a closure function, the sig needs to include the implicit
         // closure object parameter
         let mut sig = translate_sig(&func.sig(), self);
-        sig.param_tys.insert(0, ir::Type::any());
+        sig.param_types.insert(0, ir::Type::any());
 
         let id = self.metadata.insert_func(None, sig, false, []);
 
@@ -1535,7 +1535,7 @@ impl<'a> LibraryBuilder<'a> {
         let mut closure_func_sig = translate_sig(&func.src_sig, self);
 
         // closure parameter (unused for static closures)
-        closure_func_sig.param_tys.insert(0, ir::Type::any());
+        closure_func_sig.param_types.insert(0, ir::Type::any());
 
         let thunk_id = self.metadata.insert_func(None, closure_func_sig, false, []);
         let thunk_def = build_func_static_closure_def(self, func, &ir_func);
@@ -1624,8 +1624,8 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
         return;
     }
     let dtor_sig = ir::FunctionSig {
-        param_tys: vec![array_type.clone()],
-        return_ty: ir::Type::Nothing,
+        param_types: vec![array_type.clone()],
+        result_type: ir::Type::Nothing,
     };
 
     let dtor_id = lib.metadata.insert_func(None, dtor_sig.clone(), false, []);
@@ -1732,8 +1732,8 @@ fn gen_class_dtor(
     let dtor_body = dtor_builder.finish();
 
     let dtor_sig = ir::FunctionSig {
-        param_tys: vec![class_ty.clone()],
-        return_ty: ir::Type::Nothing,
+        param_types: vec![class_ty.clone()],
+        result_type: ir::Type::Nothing,
     };
 
     let dtor_id = lib.metadata.insert_func(None, dtor_sig.clone(), false, []);
@@ -1790,7 +1790,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         let sig = lib.functions[&func.id].sig().clone();
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_return(sig.return_ty.clone());
+        builder.bind_return(sig.result_type.clone());
 
         let self_arg = ir::ArgID(0);
         let args_arg = ir::ArgID(1);

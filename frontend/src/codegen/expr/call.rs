@@ -198,9 +198,9 @@ pub fn build_method_invocation(
     // eprintln!("   self_ty = {self_ty}");
     // eprintln!("   decl ty = {method_decl_ty}");
 
-    let method_decl_index = builder.get_impl_method_index(method_decl_ty, &iface_ty, method_index);
-    let method_decl = builder.get_method(method_decl_ty, method_decl_index);
+    let (method_decl_ty, method_decl_index) = builder.get_impl_method_index(method_decl_ty, &iface_ty, method_index);
 
+    let method_decl = builder.get_method(method_decl_ty, method_decl_index);
     let method_decl_sig = method_decl.func_decl.sig().with_self(&self_ty);
 
     assert_eq!(
@@ -223,7 +223,7 @@ pub fn build_method_invocation(
         GenericContext::empty()
     };
 
-    let call_target = match builder.translate_type(&self_ty) {
+    let call_target = match builder.translate_type(&method_decl_ty) {
         ir::Type::Object(ir::ObjectID::Interface(iface_id)) => {
             if ty_args.is_some() {
                 unimplemented!("IR for virtual call with type args")

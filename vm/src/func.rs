@@ -55,7 +55,7 @@ impl Function {
             .unwrap_or_else(|| id.to_string());
         let debug_name = Function::make_debug_name(
             &func_name,
-            &def.sig.param_tys,
+            &def.sig.param_types,
             metadata,
         );
 
@@ -72,12 +72,12 @@ impl Function {
         let invoker = marshaller.build_ffi_invoker(&func_ref)?;
 
         let func_name =  format!("{}::{}", func_ref.src, func_ref.symbol);
-        let debug_name = Self::make_debug_name(&func_name, &func_ref.sig.param_tys, marshaller.metadata());
+        let debug_name = Self::make_debug_name(&func_name, &func_ref.sig.param_types, marshaller.metadata());
 
         let func = Function::External(FfiFunction {
             debug_name,
-            return_ty: func_ref.sig.return_ty.clone(),
-            param_tys: func_ref.sig.param_tys.clone(),
+            return_ty: func_ref.sig.result_type.clone(),
+            param_tys: func_ref.sig.param_types.clone(),
 
             invoker,
         });
@@ -89,7 +89,7 @@ impl Function {
         match self {
             Function::Builtin(func) => &func.return_ty,
             Function::External(func) => &func.return_ty,
-            Function::IR(func) => &func.def.sig.return_ty,
+            Function::IR(func) => &func.def.sig.result_type,
         }
     }
 
@@ -97,7 +97,7 @@ impl Function {
         match self {
             Function::Builtin(builtin_fn) => &builtin_fn.param_tys,
             Function::External(external_fn) => &external_fn.param_tys,
-            Function::IR(func) => &func.def.sig.param_tys,
+            Function::IR(func) => &func.def.sig.param_types,
         }
     }
 

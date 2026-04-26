@@ -49,7 +49,7 @@ where
     let exit_label = builder.next_label();
     let exit_error_label = builder.next_label();
 
-    let params_len = func_sig.param_tys.len() as i32;
+    let params_len = func_sig.param_types.len() as i32;
 
     let arg_array_type = Type::any().dyn_array();
 
@@ -87,13 +87,13 @@ where
     }
     builder.local_end();
 
-    let mut call_args = Vec::with_capacity(func_sig.param_tys.len());
+    let mut call_args = Vec::with_capacity(func_sig.param_types.len());
 
     builder.comment("check each arg type");
     let arg_ref = builder.local_temp(Type::any().temp_ref());
 
-    for param_index in 0..func_sig.param_tys.len() {
-        let param_ty = &func_sig.param_tys[param_index];
+    for param_index in 0..func_sig.param_types.len() {
+        let param_ty = &func_sig.param_types[param_index];
         let expect_object_id = match param_ty {
             Type::Object(id) | Type::WeakObject(id) => id.clone(),
 
@@ -194,15 +194,15 @@ where
         }
     }
 
-    if func_sig.return_ty == Type::Nothing {
+    if func_sig.result_type == Type::Nothing {
         // no result: set result ref to nil
         builder.call(func_id, call_args, [], None);
         builder.mov(RESULT_REF, Value::LiteralNil);
     } else {
-        let call_result = builder.local_temp(func_sig.return_ty.clone());
+        let call_result = builder.local_temp(func_sig.result_type.clone());
         builder.call(func_id, call_args, [], Some(call_result.to_ref()));
 
-        gen_box_result(builder, &func_sig.return_ty, call_result.value());
+        gen_box_result(builder, &func_sig.result_type, call_result.value());
     }
 
     builder.mov(error_out_ref.clone(), Value::I32_0);
