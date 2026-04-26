@@ -518,16 +518,15 @@ impl Vm {
             ExecError::illegal_state(msg)
         })?;
 
-        let instance_ty = self.heap
-            .load_object_header(self_ptr)?.id
-            .to_type(self.marshaller())?;
+        let object_header = self.heap.load_object_header(self_ptr)?;
+        let instance_ty = object_header.id.to_type(self.marshaller())?;
 
         self.metadata()
             .find_virtual_impl(&instance_ty, iface_id, method)
             .ok_or_else(|| {
                 let mut err = "virtual call ".to_string();
 
-                let iface_ty = ir::Type::Object(ir::ObjectID::Interface(iface_id));
+                let iface_ty = iface_id.to_interface_ptr_type();
                 let _ = self.metadata().format_type(&iface_ty, &mut err);
                 err.push('.');
                 let _ = self.metadata().format_method(iface_id, method, &mut err);
@@ -1896,18 +1895,10 @@ impl Vm {
 
         let is = match object_id {
             ir::ObjectID::Any => true,
-
+            
             ir::ObjectID::Interface(iface_id) => {
-                match &object_header.id {
-                    // out of all the types a struct might represent, only a class can
-                    // implement any interfaces
-                    ObjectID::Struct(class_index) => {
-                        let class_type = self.marshaller().get_type(*class_index)?;
-                        self.metadata().is_impl(class_type, *iface_id)
-                    }
-
-                    _ => false,
-                }
+                let object_type = object_header.id.to_type(self.marshaller())?;
+                self.metadata().is_impl(&object_type, *iface_id)
             }
 
             ir::ObjectID::Class(class_id) => {

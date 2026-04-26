@@ -1,10 +1,13 @@
 use crate::ir;
+use crate::marshal::MarshalError;
+use crate::marshal::MarshalResult;
+use crate::marshal::Marshaller;
+use crate::marshal::TypeIndex;
 use crate::ptr::Pointer;
 use cast::i128;
 use std::ops::Index;
 use std::ops::IndexMut;
 use std::rc::Rc;
-use crate::marshal::{MarshalResult, Marshaller, TypeIndex};
 
 #[derive(Debug, Clone)]
 pub enum DynValue {
@@ -703,11 +706,14 @@ impl ObjectID {
             _ => None,
         }
     }
-    
+
     pub fn to_type(&self, marshaller: &Marshaller) -> MarshalResult<ir::Type> {
         match self {
             ObjectID::Struct(id) => {
-                marshaller.get_type(*id).cloned()
+                match marshaller.get_type(*id).cloned()? {
+                    ir::Type::Struct(id) => Ok(id.to_class_object_type()),
+                    other => Err(MarshalError::InvalidObjectType(other)),
+                }
             },
             ObjectID::Array(element) => {
                 Ok(ir::ObjectID::Array(element.clone()).to_object_type())
