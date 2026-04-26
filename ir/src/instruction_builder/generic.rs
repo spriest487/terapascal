@@ -352,6 +352,7 @@ pub fn instantiate_struct_def<'a>(
         fields,
         tags: generic_struct.tags.clone(),
         identity,
+        layout: generic_struct.layout,
     })
 }
 

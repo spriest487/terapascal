@@ -3,6 +3,7 @@ use crate::codegen::library_builder::LibraryBuilder;
 use crate::ir;
 use crate::Operator;
 use ir::InstructionBuilder as _;
+use terapascal_ir::StructLayout;
 
 pub const WORD_TYPE: ir::Type = ir::Type::U64;
 const WORD_BITS: usize = u64::BITS as usize;
@@ -41,7 +42,7 @@ pub fn set_word_count(bit_count: usize) -> usize {
 impl SetFlagsType {
     // full-size 256-bit flag struct, the max number of values supported by
     // delphi/FPC sets
-    pub fn define_new(lib: &mut LibraryBuilder, bit_count: usize) -> Self {        
+    pub fn define_new(lib: &mut LibraryBuilder, bit_count: usize) -> Self {
         let word_count = set_word_count(bit_count);
 
         let word_fields = (0..word_count)
@@ -49,7 +50,8 @@ impl SetFlagsType {
             .collect();
 
         let struct_identity = ir::StructIdentity::SetFlags { bits: bit_count };
-        let set_flags_struct = ir::StructDef::new(struct_identity).with_fields(word_fields);
+        let set_flags_struct = ir::StructDef::new(struct_identity, StructLayout::Packed)
+            .with_fields(word_fields);
 
         let struct_id = lib.metadata_mut().new_type();
         lib.metadata_mut().define_struct(struct_id, set_flags_struct);

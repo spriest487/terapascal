@@ -12,8 +12,15 @@ use std::fmt;
 pub struct StructDef {
     pub identity: StructIdentity,
     pub tags: Vec<TagInfo>,
-    
+
     pub fields: BTreeMap<FieldID, StructFieldDef>,
+    pub layout: StructLayout,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum StructLayout {
+    Default,
+    Packed,
 }
 
 impl StructDef {
@@ -63,11 +70,12 @@ impl StructDef {
         true
     }
 
-    pub fn new(identity: StructIdentity) -> Self {
+    pub fn new(identity: StructIdentity, layout: StructLayout) -> Self {
         Self {
             identity,
             fields: BTreeMap::new(),
             tags: Vec::new(),
+            layout,
         }
     }
 

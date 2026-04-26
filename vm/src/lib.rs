@@ -1310,7 +1310,8 @@ impl Vm {
 
         // we don't need to actually look this up, the variant data always appears right
         // after the fixed-size tag
-        let data_offset = self.marshaller().variant_tag_type().size();
+        let type_index = self.marshaller().get_type_index(instance_type)?;
+        let data_offset = self.marshaller().variant_data_offset(type_index)?;
 
         Ok(Pointer {
             addr: a_ptr.addr + data_offset,

@@ -21,18 +21,16 @@ use crate::codegen::*;
 use crate::ir;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::FunctionDeclContext;
+use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::free_mem_sig;
 use crate::typ::get_mem_sig;
-use crate::typ::layout::StructLayout;
-use crate::typ::layout::StructLayoutMember;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::TypeParamContainer;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::builtin_funcinfo_name;
 pub use function::*;
 use init::gen_tags_init;
 use ir::InstructionBuilder as _;
@@ -1430,16 +1428,6 @@ impl<'a> LibraryBuilder<'a> {
             result_ty: self.translate_type(&decl.result_ty),
             tags,
         }
-    }
-
-    pub fn aligned_struct_members<'s>(&self, struct_def: &'s typ::ast::StructDecl) -> Vec<StructLayoutMember<'s>> {
-        let layout = if struct_def.packed {
-            StructLayout::Packed
-        } else {
-            StructLayout::Aligned
-        };
-
-        layout.members_of(&struct_def, &self.src_metadata).unwrap()
     }
 
     pub fn translate_func_ty(&mut self, func_sig: &typ::FunctionSig) -> ir::TypeDefID {

@@ -5,7 +5,6 @@ mod specialize;
 #[cfg(test)]
 mod test;
 
-pub mod layout;
 pub mod pattern;
 pub mod primitive;
 pub mod seq;

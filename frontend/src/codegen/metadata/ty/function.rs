@@ -6,6 +6,7 @@ use crate::ir;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
 use std::fmt;
+use terapascal_ir::StructLayout;
 
 #[derive(Debug, Clone)]
 pub struct ClosureInstance {
@@ -65,11 +66,11 @@ pub fn translate_closure_struct(
         field_id.0 += 1;
     }
 
-    
-    lib.metadata_mut().define_closure_ty(
-        id,
-        ir::StructDef::new(ir::StructIdentity::ClosureObject(identity)).with_fields(fields),
-    );
+    let struct_identity = ir::StructIdentity::ClosureObject(identity);
+    let struct_def = ir::StructDef::new(struct_identity, StructLayout::Default)
+        .with_fields(fields);
+
+    lib.metadata_mut().define_closure_ty(id, struct_def);
 
     id
 }

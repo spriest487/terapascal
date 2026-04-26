@@ -26,6 +26,7 @@ pub enum MarshalError<Ty = ir::Type> {
         type_index: TypeIndex,
     },
     InvalidStructType(Ty),
+    InvalidVariantType(Ty),
     InvalidObjectType(Ty),
 
     InvalidRefCountValue(DynValue),
@@ -83,6 +84,9 @@ impl<Ty> MarshalError<Ty> {
             },
             MarshalError::InvalidStructType(ty) => {
                 MarshalError::InvalidStructType(f(ty))
+            },
+            MarshalError::InvalidVariantType(ty) => {
+                MarshalError::InvalidVariantType(f(ty))
             }
             MarshalError::InvalidRefCountValue(val) => {
                 MarshalError::InvalidRefCountValue(val)
@@ -108,6 +112,9 @@ impl<T: fmt::Display> fmt::Display for MarshalError<T> {
             },
             MarshalError::InvalidStructType(ty)  => {
                 write!(f, "Type {} is not a struct", ty)
+            }
+            MarshalError::InvalidVariantType(ty)  => {
+                write!(f, "Type {} is not a variant", ty)
             }
             MarshalError::InvalidObjectType(ty)  => {
                 write!(f, "Type {} is not an object type", ty)

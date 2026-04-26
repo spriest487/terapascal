@@ -1,6 +1,7 @@
 mod util;
 mod error;
 mod native_type;
+mod type_def;
 
 use self::util::unmarshal_from_ne_bytes;
 use self::util::UnmarshalledValue;
@@ -30,7 +31,6 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::env;
 use std::error::Error;
-use std::iter;
 use std::mem::size_of;
 use std::path::PathBuf;
 use std::ptr::slice_from_raw_parts;
@@ -38,8 +38,6 @@ use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
 use terapascal_ir::generic::instantiate_struct_def;
 use terapascal_ir::generic::instantiate_variant_def;
-
-const RC_ELEMENT_COUNT: usize = 3;
 
 // dynamic array values in memory are marshalled as a set of header fields followed by a variably
 // sized sequence of elements
@@ -65,6 +63,7 @@ struct StructLayout {
 #[derive(Debug, Clone)]
 struct VariantLayout {
     def: Rc<ir::VariantDef>,
+    data_offset: usize,
     cases: Vec<Option<VariantCaseDataInfo>>,
 }
 
@@ -179,8 +178,9 @@ impl Marshaller {
         Ok(())
     }
 
-    pub fn variant_tag_type(&self) -> NativeType {
-        NativeType::i32()
+    pub fn variant_data_offset(&self, type_index: TypeIndex) -> MarshalResult<usize> {
+        let layout = self.get_variant_layout(type_index)?;
+        Ok(layout.data_offset)
     }
     
     fn register_type(&mut self, ty: ir::Type, ffi_ty: NativeType) -> MarshalResult<TypeIndex> {
@@ -247,65 +247,6 @@ impl Marshaller {
         Some((cached.clone(), *type_index))
     }
 
-    fn define_struct(
-        &mut self,
-        struct_type: &ir::Type,
-        def: Rc<ir::StructDef>,
-    ) -> MarshalResult<(NativeType, TypeIndex)> {
-        if let Some(cached) = self.get_cached_type(struct_type) {
-            return Ok(cached);
-        }
-
-        assert!(matches!(struct_type, ir::Type::Struct {..} | ir::Type::Flags(..)), "not a struct: {}", struct_type);
-
-        let mut def_fields: Vec<_> = def.fields.iter().collect();
-        def_fields.sort_by_key(|(id, _)| **id);
-
-        // definitions may have gaps in their field lists, in which case we need to remember
-        // the element index of each field so we can find it without expecting the field ID to match
-        
-        let mut element_count = def_fields.len();
-        if def.identity.is_ref_type() {
-            element_count += RC_ELEMENT_COUNT;
-        }
-
-        let mut field_native_types: Vec<NativeType> = Vec::with_capacity(element_count);
-        let mut field_layout = BTreeMap::new();
-        
-        let mut offset = field_native_types.iter()
-            .map(|ty| ty.size())
-            .sum::<usize>();
-
-        for (field_id, field_def) in def_fields {
-            let foreign_ty = self.build_marshalled_type(&field_def.ty)?;
-            field_native_types.push(foreign_ty.clone());
-            
-            let size = foreign_ty.size();
-
-            field_layout.insert(*field_id, StructFieldInfo {
-                offset,
-                ty: field_def.ty.clone(),
-                native_type: foreign_ty,
-            });
-
-            offset += size;
-        }
-
-        self.add_dyn_array_type(struct_type.clone())?;
-
-        let native_type = NativeType::structure(field_native_types);
-        let type_index = self.register_type(struct_type.clone(), native_type.clone())?;
-
-        self.struct_layouts.insert(type_index, StructLayout {
-            fields: field_layout,
-            def,
-        });
-
-        // eprintln!("add_struct: {}={} (size {})", type_index.0, struct_type.to_pretty_string(&self.metadata), native_type.size());
-
-        Ok((native_type, type_index))
-    }
-
     pub fn add_variant_type(
         &mut self,
         variant_type: &ir::Type
@@ -348,46 +289,6 @@ impl Marshaller {
                 Ok((def, type_index))
             }
         }
-    }
-
-    fn define_variant(
-        &mut self,
-        variant_type: &ir::Type,
-        def: Rc<ir::VariantDef>,
-    ) -> MarshalResult<TypeIndex> {
-        let mut cases = Vec::with_capacity(def.cases.len());
-
-        let mut max_case_size = 0;
-
-        for case_def in &def.cases {
-            if let Some(data_type) = case_def.ty.as_ref() {
-                let case_native_type = self.build_marshalled_type(data_type)?;
-                max_case_size = max(case_native_type.size(), max_case_size);
-
-                cases.push(Some(VariantCaseDataInfo {
-                    ty: data_type.clone(),
-                    native_type: case_native_type,
-                }));
-            } else {
-                cases.push(None)
-            };
-        }
-
-        let variant_layout: Vec<_> = iter::once(self.variant_tag_type())
-            .chain(iter::repeat(NativeType::u8()).take(max_case_size))
-            .collect();
-
-        let variant_ffi_ty = NativeType::structure(variant_layout);
-
-        self.add_dyn_array_type(variant_type.clone())?;
-        let type_index = self.register_type(variant_type.clone(), variant_ffi_ty.clone())?;
-
-        self.variant_layouts.insert(type_index, VariantLayout {
-            def: def.clone(),
-            cases,
-        });
-
-        Ok(type_index)
     }
 
     pub fn add_iface(&mut self, id: ir::InterfaceID) -> MarshalResult<TypeIndex> {
@@ -1278,38 +1179,38 @@ impl Marshaller {
         variant_val: &VariantValue,
         out_bytes: &mut [u8],
     ) -> MarshalResult<usize> {
-        let variant_type = self.get_type(variant_val.type_index)?;
+        let layout = self.get_variant_layout(variant_val.type_index)?;
 
-        let layout = self
-            .variant_layouts
-            .get(&variant_val.type_index)
-            .ok_or_else(|| {
-                MarshalError::unsupported_type(variant_type.clone())
-            })?;
-
-        let tag = variant_val
-            .tag
-            .as_i32()
-            .ok_or_else(|| MarshalError::InvalidData)?;
+        let Some(case_index) = variant_val.tag
+            .try_cast(&ir::Type::USize, self)
+            .and_then(|usize_val| usize_val.as_usize())
+        else {
+            return Err(self.invalid_variant_tag_err((*variant_val.tag).clone(), variant_val.type_index));
+        };
 
         let data_native_type = layout.cases
-            .get(tag as usize)
+            .get(case_index)
             .map(|case| {
                 case.as_ref().map(|data| data.native_type.clone())
             })
             .ok_or_else(|| MarshalError::InvalidData)?;
+
+        let data_offset = layout.data_offset;
 
         // we still need to refer to the type size, because we always marshal/unmarshal
         // the entire size of the variant regardless of which case is active
         let variant_size = self.get_native_type(variant_val.type_index)?.size();
 
         let tag_size = self.marshal(&variant_val.tag, out_bytes)?;
+        if tag_size > data_offset {
+            return Err(self.invalid_variant_tag_err((*variant_val.tag).clone(), variant_val.type_index));
+        }
 
         // don't marshal anything for data-less cases
         let data_size = match data_native_type {
             None => 0,
             Some(native_type) => {
-                let data_size = self.marshal(&variant_val.data, &mut out_bytes[tag_size..])?;
+                let data_size = self.marshal(&variant_val.data, &mut out_bytes[data_offset..])?;
                 let ty_size = native_type.size();
                 assert_eq!(ty_size, data_size);
 
@@ -1329,41 +1230,45 @@ impl Marshaller {
         Ok(variant_size)
     }
 
+    fn get_variant_layout(&self, type_index: TypeIndex) -> MarshalResult<&VariantLayout> {
+        match self.variant_layouts.get(&type_index) {
+            Some(layout) => Ok(layout),
+            None => {
+                let variant_type = self.get_type(type_index)?.clone();
+                Err(MarshalError::InvalidVariantType(variant_type))
+            }
+        }
+    }
+
     fn unmarshal_variant(
         &self,
         type_index: TypeIndex,
         in_bytes: &[u8],
     ) -> MarshalResult<UnmarshalledValue<VariantValue>> {
-        let tag_val = self.unmarshal(in_bytes, &ir::Type::I32)?;
-        let tag = tag_val.value.as_i32().unwrap();
+        let layout = self.get_variant_layout(type_index)?;
 
-        let variant_type = self.get_type(type_index)?;
+        let tag_val = self.unmarshal(in_bytes, &layout.def.tag_type)?;
+        if tag_val.byte_count > layout.data_offset {
+            return Err(self.invalid_variant_tag_err(tag_val.value, type_index));
+        }
 
-        let case_index = cast::usize(tag).map_err(|_| MarshalError::VariantTagOutOfRange {
-            variant_type: variant_type.clone(),
-            tag: tag_val.value.clone(),
-        })?;
+        let Some(case_index) = tag_val.value
+            .try_cast(&ir::Type::USize, self)
+            .and_then(|usize_val| usize_val.as_usize())
+        else {
+            return Err(self.invalid_variant_tag_err(tag_val.value, type_index));
+        };
 
         let variant_size = self.get_native_type(type_index)?.size();
 
-        let layout = self
-            .variant_layouts
-            .get(&type_index)
-            .ok_or_else(|| {
-                MarshalError::unsupported_type(variant_type.clone())
-            })?;
-
         let case_data = layout.cases
             .get(case_index)
-            .ok_or_else(|| MarshalError::VariantTagOutOfRange {
-                variant_type: variant_type.clone(),
-                tag: tag_val.value.clone(),
-            })?
+            .ok_or_else(|| self.invalid_variant_tag_err(tag_val.value.clone(), type_index))?
             .as_ref();
 
         let data_val = match case_data {
             Some(case_data) => {
-                self.unmarshal(&in_bytes[tag_val.byte_count..], &case_data.ty)?
+                self.unmarshal(&in_bytes[layout.data_offset..], &case_data.ty)?
             }
 
             None => {
@@ -1380,10 +1285,22 @@ impl Marshaller {
             byte_count: variant_size,
             value: VariantValue {
                 type_index,
-                tag: Box::new(DynValue::I32(tag)),
+                tag: Box::new(tag_val.value),
                 data: Box::new(data_val.value),
             },
         })
+    }
+
+    fn invalid_variant_tag_err(&self, tag_val: DynValue, type_index: TypeIndex) -> MarshalError {
+        let variant_type = match self.get_type(type_index) {
+            Ok(t) => t.clone(),
+            Err(err) => return err,
+        };
+
+        MarshalError::VariantTagOutOfRange {
+            variant_type,
+            tag: tag_val,
+        }
     }
 }
 
