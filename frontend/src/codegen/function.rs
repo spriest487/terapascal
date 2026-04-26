@@ -52,17 +52,42 @@ pub fn build_func_def(
 
     let return_ty = bind_function_return(def_return_ty, &mut body_builder);
 
-    let def_params: Vec<_> = def_params
+    let bind_params: Vec<_> = def_params
         .iter()
         .flat_map(|param| FunctionParam::from_ast(param, &mut body_builder))
         .collect();
-    let bound_params = bind_function_params(def_params, is_instance_method, ArgID(0), &mut body_builder);
+    let bound_params = bind_function_params(bind_params, is_instance_method, ArgID(0), &mut body_builder);
 
-    let type_params = def_type_params
-        .map(|param_list| param_list.items.iter()
-            .map(|param| Arc::new(param.name.to_string()))
-            .collect())
-        .unwrap_or_else(Vec::new);
+    let mut type_params = Vec::new();
+
+    // if the self param is a specialized generic name, add its type parameters to the
+    // beginning of the method function's type param list
+    if is_instance_method {
+        assert!(def_params.len() >= 1);
+        let self_param_group = &def_params[0];
+
+        assert!(self_param_group.param_items.len() >= 1);
+        let self_param = &self_param_group.param_items[0];
+
+        assert!(self_param.is_implicit_self);
+        assert_eq!(typ::ast::SELF_PARAM_NAME, self_param.name.as_str());
+
+        if let Some(self_type_name) = self_param_group.ty.ty().full_name()
+            && let Some(self_type_params) = &self_type_name.type_params
+        {
+            for param in &self_type_params.items {
+                let param_name = Arc::new(param.name.name.to_string());
+                type_params.push(param_name);
+            }
+        }
+    }
+
+    type_params.extend(def_type_params
+        .into_iter()
+        .flat_map(|param_list| param_list.items
+            .iter()
+            .map(|param| Arc::new(param.name.to_string())))
+    );
 
     init_function_locals(def_locals, &mut body_builder);
 

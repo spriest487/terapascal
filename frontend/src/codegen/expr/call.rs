@@ -247,7 +247,28 @@ pub fn build_method_invocation(
 
     let method_call_sig = call_generic_ctx.apply_to_sig(&method_decl_sig);
 
-    translate_call_with_args(call_target, &args, ty_args.as_ref(), &method_call_sig, builder)
+    let enclosing_type_args = method_decl_ty
+        .full_name()
+        .and_then(|name| name.type_args.clone());
+
+    // methods are translated into IR functions which have a combined type parameter list
+    // where the enclosing type params are followed by the method's own type params, so we
+    // need to combine both lists here for an invocation
+    let method_call_type_args = match (enclosing_type_args, ty_args) {
+        (Some(enclosing_args), None) => {
+            Some(enclosing_args)
+        }
+        (Some(enclosing_args), Some(call_args)) => {
+            let mut combined_args = enclosing_args.clone();
+            combined_args.items.extend(call_args.items.into_iter());
+            Some(combined_args)
+        }
+        (None, call_args) => {
+            call_args
+        },
+    };
+
+    translate_call_with_args(call_target, &args, method_call_type_args.as_ref(), &method_call_sig, builder)
 }
 
 fn build_variant_ctor_call(

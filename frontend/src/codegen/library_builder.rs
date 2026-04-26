@@ -646,23 +646,17 @@ impl<'a> LibraryBuilder<'a> {
             .unwrap_or_else(|e| {
                 panic!("instantiate_method: failed to get method metadata for {} method {}: {}", decl_self_ty, method_key.method_index, e)
             });
-        
+
         let method_sig = Arc::new(method_decl.func_decl.sig());
 
-        let method_def = self
-            .src_metadata
-            .find_method(
-                &decl_self_ty,
-                &method_decl.func_decl.ident(),
-                &method_sig,
-            )
+        let method_def = self.src_metadata
+            .find_method(&decl_self_ty, &method_decl.func_decl.ident(), &method_sig)
             .cloned()
             .unwrap_or_else(|| {
                 panic!("instantiate_method: missing method def: {} method {}", decl_self_ty, method_key.method_index)
             });
 
-        let ns = method_key
-            .self_ty
+        let ns = method_key.self_ty
             .full_path()
             .expect("instantiate_method: methods should only be generated for named types")
             .into_owned();

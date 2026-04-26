@@ -40,6 +40,15 @@ pub enum ExecError<Ty = ir::Type> {
     }
 }
 
+impl<Ty> ExecError<Ty> {
+    pub fn with_stack_trace(err: impl Into<Self>, stack_trace: StackTrace) -> Self {
+        Self::WithStackTrace {
+            err: Box::new(err.into()),
+            stack_trace,
+        }
+    }
+}
+
 impl<Ty: fmt::Display> ExecError<Ty> {
     pub fn illegal_state(msg: impl Into<String>) -> Self {
         Self::InternalError {

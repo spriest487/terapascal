@@ -118,13 +118,12 @@ impl Vm {
         })
     }
 
-    fn add_stack_trace(&self, err: ExecError) -> ExecError {
+    fn add_stack_trace(&self, err: impl Into<ExecError>) -> ExecError {
+        let err = err.into();
+
         match err {
             err @ ExecError::WithStackTrace { .. } => err,
-            err => ExecError::WithStackTrace {
-                err: Box::new(err),
-                stack_trace: self.stack.trace(),
-            },
+            err => ExecError::with_stack_trace(err, self.stack.trace()),
         }
     }
 
@@ -269,7 +268,7 @@ impl Vm {
         let current_frame = self.stack.current_frame_mut()?;
         let local_ptr = current_frame
             .get_result_ptr()
-            .map_err(|err| self.add_stack_trace(err.into()))?;
+            .map_err(|err| self.add_stack_trace(err))?;
 
         self.heap.marshaller.marshal_at(&val, &local_ptr)?;
 
@@ -280,7 +279,7 @@ impl Vm {
         let current_frame = self.stack.current_frame_mut()?;
         let local_ptr = current_frame
             .get_arg_ptr(id)
-            .map_err(|err| self.add_stack_trace(err.into()))?;
+            .map_err(|err| self.add_stack_trace(err))?;
 
         self.heap.marshaller.marshal_at(&val, &local_ptr)?;
 
@@ -291,7 +290,7 @@ impl Vm {
         let current_frame = self.stack.current_frame_mut()?;
         let local_ptr = current_frame
             .get_local_ptr(id)
-            .map_err(|err| self.add_stack_trace(err.into()))?;
+            .map_err(|err| self.add_stack_trace(err))?;
 
         self.heap.marshaller.marshal_at(&val, &local_ptr)?;
 
@@ -302,7 +301,7 @@ impl Vm {
         let current_frame = self.stack.current_frame()?;
         let local_ptr = current_frame
             .get_result_ptr()
-            .map_err(|err| self.add_stack_trace(err.into()))?;
+            .map_err(|err| self.add_stack_trace(err))?;
 
         let val = self.heap.load(&local_ptr)?;
         Ok(val)
@@ -312,7 +311,7 @@ impl Vm {
         let current_frame = self.stack.current_frame()?;
         let local_ptr = current_frame
             .get_arg_ptr(id)
-            .map_err(|err| self.add_stack_trace(err.into()))?;
+            .map_err(|err| self.add_stack_trace(err))?;
 
         let val = self.heap.load(&local_ptr)?;
         Ok(val)
@@ -322,7 +321,7 @@ impl Vm {
         let current_frame = self.stack.current_frame()?;
         let local_ptr = current_frame
             .get_local_ptr(id)
-            .map_err(|err| self.add_stack_trace(err.into()))?;
+            .map_err(|err| self.add_stack_trace(err))?;
 
         let val = self.heap.load(&local_ptr)?;
         Ok(val)
@@ -341,7 +340,7 @@ impl Vm {
 
             ir::Ref::Global(name) => {
                 let Some(global) = self.globals.get_mut(name) else {
-                    return Err(ExecError::illegal_state(format!("global `{name}` is not allocated")));
+                    return Err(ExecError::illegal_state(format!("global {name} is not allocated")));
                 };
 
                 match global {
@@ -418,7 +417,7 @@ impl Vm {
 
                 None => {
                     let ref_name = at.to_pretty_string(self.metadata());
-                    let msg = format!("global `{ref_name}` is not allocated");
+                    let msg = format!("global {ref_name} is not allocated");
                     Err(ExecError::illegal_state(msg))
                 }
             },
@@ -1098,7 +1097,7 @@ impl Vm {
         let current_frame = self.stack.current_frame_mut()?;
         current_frame
             .declare_local(id, ty.clone(), &uninit_val, pc, &mut self.heap.marshaller)
-            .map_err(|err| self.add_stack_trace(err.into()))?;
+            .map_err(|err| self.add_stack_trace(err))?;
 
         Ok(())
     }
@@ -2133,26 +2132,22 @@ impl Vm {
     pub fn load_lib(&mut self, lib: &ir::Library) -> ExecResult<()> {
         self.heap.marshaller
             .load_metadata(&lib.metadata)
-            .map_err(|err| self.add_stack_trace(err.into()))?;
+            .map_err(|err| self.add_stack_trace(err))?;
 
         for (func_id, ir_func) in lib.functions() {
             let func = match ir_func {
                 ir::Function::Local(ir_func_def) => {
-                    Some(Function::new(*func_id, ir_func_def.clone(), self.metadata()))
+                    Function::new(*func_id, ir_func_def.clone(), self.metadata())
                 }
 
                 ir::Function::External(external_ref)
                 if external_ref.src == ir::BUILTIN_SRC => {
-                    None
+                    continue;
                 }
 
                 ir::Function::External(external_ref) => {
-                    let ffi_func = Function::new_ffi(external_ref, &mut self.heap.marshaller)
-                        .map_err(|err| ExecError::WithStackTrace {
-                            err: Box::new(ExecError::from(err)),
-                            stack_trace: self.stack.trace(),
-                        })?;
-                    Some(ffi_func)
+                    Function::new_ffi(external_ref, &mut self.heap.marshaller)
+                        .map_err(|err| self.add_stack_trace(err))?
                 }
             };
 
@@ -2160,18 +2155,16 @@ impl Vm {
                 .get_function_info(*func_id)
                 .and_then(|f| f.invoker);
 
-            if let Some(func) = func {
-                self.globals.insert(
-                    ir::GlobalRef::Function(*func_id),
-                    GlobalValue::Function(*func_id),
-                );
+            self.globals.insert(
+                ir::GlobalRef::Function(*func_id),
+                GlobalValue::Function(*func_id),
+            );
 
-                self.functions.insert(FuncInstanceKey::new(*func_id), FunctionInfo {
-                    name: Rc::new(func.debug_name().to_string()),
-                    func: Rc::new(func),
-                    invoker,
-                });
-            }
+            self.functions.insert(FuncInstanceKey::new(*func_id), FunctionInfo {
+                name: Rc::new(func.debug_name().to_string()),
+                func: Rc::new(func),
+                invoker,
+            });
         }
 
         // we need to check again after loading a new lib, which might have declared some IDs for
@@ -2235,7 +2228,7 @@ impl Vm {
 
         let init_stack_size = self.heap.marshaller
             .stack_alloc_size(&lib.init().instructions)
-            .map_err(|err| self.add_stack_trace(err.into()))?;
+            .map_err(|err| self.add_stack_trace(err))?;
 
         if !lib.init.instructions.is_empty() {
             if self.opts.verbose {

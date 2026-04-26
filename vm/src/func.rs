@@ -6,7 +6,7 @@ use crate::result::ExecError;
 use crate::ExecResult;
 use crate::FunctionInfo;
 use crate::Vm;
-use ir::generic::instantiate_generic;
+use ir::generic::instantiate_function_def;
 use ir::generic::instantiate_sig;
 use std::collections::HashMap;
 use std::fmt;
@@ -98,6 +98,14 @@ impl Function {
             Function::Builtin(builtin_fn) => &builtin_fn.param_tys,
             Function::External(external_fn) => &external_fn.param_tys,
             Function::IR(func) => &func.def.sig.param_types,
+        }
+    }
+
+    pub fn type_params(&self) -> &[Arc<String>] {
+        match self {
+            Function::Builtin(..) => &[],
+            Function::External(..) => &[],
+            Function::IR(func) => &func.def.type_params,
         }
     }
 
@@ -292,7 +300,9 @@ pub fn instantiate_func(
     vm: &mut Vm,
     key: FuncInstanceKey,
 ) -> ExecResult<FunctionInfo> {
-    if let Some(func_info) = vm.functions.get(&key).cloned() {
+    if let Some(func_info) = vm.functions.get(&key).cloned()
+        && func_info.func.type_params().len() == key.args.len()
+    {
         return Ok(func_info);
     }
 
@@ -341,11 +351,11 @@ pub fn instantiate_func(
     let mut builder = RuntimeFuncBuilder::new(vm);
     let sig = instantiate_sig(&generic_def.sig, &types);
 
-    instantiate_generic(&generic_def, &types, &mut builder);
+    instantiate_function_def(&generic_def, &types, &mut builder);
 
     let def = ir::FunctionDef {
         body: builder.finish(),
-        debug_name: generic_def.debug_name.clone(),
+        debug_name: None,
         type_params: Vec::new(),
         sig,
     };

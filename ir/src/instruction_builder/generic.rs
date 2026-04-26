@@ -25,11 +25,13 @@ type TypeMap = HashMap<SharedStringKey, Type>;
 type LocalMap = BTreeMap<LocalID, LocalID>;
 
 // TODO: errors
-pub fn instantiate_generic(
+pub fn instantiate_function_def(
     def: &FunctionDef,
     types: &TypeMap,
     builder: &mut impl InstructionBuilder,
 ) {
+    assert!(def.type_params.iter().all(|param| types.contains_key(param)));
+
     let mut locals = LocalMap::new();
 
     let result_type = remap_type(&def.sig.result_type, types);
