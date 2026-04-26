@@ -170,7 +170,17 @@ impl Marshaller {
         }
 
         for (ty, _) in metadata.type_info() {
-            if ty.is_object() {
+            if let Some(ir::ObjectID::Class(class_id)) = ty.as_object() {
+                let def = self.metadata
+                    .get_struct_def(class_id.def_id)
+                    .ok_or_else(|| {
+                        MarshalError::MissingTypeDef(ty.clone())
+                    })?;
+
+                if !def.is_generic() {
+                    self.add_struct_type(&class_id.to_class_object_type())?;
+                }
+            } else {
                 self.register_object_type(ty.clone())?;
             }
         }
@@ -226,14 +236,7 @@ impl Marshaller {
     }
 
     pub fn register_object_type(&mut self, ty: ir::Type) -> MarshalResult<TypeIndex> {
-        if let Some(ir::ObjectID::Class(class_id)) = ty.as_object() {
-            let class_struct_type = class_id.to_struct_type();
-
-            let (_, index) = self.add_struct_type(&class_struct_type)?;
-            Ok(index)
-        } else {
-            self.register_type(ty, NativeType::pointer())
-        }
+        self.register_type(ty, NativeType::pointer())
     }
 
     fn add_dyn_array_type(&mut self, element_type: ir::Type) -> MarshalResult<TypeIndex> {
