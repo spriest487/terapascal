@@ -20,7 +20,6 @@ use crate::Label;
 use crate::LocalID;
 use crate::MetadataSource;
 use crate::MethodID;
-use crate::ObjectID;
 use crate::Ref;
 use crate::Type;
 use crate::TypeDefID;
@@ -247,11 +246,13 @@ pub trait InstructionBuilder {
         });
     }
 
-    fn class_is(&mut self, out: impl Into<Ref>, a: impl Into<Value>, type_id: ObjectID) {
-        self.emit(Instruction::ClassIs {
+    // noinspection RsSelfConvention
+    fn is_type(&mut self, out: impl Into<Ref>, a: impl Into<Value>, value_type: Type, is_type: Type) {
+        self.emit(Instruction::IsType {
             out: out.into(),
             a: a.into(),
-            class_id: type_id,
+            value_type,
+            is_type,
         })
     }
 

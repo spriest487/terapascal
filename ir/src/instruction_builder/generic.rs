@@ -18,6 +18,7 @@ use crate::ArgID;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::SharedStringKey;
 
@@ -224,16 +225,20 @@ pub fn instantiate_function_def(
                 })
             }
 
-            Instruction::ClassIs { out, a, class_id } => {
+            Instruction::IsType { out, a, value_type, is_type } => {
                 let out = remap_ref(out, &locals, &types);
                 let a = remap_val(a, &locals, &types);
 
-                builder.emit(Instruction::ClassIs {
+                let value_type = instantiate_type(value_type, types);
+                let is_type = instantiate_type(is_type, types);
+
+                builder.emit(Instruction::IsType {
                     out,
                     a,
-                    class_id: class_id.clone(),
+                    value_type,
+                    is_type,
                 })
-            },
+            }
 
             Instruction::Label(label) => {
                 builder.emit(Instruction::Label(*label));
@@ -504,16 +509,42 @@ pub fn instantiate_type(t: &Type, types: &TypeMap) -> Type {
             GenericTypeID::new(id.def_id, args).to_variant_type()
         }
 
-        Type::Object(ObjectID::Class(id)) | Type::WeakObject(ObjectID::Class(id)) => {
-            let args = id.args.iter()
-                .map(|t| instantiate_type(t, types));
-            let id = GenericTypeID::new(id.def_id, args);
+        Type::Object(object_id) | Type::WeakObject(object_id) => {
+            let object_id = match object_id {
+                ObjectID::Class(id) => {
+                    let args = id.args.iter()
+                        .map(|t| instantiate_type(t, types));
+                    let id = GenericTypeID::new(id.def_id, args);
+                    ObjectID::Class(id)
+                }
+
+                ObjectID::Array(element) => {
+                    ObjectID::Array(Rc::new(instantiate_type(element, types)))
+                }
+
+                ObjectID::Box(value) => {
+                    ObjectID::Box(Rc::new(instantiate_type(value, types)))
+                }
+                other => other.clone(),
+            };
 
             if t.is_weak() {
-                id.to_weak_class_object_type()
+                object_id.to_weak_object_type()
             } else {
-                id.to_class_object_type()
+                object_id.to_object_type()
             }
+        }
+
+        Type::Pointer(deref_ty) => {
+            instantiate_type(deref_ty, types).ptr()
+        }
+
+        Type::TempRef(deref_ty) => {
+            instantiate_type(deref_ty, types).temp_ref()
+        }
+
+        Type::Array { element, dim } => {
+            instantiate_type(element, types).array(*dim)
         }
 
         _ => t.clone(),

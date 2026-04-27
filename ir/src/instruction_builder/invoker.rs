@@ -137,7 +137,7 @@ where
         {
             let invalid_arg = builder.local_temp(Type::Bool);
 
-            builder.class_is(invalid_arg, arg_ref.to_deref(), expect_object_id);
+            builder.is_type(invalid_arg, arg_ref.to_deref(), Type::any(), expect_object_id.to_object_type());
             builder.not(invalid_arg, invalid_arg);
             builder.jmpif(exit_error_label, invalid_arg);
         }

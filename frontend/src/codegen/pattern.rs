@@ -139,16 +139,15 @@ pub fn translate_pattern_match_bindings(
 
 pub fn translate_is_ty(
     val: ir::Ref,
-    val_ty: &ir::Type,
-    ty: &ir::Type,
+    value_type: &ir::Type,
+    is_type: &ir::Type,
     builder: &mut IRBuilder
 ) -> ir::Value {
     // casting strong or weak RC type to strong RC type: do a dynamic check
-    if let ir::Type::Object(object_id) | ir::Type::WeakObject(object_id) = ty 
-        && val_ty.is_object() 
-    {
+    let is_dynamic = value_type.is_object() && matches!(is_type, ir::Type::Object(..));
+    if is_dynamic || is_type.as_generic_param().is_some() {
         let result = builder.local_temp(ir::Type::Bool);
-        builder.class_is(result, val, object_id.clone());
+        builder.is_type(result, val, value_type.clone(), is_type.clone());
 
         return result.value();
     }
@@ -159,7 +158,7 @@ pub fn translate_is_ty(
     // will always fail
 
     // any other type combination must match exactly
-    let same_ty = *val_ty == *ty;
+    let same_ty = *value_type == *is_type;
     ir::Value::LiteralBool(same_ty)
 }
 

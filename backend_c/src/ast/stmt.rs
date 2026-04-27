@@ -640,8 +640,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.stmts.push(Statement::Expr(result_expr));
             },
 
-            ir::Instruction::ClassIs { out, a, class_id } => {
-                self.translate_class_is(out, a, class_id);
+            ir::Instruction::IsType { out, a, value_type, is_type } => {
+                self.translate_is_type(out, a, value_type, is_type);
             },
 
             ir::Instruction::Raise { val } => {
@@ -700,7 +700,17 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.stmts.push(Statement::Expr(assign_result))
     }
 
-    fn translate_class_is(&mut self, out: &ir::Ref, a: &ir::Value, class_id: &ir::ObjectID) {
+    fn translate_is_type(&mut self, out: &ir::Ref, a: &ir::Value, value_type: &ir::Type, is_type: &ir::Type) {
+        let is_object_id = if value_type.is_object()
+            && let ir::Type::Object(object_id) = is_type
+        {
+            object_id
+        } else {
+            let result = Expr::translate_assign(out, Expr::LitBool(value_type == is_type), self);
+            self.stmts.push(Statement::Expr(result));
+            return;
+        };
+
         let actual_expr = Expr::translate_val(a, self);
 
         // get class ptr from rc
@@ -719,7 +729,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         let stmt = Statement::if_then_else(is_dead, [
             Statement::Expr(Expr::translate_assign(out, Expr::LitBool(false), self)),
         ], [{
-            let is = match class_id {
+            let is = match is_object_id {
                 ir::ObjectID::Class(id) => {
                     if !id.args.is_empty() {
                         todo!("C backend type args")

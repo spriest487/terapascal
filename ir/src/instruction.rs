@@ -1,7 +1,6 @@
 use crate::formatter::IRFormatter;
 use crate::formatter::RawFormatter;
 use crate::metadata::MethodID;
-use crate::ty::ObjectID;
 use crate::ty::Type;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
@@ -83,10 +82,11 @@ pub enum Instruction {
         self_arg: Value,
         rest_args: Vec<Value>,
     },
-    ClassIs {
+    IsType {
         out: Ref,
         a: Value,
-        class_id: ObjectID,
+        value_type: Type,
+        is_type: Type,
     },
 
     Label(Label),
@@ -189,7 +189,7 @@ impl Instruction {
             | Instruction::AddrOf { out, .. }
             | Instruction::MakeRef { out, .. }
             | Instruction::Length { out, .. }
-            | Instruction::ClassIs { out, .. }
+            | Instruction::IsType { out, .. }
             | Instruction::NewObject { out, .. }
             | Instruction::NewArray { out, .. }
             | Instruction::NewBox { out, .. }
@@ -251,7 +251,7 @@ impl Instruction {
                 Self::visit_ref(a, f, arg);
             },
 
-            Instruction::Cast { out, a, .. } | Instruction::ClassIs { out, a, .. } => {
+            Instruction::Cast { out, a, .. } | Instruction::IsType { out, a, .. } => {
                 Self::visit_ref(out, f, arg);
                 Self::visit_val(a, f, arg);
             },

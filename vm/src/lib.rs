@@ -1054,10 +1054,12 @@ impl Vm {
                 method,
                 self_arg,
                 rest_args,
-            } => self.exec_virtual_call(out.as_ref(), *iface_id, *method, &self_arg, rest_args)?,
+            } => {
+                self.exec_virtual_call(out.as_ref(), *iface_id, *method, &self_arg, rest_args)?
+            },
 
-            ir::Instruction::ClassIs { out, a, class_id } => {
-                self.exec_class_is(out, a, class_id)?
+            ir::Instruction::IsType { out, a, value_type, is_type } => {
+                self.exec_is_type(out, a, value_type, is_type)?
             }
 
             ir::Instruction::AddrOf { out, a } | ir::Instruction::MakeRef { out, a } => {
@@ -1870,12 +1872,22 @@ impl Vm {
         Ok(())
     }
 
-    fn exec_class_is(
+    fn exec_is_type(
         &mut self,
         out: &ir::Ref,
         a: &ir::Value,
-        object_id: &ir::ObjectID,
+        value_type: &ir::Type,
+        is_type: &ir::Type,
     ) -> ExecResult<()> {
+        let is_object_id = if value_type.is_object()
+            && let ir::Type::Object(object_id) = is_type
+        {
+            object_id
+        } else {
+            self.store(out, DynValue::Bool(is_type == value_type))?;
+            return Ok(());
+        };
+
         let a_ptr = self.evaluate(a)?.as_pointer().cloned().ok_or_else(|| {
             let msg = "argument a of ClassIs instruction must evaluate to a pointer";
             ExecError::illegal_state(msg)
@@ -1894,7 +1906,7 @@ impl Vm {
             return Ok(());
         }
 
-        let is = match object_id {
+        let is = match is_object_id {
             ir::ObjectID::Any => true,
 
             ir::ObjectID::Interface(iface_id) => {

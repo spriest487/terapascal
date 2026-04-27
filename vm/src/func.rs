@@ -342,8 +342,8 @@ pub fn instantiate_func(
     }
 
     let mut types = HashMap::new();
-    for (param, arg) in key.args.iter().zip(generic_def.type_params.iter()) {
-        if types.insert(SharedStringKey(arg.clone()), param.clone()).is_some() {
+    for (param, arg) in generic_def.type_params.iter().zip(key.args.iter()) {
+        if types.insert(SharedStringKey(param.clone()), arg.clone()).is_some() {
             return Err(ExecError::illegal_state("invalid function def: type param names are not unique"));
         }
     }
@@ -355,13 +355,13 @@ pub fn instantiate_func(
 
             ir::FunctionIdentity::Internal(Rc::new(name))
         }
-        
+
         ir::FunctionIdentity::Method { declaring_type, name, type_args} => {
             let declaring_type = instantiate_type(declaring_type, &types);
             let type_args = type_args.iter().map(|t| instantiate_type(t, &types)).collect();
 
-            ir::FunctionIdentity::Method { 
-                declaring_type, 
+            ir::FunctionIdentity::Method {
+                declaring_type,
                 name: name.clone(),
                 type_args,
             }

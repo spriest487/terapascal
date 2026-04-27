@@ -169,14 +169,16 @@ pub trait IRFormatter {
                 write!(f, ")")
             }
 
-            Instruction::ClassIs { out, a, class_id } => {
+            Instruction::IsType { out, a, value_type, is_type } => {
                 write!(f, "{:>width$} ", "is", width = IX_WIDTH)?;
 
                 self.format_ref(out, f)?;
                 write!(f, " := ")?;
                 self.format_val(a, f)?;
-                write!(f, " is ")?;
-                self.format_type(&Type::Object(class_id.clone()), f)
+                write!(f, " (")?;
+                self.format_type(value_type, f)?;
+                write!(f, ") is ")?;
+                self.format_type(is_type, f)
             }
 
             Instruction::AddrOf { out, a } => {
