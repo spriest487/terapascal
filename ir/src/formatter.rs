@@ -377,9 +377,9 @@ pub trait IRFormatter {
     }
 }
 
-pub struct RawInstructionFormatter;
+pub struct RawFormatter;
 
-impl IRFormatter for RawInstructionFormatter {
+impl IRFormatter for RawFormatter {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
         write!(f, "{}", ty)
     }

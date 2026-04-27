@@ -1041,10 +1041,11 @@ impl Type {
 
     pub fn implemented_ifaces(&self, ctx: &Context) -> NameResult<HashSet<Type>> {
         match self {
-            Type::GenericParam(param_ty) => match param_ty.is_ty.ty() {
-                Type::Any => Ok(HashSet::new()),
-
-                is_iface => Ok(HashSet::from([is_iface.clone()])),
+            Type::GenericParam(param_ty) => {
+                match param_ty.is_ty.ty() {
+                    Type::Any => Ok(HashSet::new()),
+                    is_iface => Ok(HashSet::from([is_iface.clone()])),
+                }
             },
 
             Type::Primitive(primitive) => {
@@ -1053,7 +1054,14 @@ impl Type {
 
             Type::Record(name) | Type::Class(name) => {
                 let struct_kind = self.struct_kind().unwrap();
-                let def = ctx.instantiate_struct_def(name, struct_kind)?;
+
+                let def_name = if name.is_unspecialized_generic() {
+                    Cow::Owned(name.as_ref().clone().to_generic_name())
+                } else {
+                    Cow::Borrowed(name.as_ref())
+                };
+
+                let def = ctx.instantiate_struct_def(def_name.as_ref(), struct_kind)?;
 
                 let mut implements = HashSet::new();
                 Self::implemented_ifaces_rec(def.implements_types(), &mut implements, ctx)?;
@@ -1062,7 +1070,13 @@ impl Type {
             },
 
             Type::Variant(name) => {
-                let def = ctx.instantiate_variant_def(name)?;
+                let def_name = if name.is_unspecialized_generic() {
+                    Cow::Owned(name.as_ref().clone().to_generic_name())
+                } else {
+                    Cow::Borrowed(name.as_ref())
+                };
+
+                let def = ctx.instantiate_variant_def(def_name.as_ref())?;
 
                 let mut implements = HashSet::new();
                 Self::implemented_ifaces_rec(def.implements_types(), &mut implements, ctx)?;
@@ -1437,7 +1451,7 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
         ));
     };
 
-    let path_args = match (&expect_params, &path.type_params) {
+    let (ty, path_args) = match (&expect_params, &path.type_params) {
         (Some(expect), Some(actual)) => {
             let mut path_args = Vec::new();
             for (expect_param, actual_param) in expect
@@ -1465,11 +1479,28 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
 
                 path_args.push(arg_typename);
             }
-            
-            Some(TypeArgList::new(path_args, actual.span.clone()))
+
+            let type_args = TypeArgList::new(path_args, actual.span.clone());
+
+            // let ty = ty
+            //     .specialize(&type_args, ctx)
+            //     .map_err(|err| TypeError::from_generic_err(err, path.span.clone()))?
+            //     .into_owned();
+
+            (ty, Some(type_args))
         },
+
+        // (Some(expect_params), None) => {
+        //     let generic_args = expect_params.clone().into_type_args();
+        //     let ty = ty
+        //         .specialize(&generic_args, ctx)
+        //         .map_err(|err| TypeError::from_generic_err(err, path.span.clone()))?
+        //         .into_owned();
+        //
+        //     (ty, Some(generic_args))
+        // }
         
-        _ => None,
+        _ => (ty, None),
     };
     
     let ident_name = IdentTypeName {

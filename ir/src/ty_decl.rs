@@ -8,7 +8,7 @@ use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::NamePath;
 use crate::ObjectID;
-use crate::RawInstructionFormatter;
+use crate::RawFormatter;
 use crate::TagInfo;
 use crate::Type;
 pub use interface::*;
@@ -85,7 +85,7 @@ impl StructIdentity {
 
 impl fmt::Display for StructIdentity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-       write!(f, "{}", self.to_pretty_string(&RawInstructionFormatter))
+       write!(f, "{}", self.to_pretty_string(&RawFormatter))
     }
 }
 

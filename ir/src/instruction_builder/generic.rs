@@ -1,4 +1,3 @@
-use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FunctionDef;
 use crate::FunctionSig;
@@ -15,6 +14,7 @@ use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VariantCase;
 use crate::VariantDef;
+use crate::ArgID;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -34,13 +34,13 @@ pub fn instantiate_function_def(
 
     let mut locals = LocalMap::new();
 
-    let result_type = remap_type(&def.sig.result_type, types);
+    let result_type = instantiate_type(&def.sig.result_type, types);
     if result_type != Type::Nothing {
         builder.local_stack_mut().bind_result(def.sig.result_type.clone());
     }
 
     for (i, param_type) in def.sig.param_types.iter().enumerate() {
-        let param_type = remap_type(param_type, types);
+        let param_type = instantiate_type(param_type, types);
         builder.local_stack_mut().bind_unnamed_param(ArgID(i), param_type, false);
     }
 
@@ -99,7 +99,7 @@ pub fn instantiate_function_def(
 
             Instruction::LocalAlloc(id, ty) => {
                 // remapped locals don't need any autorelease behaviour
-                let remapped_id = builder.local_temp(remap_type(ty, types));
+                let remapped_id = builder.local_temp(instantiate_type(ty, types));
                 locals.insert(*id, remapped_id);
             },
 
@@ -181,7 +181,7 @@ pub fn instantiate_function_def(
             Instruction::Length { out, a, of_type } => {
                 let out = remap_ref(out, &locals, &types);
                 let a = remap_ref(a, &locals, &types);
-                let of_type = remap_type(of_type, &types);
+                let of_type = instantiate_type(of_type, &types);
                 builder.emit(Instruction::Length { out, a, of_type });
             },
 
@@ -196,7 +196,7 @@ pub fn instantiate_function_def(
                     .collect();
                 let type_args = type_args
                     .iter()
-                    .map(|t| remap_type(t, &types))
+                    .map(|t| instantiate_type(t, &types))
                     .collect();
 
                 builder.emit(Instruction::Call {
@@ -254,7 +254,7 @@ pub fn instantiate_function_def(
                 let out = remap_ref(out, &locals, &types);
                 let type_args = type_args
                     .iter()
-                    .map(|t| remap_type(t, &types))
+                    .map(|t| instantiate_type(t, &types))
                     .collect();
 
                 builder.emit(Instruction::NewObject {
@@ -268,7 +268,7 @@ pub fn instantiate_function_def(
             Instruction::NewArray { out, count, immortal, element_type } => {
                 let out = remap_ref(out, &locals, &types);
                 let count = remap_val(count, &locals, &types);
-                let element_type = remap_type(element_type, &types);
+                let element_type = instantiate_type(element_type, &types);
 
                 builder.emit(Instruction::NewArray {
                     out,
@@ -280,7 +280,7 @@ pub fn instantiate_function_def(
 
             Instruction::NewBox { out, value_type, immortal } => {
                 let out = remap_ref(out, &locals, &types);
-                let value_type = remap_type(value_type, &types);
+                let value_type = instantiate_type(value_type, &types);
                 builder.emit(Instruction::NewBox {
                     out,
                     value_type,
@@ -297,7 +297,7 @@ pub fn instantiate_function_def(
             Instruction::Cast { out, a, ty } => {
                 let out = remap_ref(out, &locals, &types);
                 let a = remap_val(a, &locals, &types);
-                let ty = remap_type(ty, &types);
+                let ty = instantiate_type(ty, &types);
 
                 builder.emit(Instruction::Cast {
                     out,
@@ -316,12 +316,12 @@ pub fn instantiate_function_def(
 pub fn instantiate_sig(generic_sig: &FunctionSig, types: &TypeMap) -> FunctionSig {
     let param_tys = generic_sig.param_types
         .iter()
-        .map(|t| remap_type(t, types))
+        .map(|t| instantiate_type(t, types))
         .collect();
 
     FunctionSig {
         param_types: param_tys,
-        result_type: remap_type(&generic_sig.result_type, types),
+        result_type: instantiate_type(&generic_sig.result_type, types),
     }
 }
 
@@ -356,7 +356,7 @@ pub fn instantiate_struct_def<'a>(
     let mut fields = BTreeMap::new();
     for (field_id, field_def) in &generic_struct.fields {
         fields.insert(*field_id, StructFieldDef {
-            ty: remap_type(&field_def.ty, &types),
+            ty: instantiate_type(&field_def.ty, &types),
             name: field_def.name.clone(),
         });
     }
@@ -392,13 +392,13 @@ pub fn instantiate_variant_def<'a>(
         *param = arg.clone();
     }
 
-    let tag_type = remap_type(&generic_variant.tag_type, &types);
+    let tag_type = instantiate_type(&generic_variant.tag_type, &types);
 
     let mut cases = Vec::new();
     for case_def in &generic_variant.cases {
         let data_type = case_def.ty
             .as_ref()
-            .map(|t| remap_type(t, &types));
+            .map(|t| instantiate_type(t, &types));
 
         cases.push(VariantCase {
             tag: case_def.tag.clone(),
@@ -451,23 +451,23 @@ fn remap_ref(r: &Ref, locals: &LocalMap, types: &TypeMap) -> Ref {
         Ref::Deref(val) => remap_val(val, locals, types).deref(),
         Ref::Field(field_ref) => {
             let instance = remap_ref(&field_ref.instance, locals, types);
-            instance.field_ref(remap_type(&field_ref.instance_type, types), field_ref.field)
+            instance.field_ref(instantiate_type(&field_ref.instance_type, types), field_ref.field)
         },
         Ref::Element(element_ref) => {
             let index = remap_val(&element_ref.index, locals, types);
             let instance = remap_ref(&element_ref.instance, locals, types);
-            instance.element_ref(remap_type(&element_ref.instance_type, types), index)
+            instance.element_ref(instantiate_type(&element_ref.instance_type, types), index)
         },
         Ref::VariantData(data_ref) => {
             let instance = remap_ref(&data_ref.instance, locals, types);
             instance.vardata_ref(
-                remap_type(&data_ref.instance_type, types),
+                instantiate_type(&data_ref.instance_type, types),
                 data_ref.case_index,
             )
         },
         Ref::VariantTag(tag_ref) => {
             let instance = remap_ref(&tag_ref.instance, locals, types);
-            instance.vartag_ref(remap_type(&tag_ref.instance_type, types))
+            instance.vartag_ref(instantiate_type(&tag_ref.instance_type, types))
         },
         _ => r.clone(),
     }
@@ -476,12 +476,12 @@ fn remap_ref(r: &Ref, locals: &LocalMap, types: &TypeMap) -> Ref {
 fn remap_val(v: &Value, locals: &LocalMap, types: &TypeMap) -> Value {
     match v {
         Value::Ref(r) => remap_ref(r, locals, types).value(),
-        Value::Default(t) => Value::Default(remap_type(t, types)),
+        Value::Default(t) => Value::Default(instantiate_type(t, types)),
         _ => v.clone(),
     }
 }
 
-fn remap_type(t: &Type, types: &TypeMap) -> Type {
+pub fn instantiate_type(t: &Type, types: &TypeMap) -> Type {
     match t {
         Type::Generic(name) => {
             let real_type = types
@@ -492,21 +492,21 @@ fn remap_type(t: &Type, types: &TypeMap) -> Type {
 
         Type::Struct(id) => {
             let args = id.args.iter()
-                .map(|t| remap_type(t, types));
+                .map(|t| instantiate_type(t, types));
 
             GenericTypeID::new(id.def_id, args).to_struct_type()
         }
 
         Type::Variant(id) => {
             let args = id.args.iter()
-                .map(|t| remap_type(t, types));
+                .map(|t| instantiate_type(t, types));
 
             GenericTypeID::new(id.def_id, args).to_variant_type()
         }
 
         Type::Object(ObjectID::Class(id)) | Type::WeakObject(ObjectID::Class(id)) => {
             let args = id.args.iter()
-                .map(|t| remap_type(t, types));
+                .map(|t| instantiate_type(t, types));
             let id = GenericTypeID::new(id.def_id, args);
 
             if t.is_weak() {

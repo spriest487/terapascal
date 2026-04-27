@@ -409,12 +409,11 @@ pub fn build_static_closure_impl(
     init_builder.cast(static_closure_ptr_ref, closure_ref, closure.closure_class_type());
 
     let init_body = init_builder.finish();
-    
-    let debug_name = if library.opts().debug {
-        Some(format!("static closure init for {}", closure))
-    } else {
-        None
-    };
+
+    let internal_name = format!("static closure init for {}", closure);
+    let debug_name = library.opts().debug.then(|| internal_name.clone());
+
+    let identity = FunctionIdentity::internal(internal_name);
 
     let init_sig = FunctionSig {
         param_types: Vec::new(),
@@ -423,7 +422,7 @@ pub fn build_static_closure_impl(
 
     let init_func_id = library
         .metadata_mut()
-        .insert_func(None, init_sig.clone(), false, []);
+        .insert_func(identity, init_sig.clone(), false, []);
 
     library.insert_function(
         init_func_id,

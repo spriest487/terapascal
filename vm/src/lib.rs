@@ -22,6 +22,7 @@ use crate::func::BuiltinFn;
 use crate::func::BuiltinFunction;
 use crate::func::FuncInstanceKey;
 use crate::func::Function;
+use crate::func::FunctionInfo;
 use crate::heap::NativeHeap;
 use crate::marshal::Marshaller;
 use crate::marshal::NativeType;
@@ -42,7 +43,7 @@ use std::rc::Rc;
 use terapascal_common::span::Span;
 use terapascal_ir as ir;
 use terapascal_ir::builtin::string_def;
-use terapascal_ir::MetadataSource as _;
+use terapascal_ir::{FunctionIdentity, MetadataSource as _};
 
 #[derive(Debug)]
 pub struct Vm {
@@ -572,11 +573,11 @@ impl Vm {
         let func_key = FuncInstanceKey::new(id).with_args(type_args.to_vec());
         let func_info = instantiate_func(self, func_key)?;
 
-        let func_name = func_info.name.clone();
+        let func_name = func_info.identity.to_pretty_string(self.metadata());
         let func = &func_info.func.clone();
         let stack_size = func.stack_alloc_size(&mut self.heap.marshaller)?;
 
-        self.stack.push(func_name, stack_size);
+        self.stack.push(Rc::new(func_name.into_owned()), stack_size);
 
         // store empty result if there is a result value
         let return_ty = func.return_ty();
@@ -590,7 +591,7 @@ impl Vm {
         if args.len() != func.param_tys().len() {
             let msg = format!(
                 "arguments provided for call to {} are invalid (expected {} args, got {})",
-                func_info.name,
+                func_info.identity.to_pretty_string(self.metadata()),
                 func.param_tys().len(),
                 args.len()
             );
@@ -1895,7 +1896,7 @@ impl Vm {
 
         let is = match object_id {
             ir::ObjectID::Any => true,
-            
+
             ir::ObjectID::Interface(iface_id) => {
                 let object_type = object_header.id.to_type(self.marshaller())?;
                 self.metadata().is_impl(&object_type, *iface_id)
@@ -2073,7 +2074,7 @@ impl Vm {
 
         self.functions.insert(FuncInstanceKey::new(func_id), FunctionInfo {
             func: Rc::new(func),
-            name: Rc::new(name.to_string()),
+            identity: ir::FunctionIdentity::Path(name),
             invoker,
         });
     }
@@ -2142,17 +2143,20 @@ impl Vm {
                 }
             };
 
-            let invoker = self.metadata()
-                .get_function_info(*func_id)
-                .and_then(|f| f.invoker);
+            let func_info = self.metadata().get_function_info(*func_id);
+            let invoker = func_info.and_then(|f| f.invoker);
+
+            let identity = func_info.map(|info| info.identity.clone())
+                .unwrap_or_else(|| FunctionIdentity::internal(func_id.to_string()));
 
             self.globals.insert(
                 ir::GlobalRef::Function(*func_id),
                 GlobalValue::Function(*func_id),
             );
 
+
             self.functions.insert(FuncInstanceKey::new(*func_id), FunctionInfo {
-                name: Rc::new(func.debug_name().to_string()),
+                identity,
                 func: Rc::new(func),
                 invoker,
             });
@@ -2737,16 +2741,6 @@ impl Vm {
 
         Ok(())
     }
-}
-
-#[derive(Debug, Clone)]
-struct FunctionInfo {
-    func: Rc<Function>,
-
-    // cached debug name for stack frame
-    name: Rc<String>,
-
-    invoker: Option<ir::FunctionID>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]

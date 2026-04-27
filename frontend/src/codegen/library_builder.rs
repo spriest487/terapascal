@@ -304,11 +304,9 @@ impl<'a> LibraryBuilder<'a> {
             
             let unit_init = init_builder.finish();
             
-            let debug_name = if self.opts.debug {
-                Some(format!("{}.<init>", unit.ident))
-            } else {
-                None
-            };
+            let internal_name = format!("{}.<init>", unit.ident);
+            let debug_name = self.opts.debug.then(|| internal_name.clone());
+            let identity = ir::FunctionIdentity::internal(internal_name);
 
             let init_sig = ir::FunctionSig {
                 param_types: Vec::new(),
@@ -321,7 +319,7 @@ impl<'a> LibraryBuilder<'a> {
                 debug_name,
             };
 
-            let init_func_id = self.metadata.insert_func(None, init_sig, false, []);
+            let init_func_id = self.metadata.insert_func(identity, init_sig, false, []);
             self.functions.insert(init_func_id, ir::Function::Local(init_func));
 
             self.init_code.push(ir::Instruction::Call {
@@ -761,20 +759,29 @@ impl<'a> LibraryBuilder<'a> {
         func_decl: &typ::ast::FunctionDecl,
         namespace: IdentPath,
     ) -> ir::FunctionID {
-        let has_global_name = func_decl.name.context == FunctionDeclContext::FreeFunction
-            && !func_decl.is_overload()
-            && func_decl.name.type_params.is_none();
+        let identity = match &func_decl.name.context {
+            FunctionDeclContext::FreeFunction if !func_decl.is_overload() => {
+                let ns: Vec<_> = namespace
+                    .iter()
+                    .map(|part| part.to_string())
+                    .collect();
+                let name = func_decl.name.ident.to_string();
+                let path = ir::NamePath::new(ns, name);
 
-        let global_name = if has_global_name {
-            let ns: Vec<_> = namespace
-                .iter()
-                .map(|part| part.to_string())
-                .collect();
-            let name = func_decl.name.ident.to_string();
+                ir::FunctionIdentity::Path(path)
+            }
 
-            Some(ir::NamePath::new(ns, name))
-        } else {
-            None
+            FunctionDeclContext::MethodDef { declaring_type } => {
+                self.method_identity(func_decl, declaring_type.ty())
+            }
+
+            FunctionDeclContext::MethodDecl { enclosing_type} => {
+                self.method_identity(func_decl, enclosing_type)
+            }
+
+            _ => {
+                ir::FunctionIdentity::internal(func_decl.to_string())
+            }
         };
 
         let tags = self.translate_tag_groups(&func_decl.tags);
@@ -782,7 +789,38 @@ impl<'a> LibraryBuilder<'a> {
         let sig = func_decl.sig();
         let ir_sig = translate_sig(&sig, self);
 
-        self.metadata.insert_func(global_name, ir_sig, self.opts.rtti, tags)
+        self.metadata.insert_func(identity, ir_sig, self.opts.rtti, tags)
+    }
+
+    fn method_identity(
+        &mut self,
+        func_decl: &typ::ast::FunctionDecl,
+        declaring_type: &typ::Type,
+    ) -> ir::FunctionIdentity {
+        // if the declaring type is a generic type, use its generic name in its identity
+        // e.g. the declaring type is Box[T], not Box with unspecified type params
+        // TODO: method translation should already use generic names here
+        let declaring_type = match declaring_type {
+            typ::Type::Variant(name) => typ::Type::variant((**name).clone().to_generic_name()),
+            typ::Type::Class(name) => typ::Type::class((**name).clone().to_generic_name()),
+            typ::Type::Record(name) => typ::Type::record((**name).clone().to_generic_name()),
+            typ::Type::Interface(name) => typ::Type::interface((**name).clone().to_generic_name()),
+            other => other.clone(),
+        };
+
+        let declaring_type = self.translate_type(&declaring_type);
+
+        let type_args = func_decl.name.type_params
+            .iter()
+            .flat_map(|param_list| param_list.items.iter())
+            .map(|p| ir::Type::Generic(Rc::new(p.name.to_string())))
+            .collect();
+
+        ir::FunctionIdentity::Method {
+            declaring_type,
+            name: func_decl.name.ident.to_string(),
+            type_args,
+        }
     }
 
     pub fn translate_func(
@@ -1457,7 +1495,12 @@ impl<'a> LibraryBuilder<'a> {
         let mut sig = translate_sig(&func.sig(), self);
         sig.param_types.insert(0, ir::Type::any());
 
-        let id = self.metadata.insert_func(None, sig, false, []);
+        let internal_name = "<anonymous function>".to_string();
+
+        let debug_name = self.opts.debug.then(|| internal_name.clone());
+        let identity = ir::FunctionIdentity::internal(internal_name);
+
+        let id = self.metadata.insert_func(identity, sig, false, []);
 
         let closure_identity = ir::ClosureIdentity {
             virt_func_ty: func_ty_id,
@@ -1469,12 +1512,6 @@ impl<'a> LibraryBuilder<'a> {
             &func.captures,
             self
         );
-
-        let debug_name = if self.opts.debug {
-            Some("<anonymous function>".to_string())
-        } else {
-            None
-        };
 
         let func_def = build_closure_function_def(self, &func, closure_id, debug_name);
 
@@ -1531,7 +1568,10 @@ impl<'a> LibraryBuilder<'a> {
         // closure parameter (unused for static closures)
         closure_func_sig.param_types.insert(0, ir::Type::any());
 
-        let thunk_id = self.metadata.insert_func(None, closure_func_sig, false, []);
+        let internal_name = "<static closure function>".to_string();
+        let identity = ir::FunctionIdentity::internal(internal_name);
+
+        let thunk_id = self.metadata.insert_func(identity, closure_func_sig, false, []);
         let thunk_def = build_func_static_closure_def(self, func, &ir_func);
 
         self.functions.insert(thunk_id, ir::Function::Local(thunk_def));
@@ -1622,7 +1662,11 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
         result_type: ir::Type::Nothing,
     };
 
-    let dtor_id = lib.metadata.insert_func(None, dtor_sig.clone(), false, []);
+    let internal_name = format!("generated dtor for {}", lib.metadata.pretty_type_name(array_type));
+    let dtor_debug_name = lib.opts.debug.then(|| internal_name.clone());
+    let identity = ir::FunctionIdentity::internal(internal_name);
+
+    let dtor_id = lib.metadata.insert_func(identity, dtor_sig.clone(), false, []);
 
     let mut dtor_builder = IRBuilder::new(lib);
     
@@ -1632,10 +1676,6 @@ fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
     dtor_builder.gen_dyn_array_dtor_body(self_arg, element_type);
     
     let dtor_body = dtor_builder.finish();
-
-    let dtor_debug_name = lib.opts.debug.then(|| {
-        format!("generated dtor for {}", lib.metadata.pretty_type_name(array_type))
-    });
 
     lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
         debug_name: dtor_debug_name,
@@ -1730,14 +1770,15 @@ fn gen_class_dtor(
         result_type: ir::Type::Nothing,
     };
 
-    let dtor_id = lib.metadata.insert_func(None, dtor_sig.clone(), false, []);
+    let internal_name = format!("generated dtor for {}", lib.metadata.pretty_type_name(&class_ty));
+    let debug_name = lib.opts.debug.then(|| internal_name.clone());
+    let identity = ir::FunctionIdentity::internal(internal_name);
+
+    let dtor_id = lib.metadata.insert_func(identity, dtor_sig.clone(), false, []);
     runtime_type.dtor = Some(dtor_id);
 
-    let dtor_debug_name = lib.opts.debug
-        .then(|| format!("generated dtor for {}", lib.metadata.pretty_type_name(&class_ty)));
-
     lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
-        debug_name: dtor_debug_name,
+        debug_name,
         body: dtor_body,
         sig: dtor_sig,
         type_params: Vec::new(),
@@ -1764,20 +1805,17 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
             continue;
         }
 
-        let debug_name = if lib.opts.debug {
-            let debug_name = lib.functions[&func.id].debug_name();
-            
-            let func_name_display = match debug_name {
-                Some(name) => format!("{name} ({})", func.id),
-                None => format!("{}", func.id),
-            };
-
-            Some(format!("generated invoker for {}", func_name_display))
-        } else {
-            None
+        let target_debug_name = lib.functions[&func.id].debug_name();
+        let target_name = match target_debug_name {
+            Some(name) => format!("{name} ({})", func.id),
+            None => format!("{}", func.id),
         };
 
-        let invoker_id = lib.metadata_mut().insert_func(None, invoker_sig.clone(), false, []);
+        let internal_name = format!("generated invoker for {}", target_name);
+        let debug_name = lib.opts.debug.then(|| internal_name.clone());
+        let identity = ir::FunctionIdentity::internal(internal_name);
+
+        let invoker_id = lib.metadata_mut().insert_func(identity, invoker_sig.clone(), false, []);
         
         // the source sig may be generic, so look up the translated sig rather than attempting
         // to translate it without a generic context

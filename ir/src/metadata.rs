@@ -16,7 +16,7 @@ use crate::InterfaceDef;
 use crate::InterfaceImpl;
 use crate::MethodInfo;
 use crate::NamePath;
-use crate::RawInstructionFormatter;
+use crate::RawFormatter;
 use crate::Ref;
 use crate::StructDef;
 use crate::StructIdentity;
@@ -179,8 +179,8 @@ impl Metadata {
                 Self::check_conflict(
                     "function ID",
                     id,
-                    func_info.global_name.as_ref(),
-                    existing.global_name.as_ref(),
+                    Some(&func_info.identity),
+                    Some(&existing.identity),
                 );
             }
             self.function_info.insert(*id, func_info.clone());
@@ -336,7 +336,7 @@ impl Metadata {
         // do a linear search for now because we don't want to store a redundant map of names,
         // and a user can always make a hashmap themselves if looking up names this way is too slow.
         self.function_info.iter().find_map(|(id, func)| {
-            let func_name = func.global_name.as_ref()?;
+            let func_name = func.identity.as_path()?;
             if func_name == name { Some(*id) } else { None }
         })
     }
@@ -344,8 +344,8 @@ impl Metadata {
     pub fn func_desc(&self, id: FunctionID) -> Option<String> {
         self.function_info
             .get(&id)
-            .and_then(|decl| decl.global_name.as_ref())
-            .map(NamePath::to_string)
+            .and_then(|decl| decl.identity.as_path())
+            .map(|path| path.to_pretty_string(self))
             .or_else(|| {
                 self.iface_impls.iter().find_map(|(impl_ty, impls)| {
                     impls.iter().find_map(|(iface_id, iface_impl)| {
@@ -673,7 +673,7 @@ impl<T: MetadataSource> IRFormatter for T {
             Value::SizeOf(ty) => {
                 write!(f, "sizeof({})", self.pretty_type_name(ty))
             },
-            _ => RawInstructionFormatter.format_val(val, f),
+            _ => RawFormatter.format_val(val, f),
         }
     }
 
@@ -778,10 +778,10 @@ impl<T: MetadataSource> IRFormatter for T {
             Ref::Global(GlobalRef::Function(id)) => {
                 let func_name = self
                     .get_function_info(*id)
-                    .and_then(|f| f.global_name.as_ref());
+                    .and_then(|f| f.identity.as_path());
 
                 match func_name {
-                    Some(name) => write!(f, "{}", name),
+                    Some(name) => write!(f, "{}", name.to_pretty_string(self)),
 
                     None => {
                         match self.find_iface_impl(*id) {
@@ -822,7 +822,7 @@ impl<T: MetadataSource> IRFormatter for T {
                 write!(f, ")")
             }
 
-            _ => RawInstructionFormatter.format_ref(r, f),
+            _ => RawFormatter.format_ref(r, f),
         }
     }
 
@@ -839,7 +839,7 @@ impl<T: MetadataSource> IRFormatter for T {
 
         match field_name {
             Some(name) => write!(f, "{}", name),
-            _ => RawInstructionFormatter.format_field(of_ty, field, f),
+            _ => RawFormatter.format_field(of_ty, field, f),
         }
     }
 
@@ -851,13 +851,13 @@ impl<T: MetadataSource> IRFormatter for T {
     ) -> fmt::Result {
         let iface = match self.get_iface_def(iface_id) {
             Some(iface) => iface,
-            None => return RawInstructionFormatter.format_method(iface_id, method, f),
+            None => return RawFormatter.format_method(iface_id, method, f),
         };
 
         let method = match iface.get_method(method) {
             Some(method) => method,
             None => {
-                return RawInstructionFormatter.format_method(iface_id, method, f);
+                return RawFormatter.format_method(iface_id, method, f);
             },
         };
 
@@ -875,7 +875,7 @@ impl<T: MetadataSource> IRFormatter for T {
 
         match case_name {
             Some(name) => write!(f, "{}", name),
-            _ => RawInstructionFormatter.format_variant_case(of_ty, tag, f),
+            _ => RawFormatter.format_variant_case(of_ty, tag, f),
         }
     }
 }

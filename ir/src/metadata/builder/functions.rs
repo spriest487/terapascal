@@ -1,4 +1,4 @@
-use crate::FunctionID;
+use crate::{FunctionID, FunctionIdentity};
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::MetadataBuilder;
@@ -11,7 +11,7 @@ use crate::TypeDefID;
 impl MetadataBuilder {
     pub fn insert_func(
         &mut self,
-        global_name: Option<NamePath>,
+        identity: FunctionIdentity,
         sig: FunctionSig,
         gen_runtime_name: bool,
         tags: impl IntoIterator<Item=TagInfo>,
@@ -19,23 +19,25 @@ impl MetadataBuilder {
         let id = self.next_function_id;
 
         let runtime_name = if gen_runtime_name {
-            global_name
-                .as_ref()
-                .cloned()
-                .map(|name_path| {
-                    let name = name_path.to_string();
+            match &identity {
+                FunctionIdentity::Path(path) => {
+                    let path_string = path.path.join(".");
+                    let id = self.find_or_insert_string(&path_string);
 
-                    self.find_or_insert_string(&name)
-                })
+                    Some(id)
+                }
+
+                _ => None,
+            }
         } else {
             None
         };
 
-        let func_info = FunctionInfo { 
-            global_name: global_name.clone(),
+        let func_info = FunctionInfo {
+            identity,
+            runtime_name,
 
             sig,
-            runtime_name,
             
             tags: tags.into_iter().collect(),
 

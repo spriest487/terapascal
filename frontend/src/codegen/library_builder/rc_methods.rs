@@ -36,11 +36,9 @@ fn gen_release_func(
 
     let body = gen_release_body(lib, ty);
 
-    let debug_name = lib
-        .opts().debug
-        .then(|| format!("<generated RC release for {}>", lib.metadata().pretty_type_name(ty)));
+    let internal_name = format!("generated RC release for {}", lib.metadata().pretty_type_name(ty));
 
-    let func_id = create_rc_func(lib, ty, body, debug_name);
+    let func_id = create_rc_func(lib, ty, body, internal_name);
 
     Some(func_id)
 }
@@ -80,11 +78,9 @@ fn gen_retain_func(
     
     let body = gen_retain_body(lib, ty);
 
-    let debug_name = lib
-        .opts().debug
-        .then(|| format!("<generated RC retain for {}>", lib.metadata().pretty_type_name(ty)));
+    let internal_name = format!("<generated RC retain for {}>", lib.metadata().pretty_type_name(ty));
 
-    let func_id = create_rc_func(lib, ty, body, debug_name);
+    let func_id = create_rc_func(lib, ty, body, internal_name);
 
     Some(func_id)
 }
@@ -116,11 +112,14 @@ fn create_rc_func(
     lib: &mut LibraryBuilder,
     ty: &ir::Type,
     body: ir::InstructionList,
-    debug_name: Option<String>
+    internal_name: String,
 ) -> ir::FunctionID {
     let sig = ir::FunctionSig::new([ty.clone().temp_ref()], ir::Type::Nothing);
 
-    let func_id = lib.metadata_mut().insert_func(None, sig.clone(), false, []);
+    let debug_name = lib.opts.debug.then(|| internal_name.clone());
+    let identity = ir::FunctionIdentity::internal(internal_name);
+
+    let func_id = lib.metadata_mut().insert_func(identity, sig.clone(), false, []);
     lib.insert_function(func_id, ir::Function::new_local_def(debug_name, Vec::new(), sig, body));
 
     func_id

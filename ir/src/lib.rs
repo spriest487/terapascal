@@ -104,7 +104,7 @@ impl NamePath {
 
 impl fmt::Display for NamePath {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        RawInstructionFormatter.format_name(self, f)
+        RawFormatter.format_name(self, f)
     }
 }
 

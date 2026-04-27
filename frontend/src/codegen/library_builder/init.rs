@@ -21,13 +21,15 @@ pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
     if body.instructions.is_empty() {
         return None;
     }
-    
-    let name = "<generated tag init function>".to_string();
+
+    let internal_name = "generated tag init function".to_string();
+    let debug_name = lib.opts.debug.then(|| internal_name.clone());
+    let identity = ir::FunctionIdentity::internal(internal_name);
 
     let sig = ir::FunctionSig::new([], ir::Type::Nothing);
-    let func = ir::Function::new_local_def(Some(name), Vec::new(), sig.clone(), body);
+    let func = ir::Function::new_local_def(debug_name, Vec::new(), sig.clone(), body);
 
-    let func_id = lib.metadata_mut().insert_func(None, sig, false, []);
+    let func_id = lib.metadata_mut().insert_func(identity, sig, false, []);
     lib.insert_function(func_id, func);
     
     Some(func_id)

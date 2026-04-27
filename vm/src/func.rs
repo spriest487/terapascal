@@ -4,7 +4,6 @@ use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::result::ExecError;
 use crate::ExecResult;
-use crate::FunctionInfo;
 use crate::Vm;
 use ir::generic::instantiate_function_def;
 use ir::generic::instantiate_sig;
@@ -14,6 +13,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::SharedStringKey;
+use terapascal_ir::generic::instantiate_type;
+use terapascal_ir::MetadataSource;
 
 pub mod ffi;
 
@@ -39,7 +40,7 @@ pub struct FfiFunction {
 pub struct IRFunction {
     def: ir::FunctionDef,
 
-    debug_name: String,
+    identity: ir::FunctionIdentity,
 }
 
 pub enum Function {
@@ -48,19 +49,36 @@ pub enum Function {
     IR(IRFunction),
 }
 
+#[derive(Debug, Clone)]
+pub struct FunctionInfo {
+    pub func: Rc<Function>,
+
+    pub identity: ir::FunctionIdentity,
+
+    pub invoker: Option<ir::FunctionID>,
+}
+
 impl Function {
     pub fn new(id: ir::FunctionID, def: ir::FunctionDef, metadata: &ir::Metadata) -> Self {
-        let func_name = def.debug_name
-            .clone()
-            .unwrap_or_else(|| id.to_string());
-        let debug_name = Function::make_debug_name(
-            &func_name,
-            &def.sig.param_types,
-            metadata,
-        );
+        let func_info = metadata.get_function_info(id);
+
+        let identity = func_info
+            .map(|func_info| func_info.identity.clone())
+            .unwrap_or_else(|| {
+                let func_name = def.debug_name
+                    .clone()
+                    .unwrap_or_else(|| id.to_string());
+
+                let internal_name = Function::make_debug_name(
+                    &func_name,
+                    &def.sig.param_types,
+                    metadata,
+                );
+                ir::FunctionIdentity::internal(internal_name)
+            });
 
         Self::IR(IRFunction {
-            debug_name,
+            identity,
             def: def.clone(),
         })
     }
@@ -109,14 +127,6 @@ impl Function {
         }
     }
 
-    pub fn debug_name(&self) -> &str {
-        match self {
-            Function::Builtin(def) => def.debug_name.as_str(),
-            Function::External(def) => def.debug_name.as_str(),
-            Function::IR(func) => func.debug_name.as_str(),
-        }
-    }
-
     fn make_debug_name(
         func_name: &str,
         params: &[ir::Type],
@@ -152,13 +162,13 @@ impl Function {
             
             Function::IR(func) => {
                 if state.opts().trace_ir {
-                    println!("[vm] entering {}", func.debug_name);
+                    println!("[vm] entering {}", func.identity.to_pretty_string(state.metadata()));
                 }
 
                 state.execute(&func.def.body)?;
 
                 if state.opts().trace_ir {
-                    println!("[vm] exiting {}", func.debug_name);
+                    println!("[vm] exiting {}", func.identity.to_pretty_string(state.metadata()));
                 }
             }
         };
@@ -195,7 +205,7 @@ impl fmt::Debug for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Function::Builtin(func) => write!(f, "<native function: {}>", func.debug_name),
-            Function::IR(func) => write!(f, "<function: {}>", func.debug_name),
+            Function::IR(func) => write!(f, "<function: {}>", func.identity),
             Function::External(func) => write!(f, "<ffi function: {}>", func.debug_name),
         }
     }
@@ -324,7 +334,7 @@ pub fn instantiate_func(
     if key.args.len() != generic_def.type_params.len() {
         let msg = format!(
             "incorrect number of type parameters for function {} (invocation has {}, expected: {})",
-            generic_func.name,
+            generic_func.identity.to_pretty_string(vm.metadata()),
             key.args.len(),
             generic_def.type_params.len(),
         );
@@ -338,13 +348,37 @@ pub fn instantiate_func(
         }
     }
 
-    let type_args_formatted = format_type_arg_list(&generic_def.type_params, &types, vm.metadata());
+    let identity = match &generic_func.identity {
+        ir::FunctionIdentity::Internal(name) => {
+            let type_args_formatted = format_type_arg_list(&generic_def.type_params, &types, vm.metadata());
+            let name = format!("{name} {}", type_args_formatted);
+
+            ir::FunctionIdentity::Internal(Rc::new(name))
+        }
+        
+        ir::FunctionIdentity::Method { declaring_type, name, type_args} => {
+            let declaring_type = instantiate_type(declaring_type, &types);
+            let type_args = type_args.iter().map(|t| instantiate_type(t, &types)).collect();
+
+            ir::FunctionIdentity::Method { 
+                declaring_type, 
+                name: name.clone(),
+                type_args,
+            }
+        }
+
+        ir::FunctionIdentity::Path(path) => {
+            let mut path = path.clone();
+            path.type_args = key.args.clone();
+            ir::FunctionIdentity::Path(path)
+        }
+    };
 
     if vm.opts.trace_generics {
         eprintln!(
             "[vm] new instantiation of function {}: {}",
-            generic_func.name,
-            type_args_formatted,
+            generic_func.identity.to_pretty_string(vm.metadata()),
+            identity.to_pretty_string(vm.metadata()),
         );
     }
 
@@ -360,15 +394,13 @@ pub fn instantiate_func(
         sig,
     };
 
-    let func_name = format!("{} {}", generic_func.name, type_args_formatted);
-
     let func_info = FunctionInfo {
-        name: Rc::new(func_name.clone()),
-        invoker: None,
         func: Rc::new(Function::IR(IRFunction {
-            debug_name: func_name,
+            identity: identity.clone(),
             def,
-        }))
+        })),
+        identity,
+        invoker: None,
     };
 
     vm.functions.insert(key.clone(), func_info.clone());

@@ -332,9 +332,7 @@ pub fn specialize_method_decl(
     );
 
     // specialize the owning type of all methods
-    method.name.context = FunctionDeclContext::MethodDecl { 
-        enclosing_type: self_ty,
-    };
+    method.name.context = FunctionDeclContext::method_decl(self_ty);
 
     method
 }

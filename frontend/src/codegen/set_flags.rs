@@ -108,20 +108,17 @@ impl SetFlagsType {
         sig: ir::FunctionSig,
         lib: &mut LibraryBuilder,
     ) -> ir::FunctionID {
-        let name = if lib.opts().debug {
-            Some(name)
-        } else {
-            None
-        };
+        let debug_name = lib.opts().debug.then(|| name.clone());
+        let identity = ir::FunctionIdentity::internal(name);
 
         let func = ir::Function::Local(ir::FunctionDef {
             sig: sig.clone(),
             type_params: Vec::new(),
-            debug_name: name,
+            debug_name,
             body,
         });
 
-        let func_id = lib.metadata_mut().insert_func(None, sig, false, []);
+        let func_id = lib.metadata_mut().insert_func(identity, sig, false, []);
         lib.insert_function(func_id, func);
 
         func_id

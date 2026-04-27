@@ -1,9 +1,9 @@
-mod ty_path;
+mod type_path;
 mod function_name;
 
 pub use self::function_name::FunctionTypeName;
 pub use self::function_name::FunctionTypeNameParam;
-pub use self::ty_path::TypePath;
+pub use self::type_path::TypePath;
 use crate::ast::Annotation;
 use crate::ast::Expr;
 use crate::ast::Ident;

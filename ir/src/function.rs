@@ -2,7 +2,7 @@ use crate::IRFormatter;
 use crate::InstructionList;
 use crate::Label;
 use crate::NamePath;
-use crate::RawInstructionFormatter;
+use crate::RawFormatter;
 use crate::Ref;
 use crate::StringID;
 use crate::TagInfo;
@@ -11,7 +11,9 @@ use crate::TypeDefID;
 use crate::VariableID;
 use serde::Deserialize;
 use serde::Serialize;
+use std::borrow::Cow;
 use std::fmt;
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub const BUILTIN_SRC: &str = "rt";
@@ -80,7 +82,7 @@ impl FunctionSig {
 
 impl fmt::Display for FunctionSig {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_pretty_string(&RawInstructionFormatter))
+        write!(f, "{}", self.to_pretty_string(&RawFormatter))
     }
 }
 
@@ -92,9 +94,73 @@ pub struct ExternalFunctionRef {
     pub sig: FunctionSig,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub enum FunctionIdentity {
+    // function has a global path
+    Path(NamePath),
+
+    Method {
+        declaring_type: Type,
+        name: String,
+        type_args: Vec<Type>,
+    },
+
+    // function is anonymous (e.g. generated functions) but has a debug name
+    Internal(Rc<String>),
+}
+
+impl FunctionIdentity {
+    pub fn internal(name: impl Into<String>) -> Self {
+        Self::Internal(Rc::new(name.into()))
+    }
+
+    pub fn to_pretty_string(&'_ self, formatter: &impl IRFormatter) -> Cow<'_, String> {
+        match self {
+            FunctionIdentity::Path(path) => {
+                Cow::Owned(path.to_pretty_string(formatter))
+            },
+
+            FunctionIdentity::Method { declaring_type, name, type_args } => {
+                let mut result = declaring_type.to_pretty_string(formatter);
+                result.push('.');
+                result.push_str(name);
+                if !type_args.is_empty() {
+                    result.push('[');
+                    for (i, arg) in type_args.iter().enumerate() {
+                        if i > 0 {
+                            result.push_str(", ");
+                        }
+                        result.push_str(&arg.to_pretty_string(formatter));
+                    }
+                    result.push(']');
+                }
+
+                Cow::Owned(result)
+            }
+
+            FunctionIdentity::Internal(name) => {
+                Cow::Borrowed(name.as_ref())
+            }
+        }
+    }
+
+    pub fn as_path(&self) -> Option<&NamePath> {
+        match self {
+            FunctionIdentity::Path(path) => Some(path),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for FunctionIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_pretty_string(&RawFormatter))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionInfo {
-    pub global_name: Option<NamePath>,
+    pub identity: FunctionIdentity,
 
     pub runtime_name: Option<StringID>,
     pub sig: FunctionSig,

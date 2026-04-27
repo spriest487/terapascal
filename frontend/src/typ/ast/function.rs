@@ -121,9 +121,7 @@ impl FunctionName {
             ident: ident.into(),
             type_params,
             span: span.into(),
-            context: FunctionDeclContext::MethodDecl {
-                enclosing_type,
-            },
+            context: FunctionDeclContext::method_decl(enclosing_type),
         }
     }
     

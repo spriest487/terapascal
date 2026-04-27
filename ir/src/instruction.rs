@@ -1,5 +1,5 @@
 use crate::formatter::IRFormatter;
-use crate::formatter::RawInstructionFormatter;
+use crate::formatter::RawFormatter;
 use crate::metadata::MethodID;
 use crate::ty::ObjectID;
 use crate::ty::Type;
@@ -366,7 +366,7 @@ impl Instruction {
 impl fmt::Display for Instruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut buf = String::new();
-        RawInstructionFormatter
+        RawFormatter
             .format_instruction(self, &mut buf)
             .map_err(|_| fmt::Error)?;
 
