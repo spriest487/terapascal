@@ -1,6 +1,7 @@
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
 use std::collections::HashMap;
+use std::sync::Arc;
 use terapascal_ir as ir;
 use terapascal_ir::InstructionBuilder;
 use terapascal_ir::MetadataSource;
@@ -17,7 +18,7 @@ impl RcMethodInfo {
         
         let retain = gen_retain_func(lib, ty, &mut rc_type_cache);
         let release = gen_release_func(lib, ty, &mut rc_type_cache);
-        
+
         Self {
             retain_elements: retain,
             release_elements: release,
@@ -114,13 +115,27 @@ fn create_rc_func(
     body: ir::InstructionList,
     internal_name: String,
 ) -> ir::FunctionID {
+    let type_params = match ty {
+        ir::Type::Variant(id) | ir::Type::Struct(id) => {
+            let mut type_params = Vec::new();
+            for param_type in &id.args {
+                let Some(param_name) = param_type.as_generic_param() else {
+                    panic!("create_rc_func: types must be generic paths (was: {})", param_type)
+                };
+                type_params.push(Arc::new(param_name.to_string()));
+            }
+            type_params
+        }
+        _ => Vec::new(),
+    };
+
     let sig = ir::FunctionSig::new([ty.clone().temp_ref()], ir::Type::Nothing);
 
     let debug_name = lib.opts.debug.then(|| internal_name.clone());
     let identity = ir::FunctionIdentity::internal(internal_name);
 
     let func_id = lib.metadata_mut().insert_func(identity, sig.clone(), false, []);
-    lib.insert_function(func_id, ir::Function::new_local_def(debug_name, Vec::new(), sig, body));
+    lib.insert_function(func_id, ir::Function::new_local_def(debug_name, type_params, sig, body));
 
     func_id
 }
