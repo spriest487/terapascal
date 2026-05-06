@@ -4,6 +4,8 @@ use crate::codegen::expr::call::translate_invocation;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::expr::translate_raise;
 use crate::codegen::ir;
+use crate::codegen::pattern::translate_pattern_match_bindings;
+use crate::codegen::pattern::translate_pattern_match_is;
 use crate::codegen::translate_block;
 use crate::codegen::translate_exit;
 use crate::codegen::translate_expr;
@@ -11,13 +13,13 @@ use crate::codegen::translate_if_cond_stmt;
 use crate::codegen::typ;
 use crate::codegen::IRBuilder;
 use crate::typ::system_option_type_of;
+use crate::typ::TypeArgsResult;
 use crate::typ::OPTION_NONE_CASE;
 use crate::typ::OPTION_SOME_CASE;
 use std::sync::Arc;
 use terapascal_common::span::Spanned;
 use terapascal_ir::jmp_exists;
 use terapascal_ir::InstructionBuilder;
-use crate::codegen::pattern::{translate_pattern_match_bindings, translate_pattern_match_is};
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut IRBuilder) {
     builder.push_source(stmt.annotation().span().clone());
@@ -243,7 +245,7 @@ fn build_for_loop_sequence(
                 let counter_ref = builder.local_temp(ir::Type::I32);
                 builder.comment("loop binding");
                 let binding_ref = builder.local_var(binding_ty.clone(), Some(binding_name));
-                
+
                 let base_type = builder.translate_type(&base_type);
                 let element_ty = builder.translate_type(&array_ty.element_ty);
 
@@ -268,7 +270,7 @@ fn build_for_loop_sequence(
                     }
                 );
             },
-            
+
             typ::Type::DynArray(element) => {
                 builder.comment("loop counter");
                 let counter_ref = builder.local_temp(ir::Type::I32);
@@ -277,11 +279,11 @@ fn build_for_loop_sequence(
 
                 let element_ty = builder.translate_type(element);
                 let dynarray_ty = builder.translate_type(&range.src_expr.annotation().ty());
-                
+
                 // high := seq_val.length
                 let high_index_ref = builder.local_temp(ir::Type::I32);
                 builder.length(high_index_ref, src_ref.clone(), dynarray_ty.clone());
-                
+
                 // high -= 1;
                 builder.sub(high_index_ref, high_index_ref, ir::Value::LiteralI32(1));
 
@@ -320,6 +322,9 @@ fn build_for_loop_sequence(
                     seq_support.item_next_method_index,
                 );
 
+                let src_type_args = infer_type_args_from_target(src_ty, builder);
+                let seq_type_args = infer_type_args_from_target(&seq_support.sequence_type, builder);
+
                 let src_ty = builder.translate_type(src_ty);
 
                 let seq_ty = builder.translate_type(&seq_support.sequence_type);
@@ -351,7 +356,7 @@ fn build_for_loop_sequence(
                 let item_option_ty = builder.translate_type(&typ::Type::variant(next_result_ty));
 
                 // seq_ref := src_ref.Sequence();
-                builder.call(seq_method.id, [src_self_arg_ref.value()], [], Some(seq_var.to_ref()));
+                builder.call(seq_method.id, [src_self_arg_ref.value()], src_type_args, Some(seq_var.to_ref()));
 
                 // stores the option resulting from calling Next. don't need to RC this,
                 // it'll either return an item and be stored in the binding local and retained there,
@@ -368,7 +373,7 @@ fn build_for_loop_sequence(
 
                     // next item in the sequence
                     // next_item_option_ref := sequence.Next();
-                    builder.call(next_method.id, [seq_self_arg_var.value()], [], Some(next_item_option_ref.to_ref()));
+                    builder.call(next_method.id, [seq_self_arg_var.value()], seq_type_args, Some(next_item_option_ref.to_ref()));
 
                     // if the case is None, break
                     // next_item_tag_ref := next_item_option_ref.tag
@@ -403,6 +408,22 @@ fn build_for_loop_sequence(
             }
         };
     });
+}
+
+// the sequence support methods never have type params themselves, but if they are found on a 
+// specialized generic type, we need to pass the type args used for that type in to the method call
+fn infer_type_args_from_target(ty: &typ::Type, builder: &mut IRBuilder) -> Vec<ir::Type> {
+    match ty.type_args() {
+        TypeArgsResult::Specialized(.., src_args) => {
+            let mut args = Vec::new();
+            for arg in &src_args.items {
+                args.push(builder.translate_type(arg));
+            }
+            args
+        }
+
+        _ => Vec::new(),
+    }
 }
 
 fn build_array_sequence_loop<ElementFn>(

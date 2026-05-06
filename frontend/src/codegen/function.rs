@@ -43,6 +43,7 @@ pub fn build_func_def(
     def_locals: &[typ::ast::FunctionLocalBinding],
     def_body: &typ::ast::Block,
     is_instance_method: bool,
+    enclosing_type: Option<&typ::Type>,
     debug_name: Option<String>,
 ) -> FunctionDef {
     let mut body_builder = create_function_body_builder(
@@ -62,23 +63,10 @@ pub fn build_func_def(
 
     // if the self param is a specialized generic name, add its type parameters to the
     // beginning of the method function's type param list
-    if is_instance_method {
-        assert!(def_params.len() >= 1);
-        let self_param_group = &def_params[0];
-
-        assert!(self_param_group.param_items.len() >= 1);
-        let self_param = &self_param_group.param_items[0];
-
-        assert!(self_param.is_implicit_self);
-        assert_eq!(typ::ast::SELF_PARAM_NAME, self_param.name.as_str());
-
-        if let Some(self_type_name) = self_param_group.ty.ty().full_name()
-            && let Some(self_type_params) = &self_type_name.type_params
-        {
-            for param in &self_type_params.items {
-                let param_name = Arc::new(param.name.name.to_string());
-                type_params.push(param_name);
-            }
+    if let Some(enclosing_params) = enclosing_type.and_then(|t| t.type_params()) {
+        for param in &enclosing_params.items {
+            let param_name = Arc::new(param.name.name.to_string());
+            type_params.push(param_name);
         }
     }
 

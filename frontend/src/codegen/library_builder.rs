@@ -544,6 +544,7 @@ impl<'a> LibraryBuilder<'a> {
             &func_def.locals,
             &func_def.body,
             false,
+            None,
             Some(debug_name),
         );
 
@@ -668,6 +669,8 @@ impl<'a> LibraryBuilder<'a> {
         
         self.translated_funcs.insert(key, func_instance.clone());
 
+        let is_instance_method = !method_decl.func_decl.kind.is_static_method();
+
         let def = build_func_def(
             self,
             &method_def.decl.param_groups,
@@ -675,7 +678,8 @@ impl<'a> LibraryBuilder<'a> {
             &method_def.decl.result_ty,
             &method_def.locals,
             &method_def.body,
-            true,
+            is_instance_method,
+            Some(&decl_self_ty),
             Some(debug_name),
         );
         self.functions.insert(id, ir::Function::Local(def));
