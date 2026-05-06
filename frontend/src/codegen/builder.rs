@@ -5,7 +5,6 @@ use crate::ast as ast;
 use crate::codegen::expr::literal_to_val;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::library_builder::RcMethodInfo;
 use crate::codegen::metadata::*;
 use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;
@@ -98,60 +97,6 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         if self.debug_stack.pop().is_none() {
             eprintln!("pop_debug_context: debug context stack is empty");
         }
-    }
-
-    fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        if ty.is_object() {
-            self.comment(format!("release: {}", self.metadata().pretty_type_name(ty)));
-            self.release(at, ty.is_weak(), Ref::Discard);
-            return true;
-        }
-
-        if let Type::Generic(param_name) = ty {
-            // placeholder release to be expanded during instantiation
-            self.comment(format!("release (generic): {}", param_name));
-            return true;
-        }
-
-        let rc_method_info = self.get_rc_method_info(ty);
-        let Some(func_id) = rc_method_info.release_elements else {
-            return false;
-        };
-
-        if self.opts().debug {
-            self.comment(format!("release_deep: {}", self.metadata().pretty_type_name(ty)));
-        }
-
-        let at_ref = self.make_ref_local(at, ty);
-        self.call(func_id, [at_ref.value()], [], None);
-        true
-    }
-
-    fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        if ty.is_object() {
-            self.comment(format!("retain: {}", self.metadata().pretty_type_name(ty)));
-            self.retain(at, ty.is_weak());
-            return true;
-        }
-
-        if let Type::Generic(param_name) = ty {
-            // placeholder release to be expanded during instantiation
-            self.comment(format!("retain (generic): {}", param_name));
-            return true;
-        }
-
-        let rc_method_info = self.get_rc_method_info(ty);
-        let Some(func_id) = rc_method_info.retain_elements else {
-            return false;
-        };
-
-        if self.opts().debug {
-            self.comment(format!("retain_deep: {}", self.metadata().pretty_type_name(ty)));
-        }
-
-        let at_ref = self.make_ref_local(at, ty);
-        self.call(func_id, [at_ref.value()], [], None);
-        true
     }
 }
 
@@ -333,13 +278,13 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
                 let captured_local = builder.find_named(field_name).unwrap();
                 builder.mov(capture_field_ref.to_deref(), captured_local.to_ref());
-                builder.retain_deep(capture_field_ref.to_deref(), &field_def.ty);
+                builder.retain(capture_field_ref.to_deref(), field_def.ty.clone());
             }
             
-            builder.cast(closure_virtual_ptr, closure_ref, closure_virtual_ty);
+            builder.cast(closure_virtual_ptr, closure_ref, closure_virtual_ty.clone());
         });
 
-        self.retain(closure_virtual_ptr, false);
+        self.retain(closure_virtual_ptr, closure_virtual_ty);
         closure_virtual_ptr.to_ref()
     }
     
@@ -672,9 +617,5 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.cleanup_scope(0);
 
         self.emit(Instruction::Jump { dest: EXIT_LABEL })
-    }
-    
-    pub fn get_rc_method_info(&mut self, ty: &Type) -> RcMethodInfo {
-        self.library.get_rc_method_info(ty)
     }
 }

@@ -6,7 +6,6 @@ use crate::ty_decl::TagLocation;
 use crate::FieldID;
 use crate::FunctionID;
 use crate::IRFormatter;
-use crate::LocalStack;
 use crate::MetadataSource;
 use crate::ObjectID;
 use crate::VariableID;
@@ -89,25 +88,25 @@ impl Ref {
 
     pub fn find_type<'a: 'b, 'b>(
         &'a self,
-        local_stack: &'a LocalStack,
+        local_stack: &'a impl FunctionBodyContext,
         metadata: &'a impl MetadataSource,
     ) -> Option<Cow<'b, Type>> {
         match self {
             Ref::Discard => None,
 
             Ref::Result => {
-                let result_binding = local_stack.find_result_binding()?;
-                Some(Cow::Borrowed(&result_binding.ty))
+                let result_type = local_stack.get_result_type()?;
+                Some(Cow::Borrowed(result_type))
             }
 
             Ref::Arg(id) => {
-                let arg_binding = local_stack.find_arg_binding(*id)?;
-                Some(Cow::Borrowed(&arg_binding.ty))
+                let arg_type = local_stack.get_arg_type(*id)?;
+                Some(Cow::Borrowed(arg_type))
             }
 
             Ref::Local(id) => {
-                let local_binding = local_stack.find_local_binding(*id)?;
-                Some(Cow::Borrowed(&local_binding.ty))
+                let local_type = local_stack.get_local_type(*id)?;
+                Some(Cow::Borrowed(&local_type))
             }
 
             Ref::Global(GlobalRef::StringLiteral(..)) => {
@@ -440,7 +439,11 @@ impl Value {
         }
     }
 
-    pub fn find_type<'a: 'b, 'b>(&'a self, local_stack: &'a LocalStack, metadata: &'a impl MetadataSource) -> Option<Cow<'b, Type>> {
+    pub fn find_type<'a: 'b, 'b>(
+        &'a self,
+        local_stack: &'a impl FunctionBodyContext,
+        metadata: &'a impl MetadataSource,
+    ) -> Option<Cow<'b, Type>> {
         match self {
             Value::Ref(r) => r.find_type(local_stack, metadata),
             Value::LiteralNil => Some(Cow::Owned(Type::Nothing.ptr())),
@@ -617,4 +620,12 @@ impl ArgID {
     pub fn value(self) -> Value {
         self.to_ref().value()
     }
+}
+
+// object that can provide information about the types of function local values
+// (runtime or codegen)
+pub trait FunctionBodyContext {
+    fn get_result_type(&self) -> Option<&Type>;
+    fn get_arg_type(&self, id: ArgID) -> Option<&Type>;
+    fn get_local_type(&self, id: LocalID) -> Option<&Type>;
 }

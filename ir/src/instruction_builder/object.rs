@@ -1,5 +1,6 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
 use crate::ArgID;
+use crate::Ref;
 use crate::GenericTypeID;
 use crate::MetadataSource;
 use std::rc::Rc;
@@ -27,7 +28,7 @@ where
         .into_owned();
 
     let class_ty = class_id.to_class_object_type();
-    
+
     let mut released_any = false;
 
     for (field_id, field_def) in &class_struct_def.fields {
@@ -36,9 +37,9 @@ where
         }
 
         let field_ref = self_param.to_ref().field_ref(class_ty.clone(), *field_id);
-        released_any |= builder.release_deep(field_ref.to_deref(), &field_def.ty);
+        builder.release(field_ref.to_deref(), field_def.ty.clone(), Ref::Discard);
 
-        assert!(released_any, "if contains_any_object_refs returns true, release_deep should find a reference to release")
+        released_any = true;
     }
     
     released_any

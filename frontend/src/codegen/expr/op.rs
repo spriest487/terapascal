@@ -296,7 +296,7 @@ pub fn translate_bin_op(
     };
 
     if !out_is_ref {
-        builder.retain_deep(out_val.clone(), &result_ty);
+        builder.retain(out_val.clone(), result_ty);
     }
 
     builder.local_end();
@@ -336,7 +336,7 @@ pub fn translate_unary_op(
             builder.addr_of(out_val, operand_ref);
             
             // todo: should never do anything since pointers don't affect RC
-            builder.retain_deep(out_val, &out_ty);
+            builder.retain(out_val, out_ty);
 
             out_val.to_ref()
         },

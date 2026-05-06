@@ -145,7 +145,7 @@ pub trait InstructionBuilder {
 
     fn expire_binding(&mut self, binding: &ScopedBinding) {
         if binding.auto_release {
-            self.release_deep(binding.to_ref(), &binding.ty);
+            self.release(binding.to_ref(), binding.ty.clone(), Ref::Discard);
         }
 
         // inside a loop scope, these locals may be reused without being reinitialized.
@@ -735,81 +735,21 @@ pub trait InstructionBuilder {
         self.mov(out, instance.into().vardata_ref(instance_type, tag));
     }
 
-    fn release(&mut self, at: impl Into<Ref>, weak: bool, released_out: impl Into<Ref>) {
+    fn release(&mut self, at: impl Into<Ref>, value_type: Type, released_out: impl Into<Ref>) {
         self.emit(Instruction::Release {
             at: at.into(),
-            weak,
+            value_type,
             released_out: released_out.into(),
         });
     }
 
-    fn retain(&mut self, at: impl Into<Ref>, weak: bool) -> bool {
+    fn retain(&mut self, at: impl Into<Ref>, value_type: Type) -> bool {
         self.emit(Instruction::Retain {
             at: at.into(),
-            weak,
+            value_type,
         });
 
         true
-    }
-
-    fn release_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        let at = at.into();
-        if at.is_discard() {
-            panic!("release_deep: operand must not be a discard ref");
-        }
-
-        self.visit_deep(
-            at,
-            ty,
-            |builder, element_ty, element_ref| {
-                match element_ty {
-                    Type::Object(..) | Type::WeakObject(..) => {
-                        let type_name = ty.to_pretty_string(builder.ir_formatter());
-                        builder.comment(format!("release: {}", type_name));
-                    }
-
-                    Type::Generic(name) => {
-                        builder.comment(format!("release (generic): {name}"))
-                    }
-
-                    _ => {
-                        return false;
-                    }
-                }
-
-                builder.release(element_ref, element_ty.is_weak(), Ref::Discard);
-                true
-            },
-        )
-    }
-
-    fn retain_deep(&mut self, at: impl Into<Ref>, ty: &Type) -> bool {
-        let at = at.into();
-        if at.is_discard() {
-            panic!("retain_deep: operand must not be a discard ref");
-        }
-        
-        self.visit_deep(
-            at,
-            ty,
-            |builder, element_ty, element_ref| {
-                match element_ty {
-                    Type::Object(..) | Type::WeakObject(..) => {
-                        let type_name = ty.to_pretty_string(builder.ir_formatter());
-                        builder.comment(format!("retain: {}", type_name));
-                    }
-
-                    Type::Generic(name) => {
-                        builder.comment(format!("retain (generic): {name}"));
-                    }
-
-                    _ => return false,
-                }
-                
-                builder.retain(element_ref, element_ty.is_weak());
-                true
-            },
-        )
     }
 
     fn ref_to_ptr_val(&mut self, at: impl Into<Ref>, ty: &Type) -> Value {

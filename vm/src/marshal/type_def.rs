@@ -43,7 +43,7 @@ impl Marshaller {
         };
 
         for (field_id, field_def) in def_fields {
-            let native_type = self.build_marshalled_type(&field_def.ty)?;
+            let (_, native_type) = self.build_marshalled_type(&field_def.ty)?;
 
             if def.layout != ir::StructLayout::Packed {
                 let member_align = self.align_of(&field_def.ty, def.layout)?;
@@ -91,7 +91,7 @@ impl Marshaller {
 
         let mut native_fields = Vec::with_capacity(def.cases.len() + 1);
 
-        let tag_native_type = self.build_marshalled_type(&def.tag_type)?;
+        let (_, tag_native_type) = self.build_marshalled_type(&def.tag_type)?;
 
         let tag_offset = tag_native_type.size();
 
@@ -102,7 +102,7 @@ impl Marshaller {
 
         for case_def in &def.cases {
             if let Some(data_type) = case_def.ty.as_ref() {
-                let case_native_type = self.build_marshalled_type(data_type)?;
+                let (_, case_native_type) = self.build_marshalled_type(data_type)?;
 
                 let case_align = self.align_of(&data_type, ir::StructLayout::Default)?;
                 let case_pad = Self::field_padding(tag_offset, case_align);

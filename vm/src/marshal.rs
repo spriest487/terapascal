@@ -180,7 +180,7 @@ impl Marshaller {
                 if !def.is_generic() {
                     self.add_struct_type(&class_id.to_class_object_type())?;
                 }
-            } else {
+            } else if ty.is_object() {
                 self.register_object_type(ty.clone())?;
             }
         }
@@ -193,7 +193,7 @@ impl Marshaller {
         Ok(layout.data_offset)
     }
     
-    fn register_type(&mut self, ty: ir::Type, ffi_ty: NativeType) -> MarshalResult<TypeIndex> {
+    fn register_type(&mut self, ty: ir::Type, native_type: NativeType) -> MarshalResult<TypeIndex> {
         if let Some(type_index) = self.type_indices.get_by_right(&ty) {
             return Ok(*type_index);
         }
@@ -202,7 +202,7 @@ impl Marshaller {
         self.next_type_index.0 += 1;
 
         self.type_indices.insert(type_index, ty.clone());
-        self.types.insert(type_index, ffi_ty);
+        self.types.insert(type_index, native_type);
 
         let object_id = match &ty {
             ir::Type::WeakObject(id) | ir::Type::Object(id) => match id {
@@ -300,12 +300,12 @@ impl Marshaller {
         self.add_dyn_array_type(iface_ty)
     }
     
-    pub fn add_flags_type(&mut self, id: ir::TypeDefID) -> MarshalResult<NativeType> {
+    pub fn add_flags_type(&mut self, id: ir::TypeDefID) -> MarshalResult<(TypeIndex, NativeType)> {
         let flags_type = id.to_flags_type();
         let (_, type_index) = self.add_struct_type(&flags_type)?;
 
         let native_type = self.types[&type_index].clone();
-        Ok(native_type)
+        Ok((type_index, native_type))
     }
 
     pub fn build_ffi_invoker(
@@ -314,21 +314,27 @@ impl Marshaller {
     ) -> MarshalResult<FfiInvoker> {
         // the "nothing" type is usually not allowed by the marshaller because it can't be
         // instantiated, but here we need to map it to the void ffi type
-        let ffi_return_ty = match &func_ref.sig.result_type {
+        let native_return_type = match &func_ref.sig.result_type {
             ir::Type::Nothing => NativeType(FfiType::void()),
-            return_ty => self.build_marshalled_type(return_ty)?,
+            return_ty => {
+                let (_, native_type) = self.build_marshalled_type(return_ty)?;
+                native_type
+            },
         };
 
-        let ffi_param_tys: Vec<_> = func_ref
+        let native_param_types: Vec<_> = func_ref
             .sig
             .param_types
             .iter()
-            .map(|ty| self.build_marshalled_type(ty))
+            .map(|ty| {
+                let (_, native_type) = self.build_marshalled_type(ty)?;
+                Ok(native_type)
+            })
             .collect::<MarshalResult<_>>()?;
 
         let cif = FfiBuilder::new()
-            .args(ffi_param_tys.iter().map(|t| t.0.clone()))
-            .res(ffi_return_ty.0.clone())
+            .args(native_param_types.iter().map(|t| t.0.clone()))
+            .res(native_return_type.0.clone())
             .into_cif();
 
         let lib_filename = format!("{}{}{}", env::consts::DLL_PREFIX, func_ref.src, env::consts::DLL_SUFFIX);
@@ -366,32 +372,32 @@ impl Marshaller {
         Ok(FfiInvoker::new(
             cif,
             symbol,
-            ffi_param_tys,
+            native_param_types,
             func_ref.sig.result_type.clone(),
-            ffi_return_ty,
+            native_return_type,
         ))
     }
 
     fn build_marshalled_type(
         &mut self,
         ty: &ir::Type,
-    ) -> MarshalResult<NativeType> {
+    ) -> MarshalResult<(TypeIndex, NativeType)> {
         if let Some(type_index) = self.try_get_type_index(ty) {
             let cached = self.types[&type_index].clone();
-            return Ok(cached);
+            return Ok((type_index, cached));
         }
 
         match ty {
             ir::Type::Variant(..) => {
                 let (_, type_index) = self.add_variant_type(ty)?;
                 let marshalled_type = self.types[&type_index].clone();
-                Ok(marshalled_type)
+                Ok((type_index, marshalled_type))
             },
 
             ir::Type::Struct { .. } => {
                 let (_, type_index) = self.add_struct_type(ty)?;
                 let marshalled_type = self.types[&type_index].clone();
-                Ok(marshalled_type)
+                Ok((type_index, marshalled_type))
             },
 
             ir::Type::Object(..) 
@@ -402,21 +408,21 @@ impl Marshaller {
                 let pointer_type = NativeType::pointer();
                 
                 self.add_dyn_array_type(ty.clone())?;
-                self.register_type(ty.clone(), pointer_type.clone())?;
+                let type_index = self.register_type(ty.clone(), pointer_type.clone())?;
                 
-                Ok(pointer_type)
+                Ok((type_index, pointer_type))
             },
 
             ir::Type::Array { element, dim } => {
-                let el_ty = self.build_marshalled_type(&element)?;
+                let (_, el_ty) = self.build_marshalled_type(&element)?;
                 let el_tys = vec![el_ty; *dim];
                 
                 let array_struct = NativeType::structure(el_tys);
 
                 self.add_dyn_array_type(ty.clone())?;
-                self.register_type(ty.clone(), array_struct.clone())?;
+                let type_index = self.register_type(ty.clone(), array_struct.clone())?;
 
-                Ok(array_struct)
+                Ok((type_index, array_struct))
             },
 
             ir::Type::Flags(ty_id) => {
@@ -468,6 +474,7 @@ impl Marshaller {
                 let el_tys = vec![el_ty; *dim];
 
                 let native_type = NativeType::structure(el_tys);
+
                 self.register_type(ty.clone(), native_type.clone())?;
 
                 Ok(native_type)

@@ -1,3 +1,4 @@
+use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FunctionDef;
 use crate::FunctionSig;
@@ -14,7 +15,6 @@ use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VariantCase;
 use crate::VariantDef;
-use crate::ArgID;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -51,47 +51,19 @@ pub fn instantiate_function_def(
         }
 
         match instruction {
-            // release/retain instructions where the target ref is generic need to be expanded
-            // into deep release/retain operations for the appropriate type
-            Instruction::Release { at, released_out, weak } => {
-                let Some(ref_type) = at.find_type(builder.local_stack(), builder.metadata()) else {
-                    panic!("instantiate_generic: unable to determine type of reference: {:?}", at);
-                };
+            Instruction::Release { at, released_out, value_type } => {
+                let value_type = instantiate_type(value_type, types);
+                let at = remap_ref(at, &locals, types);
+                let released_out = remap_ref(released_out, &locals, types);
 
-                if ref_type.is_object() {
-                    builder.release(at.clone(), *weak, released_out.clone());
-                } else {
-                    let ref_type = ref_type.into_owned();
-                    builder.visit_deep(at.clone(), &ref_type, |builder, item_type, item_ref| {
-                        if item_type.is_object() {
-                            builder.release(item_ref, *weak, Ref::Discard);
-                            true
-                        } else {
-                            false
-                        }
-                    });
-                    builder.mov(released_out.clone(), false);
-                }
+                builder.release(at, value_type, released_out);
             },
-            Instruction::Retain { at, weak } => {
-                let Some(ref_type) = at.find_type(builder.local_stack(), builder.metadata()) else {
-                    panic!("instantiate_generic: unable to determine type of reference: {:?}", at);
-                };
 
-                if ref_type.is_object() {
-                    builder.retain(at.clone(), *weak);
-                } else {
-                    let ref_type = ref_type.into_owned();
-                    builder.visit_deep(at.clone(), &ref_type, |builder, item_type, item_ref| {
-                        if item_type.is_object() {
-                            builder.retain(item_ref, *weak);
-                            true
-                        } else {
-                            false
-                        }
-                    });
-                    builder.retain_deep(at.clone(), &ref_type);
-                }
+            Instruction::Retain { at, value_type } => {
+                let value_type = instantiate_type(value_type, types);
+                let at = remap_ref(at, &locals, types);
+
+                builder.retain(at, value_type);
             },
 
             comment @ Instruction::Comment(..) => {

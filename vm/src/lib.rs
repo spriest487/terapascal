@@ -42,8 +42,7 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_common::span::Span;
 use terapascal_ir as ir;
-use terapascal_ir::builtin::string_def;
-use terapascal_ir::{FunctionIdentity, MetadataSource as _};
+use terapascal_ir::MetadataSource as _;
 
 #[derive(Debug)]
 pub struct Vm {
@@ -72,7 +71,7 @@ impl Vm {
         let globals = HashMap::new();
 
         let builtin_structs: BTreeMap<_, _> = [
-            (ir::STRING_ID, string_def()),
+            (ir::STRING_ID, ir::builtin::string_def()),
         ].into_iter().collect();
 
         let mut metadata = ir::MetadataBuilder::new();
@@ -162,20 +161,20 @@ impl Vm {
 
     pub fn default_val(&mut self, ty: &ir::Type) -> ExecResult<DynValue> {
         let val = match ty {
-            ir::Type::I8 => DynValue::I8(i8::MIN),
-            ir::Type::U8 => DynValue::U8(u8::MAX),
-            ir::Type::I16 => DynValue::I16(i16::MIN),
-            ir::Type::U16 => DynValue::U16(u16::MAX),
-            ir::Type::I32 => DynValue::I32(i32::MIN),
-            ir::Type::U32 => DynValue::U32(u32::MAX),
-            ir::Type::I64 => DynValue::I64(i64::MIN),
-            ir::Type::U64 => DynValue::U64(u64::MAX),
-            ir::Type::ISize => DynValue::ISize(isize::MIN),
-            ir::Type::USize => DynValue::USize(usize::MAX),
+            ir::Type::I8 => DynValue::I8(0),
+            ir::Type::U8 => DynValue::U8(0),
+            ir::Type::I16 => DynValue::I16(0),
+            ir::Type::U16 => DynValue::U16(0),
+            ir::Type::I32 => DynValue::I32(0),
+            ir::Type::U32 => DynValue::U32(0),
+            ir::Type::I64 => DynValue::I64(0),
+            ir::Type::U64 => DynValue::U64(0),
+            ir::Type::ISize => DynValue::ISize(0),
+            ir::Type::USize => DynValue::USize(0),
 
             ir::Type::Bool => DynValue::Bool(false),
-            ir::Type::F32 => DynValue::F32(f32::NAN),
-            ir::Type::F64 => DynValue::F64(f64::NAN),
+            ir::Type::F32 => DynValue::F32(0.0),
+            ir::Type::F64 => DynValue::F64(0.0),
 
             ir::Type::Struct { .. } => DynValue::from(self.default_struct(ty)?),
 
@@ -208,7 +207,7 @@ impl Vm {
             }
 
             ir::Type::Function(..) => {
-                DynValue::Function(ir::FunctionID(usize::MAX))
+                DynValue::Function(ir::FunctionID(0))
             },
 
             _ => {
@@ -508,7 +507,7 @@ impl Vm {
         }
     }
 
-    fn vcall_lookup(
+    fn virtual_call_lookup(
         &self,
         self_val: &DynValue,
         iface_id: ir::InterfaceID,
@@ -520,6 +519,7 @@ impl Vm {
         })?;
 
         let object_header = self.heap.load_object_header(self_ptr)?;
+
         let instance_ty = object_header.id.to_type(self.marshaller())?;
 
         self.metadata()
@@ -686,149 +686,242 @@ impl Vm {
         Ok((struct_val, object_val.header))
     }
 
-    fn release_dyn_val(&mut self, val: &DynValue, weak: bool) -> ExecResult<bool> {
-        let ptr = val.as_pointer().ok_or_else(|| {
-            let msg = format!("released val was not a pointer, found: {:?}", val);
-            ExecError::illegal_state(msg)
-        })?;
+    fn visit_deep<F>(&mut self, val: &DynValue, ty: &ir::Type, f: &mut F) -> ExecResult<()>
+    where
+        F: FnMut(&mut Self, &ir::Type, &DynValue) -> ExecResult<()>
+    {
+        match ty {
+            ir::Type::Struct(_) => {
+                let DynValue::Structure(struct_val) = val else {
+                    let msg = format!("value with type {} is not a struct", ty.to_pretty_string(self.metadata()));
+                    return Err(ExecError::illegal_state(msg));
+                };
 
-        // NULL is a valid release target because we release uninitialized local RC pointers
-        // just do nothing
-        if ptr.is_null() {
-            return Ok(false);
-        }
-
-        let mut header = self.heap.load_object_header(ptr)?;
-
-        // release calls are totally ignored for immortal refs
-        if header.strong_count < 0 {
-            return Ok(false);
-        }
-
-        let object_type = header.id.to_type(self.marshaller())?;
-
-        if weak {
-            if header.weak_count == 0 {
-                panic!(
-                    "releasing with 0 weak refs remaining @ {} <{}> (+{} weak refs remain)\n{}",
-                    ptr.to_pretty_string(self.metadata()),
-                    object_type.to_pretty_string(self.metadata()),
-                    header.weak_count,
-                    self.stack.trace_formatted(),
-                );
+                let (def, _) = self.heap.marshaller.add_struct_type(ty)?;
+                for (field_id, field_def) in &def.fields {
+                    if let Some(field_val) = struct_val.fields.get(field_id.0) {
+                        self.visit_deep(field_val, &field_def.ty, f)?;
+                    }
+                }
             }
 
-            header.weak_count -= 1;
-        } else {
-            if header.strong_count == 0 {
-                panic!(
-                    "releasing with 0 strong refs remaining @ {} <{}> (+{} strong refs remain)\n{}",
-                    ptr.to_pretty_string(self.metadata()),
-                    object_type.to_pretty_string(self.metadata()),
-                    header.strong_count,
-                    self.stack.trace_formatted(),
-                );
+            ir::Type::Variant(_) => {
+                let DynValue::Variant(variant_val) = val else {
+                    let msg = format!("value with type {} is not a variant", ty.to_pretty_string(self.metadata()));
+                    return Err(ExecError::illegal_state(msg));
+                };
+
+                let (def, _) = self.heap.marshaller.add_variant_type(ty)?;
+                let case_index = variant_val.tag
+                    .try_cast(&ir::Type::USize, &self.heap.marshaller)
+                    .and_then(|index_val| index_val.as_usize())
+                    .ok_or_else(|| {
+                        let msg = format!("tag value of variant {} cannot be converted to an index", ty.to_pretty_string(self.metadata()));
+                        ExecError::illegal_state(msg)
+                    })?;
+
+                let active_case = def.cases
+                    .get(case_index)
+                    .ok_or_else(|| {
+                        let msg = format!("invalid tag index {} for variant {}", case_index, ty.to_pretty_string(self.metadata()));
+                        ExecError::illegal_state(msg)
+                    })?;
+
+                if let Some(value_type) = &active_case.ty {
+                    self.visit_deep(&variant_val.data, value_type, f)?;
+                }
             }
 
-            // if we just removed the last strong reference, destroy the object, making it a zombie
-            // until the last weak ref is removed, if there are any
-            if header.strong_count == 1 {
-                if self.opts.trace_rc {
-                    eprintln!(
-                        "[rc] destroy @ {} <{}> ({}+{} refs will remain)",
-                        ptr.to_pretty_string(self.metadata()),
-                        object_type.to_pretty_string(self.metadata()),
-                        header.strong_count - 1,
+            ir::Type::Array { element, dim } => {
+                let DynValue::Array(array_val) = val else {
+                    let msg = format!("value with type {} is not an array", ty.to_pretty_string(self.metadata()));
+                    return Err(ExecError::illegal_state(msg));
+                };
+
+                for i in 0..*dim {
+                    let element_val = array_val.elements
+                        .get(i)
+                        .ok_or_else(|| {
+                            let msg = format!("invalid element index {} for array {}", i, ty.to_pretty_string(self.metadata()));
+                            ExecError::illegal_state(msg)
+                        })?;
+
+                    self.visit_deep(element_val, element, f)?;
+                }
+            }
+
+            _ => {
+                // doesn't have fields
+            }
+        }
+
+        f(self, ty, val)
+    }
+
+    fn release_dyn_val(&mut self, val: &DynValue, value_type: &ir::Type) -> ExecResult<bool> {
+        let mut released = false;
+
+        self.visit_deep(val, value_type, &mut |vm, val_type, val| {
+            let weak = match val_type {
+                ir::Type::Object(..) => false,
+                ir::Type::WeakObject(..) => true,
+                _ => return Ok(()), // not an object
+            };
+
+            let ptr = val.as_pointer().ok_or_else(|| {
+                let msg = format!("released val was not a pointer, found: {:?}", val);
+                ExecError::illegal_state(msg)
+            })?;
+
+            // NULL is a valid release target because we release uninitialized local RC pointers
+            // just do nothing
+            if ptr.is_null() {
+                return Ok(());
+            }
+
+            let mut header = vm.heap.load_object_header(ptr)?;
+
+            // release calls are totally ignored for immortal refs
+            if header.strong_count < 0 {
+                return Ok(());
+            }
+
+            let object_type = header.id.to_type(vm.marshaller())?;
+
+            if weak {
+                if header.weak_count == 0 {
+                    panic!(
+                        "releasing with 0 weak refs remaining @ {} <{}> (+{} weak refs remain)\n{}",
+                        ptr.to_pretty_string(vm.metadata()),
+                        object_type.to_pretty_string(vm.metadata()),
                         header.weak_count,
+                        vm.stack.trace_formatted(),
                     );
                 }
 
-                self.invoke_dtor(&val, &object_type)?;
+                header.weak_count -= 1;
+            } else {
+                if header.strong_count == 0 {
+                    panic!(
+                        "releasing with 0 strong refs remaining @ {} <{}> (+{} strong refs remain)\n{}",
+                        ptr.to_pretty_string(vm.metadata()),
+                        object_type.to_pretty_string(vm.metadata()),
+                        header.strong_count,
+                        vm.stack.trace_formatted(),
+                    );
+                }
+
+                // if we just removed the last strong reference, destroy the object, making it a zombie
+                // until the last weak ref is removed, if there are any
+                if header.strong_count == 1 {
+                    if vm.opts.trace_rc {
+                        eprintln!(
+                            "[rc] destroy @ {} <{}> ({}+{} refs will remain)",
+                            ptr.to_pretty_string(vm.metadata()),
+                            object_type.to_pretty_string(vm.metadata()),
+                            header.strong_count - 1,
+                            header.weak_count,
+                        );
+                    }
+
+                    vm.invoke_dtor(&val, &object_type)?;
+                }
+
+                header.strong_count -= 1;
             }
 
-            header.strong_count -= 1;
-        }
-
-        if self.opts.trace_rc {
-            eprintln!(
-                "[rc] release @ {} <{}> ({}+{} refs remain)",
-                ptr.to_pretty_string(self.metadata()),
-                object_type.to_pretty_string(self.metadata()),
-                header.strong_count,
-                header.weak_count,
-            )
-        }
-
-        if header.strong_count == 0 && header.weak_count == 0 {
-            // no more refs, free the object
-            if self.opts.trace_rc {
+            if vm.opts.trace_rc {
                 eprintln!(
-                    "[rc] free @ {} <{}>",
-                    ptr.to_pretty_string(self.metadata()),
-                    object_type.to_pretty_string(self.metadata())
+                    "[rc] release @ {} <{}> ({}+{} refs remain)",
+                    ptr.to_pretty_string(vm.metadata()),
+                    object_type.to_pretty_string(vm.metadata()),
+                    header.strong_count,
+                    header.weak_count,
                 )
             }
 
-            self.dynfree(ptr)?;
+            if header.strong_count == 0 && header.weak_count == 0 {
+                // no more refs, free the object
+                if vm.opts.trace_rc {
+                    eprintln!(
+                        "[rc] free @ {} <{}>",
+                        ptr.to_pretty_string(vm.metadata()),
+                        object_type.to_pretty_string(vm.metadata())
+                    )
+                }
 
-            return Ok(true);
-        }
+                vm.dynfree(ptr)?;
 
-        self.heap.store_object_header(&header, &ptr)?;
+                released |= true;
+                return Ok(());
+            }
 
-        Ok(false)
+            vm.heap.store_object_header(&header, &ptr)?;
+
+            Ok(())
+        })?;
+
+        Ok(released)
     }
 
-    fn retain_dyn_val(&mut self, val: &DynValue, weak: bool) -> ExecResult<()> {
-        let ptr = val
-            .as_pointer()
-            .ok_or_else(|| ExecError::illegal_state(format!("{} cannot be retained", val.value_type_category())))?;
+    fn retain_dyn_val(&mut self, val: &DynValue, value_type: &ir::Type) -> ExecResult<()> {
+        self.visit_deep(val, value_type, &mut |vm, val_type, val| {
+            let weak = match val_type {
+                ir::Type::Object(..) => false,
+                ir::Type::WeakObject(..) => true,
+                _ => return Ok(()), // not an object
+            };
 
-        // retain on null is valid and does nothing
-        // it should never normally happen in user code, but with unsafe casting it's
-        // possible to create a null RC pointer
-        if ptr.is_null() {
-            return Ok(());
-        }
+            let ptr = val
+                .as_pointer()
+                .ok_or_else(|| ExecError::illegal_state(format!("{} cannot be retained", val.value_type_category())))?;
 
-        let mut header = self.heap.load_object_header(ptr)?;
+            // retain on null is valid and does nothing
+            // it should never normally happen in user code, but with unsafe casting it's
+            // possible to create a null RC pointer
+            if ptr.is_null() {
+                return Ok(());
+            }
 
-        let object_type = header.id.to_type(self.marshaller())?;
+            let mut header = vm.heap.load_object_header(ptr)?;
 
-        // don't retain immortal refs
-        if header.strong_count < 0 {
-            return Ok(());
-        }
+            let object_type = header.id.to_type(vm.marshaller())?;
 
-        if weak {
-            header.weak_count += 1;
-        } else {
-            if header.strong_count == 0 {
-                panic!(
-                    "resurrecting with 0 strong refs @ {} <{}> (+{} weak refs remain)\n{}",
-                    ptr.to_pretty_string(self.metadata()),
-                    object_type.to_pretty_string(self.metadata()),
+            // don't retain immortal refs
+            if header.strong_count < 0 {
+                return Ok(());
+            }
+
+            if weak {
+                header.weak_count += 1;
+            } else {
+                if header.strong_count == 0 {
+                    panic!(
+                        "resurrecting with 0 strong refs @ {} <{}> (+{} weak refs remain)\n{}",
+                        ptr.to_pretty_string(vm.metadata()),
+                        object_type.to_pretty_string(vm.metadata()),
+                        header.strong_count,
+                        vm.stack.trace_formatted(),
+                    );
+                }
+
+                header.strong_count += 1;
+            }
+
+            if vm.opts.trace_rc {
+                eprintln!(
+                    "[rc] retain @ {} <{}> ({}+{} refs)",
+                    ptr.to_pretty_string(vm.metadata()),
+                    object_type.to_pretty_string(vm.metadata()),
                     header.strong_count,
-                    self.stack.trace_formatted(),
+                    header.weak_count
                 );
             }
 
-            header.strong_count += 1;
-        }
+            vm.heap.store_object_header(&header, ptr)?;
 
-        if self.opts.trace_rc {
-            eprintln!(
-                "[rc] retain @ {} <{}> ({}+{} refs)",
-                ptr.to_pretty_string(self.metadata()),
-                object_type.to_pretty_string(self.metadata()),
-                header.strong_count,
-                header.weak_count
-            );
-        }
-
-        self.heap.store_object_header(&header, ptr)?;
-
-        Ok(())
+            Ok(())
+        })
     }
 
     fn addr_of_ref(&mut self, target: &ir::Ref) -> ExecResult<Pointer> {
@@ -1082,8 +1175,8 @@ impl Vm {
             ir::Instruction::Jump { dest } => self.exec_jump(pc, *dest, labels)?,
             ir::Instruction::JumpIf { dest, test } => self.exec_jmpif(pc, &labels, *dest, test)?,
 
-            ir::Instruction::Release { at, weak, released_out } => self.exec_release(at, *weak, released_out)?,
-            ir::Instruction::Retain { at, weak } => self.exec_retain(at, *weak)?,
+            ir::Instruction::Release { at, value_type, released_out } => self.exec_release(at, value_type, released_out)?,
+            ir::Instruction::Retain { at, value_type } => self.exec_retain(at, value_type)?,
 
             ir::Instruction::Raise { val } => self.exec_raise(&val)?,
 
@@ -1238,18 +1331,18 @@ impl Vm {
         Ok(ptr)
     }
 
-    fn exec_retain(&mut self, at: &ir::Ref, weak: bool) -> ExecResult<()> {
+    fn exec_retain(&mut self, at: &ir::Ref, value_type: &ir::Type) -> ExecResult<()> {
         let val = self.load(at)?;
-        self.retain_dyn_val(&val, weak)?;
+        self.retain_dyn_val(&val, value_type)?;
 
         Ok(())
     }
 
-    fn exec_release(&mut self, at: &ir::Ref, weak: bool, released_out: &ir::Ref) -> ExecResult<()> {
+    fn exec_release(&mut self, at: &ir::Ref, value_type: &ir::Type, released_out: &ir::Ref) -> ExecResult<()> {
         let val = self.load(at)?;
 
         // to aid with debugging, set freed RC pointers to a recognizable value
-        let released = self.release_dyn_val(&val, weak)?;
+        let released = self.release_dyn_val(&val, value_type)?;
 
         if released {
             self.store(at, DynValue::Pointer(Pointer {
@@ -1311,8 +1404,9 @@ impl Vm {
 
         // we don't need to actually look this up, the variant data always appears right
         // after the fixed-size tag
-        let type_index = self.marshaller().get_type_index(instance_type)?;
-        let data_offset = self.marshaller().variant_data_offset(type_index)?;
+        self.heap.marshaller.create_native_type(instance_type)?;
+        let type_index = self.heap.marshaller.get_type_index(&instance_type)?;
+        let data_offset = self.heap.marshaller.variant_data_offset(type_index)?;
 
         Ok(Pointer {
             addr: a_ptr.addr + data_offset,
@@ -1849,8 +1943,46 @@ impl Vm {
         self_arg: &ir::Value,
         rest_args: &[ir::Value],
     ) -> ExecResult<()> {
-        let self_val = self.evaluate(&self_arg)?;
-        let func = self.vcall_lookup(&self_val, iface_id, method)?;
+        let self_type = self_arg
+            .find_type(self.stack.current_frame()?, self.metadata())
+            .ok_or_else(|| {
+                ExecError::illegal_state("exec_virtual_call: unable to determine type of self argument")
+            })?;
+
+        // if the self-arg is not an object, we are not actually doing a virtual call
+        let (self_val, func) = if self_type.is_object() {
+            let self_val = self.evaluate(&self_arg)?;
+            let func = self.virtual_call_lookup(&self_val, iface_id, method)?;
+
+            (self_val, func)
+        } else {
+            // expect a temp ref
+            let value_type = self_type
+                .deref_ty()
+                .ok_or_else(|| {
+                    ExecError::illegal_state("virtual call self argument must be a reference")
+                })?
+                .clone();
+
+            let self_ptr = self.evaluate(self_arg)?;
+
+            // the self-arg is always a pointer because it's passed as a temp ref for value types
+            if self_ptr.as_pointer().is_none() {
+                return Err(ExecError::illegal_state("virtual call self argument value must be a pointer"))
+            }
+
+            let func = self.metadata()
+                .find_virtual_impl(&value_type, iface_id, method)
+                .ok_or_else(|| {
+                    ExecError::illegal_state(format!(
+                        "missing implementation of {} for {}",
+                        self.metadata().iface_name(iface_id),
+                        value_type.to_pretty_string(self.metadata())
+                    ))
+                })?;
+
+            (self_ptr, func)
+        };
 
         let mut arg_vals = vec![self_val];
         for arg_val in rest_args {
@@ -2159,7 +2291,7 @@ impl Vm {
             let invoker = func_info.and_then(|f| f.invoker);
 
             let identity = func_info.map(|info| info.identity.clone())
-                .unwrap_or_else(|| FunctionIdentity::internal(func_id.to_string()));
+                .unwrap_or_else(|| ir::FunctionIdentity::internal(func_id.to_string()));
 
             self.globals.insert(
                 ir::GlobalRef::Function(*func_id),
@@ -2724,18 +2856,10 @@ impl Vm {
                 continue;
             };
 
-            let ref_weak = match ty {
-                ir::Type::Object(..) => Some(false),
-                ir::Type::WeakObject(..) => Some(false),
-                _ => None,
-            };
-
             let dyn_val = self.marshaller().unmarshal(&value, &ty)?;
 
-            if let Some(weak) = ref_weak {
-                if self.release_dyn_val(&dyn_val.value, weak)? {
-                    globals.remove(i);
-                }
+            if self.release_dyn_val(&dyn_val.value, ty)? {
+                globals.remove(i);
             }
         }
 

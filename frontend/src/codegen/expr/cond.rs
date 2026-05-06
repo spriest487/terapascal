@@ -159,7 +159,7 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut IRBu
                     let branch_val = expr::expr_to_val(&branch.item, builder);
 
                     builder.mov(out_ref.clone(), branch_val);
-                    builder.retain_deep(out_ref.clone(), &out_ty);
+                    builder.retain(out_ref.clone(), out_ty.clone());
                 });
 
                 // only one branch must run so break out of the block now
@@ -176,7 +176,7 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut IRBu
 
                 let else_val = expr::expr_to_val(&else_branch.item, builder);
                 builder.mov(out_ref.clone(), else_val);
-                builder.retain_deep(out_ref.clone(), &out_ty);
+                builder.retain(out_ref.clone(), out_ty.clone());
             });
 
             builder.jmp(break_label);

@@ -107,7 +107,7 @@ fn build_binding(binding: &typ::ast::LocalBinding, builder: &mut IRBuilder) {
             let val = expr_to_val(init_expr, builder);
 
             builder.mov(binding_ref, val);
-            builder.retain_deep(binding_ref, &bound_ty);
+            builder.retain(binding_ref, bound_ty);
         });
     };
 }
@@ -431,7 +431,7 @@ fn build_array_sequence_loop<ElementFn>(
                 let first_iter = builder.eq_to_val(counter_ref.clone(), ir::Value::LiteralI32(0));
                 builder.jmpif(skip_release_label, first_iter);
 
-                builder.release_deep(binding_ref.clone(), &binding_ty);
+                builder.release(binding_ref.clone(), binding_ty.clone(), ir::Ref::Discard);
             });
             
             builder.label(skip_release_label);
@@ -439,7 +439,7 @@ fn build_array_sequence_loop<ElementFn>(
             builder.scope(|builder| {
                 let element = element_fn(builder);
                 builder.cast(binding_ref.clone(), element, binding_ty.clone());
-                builder.retain_deep(binding_ref, &binding_ty);
+                builder.retain(binding_ref, binding_ty.clone());
 
                 translate_stmt(body, builder);
             });
@@ -493,7 +493,7 @@ pub fn translate_assignment(assignment: &typ::ast::Assignment, builder: &mut IRB
 
     // the new value is being stored in a new location, retain it
     let rhs_ty = builder.translate_type(&assignment.rhs.annotation().ty());
-    builder.retain_deep(rhs.clone(), &rhs_ty);
+    builder.retain(rhs.clone(), rhs_ty);
 
     // the old value is being replaced, release it. local variables can be uninitialized,
     // or ambiguously initialized (initialized in one branch and not another), so we can't check
@@ -504,7 +504,7 @@ pub fn translate_assignment(assignment: &typ::ast::Assignment, builder: &mut IRB
     //
     // the alternative would be to store an initialization flag alongside each rc variable
     let lhs_ty = builder.translate_type(&assignment.lhs.annotation().ty());
-    builder.release_deep(lhs.clone(), &lhs_ty);
+    builder.release(lhs.clone(), lhs_ty, ir::Ref::Discard);
 
     builder.mov(lhs, rhs)
 }
@@ -537,8 +537,8 @@ pub fn translate_compound_assignment(
         };
 
         // the new value is being stored in a new location, release the old value and retain it
-        builder.retain_deep(op_result.clone(), &lhs_ty);
-        builder.release_deep(lhs.clone(), &lhs_ty);
+        builder.retain(op_result.clone(), lhs_ty.clone());
+        builder.release(lhs.clone(), lhs_ty, ir::Ref::Discard);
 
         builder.mov(lhs, op_result);
     });

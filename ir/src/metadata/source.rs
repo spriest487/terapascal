@@ -187,7 +187,7 @@ pub trait MetadataSource : Sized {
 
             Type::Array { element, dim } => {
                 let elem_name = self.pretty_type_name(element);
-                Cow::Owned(format!("array [{}] of {}", dim, elem_name))
+                Cow::Owned(format!("array[{}] of {}", dim, elem_name))
             },
 
             Type::WeakObject(class_id) => {

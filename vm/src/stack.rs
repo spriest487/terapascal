@@ -3,7 +3,6 @@ mod trace;
 pub use self::trace::*;
 use crate::ir;
 use crate::marshal::MarshalError;
-use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::DynValue;
 use crate::Pointer;
@@ -137,7 +136,7 @@ impl StackFrame {
         ty: ir::Type,
         value: &DynValue,
         marshaller: &mut Marshaller,
-    ) -> MarshalResult<()> {
+    ) -> StackResult<()> {
         assert!(self.result.is_none(), "result storage must not be allocated twice");
         
         let stack_offset = self.stack_alloc(&ty, value, marshaller)?;
@@ -156,7 +155,7 @@ impl StackFrame {
         ty: ir::Type,
         value: &DynValue,
         marshaller: &mut Marshaller,
-    ) -> MarshalResult<ir::ArgID> {
+    ) -> StackResult<ir::ArgID> {
         let stack_offset = self.stack_alloc(&ty, value, marshaller)?;
 
         self.args.push(StackAlloc {
@@ -229,7 +228,11 @@ impl StackFrame {
         }
     }
 
-    fn stack_alloc(&mut self, ty: &ir::Type, value: &DynValue, marshaller: &mut Marshaller) -> MarshalResult<usize> {
+    fn stack_alloc(&mut self,
+        ty: &ir::Type,
+        value: &DynValue,
+        marshaller: &mut Marshaller,
+    ) -> StackResult<usize> {
         let start_offset = self.stack_offset;
         let alloc_slice = &mut self.stack_mem[start_offset..];
         let size = marshaller.marshal(value, alloc_slice)?;
@@ -239,7 +242,13 @@ impl StackFrame {
         if cfg!(debug_assertions) {
             let marshalled_size = self.stack_offset - start_offset;
             let ty_size = marshaller.create_native_type(ty)?.size();
-            assert_eq!(marshalled_size, ty_size, "stack space allocated ({}) did not match expected size {} for type {}", marshalled_size, ty_size, ty);
+
+            assert_eq!(
+                marshalled_size,
+                ty_size,
+                "allocation of size {marshalled_size} did not match expected size {ty_size} for type {}",
+                ty.to_pretty_string(marshaller.metadata())
+            );
         }
 
         Ok(start_offset)
@@ -293,6 +302,20 @@ impl StackFrame {
 
     pub fn set_debug_source(&mut self, source: Option<Span>) {
         self.current_debug_source = source;
+    }
+}
+
+impl ir::FunctionBodyContext for StackFrame {
+    fn get_result_type(&self) -> Option<&ir::Type> {
+        self.result.as_ref().map(|result| &result.ty)
+    }
+
+    fn get_arg_type(&self, id: ir::ArgID) -> Option<&ir::Type> {
+        self.args.get(id.0).map(|arg| &arg.ty)
+    }
+
+    fn get_local_type(&self, id: ir::LocalID) -> Option<&ir::Type> {
+        self.locals.get(id.0).map(|local| &local.ty)
     }
 }
 

@@ -24,7 +24,7 @@ pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
     builder.counter_loop(counter, Value::LiteralI32(1), arr_high, |builder| {
         let element_ref = self_param.to_ref().element_ref(array_type.clone(), counter);
 
-        builder.release_deep(element_ref.to_deref(), &elem_ty);
+        builder.release(element_ref.to_deref(), elem_ty.clone(), Ref::Discard);
     });
 }
 
@@ -54,7 +54,7 @@ pub(super) fn new_array_from(
                 // retain each element. we don't do this for static arrays because retaining
                 // a static array retains all its elements - for dynamic arrays, retaining
                 // the array object itself does not retain the elements
-                builder.retain_deep(element_ref.to_deref(), &element_type);
+                builder.retain(element_ref.to_deref(), element_type.clone());
             }
         }
     }

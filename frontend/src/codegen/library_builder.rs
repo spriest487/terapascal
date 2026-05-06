@@ -1,6 +1,5 @@
 mod init;
 mod function;
-mod rc_methods;
 
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
@@ -36,7 +35,6 @@ use init::gen_tags_init;
 use ir::InstructionBuilder as _;
 use ir::MetadataSource as _;
 use linked_hash_map::LinkedHashMap;
-pub use rc_methods::RcMethodInfo;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
@@ -75,9 +73,6 @@ pub struct LibraryBuilder<'a> {
     // looked up on first use
     free_mem_func: Option<ir::FunctionID>,
     get_mem_func: Option<ir::FunctionID>,
-    
-    // generated funcs for retain/release operations
-    rc_methods: HashMap<ir::Type, RcMethodInfo>,
     
     // user-defined destructors by class ID
     dtors: BTreeMap<ir::TypeDefID, ir::FunctionID>,
@@ -161,8 +156,6 @@ impl<'a> LibraryBuilder<'a> {
             variables_by_name: HashMap::new(),
             
             static_closures: BTreeMap::new(),
-            
-            rc_methods: HashMap::new(),
             
             dtors: BTreeMap::new(),
             
@@ -1263,17 +1256,6 @@ impl<'a> LibraryBuilder<'a> {
     pub fn find_global_var(&self, name_path: &IdentPath) -> Option<ir::VariableID> {
         self.variables_by_name.get(name_path).cloned()
     }
-    
-    pub fn get_rc_method_info(&mut self, ty: &ir::Type) -> RcMethodInfo {
-        if let Some(method_info) = self.rc_methods.get(ty) {
-            return *method_info;
-        }
-
-        let method_info = RcMethodInfo::gen_for_type(self, ty);
-        self.rc_methods.insert(ty.clone(), method_info);
-        
-        method_info
-    }
 
     // get or generate runtime type for a given type, which contains the function IDs etc
     // used for RC operations at runtime. the rest of the RTTI info will be filled in later 
@@ -1646,17 +1628,17 @@ impl<'a> LibraryBuilder<'a> {
     }
 }
 
+// TODO: dynarray dtors should be handled by the backend
 fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
     let ir::Type::Object(ir::ObjectID::Array(element_type)) = &array_type else {
         panic!("dyn array type did not translate to a dyn array reference");
     };
     
-    // the destructor can be skipped entirely if the element isn't an RC object itself and
-    // doesn't have a release function for its own elements
-    let element_release = lib.get_rc_method_info(&element_type).release_elements;
-    if element_release.is_none() && !element_type.is_object() {
+    // the destructor can be skipped entirely if the element never contains RC elements
+    if !element_type.contains_any_object_refs(&lib.metadata) {
         return;
     }
+
     let dtor_sig = ir::FunctionSig {
         param_types: vec![array_type.clone()],
         result_type: ir::Type::Nothing,

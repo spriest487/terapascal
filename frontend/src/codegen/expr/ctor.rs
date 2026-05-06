@@ -62,7 +62,7 @@ pub fn build_object_ctor_invocation(
             let field_ref = out_val.clone().field_ref(object_ty.clone(), field_id);
 
             builder.mov(field_ref.to_deref(), member_val);
-            builder.retain_deep(field_ref.to_deref(), &field_def.ty);
+            builder.retain(field_ref.to_deref(), field_def.ty.clone());
         }
     });
 
@@ -121,7 +121,7 @@ fn translate_static_array_ctor(
                     let el_init = translate_expr(&el.value, builder);
 
                     builder.mov(element_ref.to_deref(), el_init);
-                    builder.retain_deep(element_ref.to_deref(), &el_ty);
+                    builder.retain(element_ref.to_deref(), el_ty.clone());
                 });
             }
         });

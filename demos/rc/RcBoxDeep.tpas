@@ -10,7 +10,6 @@ type
         obj1: MyObject;
         obj2: MyArr;
     end;
-    
 
 begin
     var objBox: Object := [MyRecord(

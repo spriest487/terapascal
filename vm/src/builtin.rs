@@ -216,11 +216,11 @@ pub(super) fn array_create(state: &mut Vm) -> ExecResult<()> {
     let mut array_ptr = load_pointer(state, &array_ref_arg.to_deref())?;
     let array_header = state.marshaller()
         .unmarshal_dyn_array_header_at(&array_ptr)?;
-    
+
     if array_header.object_header.is_immortal() {
         return Err(ExecError::illegal_state("array_create: array is immortal and cannot be resized"));
     }
-    
+
     let ObjectID::Array(element_type) = &array_header.object_header.id else {
         return Err(ExecError::illegal_state("array_create: array pointer points to an invalid array object"));
     };
@@ -228,7 +228,7 @@ pub(super) fn array_create(state: &mut Vm) -> ExecResult<()> {
     let default_val = state.default_val(element_type)?;
     let elements = iter::repeat(default_val).take(new_len as usize).collect();
 
-    state.release_dyn_val(&DynValue::Pointer(array_ptr.clone()), false)?;
+    state.release_dyn_val(&DynValue::Pointer(array_ptr.clone()), &element_type.dyn_array())?;
 
     // keep the exact same RC state
     array_ptr = state.new_dyn_array_with_header(&element_type, elements, array_header.object_header.clone())?;

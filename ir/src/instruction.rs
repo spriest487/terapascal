@@ -118,12 +118,12 @@ pub enum Instruction {
 
     Release {
         at: Ref,
-        weak: bool,
+        value_type: Type,
         released_out: Ref,
     },
     Retain {
         at: Ref,
-        weak: bool,
+        value_type: Type,
     },
 
     Raise {

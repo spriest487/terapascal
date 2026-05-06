@@ -183,7 +183,7 @@ pub fn translate_if_cond_expr(
                 out: out_ref.clone(),
                 new_val: val.into(),
             });
-            builder.retain_deep(out_ref, &out_ty);
+            builder.retain(out_ref, out_ty.clone());
         }
     })
 }
@@ -333,7 +333,7 @@ pub fn translate_block(block: &typ::ast::Block, out_ref: ir::Ref, builder: &mut 
     if let Some(out) = &block.output {
         let result_val = translate_expr(out, builder);
         builder.mov(out_ref, result_val.clone());
-        builder.retain_deep(result_val, &out_ty);
+        builder.retain(result_val, out_ty);
     }
 
     builder.local_end();
@@ -350,7 +350,7 @@ pub fn translate_exit(exit: &typ::ast::Exit, builder: &mut IRBuilder) {
 
         // we are effectively reassigning the return ref, so like a normal assignment, we need
         // retain the new value to make it outlive the scope the exit expr appears in
-        builder.retain_deep(ir::RESULT_REF, &value_ty);
+        builder.retain(ir::RESULT_REF, value_ty);
     }
 
     builder.exit_function();

@@ -25,7 +25,7 @@ impl PatternMatchBinding {
 
         let local = builder.local_var(self.ty.clone(), Some(Arc::new(self.name.clone()))).to_ref();
         builder.mov(local.clone(), self.binding_ref.clone());
-        builder.retain_deep(local, &self.ty);
+        builder.retain(local, self.ty.clone());
     }
 }
 

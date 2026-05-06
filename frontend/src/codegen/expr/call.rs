@@ -25,7 +25,7 @@ fn translate_args(
         // turned into a pointer to the type, so we need to pass it by its address here
         let is_value_type_method_self_arg = arg_index == 0 
             && is_instance_method 
-            && !sig.params[0].ty.is_strong_object_ref();
+            && !sig.params[0].ty.is_object();
 
         let arg_expr = if is_value_type_method_self_arg || param.is_by_ref() {
             let arg_ty = builder.translate_type(&arg.annotation().ty());
@@ -80,7 +80,10 @@ fn translate_call_with_args(
 
     builder.local_begin();
     {
-        let is_instance_method = matches!(call_target, CallTarget::InstanceMethod(..));
+        let is_instance_method = matches!(
+            call_target,
+            CallTarget::InstanceMethod(..) | CallTarget::Virtual { .. }
+        );
 
         let type_args = translate_call_type_args(type_args, builder);
 
@@ -254,16 +257,22 @@ pub fn build_method_invocation(
     // methods are translated into IR functions which have a combined type parameter list
     // where the enclosing type params are followed by the method's own type params, so we
     // need to combine both lists here for an invocation
-    let method_call_type_args = match (enclosing_type_args, ty_args) {
-        (Some(enclosing_args), None) => {
+    let method_call_type_args = match (&call_target, enclosing_type_args, ty_args) {
+        (CallTarget::Virtual { .. }, _, invocation_args) => {
+            // virtual method calls are associated with a (maybe generic) type, so we don't need
+            // to duplicate that type's type args in the call args
+            invocation_args
+        }
+
+        (_, Some(enclosing_args), None) => {
             Some(enclosing_args)
         }
-        (Some(enclosing_args), Some(call_args)) => {
+        (_, Some(enclosing_args), Some(call_args)) => {
             let mut combined_args = enclosing_args.clone();
             combined_args.items.extend(call_args.items.into_iter());
             Some(combined_args)
         }
-        (None, call_args) => {
+        (_, None, call_args) => {
             call_args
         },
     };
@@ -297,7 +306,7 @@ fn build_variant_ctor_call(
             let data_ref = out.to_ref().vardata_ref(out_ty.clone(), case_index);
 
             builder.mov(data_ref.to_deref(), arg_val);
-            builder.retain_deep(data_ref.to_deref(), &arg_ty);
+            builder.retain(data_ref.to_deref(), arg_ty);
         }
     }
     builder.local_end();

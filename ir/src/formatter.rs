@@ -270,7 +270,7 @@ pub trait IRFormatter {
                 Ok(())
             }
 
-            Instruction::Release { at, weak, released_out } => {
+            Instruction::Release { at, value_type, released_out } => {
                 write!(f, "{:>width$} ", "release", width = IX_WIDTH)?;
                 
                 if *released_out != Ref::Discard {
@@ -280,18 +280,18 @@ pub trait IRFormatter {
 
                 self.format_ref(at, f)?;
 
-                let ref_kind = if *weak { "weak" } else { "strong" };
+                let ref_kind = if value_type.is_weak() { "weak" } else { "strong" };
                 write!(f, " (-{})", ref_kind)?;
 
                 Ok(())
             }
 
-            Instruction::Retain { at, weak } => {
+            Instruction::Retain { at, value_type } => {
                 write!(f, "{:>width$} ", "retain", width = IX_WIDTH)?;
 
                 self.format_ref(at, f)?;
 
-                let ref_kind = if *weak { "weak" } else { "strong" };
+                let ref_kind = if value_type.is_weak() { "weak" } else { "strong" };
                 write!(f, " (+{})", ref_kind)?;
 
                 Ok(())

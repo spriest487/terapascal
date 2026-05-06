@@ -591,20 +591,22 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.stmts.push(Statement::Expr(assign_result))
             },
 
-            ir::Instruction::Retain { at, weak } => {
+            ir::Instruction::Retain { at, value_type } => {
+                // TODO deep release/retain
                 let retain = Expr::Function(FunctionName::Builtin(BuiltinName::RcRetain));
 
                 let rc_ptr = Expr::translate_ref(at, self).cast(Type::object_ptr());
-                let call_retain = retain.call([rc_ptr, Expr::LitBool(*weak)]);
+                let call_retain = retain.call([rc_ptr, Expr::LitBool(value_type.is_weak())]);
 
                 self.stmts.push(Statement::Expr(call_retain));
             },
 
-            ir::Instruction::Release { at, weak, released_out } => {
+            ir::Instruction::Release { at, value_type, released_out } => {
+                // TODO deep release/retain
                 let release = Expr::Function(FunctionName::Builtin(BuiltinName::RcRelease));
 
                 let rc_ptr = Expr::translate_ref(at, self).cast(Type::object_ptr());
-                let call_release = release.call([rc_ptr, Expr::LitBool(*weak)]);
+                let call_release = release.call([rc_ptr, Expr::LitBool(value_type.is_weak())]);
                 
                 if *released_out != ir::Ref::Discard {
                     let lhs = Expr::translate_ref(released_out, self);
