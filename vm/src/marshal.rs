@@ -57,12 +57,14 @@ pub struct StructFieldInfo {
 #[derive(Debug, Clone)]
 struct StructLayout {
     def: Rc<ir::StructDef>,
+    size: usize,
     fields: BTreeMap<ir::FieldID, StructFieldInfo>,
 }
 
 #[derive(Debug, Clone)]
 struct VariantLayout {
     def: Rc<ir::VariantDef>,
+    size: usize,
     data_offset: usize,
     cases: Vec<Option<VariantCaseDataInfo>>,
 }
@@ -200,6 +202,8 @@ impl Marshaller {
 
         let type_index = self.next_type_index;
         self.next_type_index.0 += 1;
+
+        // eprintln!("size of {} ({}) is {}", ty.to_pretty_string(self.metadata()), ty, native_type.size());
 
         self.type_indices.insert(type_index, ty.clone());
         self.types.insert(type_index, native_type);
@@ -1133,6 +1137,8 @@ impl Marshaller {
             return Err(MarshalError::InvalidStructType(struct_type.clone()));
         };
 
+        let struct_size = layout.size;
+
         let mut field_types: SmallVec<[_; 4]> = SmallVec::new();
         for (field_id, field_info) in &layout.fields {
             field_types.push((field_id.0, field_info.native_type.clone()));
@@ -1151,7 +1157,15 @@ impl Marshaller {
             };
         }
 
-        Ok(offset)
+        assert!(
+            offset <= struct_size,
+            "marshalled size {} <= type size {} for struct {}",
+            offset,
+            struct_size,
+            self.get_type(struct_val.type_index)?,
+        );
+
+        Ok(struct_size)
     }
 
     fn unmarshal_struct(&self, type_index: TypeIndex, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<StructValue>> {
@@ -1175,8 +1189,16 @@ impl Marshaller {
             fields[id.0] = field_val.value;
         }
 
+        assert!(
+            offset <= layout.size,
+            "marshalled size {} <= type size {} for struct {}",
+            offset,
+            layout.size,
+            self.get_type(type_index)?,
+        );
+
         Ok(UnmarshalledValue {
-            byte_count: offset,
+            byte_count: layout.size,
             value: StructValue {
                 fields,
                 type_index,
@@ -1209,7 +1231,7 @@ impl Marshaller {
 
         // we still need to refer to the type size, because we always marshal/unmarshal
         // the entire size of the variant regardless of which case is active
-        let variant_size = self.get_native_type(variant_val.type_index)?.size();
+        let variant_size = layout.size;
 
         let tag_size = self.marshal(&variant_val.tag, out_bytes)?;
         if tag_size > data_offset {
@@ -1269,8 +1291,6 @@ impl Marshaller {
             return Err(self.invalid_variant_tag_err(tag_val.value, type_index));
         };
 
-        let variant_size = self.get_native_type(type_index)?.size();
-
         let case_data = layout.cases
             .get(case_index)
             .ok_or_else(|| self.invalid_variant_tag_err(tag_val.value.clone(), type_index))?
@@ -1289,10 +1309,10 @@ impl Marshaller {
             }
         };
 
-        assert!(tag_val.byte_count + data_val.byte_count <= variant_size);
+        assert!(tag_val.byte_count + data_val.byte_count <= layout.size);
 
         Ok(UnmarshalledValue {
-            byte_count: variant_size,
+            byte_count: layout.size,
             value: VariantValue {
                 type_index,
                 tag: Box::new(tag_val.value),

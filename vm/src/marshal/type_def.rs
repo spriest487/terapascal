@@ -74,6 +74,7 @@ impl Marshaller {
 
         self.struct_layouts.insert(type_index, StructLayout {
             fields: field_layout,
+            size: native_type.size(),
             def,
         });
 
@@ -125,13 +126,15 @@ impl Marshaller {
         // amount of space for all cases
         native_fields.extend(iter::repeat(NativeType::u8()).take(max_case_size + max_case_pad));
 
-        let variant_ffi_ty = NativeType::structure(native_fields);
+        let native_type = NativeType::structure(native_fields);
+        let size = native_type.size();
 
         self.add_dyn_array_type(variant_type.clone())?;
-        let type_index = self.register_type(variant_type.clone(), variant_ffi_ty.clone())?;
+        let type_index = self.register_type(variant_type.clone(), native_type)?;
 
         self.variant_layouts.insert(type_index, VariantLayout {
             def: def.clone(),
+            size,
             data_offset,
             cases,
         });
