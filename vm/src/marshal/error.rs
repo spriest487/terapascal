@@ -108,7 +108,7 @@ impl<T: fmt::Display> fmt::Display for MarshalError<T> {
                 write!(f, "Invalid data")
             },
             MarshalError::InvalidTypeIndex { type_index }  => {
-                write!(f, "Illegal object pointer (unknown type index: {})", type_index)
+                write!(f, "Invalid object pointer (unknown type index: {})", type_index)
             },
             MarshalError::InvalidStructType(ty)  => {
                 write!(f, "Type {} is not a struct", ty)
