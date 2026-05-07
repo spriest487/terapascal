@@ -23,8 +23,19 @@ use terapascal_ir::InstructionBuilder;
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut IRBuilder) {
     builder.push_source(stmt.annotation().span().clone());
-    builder.comment(stmt.to_string());
-    
+
+    if builder.is_debug() {
+        let src_text = stmt.to_string();
+        let mut lines = src_text.lines();
+
+        let mut comment = lines.next().unwrap_or_else(|| "").to_string();
+        if lines.next().is_some() {
+            comment.push_str("...")
+        }
+
+        builder.comment(comment);
+    }
+
     match stmt {
         ast::Stmt::Ident(..) | ast::Stmt::Member(..) => {
             let typ::Value::Invocation(invocation) = stmt.annotation() else {
@@ -410,7 +421,7 @@ fn build_for_loop_sequence(
     });
 }
 
-// the sequence support methods never have type params themselves, but if they are found on a 
+// the sequence support methods never have type params themselves, but if they are found on a
 // specialized generic type, we need to pass the type args used for that type in to the method call
 fn infer_type_args_from_target(ty: &typ::Type, builder: &mut IRBuilder) -> Vec<ir::Type> {
     match ty.type_args() {
