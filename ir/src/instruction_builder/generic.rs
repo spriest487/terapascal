@@ -182,7 +182,7 @@ pub fn instantiate_function_def(
 
             Instruction::VirtualCall { out, iface_id, method, self_arg, rest_args } => {
                 let out = out.as_ref().map(|r| remap_ref(r, &locals, &types));
-                let self_arg = remap_val(self_arg, &locals, &types);
+                let self_arg = remap_ref(self_arg, &locals, &types);
 
                 let rest_args = rest_args.iter()
                     .map(|v| remap_val(v, &locals, &types))

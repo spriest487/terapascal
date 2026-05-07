@@ -152,6 +152,13 @@ impl Type {
         matches!(self, Type::Object(..) | Type::WeakObject(..))
     }
 
+    pub fn is_abstract(&self) -> bool {
+        match self {
+            Type::Object(id) => id.is_abstract(),
+            _ => false,
+        }
+    }
+
     pub fn is_pointer(&self) -> bool {
         matches!(self, Type::Pointer(..))
     }

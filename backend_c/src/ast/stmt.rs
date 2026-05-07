@@ -625,7 +625,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             } => {
                 let method_func = Expr::Function(FunctionName::Method(*iface_id, *method));
 
-                let mut args = vec![Expr::translate_val(self_arg, self)];
+                let mut args = vec![Expr::translate_ref(self_arg, self)];
                 args.extend(
                     rest_args
                         .iter()

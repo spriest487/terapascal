@@ -507,7 +507,7 @@ impl Vm {
         }
     }
 
-    fn virtual_call_lookup(
+    fn virtual_call_dyn_lookup(
         &self,
         self_val: &DynValue,
         iface_id: ir::InterfaceID,
@@ -1940,7 +1940,7 @@ impl Vm {
         out: Option<&ir::Ref>,
         iface_id: ir::InterfaceID,
         method: ir::MethodID,
-        self_arg: &ir::Value,
+        self_arg: &ir::Ref,
         rest_args: &[ir::Value],
     ) -> ExecResult<()> {
         let self_type = self_arg
@@ -1950,36 +1950,30 @@ impl Vm {
             })?;
 
         // if the self-arg is not an object, we are not actually doing a virtual call
-        let (self_val, func) = if self_type.is_object() {
-            let self_val = self.evaluate(&self_arg)?;
-            let func = self.virtual_call_lookup(&self_val, iface_id, method)?;
+        let (self_val, func) = if self_type.is_abstract() {
+            let self_val = self.load(&self_arg)?;
+            let func = self.virtual_call_dyn_lookup(&self_val, iface_id, method)?;
 
             (self_val, func)
         } else {
-            // expect a temp ref
-            let value_type = self_type
-                .deref_ty()
-                .ok_or_else(|| {
-                    ExecError::illegal_state("virtual call self argument must be a reference")
-                })?
-                .clone();
-
-            let self_ptr = self.evaluate(self_arg)?;
-
-            // the self-arg is always a pointer because it's passed as a temp ref for value types
-            if self_ptr.as_pointer().is_none() {
-                return Err(ExecError::illegal_state("virtual call self argument value must be a pointer"))
-            }
-
             let func = self.metadata()
-                .find_virtual_impl(&value_type, iface_id, method)
+                .find_virtual_impl(&self_type, iface_id, method)
                 .ok_or_else(|| {
                     ExecError::illegal_state(format!(
                         "missing implementation of {} for {}",
                         self.metadata().iface_name(iface_id),
-                        value_type.to_pretty_string(self.metadata())
+                        self_type.to_pretty_string(self.metadata())
                     ))
                 })?;
+            
+            let self_ptr = if self_type.is_object() {
+                self.load(self_arg)?
+            } else {
+                // the method is a concrete instance method of a value type, which means it's expecting
+                // a reference as the first param
+                let self_ptr = self.addr_of_ref(self_arg)?;
+                DynValue::Pointer(self_ptr)
+            };
 
             (self_ptr, func)
         };

@@ -152,7 +152,7 @@ pub trait IRFormatter {
                 }
                 write!(f, "(")?;
 
-                self.format_val(self_arg, f)?;
+                self.format_ref(self_arg, f)?;
                 write!(f, " as ")?;
                 self.format_type(&Type::Object(ObjectID::Interface(*iface_id)), f)?;
 

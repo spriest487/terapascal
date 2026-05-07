@@ -175,6 +175,18 @@ impl ObjectID {
     pub fn to_weak_object_type(&self) -> Type {
         Type::WeakObject(self.clone())
     }
+
+    pub fn is_abstract(&self) -> bool {
+        match self {
+            ObjectID::Any
+            | ObjectID::AnyClosure(..)
+            | ObjectID::Interface(..) => true,
+
+            ObjectID::Class(..)
+            | ObjectID::Box(..)
+            | ObjectID::Array(..) => false,
+        }
+    }
 }
 
 impl fmt::Display for ObjectID {

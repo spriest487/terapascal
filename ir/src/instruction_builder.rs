@@ -672,7 +672,7 @@ pub trait InstructionBuilder {
         &mut self,
         iface_id: InterfaceID,
         method: MethodID,
-        self_arg: impl Into<Value>,
+        self_arg: impl Into<Ref>,
         rest_args: impl IntoIterator<Item = Value>,
         out: Option<Ref>,
     ) {

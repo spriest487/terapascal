@@ -2,27 +2,47 @@ program GenericVCall;
 
 type
     IConstraint = interface
+        function Inc;
         function Get: Integer;
     end;
 
     MyObject = class of IConstraint
         value: Integer;
+        function Inc;
         function Get: Integer;
     end;
 
     MyValue = record of IConstraint
         value: Integer;
+        function Inc;
         function Get: Integer;
     end;
+
+function MyObject.Inc;
+begin
+    self.value += 1
+end;
 
 function MyObject.Get: Integer;
 begin
     self.value
 end;
 
+function MyValue.Inc;
+begin
+    self.value += 1
+end;
+
 function MyValue.Get: Integer;
 begin
     self.value
+end;
+
+function IncValue[T](var target: T)
+where
+    T is IConstraint;
+begin
+    target.Inc
 end;
 
 function GetValue[T](target: T): Integer
@@ -35,6 +55,9 @@ end;
 begin
     var a := MyObject(value: 123);
     var b := MyValue(value: 456);
+
+    IncValue(a);
+    IncValue(b);
 
     WriteLn('a is: ' + GetValue(a));
     WriteLn('b is: ' + GetValue(b));

@@ -80,9 +80,11 @@ fn translate_call_with_args(
 
     builder.local_begin();
     {
+        // don't include virtual methods in this, the vcall instruction takes its first
+        // argument as a ref already
         let is_instance_method = matches!(
             call_target,
-            CallTarget::InstanceMethod(..) | CallTarget::Virtual { .. }
+            CallTarget::InstanceMethod(..)
         );
 
         let type_args = translate_call_type_args(type_args, builder);
@@ -107,7 +109,22 @@ fn translate_call_with_args(
                 iface_id,
                 iface_method_id,
             } => {
-                let self_arg = arg_vals[0].clone();
+                // for a virtual call, the self-arg is a ref. if the value provided is already a
+                // ref, use that, but if not (e.g. calling a method on a const or temp value),
+                // just store it in a temporary local var and use that
+                let self_arg = match &arg_vals[0] {
+                    ir::Value::Ref(self_ref) => self_ref.clone(),
+
+                    temp_val => {
+                        let self_type = builder.translate_type(args[0].annotation().ty().as_ref());
+                        let self_var = builder.local_temp(self_type);
+
+                        builder.mov(self_var, temp_val.clone());
+
+                        self_var.to_ref()
+                    }
+                };
+
                 let rest_args = arg_vals[1..].to_vec();
 
                 assert_eq!(0, type_args.len(), "not supported yet: generic virtual call");

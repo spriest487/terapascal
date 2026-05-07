@@ -79,7 +79,7 @@ pub enum Instruction {
         out: Option<Ref>,
         iface_id: InterfaceID,
         method: MethodID,
-        self_arg: Value,
+        self_arg: Ref,
         rest_args: Vec<Value>,
     },
     IsType {
@@ -283,7 +283,7 @@ impl Instruction {
                     Self::visit_ref(out_ref, f, arg);
                 }
 
-                Self::visit_val(self_arg, f, arg);
+                Self::visit_ref(self_arg, f, arg);
 
                 for call_arg in rest_args {
                     Self::visit_val(call_arg, f, arg);
