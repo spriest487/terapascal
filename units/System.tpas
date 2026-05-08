@@ -102,6 +102,7 @@ type
         tags: array of Object;
     public
         function Sequence: ArraySequence[Object];
+        function Length: Integer;
     end;
 
     TypeInfo = class;
@@ -385,22 +386,24 @@ begin
         Option.None;
 end;
 
-function FindTagInArray[TTag](allTags: array of Object; tagClass: TypeInfo): Option[TTag]; overload;
+function FindTagInArray[TTag](allTags: array of Object; findTagType: TypeInfo): Option[TTag]; overload;
 begin
     if allTags is not array of Object then
-    begin 
+    begin
         exit Option.None;
     end;
 
     for var tag in allTags do
     begin
-        if TypeInfo.Get(tag) = tagClass then
+        var tagType := TypeInfo.Get(tag);
+
+        if tagType = findTagType then
         begin
             var result := tag.Downcast[TTag]().Get;
             exit Option.Some(result);
         end;
     end;
-    
+
     Option.None
 end;
 
@@ -588,6 +591,11 @@ end;
 function TagCollection.Sequence: ArraySequence[Object];
 begin
     ArraySequence.Create(self.tags);
+end;
+
+function TagCollection.Length: Integer;
+begin
+    self.tags.Length;
 end;
 
 {$ENDIF}
