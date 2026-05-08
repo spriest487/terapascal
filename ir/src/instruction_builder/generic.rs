@@ -3,6 +3,7 @@ use crate::BinOpInstruction;
 use crate::FunctionDef;
 use crate::FunctionSig;
 use crate::GenericTypeID;
+use crate::GlobalRef;
 use crate::Instruction;
 use crate::InstructionBuilder;
 use crate::LocalID;
@@ -446,6 +447,10 @@ fn remap_ref(r: &Ref, locals: &LocalMap, types: &TypeMap) -> Ref {
             let instance = remap_ref(&tag_ref.instance, locals, types);
             instance.vartag_ref(instantiate_type(&tag_ref.instance_type, types))
         },
+        Ref::Global(GlobalRef::StaticTypeInfo(ty)) => {
+            let ty = instantiate_type(ty, types);
+            Ref::from(GlobalRef::StaticTypeInfo(Rc::new(ty)))
+        }
         _ => r.clone(),
     }
 }
