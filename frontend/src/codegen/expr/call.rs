@@ -5,6 +5,7 @@ use crate::codegen::typ;
 use crate::ir;
 use crate::typ::ast::apply_func_decl_ty_args;
 use crate::typ::GenericContext;
+use crate::typ::Type;
 use crate::typ::Invocation;
 use crate::typ::Value;
 use std::sync::Arc;
@@ -261,7 +262,12 @@ pub fn build_method_invocation(
             let self_type = method_decl_ty.clone();
             let func_instance = builder.translate_method(self_type, method_decl_index);
 
-            CallTarget::InstanceMethod(func_instance.id)
+            // static methods are translated to free functions
+            if self_ty == Type::Nothing {
+                CallTarget::Function(func_instance.id)
+            } else {
+                CallTarget::InstanceMethod(func_instance.id)
+            }
         },
     };
 
