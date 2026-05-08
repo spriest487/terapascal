@@ -42,6 +42,8 @@ impl Marshaller {
             0
         };
 
+        let mut max_member_align = 0;
+
         for (field_id, field_def) in def_fields {
             let (_, native_type) = self.build_marshalled_type(&field_def.ty)?;
 
@@ -49,8 +51,13 @@ impl Marshaller {
                 let member_align = self.align_of(&field_def.ty, def.layout)?;
                 let member_pad = Self::field_padding(offset + header_offset, member_align);
 
+                // remember the alignment of the first member so we can insert appropriate end
+                // padding for this type to be used in arrays
+                max_member_align = usize::max(max_member_align, member_align);
+
                 for _ in 0..member_pad {
                     native_fields.push(NativeType::u8());
+                    offset += 1;
                 }
             }
 
@@ -67,7 +74,10 @@ impl Marshaller {
             offset += size;
         }
 
-        self.add_dyn_array_type(struct_type.clone())?;
+        let end_pad = Self::field_padding(offset + header_offset, max_member_align);
+        for _ in 0..end_pad {
+            native_fields.push(NativeType::u8());
+        }
 
         let native_type = NativeType::structure(native_fields);
         let type_index = self.register_type(struct_type.clone(), native_type.clone())?;
@@ -77,6 +87,8 @@ impl Marshaller {
             size: native_type.size(),
             def,
         });
+
+        self.add_dyn_array_type(struct_type.clone())?;
 
         // eprintln!("add_struct: {}={} (size {})", type_index.0, struct_type.to_pretty_string(&self.metadata), native_type.size());
 
