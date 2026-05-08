@@ -280,8 +280,9 @@ pub trait IRFormatter {
 
                 self.format_ref(at, f)?;
 
-                let ref_kind = if value_type.is_weak() { "weak" } else { "strong" };
-                write!(f, " (-{})", ref_kind)?;
+                write!(f, " (-1 ")?;
+                self.format_type(value_type, f)?;
+                write!(f, ")")?;
 
                 Ok(())
             }
@@ -291,8 +292,9 @@ pub trait IRFormatter {
 
                 self.format_ref(at, f)?;
 
-                let ref_kind = if value_type.is_weak() { "weak" } else { "strong" };
-                write!(f, " (+{})", ref_kind)?;
+                write!(f, " (+1 ")?;
+                self.format_type(value_type, f)?;
+                write!(f, ")")?;
 
                 Ok(())
             }
