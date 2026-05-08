@@ -1129,8 +1129,6 @@ impl Marshaller {
     }
 
     fn marshal_struct(&mut self, struct_val: &StructValue, out_bytes: &mut [u8]) -> MarshalResult<usize> {
-        let mut offset = 0;
-        
         let Some(layout) = self.struct_layouts.get(&struct_val.type_index) else {
             // struct type is not in metadata
             let struct_type = self.get_type(struct_val.type_index)?;
@@ -1141,36 +1139,21 @@ impl Marshaller {
 
         let mut field_types: SmallVec<[_; 4]> = SmallVec::new();
         for (field_id, field_info) in &layout.fields {
-            field_types.push((field_id.0, field_info.native_type.clone()));
+            field_types.push((field_id.0, field_info.offset));
         }
 
-        for (field_index, native_type) in field_types {
-            match struct_val.fields.get(field_index) {
-                Some(field_val) => {
-                    offset += self.marshal(field_val, &mut out_bytes[offset..])?;
-                }
-                
-                // skip this field
-                None => {
-                    offset += native_type.size();
-                }
+        for (field_index, field_offset) in field_types {
+            // skip fields that aren't present in the value
+            if let Some(field_val) = struct_val.fields.get(field_index) {
+                let field_bytes = &mut out_bytes[field_offset..];
+                self.marshal(field_val, field_bytes)?;
             };
         }
-
-        assert!(
-            offset <= struct_size,
-            "marshalled size {} <= type size {} for struct {}",
-            offset,
-            struct_size,
-            self.get_type(struct_val.type_index)?,
-        );
 
         Ok(struct_size)
     }
 
     fn unmarshal_struct(&self, type_index: TypeIndex, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<StructValue>> {
-        let mut offset = 0;
-
         let layout = self.struct_layouts
             .get(&type_index)
             .ok_or_else(|| MarshalError::invalid_type_index(type_index))?;
@@ -1184,18 +1167,10 @@ impl Marshaller {
         let mut fields = vec![DynValue::I32(-1); fields_len];
 
         for (id, field_info) in &layout.fields {
-            let field_val = self.unmarshal(&in_bytes[offset..], &field_info.ty)?;
-            offset += field_val.byte_count;
+            let field_bytes = &in_bytes[field_info.offset..];
+            let field_val = self.unmarshal(field_bytes, &field_info.ty)?;
             fields[id.0] = field_val.value;
         }
-
-        assert!(
-            offset <= layout.size,
-            "marshalled size {} <= type size {} for struct {}",
-            offset,
-            layout.size,
-            self.get_type(type_index)?,
-        );
 
         Ok(UnmarshalledValue {
             byte_count: layout.size,
