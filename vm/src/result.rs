@@ -109,7 +109,7 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
 
     fn title(&self) -> String {
         match self {
-            ExecError::Raised { msg } => msg.clone(),
+            ExecError::Raised { msg } => format!("Runtime error raised: {msg}"),
             ExecError::MarshalError(..) => "Memory error".to_string(),
             ExecError::StackError(..) => "Stack error".to_string(),
             ExecError::ExternSymbolLoadFailed { .. } => "Symbol load failed".to_string(),
