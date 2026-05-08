@@ -239,16 +239,15 @@ impl StackFrame {
         
         self.stack_offset += size;
 
-        if cfg!(debug_assertions) {
-            let marshalled_size = self.stack_offset - start_offset;
-            let ty_size = marshaller.create_native_type(ty)?.size();
+        let marshalled_size = self.stack_offset - start_offset;
+        let ty_size = marshaller.create_native_type(ty)?.size();
 
-            assert_eq!(
-                marshalled_size,
-                ty_size,
-                "allocation of size {marshalled_size} did not match expected size {ty_size} for type {}",
-                ty.to_pretty_string(marshaller.metadata())
-            );
+        if marshalled_size != ty_size {
+            return Err(StackError::BadAllocValue {
+                value_type: ty.clone(),
+                actual_size: marshalled_size,
+                expected_size: ty_size,
+            });
         }
 
         Ok(start_offset)
@@ -336,6 +335,11 @@ pub enum StackError<Ty: fmt::Display = ir::Type> {
         dest_block: usize,
     },
     IllegalAlloc(ir::LocalID),
+    BadAllocValue {
+        value_type: ir::Type,
+        actual_size: usize,
+        expected_size: usize,
+    },
     MarshalError(MarshalError<Ty>),
     BadSentinel(usize),
 }
@@ -371,6 +375,9 @@ impl<Ty: fmt::Display> fmt::Display for StackError<Ty> {
                 }
 
                 write!(f, ")")
+            }
+            StackError::BadAllocValue { value_type, expected_size, actual_size } => {
+                write!(f, "bad value of type {value_type}: expected length {expected_size}, was {actual_size}")
             }
             StackError::IllegalJmp { current_block, dest_block } => {
                 write!(f, "illegal jump from block {} to block {}", current_block, dest_block)

@@ -109,7 +109,7 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
 
     fn title(&self) -> String {
         match self {
-            ExecError::Raised { .. } => "Runtime error raised".to_string(),
+            ExecError::Raised { msg } => msg.clone(),
             ExecError::MarshalError(..) => "Memory error".to_string(),
             ExecError::StackError(..) => "Stack error".to_string(),
             ExecError::ExternSymbolLoadFailed { .. } => "Symbol load failed".to_string(),
@@ -139,9 +139,8 @@ impl<Ty: fmt::Display> DiagnosticOutput for ExecError<Ty> {
 
     fn notes(&self) -> Vec<String> {
         match self {
-            ExecError::Raised { msg } => vec![
-                msg.clone()
-            ],
+            ExecError::Raised { .. } => Vec::new(),
+
             ExecError::ExternSymbolLoadFailed { lib, symbol, path, msg, cause, .. } => {
                 let mut notes = vec![
                     format!("Failed to load {lib}::{symbol} ({})", path.display()),
