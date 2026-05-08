@@ -5,9 +5,6 @@ use crate::codegen::typ;
 use crate::ir;
 use crate::typ::ast::apply_func_decl_ty_args;
 use crate::typ::GenericContext;
-use crate::typ::Type;
-use crate::typ::Invocation;
-use crate::typ::Value;
 use std::sync::Arc;
 use terapascal_ir::InstructionBuilder;
 
@@ -165,7 +162,7 @@ enum CallTarget {
 pub fn build_call(call: &typ::ast::Call, builder: &mut IRBuilder) -> Option<ir::Ref> {
     // eprintln!("build_call: {} @ {}", call, call.span());
 
-    let Value::Invocation(invocation) = &call.annotation else {
+    let typ::Value::Invocation(invocation) = &call.annotation else {
         panic!(
             "bad value for call expression `{}`: {}",
             call,
@@ -263,7 +260,7 @@ pub fn build_method_invocation(
             let func_instance = builder.translate_method(self_type, method_decl_index);
 
             // static methods are translated to free functions
-            if self_ty == Type::Nothing {
+            if self_ty == typ::Type::Nothing {
                 CallTarget::Function(func_instance.id)
             } else {
                 CallTarget::InstanceMethod(func_instance.id)
@@ -338,11 +335,11 @@ fn build_variant_ctor_call(
 }
 
 pub fn translate_invocation(
-    invocation: &Invocation,
+    invocation: &typ::Invocation,
     builder: &mut IRBuilder,
 ) -> Option<ir::Ref> {
     match invocation {
-        Invocation::Function {
+        typ::Invocation::Function {
             function,
             type_args,
             ..
@@ -373,7 +370,7 @@ pub fn translate_invocation(
             translate_call_with_args(call_target, &args, type_args.as_ref(), &invocation_sig, builder)
         },
 
-        Invocation::Method {
+        typ::Invocation::Method {
             self_ty, method, args, type_args, .. 
         } => {
             assert_eq!(
@@ -394,16 +391,16 @@ pub fn translate_invocation(
             )
         },
 
-        Invocation::VariantCtor { variant_type, case, arg, .. } => {
+        typ::Invocation::VariantCtor { variant_type, case, arg, .. } => {
             build_variant_ctor_call(variant_type, case.as_str(), arg.as_ref(), builder)
         },
 
-        Invocation::ObjectCtor { object_type, members, .. } => {
+        typ::Invocation::ObjectCtor { object_type, members, .. } => {
             let ctor_result = build_object_ctor_invocation(object_type, members.as_slice(), builder);
             Some(ctor_result)
         }
 
-        Invocation::FunctionValue { value, args, .. } => {
+        typ::Invocation::FunctionValue { value, args, .. } => {
             let value_ty = value.annotation().ty();
             build_func_val_invocation(value, value_ty.as_ref(), args, builder)
         }

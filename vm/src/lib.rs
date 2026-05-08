@@ -1947,7 +1947,8 @@ impl Vm {
             .find_type(self.stack.current_frame()?, self.metadata())
             .ok_or_else(|| {
                 ExecError::illegal_state("exec_virtual_call: unable to determine type of self argument")
-            })?;
+            })?
+            .into_owned();
 
         // if the self-arg is not an object, we are not actually doing a virtual call
         let (self_val, func) = if self_type.is_abstract() {
@@ -1993,7 +1994,16 @@ impl Vm {
             }
         };
 
-        self.call_and_store(func, &arg_vals, &[], out)?;
+        // method definitions type arg lists are prefixed with the enclosing type's type arg list
+        match self_type.def_id() {
+            Some(def_id) => {
+                self.call_and_store(func, &arg_vals, &def_id.args, out)?;
+            }
+
+            None => {
+                self.call_and_store(func, &arg_vals, &[], out)?;
+            }
+        }
 
         Ok(())
     }
