@@ -2302,7 +2302,6 @@ impl Vm {
                 GlobalValue::Function(*func_id),
             );
 
-
             self.functions.insert(FuncInstanceKey::new(*func_id), FunctionInfo {
                 identity,
                 func: Rc::new(func),

@@ -3,6 +3,7 @@ use crate::c::expr::Expr;
 use crate::c::expr::InfixOp;
 use crate::c::expr::PrefixOp;
 use crate::c::ty_def::FieldName;
+use crate::c::type_map::TypeID;
 use crate::c::BuiltinName;
 use crate::c::DynArrayTypeID;
 use crate::c::FunctionName;
@@ -22,7 +23,7 @@ pub enum GlobalName {
     DynArrayClassType,
     BoxClassType,
     
-    ClassInstance(ir::TypeDefID),
+    ClassInstance(TypeID),
     DynArrayClassInstance(DynArrayTypeID),
     BoxClassInstance(BoxTypeID),
 
@@ -54,7 +55,7 @@ impl fmt::Display for GlobalName {
             GlobalName::DynArrayClassType => write!(f, "DynArrayClass"),
             GlobalName::BoxClassType => write!(f, "BoxClass"),
             
-            GlobalName::ClassInstance(id) => write!(f, "Class_{}", id.0),
+            GlobalName::ClassInstance(id) => write!(f, "Class_{}", id),
             GlobalName::DynArrayClassInstance(id) => write!(f, "DynArrayClass_{}", id.0),
             GlobalName::BoxClassInstance(id) => write!(f, "BoxClass_{}", id.0),
 
@@ -330,7 +331,7 @@ impl fmt::Display for Statement {
 }
 
 pub struct Builder<'a, 'b> {
-    module: &'a mut Unit<'b>,
+    unit: &'a mut Unit<'b>,
     pub stmts: Vec<Statement>,
 
     variable_types: BTreeMap<ir::LocalID, ir::Type>,
@@ -340,7 +341,7 @@ pub struct Builder<'a, 'b> {
 impl<'a, 'b> Builder<'a, 'b> {
     pub fn new(module: &'a mut Unit<'b>) -> Self {
         Self {
-            module,
+            unit: module,
             stmts: Vec::new(),
 
             variable_types: BTreeMap::new(),
@@ -349,7 +350,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
     
     pub fn translate_type(&mut self, ir_ty: &ir::Type) -> Type {
-        Type::from_metadata(ir_ty, self.module)
+        self.unit.translate_type(ir_ty)
     }
 
     pub fn translate_instructions(&mut self, instruction_list: &ir::InstructionList) {
@@ -384,14 +385,14 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     fn translate_instruction(&mut self, instruction: &ir::Instruction) {
-        if self.module.opts.trace_ir {
+        if self.unit.opts.trace_ir {
             self.stmts.push(Statement::Comment(instruction.to_string()));
         }
 
         match instruction {
             ir::Instruction::LocalAlloc(id, ty) => {
                 let null_init = ty.is_object();
-                let c_type = Type::from_metadata(ty, self.module);
+                let c_type = self.translate_type(ty);
 
                 self.stmts.push(Statement::VariableDecl {
                     ty: c_type,
@@ -400,7 +401,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                 });
                 
                 if self.variable_types.insert(*id, ty.clone()).is_some() {
-                    panic!("redeclaration of variable {} ({})", *id, ty.to_pretty_string(self.module.metadata.as_formatter()));
+                    panic!("redeclaration of variable {} ({})", *id, ty.to_pretty_string(self.unit.metadata.as_formatter()));
                 }
             },
 
@@ -652,7 +653,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             },
 
             ir::Instruction::Cast { ty, out, a } => {
-                let ty = Type::from_metadata(ty, self.module);
+                let ty = self.translate_type(ty);
                 let expr = Expr::translate_val(a, self);
 
                 // TODO: just assume any valid pascal cast is a valid C cast for now...
@@ -702,7 +703,16 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.stmts.push(Statement::Expr(assign_result))
     }
 
-    fn translate_is_type(&mut self, out: &ir::Ref, a: &ir::Value, value_type: &ir::Type, is_type: &ir::Type) {
+    fn translate_is_type(
+        &mut self,
+        out: &ir::Ref,
+        a: &ir::Value,
+        value_type: &ir::Type,
+        is_type: &ir::Type,
+    ) {
+        self.unit.translate_type(is_type);
+        let is_type_index = self.unit.get_type_id(&is_type);
+
         let is_object_id = if value_type.is_object()
             && let ir::Type::Object(object_id) = is_type
         {
@@ -732,17 +742,14 @@ impl<'a, 'b> Builder<'a, 'b> {
             Statement::Expr(Expr::translate_assign(out, Expr::LitBool(false), self)),
         ], [{
             let is = match is_object_id {
-                ir::ObjectID::Class(id) => {
-                    if !id.args.is_empty() {
-                        todo!("C backend type args")
-                    }
-                    let is_class_ptr = Expr::class_ptr(id.def_id);
+                ir::ObjectID::Class(..) => {
+                    let is_class_ptr = Expr::class_ptr(is_type_index);
                     
                     Expr::infix_op(actual_class_ptr, InfixOp::Eq, is_class_ptr)
                 }
 
                 ir::ObjectID::Array(element) => {
-                    let array_id = self.module.get_dyn_array_type(element);
+                    let (_, array_id) = self.unit.get_dyn_array_type(element);
                     let array_class_ptr = Expr::dyn_array_class_ptr(array_id)
                         .cast(Type::Class.ptr());
                     
@@ -750,7 +757,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                 }
 
                 ir::ObjectID::Box(element) => {
-                    let box_id = self.module.get_box_type(element);
+                    let (_, box_id) = self.unit.get_box_type(element);
                     let box_class_ptr = box_id.class_ptr().cast(Type::Class.ptr());
 
                     Expr::infix_op(actual_class_ptr, InfixOp::Eq, box_class_ptr)
@@ -783,19 +790,19 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 
     pub fn get_dyn_array_type(&mut self, element_type: &ir::Type) -> DynArrayTypeID {
-        self.module.get_dyn_array_type(element_type)
+        self.unit.get_dyn_array_type(element_type).1
     }
 
     pub fn array_class_ptr(&mut self, arr_obj: &Expr, id: &ir::ObjectID) -> Expr {
-        Expr::array_class_ptr(arr_obj, id, self.module)
+        Expr::array_class_ptr(arr_obj, id, self.unit)
     }
 
     pub fn function_name(&self, id: ir::FunctionID) -> FunctionName {
-        self.module.function_name(id)
+        self.unit.function_name(id)
     }
 
     pub fn get_box_type(&mut self, element_type: &ir::Type) -> BoxTypeID {
-        self.module.get_box_type(element_type)
+        self.unit.get_box_type(element_type).1
     }
 
     #[allow(unused)]
@@ -806,7 +813,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             }
 
             ir::Ref::Global(ir::GlobalRef::Variable(var_id)) => {
-                let var = self.module.metadata.get_variable(*var_id)?;
+                let var = self.unit.metadata.get_variable(*var_id)?;
                 
                 Some(var.r#type.clone())
             }
@@ -816,7 +823,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             }
 
             ir::Ref::Global(ir::GlobalRef::Function(func_id)) => {
-                let func_ty = self.module.function_types.get(func_id)?;
+                let func_ty = self.unit.function_types.get(func_id)?;
                 Some(ir::Type::Function(*func_ty))
             }
 
@@ -864,15 +871,16 @@ impl<'a, 'b> Builder<'a, 'b> {
     fn translate_new_object(
         &mut self,
         out: &ir::Ref,
-        struct_id: ir::TypeDefID,
+        def_id: ir::TypeDefID,
         type_args: &[ir::Type],
         immortal: bool,
     ) {
-        if !type_args.is_empty() {
-            todo!("C backend type args")
-        }
+        let object_type = def_id.to_class_ptr_type(type_args.to_vec());
 
-        let ty_class_ptr = Expr::class_ptr(struct_id);
+        let object_c_type = self.translate_type(&object_type);
+        let type_index = self.unit.create_type_id(&object_type);
+
+        let ty_class_ptr = Expr::class_ptr(type_index);
         
         let new_function = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
 
@@ -881,9 +889,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             Expr::LitBool(immortal),
         ]);
 
-        let struct_type = Type::from_ir_struct(struct_id, type_args);
-
-        self.assign_ref(out, new_object.cast(struct_type.ptr()));
+        self.assign_ref(out, new_object.cast(object_c_type));
     }
 
     fn translate_new_array(
@@ -893,7 +899,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         count: &ir::Value,
         immortal: bool,
     ) {
-        let array_id = self.module.get_dyn_array_type(element_type);
+        let (_, array_id) = self.unit.get_dyn_array_type(element_type);
         let count_val = Expr::translate_val(count, self);
 
         let array_class_ptr = Expr::dyn_array_class(array_id).addr_of();
@@ -905,7 +911,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             count_val,
             Expr::LitBool(immortal),
         ]);
-        
+
         let array_ptr = object_ptr.cast(Type::dyn_array_ptr(array_id));
 
         self.assign_ref(out, array_ptr);
@@ -923,7 +929,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
     
     pub fn new_box(&mut self, out: Expr, value_type: &ir::Type, immortal: bool) {
-        let box_type_id = self.module.get_box_type(value_type);
+        let (_, box_type_id) = self.unit.get_box_type(value_type);
 
         let box_type = Type::DefinedType(TypeDefName::Box(box_type_id));
         let box_ptr_type = box_type.clone().ptr();
@@ -943,7 +949,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
     
     pub fn box_value(&mut self, value: Expr, value_type: &ir::Type) -> Expr {
-        let box_ptr_type = self.module.get_box_type(value_type).ptr_type();
+        let box_ptr_type = self.unit.get_box_type(value_type).1.ptr_type();
         let box_ptr = Expr::Variable(self.new_temp_var(box_ptr_type, false));
         
         let box_value_field = box_ptr.clone().arrow(FieldName::BoxValue);
@@ -960,7 +966,7 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
     
     pub fn unbox_value(&mut self, box_ptr: Expr, value_type: &ir::Type) -> Expr {
-        let arg_box_id = self.module.get_box_type(value_type);
+        let (_, arg_box_id) = self.unit.get_box_type(value_type);
         let arg_box = box_ptr.cast(arg_box_id.ptr_type());
 
         arg_box.arrow(FieldName::BoxValue)

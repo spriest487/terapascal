@@ -45,6 +45,7 @@ fn translate_c<'a>(lib: &'a ir::Library, args: &Args) -> backend_c::c::Unit<'a> 
         trace_heap: args.trace_heap,
         trace_rc: args.trace_rc,
         trace_ir: args.trace_ir,
+        trace_generics: args.trace_generics,
         debug: args.debug,
     };
 

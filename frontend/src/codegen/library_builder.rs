@@ -1333,7 +1333,9 @@ impl<'a> LibraryBuilder<'a> {
                     gen_class_runtime_type(self, &ty);
                 }
                 
-                if matches!(src_ty, typ::Type::DynArray { .. }) {
+                if let typ::Type::DynArray(element_type) = &src_ty
+                    && !element_type.contains_unresolved_params(self.src_metadata)
+                {
                     gen_dynarray_runtime_type(self, &ty);
                 }
 

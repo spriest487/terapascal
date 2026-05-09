@@ -1,18 +1,18 @@
 use crate::c::Class;
-use crate::c::FieldName;
-use crate::c::StructDef;
-use crate::c::StructMember;
-use crate::c::Type;
-use crate::c::TypeDef;
-use crate::c::Unit;
-use crate::c::FunctionDef;
-use crate::c::FunctionDecl;
 use crate::c::Expr;
+use crate::c::FieldName;
+use crate::c::FunctionDecl;
+use crate::c::FunctionDef;
 use crate::c::FunctionName;
 use crate::c::GlobalName;
 use crate::c::Statement;
+use crate::c::StructDef;
+use crate::c::StructMember;
+use crate::c::Type;
 use crate::c::TypeDefName;
-use crate::ir;
+use crate::c::Unit;
+use crate::{c, ir};
+use crate::c::type_map::TypeID;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct BoxTypeID(pub usize);
@@ -28,21 +28,28 @@ impl BoxTypeID {
 }
 
 impl<'a> Unit<'a> {
-    pub fn get_box_type(&mut self, element_type: &ir::Type) -> BoxTypeID {
-        if let Some(existing_id) = self.box_types_by_element.get(element_type) {
-            return *existing_id;
+    pub fn get_box_type(&mut self, element_type: &ir::Type) -> (TypeID, BoxTypeID) {
+        let element_c_type = self.translate_type(element_type);
+        let element_type_id = self.get_type_id(element_type);
+
+        if let Some(existing_id) = self.box_types_by_element.get(&element_type_id) {
+            let type_id = self.get_type_id(&element_type.boxed());
+            return (type_id, *existing_id);
         };
 
-        let index = self.box_types_by_element.len();
-        let id = BoxTypeID(index);
+        let box_index = self.box_types_by_element.len();
+        let box_id = BoxTypeID(box_index);
 
-        let class = Class::gen_box_class(self.metadata, id, element_type.clone());
+        let class = Class::gen_box_class(self.metadata, box_id, element_type.clone());
         self.classes.push(class);
 
-        let element_field_ty = Type::from_metadata(element_type, self);
+        let element_field_ty = self.translate_type(element_type);
 
-        let struct_name = TypeDefName::Box(id);
-        let struct_def = StructDef::new(struct_name, false)
+        let box_def_name = c::TypeDefName::Box(box_id);
+        let box_c_type = c::Type::DefinedType(box_def_name);
+        let box_type_id = self.register_type(element_type.dyn_array(), box_c_type);
+
+        let struct_def = StructDef::new(box_def_name, false)
             .with_comment(format!("box of {}", self.pretty_type(element_type)))
             .with_member(StructMember {
                 name: FieldName::Rc,
@@ -55,19 +62,13 @@ impl<'a> Unit<'a> {
                 comment: None,
             });
 
-        self.type_defs.insert(struct_def.decl.name, TypeDef::Struct(struct_def));
-        self.type_defs_order.insert(struct_name);
+        self.register_type_def(box_type_id, struct_def.decl.name, struct_def, element_c_type.type_def_deps());
 
-        let c_element_type = Type::from_metadata(element_type, self);
-        for element_dep in c_element_type.type_def_deps() {
-            self.type_defs_order.add_dependency(element_dep, struct_name);
-        }
+        self.box_types_by_element.insert(element_type_id, box_id);
 
-        self.box_types_by_element.insert(element_type.clone(), id);
+        self.gen_box_element_method(box_id, element_type);
 
-        self.gen_box_element_method(id, element_type);
-
-        id
+        (box_type_id, box_id)
     }
 
     fn gen_box_element_method(&mut self, box_id: BoxTypeID, element_type: &ir::Type) {

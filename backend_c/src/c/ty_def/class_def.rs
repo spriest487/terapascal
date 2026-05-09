@@ -17,6 +17,7 @@ use ir::MetadataSource as _;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write;
+use crate::c::type_map::TypeID;
 
 #[derive(Clone, Debug)]
 struct MethodImplFunc {
@@ -44,9 +45,9 @@ impl MethodImplFunc {
         let wrapper_param_tys: Vec<_> = iface_method
             .params
             .iter()
-            .map(|ty| Type::from_metadata(ty, module))
+            .map(|ty| module.translate_type(ty))
             .collect();
-        let wrapper_return_ty = Type::from_metadata(&iface_method.return_ty, module);
+        let wrapper_return_ty = module.translate_type(&iface_method.return_ty);
 
         Self {
             name: impl_func_name,
@@ -107,7 +108,7 @@ pub struct InterfaceImpl {
 
 #[derive(Copy, Clone, Debug)]
 pub enum ClassIdentity {
-    Class(ir::TypeDefID),
+    Class(TypeID),
     DynArrayClass(DynArrayTypeID),
     BoxClass(BoxTypeID),
 }
@@ -134,8 +135,9 @@ impl ClassIdentity {
     pub fn to_ir_type(&self, unit: &Unit) -> ir::Type {
         match self {
             ClassIdentity::Class(id) => {
-                id.to_class_ptr_type([]) // TODO: C backend type args
+                unit.get_type(*id).clone()
             },
+
             ClassIdentity::DynArrayClass(id) => {
                 let element = unit.dyn_array_types_by_element.iter()
                     .find_map(|(element, element_array_id)| {
@@ -143,16 +145,18 @@ impl ClassIdentity {
                             element.clone()
                         })
                     })
+                    .map(|id| unit.get_type(id))
                     .unwrap_or_else(|| panic!("missing array type for ID {}", id.0));
                 
                 element.dyn_array()
             }
             
             ClassIdentity::BoxClass(id) => {
-                let element = unit.box_types_by_element.iter()
-                    .find_map(|(element, element_box_id)| {
+                let element = unit.box_types_by_element
+                    .iter()
+                    .find_map(|(element_id, element_box_id)| {
                         (*element_box_id == *id).then(|| {
-                            element.clone()
+                            unit.get_type(*element_id)
                         })
                     })
                     .unwrap_or_else(|| panic!("missing box type for ID {}", id.0));
@@ -193,13 +197,14 @@ pub struct Class {
 
 impl Class {
     pub fn translate(
-        struct_id: ir::TypeDefID,
+        class_ty: ir::Type,
         metadata: &ir::Metadata,
         module: &mut Unit,
     ) -> Self {
-        let class_ty = struct_id.to_class_ptr_type([]); // TODO: C backend type args
-
         let mut impls = BTreeMap::new();
+
+        module.translate_type(&class_ty);
+        let class_index = module.get_type_id(&class_ty);
 
         for (iface_id, iface_impl) in metadata.find_impls(&class_ty) {
             let mut method_impls = BTreeMap::new();
@@ -211,7 +216,7 @@ impl Class {
 
                 let impl_func = MethodImplFunc::new(
                     iface_id,
-                    ClassIdentity::Class(struct_id),
+                    ClassIdentity::Class(class_index),
                     *method_id,
                     method_def,
                     *impl_func_id,
@@ -243,7 +248,7 @@ impl Class {
         let typeinfo_name = global_typeinfo_decl_name(metadata, &class_ty);
 
         Class {
-            identity: ClassIdentity::Class(struct_id),
+            identity: ClassIdentity::Class(class_index),
             impls,
             dtor: runtime_type.dtor,
             comment: Some(comment),
@@ -283,15 +288,17 @@ impl Class {
         }
     }
     
-    pub fn gen_closure_class(metadata: &ir::Metadata, closure_struct_id: ir::TypeDefID) -> Self {
+    pub fn gen_closure_class(module: &mut Unit, closure_struct_id: ir::TypeDefID) -> Self {
         let ty = closure_struct_id.to_class_ptr_type([]);
 
+        let closure_type_index = module.create_type_id(&ty);
+
         Class {
-            identity: ClassIdentity::Class(closure_struct_id),
+            identity: ClassIdentity::Class(closure_type_index),
             comment: Some(format!("closure class {}", closure_struct_id)),
             dtor: None,
             impls: BTreeMap::new(),
-            typeinfo_global_name: global_typeinfo_decl_name(metadata, &ty),
+            typeinfo_global_name: global_typeinfo_decl_name(module.metadata, &ty),
         }
     }
 
@@ -507,12 +514,12 @@ impl Interface {
             .iter()
             .enumerate()
             .map(|(method_index, method)| {
-                let return_ty = Type::from_metadata(&method.return_ty, module);
+                let return_ty = module.translate_type(&method.return_ty);
                 let method_id = ir::MethodID(method_index);
                 let params = method
                     .params
                     .iter()
-                    .map(|param| Type::from_metadata(param, module))
+                    .map(|param| module.translate_type(param))
                     .collect();
 
                 let name = FunctionName::Method(iface_id, method_id);

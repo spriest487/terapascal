@@ -6,20 +6,23 @@ mod ty_def;
 mod array;
 mod boxed;
 mod builtin;
+mod type_map;
 
 pub use self::array::*;
+pub use self::boxed::*;
 pub use self::expr::*;
 pub use self::function::*;
 pub use self::stmt::*;
 pub use self::ty_def::*;
-use crate::c::boxed::BoxTypeID;
+use crate::c;
 use crate::c::string_lit::StringLiteral;
 use crate::c::string_lit::StringLiteralKey;
+use crate::c::type_map::{ArraySig, TypeID};
 use crate::ir;
 use crate::rtti::RuntimeFuncInfo;
 use crate::Options;
+use bimap::BiHashMap;
 use std::borrow::Cow;
-use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -29,23 +32,27 @@ use terapascal_ir::MetadataSource;
 use topological_sort::TopologicalSort;
 
 pub struct Unit<'a> {
-    metadata: &'a ir::Metadata,
-    
+    pub metadata: &'a ir::Metadata,
+
     functions: Vec<FunctionDef>,
     function_types: BTreeMap<ir::FunctionID, ir::TypeDefID>,
+
+    types: BiHashMap<TypeID, ir::Type>,
+    c_types: BTreeMap<TypeID, c::Type>,
+
+    pub dyn_array_types_by_element: BTreeMap<TypeID, c::DynArrayTypeID>,
+    pub box_types_by_element: BTreeMap<TypeID, c::BoxTypeID>,
+
+    static_array_types: HashMap<ArraySig, TypeID>,
+
+    type_defs: BTreeMap<TypeID, c::TypeDef>,
+    type_defs_by_name: HashMap<c::TypeDefName, TypeID>,
+    type_defs_order: TopologicalSort<c::TypeDefName>,
     
     ffi_funcs: Vec<FfiFunction>,
     builtin_funcs: HashMap<ir::FunctionID, BuiltinName>,
 
     global_vars: Vec<GlobalVar>,
-
-    static_array_types: HashMap<ArraySig, Type>,
-    
-    dyn_array_types_by_element: HashMap<ir::Type, DynArrayTypeID>,
-    box_types_by_element: HashMap<ir::Type, BoxTypeID>,
-
-    type_defs: HashMap<TypeDefName, TypeDef>,
-    type_defs_order: TopologicalSort<TypeDefName>,
 
     classes: Vec<Class>,
     ifaces: Vec<Interface>,
@@ -57,7 +64,7 @@ pub struct Unit<'a> {
     object_array_id: DynArrayTypeID,
 
     opts: Options,
-    
+
     type_infos: HashMap<ir::Type, Rc<ir::TypeInfo>>,
     
     runtime_funcinfos: Vec<RuntimeFuncInfo>,
@@ -98,19 +105,22 @@ impl<'a> Unit<'a> {
         let mut unit = Unit {
             metadata,
 
+            types: BiHashMap::new(),
+            c_types: BTreeMap::new(),
+
+            dyn_array_types_by_element: BTreeMap::new(),
+            box_types_by_element: BTreeMap::new(),
+            static_array_types: HashMap::new(),
+
+            type_defs: BTreeMap::new(),
+            type_defs_by_name: HashMap::new(),
+            type_defs_order: TopologicalSort::new(),
+
             functions: Vec::new(),
             function_types: BTreeMap::new(),
 
             ffi_funcs: Vec::new(),
             builtin_funcs: HashMap::new(),
-
-            type_defs: HashMap::new(),
-            type_defs_order: TopologicalSort::new(),
-
-            static_array_types: HashMap::new(),
-            
-            dyn_array_types_by_element: HashMap::new(),
-            box_types_by_element: HashMap::new(),
             
             global_vars: Vec::new(),
 
@@ -133,7 +143,7 @@ impl<'a> Unit<'a> {
         
         unit.create_named_string_lit(GlobalName::InvokeArgsError, "function invoked with invalid argument count");
 
-        unit.object_array_id = unit.get_dyn_array_type(&ir::ANY_TYPE);
+        unit.object_array_id = unit.get_dyn_array_type(&ir::ANY_TYPE).1;
 
         let system_funcs = builtin::system_funcs();
         
@@ -149,13 +159,19 @@ impl<'a> Unit<'a> {
             }
         }
 
-        for (class_id, _class_def) in metadata.class_defs() {
-            let class = Class::translate(class_id, metadata, &mut unit);
+        for (class_id, class_def) in metadata.class_defs() {
+            if class_def.is_generic() {
+                continue;
+            }
+
+            let class_type = class_id.to_class_ptr_type([]);
+
+            let class = Class::translate(class_type, metadata, &mut unit);
             unit.classes.push(class);
         }
         
         for closure_id in metadata.closures() {
-            let class = Class::gen_closure_class(metadata, closure_id);
+            let class = Class::gen_closure_class(&mut unit, closure_id);
             unit.classes.push(class);
         } 
 
@@ -182,45 +198,6 @@ impl<'a> Unit<'a> {
         name_path.to_pretty_string(self.metadata)
     }
 
-    fn make_array_type(&mut self, element: Type, dim: usize) -> Type {
-        let sig = ArraySig {
-            element: element.clone(),
-            dim,
-        };
-
-        let next_id = self.static_array_types.len();
-
-        match self.static_array_types.entry(sig) {
-            Entry::Occupied(entry) => {
-                entry.get().clone()
-            },
-
-            Entry::Vacant(entry) => {
-                let array_name = TypeDefName::StaticArray(ArrayTypeID(next_id));
-                
-                let array_struct = StructDef::new(array_name, false)
-                    .with_comment(format!("array[{}] of {}", dim, element.typename()))
-                    .with_member(StructMember {
-                        name: FieldName::StaticArrayElements,
-                        ty: element.clone().sized_array(dim),
-                        comment: None,
-                    });
-
-                self.type_defs.insert(array_name, TypeDef::Struct(array_struct));
-                self.type_defs_order.insert(array_name);
-                
-                for element_dep in element.type_def_deps() {
-                    self.type_defs_order.add_dependency(element_dep, array_name);
-                }
-
-                let array_struct_ty = Type::DefinedType(array_name);
-                entry.insert(array_struct_ty.clone());
-
-                array_struct_ty
-            },
-        }
-    }
-
     pub fn function_name(&self, id: ir::FunctionID) -> FunctionName {
         match self.builtin_funcs.get(&id) {
             Some(builtin) => FunctionName::Builtin(*builtin),
@@ -230,70 +207,40 @@ impl<'a> Unit<'a> {
 
     pub fn add_lib(&mut self, library: &ir::Library) {
         for (id, type_def) in library.metadata().type_defs() {
-            let mut member_deps = Vec::new();
-
-            let c_type_def = match type_def {
+            match type_def {
                 ir::TypeDef::Struct(struct_def) => {
                     if struct_def.is_generic() {
                         continue; 
                     }
-                    
-                    let struct_def = StructDef::translate(id, struct_def, &[], self);
-                    for member in &struct_def.members {
-                        member.ty.collect_type_def_deps(&mut member_deps);
-                    }
 
-                    TypeDef::Struct(struct_def)
+                    let def_ty = struct_def.identity.to_definition_type(id);
+                    self.translate_struct_type(&def_ty);
                 },
 
                 ir::TypeDef::Variant(variant_def) => {
-                    let variant_def = VariantDef::translate(id, variant_def, self);
-                    for case in &variant_def.cases {
-                        if let Some(case_ty) = &case.ty {
-                            case_ty.collect_type_def_deps(&mut member_deps);
-                        }
+                    if variant_def.is_generic() {
+                        continue;
                     }
 
-                    TypeDef::Variant(variant_def)
+                    let def_ty = id.to_variant_type([]);
+                    self.translate_variant_type(&def_ty);
                 },
 
-                ir::TypeDef::Function(func_def) => {
-                    let return_ty = Type::from_metadata(&func_def.result_type, self);
-                    return_ty.collect_type_def_deps(&mut member_deps);
-
-                    let mut param_tys = Vec::new();
-
-                    for param_ty in &func_def.param_types {
-                        let param_ty = Type::from_metadata(param_ty, self);
-                        param_ty.collect_type_def_deps(&mut member_deps);
-                        param_tys.push(param_ty);
-                    }
-
-                    let func_alias_def = FuncAliasDef {
-                        decl: TypeDecl {
-                            name: TypeDefName::Alias(id),
-                        },
-                        param_tys,
-                        return_ty,
-                        comment: Some(func_def.to_string()),
-                    };
-
-                    TypeDef::FuncAlias(func_alias_def)
+                ir::TypeDef::Function(..) => {
+                    self.translate_function_type(id.to_function_type());
                 },
-            };
-
-            let c_def_name = c_type_def.decl().name;
-            self.type_defs.insert(c_def_name, c_type_def);
-            self.type_defs_order.insert(c_def_name);
-            
-            for member_dep in member_deps {
-                self.type_defs_order.add_dependency(member_dep, c_def_name);
             }
         }
 
         for (func_id, func) in library.functions() {
             match func {
                 ir::Function::Local(func_def) => {
+                    // generic functions can't be translated and will be instantiated as we
+                    // encounter their usages
+                    if !func_def.type_params.is_empty() {
+                        continue;
+                    }
+
                     let c_func = FunctionDef::translate(*func_id, func_def, self);
                     self.functions.push(c_func);
                 },
@@ -368,7 +315,7 @@ impl<'a> Unit<'a> {
         
         for (var_id, var_info) in library.metadata.variables() {
             let name = GlobalName::Variable(var_id);
-            let ty = Type::from_metadata(&var_info.r#type, self);
+            let ty = self.translate_type(&var_info.r#type);
             
             self.global_vars.push(GlobalVar {
                 name,
@@ -394,8 +341,8 @@ impl<'a> Unit<'a> {
             return;
         }
 
-        let typeinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::TYPEINFO_ID)).ptr();
-        let funcinfo_ty = Type::DefinedType(TypeDefName::Struct(ir::FUNCINFO_ID)).ptr();
+        let typeinfo_ty = self.translate_type(&ir::TYPEINFO_ID.to_class_ptr_type([]));
+        let funcinfo_ty = self.translate_type(&ir::FUNCINFO_ID.to_class_ptr_type([]));
 
         let typeinfo_count = i32::try_from(self.type_infos.len()).unwrap_or(i32::MAX);
         let funcinfo_count = i32::try_from(self.runtime_funcinfos.len()).unwrap_or(i32::MAX);
@@ -439,9 +386,11 @@ impl<'a> Unit<'a> {
             Expr::Global(GlobalName::FuncInfoList),
             Expr::LitCString("forget".to_string()),
         ])));
-        
+
         let method_info_class_type = ir::Type::method_info();
-        let method_info_array_id = self.get_dyn_array_type(&method_info_class_type);
+        let method_info_class_id = self.get_type_id(&method_info_class_type);
+
+        let (_, method_info_array_id) = self.get_dyn_array_type(&method_info_class_type);
 
         // initialize type info fields that can't be statically initialized
         const METHODS_ARRAY_NAME: &str = "methods_array";
@@ -453,19 +402,21 @@ impl<'a> Unit<'a> {
 
         const METHODINFO_NAME: &str = "methodinfo";
         init_stmts.push(Statement::VariableDecl {
-            ty: Type::from_ir_struct(ir::METHODINFO_ID, &[]).ptr().ptr(),
+            ty: self.translate_type(&ir::METHODINFO_ID.to_class_ptr_type([])).ptr(),
             id: VariableID::named(METHODINFO_NAME),
             null_init: false,
         });
 
         const METHODNULL_NAME: &str = "method_null";
         init_stmts.push(Statement::VariableDecl {
-            ty: Type::from_ir_struct(ir::METHODINFO_ID, &[]).ptr(),
+            ty: self.translate_type(&ir::METHODINFO_ID.to_class_ptr_type([])),
             id: VariableID::named(METHODNULL_NAME),
             null_init: true,
         });
 
         let mut typeinfo_index = 0i128;
+
+        let new_method_info_expr = Expr::call_new(&method_info_class_type, true, self);
 
         for (ty, typeinfo) in &self.type_infos {
             // allocate the method dynarray instance for this typeinfo 
@@ -501,23 +452,24 @@ impl<'a> Unit<'a> {
                             methods_array_var.clone().cast(Type::object_ptr()),
                             Expr::LitInt(method_index as i128)
                         ])
-                        .cast(Type::class_instance_ptr(ir::METHODINFO_ID, &[]).ptr())
+                        .cast(Type::class_instance_ptr(method_info_class_id).ptr())
                 )));
                 
                 // *methodinfo = RcNew(..method info class, immortal: true)
-                let method_info = Expr::named_var(METHODINFO_NAME).deref();
+                let method_info_var = Expr::named_var(METHODINFO_NAME).deref();
+
                 init_stmts.push(Statement::Expr(
-                    method_info.clone().assign_from(Expr::call_new(ir::METHODINFO_ID, &[], true)))
-                );
+                    method_info_var.clone().assign_from(new_method_info_expr.clone())
+                ));
 
                 let method = &typeinfo.methods[method_index];
                 init_stmts.push(Statement::Expr(Expr::assign(
-                    method_info.clone().clone().arrow(FieldName::ID(ir::METHODINFO_NAME_FIELD)),
+                    method_info_var.clone().clone().arrow(FieldName::ID(ir::METHODINFO_NAME_FIELD)),
                     Expr::Global(GlobalName::StringLiteral(method.name)).addr_of(),
                 )));
 
                 init_stmts.push(Statement::Expr(Expr::assign(
-                    method_info.clone().arrow(FieldName::ID(ir::METHODINFO_OWNER_FIELD)),
+                    method_info_var.clone().arrow(FieldName::ID(ir::METHODINFO_OWNER_FIELD)),
                     type_info_expr.clone().addr_of(),
                 )));
 
@@ -532,7 +484,7 @@ impl<'a> Unit<'a> {
                 };
 
                 init_stmts.push(Statement::Expr(Expr::assign(
-                    method_info.clone().arrow(FieldName::ID(ir::METHODINFO_IMPL_FIELD)),
+                    method_info_var.clone().arrow(FieldName::ID(ir::METHODINFO_IMPL_FIELD)),
                     impl_ptr_expr,
                 )));
 
@@ -549,7 +501,7 @@ impl<'a> Unit<'a> {
                     });
 
                 init_stmts.push(Statement::assign(
-                    method_info.clone().clone().arrow(FieldName::ID(ir::METHODINFO_TAGS_FIELD)),
+                    method_info_var.clone().clone().arrow(FieldName::ID(ir::METHODINFO_TAGS_FIELD)),
                     match tag_loc {
                         Some(loc) => Expr::Global(GlobalName::StaticTagArray(loc)).addr_of(),
                         None => Expr::Null,
@@ -590,59 +542,53 @@ impl<'a> fmt::Display for Unit<'a> {
             writeln!(f, "#define DISABLE_RTTI")?;
         }
 
-        writeln!(f, "#define STRING_STRUCT struct {}", TypeDefName::Struct(ir::STRING_ID))?;
-        writeln!(f, "#define STRING_CLASS {}", GlobalName::ClassInstance(ir::STRING_ID))?;
+        let string_id = self.get_type_id(&ir::STRING_ID.to_class_ptr_type([]));
+        writeln!(f, "#define STRING_STRUCT struct {}", TypeDefName::Struct(string_id))?;
+        writeln!(f, "#define STRING_CLASS {}", GlobalName::ClassInstance(string_id))?;
         writeln!(f, "#define STRING_CHARS(str_ptr) (str_ptr->{})", FieldName::ID(ir::STRING_CHARS_FIELD))?;
         writeln!(f, "#define STRING_LEN(str_ptr) (str_ptr->{})", FieldName::ID(ir::STRING_LEN_FIELD))?;
-        
-        writeln!(f, "#define TYPEINFO_STRUCT struct {}", TypeDefName::Struct(ir::TYPEINFO_ID))?;
-        writeln!(f, "#define TYPEINFO_NAME(typeinfo) (typeinfo->{})", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
-        writeln!(f, "#define TYPEINFO_NAME_CHARS(typeinfo) STRING_CHARS(TYPEINFO_NAME(typeinfo))")?;
 
-        writeln!(f, "#define METHODINFO_STRUCT struct {}", TypeDefName::Struct(ir::METHODINFO_ID))?;
-        writeln!(f, "#define METHODINFO_INVOKER(method) ((Invoker) method->{})", FieldName::ID(ir::METHODINFO_IMPL_FIELD))?;
-
-        writeln!(f, "#define FUNCINFO_STRUCT struct {}", TypeDefName::Struct(ir::FUNCINFO_ID))?;
-        writeln!(f, "#define FUNCINFO_NAME(typeinfo) (typeinfo->{})", FieldName::ID(ir::FUNCINFO_NAME_FIELD))?;
-        writeln!(f, "#define FUNCINFO_NAME_CHARS(typeinfo) STRING_CHARS(FUNCINFO_NAME(typeinfo))")?;
-        writeln!(f, "#define FUNCINFO_INVOKER(func) ((Invoker) func->{})", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
-        
         writeln!(f, "#define DYNARRAY_PTR(arr) (arr->{})", FieldName::DynArrayElements)?;
         writeln!(f, "#define DYNARRAY_LEN(arr) (arr->{})", FieldName::DynArrayLength)?;
-        
+
         writeln!(f, "#define OBJECT_ARRAY_STRUCT struct {}", TypeDefName::DynArray(self.object_array_id))?;
+
+        if self.opts.enable_rtti {
+            let type_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
+            let method_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
+            let func_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
+
+            writeln!(f, "#define TYPEINFO_STRUCT struct {}", TypeDefName::Struct(type_info_id))?;
+            writeln!(f, "#define TYPEINFO_NAME(typeinfo) (typeinfo->{})", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
+            writeln!(f, "#define TYPEINFO_NAME_CHARS(typeinfo) STRING_CHARS(TYPEINFO_NAME(typeinfo))")?;
+
+            writeln!(f, "#define METHODINFO_STRUCT struct {}", TypeDefName::Struct(method_info_id))?;
+            writeln!(f, "#define METHODINFO_INVOKER(method) ((Invoker) method->{})", FieldName::ID(ir::METHODINFO_IMPL_FIELD))?;
+
+            writeln!(f, "#define FUNCINFO_STRUCT struct {}", TypeDefName::Struct(func_info_id))?;
+            writeln!(f, "#define FUNCINFO_NAME(typeinfo) (typeinfo->{})", FieldName::ID(ir::FUNCINFO_NAME_FIELD))?;
+            writeln!(f, "#define FUNCINFO_NAME_CHARS(typeinfo) STRING_CHARS(FUNCINFO_NAME(typeinfo))")?;
+            writeln!(f, "#define FUNCINFO_INVOKER(func) ((Invoker) func->{})", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
+        }
 
         writeln!(f, "{}", include_str!("prelude.h"))?;
 
-        let ordered_type_defs: Vec<_> = self.type_defs_order.clone().into_iter().collect();
-        if ordered_type_defs.len() != self.type_defs_order.len() {
-            eprintln!("ordered defs ({}):", ordered_type_defs.len());
-            for def in ordered_type_defs {
-                eprintln!(" - {}", def);
-            }
+        let ordered_type_defs = self.ordered_type_defs();
 
-            eprintln!("type order sort {}:", self.type_defs_order.len());
-            for def in self.type_defs_order.clone().into_iter() {
-                eprintln!(" - {}", def);
-            }
-
-            panic!("type metadata contained illegal circular references");
-        }
-
-        for def_name in &ordered_type_defs {
-            if let Some(forward_decl) = self.type_defs[def_name].forward_decl() {
+        for (_, def_name) in &ordered_type_defs {
+            if let Some(forward_decl) = def_name.forward_decl() {
                 writeln!(f, "{};", forward_decl)?;
             }
         }
         writeln!(f)?;
 
-        for def_name in &ordered_type_defs {
+        for (def_id, _) in &ordered_type_defs {
             // special case for System.String: we expect it to already be defined in the prelude
-            if *def_name == TypeDefName::Struct(ir::STRING_ID) {
+            if *def_id == string_id {
                 continue;
             }
 
-            let def = &self.type_defs[def_name];
+            let def = self.get_type_def(*def_id);
 
             writeln!(f, "{};", def)?;
             writeln!(f)?;
@@ -664,7 +610,7 @@ impl<'a> fmt::Display for Unit<'a> {
         }
         
         // declare string vars
-        let string_name = TypeDefName::Struct(ir::STRING_ID);
+        let string_name = TypeDefName::Struct(string_id);
         for str_key in self.string_literals.keys() {
             write!(f, "static struct {} {};", string_name, str_key.global_name())?;
         } 
@@ -702,113 +648,116 @@ impl<'a> fmt::Display for Unit<'a> {
             writeln!(f, "}};")?;
         }
 
-        let typeinfo_struct_name = TypeDefName::Struct(ir::TYPEINFO_ID);
-        let typeinfo_class = GlobalName::ClassInstance(ir::TYPEINFO_ID);
-
         if self.opts.enable_rtti {
-            let typeinfo_def = self.metadata
-                .get_struct_def(ir::TYPEINFO_ID)
-                .expect("missing definition for TypeInfo object");
-            
-            let flags_field = typeinfo_def.fields
-                .get(&ir::TYPEINFO_FLAGS_FIELD)
-                .expect("missing definition for TypeInfo flags field");
-            
-            // should be a set struct
-            let flags_type_name = flags_field.ty
-                .def_id()
-                .map(|id| TypeDefName::Struct(id.def_id))
-                .unwrap_or_else(|| panic!("invalid type for TypeInfo flags field: {}", flags_field.ty));
+            let type_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
+            let func_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
 
-            for (ty, typeinfo) in &self.type_infos {
-                if self.opts.debug {
-                    let debug_name = typeinfo.name
-                        .and_then(|id| self.get_string_lit(id))
-                        .map(str::to_string)
-                        .unwrap_or_else(|| ty.to_string());
+            let typeinfo_struct_name = TypeDefName::Struct(type_info_id);
+            let typeinfo_class = GlobalName::ClassInstance(type_info_id);
 
-                    writeln!(f, "/** static TypeInfo of {} */", debug_name)?;
+            if self.opts.enable_rtti {
+                let typeinfo_def = self.metadata
+                    .get_struct_def(ir::TYPEINFO_ID)
+                    .expect("missing definition for TypeInfo object");
+
+                let flags_field = typeinfo_def.fields
+                    .get(&ir::TYPEINFO_FLAGS_FIELD)
+                    .expect("missing definition for TypeInfo flags field");
+
+                // should be a set struct
+                let flags_type_id = self.get_type_id(&flags_field.ty);
+                let flags_type_name = TypeDefName::Struct(flags_type_id);
+
+                for (ty, typeinfo) in &self.type_infos {
+                    if self.opts.debug {
+                        let debug_name = typeinfo.name
+                            .and_then(|id| self.get_string_lit(id))
+                            .map(str::to_string)
+                            .unwrap_or_else(|| ty.to_string());
+
+                        writeln!(f, "/** static TypeInfo of {} */", debug_name)?;
+                    }
+
+                    write!(f, "static struct {} ", typeinfo_struct_name)?;
+                    write_global_typeinfo_decl_name(f, ty)?;
+                    writeln!(f, " = {{")?;
+
+                    writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;
+
+                    write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
+
+                    let type_name_id = typeinfo.name.unwrap_or(ir::EMPTY_STRING_ID);
+                    let type_name_str = GlobalName::StringLiteral(type_name_id);
+
+                    writeln!(f, "&{},", type_name_str)?;
+
+                    // initialized at runtime for now
+                    writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
+
+                    // should be a single 1-word flag type
+                    writeln!(f, "  .{} = (struct {flags_type_name}) {{", FieldName::ID(ir::TYPEINFO_FLAGS_FIELD))?;
+                    writeln!(f, "       .{} = {}", FieldName::ID(FieldID(0)), typeinfo.flags)?;
+                    writeln!(f, "}},")?;
+
+                    writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
+
+                    let tags_loc = ty
+                        .tags_loc()
+                        .and_then(|loc| {
+                            if *self.tag_arrays.get(&loc)? > 0 {
+                                Some(loc)
+                            } else {
+                                None
+                            }
+                        });
+
+                    match tags_loc {
+                        Some(loc) => write!(f, "&{}", GlobalName::StaticTagArray(loc))?,
+                        None => write!(f, "NULL,")?,
+                    }
+
+                    writeln!(f, "}};")?;
                 }
 
-                write!(f, "static struct {} ", typeinfo_struct_name)?;
-                write_global_typeinfo_decl_name(f, ty)?;
-                writeln!(f, " = {{")?;
+                let funcinfo_class = GlobalName::ClassInstance(func_info_id);
+                let funcinfo_struct_name = TypeDefName::Struct(func_info_id);
 
-                writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;
+                for func in &self.runtime_funcinfos {
+                    let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
 
-                write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
+                    if self.opts.debug {
+                        let debug_name = self.get_string_lit(func.name)
+                            .map(str::to_string)
+                            .unwrap_or_else(|| func.id.to_string());
+                        writeln!(f, "/** static FunctionInfo of {} */", debug_name)?;
+                    }
 
-                let type_name_id = typeinfo.name.unwrap_or(ir::EMPTY_STRING_ID);
-                let type_name_str = GlobalName::StringLiteral(type_name_id);
+                    writeln!(f, "static struct {} {} = {{", funcinfo_struct_name, funcinfo_name)?;
+                    writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
 
-                writeln!(f, "&{},", type_name_str)?;
+                    let name_str = GlobalName::StringLiteral(func.name);
 
-                // initialized at runtime for now
-                writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
+                    writeln!(f, "  .{} = &{},", FieldName::ID(ir::FUNCINFO_NAME_FIELD), name_str)?;
 
-                // should be a single 1-word flag type
-                writeln!(f, "  .{} = (struct {flags_type_name}) {{", FieldName::ID(ir::TYPEINFO_FLAGS_FIELD))?;
-                writeln!(f, "       .{} = {}", FieldName::ID(FieldID(0)), typeinfo.flags)?;
-                writeln!(f, "}},")?;
+                    write!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
+                    if let Some(invoker_id) = func.invoker {
+                        write!(f, "&{}", FunctionName::ID(invoker_id))?;
+                    } else {
+                        write!(f, "NULL")?;
+                    }
+                    writeln!(f, ",")?;
 
-                writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
+                    writeln!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_TAGS_FIELD))?;
 
-                let tags_loc = ty
-                    .tags_loc()
-                    .and_then(|loc| {
-                        if *self.tag_arrays.get(&loc)? > 0 {
-                            Some(loc)
-                        } else {
-                            None
-                        }
-                    });
+                    let tags_loc = ir::TagLocation::Function(func.id);
+                    if self.tag_arrays.get(&tags_loc).is_some() {
+                        write!(f, "&{}", GlobalName::StaticTagArray(tags_loc))?;
+                    } else {
+                        write!(f, "NULL")?;
+                    };
 
-                match tags_loc {
-                    Some(loc) => write!(f, "&{}", GlobalName::StaticTagArray(loc))?,
-                    None => write!(f, "NULL,")?,
+                    writeln!(f, "}};")?;
                 }
-
-                writeln!(f, "}};")?;
-            }
-
-            let funcinfo_class = GlobalName::ClassInstance(ir::FUNCINFO_ID);
-            let funcinfo_struct_name = TypeDefName::Struct(ir::FUNCINFO_ID);
-
-            for func in &self.runtime_funcinfos {
-                let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
-
-                if self.opts.debug {
-                    let debug_name = self.get_string_lit(func.name)
-                        .map(str::to_string)
-                        .unwrap_or_else(|| func.id.to_string());
-                    writeln!(f, "/** static FunctionInfo of {} */", debug_name)?;
-                }
-
-                writeln!(f, "static struct {} {} = {{", funcinfo_struct_name, funcinfo_name)?;
-                writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
-
-                let name_str = GlobalName::StringLiteral(func.name);
-
-                writeln!(f, "  .{} = &{},", FieldName::ID(ir::FUNCINFO_NAME_FIELD), name_str)?;
-
-                write!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
-                if let Some(invoker_id) = func.invoker {
-                    write!(f, "&{}", FunctionName::ID(invoker_id))?;
-                } else {
-                    write!(f, "NULL")?;
-                }
-                writeln!(f, ",")?;
-
-                writeln!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_TAGS_FIELD))?;
-
-                let tags_loc = ir::TagLocation::Function(func.id);
-                if self.tag_arrays.get(&tags_loc).is_some() {
-                    write!(f, "&{}", GlobalName::StaticTagArray(tags_loc))?;
-                } else {
-                    write!(f, "NULL")?;
-                };
-
-                writeln!(f, "}};")?;
             }
         }
 
@@ -823,7 +772,7 @@ impl<'a> fmt::Display for Unit<'a> {
             writeln!(f)?;
         }
 
-        let string_name = TypeDefName::Struct(ir::STRING_ID);
+        let string_name = TypeDefName::Struct(string_id);
         for (str_key, lit) in &self.string_literals {
             write!(f, "static struct {} {} = ", string_name, str_key.global_name())?;
             writeln!(f, "MAKE_STRING_LIT(\"{}\");", lit.as_str().escape_default())?;
@@ -842,12 +791,6 @@ impl<'a> fmt::Display for Unit<'a> {
 
         writeln!(f)
     }
-}
-
-#[derive(Eq, PartialEq, Hash)]
-struct ArraySig {
-    element: Type,
-    dim: usize,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]

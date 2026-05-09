@@ -1,7 +1,8 @@
-use crate::c::FieldName;
+use crate::c::type_map::TypeID;
 use crate::c::Type;
 use crate::c::TypeDecl;
 use crate::c::TypeDefName;
+use crate::c::{FieldName, Unit};
 use crate::ir;
 use std::fmt;
 use std::hash::Hash;
@@ -47,15 +48,20 @@ impl Hash for VariantDef {
 }
 
 impl VariantDef {
-    pub fn translate(id: ir::TypeDefID, variant: &ir::VariantDef, module: &mut Unit) -> Self {
-        let cases = variant
+    pub fn translate(
+        index: TypeID,
+        def: &ir::VariantDef,
+        comment: Option<String>,
+        unit: &mut Unit,
+    ) -> Self {
+        let cases = def
             .cases
             .iter()
             .map(|case| {
                 let ty = case
                     .ty
                     .as_ref()
-                    .map(|data_ty| Type::from_metadata(data_ty, module));
+                    .map(|data_ty| unit.translate_type(data_ty));
                 VariantCaseDef {
                     ty,
                     comment: Some(case.name.clone()),
@@ -63,15 +69,12 @@ impl VariantDef {
             })
             .collect();
 
-        let variant_ty = id.to_variant_type(variant.name.type_args.clone());
-        let comment = module.pretty_type(&variant_ty).to_string();
-
         Self {
             decl: TypeDecl {
-                name: TypeDefName::Variant(id),
+                name: TypeDefName::Variant(index),
             },
             cases,
-            comment: Some(comment),
+            comment,
         }
     }
 }

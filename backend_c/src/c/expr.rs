@@ -1,3 +1,4 @@
+use crate::c::type_map::TypeID;
 use crate::c::Builder;
 use crate::c::BuiltinName;
 use crate::c::DynArrayTypeID;
@@ -271,16 +272,20 @@ impl Expr {
         }
     }
 
-    pub fn call_new(class_id: ir::TypeDefID, type_args: &[ir::Type], immortal: bool) -> Self {
+    pub fn call_new(class_type: &ir::Type, immortal: bool, unit: &mut Unit) -> Self {
         let new = Expr::Function(FunctionName::Builtin(BuiltinName::RcNew));
-        let class_ptr = Expr::class_ptr(class_id);
+
+        let class_c_type = unit.translate_type(class_type);
+        let class_type_index = unit.get_type_id(class_type);
+
+        let class_ptr = Expr::class_ptr(class_type_index);
 
         let instance = new.call([
             class_ptr, 
             Expr::LitBool(immortal),
         ]);
 
-        instance.cast(Type::class_instance_ptr(class_id, type_args))
+        instance.cast(class_c_type)
     }
 
     pub fn call_newarray(array_id: DynArrayTypeID, len: impl Into<Expr>, immortal: bool) -> Self {
@@ -381,7 +386,7 @@ impl Expr {
     pub fn array_class_ptr(arr_obj: &Expr, v_id: &ir::ObjectID, unit: &mut Unit) -> Expr {
         match v_id {
             ir::ObjectID::Array(element_ty) => {
-                let dyn_array_id = unit.get_dyn_array_type(element_ty);
+                let (_, dyn_array_id) = unit.get_dyn_array_type(element_ty);
                 dyn_array_id.class_ptr()
             }
 
@@ -486,7 +491,8 @@ impl Expr {
                         let cast_to_anon_closure = a_expr.cast(Type::AnonymousClosure.ptr());
                         let func_ptr = cast_to_anon_closure.arrow(FieldName::ClosureFunctionPointer).addr_of();
 
-                        let func_ptr_ty = Type::DefinedType(TypeDefName::Alias(*func_ty_id));
+                        let func_ptr_ty = builder.translate_type(&func_ty_id.to_function_type());
+
                         func_ptr.cast(func_ptr_ty.ptr())
                     },
 
@@ -546,13 +552,13 @@ impl Expr {
         case_field.addr_of()
     }
 
-    pub fn class_ptr(class_id: ir::TypeDefID) -> Self {
+    pub fn class_ptr(type_index: TypeID) -> Self {
         // dyn arrays use a different class type, but it's castable to the normal Class struct
-        Expr::class(class_id).addr_of().cast(Type::Class.ptr())
+        Expr::class(type_index).addr_of().cast(Type::Class.ptr())
     }
     
-    pub fn class(class_id: ir::TypeDefID) -> Self {
-        Expr::Global(GlobalName::ClassInstance(class_id))
+    pub fn class(type_index: TypeID) -> Self {
+        Expr::Global(GlobalName::ClassInstance(type_index))
     }
 
     pub fn dyn_array_class(array_id: DynArrayTypeID) -> Self {

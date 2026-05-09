@@ -9,9 +9,8 @@ pub use self::type_def::*;
 pub use self::variant_def::*;
 use crate::c::DynArrayTypeID;
 use crate::c::Expr;
-use crate::c::Unit;
-use crate::ir;
 use std::fmt;
+use crate::c::type_map::TypeID;
 
 #[allow(unused)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -59,80 +58,6 @@ pub enum Type {
 }
 
 impl Type {
-    pub fn from_ir_struct(id: ir::TypeDefID, type_args: &[ir::Type]) -> Type {
-        if !type_args.is_empty() {
-            todo!("C backend type args")
-        }
-        Type::DefinedType(TypeDefName::Struct(id))
-    }
-
-    pub fn from_ir_variant(id: ir::TypeDefID, type_args: &[ir::Type]) -> Type {
-        if !type_args.is_empty() {
-            todo!("C backend type args")
-        }
-
-        Type::DefinedType(TypeDefName::Variant(id))
-    }
-    
-    pub fn from_metadata(ty: &ir::Type, module: &mut Unit) -> Type {
-        match ty {
-            ir::Type::Generic(..) => {
-                panic!("code output should never contain generic placeholders")
-            },
-
-            ir::Type::Pointer(target) | ir::Type::TempRef(target) => {
-                Type::from_metadata(target.as_ref(), module).ptr()
-            },
-            ir::Type::Function(id) => Type::DefinedType(TypeDefName::Alias(*id)),
-            
-            ir::Type::Object(ir::ObjectID::Class(id))
-            | ir::Type::WeakObject(ir::ObjectID::Class(id)) => {
-                if !id.args.is_empty() {
-                    todo!("C backend type args")
-                }
-                Type::DefinedType(TypeDefName::Struct(id.def_id)).ptr()
-            },
-
-            ir::Type::Object(ir::ObjectID::Array(element_type))
-            | ir::Type::WeakObject(ir::ObjectID::Array(element_type)) => {
-                let array_id = module.get_dyn_array_type(element_type);
-                Type::dyn_array_ptr(array_id)
-            }
-
-            ir::Type::Object(ir::ObjectID::Box(value_type))
-            | ir::Type::WeakObject(ir::ObjectID::Box(value_type)) => {
-                let box_id = module.get_box_type(value_type);
-                box_id.ptr_type()
-            }
-            
-            ir::Type::Object(..) | ir::Type::WeakObject(..) => Type::Rc.ptr(),
-            
-            ir::Type::Struct(id) => Type::from_ir_struct(id.def_id, &id.args),
-            ir::Type::Variant(id) => Type::from_ir_variant(id.def_id, &id.args),
-            ir::Type::Flags(repr_id) => Type::from_ir_struct(*repr_id, &[]),
-            
-            ir::Type::Nothing => Type::Void,
-            ir::Type::Bool => Type::Bool,
-            ir::Type::F32 => Type::Float,
-            ir::Type::F64 => Type::Double,
-            ir::Type::I8 => Type::SChar,
-            ir::Type::U8 => Type::UChar,
-            ir::Type::I16 => Type::Int16,
-            ir::Type::U16 => Type::UInt16,
-            ir::Type::I32 => Type::Int32,
-            ir::Type::U32 => Type::UInt32,
-            ir::Type::I64 => Type::Int64,
-            ir::Type::U64 => Type::UInt64,
-            ir::Type::ISize => Type::PtrDiffType,
-            ir::Type::USize => Type::SizeType,
-
-            ir::Type::Array { element, dim } => {
-                let element = Type::from_metadata(element, module);
-                module.make_array_type(element, *dim)
-            },
-        }
-    }
-
     pub fn ptr(self) -> Self {
         Type::Pointer(Box::new(self))
     }
@@ -141,8 +66,8 @@ impl Type {
         Type::Rc.ptr()
     }
 
-    pub fn class_instance_ptr(class_id: ir::TypeDefID, type_args: &[ir::Type]) -> Type {
-        Type::from_ir_struct(class_id, type_args).ptr()
+    pub fn class_instance_ptr(class_id: TypeID) -> Type {
+        Type::DefinedType(TypeDefName::Struct(class_id)).ptr()
     }
 
     pub fn dyn_array_ptr(array_id: DynArrayTypeID) -> Type {
@@ -300,12 +225,13 @@ impl Type {
             Type::PtrDiffType => "ptrdiff_t".to_string(),
             Type::SizeType => "size_t".to_string(),
             Type::DefinedType(name) => match name {
-                TypeDefName::Alias(..) => name.to_string(),
-                TypeDefName::Struct(ir::STRING_ID) => String::from("STRING_STRUCT"),
-                TypeDefName::Struct(ir::TYPEINFO_ID) => String::from("TYPEINFO_STRUCT"),
-                TypeDefName::Struct(ir::METHODINFO_ID) => String::from("METHODINFO_STRUCT"),
-                TypeDefName::Struct(ir::FUNCINFO_ID) => String::from("FUNCINFO_STRUCT"),
-                _ => format!("struct {}", name),
+                TypeDefName::Struct(..)
+                | TypeDefName::Variant(..)
+                | TypeDefName::StaticArray(..) => {
+                    format!("struct {}", name)
+                },
+
+                _ => name.to_string(),
             },
             Type::Rc => "struct Rc".to_string(),
             Type::Class => "struct Class".to_string(),

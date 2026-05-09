@@ -228,12 +228,12 @@ pub struct FunctionDecl {
 impl FunctionDecl {
     pub fn translate(id: ir::FunctionID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
         let name = FunctionName::ID(id);
-        let return_ty = Type::from_metadata(&func.sig.result_type, module);
+        let return_ty = module.translate_type(&func.sig.result_type);
         let params = func
             .sig
             .param_types
             .iter()
-            .map(|param| Type::from_metadata(param, module))
+            .map(|param| module.translate_type(param))
             .collect();
 
         let mut comment = match &func.debug_name {
@@ -341,10 +341,10 @@ impl FfiFunction {
         func_ref: &ir::ExternalFunctionRef,
         module: &mut Unit,
     ) -> Self {
-        let return_ty = Type::from_metadata(&func_ref.sig.result_type, module);
+        let return_ty = module.translate_type(&func_ref.sig.result_type);
         let mut params = Vec::new();
         for param in &func_ref.sig.param_types {
-            params.push(Type::from_metadata(param, module));
+            params.push(module.translate_type(param));
         }
 
         let decl = FunctionDecl {

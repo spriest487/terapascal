@@ -111,8 +111,8 @@ impl Type {
         }
     }
 
-    pub fn boxed(self) -> Self {
-        Type::Object(ObjectID::Box(Rc::new(self)))
+    pub fn boxed(&self) -> Self {
+        Type::Object(ObjectID::Box(Rc::new(self.clone())))
     }
 
     pub fn as_generic_param(&self) -> Option<&Rc<String>> {

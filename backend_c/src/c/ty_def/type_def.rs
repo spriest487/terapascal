@@ -1,19 +1,19 @@
 use crate::c::boxed::BoxTypeID;
+use crate::c::type_map::TypeID;
 use crate::c::ArrayTypeID;
 use crate::c::DynArrayTypeID;
 use crate::c::FuncAliasDef;
 use crate::c::StructDef;
 use crate::c::TypeDecl;
 use crate::c::VariantDef;
-use crate::util::TypeID;
 use std::fmt;
-use crate::ast::boxed::BoxTypeID;
+use std::rc::Rc;
 
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub enum TypeDef {
-    Struct(StructDef),
-    Variant(VariantDef),
-    FuncAlias(FuncAliasDef),
+    Struct(Rc<StructDef>),
+    Variant(Rc<VariantDef>),
+    FuncAlias(Rc<FuncAliasDef>),
 }
 
 impl TypeDef {
@@ -34,6 +34,42 @@ impl TypeDef {
     }
 }
 
+impl From<StructDef> for TypeDef {
+    fn from(value: StructDef) -> Self {
+        Self::Struct(Rc::new(value))
+    }
+}
+
+impl From<Rc<StructDef>> for TypeDef {
+    fn from(value: Rc<StructDef>) -> Self {
+        Self::Struct(value)
+    }
+}
+
+impl From<VariantDef> for TypeDef {
+    fn from(value: VariantDef) -> Self {
+        Self::Variant(Rc::new(value))
+    }
+}
+
+impl From<Rc<VariantDef>> for TypeDef {
+    fn from(value: Rc<VariantDef>) -> Self {
+        Self::Variant(value)
+    }
+}
+
+impl From<FuncAliasDef> for TypeDef {
+    fn from(value: FuncAliasDef) -> Self {
+        Self::FuncAlias(Rc::new(value))
+    }
+}
+
+impl From<Rc<FuncAliasDef>> for TypeDef {
+    fn from(value: Rc<FuncAliasDef>) -> Self {
+        Self::FuncAlias(value)
+    }
+}
+
 impl fmt::Display for TypeDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -47,13 +83,13 @@ impl fmt::Display for TypeDef {
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum TypeDefName {
     // struct from class def ID
-    Struct(ir::TypeDefID),
+    Struct(TypeID),
 
     // struct from variant def ID
-    Variant(ir::TypeDefID),
+    Variant(TypeID),
 
-    // alias for another type
-    Alias(ir::TypeDefID),
+    // alias for function type
+    Alias(TypeID),
 
     // struct for a fixed-size array with a generated unique ID
     StaticArray(ArrayTypeID),
@@ -66,12 +102,12 @@ pub enum TypeDefName {
 impl fmt::Display for TypeDefName {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TypeDefName::Struct(id) => write!(f, "Struct_{}", id.0),
-            TypeDefName::Variant(id) => write!(f, "Variant_{}", id.0),
+            TypeDefName::Struct(id) => write!(f, "Struct_{}", id),
+            TypeDefName::Variant(id) => write!(f, "Variant_{}", id),
             TypeDefName::StaticArray(id) => write!(f, "StaticArray_{}", id.0),
             TypeDefName::DynArray(id) => write!(f, "DynArray_{}", id.0),
             TypeDefName::Box(id) => write!(f, "Box_{}", id.0),
-            TypeDefName::Alias(id) => write!(f, "FuncAlias_{}", id.0),
+            TypeDefName::Alias(id) => write!(f, "FuncAlias_{}", id),
         }
     }
 }
@@ -80,22 +116,6 @@ impl TypeDefName {
     pub fn build_decl_string(&self, left: &mut String, _right: &mut String) {
         match self {
             // special case some builtins which have nicer names defined in macros
-            TypeDefName::Struct(ir::STRING_ID) => {
-                left.push_str("STRING_STRUCT");
-            }
-
-            TypeDefName::Struct(ir::TYPEINFO_ID) => {
-                left.push_str("TYPEINFO_STRUCT");
-            }
-
-            TypeDefName::Struct(ir::METHODINFO_ID) => {
-                left.push_str("METHODINFO_STRUCT");
-            }
-
-            TypeDefName::Struct(ir::FUNCINFO_ID) => {
-                left.push_str("FUNCINFO_STRUCT");
-            }
-
             TypeDefName::Struct(..)
             | TypeDefName::Variant(..)
             | TypeDefName::StaticArray(..)

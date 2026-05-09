@@ -1619,6 +1619,8 @@ dependencies = [
 name = "terapascal-backend-c"
 version = "0.1.0"
 dependencies = [
+ "bimap",
+ "linked-hash-map",
  "terapascal-ir",
  "topological-sort",
 ]

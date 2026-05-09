@@ -1,9 +1,8 @@
-use crate::c::Type;
+use crate::c::type_map::TypeID;
+use crate::c::{Type, Unit};
 use crate::c::TypeDecl;
 use crate::c::TypeDefName;
 use crate::ir;
-use crate::util::TypeID;
-use crate::util::TypeMap;
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -75,10 +74,10 @@ impl Hash for StructDef {
 
 impl StructDef {
     pub fn translate(
-        id: ir::TypeDefID,
+        index: TypeID,
         ir_struct: &ir::StructDef,
-        type_args: &[ir::Type],
-        module: &mut Unit,
+        comment: Option<String>,
+        unit: &mut Unit,
     ) -> Self {
         let mut members = Vec::new();
 
@@ -95,7 +94,7 @@ impl StructDef {
         sorted_fields.sort_by_key(|(id, _)| id.0);
 
         for (id, field) in sorted_fields {
-            let ty = Type::from_metadata(&field.ty, module);
+            let ty = unit.translate_type(&field.ty);
 
             members.push(StructMember {
                 name: FieldName::ID(*id),
@@ -104,23 +103,15 @@ impl StructDef {
             });
         }
 
-        let struct_ty = id.to_struct_type(type_args.to_vec());
-        let comment = module.pretty_type(&struct_ty).to_string();
-
-        // user-defined types will have explicit padding, so they should be packed to avoid
-        // the C frontend inserting any extra padding
-        let packed = match &ir_struct.identity {
-            ir::StructIdentity::Record(_) => true,
-            _ => false,
-        };
+        let packed = ir_struct.layout == ir::StructLayout::Packed;
 
         Self {
             decl: TypeDecl {
-                name: TypeDefName::Struct(id),
+                name: TypeDefName::Struct(index),
             },
             packed,
             members,
-            comment: Some(comment),
+            comment,
         }
     }
 }

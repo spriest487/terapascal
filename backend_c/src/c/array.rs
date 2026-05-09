@@ -1,4 +1,3 @@
-use crate::c::BuiltinName;
 use crate::c::Class;
 use crate::c::Expr;
 use crate::c::FieldName;
@@ -8,13 +7,12 @@ use crate::c::FunctionName;
 use crate::c::GlobalName;
 use crate::c::InfixOp;
 use crate::c::Statement;
-use crate::c::StructDef;
-use crate::c::StructMember;
 use crate::c::Type;
-use crate::c::TypeDef;
 use crate::c::TypeDefName;
 use crate::c::Unit;
 use crate::c::VariableID;
+use crate::c::{BuiltinName, StructDef, StructMember};
+use crate::c::type_map::TypeID;
 use crate::ir;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -30,25 +28,31 @@ impl DynArrayTypeID {
 }
 
 impl<'a> Unit<'a> {
-    pub fn get_dyn_array_type(&mut self, element_type: &ir::Type) -> DynArrayTypeID {
-        if let Some(existing_id) = self.dyn_array_types_by_element.get(element_type) {
-            return *existing_id;
+    pub fn get_dyn_array_type(&mut self, element_type: &ir::Type) -> (TypeID, DynArrayTypeID) {
+        let element_c_type = self.translate_type(element_type);
+        let element_type_id = self.get_type_id(element_type);
+
+        if let Some(existing_id) = self.dyn_array_types_by_element.get(&element_type_id) {
+            let type_id = self.get_type_id(&element_type.dyn_array());
+            return (type_id, *existing_id);
         };
 
         let index = self.dyn_array_types_by_element.len();
-        let id = DynArrayTypeID(index);
+        let array_id = DynArrayTypeID(index);
 
-        self.gen_dyn_array_methods(id, element_type);
+        self.gen_dyn_array_methods(array_id, element_type);
 
-        let class = Class::gen_dyn_array_class(self.metadata, id, element_type.clone());
-
+        let class = Class::gen_dyn_array_class(self.metadata, array_id, element_type.clone());
         self.classes.push(class);
 
-        let elements_field_ty = Type::from_metadata(&element_type.clone().ptr(), self);
+        let elements_field_ty = self.translate_type(&element_type.clone().ptr());
 
-        let struct_name = TypeDefName::DynArray(id);
-        let struct_def = StructDef::new(struct_name, false)
-            .with_comment(format!("array of {}", self.pretty_type(element_type)))
+        let array_def_name = TypeDefName::DynArray(array_id);
+        let array_c_type = Type::DefinedType(array_def_name);
+        let array_type_id = self.register_type(element_type.dyn_array(), array_c_type);
+
+        let struct_def = StructDef::new(array_def_name, false)
+            .with_comment(format!("array of {}", element_type.to_pretty_string(self.metadata)))
             .with_member(StructMember {
                 name: FieldName::Rc,
                 ty: Type::Rc,
@@ -64,19 +68,13 @@ impl<'a> Unit<'a> {
                 ty: Type::Int32,
                 comment: None,
             });
-        
-        self.type_defs.insert(struct_def.decl.name, TypeDef::Struct(struct_def));
-        
-        self.type_defs_order.insert(struct_name);
-        
-        let c_element_type = Type::from_metadata(element_type, self); 
-        for element_dep in c_element_type.type_def_deps() {
-            self.type_defs_order.add_dependency(element_dep, struct_name);
-        }
-        
-        self.dyn_array_types_by_element.insert(element_type.clone(), id);
 
-        id
+        let element_deps = element_c_type.type_def_deps();
+        self.register_type_def(array_type_id, array_def_name, struct_def, element_deps);
+
+        self.dyn_array_types_by_element.insert(element_type_id, array_id);
+
+        (array_type_id, array_id)
     }
 
     fn gen_dyn_array_methods(&mut self, array_id: DynArrayTypeID, element_type: &ir::Type) {
@@ -158,7 +156,7 @@ impl<'a> Unit<'a> {
         let zero_mem = Expr::Function(FunctionName::Builtin(BuiltinName::ZeroMemory));
         let forget_mem = Expr::Function(FunctionName::Forget);
 
-        let c_element_type = Type::from_metadata(element_type, self);
+        let c_element_type = self.translate_type(element_type);
         let elements_ptr_type = c_element_type.clone().ptr();
 
         let alloc_size = Expr::SizeOf(c_element_type.clone())

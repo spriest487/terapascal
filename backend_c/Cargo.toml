@@ -7,3 +7,5 @@ edition = "2024"
 [dependencies]
 terapascal-ir = { path = "../ir" }
 topological-sort = "0.2.2"
+bimap = "0.6.3"
+linked-hash-map = "0.5.6"
