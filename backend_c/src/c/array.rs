@@ -1,20 +1,20 @@
-use crate::ast::Class;
-use crate::ast::Expr;
-use crate::ast::FieldName;
-use crate::ast::FunctionDecl;
-use crate::ast::FunctionDef;
-use crate::ast::FunctionName;
-use crate::ast::GlobalName;
-use crate::ast::Statement;
-use crate::ast::StructDef;
-use crate::ast::StructMember;
-use crate::ast::Type;
-use crate::ast::TypeDef;
-use crate::ast::TypeDefName;
-use crate::ast::Unit;
-use crate::ast::VariableID;
-use crate::ast::BuiltinName;
-use crate::ast::InfixOp;
+use crate::c::BuiltinName;
+use crate::c::Class;
+use crate::c::Expr;
+use crate::c::FieldName;
+use crate::c::FunctionDecl;
+use crate::c::FunctionDef;
+use crate::c::FunctionName;
+use crate::c::GlobalName;
+use crate::c::InfixOp;
+use crate::c::Statement;
+use crate::c::StructDef;
+use crate::c::StructMember;
+use crate::c::Type;
+use crate::c::TypeDef;
+use crate::c::TypeDefName;
+use crate::c::Unit;
+use crate::c::VariableID;
 use crate::ir;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]

@@ -1,4 +1,4 @@
-use crate::ast::BuiltinName;
+use crate::c::BuiltinName;
 use crate::ir;
 
 pub fn system_funcs() -> Vec<(&'static str, BuiltinName, ir::Type, Vec<ir::Type>)> {

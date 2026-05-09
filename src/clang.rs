@@ -39,7 +39,7 @@ pub(crate) fn clang_print(
     Ok(())
 }
 
-fn translate_c<'a>(lib: &'a ir::Library, args: &Args) -> backend_c::ast::Unit<'a> {
+fn translate_c<'a>(lib: &'a ir::Library, args: &Args) -> backend_c::c::Unit<'a> {
     let c_opts = backend_c::Options {
         enable_rtti: args.rtti,
         trace_heap: args.trace_heap,
@@ -52,7 +52,7 @@ fn translate_c<'a>(lib: &'a ir::Library, args: &Args) -> backend_c::ast::Unit<'a
 }
 
 fn invoke_clang<'a>(
-    c_unit: &backend_c::ast::Unit<'a>,
+    c_unit: &backend_c::c::Unit<'a>,
     args: &Args,
     out_path: &Path,
 ) -> io::Result<()> {

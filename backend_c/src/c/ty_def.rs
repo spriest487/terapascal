@@ -7,9 +7,9 @@ pub use self::class_def::*;
 pub use self::struct_def::*;
 pub use self::type_def::*;
 pub use self::variant_def::*;
-use crate::ast::DynArrayTypeID;
-use crate::ast::Expr;
-use crate::ast::Unit;
+use crate::c::DynArrayTypeID;
+use crate::c::Expr;
+use crate::c::Unit;
 use crate::ir;
 use std::fmt;
 

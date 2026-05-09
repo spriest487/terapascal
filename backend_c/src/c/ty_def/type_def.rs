@@ -1,10 +1,11 @@
-use crate::ast::FuncAliasDef;
-use crate::ast::StructDef;
-use crate::ast::TypeDecl;
-use crate::ast::VariantDef;
-use crate::ast::ArrayTypeID;
-use crate::ast::DynArrayTypeID;
-use crate::ir;
+use crate::c::boxed::BoxTypeID;
+use crate::c::ArrayTypeID;
+use crate::c::DynArrayTypeID;
+use crate::c::FuncAliasDef;
+use crate::c::StructDef;
+use crate::c::TypeDecl;
+use crate::c::VariantDef;
+use crate::util::TypeID;
 use std::fmt;
 use crate::ast::boxed::BoxTypeID;
 

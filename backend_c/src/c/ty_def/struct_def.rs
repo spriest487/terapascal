@@ -1,11 +1,12 @@
-use crate::ast::Unit;
-use crate::ast::Type;
-use crate::ast::TypeDecl;
-use crate::ast::TypeDefName;
+use crate::c::Type;
+use crate::c::TypeDecl;
+use crate::c::TypeDefName;
+use crate::ir;
+use crate::util::TypeID;
+use crate::util::TypeMap;
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
-use crate::ir;
 
 #[derive(Clone, Eq)]
 pub struct StructMember {

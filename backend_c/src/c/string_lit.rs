@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::fmt;
-use crate::ast::GlobalName;
+use crate::c::GlobalName;
 use crate::ir;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]

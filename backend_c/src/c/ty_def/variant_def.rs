@@ -1,8 +1,7 @@
-use crate::ast::FieldName;
-use crate::ast::Type;
-use crate::ast::TypeDecl;
-use crate::ast::TypeDefName;
-use crate::ast::Unit;
+use crate::c::FieldName;
+use crate::c::Type;
+use crate::c::TypeDecl;
+use crate::c::TypeDefName;
 use crate::ir;
 use std::fmt;
 use std::hash::Hash;

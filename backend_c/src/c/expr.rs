@@ -1,14 +1,13 @@
-use crate::ast::Builder;
-use crate::ast::BuiltinName;
-use crate::ast::DynArrayTypeID;
-use crate::ast::FieldName;
-use crate::ast::FunctionName;
-use crate::ast::GlobalName;
-use crate::ast::Statement;
-use crate::ast::Type;
-use crate::ast::TypeDefName;
-use crate::ast::Unit;
-use crate::ast::VariableID;
+use crate::c::Builder;
+use crate::c::BuiltinName;
+use crate::c::DynArrayTypeID;
+use crate::c::FieldName;
+use crate::c::FunctionName;
+use crate::c::GlobalName;
+use crate::c::Statement;
+use crate::c::Type;
+use crate::c::Unit;
+use crate::c::VariableID;
 use crate::ir;
 use std::fmt;
 
