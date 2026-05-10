@@ -45,7 +45,7 @@ impl<'a> Unit<'a> {
             .get_by_right(ty)
             .cloned()
             .unwrap_or_else(|| {
-                panic!("type not registered in type map: {ty}")
+                panic!("type not registered in type map: {}", ty.to_pretty_string(self.metadata))
             })
     }
 
@@ -76,6 +76,12 @@ impl<'a> Unit<'a> {
     }
 
     fn build_type(&mut self, ty: &ir::Type) -> TypeID {
+        // types containing any generic placeholders e.g. T, Struct<T>, array of T, etc, aren't real
+        // types but need an index too, so map them to `void`
+        if ty.contains_generic_params() {
+            return self.register_type(ty.clone(), Type::Void);
+        }
+
         match ty {
             ir::Type::Nothing => {
                 self.register_type(ty.clone(), Type::Void)
@@ -352,7 +358,9 @@ impl<'a> Unit<'a> {
     where
         F: FnOnce(TypeID) -> Type
     {
-        assert_eq!(None, self.types.get_by_right(&ty));
+        if let Some(id) = self.types.get_by_right(&ty) {
+            panic!("type {} is already registered with ID {}", ty.to_pretty_string(self.metadata), id);
+        }
 
         let id = self.types
             .len()

@@ -40,16 +40,16 @@ impl<'a> Unit<'a> {
         let index = self.dyn_array_types_by_element.len();
         let array_id = DynArrayTypeID(index);
 
-        self.gen_dyn_array_methods(array_id, element_type);
-
-        let class = Class::gen_dyn_array_class(self.metadata, array_id, element_type.clone());
-        self.classes.push(class);
-
-        let elements_field_ty = self.translate_type(&element_type.clone().ptr());
-
         let array_def_name = TypeDefName::DynArray(array_id);
         let array_c_type = Type::DefinedType(array_def_name);
         let array_type_id = self.register_type(element_type.dyn_array(), array_c_type);
+
+        self.gen_dyn_array_methods(array_id, element_type);
+
+        let class = Class::gen_dyn_array_class(self, array_id, element_type.clone());
+        self.classes.push(class);
+
+        let elements_field_ty = self.translate_type(&element_type.clone().ptr());
 
         let struct_def = StructDef::new(array_def_name, false)
             .with_comment(format!("array of {}", element_type.to_pretty_string(self.metadata)))

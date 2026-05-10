@@ -14,10 +14,9 @@ use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::iter;
-use std::rc::Rc;
-use terapascal_ir::MetadataSource;
+use terapascal_ir::{MetadataSource, TypeDefID};
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
     ClassType,
     DynArrayClassType,
@@ -31,8 +30,9 @@ pub enum GlobalName {
 
     TypeInfoList,
     TypeInfoCount,
-    StaticTypeInfo(Rc<ir::Type>),
-    
+    StaticTypeInfo(TypeID),
+    GenericStaticTypeInfo(TypeDefID),
+
     FuncInfoList,
     FuncInfoCount,
     StaticFuncInfo(ir::FunctionID),
@@ -89,7 +89,11 @@ impl fmt::Display for GlobalName {
             GlobalName::FuncInfoCount => write!(f, "funcinfo_count"),
 
             GlobalName::StaticTypeInfo(ty) => {
-                write_global_typeinfo_decl_name(f, ty)
+                write_global_typeinfo_decl_name(f, *ty)
+            }
+
+            GlobalName::GenericStaticTypeInfo(def_id) => {
+                write_global_generic_typeinfo_decl_name(f, *def_id)
             }
             
             GlobalName::StaticFuncInfo(id) => write!(f, "FuncInfo_{}", id.0),
@@ -101,94 +105,21 @@ impl fmt::Display for GlobalName {
     }
 }
 
-pub fn write_global_typeinfo_decl_name(f: &mut fmt::Formatter, ty: &ir::Type) -> fmt::Result {
-    write!(f, "TypeInfo_{}", global_typeinfo_decl_name_type(ty))
+pub fn write_global_typeinfo_decl_name(f: &mut fmt::Formatter, id: TypeID) -> fmt::Result {
+    write!(f, "TypeInfo_{id}")
 }
 
-pub fn global_typeinfo_decl_name(metadata: &ir::Metadata, ty: &ir::Type) -> Option<String> {
-    if metadata.get_type_info(ty).is_some() {
-        Some(format!("TypeInfo_{}", global_typeinfo_decl_name_type(ty)))
+pub fn write_global_generic_typeinfo_decl_name(f: &mut fmt::Formatter, id: TypeDefID) -> fmt::Result {
+    write!(f, "GenericTypeInfo_{id}")
+}
+
+pub fn global_typeinfo_decl_name(unit: &mut Unit, ty: &ir::Type) -> Option<String> {
+    let type_id = unit.create_type_id(ty);
+
+    if unit.metadata.get_type_info(ty).is_some() {
+        Some(format!("TypeInfo_{type_id}"))
     } else {
         None
-    }
-}
-
-fn global_typeinfo_decl_name_type(ty: &ir::Type) -> String {
-    match ty {
-        ir::Type::Generic(..) => {
-            panic!("code output should never contain generic placeholders")
-        },
-
-        // primitives
-        ir::Type::Bool => String::from("Bool"),
-        ir::Type::U8 => String::from("U8"),
-        ir::Type::I8 => String::from("I8"),
-        ir::Type::I16 => String::from("I16"),
-        ir::Type::U16 => String::from("U16"),
-        ir::Type::I32 => String::from("I32"),
-        ir::Type::U32 => String::from("U32"),
-        ir::Type::I64 => String::from("I64"),
-        ir::Type::U64 => String::from("U64"),
-        ir::Type::USize => String::from("USize"),
-        ir::Type::ISize => String::from("ISize"),
-        ir::Type::F32 => String::from("F32"),
-        ir::Type::F64 => String::from("F64"),
-
-        // aggregates
-        ir::Type::Struct(id) => {
-            if !id.args.is_empty() {
-                todo!("C backend type args")
-            }
-            format!("Struct_{}", id.def_id)
-        },
-        ir::Type::Variant(id) => {
-            if !id.args.is_empty() {
-                todo!("C backend type args")
-            }
-
-            format!("Variant_{}", id.def_id)
-        },
-        ir::Type::Flags(repr_id) => format!("Flags_{repr_id}"),
-
-        // reference types
-        ir::Type::Object(id) => {
-            vtype_typeinfo_name(id)
-        },
-        
-        ir::Type::WeakObject(id) => {
-            format!("{}_Weak", vtype_typeinfo_name(id))
-        }
-
-        ir::Type::Function(closure_id) => format!("FunctionType_{closure_id}"),
-
-        // ???
-        ir::Type::Nothing => String::from("Nothing"),
-
-        // recursive types
-        ir::Type::Pointer(ty) => {
-            format!("Ptr_{}", global_typeinfo_decl_name_type(ty))
-        },
-        ir::Type::TempRef(ty) => {
-            format!("Ref_{}", global_typeinfo_decl_name_type(ty))
-        },
-        ir::Type::Array { element, dim } => { 
-            format!("Array{}_{}", dim, global_typeinfo_decl_name_type(element))
-        },
-    }
-}
-
-fn vtype_typeinfo_name(id: &ir::ObjectID) -> String {
-    match id {
-        ir::ObjectID::Any => String::from("VType_Any"),
-        ir::ObjectID::Class(id) => format!("VType_Class_{id}"),
-        ir::ObjectID::Interface(id) => format!("VType_Interface_{id}"),
-        ir::ObjectID::AnyClosure(id) => format!("VType_Closure_{id}"),
-        ir::ObjectID::Array(element) => {
-            format!("DynArray_{}", global_typeinfo_decl_name_type(&element))
-        }
-        ir::ObjectID::Box(element) => {
-            format!("Box_{}", global_typeinfo_decl_name_type(&element))
-        }
     }
 }
 
@@ -351,6 +282,10 @@ impl<'a, 'b> Builder<'a, 'b> {
     
     pub fn translate_type(&mut self, ir_ty: &ir::Type) -> Type {
         self.unit.translate_type(ir_ty)
+    }
+
+    pub fn create_type_id(&mut self, ir_ty: &ir::Type) -> TypeID {
+        self.unit.create_type_id(ir_ty)
     }
 
     pub fn translate_instructions(&mut self, instruction_list: &ir::InstructionList) {

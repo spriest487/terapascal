@@ -418,8 +418,15 @@ impl<'a> Unit<'a> {
 
         let new_method_info_expr = Expr::call_new(&method_info_class_type, true, self);
 
-        for (ty, typeinfo) in &self.type_infos {
-            // allocate the method dynarray instance for this typeinfo 
+        let type_info_keys: Vec<_> = self.type_infos.keys().cloned().collect();
+
+        for ty in type_info_keys {
+            let type_id = self.create_type_id(&ty);
+            let type_info_name = GlobalName::StaticTypeInfo(type_id);
+
+            let type_info = &self.type_infos[&ty];
+
+            // allocate the method dynarray instance for this typeinfo
             let method_array_class_ptr = Expr::dyn_array_class(method_info_array_id).addr_of();
             let methods_array_var = Expr::named_var(METHODS_ARRAY_NAME);
 
@@ -427,12 +434,12 @@ impl<'a> Unit<'a> {
                 methods_array_var.clone(),
                 Expr::call_newarray(
                     method_info_array_id, 
-                    Expr::LitInt(typeinfo.methods.len() as i128), 
+                    Expr::LitInt(type_info.methods.len() as i128),
                     true
                 )
             )));
 
-            let type_info_expr = Expr::Global(GlobalName::StaticTypeInfo(Rc::new(ty.clone())));
+            let type_info_expr = Expr::Global(type_info_name);
 
             // typeinfo_list[typeinfo_index] = &typeinfo
             init_stmts.push(Statement::Expr(Expr::assign(
@@ -442,7 +449,7 @@ impl<'a> Unit<'a> {
 
             typeinfo_index += 1;
 
-            for method_index in 0..typeinfo.methods.len() {
+            for method_index in 0..type_info.methods.len() {
                 init_stmts.push(Statement::Expr(Expr::assign(
                     Expr::named_var(METHODINFO_NAME), 
                     method_array_class_ptr
@@ -462,7 +469,7 @@ impl<'a> Unit<'a> {
                     method_info_var.clone().assign_from(new_method_info_expr.clone())
                 ));
 
-                let method = &typeinfo.methods[method_index];
+                let method = &type_info.methods[method_index];
                 init_stmts.push(Statement::Expr(Expr::assign(
                     method_info_var.clone().clone().arrow(FieldName::ID(ir::METHODINFO_NAME_FIELD)),
                     Expr::Global(GlobalName::StringLiteral(method.name)).addr_of(),
@@ -668,7 +675,15 @@ impl<'a> fmt::Display for Unit<'a> {
                 let flags_type_id = self.get_type_id(&flags_field.ty);
                 let flags_type_name = TypeDefName::Struct(flags_type_id);
 
-                for (ty, typeinfo) in &self.type_infos {
+                let type_info_keys: Vec<_> = self.type_infos.keys().cloned().collect();
+
+                for ty in type_info_keys {
+                    let Some(type_id) = self.try_get_type_id(&ty) else {
+                        continue;
+                    };
+
+                    let typeinfo = &self.type_infos[&ty];
+
                     if self.opts.debug {
                         let debug_name = typeinfo.name
                             .and_then(|id| self.get_string_lit(id))
@@ -679,7 +694,7 @@ impl<'a> fmt::Display for Unit<'a> {
                     }
 
                     write!(f, "static struct {} ", typeinfo_struct_name)?;
-                    write_global_typeinfo_decl_name(f, ty)?;
+                    write_global_typeinfo_decl_name(f, type_id)?;
                     writeln!(f, " = {{")?;
 
                     writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;

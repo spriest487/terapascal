@@ -237,6 +237,39 @@ impl Type {
             _ => None,
         }
     }
+
+    pub fn contains_generic_params(&self) -> bool {
+        match self {
+            Type::Generic(..) => true,
+
+            Type::Pointer(deref_type)
+            | Type::TempRef(deref_type) => {
+                deref_type.contains_generic_params()
+            },
+
+            Type::Struct(id)
+            | Type::Variant(id) => {
+                id.is_generic()
+            },
+
+            Type::Array { element, .. } => element.contains_generic_params(),
+            Type::Object(object_id) | Type::WeakObject(object_id) => {
+                match object_id {
+                    ObjectID::Class(class_id) => {
+                        class_id.is_generic()
+                    },
+
+                    ObjectID::Array(element)
+                    | ObjectID::Box(element) => {
+                        element.contains_generic_params()
+                    },
+
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
     
     pub fn tags_loc(&self) -> Option<TagLocation> {
         match self {

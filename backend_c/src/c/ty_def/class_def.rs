@@ -245,7 +245,7 @@ impl Class {
             .map(|name| name.clone())
             .unwrap_or_else(|| metadata.pretty_type_name(&class_ty).to_string());
 
-        let typeinfo_name = global_typeinfo_decl_name(metadata, &class_ty);
+        let typeinfo_name = global_typeinfo_decl_name(module, &class_ty);
 
         Class {
             identity: ClassIdentity::Class(class_index),
@@ -257,7 +257,7 @@ impl Class {
     }
     
     pub fn gen_dyn_array_class(
-        metadata: &ir::Metadata,
+        unit: &mut Unit,
         id: DynArrayTypeID,
         element_type: ir::Type,
     ) -> Self {
@@ -268,12 +268,12 @@ impl Class {
             impls: BTreeMap::new(),
             dtor: None,
             comment: Some(format!("generated dynarray class (array of {element_type})")),
-            typeinfo_global_name: global_typeinfo_decl_name(metadata, &array_type),
+            typeinfo_global_name: global_typeinfo_decl_name(unit, &array_type),
         }
     }
 
     pub fn gen_box_class(
-        metadata: &ir::Metadata,
+        unit: &mut Unit,
         id: BoxTypeID,
         value_type: ir::Type,
     ) -> Self {
@@ -284,21 +284,21 @@ impl Class {
             impls: BTreeMap::new(),
             dtor: None,
             comment: Some(format!("generated box class (box of {value_type})")),
-            typeinfo_global_name: global_typeinfo_decl_name(metadata, &box_type),
+            typeinfo_global_name: global_typeinfo_decl_name(unit, &box_type),
         }
     }
     
-    pub fn gen_closure_class(module: &mut Unit, closure_struct_id: ir::TypeDefID) -> Self {
+    pub fn gen_closure_class(unit: &mut Unit, closure_struct_id: ir::TypeDefID) -> Self {
         let ty = closure_struct_id.to_class_ptr_type([]);
 
-        let closure_type_index = module.create_type_id(&ty);
+        let closure_type_index = unit.create_type_id(&ty);
 
         Class {
             identity: ClassIdentity::Class(closure_type_index),
             comment: Some(format!("closure class {}", closure_struct_id)),
             dtor: None,
             impls: BTreeMap::new(),
-            typeinfo_global_name: global_typeinfo_decl_name(module.metadata, &ty),
+            typeinfo_global_name: global_typeinfo_decl_name(unit, &ty),
         }
     }
 

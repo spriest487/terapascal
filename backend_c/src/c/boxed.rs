@@ -11,7 +11,7 @@ use crate::c::StructMember;
 use crate::c::Type;
 use crate::c::TypeDefName;
 use crate::c::Unit;
-use crate::{c, ir};
+use crate::ir;
 use crate::c::type_map::TypeID;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -40,14 +40,14 @@ impl<'a> Unit<'a> {
         let box_index = self.box_types_by_element.len();
         let box_id = BoxTypeID(box_index);
 
-        let class = Class::gen_box_class(self.metadata, box_id, element_type.clone());
+        let box_def_name = TypeDefName::Box(box_id);
+        let box_c_type = Type::DefinedType(box_def_name);
+        let box_type_id = self.register_type(element_type.boxed(), box_c_type);
+
+        let class = Class::gen_box_class(self, box_id, element_type.clone());
         self.classes.push(class);
 
         let element_field_ty = self.translate_type(element_type);
-
-        let box_def_name = c::TypeDefName::Box(box_id);
-        let box_c_type = c::Type::DefinedType(box_def_name);
-        let box_type_id = self.register_type(element_type.dyn_array(), box_c_type);
 
         let struct_def = StructDef::new(box_def_name, false)
             .with_comment(format!("box of {}", self.pretty_type(element_type)))

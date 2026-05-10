@@ -227,7 +227,8 @@ impl Expr {
                 Expr::Global(name).addr_of()
             }
             ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(ty)) => {
-                let name = GlobalName::StaticTypeInfo(ty.clone());
+                let type_id = builder.create_type_id(ty);
+                let name = GlobalName::StaticTypeInfo(type_id);
                 Expr::Global(name).addr_of()
             }
             ir::Ref::Global(ir::GlobalRef::StaticFuncInfo(id)) => {

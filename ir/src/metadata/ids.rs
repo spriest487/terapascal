@@ -108,6 +108,16 @@ impl GenericTypeID {
     pub fn to_weak_class_object_type(self: &Rc<Self>) -> Type {
         Type::WeakObject(ObjectID::Class(self.clone()))
     }
+
+    pub fn is_generic(&self) -> bool {
+        if self.args.is_empty() {
+            return false;
+        }
+
+        self.args.iter().all(|ty| {
+            ty.as_generic_param().is_some()
+        })
+    }
 }
 
 impl fmt::Display for GenericTypeID {
