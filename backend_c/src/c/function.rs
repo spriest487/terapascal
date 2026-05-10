@@ -246,10 +246,10 @@ impl FunctionDecl {
             if i > 0 {
                 comment.push_str(", ");
             }
-            comment.push_str(&arg.to_string());
+            comment.push_str(&arg.to_pretty_string(module.metadata));
         }
         comment.push_str(") -> ");
-        comment.push_str(&func.sig.result_type.to_string());
+        comment.push_str(&func.sig.result_type.to_pretty_string(module.metadata));
 
         Self {
             name,

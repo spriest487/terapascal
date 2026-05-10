@@ -14,7 +14,6 @@ pub use self::expr::*;
 pub use self::function::*;
 pub use self::stmt::*;
 pub use self::ty_def::*;
-use crate::c;
 use crate::c::string_lit::StringLiteral;
 use crate::c::string_lit::StringLiteralKey;
 use crate::c::type_map::{ArraySig, TypeID};
@@ -38,16 +37,16 @@ pub struct Unit<'a> {
     function_types: BTreeMap<ir::FunctionID, ir::TypeDefID>,
 
     types: BiHashMap<TypeID, ir::Type>,
-    c_types: BTreeMap<TypeID, c::Type>,
+    c_types: BTreeMap<TypeID, Type>,
 
-    pub dyn_array_types_by_element: BTreeMap<TypeID, c::DynArrayTypeID>,
-    pub box_types_by_element: BTreeMap<TypeID, c::BoxTypeID>,
+    dyn_array_types_by_element: BTreeMap<TypeID, DynArrayTypeID>,
+    box_types_by_element: BTreeMap<TypeID, BoxTypeID>,
 
     static_array_types: HashMap<ArraySig, TypeID>,
 
-    type_defs: BTreeMap<TypeID, c::TypeDef>,
-    type_defs_by_name: HashMap<c::TypeDefName, TypeID>,
-    type_defs_order: TopologicalSort<c::TypeDefName>,
+    type_defs: BTreeMap<TypeID, TypeDef>,
+    type_defs_by_name: HashMap<TypeDefName, TypeID>,
+    type_defs_order: TopologicalSort<TypeDefName>,
     
     ffi_funcs: Vec<FfiFunction>,
     builtin_funcs: HashMap<ir::FunctionID, BuiltinName>,
@@ -67,7 +66,7 @@ pub struct Unit<'a> {
 
     type_infos: HashMap<ir::Type, Rc<ir::TypeInfo>>,
     
-    runtime_funcinfos: Vec<RuntimeFuncInfo>,
+    runtime_func_infos: Vec<RuntimeFuncInfo>,
 }
 
 impl<'a> Unit<'a> {
@@ -133,7 +132,7 @@ impl<'a> Unit<'a> {
 
             type_infos,
 
-            runtime_funcinfos: func_infos,
+            runtime_func_infos: func_infos,
             
             tag_arrays,
             
@@ -345,7 +344,7 @@ impl<'a> Unit<'a> {
         let funcinfo_ty = self.translate_type(&ir::FUNCINFO_ID.to_class_ptr_type([]));
 
         let typeinfo_count = i32::try_from(self.type_infos.len()).unwrap_or(i32::MAX);
-        let funcinfo_count = i32::try_from(self.runtime_funcinfos.len()).unwrap_or(i32::MAX);
+        let funcinfo_count = i32::try_from(self.runtime_func_infos.len()).unwrap_or(i32::MAX);
 
         // allocate the global typeinfo and funcinfo lists
         init_stmts.push(Statement::assign(
@@ -523,8 +522,8 @@ impl<'a> Unit<'a> {
             )));
         }
 
-        for funcinfo_index in 0..self.runtime_funcinfos.len() {
-            let func_id = self.runtime_funcinfos[funcinfo_index].id;
+        for funcinfo_index in 0..self.runtime_func_infos.len() {
+            let func_id = self.runtime_func_infos[funcinfo_index].id;
             let func_info_expr = Expr::Global(GlobalName::StaticFuncInfo(func_id));
 
             init_stmts.push(Statement::Expr(Expr::assign(
@@ -737,7 +736,7 @@ impl<'a> fmt::Display for Unit<'a> {
                 let funcinfo_class = GlobalName::ClassInstance(func_info_id);
                 let funcinfo_struct_name = TypeDefName::Struct(func_info_id);
 
-                for func in &self.runtime_funcinfos {
+                for func in &self.runtime_func_infos {
                     let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
 
                     if self.opts.debug {
