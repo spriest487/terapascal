@@ -224,22 +224,23 @@ impl Type {
             Type::UInt64 => "uint64_t".to_string(),
             Type::PtrDiffType => "ptrdiff_t".to_string(),
             Type::SizeType => "size_t".to_string(),
-            Type::DefinedType(name) => match name {
-                TypeDefName::Struct(..)
-                | TypeDefName::Variant(..)
-                | TypeDefName::StaticArray(..) => {
-                    format!("struct {}", name)
-                },
 
-                _ => name.to_string(),
+            Type::DefinedType(name) => match name {
+                TypeDefName::Alias(..) => name.to_string(),
+                _ => format!("struct {}", name),
             },
+
             Type::Rc => "struct Rc".to_string(),
             Type::Class => "struct Class".to_string(),
             Type::DynArrayClass => "struct DynArrayClass".to_string(),
             Type::Pointer(inner) if **inner == Type::Rc => {
                 "OBJECT_PTR".to_string()
             }
-            Type::SizedArray(ty, ..) | Type::Pointer(ty) => format!("{}*", ty.typename()),
+
+            Type::SizedArray(ty, ..) | Type::Pointer(ty) => {
+                format!("{}*", ty.typename())
+            },
+
             Type::Bool => "bool".to_string(),
             Type::Float => "float".to_string(),
             Type::Double => "double".to_string(),

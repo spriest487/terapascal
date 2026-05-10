@@ -80,7 +80,7 @@ impl fmt::Display for TypeDef {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum TypeDefName {
     // struct from class def ID
     Struct(TypeID),

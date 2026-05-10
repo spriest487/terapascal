@@ -41,7 +41,7 @@ impl<'a> Unit<'a> {
         let array_id = DynArrayTypeID(index);
 
         let array_def_name = TypeDefName::DynArray(array_id);
-        let array_c_type = Type::DefinedType(array_def_name);
+        let array_c_type = Type::DefinedType(array_def_name).ptr();
         let array_type_id = self.register_type(element_type.dyn_array(), array_c_type);
 
         self.gen_dyn_array_methods(array_id, element_type);

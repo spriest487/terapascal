@@ -41,7 +41,7 @@ impl<'a> Unit<'a> {
         let box_id = BoxTypeID(box_index);
 
         let box_def_name = TypeDefName::Box(box_id);
-        let box_c_type = Type::DefinedType(box_def_name);
+        let box_c_type = Type::DefinedType(box_def_name).ptr();
         let box_type_id = self.register_type(element_type.boxed(), box_c_type);
 
         let class = Class::gen_box_class(self, box_id, element_type.clone());

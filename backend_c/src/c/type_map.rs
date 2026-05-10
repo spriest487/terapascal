@@ -164,17 +164,9 @@ impl<'a> Unit<'a> {
             ir::Type::Struct(id) => (id.def_id, &id.args),
             ir::Type::Flags(id) => (*id, &[]),
 
-            ir::Type::Object(ir::ObjectID::Class(..))
-            | ir::Type::WeakObject(ir::ObjectID::Class(..)) => {
-                // class types: register the pointer
-                let type_id = self.register_type_with(ty.clone(), |type_id| {
-                    // TODO: special names for builtin types
-                    let def_name = TypeDefName::Struct(type_id);
-
-                    Type::DefinedType(def_name).ptr()
-                });
-
-                return type_id;
+            ir::Type::Object(ir::ObjectID::Class(id))
+            | ir::Type::WeakObject(ir::ObjectID::Class(id)) => {
+                (id.def_id, &id.args)
             }
 
             _ => {
@@ -215,8 +207,16 @@ impl<'a> Unit<'a> {
     ) -> TypeID {
         let comment = Some(ty.to_pretty_string(self.metadata));
 
+        let is_object = ty.is_object();
+
         let id = self.register_type_with(ty, |index| {
-            Type::DefinedType(TypeDefName::Struct(index))
+            let struct_type = Type::DefinedType(TypeDefName::Struct(index));
+
+            if is_object {
+                struct_type.ptr()
+            } else {
+                struct_type
+            }
         });
 
         let c_def = Rc::new(StructDef::translate(id, def, comment, self));

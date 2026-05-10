@@ -561,8 +561,8 @@ impl<'a> fmt::Display for Unit<'a> {
 
         if self.opts.enable_rtti {
             let type_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
-            let method_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
-            let func_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
+            let method_info_id = self.get_type_id(&ir::METHODINFO_ID.to_class_ptr_type([]));
+            let func_info_id = self.get_type_id(&ir::FUNCINFO_ID.to_class_ptr_type([]));
 
             writeln!(f, "#define TYPEINFO_STRUCT struct {}", TypeDefName::Struct(type_info_id))?;
             writeln!(f, "#define TYPEINFO_NAME(typeinfo) (typeinfo->{})", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
