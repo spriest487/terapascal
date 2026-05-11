@@ -237,10 +237,20 @@ pub trait MetadataSource : Sized {
 
             ObjectID::Interface(iface_id) => Cow::Owned(self.iface_name(*iface_id)),
 
-            ObjectID::AnyClosure(func_ty_id) => Cow::Owned(match self.get_function_ptr_sig(*func_ty_id) {
-                Some(sig) => format!("closure of {}", self.pretty_func_sig(sig)),
-                None => format!("closure of {}", func_ty_id),
-            }),
+            ObjectID::AnyClosure(func_ty_id) => {
+                let closure_name = match self.get_function_ptr_sig(*func_ty_id) {
+                    Some(sig) => {
+                        // don't include the implicit closure pointer in the type name
+                        let mut target_sig = sig.clone();
+                        target_sig.param_types.remove(0);
+
+                        format!("closure of {}", self.pretty_func_sig(&target_sig))
+                    },
+                    None => format!("closure of {}", func_ty_id),
+                };
+
+                Cow::Owned(closure_name)
+            },
 
             ObjectID::Class(struct_id) => {
                 self.pretty_type_name(&struct_id.to_struct_type())

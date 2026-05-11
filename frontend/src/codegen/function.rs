@@ -95,6 +95,7 @@ pub fn build_func_def(
 pub fn build_func_static_closure_def(
     library: &mut LibraryBuilder,
     target_func: &FunctionInstance,
+    func_type_id: TypeDefID,
     target_ir_func: &Function,
 ) -> FunctionDef {
     let params = target_func
@@ -126,10 +127,10 @@ pub fn build_func_static_closure_def(
     // this method needs to be compatible with the type-erased function pointer stored in a
     // closure struct, which has the sig "(Object, ...actual params)"
     let closure_ptr_arg = ArgID(0);
-    let mut bound_params = vec![(closure_ptr_arg, Type::any())];
+    let mut bound_params = vec![(closure_ptr_arg, func_type_id.to_closure_ptr_type())];
 
     // bind the closure pointer arg at ID 0
-    body_builder.bind_closure_ptr(closure_ptr_arg);
+    body_builder.bind_closure_ptr(closure_ptr_arg, func_type_id);
     
     // bind the rest of the args at ID 1+
     bound_params.extend(bind_function_params(params, false, ArgID(1), &mut body_builder));
@@ -169,6 +170,7 @@ pub fn build_closure_function_def(
     lib: &mut LibraryBuilder,
     func_def: &typ::ast::AnonymousFunctionDef,
     closure_id: TypeDefID,
+    func_type_id: TypeDefID,
     debug_name: Option<String>,
 ) -> FunctionDef {
     let closure_def = lib.metadata().get_struct_def(closure_id).cloned().unwrap();
@@ -181,7 +183,7 @@ pub fn build_closure_function_def(
     // *not* bound like a normal param since it can't be named from code, so bind it in the scope
     // of this function body now
     let closure_arg = ArgID(0);
-    body_builder.bind_closure_ptr(closure_arg);
+    body_builder.bind_closure_ptr(closure_arg, func_type_id);
 
     let def_params: Vec<_> = func_def.params
         .iter()
@@ -230,7 +232,7 @@ pub fn build_closure_function_def(
 
     // the 0th parameter of the function is always a type-erased pointer, which we must
     // cast to the actual closure struct type in the body
-    let actual_params = iter::once(Type::any())
+    let actual_params = iter::once(func_type_id.to_closure_ptr_type())
         .chain(bound_params.into_iter().map(|(_, param_ty)| param_ty))
         .collect();
 
@@ -394,7 +396,7 @@ pub fn build_static_closure_impl(
     let static_closure_ptr_ref = Ref::Global(GlobalRef::Variable(id));
 
     let closure_ref = init_builder.build_closure_instance(closure.clone(), true);
-    init_builder.cast(static_closure_ptr_ref, closure_ref, closure.closure_class_type());
+    init_builder.cast(static_closure_ptr_ref, closure_ref, closure.function_pointer_type());
 
     let init_body = init_builder.finish();
 

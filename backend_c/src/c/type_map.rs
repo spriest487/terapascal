@@ -111,9 +111,12 @@ impl<'a> Unit<'a> {
             ir::Type::Object(object_id)| ir::Type::WeakObject(object_id) => {
                 match object_id {
                     ir::ObjectID::Any
-                    | ir::ObjectID::AnyClosure(..)
-                    | ir::ObjectID::Interface(_) => {
+                    | ir::ObjectID::Interface(..) => {
                         self.register_type(ty.clone(), Type::Rc.ptr())
+                    }
+
+                    ir::ObjectID::AnyClosure(..) => {
+                        self.register_type(ty.clone(), Type::AnonymousClosure.ptr())
                     }
 
                     ir::ObjectID::Class(..) => {

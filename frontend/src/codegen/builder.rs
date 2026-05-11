@@ -218,9 +218,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             // closure objects have a specific type, but refs to closures are type erased so
             // we need to cast to Object. we know static closures are immortal, so this can be
             // a temp ref
-            let closure_obj = self.local_temp(ANY_TYPE);
-            self.cast(closure_obj, static_closure_ref, ANY_TYPE);
-            
+            let closure_type = Type::Object(ObjectID::AnyClosure(static_closure.func_ty_id));
+            let closure_obj = self.local_temp(closure_type.clone());
+            self.cast(closure_obj, static_closure_ref, closure_type);
+
             closure_obj.to_ref()
         } else {
             self.build_closure_instance(closure, false)
@@ -528,8 +529,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     // binds an anonymous local binding for the closure pointer of a function
-    pub fn bind_closure_ptr(&mut self, id: ArgID) {
-        self.local_stack_mut().bind_unnamed_param(id, ANY_TYPE, false)
+    pub fn bind_closure_ptr(&mut self, id: ArgID, func_type_id: TypeDefID) {
+        self.local_stack_mut().bind_unnamed_param(id, func_type_id.to_closure_ptr_type(), false)
     }
 
     pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {

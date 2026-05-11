@@ -28,15 +28,19 @@ impl MetadataBuilder {
             .unwrap_or(false)
     }
     
-    pub fn insert_type_decl(&mut self, decl: TypeDecl) -> TypeDefID {
-        let id = self.next_type_id;
-
+    pub fn insert_type_decl(&mut self, id: TypeDefID, decl: TypeDecl) -> TypeDefID {
         let replaced = self.metadata.type_decls.insert(id, decl);
-        assert!(replaced.is_none());
+        match replaced {
+            None | Some(TypeDecl::Reserved) => {
+                self.next_type_id.0 += 1;
 
-        self.next_type_id.0 += 1;
+                id
+            }
 
-        id
+            Some(other) => {
+                panic!("insert_type_decl: unexpectedly replacing type decl {}", other)
+            }
+        }
     }
 
     pub fn new_type(&mut self) -> TypeDefID {

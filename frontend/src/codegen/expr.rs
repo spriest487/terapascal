@@ -87,18 +87,30 @@ pub fn translate_expr(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Ref
                     out_ref
                 },
 
-                ast::Expr::Raise(raise) => translate_raise(raise, builder),
+                ast::Expr::Raise(raise) => {
+                    translate_raise(raise, builder)
+                },
+
                 ast::Expr::Exit(exit) => {
                     translate_exit(exit, builder);
                     ir::Ref::Discard
                 },
 
-                ast::Expr::Case(case) => cond::translate_case_expr(case, builder),
-                ast::Expr::Match(match_expr) => cond::translate_match_expr(match_expr, builder),
+                ast::Expr::Case(case) => {
+                    cond::translate_case_expr(case, builder)
+                },
 
-                ast::Expr::Cast(cast) => translate_cast_expr(cast, builder),
+                ast::Expr::Match(match_expr) => {
+                    cond::translate_match_expr(match_expr, builder)
+                },
 
-                ast::Expr::AnonymousFunction(def) => builder.build_closure_expr(def),
+                ast::Expr::Cast(cast) => {
+                    translate_cast_expr(cast, builder)
+                },
+
+                ast::Expr::AnonymousFunction(def) => {
+                    builder.build_closure_expr(def)
+                },
 
                 ast::Expr::Group(group) => {
                     translate_expr(&group.expr, builder)
