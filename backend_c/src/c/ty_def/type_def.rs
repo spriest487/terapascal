@@ -9,7 +9,6 @@ use crate::c::VariantDef;
 use std::fmt;
 use std::rc::Rc;
 
-#[derive(Clone, Eq, PartialEq, Hash)]
 pub enum TypeDef {
     Struct(Rc<StructDef>),
     Variant(Rc<VariantDef>),

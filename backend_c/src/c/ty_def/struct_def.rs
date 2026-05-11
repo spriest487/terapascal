@@ -6,6 +6,7 @@ use crate::ir;
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::rc::Rc;
 
 #[derive(Clone, Eq)]
 pub struct StructMember {
@@ -28,13 +29,14 @@ impl Hash for StructMember {
     }
 }
 
-#[derive(Clone, Eq)]
+#[derive(Clone)]
 pub struct StructDef {
     pub decl: TypeDecl,
     pub members: Vec<StructMember>,
 
     pub packed: bool,
 
+    pub ir_def: Option<Rc<ir::StructDef>>,
     pub comment: Option<String>,
 }
 
@@ -44,6 +46,7 @@ impl StructDef {
             decl: TypeDecl { name },
             packed,
             members: Vec::new(),
+            ir_def: None,
             comment: None,
         }
     }
@@ -59,12 +62,6 @@ impl StructDef {
     }
 }
 
-impl PartialEq for StructDef {
-    fn eq(&self, other: &Self) -> bool {
-        self.decl == other.decl && self.members == other.members
-    }
-}
-
 impl Hash for StructDef {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.decl.hash(state);
@@ -75,7 +72,7 @@ impl Hash for StructDef {
 impl StructDef {
     pub fn translate(
         index: TypeID,
-        ir_struct: &ir::StructDef,
+        ir_struct: Rc<ir::StructDef>,
         comment: Option<String>,
         unit: &mut Unit,
     ) -> Self {
@@ -109,6 +106,7 @@ impl StructDef {
             decl: TypeDecl {
                 name: TypeDefName::Struct(index),
             },
+            ir_def: Some(ir_struct),
             packed,
             members,
             comment,

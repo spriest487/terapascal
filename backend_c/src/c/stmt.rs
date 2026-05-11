@@ -10,10 +10,10 @@ use crate::c::FunctionName;
 use crate::c::Type;
 use crate::c::TypeDefName;
 use crate::c::Unit;
-use crate::ir;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::iter;
+use terapascal_ir as ir;
 use terapascal_ir::{MetadataSource, TypeDefID};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
@@ -528,28 +528,60 @@ impl<'a, 'b> Builder<'a, 'b> {
             },
 
             ir::Instruction::Retain { at, value_type } => {
-                // TODO deep release/retain
-                let retain = Expr::Function(FunctionName::Builtin(BuiltinName::RcRetain));
+                let at_expr = Expr::translate_ref(at, self);
 
-                let rc_ptr = Expr::translate_ref(at, self).cast(Type::object_ptr());
-                let call_retain = retain.call([rc_ptr, Expr::LitBool(value_type.is_weak())]);
+                let mut retain_stmts = Vec::new();
 
-                self.stmts.push(Statement::Expr(call_retain));
+                self.visit_deep(
+                    at_expr,
+                    value_type,
+                    &mut retain_stmts,
+                    &|_builder, value_expr, val_type, stmts| {
+                        if !val_type.is_object() {
+                            return;
+                        }
+
+                        let retain = Expr::Function(FunctionName::Builtin(BuiltinName::RcRetain));
+
+                        let rc_ptr = value_expr.cast(Type::object_ptr());
+                        let call_retain = retain.call([rc_ptr, Expr::LitBool(value_type.is_weak())]);
+
+                        stmts.push(Statement::Expr(call_retain));
+                    }
+                );
+
+                self.stmts.extend(retain_stmts);
             },
 
             ir::Instruction::Release { at, value_type, released_out } => {
-                // TODO deep release/retain
-                let release = Expr::Function(FunctionName::Builtin(BuiltinName::RcRelease));
+                let at_expr = Expr::translate_ref(at, self);
 
-                let rc_ptr = Expr::translate_ref(at, self).cast(Type::object_ptr());
-                let call_release = release.call([rc_ptr, Expr::LitBool(value_type.is_weak())]);
-                
-                if *released_out != ir::Ref::Discard {
-                    let lhs = Expr::translate_ref(released_out, self);
-                    self.stmts.push(Statement::assign(lhs, call_release));
-                } else {
-                    self.stmts.push(Statement::Expr(call_release));
-                }
+                let mut release_stmts = Vec::new();
+
+                self.visit_deep(
+                    at_expr,
+                    value_type,
+                    &mut release_stmts,
+                    &|builder, value_expr, val_type, stmts| {
+                        if !val_type.is_object() {
+                            return;
+                        }
+
+                        let release = Expr::Function(FunctionName::Builtin(BuiltinName::RcRelease));
+
+                        let rc_ptr = value_expr.cast(Type::object_ptr());
+                        let call_release = release.call([rc_ptr, Expr::LitBool(value_type.is_weak())]);
+
+                        if *released_out != ir::Ref::Discard {
+                            let lhs = Expr::translate_ref(released_out, builder);
+                            stmts.push(Statement::assign(lhs, call_release));
+                        } else {
+                            stmts.push(Statement::Expr(call_release));
+                        }
+                    }
+                );
+
+                self.stmts.extend(release_stmts);
             },
 
             ir::Instruction::VirtualCall {
@@ -597,6 +629,79 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.assign_ref(out, cast_result);
             },
         }
+    }
+
+    fn visit_deep<F>(&mut self, value: Expr, value_type: &ir::Type, out: &mut Vec<Statement>, f: &F)
+    where
+        F: Fn(&mut Self, Expr, &ir::Type, &mut Vec<Statement>)
+    {
+        match value_type {
+            ir::Type::Struct(..) => {
+                let type_id = self.unit.translate_struct_type(value_type);
+                let struct_c_def = self.unit.get_struct_def(type_id);
+
+                // if it's not defined in IR, assume it's a system type with no RC members
+                if let Some(struct_def) = &struct_c_def.ir_def {
+                    for (field_id, field_def) in &struct_def.fields {
+                        let field_expr = value
+                            .clone()
+                            .field(FieldName::ID(*field_id));
+
+                        f(self, field_expr, &field_def.ty, out);
+                    }
+                }
+            }
+
+            ir::Type::Variant(..) => {
+                let type_id = self.unit.translate_variant_type(value_type);
+                let variant_c_def = self.unit.get_variant_def(type_id);
+
+                if let Some(variant_def) = &variant_c_def.ir_def {
+                    for (case_index, case) in variant_def.cases.iter().enumerate() {
+                        let Some(data_type) = &case.ty else {
+                            continue;
+                        };
+
+                        let mut case_stmts = Vec::new();
+                        let case_data_expr = value
+                            .clone()
+                            .field(FieldName::VariantDataCase(case_index))
+                            .deref();
+
+                        f(self, case_data_expr, data_type, &mut case_stmts);
+
+                        let tag_expr = value.clone().field(FieldName::VariantTag);
+                        let tag_val = Expr::translate_val(&case.tag, self);
+
+                        let is_case_tag = tag_expr.infix_op(InfixOp::Eq, tag_val);
+
+                        if !case_stmts.is_empty() {
+                            out.push(Statement::if_then(is_case_tag, case_stmts));
+                        }
+                    }
+                }
+            }
+
+            ir::Type::Array { element, dim } => {
+                for i in 0..*dim {
+                    let index_expr = i128::try_from(i)
+                        .expect("visit_deep: invalid element index");
+
+                    let element_expr = value
+                        .clone()
+                        .field(FieldName::StaticArrayElements)
+                        .index(Expr::LitInt(index_expr));
+
+                    f(self, element_expr, element, out)
+                }
+            }
+
+            _ => {
+                // type has no members
+            }
+        }
+
+        f(self, value, value_type, out);
     }
     
     pub fn retain(&mut self, at: Expr, weak: bool) {

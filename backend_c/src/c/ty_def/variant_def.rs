@@ -7,6 +7,7 @@ use crate::ir;
 use std::fmt;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::rc::Rc;
 
 #[derive(Clone, Eq)]
 pub struct VariantCaseDef {
@@ -26,10 +27,11 @@ impl Hash for VariantCaseDef {
     }
 }
 
-#[derive(Clone, Eq)]
 pub struct VariantDef {
     pub decl: TypeDecl,
     pub cases: Vec<VariantCaseDef>,
+    
+    pub ir_def: Option<Rc<ir::VariantDef>>,
 
     pub comment: Option<String>,
 }
@@ -50,7 +52,7 @@ impl Hash for VariantDef {
 impl VariantDef {
     pub fn translate(
         index: TypeID,
-        def: &ir::VariantDef,
+        def: Rc<ir::VariantDef>,
         comment: Option<String>,
         unit: &mut Unit,
     ) -> Self {
@@ -74,6 +76,7 @@ impl VariantDef {
                 name: TypeDefName::Variant(index),
             },
             cases,
+            ir_def: Some(def),
             comment,
         }
     }

@@ -176,7 +176,7 @@ impl<'a> Unit<'a> {
 
         let generic_def = self.metadata
             .get_struct_def(def_id)
-            .cloned()
+            .map(|def| Rc::new(def.clone()))
             .unwrap_or_else(|| {
                 panic!("missing struct def: {def_id}")
             });
@@ -184,7 +184,7 @@ impl<'a> Unit<'a> {
         match instantiate_struct_def(&generic_def, args) {
             Cow::Borrowed(..) => {
                 // not a specialized generic
-                self.define_struct(ty.clone(), &generic_def)
+                self.define_struct(ty.clone(), generic_def)
             },
 
             Cow::Owned(new_def) => {
@@ -195,7 +195,7 @@ impl<'a> Unit<'a> {
                     eprintln!("new instantiation of struct {}: {}", generic_name, new_name);
                 }
 
-                self.define_struct(ty.clone(), &new_def)
+                self.define_struct(ty.clone(), Rc::new(new_def))
             },
         }
     }
@@ -203,7 +203,7 @@ impl<'a> Unit<'a> {
     fn define_struct(
         &mut self,
         ty: ir::Type,
-        def: &ir::StructDef,
+        def: Rc<ir::StructDef>,
     ) -> TypeID {
         let comment = Some(ty.to_pretty_string(self.metadata));
 
@@ -261,7 +261,7 @@ impl<'a> Unit<'a> {
         match instantiate_variant_def(&generic_def, &variant_id.args) {
             Cow::Borrowed(..) => {
                 // not a specialized generic
-                self.define_variant(ty.clone(), &generic_def)
+                self.define_variant(ty.clone(), Rc::new(generic_def))
             },
 
             Cow::Owned(new_def) => {
@@ -272,7 +272,7 @@ impl<'a> Unit<'a> {
                     eprintln!("new instantiation of variant {}: {}", generic_name, new_name);
                 }
 
-                self.define_variant(ty.clone(), &new_def)
+                self.define_variant(ty.clone(), Rc::new(new_def))
             },
         }
     }
@@ -280,7 +280,7 @@ impl<'a> Unit<'a> {
     fn define_variant(
         &mut self,
         ty: ir::Type,
-        def: &ir::VariantDef,
+        def: Rc<ir::VariantDef>,
     ) -> TypeID {
         let comment = Some(ty.to_pretty_string(self.metadata));
 
@@ -288,9 +288,11 @@ impl<'a> Unit<'a> {
             Type::DefinedType(TypeDefName::Variant(index))
         });
 
+        let cases_len = def.cases.len();
+
         let c_def = Rc::new(VariantDef::translate(id, def, comment, self));
 
-        let mut member_deps = Vec::with_capacity(def.cases.len());
+        let mut member_deps = Vec::with_capacity(cases_len);
 
         for case in &c_def.cases {
             if let Some(case_ty) = &case.ty {
