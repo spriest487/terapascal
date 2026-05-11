@@ -185,12 +185,12 @@ static bool System_IsNaN(float val);
 // runtime start/stop
 
 // this needs to match what would ordinarily be generated for the System.String decl
-PACKED_DECL(STRING_STRUCT {
+STRING_STRUCT {
     struct Rc rc;
 
     unsigned char* field_0;
     int32_t field_1;
-});
+};
 
 #define MAKE_STRING_LIT(text) {\
     .rc = MAKE_RC(STRING_CLASS, -1, 0),\
