@@ -656,7 +656,7 @@ impl<'a> fmt::Display for Unit<'a> {
 
         if self.opts.enable_rtti {
             let type_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
-            let func_info_id = self.get_type_id(&ir::TYPEINFO_ID.to_class_ptr_type([]));
+            let func_info_id = self.get_type_id(&ir::FUNCINFO_ID.to_class_ptr_type([]));
 
             let typeinfo_struct_name = TypeDefName::Struct(type_info_id);
             let typeinfo_class = GlobalName::ClassInstance(type_info_id);
