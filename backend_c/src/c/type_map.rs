@@ -399,6 +399,10 @@ impl<'a> Unit<'a> {
     }
 
     pub fn translate_function_type(&mut self, ty: ir::Type) -> TypeID {
+        if let Some(existing_id) = self.try_get_type_id(&ty) {
+            return existing_id;
+        }
+
         let ir::Type::Function(func_id) = &ty else {
             panic!("{} is not a function type", ty.to_pretty_string(self.metadata));
         };
