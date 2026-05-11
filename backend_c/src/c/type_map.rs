@@ -130,9 +130,7 @@ impl<'a> Unit<'a> {
             }
 
             ir::Type::Function(..) => {
-                self.register_type_with(ty.clone(), |id| {
-                    Type::DefinedType(TypeDefName::Alias(id))
-                })
+                self.translate_function_type(ty.clone())
             }
 
             ir::Type::Bool => self.register_type(ty.clone(), Type::Bool),
@@ -434,9 +432,7 @@ impl<'a> Unit<'a> {
         let name = TypeDefName::Alias(id);
 
         let func_alias_def = FuncAliasDef {
-            decl: TypeDecl {
-                name,
-            },
+            decl: TypeDecl { name },
             param_tys,
             return_ty,
             comment: Some(sig.to_string()),
