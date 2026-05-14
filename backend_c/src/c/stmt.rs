@@ -487,7 +487,6 @@ impl<'a, 'b> Builder<'a, 'b> {
                 );
                 self.stmts.push(Statement::Expr(assign_result))
             },
-            
 
             ir::Instruction::And(ir::BinOpInstruction { out, a, b }) => {
                 let and = Expr::translate_infix_op(a, InfixOp::And, b, self);
