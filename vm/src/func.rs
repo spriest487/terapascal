@@ -284,31 +284,9 @@ impl<'a> ir::InstructionBuilder for RuntimeFuncBuilder<'a> {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct FuncInstanceKey {
-    pub id: ir::FunctionID,
-    pub args: Vec<ir::Type>
-}
-
-impl FuncInstanceKey {
-    pub fn new(id: ir::FunctionID) -> Self {
-        Self {
-            id,
-            args: Vec::new(),
-        }
-    }
-
-    pub fn with_args(self, args: impl IntoIterator<Item=ir::Type>) -> Self {
-        Self {
-            id: self.id,
-            args: args.into_iter().collect(),
-        }
-    }
-}
-
 pub fn instantiate_func(
     vm: &mut Vm,
-    key: FuncInstanceKey,
+    key: ir::FuncInstanceKey,
 ) -> ExecResult<FunctionInfo> {
     if let Some(func_info) = vm.functions.get(&key).cloned()
         && func_info.func.type_params().len() == key.args.len()
@@ -317,7 +295,7 @@ pub fn instantiate_func(
     }
 
     let generic_func = vm.functions
-        .get(&FuncInstanceKey::new(key.id))
+        .get(&ir::FuncInstanceKey::new(key.id))
         .ok_or_else(|| {
             let msg = format!("missing generic function definition: {}", key.id);
             ExecError::illegal_state(msg)

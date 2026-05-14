@@ -254,14 +254,9 @@ fn bind_function_return(return_ty: &typ::Type, builder: &mut IRBuilder) -> Type 
         return_ty => {
             let return_ty = builder.translate_type(return_ty);
 
-            // anonymous return binding at %0
-            builder.comment(&format!(
-                "{} = {} (return slot)",
-                LocalID(0),
-                builder.pretty_ty_name(&return_ty),
-            ));
+            builder.comment(format!("result binding: {}", builder.pretty_ty_name(&return_ty)));
 
-            builder.bind_return(return_ty.clone());
+            builder.bind_result(return_ty.clone());
             return_ty
         },
     }

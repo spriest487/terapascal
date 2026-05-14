@@ -524,7 +524,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     // binds an anonymous return local in %0 with the indicated type
-    pub fn bind_return(&mut self, ty: Type) {
+    pub fn bind_result(&mut self, ty: Type) {
         self.local_stack_mut().bind_result(ty);
     }
 

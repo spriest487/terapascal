@@ -26,7 +26,6 @@ use std::collections::hash_map::HashMap;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
-use terapascal_ir::FieldID;
 use terapascal_ir::MetadataSource;
 use topological_sort::TopologicalSort;
 
@@ -34,7 +33,11 @@ pub struct Unit<'a> {
     pub metadata: &'a ir::Metadata,
 
     functions: Vec<FunctionDef>,
+
+    function_refs: HashMap<ir::FuncInstanceKey, FunctionInstance>,
     function_types: BTreeMap<ir::FunctionID, ir::TypeDefID>,
+
+    func_instances: BTreeMap<FuncInstanceID, FunctionName>,
 
     types: BiHashMap<TypeID, ir::Type>,
     c_types: BTreeMap<TypeID, Type>,
@@ -49,7 +52,6 @@ pub struct Unit<'a> {
     type_defs_order: TopologicalSort<TypeDefName>,
     
     ffi_funcs: Vec<FfiFunction>,
-    builtin_funcs: HashMap<ir::FunctionID, BuiltinName>,
 
     global_vars: Vec<GlobalVar>,
 
@@ -83,19 +85,6 @@ impl<'a> Unit<'a> {
             .map(|(ty, rtti)| (ty.clone(), rtti.clone()))
             .collect();
 
-        let func_infos = metadata
-            .functions()
-            .filter_map(|(id, func_info)| {
-                let name = func_info.runtime_name?;
-
-                Some(RuntimeFuncInfo {
-                    name,
-                    id,
-                    invoker: func_info.invoker,
-                })
-            })
-            .collect();
-
         let tag_arrays = metadata
             .all_tags()
             .map(|(loc, tags)| (loc, tags.len()))
@@ -117,9 +106,10 @@ impl<'a> Unit<'a> {
 
             functions: Vec::new(),
             function_types: BTreeMap::new(),
+            function_refs: HashMap::new(),
+            func_instances: BTreeMap::new(),
 
             ffi_funcs: Vec::new(),
-            builtin_funcs: HashMap::new(),
             
             global_vars: Vec::new(),
 
@@ -132,7 +122,7 @@ impl<'a> Unit<'a> {
 
             type_infos,
 
-            runtime_func_infos: func_infos,
+            runtime_func_infos: Vec::new(),
             
             tag_arrays,
             
@@ -145,16 +135,13 @@ impl<'a> Unit<'a> {
         unit.object_array_id = unit.get_dyn_array_type(&ir::ANY_TYPE).1;
 
         let system_funcs = builtin::system_funcs();
-        
-        let mut builtin_func_ids = HashMap::with_capacity(system_funcs.len());
 
         for (pas_name, c_name, _return_ty, _params) in &system_funcs {
             let global_name = &ir::NamePath::new(vec!["System".to_string()], *pas_name);
 
             // if a function isn't used then it won't be included in the metadata
             if let Some(func_id) = metadata.find_function(global_name) {
-                unit.builtin_funcs.insert(func_id, *c_name);
-                builtin_func_ids.insert(*c_name, func_id);
+                unit.add_builtin_function(func_id, *c_name);
             }
         }
 
@@ -179,6 +166,25 @@ impl<'a> Unit<'a> {
             unit.ifaces.push(iface);
         }
 
+        for (func_id, func_info) in metadata.functions() {
+            let invoker = match func_info.invoker {
+                Some(invoker_id) => {
+                    let invoker_key = ir::FuncInstanceKey::new(invoker_id);
+                    let invoker_id = unit.add_function_instance(invoker_key);
+                    Some(invoker_id.name)
+                }
+                None => None,
+            };
+
+            let name = func_info.runtime_name;
+
+            unit.runtime_func_infos.push(RuntimeFuncInfo {
+                name,
+                id: func_id,
+                invoker,
+            });
+        }
+
         unit
     }
 
@@ -197,11 +203,8 @@ impl<'a> Unit<'a> {
         name_path.to_pretty_string(self.metadata)
     }
 
-    pub fn function_name(&self, id: ir::FunctionID) -> FunctionName {
-        match self.builtin_funcs.get(&id) {
-            Some(builtin) => FunctionName::Builtin(*builtin),
-            None => FunctionName::ID(id),
-        }
+    pub fn function_name(&self, id: FuncInstanceID) -> FunctionName {
+        self.func_instances[&id]
     }
 
     pub fn add_lib(&mut self, library: &ir::Library) {
@@ -234,20 +237,17 @@ impl<'a> Unit<'a> {
         for (func_id, func) in library.functions() {
             match func {
                 ir::Function::Local(func_def) => {
-                    // generic functions can't be translated and will be instantiated as we
-                    // encounter their usages
-                    if !func_def.type_params.is_empty() {
-                        continue;
+                    if func_def.type_params.is_empty() {
+                        self.add_function_instance(ir::FuncInstanceKey::new(*func_id));
                     }
-
-                    let c_func = FunctionDef::translate(*func_id, func_def, self);
-                    self.functions.push(c_func);
-                },
-
-                ir::Function::External(func_ref) if func_ref.src == ir::BUILTIN_SRC => {
                 },
 
                 ir::Function::External(func_ref) => {
+                    // builtin functions should already be added
+                    if func_ref.src == ir::BUILTIN_SRC {
+                        continue;
+                    }
+
                     let ffi_func = FfiFunction::translate(*func_id, func_ref, self);
                     self.ffi_funcs.push(ffi_func);
                 },
@@ -265,17 +265,6 @@ impl<'a> Unit<'a> {
             
             if let Some(id) = func_type_id {
                 self.function_types.insert(*func_id, id);
-            }
-        }
-
-        // now that real functions are defined, we can generate method vcall wrappers
-        for class in self.classes.clone() {
-            for wrapper_func_def in class.gen_vcall_wrappers(self) {
-                self.functions.push(wrapper_func_def);
-            }
-            
-            if let Some(dtor_invoker) = class.gen_dtor_invoker() {
-                self.functions.push(dtor_invoker);
             }
         }
 
@@ -323,6 +312,39 @@ impl<'a> Unit<'a> {
         }
 
         self.functions.push(init_func);
+
+        while self.func_instances.len() < self.function_refs.len() {
+            let func_keys: Vec<_> = self.function_refs
+                .iter()
+                .map(|(key, instance)| (key.clone(), instance.clone()))
+                .collect();
+
+            for (key, instance) in func_keys {
+                let instance_id = instance.id;
+                if self.func_instances.contains_key(&instance_id) {
+                    continue;
+                }
+
+                self.func_instances.insert(instance_id, instance.name);
+
+                let Some(ir::Function::Local(def)) = library.functions.get(&key.id) else {
+                    continue;
+                };
+
+                self.build_func_instance(instance_id, key, def);
+            }
+        }
+
+        // now that real functions are defined, we can generate method vcall wrappers
+        for class in self.classes.clone() {
+            for wrapper_func_def in class.gen_vcall_wrappers(self) {
+                self.functions.push(wrapper_func_def);
+            }
+
+            if let Some(dtor_invoker) = class.gen_dtor_invoker() {
+                self.functions.push(dtor_invoker);
+            }
+        }
     }
     
     fn create_named_string_lit(&mut self, name: GlobalName, text: &str) {
@@ -423,7 +445,7 @@ impl<'a> Unit<'a> {
             let type_id = self.create_type_id(&ty);
             let type_info_name = GlobalName::StaticTypeInfo(type_id);
 
-            let type_info = &self.type_infos[&ty];
+            let type_info = self.type_infos[&ty].clone();
 
             // allocate the method dynarray instance for this typeinfo
             let method_array_class_ptr = Expr::dyn_array_class(method_info_array_id).addr_of();
@@ -484,7 +506,10 @@ impl<'a> Unit<'a> {
                     .get_function_info(method_func_id)
                     .and_then(|f| f.invoker)
                 {
-                    Expr::Function(FunctionName::ID(invoker_id)).addr_of()
+                    let invoker_key = ir::FuncInstanceKey::new(invoker_id);
+                    let invoker_instance = self.add_function_instance(invoker_key);
+
+                    Expr::Function(invoker_instance.name).addr_of()
                 } else {
                     Expr::Null
                 };
@@ -710,7 +735,7 @@ impl<'a> fmt::Display for Unit<'a> {
 
                     // should be a single 1-word flag type
                     writeln!(f, "  .{} = (struct {flags_type_name}) {{", FieldName::ID(ir::TYPEINFO_FLAGS_FIELD))?;
-                    writeln!(f, "       .{} = {}", FieldName::ID(FieldID(0)), typeinfo.flags)?;
+                    writeln!(f, "       .{} = {}", FieldName::ID(ir::FieldID(0)), typeinfo.flags)?;
                     writeln!(f, "}},")?;
 
                     writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
@@ -740,7 +765,8 @@ impl<'a> fmt::Display for Unit<'a> {
                     let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
 
                     if self.opts.debug {
-                        let debug_name = self.get_string_lit(func.name)
+                        let debug_name = func.name
+                            .and_then(|id| self.get_string_lit(id))
                             .map(str::to_string)
                             .unwrap_or_else(|| func.id.to_string());
                         writeln!(f, "/** static FunctionInfo of {} */", debug_name)?;
@@ -749,13 +775,21 @@ impl<'a> fmt::Display for Unit<'a> {
                     writeln!(f, "static struct {} {} = {{", funcinfo_struct_name, funcinfo_name)?;
                     writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
 
-                    let name_str = GlobalName::StringLiteral(func.name);
+                    let name_field = FieldName::ID(ir::FUNCINFO_NAME_FIELD);
+                    match func.name {
+                        Some(name_id) => {
+                            let name_str = GlobalName::StringLiteral(name_id);
+                            writeln!(f, "  .{name_field} = &{name_str},")?;
+                        }
 
-                    writeln!(f, "  .{} = &{},", FieldName::ID(ir::FUNCINFO_NAME_FIELD), name_str)?;
+                        None => {
+                            writeln!(f, "  .{name_field} = NULL,")?;
+                        }
+                    }
 
                     write!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
-                    if let Some(invoker_id) = func.invoker {
-                        write!(f, "&{}", FunctionName::ID(invoker_id))?;
+                    if let Some(invoker) = func.invoker {
+                        write!(f, "&{}", invoker)?;
                     } else {
                         write!(f, "NULL")?;
                     }

@@ -222,3 +222,25 @@ impl Function {
         }
     }
 }
+
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct FuncInstanceKey {
+    pub id: FunctionID,
+    pub args: Vec<Type>
+}
+
+impl FuncInstanceKey {
+    pub fn new(id: FunctionID) -> Self {
+        Self {
+            id,
+            args: Vec::new(),
+        }
+    }
+
+    pub fn with_args(self, args: impl IntoIterator<Item=Type>) -> Self {
+        Self {
+            id: self.id,
+            args: args.into_iter().collect(),
+        }
+    }
+}

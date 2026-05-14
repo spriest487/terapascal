@@ -1810,7 +1810,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         let sig = lib.functions[&func.id].sig().clone();
 
         let mut builder = IRBuilder::new(lib);
-        builder.bind_return(sig.result_type.clone());
+        builder.bind_result(sig.result_type.clone());
 
         let self_arg = ir::ArgID(0);
         let args_arg = ir::ArgID(1);

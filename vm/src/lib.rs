@@ -20,7 +20,6 @@ use crate::diag::DiagnosticWorker;
 use crate::func::instantiate_func;
 use crate::func::BuiltinFn;
 use crate::func::BuiltinFunction;
-use crate::func::FuncInstanceKey;
 use crate::func::Function;
 use crate::func::FunctionInfo;
 use crate::heap::NativeHeap;
@@ -42,7 +41,7 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_common::span::Span;
 use terapascal_ir as ir;
-use terapascal_ir::MetadataSource as _;
+use terapascal_ir::{FuncInstanceKey, MetadataSource as _};
 
 #[derive(Debug)]
 pub struct Vm {
@@ -53,7 +52,7 @@ pub struct Vm {
 
     opts: ExecOpts,
 
-    functions: HashMap<FuncInstanceKey, FunctionInfo>,
+    functions: HashMap<ir::FuncInstanceKey, FunctionInfo>,
 
     diag_worker: Option<DiagnosticWorker>,
 
@@ -570,7 +569,7 @@ impl Vm {
         args: &[DynValue],
         type_args: &[ir::Type],
     ) -> ExecResult<Option<DynValue>> {
-        let func_key = FuncInstanceKey::new(id).with_args(type_args.to_vec());
+        let func_key = ir::FuncInstanceKey::new(id).with_args(type_args.to_vec());
         let func_info = instantiate_func(self, func_key)?;
 
         let func_name = func_info.identity.to_pretty_string(self.metadata());

@@ -1621,6 +1621,7 @@ version = "0.1.0"
 dependencies = [
  "bimap",
  "linked-hash-map",
+ "terapascal-common",
  "terapascal-ir",
  "topological-sort",
 ]

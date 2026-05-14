@@ -4,12 +4,12 @@ use crate::c::expr::InfixOp;
 use crate::c::expr::PrefixOp;
 use crate::c::ty_def::FieldName;
 use crate::c::type_map::TypeID;
-use crate::c::BuiltinName;
 use crate::c::DynArrayTypeID;
 use crate::c::FunctionName;
 use crate::c::Type;
 use crate::c::TypeDefName;
 use crate::c::Unit;
+use crate::c::{BuiltinName, FuncInstanceID};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::iter;
@@ -434,11 +434,7 @@ impl<'a, 'b> Builder<'a, 'b> {
             },
 
             ir::Instruction::Call { out, function, args, type_args } => {
-                if !type_args.is_empty() {
-                    todo!("generic method translation")
-                }
-
-                self.translate_call(out.as_ref(), function, args);
+                self.translate_call(out.as_ref(), function, args, type_args);
             }
 
             ir::Instruction::NewObject { out, type_id, type_args, immortal } => {
@@ -837,7 +833,7 @@ impl<'a, 'b> Builder<'a, 'b> {
         Expr::array_class_ptr(arr_obj, id, self.unit)
     }
 
-    pub fn function_name(&self, id: ir::FunctionID) -> FunctionName {
+    pub fn function_name(&self, id: FuncInstanceID) -> FunctionName {
         self.unit.function_name(id)
     }
 
@@ -891,8 +887,30 @@ impl<'a, 'b> Builder<'a, 'b> {
         }
     }
 
-    fn translate_call(&mut self, out: Option<&ir::Ref>, function: &ir::Value, args: &[ir::Value]) {
-        let func_expr = Expr::translate_val(function, self);
+    fn translate_call(
+        &mut self,
+        out: Option<&ir::Ref>,
+        function: &ir::Value,
+        args: &[ir::Value],
+        type_args: &[ir::Type],
+    ) {
+        // if the function value is a reference to a global function, instantiate that. otherwise,
+        // it must be a function pointer value, and can't have type args
+        let func_expr = match function {
+            ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(func_id))) => {
+                let instance_key = ir::FuncInstanceKey::new(*func_id)
+                    .with_args(type_args.to_vec());
+
+                let instance = self.unit.add_function_instance(instance_key);
+                Expr::Function(instance.name)
+            }
+
+            _ => {
+                assert!(type_args.is_empty(), "translate_call: call to function pointer value cannot have type args");
+                Expr::translate_val(function, self)
+            }
+        };
+
         let args = args
             .iter()
             .map(|arg_val| Expr::translate_val(arg_val, self));

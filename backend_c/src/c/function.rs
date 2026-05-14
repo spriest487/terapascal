@@ -1,6 +1,9 @@
+mod builder;
+
+use std::borrow::Cow;
 use crate::c::boxed::BoxTypeID;
+use crate::c::function::builder::FuncInstanceBuilder;
 use crate::c::Builder;
-use crate::c::VariableID;
 use crate::c::DynArrayTypeID;
 use crate::c::Expr;
 use crate::c::Statement;
@@ -8,9 +11,30 @@ use crate::c::Type;
 use crate::c::TypeDecl;
 use crate::c::TypeDefName;
 use crate::c::Unit;
+use crate::c::VariableID;
+use std::collections::HashMap;
 use std::env;
 use std::fmt;
+use terapascal_common::SharedStringKey;
 use terapascal_ir as ir;
+use terapascal_ir::FunctionID;
+use terapascal_ir::generic::instantiate_function_def;
+use terapascal_ir::generic::instantiate_sig;
+
+#[derive(Copy, Clone)]
+pub struct FunctionInstance {
+    pub id: FuncInstanceID,
+    pub name: FunctionName,
+}
+
+#[derive(Debug, Eq, PartialEq, Hash, Copy, Clone, Ord, PartialOrd)]
+pub struct FuncInstanceID(pub usize);
+
+impl fmt::Display for FuncInstanceID {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub enum FunctionName {
@@ -23,7 +47,8 @@ pub enum FunctionName {
     // function to initialize an external symbol at runtime
     LoadSymbol,
 
-    ID(ir::FunctionID),
+    ID(FuncInstanceID),
+    Extern(ir::FunctionID),
     Method(ir::InterfaceID, ir::MethodID),
     DestructorInvoker(TypeDefName),
     MethodWrapper(ir::InterfaceID, ir::MethodID, TypeDefName),
@@ -51,6 +76,7 @@ impl fmt::Display for FunctionName {
             FunctionName::LoadSymbol => write!(f, "LoadSymbol"),
 
             FunctionName::ID(id) => write!(f, "Function_{}", id.0),
+            FunctionName::Extern(id) => write!(f, "Extern{}", id.0),
             FunctionName::DestructorInvoker(name) => write!(f, "Destructor_{}", name),
 
             FunctionName::Method(iface, method) => {
@@ -226,7 +252,7 @@ pub struct FunctionDecl {
 }
 
 impl FunctionDecl {
-    pub fn translate(id: ir::FunctionID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
+    pub fn translate(id: FuncInstanceID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
         let name = FunctionName::ID(id);
         let return_ty = module.translate_type(&func.sig.result_type);
         let params = func
@@ -297,7 +323,7 @@ pub struct FunctionDef {
 }
 
 impl FunctionDef {
-    pub fn translate(id: ir::FunctionID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
+    pub fn translate(id: FuncInstanceID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
         let mut builder = Builder::new(module);
         builder.translate_instructions(&func.body);
 
@@ -348,7 +374,7 @@ impl FfiFunction {
         }
 
         let decl = FunctionDecl {
-            name: FunctionName::ID(id),
+            name: FunctionName::Extern(id),
             return_ty,
             params,
             comment: Some(format!(
@@ -422,5 +448,79 @@ pub struct FuncAliasID(pub ir::TypeDefID);
 impl fmt::Display for FuncAliasID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "FunctionAlias_{}", self.0 .0)
+    }
+}
+
+impl<'a> Unit<'a> {
+    pub fn add_function_instance(&mut self, key: ir::FuncInstanceKey) -> FunctionInstance {
+        if let Some(instance) = self.function_refs.get(&key) {
+            return *instance;
+        }
+
+        let instance_id = FuncInstanceID(self.function_refs.len());
+        let instance = FunctionInstance {
+            id: instance_id,
+            name: FunctionName::ID(instance_id),
+        };
+
+        self.function_refs.insert(key, instance);
+        instance
+    }
+
+    pub fn add_builtin_function(&mut self, id: FunctionID, name: BuiltinName) -> FuncInstanceID {
+        let key = ir::FuncInstanceKey::new(id);
+        if let Some(instance) = self.function_refs.get(&key) {
+            return instance.id;
+        }
+
+        let instance_id = FuncInstanceID(self.function_refs.len());
+        self.function_refs.insert(key, FunctionInstance {
+            id: instance_id,
+            name: FunctionName::Builtin(name),
+        });
+
+        instance_id
+    }
+
+    pub fn build_func_instance(
+        &mut self,
+        instance_id: FuncInstanceID,
+        key: ir::FuncInstanceKey,
+        generic_def: &ir::FunctionDef,
+    ) {
+        if key.args.len() != generic_def.type_params.len() {
+            panic!(
+                "incorrect number of type parameters for function {} (invocation has {}, expected: {})",
+                key.id,
+                key.args.len(),
+                generic_def.type_params.len(),
+            );
+        }
+
+        let def = if key.args.len() == 0 {
+            Cow::Borrowed(generic_def)
+        } else {
+            let mut types = HashMap::new();
+            for (param, arg) in generic_def.type_params.iter().zip(key.args.iter()) {
+                if types.insert(SharedStringKey(param.clone()), arg.clone()).is_some() {
+                    panic!("invalid function def: type param names are not unique");
+                }
+            }
+
+            let mut builder = FuncInstanceBuilder::new(self);
+            let sig = instantiate_sig(&generic_def.sig, &types);
+
+            instantiate_function_def(&generic_def, &types, &mut builder);
+
+            Cow::Owned(ir::FunctionDef {
+                body: builder.finish(),
+                debug_name: None,
+                type_params: Vec::new(),
+                sig,
+            })
+        };
+
+        let c_def = FunctionDef::translate(instance_id, &def, self);
+        self.functions.push(c_def);
     }
 }

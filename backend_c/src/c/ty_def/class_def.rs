@@ -1,5 +1,6 @@
 use crate::c::boxed::BoxTypeID;
 use crate::c::global_typeinfo_decl_name;
+use crate::c::type_map::TypeID;
 use crate::c::DynArrayTypeID;
 use crate::c::Expr;
 use crate::c::FieldName;
@@ -17,7 +18,6 @@ use ir::MetadataSource as _;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write;
-use crate::c::type_map::TypeID;
 
 #[derive(Clone, Debug)]
 struct MethodImplFunc {
@@ -38,7 +38,10 @@ impl MethodImplFunc {
     ) -> Self {
         let iface_ty = ir::Type::Object(ir::ObjectID::Interface(iface_id));
 
-        let impl_func_name = FunctionName::ID(impl_func_id);
+        // TODO: doesn't support methods with type params yet
+        let method_instance_key = ir::FuncInstanceKey::new(impl_func_id);
+        let method_instance = module.add_function_instance(method_instance_key);
+
         let vcall_wrapper_name = FunctionName::MethodWrapper(iface_id, method_id, self_class.to_def_name());
 
         // generate virtual call wrapper with the param types of the virtually called iface method
@@ -50,7 +53,7 @@ impl MethodImplFunc {
         let wrapper_return_ty = module.translate_type(&iface_method.return_ty);
 
         Self {
-            name: impl_func_name,
+            name: method_instance.name,
             vcall_wrapper_decl: FunctionDecl {
                 comment: Some(format!(
                     "virtual call wrapper impl of {}.{} for {}",
@@ -188,7 +191,7 @@ pub struct Class {
     identity: ClassIdentity,
     impls: BTreeMap<ir::InterfaceID, InterfaceImpl>,
 
-    dtor: Option<ir::FunctionID>,
+    dtor: Option<FunctionName>,
 
     comment: Option<String>,
 
@@ -199,12 +202,12 @@ impl Class {
     pub fn translate(
         class_ty: ir::Type,
         metadata: &ir::Metadata,
-        module: &mut Unit,
+        unit: &mut Unit,
     ) -> Self {
         let mut impls = BTreeMap::new();
 
-        module.translate_type(&class_ty);
-        let class_index = module.get_type_id(&class_ty);
+        unit.translate_type(&class_ty);
+        let class_index = unit.get_type_id(&class_ty);
 
         for (iface_id, iface_impl) in metadata.find_impls(&class_ty) {
             let mut method_impls = BTreeMap::new();
@@ -221,7 +224,7 @@ impl Class {
                     method_def,
                     *impl_func_id,
                     metadata,
-                    module,
+                    unit,
                 );
 
                 method_impls.insert(*method_id, impl_func);
@@ -245,12 +248,27 @@ impl Class {
             .map(|name| name.clone())
             .unwrap_or_else(|| metadata.pretty_type_name(&class_ty).to_string());
 
-        let typeinfo_name = global_typeinfo_decl_name(module, &class_ty);
+        let typeinfo_name = global_typeinfo_decl_name(unit, &class_ty);
+
+        let dtor = match runtime_type.dtor {
+            Some(id) => {
+                let ir::Type::Object(ir::ObjectID::Class(class_id)) = class_ty else {
+                    panic!("invalid type for class: {}", class_ty.to_pretty_string(unit.metadata));
+                };
+
+                let key = ir::FuncInstanceKey::new(id)
+                    .with_args(class_id.args.clone());
+
+                let instance = unit.add_function_instance(key);
+                Some(instance.name)
+            },
+            None => None,
+        };
 
         Class {
             identity: ClassIdentity::Class(class_index),
             impls,
-            dtor: runtime_type.dtor,
+            dtor,
             comment: Some(comment),
             typeinfo_global_name: typeinfo_name,
         }
@@ -314,7 +332,7 @@ impl Class {
     }
     
     pub fn gen_dtor_invoker(&self) -> Option<FunctionDef> {
-        let Some(dtor_func) = self.dtor else {
+        let Some(dtor) = self.dtor else {
             return None;
         };
         
@@ -330,7 +348,7 @@ impl Class {
             },
             body: vec![
                 // dtor((Self*) arg0);
-                Statement::Expr(Expr::Function(FunctionName::ID(dtor_func)).call([
+                Statement::Expr(Expr::Function(dtor).call([
                     Expr::arg_var(ir::ArgID(0)).cast(self_ty.ptr())
                 ])),
             ]
