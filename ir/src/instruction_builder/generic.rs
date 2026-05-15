@@ -1,4 +1,4 @@
-use crate::ArgID;
+use crate::{ArgID, FunctionRef};
 use crate::BinOpInstruction;
 use crate::FunctionDef;
 use crate::FunctionSig;
@@ -445,6 +445,13 @@ fn remap_ref(r: &Ref, locals: &LocalMap, types: &TypeMap) -> Ref {
         Ref::Global(GlobalRef::StaticTypeInfo(ty)) => {
             let ty = instantiate_type(ty, types);
             Ref::from(GlobalRef::StaticTypeInfo(Rc::new(ty)))
+        }
+        Ref::Global(GlobalRef::Function(func_ref)) => {
+            let mut type_args = Vec::with_capacity(func_ref.args.len());
+            for arg in &func_ref.args {
+                type_args.push(instantiate_type(arg, types));
+            }
+            Ref::from(FunctionRef::new(func_ref.id).with_args(type_args))
         }
         _ => r.clone(),
     }
