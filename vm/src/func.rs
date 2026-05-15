@@ -58,6 +58,9 @@ pub struct FunctionInfo {
     pub invoker: Option<ir::FunctionID>,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct FuncInstanceID(pub usize);
+
 impl Function {
     pub fn new(id: ir::FunctionID, def: ir::FunctionDef, metadata: &ir::Metadata) -> Self {
         let func_info = metadata.get_function_info(id);
@@ -286,16 +289,18 @@ impl<'a> ir::InstructionBuilder for RuntimeFuncBuilder<'a> {
 
 pub fn instantiate_func(
     vm: &mut Vm,
-    key: ir::FuncInstanceKey,
+    key: &ir::FunctionRef,
 ) -> ExecResult<FunctionInfo> {
-    if let Some(func_info) = vm.functions.get(&key).cloned()
+    if let Some(func_info) = vm.functions.get(key).cloned()
         && func_info.func.type_params().len() == key.args.len()
     {
         return Ok(func_info);
     }
+    
+    vm.heap.marshaller.register_func_instance(key.clone());
 
     let generic_func = vm.functions
-        .get(&ir::FuncInstanceKey::new(key.id))
+        .get(&ir::FunctionRef::new(key.id))
         .ok_or_else(|| {
             let msg = format!("missing generic function definition: {}", key.id);
             ExecError::illegal_state(msg)

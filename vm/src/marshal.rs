@@ -38,6 +38,7 @@ use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
 use terapascal_ir::generic::instantiate_struct_def;
 use terapascal_ir::generic::instantiate_variant_def;
+use crate::func::FuncInstanceID;
 
 // dynamic array values in memory are marshalled as a set of header fields followed by a variably
 // sized sequence of elements
@@ -90,6 +91,8 @@ pub struct Marshaller {
     type_indices: BiHashMap<TypeIndex, ir::Type>,
     object_id_indices: BiHashMap<TypeIndex, ObjectID>,
 
+    func_instances: BiHashMap<ir::FunctionRef, FuncInstanceID>,
+
     trace_generics: bool,
 }
 
@@ -107,6 +110,8 @@ impl Marshaller {
             next_type_index: TypeIndex(0),
             object_id_indices: BiHashMap::new(),
             type_indices: BiHashMap::new(),
+
+            func_instances: BiHashMap::new(),
 
             trace_generics,
         };
@@ -237,6 +242,14 @@ impl Marshaller {
         }
 
         Ok(type_index)
+    }
+
+    pub fn register_func_instance(&mut self, key: ir::FunctionRef) -> FuncInstanceID {
+        let id = FuncInstanceID(self.func_instances.len());
+
+        self.func_instances.insert(key, id);
+
+        id
     }
 
     pub fn register_object_type(&mut self, ty: ir::Type) -> MarshalResult<TypeIndex> {
@@ -675,8 +688,12 @@ impl Marshaller {
                 self.marshal_ptr(ptr, out_bytes)?
             },
 
-            DynValue::Function(func_id) => {
-                marshal_bytes(&func_id.0.to_ne_bytes(), out_bytes)?
+            DynValue::Function(key) => {
+                let id = self.func_instances.get_by_left(key)
+                    .ok_or_else(|| {
+                        MarshalError::InvalidData
+                    })?;
+                marshal_bytes(&id.0.to_ne_bytes(), out_bytes)?
             }
         };
 
@@ -948,9 +965,15 @@ impl Marshaller {
             ir::Type::Function(..) => {
                 let func_id = unmarshal_from_ne_bytes(in_bytes, usize::from_ne_bytes)?;
 
-                func_id.map(|id| {
-                    DynValue::Function(ir::FunctionID(id))
-                })
+                let key = self.func_instances
+                    .get_by_right(&FuncInstanceID(func_id.value))
+                    .ok_or_else(|| MarshalError::InvalidData)?
+                    .clone();
+
+                UnmarshalledValue {
+                    value: DynValue::Function(key),
+                    byte_count: func_id.byte_count,
+                }
             }
 
             ir::Type::Array { element, dim } => {

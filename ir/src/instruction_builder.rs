@@ -657,13 +657,11 @@ pub trait InstructionBuilder {
         &mut self,
         function: impl Into<Value>,
         args: impl IntoIterator<Item = Value>,
-        type_args: impl IntoIterator<Item = Type>,
         out: Option<Ref>,
     ) {
         self.emit(Instruction::Call {
             function: function.into(),
             args: args.into_iter().collect(),
-            type_args: type_args.into_iter().collect(),
             out,
         })
     }

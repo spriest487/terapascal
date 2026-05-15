@@ -24,7 +24,7 @@ pub enum DynValue {
     USize(usize),
     F32(f32),
     F64(f64),
-    Function(ir::FunctionID),
+    Function(ir::FunctionRef),
     Structure(Box<StructValue>),
     Variant(Box<VariantValue>),
     Pointer(Pointer),
@@ -444,9 +444,9 @@ impl DynValue {
         }
     }
 
-    pub fn as_function(&self) -> Option<ir::FunctionID> {
+    pub fn as_function(&self) -> Option<&ir::FunctionRef> {
         match self {
-            DynValue::Function(f) => Some(*f),
+            DynValue::Function(key) => Some(key),
             _ => None,
         }
     }

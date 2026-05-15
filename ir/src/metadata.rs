@@ -775,16 +775,16 @@ impl<T: MetadataSource> IRFormatter for T {
                 None => write!(f, "{}", r),
             },
 
-            Ref::Global(GlobalRef::Function(id)) => {
+            Ref::Global(GlobalRef::Function(key)) => {
                 let func_name = self
-                    .get_function_info(*id)
+                    .get_function_info(key.id)
                     .and_then(|f| f.identity.as_path());
 
                 match func_name {
                     Some(name) => write!(f, "{}", name.to_pretty_string(self)),
 
                     None => {
-                        match self.find_iface_impl(*id) {
+                        match self.find_iface_impl(key.id) {
                             Some(impl_ref) => {
                                 let iface_pretty_name = impl_ref.interface.to_pretty_string(self);
                                 write!(f, "{}.{} impl for ", iface_pretty_name, impl_ref.method_name)?;
@@ -817,12 +817,12 @@ impl<T: MetadataSource> IRFormatter for T {
             }
 
             Ref::Global(GlobalRef::StaticFuncInfo(id)) => {
-                write!(f, "funcinfo(")?;
-                self.format_ref(&Ref::Global(GlobalRef::Function(*id)), f)?;
-                write!(f, ")")
+                write!(f, "funcinfo({})", id)
             }
 
-            _ => RawFormatter.format_ref(r, f),
+            _ => {
+                RawFormatter.format_ref(r, f)
+            },
         }
     }
 

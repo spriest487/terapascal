@@ -159,7 +159,7 @@ pub fn instantiate_function_def(
                 builder.emit(Instruction::Length { out, a, of_type });
             },
 
-            Instruction::Call { out, args, function, type_args } => {
+            Instruction::Call { out, args, function } => {
                 let function = remap_val(function, &locals, &types);
                 let out = out
                     .as_ref()
@@ -168,16 +168,11 @@ pub fn instantiate_function_def(
                     .iter()
                     .map(|v| remap_val(v, &locals, &types))
                     .collect();
-                let type_args = type_args
-                    .iter()
-                    .map(|t| instantiate_type(t, &types))
-                    .collect();
 
                 builder.emit(Instruction::Call {
                     out,
                     args,
                     function,
-                    type_args,
                 })
             },
 

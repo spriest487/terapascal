@@ -452,8 +452,8 @@ impl fmt::Display for FuncAliasID {
 }
 
 impl<'a> Unit<'a> {
-    pub fn add_function_instance(&mut self, key: ir::FuncInstanceKey) -> FunctionInstance {
-        if let Some(instance) = self.function_refs.get(&key) {
+    pub fn add_function_instance(&mut self, key: &ir::FunctionRef) -> FunctionInstance {
+        if let Some(instance) = self.function_refs.get(key) {
             return *instance;
         }
 
@@ -463,12 +463,12 @@ impl<'a> Unit<'a> {
             name: FunctionName::ID(instance_id),
         };
 
-        self.function_refs.insert(key, instance);
+        self.function_refs.insert(key.clone(), instance);
         instance
     }
 
     pub fn add_builtin_function(&mut self, id: FunctionID, name: BuiltinName) -> FuncInstanceID {
-        let key = ir::FuncInstanceKey::new(id);
+        let key = ir::FunctionRef::new(id);
         if let Some(instance) = self.function_refs.get(&key) {
             return instance.id;
         }
@@ -485,7 +485,7 @@ impl<'a> Unit<'a> {
     pub fn build_func_instance(
         &mut self,
         instance_id: FuncInstanceID,
-        key: ir::FuncInstanceKey,
+        key: ir::FunctionRef,
         generic_def: &ir::FunctionDef,
     ) {
         if key.args.len() != generic_def.type_params.len() {

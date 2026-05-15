@@ -258,7 +258,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             let func_field_ref = closure_ref.to_ref().field_ref(closure_ptr_ty.clone(), CLOSURE_PTR_FIELD);
 
             // initialize closure reference to function
-            let func_ref = Ref::Global(GlobalRef::Function(closure.func_instance.id));
+            let func_ref = Ref::Global(GlobalRef::func(closure.func_instance.id, []));
             // builder.cast(func_field_ptr.clone().to_deref(), func_ref, func_ptr_ty.clone());
             builder.mov(func_field_ref.to_deref(), func_ref);
             
@@ -380,10 +380,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let flags_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(flags_ptr, set_ref);
 
-        self.call(flags_type_info.include_func, [
+        self.call(FunctionRef::new(flags_type_info.include_func), [
             flags_ptr.value(),
             bit_val.into(),
-        ], [], None);
+        ], None);
     }
 
     // todo: what is this for
@@ -395,10 +395,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let flags_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(flags_ptr, set_ref);
 
-        self.call(flags_type_info.exclude_func, [
+        self.call(FunctionRef::new(flags_type_info.exclude_func), [
             flags_ptr.value(),
             bit_val.into(),
-        ], [], None);
+        ], None);
     }
 
     pub fn set_contains(&mut self,
@@ -413,10 +413,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let flags_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(flags_ptr, set_ref);
 
-        self.call(flags_type_info.contains_func, [
+        self.call(FunctionRef::new(flags_type_info.contains_func), [
             flags_ptr.value(),
             bit_val.into(),
-        ], [], Some(out.into()));
+        ], Some(out.into()));
     }
     
     pub fn set_eq(&mut self,
@@ -433,10 +433,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.make_ref(a_ptr, a);
         self.make_ref(b_ptr, b);
 
-        self.call(flags_type_info.eq_func, [
+        self.call(FunctionRef::new(flags_type_info.eq_func), [
             a_ptr.value(),
             b_ptr.value(),
-        ], [], Some(out.into()));
+        ], Some(out.into()));
     }
 
     pub fn set_bit_not(&mut self,
@@ -449,9 +449,9 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let a_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
 
-        self.call(flags_type_info.bit_not_func, [
+        self.call(FunctionRef::new(flags_type_info.bit_not_func), [
             a_ptr.value(),
-        ], [], None);
+        ], None);
     }
 
     fn set_bitwise_op(&mut self,
@@ -468,10 +468,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.make_ref(a_ptr, a);
         self.make_ref(b_ptr, b);
 
-        self.call(get_func_id(&flags_type_info), [
+        self.call(FunctionRef::new(get_func_id(&flags_type_info)), [
             a_ptr.value(),
             b_ptr.value(),
-        ], [], None);
+        ], None);
     }
 
     pub fn set_bit_and(&mut self,
@@ -500,8 +500,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
     #[expect(unused)]
     pub fn get_mem(&mut self, count: impl Into<Value>, out: impl Into<Ref>) {
-        let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_get_mem_func()));
-        self.call(function_ref, [count.into()], [], Some(out.into()));
+        let function_ref = Ref::Global(GlobalRef::func(self.library.instantiate_get_mem_func(), []));
+        self.call(function_ref, [count.into()], Some(out.into()));
     }
 
     #[expect(unused)]
@@ -511,8 +511,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
     #[expect(unused)]
     pub fn free_mem(&mut self, at: impl Into<Value>) {
-        let function_ref = Ref::Global(GlobalRef::Function(self.library.instantiate_free_mem_func()));
-        self.call(function_ref, [at.into()], [], None);
+        let function_ref = Ref::Global(GlobalRef::func(self.library.instantiate_free_mem_func(), []));
+        self.call(function_ref, [at.into()], None);
     }
 
     pub fn bind_param(&mut self, id: ArgID, ty: Type, name: impl Into<String>) {

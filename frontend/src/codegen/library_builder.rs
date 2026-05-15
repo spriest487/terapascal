@@ -316,9 +316,8 @@ impl<'a> LibraryBuilder<'a> {
             self.functions.insert(init_func_id, ir::Function::Local(init_func));
 
             self.init_code.push(ir::Instruction::Call {
-                function: ir::Ref::Global(ir::GlobalRef::Function(init_func_id)).into(),
+                function: ir::Ref::Global(ir::GlobalRef::func(init_func_id, [])).into(),
                 args: Vec::new(),
-                type_args: Vec::new(),
                 out: None,
             }, None);
         }
@@ -1607,9 +1606,8 @@ impl<'a> LibraryBuilder<'a> {
         let mut static_closures_init = ir::InstructionList::new();
         for (_id, static_closure) in &self.static_closures {
             static_closures_init.push(ir::Instruction::Call {
-                function: ir::Ref::from(static_closure.init_func).value(),
+                function: ir::GlobalRef::func(static_closure.init_func, []).to_ref().value(),
                 args: Vec::new(),
-                type_args: Vec::new(),
                 out: None,
             }, None);
         }
@@ -1623,9 +1621,8 @@ impl<'a> LibraryBuilder<'a> {
         if self.opts.rtti && let Some(tag_init_func) = gen_tags_init(self) {
             instructions.push(ir::Instruction::Call {
                 args: Vec::new(),
-                type_args: Vec::new(),
                 out: None,
-                function: ir::Value::from(tag_init_func),
+                function: ir::GlobalRef::func(tag_init_func, []).to_ref().value(),
             }, None);
         };
 
@@ -1739,7 +1736,9 @@ fn gen_class_dtor(
 
     let mut has_dtor = false;
     if let Some(user_dtor_id) = user_dtor {
-        dtor_builder.call(user_dtor_id, [self_arg.value()], [], None);
+        let dtor_ref = ir::GlobalRef::func(user_dtor_id, []);
+
+        dtor_builder.call(dtor_ref, [self_arg.value()], None);
         has_dtor = true;
     }
     

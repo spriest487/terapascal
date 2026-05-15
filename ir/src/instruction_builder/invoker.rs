@@ -1,5 +1,5 @@
 use crate::instruction_builder::InstructionBuilder;
-use crate::FunctionID;
+use crate::{FunctionID, GlobalRef};
 use crate::FunctionSig;
 use crate::LocalID;
 use crate::ObjectID;
@@ -196,11 +196,11 @@ where
 
     if func_sig.result_type == Type::Nothing {
         // no result: set result ref to nil
-        builder.call(func_id, call_args, [], None);
+        builder.call(GlobalRef::func(func_id, []), call_args, None);
         builder.mov(RESULT_REF, Value::LiteralNil);
     } else {
         let call_result = builder.local_temp(func_sig.result_type.clone());
-        builder.call(func_id, call_args, [], Some(call_result.to_ref()));
+        builder.call(GlobalRef::func(func_id, []), call_args, Some(call_result.to_ref()));
 
         gen_box_result(builder, &func_sig.result_type, call_result.value());
     }

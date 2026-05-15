@@ -34,7 +34,7 @@ pub struct Unit<'a> {
 
     functions: Vec<FunctionDef>,
 
-    function_refs: HashMap<ir::FuncInstanceKey, FunctionInstance>,
+    function_refs: HashMap<ir::FunctionRef, FunctionInstance>,
     function_types: BTreeMap<ir::FunctionID, ir::TypeDefID>,
 
     func_instances: BTreeMap<FuncInstanceID, FunctionName>,
@@ -169,8 +169,8 @@ impl<'a> Unit<'a> {
         for (func_id, func_info) in metadata.functions() {
             let invoker = match func_info.invoker {
                 Some(invoker_id) => {
-                    let invoker_key = ir::FuncInstanceKey::new(invoker_id);
-                    let invoker_id = unit.add_function_instance(invoker_key);
+                    let invoker_key = ir::FunctionRef::new(invoker_id);
+                    let invoker_id = unit.add_function_instance(&invoker_key);
                     Some(invoker_id.name)
                 }
                 None => None,
@@ -238,7 +238,7 @@ impl<'a> Unit<'a> {
             match func {
                 ir::Function::Local(func_def) => {
                     if func_def.type_params.is_empty() {
-                        self.add_function_instance(ir::FuncInstanceKey::new(*func_id));
+                        self.add_function_instance(&ir::FunctionRef::new(*func_id));
                     }
                 },
 
@@ -506,8 +506,8 @@ impl<'a> Unit<'a> {
                     .get_function_info(method_func_id)
                     .and_then(|f| f.invoker)
                 {
-                    let invoker_key = ir::FuncInstanceKey::new(invoker_id);
-                    let invoker_instance = self.add_function_instance(invoker_key);
+                    let invoker_key = ir::FunctionRef::new(invoker_id);
+                    let invoker_instance = self.add_function_instance(&invoker_key);
 
                     Expr::Function(invoker_instance.name).addr_of()
                 } else {

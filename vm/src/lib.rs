@@ -41,7 +41,7 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_common::span::Span;
 use terapascal_ir as ir;
-use terapascal_ir::{FuncInstanceKey, MetadataSource as _};
+use terapascal_ir::MetadataSource as _;
 
 #[derive(Debug)]
 pub struct Vm {
@@ -52,7 +52,7 @@ pub struct Vm {
 
     opts: ExecOpts,
 
-    functions: HashMap<ir::FuncInstanceKey, FunctionInfo>,
+    functions: HashMap<ir::FunctionRef, FunctionInfo>,
 
     diag_worker: Option<DiagnosticWorker>,
 
@@ -206,7 +206,7 @@ impl Vm {
             }
 
             ir::Type::Function(..) => {
-                DynValue::Function(ir::FunctionID(0))
+                DynValue::Function(ir::FunctionRef::new(ir::FunctionID(0)))
             },
 
             _ => {
@@ -405,7 +405,9 @@ impl Vm {
             ir::Ref::Local(id) => self.load_local(*id),
 
             ir::Ref::Global(name) => match self.globals.get(name) {
-                Some(GlobalValue::Function(id)) => Ok(DynValue::Function(*id)),
+                Some(GlobalValue::Function(key)) => {
+                    Ok(DynValue::Function(key.clone()))
+                }
 
                 Some(GlobalValue::Variable { value, ty }) => {
                     let val = self.marshaller().unmarshal(value, ty)?;
@@ -539,12 +541,11 @@ impl Vm {
 
     fn call_and_store(
         &mut self,
-        id: ir::FunctionID,
+        key: &ir::FunctionRef,
         args: &[DynValue],
-        type_args: &[ir::Type],
         out: Option<&ir::Ref>,
     ) -> ExecResult<()> {
-        let result_val = self.call(id, args, type_args)?;
+        let result_val = self.call(key, args)?;
 
         match (result_val, out) {
             (Some(v), Some(out_at)) => {
@@ -565,11 +566,9 @@ impl Vm {
 
     pub fn call(
         &mut self,
-        id: ir::FunctionID,
+        func_key: &ir::FunctionRef,
         args: &[DynValue],
-        type_args: &[ir::Type],
     ) -> ExecResult<Option<DynValue>> {
-        let func_key = ir::FuncInstanceKey::new(id).with_args(type_args.to_vec());
         let func_info = instantiate_func(self, func_key)?;
 
         let func_name = func_info.identity.to_pretty_string(self.metadata());
@@ -643,7 +642,9 @@ impl Vm {
                 eprintln!("[rc] invoking dtor {}", func_desc);
             }
 
-            self.call_and_store(func_id, &[val.clone()], &[], None)?;
+            let dtor_key = ir::FunctionRef::new(func_id);
+
+            self.call_and_store(&dtor_key, &[val.clone()], None)?;
         } else if self.opts.trace_rc {
             eprintln!("[rc] no dtor for {}", self.metadata().pretty_type_name(ty));
         }
@@ -1135,9 +1136,8 @@ impl Vm {
                 out,
                 function,
                 args,
-                type_args,
             } => {
-                self.exec_call(out, function, args, type_args)?
+                self.exec_call(out, function, args)?
             }
 
             ir::Instruction::VirtualCall {
@@ -1913,7 +1913,6 @@ impl Vm {
         out: &Option<ir::Ref>,
         function: &ir::Value,
         args: &Vec<ir::Value>,
-        type_args: &Vec<ir::Type>,
     ) -> ExecResult<()> {
         let arg_vals: Vec<_> = args
             .iter()
@@ -1922,7 +1921,7 @@ impl Vm {
 
         match self.evaluate(function)? {
             DynValue::Function(function) => {
-                self.call_and_store(function, &arg_vals, type_args, out.as_ref())?
+                self.call_and_store(&function, &arg_vals, out.as_ref())?
             }
 
             _ => {
@@ -1984,27 +1983,27 @@ impl Vm {
             arg_vals.push(arg_val);
         }
 
-        let func_ref = ir::Ref::Global(ir::GlobalRef::Function(func));
-        let func = match self.evaluate(&ir::Value::Ref(func_ref))? {
-            DynValue::Function(func) => func,
+        let func_ref = ir::Ref::Global(ir::GlobalRef::func(func, []));
+
+        match self.evaluate(&ir::Value::Ref(func_ref))? {
+            DynValue::Function(key) => {
+                // method definitions type arg lists are prefixed with the enclosing type's type arg list
+                match self_type.def_id() {
+                    Some(def_id) => {
+                        self.call_and_store(&key.with_args(def_id.args.clone()), &arg_vals, out)
+                    }
+
+                    None => {
+                        self.call_and_store(&key, &arg_vals, out)
+                    }
+                }
+            },
+
             unexpected => {
                 let msg = format!("invalid function val: {:?}", unexpected);
-                return Err(ExecError::illegal_state(msg));
-            }
-        };
-
-        // method definitions type arg lists are prefixed with the enclosing type's type arg list
-        match self_type.def_id() {
-            Some(def_id) => {
-                self.call_and_store(func, &arg_vals, &def_id.args, out)?;
-            }
-
-            None => {
-                self.call_and_store(func, &arg_vals, &[], out)?;
+                Err(ExecError::illegal_state(msg))
             }
         }
-
-        Ok(())
     }
 
     fn exec_is_type(
@@ -2196,7 +2195,9 @@ impl Vm {
             return;
         };
 
-        match self.globals.entry(ir::GlobalRef::Function(func_id)) {
+        let func_key = ir::FunctionRef::new(func_id);
+
+        match self.globals.entry(ir::GlobalRef::Function(func_key)) {
             Entry::Occupied(..) => {
                 // we already created a definition for this
                 // assume this means it's already been loaded
@@ -2204,7 +2205,7 @@ impl Vm {
             }
 
             Entry::Vacant(entry) => {
-                entry.insert(GlobalValue::Function(func_id));
+                entry.insert(GlobalValue::Function(ir::FunctionRef::new(func_id)));
             }
         }
 
@@ -2219,7 +2220,7 @@ impl Vm {
             .get_function_info(func_id)
             .and_then(|f| f.invoker);
 
-        self.functions.insert(FuncInstanceKey::new(func_id), FunctionInfo {
+        self.functions.insert(ir::FunctionRef::new(func_id), FunctionInfo {
             func: Rc::new(func),
             identity: ir::FunctionIdentity::Path(name),
             invoker,
@@ -2296,12 +2297,17 @@ impl Vm {
             let identity = func_info.map(|info| info.identity.clone())
                 .unwrap_or_else(|| ir::FunctionIdentity::internal(func_id.to_string()));
 
+            // if this function is generic, the specialized instances will be registered later
+            // as they're used, and only the generic version is registered now
+            let generic_key = ir::FunctionRef::new(*func_id);
+            self.heap.marshaller.register_func_instance(generic_key.clone());
+
             self.globals.insert(
-                ir::GlobalRef::Function(*func_id),
-                GlobalValue::Function(*func_id),
+                ir::GlobalRef::Function(generic_key.clone()),
+                GlobalValue::Function(generic_key),
             );
 
-            self.functions.insert(FuncInstanceKey::new(*func_id), FunctionInfo {
+            self.functions.insert(ir::FunctionRef::new(*func_id), FunctionInfo {
                 identity,
                 func: Rc::new(func),
                 invoker,
@@ -2795,7 +2801,7 @@ impl Vm {
         args_array_ptr: Pointer,
     ) -> ExecResult<(i32, Pointer)> {
         let Some(invoker_id) = self.functions
-            .get(&FuncInstanceKey::new(func_id))
+            .get(&ir::FunctionRef::new(func_id))
             .and_then(|f| f.invoker)
         else {
             // not invokable
@@ -2824,7 +2830,7 @@ impl Vm {
 
         // result is a box pointer
         let result_ptr = self
-            .call(invoker_id, &invoker_args, &[])?
+            .call(&ir::FunctionRef::new(invoker_id), &invoker_args)?
             .and_then(|val| val.as_pointer().cloned())
             .ok_or_else(|| ExecError::illegal_state("expected invoker to return a pointer"))?;
 
@@ -2914,7 +2920,7 @@ impl Default for ExecOpts {
 #[derive(Debug, Clone)]
 enum GlobalValue {
     Variable { value: Box<[u8]>, ty: ir::Type },
-    Function(ir::FunctionID),
+    Function(ir::FunctionRef),
     StaticTagArray(Pointer),
 }
 

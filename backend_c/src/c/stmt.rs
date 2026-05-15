@@ -4,12 +4,12 @@ use crate::c::expr::InfixOp;
 use crate::c::expr::PrefixOp;
 use crate::c::ty_def::FieldName;
 use crate::c::type_map::TypeID;
-use crate::c::DynArrayTypeID;
 use crate::c::FunctionName;
 use crate::c::Type;
 use crate::c::TypeDefName;
 use crate::c::Unit;
 use crate::c::{BuiltinName, FuncInstanceID};
+use crate::c::{DynArrayTypeID, FunctionInstance};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::iter;
@@ -279,6 +279,10 @@ impl<'a, 'b> Builder<'a, 'b> {
             next_temp_var: 0,
         }
     }
+
+    pub fn add_function_instance(&mut self, key: &ir::FunctionRef) -> FunctionInstance {
+        self.unit.add_function_instance(key)
+    }
     
     pub fn translate_type(&mut self, ir_ty: &ir::Type) -> Type {
         self.unit.translate_type(ir_ty)
@@ -433,8 +437,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self.assign_ref(out, element);
             },
 
-            ir::Instruction::Call { out, function, args, type_args } => {
-                self.translate_call(out.as_ref(), function, args, type_args);
+            ir::Instruction::Call { out, function, args } => {
+                self.translate_call(out.as_ref(), function, args);
             }
 
             ir::Instruction::NewObject { out, type_id, type_args, immortal } => {
@@ -857,8 +861,9 @@ impl<'a, 'b> Builder<'a, 'b> {
                 Some(ir::Type::any().dyn_array())
             }
 
-            ir::Ref::Global(ir::GlobalRef::Function(func_id)) => {
-                let func_ty = self.unit.function_types.get(func_id)?;
+            ir::Ref::Global(ir::GlobalRef::Function(key)) => {
+                assert!(key.args.is_empty(), "find_ref_type: type of generic function");
+                let func_ty = self.unit.function_types.get(&key.id)?;
                 Some(ir::Type::Function(*func_ty))
             }
 
@@ -891,24 +896,10 @@ impl<'a, 'b> Builder<'a, 'b> {
         out: Option<&ir::Ref>,
         function: &ir::Value,
         args: &[ir::Value],
-        type_args: &[ir::Type],
     ) {
         // if the function value is a reference to a global function, instantiate that. otherwise,
         // it must be a function pointer value, and can't have type args
-        let func_expr = match function {
-            ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::Function(func_id))) => {
-                let instance_key = ir::FuncInstanceKey::new(*func_id)
-                    .with_args(type_args.to_vec());
-
-                let instance = self.unit.add_function_instance(instance_key);
-                Expr::Function(instance.name)
-            }
-
-            _ => {
-                assert!(type_args.is_empty(), "translate_call: call to function pointer value cannot have type args");
-                Expr::translate_val(function, self)
-            }
-        };
+        let func_expr = Expr::translate_val(function, self);
 
         let args = args
             .iter()

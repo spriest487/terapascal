@@ -135,7 +135,7 @@ pub fn build_func_static_closure_def(
     // bind the rest of the args at ID 1+
     bound_params.extend(bind_function_params(params, false, ArgID(1), &mut body_builder));
 
-    let func_global = Ref::Global(GlobalRef::Function(target_func.id));
+    let func_global = Ref::Global(GlobalRef::func(target_func.id, []));
 
     // this is a static closure, so we ignore the closure pointer (it's static) and just pass
     // the rest of the args in IDs 1+ as the args to the real function
@@ -150,7 +150,7 @@ pub fn build_func_static_closure_def(
         _ => Some(RESULT_REF),
     };
 
-    body_builder.call(func_global, func_args, [], return_ref);
+    body_builder.call(func_global, func_args, return_ref);
 
     FunctionDef {
         sig: FunctionSig {

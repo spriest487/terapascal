@@ -96,11 +96,13 @@ fn translate_call_with_args(
         match call_target {
             | CallTarget::Function(function)
             | CallTarget::InstanceMethod(function) => {
-                builder.call(function, arg_vals.clone(), type_args, out_val.clone());
+                let func_ref = ir::FunctionRef::new(function).with_args(type_args);
+                builder.call(func_ref, arg_vals.clone(), out_val.clone());
             },
 
             CallTarget::Closure { function, .. } => {
-                builder.call(function, arg_vals.clone(), type_args, out_val.clone());
+                assert!(type_args.is_empty());
+                builder.call(function, arg_vals.clone(), out_val.clone());
             },
 
             CallTarget::Virtual {

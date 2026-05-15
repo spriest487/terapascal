@@ -208,14 +208,15 @@ impl Expr {
             ir::Ref::Arg(id) => {
                 VariableID::Arg(*id).to_expr()
             }
-            ir::Ref::Local(local_id) => VariableID::local(*local_id).to_expr(),
-            ir::Ref::Deref(inner) => Expr::translate_val(inner.as_ref(), builder).deref(),
-            ir::Ref::Global(ir::GlobalRef::Function(..)) => {
-                // TODO: should this be possible?
-                // function IDs by themselves are abstract and don't map to anything in the
-                // C output, so wherever function refs are used, we need to apply type args to
-                // produce a real function instance instead of using translate_ref
-                panic!("translate_ref: uninstantiated function refs are abstract");
+            ir::Ref::Local(local_id) => {
+                VariableID::local(*local_id).to_expr()
+            },
+            ir::Ref::Deref(inner) => {
+                Expr::translate_val(inner.as_ref(), builder).deref()
+            },
+            ir::Ref::Global(ir::GlobalRef::Function(key)) => {
+                let instance = builder.add_function_instance(key);
+                Expr::Function(instance.name)
             },
             ir::Ref::Global(ir::GlobalRef::StringLiteral(id)) => {
                 let name = GlobalName::StringLiteral(*id);

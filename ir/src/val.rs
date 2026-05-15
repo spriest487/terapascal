@@ -3,7 +3,7 @@ use crate::generic::instantiate_variant_def;
 use crate::metadata::StringID;
 use crate::ty::Type;
 use crate::ty_decl::TagLocation;
-use crate::FieldID;
+use crate::{FieldID, FunctionRef, RawFormatter};
 use crate::FunctionID;
 use crate::IRFormatter;
 use crate::MetadataSource;
@@ -130,8 +130,8 @@ impl Ref {
                 Some(Cow::Owned(Type::func_info()))
             }
 
-            Ref::Global(GlobalRef::Function(id)) => {
-                let func_info = metadata.get_function_info(*id)?;
+            Ref::Global(GlobalRef::Function(key)) => {
+                let func_info = metadata.get_function_info(key.id)?;
                 let ptr_type_id = metadata.get_function_ptr_type(&func_info.sig)?;
                 Some(Cow::Owned(Type::Function(ptr_type_id)))
             }
@@ -228,9 +228,9 @@ impl From<ArgID> for Ref {
     }
 }
 
-impl From<FunctionID> for Ref {
-    fn from(id: FunctionID) -> Self {
-        Ref::Global(GlobalRef::Function(id))
+impl From<FunctionRef> for Ref {
+    fn from(func_ref: FunctionRef) -> Self {
+        Ref::Global(GlobalRef::Function(func_ref))
     }
 }
 
@@ -350,9 +350,9 @@ impl From<GlobalRef> for Value {
     }
 }
 
-impl From<FunctionID> for Value {
-    fn from(id: FunctionID) -> Self {
-        Self::from(Ref::Global(GlobalRef::Function(id)))
+impl From<FunctionRef> for Value {
+    fn from(func_ref: FunctionRef) -> Self {
+        Self::from(Ref::Global(GlobalRef::Function(func_ref)))
     }
 }
 
@@ -470,7 +470,7 @@ pub const NIL: Value = Value::LiteralNil;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum GlobalRef {
-    Function(FunctionID),
+    Function(FunctionRef),
     StringLiteral(StringID),
     StaticTypeInfo(Rc<Type>),
     StaticFuncInfo(FunctionID),
@@ -480,20 +480,38 @@ pub enum GlobalRef {
 
 impl fmt::Display for GlobalRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            GlobalRef::Function(func_id) => write!(f, "{}", func_id),
-            GlobalRef::StringLiteral(id) => write!(f, "{}", id),
-            GlobalRef::Variable(id) => write!(f, "{}", id),
-            GlobalRef::StaticTypeInfo(ty) => write!(f, "typeinfo({})", ty),
-            GlobalRef::StaticFuncInfo(id) => write!(f, "funcinfo({})", id),
-            GlobalRef::StaticTagArray(id) => write!(f, "{}", id),
-        }
+        write!(f, "{}", self.to_pretty_string(&RawFormatter))
     }
 }
 
 impl GlobalRef {
     pub fn to_ref(self) -> Ref {
         Ref::from(self)
+    }
+
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
+        match self {
+            GlobalRef::Function(key) => {
+                key.to_pretty_string(formatter)
+            },
+            GlobalRef::StaticFuncInfo(id) => {
+                format!("funcinfo({})", id)
+            },
+            GlobalRef::StringLiteral(id) => format!("{}", id),
+            GlobalRef::Variable(id) => format!("{}", id),
+            GlobalRef::StaticTypeInfo(ty) => format!("typeinfo({})", ty),
+            GlobalRef::StaticTagArray(id) => format!("{}", id),
+        }
+    }
+
+    pub fn func(id: FunctionID, args: impl IntoIterator<Item=Type>) -> Self {
+        Self::Function(FunctionRef::new(id).with_args(args))
+    }
+}
+
+impl From<FunctionRef> for GlobalRef {
+    fn from(value: FunctionRef) -> Self {
+        Self::Function(value)
     }
 }
 

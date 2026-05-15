@@ -106,7 +106,6 @@ pub trait IRFormatter {
                 out,
                 function,
                 args,
-                type_args,
             } => {
                 write!(f, "{:>width$} ", "call", width = IX_WIDTH)?;
                 if let Some(out) = out {
@@ -115,17 +114,6 @@ pub trait IRFormatter {
                 }
 
                 self.format_val(function, f)?;
-
-                if !type_args.is_empty() {
-                    write!(f, "[")?;
-                    for (i, type_arg) in type_args.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, ", ")?;
-                        }
-                        self.format_type(type_arg, f)?;
-                    }
-                    write!(f, "]")?;
-                }
 
                 write!(f, "(")?;
                 for (i, arg) in args.iter().enumerate() {

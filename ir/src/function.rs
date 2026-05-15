@@ -223,13 +223,13 @@ impl Function {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct FuncInstanceKey {
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct FunctionRef {
     pub id: FunctionID,
     pub args: Vec<Type>
 }
 
-impl FuncInstanceKey {
+impl FunctionRef {
     pub fn new(id: FunctionID) -> Self {
         Self {
             id,
@@ -242,5 +242,22 @@ impl FuncInstanceKey {
             id: self.id,
             args: args.into_iter().collect(),
         }
+    }
+
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
+        let mut string = self.id.to_string();
+
+        if !self.args.is_empty() {
+            string.push('[');
+            for (i, arg) in self.args.iter().enumerate() {
+                if i > 0 {
+                    string.push_str(", ");
+                }
+                string.push_str(&arg.to_pretty_string(formatter));
+            }
+            string.push(']');
+        }
+
+        string
     }
 }
