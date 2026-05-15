@@ -12,10 +12,13 @@
 
 // forward decl of builtin types
 STRING_STRUCT;
+OBJECT_ARRAY_STRUCT;
+
+#ifndef DISABLE_RTTI
 TYPEINFO_STRUCT;
 METHODINFO_STRUCT;
 FUNCINFO_STRUCT;
-OBJECT_ARRAY_STRUCT;
+#endif
 
 #define OBJECT_PTR struct Rc*
 #define OBJECT_ARRAY_PTR OBJECT_ARRAY_STRUCT*
@@ -39,8 +42,12 @@ struct MethodTable {
 
 struct Class {
     size_t size;
-    
+
+#ifndef DISABLE_RTTI
     TYPEINFO_STRUCT* typeinfo;
+#else
+    void* typeinfo;
+#endif
 
     struct MethodTable* iface_methods;
 
@@ -117,6 +124,8 @@ static OBJECT_PTR RcNewArray(struct DynArrayClass* class, int count, bool immort
 
 _Noreturn static void Raise(STRING_STRUCT* msg_str);
 
+#ifndef DISABLE_RTTI
+
 static OBJECT_PTR InvokeMethod(METHODINFO_STRUCT* method, OBJECT_PTR* instance, OBJECT_ARRAY_PTR args, int32_t* error_code);
 static OBJECT_PTR InvokeFunction(FUNCINFO_STRUCT* func, OBJECT_ARRAY_PTR args, int32_t* error_code);
 
@@ -134,6 +143,8 @@ static int32_t funcinfo_count;
 static FUNCINFO_STRUCT* System_FindFunctionInfo(STRING_STRUCT* func_name);
 static int System_GetFunctionInfoCount(void);
 static FUNCINFO_STRUCT* System_GetFunctionInfoByIndex(int func_index);
+
+#endif // DISABLE_RTTI
 
 // implementations of System unit builtins
 
