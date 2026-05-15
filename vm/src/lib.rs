@@ -404,6 +404,11 @@ impl Vm {
             ir::Ref::Arg(id) => self.load_arg(*id),
             ir::Ref::Local(id) => self.load_local(*id),
 
+            ir::Ref::Global(ir::GlobalRef::Function(function_ref)) => {
+                instantiate_func(self, function_ref)?;
+                Ok(DynValue::Function(function_ref.clone()))
+            },
+
             ir::Ref::Global(name) => match self.globals.get(name) {
                 Some(GlobalValue::Function(key)) => {
                     Ok(DynValue::Function(key.clone()))

@@ -1,5 +1,5 @@
 use crate::func::ffi::FfiInvoker;
-use crate::ir;
+use crate::{ir, GlobalValue};
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::result::ExecError;
@@ -289,18 +289,18 @@ impl<'a> ir::InstructionBuilder for RuntimeFuncBuilder<'a> {
 
 pub fn instantiate_func(
     vm: &mut Vm,
-    key: &ir::FunctionRef,
+    func_ref: &ir::FunctionRef,
 ) -> ExecResult<FunctionInfo> {
-    if let Some(func_info) = vm.functions.get(key).cloned()
-        && func_info.func.type_params().len() == key.args.len()
+    if let Some(func_info) = vm.functions.get(func_ref).cloned()
+        && func_info.func.type_params().len() == func_ref.args.len()
     {
         return Ok(func_info);
     }
 
     let generic_func = vm.functions
-        .get(&ir::FunctionRef::new(key.id))
+        .get(&ir::FunctionRef::new(func_ref.id))
         .ok_or_else(|| {
-            let msg = format!("missing generic function definition: {}", key.id);
+            let msg = format!("missing generic function definition: {}", func_ref.id);
             ExecError::illegal_state(msg)
         })?;
 
@@ -312,18 +312,18 @@ pub fn instantiate_func(
         }
     };
 
-    if key.args.len() != generic_def.type_params.len() {
+    if func_ref.args.len() != generic_def.type_params.len() {
         let msg = format!(
             "incorrect number of type parameters for function {} (invocation has {}, expected: {})",
             generic_func.identity.to_pretty_string(vm.metadata()),
-            key.args.len(),
+            func_ref.args.len(),
             generic_def.type_params.len(),
         );
         return Err(ExecError::illegal_state(msg))
     }
 
     let mut types = HashMap::new();
-    for (param, arg) in generic_def.type_params.iter().zip(key.args.iter()) {
+    for (param, arg) in generic_def.type_params.iter().zip(func_ref.args.iter()) {
         if types.insert(SharedStringKey(param.clone()), arg.clone()).is_some() {
             return Err(ExecError::illegal_state("invalid function def: type param names are not unique"));
         }
@@ -350,7 +350,7 @@ pub fn instantiate_func(
 
         ir::FunctionIdentity::Path(path) => {
             let mut path = path.clone();
-            path.type_args = key.args.clone();
+            path.type_args = func_ref.args.clone();
             ir::FunctionIdentity::Path(path)
         }
     };
@@ -384,7 +384,8 @@ pub fn instantiate_func(
         invoker: None,
     };
 
-    vm.functions.insert(key.clone(), func_info.clone());
+    vm.functions.insert(func_ref.clone(), func_info.clone());
+    vm.globals.insert(ir::GlobalRef::Function(func_ref.clone()), GlobalValue::Function(func_ref.clone()));
 
     Ok(func_info)
 }
