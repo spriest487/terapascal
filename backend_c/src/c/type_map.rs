@@ -206,11 +206,18 @@ impl<'a> Unit<'a> {
         ty: ir::Type,
         def: Rc<ir::StructDef>,
     ) -> TypeID {
+        // if this is an object type, use the strong version as its main type even if we
+        // first encounter a weak pointer to it
+        let ty = match ty {
+            ir::Type::WeakObject(object_id) => object_id.to_object_type(),
+            _ => ty,
+        };
+
         let comment = Some(ty.to_pretty_string(self.metadata));
 
         let is_object = ty.is_object();
 
-        let id = self.register_type_with(ty, |index| {
+        let id = self.register_type_with(ty.clone(), |index| {
             let struct_type = Type::DefinedType(TypeDefName::Struct(index));
 
             if is_object {
@@ -219,6 +226,12 @@ impl<'a> Unit<'a> {
                 struct_type
             }
         });
+
+        // if this is an object type, register the weak pointer type as the same C type
+        if let ir::Type::Object(object_id) = ty {
+            let object_ptr_type = self.c_types[&id].clone();
+            self.register_type(object_id.to_weak_object_type(), object_ptr_type);
+        }
 
         let c_def = Rc::new(StructDef::translate(id, def, comment, self));
 
@@ -285,7 +298,7 @@ impl<'a> Unit<'a> {
     ) -> TypeID {
         let comment = Some(ty.to_pretty_string(self.metadata));
 
-        let id = self.register_type_with(ty, |index| {
+        let id = self.register_type_with(ty.clone(), |index| {
             Type::DefinedType(TypeDefName::Variant(index))
         });
 

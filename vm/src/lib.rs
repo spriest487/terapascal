@@ -419,7 +419,9 @@ impl Vm {
                     Ok(val.value)
                 }
 
-                Some(GlobalValue::StaticTagArray(loc)) => Ok(DynValue::from(loc.clone())),
+                Some(GlobalValue::StaticTagArray(loc)) => {
+                    Ok(DynValue::from(loc.clone()))
+                },
 
                 None => {
                     let ref_name = at.to_pretty_string(self.metadata());

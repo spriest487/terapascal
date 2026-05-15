@@ -10,6 +10,7 @@ use crate::c::Type;
 use crate::c::Unit;
 use crate::c::VariableID;
 use crate::ir;
+use ir::MetadataSource as _;
 use std::fmt;
 
 #[allow(unused)]
@@ -231,9 +232,18 @@ impl Expr {
                 Expr::Global(name).addr_of()
             }
             ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(ty)) => {
-                let type_id = builder.create_type_id(ty);
-                let name = GlobalName::StaticTypeInfo(type_id);
-                Expr::Global(name).addr_of()
+                if builder.opts().debug {
+                    let comment = format!("typeinfo ref: {}", ty.to_pretty_string(builder.metadata()));
+                    builder.stmts.push(Statement::Comment(comment));
+                }
+
+                if builder.metadata().get_type_info(ty).is_some() {
+                    let type_id = builder.create_type_id(ty);
+                    let name = GlobalName::StaticTypeInfo(type_id);
+                    Expr::Global(name).addr_of()
+                } else {
+                    Expr::Null
+                }
             }
             ir::Ref::Global(ir::GlobalRef::StaticFuncInfo(id)) => {
                 let name = GlobalName::StaticFuncInfo(*id);

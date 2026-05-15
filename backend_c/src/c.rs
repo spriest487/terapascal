@@ -686,126 +686,124 @@ impl<'a> fmt::Display for Unit<'a> {
             let typeinfo_struct_name = TypeDefName::Struct(type_info_id);
             let typeinfo_class = GlobalName::ClassInstance(type_info_id);
 
-            if self.opts.enable_rtti {
-                let typeinfo_def = self.metadata
-                    .get_struct_def(ir::TYPEINFO_ID)
-                    .expect("missing definition for TypeInfo object");
+            let typeinfo_def = self.metadata
+                .get_struct_def(ir::TYPEINFO_ID)
+                .expect("missing definition for TypeInfo object");
 
-                let flags_field = typeinfo_def.fields
-                    .get(&ir::TYPEINFO_FLAGS_FIELD)
-                    .expect("missing definition for TypeInfo flags field");
+            let flags_field = typeinfo_def.fields
+                .get(&ir::TYPEINFO_FLAGS_FIELD)
+                .expect("missing definition for TypeInfo flags field");
 
-                // should be a set struct
-                let flags_type_id = self.get_type_id(&flags_field.ty);
-                let flags_type_name = TypeDefName::Struct(flags_type_id);
+            // should be a set struct
+            let flags_type_id = self.get_type_id(&flags_field.ty);
+            let flags_type_name = TypeDefName::Struct(flags_type_id);
 
-                let type_info_keys: Vec<_> = self.type_infos.keys().cloned().collect();
+            let type_info_keys: Vec<_> = self.type_infos.keys().cloned().collect();
 
-                for ty in type_info_keys {
-                    let Some(type_id) = self.try_get_type_id(&ty) else {
-                        continue;
-                    };
+            for ty in type_info_keys {
+                let Some(type_id) = self.try_get_type_id(&ty) else {
+                    continue;
+                };
 
-                    let typeinfo = &self.type_infos[&ty];
+                let typeinfo = &self.type_infos[&ty];
 
-                    if self.opts.debug {
-                        let debug_name = typeinfo.name
-                            .and_then(|id| self.get_string_lit(id))
-                            .map(str::to_string)
-                            .unwrap_or_else(|| ty.to_string());
+                if self.opts.debug {
+                    let debug_name = typeinfo.name
+                        .and_then(|id| self.get_string_lit(id))
+                        .map(str::to_string)
+                        .unwrap_or_else(|| ty.to_string());
 
-                        writeln!(f, "/** static TypeInfo of {} */", debug_name)?;
-                    }
-
-                    write!(f, "static struct {} ", typeinfo_struct_name)?;
-                    write_global_typeinfo_decl_name(f, type_id)?;
-                    writeln!(f, " = {{")?;
-
-                    writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;
-
-                    write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
-
-                    let type_name_id = typeinfo.name.unwrap_or(ir::EMPTY_STRING_ID);
-                    let type_name_str = GlobalName::StringLiteral(type_name_id);
-
-                    writeln!(f, "&{},", type_name_str)?;
-
-                    // initialized at runtime for now
-                    writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
-
-                    // should be a single 1-word flag type
-                    writeln!(f, "  .{} = (struct {flags_type_name}) {{", FieldName::ID(ir::TYPEINFO_FLAGS_FIELD))?;
-                    writeln!(f, "       .{} = {}", FieldName::ID(ir::FieldID(0)), typeinfo.flags)?;
-                    writeln!(f, "}},")?;
-
-                    writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
-
-                    let tags_loc = ty
-                        .tags_loc()
-                        .and_then(|loc| {
-                            if *self.tag_arrays.get(&loc)? > 0 {
-                                Some(loc)
-                            } else {
-                                None
-                            }
-                        });
-
-                    match tags_loc {
-                        Some(loc) => write!(f, "&{}", GlobalName::StaticTagArray(loc))?,
-                        None => write!(f, "NULL,")?,
-                    }
-
-                    writeln!(f, "}};")?;
+                    writeln!(f, "/** static TypeInfo of {} ({}) */", debug_name, ty.to_pretty_string(self.metadata))?;
                 }
 
-                let funcinfo_class = GlobalName::ClassInstance(func_info_id);
-                let funcinfo_struct_name = TypeDefName::Struct(func_info_id);
+                write!(f, "static struct {} ", typeinfo_struct_name)?;
+                write_global_typeinfo_decl_name(f, type_id)?;
+                writeln!(f, " = {{")?;
 
-                for func in &self.runtime_func_infos {
-                    let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
+                writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;
 
-                    if self.opts.debug {
-                        let debug_name = func.name
-                            .and_then(|id| self.get_string_lit(id))
-                            .map(str::to_string)
-                            .unwrap_or_else(|| func.id.to_string());
-                        writeln!(f, "/** static FunctionInfo of {} */", debug_name)?;
-                    }
+                write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
 
-                    writeln!(f, "static struct {} {} = {{", funcinfo_struct_name, funcinfo_name)?;
-                    writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
+                let type_name_id = typeinfo.name.unwrap_or(ir::EMPTY_STRING_ID);
+                let type_name_str = GlobalName::StringLiteral(type_name_id);
 
-                    let name_field = FieldName::ID(ir::FUNCINFO_NAME_FIELD);
-                    match func.name {
-                        Some(name_id) => {
-                            let name_str = GlobalName::StringLiteral(name_id);
-                            writeln!(f, "  .{name_field} = &{name_str},")?;
+                writeln!(f, "&{},", type_name_str)?;
+
+                // initialized at runtime for now
+                writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
+
+                // should be a single 1-word flag type
+                writeln!(f, "  .{} = (struct {flags_type_name}) {{", FieldName::ID(ir::TYPEINFO_FLAGS_FIELD))?;
+                writeln!(f, "       .{} = {}", FieldName::ID(ir::FieldID(0)), typeinfo.flags)?;
+                writeln!(f, "}},")?;
+
+                writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
+
+                let tags_loc = ty
+                    .tags_loc()
+                    .and_then(|loc| {
+                        if *self.tag_arrays.get(&loc)? > 0 {
+                            Some(loc)
+                        } else {
+                            None
                         }
+                    });
 
-                        None => {
-                            writeln!(f, "  .{name_field} = NULL,")?;
-                        }
-                    }
-
-                    write!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
-                    if let Some(invoker) = func.invoker {
-                        write!(f, "&{}", invoker)?;
-                    } else {
-                        write!(f, "NULL")?;
-                    }
-                    writeln!(f, ",")?;
-
-                    writeln!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_TAGS_FIELD))?;
-
-                    let tags_loc = ir::TagLocation::Function(func.id);
-                    if self.tag_arrays.get(&tags_loc).is_some() {
-                        write!(f, "&{}", GlobalName::StaticTagArray(tags_loc))?;
-                    } else {
-                        write!(f, "NULL")?;
-                    };
-
-                    writeln!(f, "}};")?;
+                match tags_loc {
+                    Some(loc) => write!(f, "&{}", GlobalName::StaticTagArray(loc))?,
+                    None => write!(f, "NULL,")?,
                 }
+
+                writeln!(f, "}};")?;
+            }
+
+            let funcinfo_class = GlobalName::ClassInstance(func_info_id);
+            let funcinfo_struct_name = TypeDefName::Struct(func_info_id);
+
+            for func in &self.runtime_func_infos {
+                let funcinfo_name = GlobalName::StaticFuncInfo(func.id);
+
+                if self.opts.debug {
+                    let debug_name = func.name
+                        .and_then(|id| self.get_string_lit(id))
+                        .map(str::to_string)
+                        .unwrap_or_else(|| func.id.to_string());
+                    writeln!(f, "/** static FunctionInfo of {} */", debug_name)?;
+                }
+
+                writeln!(f, "static struct {} {} = {{", funcinfo_struct_name, funcinfo_name)?;
+                writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, funcinfo_class)?;
+
+                let name_field = FieldName::ID(ir::FUNCINFO_NAME_FIELD);
+                match func.name {
+                    Some(name_id) => {
+                        let name_str = GlobalName::StringLiteral(name_id);
+                        writeln!(f, "  .{name_field} = &{name_str},")?;
+                    }
+
+                    None => {
+                        writeln!(f, "  .{name_field} = NULL,")?;
+                    }
+                }
+
+                write!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_IMPL_FIELD))?;
+                if let Some(invoker) = func.invoker {
+                    write!(f, "&{}", invoker)?;
+                } else {
+                    write!(f, "NULL")?;
+                }
+                writeln!(f, ",")?;
+
+                writeln!(f, "  .{} = ", FieldName::ID(ir::FUNCINFO_TAGS_FIELD))?;
+
+                let tags_loc = ir::TagLocation::Function(func.id);
+                if self.tag_arrays.get(&tags_loc).is_some() {
+                    write!(f, "&{}", GlobalName::StaticTagArray(tags_loc))?;
+                } else {
+                    write!(f, "NULL")?;
+                };
+
+                writeln!(f, "}};")?;
             }
         }
 

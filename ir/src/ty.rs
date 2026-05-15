@@ -249,14 +249,14 @@ impl Type {
 
             Type::Struct(id)
             | Type::Variant(id) => {
-                id.is_generic()
+                id.args.iter().any(|t| t.contains_generic_params())
             },
 
             Type::Array { element, .. } => element.contains_generic_params(),
             Type::Object(object_id) | Type::WeakObject(object_id) => {
                 match object_id {
                     ObjectID::Class(class_id) => {
-                        class_id.is_generic()
+                        class_id.args.iter().any(|t| t.contains_generic_params())
                     },
 
                     ObjectID::Array(element)

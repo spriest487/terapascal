@@ -4,17 +4,21 @@ use crate::c::expr::InfixOp;
 use crate::c::expr::PrefixOp;
 use crate::c::ty_def::FieldName;
 use crate::c::type_map::TypeID;
+use crate::c::BuiltinName;
+use crate::c::DynArrayTypeID;
+use crate::c::FuncInstanceID;
+use crate::c::FunctionInstance;
 use crate::c::FunctionName;
 use crate::c::Type;
 use crate::c::TypeDefName;
 use crate::c::Unit;
-use crate::c::{BuiltinName, FuncInstanceID};
-use crate::c::{DynArrayTypeID, FunctionInstance};
+use crate::Options;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::iter;
 use terapascal_ir as ir;
-use terapascal_ir::{MetadataSource, TypeDefID};
+use terapascal_ir::MetadataSource;
+use terapascal_ir::TypeDefID;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
@@ -288,6 +292,14 @@ impl<'a, 'b> Builder<'a, 'b> {
 
             next_temp_var: 0,
         }
+    }
+
+    pub fn opts(&self) -> &Options {
+        &self.unit.opts
+    }
+
+    pub fn metadata(&self) -> &ir::Metadata {
+        self.unit.metadata
     }
 
     pub fn function_ref(&mut self, key: &ir::FunctionRef) -> FunctionInstance {
