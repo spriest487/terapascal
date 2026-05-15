@@ -2300,7 +2300,6 @@ impl Vm {
             // if this function is generic, the specialized instances will be registered later
             // as they're used, and only the generic version is registered now
             let generic_key = ir::FunctionRef::new(*func_id);
-            self.heap.marshaller.register_func_instance(generic_key.clone());
 
             self.globals.insert(
                 ir::GlobalRef::Function(generic_key.clone()),

@@ -244,14 +244,6 @@ impl Marshaller {
         Ok(type_index)
     }
 
-    pub fn register_func_instance(&mut self, key: ir::FunctionRef) -> FuncInstanceID {
-        let id = FuncInstanceID(self.func_instances.len());
-
-        self.func_instances.insert(key, id);
-
-        id
-    }
-
     pub fn register_object_type(&mut self, ty: ir::Type) -> MarshalResult<TypeIndex> {
         self.register_type(ty, NativeType::pointer())
     }
@@ -689,10 +681,19 @@ impl Marshaller {
             },
 
             DynValue::Function(key) => {
-                let id = self.func_instances.get_by_left(key)
-                    .ok_or_else(|| {
-                        MarshalError::InvalidData
-                    })?;
+                // valid function values can only be created by marshaling them here, so we
+                // can register the instance IDs as they're marshaled and expect there will be
+                // no attempts to unmarshal the same function before this
+                let id = match self.func_instances.get_by_left(key) {
+                    Some(key) => *key,
+                    None => {
+                        let id = FuncInstanceID(self.func_instances.len());
+                        self.func_instances.insert(key.clone(), id);
+
+                        id
+                    }
+                };
+
                 marshal_bytes(&id.0.to_ne_bytes(), out_bytes)?
             }
         };

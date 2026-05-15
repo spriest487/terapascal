@@ -296,8 +296,6 @@ pub fn instantiate_func(
     {
         return Ok(func_info);
     }
-    
-    vm.heap.marshaller.register_func_instance(key.clone());
 
     let generic_func = vm.functions
         .get(&ir::FunctionRef::new(key.id))
