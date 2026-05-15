@@ -69,6 +69,7 @@ fn invoke_clang<'a>(
         .arg("-Wno-unused-variable")
         .arg("-Wno-unused-label")
         .arg("-Wno-address-of-packed-member")
+        .arg("-Wno-parentheses-equality")
         .arg("-x")
         .arg("c");
 
