@@ -266,21 +266,31 @@ pub struct Builder<'a, 'b> {
     pub stmts: Vec<Statement>,
 
     variable_types: BTreeMap<ir::LocalID, ir::Type>,
+    param_types: Vec<ir::Type>,
+    result_type: Option<ir::Type>,
+
     next_temp_var: usize,
 }
 
 impl<'a, 'b> Builder<'a, 'b> {
-    pub fn new(module: &'a mut Unit<'b>) -> Self {
+    pub fn new(
+        module: &'a mut Unit<'b>,
+        param_types: &[ir::Type],
+        result_type: Option<ir::Type>,
+    ) -> Self {
         Self {
             unit: module,
             stmts: Vec::new(),
 
             variable_types: BTreeMap::new(),
+            param_types: param_types.to_vec(),
+            result_type,
+
             next_temp_var: 0,
         }
     }
 
-    pub fn add_function_instance(&mut self, key: &ir::FunctionRef) -> FunctionInstance {
+    pub fn function_ref(&mut self, key: &ir::FunctionRef) -> FunctionInstance {
         self.unit.add_function_instance(key)
     }
     
@@ -590,14 +600,47 @@ impl<'a, 'b> Builder<'a, 'b> {
                 self_arg,
                 rest_args,
             } => {
-                let method_func = Expr::Function(FunctionName::Method(*iface_id, *method));
+                let self_type = self_arg
+                    .find_type(self, self.unit.metadata)
+                    .expect("unable to determine type of self arg in virtual call instruction")
+                    .into_owned();
 
-                let mut args = vec![Expr::translate_ref(self_arg, self)];
+                let self_arg = Expr::translate_ref(self_arg, self);
+                let mut args = Vec::with_capacity(rest_args.len() + 1);
+
+                // if the self-arg is not an object type, we pass in its address instead
+                if self_type.is_object() {
+                    args.push(self_arg)
+                } else {
+                    args.push(self_arg.addr_of())
+                }
+
                 args.extend(
                     rest_args
                         .iter()
                         .map(|arg| Expr::translate_val(arg, self)),
                 );
+
+                // virtual call instructions may have a known type, in which case we need to
+                // devirtualize them, since the type may not actually support virtual calls -
+                // e.g. methods called in a generic function where the self type is a value type
+                let method_func = if self_type.is_abstract() {
+                    Expr::Function(FunctionName::Method(*iface_id, *method))
+                } else {
+                    let func = self.unit
+                        .metadata
+                        .find_virtual_impl(&self_type, *iface_id, *method)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "missing implementation of {} for {}",
+                                self.unit.metadata.iface_name(*iface_id),
+                                self_type.to_pretty_string(self.unit.metadata)
+                            )
+                        });
+
+                    let func_instance = self.function_ref(&ir::FunctionRef::new(func));
+                    Expr::Function(func_instance.name)
+                };
 
                 let call = method_func.call(args);
 
@@ -664,8 +707,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                         let mut case_stmts = Vec::new();
                         let case_data_expr = value
                             .clone()
-                            .field(FieldName::VariantDataCase(case_index))
-                            .deref();
+                            .field(FieldName::VariantData)
+                            .field(FieldName::VariantDataCase(case_index));
 
                         f(self, case_data_expr, data_type, &mut case_stmts);
 
@@ -1018,5 +1061,19 @@ impl<'a, 'b> Builder<'a, 'b> {
         let arg_box = box_ptr.cast(arg_box_id.ptr_type());
 
         arg_box.arrow(FieldName::BoxValue)
+    }
+}
+
+impl<'a, 'b> ir::FunctionBodyContext for Builder<'a, 'b> {
+    fn get_result_type(&self) -> Option<&ir::Type> {
+        self.result_type.as_ref()
+    }
+
+    fn get_arg_type(&self, id: ir::ArgID) -> Option<&ir::Type> {
+        self.param_types.get(id.0)
+    }
+
+    fn get_local_type(&self, id: ir::LocalID) -> Option<&ir::Type> {
+        self.variable_types.get(&id)
     }
 }

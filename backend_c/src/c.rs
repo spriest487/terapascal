@@ -294,7 +294,7 @@ impl<'a> Unit<'a> {
             init_stmts.push(ffi_func.init_statement());
         }
 
-        let mut init_builder = Builder::new(self);
+        let mut init_builder = Builder::new(self, &[], None);
         init_builder.stmts.append(&mut init_stmts);
 
         // translate initialization blocks from library

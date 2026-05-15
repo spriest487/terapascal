@@ -1,6 +1,5 @@
 mod builder;
 
-use std::borrow::Cow;
 use crate::c::boxed::BoxTypeID;
 use crate::c::function::builder::FuncInstanceBuilder;
 use crate::c::Builder;
@@ -12,12 +11,12 @@ use crate::c::TypeDecl;
 use crate::c::TypeDefName;
 use crate::c::Unit;
 use crate::c::VariableID;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::fmt;
 use terapascal_common::SharedStringKey;
 use terapascal_ir as ir;
-use terapascal_ir::FunctionID;
 use terapascal_ir::generic::instantiate_function_def;
 use terapascal_ir::generic::instantiate_sig;
 
@@ -324,7 +323,9 @@ pub struct FunctionDef {
 
 impl FunctionDef {
     pub fn translate(id: FuncInstanceID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
-        let mut builder = Builder::new(module);
+        let result_type = Some(func.sig.result_type.clone());
+        let mut builder = Builder::new(module, &func.sig.param_types, result_type);
+
         builder.translate_instructions(&func.body);
 
         Self {
@@ -467,7 +468,7 @@ impl<'a> Unit<'a> {
         instance
     }
 
-    pub fn add_builtin_function(&mut self, id: FunctionID, name: BuiltinName) -> FuncInstanceID {
+    pub fn add_builtin_function(&mut self, id: ir::FunctionID, name: BuiltinName) -> FuncInstanceID {
         let key = ir::FunctionRef::new(id);
         if let Some(instance) = self.function_refs.get(&key) {
             return instance.id;

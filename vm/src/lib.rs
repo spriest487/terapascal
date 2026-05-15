@@ -1960,7 +1960,8 @@ impl Vm {
 
             (self_val, func)
         } else {
-            let func = self.metadata()
+            let func = self
+                .metadata()
                 .find_virtual_impl(&self_type, iface_id, method)
                 .ok_or_else(|| {
                     ExecError::illegal_state(format!(
