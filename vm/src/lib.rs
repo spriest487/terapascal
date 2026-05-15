@@ -1988,20 +1988,20 @@ impl Vm {
             arg_vals.push(arg_val);
         }
 
-        let func_ref = ir::Ref::Global(ir::GlobalRef::func(func, []));
+        // method definitions type arg lists are prefixed with the enclosing type's type arg list
+        let func_ref = match self_type.def_id() {
+            Some(def_id) => {
+                ir::FunctionRef::new(func).with_args(def_id.args.clone())
+            }
 
-        match self.evaluate(&ir::Value::Ref(func_ref))? {
+            None => {
+                ir::FunctionRef::new(func)
+            }
+        };
+
+        match self.evaluate(&ir::Value::from(func_ref))? {
             DynValue::Function(key) => {
-                // method definitions type arg lists are prefixed with the enclosing type's type arg list
-                match self_type.def_id() {
-                    Some(def_id) => {
-                        self.call_and_store(&key.with_args(def_id.args.clone()), &arg_vals, out)
-                    }
-
-                    None => {
-                        self.call_and_store(&key, &arg_vals, out)
-                    }
-                }
+                self.call_and_store(&key, &arg_vals, out)
             },
 
             unexpected => {
