@@ -453,7 +453,7 @@ impl fmt::Display for FuncAliasID {
 }
 
 impl<'a> Unit<'a> {
-    pub fn add_function_instance(&mut self, key: &ir::FunctionRef) -> FunctionInstance {
+    pub fn translate_func_ref(&mut self, key: &ir::FunctionRef) -> FunctionInstance {
         if let Some(instance) = self.function_refs.get(key) {
             return *instance;
         }
@@ -468,7 +468,7 @@ impl<'a> Unit<'a> {
         instance
     }
 
-    pub fn add_builtin_function(&mut self, id: ir::FunctionID, name: BuiltinName) -> FuncInstanceID {
+    pub fn add_builtin_func(&mut self, id: ir::FunctionID, name: BuiltinName) -> FuncInstanceID {
         let key = ir::FunctionRef::new(id);
         if let Some(instance) = self.function_refs.get(&key) {
             return instance.id;
@@ -478,6 +478,28 @@ impl<'a> Unit<'a> {
         self.function_refs.insert(key, FunctionInstance {
             id: instance_id,
             name: FunctionName::Builtin(name),
+        });
+
+        instance_id
+    }
+
+    pub fn translate_extern_func_ref(
+        &mut self,
+        id: ir::FunctionID,
+        extern_ref: &ir::ExternalFunctionRef,
+    ) -> FuncInstanceID {
+        let key = ir::FunctionRef::new(id);
+        if let Some(instance) = self.function_refs.get(&key) {
+            return instance.id;
+        }
+
+        let ffi_func = FfiFunction::translate(id, extern_ref, self);
+        self.ffi_funcs.push(ffi_func);
+
+        let instance_id = FuncInstanceID(self.function_refs.len());
+        self.function_refs.insert(key, FunctionInstance {
+            id: instance_id,
+            name: FunctionName::Extern(id),
         });
 
         instance_id

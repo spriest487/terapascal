@@ -141,7 +141,7 @@ impl<'a> Unit<'a> {
 
             // if a function isn't used then it won't be included in the metadata
             if let Some(func_id) = metadata.find_function(global_name) {
-                unit.add_builtin_function(func_id, *c_name);
+                unit.add_builtin_func(func_id, *c_name);
             }
         }
 
@@ -170,7 +170,7 @@ impl<'a> Unit<'a> {
             let invoker = match func_info.invoker {
                 Some(invoker_id) => {
                     let invoker_key = ir::FunctionRef::new(invoker_id);
-                    let invoker_id = unit.add_function_instance(&invoker_key);
+                    let invoker_id = unit.translate_func_ref(&invoker_key);
                     Some(invoker_id.name)
                 }
                 None => None,
@@ -238,7 +238,7 @@ impl<'a> Unit<'a> {
             match func {
                 ir::Function::Local(func_def) => {
                     if func_def.type_params.is_empty() {
-                        self.add_function_instance(&ir::FunctionRef::new(*func_id));
+                        self.translate_func_ref(&ir::FunctionRef::new(*func_id));
                     }
                 },
 
@@ -248,8 +248,7 @@ impl<'a> Unit<'a> {
                         continue;
                     }
 
-                    let ffi_func = FfiFunction::translate(*func_id, func_ref, self);
-                    self.ffi_funcs.push(ffi_func);
+                    self.translate_extern_func_ref(*func_id, func_ref);
                 },
             }
             
@@ -507,7 +506,7 @@ impl<'a> Unit<'a> {
                     .and_then(|f| f.invoker)
                 {
                     let invoker_key = ir::FunctionRef::new(invoker_id);
-                    let invoker_instance = self.add_function_instance(&invoker_key);
+                    let invoker_instance = self.translate_func_ref(&invoker_key);
 
                     Expr::Function(invoker_instance.name).addr_of()
                 } else {

@@ -302,8 +302,8 @@ impl<'a, 'b> Builder<'a, 'b> {
         self.unit.metadata
     }
 
-    pub fn function_ref(&mut self, key: &ir::FunctionRef) -> FunctionInstance {
-        self.unit.add_function_instance(key)
+    pub fn translate_function_ref(&mut self, func_ref: &ir::FunctionRef) -> FunctionInstance {
+        self.unit.translate_func_ref(func_ref)
     }
     
     pub fn translate_type(&mut self, ir_ty: &ir::Type) -> Type {
@@ -650,7 +650,7 @@ impl<'a, 'b> Builder<'a, 'b> {
                             )
                         });
 
-                    let func_instance = self.function_ref(&ir::FunctionRef::new(func));
+                    let func_instance = self.translate_function_ref(&ir::FunctionRef::new(func));
                     Expr::Function(func_instance.name)
                 };
 

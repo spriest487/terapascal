@@ -216,7 +216,7 @@ impl Expr {
                 Expr::translate_val(inner.as_ref(), builder).deref()
             },
             ir::Ref::Global(ir::GlobalRef::Function(key)) => {
-                let instance = builder.function_ref(key);
+                let instance = builder.translate_function_ref(key);
                 Expr::Function(instance.name)
             },
             ir::Ref::Global(ir::GlobalRef::StringLiteral(id)) => {

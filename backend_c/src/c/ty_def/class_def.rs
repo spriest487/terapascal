@@ -40,7 +40,7 @@ impl MethodImplFunc {
 
         // TODO: doesn't support methods with type params yet
         let method_instance_key = ir::FunctionRef::new(impl_func_id);
-        let method_instance = module.add_function_instance(&method_instance_key);
+        let method_instance = module.translate_func_ref(&method_instance_key);
 
         let vcall_wrapper_name = FunctionName::MethodWrapper(iface_id, method_id, self_class.to_def_name());
 
@@ -259,7 +259,7 @@ impl Class {
                 let key = ir::FunctionRef::new(id)
                     .with_args(class_id.args.clone());
 
-                let instance = unit.add_function_instance(&key);
+                let instance = unit.translate_func_ref(&key);
                 Some(instance.name)
             },
             None => None,
