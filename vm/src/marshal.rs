@@ -4,7 +4,9 @@ mod native_type;
 mod type_def;
 mod variant_type;
 mod struct_type;
+mod array;
 
+pub(crate) use self::array::*;
 pub(crate) use self::struct_type::*;
 use self::util::unmarshal_from_ne_bytes;
 use self::util::UnmarshalledValue;
@@ -12,7 +14,6 @@ pub(crate) use self::variant_type::*;
 use crate::func::ffi::FfiInvoker;
 use crate::func::FuncInstanceID;
 use crate::ir;
-use crate::ArrayValue;
 use crate::DynValue;
 use crate::ObjectHeader;
 use crate::ObjectID;
@@ -34,17 +35,8 @@ use std::env;
 use std::error::Error;
 use std::mem::size_of;
 use std::path::PathBuf;
-use std::ptr::slice_from_raw_parts;
 use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
-
-// dynamic array values in memory are marshalled as a set of header fields followed by a variably
-// sized sequence of elements
-#[derive(Clone, Debug)]
-pub struct DynArrayHeader {
-    pub object_header: ObjectHeader,
-    pub len: i32,
-}
 
 #[derive(Debug, Clone)]
 pub struct Marshaller {
@@ -211,10 +203,6 @@ impl Marshaller {
 
     pub fn register_object_type(&mut self, ty: ir::Type) -> MarshalResult<TypeIndex> {
         self.register_type(ty, NativeType::pointer())
-    }
-
-    fn add_dyn_array_type(&mut self, element_type: ir::Type) -> MarshalResult<TypeIndex> {
-        self.register_type(element_type.clone().dyn_array(), NativeType::pointer())
     }
 
     fn get_cached_type(&self, t: &ir::Type) -> Option<(NativeType, TypeIndex)> {
@@ -609,23 +597,6 @@ impl Marshaller {
         })
     }
 
-    pub fn unmarshal_dyn_array_header_at(&self, pointer: &Pointer) -> MarshalResult<DynArrayHeader> {
-        if pointer.addr == 0 {
-            return Err(MarshalError::InvalidData);
-        }
-
-        let mem_slice = slice_from_raw_parts(
-            pointer.addr as *const u8,
-            Self::array_header_size(),
-        );
-
-        let result = self.unmarshal_dyn_array_header(unsafe {
-            mem_slice.as_ref().unwrap()
-        })?;
-
-        Ok(result.value)
-    }
-
     pub fn unmarshal_at(&self, pointer: &Pointer) -> MarshalResult<DynValue> {
         assert_ne!(0, pointer.addr);
 
@@ -951,56 +922,6 @@ impl Marshaller {
         NativeType::u64().size() // type index
             + NativeType::i32().size() // strong ref count
             + NativeType::i32().size() // weak ref count
-    }
-    
-    // the array header is the region of memory preceding the elements of a dynamic array
-    pub fn array_header_size() -> usize {
-        let header_size = Self::object_header_size()
-            + NativeType::i32().size(); // element count
-        
-        header_size
-    }
-    
-    fn unmarshal_dyn_array_header(&self, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<DynArrayHeader>> {
-        let mut offset = 0;
-
-        // non-static arrays must be RC objects
-        let header = self.unmarshal_object_header(&in_bytes[offset..])?;
-        offset += header.byte_count;
-
-        assert!(matches!(header.value.id, ObjectID::Array(..)));
-
-        let size_int = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
-        offset += size_int.byte_count;
-        
-        Ok(UnmarshalledValue {
-            value: DynArrayHeader {
-                object_header: header.value,
-                len: size_int.value,
-            },
-            byte_count: offset,
-        })
-    }
-    
-    fn unmarshal_static_array(&self, element_type: &ir::Type, size: usize, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<ArrayValue>> {
-        let mut offset = 0;
-        
-        let mut elements = Vec::with_capacity(size);
-        
-        for _ in 0..size {
-            let element = self.unmarshal(&in_bytes[offset..], element_type)?;
-            
-            elements.push(element.value);
-            offset += element.byte_count;
-        }
-
-        Ok(UnmarshalledValue {
-            byte_count: offset,
-            value: ArrayValue {
-                element_type: element_type.clone(),
-                elements,
-            },
-        })
     }
 }
 

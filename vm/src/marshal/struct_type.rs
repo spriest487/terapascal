@@ -1,12 +1,19 @@
+use crate::ir;
+use crate::marshal::util::UnmarshalledValue;
+use crate::marshal::MarshalError;
+use crate::marshal::MarshalResult;
+use crate::marshal::Marshaller;
+use crate::marshal::NativeType;
+use crate::marshal::TypeIndex;
+use crate::DynValue;
+use crate::ObjectID;
+use crate::StructValue;
+use smallvec::SmallVec;
 use std::borrow::Cow;
-use crate::{ir, DynValue, ObjectID, StructValue};
-use crate::marshal::{MarshalError, MarshalResult, Marshaller, NativeType, TypeIndex};
 use std::collections::BTreeMap;
 use std::rc::Rc;
-use smallvec::SmallVec;
 use terapascal_ir::generic::instantiate_struct_def;
 use terapascal_ir::MetadataSource;
-use crate::marshal::util::UnmarshalledValue;
 
 #[derive(Debug, Clone)]
 pub struct StructFieldInfo {

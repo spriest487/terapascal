@@ -1,12 +1,19 @@
+use crate::ir;
+use crate::marshal::util::UnmarshalledValue;
+use crate::marshal::MarshalError;
+use crate::marshal::MarshalResult;
+use crate::marshal::Marshaller;
+use crate::marshal::NativeType;
+use crate::marshal::TypeIndex;
+use crate::DynValue;
+use crate::Pointer;
+use crate::VariantValue;
 use std::borrow::Cow;
 use std::cmp::max;
 use std::iter;
-use crate::{ir, DynValue, Pointer, VariantValue};
-use crate::marshal::{MarshalError, MarshalResult, Marshaller, NativeType, TypeIndex};
 use std::rc::Rc;
 use terapascal_ir::generic::instantiate_variant_def;
 use terapascal_ir::MetadataSource;
-use crate::marshal::util::UnmarshalledValue;
 
 #[derive(Debug, Clone)]
 pub struct VariantLayout {
