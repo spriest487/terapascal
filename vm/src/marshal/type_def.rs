@@ -1,5 +1,4 @@
-use std::cmp::max;
-use crate::marshal::{MarshalError, VariantCaseDataInfo, VariantLayout};
+use crate::marshal::MarshalError;
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::marshal::NativeType;
@@ -7,7 +6,6 @@ use crate::marshal::StructFieldInfo;
 use crate::marshal::StructLayout;
 use crate::marshal::TypeIndex;
 use std::collections::BTreeMap;
-use std::iter;
 use std::rc::Rc;
 use terapascal_ir as ir;
 
@@ -95,66 +93,7 @@ impl Marshaller {
         Ok((native_type, type_index))
     }
 
-    pub(super) fn define_variant(
-        &mut self,
-        variant_type: &ir::Type,
-        def: Rc<ir::VariantDef>,
-    ) -> MarshalResult<TypeIndex> {
-        let mut cases = Vec::with_capacity(def.cases.len());
-
-        let mut native_fields = Vec::with_capacity(def.cases.len() + 1);
-
-        let (_, tag_native_type) = self.build_marshalled_type(&def.tag_type)?;
-
-        let tag_offset = tag_native_type.size();
-
-        native_fields.push(tag_native_type);
-
-        let mut max_case_size = 0;
-        let mut max_case_pad = 0;
-
-        for case_def in &def.cases {
-            if let Some(data_type) = case_def.ty.as_ref() {
-                let (_, case_native_type) = self.build_marshalled_type(data_type)?;
-
-                let case_align = self.align_of(&data_type, ir::StructLayout::Default)?;
-                let case_pad = Self::field_padding(tag_offset, case_align);
-
-                max_case_pad = max(case_pad, max_case_pad);
-                max_case_size = max(case_native_type.size(), max_case_size);
-
-                cases.push(Some(VariantCaseDataInfo {
-                    ty: data_type.clone(),
-                    native_type: case_native_type,
-                }));
-            } else {
-                cases.push(None)
-            };
-        }
-
-        let data_offset = tag_offset + max_case_pad;
-
-        // the data value will be addressed by offset only so we just need to fill the appropriate
-        // amount of space for all cases
-        native_fields.extend(iter::repeat(NativeType::u8()).take(max_case_size + max_case_pad));
-
-        let native_type = NativeType::structure(native_fields);
-        let size = native_type.size();
-
-        self.add_dyn_array_type(variant_type.clone())?;
-        let type_index = self.register_type(variant_type.clone(), native_type)?;
-
-        self.variant_layouts.insert(type_index, VariantLayout {
-            def: def.clone(),
-            size,
-            data_offset,
-            cases,
-        });
-
-        Ok(type_index)
-    }
-
-    fn align_of(&self, ty: &ir::Type, layout: ir::StructLayout) -> MarshalResult<usize> {
+    pub fn align_of(&self, ty: &ir::Type, layout: ir::StructLayout) -> MarshalResult<usize> {
         let type_index = self.get_type_index(ty)?;
 
         match layout {
@@ -209,7 +148,7 @@ impl Marshaller {
         }
     }
 
-    fn field_padding(offset: usize, align: usize) -> usize {
+    pub fn field_padding(offset: usize, align: usize) -> usize {
         if offset > 0 && align > 1 {
             match offset % align {
                 0 => 0,
