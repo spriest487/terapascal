@@ -634,8 +634,7 @@ impl Vm {
     fn invoke_dtor(&mut self, val: &DynValue, ty: &ir::Type) -> ExecResult<()> {
         let dtor_func_id = self
             .metadata()
-            .get_type_info(ty)
-            .and_then(|runtime_type| runtime_type.dtor);
+            .get_dtor_method(&ty);
 
         // eprintln!("trying to invoke dtor for {}... {:?}, {:?}: {:?}", ty, ty.def_id(), ty.rc_resource_def_id(), dtor_func_id);
 

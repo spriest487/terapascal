@@ -76,10 +76,6 @@ pub struct Args {
     #[structopt(long = "trace-generics")]
     pub trace_generics: bool,
 
-    /// VM: check for memory leaks on shutdown and emit an error if any are found
-    #[structopt(long = "leak-check")]
-    pub leak_check: bool,
-
     /// Print compiler backtrace on certain compilation errors
     #[structopt(long = "backtrace", short = "bt")]
     pub backtrace: bool,

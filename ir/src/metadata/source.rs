@@ -1,7 +1,6 @@
 ﻿use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::vars::ConstInfo;
-use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -23,6 +22,7 @@ use crate::TypeInfo;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
+use crate::FunctionID;
 use std::borrow::Cow;
 use std::rc::Rc;
 
@@ -88,6 +88,7 @@ pub trait MetadataSource : Sized {
     }
 
     fn methods(&self) -> impl Iterator<Item = &MethodInfo>;
+    fn get_dtor_method(&self, for_type: &Type) -> Option<FunctionID>;
 
     fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)>;
     fn get_variable(&self, id: VariableID) -> Option<&VariableInfo>;

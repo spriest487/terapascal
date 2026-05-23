@@ -1,7 +1,7 @@
-use crate::NamePath;
 use crate::TagInfo;
 use crate::Type;
 use crate::Value;
+use crate::NamePath;
 use serde::Deserialize;
 use serde::Serialize;
 

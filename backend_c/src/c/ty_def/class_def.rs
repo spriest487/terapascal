@@ -250,7 +250,7 @@ impl Class {
 
         let typeinfo_name = global_typeinfo_decl_name(unit, &class_ty);
 
-        let dtor = match runtime_type.dtor {
+        let dtor = match metadata.get_dtor_method(&class_ty) {
             Some(id) => {
                 let ir::Type::Object(ir::ObjectID::Class(class_id)) = class_ty else {
                     panic!("invalid type for class: {}", class_ty.to_pretty_string(unit.metadata));

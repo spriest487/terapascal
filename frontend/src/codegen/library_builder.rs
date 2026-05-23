@@ -1,11 +1,11 @@
 mod init;
 mod function;
 
+use crate::ast;
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
-use crate::ast::MethodOwner;
 use crate::ast::StructKind;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::expr_to_val;
@@ -51,9 +51,9 @@ pub struct LibraryBuilder<'a> {
     references: Vec<String>,
 
     src_metadata: &'a typ::Context,
-    
+
     opts: CodegenOpts,
-    
+
     type_cache: LinkedHashMap<typ::Type, ir::Type>,
     cached_types: LinkedHashMap<ir::Type, typ::Type>,
 
@@ -73,9 +73,6 @@ pub struct LibraryBuilder<'a> {
     // looked up on first use
     free_mem_func: Option<ir::FunctionID>,
     get_mem_func: Option<ir::FunctionID>,
-    
-    // user-defined destructors by class ID
-    dtors: BTreeMap<ir::TypeDefID, ir::FunctionID>,
 
     init_code: ir::InstructionList,
     
@@ -157,8 +154,6 @@ impl<'a> LibraryBuilder<'a> {
             
             static_closures: BTreeMap::new(),
             
-            dtors: BTreeMap::new(),
-            
             // placeholders
             free_mem_func: None,
             get_mem_func: None,
@@ -203,18 +198,6 @@ impl<'a> LibraryBuilder<'a> {
             };
 
             self.translate_type(&translate_type);
-        }
-
-        // builtin classes are added manually to the type cache but their methods (and therefore 
-        // any destructors) are expected to be defined in code, so we need to find those in the
-        // source if they exist
-        for class_info in BUILTIN_CLASS_INFO.with(|names| names.to_vec()) {
-            let class_name = &class_info.name;
-
-            if let Ok(def) = self.src_metadata.instantiate_struct_def(class_name, StructKind::Class) {
-                let src_ty = typ::Type::class(class_name.clone());
-                self.insert_type_dtor(class_info.id, src_ty, def.as_ref());
-            }
         }
 
         self.build_typeinfo();
@@ -804,18 +787,32 @@ impl<'a> LibraryBuilder<'a> {
             other => other.clone(),
         };
 
+        let name = func_decl.name.ident.to_string();
         let declaring_type = self.translate_type(&declaring_type);
 
-        let type_args = func_decl.name.type_params
-            .iter()
-            .flat_map(|param_list| param_list.items.iter())
-            .map(|p| ir::Type::Generic(Rc::new(p.name.to_string())))
-            .collect();
+        match func_decl.kind {
+            ast::FunctionDeclKind::Destructor => {
+                assert!(func_decl.name.type_params.is_none(), "method_identity: destructor method must not have type params");
 
-        ir::FunctionIdentity::Method {
-            declaring_type,
-            name: func_decl.name.ident.to_string(),
-            type_args,
+                ir::FunctionIdentity::Destructor {
+                    declaring_type,
+                    name
+                }
+            }
+
+            _ => {
+                let type_args = func_decl.name.type_params
+                    .iter()
+                    .flat_map(|param_list| param_list.items.iter())
+                    .map(|p| ir::Type::Generic(Rc::new(p.name.to_string())))
+                    .collect();
+
+                ir::FunctionIdentity::Method {
+                    declaring_type,
+                    name,
+                    type_args,
+                }
+            }
         }
     }
 
@@ -925,23 +922,6 @@ impl<'a> LibraryBuilder<'a> {
         Generic: typ::Specializable,
     {
         target.apply_type_args(params, args)
-    }
-    
-    fn insert_type_dtor(&mut self,
-        type_id: ir::TypeDefID,
-        src_ty: typ::Type,
-        src_def: &impl MethodOwner<typ::Value>
-    ) {
-        let Some(dtor_method_index) = src_def.find_dtor_index() else {
-            return;
-        };
-
-        let dtor = self.instantiate_method(&MethodDeclKey {
-            self_ty: src_ty,
-            method_index: dtor_method_index,
-        });
-        
-        self.dtors.insert(type_id, dtor.id);
     }
     
     fn add_cached_type(&mut self, src_ty: typ::Type, ty: ir::Type) {
@@ -1166,8 +1146,6 @@ impl<'a> LibraryBuilder<'a> {
                 let def = translate_variant_def(&src_def, self);
                 self.metadata.define_variant(def_id, def);
 
-                self.insert_type_dtor(def_id, def_type.clone(), src_def.as_ref());
-
                 def_id
             }
         };
@@ -1221,7 +1199,6 @@ impl<'a> LibraryBuilder<'a> {
                 let def = translate_struct_def(&src_def, self);
                 self.metadata.define_struct(def_id, def);
 
-                self.insert_type_dtor(def_id, def_src_type, src_def.as_ref());
                 def_id
             }
         };
@@ -1309,6 +1286,7 @@ impl<'a> LibraryBuilder<'a> {
             
             for closure_id in populate_closures.drain(0..) {
                 gen_closure_runtime_type(self, closure_id);
+
                 self.gen_type_info(&closure_id.to_class_ptr_type([]));
                 self.gen_type_info(&closure_id.to_class_weak_type([]));
                 done_closures += 1;
@@ -1335,12 +1313,6 @@ impl<'a> LibraryBuilder<'a> {
 
                 if src_ty.as_class().is_ok() {
                     gen_class_runtime_type(self, &ty);
-                }
-                
-                if let typ::Type::DynArray(element_type) = &src_ty
-                    && !element_type.contains_unresolved_params(self.src_metadata)
-                {
-                    gen_dynarray_runtime_type(self, &ty);
                 }
 
                 self.gen_iface_impls(&src_ty, &ty);
@@ -1631,49 +1603,6 @@ impl<'a> LibraryBuilder<'a> {
     }
 }
 
-// TODO: dynarray dtors should be handled by the backend
-fn gen_dynarray_runtime_type(lib: &mut LibraryBuilder, array_type: &ir::Type) {
-    let ir::Type::Object(ir::ObjectID::Array(element_type)) = &array_type else {
-        panic!("dyn array type did not translate to a dyn array reference");
-    };
-    
-    // the destructor can be skipped entirely if the element never contains RC elements
-    if !element_type.contains_any_object_refs(&lib.metadata) {
-        return;
-    }
-
-    let dtor_sig = ir::FunctionSig {
-        param_types: vec![array_type.clone()],
-        result_type: ir::Type::Nothing,
-    };
-
-    let internal_name = format!("generated dtor for {}", lib.metadata.pretty_type_name(array_type));
-    let dtor_debug_name = lib.opts.debug.then(|| internal_name.clone());
-    let identity = ir::FunctionIdentity::internal(internal_name);
-
-    let dtor_id = lib.metadata.insert_func(identity, dtor_sig.clone(), false, []);
-
-    let mut dtor_builder = IRBuilder::new(lib);
-    
-    let self_arg = ir::ArgID(0);
-    dtor_builder.bind_param(self_arg, array_type.clone(), "self");
-
-    dtor_builder.gen_dyn_array_dtor_body(self_arg, element_type);
-    
-    let dtor_body = dtor_builder.finish();
-
-    lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
-        debug_name: dtor_debug_name,
-        type_params: Vec::new(),
-        sig: dtor_sig,
-        body: dtor_body,
-    }));
-
-    let mut runtime_type = lib.gen_type_info(array_type).as_ref().clone();
-    runtime_type.dtor = Some(dtor_id);
-    lib.metadata.insert_type_info(array_type.clone(), runtime_type);
-}
-
 fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID) {
     let type_id = ir::GenericTypeID::new(closure_id, []);
     let closure_class_ty = type_id.to_class_object_type();
@@ -1685,8 +1614,6 @@ fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID)
     let mut weak_runtime_type = lib.gen_type_info(&closure_weak_ty)
         .as_ref()
         .clone();
-
-    gen_class_dtor(lib, &type_id, &mut runtime_type);
 
     // this type is the unnamed class implementing a closure, give it the function flag too
     runtime_type.flags |= ir::TYPE_FLAG_FUNCTION;
@@ -1706,70 +1633,10 @@ fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
     let class_id = class_ty
         .as_object()
         .and_then(|class_id| class_id.as_class())
-        .expect("resource class of translated class type was not a struct");
+        .expect("gen_class_runtime_type: resource class of translated class type was not a struct");
 
-    lib.gen_type_info(&class_ty);
     lib.gen_type_info(&class_id.to_class_object_type());
-
-    let mut runtime_type = lib.gen_type_info(&class_ty)
-        .as_ref()
-        .clone();
-
-    gen_class_dtor(lib, class_id, &mut runtime_type);
-
-    lib.metadata.insert_type_info(class_ty.clone(), runtime_type);
-}
-
-fn gen_class_dtor(
-    lib: &mut LibraryBuilder,
-    class_id: &Rc<ir::GenericTypeID>,
-    runtime_type: &mut ir::TypeInfo,
-) {
-    let class_ty = class_id.to_class_object_type();
-
-    let user_dtor = lib.dtors.get(&class_id.def_id).cloned();
-
-    let mut dtor_builder = IRBuilder::new(lib);
-    
-    let self_arg = ir::ArgID(0);
-    dtor_builder.bind_param(self_arg, class_ty.clone(), "self");
-
-    let mut has_dtor = false;
-    if let Some(user_dtor_id) = user_dtor {
-        let dtor_ref = ir::GlobalRef::func(user_dtor_id, []);
-
-        dtor_builder.call(dtor_ref, [self_arg.value()], None);
-        has_dtor = true;
-    }
-    
-    if dtor_builder.gen_class_object_dtor_body(class_id, self_arg) {
-        has_dtor = true;
-    }
-
-    if !has_dtor {
-        return;
-    }
-
-    let dtor_body = dtor_builder.finish();
-
-    let dtor_sig = ir::FunctionSig {
-        param_types: vec![class_ty.clone()],
-        result_type: ir::Type::Nothing,
-    };
-
-    let internal_name = format!("generated dtor for {}", lib.metadata.pretty_type_name(&class_ty));
-    let debug_name = lib.opts.debug.then(|| internal_name.clone());
-    let identity = ir::FunctionIdentity::internal(internal_name);
-
-    let dtor_id = lib.metadata.insert_func(identity, dtor_sig.clone(), false, []);
-    runtime_type.dtor = Some(dtor_id);
-
-    lib.insert_function(dtor_id, ir::Function::Local(ir::FunctionDef {
-        debug_name,
-        body: dtor_body,
-        sig: dtor_sig,
-        type_params: Vec::new(),
-    }));
+    lib.gen_type_info(&class_id.to_weak_class_object_type());
 }
 
 fn gen_func_invokers(lib: &mut LibraryBuilder) {

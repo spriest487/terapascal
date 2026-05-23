@@ -314,6 +314,10 @@ impl MetadataSource for MetadataBuilder {
         self.iter_in_self_or_refs(move |metadata| metadata.methods())
     }
 
+    fn get_dtor_method(&self, for_type: &Type) -> Option<FunctionID> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_dtor_method(for_type))
+    }
+
     fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)> {
         self.find_in_self_or_refs(move |metadata| metadata.find_variable(name))
     }

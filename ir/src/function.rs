@@ -105,6 +105,12 @@ pub enum FunctionIdentity {
         type_args: Vec<Type>,
     },
 
+    // user-defined destructor method associated with a type
+    Destructor {
+        declaring_type: Type,
+        name: String,
+    },
+
     // function is anonymous (e.g. generated functions) but has a debug name
     Internal(Rc<String>),
 }
@@ -119,6 +125,10 @@ impl FunctionIdentity {
             FunctionIdentity::Path(path) => {
                 Cow::Owned(path.to_pretty_string(formatter))
             },
+
+            FunctionIdentity::Destructor { name, declaring_type } => {
+                Cow::Owned(format!("{}.{name}", declaring_type.to_pretty_string(formatter)))
+            }
 
             FunctionIdentity::Method { declaring_type, name, type_args } => {
                 let mut result = declaring_type.to_pretty_string(formatter);

@@ -9,10 +9,13 @@ pub fn translate_variant_def(
     lib: &mut LibraryBuilder,
 ) -> ir::VariantDef {
     let tags = lib.translate_tag_groups(&variant_def.tags);
-    
+
     let name_path = translate_name(&variant_def.name.as_ref().clone().to_generic_name(), lib);
-    
+
     let tag_type = lib.translate_type(&VARIANT_TAG_TYPE);
+
+    // in Terapascal, the tag is always an Integer for the moment, even though the IR supports
+    // any numeric type
     assert_eq!(ir::Type::I32, tag_type);
 
     let mut cases = Vec::new();
@@ -20,6 +23,7 @@ pub fn translate_variant_def(
         let case_ty = match case.data.as_ref() {
             Some(data) => {
                 let case_ty = lib.translate_type(&data.ty);
+
                 Some(case_ty)
             },
 

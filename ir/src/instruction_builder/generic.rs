@@ -1,4 +1,3 @@
-use crate::{ArgID, FunctionRef};
 use crate::BinOpInstruction;
 use crate::FunctionDef;
 use crate::FunctionSig;
@@ -16,6 +15,7 @@ use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VariantCase;
 use crate::VariantDef;
+use crate::{ArgID, FunctionRef};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;

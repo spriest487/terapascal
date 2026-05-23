@@ -20,8 +20,6 @@ pub struct TypeInfo {
 
     pub flags: u64,
     
-    pub dtor: Option<FunctionID>,
-    
     pub methods: Vec<MethodInfo>,
 }
 
@@ -34,7 +32,6 @@ impl TypeInfo {
             flags,
             
             methods: Vec::new(),
-            dtor: None,
         }
     }
 

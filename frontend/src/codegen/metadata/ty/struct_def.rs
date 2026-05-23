@@ -4,6 +4,14 @@ use crate::codegen::translate_name;
 use crate::codegen::typ;
 use crate::ir;
 use std::collections::BTreeMap;
+use std::rc::Rc;
+
+pub fn class_dtor_sig(class_id: &Rc<ir::GenericTypeID>) -> ir::FunctionSig {
+    ir::FunctionSig {
+        param_types: vec![class_id.to_class_object_type()],
+        result_type: ir::Type::Nothing,
+    }
+}
 
 pub fn translate_struct_def(
     struct_def: &typ::ast::StructDecl,
