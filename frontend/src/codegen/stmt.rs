@@ -18,7 +18,6 @@ use crate::typ::OPTION_NONE_CASE;
 use crate::typ::OPTION_SOME_CASE;
 use std::sync::Arc;
 use terapascal_common::span::Spanned;
-use terapascal_ir::jmp_exists;
 use terapascal_ir::InstructionBuilder;
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut IRBuilder) {
@@ -222,7 +221,7 @@ where
 
         let body_instructions = builder.loop_body_scope(continue_label, break_label, body_fn);
 
-        if jmp_exists(body_instructions, continue_label) {
+        if ir::util::jmp_exists(body_instructions, continue_label) {
             builder.label(continue_label);
         }
 
@@ -233,7 +232,7 @@ where
         builder.emit(ir::Instruction::Jump { dest: top_label });
     });
 
-    if jmp_exists(&loop_instructions, break_label) {
+    if ir::util::jmp_exists(&loop_instructions, break_label) {
         builder.label(break_label);
     }
 }
@@ -408,7 +407,7 @@ fn build_for_loop_sequence(
                         translate_stmt(&body, builder);
                     });
 
-                    if jmp_exists(body_instructions, continue_label) {
+                    if ir::util::jmp_exists(body_instructions, continue_label) {
                         builder.label(continue_label);
                     }
 
@@ -416,7 +415,7 @@ fn build_for_loop_sequence(
                     builder.jmp(top_label);
                 });
 
-                if jmp_exists(&loop_instructions, break_label) {
+                if ir::util::jmp_exists(&loop_instructions, break_label) {
                     builder.label(break_label);
                 }
             }
@@ -507,7 +506,7 @@ pub fn translate_while_loop(while_loop: &typ::ast::WhileLoop, builder: &mut IRBu
             translate_stmt(&while_loop.body, builder);
         });
 
-        if jmp_exists(body_instructions, continue_label) {
+        if ir::util::jmp_exists(body_instructions, continue_label) {
             builder.comment("while-loop continue");
             builder.label(continue_label);
         }
@@ -516,7 +515,7 @@ pub fn translate_while_loop(while_loop: &typ::ast::WhileLoop, builder: &mut IRBu
         builder.jmp(top_label);
     });
 
-    if jmp_exists(loop_instructions, break_label) {
+    if ir::util::jmp_exists(loop_instructions, break_label) {
         builder.comment("while-loop break");
         builder.label(break_label);
     }
@@ -685,6 +684,7 @@ fn translate_match_stmt(match_stmt: &typ::ast::MatchStmt, builder: &mut IRBuilde
                         &branch.pattern,
                         branch.binding.as_ref(),
                         &cond_expr,
+                        &cond_ty,
                         builder
                     );
                     

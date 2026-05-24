@@ -9,8 +9,9 @@ use crate::val::Ref;
 use crate::val::Value;
 use serde::Deserialize;
 use serde::Serialize;
+use std::fmt;
+use std::iter;
 use std::ops::RangeBounds;
-use std::{fmt, iter};
 use terapascal_common::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -372,7 +373,7 @@ impl fmt::Display for Instruction {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Label(pub usize);
 
 impl fmt::Display for Label {
@@ -435,7 +436,7 @@ impl InstructionList {
         self.instructions.splice(range.clone(), instructions);
         self.sources.splice(range, sources);
     }
-    
+
     pub fn iter(&self) -> impl Iterator<Item=(&Instruction, Option<&Span>)> {
         let sources = self.sources
             .iter()

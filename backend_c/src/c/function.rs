@@ -535,9 +535,11 @@ impl<'a> Unit<'a> {
             let sig = instantiate_sig(&generic_def.sig, &types);
 
             instantiate_function_def(&generic_def, &types, &mut builder);
+            
+            let body = builder.finish();
 
             Cow::Owned(ir::FunctionDef {
-                body: builder.finish(),
+                body,
                 debug_name: None,
                 type_params: Vec::new(),
                 sig,

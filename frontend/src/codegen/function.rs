@@ -4,15 +4,14 @@ use crate::codegen::translate_block;
 use crate::codegen::typ;
 use crate::codegen::ClosureInstance;
 use crate::codegen::IRBuilder;
-use crate::ir::*;
+use crate::ir;
 use std::iter;
 use std::sync::Arc;
-use terapascal_ir::jmp_exists;
 use terapascal_ir::InstructionBuilder;
 
 #[derive(Clone, Debug)]
 pub struct FunctionInstance {
-    pub id: FunctionID,
+    pub id: ir::FunctionID,
     pub src_sig: Arc<typ::FunctionSig>,
 
     pub published: bool,
@@ -45,7 +44,7 @@ pub fn build_func_def(
     is_instance_method: bool,
     enclosing_type: Option<&typ::Type>,
     debug_name: Option<String>,
-) -> FunctionDef {
+) -> ir::FunctionDef {
     let mut body_builder = create_function_body_builder(
         module,
         debug_name.clone()
@@ -57,7 +56,7 @@ pub fn build_func_def(
         .iter()
         .flat_map(|param| FunctionParam::from_ast(param, &mut body_builder))
         .collect();
-    let bound_params = bind_function_params(bind_params, is_instance_method, ArgID(0), &mut body_builder);
+    let bound_params = bind_function_params(bind_params, is_instance_method, ir::ArgID(0), &mut body_builder);
 
     let mut type_params = Vec::new();
 
@@ -81,9 +80,9 @@ pub fn build_func_def(
 
     let body = build_func_body(def_body, &return_ty, body_builder);
 
-    FunctionDef {
+    ir::FunctionDef {
         body,
-        sig: FunctionSig {
+        sig: ir::FunctionSig {
             param_types: bound_params.into_iter().map(|(_id, ty)| ty).collect(),
             result_type: return_ty,
         },
@@ -95,9 +94,9 @@ pub fn build_func_def(
 pub fn build_func_static_closure_def(
     library: &mut LibraryBuilder,
     target_func: &FunctionInstance,
-    func_type_id: TypeDefID,
-    target_ir_func: &Function,
-) -> FunctionDef {
+    func_type_id: ir::TypeDefID,
+    target_ir_func: &ir::Function,
+) -> ir::FunctionDef {
     let params = target_func
         .src_sig
         .params
@@ -126,34 +125,34 @@ pub fn build_func_static_closure_def(
 
     // this method needs to be compatible with the type-erased function pointer stored in a
     // closure struct, which has the sig "(Object, ...actual params)"
-    let closure_ptr_arg = ArgID(0);
+    let closure_ptr_arg = ir::ArgID(0);
     let mut bound_params = vec![(closure_ptr_arg, func_type_id.to_closure_ptr_type())];
 
     // bind the closure pointer arg at ID 0
     body_builder.bind_closure_ptr(closure_ptr_arg, func_type_id);
     
     // bind the rest of the args at ID 1+
-    bound_params.extend(bind_function_params(params, false, ArgID(1), &mut body_builder));
+    bound_params.extend(bind_function_params(params, false, ir::ArgID(1), &mut body_builder));
 
-    let func_global = Ref::Global(GlobalRef::func(target_func.id, []));
+    let func_global = ir::Ref::Global(ir::GlobalRef::func(target_func.id, []));
 
     // this is a static closure, so we ignore the closure pointer (it's static) and just pass
     // the rest of the args in IDs 1+ as the args to the real function
-    let func_args: Vec<Value> = bound_params
+    let func_args: Vec<ir::Value> = bound_params
         .iter()
         .skip(1)
         .map(|(id, _)| id.value())
         .collect();
 
     let return_ref = match return_ty {
-        Type::Nothing => None,
-        _ => Some(RESULT_REF),
+        ir::Type::Nothing => None,
+        _ => Some(ir::RESULT_REF),
     };
 
     body_builder.call(func_global, func_args, return_ref);
 
-    FunctionDef {
-        sig: FunctionSig {
+    ir::FunctionDef {
+        sig: ir::FunctionSig {
             param_types: bound_params
                 .into_iter()
                 .map(|(_, param_ty)| param_ty)
@@ -169,10 +168,10 @@ pub fn build_func_static_closure_def(
 pub fn build_closure_function_def(
     lib: &mut LibraryBuilder,
     func_def: &typ::ast::AnonymousFunctionDef,
-    closure_id: TypeDefID,
-    func_type_id: TypeDefID,
+    closure_id: ir::TypeDefID,
+    func_type_id: ir::TypeDefID,
     debug_name: Option<String>,
-) -> FunctionDef {
+) -> ir::FunctionDef {
     let closure_def = lib.metadata().get_struct_def(closure_id).cloned().unwrap();
 
     let mut body_builder = create_function_body_builder(lib, debug_name.clone());
@@ -182,7 +181,7 @@ pub fn build_closure_function_def(
     // the type-erased pointer to the closure struct is included as the 0th param but
     // *not* bound like a normal param since it can't be named from code, so bind it in the scope
     // of this function body now
-    let closure_arg = ArgID(0);
+    let closure_arg = ir::ArgID(0);
     body_builder.bind_closure_ptr(closure_arg, func_type_id);
 
     let def_params: Vec<_> = func_def.params
@@ -190,7 +189,7 @@ pub fn build_closure_function_def(
         .flat_map(|param| FunctionParam::from_ast(param, &mut body_builder))
         .collect();
 
-    let bound_params = bind_function_params(def_params, false, ArgID(1), &mut body_builder);
+    let bound_params = bind_function_params(def_params, false, ir::ArgID(1), &mut body_builder);
 
     // cast the closure pointer param from the erased pointer passed in to its actual class type
     let closure_ptr_ty = closure_id.to_class_ptr_type([]);
@@ -206,7 +205,7 @@ pub fn build_closure_function_def(
     // will), we just need to ensure all captures are bound to unique locals before we
     // start letting the body code allocate its own locals
     for (field_id, field_def) in closure_def.fields.iter() {
-        if *field_id == CLOSURE_PTR_FIELD {
+        if *field_id == ir::CLOSURE_PTR_FIELD {
             continue;
         }
 
@@ -236,9 +235,9 @@ pub fn build_closure_function_def(
         .chain(bound_params.into_iter().map(|(_, param_ty)| param_ty))
         .collect();
 
-    FunctionDef {
+    ir::FunctionDef {
         body,
-        sig: FunctionSig {
+        sig: ir::FunctionSig {
             param_types: actual_params,
             result_type: return_ty,
         },
@@ -247,9 +246,9 @@ pub fn build_closure_function_def(
     }
 }
 
-fn bind_function_return(return_ty: &typ::Type, builder: &mut IRBuilder) -> Type {
+fn bind_function_return(return_ty: &typ::Type, builder: &mut IRBuilder) -> ir::Type {
     match return_ty {
-        typ::Type::Nothing => Type::Nothing,
+        typ::Type::Nothing => ir::Type::Nothing,
         
         return_ty => {
             let return_ty = builder.translate_type(return_ty);
@@ -265,7 +264,7 @@ fn bind_function_return(return_ty: &typ::Type, builder: &mut IRBuilder) -> Type 
 #[derive(Debug, Clone)]
 struct FunctionParam {
     pub name: String,
-    pub ty: Type,
+    pub ty: ir::Type,
     pub by_ref: bool,
 }
 
@@ -298,9 +297,9 @@ impl FunctionParam {
 fn bind_function_params(
     params: impl IntoIterator<Item=FunctionParam>,
     is_instance_method: bool,
-    first_id: ArgID,
+    first_id: ir::ArgID,
     builder: &mut IRBuilder,
-) -> Vec<(ArgID, Type)> {
+) -> Vec<(ir::ArgID, ir::Type)> {
     let mut bound_params = Vec::new();
 
     // for instance methods, the first arg is the self pointer or ref
@@ -359,12 +358,12 @@ fn init_function_locals(locals: &[typ::ast::FunctionLocalBinding], builder: &mut
 
 fn build_func_body(
     body: &typ::ast::Block,
-    return_ty: &Type,
+    return_ty: &ir::Type,
     mut builder: IRBuilder,
-) -> InstructionList {
+) -> ir::InstructionList {
     let body_block_out_ref = match return_ty {
-        Type::Nothing => Ref::Discard,
-        _ => RESULT_REF.clone(),
+        ir::Type::Nothing => ir::Ref::Discard,
+        _ => ir::RESULT_REF.clone(),
     };
 
     translate_block(&body, body_block_out_ref, &mut builder);
@@ -374,8 +373,8 @@ fn build_func_body(
     // all functions should finish with the reserved EXIT label but to
     // avoid writing unused label instructions, if none of the other instructions in the body
     // are jumps to the exit label, we can elide it
-    if jmp_exists(&body.instructions, EXIT_LABEL) {
-        body.push(Instruction::Label(EXIT_LABEL), None);
+    if ir::util::jmp_exists(&body.instructions, ir::EXIT_LABEL) {
+        body.push(ir::Instruction::Label(ir::EXIT_LABEL), None);
     }
 
     body
@@ -383,12 +382,12 @@ fn build_func_body(
 
 pub fn build_static_closure_impl(
     closure: ClosureInstance,
-    id: VariableID,
+    id: ir::VariableID,
     library: &mut LibraryBuilder,
-) -> StaticClosure {
+) -> ir::StaticClosure {
     let mut init_builder = IRBuilder::new(library);
 
-    let static_closure_ptr_ref = Ref::Global(GlobalRef::Variable(id));
+    let static_closure_ptr_ref = ir::Ref::Global(ir::GlobalRef::Variable(id));
 
     let closure_ref = init_builder.build_closure_instance(closure.clone(), true);
     init_builder.cast(static_closure_ptr_ref, closure_ref, closure.function_pointer_type());
@@ -398,11 +397,11 @@ pub fn build_static_closure_impl(
     let internal_name = format!("static closure init for {}", closure);
     let debug_name = library.opts().debug.then(|| internal_name.clone());
 
-    let identity = FunctionIdentity::internal(internal_name);
+    let identity = ir::FunctionIdentity::internal(internal_name);
 
-    let init_sig = FunctionSig {
+    let init_sig = ir::FunctionSig {
         param_types: Vec::new(),
-        result_type: Type::Nothing,
+        result_type: ir::Type::Nothing,
     };
 
     let init_func_id = library
@@ -411,7 +410,7 @@ pub fn build_static_closure_impl(
 
     library.insert_function(
         init_func_id,
-        Function::Local(FunctionDef {
+        ir::Function::Local(ir::FunctionDef {
             body: init_body,
             debug_name,
             sig: init_sig,
@@ -419,7 +418,7 @@ pub fn build_static_closure_impl(
         }),
     );
 
-    StaticClosure {
+    ir::StaticClosure {
         id,
         func: closure.func_instance.id,
         init_func: init_func_id,

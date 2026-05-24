@@ -374,7 +374,10 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                 self.stmts.push(Statement::EndBlock);
             },
 
-            ir::Instruction::Jump { dest } => self.stmts.push(Statement::Goto(*dest)),
+            ir::Instruction::Jump { dest } => {
+                self.stmts.push(Statement::Goto(*dest))
+            },
+
             ir::Instruction::JumpIf { dest, test } => {
                 let cond_expr = Expr::translate_val(test, self);
                 

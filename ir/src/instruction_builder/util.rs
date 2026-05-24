@@ -1,11 +1,11 @@
 use crate::instruction_builder::InstructionBuilder;
-use crate::AsInstruction;
 use crate::Instruction;
 use crate::Label;
+use crate::MetadataSource as _;
 use crate::Ref;
 use crate::Type;
 use crate::Value;
-use crate::MetadataSource as _;
+use crate::AsInstruction;
 
 pub fn if_then<B, Branch>(builder: &mut B, cond: impl Into<Value>, then_branch: Branch)
 where

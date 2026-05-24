@@ -1,10 +1,11 @@
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr;
 use crate::codegen::ir;
+use crate::codegen::pattern::translate_pattern_match_bindings;
+use crate::codegen::pattern::translate_pattern_match_is;
 use crate::codegen::stmt::build_case_block;
 use crate::codegen::typ;
 use terapascal_ir::InstructionBuilder;
-use crate::codegen::pattern::{translate_pattern_match_bindings, translate_pattern_match_is};
 
 pub fn translate_if_cond<B, BranchTranslateFn>(
     if_cond: &typ::ast::IfCond<B>,
@@ -68,6 +69,7 @@ where
                     &is_pattern.pattern,
                     is_pattern.binding.as_ref(),
                     &matched_ref,
+                    &cond_ty,
                     builder
                 );
 
@@ -148,6 +150,7 @@ pub fn translate_match_expr(match_expr: &typ::ast::MatchExpr, builder: &mut IRBu
                         &branch.pattern,
                         branch.binding.as_ref(),
                         &cond_expr,
+                        &cond_ty,
                         builder,
                     );
                     
