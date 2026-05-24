@@ -2,6 +2,7 @@ program RcBoxDeep;
 
 type
     MyObject = class
+        value: Integer;
     end;
 
     MyArr = array[3] of MyObject;
@@ -12,12 +13,20 @@ type
     end;
 
 begin
-    var objBox: Object := [MyRecord(
-        obj1: MyObject();
-        obj2: [
-            MyObject(),
-            MyObject(),
-            MyObject(),
-        ];
-    )] as box of MyRecord;
+    var objBox: box of MyRecord := [(
+       obj1: MyObject(value: 1);
+       obj2: [
+           MyObject(value: 2),
+           MyObject(value: 3),
+           MyObject(value: 4),
+       ]
+    )];
+
+    var obj := objBox as Object;
+
+    WriteLn('contents:');
+    WriteLn(objBox^.obj1.value.ToString);
+    WriteLn(objBox^.obj2[0].value.ToString);
+    WriteLn(objBox^.obj2[1].value.ToString);
+    WriteLn(objBox^.obj2[2].value.ToString);
 end.
