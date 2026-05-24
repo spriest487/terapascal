@@ -1,0 +1,7 @@
+{
+  "steps": [
+    { "output": "called GenFunc with something else" },
+    { "output": "called GenFunc with a string" },
+    { "output": "called GenFunc with something else" }
+  ]
+}
