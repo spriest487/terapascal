@@ -191,6 +191,8 @@ impl ClassIdentity {
 #[derive(Clone, Debug)]
 pub struct Class {
     identity: ClassIdentity,
+    class_type: ir::Type,
+
     impls: BTreeMap<ir::InterfaceID, InterfaceImpl>,
 
     dtor: Option<FunctionName>,
@@ -237,38 +239,48 @@ impl Class {
             impls.insert(iface_id, InterfaceImpl { method_impls });
         }
 
-        let type_def_name = TypeDefName::Struct(class_index);
-
-        let runtime_type = unit.metadata
-            .get_type_info(class_ty)
-            .unwrap_or_else(|| {
-                panic!("missing runtime type for class {}", unit.metadata.pretty_type_name(class_ty))
-            });
-
-        let comment = runtime_type
-            .get_name_string(unit.metadata)
-            .map(|name| name.clone())
-            .unwrap_or_else(|| unit.metadata.pretty_type_name(class_ty).to_string());
+        let comment = class_ty.to_pretty_string(unit.metadata);
 
         let typeinfo_name = global_typeinfo_decl_name(unit, class_ty);
 
-        let ir::Type::Object(ir::ObjectID::Class(class_id)) = class_ty else {
-            panic!("invalid type for class: {}", class_ty.to_pretty_string(unit.metadata));
-        };
-
-        let dtor = Self::gen_runtime_dtor(unit, class_ty, type_def_name, |builder, self_arg| {
-            builder.gen_class_object_dtor_body(&class_id, self_arg)
-        });
-
         Class {
             identity: ClassIdentity::Class(class_index),
+            class_type: class_ty.clone(),
             impls,
-            dtor,
+            dtor: None,
             comment: Some(comment),
             typeinfo_global_name: typeinfo_name,
         }
     }
+
+    pub fn identity(&self) -> &ClassIdentity {
+        &self.identity
+    }
+
+    pub fn class_type(&self) -> &ir::Type {
+        &self.class_type
+    }
+
+    pub fn gen_class_dtor(unit: &mut Unit, class_type: &ir::Type, type_id: TypeID) -> Option<FunctionName>{
+        let type_def_name = TypeDefName::Struct(type_id);
+
+        let class_id = class_type
+            .as_object()
+            .and_then(|obj| obj.as_class())
+            .unwrap_or_else(|| {
+                panic!("gen_class_dtor: class type must have a definition ID (was: {})", class_type.to_pretty_string(unit.metadata))
+            });
+
+        Self::gen_runtime_dtor(unit, class_type, type_def_name, |builder, self_arg| {
+            builder.gen_class_object_dtor_body(&class_id, self_arg)
+        })
+    }
     
+    pub fn add_dtor(&mut self, dtor: FunctionName) {
+        assert!(self.dtor.is_none());
+        self.dtor = Some(dtor);
+    }
+
     pub fn gen_dyn_array_class(
         unit: &mut Unit,
         id: DynArrayTypeID,
@@ -293,6 +305,7 @@ impl Class {
             dtor,
             comment: Some(comment),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &array_type),
+            class_type: array_type,
         }
     }
 
@@ -322,6 +335,7 @@ impl Class {
             dtor,
             comment: Some(comment),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &box_type),
+            class_type: box_type,
         }
     }
 

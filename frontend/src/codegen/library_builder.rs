@@ -1277,7 +1277,7 @@ impl<'a> LibraryBuilder<'a> {
 
         // type names and methods will be added after codegen
         let mut rtti = ir::TypeInfo::new(None, flags);
-        
+
         if self.opts.debug && self.opts.rtti {
             rtti.debug_name = Some(self.metadata().pretty_type_name(&ty).into_owned());
         }

@@ -280,6 +280,7 @@ impl<'a> Unit<'a> {
 
     pub fn translate_variant_type(&mut self, ty: &ir::Type) -> TypeID {
         if let Some(existing_id) = self.try_get_type_id(ty) {
+            // eprintln!("{} = {} ({})", ty.to_pretty_string(self.metadata), existing_id, self.c_types[&existing_id].typename());
             return existing_id;
         }
 
@@ -320,8 +321,8 @@ impl<'a> Unit<'a> {
     ) -> TypeID {
         let comment = Some(ty.to_pretty_string(self.metadata));
 
-        let id = self.register_type_with(ty.clone(), |index| {
-            Type::DefinedType(TypeDefName::Variant(index))
+        let id = self.register_type_with(ty.clone(), |id| {
+            Type::DefinedType(TypeDefName::Variant(id))
         });
 
         let cases_len = def.cases.len();
@@ -338,18 +339,20 @@ impl<'a> Unit<'a> {
 
         self.register_type_def(id, c_def.decl.name, c_def, member_deps);
 
+        // eprintln!("defined {}: ID {}", ty.to_pretty_string(self.metadata), id);
+
         id
     }
 
     pub fn get_variant_def(&self, id: TypeID) -> Rc<VariantDef> {
-        self.type_defs
+        let def = self.type_defs
             .get(&id)
-            .and_then(|def| match def {
-                TypeDef::Variant(variant_def) => Some(variant_def),
-                _ => None,
-            })
-            .cloned()
-            .unwrap_or_else(|| panic!("missing variant def: {id}"))
+            .unwrap_or_else(|| panic!("missing variant def: {id}"));
+
+        match def {
+            TypeDef::Variant(variant_def) => variant_def.clone(),
+            _ => panic!("def {id} is not a variant"),
+        }
     }
 
     pub fn translate_array_type(

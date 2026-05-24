@@ -270,6 +270,20 @@ impl<'a> Unit<'a> {
         
         let mut init_stmts = Vec::new();
 
+        let mut class_index = 0;
+        while class_index < self.classes.len() {
+            let class = &self.classes[class_index];
+            if let ClassIdentity::Class(id) = class.identity().clone() {
+                let class_type = class.class_type().clone();
+
+                if let Some(dtor) = Class::gen_class_dtor(self, &class_type, id) {
+                    self.classes[class_index].add_dtor(dtor);
+                }
+            }
+
+            class_index += 1;
+        }
+
         self.gen_rtti_init(&mut init_stmts);
 
         // look up FFI functions
