@@ -239,18 +239,16 @@ impl Marshaller {
         Ok(())
     }
 
-    pub(super) fn gen_box_dtor(&mut self, box_type: &ir::Type) -> MarshalResult<()> {
-        if !box_type.contains_any_object_refs(&self.metadata) {
+    pub(super) fn gen_box_dtor(&mut self, value_type: &ir::Type) -> MarshalResult<()> {
+        if !value_type.contains_any_object_refs(&self.metadata) {
             return Ok(());
         }
 
-        let Some(element_type) = box_type.element_type() else {
-            panic!("gen_box_dtor: not a box type");
-        };
+        let box_type = value_type.boxed();
 
-        self.gen_runtime_dtor(box_type, |builder, self_arg| {
-            let element_ref = self_arg.to_ref().element_ref(box_type.clone(), ir::Value::I32_0);
-            builder.release(element_ref.to_deref(), element_type.clone(), ir::Ref::Discard);
+        self.gen_runtime_dtor(&box_type, |builder, self_arg| {
+            let value_ref = self_arg.to_ref().element_ref(box_type.clone(), ir::Value::I32_0);
+            builder.release(value_ref.to_deref(), value_type.clone(), ir::Ref::Discard);
             true
         })
     }

@@ -11,6 +11,7 @@ use crate::ObjectHeader;
 use crate::ObjectID;
 use crate::Pointer;
 use std::ptr::slice_from_raw_parts;
+use terapascal_ir::InstructionBuilder;
 
 // dynamic array values in memory are marshalled as a set of header fields followed by a variably
 // sized sequence of elements
@@ -89,6 +90,19 @@ impl Marshaller {
                 element_type: element_type.clone(),
                 elements,
             },
+        })
+    }
+    
+    pub(super) fn gen_array_dtor(&mut self, element_type: &ir::Type) -> MarshalResult<()> {
+        if !element_type.contains_any_object_refs(&self.metadata) {
+            return Ok(())
+        };
+
+        let array_type = element_type.dyn_array();
+
+        self.gen_runtime_dtor(&array_type, |builder, self_arg| {
+            builder.gen_dyn_array_dtor_body(self_arg, element_type);
+            true
         })
     }
 }

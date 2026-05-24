@@ -182,10 +182,11 @@ impl Marshaller {
                     Some(ObjectID::Struct(*struct_index))
                 },
                 ir::ObjectID::Array(element) => {
+                    self.gen_array_dtor(&element)?;
                     Some(ObjectID::Array(element.clone()))
                 },
                 ir::ObjectID::Box(value) => {
-                    self.gen_box_dtor(&ty)?;
+                    self.gen_box_dtor(&value)?;
                     Some(ObjectID::Box(value.clone()))
                 },
                 _ => None,
