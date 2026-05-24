@@ -200,6 +200,7 @@ fn translate_box_ctor(
     {
         let element_ref = box_var.to_ref().element_ref(box_ty, ir::Value::I32_0);
         builder.mov(element_ref.to_deref(), value);
+        builder.retain(element_ref.to_deref(), boxed_ty);
     }
     builder.local_end();
     
