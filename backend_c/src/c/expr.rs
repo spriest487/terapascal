@@ -401,7 +401,7 @@ impl Expr {
     pub fn array_class_ptr(arr_obj: &Expr, v_id: &ir::ObjectID, unit: &mut Unit) -> Expr {
         match v_id {
             ir::ObjectID::Array(element_ty) => {
-                let (_, dyn_array_id) = unit.get_dyn_array_type(element_ty);
+                let (_, dyn_array_id) = unit.translate_dyn_array_type(element_ty);
                 dyn_array_id.class_ptr()
             }
 

@@ -276,13 +276,24 @@ impl Class {
         id: DynArrayTypeID,
         element_type: ir::Type,
     ) -> Self {
-        let array_type = element_type.clone().dyn_array();
+        let comment = format!("generated dynarray class (array of {})", element_type.to_pretty_string(unit.metadata));
+
+        let array_type = element_type.dyn_array();
+        let array_def_name = TypeDefName::DynArray(id);
+
+        let mut dtor = None;
+        if element_type.contains_any_object_refs(unit.metadata) {
+            dtor = Self::gen_runtime_dtor(unit, &array_type, array_def_name, |builder, self_ref| {
+                builder.gen_dyn_array_dtor_body(self_ref, &element_type);
+                true
+            });
+        }
 
         Class {
             identity: ClassIdentity::DynArrayClass(id),
             impls: BTreeMap::new(),
-            dtor: None,
-            comment: Some(format!("generated dynarray class (array of {element_type})")),
+            dtor,
+            comment: Some(comment),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &array_type),
         }
     }
@@ -292,25 +303,40 @@ impl Class {
         id: BoxTypeID,
         value_type: ir::Type,
     ) -> Self {
-        let box_type = value_type.clone().boxed();
+        let comment = format!("generated box class (box of {})", value_type.to_pretty_string(unit.metadata));
+
+        let box_type = value_type.boxed();
+        let box_def_name = TypeDefName::Box(id);
+
+        let mut dtor = None;
+        if value_type.contains_any_object_refs(unit.metadata) {
+            dtor = Self::gen_runtime_dtor(unit, &box_type, box_def_name, |builder, self_ref| {
+                let value_ref = self_ref.element_ref(box_type.clone(), ir::Value::I32_0);
+
+                builder.release(value_ref.to_deref(), value_type.clone(), ir::Ref::Discard);
+                true
+            });
+        }
 
         Class {
             identity: ClassIdentity::BoxClass(id),
             impls: BTreeMap::new(),
-            dtor: None,
-            comment: Some(format!("generated box class (box of {value_type})")),
+            dtor,
+            comment: Some(comment),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &box_type),
         }
     }
     
     pub fn gen_closure_class(unit: &mut Unit, closure_struct_id: ir::TypeDefID) -> Self {
+        let comment = format!("closure class {}", closure_struct_id);
+
         let ty = closure_struct_id.to_class_ptr_type([]);
 
         let closure_type_index = unit.create_type_id(&ty);
 
         Class {
             identity: ClassIdentity::Class(closure_type_index),
-            comment: Some(format!("closure class {}", closure_struct_id)),
+            comment: Some(comment),
             dtor: None,
             impls: BTreeMap::new(),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &ty),
@@ -328,7 +354,7 @@ impl Class {
         wrappers
     }
 
-    fn gen_runtime_dtor<F>(
+    pub fn gen_runtime_dtor<F>(
         unit: &mut Unit,
         object_type: &ir::Type,
         def_name: TypeDefName,

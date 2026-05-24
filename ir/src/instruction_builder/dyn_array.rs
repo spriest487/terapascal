@@ -2,13 +2,14 @@
 use crate::Ref;
 use crate::Type;
 use crate::Value;
-use crate::ArgID;
 
 pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
     builder: &mut B,
-    self_param: ArgID,
+    array_ref: impl Into<Ref>,
     elem_ty: &Type,
 ) {
+    let array_ref = array_ref.into();
+
     let array_type = elem_ty.clone().dyn_array();
 
     builder.comment("iteration counter");
@@ -17,12 +18,12 @@ pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
 
     // arr_high := arr.length - 1
     let arr_high = builder.local_temp(Type::I32);
-    builder.length(arr_high, self_param, array_type.clone());
+    builder.length(arr_high, array_ref.clone(), array_type.clone());
     builder.sub(arr_high, arr_high, Value::LiteralI32(1));
 
     builder.comment("release every element");
     builder.counter_loop(counter, Value::LiteralI32(1), arr_high, |builder| {
-        let element_ref = self_param.to_ref().element_ref(array_type.clone(), counter);
+        let element_ref = array_ref.element_ref(array_type.clone(), counter);
 
         builder.release(element_ref.to_deref(), elem_ty.clone(), Ref::Discard);
     });

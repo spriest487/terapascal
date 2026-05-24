@@ -28,21 +28,25 @@ impl BoxTypeID {
 }
 
 impl<'a> Unit<'a> {
-    pub fn get_box_type(&mut self, element_type: &ir::Type) -> (TypeID, BoxTypeID) {
+    pub fn translate_box_type(&mut self, element_type: &ir::Type) -> (TypeID, BoxTypeID) {
+        let box_type = element_type.boxed();
+
         let element_c_type = self.translate_type(element_type);
         let element_type_id = self.get_type_id(element_type);
 
         if let Some(existing_id) = self.box_types_by_element.get(&element_type_id) {
-            let type_id = self.get_type_id(&element_type.boxed());
+            let type_id = self.get_type_id(&box_type);
             return (type_id, *existing_id);
         };
 
         let box_index = self.box_types_by_element.len();
         let box_id = BoxTypeID(box_index);
 
+        self.box_types_by_element.insert(element_type_id, box_id);
+
         let box_def_name = TypeDefName::Box(box_id);
         let box_c_type = Type::DefinedType(box_def_name).ptr();
-        let box_type_id = self.register_type(element_type.boxed(), box_c_type);
+        let box_type_id = self.register_type(box_type.clone(), box_c_type);
 
         let class = Class::gen_box_class(self, box_id, element_type.clone());
         self.classes.push(class);
@@ -63,8 +67,6 @@ impl<'a> Unit<'a> {
             });
 
         self.register_type_def(box_type_id, struct_def.decl.name, struct_def, element_c_type.type_def_deps());
-
-        self.box_types_by_element.insert(element_type_id, box_id);
 
         self.gen_box_element_method(box_id, element_type);
 

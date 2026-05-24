@@ -124,10 +124,10 @@ impl<'a> Unit<'a> {
                     }
 
                     ir::ObjectID::Array(element) => {
-                        self.get_dyn_array_type(element).0
+                        self.translate_dyn_array_type(element).0
                     }
                     ir::ObjectID::Box(element) => {
-                        self.get_box_type(element).0
+                        self.translate_box_type(element).0
                     }
                 }
             }

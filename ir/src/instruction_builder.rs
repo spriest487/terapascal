@@ -14,6 +14,7 @@ use crate::FunctionSig;
 use crate::GenericTypeID;
 use crate::IRFormatter;
 use crate::Instruction;
+use crate::InstructionList;
 use crate::InterfaceID;
 use crate::Label;
 use crate::LocalID;
@@ -24,8 +25,6 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
-use crate::ArgID;
-use crate::InstructionList;
 use crate::EXIT_LABEL;
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_array_from;
@@ -768,8 +767,8 @@ pub trait InstructionBuilder {
         gen_class_object_dtor_body(self, class_id, obj_ref)
     }
 
-    fn gen_dyn_array_dtor_body(&mut self, self_param: ArgID, element_type: &Type) {
-        gen_dyn_array_dtor_body(self, self_param, element_type)
+    fn gen_dyn_array_dtor_body(&mut self, array_ref: impl Into<Ref>, element_type: &Type) {
+        gen_dyn_array_dtor_body(self, array_ref, element_type)
     }
 
     /// Builds a dynamic array from the given elements

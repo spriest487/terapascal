@@ -28,7 +28,7 @@ impl DynArrayTypeID {
 }
 
 impl<'a> Unit<'a> {
-    pub fn get_dyn_array_type(&mut self, element_type: &ir::Type) -> (TypeID, DynArrayTypeID) {
+    pub fn translate_dyn_array_type(&mut self, element_type: &ir::Type) -> (TypeID, DynArrayTypeID) {
         let element_c_type = self.translate_type(element_type);
         let element_type_id = self.get_type_id(element_type);
 
@@ -39,6 +39,7 @@ impl<'a> Unit<'a> {
 
         let index = self.dyn_array_types_by_element.len();
         let array_id = DynArrayTypeID(index);
+        self.dyn_array_types_by_element.insert(element_type_id, array_id);
 
         let array_def_name = TypeDefName::DynArray(array_id);
         let array_c_type = Type::DefinedType(array_def_name).ptr();
@@ -71,8 +72,6 @@ impl<'a> Unit<'a> {
 
         let element_deps = element_c_type.type_def_deps();
         self.register_type_def(array_type_id, array_def_name, struct_def, element_deps);
-
-        self.dyn_array_types_by_element.insert(element_type_id, array_id);
 
         (array_type_id, array_id)
     }

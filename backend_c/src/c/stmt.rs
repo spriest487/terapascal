@@ -701,7 +701,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                             .clone()
                             .field(FieldName::ID(*field_id));
 
-                        f(self, field_expr, &field_def.ty, out);
+                        self.visit_deep(field_expr, &field_def.ty, out, f);
                     }
                 }
             }
@@ -722,7 +722,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                             .field(FieldName::VariantData)
                             .field(FieldName::VariantDataCase(case_index));
 
-                        f(self, case_data_expr, data_type, &mut case_stmts);
+                        self.visit_deep(case_data_expr, data_type, &mut case_stmts, f);
 
                         let tag_expr = value.clone().field(FieldName::VariantTag);
                         let tag_val = Expr::translate_val(&case.tag, self);
@@ -746,7 +746,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                         .field(FieldName::StaticArrayElements)
                         .index(Expr::LitInt(index_expr));
 
-                    f(self, element_expr, element, out)
+                    self.visit_deep(element_expr, element, out, f);
                 }
             }
 
@@ -843,7 +843,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                 }
 
                 ir::ObjectID::Array(element) => {
-                    let (_, array_id) = self.unit.get_dyn_array_type(element);
+                    let (_, array_id) = self.unit.translate_dyn_array_type(element);
                     let array_class_ptr = Expr::dyn_array_class_ptr(array_id)
                         .cast(Type::Class.ptr());
                     
@@ -851,7 +851,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                 }
 
                 ir::ObjectID::Box(element) => {
-                    let (_, box_id) = self.unit.get_box_type(element);
+                    let (_, box_id) = self.unit.translate_box_type(element);
                     let box_class_ptr = box_id.class_ptr().cast(Type::Class.ptr());
 
                     Expr::infix_op(actual_class_ptr, InfixOp::Eq, box_class_ptr)
@@ -884,7 +884,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
     }
 
     pub fn get_dyn_array_type(&mut self, element_type: &ir::Type) -> DynArrayTypeID {
-        self.unit.get_dyn_array_type(element_type).1
+        self.unit.translate_dyn_array_type(element_type).1
     }
 
     pub fn array_class_ptr(&mut self, arr_obj: &Expr, id: &ir::ObjectID) -> Expr {
@@ -896,7 +896,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
     }
 
     pub fn get_box_type(&mut self, element_type: &ir::Type) -> BoxTypeID {
-        self.unit.get_box_type(element_type).1
+        self.unit.translate_box_type(element_type).1
     }
 
     #[allow(unused)]
@@ -1002,7 +1002,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
         count: &ir::Value,
         immortal: bool,
     ) {
-        let (_, array_id) = self.unit.get_dyn_array_type(element_type);
+        let (_, array_id) = self.unit.translate_dyn_array_type(element_type);
         let count_val = Expr::translate_val(count, self);
 
         let array_class_ptr = Expr::dyn_array_class(array_id).addr_of();
@@ -1032,7 +1032,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
     }
     
     pub fn new_box(&mut self, out: Expr, value_type: &ir::Type, immortal: bool) {
-        let (_, box_type_id) = self.unit.get_box_type(value_type);
+        let (_, box_type_id) = self.unit.translate_box_type(value_type);
 
         let box_type = Type::DefinedType(TypeDefName::Box(box_type_id));
         let box_ptr_type = box_type.clone().ptr();
@@ -1052,7 +1052,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
     }
     
     pub fn box_value(&mut self, value: Expr, value_type: &ir::Type) -> Expr {
-        let box_ptr_type = self.unit.get_box_type(value_type).1.ptr_type();
+        let box_ptr_type = self.unit.translate_box_type(value_type).1.ptr_type();
         let box_ptr = Expr::Variable(self.new_temp_var(box_ptr_type, false));
         
         let box_value_field = box_ptr.clone().arrow(FieldName::BoxValue);
@@ -1069,7 +1069,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
     }
     
     pub fn unbox_value(&mut self, box_ptr: Expr, value_type: &ir::Type) -> Expr {
-        let (_, arg_box_id) = self.unit.get_box_type(value_type);
+        let (_, arg_box_id) = self.unit.translate_box_type(value_type);
         let arg_box = box_ptr.cast(arg_box_id.ptr_type());
 
         arg_box.arrow(FieldName::BoxValue)

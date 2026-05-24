@@ -132,7 +132,7 @@ impl<'a> Unit<'a> {
         
         unit.create_named_string_lit(GlobalName::InvokeArgsError, "function invoked with invalid argument count");
 
-        unit.object_array_id = unit.get_dyn_array_type(&ir::ANY_TYPE).1;
+        unit.object_array_id = unit.translate_dyn_array_type(&ir::ANY_TYPE).1;
 
         let system_funcs = builtin::system_funcs();
 
@@ -406,7 +406,7 @@ impl<'a> Unit<'a> {
         let method_info_class_type = ir::Type::method_info();
         let method_info_class_id = self.get_type_id(&method_info_class_type);
 
-        let (_, method_info_array_id) = self.get_dyn_array_type(&method_info_class_type);
+        let (_, method_info_array_id) = self.translate_dyn_array_type(&method_info_class_type);
 
         // initialize type info fields that can't be statically initialized
         const METHODS_ARRAY_NAME: &str = "methods_array";
