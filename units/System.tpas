@@ -493,8 +493,8 @@ begin
 end;
 
 function FunctionInfo.Name: String;
-begin
-    self.name
+unsafe begin
+    if self.name <> nil then self.name else ''
 end;
 
 function FunctionInfo.Invoke(args: array of Object): Result[Object, InvokeError];
@@ -541,8 +541,8 @@ begin
 end;
 
 function TypeInfo.Name: String;
-begin
-    self.name
+unsafe begin
+    if self.name <> nil then self.name else ''
 end;
 
 function TypeInfo.Methods: array of MethodInfo;
@@ -566,8 +566,8 @@ begin
 end;
 
 function MethodInfo.Name: String;
-begin
-    self.name
+unsafe begin
+    if self.name <> nil then self.name else ''
 end;
 
 function MethodInfo.Owner: TypeInfo;

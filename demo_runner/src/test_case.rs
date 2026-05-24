@@ -324,7 +324,7 @@ impl TestCase {
             let code = status
                 .code()
                 .map(|code| code.to_string())
-                .unwrap_or_else(|| String::from("no return code"));
+                .unwrap_or_else(|| String::from("(UNKNOWN)"));
 
             println!("ERROR {}", code);
 
