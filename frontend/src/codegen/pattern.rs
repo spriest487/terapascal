@@ -70,6 +70,7 @@ pub fn translate_pattern_match_bindings(
     pattern: &MatchPattern,
     binding: Option<&Ident>,
     target_val: &ir::Ref,
+    value_type: &ir::Type,
     builder: &mut IRBuilder
 ) -> Vec<PatternMatchBinding> {
     match pattern {
@@ -86,13 +87,20 @@ pub fn translate_pattern_match_bindings(
                     // this needs to create a cast, even for static non-ref types - the binding
                     // will be of the supposed type even if the check will always fail, and the
                     // instructions that follow must be valid
-                    let bound_val = builder.local_temp(binding_type.clone());
-                    builder.cast(bound_val, target_val.clone(), binding_type.clone());
+                    // the cast must be by-ref, since casting between ref types is always valid
+                    // but casting values directly may produce invalid casts when instantiating
+                    // generic code
+                    let value_ref = builder.local_temp(value_type.temp_ref());
+                    builder.make_ref(value_ref, target_val.clone());
+
+                    let binding_ref = builder.local_temp(binding_type.temp_ref());
+
+                    builder.cast(binding_ref, value_ref, binding_type.temp_ref());
 
                     vec![PatternMatchBinding {
                         name: binding_name,
                         ty: binding_type,
-                        binding_ref: bound_val.to_ref(),
+                        binding_ref: binding_ref.to_deref(),
                     }]
                 },
 
@@ -143,9 +151,19 @@ pub fn translate_is_ty(
     is_type: &ir::Type,
     builder: &mut IRBuilder
 ) -> ir::Value {
-    // casting strong or weak RC type to strong RC type: do a dynamic check
-    let is_dynamic = value_type.is_object() && matches!(is_type, ir::Type::Object(..));
-    if is_dynamic || is_type.as_generic_param().is_some() {
+    let is_dynamic = match (value_type, is_type) {
+        // if either side is of a generic type, the check must be dynamic
+        (ir::Type::Generic(..), _)
+        | (_, ir::Type::Generic(..)) => true,
+
+        // if the target type is an object, and the value is a strong or weak object, the
+        // check is dynamic
+        (_, ir::Type::Object(..)) => value_type.is_object(),
+
+        _ => false,
+    };
+
+    if is_dynamic {
         let result = builder.local_temp(ir::Type::Bool);
         builder.is_type(result, val, value_type.clone(), is_type.clone());
 
