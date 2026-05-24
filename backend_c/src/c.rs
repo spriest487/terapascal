@@ -144,11 +144,6 @@ impl<'a> Unit<'a> {
                 unit.add_builtin_func(func_id, *c_name);
             }
         }
-        
-        for closure_id in metadata.closures() {
-            let class = Class::gen_closure_class(&mut unit, closure_id);
-            unit.classes.push(class);
-        } 
 
         for (iface_id, iface_def) in metadata.interfaces() {
             let iface = Interface::translate(iface_id, iface_def, &mut unit);

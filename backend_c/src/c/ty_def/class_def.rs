@@ -202,6 +202,8 @@ pub struct Class {
 
 impl Class {
     pub fn translate(class_ty: &ir::Type, unit: &mut Unit) -> Self {
+        // eprintln!("Class::translate: {}", class_ty.to_pretty_string(unit.metadata));
+
         unit.translate_type(class_ty);
         let class_index = unit.get_type_id(class_ty);
 
@@ -320,22 +322,6 @@ impl Class {
             dtor,
             comment: Some(comment),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &box_type),
-        }
-    }
-    
-    pub fn gen_closure_class(unit: &mut Unit, closure_struct_id: ir::TypeDefID) -> Self {
-        let comment = format!("closure class {}", closure_struct_id);
-
-        let ty = closure_struct_id.to_class_ptr_type([]);
-
-        let closure_type_index = unit.create_type_id(&ty);
-
-        Class {
-            identity: ClassIdentity::Class(closure_type_index),
-            comment: Some(comment),
-            dtor: None,
-            impls: BTreeMap::new(),
-            typeinfo_global_name: global_typeinfo_decl_name(unit, &ty),
         }
     }
 
