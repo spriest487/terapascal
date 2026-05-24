@@ -228,6 +228,15 @@ impl TestCase {
         let clang_status = try_run_command(
             Command::new("clang")
                 .arg(c_file_path)
+                .arg("-Werror")
+                .arg("-Wall")
+                .arg("-Wextra")
+                .arg("-Wno-unused-function")
+                .arg("-Wno-unused-parameter")
+                .arg("-Wno-unused-variable")
+                .arg("-Wno-unused-label")
+                .arg("-Wno-address-of-packed-member")
+                .arg("-Wno-parentheses-equality")
                 .arg("-o").arg(exe_path)
                 .args(clang_args),
             build_stdout,
