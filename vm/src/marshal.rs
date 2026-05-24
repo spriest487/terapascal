@@ -159,7 +159,7 @@ impl Marshaller {
 
         Ok(())
     }
-    
+
     fn register_type(&mut self, ty: ir::Type, native_type: NativeType) -> MarshalResult<TypeIndex> {
         if let Some(type_index) = self.type_indices.get_by_right(&ty) {
             return Ok(*type_index);
@@ -175,22 +175,26 @@ impl Marshaller {
 
         match &ty {
             ir::Type::WeakObject(id) | ir::Type::Object(id) => {
+                // for any object type, first register the strong type (might be the same as
+                // type index, or not if we register the weak type first)
+                let strong_index = self.register_object_type(id.to_object_type())?;
+
                 match id {
-                    | ir::ObjectID::Class(class_id) => {
-                        let struct_type = class_id.to_struct_type();
+                    ir::ObjectID::Class(class_id) => {
+                        let struct_type = class_id.to_class_object_type();
                         self.add_struct_type(&struct_type)?;
                     },
 
                     ir::ObjectID::Array(element) => {
                         let object_id = ObjectID::Array(element.clone());
-                        self.object_id_indices.insert(type_index, object_id.clone());
+                        self.object_id_indices.insert(strong_index, object_id.clone());
 
                         self.gen_array_dtor(&element)?;
                     },
 
                     ir::ObjectID::Box(value) => {
                         let object_id = ObjectID::Box(value.clone());
-                        self.object_id_indices.insert(type_index, object_id.clone());
+                        self.object_id_indices.insert(strong_index, object_id.clone());
 
                         self.gen_box_dtor(&value)?;
                     },
@@ -200,13 +204,7 @@ impl Marshaller {
                     },
                 };
 
-                // if we encounter a weak reference, make sure the strong version is registered,
-                // and vice versa
-                if ty.is_weak() {
-                    self.register_object_type(id.to_object_type())?;
-                } else {
-                    self.register_object_type(id.to_weak_object_type())?;
-                }
+                self.register_object_type(id.to_weak_object_type())?;
             },
 
             _ => {
