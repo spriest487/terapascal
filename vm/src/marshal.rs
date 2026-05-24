@@ -5,6 +5,7 @@ mod type_def;
 mod variant_type;
 mod struct_type;
 mod array;
+mod object;
 
 pub(crate) use self::array::*;
 pub(crate) use self::struct_type::*;
@@ -15,9 +16,7 @@ use crate::func::ffi::FfiInvoker;
 use crate::func::{FuncInstanceID, Function};
 use crate::ir;
 use crate::DynValue;
-use crate::ObjectHeader;
 use crate::ObjectID;
-use crate::ObjectValue;
 use crate::Pointer;
 use bimap::BiHashMap;
 use ::dlopen::raw as dlopen;
@@ -53,7 +52,7 @@ pub struct Marshaller {
     type_indices: BiHashMap<TypeIndex, ir::Type>,
     object_id_indices: BiHashMap<TypeIndex, ObjectID>,
 
-    class_dtors: BTreeMap<TypeIndex, Rc<Function>>,
+    object_dtors: BTreeMap<TypeIndex, Rc<Function>>,
 
     func_instances: BiHashMap<ir::FunctionRef, FuncInstanceID>,
 
@@ -77,7 +76,7 @@ impl Marshaller {
 
             func_instances: BiHashMap::new(),
 
-            class_dtors: BTreeMap::new(),
+            object_dtors: BTreeMap::new(),
 
             trace_generics,
         };
@@ -186,6 +185,7 @@ impl Marshaller {
                     Some(ObjectID::Array(element.clone()))
                 },
                 ir::ObjectID::Box(value) => {
+                    self.gen_box_dtor(&ty)?;
                     Some(ObjectID::Box(value.clone()))
                 },
                 _ => None,
@@ -614,118 +614,6 @@ impl Marshaller {
         Ok(result.value)
     }
 
-    pub fn marshal_object_at(
-        &mut self,
-        pointer: &Pointer,
-        object: &ObjectValue,
-    ) -> MarshalResult<usize> {
-        let mut offset = 0;
-
-        offset += unsafe {
-            let header_mem = pointer.as_slice_mut(Self::object_header_size());
-            self.marshal_object_header(&object.header, header_mem)?
-        };
-
-        match (&object.header.id, &object.value) {
-            (ObjectID::Box(value_type), boxed_val) => {
-                let body_ptr = Pointer::new(pointer.addr + offset, value_type.as_ref().clone());
-                offset += self.marshal_at(boxed_val, &body_ptr)?;
-                
-                Ok(offset)
-            }
-
-            (ObjectID::Struct(type_index), DynValue::Structure(..)) => {
-                let struct_type = self.get_type(*type_index)?;
-                let struct_ptr = Pointer::new(pointer.addr + offset, struct_type.clone());
-                offset += self.marshal_at(&object.value, &struct_ptr)?;
-                Ok(offset)
-            }
-
-            (
-                ObjectID::Array(element),
-                DynValue::Array(array_val)
-            ) if array_val.element_type == **element => {
-                let element_count = array_val.elements.len();
-
-                let size_ptr = Pointer::new(pointer.addr + offset, ir::Type::I32);
-                let size = i32::try_from(element_count)
-                    .map_err(|_| {
-                        MarshalError::unsupported_type(element.as_ref().clone().array(element_count))
-                    })?;
-                
-                offset += unsafe {
-                    let size_mem = size_ptr.as_slice_mut(NativeType::i32().size());
-                    marshal_bytes(&size.to_ne_bytes(), size_mem)?
-                };
-
-                let elements_ty = element.as_ref().clone().array(element_count);
-                let elements_ptr = Pointer::new(pointer.addr + offset, elements_ty);
-
-                offset += self.marshal_at(&object.value, &elements_ptr)?;
-                
-                Ok(offset)
-            }
-
-            _ => {
-                Err(MarshalError::InvalidData)
-            }
-        }
-    }
-
-    pub fn unmarshal_object_at(&self, pointer: &Pointer) -> MarshalResult<ObjectValue> {
-        assert_ne!(0, pointer.addr);
-        
-        let mem = unsafe {
-            pointer.as_slice(Self::object_header_size())
-        };
-
-        let header = self.unmarshal_object_header(mem)?;
-        let body_addr = pointer.addr + header.byte_count;
-        
-        let value = match &header.value.id {
-            ObjectID::Box(value) => {
-                let value_ptr = Pointer { addr: body_addr, ty: value.as_ref().clone() };
-
-                self.unmarshal_at(&value_ptr)?
-            }
-
-            ObjectID::Struct(type_index) => {
-                let struct_type = self.get_type(*type_index)?;
-                assert!(matches!(struct_type, ir::Type::Struct { .. }));
-
-                let struct_ptr = Pointer { 
-                    addr: body_addr, 
-                    ty: struct_type.clone(),
-                };
-                
-                self.unmarshal_at(&struct_ptr)?
-            }
-
-            ObjectID::Array(element) => {
-                let size_ptr = Pointer { addr: body_addr, ty: ir::Type::I32 };
-                let size = unmarshal_from_ne_bytes(unsafe {
-                    size_ptr.as_slice(NativeType::i32().size())
-                }, i32::from_ne_bytes)?;
-                
-                let array_dim = usize::try_from(size.value)
-                    .map_err(|_| {
-                        MarshalError::InvalidData
-                    })?;
-
-                let array_ptr = Pointer { 
-                    addr: body_addr + size.byte_count, 
-                    ty: element.as_ref().clone().array(array_dim) 
-                };
-                self.unmarshal_at(&array_ptr)?
-            }
-        };
-        
-        Ok(ObjectValue {
-            header: header.value,
-            value,
-        })
-    }
-
     pub fn marshal_at(&mut self, val: &DynValue, into_ptr: &Pointer) -> MarshalResult<usize> {
         if into_ptr.addr == 0 {
             return Err(MarshalError::InvalidData);
@@ -850,86 +738,6 @@ impl Marshaller {
 
         let size_sum = local_sizes.into_iter().sum();
         Ok(size_sum)
-    }
-
-    pub fn marshal_object_header(
-        &self,
-        header: &ObjectHeader,
-        out_bytes: &mut [u8],
-    ) -> MarshalResult<usize> {
-        let id_index = *self.object_id_indices
-            .get_by_right(&header.id)
-            .ok_or_else(|| {
-                match header.id.to_type(self) {
-                    Ok(object_type) => MarshalError::InvalidObjectType(object_type),
-                    Err(err) => err,
-                }
-            })?;
-
-        let mut offset = 0;
-        offset += marshal_bytes(&id_index.0.to_ne_bytes(), &mut out_bytes[offset..])?;
-        offset += marshal_bytes(&header.strong_count.to_ne_bytes(), &mut out_bytes[offset..])?;
-        offset += marshal_bytes(&header.weak_count.to_ne_bytes(), &mut out_bytes[offset..])?;
-
-        Ok(offset)
-    }
-    
-    pub fn marshal_array_object_header(&self,
-        header: &ObjectHeader,
-        count: usize,
-        out_bytes: &mut [u8],
-    ) -> MarshalResult<usize> {
-        let mut offset = self.marshal_object_header(header, out_bytes)?; 
-        
-        let element_ty = match &header.id {
-            ObjectID::Array(element_ty) => element_ty.clone(),
-            _ => {
-                // wrong header for an array
-                return Err(MarshalError::InvalidData);
-            }
-        };
-
-        let size = i32::try_from(count)
-            .map_err(|_| {
-                MarshalError::unsupported_type(element_ty.as_ref().clone().array(count))
-            })?;
-
-        offset += marshal_bytes(&size.to_ne_bytes(), &mut out_bytes[offset..])?;
-        Ok(offset)
-    }
-
-    pub fn unmarshal_object_header(&self, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<ObjectHeader>> {
-        let mut offset = 0;
-
-        let type_index = unmarshal_from_ne_bytes(&in_bytes[offset..], u64::from_ne_bytes)?;
-        offset += type_index.byte_count;
-
-        let strong_count = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
-        offset += strong_count.byte_count;
-
-        let weak_count = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
-        offset += weak_count.byte_count;
-
-        let object_id = self.get_object_id(TypeIndex(type_index.value))?;
-
-        Ok(UnmarshalledValue {
-            value: ObjectHeader {
-                id: object_id.clone(),
-                strong_count: strong_count.value,
-                weak_count: weak_count.value,
-            },
-            byte_count: offset,
-        })
-    }
-
-    pub fn object_header_size() -> usize {
-        NativeType::u64().size() // type index
-            + NativeType::i32().size() // strong ref count
-            + NativeType::i32().size() // weak ref count
-    }
-
-    pub fn get_dtor_function(&self, t: TypeIndex) -> Option<Rc<Function>> {
-        self.class_dtors.get(&t).cloned()
     }
 }
 

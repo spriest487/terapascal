@@ -1,5 +1,3 @@
-use crate::func::Function;
-use crate::func::RuntimeFuncBuilder;
 use crate::ir;
 use crate::marshal::util::UnmarshalledValue;
 use crate::marshal::MarshalError;
@@ -170,27 +168,9 @@ impl Marshaller {
 
     pub(crate) fn gen_class_dtor(&mut self, type_def_id: &Rc<GenericTypeID>) -> MarshalResult<()> {
         let class_type = type_def_id.to_class_object_type();
-        let type_index = self.get_type_index(&class_type)?;
-
-        let mut builder = RuntimeFuncBuilder::new(self);
-        builder.local_stack_mut().bind_unnamed_param(ir::ArgID(0), class_type.clone(), false);
-
-        if !builder.gen_class_object_dtor_body(type_def_id, ir::ArgID(0)) {
-            return Ok(());
-        }
-
-        let dtor_body = builder.finish();
-        let dtor_name = format!("<runtime dtor for {}>", class_type.to_pretty_string(&self.metadata));
-
-        let dtor_def = ir::FunctionDef {
-            body: dtor_body,
-            type_params: Vec::new(),
-            debug_name: Some(dtor_name.clone()),
-            sig: ir::FunctionSig::new([class_type], ir::Type::Nothing),
-        };
-
-        self.class_dtors.insert(type_index, Rc::new(Function::new_internal(dtor_name, dtor_def)));
-
-        Ok(())
+        
+        self.gen_runtime_dtor(&class_type, |builder, self_arg| {
+            builder.gen_class_object_dtor_body(type_def_id, self_arg)
+        })
     }
 }

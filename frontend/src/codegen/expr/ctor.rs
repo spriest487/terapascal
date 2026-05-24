@@ -195,7 +195,7 @@ fn translate_box_ctor(
     let box_var = builder.local_var(box_ty.clone(), None);
     
     builder.new_box(box_var, boxed_ty.clone(), false);
-    
+
     builder.local_begin();
     {
         let element_ref = box_var.to_ref().element_ref(box_ty, ir::Value::I32_0);
@@ -203,6 +203,6 @@ fn translate_box_ctor(
         builder.retain(element_ref.to_deref(), boxed_ty);
     }
     builder.local_end();
-    
+
     box_var.to_ref()
 }

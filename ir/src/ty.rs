@@ -104,13 +104,6 @@ impl Type {
         Type::WeakObject(ObjectID::Array(Rc::new(self)))
     }
 
-    pub fn dyn_array_element(&self) -> Option<&Self> {
-        match self {
-            Type::Object(ObjectID::Array(element_type)) => Some(element_type.as_ref()),
-            _ => None,
-        }
-    }
-
     pub fn boxed(&self) -> Self {
         Type::Object(ObjectID::Box(Rc::new(self.clone())))
     }

@@ -637,7 +637,7 @@ impl Vm {
     fn invoke_dtor(&mut self, val: &DynValue, ty: &ir::Type) -> ExecResult<()> {
         let type_index = self.heap.marshaller.get_type_index(ty)?;
 
-        let Some(dtor_func) = self.heap.marshaller.get_dtor_function(type_index) else {
+        let Some(dtor_func) = self.heap.marshaller.get_runtime_dtor(type_index) else {
             eprintln!("[rc] no dtor for {}", self.metadata().pretty_type_name(ty));
             return Ok(());
         };
