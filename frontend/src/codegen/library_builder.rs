@@ -200,6 +200,27 @@ impl<'a> LibraryBuilder<'a> {
             self.translate_type(&translate_type);
         }
 
+        // ensure methods of all defined types are instantiated
+        let all_defined_methods: Vec<_> = self.src_metadata
+            .defined_types()
+            .into_iter()
+            .filter(|ty| {
+                !ty.is_abstract() && !ty.contains_unresolved_params(self.src_metadata)
+            })
+            .flat_map(|ty| {
+                let methods = ty.methods(self.src_metadata).unwrap();
+                (0..methods.len())
+                    .map(move |method_index| MethodDeclKey {
+                        self_ty: ty.clone(),
+                        method_index,
+                    })
+            })
+            .collect();
+
+        for method_key in all_defined_methods {
+            self.instantiate_method(&method_key);
+        }
+
         self.build_typeinfo();
 
         self.gen_static_closure_init();

@@ -98,6 +98,7 @@ impl Marshaller {
             (ir::Type::F64, NativeType::f64()),
             (ir::Type::Bool, NativeType::u8()),
             (ir::Type::any(), NativeType::pointer()),
+            (ir::Type::string(), NativeType::pointer()),
         ];
 
         for (primitive_type, ffi_type) in primitive_types {

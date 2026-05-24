@@ -162,20 +162,21 @@ impl Marshaller {
         };
 
         if def.identity.is_ref_type() {
-            self.gen_class_dtor(&type_def_id, type_index);
+            self.gen_class_dtor(&type_def_id)?;
         }
 
         Ok((def, type_index))
     }
 
-    fn gen_class_dtor(&mut self, type_def_id: &Rc<GenericTypeID>, type_index: TypeIndex) {
+    pub(crate) fn gen_class_dtor(&mut self, type_def_id: &Rc<GenericTypeID>) -> MarshalResult<()> {
         let class_type = type_def_id.to_class_object_type();
+        let type_index = self.get_type_index(&class_type)?;
 
         let mut builder = RuntimeFuncBuilder::new(self);
         builder.local_stack_mut().bind_unnamed_param(ir::ArgID(0), class_type.clone(), false);
 
         if !builder.gen_class_object_dtor_body(type_def_id, ir::ArgID(0)) {
-            return;
+            return Ok(());
         }
 
         let dtor_body = builder.finish();
@@ -189,5 +190,7 @@ impl Marshaller {
         };
 
         self.class_dtors.insert(type_index, Rc::new(Function::new_internal(dtor_name, dtor_def)));
+
+        Ok(())
     }
 }

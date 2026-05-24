@@ -417,38 +417,62 @@ impl Type {
         }
     }
 
+    pub fn is_abstract(&self) -> bool {
+        match self {
+            Type::Any
+            | Type::GenericParam(..)
+            | Type::Interface(..)
+            | Type::MethodSelf => true,
+
+            | Type::Weak(ty) => ty.is_abstract(),
+
+            _ => false,
+        }
+    }
+
     /// is this type, or any of the type parameters that it contains, a generic param type?
     /// e.g. in the sig `X[T](a: Box[T])`, the type of param `a` is "Box of type param 0".
     /// if this type appears in a context where the params already refer to specific types,
     /// for example in the body of a function where this type refers to one of the function's type
     /// params, we ignore those types since they'll be real types when actually used
     pub fn contains_unresolved_params(&self, ctx: &Context) -> bool {
-        if let Type::GenericParam(ty_param_ty) = self {
-            let mut func_ty_params = ctx.current_function_body_env().into_iter().flat_map(|env| {
-                let func_ty_params = env.ty_params.iter().flat_map(|params| params.iter());
+        match self.type_args() {
+            TypeArgsResult::Unspecialized(..) => {
+                true
+            }
 
-                let enclosing_ty_params = env.self_ty.iter().flat_map(|self_ty| {
-                    self_ty.type_params().into_iter().flat_map(|params| params.iter())
-                });
+            TypeArgsResult::Specialized(_, type_args) => {
+                type_args.items.iter().any(|a| a.contains_unresolved_params(ctx))
+            }
 
-                func_ty_params.chain(enclosing_ty_params)
-            });
+            TypeArgsResult::NotGeneric => {
+                match self {
+                    Type::GenericParam(param_ty) => {
+                        let mut func_ty_params = ctx.current_function_body_env().into_iter().flat_map(|env| {
+                            let func_ty_params = env.ty_params.iter().flat_map(|params| params.iter());
 
-            return !func_ty_params.any(|param| param.name == ty_param_ty.name);
-        }
+                            let enclosing_ty_params = env.self_ty.iter().flat_map(|self_ty| {
+                                self_ty.type_params().into_iter().flat_map(|params| params.iter())
+                            });
 
-        if let TypeArgsResult::Specialized(_, type_args) = &self.type_args() {
-            return type_args.items.iter().any(|a| a.contains_unresolved_params(ctx));
-        }
+                            func_ty_params.chain(enclosing_ty_params)
+                        });
 
-        match self {
-            Type::Array(array_ty) => array_ty.element_ty.contains_unresolved_params(ctx),
+                        return !func_ty_params.any(|param| param.name == param_ty.name);
+                    }
 
-            Type::DynArray(element) => element.contains_unresolved_params(ctx),
+                    Type::Array(array_ty) => array_ty.element_ty.contains_unresolved_params(ctx),
 
-            Type::Function(sig) => sig.contains_generic_params(ctx),
+                    Type::DynArray(element) => element.contains_unresolved_params(ctx),
+                    Type::Box(element_ty) => element_ty.contains_unresolved_params(ctx),
+                    Type::Weak(target_type) => target_type.contains_unresolved_params(ctx),
+                    Type::Pointer(target_type) => target_type.contains_unresolved_params(ctx),
 
-            _ => false,
+                    Type::Function(sig) => sig.contains_generic_params(ctx),
+
+                    _ => false,
+                }
+            }
         }
     }
 
@@ -511,22 +535,23 @@ impl Type {
     /// e.g. for the type `Box[Integer]`, the type list contains `Integer`
     /// returns `None` for non-generic types and unspecialized generic types
     pub fn type_args(&self) -> TypeArgsResult<'_> {
-        match self {
-            Type::Variant(name) | Type::Class(name) | Type::Record(name) => {
-                match (&name.type_params, &name.type_args) {
-                    (Some(type_params), None) => TypeArgsResult::Unspecialized(type_params),
+        // TODO: assumes all generic types must contain a name that can be borrowed
+        // this is true at the moment - full_name exists for builtin symbols, and none are generic,
+        // are generic, but if that changes this will fail!
+        let Some(Cow::Borrowed(name)) = self.full_name() else {
+            return TypeArgsResult::NotGeneric;
+        };
 
-                    (Some(type_params), Some(type_args)) => {
-                        TypeArgsResult::Specialized(type_params, type_args)
-                    },
+        match (&name.type_params, &name.type_args) {
+            (Some(type_params), None) => TypeArgsResult::Unspecialized(type_params),
 
-                    (None, None) => TypeArgsResult::NotGeneric,
-
-                    (None, Some(..)) => unreachable!(),
-                }
+            (Some(type_params), Some(type_args)) => {
+                TypeArgsResult::Specialized(type_params, type_args)
             },
 
-            _ => TypeArgsResult::NotGeneric,
+            (None, None) => TypeArgsResult::NotGeneric,
+
+            (None, Some(..)) => unreachable!(),
         }
     }
 

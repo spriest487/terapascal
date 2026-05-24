@@ -2309,10 +2309,21 @@ impl Vm {
             );
 
             self.functions.insert(ir::FunctionRef::new(*func_id), FunctionInfo {
-                identity,
+                identity: identity.clone(),
                 func: Rc::new(func),
                 invoker,
             });
+
+            // TODO: strings shouldn't need a user-defined destructor
+            // when a non-generic destructor method is loaded, force an update of the generated
+            // destructor code because it might now need one where it didn't before
+            // workaround for user-defined destructors for builtin classes not being found
+            // when the type is first loaded e.g. System.String
+            if let ir::FunctionIdentity::Destructor { declaring_type, .. } = &identity
+                && let ir::Type::Object(ir::ObjectID::Class(declaring_class)) = declaring_type
+            {
+                self.heap.marshaller.gen_class_dtor(declaring_class)?;
+            };
         }
 
         // we need to check again after loading a new lib, which might have declared some IDs for
