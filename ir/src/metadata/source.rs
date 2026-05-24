@@ -166,22 +166,29 @@ pub trait MetadataSource : Sized {
 
     fn pretty_type_name(&self, ty: &Type) -> Cow<'_, str> {
         match ty {
-            Type::Struct(def_id) | Type::Variant(def_id) => {
-                match self.get_type_name(def_id.def_id) {
-                    Some(name) => {
-                        if def_id.args == name.type_args {
-                            return Cow::Owned(name.to_pretty_string(self))
-                        }
+            Type::Struct(id) | Type::Variant(id) => {
+                // if the type has a fully-qualified path, display that
+                if let Some(name_path) = self.get_type_name(id.def_id) {
+                    if id.args == name_path.type_args {
+                        return Cow::Owned(name_path.to_pretty_string(self))
+                    }
 
-                        let name = NamePath {
-                            path: name.path.clone(),
-                            type_args: def_id.args.clone()
-                        };
+                    let name = NamePath {
+                        path: name_path.path.clone(),
+                        type_args: id.args.clone()
+                    };
 
-                        Cow::Owned(name.to_pretty_string(self))
-                    },
-                    None => {
-                        Cow::Owned(def_id.to_string())
+                    return Cow::Owned(name.to_pretty_string(self));
+                }
+
+                // if the type has a struct identity, display that
+                match self.get_type_decl(id.def_id) {
+                    Some(TypeDecl::Def(TypeDef::Struct(struct_def))) => {
+                        Cow::Owned(struct_def.identity.to_pretty_string(self))
+                    }
+
+                    _ => {
+                        Cow::Owned(id.to_string())
                     }
                 }
             }

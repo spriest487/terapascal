@@ -4,11 +4,13 @@ mod interface;
 mod tags;
 
 use crate::FunctionID;
+use crate::FunctionRef;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::NamePath;
 use crate::ObjectID;
 use crate::RawFormatter;
+use crate::Ref;
 use crate::TagInfo;
 use crate::Type;
 pub use interface::*;
@@ -40,8 +42,14 @@ impl StructIdentity {
                 name.to_pretty_string(formatter)
             },
             StructIdentity::ClosureObject(id) => {
+                let func_ref = Ref::from(FunctionRef::new(id.id));
                 let func_ty = Type::Function(id.sig.clone());
-                format!("closure ({})", func_ty.to_pretty_string(formatter))
+
+                format!(
+                    "closure object ({}: {})",
+                    func_ref.to_pretty_string(formatter),
+                    func_ty.to_pretty_string(formatter),
+                )
             }
             StructIdentity::SetFlags { bits } => {
                 format!("set{bits}")

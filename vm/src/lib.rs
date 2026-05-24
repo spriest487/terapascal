@@ -2241,7 +2241,11 @@ impl Vm {
         let object_ptr = self.heap.alloc_object(fields_size, object_id.clone(), !immortal)?;
 
         if !immortal && self.opts.trace_rc {
-            eprintln!("[rc] alloc @ {}", object_ptr.to_pretty_string(self.metadata()))
+            eprintln!(
+                "[rc] alloc @ {} <{}>",
+                object_ptr.to_pretty_string(self.metadata()),
+                object_id.to_pretty_name(self.marshaller())
+            )
         }
 
         let header = ObjectHeader::new(object_id, immortal);
@@ -2583,10 +2587,14 @@ impl Vm {
 
         let value_size = self.heap.marshaller.create_native_type(value_ty)?.size();
 
-        let box_ptr = self.heap.alloc_object(value_size, object_id, !immortal)?;
+        let box_ptr = self.heap.alloc_object(value_size, object_id.clone(), !immortal)?;
 
         if !immortal && self.opts.trace_rc {
-            eprintln!("[rc] alloc @ {}", box_ptr.to_pretty_string(self.metadata()))
+            eprintln!(
+                "[rc] alloc @ {} <{}>",
+                box_ptr.to_pretty_string(self.metadata()),
+                object_id.to_pretty_name(self.marshaller()),
+            )
         }
 
         let offset = self.heap.marshaller.marshal_object_at(&box_ptr, &ObjectValue {
@@ -2629,7 +2637,11 @@ impl Vm {
         let array_ptr = self.heap.alloc_object(data_size, object_id.clone(), !immortal)?;
 
         if !immortal && self.opts.trace_rc {
-            eprintln!("[rc] alloc @ {}", array_ptr.to_pretty_string(self.metadata()))
+            eprintln!(
+                "[rc] alloc @ {} <{}>",
+                array_ptr.to_pretty_string(self.metadata()),
+                object_id.to_pretty_name(self.marshaller()),
+            )
         }
 
         let offset = self.heap.marshaller.marshal_object_at(&array_ptr, &ObjectValue {

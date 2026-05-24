@@ -1682,7 +1682,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
             args_arg.to_ref(),
             error_out_arg.to_deref(),
         );
-        
+
         let body = builder.finish();
         
         let invoker_func = ir::FunctionDef {
