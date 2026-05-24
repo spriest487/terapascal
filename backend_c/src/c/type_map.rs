@@ -184,10 +184,10 @@ impl<'a> Unit<'a> {
                 panic!("missing struct def: {def_id}")
             });
 
-        let type_id = match instantiate_struct_def(&generic_def, args) {
+        match instantiate_struct_def(&generic_def, args) {
             Cow::Borrowed(..) => {
                 // not a specialized generic
-                self.define_struct(ty.clone(), generic_def)
+                self.define_struct(ty.clone(), generic_def);
             },
 
             Cow::Owned(new_def) => {
@@ -198,17 +198,13 @@ impl<'a> Unit<'a> {
                     eprintln!("new instantiation of struct {}: {}", generic_name, new_name);
                 }
 
-                self.define_struct(ty.clone(), Rc::new(new_def))
+                self.define_struct(ty.clone(), Rc::new(new_def));
             },
         };
 
-        // if the type requested was a weak type, define_struct will only have registered the
-        // strong type, so add the weak one separately now
-        if ty.is_weak() {
-            self.register_type(ty.clone(), Type::DefinedType(TypeDefName::Struct(type_id)));
-        }
-
-        type_id
+        // the ID returned from define_struct may not match the one registered for "ty" if "ty"
+        // is a weak pointer, so look it up again, assuming it must have been added by define_struct
+        self.types.get_by_right(ty).cloned().unwrap()
     }
 
     fn define_struct(
