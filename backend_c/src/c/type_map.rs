@@ -124,10 +124,21 @@ impl<'a> Unit<'a> {
                     }
 
                     ir::ObjectID::Array(element) => {
-                        self.translate_dyn_array_type(element).0
+                        let (array_type_id, array_id) = self.translate_dyn_array_type(element);
+                        if ty.is_weak() {
+                            self.register_type(ty.clone(), Type::DefinedType(TypeDefName::DynArray(array_id)))
+                        } else {
+                            array_type_id
+                        }
                     }
+
                     ir::ObjectID::Box(element) => {
-                        self.translate_box_type(element).0
+                        let (box_type_id, box_id) = self.translate_box_type(element);
+                        if ty.is_weak() {
+                            self.register_type(ty.clone(), Type::DefinedType(TypeDefName::Box(box_id)))
+                        } else {
+                            box_type_id
+                        }
                     }
                 }
             }
