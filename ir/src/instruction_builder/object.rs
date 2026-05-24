@@ -1,18 +1,19 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
-use crate::ArgID;
-use crate::Ref;
 use crate::GenericTypeID;
 use crate::MetadataSource;
+use crate::Ref;
 use std::rc::Rc;
 
 pub fn gen_class_object_dtor_body<B>(
     builder: &mut B,
     class_id: &Rc<GenericTypeID>,
-    self_arg: ArgID,
+    object_ref: impl Into<Ref>,
 ) -> bool
 where
     B: InstructionBuilder + ?Sized
 {
+    let object_ref = object_ref.into();
+
     let mut has_dtor_method = false;
 
     if let Some(dtor_func_id) = builder
@@ -22,7 +23,7 @@ where
         let dtor_ref = crate::FunctionRef::new(dtor_func_id)
             .with_args(class_id.args.clone());
 
-        builder.call(dtor_ref, [self_arg.value()], None);
+        builder.call(dtor_ref, [object_ref.value()], None);
 
         has_dtor_method = true;
     }
@@ -50,7 +51,7 @@ where
             continue;
         }
 
-        let field_ref = self_arg.to_ref().field_ref(class_ty.clone(), *field_id);
+        let field_ref = object_ref.field_ref(class_ty.clone(), *field_id);
         builder.release(field_ref.to_deref(), field_def.ty.clone(), Ref::Discard);
 
         released_any = true;

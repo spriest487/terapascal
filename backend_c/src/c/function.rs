@@ -2,7 +2,7 @@ mod builder;
 
 use crate::c::boxed::BoxTypeID;
 use crate::c::function::builder::FuncInstanceBuilder;
-use crate::c::Builder;
+use crate::c::CBuilder;
 use crate::c::DynArrayTypeID;
 use crate::c::Expr;
 use crate::c::Statement;
@@ -49,7 +49,7 @@ pub enum FunctionName {
     ID(FuncInstanceID),
     Extern(ir::FunctionID),
     Method(ir::InterfaceID, ir::MethodID),
-    DestructorInvoker(TypeDefName),
+    Destructor(TypeDefName),
     MethodWrapper(ir::InterfaceID, ir::MethodID, TypeDefName),
 
     // generated dynarray methods
@@ -76,7 +76,8 @@ impl fmt::Display for FunctionName {
 
             FunctionName::ID(id) => write!(f, "Function_{}", id.0),
             FunctionName::Extern(id) => write!(f, "Extern{}", id.0),
-            FunctionName::DestructorInvoker(name) => write!(f, "Destructor_{}", name),
+
+            FunctionName::Destructor(name) => write!(f, "Destructor_{}", name),
 
             FunctionName::Method(iface, method) => {
                 write!(f, "Method_{}_{}", iface, method.0)
@@ -323,8 +324,8 @@ pub struct FunctionDef {
 
 impl FunctionDef {
     pub fn translate(id: FuncInstanceID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
-        let result_type = Some(func.sig.result_type.clone());
-        let mut builder = Builder::new(module, &func.sig.param_types, result_type);
+        let result_type = func.sig.result_type.clone();
+        let mut builder = CBuilder::new(module, &func.sig.param_types, result_type);
 
         builder.translate_instructions(&func.body);
 

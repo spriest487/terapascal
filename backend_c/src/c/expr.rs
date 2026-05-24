@@ -1,5 +1,5 @@
 use crate::c::type_map::TypeID;
-use crate::c::Builder;
+use crate::c::CBuilder;
 use crate::c::BuiltinName;
 use crate::c::DynArrayTypeID;
 use crate::c::FieldName;
@@ -121,7 +121,7 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn translate_val(v: &ir::Value, builder: &mut Builder) -> Self {
+    pub fn translate_val(v: &ir::Value, builder: &mut CBuilder) -> Self {
         match v {
             ir::Value::LiteralNil => Expr::Null,
             ir::Value::LiteralBool(b) => Expr::LitBool(*b),
@@ -198,7 +198,7 @@ impl Expr {
         }
     }
 
-    pub fn translate_ref(r: &ir::Ref, builder: &mut Builder) -> Self {
+    pub fn translate_ref(r: &ir::Ref, builder: &mut CBuilder) -> Self {
         match r {
             ir::Ref::Discard => {
                 panic!("can't translate a discard ref, it should only be used in assignments")
@@ -380,7 +380,7 @@ impl Expr {
         lhs: &ir::Value,
         op: InfixOp,
         rhs: &ir::Value,
-        builder: &mut Builder,
+        builder: &mut CBuilder,
     ) -> Self {
         let lhs_expr = Expr::translate_val(lhs, builder);
         let rhs_expr = Expr::translate_val(rhs, builder);
@@ -388,7 +388,7 @@ impl Expr {
         Self::infix_op(lhs_expr, op, rhs_expr)
     }
 
-    pub fn translate_assign(out: &ir::Ref, val: Self, builder: &mut Builder) -> Self {
+    pub fn translate_assign(out: &ir::Ref, val: Self, builder: &mut CBuilder) -> Self {
         match out {
             ir::Ref::Discard => val,
             _ => {
@@ -416,7 +416,7 @@ impl Expr {
         arr: &ir::Ref,
         index: &ir::Value,
         of_type: &ir::Type,
-        builder: &mut Builder,
+        builder: &mut CBuilder,
     ) -> Self {
         let base_expr = Expr::translate_ref(arr, builder);
         let index_expr = Expr::translate_val(index, builder);
@@ -461,7 +461,7 @@ impl Expr {
     pub fn translate_length(
         arr: &ir::Ref,
         of_type: &ir::Type,
-        builder: &mut Builder,
+        builder: &mut CBuilder,
     ) -> Self {
         let array_expr = Expr::translate_ref(arr, builder);
 
@@ -491,7 +491,7 @@ impl Expr {
         a: &ir::Ref,
         of_ty: &ir::Type,
         field_id: ir::FieldID,
-        builder: &mut Builder,
+        builder: &mut CBuilder,
     ) -> Self {
         let a_expr = Expr::translate_ref(a, builder);
 
@@ -537,7 +537,7 @@ impl Expr {
 
     pub fn translate_variant_tag(
         instance: &ir::Ref,
-        builder: &mut Builder
+        builder: &mut CBuilder
     ) -> Expr {
         let instance_expr = Expr::translate_ref(instance, builder);
 
@@ -552,7 +552,7 @@ impl Expr {
     pub fn translate_variant_data(
         instance: &ir::Ref,
         case_index: usize,
-        builder: &mut Builder
+        builder: &mut CBuilder
     ) -> Expr {
         let data_field = Expr::Field {
             base: Box::new(Expr::translate_ref(instance, builder)),

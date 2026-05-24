@@ -1,6 +1,7 @@
 use crate::c::boxed::BoxTypeID;
 use crate::c::global_typeinfo_decl_name;
 use crate::c::type_map::TypeID;
+use crate::c::CBuilder;
 use crate::c::DynArrayTypeID;
 use crate::c::Expr;
 use crate::c::FieldName;
@@ -18,6 +19,7 @@ use ir::MetadataSource as _;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write;
+use terapascal_ir::InstructionBuilder;
 
 #[derive(Clone, Debug)]
 struct MethodImplFunc {
@@ -236,7 +238,9 @@ impl Class {
 
             impls.insert(iface_id, InterfaceImpl { method_impls });
         }
-        
+
+        let type_def_name = TypeDefName::Struct(class_index);
+
         let runtime_type = metadata
             .get_type_info(&class_ty)
             .unwrap_or_else(|| {
@@ -250,20 +254,13 @@ impl Class {
 
         let typeinfo_name = global_typeinfo_decl_name(unit, &class_ty);
 
-        let dtor = match metadata.get_dtor_method(&class_ty) {
-            Some(id) => {
-                let ir::Type::Object(ir::ObjectID::Class(class_id)) = class_ty else {
-                    panic!("invalid type for class: {}", class_ty.to_pretty_string(unit.metadata));
-                };
-
-                let key = ir::FunctionRef::new(id)
-                    .with_args(class_id.args.clone());
-
-                let instance = unit.translate_func_ref(&key);
-                Some(instance.name)
-            },
-            None => None,
+        let ir::Type::Object(ir::ObjectID::Class(class_id)) = &class_ty else {
+            panic!("invalid type for class: {}", class_ty.to_pretty_string(unit.metadata));
         };
+
+        let dtor = Self::gen_runtime_dtor(unit, &class_ty, type_def_name, |builder, self_arg| {
+            builder.gen_class_object_dtor_body(&class_id, self_arg)
+        });
 
         Class {
             identity: ClassIdentity::Class(class_index),
@@ -330,31 +327,51 @@ impl Class {
 
         wrappers
     }
-    
-    pub fn gen_dtor_invoker(&self) -> Option<FunctionDef> {
-        let Some(dtor) = self.dtor else {
-            return None;
-        };
-        
-        let def_name = self.identity.to_def_name();
-        let self_ty = Type::DefinedType(def_name);
 
-        let def = FunctionDef {
+    fn gen_runtime_dtor<F>(
+        unit: &mut Unit,
+        object_type: &ir::Type,
+        def_name: TypeDefName,
+        build_fn: F,
+    ) -> Option<FunctionName>
+    where
+        F: FnOnce(&mut ir::RawInstructionBuilder<ir::Metadata>, ir::Ref) -> bool
+    {
+        let self_arg_id = ir::ArgID(0);
+
+        let mut builder = ir::RawInstructionBuilder::new(unit.metadata, true);
+        builder.local_stack_mut().bind_unnamed_param(self_arg_id, ir::ANY_TYPE, false);
+
+        // the self arg is provided as an Any pointer, so we have to cast it first
+        let object_ref = builder.local_temp(object_type.clone());
+        builder.cast(object_ref, self_arg_id, object_type.clone());
+
+        if !build_fn(&mut builder, object_ref.to_ref()) {
+            return None;
+        }
+
+        let comment = format!("runtime dtor for {}", object_type.to_pretty_string(unit.metadata));
+
+        let dtor_body = builder.finish();
+
+        let mut func_builder = CBuilder::new(unit, &[ir::ANY_TYPE], ir::Type::Nothing);
+
+        func_builder.translate_instructions(&dtor_body);
+        let dtor_stmts = func_builder.stmts;
+
+        let name = FunctionName::Destructor(def_name);
+
+        unit.functions.push(FunctionDef {
+            body: dtor_stmts,
             decl: FunctionDecl {
-                name: FunctionName::DestructorInvoker(def_name),
-                params: vec![Type::Rc.ptr()],
-                comment: None,
+                name,
                 return_ty: Type::Void,
+                params: vec![Type::Rc.ptr()],
+                comment: Some(comment),
             },
-            body: vec![
-                // dtor((Self*) arg0);
-                Statement::Expr(Expr::Function(dtor).call([
-                    Expr::arg_var(ir::ArgID(0)).cast(self_ty.ptr())
-                ])),
-            ]
-        };
-        
-        Some(def)
+        });
+
+        Some(name)
     }
 
     pub fn to_decl_string(&self) -> String {
@@ -489,9 +506,8 @@ impl Class {
             Expr::SizeOf(Type::DefinedType(self.identity.to_def_name()))
         ).unwrap();
 
-        if self.dtor.is_some() {
-            let dtor_name = FunctionName::DestructorInvoker(self.identity.to_def_name());
-            writeln!(out, "  .dtor = &{},", dtor_name).unwrap();
+        if let Some(dtor_func) = &self.dtor {
+            writeln!(out, "  .dtor = &{},", dtor_func).unwrap();
         } else {
             writeln!(out, "  .dtor = NULL,").unwrap();
         };

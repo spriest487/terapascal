@@ -17,6 +17,7 @@ pub use instruction::*;
 pub use instruction_builder::scope::*;
 pub use instruction_builder::util::jmp_exists;
 pub use instruction_builder::InstructionBuilder;
+pub use instruction_builder::RawInstructionBuilder;
 pub use instruction_builder::LocalBinding;
 pub use instruction_builder::generic;
 pub use library::*;

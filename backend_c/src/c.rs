@@ -293,7 +293,7 @@ impl<'a> Unit<'a> {
             init_stmts.push(ffi_func.init_statement());
         }
 
-        let mut init_builder = Builder::new(self, &[], None);
+        let mut init_builder = CBuilder::new(self, &[], ir::Type::Nothing);
         init_builder.stmts.append(&mut init_stmts);
 
         // translate initialization blocks from library
@@ -338,10 +338,6 @@ impl<'a> Unit<'a> {
         for class in self.classes.clone() {
             for wrapper_func_def in class.gen_vcall_wrappers(self) {
                 self.functions.push(wrapper_func_def);
-            }
-
-            if let Some(dtor_invoker) = class.gen_dtor_invoker() {
-                self.functions.push(dtor_invoker);
             }
         }
     }

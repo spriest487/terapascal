@@ -1,5 +1,4 @@
 use crate::func::Function;
-use crate::func::RuntimeFuncBuilder;
 use crate::ir;
 use crate::marshal::marshal_bytes;
 use crate::marshal::util::unmarshal_from_ne_bytes;
@@ -212,12 +211,12 @@ impl Marshaller {
         build_fn: F,
     ) -> MarshalResult<()>
     where
-        F: FnOnce(&mut RuntimeFuncBuilder, ir::ArgID) -> bool
+        F: FnOnce(&mut ir::RawInstructionBuilder<ir::Metadata>, ir::ArgID) -> bool
     {
         let self_arg_id = ir::ArgID(0);
         let type_index = self.get_type_index(object_type)?;
 
-        let mut builder = RuntimeFuncBuilder::new(self);
+        let mut builder = ir::RawInstructionBuilder::new(self.metadata(), true);
         builder.local_stack_mut().bind_unnamed_param(self_arg_id, object_type.clone(), false);
 
         if !build_fn(&mut builder, self_arg_id) {

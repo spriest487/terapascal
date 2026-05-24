@@ -65,9 +65,7 @@ static void DynArrayBoundsCheck(OBJECT_PTR arr, int32_t index) {
 
 static int32_t System_StrToInt(STRING_STRUCT* str) {
     if (!str || str->rc.strong_count == 0) {
-        fprintf(stderr, "called StrToInt for an invalid string pointer\n");
-        fflush(stderr);
-        abort();
+        fatal("called StrToInt for an invalid string pointer");
     }
 
     int i = atoi((char*) STRING_CHARS(str));
@@ -153,7 +151,7 @@ static void Free(void* mem) {
 
 static OBJECT_PTR RcNew(struct Class* class, bool immortal) {
     if (!class) {
-        abort();
+        fatal("null class pointer");
     }
 
     char* mem = (char*) Alloc(class->size);

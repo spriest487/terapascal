@@ -7,7 +7,6 @@ mod object;
 
 use self::object::gen_class_object_dtor_body;
 use self::scope::ScopedBinding;
-use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::FunctionID;
@@ -25,6 +24,9 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use crate::Value;
+use crate::ArgID;
+use crate::InstructionList;
+use crate::EXIT_LABEL;
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_array_from;
 use scope::LocalStack;
@@ -762,8 +764,8 @@ pub trait InstructionBuilder {
         temp_at_ptr.value()
     }
     
-    fn gen_class_object_dtor_body(&mut self, class_id: &Rc<GenericTypeID>, self_param: ArgID) -> bool {
-        gen_class_object_dtor_body(self, class_id, self_param)
+    fn gen_class_object_dtor_body(&mut self, class_id: &Rc<GenericTypeID>, obj_ref: impl Into<Ref>) -> bool {
+        gen_class_object_dtor_body(self, class_id, obj_ref)
     }
 
     fn gen_dyn_array_dtor_body(&mut self, self_param: ArgID, element_type: &Type) {
@@ -868,5 +870,82 @@ impl LocalBinding {
         } else {
             self.id.to_ref()
         }
+    }
+}
+
+/// Simple language-agnostic builder implementation for building instruction lists directly
+pub struct RawInstructionBuilder<'a, M: MetadataSource> {
+    metadata: &'a M,
+
+    local_stack: LocalStack,
+
+    debug_stack: Vec<Span>,
+
+    next_label: Label,
+
+    body: InstructionList,
+
+    is_debug: bool,
+}
+
+impl<'a, M: MetadataSource> RawInstructionBuilder<'a, M> {
+    pub fn new(marshaller: &'a M, is_debug: bool) -> Self {
+        Self {
+            metadata: marshaller,
+            local_stack: LocalStack::new(),
+            debug_stack: Vec::new(),
+            next_label: Label(EXIT_LABEL.0 + 1),
+            body: InstructionList::new(),
+            is_debug,
+        }
+    }
+
+    pub fn finish(mut self) -> InstructionList {
+        let local_count = self.local_stack.local_slot_count();
+        let mut init_instructions = Vec::with_capacity(local_count);
+
+        for (local_id, ty) in self.local_stack.finish() {
+            init_instructions.push(Instruction::LocalAlloc(local_id, ty));
+        }
+
+        self.body.splice(0..0, init_instructions);
+        self.body
+    }
+}
+
+impl<'a, M: MetadataSource> InstructionBuilder for RawInstructionBuilder<'a, M> {
+    fn emit(&mut self, instruction: Instruction) {
+        let source = self.debug_stack.last().cloned();
+        self.body.push(instruction, source);
+    }
+
+    fn metadata(&self) -> &impl MetadataSource {
+        self.metadata
+    }
+
+    fn local_stack(&self) -> &LocalStack {
+        &self.local_stack
+    }
+
+    fn local_stack_mut(&mut self) -> &mut LocalStack {
+        &mut self.local_stack
+    }
+
+    fn is_debug(&self) -> bool {
+        self.is_debug
+    }
+
+    fn next_label(&mut self) -> Label {
+        let next = self.next_label;
+        self.next_label.0 += 1;
+        next
+    }
+
+    fn push_source(&mut self, ctx: Span) {
+        self.debug_stack.push(ctx);
+    }
+
+    fn pop_source(&mut self) {
+        self.debug_stack.pop();
     }
 }

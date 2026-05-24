@@ -265,22 +265,22 @@ impl fmt::Display for Statement {
     }
 }
 
-pub struct Builder<'a, 'b> {
+pub struct CBuilder<'a, 'b> {
     unit: &'a mut Unit<'b>,
     pub stmts: Vec<Statement>,
 
     variable_types: BTreeMap<ir::LocalID, ir::Type>,
     param_types: Vec<ir::Type>,
-    result_type: Option<ir::Type>,
+    result_type: ir::Type,
 
     next_temp_var: usize,
 }
 
-impl<'a, 'b> Builder<'a, 'b> {
+impl<'a, 'b> CBuilder<'a, 'b> {
     pub fn new(
         module: &'a mut Unit<'b>,
         param_types: &[ir::Type],
-        result_type: Option<ir::Type>,
+        result_type: ir::Type,
     ) -> Self {
         Self {
             unit: module,
@@ -557,8 +557,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                     at_expr,
                     value_type,
                     &mut retain_stmts,
-                    &|_builder, value_expr, val_type, stmts| {
-                        if !val_type.is_object() {
+                    &|_builder, value_expr, value_type, stmts| {
+                        if !value_type.is_object() {
                             return;
                         }
 
@@ -583,8 +583,8 @@ impl<'a, 'b> Builder<'a, 'b> {
                     at_expr,
                     value_type,
                     &mut release_stmts,
-                    &|builder, value_expr, val_type, stmts| {
-                        if !val_type.is_object() {
+                    &|builder, value_expr, value_type, stmts| {
+                        if !value_type.is_object() {
                             return;
                         }
 
@@ -1076,9 +1076,13 @@ impl<'a, 'b> Builder<'a, 'b> {
     }
 }
 
-impl<'a, 'b> ir::FunctionBodyContext for Builder<'a, 'b> {
+impl<'a, 'b> ir::FunctionBodyContext for CBuilder<'a, 'b> {
     fn get_result_type(&self) -> Option<&ir::Type> {
-        self.result_type.as_ref()
+        if self.result_type == ir::Type::Nothing {
+            return None;
+        }
+
+        Some(&self.result_type)
     }
 
     fn get_arg_type(&self, id: ir::ArgID) -> Option<&ir::Type> {

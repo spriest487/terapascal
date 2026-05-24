@@ -9,7 +9,7 @@ use crate::codegen::metadata::*;
 use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
-use crate::ir::*;
+use crate::ir as ir;
 use crate::typ as typ;
 use crate::typ::seq::TypeSequenceSupport;
 use std::borrow::Cow;
@@ -17,34 +17,34 @@ use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_ir::InstructionBuilder;
-use terapascal_ir::LocalStack;
+use terapascal_ir::MetadataSource;
 
 #[derive(Debug)]
 pub struct IRBuilder<'m, 'l: 'm> {
     library: &'m mut LibraryBuilder<'l>,
 
     instructions: Vec<DebugInstruction>,
-    next_label: Label,
+    next_label: ir::Label,
 
-    local_stack: LocalStack,
+    local_stack: ir::LocalStack,
 
     debug_stack: Vec<Span>,
 }
 
 #[derive(Debug, Clone)]
 pub struct DebugInstruction {
-    instruction: Instruction,
+    instruction: ir::Instruction,
     debug_span: Option<Span>,
 }
 
-impl AsInstruction for DebugInstruction {
-    fn as_instruction(&self) -> &Instruction {
+impl ir::AsInstruction for DebugInstruction {
+    fn as_instruction(&self) -> &ir::Instruction {
         &self.instruction
     }
 }
 
 impl InstructionBuilder for IRBuilder<'_, '_> {
-    fn emit(&mut self, instruction: Instruction) {
+    fn emit(&mut self, instruction: ir::Instruction) {
         if instruction.should_discard() {
             return;
         }
@@ -55,15 +55,15 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         });
     }
 
-    fn metadata(&self) -> &impl MetadataSource {
+    fn metadata(&self) -> &impl ir::MetadataSource {
         self.library.metadata()
     }
 
-    fn local_stack(&self) -> &LocalStack {
+    fn local_stack(&self) -> &ir::LocalStack {
         &self.local_stack
     }
 
-    fn local_stack_mut(&mut self) -> &mut LocalStack {
+    fn local_stack_mut(&mut self) -> &mut ir::LocalStack {
         &mut self.local_stack
     }
 
@@ -71,13 +71,13 @@ impl InstructionBuilder for IRBuilder<'_, '_> {
         self.opts().debug
     }
 
-    fn ir_formatter(&self) -> &impl IRFormatter {
+    fn ir_formatter(&self) -> &impl ir::IRFormatter {
         self.library.metadata()
     }
 
-    fn next_label(&mut self) -> Label {
+    fn next_label(&mut self) -> ir::Label {
         let label = self.next_label;
-        self.next_label = Label(self.next_label.0 + 1);
+        self.next_label = ir::Label(self.next_label.0 + 1);
         label
     }
 
@@ -108,8 +108,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             instructions: Vec::new(),
 
             // the EXIT label is always reserved, so start one after that
-            next_label: Label(EXIT_LABEL.0 + 1),
-            local_stack: LocalStack::new(),
+            next_label: ir::Label(ir::EXIT_LABEL.0 + 1),
+            local_stack: ir::LocalStack::new(),
 
             debug_stack: Vec::new(),
         }
@@ -123,10 +123,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         &mut self,
         variant: &typ::Symbol,
         case: &str,
-    ) -> (Rc<GenericTypeID>, usize, Option<Type>) {
+    ) -> (Rc<ir::GenericTypeID>, usize, Option<ir::Type>) {
         let variant_src_type = typ::Type::variant(variant.clone());
 
-        let Type::Variant(id) = self.translate_type(&variant_src_type) else {
+        let ir::Type::Variant(id) = self.translate_type(&variant_src_type) else {
             unreachable!("result of translating variant must be variant");
         };
 
@@ -148,15 +148,15 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         (id, case_index, variant_def.cases[case_index].ty.clone())
     }
     
-    pub fn literal_to_val(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> Value {
+    pub fn literal_to_val(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> ir::Value {
         let ty = self.translate_type(ty);
         literal_to_val(lit, &ty, self.library)
     }
     
-    pub fn translate_literal(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> Ref {
+    pub fn translate_literal(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> ir::Ref {
         let val = self.literal_to_val(lit, ty);
 
-        if let Value::Ref(lit_ref) = val {
+        if let ir::Value::Ref(lit_ref) = val {
             return lit_ref
         };
         
@@ -169,15 +169,15 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     #[expect(unused)]
-    pub fn translate_name(&mut self, name: &typ::Symbol) -> NamePath {
+    pub fn translate_name(&mut self, name: &typ::Symbol) -> ir::NamePath {
         translate_name(name, self.library)
     }
 
-    pub fn translate_iface(&mut self, iface_def: &typ::ast::InterfaceDecl) -> InterfaceDef {
+    pub fn translate_iface(&mut self, iface_def: &typ::ast::InterfaceDecl) -> ir::InterfaceDef {
         translate_iface(iface_def, self.library)
     }
 
-    pub fn translate_type(&mut self, src_ty: &typ::Type) -> Type {
+    pub fn translate_type(&mut self, src_ty: &typ::Type) -> ir::Type {
         self.library.translate_type(src_ty)
     }
 
@@ -202,23 +202,23 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.library.instantiate_func(&key)
     }
 
-    pub fn translate_func_ty(&mut self, func_sig: &typ::FunctionSig) -> TypeDefID {
+    pub fn translate_func_ty(&mut self, func_sig: &typ::FunctionSig) -> ir::TypeDefID {
         self.library.translate_func_ty(func_sig)
     }
 
-    pub fn build_closure_expr(&mut self, func: &typ::ast::AnonymousFunctionDef) -> Ref {
+    pub fn build_closure_expr(&mut self, func: &typ::ast::AnonymousFunctionDef) -> ir::Ref {
         let closure = self
             .library
             .build_closure_instance(func);
 
         if func.captures.len() == 0 {
             let static_closure = self.library.build_static_closure_instance(closure);
-            let static_closure_ref = Ref::Global(GlobalRef::Variable(static_closure.id));
+            let static_closure_ref = ir::Ref::Global(ir::GlobalRef::Variable(static_closure.id));
 
             // closure objects have a specific type, but refs to closures are type erased so
             // we need to cast to Object. we know static closures are immortal, so this can be
             // a temp ref
-            let closure_type = Type::Object(ObjectID::AnyClosure(static_closure.func_ty_id));
+            let closure_type = ir::Type::Object(ir::ObjectID::AnyClosure(static_closure.func_ty_id));
             let closure_obj = self.local_temp(closure_type.clone());
             self.cast(closure_obj, static_closure_ref, closure_type);
 
@@ -228,15 +228,15 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         }
     }
     
-    pub fn build_function_closure(&mut self, func: &FunctionInstance) -> Ref {
+    pub fn build_function_closure(&mut self, func: &FunctionInstance) -> ir::Ref {
         let static_closure = self
             .library
             .build_func_static_closure_instance(func);
 
-        Ref::Global(GlobalRef::Variable(static_closure.id))
+        ir::Ref::Global(ir::GlobalRef::Variable(static_closure.id))
     }
 
-    pub fn build_closure_instance(&mut self, closure: ClosureInstance, immortal: bool) -> Ref {
+    pub fn build_closure_instance(&mut self, closure: ClosureInstance, immortal: bool) -> ir::Ref {
         let closure_def = self
             .library
             .metadata()
@@ -248,24 +248,24 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let closure_ptr_ty = closure.closure_id.to_class_ptr_type([]);
 
         // virtual pointer to the closure
-        let closure_virtual_ty = Type::Object(ObjectID::AnyClosure(closure.func_ty_id));
+        let closure_virtual_ty = ir::Type::Object(ir::ObjectID::AnyClosure(closure.func_ty_id));
         let closure_virtual_ptr = self.local_var(closure_virtual_ty.clone(), None);
 
         self.scope(|builder| {
             let closure_ref = builder.local_temp(closure_ptr_ty.clone());
             builder.new_object(closure_ref, closure.closure_id, [], immortal);
 
-            let func_field_ref = closure_ref.to_ref().field_ref(closure_ptr_ty.clone(), CLOSURE_PTR_FIELD);
+            let func_field_ref = closure_ref.to_ref().field_ref(closure_ptr_ty.clone(), ir::CLOSURE_PTR_FIELD);
 
             // initialize closure reference to function
-            let func_ref = Ref::Global(GlobalRef::func(closure.func_instance.id, []));
+            let func_ref = ir::Ref::Global(ir::GlobalRef::func(closure.func_instance.id, []));
             // builder.cast(func_field_ptr.clone().to_deref(), func_ref, func_ptr_ty.clone());
             builder.mov(func_field_ref.to_deref(), func_ref);
             
             // initialize closure capture fields - copy from local scope into closure object
             for (field_id, field_def) in closure_def.fields.iter() {
                 // skip the closure pointer field
-                if *field_id == CLOSURE_PTR_FIELD {
+                if *field_id == ir::CLOSURE_PTR_FIELD {
                     continue;
                 }
 
@@ -324,21 +324,21 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         (self_ty, method_index)
     }
 
-    pub fn pretty_ty_name(&self, ty: &Type) -> Cow<'_, str> {
+    pub fn pretty_ty_name(&self, ty: &ir::Type) -> Cow<'_, str> {
         self.library.metadata().pretty_type_name(ty)
     }
 
-    pub fn find_or_insert_string(&mut self, s: &str) -> StringID {
+    pub fn find_or_insert_string(&mut self, s: &str) -> ir::StringID {
         self.library.metadata_mut().find_or_insert_string(s)
     }
 
     #[expect(unused)]
-    pub fn get_struct(&self, id: TypeDefID) -> Option<&StructDef> {
+    pub fn get_struct(&self, id: ir::TypeDefID) -> Option<&ir::StructDef> {
         self.library.metadata().get_struct_def(id)
     }
 
     #[expect(unused)]
-    pub fn get_iface(&self, id: InterfaceID) -> Option<&InterfaceDef> {
+    pub fn get_iface(&self, id: ir::InterfaceID) -> Option<&ir::InterfaceDef> {
         self.library.metadata().get_iface_def(id)
     }
     
@@ -346,7 +346,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.library.find_type_seq_support(src_ty)
     }
 
-    pub fn finish(mut self) -> InstructionList {
+    pub fn finish(mut self) -> ir::InstructionList {
         while self.local_stack.len() > 0 {
             self.local_end();
         }
@@ -358,7 +358,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let mut sources = Vec::with_capacity(instruction_count);
 
         for (local_id, ty) in self.local_stack.finish() {
-            instructions.push(Instruction::LocalAlloc(local_id, ty));
+            instructions.push(ir::Instruction::LocalAlloc(local_id, ty));
             sources.push(None);
         }
 
@@ -367,20 +367,20 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             sources.push(instruction.debug_span);
         }
 
-        InstructionList {
+        ir::InstructionList {
             instructions,
             sources,
         }
     }
     
-    pub fn set_include(&mut self, set_ref: impl Into<Ref>, bit_val: impl Into<Value>, set_type: &typ::SetType) {
+    pub fn set_include(&mut self, set_ref: impl Into<ir::Ref>, bit_val: impl Into<ir::Value>, set_type: &typ::SetType) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Flags(flags_type_info.struct_id);
+        let flags_type = ir::Type::Flags(flags_type_info.struct_id);
         
         let flags_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(flags_ptr, set_ref);
 
-        self.call(FunctionRef::new(flags_type_info.include_func), [
+        self.call(ir::FunctionRef::new(flags_type_info.include_func), [
             flags_ptr.value(),
             bit_val.into(),
         ], None);
@@ -388,164 +388,164 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
     // todo: what is this for
     #[allow(unused)]
-    pub fn set_exclude(&mut self, set_ref: impl Into<Ref>, bit_val: impl Into<Value>, set_type: &typ::SetType) {
+    pub fn set_exclude(&mut self, set_ref: impl Into<ir::Ref>, bit_val: impl Into<ir::Value>, set_type: &typ::SetType) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Flags(flags_type_info.struct_id);
+        let flags_type = ir::Type::Flags(flags_type_info.struct_id);
 
         let flags_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(flags_ptr, set_ref);
 
-        self.call(FunctionRef::new(flags_type_info.exclude_func), [
+        self.call(ir::FunctionRef::new(flags_type_info.exclude_func), [
             flags_ptr.value(),
             bit_val.into(),
         ], None);
     }
 
     pub fn set_contains(&mut self,
-        out: impl Into<Ref>,
-        set_ref: impl Into<Ref>,
-        bit_val: impl Into<Value>,
+        out: impl Into<ir::Ref>,
+        set_ref: impl Into<ir::Ref>,
+        bit_val: impl Into<ir::Value>,
         set_type: &typ::SetType
     ) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Flags(flags_type_info.struct_id);
+        let flags_type = ir::Type::Flags(flags_type_info.struct_id);
 
         let flags_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(flags_ptr, set_ref);
 
-        self.call(FunctionRef::new(flags_type_info.contains_func), [
+        self.call(ir::FunctionRef::new(flags_type_info.contains_func), [
             flags_ptr.value(),
             bit_val.into(),
         ], Some(out.into()));
     }
     
     pub fn set_eq(&mut self,
-        out: impl Into<Ref>,
-        a: impl Into<Ref>,
-        b: impl Into<Ref>,
+        out: impl Into<ir::Ref>,
+        a: impl Into<ir::Ref>,
+        b: impl Into<ir::Ref>,
         set_type: &typ::SetType
     ) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Flags(flags_type_info.struct_id);
+        let flags_type = ir::Type::Flags(flags_type_info.struct_id);
 
         let a_ptr = self.local_temp(flags_type.temp_ref());
         let b_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
         self.make_ref(b_ptr, b);
 
-        self.call(FunctionRef::new(flags_type_info.eq_func), [
+        self.call(ir::FunctionRef::new(flags_type_info.eq_func), [
             a_ptr.value(),
             b_ptr.value(),
         ], Some(out.into()));
     }
 
     pub fn set_bit_not(&mut self,
-        a: impl Into<Ref>,
+        a: impl Into<ir::Ref>,
         set_type: &typ::SetType
     ) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Flags(flags_type_info.struct_id);
+        let flags_type = ir::Type::Flags(flags_type_info.struct_id);
 
         let a_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
 
-        self.call(FunctionRef::new(flags_type_info.bit_not_func), [
+        self.call(ir::FunctionRef::new(flags_type_info.bit_not_func), [
             a_ptr.value(),
         ], None);
     }
 
     fn set_bitwise_op(&mut self,
-        a: impl Into<Ref>,
-        b: impl Into<Ref>,
+        a: impl Into<ir::Ref>,
+        b: impl Into<ir::Ref>,
         set_type: &typ::SetType,
-        get_func_id: fn(&SetFlagsType) -> FunctionID,
+        get_func_id: fn(&SetFlagsType) -> ir::FunctionID,
     ) {
         let flags_type_info = self.library.get_set_flags_type_info(set_type.flags_type_bits());
-        let flags_type = Type::Flags(flags_type_info.struct_id);
+        let flags_type = ir::Type::Flags(flags_type_info.struct_id);
 
         let a_ptr = self.local_temp(flags_type.temp_ref());
         let b_ptr = self.local_temp(flags_type.temp_ref());
         self.make_ref(a_ptr, a);
         self.make_ref(b_ptr, b);
 
-        self.call(FunctionRef::new(get_func_id(&flags_type_info)), [
+        self.call(ir::FunctionRef::new(get_func_id(&flags_type_info)), [
             a_ptr.value(),
             b_ptr.value(),
         ], None);
     }
 
     pub fn set_bit_and(&mut self,
-        a: impl Into<Ref>,
-        b: impl Into<Ref>,
+        a: impl Into<ir::Ref>,
+        b: impl Into<ir::Ref>,
         set_type: &typ::SetType,
     ) {
         self.set_bitwise_op(a, b, set_type, |i| i.bit_and_func)
     }
 
     pub fn set_bit_or(&mut self,
-        a: impl Into<Ref>,
-        b: impl Into<Ref>,
+        a: impl Into<ir::Ref>,
+        b: impl Into<ir::Ref>,
         set_type: &typ::SetType,
     ) {
         self.set_bitwise_op(a, b, set_type, |i| i.bit_or_func)
     }
 
     pub fn set_bit_xor(&mut self,
-        a: impl Into<Ref>,
-        b: impl Into<Ref>,
+        a: impl Into<ir::Ref>,
+        b: impl Into<ir::Ref>,
         set_type: &typ::SetType,
     ) {
         self.set_bitwise_op(a, b, set_type, |i| i.bit_xor_func)
     }
 
     #[expect(unused)]
-    pub fn get_mem(&mut self, count: impl Into<Value>, out: impl Into<Ref>) {
-        let function_ref = Ref::Global(GlobalRef::func(self.library.instantiate_get_mem_func(), []));
+    pub fn get_mem(&mut self, count: impl Into<ir::Value>, out: impl Into<ir::Ref>) {
+        let function_ref = ir::Ref::Global(ir::GlobalRef::func(self.library.instantiate_get_mem_func(), []));
         self.call(function_ref, [count.into()], Some(out.into()));
     }
 
     #[expect(unused)]
-    pub fn get_mem_id(&mut self) -> FunctionID {
+    pub fn get_mem_id(&mut self) -> ir::FunctionID {
         self.library.instantiate_get_mem_func()
     }
 
     #[expect(unused)]
-    pub fn free_mem(&mut self, at: impl Into<Value>) {
-        let function_ref = Ref::Global(GlobalRef::func(self.library.instantiate_free_mem_func(), []));
+    pub fn free_mem(&mut self, at: impl Into<ir::Value>) {
+        let function_ref = ir::Ref::Global(ir::GlobalRef::func(self.library.instantiate_free_mem_func(), []));
         self.call(function_ref, [at.into()], None);
     }
 
-    pub fn bind_param(&mut self, id: ArgID, ty: Type, name: impl Into<String>) {
+    pub fn bind_param(&mut self, id: ir::ArgID, ty: ir::Type, name: impl Into<String>) {
         self.local_stack_mut().bind_param(id, ty, Arc::new(name.into()), false)
     }
 
-    pub fn bind_ref_param(&mut self, id: ArgID, ty: Type, name: impl Into<String>) {
+    pub fn bind_ref_param(&mut self, id: ir::ArgID, ty: ir::Type, name: impl Into<String>) {
         self.local_stack_mut().bind_param(id, ty.temp_ref(), Arc::new(name.into()), true)
     }
 
     // binds an anonymous return local in %0 with the indicated type
-    pub fn bind_result(&mut self, ty: Type) {
+    pub fn bind_result(&mut self, ty: ir::Type) {
         self.local_stack_mut().bind_result(ty);
     }
 
     // binds an anonymous local binding for the closure pointer of a function
-    pub fn bind_closure_ptr(&mut self, id: ArgID, func_type_id: TypeDefID) {
+    pub fn bind_closure_ptr(&mut self, id: ir::ArgID, func_type_id: ir::TypeDefID) {
         self.local_stack_mut().bind_unnamed_param(id, func_type_id.to_closure_ptr_type(), false)
     }
 
-    pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<VariableID> {
+    pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<ir::VariableID> {
         self.library.find_global_var(name_path)
     }
 
-    pub fn local_closure_capture(&mut self, ty: Type, name: String) -> Ref {
-        assert_ne!(Type::Nothing, ty);
+    pub fn local_closure_capture(&mut self, ty: ir::Type, name: String) -> ir::Ref {
+        assert_ne!(ir::Type::Nothing, ty);
 
         let id = self.local_stack_mut().bind_capture(ty, name);
-        
-        Ref::Local(id)
+
+        id.to_ref()
     }
 
-    pub fn begin_loop_body_scope(&mut self, continue_label: Label, break_label: Label) {
+    pub fn begin_loop_body_scope(&mut self, continue_label: ir::Label, break_label: ir::Label) {
         self.local_stack_mut().push_loop(continue_label, break_label);
         self.local_begin();
     }
@@ -557,8 +557,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
     pub fn loop_body_scope<F>(
         &mut self,
-        continue_label: Label,
-        break_label: Label,
+        continue_label: ir::Label,
+        break_label: ir::Label,
         f: F,
     ) -> &[DebugInstruction]
     where
@@ -589,8 +589,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     pub fn array_bounds_check(&mut self,
-        length: impl Into<Value>,
-        index: impl Into<Value>
+        length: impl Into<ir::Value>,
+        index: impl Into<ir::Value>
     ) {
         self.comment("array bounds check");
 
@@ -599,7 +599,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let bounds_ok_label = self.next_label();
 
         // if index >= 0 and index < arr.len then goto "bounds_ok"
-        let gte_zero = self.gte_to_val(index_val.clone(), Value::LiteralI32(0));
+        let gte_zero = self.gte_to_val(index_val.clone(), ir::Value::LiteralI32(0));
         let lt_len = self.lt_to_val(index_val, length_val);
         let bounds_check_ok = self.and_to_val(gte_zero, lt_len);
 
@@ -607,8 +607,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
         // otherwise: raise
         let err_str = self.find_or_insert_string("array index out of bounds");
-        self.emit(Instruction::Raise {
-            val: Ref::Global(GlobalRef::StringLiteral(err_str)),
+        self.emit(ir::Instruction::Raise {
+            val: ir::GlobalRef::StringLiteral(err_str).to_ref(),
         });
 
         self.label(bounds_ok_label);
@@ -617,6 +617,6 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn exit_function(&mut self) {
         self.cleanup_scope(0);
 
-        self.emit(Instruction::Jump { dest: EXIT_LABEL })
+        self.emit(ir::Instruction::Jump { dest: ir::EXIT_LABEL })
     }
 }

@@ -2,11 +2,11 @@ use terapascal_common::CompileOpts;
 use terapascal_common::version::Version;
 use super::*;
 
-fn instructions_without_comments(actual: &[DebugInstruction], count: usize) -> Vec<Instruction> {
+fn instructions_without_comments(actual: &[DebugInstruction], count: usize) -> Vec<ir::Instruction> {
     actual
         .iter()
         .filter_map(|i| match &i.instruction {
-            Instruction::Comment(..) => None,
+            ir::Instruction::Comment(..) => None,
             instruction => Some(instruction.clone()),
         })
         .take(count)
@@ -40,11 +40,11 @@ fn break_cleans_up_loop_locals() {
 
     builder.begin_loop_body_scope(continue_label, break_label);
     builder.local_var(
-        Type::Object(ObjectID::Any),
+        ir::Type::Object(ir::ObjectID::Any),
         Some(Arc::new("local1".to_string())),
     );
     builder.local_var(
-        Type::Object(ObjectID::Any),
+        ir::Type::Object(ir::ObjectID::Any),
         Some(Arc::new("local2".to_string())),
     );
 
@@ -55,33 +55,33 @@ fn break_cleans_up_loop_locals() {
         .instructions
         .iter()
         .position(|i| match &i.instruction {
-            Instruction::Comment(c) => c == "before_break",
+            ir::Instruction::Comment(c) => c == "before_break",
             _ => false,
         })
         .unwrap();
 
     // Both locals should be released and cleared
     let expect = &[
-        Instruction::Release {
-            at: Ref::Local(LocalID(1)),
-            weak: false,
-            released_out: Ref::Discard,
+        ir::Instruction::Release {
+            at: ir::Ref::Local(ir::LocalID(1)),
+            value_type: ir::ANY_TYPE,
+            released_out: ir::Ref::Discard,
         },
-        Instruction::Move {
-            out: Ref::Local(LocalID(1)),
-            new_val: Value::Default(Type::Object(ObjectID::Any)),
+        ir::Instruction::Move {
+            out: ir::Ref::Local(ir::LocalID(1)),
+            new_val: ir::Value::Default(ir::Type::Object(ir::ObjectID::Any)),
         },
-        Instruction::Release {
-            at: Ref::Local(LocalID(0)),
-            weak: false,
-            released_out: Ref::Discard,
+        ir::Instruction::Release {
+            at: ir::Ref::Local(ir::LocalID(0)),
+            value_type: ir::ANY_TYPE,
+            released_out: ir::Ref::Discard,
         },
-        Instruction::Move {
-            out: Ref::Local(LocalID(0)),
-            new_val: Value::Default(Type::Object(ObjectID::Any)),
+        ir::Instruction::Move {
+            out: ir::Ref::Local(ir::LocalID(0)),
+            new_val: ir::Value::Default(ir::Type::Object(ir::ObjectID::Any)),
         },
         // and the final jmp for the break
-        Instruction::Jump { dest: break_label },
+        ir::Instruction::Jump { dest: break_label },
     ];
     
     let actual = instructions_without_comments(
