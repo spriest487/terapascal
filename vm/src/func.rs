@@ -328,7 +328,7 @@ pub fn instantiate_func(
         body: builder.finish(),
         debug_name: Some(func_name.to_string()),
         type_params: Vec::new(),
-        sig,
+        sig: Rc::new(sig),
     };
 
     let func_info = FunctionInfo {

@@ -56,14 +56,14 @@ pub trait MetadataSource : Sized {
     fn get_function_ptr_type(&self, sig: &FunctionSig) -> Option<TypeDefID> {
         self.type_defs()
             .find_map(|(id, def)| match def {
-                TypeDef::Function(decl_sig) => (*decl_sig == *sig).then_some(id),
+                TypeDef::Function(decl_sig) => (**decl_sig == *sig).then_some(id),
                 _ => None,
             })
     }
 
-    fn get_function_ptr_sig(&self, id: TypeDefID) -> Option<&FunctionSig> {
+    fn get_function_ptr_sig(&self, id: TypeDefID) -> Option<&Rc<FunctionSig>> {
         self.get_type_decl(id).and_then(|decl| match decl {
-            TypeDecl::Def(TypeDef::Function(ptr_def)) => Some(ptr_def),
+            TypeDecl::Def(TypeDef::Function(sig)) => Some(sig),
             _ => None,
         })
     }
@@ -201,11 +201,8 @@ pub trait MetadataSource : Sized {
                 Cow::Owned(format!("*{}", resource_name))
             },
 
-            Type::Function(func_ty_id) => {
-                let text = match self.get_function_ptr_sig(*func_ty_id) {
-                    Some(sig) => self.pretty_func_sig(sig),
-                    None => format!("function pointer {}", *func_ty_id),
-                };
+            Type::Function(sig) => {
+                let text = self.pretty_func_sig(sig);
                 Cow::Owned(text)
             },
 
@@ -238,17 +235,8 @@ pub trait MetadataSource : Sized {
 
             ObjectID::Interface(iface_id) => Cow::Owned(self.iface_name(*iface_id)),
 
-            ObjectID::AnyClosure(func_ty_id) => {
-                let closure_name = match self.get_function_ptr_sig(*func_ty_id) {
-                    Some(sig) => {
-                        // don't include the implicit closure pointer in the type name
-                        let mut target_sig = sig.clone();
-                        target_sig.param_types.remove(0);
-
-                        format!("closure of {}", self.pretty_func_sig(&target_sig))
-                    },
-                    None => format!("closure of {}", func_ty_id),
-                };
+            ObjectID::AnyClosure(sig) => {
+                let closure_name = format!("closure of {}", self.pretty_func_sig(sig));
 
                 Cow::Owned(closure_name)
             },

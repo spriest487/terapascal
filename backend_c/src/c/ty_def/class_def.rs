@@ -275,7 +275,7 @@ impl Class {
             builder.gen_class_object_dtor_body(&class_id, self_arg)
         })
     }
-    
+
     pub fn add_dtor(&mut self, dtor: FunctionName) {
         assert!(self.dtor.is_none());
         self.dtor = Some(dtor);

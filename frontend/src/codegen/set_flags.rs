@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::ir;
@@ -110,6 +111,8 @@ impl SetFlagsType {
     ) -> ir::FunctionID {
         let debug_name = lib.opts().debug.then(|| name.clone());
         let identity = ir::FunctionIdentity::internal(name);
+
+        let sig = Rc::new(sig);
 
         let func = ir::Function::Local(ir::FunctionDef {
             sig: sig.clone(),

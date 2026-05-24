@@ -132,8 +132,7 @@ impl Ref {
 
             Ref::Global(GlobalRef::Function(key)) => {
                 let func_info = metadata.get_function_info(key.id)?;
-                let ptr_type_id = metadata.get_function_ptr_type(&func_info.sig)?;
-                Some(Cow::Owned(Type::Function(ptr_type_id)))
+                Some(Cow::Owned(Type::Function(func_info.sig.clone())))
             }
 
             Ref::Deref(target) => {

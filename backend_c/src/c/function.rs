@@ -15,6 +15,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::env;
 use std::fmt;
+use std::rc::Rc;
 use terapascal_common::SharedStringKey;
 use terapascal_ir as ir;
 use terapascal_ir::generic::instantiate_function_def;
@@ -535,14 +536,14 @@ impl<'a> Unit<'a> {
             let sig = instantiate_sig(&generic_def.sig, &types);
 
             instantiate_function_def(&generic_def, &types, &mut builder);
-            
+
             let body = builder.finish();
 
             Cow::Owned(ir::FunctionDef {
                 body,
                 debug_name: None,
                 type_params: Vec::new(),
-                sig,
+                sig: Rc::new(sig),
             })
         };
 

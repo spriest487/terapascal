@@ -2060,20 +2060,19 @@ impl Vm {
                 object_header.id == ObjectID::Struct(class_type_index)
             }
 
-            ir::ObjectID::AnyClosure(func_type_id) => {
+            ir::ObjectID::AnyClosure(is_sig) => {
                 match object_header.id {
                     ObjectID::Struct(class_index) => {
+                        // looking up the closure impl class
                         let class_type = self.marshaller().get_type(class_index)?;
 
                         match class_type {
-                            ir::Type::Object(ir::ObjectID::AnyClosure(id)) => {
-                                self.metadata()
-                                    .closures_by_function()
-                                    .get(&func_type_id)
-                                    .map(|func_closures| {
-                                        func_closures.contains(id)
-                                    })
-                                    .unwrap_or(false)
+                            ir::Type::Object(ir::ObjectID::Class(closure_class_id)) => {
+                                // is this class in the list of closures classes that have this sig?
+                                match self.metadata().find_closure_sig(closure_class_id.def_id) {
+                                    Some(actual_sig) => *actual_sig == **is_sig,
+                                    None => false,
+                                }
                             }
 
                             _ => false,

@@ -112,13 +112,15 @@ impl StructDef {
 impl fmt::Display for StructDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.identity {
-            StructIdentity::Class(name) | StructIdentity::Record(name) => write!(f, "{}", name),
-            StructIdentity::SetFlags { bits, .. } => write!(f, "set<{bits}>"),
-            StructIdentity::ClosureObject(identity) => write!(
-                f,
-                "closure of function type {} ({})",
-                identity.virt_func_ty, identity.id
-            ),
+            StructIdentity::Class(name) | StructIdentity::Record(name) => {
+                write!(f, "{}", name)
+            },
+            StructIdentity::SetFlags { bits, .. } => {
+                write!(f, "set<{bits}>")
+            },
+            StructIdentity::ClosureObject(identity) => {
+                write!(f, "closure of function type {} ({})", identity.sig, identity.id)
+            },
         }
     }
 }

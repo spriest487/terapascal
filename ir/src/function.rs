@@ -1,4 +1,4 @@
-use crate::IRFormatter;
+use crate::{ClosureIdentity, IRFormatter, ObjectID};
 use crate::InstructionList;
 use crate::Label;
 use crate::NamePath;
@@ -32,12 +32,14 @@ impl fmt::Display for FunctionID {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct StaticClosure {
-    pub id: VariableID,
-    pub func: FunctionID,
+    pub identity: ClosureIdentity,
     pub init_func: FunctionID,
 
+    // ID of the global variable storing the singleton reference
+    pub id: VariableID,
+
+    // ID of the class implementing the closure
     pub closure_id: TypeDefID,
-    pub func_ty_id: TypeDefID,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -78,6 +80,27 @@ impl FunctionSig {
         
         result
     }
+
+    pub fn contains_generic_params(&self) -> bool {
+        self.result_type.contains_generic_params()
+            || self.param_types.iter().any(|ty| ty.contains_generic_params())
+    }
+
+    pub fn to_function_type(self: &Rc<Self>) -> Type {
+        Type::Function(self.clone())
+    }
+
+    pub fn into_function_type(self) -> Type {
+        Type::Function(Rc::new(self))
+    }
+
+    pub fn to_closure_ptr_type(self: &Rc<Self>) -> Type {
+        Type::Object(ObjectID::AnyClosure(self.clone()))
+    }
+
+    pub fn into_closure_ptr_type(self) -> Type {
+        Type::Object(ObjectID::AnyClosure(Rc::new(self)))
+    }
 }
 
 impl fmt::Display for FunctionSig {
@@ -91,7 +114,7 @@ pub struct ExternalFunctionRef {
     pub symbol: String,
     pub src: String,
 
-    pub sig: FunctionSig,
+    pub sig: Rc<FunctionSig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -173,7 +196,7 @@ pub struct FunctionInfo {
     pub identity: FunctionIdentity,
 
     pub runtime_name: Option<StringID>,
-    pub sig: FunctionSig,
+    pub sig: Rc<FunctionSig>,
 
     pub invoker: Option<FunctionID>,
 
@@ -194,7 +217,7 @@ pub struct FunctionDef {
 
     pub body: InstructionList,
 
-    pub sig: FunctionSig,
+    pub sig: Rc<FunctionSig>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -207,13 +230,13 @@ impl Function {
     pub fn new_local_def(
         debug_name: Option<String>,
         type_params: Vec<Arc<String>>,
-        sig: FunctionSig,
+        sig: impl Into<Rc<FunctionSig>>,
         body: InstructionList,
     ) -> Self {
         Function::Local(FunctionDef {
             debug_name,
             type_params,
-            sig,
+            sig: sig.into(),
             body,
         })
     }
@@ -225,7 +248,7 @@ impl Function {
         }
     }
 
-    pub fn sig(&self) -> &FunctionSig {
+    pub fn sig(&self) -> &Rc<FunctionSig> {
         match self {
             Function::External(external_func) => &external_func.sig,
             Function::Local(local_func) => &local_func.sig,

@@ -1,4 +1,4 @@
-﻿use crate::IRFormatter;
+﻿use crate::{FunctionSig, IRFormatter};
 use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;
@@ -45,10 +45,6 @@ impl TypeDefID {
         Type::WeakObject(ObjectID::Class(GenericTypeID::new(self, args)))
     }
 
-    pub fn to_closure_ptr_type(self) -> Type {
-        Type::Object(ObjectID::AnyClosure(self))
-    }
-
     pub fn to_struct_type(self, args: impl IntoIterator<Item=Type>) -> Type {
         Type::Struct(GenericTypeID::new(self, args))
     }
@@ -59,10 +55,6 @@ impl TypeDefID {
 
     pub fn to_variant_type(self, args: impl IntoIterator<Item=Type>) -> Type {
         Type::Variant(GenericTypeID::new(self, args))
-    }
-
-    pub fn to_function_type(self) -> Type {
-        Type::Function(self)
     }
 
     pub fn to_pretty_string(self, format: &impl IRFormatter) -> String {
@@ -159,8 +151,8 @@ pub enum ObjectID {
     // instance of an unknown class that implements the interface with this interface ID
     Interface(InterfaceID),
 
-    // closure of an unknown structure that calls the function type with this typedef ID
-    AnyClosure(TypeDefID),
+    // closure of an unknown structure that calls the function type with this virtual sig
+    AnyClosure(Rc<FunctionSig>),
 
     // array class (dyn array)
     Array(Rc<Type>),

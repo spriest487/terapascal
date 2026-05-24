@@ -16,6 +16,7 @@ pub use r#struct::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
+use std::rc::Rc;
 pub use tags::*;
 pub use variant::*;
 
@@ -39,7 +40,7 @@ impl StructIdentity {
                 name.to_pretty_string(formatter)
             },
             StructIdentity::ClosureObject(id) => {
-                let func_ty = Type::Function(id.virt_func_ty);
+                let func_ty = Type::Function(id.sig.clone());
                 format!("closure ({})", func_ty.to_pretty_string(formatter))
             }
             StructIdentity::SetFlags { bits } => {
@@ -91,16 +92,17 @@ impl fmt::Display for StructIdentity {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ClosureIdentity {
-    /// the type of the closure's virtual call function alias, which has the sig of the closure's
-    /// target type plus a type-erased pointer inserted as parameter 0
-    pub virt_func_ty: TypeDefID,
+    // the virtual sig of the closure type, which doesn't include the initial closure pointer
+    // parameter the actual function/function pointer type has
+    pub sig: Rc<FunctionSig>,
 
+    // the ID of the real function that implements this closure instance
     pub id: FunctionID,
 }
 
 impl ClosureIdentity {
     pub fn to_closure_ptr_type(&self) -> Type {
-        Type::Object(ObjectID::AnyClosure(self.virt_func_ty))
+        Type::Object(ObjectID::AnyClosure(self.sig.clone()))
     }
 }
 
@@ -151,7 +153,7 @@ impl fmt::Display for TypeDecl {
 pub enum TypeDef {
     Struct(StructDef),
     Variant(VariantDef),
-    Function(FunctionSig),
+    Function(Rc<FunctionSig>),
 }
 
 impl TypeDef {

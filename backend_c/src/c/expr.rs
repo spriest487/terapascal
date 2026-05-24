@@ -502,11 +502,11 @@ impl Expr {
                     // cast closures are of unknown type, but we don't need a real vtable to call
                     // them. cast to the AnonymousClosure struct which is guaranteed to have the
                     // same layout as the first two fields of any closure struct
-                    ir::ObjectID::AnyClosure(func_ty_id) if field_id == ir::CLOSURE_PTR_FIELD => {
+                    ir::ObjectID::AnyClosure(sig) if field_id == ir::CLOSURE_PTR_FIELD => {
                         let cast_to_anon_closure = a_expr.cast(Type::AnonymousClosure.ptr());
                         let func_ptr = cast_to_anon_closure.arrow(FieldName::ClosureFunctionPointer).addr_of();
 
-                        let func_ptr_ty = builder.translate_type(&func_ty_id.to_function_type());
+                        let func_ptr_ty = builder.translate_type(&sig.to_function_type());
 
                         func_ptr.cast(func_ptr_ty.ptr())
                     },

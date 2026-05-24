@@ -184,10 +184,10 @@ fn build_func_val_invocation(
     // expr that evaluates to a closure pointer
     let target_expr_val = expr::translate_expr(func_expr, builder);
     let func_sig = func_ty.as_func().expect("target value of invocation must have function type");
-    let func_ty_id = builder.translate_func_ty(&func_sig);
+    let sig = builder.translate_sig(&func_sig);
 
     // retrieve the actual function value
-    let closure_ptr_ty = func_ty_id.to_closure_ptr_type();
+    let closure_ptr_ty = sig.into_closure_ptr_type();
     let func_field_ref = target_expr_val.clone().field_ref(closure_ptr_ty, ir::CLOSURE_PTR_FIELD);
 
     let call_target = CallTarget::Closure {

@@ -6,6 +6,7 @@ use crate::codegen::ClosureInstance;
 use crate::codegen::IRBuilder;
 use crate::ir;
 use std::iter;
+use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_ir::InstructionBuilder;
 
@@ -82,10 +83,10 @@ pub fn build_func_def(
 
     ir::FunctionDef {
         body,
-        sig: ir::FunctionSig {
+        sig: Rc::new(ir::FunctionSig {
             param_types: bound_params.into_iter().map(|(_id, ty)| ty).collect(),
             result_type: return_ty,
-        },
+        }),
         type_params,
         debug_name,
     }
@@ -94,7 +95,7 @@ pub fn build_func_def(
 pub fn build_func_static_closure_def(
     library: &mut LibraryBuilder,
     target_func: &FunctionInstance,
-    func_type_id: ir::TypeDefID,
+    closure_sig: &Rc<ir::FunctionSig>,
     target_ir_func: &ir::Function,
 ) -> ir::FunctionDef {
     let params = target_func
@@ -126,10 +127,10 @@ pub fn build_func_static_closure_def(
     // this method needs to be compatible with the type-erased function pointer stored in a
     // closure struct, which has the sig "(Object, ...actual params)"
     let closure_ptr_arg = ir::ArgID(0);
-    let mut bound_params = vec![(closure_ptr_arg, func_type_id.to_closure_ptr_type())];
+    let mut bound_params = vec![(closure_ptr_arg, closure_sig.to_closure_ptr_type())];
 
     // bind the closure pointer arg at ID 0
-    body_builder.bind_closure_ptr(closure_ptr_arg, func_type_id);
+    body_builder.bind_closure_ptr(closure_ptr_arg, closure_sig);
     
     // bind the rest of the args at ID 1+
     bound_params.extend(bind_function_params(params, false, ir::ArgID(1), &mut body_builder));
@@ -152,13 +153,13 @@ pub fn build_func_static_closure_def(
     body_builder.call(func_global, func_args, return_ref);
 
     ir::FunctionDef {
-        sig: ir::FunctionSig {
+        sig: Rc::new(ir::FunctionSig {
             param_types: bound_params
                 .into_iter()
                 .map(|(_, param_ty)| param_ty)
                 .collect(),
             result_type: return_ty,
-        },
+        }),
         type_params: Vec::new(),
         debug_name,
         body: body_builder.finish(),
@@ -169,7 +170,7 @@ pub fn build_closure_function_def(
     lib: &mut LibraryBuilder,
     func_def: &typ::ast::AnonymousFunctionDef,
     closure_id: ir::TypeDefID,
-    func_type_id: ir::TypeDefID,
+    closure_sig: &Rc<ir::FunctionSig>,
     debug_name: Option<String>,
 ) -> ir::FunctionDef {
     let closure_def = lib.metadata().get_struct_def(closure_id).cloned().unwrap();
@@ -182,7 +183,7 @@ pub fn build_closure_function_def(
     // *not* bound like a normal param since it can't be named from code, so bind it in the scope
     // of this function body now
     let closure_arg = ir::ArgID(0);
-    body_builder.bind_closure_ptr(closure_arg, func_type_id);
+    body_builder.bind_closure_ptr(closure_arg, closure_sig);
 
     let def_params: Vec<_> = func_def.params
         .iter()
@@ -231,16 +232,16 @@ pub fn build_closure_function_def(
 
     // the 0th parameter of the function is always a type-erased pointer, which we must
     // cast to the actual closure struct type in the body
-    let actual_params = iter::once(func_type_id.to_closure_ptr_type())
+    let actual_params = iter::once(closure_sig.to_closure_ptr_type())
         .chain(bound_params.into_iter().map(|(_, param_ty)| param_ty))
         .collect();
 
     ir::FunctionDef {
         body,
-        sig: ir::FunctionSig {
+        sig: Rc::new(ir::FunctionSig {
             param_types: actual_params,
             result_type: return_ty,
-        },
+        }),
         type_params: Vec::new(),
         debug_name,
     }
@@ -399,10 +400,10 @@ pub fn build_static_closure_impl(
 
     let identity = ir::FunctionIdentity::internal(internal_name);
 
-    let init_sig = ir::FunctionSig {
+    let init_sig = Rc::new(ir::FunctionSig {
         param_types: Vec::new(),
         result_type: ir::Type::Nothing,
-    };
+    });
 
     let init_func_id = library
         .metadata_mut()
@@ -420,9 +421,11 @@ pub fn build_static_closure_impl(
 
     ir::StaticClosure {
         id,
-        func: closure.func_instance.id,
+        identity: ir::ClosureIdentity {
+            sig: closure.sig,
+            id: closure.func_instance.id,
+        },
         init_func: init_func_id,
         closure_id: closure.closure_id,
-        func_ty_id: closure.func_ty_id,
     }
 }

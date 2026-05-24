@@ -35,7 +35,7 @@ pub struct Unit<'a> {
     functions: Vec<FunctionDef>,
 
     function_refs: HashMap<ir::FunctionRef, FunctionInstance>,
-    function_types: BTreeMap<ir::FunctionID, ir::TypeDefID>,
+    function_types: BTreeMap<ir::FunctionID, Rc<ir::FunctionSig>>,
 
     func_instances: BTreeMap<FuncInstanceID, FunctionName>,
 
@@ -212,8 +212,8 @@ impl<'a> Unit<'a> {
                     self.translate_variant_type(&def_ty);
                 },
 
-                ir::TypeDef::Function(..) => {
-                    self.translate_function_type(id.to_function_type());
+                ir::TypeDef::Function(sig) => {
+                    self.translate_function_type(sig.to_function_type());
                 },
             }
         }
@@ -235,20 +235,8 @@ impl<'a> Unit<'a> {
                     self.translate_extern_func_ref(*func_id, func_ref);
                 },
             }
-            
-            let sig = func.sig();
-            let func_type_id = self.metadata.type_defs()
-                .find_map(|(def_id, type_def)| {
-                    let ir::TypeDef::Function(def_sig) = type_def else {
-                        return None;
-                    };
 
-                    (*def_sig == *sig).then_some(def_id)
-                });
-            
-            if let Some(id) = func_type_id {
-                self.function_types.insert(*func_id, id);
-            }
+            self.function_types.insert(*func_id, func.sig().clone());
         }
 
         let init_index = self

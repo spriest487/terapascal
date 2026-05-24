@@ -8,7 +8,7 @@ mod format;
 pub use self::source::InterfaceMethodImplRef;
 use crate::metadata::vars::ConstInfo;
 use crate::typeinfo::TypeInfo;
-use crate::FunctionID;
+use crate::{FunctionID, FunctionSig};
 use crate::FunctionIdentity;
 use crate::FunctionInfo;
 use crate::IRFormatter;
@@ -50,7 +50,7 @@ pub struct Metadata {
     function_info: LinkedHashMap<FunctionID, FunctionInfo>,
 
     // function pointer type ID -> closure class IDs
-    closures: BTreeMap<TypeDefID, Vec<TypeDefID>>,
+    closures: HashMap<Rc<FunctionSig>, Vec<TypeDefID>>,
 }
 
 impl Metadata {
@@ -66,7 +66,7 @@ impl Metadata {
 
             function_info: LinkedHashMap::new(),
 
-            closures: BTreeMap::new(),
+            closures: HashMap::new(),
 
             type_info: HashMap::new(),
         }
@@ -192,8 +192,10 @@ impl Metadata {
             self.variables.insert(*id, var.clone());
         }
 
-        for (func_type_id, other_closure_ids) in &other.closures {
-            let func_closures = self.closures.entry(*func_type_id).or_insert_with(Vec::new);
+        for (sig, other_closure_ids) in &other.closures {
+            let func_closures = self.closures
+                .entry(sig.clone())
+                .or_insert_with(Vec::new);
 
             for id in other_closure_ids {
                 if !func_closures.contains(id) {
@@ -384,22 +386,20 @@ impl Metadata {
                 id.def_id
             }
 
-            Type::Flags(id, ..)
-            | Type::Function(id) => {
-                *id
-            },
+            Type::Flags(id, ..) => *id,
 
             Type::Object(object_id) | Type::WeakObject(object_id) => {
                 match object_id {
                     ObjectID::Class(generic_id) => generic_id.def_id,
 
-                    ObjectID::AnyClosure(func_type_id) => *func_type_id,
-
                     ObjectID::Interface(id) => {
                         return self.ifaces.contains_key(id);
                     },
 
-                    ObjectID::Any | ObjectID::Array(..) | ObjectID::Box(..) => {
+                    | ObjectID::Any
+                    | ObjectID::AnyClosure(..)
+                    | ObjectID::Array(..)
+                    | ObjectID::Box(..) => {
                         return true;
                     },
                 }
@@ -438,13 +438,15 @@ impl Metadata {
             .collect()
     }
 
-    pub fn insert_closure(&mut self, func_type_id: TypeDefID, closure_id: TypeDefID) {
-        let closures = self.closures.entry(func_type_id).or_insert_with(Vec::new);
+    pub fn insert_closure(&mut self, virtual_sig: impl Into<Rc<FunctionSig>>, closure_id: TypeDefID) {
+        let closures = self.closures
+            .entry(virtual_sig.into())
+            .or_insert_with(Vec::new);
 
         closures.push(closure_id);
     }
 
-    pub fn closures_by_function(&self) -> &BTreeMap<TypeDefID, Vec<TypeDefID>> {
+    pub fn closures_by_sig(&self) -> &HashMap<Rc<FunctionSig>, Vec<TypeDefID>> {
         &self.closures
     }
 
@@ -452,10 +454,10 @@ impl Metadata {
         self.closures.values().flat_map(|ids| ids.iter().cloned())
     }
 
-    pub fn find_closure_func_type_id(&self, closure_class_id: TypeDefID) -> Option<TypeDefID> {
-        for (func_id, closure_class_ids) in &self.closures {
+    pub fn find_closure_sig(&self, closure_class_id: TypeDefID) -> Option<Rc<FunctionSig>> {
+        for (sig, closure_class_ids) in &self.closures {
             if closure_class_ids.contains(&closure_class_id) {
-                return Some(*func_id);
+                return Some(sig.clone());
             }
         }
         None

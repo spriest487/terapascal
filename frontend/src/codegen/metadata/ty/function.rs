@@ -6,6 +6,7 @@ use crate::ir;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::rc::Rc;
 use terapascal_ir::StructLayout;
 
 #[derive(Debug, Clone)]
@@ -13,8 +14,8 @@ pub struct ClosureInstance {
     // the function containing the closure's body
     pub func_instance: FunctionInstance,
     
-    // ID of the function type (not the closure function but the target type)
-    pub func_ty_id: ir::TypeDefID,
+    // signature of the virtual function type (no closure pointer param)
+    pub sig: Rc<ir::FunctionSig>,
     
     // ID of the implementation struct type of this closure
     pub closure_id: ir::TypeDefID,
@@ -22,7 +23,7 @@ pub struct ClosureInstance {
 
 impl ClosureInstance {
     pub fn function_pointer_type(&self) -> ir::Type {
-        self.func_ty_id.to_closure_ptr_type()
+        self.sig.to_closure_ptr_type()
     }
 
     pub fn closure_class_type(&self) -> ir::Type {
@@ -35,7 +36,7 @@ impl fmt::Display for ClosureInstance {
         write!(
             f,
             "closure {} of {} ({})",
-            self.closure_id, self.func_ty_id, self.func_instance.src_sig
+            self.closure_id, self.sig, self.func_instance.src_sig
         )
     }
 }
@@ -50,7 +51,7 @@ pub fn translate_closure_struct(
     let mut fields = BTreeMap::new();
     fields.insert(
         ir::CLOSURE_PTR_FIELD,
-        ir::StructFieldDef::new(ir::Type::Function(identity.virt_func_ty)),
+        ir::StructFieldDef::new(ir::Type::Function(identity.sig.clone())),
     );
 
     let mut field_id = ir::FieldID(ir::CLOSURE_PTR_FIELD.0 + 1);

@@ -442,15 +442,16 @@ impl<'a> Unit<'a> {
             return existing_id;
         }
 
-        let ir::Type::Function(func_id) = &ty else {
+        let ir::Type::Function(sig) = &ty else {
             panic!("{} is not a function type", ty.to_pretty_string(self.metadata));
         };
 
-        let sig = self.metadata
-            .get_function_ptr_sig(*func_id)
-            .unwrap_or_else(|| {
-                panic!("missing definition for function type {}", ty.to_pretty_string(self.metadata));
-            });
+        let sig = sig.clone();
+
+        // not a real type, won't ever be instantiated
+        if sig.contains_generic_params() {
+            return self.register_type(ty, Type::Void);
+        }
 
         let mut deps = Vec::new();
 

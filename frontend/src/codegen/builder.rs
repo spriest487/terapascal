@@ -180,6 +180,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn translate_type(&mut self, src_ty: &typ::Type) -> ir::Type {
         self.library.translate_type(src_ty)
     }
+    
+    pub fn translate_sig(&mut self, sig: &typ::FunctionSig) -> ir::FunctionSig {
+        translate_sig(sig, self.library)
+    }
 
     pub fn translate_method(
         &mut self,
@@ -202,10 +206,6 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.library.instantiate_func(&key)
     }
 
-    pub fn translate_func_ty(&mut self, func_sig: &typ::FunctionSig) -> ir::TypeDefID {
-        self.library.translate_func_ty(func_sig)
-    }
-
     pub fn build_closure_expr(&mut self, func: &typ::ast::AnonymousFunctionDef) -> ir::Ref {
         let closure = self
             .library
@@ -218,7 +218,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             // closure objects have a specific type, but refs to closures are type erased so
             // we need to cast to Object. we know static closures are immortal, so this can be
             // a temp ref
-            let closure_type = ir::Type::Object(ir::ObjectID::AnyClosure(static_closure.func_ty_id));
+            let closure_type = ir::Type::Object(ir::ObjectID::AnyClosure(static_closure.identity.sig.clone()));
             let closure_obj = self.local_temp(closure_type.clone());
             self.cast(closure_obj, static_closure_ref, closure_type);
 
@@ -248,7 +248,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         let closure_ptr_ty = closure.closure_id.to_class_ptr_type([]);
 
         // virtual pointer to the closure
-        let closure_virtual_ty = ir::Type::Object(ir::ObjectID::AnyClosure(closure.func_ty_id));
+        let closure_virtual_ty = ir::Type::Object(ir::ObjectID::AnyClosure(closure.sig.clone()));
         let closure_virtual_ptr = self.local_var(closure_virtual_ty.clone(), None);
 
         self.scope(|builder| {
@@ -529,8 +529,8 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     }
 
     // binds an anonymous local binding for the closure pointer of a function
-    pub fn bind_closure_ptr(&mut self, id: ir::ArgID, func_type_id: ir::TypeDefID) {
-        self.local_stack_mut().bind_unnamed_param(id, func_type_id.to_closure_ptr_type(), false)
+    pub fn bind_closure_ptr(&mut self, id: ir::ArgID, sig: &Rc<ir::FunctionSig>) {
+        self.local_stack_mut().bind_unnamed_param(id, sig.to_closure_ptr_type(), false)
     }
 
     pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<ir::VariableID> {

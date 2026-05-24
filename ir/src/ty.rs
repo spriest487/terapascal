@@ -2,7 +2,7 @@ pub use crate::metadata::ids::FieldID;
 pub use crate::metadata::ids::ObjectID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
-use crate::GenericTypeID;
+use crate::{FunctionSig, GenericTypeID};
 use crate::IRFormatter;
 use crate::MetadataSource;
 use crate::TagLocation;
@@ -39,7 +39,7 @@ pub enum Type {
     WeakObject(ObjectID),
 
     // Function pointer type for a function
-    Function(TypeDefID),
+    Function(Rc<FunctionSig>),
 
     Bool,
     U8,
@@ -222,7 +222,6 @@ impl Type {
                 Some(Cow::Borrowed(id))
             },
 
-            | Type::Function(id)
             | Type::Flags(id, ..) => {
                 Some(Cow::Owned(GenericTypeID::new(*id, [])))
             }

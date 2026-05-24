@@ -526,6 +526,15 @@ pub fn instantiate_type(t: &Type, types: &TypeMap) -> Type {
             instantiate_type(element, types).array(*dim)
         }
 
+        Type::Function(sig) => {
+            let result_type = instantiate_type(&sig.result_type, types);
+            let param_types = sig.param_types
+                .iter()
+                .map(|ty| instantiate_type(ty, types));
+            
+            Type::Function(Rc::new(FunctionSig::new(param_types, result_type)))
+        }
+
         _ => t.clone(),
     }
 }

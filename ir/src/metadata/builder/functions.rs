@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::{FunctionID, FunctionIdentity};
 use crate::FunctionInfo;
 use crate::FunctionSig;
@@ -12,7 +13,7 @@ impl MetadataBuilder {
     pub fn insert_func(
         &mut self,
         identity: FunctionIdentity,
-        sig: FunctionSig,
+        sig: impl Into<Rc<FunctionSig>>,
         gen_runtime_name: bool,
         tags: impl IntoIterator<Item=TagInfo>,
     ) -> FunctionID {
@@ -37,7 +38,7 @@ impl MetadataBuilder {
             identity,
             runtime_name,
 
-            sig,
+            sig: sig.into(),
             
             tags: tags.into_iter().collect(),
 
@@ -76,18 +77,18 @@ impl MetadataBuilder {
         self.iter_in_self_or_refs(move |metadata| metadata.closures())
     }
 
-    pub fn closures_by_function(&self) -> impl Iterator<Item=(TypeDefID, &[TypeDefID])> {
-        self.iter_in_self_or_refs(move |metadata| metadata.closures_by_function()
+    pub fn closures_by_sig(&self) -> impl Iterator<Item=(Rc<FunctionSig>, &[TypeDefID])> {
+        self.iter_in_self_or_refs(move |metadata| metadata.closures_by_sig()
             .iter()
-            .map(|(func_type_id, closure_ids)| {
-                (*func_type_id, closure_ids.as_slice())
+            .map(|(sig, closure_ids)| {
+                (sig.clone(), closure_ids.as_slice())
             })
         )
     }
     
-    pub fn find_closure_func_type_id(&self, closure_class_id: TypeDefID) -> Option<TypeDefID> {
+    pub fn find_closure_sig(&self, closure_class_id: TypeDefID) -> Option<Rc<FunctionSig>> {
         self.find_in_self_or_refs(move |metadata| {
-            metadata.find_closure_func_type_id(closure_class_id)
+            metadata.find_closure_sig(closure_class_id)
         })
     }
 
@@ -96,7 +97,7 @@ impl MetadataBuilder {
             panic!("define_closure_ty: definition struct did not have a closure identity");
         };
 
-        self.metadata.insert_closure(identity.virt_func_ty, id);
+        self.metadata.insert_closure(identity.sig.clone(), id);
         self.define_struct(id, closure_def);
     }
 

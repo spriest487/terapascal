@@ -230,7 +230,7 @@ impl Marshaller {
             body: dtor_body,
             type_params: Vec::new(),
             debug_name: Some(dtor_name.clone()),
-            sig: ir::FunctionSig::new([object_type.clone()], ir::Type::Nothing),
+            sig: Rc::new(ir::FunctionSig::new([object_type.clone()], ir::Type::Nothing)),
         };
 
         self.object_dtors.insert(type_index, Rc::new(Function::new_internal(dtor_name, dtor_def)));

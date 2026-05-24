@@ -305,10 +305,10 @@ impl<'a> LibraryBuilder<'a> {
             let debug_name = self.opts.debug.then(|| internal_name.clone());
             let identity = ir::FunctionIdentity::internal(internal_name);
 
-            let init_sig = ir::FunctionSig {
+            let init_sig = Rc::new(ir::FunctionSig {
                 param_types: Vec::new(),
                 result_type: ir::Type::Nothing
-            };
+            });
             let init_func = ir::FunctionDef {
                 body: unit_init,
                 sig: init_sig.clone(),
@@ -565,9 +565,9 @@ impl<'a> LibraryBuilder<'a> {
         let id = self.declare_func(&extern_decl, decl_namespace);
 
         let sig = extern_decl.sig();
-        let return_ty = self.translate_type(&sig.result_ty);
+        let result_type = self.translate_type(&sig.result_ty);
 
-        let param_tys = sig.params
+        let param_types: Vec<_> = sig.params
             .iter()
             .map(|sig_param| {
                 let param_ty = self.translate_type(&sig_param.ty);
@@ -594,8 +594,7 @@ impl<'a> LibraryBuilder<'a> {
             ir::Function::External(ir::ExternalFunctionRef {
                 src: extern_src.value.as_ref().clone(),
                 symbol: (*extern_decl.name.ident.name).clone(),
-
-                sig: ir::FunctionSig { result_type: return_ty, param_types: param_tys },
+                sig: Rc::new(ir::FunctionSig::new(param_types, result_type))
             }),
         );
 
@@ -1014,12 +1013,15 @@ impl<'a> LibraryBuilder<'a> {
             },
 
             typ::Type::Function(func_sig) => {
-                let func_ty_id = self.translate_func_ty(func_sig);
-                let ty = ir::Type::Object(ir::ObjectID::AnyClosure(func_ty_id));
+                let sig = translate_sig(func_sig, self);
 
-                self.add_cached_type(src_ty.clone(), ty.clone());
+                // values of function type will always be translated as closure references,
+                // raw function pointers aren't used
+                let closure_type = sig.into_closure_ptr_type();
 
-                ty
+                self.add_cached_type(src_ty.clone(), closure_type.clone());
+
+                closure_type
             },
             
             typ::Type::Set(set_ty) => {
@@ -1238,27 +1240,6 @@ impl<'a> LibraryBuilder<'a> {
         self.function_types_by_sig.get(&sig).cloned()
     }
 
-    pub fn define_func_ty(
-        &mut self,
-        sig: &typ::FunctionSig,
-        mut type_sig: ir::FunctionSig,
-    ) -> ir::TypeDefID {
-        assert!(!self.function_types_by_sig.contains_key(&sig));
-
-        let id = self.metadata_mut().new_type();
-
-        // function type are for references to functions as values, which means the actual
-        // signature needs an extra parameter for the closure pointer
-        type_sig.param_types.insert(0, id.to_closure_ptr_type());
-
-        let decl = ir::TypeDecl::Def(ir::TypeDef::Function(type_sig));
-        self.metadata.insert_type_decl(id, decl);
-
-        self.function_types_by_sig.insert(sig.clone(), id);
-
-        id
-    }
-
     pub fn find_global_var(&self, name_path: &IdentPath) -> Option<ir::VariableID> {
         self.variables_by_name.get(name_path).cloned()
     }
@@ -1447,18 +1428,6 @@ impl<'a> LibraryBuilder<'a> {
         }
     }
 
-    pub fn translate_func_ty(&mut self, func_sig: &typ::FunctionSig) -> ir::TypeDefID {
-        let func_ty_id = match self.find_func_ty(&func_sig) {
-            Some(id) => id,
-            None => {
-                let ir_sig = translate_sig(&func_sig, self);
-                self.define_func_ty(func_sig, ir_sig)
-            },
-        };
-
-        func_ty_id
-    }
-
     pub fn build_closure_instance(
         &mut self,
         func: &typ::ast::AnonymousFunctionDef,
@@ -1466,14 +1435,13 @@ impl<'a> LibraryBuilder<'a> {
         // this is the signature of the *function type* of the closure, not the signature of
         // the real method implementing the closure, which has an extra type-erased parameter
         // for the closure itself
-        let func_ty_sig = typ::FunctionSig::of_anonymous_func(func);
-
-        let func_ty_id = self.translate_func_ty(&func_ty_sig);
+        let src_virtual_sig = typ::FunctionSig::of_anonymous_func(func);
+        let virtual_sig = Rc::new(translate_sig(&src_virtual_sig, self));
 
         // since we're translating a closure function, the sig needs to include the implicit
         // closure object parameter
         let mut sig = translate_sig(&func.sig(), self);
-        sig.param_types.insert(0, ir::Type::any());
+        sig.param_types.insert(0, virtual_sig.to_closure_ptr_type());
 
         let internal_name = "<anonymous function>".to_string();
 
@@ -1483,7 +1451,7 @@ impl<'a> LibraryBuilder<'a> {
         let id = self.metadata.insert_func(identity, sig, false, []);
 
         let closure_identity = ir::ClosureIdentity {
-            virt_func_ty: func_ty_id,
+            sig: virtual_sig.clone(),
             id,
         };
 
@@ -1493,17 +1461,17 @@ impl<'a> LibraryBuilder<'a> {
             self
         );
 
-        let func_def = build_closure_function_def(self, &func, closure_id, func_ty_id, debug_name);
+        let func_def = build_closure_function_def(self, &func, closure_id, &virtual_sig, debug_name);
 
         self.functions.insert(id, ir::Function::Local(func_def));
 
         ClosureInstance {
             func_instance: FunctionInstance {
                 id,
-                src_sig: func_ty_sig,
+                src_sig: src_virtual_sig,
                 published: false,
             },
-            func_ty_id,
+            sig: virtual_sig,
             closure_id,
         }
     }
@@ -1515,7 +1483,7 @@ impl<'a> LibraryBuilder<'a> {
         if let Some(existing_id) = self.static_closures
             .iter()
             .find_map(|(id, static_closure)| {
-                (static_closure.func == func.id).then_some(*id)
+                (static_closure.identity.id == func.id).then_some(*id)
             })
         {
             return &self.static_closures[&existing_id];
@@ -1524,7 +1492,7 @@ impl<'a> LibraryBuilder<'a> {
         // function reference closures can never have a capture list or type args
         let captures = LinkedHashMap::default();
 
-        let func_ty_id = self.translate_func_ty(func.src_sig.as_ref());
+        let virtual_sig = Rc::new(translate_sig(func.src_sig.as_ref(), self));
 
         let ir_func = self.functions
             .get(&func.id)
@@ -1532,7 +1500,7 @@ impl<'a> LibraryBuilder<'a> {
             .clone();
 
         let closure_identity = ir::ClosureIdentity {
-            virt_func_ty: func_ty_id,
+            sig: virtual_sig.clone(),
             id: func.id,
         };
 
@@ -1546,19 +1514,19 @@ impl<'a> LibraryBuilder<'a> {
         let mut closure_func_sig = translate_sig(&func.src_sig, self);
 
         // closure parameter (unused for static closures)
-        closure_func_sig.param_types.insert(0, func_ty_id.to_closure_ptr_type());
+        closure_func_sig.param_types.insert(0, virtual_sig.to_closure_ptr_type());
 
         let internal_name = "<static closure function>".to_string();
         let identity = ir::FunctionIdentity::internal(internal_name);
 
         let thunk_id = self.metadata.insert_func(identity, closure_func_sig, false, []);
-        let thunk_def = build_func_static_closure_def(self, func, func_ty_id, &ir_func);
+        let thunk_def = build_func_static_closure_def(self, func, &virtual_sig, &ir_func);
 
         self.functions.insert(thunk_id, ir::Function::Local(thunk_def));
 
         let closure = ClosureInstance {
             closure_id,
-            func_ty_id,
+            sig: virtual_sig,
             func_instance: FunctionInstance {
                 id: thunk_id,
                 src_sig: func.src_sig.clone(),
@@ -1587,7 +1555,7 @@ impl<'a> LibraryBuilder<'a> {
             return self.static_closures.get(id).unwrap();
         }
 
-        let id = self.metadata.new_variable(None, closure.func_ty_id.to_closure_ptr_type());
+        let id = self.metadata.new_variable(None, closure.sig.to_closure_ptr_type());
         let instance = build_static_closure_impl(closure, id, self);
 
         self.static_closures.insert(id, instance);
@@ -1718,7 +1686,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         let body = builder.finish();
         
         let invoker_func = ir::FunctionDef {
-            sig: invoker_sig.clone(),
+            sig: Rc::new(invoker_sig.clone()),
             debug_name,
             body,
             type_params: Vec::new(),

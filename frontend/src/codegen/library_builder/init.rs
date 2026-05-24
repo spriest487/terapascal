@@ -1,6 +1,7 @@
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::ir;
+use std::rc::Rc;
 use terapascal_ir::InstructionBuilder;
 use terapascal_ir::MetadataSource;
 
@@ -29,7 +30,7 @@ pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
     let sig = ir::FunctionSig::new([], ir::Type::Nothing);
     let func = ir::Function::new_local_def(debug_name, Vec::new(), sig.clone(), body);
 
-    let func_id = lib.metadata_mut().insert_func(identity, sig, false, []);
+    let func_id = lib.metadata_mut().insert_func(identity, Rc::new(sig), false, []);
     lib.insert_function(func_id, func);
     
     Some(func_id)
