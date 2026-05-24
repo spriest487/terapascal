@@ -1,9 +1,10 @@
 use crate::func::ffi::FfiInvoker;
-use crate::{ir, GlobalValue};
+use crate::ir;
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::result::ExecError;
 use crate::ExecResult;
+use crate::GlobalValue;
 use crate::Vm;
 use ir::generic::instantiate_function_def;
 use ir::generic::instantiate_sig;
@@ -25,11 +26,11 @@ pub struct BuiltinFunction {
     pub return_ty: ir::Type,
     pub param_tys: Vec<ir::Type>,
 
-    pub debug_name: String,
+    pub name: Rc<String>,
 }
 
 pub struct FfiFunction {
-    debug_name: String,
+    name: Rc<String>,
 
     return_ty: ir::Type,
     param_tys: Vec<ir::Type>,
@@ -39,8 +40,7 @@ pub struct FfiFunction {
 
 pub struct IRFunction {
     def: ir::FunctionDef,
-
-    identity: ir::FunctionIdentity,
+    name: Rc<String>,
 }
 
 pub enum Function {
@@ -80,10 +80,29 @@ impl Function {
                 ir::FunctionIdentity::internal(internal_name)
             });
 
+        let name = identity.to_pretty_string(metadata).into_owned();
+
         Self::IR(IRFunction {
-            identity,
+            name: Rc::new(name),
             def: def.clone(),
         })
+    }
+
+    pub fn new_internal(name: impl Into<Rc<String>>, def: ir::FunctionDef) -> Self {
+        let name = name.into();
+
+        Self::IR(IRFunction {
+            name,
+            def,
+        })
+    }
+
+    pub fn name(&self) -> &Rc<String> {
+        match self {
+            Function::Builtin(f) => &f.name,
+            Function::External(f) => &f.name,
+            Function::IR(f) => &f.name,
+        }
     }
 
     pub fn new_ffi(
@@ -92,11 +111,11 @@ impl Function {
     ) -> MarshalResult<Self> {
         let invoker = marshaller.build_ffi_invoker(&func_ref)?;
 
-        let func_name =  format!("{}::{}", func_ref.src, func_ref.symbol);
-        let debug_name = Self::make_debug_name(&func_name, &func_ref.sig.param_types, marshaller.metadata());
+        let symbol_name =  format!("{}::{}", func_ref.src, func_ref.symbol);
+        let name = Self::make_debug_name(&symbol_name, &func_ref.sig.param_types, marshaller.metadata());
 
         let func = Function::External(FfiFunction {
-            debug_name,
+            name: Rc::new(name),
             return_ty: func_ref.sig.result_type.clone(),
             param_tys: func_ref.sig.param_types.clone(),
 
@@ -156,7 +175,7 @@ impl Function {
         match self {
             Function::Builtin(def) => {
                 if state.opts().trace_ir {
-                    println!("[vm] calling {} (builtin)", def.debug_name);
+                    println!("[vm] calling {} (builtin)", def.name);
                 }
                 (def.func)(state)?
             }
@@ -165,13 +184,13 @@ impl Function {
             
             Function::IR(func) => {
                 if state.opts().trace_ir {
-                    println!("[vm] entering {}", func.identity.to_pretty_string(state.metadata()));
+                    println!("[vm] entering {}", func.name);
                 }
 
                 state.execute(&func.def.body)?;
 
                 if state.opts().trace_ir {
-                    println!("[vm] exiting {}", func.identity.to_pretty_string(state.metadata()));
+                    println!("[vm] exiting {}", func.name);
                 }
             }
         };
@@ -207,15 +226,15 @@ impl Function {
 impl fmt::Debug for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Function::Builtin(func) => write!(f, "<native function: {}>", func.debug_name),
-            Function::IR(func) => write!(f, "<function: {}>", func.identity),
-            Function::External(func) => write!(f, "<ffi function: {}>", func.debug_name),
+            Function::Builtin(func) => write!(f, "<native function: {}>", func.name),
+            Function::IR(func) => write!(f, "<function: {}>", func.name),
+            Function::External(func) => write!(f, "<ffi function: {}>", func.name),
         }
     }
 }
 
-struct RuntimeFuncBuilder<'a> {
-    vm: &'a Vm,
+pub struct RuntimeFuncBuilder<'a> {
+    marshaller: &'a Marshaller,
 
     local_stack: ir::LocalStack,
 
@@ -227,9 +246,9 @@ struct RuntimeFuncBuilder<'a> {
 }
 
 impl<'a> RuntimeFuncBuilder<'a> {
-    pub fn new(vm: &'a Vm) -> Self {
+    pub fn new(marshaller: &'a Marshaller) -> Self {
         Self {
-            vm,
+            marshaller,
             local_stack: ir::LocalStack::new(),
             debug_stack: Vec::new(),
             next_label: ir::Label(ir::EXIT_LABEL.0 + 1),
@@ -257,7 +276,7 @@ impl<'a> ir::InstructionBuilder for RuntimeFuncBuilder<'a> {
     }
 
     fn metadata(&self) -> &impl ir::MetadataSource {
-        self.vm.marshaller().metadata()
+        self.marshaller.metadata()
     }
 
     fn local_stack(&self) -> &ir::LocalStack {
@@ -364,29 +383,31 @@ pub fn instantiate_func(
         }
     };
 
+    let func_name = Rc::new(identity.to_pretty_string(vm.metadata()).into_owned());
+
     if vm.opts.trace_generics {
         eprintln!(
             "[vm] new instantiation of function {}: {}",
             generic_func.identity.to_pretty_string(vm.metadata()),
-            identity.to_pretty_string(vm.metadata()),
+            func_name,
         );
     }
 
-    let mut builder = RuntimeFuncBuilder::new(vm);
+    let mut builder = RuntimeFuncBuilder::new(vm.marshaller());
     let sig = instantiate_sig(&generic_def.sig, &types);
 
     instantiate_function_def(&generic_def, &types, &mut builder);
 
     let def = ir::FunctionDef {
         body: builder.finish(),
-        debug_name: None,
+        debug_name: Some(func_name.to_string()),
         type_params: Vec::new(),
         sig,
     };
 
     let func_info = FunctionInfo {
         func: Rc::new(Function::IR(IRFunction {
-            identity: identity.clone(),
+            name: func_name,
             def,
         })),
         identity,

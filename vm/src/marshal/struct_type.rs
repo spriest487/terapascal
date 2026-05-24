@@ -1,3 +1,5 @@
+use crate::func::Function;
+use crate::func::RuntimeFuncBuilder;
 use crate::ir;
 use crate::marshal::util::UnmarshalledValue;
 use crate::marshal::MarshalError;
@@ -13,6 +15,8 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use terapascal_ir::generic::instantiate_struct_def;
+use terapascal_ir::GenericTypeID;
+use terapascal_ir::InstructionBuilder;
 use terapascal_ir::MetadataSource;
 
 #[derive(Debug, Clone)]
@@ -93,9 +97,14 @@ impl Marshaller {
             return Ok((layout.def.clone(), type_index));
         }
 
-        let (def_id, args): (_, &[ir::Type]) = match struct_type {
-            ir::Type::Struct(id) => (id.def_id, &id.args),
-            ir::Type::Flags(id) => (*id, &[]),
+        let type_def_id = match struct_type {
+            ir::Type::Struct(id) => {
+                id.clone()
+            },
+
+            ir::Type::Flags(id) => {
+                ir::GenericTypeID::new(*id, [])
+            },
 
             // for object types that are pointers to an inner struct, instantiate that inner
             // struct and register the object type separately
@@ -122,19 +131,19 @@ impl Marshaller {
 
         let generic_def = self
             .metadata()
-            .get_struct_def(def_id)
+            .get_struct_def(type_def_id.def_id)
             .cloned()
             .ok_or_else(|| {
                 MarshalError::MissingTypeDef(struct_type.clone())
             })?;
 
-        match instantiate_struct_def(&generic_def, args) {
+        let (def, type_index) = match instantiate_struct_def(&generic_def, &type_def_id.args) {
             Cow::Borrowed(..) => {
                 // not generic
                 let def = Rc::new(generic_def);
                 let (_, type_index) = self.define_struct(struct_type, def.clone())?;
 
-                Ok((def, type_index))
+                (def, type_index)
             },
 
             Cow::Owned(new_def) => {
@@ -148,8 +157,37 @@ impl Marshaller {
                 let def = Rc::new(new_def);
                 let (_, struct_index) = self.define_struct(struct_type, def.clone())?;
 
-                Ok((def, struct_index))
+                (def, struct_index)
             },
+        };
+
+        if def.identity.is_ref_type() {
+            self.gen_class_dtor(&type_def_id, type_index);
         }
+
+        Ok((def, type_index))
+    }
+
+    fn gen_class_dtor(&mut self, type_def_id: &Rc<GenericTypeID>, type_index: TypeIndex) {
+        let class_type = type_def_id.to_class_object_type();
+
+        let mut builder = RuntimeFuncBuilder::new(self);
+        builder.local_stack_mut().bind_unnamed_param(ir::ArgID(0), class_type.clone(), false);
+
+        if !builder.gen_class_object_dtor_body(type_def_id, ir::ArgID(0)) {
+            return;
+        }
+
+        let dtor_body = builder.finish();
+        let dtor_name = format!("<runtime dtor for {}>", class_type.to_pretty_string(&self.metadata));
+
+        let dtor_def = ir::FunctionDef {
+            body: dtor_body,
+            type_params: Vec::new(),
+            debug_name: Some(dtor_name.clone()),
+            sig: ir::FunctionSig::new([class_type], ir::Type::Nothing),
+        };
+
+        self.class_dtors.insert(type_index, Rc::new(Function::new_internal(dtor_name, dtor_def)));
     }
 }

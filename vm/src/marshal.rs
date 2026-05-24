@@ -12,7 +12,7 @@ use self::util::unmarshal_from_ne_bytes;
 use self::util::UnmarshalledValue;
 pub(crate) use self::variant_type::*;
 use crate::func::ffi::FfiInvoker;
-use crate::func::FuncInstanceID;
+use crate::func::{FuncInstanceID, Function};
 use crate::ir;
 use crate::DynValue;
 use crate::ObjectHeader;
@@ -53,6 +53,8 @@ pub struct Marshaller {
     type_indices: BiHashMap<TypeIndex, ir::Type>,
     object_id_indices: BiHashMap<TypeIndex, ObjectID>,
 
+    class_dtors: BTreeMap<TypeIndex, Rc<Function>>,
+
     func_instances: BiHashMap<ir::FunctionRef, FuncInstanceID>,
 
     trace_generics: bool,
@@ -75,6 +77,8 @@ impl Marshaller {
 
             func_instances: BiHashMap::new(),
 
+            class_dtors: BTreeMap::new(),
+
             trace_generics,
         };
 
@@ -94,7 +98,6 @@ impl Marshaller {
             (ir::Type::F64, NativeType::f64()),
             (ir::Type::Bool, NativeType::u8()),
             (ir::Type::any(), NativeType::pointer()),
-            (ir::Type::string(), NativeType::pointer()),
         ];
 
         for (primitive_type, ffi_type) in primitive_types {
@@ -922,6 +925,10 @@ impl Marshaller {
         NativeType::u64().size() // type index
             + NativeType::i32().size() // strong ref count
             + NativeType::i32().size() // weak ref count
+    }
+
+    pub fn get_dtor_function(&self, t: TypeIndex) -> Option<Rc<Function>> {
+        self.class_dtors.get(&t).cloned()
     }
 }
 

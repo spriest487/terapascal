@@ -12,7 +12,7 @@ fn empty_library_executes_ok() {
         ..Default::default()
     };
 
-    let mut vm = Vm::new(opts);
+    let mut vm = Vm::new(opts).unwrap();
 
     vm.load_lib(&lib).expect("should load successfully");
 }
@@ -24,7 +24,7 @@ fn created_string_has_expected_content() {
         ..Default::default()
     };
 
-    let mut vm = Vm::new(opts);
+    let mut vm = Vm::new(opts).unwrap();
 
     let greeting = "hello, world";
 

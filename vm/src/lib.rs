@@ -546,13 +546,13 @@ impl Vm {
             })
     }
 
-    fn call_and_store(
+    fn invoke_and_store(
         &mut self,
         key: &ir::FunctionRef,
         args: &[DynValue],
         out: Option<&ir::Ref>,
     ) -> ExecResult<()> {
-        let result_val = self.call(key, args)?;
+        let result_val = self.invoke_func_ref(key, args)?;
 
         match (result_val, out) {
             (Some(v), Some(out_at)) => {
@@ -571,18 +571,21 @@ impl Vm {
         Ok(())
     }
 
-    pub fn call(
+    pub fn invoke_func_ref(
         &mut self,
-        func_key: &ir::FunctionRef,
+        func_ref: &ir::FunctionRef,
         args: &[DynValue],
     ) -> ExecResult<Option<DynValue>> {
-        let func_info = instantiate_func(self, func_key)?;
+        let func_info = instantiate_func(self, func_ref)?;
+        let func = func_info.func.clone();
 
-        let func_name = func_info.identity.to_pretty_string(self.metadata());
-        let func = &func_info.func.clone();
+        self.invoke_func(&func, args)
+    }
+
+    fn invoke_func(&mut self, func: &Function, args: &[DynValue]) -> ExecResult<Option<DynValue>> {
         let stack_size = func.stack_alloc_size(&mut self.heap.marshaller)?;
 
-        self.stack.push(Rc::new(func_name.into_owned()), stack_size);
+        self.stack.push(func.name().clone(), stack_size);
 
         // store empty result if there is a result value
         let return_ty = func.return_ty();
@@ -596,7 +599,7 @@ impl Vm {
         if args.len() != func.param_tys().len() {
             let msg = format!(
                 "arguments provided for call to {} are invalid (expected {} args, got {})",
-                func_info.identity.to_pretty_string(self.metadata()),
+                func.name(),
                 func.param_tys().len(),
                 args.len()
             );
@@ -632,28 +635,20 @@ impl Vm {
     }
 
     fn invoke_dtor(&mut self, val: &DynValue, ty: &ir::Type) -> ExecResult<()> {
-        let dtor_func_id = self
-            .metadata()
-            .get_dtor_method(&ty);
+        let type_index = self.heap.marshaller.get_type_index(ty)?;
+
+        let Some(dtor_func) = self.heap.marshaller.get_dtor_function(type_index) else {
+            eprintln!("[rc] no dtor for {}", self.metadata().pretty_type_name(ty));
+            return Ok(());
+        };
 
         // eprintln!("trying to invoke dtor for {}... {:?}, {:?}: {:?}", ty, ty.def_id(), ty.rc_resource_def_id(), dtor_func_id);
 
-        if let Some(func_id) = dtor_func_id {
-            let func_desc = self
-                .metadata()
-                .func_desc(func_id)
-                .unwrap_or_else(|| func_id.to_string());
-
-            if self.opts.trace_rc {
-                eprintln!("[rc] invoking dtor {}", func_desc);
-            }
-
-            let dtor_key = ir::FunctionRef::new(func_id);
-
-            self.call_and_store(&dtor_key, &[val.clone()], None)?;
-        } else if self.opts.trace_rc {
-            eprintln!("[rc] no dtor for {}", self.metadata().pretty_type_name(ty));
+        if self.opts.trace_rc {
+            eprintln!("[rc] invoking dtor: {}", dtor_func.name());
         }
+
+        self.invoke_func(&dtor_func, &[val.clone()])?;
 
         Ok(())
     }
@@ -1927,7 +1922,7 @@ impl Vm {
 
         match self.evaluate(function)? {
             DynValue::Function(function) => {
-                self.call_and_store(&function, &arg_vals, out.as_ref())?
+                self.invoke_and_store(&function, &arg_vals, out.as_ref())?
             }
 
             _ => {
@@ -2003,7 +1998,7 @@ impl Vm {
 
         match self.evaluate(&ir::Value::from(func_ref))? {
             DynValue::Function(key) => {
-                self.call_and_store(&key, &arg_vals, out)
+                self.invoke_and_store(&key, &arg_vals, out)
             },
 
             unexpected => {
@@ -2220,7 +2215,7 @@ impl Vm {
             func,
             return_ty: ret,
             param_tys: params,
-            debug_name: name.to_string(),
+            name: Rc::new(name.to_string()),
         });
 
         let invoker = self.metadata()
@@ -2836,7 +2831,7 @@ impl Vm {
 
         // result is a box pointer
         let result_ptr = self
-            .call(&ir::FunctionRef::new(invoker_id), &invoker_args)?
+            .invoke_func_ref(&ir::FunctionRef::new(invoker_id), &invoker_args)?
             .and_then(|val| val.as_pointer().cloned())
             .ok_or_else(|| ExecError::illegal_state("expected invoker to return a pointer"))?;
 

@@ -8,11 +8,25 @@ use std::rc::Rc;
 pub fn gen_class_object_dtor_body<B>(
     builder: &mut B,
     class_id: &Rc<GenericTypeID>,
-    self_param: ArgID,
+    self_arg: ArgID,
 ) -> bool
 where
     B: InstructionBuilder + ?Sized
 {
+    let mut has_dtor_method = false;
+
+    if let Some(dtor_func_id) = builder
+        .metadata()
+        .get_dtor_method(&class_id.to_class_object_type())
+    {
+        let dtor_ref = crate::FunctionRef::new(dtor_func_id)
+            .with_args(class_id.args.clone());
+
+        builder.call(dtor_ref, [self_arg.value()], None);
+
+        has_dtor_method = true;
+    }
+
     // we have to do this loop manually, because the "self" reference in a class method is
     // meant to be immutable (it's illegal to reference it even via an immutable reference in CIL).
     // using visit_deep on self would use references!
@@ -36,11 +50,11 @@ where
             continue;
         }
 
-        let field_ref = self_param.to_ref().field_ref(class_ty.clone(), *field_id);
+        let field_ref = self_arg.to_ref().field_ref(class_ty.clone(), *field_id);
         builder.release(field_ref.to_deref(), field_def.ty.clone(), Ref::Discard);
 
         released_any = true;
     }
     
-    released_any
+    released_any || has_dtor_method
 }
