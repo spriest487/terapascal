@@ -1,4 +1,4 @@
-use crate::c::{ArrayTypeID, FieldName, FuncAliasDef, StructDef, StructMember, Type, TypeDecl, TypeDef, TypeDefName, Unit, VariantDef};
+use crate::c::{ArrayTypeID, Class, FieldName, FuncAliasDef, StructDef, StructMember, Type, TypeDecl, TypeDef, TypeDefName, Unit, VariantDef};
 use crate::ir;
 use std::borrow::Cow;
 use std::fmt;
@@ -161,6 +161,8 @@ impl<'a> Unit<'a> {
             return existing_id;
         }
 
+        // eprintln!("translate_struct_type: {}", ty.to_pretty_string(self.metadata));
+
         let (def_id, args): (_, &[ir::Type]) = match ty {
             ir::Type::Struct(id) => (id.def_id, &id.args),
             ir::Type::Flags(id) => (*id, &[]),
@@ -182,7 +184,7 @@ impl<'a> Unit<'a> {
                 panic!("missing struct def: {def_id}")
             });
 
-        match instantiate_struct_def(&generic_def, args) {
+        let type_id = match instantiate_struct_def(&generic_def, args) {
             Cow::Borrowed(..) => {
                 // not a specialized generic
                 self.define_struct(ty.clone(), generic_def)
@@ -198,7 +200,15 @@ impl<'a> Unit<'a> {
 
                 self.define_struct(ty.clone(), Rc::new(new_def))
             },
+        };
+
+        // if the type requested was a weak type, define_struct will only have registered the
+        // strong type, so add the weak one separately now
+        if ty.is_weak() {
+            self.register_type(ty.clone(), Type::DefinedType(TypeDefName::Struct(type_id)));
         }
+
+        type_id
     }
 
     fn define_struct(
@@ -228,7 +238,7 @@ impl<'a> Unit<'a> {
         });
 
         // if this is an object type, register the weak pointer type as the same C type
-        if let ir::Type::Object(object_id) = ty {
+        if let ir::Type::Object(object_id) = &ty {
             let object_ptr_type = self.c_types[&id].clone();
             self.register_type(object_id.to_weak_object_type(), object_ptr_type);
         }
@@ -241,6 +251,11 @@ impl<'a> Unit<'a> {
         }
 
         self.register_type_def(id, c_def.decl.name, c_def, member_deps);
+
+        if is_object {
+            let class = Class::translate(&ty, self);
+            self.classes.push(class);
+        }
 
         id
     }

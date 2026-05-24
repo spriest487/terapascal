@@ -144,17 +144,6 @@ impl<'a> Unit<'a> {
                 unit.add_builtin_func(func_id, *c_name);
             }
         }
-
-        for (class_id, class_def) in metadata.class_defs() {
-            if class_def.is_generic() {
-                continue;
-            }
-
-            let class_type = class_id.to_class_ptr_type([]);
-
-            let class = Class::translate(class_type, metadata, &mut unit);
-            unit.classes.push(class);
-        }
         
         for closure_id in metadata.closures() {
             let class = Class::gen_closure_class(&mut unit, closure_id);

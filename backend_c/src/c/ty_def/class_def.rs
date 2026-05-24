@@ -201,20 +201,16 @@ pub struct Class {
 }
 
 impl Class {
-    pub fn translate(
-        class_ty: ir::Type,
-        metadata: &ir::Metadata,
-        unit: &mut Unit,
-    ) -> Self {
+    pub fn translate(class_ty: &ir::Type, unit: &mut Unit) -> Self {
+        unit.translate_type(class_ty);
+        let class_index = unit.get_type_id(class_ty);
+
         let mut impls = BTreeMap::new();
 
-        unit.translate_type(&class_ty);
-        let class_index = unit.get_type_id(&class_ty);
-
-        for (iface_id, iface_impl) in metadata.find_impls(&class_ty) {
+        for (iface_id, iface_impl) in unit.metadata.find_impls(class_ty) {
             let mut method_impls = BTreeMap::new();
 
-            let iface = metadata.get_iface_def(iface_id).unwrap();
+            let iface = unit.metadata.get_iface_def(iface_id).unwrap();
 
             for (method_id, impl_func_id) in iface_impl.methods.iter() {
                 let method_def = iface.get_method(*method_id).unwrap();
@@ -225,7 +221,7 @@ impl Class {
                     *method_id,
                     method_def,
                     *impl_func_id,
-                    metadata,
+                    unit.metadata,
                     unit,
                 );
 
@@ -241,24 +237,24 @@ impl Class {
 
         let type_def_name = TypeDefName::Struct(class_index);
 
-        let runtime_type = metadata
-            .get_type_info(&class_ty)
+        let runtime_type = unit.metadata
+            .get_type_info(class_ty)
             .unwrap_or_else(|| {
-                panic!("missing runtime type for class {}", metadata.pretty_type_name(&class_ty))
+                panic!("missing runtime type for class {}", unit.metadata.pretty_type_name(class_ty))
             });
 
         let comment = runtime_type
-            .get_name_string(metadata)
+            .get_name_string(unit.metadata)
             .map(|name| name.clone())
-            .unwrap_or_else(|| metadata.pretty_type_name(&class_ty).to_string());
+            .unwrap_or_else(|| unit.metadata.pretty_type_name(class_ty).to_string());
 
-        let typeinfo_name = global_typeinfo_decl_name(unit, &class_ty);
+        let typeinfo_name = global_typeinfo_decl_name(unit, class_ty);
 
-        let ir::Type::Object(ir::ObjectID::Class(class_id)) = &class_ty else {
+        let ir::Type::Object(ir::ObjectID::Class(class_id)) = class_ty else {
             panic!("invalid type for class: {}", class_ty.to_pretty_string(unit.metadata));
         };
 
-        let dtor = Self::gen_runtime_dtor(unit, &class_ty, type_def_name, |builder, self_arg| {
+        let dtor = Self::gen_runtime_dtor(unit, class_ty, type_def_name, |builder, self_arg| {
             builder.gen_class_object_dtor_body(&class_id, self_arg)
         });
 
