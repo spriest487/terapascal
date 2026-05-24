@@ -173,35 +173,48 @@ impl Marshaller {
         self.type_indices.insert(type_index, ty.clone());
         self.types.insert(type_index, native_type);
 
-        let object_id = match &ty {
-            ir::Type::WeakObject(id) | ir::Type::Object(id) => match id {
-                | ir::ObjectID::Class(class_id) => {
-                    let struct_type = class_id.to_struct_type();
-                    let (_, struct_index) = &self.add_struct_type(&struct_type)?;
+        match &ty {
+            ir::Type::WeakObject(id) | ir::Type::Object(id) => {
+                match id {
+                    | ir::ObjectID::Class(class_id) => {
+                        let struct_type = class_id.to_struct_type();
+                        self.add_struct_type(&struct_type)?;
+                    },
 
-                    Some(ObjectID::Struct(*struct_index))
-                },
-                ir::ObjectID::Array(element) => {
-                    self.gen_array_dtor(&element)?;
-                    Some(ObjectID::Array(element.clone()))
-                },
-                ir::ObjectID::Box(value) => {
-                    self.gen_box_dtor(&value)?;
-                    Some(ObjectID::Box(value.clone()))
-                },
-                _ => None,
+                    ir::ObjectID::Array(element) => {
+                        let object_id = ObjectID::Array(element.clone());
+                        self.object_id_indices.insert(type_index, object_id.clone());
+
+                        self.gen_array_dtor(&element)?;
+                    },
+
+                    ir::ObjectID::Box(value) => {
+                        let object_id = ObjectID::Box(value.clone());
+                        self.object_id_indices.insert(type_index, object_id.clone());
+
+                        self.gen_box_dtor(&value)?;
+                    },
+
+                    _ => {
+                        // abstract
+                    },
+                };
+
+                // if we encounter a weak reference, make sure the strong version is registered,
+                // and vice versa
+                if ty.is_weak() {
+                    self.register_object_type(id.to_object_type())?;
+                } else {
+                    self.register_object_type(id.to_weak_object_type())?;
+                }
             },
 
-            _ => None,
+            _ => {
+                // register the box type for non-object types so all known value types also
+                // have a boxed version if we need to use them via RTTI
+                self.register_object_type(ty.clone().boxed())?;
+            },
         };
- 
-        if let Some(object_id) = object_id {
-            self.object_id_indices.insert(type_index, object_id);
-        } else {
-            // register the box type for non-object types so all known value types also
-            // have a boxed version if we need to use them via RTTI
-            self.register_object_type(ty.clone().boxed())?;
-        }
 
         Ok(type_index)
     }

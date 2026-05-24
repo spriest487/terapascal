@@ -106,18 +106,12 @@ impl Marshaller {
 
             // for object types that are pointers to an inner struct, instantiate that inner
             // struct and register the object type separately
-            ir::Type::Object(ir::ObjectID::Class(..))
-            | ir::Type::WeakObject(ir::ObjectID::Class(..)) => {
+            ir::Type::Object(ir::ObjectID::Class(def_id))
+            | ir::Type::WeakObject(ir::ObjectID::Class(def_id)) => {
                 let type_index = self.register_type(struct_type.clone(), NativeType::pointer())?;
 
-                let def = match self.object_id_indices.get_by_left(&type_index) {
-                    Some(ObjectID::Struct(struct_index)) => {
-                        self.struct_layouts[&struct_index].def.clone()
-                    },
-                    _ => {
-                        unreachable!("{} must have a registered struct object ID after register_object_type was called", struct_type)
-                    },
-                };
+                let (def, struct_index) = self.add_struct_type(&def_id.to_struct_type())?;
+                self.object_id_indices.insert(type_index, ObjectID::Struct(struct_index));
 
                 return Ok((def, type_index));
             }
@@ -168,7 +162,7 @@ impl Marshaller {
 
     pub(crate) fn gen_class_dtor(&mut self, type_def_id: &Rc<GenericTypeID>) -> MarshalResult<()> {
         let class_type = type_def_id.to_class_object_type();
-        
+
         self.gen_runtime_dtor(&class_type, |builder, self_arg| {
             builder.gen_class_object_dtor_body(type_def_id, self_arg)
         })
