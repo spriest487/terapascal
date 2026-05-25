@@ -16,11 +16,12 @@ pub use self::stmt::*;
 pub use self::ty_def::*;
 use crate::c::string_lit::StringLiteral;
 use crate::c::string_lit::StringLiteralKey;
-use crate::c::type_map::{ArraySig, TypeID};
+use crate::c::type_map::ArraySig;
+use crate::c::type_map::TypeID;
 use crate::ir;
 use crate::rtti::RuntimeFuncInfo;
 use crate::Options;
-use bimap::BiHashMap;
+use bimap::{BiBTreeMap, BiHashMap};
 use std::borrow::Cow;
 use std::collections::hash_map::HashMap;
 use std::collections::BTreeMap;
@@ -42,8 +43,8 @@ pub struct Unit<'a> {
     types: BiHashMap<TypeID, ir::Type>,
     c_types: BTreeMap<TypeID, Type>,
 
-    dyn_array_types_by_element: BTreeMap<TypeID, DynArrayTypeID>,
-    box_types_by_element: BTreeMap<TypeID, BoxTypeID>,
+    dyn_array_types_by_element: BiBTreeMap<TypeID, DynArrayTypeID>,
+    box_types_by_element: BiBTreeMap<TypeID, BoxTypeID>,
 
     static_array_types: HashMap<ArraySig, TypeID>,
 
@@ -96,8 +97,8 @@ impl<'a> Unit<'a> {
             types: BiHashMap::new(),
             c_types: BTreeMap::new(),
 
-            dyn_array_types_by_element: BTreeMap::new(),
-            box_types_by_element: BTreeMap::new(),
+            dyn_array_types_by_element: BiBTreeMap::new(),
+            box_types_by_element: BiBTreeMap::new(),
             static_array_types: HashMap::new(),
 
             type_defs: BTreeMap::new(),
@@ -312,7 +313,7 @@ impl<'a> Unit<'a> {
                     continue;
                 };
 
-                self.build_func_instance(instance_id, key, def);
+                self.build_func_ref(instance_id, key, def);
             }
         }
 

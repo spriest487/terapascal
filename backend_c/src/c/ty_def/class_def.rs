@@ -36,13 +36,19 @@ impl MethodImplFunc {
         iface_method: &ir::Method,
         impl_func_id: ir::FunctionID,
         metadata: &ir::Metadata,
-        module: &mut Unit,
+        unit: &mut Unit,
     ) -> Self {
         let iface_ty = ir::Type::Object(ir::ObjectID::Interface(iface_id));
+        let self_type = self_class.to_ir_type(unit);
 
         // TODO: doesn't support methods with type params yet
-        let method_instance_key = ir::FunctionRef::new(impl_func_id);
-        let method_instance = module.translate_func_ref(&method_instance_key);
+        let mut method_instance_key = ir::FunctionRef::new(impl_func_id);
+
+        if let Some(self_type_ref) = self_type.def_id() {
+            method_instance_key.args = self_type_ref.args.clone(); 
+        }
+        
+        let method_instance = unit.translate_func_ref(&method_instance_key);
 
         let vcall_wrapper_name = FunctionName::MethodWrapper(iface_id, method_id, self_class.to_def_name());
 
@@ -50,9 +56,9 @@ impl MethodImplFunc {
         let wrapper_param_tys: Vec<_> = iface_method
             .params
             .iter()
-            .map(|ty| module.translate_type(ty))
+            .map(|ty| unit.translate_type(ty))
             .collect();
-        let wrapper_return_ty = module.translate_type(&iface_method.return_ty);
+        let wrapper_return_ty = unit.translate_type(&iface_method.return_ty);
 
         Self {
             name: method_instance.name,
@@ -61,7 +67,7 @@ impl MethodImplFunc {
                     "virtual call wrapper impl of {}.{} for {}",
                     metadata.pretty_type_name(&iface_ty),
                     iface_method.name,
-                    metadata.pretty_type_name(&self_class.to_ir_type(module)),
+                    metadata.pretty_type_name(&self_class.to_ir_type(unit)),
                 )),
                 name: vcall_wrapper_name,
                 params: wrapper_param_tys,
@@ -144,13 +150,9 @@ impl ClassIdentity {
             },
 
             ClassIdentity::DynArrayClass(id) => {
-                let element = unit.dyn_array_types_by_element.iter()
-                    .find_map(|(element, element_array_id)| {
-                        (*element_array_id == *id).then(|| {
-                            element.clone()
-                        })
-                    })
-                    .map(|id| unit.get_type(id))
+                let element = unit.dyn_array_types_by_element
+                    .get_by_right(id)
+                    .map(|element_id| unit.get_type(*element_id))
                     .unwrap_or_else(|| panic!("missing array type for ID {}", id.0));
                 
                 element.dyn_array()
@@ -158,12 +160,8 @@ impl ClassIdentity {
             
             ClassIdentity::BoxClass(id) => {
                 let element = unit.box_types_by_element
-                    .iter()
-                    .find_map(|(element_id, element_box_id)| {
-                        (*element_box_id == *id).then(|| {
-                            unit.get_type(*element_id)
-                        })
-                    })
+                    .get_by_right(id)
+                    .map(|value_id| unit.get_type(*value_id))
                     .unwrap_or_else(|| panic!("missing box type for ID {}", id.0));
                 
                 element.boxed()

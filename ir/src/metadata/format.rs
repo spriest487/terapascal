@@ -1,4 +1,5 @@
 use crate::FieldID;
+use crate::FunctionRef;
 use crate::GlobalRef;
 use crate::IRFormatter;
 use crate::InterfaceID;
@@ -13,7 +14,6 @@ use crate::TypeDefID;
 use crate::Value;
 use crate::VariableInfo;
 use std::fmt;
-
 
 impl<T: MetadataSource> IRFormatter for T {
     fn format_type(&self, ty: &Type, f: &mut dyn fmt::Write) -> fmt::Result {
@@ -143,28 +143,9 @@ impl<T: MetadataSource> IRFormatter for T {
                 None => write!(f, "{}", r),
             },
 
-            Ref::Global(GlobalRef::Function(key)) => {
-                let func_name = self
-                    .get_function_info(key.id)
-                    .and_then(|f| f.identity.as_path());
-
-                match func_name {
-                    Some(name) => write!(f, "{}", name.to_pretty_string(self)),
-
-                    None => {
-                        match self.find_iface_impl(key.id) {
-                            Some(impl_ref) => {
-                                let iface_pretty_name = impl_ref.interface.to_pretty_string(self);
-                                write!(f, "{}.{} impl for ", iface_pretty_name, impl_ref.method_name)?;
-
-                                self.format_type(impl_ref.impl_type, f)
-                            },
-
-                            None => write!(f, "{}", r),
-                        }
-                    },
-                }
-            },
+            Ref::Global(GlobalRef::Function(func_ref)) => {
+                self.format_func_ref(func_ref, f)
+            }
 
             Ref::Global(GlobalRef::Variable(id)) => {
                 match self.get_variable(*id) {
@@ -192,6 +173,39 @@ impl<T: MetadataSource> IRFormatter for T {
                 RawFormatter.format_ref(r, f)
             },
         }
+    }
+
+    fn format_func_ref(&self, r: &FunctionRef, f: &mut dyn fmt::Write) -> fmt::Result {
+        let func_name = self
+            .get_function_info(r.id)
+            .and_then(|f| f.identity.as_path());
+
+        match func_name {
+            Some(name) => {
+                write!(f, "{}", name.to_pretty_string(self))?
+            },
+
+            None => {
+                match self.find_iface_impl(r.id) {
+                    Some(impl_ref) => {
+                        let iface_pretty_name = impl_ref.interface.to_pretty_string(self);
+                        write!(f, "{}.{} impl for ", iface_pretty_name, impl_ref.method_name)?;
+
+                        self.format_type(impl_ref.impl_type, f)?;
+                    },
+
+                    None => {
+                        write!(f, "{}", r.id)?
+                    },
+                }
+            },
+        }
+
+        if !r.args.is_empty() {
+            self.format_type_args(&r.args, f)?;
+        }
+
+        Ok(())
     }
 
     fn format_field(&self, of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result {

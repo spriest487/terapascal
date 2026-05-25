@@ -653,7 +653,13 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                             )
                         });
 
-                    let func_instance = self.translate_function_ref(&ir::FunctionRef::new(func));
+                    // add enclosing type args, if any
+                    let mut method_ref = ir::FunctionRef::new(func);
+                    if let Some(self_type_ref) = self_type.def_id() {
+                        method_ref.args = self_type_ref.args.clone();
+                    }
+
+                    let func_instance = self.translate_function_ref(&method_ref);
                     Expr::Function(func_instance.name)
                 };
 

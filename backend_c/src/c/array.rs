@@ -32,7 +32,7 @@ impl<'a> Unit<'a> {
         let element_c_type = self.translate_type(element_type);
         let element_type_id = self.get_type_id(element_type);
 
-        if let Some(existing_id) = self.dyn_array_types_by_element.get(&element_type_id) {
+        if let Some(existing_id) = self.dyn_array_types_by_element.get_by_left(&element_type_id) {
             let type_id = self.get_type_id(&element_type.dyn_array());
             return (type_id, *existing_id);
         };

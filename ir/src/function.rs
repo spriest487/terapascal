@@ -300,19 +300,8 @@ impl FunctionRef {
     }
 
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
-        let mut string = self.id.to_string();
-
-        if !self.args.is_empty() {
-            string.push('[');
-            for (i, arg) in self.args.iter().enumerate() {
-                if i > 0 {
-                    string.push_str(", ");
-                }
-                string.push_str(&arg.to_pretty_string(formatter));
-            }
-            string.push(']');
-        }
-
+        let mut string = String::new();
+        _ = formatter.format_func_ref(self, &mut string);
         string
     }
 }

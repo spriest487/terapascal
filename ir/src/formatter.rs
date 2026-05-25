@@ -7,8 +7,10 @@ use crate::ty::Type;
 use crate::ty_decl::InterfaceID;
 use crate::val::Ref;
 use crate::val::Value;
+use crate::FunctionRef;
+use crate::NamePath;
+use crate::TypeDefID;
 use crate::UnaryOpInstruction;
-use crate::{NamePath, TypeDefID};
 use std::fmt;
 
 const IX_WIDTH: usize = 8;
@@ -309,6 +311,7 @@ pub trait IRFormatter {
     fn format_type_def(&self, id: TypeDefID, f: &mut dyn fmt::Write) -> fmt::Result;
     fn format_val(&self, val: &Value, f: &mut dyn fmt::Write) -> fmt::Result;
     fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result;
+    fn format_func_ref(&self, r: &FunctionRef, f: &mut dyn fmt::Write) -> fmt::Result;
     fn format_field(&self, of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result;
     fn format_method(
         &self,
@@ -355,17 +358,21 @@ pub trait IRFormatter {
         write!(f, "{}", name.path.join("."))?;
 
         if !name.type_args.is_empty() {
-            write!(f, "[")?;
-            for (i, arg) in name.type_args.iter().enumerate() {
-                if i > 0 {
-                    write!(f, ", ")?;
-                }
-
-                self.format_type(arg, f)?;
-            }
-            write!(f, "]")?;
+            self.format_type_args(&name.type_args, f)?;
         }
         Ok(())
+    }
+    
+    fn format_type_args(&self, args: &[Type], f: &mut dyn fmt::Write) -> fmt::Result {
+        write!(f, "[")?;
+        for (i, arg) in args.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+
+            self.format_type(arg, f)?;
+        }
+        write!(f, "]")
     }
 }
 
@@ -386,6 +393,16 @@ impl IRFormatter for RawFormatter {
 
     fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result {
         write!(f, "{}", r)
+    }
+
+    fn format_func_ref(&self, r: &FunctionRef, f: &mut dyn fmt::Write) -> fmt::Result {
+        write!(f, "{}", r.id)?;
+
+        if !r.args.is_empty() {
+            self.format_type_args(&r.args, f)?;
+        }
+        
+        Ok(())
     }
 
     fn format_field(&self, _of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result {

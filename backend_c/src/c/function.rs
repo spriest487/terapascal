@@ -460,6 +460,8 @@ impl<'a> Unit<'a> {
             return *instance;
         }
 
+        // eprintln!("translating func ref: {}", key.to_pretty_string(self.metadata));
+
         let instance_id = FuncInstanceID(self.function_refs.len());
         let instance = FunctionInstance {
             id: instance_id,
@@ -507,26 +509,26 @@ impl<'a> Unit<'a> {
         instance_id
     }
 
-    pub fn build_func_instance(
+    pub fn build_func_ref(
         &mut self,
         instance_id: FuncInstanceID,
-        key: ir::FunctionRef,
+        func_ref: ir::FunctionRef,
         generic_def: &ir::FunctionDef,
     ) {
-        if key.args.len() != generic_def.type_params.len() {
+        if func_ref.args.len() != generic_def.type_params.len() {
             panic!(
-                "incorrect number of type parameters for function {} (invocation has {}, expected: {})",
-                key.id,
-                key.args.len(),
+                "incorrect number of type parameters for {} (invocation has {}, expected: {})",
+                func_ref.to_pretty_string(self.metadata),
+                func_ref.args.len(),
                 generic_def.type_params.len(),
             );
         }
 
-        let def = if key.args.len() == 0 {
+        let def = if func_ref.args.len() == 0 {
             Cow::Borrowed(generic_def)
         } else {
             let mut types = HashMap::new();
-            for (param, arg) in generic_def.type_params.iter().zip(key.args.iter()) {
+            for (param, arg) in generic_def.type_params.iter().zip(func_ref.args.iter()) {
                 if types.insert(SharedStringKey(param.clone()), arg.clone()).is_some() {
                     panic!("invalid function def: type param names are not unique");
                 }
