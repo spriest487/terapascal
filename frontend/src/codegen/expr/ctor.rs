@@ -41,28 +41,43 @@ pub fn build_object_ctor_invocation(
     }
 
     builder.scope(|builder| {
-        for member in members {
-            let member_val = translate_expr(&member.value, builder);
-            let field_id = struct_def
-                .find_field(&member.ident.name)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "field {} referenced in object ctor must exist",
-                        member.ident
-                    )
-                });
+        for (field_id, field_def) in &struct_def.fields {
+            let field_ref = out_val.clone().field_ref(object_ty.clone(), *field_id);
 
-            let field_def = struct_def.get_field(field_id).unwrap();
+            match field_def.name
+                .as_ref()
+                .and_then(|field_name| {
+                    members
+                        .iter()
+                        .find(|m| *m.ident.name == *field_name)
+                })
+            {
+                Some(member) => {
+                    let member_val = translate_expr(&member.value, builder);
 
-            builder.comment(&format!(
-                "{}: {} ({})",
-                member.ident, member.value, field_def.ty
-            ));
+                    builder.comment(format!(
+                        "{}: {} ({})",
+                        member.ident, member.value, field_def.ty
+                    ));
 
-            let field_ref = out_val.clone().field_ref(object_ty.clone(), field_id);
+                    builder.mov(field_ref.to_deref(), member_val);
+                    if field_def.ty.contains_any_object_refs(builder.metadata()) {
+                        builder.retain(field_ref.to_deref(), field_def.ty.clone());
+                    }
+                }
 
-            builder.mov(field_ref.to_deref(), member_val);
-            builder.retain(field_ref.to_deref(), field_def.ty.clone());
+                // if the field isn't present in the constructor expression, initialize it with
+                // the type's default value
+                None => {
+                    let field_display = match &field_def.name {
+                        None => format!("field {}", field_id),
+                        Some(name) => name.clone(),
+                    };
+                    builder.comment(format!("{field_display}: <no value>"));
+
+                    builder.mov(field_ref.to_deref(), ir::Value::Default(field_def.ty.clone()));
+                }
+            }
         }
     });
 
