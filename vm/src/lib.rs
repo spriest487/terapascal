@@ -222,7 +222,7 @@ impl Vm {
     fn default_variant(
         &mut self,
         ty: &ir::Type,
-        id: &Rc<ir::GenericTypeID>,
+        id: &Rc<ir::TypeRef>,
     ) -> ExecResult<DynValue> {
         let (def, type_index) = self.heap.marshaller.add_variant_type(ty)?;
 
@@ -1539,7 +1539,7 @@ impl Vm {
         let array_header = self.marshaller().unmarshal_dyn_array_header_at(&array_ptr)?;
 
         let element_type = match &array_header.object_header.id {
-            ObjectID::Array(t) => t.as_ref().clone(),
+            ObjectID::Array(t) => self.heap.marshaller.get_type(*t)?.clone(),
             _ => return Err(ExecError::illegal_state("dyn_array_element_pointer: object was not an array")),
         };
 
@@ -1571,12 +1571,13 @@ impl Vm {
             box_ptr.as_slice(Marshaller::object_header_size())
         })?;
 
-        let ObjectID::Box(value_type) = header.value.id else {
+        let ObjectID::Box(value_id) = header.value.id else {
             return Err(ExecError::illegal_state("unbox: object is not a box"));
         };
+        let value_type = self.heap.marshaller.get_type(value_id)?;
 
         let value_addr = box_ptr.addr + header.byte_count;
-        let value_ptr = Pointer::new(value_addr, (*value_type).clone());
+        let value_ptr = Pointer::new(value_addr, value_type.clone());
 
         let val = self.heap.load(&value_ptr)?;
         Ok(val)
@@ -2084,11 +2085,13 @@ impl Vm {
             }
 
             ir::ObjectID::Array(element_type) => {
-                object_header.id == ObjectID::Array(element_type.clone())
+                let element_id = self.marshaller().get_type_index(element_type)?;
+                object_header.id == ObjectID::Array(element_id)
             }
 
             ir::ObjectID::Box(value_type) => {
-                object_header.id == ObjectID::Box(value_type.clone())
+                let value_id = self.marshaller().get_type_index(value_type)?;
+                object_header.id == ObjectID::Box(value_id)
             }
         };
 
@@ -2140,16 +2143,18 @@ impl Vm {
     fn box_value_ptr(&self, box_ptr: &Pointer) -> ExecResult<Pointer> {
         let header = self.heap.load_object_header(box_ptr)?;
 
-        let ObjectID::Box(value_type) = &header.id else {
+        let ObjectID::Box(value_id) = &header.id else {
             return Err(ExecError::illegal_state(format!(
                 "exec_field: loading a box object returned the wrong type of object ({})",
                 header.id.to_pretty_name(self.marshaller())
             )));
         };
 
+        let value_type = self.marshaller().get_type(*value_id)?;
+
         let addr = box_ptr.addr + Marshaller::object_header_size();
 
-        Ok(Pointer::new(addr, value_type.as_ref().clone()))
+        Ok(Pointer::new(addr, value_type.clone()))
     }
 
     fn object_field_ptr(&self, object_ptr: &Pointer, field: ir::FieldID) -> ExecResult<Pointer> {
@@ -2580,12 +2585,14 @@ impl Vm {
         value: DynValue,
         immortal: bool,
     ) -> ExecResult<Pointer> {
-        let object_id = ObjectID::Box(Rc::new(value_ty.clone()));
+        let value_native_type = self.heap.marshaller.create_native_type(value_ty)?;
+        let value_id = self.heap.marshaller.get_type_index(&value_ty)?;
+        let value_size = value_native_type.size();
+
+        let object_id = ObjectID::Box(value_id);
         let header = ObjectHeader::new(object_id.clone(), immortal);
 
         let immortal = header.is_immortal();
-
-        let value_size = self.heap.marshaller.create_native_type(value_ty)?.size();
 
         let box_ptr = self.heap.alloc_object(value_size, object_id.clone(), !immortal)?;
 
@@ -2613,7 +2620,10 @@ impl Vm {
         elements: Vec<DynValue>,
         immortal: bool,
     ) -> ExecResult<Pointer> {
-        let object_id = ObjectID::Array(Rc::new(element_ty.clone()));
+        self.heap.marshaller.create_native_type(&element_ty)?;
+        let element_id = self.heap.marshaller.get_type_index(element_ty)?;
+
+        let object_id = ObjectID::Array(element_id);
         let header = ObjectHeader::new(object_id, immortal);
 
         self.new_dyn_array_with_header(element_ty, elements, header)
@@ -2633,19 +2643,18 @@ impl Vm {
         let data_size = element_size * array_len;
 
         // we can't allocate a fixed-size object here so allocate bytes and reinterpret the pointer
-        let object_id = ObjectID::Array(Rc::new(element_ty.clone()));
-        let array_ptr = self.heap.alloc_object(data_size, object_id.clone(), !immortal)?;
+        let array_ptr = self.heap.alloc_object(data_size, header.id, !immortal)?;
 
         if !immortal && self.opts.trace_rc {
             eprintln!(
                 "[rc] alloc @ {} <{}>",
                 array_ptr.to_pretty_string(self.metadata()),
-                object_id.to_pretty_name(self.marshaller()),
+                header.id.to_pretty_name(self.marshaller()),
             )
         }
 
         let offset = self.heap.marshaller.marshal_object_at(&array_ptr, &ObjectValue {
-            header: ObjectHeader::new(object_id, immortal),
+            header,
             value: DynValue::Array(Box::new(ArrayValue {
                 element_type: element_ty.clone(),
                 elements,

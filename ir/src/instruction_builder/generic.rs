@@ -1,7 +1,7 @@
 use crate::BinOpInstruction;
 use crate::FunctionDef;
 use crate::FunctionSig;
-use crate::GenericTypeID;
+use crate::TypeRef;
 use crate::GlobalRef;
 use crate::Instruction;
 use crate::InstructionBuilder;
@@ -475,14 +475,14 @@ pub fn instantiate_type(t: &Type, types: &TypeMap) -> Type {
             let args = id.args.iter()
                 .map(|t| instantiate_type(t, types));
 
-            GenericTypeID::new(id.def_id, args).to_struct_type()
+            TypeRef::new(id.def_id, args).to_struct_type()
         }
 
         Type::Variant(id) => {
             let args = id.args.iter()
                 .map(|t| instantiate_type(t, types));
 
-            GenericTypeID::new(id.def_id, args).to_variant_type()
+            TypeRef::new(id.def_id, args).to_variant_type()
         }
 
         Type::Object(object_id) | Type::WeakObject(object_id) => {
@@ -490,7 +490,7 @@ pub fn instantiate_type(t: &Type, types: &TypeMap) -> Type {
                 ObjectID::Class(id) => {
                     let args = id.args.iter()
                         .map(|t| instantiate_type(t, types));
-                    let id = GenericTypeID::new(id.def_id, args);
+                    let id = TypeRef::new(id.def_id, args);
                     ObjectID::Class(id)
                 }
 

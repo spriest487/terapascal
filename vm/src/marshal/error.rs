@@ -3,7 +3,7 @@ use std::fmt;
 use std::path::PathBuf;
 use terapascal_ir as ir;
 use thiserror::Error;
-use crate::marshal::TypeIndex;
+use crate::marshal::TypeID;
 
 #[derive(Clone, Debug, Error)]
 pub enum MarshalError<Ty = ir::Type> {
@@ -23,7 +23,7 @@ pub enum MarshalError<Ty = ir::Type> {
         field: ir::FieldID,
     },
     InvalidTypeIndex {
-        type_index: TypeIndex,
+        type_index: TypeID,
     },
     InvalidStructType(Ty),
     InvalidVariantType(Ty),
@@ -49,7 +49,7 @@ impl<Ty> MarshalError<Ty> {
         Self::UnsupportedType(ty)
     }
 
-    pub fn invalid_type_index(type_index: TypeIndex) -> Self {
+    pub fn invalid_type_index(type_index: TypeID) -> Self {
         Self::InvalidTypeIndex { type_index }
     }
 

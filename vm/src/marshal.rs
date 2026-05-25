@@ -41,18 +41,18 @@ use std::rc::Rc;
 pub struct Marshaller {
     metadata: ir::Metadata,
 
-    types: BTreeMap<TypeIndex, NativeType>,
+    types: BTreeMap<TypeID, NativeType>,
     libs: HashMap<String, Rc<dlopen::Library>>,
 
-    struct_layouts: BTreeMap<TypeIndex, StructLayout>,
-    variant_layouts: BTreeMap<TypeIndex, VariantLayout>,
+    struct_layouts: BTreeMap<TypeID, StructLayout>,
+    variant_layouts: BTreeMap<TypeID, VariantLayout>,
 
     // map of known object IDs to serializable indices
-    next_type_index: TypeIndex,
-    type_indices: BiHashMap<TypeIndex, ir::Type>,
-    object_id_indices: BiHashMap<TypeIndex, ObjectID>,
+    next_type_index: TypeID,
+    type_indices: BiHashMap<TypeID, ir::Type>,
+    object_id_indices: BiHashMap<TypeID, ObjectID>,
 
-    object_dtors: BTreeMap<TypeIndex, Rc<Function>>,
+    object_dtors: BTreeMap<TypeID, Rc<Function>>,
 
     func_instances: BiHashMap<ir::FunctionRef, FuncInstanceID>,
 
@@ -70,7 +70,7 @@ impl Marshaller {
             struct_layouts: BTreeMap::new(),
             variant_layouts: BTreeMap::new(),
             
-            next_type_index: TypeIndex(0),
+            next_type_index: TypeID(0),
             object_id_indices: BiHashMap::new(),
             type_indices: BiHashMap::new(),
 
@@ -157,7 +157,7 @@ impl Marshaller {
         Ok(())
     }
 
-    fn register_type(&mut self, ty: ir::Type, native_type: NativeType) -> MarshalResult<TypeIndex> {
+    fn register_type(&mut self, ty: ir::Type, native_type: NativeType) -> MarshalResult<TypeID> {
         if let Some(type_index) = self.type_indices.get_by_right(&ty) {
             return Ok(*type_index);
         }
@@ -183,14 +183,16 @@ impl Marshaller {
                     },
 
                     ir::ObjectID::Array(element) => {
-                        let object_id = ObjectID::Array(element.clone());
+                        let (element_id, _) = self.build_marshalled_type(element)?;
+                        let object_id = ObjectID::Array(element_id);
                         self.object_id_indices.insert(strong_index, object_id.clone());
 
                         self.gen_array_dtor(&element)?;
                     },
 
                     ir::ObjectID::Box(value) => {
-                        let object_id = ObjectID::Box(value.clone());
+                        let (value_id, _) = self.build_marshalled_type(value)?;
+                        let object_id = ObjectID::Box(value_id);
                         self.object_id_indices.insert(strong_index, object_id.clone());
 
                         self.gen_box_dtor(&value)?;
@@ -214,24 +216,24 @@ impl Marshaller {
         Ok(type_index)
     }
 
-    pub fn register_object_type(&mut self, ty: ir::Type) -> MarshalResult<TypeIndex> {
+    pub fn register_object_type(&mut self, ty: ir::Type) -> MarshalResult<TypeID> {
         self.register_type(ty, NativeType::pointer())
     }
 
-    fn get_cached_type(&self, t: &ir::Type) -> Option<(NativeType, TypeIndex)> {
+    fn get_cached_type(&self, t: &ir::Type) -> Option<(NativeType, TypeID)> {
         let type_index = self.type_indices.get_by_right(t)?;
         let cached = self.types.get(type_index)?;
 
         Some((cached.clone(), *type_index))
     }
 
-    pub fn add_iface(&mut self, id: ir::InterfaceID) -> MarshalResult<TypeIndex> {
+    pub fn add_iface(&mut self, id: ir::InterfaceID) -> MarshalResult<TypeID> {
         let iface_ty = id.to_interface_ptr_type();
         
         self.add_dyn_array_type(iface_ty)
     }
     
-    pub fn add_flags_type(&mut self, id: ir::TypeDefID) -> MarshalResult<(TypeIndex, NativeType)> {
+    pub fn add_flags_type(&mut self, id: ir::TypeDefID) -> MarshalResult<(TypeID, NativeType)> {
         let flags_type = id.to_flags_type();
         let (_, type_index) = self.add_struct_type(&flags_type)?;
 
@@ -312,10 +314,10 @@ impl Marshaller {
     fn build_marshalled_type(
         &mut self,
         ty: &ir::Type,
-    ) -> MarshalResult<(TypeIndex, NativeType)> {
-        if let Some(type_index) = self.try_get_type_index(ty) {
-            let cached = self.types[&type_index].clone();
-            return Ok((type_index, cached));
+    ) -> MarshalResult<(TypeID, NativeType)> {
+        if let Some(id) = self.try_get_type_index(ty) {
+            let cached = self.types[&id].clone();
+            return Ok((id, cached));
         }
 
         match ty {
@@ -339,9 +341,9 @@ impl Marshaller {
                 let pointer_type = NativeType::pointer();
                 
                 self.add_dyn_array_type(ty.clone())?;
-                let type_index = self.register_type(ty.clone(), pointer_type.clone())?;
+                let id = self.register_type(ty.clone(), pointer_type.clone())?;
                 
-                Ok((type_index, pointer_type))
+                Ok((id, pointer_type))
             },
 
             ir::Type::Array { element, dim } => {
@@ -351,13 +353,18 @@ impl Marshaller {
                 let array_struct = NativeType::structure(el_tys);
 
                 self.add_dyn_array_type(ty.clone())?;
-                let type_index = self.register_type(ty.clone(), array_struct.clone())?;
+                let id = self.register_type(ty.clone(), array_struct.clone())?;
 
-                Ok((type_index, array_struct))
+                Ok((id, array_struct))
             },
 
             ir::Type::Flags(ty_id) => {
                 Ok(self.add_flags_type(*ty_id)?)
+            }
+
+            ir::Type::Generic(..) => {
+                let type_id = self.register_type(ty.clone(), NativeType::void())?;
+                Ok((type_id, NativeType::void()))
             }
 
             // all primitives/builtins should be in the cache already
@@ -367,17 +374,17 @@ impl Marshaller {
         }
     }
 
-    pub fn try_get_type_index(&self, t: &ir::Type) -> Option<TypeIndex> {
+    pub fn try_get_type_index(&self, t: &ir::Type) -> Option<TypeID> {
         self.type_indices
             .get_by_right(t)
             .cloned()
     }
 
-    pub fn get_type_index(&self, t: &ir::Type) -> MarshalResult<TypeIndex> {
+    pub fn get_type_index(&self, t: &ir::Type) -> MarshalResult<TypeID> {
         self.try_get_type_index(t).ok_or_else(|| MarshalError::unsupported_type(t.clone()))
     }
 
-    pub fn get_type(&self, index: TypeIndex) -> MarshalResult<&ir::Type> {
+    pub fn get_type(&self, index: TypeID) -> MarshalResult<&ir::Type> {
         self.type_indices
             .get_by_left(&index)
             .ok_or_else(|| MarshalError::invalid_type_index(index))
@@ -443,6 +450,11 @@ impl Marshaller {
                 Ok(NativeType::pointer())
             }
 
+            ir::Type::Generic(..) => {
+                self.register_type(ty.clone(), NativeType::void())?;
+                Ok(NativeType::void())
+            }
+
             // all other types must exist in the cache already
             ty => {
                 let type_index = self.get_type_index(ty)?;
@@ -453,7 +465,7 @@ impl Marshaller {
     }
 
     // TODO: should probably change this to take a TypeIndex
-    pub fn get_native_type(&self, type_index: TypeIndex) -> MarshalResult<&NativeType> {
+    pub fn get_native_type(&self, type_index: TypeID) -> MarshalResult<&NativeType> {
         self.types
             .get(&type_index)
             .ok_or_else(|| {
@@ -461,7 +473,7 @@ impl Marshaller {
             })
     }
 
-    pub fn get_object_id(&self, index: TypeIndex) -> MarshalResult<&ObjectID> {
+    pub fn get_object_id(&self, index: TypeID) -> MarshalResult<&ObjectID> {
         match self.object_id_indices.get_by_left(&index) {
             Some(id) => Ok(id),
             None => {

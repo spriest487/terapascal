@@ -221,11 +221,12 @@ pub(super) fn array_create(state: &mut Vm) -> ExecResult<()> {
         return Err(ExecError::illegal_state("array_create: array is immortal and cannot be resized"));
     }
 
-    let ObjectID::Array(element_type) = &array_header.object_header.id else {
+    let ObjectID::Array(element_id) = &array_header.object_header.id else {
         return Err(ExecError::illegal_state("array_create: array pointer points to an invalid array object"));
     };
+    let element_type = state.marshaller().get_type(*element_id)?.clone();
 
-    let default_val = state.default_val(element_type)?;
+    let default_val = state.default_val(&element_type)?;
     let elements = iter::repeat(default_val).take(new_len as usize).collect();
 
     state.release_dyn_val(&DynValue::Pointer(array_ptr.clone()), &element_type.dyn_array())?;

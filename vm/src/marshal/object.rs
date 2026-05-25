@@ -7,7 +7,7 @@ use crate::marshal::MarshalError;
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::marshal::NativeType;
-use crate::marshal::TypeIndex;
+use crate::marshal::TypeID;
 use crate::DynValue;
 use crate::ObjectHeader;
 use crate::ObjectID;
@@ -30,8 +30,10 @@ impl Marshaller {
         };
 
         match (&object.header.id, &object.value) {
-            (ObjectID::Box(value_type), boxed_val) => {
-                let body_ptr = Pointer::new(pointer.addr + offset, value_type.as_ref().clone());
+            (ObjectID::Box(value_id), boxed_val) => {
+                let value_type = self.get_type(*value_id)?.clone();
+
+                let body_ptr = Pointer::new(pointer.addr + offset, value_type);
                 offset += self.marshal_at(boxed_val, &body_ptr)?;
 
                 Ok(offset)
@@ -45,15 +47,22 @@ impl Marshaller {
             }
 
             (
-                ObjectID::Array(element),
+                ObjectID::Array(element_id),
                 DynValue::Array(array_val)
-            ) if array_val.element_type == **element => {
+            ) => {
+                let element_type = self.get_type(*element_id)?.clone();
+
+                if array_val.element_type != element_type {
+                    return Err(MarshalError::InvalidData);
+                }
+
                 let element_count = array_val.elements.len();
+                let element_array_type = element_type.array(element_count);
 
                 let size_ptr = Pointer::new(pointer.addr + offset, ir::Type::I32);
                 let size = i32::try_from(element_count)
                     .map_err(|_| {
-                        MarshalError::unsupported_type(element.as_ref().clone().array(element_count))
+                        MarshalError::unsupported_type(element_array_type.clone())
                     })?;
 
                 offset += unsafe {
@@ -61,8 +70,7 @@ impl Marshaller {
                     marshal_bytes(&size.to_ne_bytes(), size_mem)?
                 };
 
-                let elements_ty = element.as_ref().clone().array(element_count);
-                let elements_ptr = Pointer::new(pointer.addr + offset, elements_ty);
+                let elements_ptr = Pointer::new(pointer.addr + offset, element_array_type);
 
                 offset += self.marshal_at(&object.value, &elements_ptr)?;
 
@@ -86,8 +94,9 @@ impl Marshaller {
         let body_addr = pointer.addr + header.byte_count;
 
         let value = match &header.value.id {
-            ObjectID::Box(value) => {
-                let value_ptr = Pointer { addr: body_addr, ty: value.as_ref().clone() };
+            ObjectID::Box(value_id) => {
+                let value_type = self.get_type(*value_id)?;
+                let value_ptr = Pointer::new(body_addr, value_type.clone());
 
                 self.unmarshal_at(&value_ptr)?
             }
@@ -104,7 +113,9 @@ impl Marshaller {
                 self.unmarshal_at(&struct_ptr)?
             }
 
-            ObjectID::Array(element) => {
+            ObjectID::Array(element_id) => {
+                let element_type = self.get_type(*element_id)?;
+
                 let size_ptr = Pointer { addr: body_addr, ty: ir::Type::I32 };
                 let size = unmarshal_from_ne_bytes(unsafe {
                     size_ptr.as_slice(NativeType::i32().size())
@@ -117,7 +128,7 @@ impl Marshaller {
 
                 let array_ptr = Pointer {
                     addr: body_addr + size.byte_count,
-                    ty: element.as_ref().clone().array(array_dim)
+                    ty: element_type.array(array_dim)
                 };
                 self.unmarshal_at(&array_ptr)?
             }
@@ -158,8 +169,10 @@ impl Marshaller {
     ) -> MarshalResult<usize> {
         let mut offset = self.marshal_object_header(header, out_bytes)?;
 
-        let element_ty = match &header.id {
-            ObjectID::Array(element_ty) => element_ty.clone(),
+        let element_type = match &header.id {
+            ObjectID::Array(element_id) => {
+                self.get_type(*element_id)?.clone()
+            },
             _ => {
                 // wrong header for an array
                 return Err(MarshalError::InvalidData);
@@ -168,7 +181,7 @@ impl Marshaller {
 
         let size = i32::try_from(count)
             .map_err(|_| {
-                MarshalError::unsupported_type(element_ty.as_ref().clone().array(count))
+                MarshalError::unsupported_type(element_type.array(count))
             })?;
 
         offset += marshal_bytes(&size.to_ne_bytes(), &mut out_bytes[offset..])?;
@@ -187,7 +200,7 @@ impl Marshaller {
         let weak_count = unmarshal_from_ne_bytes(&in_bytes[offset..], i32::from_ne_bytes)?;
         offset += weak_count.byte_count;
 
-        let object_id = self.get_object_id(TypeIndex(type_index.value))?;
+        let object_id = self.get_object_id(TypeID(type_index.value))?;
 
         Ok(UnmarshalledValue {
             value: ObjectHeader {
@@ -252,7 +265,7 @@ impl Marshaller {
         })
     }
 
-    pub fn get_runtime_dtor(&self, t: TypeIndex) -> Option<Rc<Function>> {
+    pub fn get_runtime_dtor(&self, t: TypeID) -> Option<Rc<Function>> {
         self.object_dtors.get(&t).cloned()
     }
 }

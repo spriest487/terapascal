@@ -123,7 +123,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         &mut self,
         variant: &typ::Symbol,
         case: &str,
-    ) -> (Rc<ir::GenericTypeID>, usize, Option<ir::Type>) {
+    ) -> (Rc<ir::TypeRef>, usize, Option<ir::Type>) {
         let variant_src_type = typ::Type::variant(variant.clone());
 
         let ir::Type::Variant(id) = self.translate_type(&variant_src_type) else {

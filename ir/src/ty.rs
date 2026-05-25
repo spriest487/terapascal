@@ -2,7 +2,7 @@ pub use crate::metadata::ids::FieldID;
 pub use crate::metadata::ids::ObjectID;
 use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
-use crate::{FunctionSig, GenericTypeID};
+use crate::{FunctionSig, TypeRef};
 use crate::IRFormatter;
 use crate::MetadataSource;
 use crate::TagLocation;
@@ -24,8 +24,8 @@ pub enum Type {
     Pointer(Rc<Type>),
     TempRef(Rc<Type>),
 
-    Struct(Rc<GenericTypeID>),
-    Variant(Rc<GenericTypeID>),
+    Struct(Rc<TypeRef>),
+    Variant(Rc<TypeRef>),
     Flags(TypeDefID),
     Array {
         element: Rc<Type>,
@@ -70,7 +70,7 @@ impl Type {
     }
 
     pub fn class_ptr(id: TypeDefID, args: impl IntoIterator<Item=Type>) -> Self {
-        Self::object_ptr(ObjectID::Class(GenericTypeID::new(id, args)))
+        Self::object_ptr(ObjectID::Class(TypeRef::new(id, args)))
     }
     
     pub const fn object_ptr(class: ObjectID) -> Self {
@@ -115,14 +115,14 @@ impl Type {
         }
     }
 
-    pub fn as_struct(&self) -> Option<&GenericTypeID> {
+    pub fn as_struct(&self) -> Option<&TypeRef> {
         match self {
             Type::Struct(id) => Some(id),
             _ => None,
         }
     }
     
-    pub fn as_variant(&self) -> Option<&GenericTypeID> {
+    pub fn as_variant(&self) -> Option<&TypeRef> {
         match self {
             Type::Variant(id) => Some(id),
             _ => None,
@@ -196,7 +196,7 @@ impl Type {
     // when a value of this type is the target of a field reference, the id of the struct
     // definition that contains the field that can be accessed through this type, or None if the
     // type does not have fields
-    pub fn field_struct_id(&self) -> Option<&GenericTypeID> {
+    pub fn field_struct_id(&self) -> Option<&TypeRef> {
         match self {
             Type::Struct(id) => Some(id.as_ref()),
             Type::Object(ObjectID::Class(id)) => Some(id.as_ref()),
@@ -215,7 +215,7 @@ impl Type {
         }
     }
     
-    pub fn def_id(&'_ self) -> Option<Cow<'_, Rc<GenericTypeID>>> {
+    pub fn def_id(&'_ self) -> Option<Cow<'_, Rc<TypeRef>>> {
         match self {
             Type::Variant(id)
             | Type::Struct(id) => {
@@ -223,7 +223,7 @@ impl Type {
             },
 
             | Type::Flags(id, ..) => {
-                Some(Cow::Owned(GenericTypeID::new(*id, [])))
+                Some(Cow::Owned(TypeRef::new(*id, [])))
             }
 
             _ => None,

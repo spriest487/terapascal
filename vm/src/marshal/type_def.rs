@@ -4,7 +4,7 @@ use crate::marshal::Marshaller;
 use crate::marshal::NativeType;
 use crate::marshal::StructFieldInfo;
 use crate::marshal::StructLayout;
-use crate::marshal::TypeIndex;
+use crate::marshal::TypeID;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use terapascal_ir as ir;
@@ -14,7 +14,7 @@ impl Marshaller {
         &mut self,
         struct_type: &ir::Type,
         def: Rc<ir::StructDef>,
-    ) -> MarshalResult<(NativeType, TypeIndex)> {
+    ) -> MarshalResult<(NativeType, TypeID)> {
         if let Some(cached) = self.get_cached_type(struct_type) {
             return Ok(cached);
         }

@@ -2,12 +2,11 @@ use crate::ir;
 use crate::marshal::MarshalError;
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
-use crate::marshal::TypeIndex;
+use crate::marshal::TypeID;
 use crate::ptr::Pointer;
 use cast::i128;
 use std::ops::Index;
 use std::ops::IndexMut;
-use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub enum DynValue {
@@ -451,7 +450,7 @@ impl DynValue {
         }
     }
 
-    pub fn as_struct_mut(&mut self, type_index: TypeIndex) -> Option<&mut StructValue> {
+    pub fn as_struct_mut(&mut self, type_index: TypeID) -> Option<&mut StructValue> {
         match self {
             DynValue::Structure(struct_val) if type_index == struct_val.type_index => {
                 Some(struct_val)
@@ -460,7 +459,7 @@ impl DynValue {
         }
     }
 
-    pub fn as_struct(&self, type_index: TypeIndex) -> Option<&StructValue> {
+    pub fn as_struct(&self, type_index: TypeID) -> Option<&StructValue> {
         match self {
             DynValue::Structure(struct_val) if type_index == struct_val.type_index => {
                 Some(struct_val)
@@ -483,7 +482,7 @@ impl DynValue {
         }
     }
 
-    pub fn as_variant(&self, type_index: TypeIndex) -> Option<&VariantValue> {
+    pub fn as_variant(&self, type_index: TypeID) -> Option<&VariantValue> {
         match self {
             DynValue::Variant(var_val) if type_index == var_val.type_index => Some(var_val),
             _ => None,
@@ -632,12 +631,12 @@ impl From<Pointer> for DynValue {
 
 #[derive(Debug, Clone)]
 pub struct StructValue {
-    pub type_index: TypeIndex,
+    pub type_index: TypeID,
     pub fields: Vec<DynValue>,
 }
 
 impl StructValue {
-    pub fn new(type_index: TypeIndex, fields: impl IntoIterator<Item = DynValue>) -> Self {
+    pub fn new(type_index: TypeID, fields: impl IntoIterator<Item = DynValue>) -> Self {
         Self {
             type_index,
             fields: fields.into_iter().collect(),
@@ -676,11 +675,11 @@ impl PartialEq<Self> for StructValue {
 }
 
 // subset of ir::ObjectID that only includes concrete types
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum ObjectID {
-    Struct(TypeIndex),
-    Array(Rc<ir::Type>),
-    Box(Rc<ir::Type>),
+    Struct(TypeID),
+    Array(TypeID),
+    Box(TypeID),
 }
 
 impl ObjectID {
@@ -690,16 +689,24 @@ impl ObjectID {
                 match id {
                     // real types
                     ir::ObjectID::Class(..) => {
-                        let type_index = marshaller.try_get_type_index(ty)?;
-                        Some(ObjectID::Struct(type_index))
+                        let class_id = marshaller.try_get_type_index(ty)?;
+                        Some(ObjectID::Struct(class_id))
                     },
-                    ir::ObjectID::Array(element_type) => Some(ObjectID::Array(element_type.clone())),
-                    ir::ObjectID::Box(value_type) => Some(ObjectID::Box(value_type.clone())),
+                    ir::ObjectID::Array(element_type) => {
+                        let element_id = marshaller.try_get_type_index(element_type)?;
+                        Some(ObjectID::Array(element_id))
+                    },
+                    ir::ObjectID::Box(value_type) => {
+                        let value_id = marshaller.try_get_type_index(value_type)?;
+                        Some(ObjectID::Box(value_id))
+                    },
 
                     // abstract types
                     ir::ObjectID::Any
                     | ir::ObjectID::Interface(_)
-                    | ir::ObjectID::AnyClosure(_) => None,
+                    | ir::ObjectID::AnyClosure(_) => {
+                        None
+                    },
                 }
             },
 
@@ -715,11 +722,13 @@ impl ObjectID {
                     other => Err(MarshalError::InvalidObjectType(other)),
                 }
             },
-            ObjectID::Array(element) => {
-                Ok(ir::ObjectID::Array(element.clone()).to_object_type())
+            ObjectID::Array(element_id) => {
+                let element_type = marshaller.get_type(*element_id)?;
+                Ok(element_type.dyn_array())
             },
-            ObjectID::Box(value) => {
-                Ok(ir::ObjectID::Box(value.clone()).to_object_type())
+            ObjectID::Box(value_id) => {
+                let value_type = marshaller.get_type(*value_id)?;
+                Ok(value_type.boxed())
             },
         }
     }
@@ -771,7 +780,7 @@ pub struct ObjectValue {
 
 #[derive(Debug, Clone)]
 pub struct VariantValue {
-    pub type_index: TypeIndex,
+    pub type_index: TypeID,
     pub tag: Box<DynValue>,
     pub data: Box<DynValue>,
 }

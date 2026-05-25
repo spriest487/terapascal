@@ -11,7 +11,7 @@ use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::FunctionID;
 use crate::FunctionSig;
-use crate::GenericTypeID;
+use crate::TypeRef;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::InstructionList;
@@ -763,7 +763,7 @@ pub trait InstructionBuilder {
         temp_at_ptr.value()
     }
     
-    fn gen_class_object_dtor_body(&mut self, class_id: &Rc<GenericTypeID>, obj_ref: impl Into<Ref>) -> bool {
+    fn gen_class_object_dtor_body(&mut self, class_id: &Rc<TypeRef>, obj_ref: impl Into<Ref>) -> bool {
         gen_class_object_dtor_body(self, class_id, obj_ref)
     }
 

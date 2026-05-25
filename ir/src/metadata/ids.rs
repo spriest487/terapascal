@@ -42,11 +42,11 @@ impl TypeDefID {
     }
 
     pub fn to_class_weak_type(self, args: impl IntoIterator<Item=Type>) -> Type {
-        Type::WeakObject(ObjectID::Class(GenericTypeID::new(self, args)))
+        Type::WeakObject(ObjectID::Class(TypeRef::new(self, args)))
     }
 
     pub fn to_struct_type(self, args: impl IntoIterator<Item=Type>) -> Type {
-        Type::Struct(GenericTypeID::new(self, args))
+        Type::Struct(TypeRef::new(self, args))
     }
 
     pub fn to_flags_type(self) -> Type {
@@ -54,7 +54,7 @@ impl TypeDefID {
     }
 
     pub fn to_variant_type(self, args: impl IntoIterator<Item=Type>) -> Type {
-        Type::Variant(GenericTypeID::new(self, args))
+        Type::Variant(TypeRef::new(self, args))
     }
 
     pub fn to_pretty_string(self, format: &impl IRFormatter) -> String {
@@ -72,12 +72,12 @@ impl fmt::Display for TypeDefID {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct GenericTypeID {
+pub struct TypeRef {
     pub def_id: TypeDefID,
     pub args: Vec<Type>,
 }
 
-impl GenericTypeID {
+impl TypeRef {
     pub fn new(def_id: TypeDefID, args: impl IntoIterator<Item=Type>) -> Rc<Self> {
         Rc::new(Self {
             def_id,
@@ -112,7 +112,7 @@ impl GenericTypeID {
     }
 }
 
-impl fmt::Display for GenericTypeID {
+impl fmt::Display for TypeRef {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.def_id)?;
 
@@ -146,7 +146,7 @@ pub enum ObjectID {
     Any,
 
     //instance of a known class whose layout is defined as the struct with this typedef ID
-    Class(Rc<GenericTypeID>),
+    Class(Rc<TypeRef>),
 
     // instance of an unknown class that implements the interface with this interface ID
     Interface(InterfaceID),
@@ -162,7 +162,7 @@ pub enum ObjectID {
 }
 
 impl ObjectID {
-    pub fn as_class(&self) -> Option<&Rc<GenericTypeID>> {
+    pub fn as_class(&self) -> Option<&Rc<TypeRef>> {
         let ObjectID::Class(type_id) = self else {
             return None;
         };
@@ -254,10 +254,10 @@ pub const RESERVED_STRINGS: [StringID; 1] = [
 ];
 
 thread_local!{
-    static STRING_OBJECT_ID: Rc<GenericTypeID> = GenericTypeID::new(STRING_ID, []);
-    static TYPEINFO_OBJECT_ID: Rc<GenericTypeID> = GenericTypeID::new(TYPEINFO_ID, []);
-    static FUNCINFO_OBJECT_ID: Rc<GenericTypeID> = GenericTypeID::new(FUNCINFO_ID, []);
-    static METHODINFO_OBJECT_ID: Rc<GenericTypeID> = GenericTypeID::new(METHODINFO_ID, []);
+    static STRING_OBJECT_ID: Rc<TypeRef> = TypeRef::new(STRING_ID, []);
+    static TYPEINFO_OBJECT_ID: Rc<TypeRef> = TypeRef::new(TYPEINFO_ID, []);
+    static FUNCINFO_OBJECT_ID: Rc<TypeRef> = TypeRef::new(FUNCINFO_ID, []);
+    static METHODINFO_OBJECT_ID: Rc<TypeRef> = TypeRef::new(METHODINFO_ID, []);
 
     static STRING_TYPE: Type = STRING_OBJECT_ID
         .try_with(|id| id.to_class_object_type())

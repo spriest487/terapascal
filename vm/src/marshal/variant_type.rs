@@ -4,7 +4,7 @@ use crate::marshal::MarshalError;
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::marshal::NativeType;
-use crate::marshal::TypeIndex;
+use crate::marshal::TypeID;
 use crate::DynValue;
 use crate::Pointer;
 use crate::VariantValue;
@@ -88,7 +88,7 @@ impl Marshaller {
 
     pub(super) fn unmarshal_variant(
         &self,
-        type_index: TypeIndex,
+        type_index: TypeID,
         in_bytes: &[u8],
     ) -> MarshalResult<UnmarshalledValue<VariantValue>> {
         let layout = self.get_variant_layout(type_index)?;
@@ -135,7 +135,7 @@ impl Marshaller {
         })
     }
 
-    fn get_variant_layout(&self, type_index: TypeIndex) -> MarshalResult<&VariantLayout> {
+    fn get_variant_layout(&self, type_index: TypeID) -> MarshalResult<&VariantLayout> {
         match self.variant_layouts.get(&type_index) {
             Some(layout) => Ok(layout),
             None => {
@@ -145,7 +145,7 @@ impl Marshaller {
         }
     }
 
-    fn invalid_variant_tag_err(&self, tag_val: DynValue, type_index: TypeIndex) -> MarshalError {
+    fn invalid_variant_tag_err(&self, tag_val: DynValue, type_index: TypeID) -> MarshalError {
         let variant_type = match self.get_type(type_index) {
             Ok(t) => t.clone(),
             Err(err) => return err,
@@ -157,7 +157,7 @@ impl Marshaller {
         }
     }
 
-    pub fn variant_data_offset(&self, type_index: TypeIndex) -> MarshalResult<usize> {
+    pub fn variant_data_offset(&self, type_index: TypeID) -> MarshalResult<usize> {
         let layout = self.get_variant_layout(type_index)?;
         Ok(layout.data_offset)
     }
@@ -165,7 +165,7 @@ impl Marshaller {
     pub fn add_variant_type(
         &mut self,
         variant_type: &ir::Type
-    ) -> MarshalResult<(Rc<ir::VariantDef>, TypeIndex)> {
+    ) -> MarshalResult<(Rc<ir::VariantDef>, TypeID)> {
         if let Some((_, type_index)) = self.get_cached_type(&variant_type)
             && let Some(layout) = self.variant_layouts.get(&type_index)
         {
@@ -210,7 +210,7 @@ impl Marshaller {
         &mut self,
         variant_type: &ir::Type,
         def: Rc<ir::VariantDef>,
-    ) -> MarshalResult<TypeIndex> {
+    ) -> MarshalResult<TypeID> {
         let mut cases = Vec::with_capacity(def.cases.len());
 
         let mut native_fields = Vec::with_capacity(def.cases.len() + 1);

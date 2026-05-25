@@ -1592,7 +1592,7 @@ impl<'a> LibraryBuilder<'a> {
 }
 
 fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID) {
-    let type_id = ir::GenericTypeID::new(closure_id, []);
+    let type_id = ir::TypeRef::new(closure_id, []);
     let closure_class_ty = type_id.to_class_object_type();
     let closure_weak_ty = type_id.to_weak_class_object_type();
 

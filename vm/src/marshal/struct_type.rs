@@ -4,7 +4,7 @@ use crate::marshal::MarshalError;
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::marshal::NativeType;
-use crate::marshal::TypeIndex;
+use crate::marshal::TypeID;
 use crate::DynValue;
 use crate::ObjectID;
 use crate::StructValue;
@@ -13,7 +13,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use terapascal_ir::generic::instantiate_struct_def;
-use terapascal_ir::GenericTypeID;
+use terapascal_ir::TypeRef;
 use terapascal_ir::InstructionBuilder;
 use terapascal_ir::MetadataSource;
 
@@ -57,7 +57,7 @@ impl Marshaller {
         Ok(struct_size)
     }
 
-    pub(super) fn unmarshal_struct(&self, type_index: TypeIndex, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<StructValue>> {
+    pub(super) fn unmarshal_struct(&self, type_index: TypeID, in_bytes: &[u8]) -> MarshalResult<UnmarshalledValue<StructValue>> {
         let layout = self.struct_layouts
             .get(&type_index)
             .ok_or_else(|| MarshalError::invalid_type_index(type_index))?;
@@ -88,7 +88,7 @@ impl Marshaller {
     pub fn add_struct_type(
         &mut self,
         struct_type: &ir::Type,
-    ) -> MarshalResult<(Rc<ir::StructDef>, TypeIndex)> {
+    ) -> MarshalResult<(Rc<ir::StructDef>, TypeID)> {
         if let Some(type_index) = self.try_get_type_index(struct_type)
             && let Some(layout) = self.struct_layouts.get(&type_index)
         {
@@ -101,7 +101,7 @@ impl Marshaller {
             },
 
             ir::Type::Flags(id) => {
-                ir::GenericTypeID::new(*id, [])
+                ir::TypeRef::new(*id, [])
             },
 
             // for object types that are pointers to an inner struct, instantiate that inner
@@ -160,7 +160,7 @@ impl Marshaller {
         Ok((def, type_index))
     }
 
-    pub(crate) fn gen_class_dtor(&mut self, type_def_id: &Rc<GenericTypeID>) -> MarshalResult<()> {
+    pub(crate) fn gen_class_dtor(&mut self, type_def_id: &Rc<TypeRef>) -> MarshalResult<()> {
         let class_type = type_def_id.to_class_object_type();
 
         self.gen_runtime_dtor(&class_type, |builder, self_arg| {

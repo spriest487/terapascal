@@ -5,7 +5,7 @@ use crate::marshal::MarshalError;
 use crate::marshal::MarshalResult;
 use crate::marshal::Marshaller;
 use crate::marshal::NativeType;
-use crate::marshal::TypeIndex;
+use crate::marshal::TypeID;
 use crate::ArrayValue;
 use crate::ObjectHeader;
 use crate::ObjectID;
@@ -22,7 +22,7 @@ pub struct DynArrayHeader {
 }
 
 impl Marshaller {
-    pub(super) fn add_dyn_array_type(&mut self, element_type: ir::Type) -> MarshalResult<TypeIndex> {
+    pub(super) fn add_dyn_array_type(&mut self, element_type: ir::Type) -> MarshalResult<TypeID> {
         self.register_type(element_type.clone().dyn_array(), NativeType::pointer())
     }
 

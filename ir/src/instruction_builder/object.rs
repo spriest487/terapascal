@@ -1,12 +1,12 @@
 ﻿use crate::instruction_builder::InstructionBuilder;
-use crate::GenericTypeID;
+use crate::TypeRef;
 use crate::MetadataSource;
 use crate::Ref;
 use std::rc::Rc;
 
 pub fn gen_class_object_dtor_body<B>(
     builder: &mut B,
-    class_id: &Rc<GenericTypeID>,
+    class_id: &Rc<TypeRef>,
     object_ref: impl Into<Ref>,
 ) -> bool
 where

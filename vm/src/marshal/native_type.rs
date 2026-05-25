@@ -6,9 +6,9 @@ use std::mem::transmute;
 use std::ptr::slice_from_raw_parts;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct TypeIndex(pub u64);
+pub struct TypeID(pub u64);
 
-impl fmt::Display for TypeIndex {
+impl fmt::Display for TypeID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
     }

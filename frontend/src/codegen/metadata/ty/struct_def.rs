@@ -6,7 +6,7 @@ use crate::ir;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-pub fn class_dtor_sig(class_id: &Rc<ir::GenericTypeID>) -> ir::FunctionSig {
+pub fn class_dtor_sig(class_id: &Rc<ir::TypeRef>) -> ir::FunctionSig {
     ir::FunctionSig {
         param_types: vec![class_id.to_class_object_type()],
         result_type: ir::Type::Nothing,
