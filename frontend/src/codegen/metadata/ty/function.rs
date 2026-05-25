@@ -48,10 +48,14 @@ pub fn translate_closure_struct(
 ) -> ir::TypeDefID {
     let id = lib.metadata_mut().new_type();
 
+    // the function pointer needs the real type, which takes the type-erased self arg as
+    // an extra 0th parameter
+    let func_ptr_sig = identity.sig.to_closure_function_ptr_sig();
+
     let mut fields = BTreeMap::new();
     fields.insert(
         ir::CLOSURE_PTR_FIELD,
-        ir::StructFieldDef::new(ir::Type::Function(identity.sig.clone())),
+        ir::StructFieldDef::new(func_ptr_sig.into_function_type()),
     );
 
     let mut field_id = ir::FieldID(ir::CLOSURE_PTR_FIELD.0 + 1);

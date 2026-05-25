@@ -1440,8 +1440,7 @@ impl<'a> LibraryBuilder<'a> {
 
         // since we're translating a closure function, the sig needs to include the implicit
         // closure object parameter
-        let mut sig = translate_sig(&func.sig(), self);
-        sig.param_types.insert(0, virtual_sig.to_closure_ptr_type());
+        let sig = translate_sig(&func.sig(), self).into_closure_function_ptr_sig();
 
         let internal_name = "<anonymous function>".to_string();
 
@@ -1534,13 +1533,13 @@ impl<'a> LibraryBuilder<'a> {
             },
         };
 
-        let static_closure = self.build_static_closure_instance(closure);
+        let static_closure = self.build_static_closure(closure);
         let static_closure_id = static_closure.id;
 
         &self.static_closures[&static_closure_id]
     }
 
-    pub fn build_static_closure_instance(&mut self, closure: ClosureInstance) -> &ir::StaticClosure {
+    pub fn build_static_closure(&mut self, closure: ClosureInstance) -> &ir::StaticClosure {
         let existing_id = self.static_closures.iter()
             .filter_map(|(var_id, static_closure)| {
                 if static_closure.closure_id == closure.closure_id {

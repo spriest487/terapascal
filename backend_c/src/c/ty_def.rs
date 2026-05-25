@@ -226,7 +226,7 @@ impl Type {
             Type::SizeType => "size_t".to_string(),
 
             Type::DefinedType(name) => match name {
-                TypeDefName::Alias(..) => name.to_string(),
+                TypeDefName::FuncPointer(..) => name.to_string(),
                 _ => format!("struct {}", name),
             },
 
@@ -271,7 +271,7 @@ pub struct TypeDecl {
 impl fmt::Display for TypeDecl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.name {
-            TypeDefName::Alias(..) => write!(f, "{}", self.name),
+            TypeDefName::FuncPointer(..) => write!(f, "{}", self.name),
             _ => write!(f, "struct {}", self.name),
         }
     }

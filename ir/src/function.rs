@@ -91,7 +91,7 @@ impl FunctionSig {
     }
 
     pub fn into_function_type(self) -> Type {
-        Type::Function(Rc::new(self))
+        Rc::new(self).to_function_type()
     }
 
     pub fn to_closure_ptr_type(self: &Rc<Self>) -> Type {
@@ -99,7 +99,21 @@ impl FunctionSig {
     }
 
     pub fn into_closure_ptr_type(self) -> Type {
-        Type::Object(ObjectID::AnyClosure(Rc::new(self)))
+        Rc::new(self).to_closure_ptr_type()
+    }
+
+    /// Create the sig of the function pointer type that needs to be stored in a closure
+    /// that calls a function with this sig. Inserts a new 0th parameter of the anonymous
+    /// closure type.
+    pub fn to_closure_function_ptr_sig(self: &Rc<Self>) -> Self {
+        let mut sig = (**self).clone();
+        sig.param_types.insert(0, self.to_closure_ptr_type());
+
+        sig
+    }
+
+    pub fn into_closure_function_ptr_sig(self) -> Self {
+        Rc::new(self).to_closure_function_ptr_sig()
     }
 }
 

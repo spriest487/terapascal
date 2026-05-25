@@ -390,7 +390,7 @@ pub fn build_static_closure_impl(
 
     let static_closure_ptr_ref = ir::Ref::Global(ir::GlobalRef::Variable(id));
 
-    let closure_ref = init_builder.build_closure_instance(closure.clone(), true);
+    let closure_ref = init_builder.build_closure_value(closure.clone(), true);
     init_builder.cast(static_closure_ptr_ref, closure_ref, closure.function_pointer_type());
 
     let init_body = init_builder.finish();

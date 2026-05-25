@@ -143,8 +143,8 @@ impl<'a> Unit<'a> {
                 }
             }
 
-            ir::Type::Function(..) => {
-                self.translate_function_type(ty.clone())
+            ir::Type::Function(sig) => {
+                self.translate_func_type(ty, sig)
             }
 
             ir::Type::Bool => self.register_type(ty.clone(), Type::Bool),
@@ -437,20 +437,14 @@ impl<'a> Unit<'a> {
         }
     }
 
-    pub fn translate_function_type(&mut self, ty: ir::Type) -> TypeID {
-        if let Some(existing_id) = self.try_get_type_id(&ty) {
+    pub fn translate_func_type(&mut self, ty: &ir::Type, sig: &Rc<ir::FunctionSig>) -> TypeID {
+        if let Some(existing_id) = self.try_get_type_id(ty) {
             return existing_id;
         }
 
-        let ir::Type::Function(sig) = &ty else {
-            panic!("{} is not a function type", ty.to_pretty_string(self.metadata));
-        };
-
-        let sig = sig.clone();
-
         // not a real type, won't ever be instantiated
         if sig.contains_generic_params() {
-            return self.register_type(ty, Type::Void);
+            return self.register_type(ty.clone(), Type::Void);
         }
 
         let mut deps = Vec::new();
@@ -467,17 +461,17 @@ impl<'a> Unit<'a> {
             param_tys.push(param_ty);
         }
 
-        let id = self.register_type_with(ty, |id| {
-            Type::DefinedType(TypeDefName::Alias(id))
+        let id = self.register_type_with(ty.clone(), |id| {
+            Type::DefinedType(TypeDefName::FuncPointer(id))
         });
 
-        let name = TypeDefName::Alias(id);
+        let name = TypeDefName::FuncPointer(id);
 
         let func_alias_def = FuncAliasDef {
             decl: TypeDecl { name },
             param_tys,
             return_ty,
-            comment: Some(sig.to_string()),
+            comment: Some(sig.to_pretty_string(self.metadata)),
         };
 
         self.register_type_def(id, name, func_alias_def, deps);

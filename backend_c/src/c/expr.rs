@@ -506,7 +506,10 @@ impl Expr {
                         let cast_to_anon_closure = a_expr.cast(Type::AnonymousClosure.ptr());
                         let func_ptr = cast_to_anon_closure.arrow(FieldName::ClosureFunctionPointer).addr_of();
 
-                        let func_ptr_ty = builder.translate_type(&sig.to_function_type());
+                        // sig is virtual, we need to cast to the actual function pointer with
+                        // the self param
+                        let func_ptr_sig = sig.to_closure_function_ptr_sig();
+                        let func_ptr_ty = builder.translate_type(&func_ptr_sig.into_function_type());
 
                         func_ptr.cast(func_ptr_ty.ptr())
                     },

@@ -211,21 +211,21 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             .library
             .build_closure_instance(func);
 
-        if func.captures.len() == 0 {
-            let static_closure = self.library.build_static_closure_instance(closure);
-            let static_closure_ref = ir::Ref::Global(ir::GlobalRef::Variable(static_closure.id));
-
-            // closure objects have a specific type, but refs to closures are type erased so
-            // we need to cast to Object. we know static closures are immortal, so this can be
-            // a temp ref
-            let closure_type = ir::Type::Object(ir::ObjectID::AnyClosure(static_closure.identity.sig.clone()));
-            let closure_obj = self.local_temp(closure_type.clone());
-            self.cast(closure_obj, static_closure_ref, closure_type);
-
-            closure_obj.to_ref()
-        } else {
-            self.build_closure_instance(closure, false)
+        if func.captures.len() != 0 {
+            return self.build_closure_value(closure, false);
         }
+
+        let static_closure = self.library.build_static_closure(closure);
+        let static_closure_ref = ir::Ref::from(static_closure.id);
+
+        // closure objects have a specific type, but refs to closures are type erased so
+        // we need to cast to Object. we know static closures are immortal, so this can be
+        // a temp ref
+        let closure_type = static_closure.identity.sig.to_closure_ptr_type();
+        let closure_obj = self.local_temp(closure_type.clone());
+        self.cast(closure_obj, static_closure_ref, closure_type);
+
+        closure_obj.to_ref()
     }
     
     pub fn build_function_closure(&mut self, func: &FunctionInstance) -> ir::Ref {
@@ -236,7 +236,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         ir::Ref::Global(ir::GlobalRef::Variable(static_closure.id))
     }
 
-    pub fn build_closure_instance(&mut self, closure: ClosureInstance, immortal: bool) -> ir::Ref {
+    pub fn build_closure_value(&mut self, closure: ClosureInstance, immortal: bool) -> ir::Ref {
         let closure_def = self
             .library
             .metadata()

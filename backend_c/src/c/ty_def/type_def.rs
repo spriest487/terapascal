@@ -87,8 +87,8 @@ pub enum TypeDefName {
     // struct from variant def ID
     Variant(TypeID),
 
-    // alias for function type
-    Alias(TypeID),
+    // typedef alias for a function pointer
+    FuncPointer(TypeID),
 
     // struct for a fixed-size array with a generated unique ID
     StaticArray(ArrayTypeID),
@@ -106,7 +106,7 @@ impl fmt::Display for TypeDefName {
             TypeDefName::StaticArray(id) => write!(f, "StaticArray_{}", id.0),
             TypeDefName::DynArray(id) => write!(f, "DynArray_{}", id.0),
             TypeDefName::Box(id) => write!(f, "Box_{}", id.0),
-            TypeDefName::Alias(id) => write!(f, "FuncAlias_{}", id),
+            TypeDefName::FuncPointer(id) => write!(f, "FuncPointer_{}", id),
         }
     }
 }
@@ -123,7 +123,7 @@ impl TypeDefName {
                 left.push_str(&format!("struct {}", self.to_string()));
             },
 
-            TypeDefName::Alias(..) => {
+            TypeDefName::FuncPointer(..) => {
                 left.push_str(&self.to_string());
             },
         }
