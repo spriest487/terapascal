@@ -161,7 +161,6 @@ impl fmt::Display for TypeDecl {
 pub enum TypeDef {
     Struct(StructDef),
     Variant(VariantDef),
-    Function(Rc<FunctionSig>),
 }
 
 impl TypeDef {
@@ -169,7 +168,6 @@ impl TypeDef {
         match self {
             TypeDef::Struct(s) => s.name(),
             TypeDef::Variant(v) => Some(&v.name),
-            TypeDef::Function(..) => None,
         }
     }
     
@@ -177,7 +175,6 @@ impl TypeDef {
         match self {
             TypeDef::Struct(def) => &def.tags,
             TypeDef::Variant(def) => &def.tags,
-            TypeDef::Function(..) => &[],
         }
     }
     
@@ -189,24 +186,6 @@ impl TypeDef {
             
             TypeDef::Variant(def) => {
                 def.name.to_pretty_string(formatter)
-            },
-            
-            TypeDef::Function(def) => {
-                let mut string = String::new();
-                string.push_str("function (");
-
-                for (i, param_ty) in def.param_types.iter().enumerate() {
-                    if i > 0 {
-                        string.push_str("; ");
-                    }
-
-                    string.push_str(&param_ty.to_pretty_string(formatter));
-                }
-
-                string.push_str("): ");
-                string.push_str(&def.result_type.to_pretty_string(formatter));
-
-                string
             },
         }
     }
@@ -232,18 +211,6 @@ impl fmt::Display for TypeDef {
         match self {
             TypeDef::Struct(s) => write!(f, "{}", s),
             TypeDef::Variant(v) => write!(f, "{}", v.name),
-            TypeDef::Function(func_ty) => {
-                write!(f, "function (")?;
-
-                for (i, param_ty) in func_ty.param_types.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, "; ")?;
-                    }
-                    write!(f, "{}", param_ty)?;
-                }
-
-                write!(f, "): {}", func_ty.result_type)
-            },
         }
     }
 }

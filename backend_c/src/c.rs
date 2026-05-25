@@ -211,10 +211,6 @@ impl<'a> Unit<'a> {
                     let def_ty = id.to_variant_type([]);
                     self.translate_variant_type(&def_ty);
                 },
-
-                ir::TypeDef::Function(sig) => {
-                    self.translate_function_type(sig.to_function_type());
-                },
             }
         }
 

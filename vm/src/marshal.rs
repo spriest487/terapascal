@@ -131,9 +131,6 @@ impl Marshaller {
                         self.add_variant_type(&variant_type)?;
                     }
                 }
-                ir::TypeDef::Function(_func_def) => {
-                    // functions don't need special marshaling, we only marshal pointers to them
-                }
             };
         }
 

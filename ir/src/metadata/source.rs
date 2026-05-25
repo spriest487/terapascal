@@ -53,21 +53,6 @@ pub trait MetadataSource : Sized {
     fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)>;
     fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo>;
 
-    fn get_function_ptr_type(&self, sig: &FunctionSig) -> Option<TypeDefID> {
-        self.type_defs()
-            .find_map(|(id, def)| match def {
-                TypeDef::Function(decl_sig) => (**decl_sig == *sig).then_some(id),
-                _ => None,
-            })
-    }
-
-    fn get_function_ptr_sig(&self, id: TypeDefID) -> Option<&Rc<FunctionSig>> {
-        self.get_type_decl(id).and_then(|decl| match decl {
-            TypeDecl::Def(TypeDef::Function(sig)) => Some(sig),
-            _ => None,
-        })
-    }
-
     fn interfaces(&self) -> impl Iterator<Item = (InterfaceID, &InterfaceDef)>;
     fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef>;
     fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>>;
@@ -101,7 +86,6 @@ pub trait MetadataSource : Sized {
             let tags = match def {
                 TypeDef::Struct(struct_def) => struct_def.tags.as_slice(),
                 TypeDef::Variant(struct_def) => struct_def.tags.as_slice(),
-                TypeDef::Function(_alias_sig) => &[],
             };
 
             (TagLocation::TypeDef(id), tags)

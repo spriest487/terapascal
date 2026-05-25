@@ -113,10 +113,6 @@ impl fmt::Display for Library {
                         writeln!(f)?;
                     }
                 },
-
-                TypeDef::Function(sig) => {
-                    writeln!(f, "{}", sig.to_pretty_string(self.metadata()))?;
-                },
             }
 
             let impl_self_ty = match def {
@@ -126,7 +122,6 @@ impl fmt::Display for Library {
                 TypeDef::Struct(struct_def) => {
                     Some(struct_def.identity.to_definition_type(*id))
                 },
-                TypeDef::Function(..) => None,
             };
 
             if let Some(self_ty) = impl_self_ty {
