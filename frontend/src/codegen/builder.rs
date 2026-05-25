@@ -180,7 +180,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn translate_type(&mut self, src_ty: &typ::Type) -> ir::Type {
         self.library.translate_type(src_ty)
     }
-    
+
     pub fn translate_sig(&mut self, sig: &typ::FunctionSig) -> ir::FunctionSig {
         translate_sig(sig, self.library)
     }
@@ -279,13 +279,15 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
                 let captured_local = builder.find_named(field_name).unwrap();
                 builder.mov(capture_field_ref.to_deref(), captured_local.to_ref());
-                builder.retain(capture_field_ref.to_deref(), field_def.ty.clone());
+
+                if field_def.ty.contains_any_object_refs(builder.metadata()) {
+                    builder.retain(capture_field_ref.to_deref(), field_def.ty.clone());
+                };
             }
             
             builder.cast(closure_virtual_ptr, closure_ref, closure_virtual_ty.clone());
         });
 
-        self.retain(closure_virtual_ptr, closure_virtual_ty);
         closure_virtual_ptr.to_ref()
     }
     
