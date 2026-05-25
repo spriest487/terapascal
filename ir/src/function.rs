@@ -94,12 +94,20 @@ impl FunctionSig {
         Rc::new(self).to_function_type()
     }
 
+    pub fn to_closure_id(self: &Rc<Self>) -> ObjectID {
+        ObjectID::AnyClosure(self.clone())
+    }
+
+    pub fn into_closure_id(self) -> ObjectID {
+        Rc::new(self).to_closure_id()
+    }
+
     pub fn to_closure_ptr_type(self: &Rc<Self>) -> Type {
-        Type::Object(ObjectID::AnyClosure(self.clone()))
+        self.to_closure_id().to_object_type()
     }
 
     pub fn into_closure_ptr_type(self) -> Type {
-        Rc::new(self).to_closure_ptr_type()
+        self.into_closure_id().to_object_type()
     }
 
     /// Create the sig of the function pointer type that needs to be stored in a closure

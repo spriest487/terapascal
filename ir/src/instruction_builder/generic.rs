@@ -286,16 +286,13 @@ pub fn instantiate_function_def(
     }
 }
 
-pub fn instantiate_sig(generic_sig: &FunctionSig, types: &TypeMap) -> FunctionSig {
-    let param_tys = generic_sig.param_types
+pub fn instantiate_sig(sig: &FunctionSig, types: &TypeMap) -> FunctionSig {
+    let result_type = instantiate_type(&sig.result_type, types);
+    let param_types = sig.param_types
         .iter()
-        .map(|t| instantiate_type(t, types))
-        .collect();
+        .map(|ty| instantiate_type(ty, types));
 
-    FunctionSig {
-        param_types: param_tys,
-        result_type: instantiate_type(&generic_sig.result_type, types),
-    }
+    FunctionSig::new(param_types, result_type)
 }
 
 pub fn instantiate_struct_def<'a>(
@@ -504,6 +501,11 @@ pub fn instantiate_type(t: &Type, types: &TypeMap) -> Type {
                 ObjectID::Box(value) => {
                     ObjectID::Box(Rc::new(instantiate_type(value, types)))
                 }
+
+                ObjectID::AnyClosure(sig) => {
+                    instantiate_sig(sig, types).into_closure_id()
+                }
+
                 other => other.clone(),
             };
 
@@ -527,12 +529,7 @@ pub fn instantiate_type(t: &Type, types: &TypeMap) -> Type {
         }
 
         Type::Function(sig) => {
-            let result_type = instantiate_type(&sig.result_type, types);
-            let param_types = sig.param_types
-                .iter()
-                .map(|ty| instantiate_type(ty, types));
-            
-            Type::Function(Rc::new(FunctionSig::new(param_types, result_type)))
+            instantiate_sig(sig, types).into_function_type()
         }
 
         _ => t.clone(),
