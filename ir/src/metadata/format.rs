@@ -51,10 +51,11 @@ impl<T: MetadataSource> IRFormatter for T {
             }
 
             Ref::Field(field_ref) => {
-                write!(f, "(as ")?;
-                self.format_type(&field_ref.instance_type, f)?;
-                write!(f, ") &(")?;
+                // write!(f, "(as ")?;
+                // self.format_type(&field_ref.instance_type, f)?;
+                // write!(f, ") &(")?;
 
+                write!(f, "&")?;
                 self.format_ref(&field_ref.instance, f)?;
                 write!(f, ".")?;
 
@@ -83,31 +84,34 @@ impl<T: MetadataSource> IRFormatter for T {
                 } else {
                     write!(f, "{}", field_ref.field.0)?;
                 }
-                write!(f, ")")?;
+                // write!(f, ")")?;
 
                 Ok(())
             }
 
             Ref::Element(el_ref) => {
-                write!(f, "(as ")?;
-                self.format_type(&el_ref.instance_type, f)?;
-                write!(f, ") &(")?;
+                // write!(f, "(as ")?;
+                // self.format_type(&el_ref.instance_type, f)?;
+                // write!(f, ") &(")?;
 
+                write!(f, "&")?;
                 self.format_ref(&el_ref.instance, f)?;
                 write!(f, "[")?;
                 self.format_val(&el_ref.index, f)?;
-                write!(f, "])")?;
+                write!(f, "]")?;
+                // write!(f, "])")?;
 
                 Ok(())
             }
 
             Ref::VariantTag(tag_ref) => {
-                write!(f, "(as ")?;
-                self.format_type(&tag_ref.instance_type, f)?;
-                write!(f, ") &(tag of ")?;
+                // write!(f, "(as ")?;
+                // self.format_type(&tag_ref.instance_type, f)?;
+                // write!(f, ") &(tag of ")?;
 
+                write!(f, "&tag of ")?;
                 self.format_ref(&tag_ref.instance, f)?;
-                write!(f, ")")?;
+                // write!(f, ")")?;
                 Ok(())
             }
 
