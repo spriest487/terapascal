@@ -1,4 +1,5 @@
-use crate::{ast, typ};
+use crate::ast;
+use crate::typ;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::Module;
