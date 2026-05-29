@@ -347,8 +347,8 @@ pub struct ConstValue {
 }
 
 impl ConstValue {
-    pub fn string_literal(text: Arc<String>, span: Span) -> Self {
-        Self::literal(Literal::String(text), builtin_string_type(), span)
+    pub fn string_literal(text: impl Into<Arc<String>>, span: Span) -> Self {
+        Self::literal(Literal::String(text.into()), builtin_string_type(), span)
     }
     
     pub fn literal(value: Literal, ty: impl Into<Type>, span: Span) -> Self {

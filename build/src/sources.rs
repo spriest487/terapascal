@@ -8,6 +8,7 @@ use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::Filesystem;
 use terapascal_common::span::*;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
+use terapascal_common::UNITS_DIR_VAR;
 use terapascal_frontend::ast::IdentPath;
 
 pub struct SourceCollection<'fs, Fs: Filesystem> {
@@ -29,7 +30,7 @@ impl<'fs, Fs: Filesystem> SourceCollection<'fs, Fs> {
             .cloned()
             .chain({
                 let mut unit_dirs = Vec::with_capacity(4);
-                if let Ok(units_var) = env::var("TERAPASCAL_UNITS") {
+                if let Ok(units_var) = env::var(UNITS_DIR_VAR) {
                     unit_dirs.extend(env::split_paths(&units_var).map(PathBuf::from));
                 }
 

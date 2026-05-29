@@ -32,7 +32,7 @@ pub struct Symbol {
     pub type_args: Option<TypeArgList>,
 }
 
-impl Symbol {
+impl Symbol {   
     pub fn with_ty_params(self, type_params: Option<TypeParamList>) -> Self {
         Self {
             type_params,

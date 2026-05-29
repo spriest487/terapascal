@@ -19,7 +19,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::version::Version;
-use terapascal_common::CompileOpts;
 
 #[derive(Debug, Clone)]
 pub struct ModuleUnit {
@@ -35,7 +34,6 @@ pub struct Module {
     pub version: Version,
 
     pub units: Vec<ModuleUnit>,
-    pub root_ctx: Box<Context>,
 }
 
 impl Module {
@@ -43,7 +41,7 @@ impl Module {
         name: impl Into<String>,
         version: Version,
         units: impl DoubleEndedIterator<Item=(&'a PathBuf, &'a Unit)>,
-        opts: CompileOpts,
+        root_ctx: &mut Context,
         log: &mut BuildLog,
     ) -> Self {
         // eprintln!("function sig size: {}", std::mem::size_of::<sig::FunctionSig>());
@@ -56,9 +54,8 @@ impl Module {
         // eprintln!("ident path size: {}", std::mem::size_of::<IdentPath>());
         // eprintln!("span size: {}", std::mem::size_of::<Span>());
 
-        let verbose = opts.verbose;
+        let verbose = root_ctx.opts().verbose;
 
-        let mut root_ctx = Context::root(opts);
         let mut module_units = Vec::new();
 
         // typecheck in reverse order - the parsing order starts with the root unit, but we
@@ -68,8 +65,8 @@ impl Module {
                 log.trace(format!("Typechecking {} {}", unit.kind, unit.ident));
             }
 
-            if let Some(unit) = typecheck_unit(unit_path, unit, &mut root_ctx)
-                .ok_or_continue(&mut root_ctx)
+            if let Some(unit) = typecheck_unit(unit_path, unit, root_ctx)
+                .ok_or_continue(root_ctx)
             {
                 module_units.push(unit);
             }
@@ -81,7 +78,6 @@ impl Module {
             name: name.into(),
             version,
             units: module_units,
-            root_ctx: Box::new(root_ctx),
         }
     }
     

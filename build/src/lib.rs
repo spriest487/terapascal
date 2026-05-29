@@ -6,16 +6,16 @@ use crate::error::BuildResult;
 use crate::sources::SourceCollection;
 use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::{env, io};
 use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::Filesystem;
 use terapascal_common::span::Span;
 use terapascal_common::version::Version;
-use terapascal_common::CompileOpts;
 use terapascal_common::TracedError;
-use terapascal_common::SRC_FILE_DEFAULT_EXT;
+use terapascal_common::{CompileOpts, IR_LIB_EXT, LIB_DIR_VAR};
 use terapascal_frontend::ast;
 use terapascal_frontend::ast::package::PackageUnit;
 use terapascal_frontend::ast::IdentPath;
@@ -24,14 +24,15 @@ use terapascal_frontend::ast::UnitKind;
 use terapascal_frontend::ast::UseDeclItem;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::codegen_ir;
+use terapascal_frontend::digest::digest;
+use terapascal_frontend::digest::DigestOutput;
 use terapascal_frontend::parse;
 use terapascal_frontend::parse::ParseError;
 use terapascal_frontend::parse::Parser;
 use terapascal_frontend::pp::PreprocessedUnit;
 use terapascal_frontend::tokenize;
 use terapascal_frontend::typ;
-use terapascal_frontend::typ::builtin_ident;
-use terapascal_frontend::typ::SYSTEM_UNIT_NAME;
+use terapascal_frontend::typ::Context;
 use terapascal_frontend::typecheck;
 use terapascal_frontend::TokenStream;
 use topological_sort::TopologicalSort;
@@ -49,6 +50,8 @@ pub struct BuildInput {
     pub source_path: PathBuf,
 
     pub search_dirs: Vec<PathBuf>,
+
+    pub package_names: Vec<String>,
 
     pub project_name: Option<String>,
     pub project_version: Option<Version>,
@@ -83,6 +86,10 @@ struct ProjectLoader<'a, Fs: Filesystem> {
     input: &'a BuildInput,
     log: &'a mut BuildLog,
 
+    // namespaces imported from external libraries, which we won't search for as local unit files
+    // when we encounter them as in `using` statements
+    imported_namespaces: HashSet<IdentPath>,
+
     sources: SourceCollection<'a, Fs>,
 
     // files parsed in the order specified, either by the project unit or on the command line
@@ -99,12 +106,20 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
     fn new(
         fs: &'a Fs,
         input: &'a BuildInput,
+        imported_namespaces: impl IntoIterator<Item=IdentPath>,
         log: &'a mut BuildLog,
     ) -> BuildResult<Self> {
         let mut sources = SourceCollection::new(fs, &input.search_dirs, input.compile_opts.verbose)?;
         sources.add(&input.source_path, None, log)?;
 
+        let imported_namespaces: HashSet<_> = imported_namespaces.into_iter().collect();
+
         if input.compile_opts.verbose {
+            log.trace("Imported namespaces:");
+            for ns in &imported_namespaces {
+                log.trace(format!("\t{}", ns));
+            }
+
             log.trace("Unit source directories:");
             for path in sources.source_dirs() {
                 log.trace(format!("\t{}", path.display()));
@@ -118,6 +133,8 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
             log,
 
             sources,
+
+            imported_namespaces,
 
             parsed_units: LinkedHashMap::new(),
 
@@ -136,6 +153,12 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
         let is_package_unit = matches!(main_unit_kind, Some(MainUnitKind::Package));
 
         for used_unit in uses_units {
+            // if this unit matches a namespace in a loaded library, the unit will be loaded
+            // from that library and we shouldn't try to load it from disk
+            if self.imported_namespaces.contains(&used_unit.ident) {
+                continue;
+            }
+
             // only project units can load other units. if this isn't the main project unit,
             // the unit we're trying to load must already have been declared in the project unit
             // or a package it references
@@ -295,7 +318,7 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
 }
 
 pub fn preprocess_project(fs: &impl Filesystem, input: &BuildInput, log: &mut BuildLog) -> BuildResult<Vec<PreprocessedUnit>> {
-    let mut loader = ProjectLoader::new(fs, input, log)?;
+    let mut loader = ProjectLoader::new(fs, input, [], log)?;
 
     let mut pp_units = Vec::new();
     while let Some(source_path) = loader.sources.next() {
@@ -309,35 +332,36 @@ pub fn preprocess_project(fs: &impl Filesystem, input: &BuildInput, log: &mut Bu
 pub fn parse_sources(
     fs: &impl Filesystem,
     input: &BuildInput,
+    imported_namespaces: impl IntoIterator<Item=IdentPath>,
     log: &mut BuildLog,
 ) -> BuildResult<ParseOutput> {
     let verbose = input.compile_opts.verbose;
 
-    let mut project = ProjectLoader::new(fs, input, log)?;
+    let mut project = ProjectLoader::new(fs, input, imported_namespaces, log)?;
 
     // auto-add system units if we're going beyond parsing
-    let include_system = input.output_stage >= BuildStage::Typecheck;
+    // let include_system = input.output_stage >= BuildStage::Typecheck;
 
-    let system_units = [
-        IdentPath::from_parts([builtin_ident(SYSTEM_UNIT_NAME)])  
-    ];
+    // let system_units = [
+    //     IdentPath::from_parts([builtin_ident(SYSTEM_UNIT_NAME)])
+    // ];
 
-    let mut system_paths = Vec::with_capacity(system_units.len());
+    // let mut system_paths = Vec::with_capacity(system_units.len());
 
-    if include_system {
-        for stdlib_unit in &system_units {
-            let filename = PathBuf::from(stdlib_unit.to_string())
-                .with_extension(SRC_FILE_DEFAULT_EXT);
+    // if include_system {
+    //     for stdlib_unit in &system_units {
+    //         let filename = PathBuf::from(stdlib_unit.to_string())
+    //             .with_extension(SRC_FILE_DEFAULT_EXT);
+    //
+    //         let unit_path = project.sources.add(&filename, None, &mut project.log)?;
+    //
+    //         system_paths.push(unit_path);
+    //     }
+    // }
 
-            let unit_path = project.sources.add(&filename, None, &mut project.log)?;
-
-            system_paths.push(unit_path);
-        }
-    }
-
-    for (unit_name, path) in system_units.iter().zip(system_paths.into_iter()) {
-        project.used_unit_paths.insert(unit_name.clone(), path);
-    }
+    // for (unit_name, path) in system_units.iter().zip(system_paths.into_iter()) {
+    //     project.used_unit_paths.insert(unit_name.clone(), path);
+    // }
 
     loop {
         let unit_filename = match project.sources.next() {
@@ -479,6 +503,33 @@ pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
     }
 }
 
+fn load_package(name: &str, input: &BuildInput, type_ctx: Option<&mut Context>) -> BuildResult<DigestOutput> {
+    let mut search_dirs = Vec::new();
+
+    if let Some(current_dir) = input.source_path.parent() {
+        search_dirs.push(current_dir.to_path_buf());
+    }
+
+    if let Ok(lib_path) = env::var(LIB_DIR_VAR) {
+        search_dirs.push(PathBuf::from(lib_path));
+    }
+
+    let path = search_dirs
+        .iter()
+        .find_map(|dir| {
+            let full_path = dir.join(name).with_added_extension(IR_LIB_EXT);
+            full_path.exists().then_some(full_path)
+        })
+        .ok_or_else(|| {
+            let msg = format!("failed to locate library {name}.{IR_LIB_EXT}");
+            io::Error::new(io::ErrorKind::NotFound, msg)
+        })?;
+
+    let digest = digest(path.as_path(), type_ctx)?;
+
+    Ok(digest)
+}
+
 fn build_with_log(
     fs: &impl Filesystem,
     input: BuildInput,
@@ -491,11 +542,25 @@ fn build_with_log(
         return Ok(BuildArtifact::PreprocessedText(units));
     }
 
-    let parse_output = parse_sources(fs, &input, log)?;
+    let mut root_ctx = (input.output_stage >= BuildStage::Typecheck)
+        .then(|| Context::root(input.compile_opts.clone()));
+
+    let mut package_namespaces = HashSet::new();
+    let mut package_libs = Vec::with_capacity(input.package_names.len());
+
+    for package_name in &input.package_names {
+        let package_digest = load_package(&package_name, &input, root_ctx.as_mut())?;
+        package_namespaces.extend(package_digest.namespaces.clone());
+        package_libs.push(package_digest.library);
+    }
+
+    let parse_output = parse_sources(fs, &input, package_namespaces, log)?;
 
     if input.output_stage == BuildStage::Parse {
         return Ok(BuildArtifact::ParsedUnits(parse_output));
     }
+
+    let mut root_ctx = root_ctx.unwrap();
 
     // reverse the compilation order for typechecking, modules should be processed after all their
     // dependencies
@@ -503,7 +568,7 @@ fn build_with_log(
         parse_output.project_name,
         parse_output.project_version,
         parse_output.units.iter(),
-        input.compile_opts,
+        &mut root_ctx,
         log,
     );
 
@@ -515,7 +580,7 @@ fn build_with_log(
         return Err(BuildError::CompletedWithErrors);
     }
 
-    let library = codegen_ir(&typed_module, input.codegen_opts);
+    let library = codegen_ir(&typed_module, &root_ctx, input.codegen_opts);
 
     Ok(BuildArtifact::Library(library))
 }

@@ -1,0 +1,9 @@
+program LoadPackage;
+uses
+    MyLib;
+
+begin
+    //var x := MyLibClass();
+
+    WriteLn('hello, MyLib! ' + MyLibFunc);
+end.

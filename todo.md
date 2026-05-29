@@ -1,3 +1,7 @@
+# IR 2.0
+* type constraints should be stored (if not enforced) in library
+* visibility info
+
 # impls rework
 * update CIL: remove impls from interface defs, add new map
 

@@ -22,6 +22,9 @@ pub const IR_LIB_EXT: &str = "lib";
 pub const CIL_LIB_EXT: &str = "dll";
 pub const SRC_FILE_DEFAULT_EXT: &str = "tpas";
 
+pub const UNITS_DIR_VAR: &str = "TERAPASCAL_UNITS";
+pub const LIB_DIR_VAR: &str = "TERAPASCAL_LIB";
+
 pub trait DiagnosticOutput: fmt::Display {
     fn severity(&self) -> Severity;
     

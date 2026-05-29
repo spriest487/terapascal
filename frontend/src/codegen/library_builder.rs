@@ -367,7 +367,9 @@ impl<'a> LibraryBuilder<'a> {
                         panic!("wrong kind of source def for function: {}", other.ident())
                     }
 
-                    None => panic!("missing source def for function {}", name),
+                    None => {
+                        panic!("missing source def for function {}", name)
+                    },
                 }
             },
 

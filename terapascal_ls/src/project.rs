@@ -128,6 +128,9 @@ impl Project {
             output_stage: BuildStage::Codegen,
             search_dirs: Vec::new(),
 
+            // TODO: package dependencies support
+            package_names: Vec::new(),
+
             // TODO
             project_name: None,
             project_version: None,
@@ -140,7 +143,7 @@ impl Project {
         };
 
         let parse_start_time = Instant::now();
-        let parse_result = parse_sources(filesystem, &input, &mut log);
+        let parse_result = parse_sources(filesystem, &input, [], &mut log);
         eprintln!("[build] parsing complete: {}ms", Instant::now()
             .duration_since(parse_start_time)
             .as_millis());
@@ -152,11 +155,12 @@ impl Project {
         match parse_result {
             Ok(parsed_output) => {
                 let typecheck_start_time = Instant::now();
+                let mut ctx = typ::Context::root(input.compile_opts);
                 let module = typecheck(
                     project_name,
                     Version::new(0, 0, 0),
                     parsed_output.units.iter(),
-                    input.compile_opts,
+                    &mut ctx,
                     &mut log,
                 );
 
@@ -164,7 +168,7 @@ impl Project {
                     .duration_since(typecheck_start_time)
                     .as_millis());
 
-                for completion in module.root_ctx.completion_hints() {
+                for completion in ctx.completion_hints() {
                     self.add_completion(completion);
                 }
 

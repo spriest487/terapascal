@@ -8,11 +8,13 @@ use crate::ir::TypeDef;
 use crate::ir::TypeDefID;
 use crate::typ;
 use std::collections::HashMap;
+use terapascal_common::CompileOpts;
 use terapascal_ir::MetadataSource;
 
 fn defs_from_src(src: &str) -> (HashMap<TypeDefID, TypeDef>, Metadata) {
+    let ctx = typ::Context::root(CompileOpts::default());
     let module = typ::test::module_from_src("test", src);
-    let ir = gen_lib(&module, CodegenOpts::default());
+    let ir = gen_lib(&module, &ctx, CodegenOpts::default());
 
     let defs = ir.metadata().type_defs()
         .map(|(id, def)| (id, def.clone()))

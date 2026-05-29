@@ -1,22 +1,9 @@
 use crate::InterfaceID;
 use crate::TypeDefID;
-use crate::Value;
-use crate::{FieldID, FunctionID};
+use crate::FunctionID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Tag {
-    pub tag_class: TypeDefID,
-    pub tag_args: Vec<TagArg>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct TagArg {
-    pub field_id: FieldID,
-    pub value: Value,
-}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum TagLocation {

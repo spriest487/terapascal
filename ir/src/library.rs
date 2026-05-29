@@ -247,14 +247,14 @@ fn write_tag_list(tags: &[TagInfo], formatter: &impl IRFormatter, f: &mut impl f
     Ok(())
 }
 
-pub fn encode_lib(lib: &crate::Library) -> Result<Vec<u8>, io::Error> {
+pub fn encode_lib(lib: &Library) -> Result<Vec<u8>, io::Error> {
     let data = rmp_serde::encode::to_vec_named(&lib)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))?;
 
     Ok(data)
 }
 
-pub fn decode_lib(data: &[u8]) -> Result<crate::Library, io::Error> {
+pub fn decode_lib(data: &[u8]) -> Result<Library, io::Error> {
     rmp_serde::decode::from_slice(data)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err.to_string()))
 }

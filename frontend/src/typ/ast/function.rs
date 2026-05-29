@@ -58,6 +58,7 @@ pub const SELF_PARAM_NAME: &str = "self";
 pub const SELF_TY_NAME: &str = "Self";
 
 pub type FunctionDecl = ast::FunctionDecl<Value>;
+pub type FunctionDeclMod = ast::FunctionDeclMod<Value>;
 pub type FunctionDef = ast::FunctionDef<Value>;
 pub type FunctionParamGroup = ast::FunctionParamGroup<Value>;
 pub type InterfaceMethodDecl = ast::InterfaceMethodDecl<Value>;

@@ -7,14 +7,14 @@ mod function;
 pub mod library_builder;
 mod set_flags;
 
-pub use self::function::*;
-pub use self::set_flags::*;
-use crate::ast::StructKind;
 use self::builder::IRBuilder;
 use self::expr::*;
+pub use self::function::*;
 use self::library_builder::LibraryBuilder;
 use self::metadata::*;
+pub use self::set_flags::*;
 use self::stmt::*;
+use crate::ast::StructKind;
 use crate::ir;
 use crate::typ as typ;
 use terapascal_common::StripMode;
@@ -40,15 +40,15 @@ impl Default for CodegenOpts {
     }
 }
 
-pub fn gen_lib(module: &typ::Module, opts: CodegenOpts) -> ir::Library {
-    let mut lib = LibraryBuilder::new(module.name.as_str(), module.version, module.root_ctx.as_ref(), [], opts);
+pub fn gen_lib(module: &typ::Module, type_ctx: &typ::Context, opts: CodegenOpts) -> ir::Library {
+    let mut lib = LibraryBuilder::new(module.name.as_str(), module.version, type_ctx, [], opts);
 
-    translate_builtin_class(&module, &mut lib, &typ::builtin_string_name(), ir::STRING_ID);
+    translate_builtin_class(&mut lib, type_ctx, &typ::builtin_string_name(), ir::STRING_ID);
 
     if opts.rtti {
-        translate_builtin_class(&module, &mut lib, &typ::builtin_typeinfo_name(), ir::TYPEINFO_ID);
-        translate_builtin_class(&module, &mut lib, &typ::builtin_methodinfo_name(), ir::METHODINFO_ID);
-        translate_builtin_class(&module, &mut lib, &typ::builtin_funcinfo_name(), ir::FUNCINFO_ID);
+        translate_builtin_class(&mut lib, type_ctx, &typ::builtin_typeinfo_name(), ir::TYPEINFO_ID);
+        translate_builtin_class(&mut lib, type_ctx, &typ::builtin_methodinfo_name(), ir::METHODINFO_ID);
+        translate_builtin_class(&mut lib, type_ctx, &typ::builtin_funcinfo_name(), ir::FUNCINFO_ID);
     }
 
     for unit in &module.units {
@@ -59,13 +59,12 @@ pub fn gen_lib(module: &typ::Module, opts: CodegenOpts) -> ir::Library {
 }
 
 fn translate_builtin_class(
-    module: &typ::Module,
     lib: &mut LibraryBuilder,
+    type_ctx: &typ::Context,
     name: &typ::Symbol,
     id: ir::TypeDefID
 ) {
-    let Ok(class_def) = module.root_ctx
-        .find_struct_def(&name.full_path, StructKind::Class)
+    let Ok(class_def) = type_ctx.find_struct_def(&name.full_path, StructKind::Class)
     else {
         return;
     };

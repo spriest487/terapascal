@@ -16,7 +16,7 @@ pub struct Args {
     /// If the output file extension matches a backend, the output from that backend will be written
     /// to this path.
     /// If no output path is provided the vm will be invoked.
-    #[structopt(name = "OUTPUT", short = "o", parse(from_os_str))]
+    #[structopt(short = "o", parse(from_os_str))]
     pub output: Option<PathBuf>,
 
     #[structopt(name = "project-name")]
@@ -51,14 +51,18 @@ pub struct Args {
     #[structopt(long="strip", default_value = "unused-impl", parse(try_from_str = parse_strip_mode))]
     pub strip: StripMode,
 
-    /// source dir for unit source files
+    /// Source directory to search for unit source files
     #[structopt(long = "search-dir", short = "s", parse(from_os_str))]
     pub search_dirs: Vec<PathBuf>,
 
-    /// if set, run compilation to a given stage and print the intermediate output to stdout
-    /// text instead of creating an output file
-    #[structopt(short = "p", long = "print-stage", parse(try_from_str = parse_build_stage_arg))]
-    pub print_stage: Option<BuildStage>,
+    /// Add a package dependency on a package with the given name
+    #[structopt(long = "package", short = "p")]
+    pub packages: Vec<String>,
+
+    /// If set, run compilation to the given stage and print a representation of the output to
+    /// stdout as text instead of creating an output file
+    #[structopt(long = "dump", parse(try_from_str = parse_build_stage_arg))]
+    pub dump_stage: Option<BuildStage>,
 
     /// Log RC heap usage to stderr
     #[structopt(long = "trace-heap")]
@@ -72,7 +76,7 @@ pub struct Args {
     #[structopt(long = "trace-ir")]
     pub trace_ir: bool,
 
-    /// VM: log runtime generic instantiations
+    /// Log runtime generic instantiations, where supported by the backend
     #[structopt(long = "trace-generics")]
     pub trace_generics: bool,
 

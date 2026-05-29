@@ -1,0 +1,4 @@
+package MyLib;
+contains MyLib in 'MyLib.tpas';
+
+end.

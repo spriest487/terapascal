@@ -1,4 +1,4 @@
-use crate::ast;
+use crate::{ast, typ};
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::Module;
@@ -17,6 +17,7 @@ use terapascal_common::fs::Filesystem;
 use terapascal_common::version::Version;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::UNITS_DIR_VAR;
 
 const INT32: Type = Type::Primitive(Primitive::Int32);
 const BOOL: Type = Type::Primitive(Primitive::Boolean);
@@ -38,8 +39,8 @@ where
     let mut units = Vec::new();
 
     // always include the system unit from the configure unit path
-    let units_var = env::var("TERAPASCAL_UNITS")
-        .expect("TERAPASCAL_UNITS environment variable must be set");
+    let units_var = env::var(UNITS_DIR_VAR)
+        .expect(&format!("{} environment variable must be set", UNITS_DIR_VAR));
     let unit_path = PathBuf::from(units_var);
 
     let system_src = DefaultFilesystem
@@ -65,10 +66,12 @@ where
 
     let units_by_path = units.iter().map(|(p, u)| (p, u));
 
-    let module = Module::typecheck("test", Version::default(), units_by_path, CompileOpts::default(), &mut log);
+    let mut root_ctx = typ::Context::root(CompileOpts::default());
 
-    if !module.root_ctx.errors().is_empty() {
-        Err(module.root_ctx.errors().to_vec())
+    let module = Module::typecheck("test", Version::default(), units_by_path, &mut root_ctx, &mut log);
+
+    if !root_ctx.errors().is_empty() {
+        Err(root_ctx.errors().to_vec())
     } else {
         Ok(module)
     }

@@ -87,6 +87,20 @@ impl NamePath {
         buf
     }
 
+    pub fn parent(&self) -> Option<Self> {
+        if self.path.len() < 2 {
+            return None;
+        }
+
+        let mut path = self.path.clone();
+        path.pop();
+
+        Some(Self {
+            path,
+            type_args: Vec::new()
+        })
+    }
+
     pub fn child(mut self, name: impl Into<String>) -> Self {
         self.path.push(name.into());
         self

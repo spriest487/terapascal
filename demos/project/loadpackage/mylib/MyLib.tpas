@@ -1,0 +1,19 @@
+unit MyLib;
+interface
+
+type
+    MyLibClass = class
+    end;
+
+function MyLibFunc: Integer;
+
+implementation
+
+function MyLibFunc: Integer;
+begin
+    456
+end;
+
+initialization
+    WriteLn('loaded MyLib');
+end.

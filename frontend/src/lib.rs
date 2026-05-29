@@ -8,6 +8,7 @@ pub mod pp;
 pub mod result;
 pub mod token_tree;
 pub mod typ;
+pub mod digest;
 
 pub use self::consts::EnumConstant;
 pub use self::consts::IntConstant;
@@ -26,7 +27,7 @@ use crate::parse::ParseResult;
 use crate::parse::Parser;
 use crate::pp::error::PreprocessorError;
 use crate::pp::PreprocessedUnit;
-use crate::typ::Module;
+use crate::typ::{Context, Module};
 pub use ast::keyword::Keyword;
 pub use ast::operators::CompoundAssignmentOperator;
 pub use ast::operators::Operator;
@@ -100,18 +101,18 @@ pub fn typecheck<'a>(
     module_name: String,
     module_version: Version,
     units: impl DoubleEndedIterator<Item = (&'a PathBuf, &'a ast::Unit)>,
-    opts: CompileOpts,
+    ctx: &mut Context,
     log: &mut BuildLog,
 ) -> Module {
-    let module = Module::typecheck(module_name, module_version, units, opts, log);
+    let module = Module::typecheck(module_name, module_version, units, ctx, log);
 
-    for error in module.root_ctx.errors() {
+    for error in ctx.errors() {
         log.diagnostic(error.clone());
     }
 
     module
 }
 
-pub fn codegen_ir(module: &Module, opts: CodegenOpts) -> ir::Library {
-    codegen::gen_lib(module, opts)
+pub fn codegen_ir(module: &Module, type_ctx: &Context, opts: CodegenOpts) -> ir::Library {
+    codegen::gen_lib(module, type_ctx, opts)
 }

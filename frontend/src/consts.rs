@@ -245,6 +245,12 @@ impl RealConstant {
     }
 }
 
+impl From<f32> for RealConstant {
+    fn from(val: f32) -> Self {
+        RealConstant(BigDecimal::from_f32(val).expect("NaN/infinite constant values not supported yet"))
+    }
+}
+
 impl From<f64> for RealConstant {
     fn from(val: f64) -> Self {
         RealConstant(BigDecimal::from_f64(val).expect("NaN/infinite constant values not supported yet"))

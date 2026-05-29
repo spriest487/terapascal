@@ -52,7 +52,7 @@ use dotnet::dotnet_build;
 use terapascal_vm::result::ExecResult;
 
 fn compile(args: Args) -> Result<(), RunError> {
-    if args.output.is_some() && args.print_stage.is_some() {
+    if args.output.is_some() && args.dump_stage.is_some() {
         let msg = "output file and print stage arguments are mutually exclusive".to_string();
         return Err(RunError::InvalidArguments(msg));
     }
@@ -104,8 +104,9 @@ fn compile(args: Args) -> Result<(), RunError> {
         project_version: args.project_version,
         project_name: args.project_name.clone(),
         search_dirs: args.search_dirs.clone(),
-        output_stage: args.print_stage.unwrap_or(BuildStage::Codegen),
+        output_stage: args.dump_stage.unwrap_or(BuildStage::Codegen),
         source_path: args.file.clone(),
+        package_names: args.packages.clone(),
     };
     
     let output = build(&DefaultFilesystem, input);
@@ -213,7 +214,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
         },
 
         BuildArtifact::Library(lib) => {
-            if let Some(BuildStage::Codegen) = args.print_stage {
+            if let Some(BuildStage::Codegen) = args.dump_stage {
                 return print_output(
                     args.output_path(), 
                     |dst| write!(dst, "{}", lib)
