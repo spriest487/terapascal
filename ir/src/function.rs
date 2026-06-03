@@ -1,4 +1,3 @@
-use crate::{ClosureIdentity, IRFormatter, ObjectID};
 use crate::InstructionList;
 use crate::Label;
 use crate::NamePath;
@@ -9,6 +8,7 @@ use crate::TagInfo;
 use crate::Type;
 use crate::TypeDefID;
 use crate::VariableID;
+use crate::{ClosureIdentity, IRFormatter, MethodID, ObjectID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -146,6 +146,7 @@ pub enum FunctionIdentity {
 
     Method {
         declaring_type: Type,
+        id: MethodID,
         name: String,
         type_args: Vec<Type>,
     },
@@ -175,7 +176,7 @@ impl FunctionIdentity {
                 Cow::Owned(format!("{}.{name}", declaring_type.to_pretty_string(formatter)))
             }
 
-            FunctionIdentity::Method { declaring_type, name, type_args } => {
+            FunctionIdentity::Method { declaring_type, id: _, name, type_args } => {
                 let mut result = declaring_type.to_pretty_string(formatter);
                 result.push('.');
                 result.push_str(name);

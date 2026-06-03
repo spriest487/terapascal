@@ -48,7 +48,7 @@ pub struct LibraryBuilder<'a> {
     name: String,
     version: Version,
 
-    references: Vec<String>,
+    references: Vec<LibraryRef>,
 
     src_metadata: &'a typ::Context,
 
@@ -69,7 +69,7 @@ pub struct LibraryBuilder<'a> {
     variables_by_name: HashMap<IdentPath, ir::VariableID>,
 
     static_closures: BTreeMap<ir::VariableID, ir::StaticClosure>,
-    
+
     // looked up on first use
     free_mem_func: Option<ir::FunctionID>,
     get_mem_func: Option<ir::FunctionID>,
@@ -79,11 +79,17 @@ pub struct LibraryBuilder<'a> {
     metadata: ir::MetadataBuilder,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 struct BuiltinClassInfo {
     name: typ::Symbol,
     id: ir::TypeDefID,
     rtti: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct LibraryRef {
+    pub lib: ir::Library,
+    pub imported_funcs: HashMap<FunctionDeclKey, FunctionInstance>,
 }
 
 thread_local! {
@@ -100,11 +106,14 @@ impl<'a> LibraryBuilder<'a> {
         name: impl Into<String>,
         version: Version,
         src_metadata: &'a typ::Context,
-        metadata_refs: impl IntoIterator<Item=Arc<ir::Metadata>>,
+        refs: impl IntoIterator<Item=LibraryRef>,
         opts: CodegenOpts
     ) -> Self {
         let builtin_classes = BUILTIN_CLASS_INFO
             .with(|class_infos| class_infos.to_vec());
+
+        let refs: Vec<_> = refs.into_iter().collect();
+        let metadata_refs = refs.iter().map(|r| r.lib.metadata.clone());
 
         let mut metadata = ir::MetadataBuilder::with_refs(metadata_refs);
 
@@ -130,7 +139,7 @@ impl<'a> LibraryBuilder<'a> {
 
         let builder = LibraryBuilder {
             name: name.into(),
-            references: Vec::new(),
+            references: refs,
 
             version,
 
@@ -230,7 +239,12 @@ impl<'a> LibraryBuilder<'a> {
 
         let metadata = self.metadata.build();
 
-        let mut lib = ir::Library::new(self.name, self.version, self.references, metadata);
+        let ref_names: Vec<_> = self.references
+            .into_iter()
+            .map(|lib_ref| lib_ref.lib.name)
+            .collect();
+
+        let mut lib = ir::Library::new(self.name, self.version, ref_names, metadata);
         lib.functions = self.functions;
         lib.init = self.init_code;
 
@@ -352,6 +366,10 @@ impl<'a> LibraryBuilder<'a> {
             return cached_func.clone();
         }
 
+        if let Some(imported_func) = self.find_imported_func(key) {
+            return imported_func.clone();
+        }
+
         match key {
             FunctionDeclKey::Function { name, sig } => {
                 match self.src_metadata.find_func_def(&name, sig.clone()).cloned() {
@@ -381,6 +399,16 @@ impl<'a> LibraryBuilder<'a> {
                 self.instantiate_virtual_method(virtual_key)
             }
         }
+    }
+
+    fn find_imported_func(&self, key: &FunctionDeclKey) -> Option<&FunctionInstance> {
+        for lib_ref in &self.references {
+            if let Some(imported_func) = lib_ref.imported_funcs.get(key) {
+                return Some(imported_func);
+            }
+        }
+
+        None
     }
 
     pub fn get_method(&self, ty: &typ::Type, index: usize) -> typ::ast::MethodDecl {
@@ -652,12 +680,7 @@ impl<'a> LibraryBuilder<'a> {
                 panic!("instantiate_method: missing method def: {} method {}", decl_self_ty, method_key.method_index)
             });
 
-        let ns = method_key.self_ty
-            .full_path()
-            .expect("instantiate_method: methods should only be generated for named types")
-            .into_owned();
-
-        let id = self.declare_func(&method_def.decl, ns);
+        let id = self.declare_method(&method_def.decl, method_key.method_index);
 
         // cache the function before translating the instantiation, because
         // it may recurse and instantiate itself in its own body
@@ -772,12 +795,8 @@ impl<'a> LibraryBuilder<'a> {
                 ir::FunctionIdentity::Path(path)
             }
 
-            FunctionDeclContext::MethodDef { declaring_type } => {
-                self.method_identity(func_decl, declaring_type.ty())
-            }
-
-            FunctionDeclContext::MethodDecl { enclosing_type} => {
-                self.method_identity(func_decl, enclosing_type)
+            FunctionDeclContext::MethodDef { .. } | FunctionDeclContext::MethodDecl { ..} => {
+                panic!("declare_func: {} is a method", func_decl.name)
             }
 
             _ => {
@@ -785,6 +804,36 @@ impl<'a> LibraryBuilder<'a> {
             }
         };
 
+        self.insert_func_decl(identity, func_decl)
+    }
+
+    pub fn declare_method(
+        &mut self,
+        method_decl: &typ::ast::FunctionDecl,
+        method_index: usize,
+    ) -> ir::FunctionID {
+        let identity = match &method_decl.name.context {
+            FunctionDeclContext::MethodDecl { enclosing_type } => {
+                self.method_identity(method_decl, enclosing_type, method_index)
+            }
+
+            FunctionDeclContext::MethodDef { declaring_type } => {
+                self.method_identity(method_decl, declaring_type.ty(), method_index)
+            }
+
+            _ => {
+                panic!("declare_method: {} is not a method", method_decl.name)
+            }
+        };
+
+        self.insert_func_decl(identity, method_decl)
+    }
+
+    fn insert_func_decl(
+        &mut self,
+        identity: ir::FunctionIdentity,
+        func_decl: &typ::ast::FunctionDecl,
+    ) -> ir::FunctionID {
         let tags = self.translate_tag_groups(&func_decl.tags);
 
         let sig = func_decl.sig();
@@ -797,6 +846,7 @@ impl<'a> LibraryBuilder<'a> {
         &mut self,
         func_decl: &typ::ast::FunctionDecl,
         declaring_type: &typ::Type,
+        method_index: usize,
     ) -> ir::FunctionIdentity {
         // if the declaring type is a generic type, use its generic name in its identity
         // e.g. the declaring type is Box[T], not Box with unspecified type params
@@ -831,6 +881,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 ir::FunctionIdentity::Method {
                     declaring_type,
+                    id: ir::MethodID(method_index),
                     name,
                     type_args,
                 }

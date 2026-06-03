@@ -1,9 +1,9 @@
-﻿use crate::{FunctionSig, IRFormatter};
+﻿use crate::FunctionSig;
+use crate::IRFormatter;
 use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
-use std::fmt::Formatter;
 use std::rc::Rc;
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
@@ -17,6 +17,12 @@ impl fmt::Display for StringID {
 
 #[derive(Eq, PartialEq, Hash, Clone, Copy, Debug, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct MethodID(pub usize);
+
+impl fmt::Display for MethodID {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl fmt::Display for InterfaceID {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -113,7 +119,7 @@ impl TypeRef {
 }
 
 impl fmt::Display for TypeRef {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.def_id)?;
 
         if !self.args.is_empty() {

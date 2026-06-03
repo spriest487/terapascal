@@ -1,20 +1,209 @@
-use std::sync::Arc;
-use terapascal_ir::MetadataSource;
+use crate::ast::Access;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::StructKind;
+use crate::ast::Visibility;
 use crate::digest::DigestBuilder;
 use crate::digest::DigestError;
 use crate::digest::DigestResult;
-use crate::typ::TypeParam;
-use crate::typ::TypeName;
-use crate::typ::Type;
-use crate::typ::Symbol;
-use crate::typ::Primitive;
-use crate::typ::TypeParamList;
+use crate::digest::DigestWarning;
 use crate::ir;
+use crate::typ::ast::FieldDecl;
+use crate::typ::ast::MethodDecl;
+use crate::typ::ast::MethodDeclSection;
+use crate::typ::ast::StructDecl;
+use crate::typ::ast::StructDeclSection;
+use crate::typ::ast::StructMemberDecl;
+use crate::typ::ast::VariantCase;
+use crate::typ::ast::VariantCaseData;
+use crate::typ::ast::VariantDecl;
+use crate::typ::Primitive;
+use crate::typ::ScopeID;
+use crate::typ::Symbol;
+use crate::typ::Type;
+use crate::typ::TypeName;
+use crate::typ::TypeParam;
+use crate::typ::TypeParamList;
+use std::collections::BTreeMap;
+use std::collections::HashMap;
+use std::mem;
+use std::sync::Arc;
+use terapascal_ir::MetadataSource as _;
 
 impl DigestBuilder<'_> {
+    pub fn digest_type_decl(&mut self, decl: &ir::TypeDecl) -> DigestResult<()> {
+        match decl {
+            ir::TypeDecl::Reserved | ir::TypeDecl::Forward(..) => {
+                Ok(())
+            }
+
+            ir::TypeDecl::Def(ir::TypeDef::Variant(variant_def)) => {
+                self.digest_variant_def(variant_def)?;
+                Ok(())
+            }
+
+            ir::TypeDecl::Def(ir::TypeDef::Struct(struct_def)) => {
+                match &struct_def.identity {
+                    ir::StructIdentity::Class(class_path) => {
+                        self.digest_struct_def(class_path, struct_def, StructKind::Class)
+                    }
+
+                    ir::StructIdentity::Record(record_path) => {
+                        self.digest_struct_def(record_path, struct_def, StructKind::Record)
+                    }
+
+                    ir::StructIdentity::SetFlags { .. }
+                    | ir::StructIdentity::ClosureObject(..) => {
+                        // unnamed class = internal only, no import
+                        Ok(())
+                    }
+                }
+            }
+        }
+    }
+
+    fn digest_variant_def(
+        &mut self,
+        def: &ir::VariantDef,
+    ) -> DigestResult<()> {
+        let name = self.digest_def_path(&def.name)?;
+        let variant_type = Type::variant(name.clone());
+
+        let def_path = name.full_path.clone();
+
+        let mut cases = Vec::with_capacity(def.cases.len());
+        for case_def in &def.cases {
+            let data_type = match &case_def.ty {
+                None => None,
+                Some(t) => {
+                    let data_type = self.digest_type(t)?;
+
+                    Some(VariantCaseData {
+                        ty: TypeName::Unspecified(data_type),
+                    })
+                },
+            };
+
+            cases.push(VariantCase {
+                ident: Ident::new(&case_def.name, self.span()),
+                span: self.span(),
+                data: data_type,
+            });
+        }
+
+        // TODO
+        let implements = None;
+        let where_clause = None;
+
+        let tags = self.digest_tags(&def.tags)?;
+
+        let variant_decl = VariantDecl {
+            name: Arc::new(name),
+            implements,
+            where_clause,
+
+            tags,
+
+            forward: false,
+
+            cases,
+            sections: Vec::new(),
+
+            end_kw_span: None,
+            span: self.span(),
+            kw_span: self.span(),
+        };
+
+        self.declare_type(&def.name, variant_type)?;
+
+        self.variant_defs.insert(def_path, variant_decl);
+
+        Ok(())
+    }
+
+    fn digest_struct_def(
+        &mut self,
+        name_path: &ir::NamePath,
+        def: &ir::StructDef,
+        kind: StructKind,
+    ) -> DigestResult<()> {
+        let name = self.digest_def_path(&name_path)?;
+        let struct_type = Type::from_struct_type(name.clone(), kind);
+
+        let def_path = name.full_path.clone();
+
+        let mut sections = Vec::with_capacity(def.fields.len());
+
+        for (_, field) in &def.fields {
+            let Some(field_name) = &field.name else {
+                // skip anonymous internal fields
+                continue;
+            };
+
+            let field_type = self.digest_type(&field.ty)?;
+
+            sections.push(StructDeclSection {
+                members: vec![StructMemberDecl::Field(FieldDecl {
+                    span: self.span(),
+                    ty: TypeName::Unspecified(field_type),
+                    idents: vec![Ident::new(field_name, self.span())],
+                    access: Access::Published, // TODO: access modifiers in IR
+                })],
+                access_kw_span: None,
+                access: Access::Published, // TODO: access modifiers in IR
+            });
+        }
+
+        let tags = self.digest_tags(&def.tags)?;
+
+        // TODO
+        let implements = None;
+        let where_clause = None;
+
+        let struct_decl = StructDecl {
+            name,
+            kind,
+            implements,
+            where_clause,
+
+            tags,
+
+            forward: false,
+            packed: def.layout == ir::StructLayout::Packed,
+
+            sections,
+
+            end_kw_span: None,
+            span: self.span(),
+            kw_span: self.span(),
+        };
+
+        self.declare_type(name_path, struct_type)?;
+
+        self.struct_defs.insert(def_path, struct_decl);
+
+        Ok(())
+    }
+
+    fn declare_type(&mut self, name_path: &ir::NamePath, as_type: Type) -> DigestResult<()> {
+        let span = self.span();
+
+        let unit_scope = if let Some(unit_path) = name_path.parent() {
+            self.open_unit(&unit_path)?
+        } else {
+            ScopeID(0)
+        };
+
+        if let Some(ctx) = self.root_ctx.as_mut() {
+            let ident = Ident::new(&name_path.path.last().unwrap(), span);
+            ctx.declare_type(ident, as_type, Visibility::Interface, true);
+
+            ctx.pop_scope(unit_scope);
+        }
+
+        Ok(())
+    }
+
     pub fn digest_type(&mut self, ir_type: &ir::Type) -> DigestResult<Type> {
         let result = match ir_type {
             ir::Type::Nothing => {
@@ -109,13 +298,17 @@ impl DigestBuilder<'_> {
             type_args.push(TypeName::Unspecified(self.digest_type(type_arg)?));
         }
 
-        let type_decl = self.library.metadata
+        let type_decl = self
+            .metadata()
             .get_type_decl(type_ref.def_id)
-            .ok_or_else(|| DigestError::InvalidData)?;
+            .ok_or_else(|| {
+                let type_name = type_ref.def_id.to_pretty_string(self.metadata());
+                DigestError::MissingTypeDef(type_name)
+            })?;
 
         match type_decl {
             ir::TypeDecl::Reserved | ir::TypeDecl::Forward(..) => {
-                Err(DigestError::InvalidData)
+                Err(DigestError::InvalidData("Type is undefined".to_string()))
             }
 
             ir::TypeDecl::Def(ir::TypeDef::Struct(struct_def)) => {
@@ -151,9 +344,13 @@ impl DigestBuilder<'_> {
     }
 
     fn digest_interface_type(&mut self, id: ir::InterfaceID) -> DigestResult<Type> {
-        let def = self.library.metadata
+        let def = self
+            .metadata()
             .get_iface_def(id)
-            .ok_or_else(|| DigestError::InvalidData)?;
+            .ok_or_else(|| {
+                let type_name = id.to_interface_ptr_type().to_pretty_string(self.metadata());
+                DigestError::MissingTypeDef(type_name)
+            })?;
 
         let name = self.digest_def_path(&def.name)?;
 
@@ -165,21 +362,121 @@ impl DigestBuilder<'_> {
             .iter()
             .map(|part| Ident::new(part, self.span())));
 
-        if name_path.type_args.is_empty() {
-            return Ok(Symbol::from(ident_path));
+        let type_params = self.digest_def_type_params(&name_path.type_args)?;
+
+        Ok(Symbol::from(ident_path).with_ty_params(type_params))
+    }
+
+    pub(super) fn digest_def_type_params(&self, type_params: &[ir::Type]) -> DigestResult<Option<TypeParamList>> {
+        if type_params.is_empty() {
+            return Ok(None);
         }
 
-        let mut type_params = Vec::new();
-        for path_arg in &name_path.type_args {
-            let ir::Type::Generic(param_name) = path_arg else {
-                // all params
-                return Err(DigestError::InvalidData);
+        let mut params = Vec::with_capacity(type_params.len());
+
+        for type_arg in type_params {
+            let ir::Type::Generic(param_name) = type_arg else {
+                let type_name = type_arg.to_pretty_string(self.metadata());
+                let msg = format!("definition has invalid type parameter: {type_name}");
+
+                return Err(DigestError::InvalidData(msg));
             };
 
-            type_params.push(TypeParam::new(Ident::new(param_name, self.span())));
+            params.push(TypeParam {
+                span: self.span(),
+                name: Ident::new(param_name, self.span()),
+                constraint: None,
+            });
         }
 
-        let param_list = TypeParamList::new(type_params, self.span());
-        Ok(Symbol::from(ident_path).with_ty_params(Some(param_list)))
+        Ok(Some(TypeParamList::new(params, self.span())))
+    }
+
+    pub fn finish_type_defs(&mut self) {
+        let mut type_methods = HashMap::new();
+        mem::swap(&mut type_methods, &mut self.type_methods);
+
+        for (declaring_type, type_methods) in type_methods {
+            if let Err(err) = self.finish_type_def(&declaring_type, type_methods) {
+                self.warnings.push(DigestWarning::InvalidMethodList(declaring_type, Box::new(err)));
+            }
+        }
+
+        assert!(self.type_methods.is_empty());
+    }
+
+    fn finish_type_def(
+        &mut self,
+        declaring_type: &Type,
+        mut method_map: BTreeMap<usize, MethodDecl>,
+    ) -> DigestResult<()> {
+        let mut method_list = Vec::with_capacity(method_map.len());
+
+        for method_index in 0..method_map.len() {
+            let Some(method_decl) = method_map.remove(&method_index) else {
+                return Err(DigestError::MissingMethodDef(ir::MethodID(method_index)));
+            };
+
+            method_list.push(method_decl)
+        }
+
+        match declaring_type {
+            Type::Record(path) | Type::Class(path) => {
+                self.finish_struct_def(&path.full_path, method_list)
+            }
+
+            Type::Variant(path) => {
+                self.finish_variant_def(&path.full_path, method_list)
+            }
+
+            // Type::Interface(_) => {}
+
+            _ => {
+                Err(DigestError::InvalidData(format!("invalid declaring type for method: {declaring_type}",)))
+            }
+        }
+    }
+
+    fn finish_struct_def(
+        &mut self,
+        path: &IdentPath,
+        method_list: Vec<MethodDecl>,
+    ) -> DigestResult<()> {
+        let struct_def = self.struct_defs
+            .get_mut(path)
+            .ok_or_else(|| {
+                DigestError::MissingTypeDef(path.to_string())
+            })?;
+
+        struct_def.sections.push(StructDeclSection {
+            members: method_list
+                .into_iter()
+                .map(|method| StructMemberDecl::Method(method))
+                .collect(),
+            access: Access::Published, // TODO: access modifiers in IR
+            access_kw_span: None,
+        });
+
+        Ok(())
+    }
+
+    fn finish_variant_def(
+        &mut self,
+        path: &IdentPath,
+        method_list: Vec<MethodDecl>,
+    ) -> DigestResult<()> {
+        let variant_def = self.variant_defs
+            .get_mut(path)
+            .ok_or_else(|| {
+                DigestError::MissingTypeDef(path.to_string())
+            })?;
+
+        variant_def.sections.push(MethodDeclSection {
+            methods: method_list,
+            access: Access::Published, // TODO: access modifiers in IR
+            access_kw_span: None,
+        });
+
+        Ok(())
     }
 }

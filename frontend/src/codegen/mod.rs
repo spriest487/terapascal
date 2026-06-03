@@ -15,6 +15,7 @@ use self::metadata::*;
 pub use self::set_flags::*;
 use self::stmt::*;
 use crate::ast::StructKind;
+use crate::codegen::library_builder::LibraryRef;
 use crate::ir;
 use crate::typ as typ;
 use terapascal_common::StripMode;
@@ -40,8 +41,13 @@ impl Default for CodegenOpts {
     }
 }
 
-pub fn gen_lib(module: &typ::Module, type_ctx: &typ::Context, opts: CodegenOpts) -> ir::Library {
-    let mut lib = LibraryBuilder::new(module.name.as_str(), module.version, type_ctx, [], opts);
+pub fn gen_lib(
+    module: &typ::Module,
+    type_ctx: &typ::Context,
+    refs: impl IntoIterator<Item=LibraryRef>,
+    opts: CodegenOpts,
+) -> ir::Library {
+    let mut lib = LibraryBuilder::new(module.name.as_str(), module.version, type_ctx, refs, opts);
 
     translate_builtin_class(&mut lib, type_ctx, &typ::builtin_string_name(), ir::STRING_ID);
 

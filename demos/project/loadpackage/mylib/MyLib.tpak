@@ -1,4 +1,6 @@
 package MyLib;
-contains MyLib in 'MyLib.tpas';
+contains
+    System,
+    MyLib in 'MyLib.tpas';
 
 end.

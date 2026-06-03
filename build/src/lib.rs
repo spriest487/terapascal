@@ -39,6 +39,7 @@ use terapascal_frontend::typ::Context;
 use terapascal_frontend::typecheck;
 use terapascal_frontend::TokenStream;
 use topological_sort::TopologicalSort;
+use terapascal_frontend::codegen::library_builder::LibraryRef;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
 pub enum BuildStage {
@@ -506,7 +507,11 @@ pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
     }
 }
 
-fn load_package(name: &str, input: &BuildInput, type_ctx: Option<&mut Context>) -> BuildResult<DigestOutput> {
+fn load_package(
+    name: &str,
+    input: &BuildInput,
+    type_ctx: Option<&mut Context>,
+) -> BuildResult<DigestOutput> {
     let mut search_dirs = Vec::new();
 
     if let Some(current_dir) = input.source_path.parent() {
@@ -553,8 +558,16 @@ fn build_with_log(
 
     for package_name in &input.package_names {
         let package_digest = load_package(&package_name, &input, root_ctx.as_mut())?;
+        for warning in package_digest.warnings {
+            log.diagnostic(warning);
+        }
+
         package_namespaces.extend(package_digest.namespaces.clone());
-        package_libs.push(package_digest.library);
+
+        package_libs.push(LibraryRef {
+            lib: package_digest.library,
+            imported_funcs: package_digest.imported_funcs,
+        });
     }
 
     let parse_output = parse_sources(fs, &input, package_namespaces, log)?;
@@ -583,7 +596,7 @@ fn build_with_log(
         return Err(BuildError::CompletedWithErrors);
     }
 
-    let library = codegen_ir(&typed_module, &root_ctx, input.codegen_opts);
+    let library = codegen_ir(&typed_module, &root_ctx, package_libs, input.codegen_opts);
 
     Ok(BuildArtifact::Library(library))
 }

@@ -1,9 +1,14 @@
+use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionParamItem;
 use crate::ast::FunctionParamMod;
 use crate::ast::FunctionParamModDecl;
 use crate::ast::Ident;
+use crate::ast::IdentPath;
 use crate::ast::Visibility;
+use crate::codegen::library_builder::FunctionDeclKey;
+use crate::codegen::library_builder::MethodDeclKey;
+use crate::codegen::FunctionInstance;
 use crate::digest::DigestBuilder;
 use crate::digest::DigestError;
 use crate::digest::DigestResult;
@@ -13,13 +18,14 @@ use crate::typ::ast::FunctionDeclContext;
 use crate::typ::ast::FunctionDeclMod;
 use crate::typ::ast::FunctionName;
 use crate::typ::ast::FunctionParamGroup;
+use crate::typ::ast::MethodDecl;
+use crate::typ::ast::Tag;
 use crate::typ::EvaluatedConstExpr;
 use crate::typ::ScopeID;
+use crate::typ::Type;
 use crate::typ::TypeName;
-use crate::typ::TypeParam;
-use crate::typ::TypeParamList;
+use std::collections::BTreeMap;
 use std::sync::Arc;
-use terapascal_ir::Function;
 
 impl DigestBuilder<'_> {
     pub fn digest_function(
@@ -27,122 +33,195 @@ impl DigestBuilder<'_> {
         func_id: ir::FunctionID,
         func_info: &ir::FunctionInfo,
     ) -> DigestResult<()> {
+        let tags = self.digest_tags(&func_info.tags)?;
+
+        let result_type = self.digest_type(&func_info.sig.result_type)?;
+
+        let mut param_groups = Vec::with_capacity(func_info.sig.param_types.len());
+        for (i, param_type) in func_info.sig.param_types.iter().enumerate() {
+            let (param_type, modifier) = match param_type {
+                ir::Type::TempRef(deref_type) => {
+                    let param_type = self.digest_type(deref_type)?;
+                    let mod_decl = FunctionParamModDecl {
+                        span: self.span(),
+                        param_mod: FunctionParamMod::Var,
+                    };
+                    (param_type, Some(mod_decl))
+                }
+
+                t => {
+                    let param_type = self.digest_type(t)?;
+                    (param_type, None)
+                }
+            };
+
+            param_groups.push(FunctionParamGroup {
+                param_items: vec![FunctionParamItem {
+                    name: Arc::new(format!("arg{i}")),
+                    is_implicit_self: false,
+                    name_span: None,
+                }],
+                ty: TypeName::Unspecified(param_type),
+                modifier,
+                span: None,
+            });
+        }
+
         match &func_info.identity {
             ir::FunctionIdentity::Path(path) => {
-                let scope = match path.parent() {
-                    Some(unit_path) => {
-                        self.open_unit(&unit_path)?
-                    }
-                    None => {
-                        ScopeID(0)
-                    },
-                };
-
-                let Some(lib_func) = self.library.functions.get(&func_id) else {
-                    return Err(DigestError::MissingFuncDef(func_id));
-                };
-
-                let decl_mods = match lib_func {
-                    Function::External(extern_ref) => {
-                        vec![FunctionDeclMod::External {
-                            span: self.span(),
-                            kw_span: self.span(),
-                            src: EvaluatedConstExpr::create_string(extern_ref.src.clone(), self.span()),
-                        }]
-                    }
-                    Function::Local(..) => {
-                        Vec::new()
-                    },
-                };
-
-                let type_params = if !path.type_args.is_empty() {
-                    let mut params = Vec::with_capacity(path.type_args.len());
-
-                    for type_arg in &path.type_args {
-                        let ir::Type::Generic(param_name) = type_arg else {
-                            return Err(DigestError::InvalidData);
-                        };
-
-                        params.push(TypeParam {
-                            span: self.span(),
-                            name: Ident::new(param_name, self.span()),
-                            constraint: None,
-                        });
-                    }
-
-                    Some(TypeParamList::new(params, self.span()))
-                } else {
-                    None
-                };
-
-                let tags = self.digest_tags(&func_info.tags)?;
-
-                let func_ident = Ident::new(path.name(), self.span());
-
-                let result_type = self.digest_type(&func_info.sig.result_type)?;
-
-                let mut param_groups = Vec::with_capacity(func_info.sig.param_types.len());
-                for (i, param_type) in func_info.sig.param_types.iter().enumerate() {
-                    let (param_type, modifier) = match param_type {
-                        ir::Type::TempRef(deref_type) => {
-                            let param_type = self.digest_type(deref_type)?;
-                            let mod_decl = FunctionParamModDecl {
-                                span: self.span(),
-                                param_mod: FunctionParamMod::Var,
-                            };
-                            (param_type, Some(mod_decl))
-                        }
-
-                        t => {
-                            let param_type = self.digest_type(t)?;
-                            (param_type, None)
-                        }
-                    };
-
-                    param_groups.push(FunctionParamGroup {
-                        param_items: vec![FunctionParamItem {
-                            name: Arc::new(format!("arg{i}")),
-                            is_implicit_self: false,
-                            name_span: None,
-                        }],
-                        ty: TypeName::Unspecified(param_type),
-                        modifier,
-                        span: None,
-                    });
-                }
-
-                let func_decl = FunctionDecl {
-                    span: self.span(),
-                    name: FunctionName {
-                        ident: func_ident.clone(),
-                        span: self.span(),
-                        context: FunctionDeclContext::FreeFunction,
-                        type_params,
-                    },
-                    kind: FunctionDeclKind::Function,
-                    tags,
-                    mods: decl_mods,
-                    result_ty: TypeName::Unspecified(result_type),
-                    param_groups,
-                    kw_span: self.span(),
-                    where_clause: None,
-                };
-
-                if let Some(ctx) = self.root_ctx.as_mut() {
-                    ctx.declare_function(func_ident, Arc::new(func_decl), Visibility::Interface)?;
-
-                    ctx.pop_scope(scope);
-                }
+                self.digest_free_function(func_id, func_info, tags, result_type, param_groups, &path)?;
             }
 
-            ir::FunctionIdentity::Method { .. } => {
-                // TODO
+            ir::FunctionIdentity::Method { declaring_type, id, name, type_args } => {
+                self.digest_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, type_args)?;
             }
 
             ir::FunctionIdentity::Destructor { .. } | ir::FunctionIdentity::Internal(..) => {
                 // ignored
             }
         }
+
+        Ok(())
+    }
+
+    fn digest_method(&mut self,
+        func_id: ir::FunctionID,
+        tags: Vec<Tag>,
+        result_type: Type,
+        param_groups: Vec<FunctionParamGroup>,
+        declaring_type: &ir::Type,
+        method_id: ir::MethodID,
+        name: &str,
+        type_args: &[ir::Type],
+    ) -> DigestResult<()> {
+        let declaring_type = self.digest_type(declaring_type)?;
+
+        // primitive methods are hardcoded and don't need to be imported
+        if let Type::Primitive(..) = declaring_type {
+            return Ok(());
+        }
+
+        let decl_key = FunctionDeclKey::Method(MethodDeclKey {
+            self_ty: declaring_type.clone(),
+            method_index: method_id.0,
+        });
+
+        let type_params = self.digest_def_type_params(type_args)?;
+
+        let func_decl = Arc::new(FunctionDecl {
+            span: self.span(),
+            name: FunctionName {
+                ident: Ident::new(name, self.span()),
+                span: self.span(),
+                context: FunctionDeclContext::MethodDecl {
+                    enclosing_type: declaring_type.clone(),
+                },
+                type_params,
+            },
+            kind: FunctionDeclKind::ClassMethod,
+            tags,
+            mods: Vec::new(),
+            result_ty: TypeName::Unspecified(result_type),
+            param_groups,
+            kw_span: self.span(),
+            where_clause: None,
+        });
+
+        let decl_sig = Arc::new(func_decl.sig());
+
+        let method_list = self.type_methods
+            .entry(declaring_type.clone())
+            .or_insert_with(|| BTreeMap::new());
+        method_list.insert(method_id.0, MethodDecl {
+            func_decl,
+            access: Access::Published, // TODO: access modifiers in IR
+        });
+
+        self.imported_funcs.insert(decl_key, FunctionInstance {
+            id: func_id,
+            published: true,
+            src_sig: decl_sig,
+        });
+        Ok(())
+    }
+
+    fn digest_free_function(&mut self,
+        func_id: ir::FunctionID,
+        func_info: &ir::FunctionInfo,
+        tags: Vec<Tag>,
+        result_type: Type,
+        param_groups: Vec<FunctionParamGroup>,
+        path: &ir::NamePath
+    ) -> DigestResult<()> {
+        let scope = match path.parent() {
+            Some(unit_path) => {
+                self.open_unit(&unit_path)?
+            }
+            None => {
+                ScopeID(0)
+            },
+        };
+
+        let Some(lib_func) = self.library.functions.get(&func_id) else {
+            return Err(DigestError::MissingFuncDef(func_id));
+        };
+
+        let decl_mods = match lib_func {
+            ir::Function::External(extern_ref) => {
+                vec![FunctionDeclMod::External {
+                    span: self.span(),
+                    kw_span: self.span(),
+                    src: EvaluatedConstExpr::create_string(extern_ref.src.clone(), self.span()),
+                }]
+            }
+            ir::Function::Local(..) => {
+                Vec::new()
+            },
+        };
+
+        let type_params = self.digest_def_type_params(&path.type_args)?;
+
+        let func_path = IdentPath::from_parts(path.path
+            .iter()
+            .map(|part| Ident::new(part, self.span())));
+
+        let func_ident = func_path.last().clone();
+
+        let func_decl = FunctionDecl {
+            span: self.span(),
+            name: FunctionName {
+                ident: func_ident.clone(),
+                span: self.span(),
+                context: FunctionDeclContext::FreeFunction,
+                type_params,
+            },
+            kind: FunctionDeclKind::Function,
+            tags,
+            mods: decl_mods,
+            result_ty: TypeName::Unspecified(result_type),
+            param_groups,
+            kw_span: self.span(),
+            where_clause: None,
+        };
+
+        let decl_sig = Arc::new(func_decl.sig());
+
+        if let Some(ctx) = self.root_ctx.as_mut() {
+            ctx.declare_function(func_ident.clone(), Arc::new(func_decl), Visibility::Interface)?;
+
+            ctx.pop_scope(scope);
+        }
+
+        let decl_key = FunctionDeclKey::Function {
+            sig: decl_sig.clone(),
+            name: func_path,
+        };
+
+        self.imported_funcs.insert(decl_key, FunctionInstance {
+            id: func_id,
+            published: func_info.runtime_name.is_some(), // TODO: access modifiers in IR
+            src_sig: decl_sig
+        });
 
         Ok(())
     }

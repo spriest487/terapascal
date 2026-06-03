@@ -43,6 +43,7 @@ use terapascal_common::version::Version;
 use terapascal_common::CompileOpts;
 use terapascal_common::TracedError;
 use terapascal_ir as ir;
+use crate::codegen::library_builder::LibraryRef;
 
 pub fn preprocess(
     fs: &impl Filesystem,
@@ -113,6 +114,11 @@ pub fn typecheck<'a>(
     module
 }
 
-pub fn codegen_ir(module: &Module, type_ctx: &Context, opts: CodegenOpts) -> ir::Library {
-    codegen::gen_lib(module, type_ctx, opts)
+pub fn codegen_ir(
+    module: &Module,
+    type_ctx: &Context,
+    refs: impl IntoIterator<Item=LibraryRef>,
+    opts: CodegenOpts,
+) -> ir::Library {
+    codegen::gen_lib(module, type_ctx, refs, opts)
 }

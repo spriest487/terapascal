@@ -14,7 +14,7 @@ use terapascal_ir::MetadataSource;
 fn defs_from_src(src: &str) -> (HashMap<TypeDefID, TypeDef>, Metadata) {
     let ctx = typ::Context::root(CompileOpts::default());
     let module = typ::test::module_from_src("test", src);
-    let ir = gen_lib(&module, &ctx, CodegenOpts::default());
+    let ir = gen_lib(&module, &ctx, [], CodegenOpts::default());
 
     let defs = ir.metadata().type_defs()
         .map(|(id, def)| (id, def.clone()))
