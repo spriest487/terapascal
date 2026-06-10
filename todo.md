@@ -1,6 +1,9 @@
 # IR 2.0
 * type constraints should be stored (if not enforced) in library
 * visibility info
+* .NET:
+  * generic method/type instantiation
+  * remove flag types
 
 # impls rework
 * update CIL: remove impls from interface defs, add new map

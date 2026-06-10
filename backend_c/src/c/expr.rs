@@ -176,7 +176,6 @@ impl Expr {
 
                     ir::Type::Struct { .. }
                     | ir::Type::Variant { .. }
-                    | ir::Type::Flags(_)
                     | ir::Type::Array { .. } => {
                         let ty = builder.translate_type(ty);
                         let ty_size = Expr::SizeOf(ty.clone());

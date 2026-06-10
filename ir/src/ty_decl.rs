@@ -27,17 +27,26 @@ pub use crate::metadata::ids::TypeDefID;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum StructIdentity {
+    /// Unnamed internal type
+    Internal(String),
+
+    /// Named type used as a value
     Record(NamePath),
+
+    /// Named type used as the memory layout for a class object
     Class(NamePath),
+
+    /// Unnamed type used as the memory layout for a closure object
     ClosureObject(ClosureIdentity),
-    
-    // bitmask type for set flag collections. value is the number of bits
-    SetFlags { bits: usize }
 }
 
 impl StructIdentity {
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         match self {
+            StructIdentity::Internal(debug_name) => {
+                debug_name.clone()
+            }
+
             StructIdentity::Record(name) | StructIdentity::Class(name) => {
                 name.to_pretty_string(formatter)
             },
@@ -51,14 +60,13 @@ impl StructIdentity {
                     func_ty.to_pretty_string(formatter),
                 )
             }
-            StructIdentity::SetFlags { bits } => {
-                format!("set{bits}")
-            },
         }
     }
 
     pub fn to_definition_type(&self, id: TypeDefID) -> Type {
         match self {
+            StructIdentity::Internal(..) => id.to_struct_type([]),
+
             StructIdentity::Record(name) => id.to_struct_type(name.type_args.clone()),
 
             StructIdentity::Class(name) => id.to_class_ptr_type(name.type_args.clone()),
@@ -66,28 +74,28 @@ impl StructIdentity {
             // the type of a closure definition is not a (virtual) closure pointer object, it's
             // an anonymous class
             StructIdentity::ClosureObject(..) => id.to_class_ptr_type([]),
-
-            StructIdentity::SetFlags { .. } => id.to_flags_type(),
         }
     }
 
     pub fn name(&self) -> Option<&NamePath> {
         match self {
+            StructIdentity::Internal(..) => None,
+
             StructIdentity::Class(name)
             | StructIdentity::Record(name) => Some(name),
 
-            StructIdentity::ClosureObject(..)
-            | StructIdentity::SetFlags { .. } => None,
+            StructIdentity::ClosureObject(..) => None,
         }
     }
 
     pub fn name_mut(&mut self) -> Option<&mut NamePath> {
         match self {
+            StructIdentity::Internal(..) => None,
+
             StructIdentity::Class(name)
             | StructIdentity::Record(name) => Some(name),
 
-            StructIdentity::ClosureObject(..)
-            | StructIdentity::SetFlags { .. } => None,
+            StructIdentity::ClosureObject(..) => None,
         }
     }
 }
@@ -117,8 +125,8 @@ impl ClosureIdentity {
 impl StructIdentity {
     pub fn is_ref_type(&self) -> bool {
         match self {
-            | StructIdentity::Record(..)
-            | StructIdentity::SetFlags { .. } => false,
+            StructIdentity::Internal(..)
+            | StructIdentity::Record(..) => false,
 
             StructIdentity::Class(..)
             | StructIdentity::ClosureObject(..) => true,

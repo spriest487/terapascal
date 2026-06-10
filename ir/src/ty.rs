@@ -26,7 +26,7 @@ pub enum Type {
 
     Struct(Rc<TypeRef>),
     Variant(Rc<TypeRef>),
-    Flags(TypeDefID),
+
     Array {
         element: Rc<Type>,
         dim: usize,
@@ -222,10 +222,6 @@ impl Type {
                 Some(Cow::Borrowed(id))
             },
 
-            | Type::Flags(id, ..) => {
-                Some(Cow::Owned(TypeRef::new(*id, [])))
-            }
-
             _ => None,
         }
     }
@@ -271,10 +267,6 @@ impl Type {
                 Some(TagLocation::TypeDef(id.def_id))
             },
 
-            | Type::Flags(id) => {
-                Some(TagLocation::TypeDef(*id))
-            },
-
             | Type::Object(ObjectID::Interface(id)) => {
                 Some(TagLocation::Interface(*id))
             },
@@ -315,7 +307,6 @@ impl Type {
             Type::Generic(..)
             | Type::Struct { .. }
             | Type::TempRef(..)
-            | Type::Flags(..)
             | Type::Variant(..)
             | Type::Array { .. }
             | Type::Nothing => {
@@ -362,10 +353,9 @@ impl Type {
             }
 
             Type::Nothing
-            | Type::Pointer(_)
-            | Type::TempRef(_)
-            | Type::Flags(_)
-            | Type::Function(_)
+            | Type::Pointer(..)
+            | Type::TempRef(..)
+            | Type::Function(..)
             | Type::Bool
             | Type::U8
             | Type::I8
@@ -414,9 +404,6 @@ impl fmt::Display for Type {
             Type::Variant(id) => {
                 write!(f, "{{variant {}}}", id.def_id)?;
                 format_type_args(f, &id.args)
-            },
-            Type::Flags(repr_id) => {
-                write!(f, "{{flags {}}}", repr_id)
             },
             Type::Object(id) => {
                 format_object_id(f, id)

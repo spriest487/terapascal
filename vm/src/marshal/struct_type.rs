@@ -100,10 +100,6 @@ impl Marshaller {
                 id.clone()
             },
 
-            ir::Type::Flags(id) => {
-                ir::TypeRef::new(*id, [])
-            },
-
             // for object types that are pointers to an inner struct, instantiate that inner
             // struct and register the object type separately
             ir::Type::Object(ir::ObjectID::Class(def_id))

@@ -20,7 +20,6 @@ use crate::codegen::*;
 use crate::ir;
 use crate::typ::ast::const_eval::ConstEval;
 use crate::typ::ast::FunctionDeclContext;
-use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
@@ -30,6 +29,7 @@ use crate::typ::get_mem_sig;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::TypeParamContainer;
 use crate::typ::SYSTEM_UNIT_NAME;
+use crate::typ::builtin_funcinfo_name;
 pub use function::*;
 use init::gen_tags_init;
 use ir::InstructionBuilder as _;
@@ -58,7 +58,7 @@ pub struct LibraryBuilder<'a> {
     cached_types: LinkedHashMap<ir::Type, typ::Type>,
 
     // key is size (bits)
-    set_flags_type_info: BTreeMap<usize, SetFlagsType>,
+    flags_repr_types: BTreeMap<usize, FlagsReprType>,
 
     translated_funcs: LinkedHashMap<FunctionDeclKey, FunctionInstance>,
 
@@ -151,7 +151,7 @@ impl<'a> LibraryBuilder<'a> {
             type_cache,
             cached_types,
 
-            set_flags_type_info: BTreeMap::new(),
+            flags_repr_types: BTreeMap::new(),
             
             functions: BTreeMap::new(),
             translated_funcs: LinkedHashMap::new(),
@@ -432,15 +432,26 @@ impl<'a> LibraryBuilder<'a> {
     pub fn find_type_seq_support(&self, src_ty: &typ::Type) -> Option<TypeSequenceSupport> {
         TypeSequenceSupport::try_from_type(src_ty, &self.src_metadata).ok()
     }
-    
-    pub fn get_set_flags_type_info(&mut self, bits: usize) -> SetFlagsType {
-        let existing = self.set_flags_type_info.get(&bits).cloned();
-        if let Some(set_flags_ty) = existing {
-            return set_flags_ty;
+
+    pub fn get_flags_repr_type(&mut self, bits: usize) -> FlagsReprType {
+        if let Some(repr_type) = self.flags_repr_types.get(&bits) {
+            return *repr_type;
         }
 
-        let set_flags_type = SetFlagsType::define_new(self, bits);
-        self.set_flags_type_info.insert(bits, set_flags_type);
+        let repr_type = FlagsReprType::build(self, bits);
+        self.flags_repr_types.insert(bits, repr_type);
+
+        repr_type
+    }
+    
+    pub fn translate_set_type(&mut self, set_type: &typ::SetType) -> SetFlagsType {
+        // let existing = self.set_flags_type_info.get(&bits).cloned();
+        // if let Some(set_flags_ty) = existing {
+        //     return set_flags_ty;
+        // }
+
+        let set_flags_type = SetFlagsType::translate(self, set_type);
+        // self.set_flags_type_info.insert(bits, set_flags_type);
 
         self.gen_type_info(&set_flags_type.struct_id.to_struct_type([]));
 
@@ -1078,9 +1089,9 @@ impl<'a> LibraryBuilder<'a> {
             },
             
             typ::Type::Set(set_ty) => {
-                let flags_ty = self.get_set_flags_type_info(set_ty.flags_type_bits());
+                let flags_ty = self.translate_set_type(set_ty);
 
-                let ty = ir::Type::Flags(flags_ty.struct_id);
+                let ty = flags_ty.struct_id.to_struct_type([]);
 
                 self.add_cached_type(src_ty.clone(), ty.clone());
                 

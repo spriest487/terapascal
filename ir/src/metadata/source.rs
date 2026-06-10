@@ -115,13 +115,6 @@ pub trait MetadataSource : Sized {
                     }
                 }
 
-                | Type::Flags(type_id) => {
-                    TagLocation::Method {
-                        type_id: *type_id,
-                        method_index: method_info.index,
-                    }
-                },
-
                 _ => {
                     let instance_ty_name = method_info
                         .instance_ty
@@ -203,17 +196,6 @@ pub trait MetadataSource : Sized {
 
             Type::TempRef(ty) => {
                 Cow::Owned(format!("&{}", self.pretty_type_name(ty)))
-            },
-
-            Type::Flags(id) => {
-                let name = match self.get_type_decl(*id) {
-                    Some(TypeDecl::Def(def)) => {
-                        format!("flags[{}]", def.to_pretty_string(self.as_formatter()))
-                    },
-
-                    _ => ty.to_string(),
-                };
-                Cow::Owned(name)
             },
 
             ty => Cow::Owned(ty.to_string()),

@@ -60,10 +60,6 @@ impl<T: MetadataSource> IRFormatter for T {
                 write!(f, ".")?;
 
                 let struct_def = match &field_ref.instance_type {
-                    Type::Flags(id) => {
-                        self.get_struct_def(*id)
-                    }
-
                     Type::Struct(id)
                     | Type::Object(ObjectID::Class(id))
                     | Type::WeakObject(ObjectID::Class(id)) => {

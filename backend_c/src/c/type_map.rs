@@ -100,10 +100,6 @@ impl<'a> Unit<'a> {
                 self.translate_variant_type(ty)
             }
 
-            ir::Type::Flags(_) => {
-                self.translate_struct_type(ty)
-            }
-
             ir::Type::Array { element, dim } => {
                 self.translate_array_type(element, *dim)
             }
@@ -167,6 +163,10 @@ impl<'a> Unit<'a> {
         }
     }
 
+    pub fn translate_flags_type(&mut self, bits: u8) -> TypeID {
+        unimplemented!("C flags type ({bits} bits)")
+    }
+
     pub fn translate_struct_type(&mut self, ty: &ir::Type) -> TypeID {
         if let Some(existing_id) = self.try_get_type_id(ty) {
             return existing_id;
@@ -176,7 +176,6 @@ impl<'a> Unit<'a> {
 
         let (def_id, args): (_, &[ir::Type]) = match ty {
             ir::Type::Struct(id) => (id.def_id, &id.args),
-            ir::Type::Flags(id) => (*id, &[]),
 
             ir::Type::Object(ir::ObjectID::Class(id))
             | ir::Type::WeakObject(ir::ObjectID::Class(id)) => {

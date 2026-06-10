@@ -55,10 +55,6 @@ impl TypeDefID {
         Type::Struct(TypeRef::new(self, args))
     }
 
-    pub fn to_flags_type(self) -> Type {
-        Type::Flags(self)
-    }
-
     pub fn to_variant_type(self, args: impl IntoIterator<Item=Type>) -> Type {
         Type::Variant(TypeRef::new(self, args))
     }
