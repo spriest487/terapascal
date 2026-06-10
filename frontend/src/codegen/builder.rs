@@ -374,16 +374,19 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
             sources,
         }
     }
+
+    fn set_flags_ref(&mut self, set_ref: impl Into<ir::Ref>, set_type: &SetFlagsType) -> ir::Ref {
+        let set_type = set_type.struct_id.to_struct_type([]);
+
+        set_ref.into().field_ref(set_type, ir::FieldID(0))
+    }
     
     pub fn set_include(&mut self, set_ref: impl Into<ir::Ref>, bit_val: impl Into<ir::Value>, set_type: &typ::SetType) {
         let flags_type_info = self.library.translate_set_type(set_type);
-        let flags_type = flags_type_info.struct_id.to_struct_type([]);
-        
-        let flags_ptr = self.local_temp(flags_type.temp_ref());
-        self.make_ref(flags_ptr, set_ref);
+        let flags_ref = self.set_flags_ref(set_ref, &flags_type_info);
 
-        self.call(ir::FunctionRef::new(flags_type_info.include_func), [
-            flags_ptr.value(),
+        self.call(ir::FunctionRef::new(flags_type_info.repr_type.include_func), [
+            flags_ref.value(),
             bit_val.into(),
         ], None);
     }
@@ -392,13 +395,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     #[allow(unused)]
     pub fn set_exclude(&mut self, set_ref: impl Into<ir::Ref>, bit_val: impl Into<ir::Value>, set_type: &typ::SetType) {
         let flags_type_info = self.library.translate_set_type(set_type);
-        let flags_type = flags_type_info.struct_id.to_struct_type([]);
+        let flags_ref = self.set_flags_ref(set_ref, &flags_type_info);
 
-        let flags_ptr = self.local_temp(flags_type.temp_ref());
-        self.make_ref(flags_ptr, set_ref);
-
-        self.call(ir::FunctionRef::new(flags_type_info.exclude_func), [
-            flags_ptr.value(),
+        self.call(ir::FunctionRef::new(flags_type_info.repr_type.exclude_func), [
+            flags_ref.value(),
             bit_val.into(),
         ], None);
     }
@@ -410,13 +410,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         set_type: &typ::SetType
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
-        let flags_type = flags_type_info.struct_id.to_struct_type([]);
+        let flags_ref = self.set_flags_ref(set_ref, &flags_type_info);
 
-        let flags_ptr = self.local_temp(flags_type.temp_ref());
-        self.make_ref(flags_ptr, set_ref);
-
-        self.call(ir::FunctionRef::new(flags_type_info.contains_func), [
-            flags_ptr.value(),
+        self.call(ir::FunctionRef::new(flags_type_info.repr_type.contains_func), [
+            flags_ref.value(),
             bit_val.into(),
         ], Some(out.into()));
     }
@@ -428,16 +425,12 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         set_type: &typ::SetType
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
-        let flags_type = flags_type_info.struct_id.to_struct_type([]);
+        let a_ref = self.set_flags_ref(a, &flags_type_info);
+        let b_ref = self.set_flags_ref(b, &flags_type_info);
 
-        let a_ptr = self.local_temp(flags_type.temp_ref());
-        let b_ptr = self.local_temp(flags_type.temp_ref());
-        self.make_ref(a_ptr, a);
-        self.make_ref(b_ptr, b);
-
-        self.call(ir::FunctionRef::new(flags_type_info.eq_func), [
-            a_ptr.value(),
-            b_ptr.value(),
+        self.call(ir::FunctionRef::new(flags_type_info.repr_type.eq_func), [
+            a_ref.value(),
+            b_ref.value(),
         ], Some(out.into()));
     }
 
@@ -446,13 +439,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         set_type: &typ::SetType
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
-        let flags_type = flags_type_info.struct_id.to_struct_type([]);
+        let a_ref = self.set_flags_ref(a, &flags_type_info);
 
-        let a_ptr = self.local_temp(flags_type.temp_ref());
-        self.make_ref(a_ptr, a);
-
-        self.call(ir::FunctionRef::new(flags_type_info.bit_not_func), [
-            a_ptr.value(),
+        self.call(ir::FunctionRef::new(flags_type_info.repr_type.bit_not_func), [
+            a_ref.value(),
         ], None);
     }
 
@@ -463,16 +453,12 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         get_func_id: fn(&SetFlagsType) -> ir::FunctionID,
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
-        let flags_type = flags_type_info.struct_id.to_struct_type([]);
-
-        let a_ptr = self.local_temp(flags_type.temp_ref());
-        let b_ptr = self.local_temp(flags_type.temp_ref());
-        self.make_ref(a_ptr, a);
-        self.make_ref(b_ptr, b);
+        let a_ref = self.set_flags_ref(a, &flags_type_info);
+        let b_ref = self.set_flags_ref(b, &flags_type_info);
 
         self.call(ir::FunctionRef::new(get_func_id(&flags_type_info)), [
-            a_ptr.value(),
-            b_ptr.value(),
+            a_ref.value(),
+            b_ref.value(),
         ], None);
     }
 
@@ -481,7 +467,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         b: impl Into<ir::Ref>,
         set_type: &typ::SetType,
     ) {
-        self.set_bitwise_op(a, b, set_type, |i| i.bit_and_func)
+        self.set_bitwise_op(a, b, set_type, |i| i.repr_type.bit_and_func)
     }
 
     pub fn set_bit_or(&mut self,
@@ -489,7 +475,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         b: impl Into<ir::Ref>,
         set_type: &typ::SetType,
     ) {
-        self.set_bitwise_op(a, b, set_type, |i| i.bit_or_func)
+        self.set_bitwise_op(a, b, set_type, |i| i.repr_type.bit_or_func)
     }
 
     pub fn set_bit_xor(&mut self,
@@ -497,7 +483,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         b: impl Into<ir::Ref>,
         set_type: &typ::SetType,
     ) {
-        self.set_bitwise_op(a, b, set_type, |i| i.bit_xor_func)
+        self.set_bitwise_op(a, b, set_type, |i| i.repr_type.bit_xor_func)
     }
 
     #[expect(unused)]
