@@ -58,7 +58,7 @@ pub struct LibraryBuilder<'a> {
     cached_types: LinkedHashMap<ir::Type, typ::Type>,
 
     // key is size (bits)
-    set_flags_type_info: BTreeMap<usize, SetFlagsType>,
+    // set_flags_type_info: BTreeMap<usize, SetFlagsType>,
 
     translated_funcs: LinkedHashMap<FunctionDeclKey, FunctionInstance>,
 
@@ -142,7 +142,7 @@ impl<'a> LibraryBuilder<'a> {
             type_cache,
             cached_types,
 
-            set_flags_type_info: BTreeMap::new(),
+            // set_flags_type_info: BTreeMap::new(),
             
             functions: BTreeMap::new(),
             translated_funcs: LinkedHashMap::new(),
@@ -403,14 +403,15 @@ impl<'a> LibraryBuilder<'a> {
         TypeSequenceSupport::try_from_type(src_ty, &self.src_metadata).ok()
     }
     
-    pub fn get_set_flags_type_info(&mut self, bits: usize) -> SetFlagsType {
-        let existing = self.set_flags_type_info.get(&bits).cloned();
-        if let Some(set_flags_ty) = existing {
-            return set_flags_ty;
-        }
+    pub fn translate_set_type(&mut self, set_type: &typ::SetType) -> SetFlagsType {
+        // let existing = self.set_flags_type_info.get(&bits).cloned();
+        // if let Some(set_flags_ty) = existing {
+        //     return set_flags_ty;
+        // }
 
-        let set_flags_type = SetFlagsType::define_new(self, bits);
-        self.set_flags_type_info.insert(bits, set_flags_type);
+        let bits = set_type.flags_type_bits();
+        let set_flags_type = SetFlagsType::define_new(self, set_type.name.as_ref(), bits);
+        // self.set_flags_type_info.insert(bits, set_flags_type);
 
         self.gen_type_info(&set_flags_type.struct_id.to_struct_type([]));
 
@@ -1025,9 +1026,9 @@ impl<'a> LibraryBuilder<'a> {
             },
             
             typ::Type::Set(set_ty) => {
-                let flags_ty = self.get_set_flags_type_info(set_ty.flags_type_bits());
+                let flags_ty = self.translate_set_type(set_ty);
 
-                let ty = ir::Type::Flags(flags_ty.struct_id);
+                let ty = flags_ty.struct_id.to_struct_type([]);
 
                 self.add_cached_type(src_ty.clone(), ty.clone());
                 

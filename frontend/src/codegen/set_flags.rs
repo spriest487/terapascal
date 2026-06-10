@@ -1,9 +1,11 @@
-use std::rc::Rc;
+use crate::ast::IdentPath;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
+use crate::codegen::metadata::NamePathExt;
 use crate::ir;
 use crate::Operator;
 use ir::InstructionBuilder as _;
+use std::rc::Rc;
 use terapascal_ir::StructLayout;
 
 pub const WORD_TYPE: ir::Type = ir::Type::U64;
@@ -43,14 +45,24 @@ pub fn set_word_count(bit_count: usize) -> usize {
 impl SetFlagsType {
     // full-size 256-bit flag struct, the max number of values supported by
     // delphi/FPC sets
-    pub fn define_new(lib: &mut LibraryBuilder, bit_count: usize) -> Self {
+    pub fn define_new(lib: &mut LibraryBuilder, name: Option<&IdentPath>, bit_count: usize) -> Self {
         let word_count = set_word_count(bit_count);
 
         let word_fields = (0..word_count)
             .map(|id| (ir::FieldID(id), ir::StructFieldDef::new(WORD_TYPE)))
             .collect();
 
-        let struct_identity = ir::StructIdentity::SetFlags { bits: bit_count };
+        let struct_identity = match name {
+            Some(ident_path) => {
+                let name_path = ir::NamePath::from_parts(ident_path.to_string_path());
+                ir::StructIdentity::Record(name_path)
+            }
+
+            None => {
+                ir::StructIdentity::Internal(format!("<{}-bit flags>", bit_count))
+            }
+        };
+
         let set_flags_struct = ir::StructDef::new(struct_identity, StructLayout::Packed)
             .with_fields(word_fields);
 
@@ -132,7 +144,7 @@ impl SetFlagsType {
         word_count: usize,
         lib: &mut LibraryBuilder
     ) -> ir::FunctionID {
-        let flags_ty = ir::Type::Flags(repr_id);
+        let flags_ty = repr_id.to_struct_type([]);
 
         let mut builder = IRBuilder::new(lib);
         let self_arg = ir::ArgID(0);
@@ -166,7 +178,7 @@ impl SetFlagsType {
     }
     
     fn define_exclude(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let flags_ty = ir::Type::Flags(struct_id);
+        let flags_ty = struct_id.to_struct_type([]);
 
         let mut builder = IRBuilder::new(lib);
         let self_arg = ir::ArgID(0);
@@ -201,7 +213,7 @@ impl SetFlagsType {
     }
 
     fn define_contains(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let flags_ty = ir::Type::Flags(struct_id);
+        let flags_ty = struct_id.to_struct_type([]);
 
         let mut builder = IRBuilder::new(lib);
         builder.bind_result(ir::Type::Bool);
@@ -248,7 +260,7 @@ impl SetFlagsType {
         lib: &mut LibraryBuilder,
         build_op: impl Fn(&mut IRBuilder, ir::Ref, ir::Value, ir::Value)
     ) -> ir::FunctionID {
-        let flags_ty = ir::Type::Flags(struct_id);
+        let flags_ty = struct_id.to_struct_type([]);
 
         let mut builder = IRBuilder::new(lib);
         let flags_arg = ir::ArgID(0);
@@ -279,7 +291,7 @@ impl SetFlagsType {
     }
     
     fn define_bit_not(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let flags_ty = ir::Type::Flags(struct_id);
+        let flags_ty = struct_id.to_struct_type([]);
 
         let mut builder = IRBuilder::new(lib);
         
@@ -302,7 +314,7 @@ impl SetFlagsType {
     }
 
     fn define_eq(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let flags_ty = ir::Type::Flags(struct_id);
+        let flags_ty = struct_id.to_struct_type([]);
         
         let mut builder = IRBuilder::new(lib);
         builder.bind_result(ir::Type::Bool);

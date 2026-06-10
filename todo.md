@@ -1,3 +1,7 @@
+# IR generics rework CLR TODOs
+* generic method/type instantiation
+* flag types
+
 # impls rework
 * update CIL: remove impls from interface defs, add new map
 

@@ -19,7 +19,7 @@ impl Marshaller {
             return Ok(cached);
         }
 
-        assert!(matches!(struct_type, ir::Type::Struct {..} | ir::Type::Flags(..)), "not a struct: {}", struct_type);
+        assert!(struct_type.as_struct().is_some(), "not a struct: {}", struct_type);
 
         let mut def_fields: Vec<_> = def.fields.iter().collect();
         def_fields.sort_by_key(|(id, _)| **id);

@@ -232,14 +232,6 @@ impl Marshaller {
         
         self.add_dyn_array_type(iface_ty)
     }
-    
-    pub fn add_flags_type(&mut self, id: ir::TypeDefID) -> MarshalResult<(TypeID, NativeType)> {
-        let flags_type = id.to_flags_type();
-        let (_, type_index) = self.add_struct_type(&flags_type)?;
-
-        let native_type = self.types[&type_index].clone();
-        Ok((type_index, native_type))
-    }
 
     pub fn build_ffi_invoker(
         &mut self,
@@ -357,10 +349,6 @@ impl Marshaller {
 
                 Ok((id, array_struct))
             },
-
-            ir::Type::Flags(ty_id) => {
-                Ok(self.add_flags_type(*ty_id)?)
-            }
 
             ir::Type::Generic(..) => {
                 let type_id = self.register_type(ty.clone(), NativeType::void())?;
@@ -719,7 +707,7 @@ impl Marshaller {
 
             // these need field offset/tag type info from the ffi cache so marshal/unmarshal should
             // be members
-            ir::Type::Struct { .. } | ir::Type::Flags { .. } => {
+            ir::Type::Struct { .. } => {
                 let type_index = self.get_type_index(ty)?;
                 let struct_val = self.unmarshal_struct(type_index, in_bytes)?;
 

@@ -18,7 +18,6 @@ use crate::InterfaceImpl;
 use crate::MethodInfo;
 use crate::NamePath;
 use crate::StructDef;
-use crate::StructIdentity;
 use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
@@ -268,37 +267,6 @@ impl Metadata {
         })
     }
 
-    // find the struct used as the backing type for set types with at least the given number of bits
-    // the same struct definition may represent multiple defined set types
-    pub fn find_set_repr_struct(&self, bits: usize) -> Option<TypeDefID> {
-        let mut result = None;
-        let mut min_bits: Option<usize> = None;
-
-        for (id, decl) in &self.type_decls {
-            let TypeDecl::Def(TypeDef::Struct(struct_def)) = decl else {
-                continue;
-            };
-
-            if let StructIdentity::SetFlags { bits: def_bits } = &struct_def.identity {
-                if *def_bits < bits {
-                    continue;
-                }
-
-                let is_min = match min_bits {
-                    Some(prev_min) => *def_bits < prev_min,
-                    None => true,
-                };
-
-                if is_min {
-                    result = Some(*id);
-                    min_bits = Some(*def_bits);
-                }
-            }
-        }
-
-        result
-    }
-
     pub fn type_info(&self) -> impl Iterator<Item = (&Type, &Rc<TypeInfo>)> {
         self.type_info.iter()
     }
@@ -385,8 +353,6 @@ impl Metadata {
             | Type::Variant(id) => {
                 id.def_id
             }
-
-            Type::Flags(id, ..) => *id,
 
             Type::Object(object_id) | Type::WeakObject(object_id) => {
                 match object_id {

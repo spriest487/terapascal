@@ -177,8 +177,6 @@ impl Vm {
 
             ir::Type::Struct { .. } => DynValue::from(self.default_struct(ty)?),
 
-            ir::Type::Flags(..) => DynValue::from(self.default_struct(ty)?),
-
             ir::Type::Object(..) | ir::Type::WeakObject(..) => {
                 DynValue::Pointer(Pointer::nil(ir::Type::Nothing))
             }
@@ -2107,7 +2105,7 @@ impl Vm {
         field: ir::FieldID,
     ) -> ExecResult<Pointer> {
         match instance_type {
-            ir::Type::Flags(..) | ir::Type::Struct { .. } => {
+            ir::Type::Struct { .. } => {
                 let struct_ptr = self.addr_of_ref(instance)?;
 
                 let field_info = self.marshaller().get_field_info(instance_type, field)?;
@@ -2689,11 +2687,17 @@ impl Vm {
         let (_, typeinfo_index) = self.heap.marshaller
             .add_struct_type(&ir::TYPEINFO_ID.to_struct_type([]))?;
 
-        let type_flags_repr = self
+        let typeinfo_struct_def = self
             .metadata()
-            .find_set_repr_struct(ir::TYPEINFO_FLAGS_BITS)
-            .ok_or_else(|| ExecError::illegal_state("missing flags type for TypeFlags"))?;
-        let type_flags_index = self.marshaller().get_type_index(&type_flags_repr.to_flags_type())?;
+            .get_struct_def(ir::TYPEINFO_ID)
+            .ok_or_else(|| ExecError::illegal_state("missing type for TypeInfo"))?;
+
+        let type_flags_type = typeinfo_struct_def
+            .get_field(ir::TYPEINFO_FLAGS_FIELD)
+            .map(|f| &f.ty)
+            .ok_or_else(|| ExecError::illegal_state("unable to determine type of type flags field"))?;
+
+        let type_flags_index = self.marshaller().get_type_index(type_flags_type)?;
 
         let (_, methodinfo_index) = self.heap.marshaller
             .add_struct_type(&ir::METHODINFO_ID.to_struct_type([]))?;

@@ -139,15 +139,6 @@ impl DynValue {
                 _ => None,
             },
 
-            ir::Type::Flags(..) => {
-                let DynValue::Structure(s) = self else {
-                    return None;
-                };
-
-                let flags_type_index = marshaller.get_type_index(ty).ok()?;
-                (s.type_index == flags_type_index).then(|| self.clone())
-            },
-
             ir::Type::Function(..) => None,
         }
     }

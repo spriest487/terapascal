@@ -1,8 +1,8 @@
+use crate::FieldID;
 use crate::NamePath;
 use crate::StructIdentity;
 use crate::TagInfo;
 use crate::Type;
-use crate::FieldID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -112,11 +112,11 @@ impl StructDef {
 impl fmt::Display for StructDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.identity {
+            StructIdentity::Internal(debug_name) => {
+                write!(f, "{}", debug_name)
+            },
             StructIdentity::Class(name) | StructIdentity::Record(name) => {
                 write!(f, "{}", name)
-            },
-            StructIdentity::SetFlags { bits, .. } => {
-                write!(f, "set<{bits}>")
             },
             StructIdentity::ClosureObject(identity) => {
                 write!(f, "closure of function type {} ({})", identity.sig, identity.id)
