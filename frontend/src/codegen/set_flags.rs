@@ -55,6 +55,15 @@ impl SetFlagsType {
             repr_type: flags_type,
         }
     }
+
+    pub fn flags_ref(&self, self_ref: impl Into<ir::Ref>) -> ir::Ref {
+        let set_type = self.struct_id.to_struct_type([]);
+
+        self_ref
+            .into()
+            .field_ref(set_type, ir::FieldID(0))
+            .to_deref()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -91,6 +100,10 @@ pub fn set_word_count(bit_count: usize) -> usize {
 impl FlagsReprType {
     pub fn repr_type(&self) -> ir::Type {
         flags_repr_type(self.word_count)
+    }
+
+    pub fn word_ref(&self, self_ref: impl Into<ir::Ref>, word: usize) -> ir::Ref {
+        Self::make_word_ref(self_ref, self.word_count, word)
     }
 
     pub fn build(lib: &mut LibraryBuilder, bit_count: usize) -> FlagsReprType {
@@ -284,8 +297,8 @@ impl FlagsReprType {
         builder.bind_param(other_arg, flags_ty.temp_ref(), "other");
 
         for word in 0..word_count {
-            let word_field_ref = Self::word_ref(flags_arg.to_deref(), word_count, word);
-            let other_word_field_ref = Self::word_ref(other_arg.to_deref(), word_count, word);
+            let word_field_ref = Self::make_word_ref(flags_arg.to_deref(), word_count, word);
+            let other_word_field_ref = Self::make_word_ref(other_arg.to_deref(), word_count, word);
 
             build_op(
                 &mut builder,
@@ -313,7 +326,7 @@ impl FlagsReprType {
         builder.bind_param(flags_arg, flags_ty.temp_ref(), "flags");
 
         for word in 0..word_count {
-            let word_ref = Self::word_ref(flags_arg.to_deref(), word_count, word);
+            let word_ref = Self::make_word_ref(flags_arg.to_deref(), word_count, word);
             builder.bit_not(word_ref.clone(), word_ref);
         }
 
@@ -341,8 +354,8 @@ impl FlagsReprType {
         let word_eq_var = builder.local_temp(ir::Type::Bool);
 
         for word in 0..word_count {
-            let word_field_ref = Self::word_ref(flags_arg.to_deref(), word_count, word);
-            let other_word_field_ref = Self::word_ref(other_arg.to_deref(), word_count, word);
+            let word_field_ref = Self::make_word_ref(flags_arg.to_deref(), word_count, word);
+            let other_word_field_ref = Self::make_word_ref(other_arg.to_deref(), word_count, word);
 
             // result := result and (word = other_word)
             builder.eq(word_eq_var,  word_field_ref, other_word_field_ref);
@@ -358,7 +371,7 @@ impl FlagsReprType {
         Self::define_func(name, builder.finish(), sig, lib)
     }
 
-    fn word_ref(self_ref: impl Into<ir::Ref>, word_count: usize, word_index: usize) -> ir::Ref{
+    fn make_word_ref(self_ref: impl Into<ir::Ref>, word_count: usize, word_index: usize) -> ir::Ref{
         if word_count == 1 {
             self_ref.into()
         } else {
@@ -401,7 +414,7 @@ impl FlagsReprType {
                 None
             };
 
-            builder.make_ref(result_ref, Self::word_ref(self_ref.clone(), word_count, word));
+            builder.make_ref(result_ref, Self::make_word_ref(self_ref.clone(), word_count, word));
 
             if word > 0 {
                 let word_start = ir::Value::LiteralU8((word * WORD_BITS) as u8);
