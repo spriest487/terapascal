@@ -1211,7 +1211,7 @@ impl<'a> LibraryBuilder<'a> {
             None => {
                 let src_def = self.src_metadata
                     .find_struct_def(&name.full_path, kind)
-                    .unwrap();
+                    .unwrap_or_else(|e| panic!("translate_struct_type: {}", e));
 
                 let def_src_type = typ::Type::from_struct_type(def_name.clone(), kind);
 
