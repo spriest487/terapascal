@@ -1,3 +1,4 @@
+use std::fmt;
 use crate::ast;
 use crate::typ::ast::InterfaceDecl;
 use crate::typ::builtin_string_type;
@@ -45,7 +46,7 @@ fn self_ty_is_valid_in_interface() {
         end;
 
         end.",
-    );
+    ).module;
 
     let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");
     let method_a = &my_iface_decl.methods[0];
@@ -64,7 +65,7 @@ fn self_ty_is_valid_in_interface_sig_with_arrays() {
         end;
         
         end.",
-    );
+    ).module;
 
     let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");
     let method_a = &my_iface_decl.methods[0];
@@ -89,7 +90,7 @@ fn self_ty_is_valid_in_interface_sig_with_generics() {
         end;
         
         end.",
-    );
+    ).module;
 
     let my_iface_decl = get_decl_iface(&module, "test", "MyInterface");
     let method_a = &my_iface_decl.methods[0];
@@ -100,7 +101,7 @@ fn self_ty_is_valid_in_interface_sig_with_generics() {
     assert_eq!("test.MyGeneric[Self]", method_a.decl.result_ty.to_string());
 }
 
-fn expect_self_not_found_err(result: Result<Module, Vec<TypeError>>) {
+fn expect_self_not_found_err<T: fmt::Debug>(result: Result<T, Vec<TypeError>>) {
     expect_type_error(result, |err| match err {
         TypeError::NameError {
             err: NameError::NotFound { ident, .. },

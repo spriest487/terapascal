@@ -1,5 +1,6 @@
 use crate::ast;
 use crate::typ;
+use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::Module;
@@ -23,17 +24,23 @@ use terapascal_common::UNITS_DIR_VAR;
 const INT32: Type = Type::Primitive(Primitive::Int32);
 const BOOL: Type = Type::Primitive(Primitive::Boolean);
 
-pub fn try_module_from_src(unit_name: &str, src: &str) -> Result<Module, Vec<TypeError>> {
+#[derive(Debug)]
+pub struct TestModule {
+    pub module: Module,
+    pub root_ctx: Context,
+}
+
+pub fn try_module_from_src(unit_name: &str, src: &str) -> Result<TestModule, Vec<TypeError>> {
     try_module_from_srcs(vec![(unit_name, src)])
 }
 
-pub fn module_from_src(unit_name: &str, src: &str) -> Module {
+pub fn module_from_src(unit_name: &str, src: &str) -> TestModule {
     module_from_srcs(vec![(unit_name, src)])
 }
 
 pub fn try_module_from_srcs<'a, UnitSources>(
     unit_srcs: UnitSources,
-) -> Result<Module, Vec<TypeError>>
+) -> Result<TestModule, Vec<TypeError>>
 where
     UnitSources: IntoIterator<Item = (&'a str, &'a str)>,
 {
@@ -74,7 +81,10 @@ where
     if !root_ctx.errors().is_empty() {
         Err(root_ctx.errors().to_vec())
     } else {
-        Ok(module)
+        Ok(TestModule {
+            module,
+            root_ctx,
+        })
     }
 }
 
@@ -86,7 +96,7 @@ pub fn print_errors(errors: &[TypeError]) {
     }
 }
 
-pub fn module_from_srcs<'a, UnitSources>(unit_srcs: UnitSources) -> Module
+pub fn module_from_srcs<'a, UnitSources>(unit_srcs: UnitSources) -> TestModule
 where
     UnitSources: IntoIterator<Item = (&'a str, &'a str)>,
 {
@@ -97,7 +107,7 @@ where
 }
 
 pub fn unit_from_src(unit_name: &'static str, src: &'static str) -> ModuleUnit {
-    let module = module_from_src(unit_name, src);
+    let module = module_from_src(unit_name, src).module;
 
     module.units.into_iter().next().unwrap()
 }
@@ -106,7 +116,7 @@ pub fn try_unit_from_src(
     unit_name: &'static str,
     src: &'static str,
 ) -> Result<ModuleUnit, Vec<TypeError>> {
-    let module = try_module_from_src(unit_name, src)?;
+    let module = try_module_from_src(unit_name, src)?.module;
 
     Ok(module.units.into_iter().next().unwrap())
 }
@@ -115,7 +125,7 @@ pub fn units_from_src<UnitSources>(unit_srcs: UnitSources) -> HashMap<String, Mo
 where
     UnitSources: IntoIterator<Item = (&'static str, &'static str)>,
 {
-    let module = module_from_srcs(unit_srcs);
+    let module = module_from_srcs(unit_srcs).module;
 
     let mut units = HashMap::new();
     for unit in module.units {

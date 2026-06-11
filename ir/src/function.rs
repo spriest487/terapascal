@@ -1,6 +1,10 @@
+use crate::ClosureIdentity;
+use crate::IRFormatter;
 use crate::InstructionList;
 use crate::Label;
+use crate::MethodID;
 use crate::NamePath;
+use crate::ObjectID;
 use crate::RawFormatter;
 use crate::Ref;
 use crate::StringID;
@@ -8,7 +12,6 @@ use crate::TagInfo;
 use crate::Type;
 use crate::TypeDefID;
 use crate::VariableID;
-use crate::{ClosureIdentity, IRFormatter, MethodID, ObjectID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
