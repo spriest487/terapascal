@@ -175,7 +175,7 @@ impl FlagsReprType {
 
         let (word_ref, word_bit) = Self::find_word_bit(
             &mut builder,
-            self_arg,
+            self_arg.to_deref(),
             bit_arg,
             word_count
         );
@@ -208,7 +208,7 @@ impl FlagsReprType {
 
         let (word_ref, word_bit) = Self::find_word_bit(
             &mut builder,
-            self_arg,
+            self_arg.to_deref(),
             bit_arg,
             word_count);
 
@@ -243,7 +243,7 @@ impl FlagsReprType {
 
         let (word_ref, word_bit) = Self::find_word_bit(
             &mut builder,
-            self_arg,
+            self_arg.to_deref(),
             bit_arg,
             word_count);
 
@@ -284,13 +284,15 @@ impl FlagsReprType {
         builder.bind_param(other_arg, flags_ty.temp_ref(), "other");
 
         for word in 0..word_count {
-            let word_field_ref = Self::word_ref(flags_arg, word_count, word);
-            let other_word_field_ref = Self::word_ref(other_arg, word_count, word);
+            let word_field_ref = Self::word_ref(flags_arg.to_deref(), word_count, word);
+            let other_word_field_ref = Self::word_ref(other_arg.to_deref(), word_count, word);
 
-            let word_val = word_field_ref.to_deref().value();
-            let other_word_val = other_word_field_ref.to_deref().value();
-
-            build_op(&mut builder, word_field_ref.to_deref(), word_val, other_word_val);
+            build_op(
+                &mut builder,
+                word_field_ref.clone(),
+                word_field_ref.value(),
+                other_word_field_ref.value(),
+            );
         }
 
         let name = format!("operator {} ({}-bit flags)", op, word_count * WORD_BITS);
@@ -311,8 +313,8 @@ impl FlagsReprType {
         builder.bind_param(flags_arg, flags_ty.temp_ref(), "flags");
 
         for word in 0..word_count {
-            let word_ref = Self::word_ref(flags_arg, word_count, word);
-            builder.bit_not(word_ref.to_deref(), word_ref.to_deref());
+            let word_ref = Self::word_ref(flags_arg.to_deref(), word_count, word);
+            builder.bit_not(word_ref.clone(), word_ref);
         }
 
         let name = format!("operator ~ ({}-bit flags)", word_count * WORD_BITS);
@@ -339,11 +341,11 @@ impl FlagsReprType {
         let word_eq_var = builder.local_temp(ir::Type::Bool);
 
         for word in 0..word_count {
-            let word_field_ref = Self::word_ref(flags_arg, word_count, word);
-            let other_word_field_ref = Self::word_ref(other_arg, word_count, word);
+            let word_field_ref = Self::word_ref(flags_arg.to_deref(), word_count, word);
+            let other_word_field_ref = Self::word_ref(other_arg.to_deref(), word_count, word);
 
             // result := result and (word = other_word)
-            builder.eq(word_eq_var,  word_field_ref.to_deref(), other_word_field_ref.to_deref());
+            builder.eq(word_eq_var,  word_field_ref, other_word_field_ref);
             builder.and(ir::RESULT_REF, ir::RESULT_REF, word_eq_var);
         }
         
@@ -361,7 +363,7 @@ impl FlagsReprType {
             self_ref.into()
         } else {
             let index = i32::try_from(word_index).expect("word index out of range");
-            self_ref.into().to_deref().element_ref(flags_repr_type(word_count), index)
+            self_ref.into().element_ref(flags_repr_type(word_count), index).to_deref()
         }
     }
 
@@ -379,7 +381,7 @@ impl FlagsReprType {
         let self_ref = self_ref.into();
         let bit_ref = bit_ref.into();
         
-        let result = builder.local_temp(WORD_TYPE.temp_ref());
+        let result_ref = builder.local_temp(WORD_TYPE.temp_ref());
         let skip_flag = builder.local_temp(ir::Type::Bool);
         
         let break_label = builder.next_label();
@@ -399,8 +401,8 @@ impl FlagsReprType {
                 None
             };
 
-            builder.mov(result, Self::word_ref(self_ref.clone(), word_count, word));
-            
+            builder.make_ref(result_ref, Self::word_ref(self_ref.clone(), word_count, word));
+
             if word > 0 {
                 let word_start = ir::Value::LiteralU8((word * WORD_BITS) as u8);
                 builder.sub(word_bit, bit_ref.clone(), word_start);
@@ -417,6 +419,6 @@ impl FlagsReprType {
         
         builder.label(break_label);
 
-        (result.to_deref(), word_bit.value())
+        (result_ref.to_deref(), word_bit.value())
     }
 }
