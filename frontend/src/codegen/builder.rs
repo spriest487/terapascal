@@ -147,6 +147,10 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
         (id, case_index, variant_def.cases[case_index].ty.clone())
     }
+
+    pub fn translate_set_type(&mut self, set_type: &typ::SetType) -> SetFlagsType { 
+        self.library.translate_set_type(set_type)
+    }
     
     pub fn literal_to_val(&mut self, lit: &typ::ast::Literal, ty: &typ::Type) -> ir::Value {
         let ty = self.translate_type(ty);
