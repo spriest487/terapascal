@@ -405,11 +405,11 @@ impl<'a> LibraryBuilder<'a> {
 
     pub fn get_flags_repr_type(&mut self, bits: usize) -> FlagsReprType {
         if let Some(repr_type) = self.flags_repr_types.get(&bits) {
-            return *repr_type;
+            return repr_type.clone();
         }
 
         let repr_type = FlagsReprType::build(self, bits);
-        self.flags_repr_types.insert(bits, repr_type);
+        self.flags_repr_types.insert(bits, repr_type.clone());
 
         repr_type
     }

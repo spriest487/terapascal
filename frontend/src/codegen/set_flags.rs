@@ -11,13 +11,19 @@ use terapascal_ir::StructLayout;
 pub const WORD_TYPE: ir::Type = ir::Type::U64;
 const WORD_BITS: usize = u64::BITS as usize;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+fn flags_repr_type(word_count: usize) -> ir::Type {
+    match word_count {
+        1 => ir::Type::U64,
+        _ => ir::Type::U64.array(word_count),
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct SetFlagsType {
     pub struct_id: ir::TypeDefID,
 
     pub repr_type: FlagsReprType,
 }
-
 
 impl SetFlagsType {
     // full-size 256-bit flag struct, the max number of values supported by
@@ -36,24 +42,24 @@ impl SetFlagsType {
             }
         };
 
-        let repr_type = lib.get_flags_repr_type(set_type.flags_type_bits());
+        let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
 
         let mut set_struct = ir::StructDef::new(struct_identity, StructLayout::Packed);
-        set_struct.fields.insert(ir::FieldID(0), ir::StructFieldDef::new(repr_type.struct_id.to_struct_type([])));
+        set_struct.fields.insert(ir::FieldID(0), ir::StructFieldDef::new(flags_type.repr_type()));
 
         let struct_id = lib.metadata_mut().new_type();
         lib.metadata_mut().define_struct(struct_id, set_struct);
 
         Self {
             struct_id,
-            repr_type,
+            repr_type: flags_type,
         }
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FlagsReprType {
-    pub struct_id: ir::TypeDefID,
+    pub word_count: usize,
 
     // function (self: ^Self; bit: UInt8);
     pub include_func: ir::FunctionID,
@@ -83,53 +89,42 @@ pub fn set_word_count(bit_count: usize) -> usize {
 }
 
 impl FlagsReprType {
+    pub fn repr_type(&self) -> ir::Type {
+        flags_repr_type(self.word_count)
+    }
+
     pub fn build(lib: &mut LibraryBuilder, bit_count: usize) -> FlagsReprType {
         let word_count = set_word_count(bit_count);
-        let word_fields = (0..word_count)
-            .map(|id| (ir::FieldID(id), ir::StructFieldDef::new(WORD_TYPE)))
-            .collect();
-        
-        let struct_identity = ir::StructIdentity::Internal(format!("<{}-bit flags>", bit_count));
 
-        let flags_struct = ir::StructDef::new(struct_identity, StructLayout::Packed)
-            .with_fields(word_fields);
-
-        let struct_id = lib.metadata_mut().new_type();
-
-        lib.metadata_mut().define_struct(struct_id, flags_struct);
-        
-        let include_func = Self::define_include(struct_id, word_count, lib);
-        let exclude_func = Self::define_exclude(struct_id, word_count, lib);
-        let contains_func = Self::define_contains(struct_id, word_count, lib);
+        let include_func = Self::define_include(word_count, lib);
+        let exclude_func = Self::define_exclude(word_count, lib);
+        let contains_func = Self::define_contains(word_count, lib);
 
         let bit_and_func = Self::define_bitwise_bin_op(
-            struct_id,
             word_count,
             Operator::BitAnd,
             lib,
             |builder, out, a, b| builder.bit_and(out, a, b)
         );
         let bit_or_func = Self::define_bitwise_bin_op(
-            struct_id,
             word_count,
             Operator::BitOr,
             lib,
             |builder, out, a, b| builder.bit_or(out, a, b)
         );
         let bit_xor_func = Self::define_bitwise_bin_op(
-            struct_id,
             word_count,
             Operator::Caret,
             lib,
             |builder, out, a, b| builder.bit_xor(out, a, b)
         );
 
-        let bit_not_func = Self::define_bit_not(struct_id, word_count, lib);
+        let bit_not_func = Self::define_bit_not(word_count, lib);
 
-        let eq_func = Self::define_eq(struct_id, word_count, lib);
+        let eq_func = Self::define_eq(word_count, lib);
         
         FlagsReprType {
-            struct_id,
+            word_count,
             contains_func,
             include_func,
             exclude_func,
@@ -166,11 +161,10 @@ impl FlagsReprType {
     }
 
     fn define_include(
-        repr_id: ir::TypeDefID,
         word_count: usize,
         lib: &mut LibraryBuilder
     ) -> ir::FunctionID {
-        let flags_ty = repr_id.to_struct_type([]);
+        let flags_ty = flags_repr_type(word_count);
 
         let mut builder = IRBuilder::new(lib);
         let self_arg = ir::ArgID(0);
@@ -181,10 +175,9 @@ impl FlagsReprType {
 
         let (word_ref, word_bit) = Self::find_word_bit(
             &mut builder,
-            self_arg.to_deref(),
+            self_arg,
             bit_arg,
-            word_count,
-            flags_ty.clone()
+            word_count
         );
 
         let word_mask = builder.local_temp(WORD_TYPE);
@@ -203,8 +196,8 @@ impl FlagsReprType {
         Self::define_func(name, builder.finish(), sig, lib)
     }
     
-    fn define_exclude(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let flags_ty = struct_id.to_struct_type([]);
+    fn define_exclude(word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
+        let flags_ty = flags_repr_type(word_count);
 
         let mut builder = IRBuilder::new(lib);
         let self_arg = ir::ArgID(0);
@@ -215,11 +208,9 @@ impl FlagsReprType {
 
         let (word_ref, word_bit) = Self::find_word_bit(
             &mut builder,
-            self_arg.to_deref(),
+            self_arg,
             bit_arg,
-            word_count,
-            flags_ty.clone()
-        );
+            word_count);
 
         let word_mask = builder.local_temp(WORD_TYPE);
 
@@ -238,8 +229,8 @@ impl FlagsReprType {
         Self::define_func(name, builder.finish(), sig, lib)
     }
 
-    fn define_contains(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let flags_ty = struct_id.to_struct_type([]);
+    fn define_contains(word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
+        let flags_ty = flags_repr_type(word_count);
 
         let mut builder = IRBuilder::new(lib);
         builder.bind_result(ir::Type::Bool);
@@ -252,11 +243,9 @@ impl FlagsReprType {
 
         let (word_ref, word_bit) = Self::find_word_bit(
             &mut builder,
-            self_arg.to_deref(),
+            self_arg,
             bit_arg,
-            word_count,
-            flags_ty.clone()
-        );
+            word_count);
 
         let word_mask = builder.local_temp(WORD_TYPE);
 
@@ -280,13 +269,12 @@ impl FlagsReprType {
     }
     
     fn define_bitwise_bin_op(
-        struct_id: ir::TypeDefID,
         word_count: usize,
         op: Operator,
         lib: &mut LibraryBuilder,
         build_op: impl Fn(&mut IRBuilder, ir::Ref, ir::Value, ir::Value)
     ) -> ir::FunctionID {
-        let flags_ty = struct_id.to_struct_type([]);
+        let flags_ty = flags_repr_type(word_count);
 
         let mut builder = IRBuilder::new(lib);
         let flags_arg = ir::ArgID(0);
@@ -296,10 +284,8 @@ impl FlagsReprType {
         builder.bind_param(other_arg, flags_ty.temp_ref(), "other");
 
         for word in 0..word_count {
-            let word_field_id = ir::FieldID(word);
-
-            let word_field_ref = flags_arg.to_deref().field_ref(flags_ty.clone(), word_field_id);
-            let other_word_field_ref = other_arg.to_deref().field_ref(flags_ty.clone(), word_field_id);
+            let word_field_ref = Self::word_ref(flags_arg, word_count, word);
+            let other_word_field_ref = Self::word_ref(other_arg, word_count, word);
 
             let word_val = word_field_ref.to_deref().value();
             let other_word_val = other_word_field_ref.to_deref().value();
@@ -316,8 +302,8 @@ impl FlagsReprType {
         Self::define_func(name, builder.finish(), sig, lib)
     }
     
-    fn define_bit_not(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let flags_ty = struct_id.to_struct_type([]);
+    fn define_bit_not(word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
+        let flags_ty = flags_repr_type(word_count);
 
         let mut builder = IRBuilder::new(lib);
         
@@ -325,10 +311,8 @@ impl FlagsReprType {
         builder.bind_param(flags_arg, flags_ty.temp_ref(), "flags");
 
         for word in 0..word_count {
-            let word_field_id = ir::FieldID(word);
-            let word_field_ref = flags_arg.to_deref().field_ref(flags_ty.clone(), word_field_id);
-        
-            builder.bit_not(word_field_ref.to_deref(), word_field_ref.to_deref());
+            let word_ref = Self::word_ref(flags_arg, word_count, word);
+            builder.bit_not(word_ref.to_deref(), word_ref.to_deref());
         }
 
         let name = format!("operator ~ ({}-bit flags)", word_count * WORD_BITS);
@@ -339,9 +323,9 @@ impl FlagsReprType {
         Self::define_func(name, builder.finish(), sig, lib)
     }
 
-    fn define_eq(struct_id: ir::TypeDefID, word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
-        let flags_ty = struct_id.to_struct_type([]);
-        
+    fn define_eq(word_count: usize, lib: &mut LibraryBuilder) -> ir::FunctionID {
+        let flags_ty = flags_repr_type(word_count);
+
         let mut builder = IRBuilder::new(lib);
         builder.bind_result(ir::Type::Bool);
         let flags_arg = ir::ArgID(0);
@@ -355,13 +339,11 @@ impl FlagsReprType {
         let word_eq_var = builder.local_temp(ir::Type::Bool);
 
         for word in 0..word_count {
-            let word_field_id = ir::FieldID(word);
-
-            let word_field_ref = flags_arg.to_deref().field_ref(flags_ty.clone(), word_field_id);
-            let other_word_field_ref = other_arg.to_deref().field_ref(flags_ty.clone(), word_field_id);
+            let word_field_ref = Self::word_ref(flags_arg, word_count, word);
+            let other_word_field_ref = Self::word_ref(other_arg, word_count, word);
 
             // result := result and (word = other_word)
-            builder.eq(word_eq_var, word_field_ref.to_deref(), other_word_field_ref.to_deref());
+            builder.eq(word_eq_var,  word_field_ref.to_deref(), other_word_field_ref.to_deref());
             builder.and(ir::RESULT_REF, ir::RESULT_REF, word_eq_var);
         }
         
@@ -374,14 +356,26 @@ impl FlagsReprType {
         Self::define_func(name, builder.finish(), sig, lib)
     }
 
+    fn word_ref(self_ref: impl Into<ir::Ref>, word_count: usize, word_index: usize) -> ir::Ref{
+        if word_count == 1 {
+            self_ref.into()
+        } else {
+            let index = i32::try_from(word_index).expect("word index out of range");
+            self_ref.into().to_deref().element_ref(flags_repr_type(word_count), index)
+        }
+    }
+
     // returns (ref to 64-bit word, bit in the 0-63 range) 
     fn find_word_bit(
         builder: &mut IRBuilder,
         self_ref: impl Into<ir::Ref>,
         bit_ref: impl Into<ir::Ref>,
         word_count: usize,
-        struct_ty: ir::Type
     ) -> (ir::Ref, ir::Value) {
+        if word_count == 1 {
+            return (self_ref.into(), bit_ref.into().value())
+        }
+
         let self_ref = self_ref.into();
         let bit_ref = bit_ref.into();
         
@@ -405,9 +399,7 @@ impl FlagsReprType {
                 None
             };
 
-            let field_id = ir::FieldID(word);
-
-            builder.mov(result, self_ref.field_ref(struct_ty.clone(), field_id));
+            builder.mov(result, Self::word_ref(self_ref.clone(), word_count, word));
             
             if word > 0 {
                 let word_start = ir::Value::LiteralU8((word * WORD_BITS) as u8);
@@ -425,6 +417,6 @@ impl FlagsReprType {
         
         builder.label(break_label);
 
-        (result.to_deref(), ir::Value::from(word_bit))
+        (result.to_deref(), word_bit.value())
     }
 }
