@@ -152,7 +152,7 @@ fn specializes_func_call_by_arg_ty() {
         end.
     ";
 
-    let module = module_from_src("Test", src);
+    let module = module_from_src("Test", src).module;
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].annotation().as_invocation() {
@@ -195,7 +195,7 @@ fn specializes_method_call_by_arg_ty() {
         end.
     ";
 
-    let module = module_from_src("Test", src);
+    let module = module_from_src("Test", src).module;
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[2].as_call() {
@@ -256,7 +256,7 @@ fn specializes_method_call_by_lambda_arg_ty() {
         end.
     ";
 
-    let module = module_from_src("Test", src);
+    let module = module_from_src("Test", src).module;
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].annotation().as_invocation() {
@@ -303,7 +303,7 @@ fn specializes_method_call_by_dynarray_element_ty() {
         end.
     ";
 
-    let module = module_from_src("Test", src);
+    let module = module_from_src("Test", src).module;
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].annotation().as_invocation() {
@@ -347,7 +347,7 @@ fn specializes_free_func_call_by_dynarray_element_ty() {
         end.
     ";
 
-    let module = module_from_src("Test", src);
+    let module = module_from_src("Test", src).module;
     let init = module.main_unit().unit.init.as_ref().unwrap();
 
     match init.body[1].annotation().as_invocation() {

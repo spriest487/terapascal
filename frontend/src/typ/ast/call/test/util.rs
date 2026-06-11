@@ -92,7 +92,7 @@ pub fn candidates_from_src(
     src: &'static str,
     unit_name: &str,
 ) -> (Vec<OverloadCandidate>, Context) {
-    let module = module_from_src(unit_name, src);
+    let module = module_from_src(unit_name, src).module;
 
     let candidates = candidates_from_module(&module, unit_name);
 

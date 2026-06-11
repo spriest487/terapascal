@@ -10,7 +10,7 @@ const INT32: TypeName = TypeName::Unspecified(Type::Primitive(Primitive::Int32))
 const BYTE: TypeName = TypeName::Unspecified(Type::Primitive(Primitive::UInt8));
 
 fn module_from_src(unit_name: &'static str, src: &'static str) -> ModuleUnit {
-    let module = typ::test::module_from_src(unit_name, src);
+    let module = typ::test::module_from_src(unit_name, src).module;
     module.units.into_iter().next().unwrap()
 }
 
