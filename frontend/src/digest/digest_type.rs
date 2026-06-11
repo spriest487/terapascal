@@ -52,7 +52,7 @@ impl DigestBuilder<'_> {
                         self.digest_struct_def(record_path, struct_def, StructKind::Record)
                     }
 
-                    ir::StructIdentity::SetFlags { .. }
+                    ir::StructIdentity::Internal(..)
                     | ir::StructIdentity::ClosureObject(..) => {
                         // unnamed class = internal only, no import
                         Ok(())
@@ -220,10 +220,6 @@ impl DigestBuilder<'_> {
                 self.digest_type_ref(type_ref)?
             }
 
-            ir::Type::Flags(type_id) => {
-                self.digest_type_ref(&ir::TypeRef::new(*type_id, []))?
-            }
-
             ir::Type::Array { element, dim } => {
                 let element_type = self.digest_type(element)?;
                 Type::array(element_type, *dim)
@@ -330,8 +326,8 @@ impl DigestBuilder<'_> {
                         Err(DigestError::UnsupportedFeature("closure types".to_string()))
                     }
 
-                    ir::StructIdentity::SetFlags { bits: _ } => {
-                        Err(DigestError::UnsupportedFeature("set types".to_string()))
+                    ir::StructIdentity::Internal(debug_name) => {
+                        Err(DigestError::UnsupportedFeature(format!("internal type: {debug_name}")))
                     }
                 }
             }
