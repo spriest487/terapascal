@@ -193,7 +193,7 @@ impl Context {
 
         result
     }
-    
+
     pub fn push_unit_scope(&mut self, unit_path: IdentPath) -> TypeResult<ScopeID> {
         let path_len = unit_path.as_slice().len();
         let mut path_parts = unit_path.clone().into_vec();
@@ -251,19 +251,22 @@ impl Context {
             }
         }
 
-        let current_scope = self.scopes.current_mut(); 
+        let current_scope = self.scopes.current_mut();
+
         match current_scope.env_mut() {
             Environment::Namespace { namespace } if *namespace == unit_path => {
                 // in case it was previously declared elsewhere (part of another unit or builtin)
                 // final namespace with the full unit name provided. the ident provided here should
                 // be the unit's own declaring ident, so it's the canonical one for this namespace
                 *namespace = unit_path;
-                
-                Ok(current_scope.id())
             }
 
-            _ => unreachable!("top scope must now be the namespace {unit_path}")
+            _ => {
+                unreachable!("top scope must now be the namespace {unit_path}")
+            }
         }
+
+        Ok(unit_scopes.remove(0))
     }
 
     pub fn unit_scope<T, F>(&mut self, unit_path: IdentPath, f: F) -> TypeResult<T>
@@ -273,7 +276,7 @@ impl Context {
         let id = self.push_unit_scope(unit_path)?;
 
         let result = f(self);
-        
+
         self.pop_scope(id);
 
         result
