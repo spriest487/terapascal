@@ -1,7 +1,9 @@
-use crate::{ClosureIdentity, IRFormatter, ObjectID};
+use crate::ClosureIdentity;
+use crate::IRFormatter;
 use crate::InstructionList;
 use crate::Label;
 use crate::NamePath;
+use crate::ObjectID;
 use crate::RawFormatter;
 use crate::Ref;
 use crate::StringID;
