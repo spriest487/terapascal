@@ -4,7 +4,6 @@ use structopt::*;
 use terapascal_build::BuildStage;
 use terapascal_common::version::Version;
 use terapascal_common::LanguageMode;
-use terapascal_common::StripMode;
 
 #[derive(StructOpt, Debug)]
 pub struct Args {
@@ -47,9 +46,6 @@ pub struct Args {
     /// If false, code using `unsafe` blocks will produce an error
     #[structopt(long="unsafe", default_value = "true", parse(try_from_str = parse_bool))]
     pub allow_unsafe: bool,
-
-    #[structopt(long="strip", default_value = "unused-impl", parse(try_from_str = parse_strip_mode))]
-    pub strip: StripMode,
 
     /// Source directory to search for unit source files
     #[structopt(long = "search-dir", short = "s", parse(from_os_str))]
@@ -140,14 +136,6 @@ fn parse_lang_mode(s: &str) -> Result<LanguageMode, String> {
         "fpc" | "FPC" => Ok(LanguageMode::Fpc),
         "default" | "Default" => Ok(LanguageMode::Default),
         _ => Err(format!("invalid language mode: {}", s)),
-    }
-}
-
-fn parse_strip_mode(s: &str) -> Result<StripMode, String> {
-    match s {
-        "unused-impl" | "default" => Ok(StripMode::UnusedImpl),
-        "unused" => Ok(StripMode::Unused),
-        _ => Err(format!("invalid strip mode: {}", s)),
     }
 }
 

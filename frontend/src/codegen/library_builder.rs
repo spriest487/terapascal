@@ -41,7 +41,6 @@ use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::version::Version;
-use terapascal_common::StripMode;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -340,24 +339,22 @@ impl<'a> LibraryBuilder<'a> {
             }, None);
         }
 
-        if self.opts.strip <= StripMode::UnusedImpl {
-            for iface_decl in &unit.iface_section.decls {
-                match iface_decl {
-                    typ::ast::UnitDecl::FunctionDecl { decl } 
-                    if decl.name.type_params.is_none() => {
-                        self.translate_unit_func_decl(&unit.ident, decl);
-                    }
+        for iface_decl in &unit.iface_section.decls {
+            match iface_decl {
+                typ::ast::UnitDecl::FunctionDecl { decl }
+                if decl.name.type_params.is_none() => {
+                    self.translate_unit_func_decl(&unit.ident, decl);
+                }
 
-                    typ::ast::UnitDecl::FunctionDef { def } 
-                    if def.decl.name.type_params.is_none() => {
-                        self.translate_unit_func_decl(&unit.ident, &def.decl);
-                    }
-                    
-                    _ => {
-                        continue;
-                    }
-                };
-            }
+                typ::ast::UnitDecl::FunctionDef { def }
+                if def.decl.name.type_params.is_none() => {
+                    self.translate_unit_func_decl(&unit.ident, &def.decl);
+                }
+
+                _ => {
+                    continue;
+                }
+            };
         }
     }
 

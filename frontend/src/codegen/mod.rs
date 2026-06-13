@@ -18,7 +18,6 @@ use crate::ast::StructKind;
 use crate::codegen::library_builder::LibraryRef;
 use crate::ir;
 use crate::typ as typ;
-use terapascal_common::StripMode;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct CodegenOpts {
@@ -27,8 +26,6 @@ pub struct CodegenOpts {
     pub debug: bool,
     
     pub rtti: bool,
-
-    pub strip: StripMode,
 }
 
 impl Default for CodegenOpts {
@@ -36,7 +33,6 @@ impl Default for CodegenOpts {
         Self {
             debug: true,
             rtti: true,
-            strip: StripMode::UnusedImpl,
         }
     }
 }

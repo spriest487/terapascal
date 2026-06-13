@@ -75,7 +75,6 @@ fn compile(args: Args) -> Result<(), RunError> {
     let codegen_opts = CodegenOpts {
         debug: args.debug,
         rtti: args.rtti,
-        strip: args.strip,
     };
 
     for define_sym in &args.define_syms {
