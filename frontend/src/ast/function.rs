@@ -48,7 +48,7 @@ pub enum FunctionDeclKind {
     Function,
 
     // declared with a preceding `class` keyword, must be within a type decl
-    ClassMethod,
+    ClassFunction,
 
     // declared with the `constructor` keyword, must not specify a return type
     Constructor,
@@ -62,7 +62,7 @@ impl FunctionDeclKind {
     pub fn is_static_method(self) -> bool {
         matches!(
             self,
-            FunctionDeclKind::ClassMethod | FunctionDeclKind::Constructor
+            FunctionDeclKind::ClassFunction | FunctionDeclKind::Constructor
         )
     }
 
@@ -71,7 +71,7 @@ impl FunctionDeclKind {
             self,
             FunctionDeclKind::Destructor
                 | FunctionDeclKind::Constructor
-                | FunctionDeclKind::ClassMethod
+                | FunctionDeclKind::ClassFunction
         )
     }
 }
@@ -80,7 +80,7 @@ impl fmt::Display for FunctionDeclKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             FunctionDeclKind::Function => write!(f, "function"),
-            FunctionDeclKind::ClassMethod => write!(f, "class method"),
+            FunctionDeclKind::ClassFunction => write!(f, "class function"),
             FunctionDeclKind::Constructor => write!(f, "constructor"),
             FunctionDeclKind::Destructor => write!(f, "destructor"),
         }
@@ -254,7 +254,7 @@ impl FunctionDecl<Span> {
             Keyword::Class => {
                 let class_func_kw = parser.match_one(Keyword::Function | Keyword::Procedure)?;
 
-                let kind = FunctionDeclKind::ClassMethod;
+                let kind = FunctionDeclKind::ClassFunction;
                 let expect_return = match class_func_kw.as_keyword() {
                     Some(Keyword::Function) => true,
                     Some(Keyword::Procedure) => false,
@@ -559,14 +559,7 @@ impl<A: Annotation> Spanned for FunctionDecl<A> {
 
 impl<A: Annotation> fmt::Display for FunctionDecl<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} ", match self.kind {
-            FunctionDeclKind::Function => "function",
-            FunctionDeclKind::ClassMethod => "class function",
-            FunctionDeclKind::Constructor => "constructor",
-            FunctionDeclKind::Destructor => "destructor",
-        })?;
-
-        write!(f, "{}", self.name)?;
+        write!(f, "{} {}", self.kind, self.name)?;
 
         if !self.param_groups.is_empty() {
             write!(f, "(")?;
@@ -583,7 +576,7 @@ impl<A: Annotation> fmt::Display for FunctionDecl<A> {
         if self.result_ty.is_known()
             && matches!(
                 self.kind,
-                FunctionDeclKind::Function | FunctionDeclKind::ClassMethod
+                FunctionDeclKind::Function | FunctionDeclKind::ClassFunction
             )
         {
             write!(f, ": {}", self.result_ty)?;

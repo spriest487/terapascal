@@ -118,7 +118,7 @@ impl ImportBuilder<'_> {
                 },
                 type_params,
             },
-            kind: FunctionDeclKind::ClassMethod,
+            kind: FunctionDeclKind::Function,
             tags,
             mods: Vec::new(),
             result_ty: TypeName::Unspecified(result_type),

@@ -298,7 +298,7 @@ impl FunctionDecl {
             };
 
             let result_ty = match decl.kind {
-                FunctionDeclKind::Function | FunctionDeclKind::ClassMethod =>  match &decl.result_ty {
+                FunctionDeclKind::Function | FunctionDeclKind::ClassFunction =>  match &decl.result_ty {
                     ast::TypeName::Unspecified(..) => TypeName::inferred(Type::Nothing),
                     
                     ty_name => {

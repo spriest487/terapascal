@@ -1,6 +1,8 @@
 use crate::ir;
+use crate::typ::ast::MethodDecl;
 use crate::typ::Type;
 use crate::typ::TypeError;
+use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::fmt::Formatter;
 use std::io;
@@ -44,7 +46,7 @@ pub type ImportResult<T> = Result<T, ImportError>;
 pub enum ImportWarning {
     InvalidType(String, Box<ImportError>),
     InvalidFunc(String, Box<ImportError>),
-    InvalidMethodList(Type, Box<ImportError>),
+    InvalidMethodList(Type, BTreeMap<usize, MethodDecl>, Box<ImportError>),
     InvalidPath(String, Box<ImportError>),
 }
 
@@ -59,7 +61,7 @@ impl Display for ImportWarning {
                 write!(f, "Invalid function `{}`: {}", name, err)
             }
 
-            ImportWarning::InvalidMethodList(ty, err) => {
+            ImportWarning::InvalidMethodList(ty, _method_list, err) => {
                 write!(f, "Method list for type {ty} is invalid: {err}")
             }
 
@@ -73,5 +75,20 @@ impl Display for ImportWarning {
 impl DiagnosticOutput for ImportWarning {
     fn severity(&self) -> Severity {
         Severity::Warning
+    }
+
+    fn notes(&self) -> Vec<String> {
+        match self {
+            ImportWarning::InvalidMethodList(_ty, method_list, _err) => {
+                method_list
+                    .iter()
+                    .map(|(index, method)| format!("{}: {}", index, method.func_decl))
+                    .collect()
+            }
+
+            _ => {
+                Vec::new()
+            }
+        }
     }
 }

@@ -309,7 +309,7 @@ fn function_completion(decl: &FunctionDecl, ufcs: bool) -> lsp::CompletionItem {
 
     let kind = match decl.kind {
         FunctionDeclKind::Function => lsp::CompletionItemKind::FUNCTION,
-        FunctionDeclKind::ClassMethod => lsp::CompletionItemKind::METHOD,
+        FunctionDeclKind::ClassFunction => lsp::CompletionItemKind::METHOD,
         FunctionDeclKind::Constructor => lsp::CompletionItemKind::CONSTRUCTOR,
         FunctionDeclKind::Destructor => lsp::CompletionItemKind::METHOD,
     };

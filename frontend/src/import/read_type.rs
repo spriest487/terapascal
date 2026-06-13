@@ -483,8 +483,8 @@ impl ImportBuilder<'_> {
         mem::swap(&mut type_methods, &mut self.type_methods);
 
         for (declaring_type, type_methods) in type_methods {
-            if let Err(err) = self.finish_type_def(&declaring_type, type_methods) {
-                self.warnings.push(ImportWarning::InvalidMethodList(declaring_type, Box::new(err)));
+            if let Err(err) = self.finish_type_def(&declaring_type, &type_methods) {
+                self.warnings.push(ImportWarning::InvalidMethodList(declaring_type, type_methods, Box::new(err)));
             }
         }
 
@@ -494,16 +494,16 @@ impl ImportBuilder<'_> {
     fn finish_type_def(
         &mut self,
         declaring_type: &Type,
-        mut method_map: BTreeMap<usize, MethodDecl>,
+        method_map: &BTreeMap<usize, MethodDecl>,
     ) -> ImportResult<()> {
         let mut method_list = Vec::with_capacity(method_map.len());
 
         for method_index in 0..method_map.len() {
-            let Some(method_decl) = method_map.remove(&method_index) else {
+            let Some(method_decl) = method_map.get(&method_index) else {
                 return Err(ImportError::MissingMethodDef(ir::MethodID(method_index)));
             };
 
-            method_list.push(method_decl)
+            method_list.push(method_decl.clone())
         }
 
         match declaring_type {
