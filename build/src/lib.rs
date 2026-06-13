@@ -8,8 +8,9 @@ use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::env;
+use std::io;
 use std::path::PathBuf;
-use std::{env, io};
 use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::Filesystem;
@@ -19,12 +20,14 @@ use terapascal_common::CompileOpts;
 use terapascal_common::TracedError;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_common::LIB_DIR_VAR;
+use terapascal_common::SRC_FILE_DEFAULT_EXT;
 use terapascal_frontend::ast;
 use terapascal_frontend::ast::package::PackageUnit;
 use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::MainUnitKind;
 use terapascal_frontend::ast::UnitKind;
 use terapascal_frontend::ast::UseDeclItem;
+use terapascal_frontend::codegen::library_builder::LibraryRef;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::codegen_ir;
 use terapascal_frontend::digest::digest;
@@ -35,11 +38,12 @@ use terapascal_frontend::parse::Parser;
 use terapascal_frontend::pp::PreprocessedUnit;
 use terapascal_frontend::tokenize;
 use terapascal_frontend::typ;
+use terapascal_frontend::typ::builtin_ident;
 use terapascal_frontend::typ::Context;
+use terapascal_frontend::typ::SYSTEM_UNIT_NAME;
 use terapascal_frontend::typecheck;
 use terapascal_frontend::TokenStream;
 use topological_sort::TopologicalSort;
-use terapascal_frontend::codegen::library_builder::LibraryRef;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
 pub enum BuildStage {
@@ -344,28 +348,28 @@ pub fn parse_sources(
     let mut project = ProjectLoader::new(fs, input, imported_namespaces, log)?;
 
     // auto-add system units if we're going beyond parsing
-    // let include_system = input.output_stage >= BuildStage::Typecheck;
+    let include_system = input.output_stage >= BuildStage::Typecheck && false;
 
-    // let system_units = [
-    //     IdentPath::from_parts([builtin_ident(SYSTEM_UNIT_NAME)])
-    // ];
+    let system_units = [
+        IdentPath::from_parts([builtin_ident(SYSTEM_UNIT_NAME)])
+    ];
 
-    // let mut system_paths = Vec::with_capacity(system_units.len());
+    let mut system_paths = Vec::with_capacity(system_units.len());
 
-    // if include_system {
-    //     for stdlib_unit in &system_units {
-    //         let filename = PathBuf::from(stdlib_unit.to_string())
-    //             .with_extension(SRC_FILE_DEFAULT_EXT);
-    //
-    //         let unit_path = project.sources.add(&filename, None, &mut project.log)?;
-    //
-    //         system_paths.push(unit_path);
-    //     }
-    // }
+    if include_system {
+        for stdlib_unit in &system_units {
+            let filename = PathBuf::from(stdlib_unit.to_string())
+                .with_extension(SRC_FILE_DEFAULT_EXT);
 
-    // for (unit_name, path) in system_units.iter().zip(system_paths.into_iter()) {
-    //     project.used_unit_paths.insert(unit_name.clone(), path);
-    // }
+            let unit_path = project.sources.add(&filename, None, &mut project.log)?;
+
+            system_paths.push(unit_path);
+        }
+    }
+
+    for (unit_name, path) in system_units.iter().zip(system_paths.into_iter()) {
+        project.used_unit_paths.insert(unit_name.clone(), path);
+    }
 
     loop {
         let unit_filename = match project.sources.next() {
