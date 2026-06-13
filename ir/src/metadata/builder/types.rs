@@ -51,9 +51,15 @@ impl MetadataBuilder {
         id
     }
 
-    pub fn declare_new_type(&mut self, name: &NamePath) -> TypeDefID {
+    /// If the type with this name already exists, return its ID, otherwise forward declare it
+    pub fn forward_declare_type(&mut self, name: &NamePath) -> TypeDefID {
+        if let Some(existing_id) = self.find_type_decl(name) {
+            return existing_id;
+        }
+
         let id = self.new_type();
-        self.declare_type(id, name);
+        self.insert_type_decl(id, TypeDecl::Forward(name.clone()));
+
         id
     }
 

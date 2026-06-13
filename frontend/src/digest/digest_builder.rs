@@ -17,7 +17,7 @@ use crate::typ::ast::StructDecl;
 use crate::typ::ast::Tag;
 use crate::typ::ast::TagItem;
 use crate::typ::ast::VariantDecl;
-use crate::typ::builtin_typeinfo_name;
+use crate::typ::{builtin_typeinfo_name, SetType};
 use crate::typ::ConstValue;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
@@ -34,6 +34,7 @@ use ir::MetadataSource as _;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::sync::Arc;
 use terapascal_common::span::Span;
 
 pub(super) struct DigestBuilder<'a> {
@@ -46,6 +47,8 @@ pub(super) struct DigestBuilder<'a> {
 
     pub struct_defs: HashMap<IdentPath, StructDecl>,
     pub variant_defs: HashMap<IdentPath, VariantDecl>,
+
+    pub set_types: BTreeMap<ir::TypeDefID, Arc<SetType>>,
 
     pub type_methods: HashMap<Type, BTreeMap<usize, MethodDecl>>,
 
@@ -65,6 +68,8 @@ impl<'a> DigestBuilder<'a> {
             struct_defs: HashMap::new(),
             variant_defs: HashMap::new(),
 
+            set_types: BTreeMap::new(),
+
             type_methods: HashMap::new(),
 
             imported_funcs: HashMap::new(),
@@ -75,7 +80,7 @@ impl<'a> DigestBuilder<'a> {
 
     pub fn digest(&mut self) -> DigestResult<()> {
         for (type_id, type_decl) in self.library.metadata.type_decls() {
-            if let Err(err) = self.digest_type_decl(type_decl) {
+            if let Err(err) = self.digest_type_decl(type_id, type_decl) {
                 let type_name = type_id.to_pretty_string(self.metadata());
                 self.warnings.push(DigestWarning::InvalidType(type_name, Box::new(err)));
             }

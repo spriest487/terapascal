@@ -3,6 +3,10 @@ use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
+use crate::codegen::SET_TAG_ITEM_TYPE_FIELD;
+use crate::codegen::SET_TAG_MAX_FIELD;
+use crate::codegen::SET_TAG_MIN_FIELD;
+use crate::codegen::SET_TAG_NAME;
 use crate::digest::DigestBuilder;
 use crate::digest::DigestError;
 use crate::digest::DigestResult;
@@ -19,11 +23,14 @@ use crate::typ::ast::VariantCaseData;
 use crate::typ::ast::VariantDecl;
 use crate::typ::Primitive;
 use crate::typ::ScopeID;
+use crate::typ::SetType;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeName;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamList;
+use crate::typ::SYSTEM_UNIT_NAME;
+use crate::IntConstant;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
@@ -31,7 +38,7 @@ use std::sync::Arc;
 use terapascal_ir::MetadataSource as _;
 
 impl DigestBuilder<'_> {
-    pub fn digest_type_decl(&mut self, decl: &ir::TypeDecl) -> DigestResult<()> {
+    pub fn digest_type_decl(&mut self, id: ir::TypeDefID, decl: &ir::TypeDecl) -> DigestResult<()> {
         match decl {
             ir::TypeDecl::Reserved | ir::TypeDecl::Forward(..) => {
                 Ok(())
@@ -45,11 +52,11 @@ impl DigestBuilder<'_> {
             ir::TypeDecl::Def(ir::TypeDef::Struct(struct_def)) => {
                 match &struct_def.identity {
                     ir::StructIdentity::Class(class_path) => {
-                        self.digest_struct_def(class_path, struct_def, StructKind::Class)
+                        self.digest_struct_def(id, class_path, struct_def, StructKind::Class)
                     }
 
                     ir::StructIdentity::Record(record_path) => {
-                        self.digest_struct_def(record_path, struct_def, StructKind::Record)
+                        self.digest_struct_def(id, record_path, struct_def, StructKind::Record)
                     }
 
                     ir::StructIdentity::Internal(..)
@@ -123,10 +130,17 @@ impl DigestBuilder<'_> {
 
     fn digest_struct_def(
         &mut self,
+        id: ir::TypeDefID,
         name_path: &ir::NamePath,
         def: &ir::StructDef,
         kind: StructKind,
     ) -> DigestResult<()> {
+        // if the typedecl is a set, its members are internal and the type info we need for
+        // typechecking is stored in the compiler-generated tag
+        if self.read_set_type_tag(id).is_some() {
+            return Ok(());
+        }
+
         let name = self.digest_def_path(&name_path)?;
         let struct_type = Type::from_struct_type(name.clone(), kind);
 
@@ -268,7 +282,7 @@ impl DigestBuilder<'_> {
             }
 
             ir::ObjectID::Interface(iface_id) => {
-                self.digest_interface_type(*iface_id)
+                self.read_interface_type(*iface_id)
             }
 
             ir::ObjectID::AnyClosure(sig) => {
@@ -289,6 +303,12 @@ impl DigestBuilder<'_> {
     }
 
     fn digest_type_ref(&mut self, type_ref: &ir::TypeRef) -> DigestResult<Type> {
+        if type_ref.args.is_empty()
+            && let Some(set_type) = self.read_set_type_tag(type_ref.def_id)
+        {
+            return Ok(Type::Set(set_type));
+        }
+
         let mut type_args = Vec::with_capacity(type_ref.args.len());
         for type_arg in &type_ref.args {
             type_args.push(TypeName::Unspecified(self.digest_type(type_arg)?));
@@ -339,7 +359,82 @@ impl DigestBuilder<'_> {
         }
     }
 
-    fn digest_interface_type(&mut self, id: ir::InterfaceID) -> DigestResult<Type> {
+    pub fn read_set_type_tag(&mut self, id: ir::TypeDefID) -> Option<Arc<SetType>> {
+        if let Some(set_type) = self.set_types.get(&id) {
+            return Some(set_type.clone());
+        }
+
+        // look up the struct again in each loop since we need mutable access to self
+        let tag_count = self.metadata().get_struct_def(id)?.tags.len();
+
+        for i in 0..tag_count {
+            let struct_def = self.metadata().get_struct_def(id)?;
+            let tag_info = &struct_def.tags[i];
+
+            // check that this tag is the set type tag
+            // TODO: cache the ID instead of looking up by name
+            let tag_def = self.metadata().get_struct_def(tag_info.class_id)?;
+
+            let tag_struct_name = tag_def.identity.name()?;
+            if tag_struct_name.path.len() != 2
+                || tag_struct_name.path[0] != SYSTEM_UNIT_NAME
+                || tag_struct_name.path[1] != SET_TAG_NAME
+            {
+                return None;
+            }
+
+            let item_type_field_val = tag_info.fields.get(&SET_TAG_ITEM_TYPE_FIELD)?.clone();
+            let min_field_val = tag_info.fields.get(&SET_TAG_MIN_FIELD)?.clone();
+            let max_field_val = tag_info.fields.get(&SET_TAG_MAX_FIELD)?.clone();
+
+            let name = match struct_def.identity.name() {
+                Some(name_path) => {
+                    let path = match self.digest_def_path(name_path) {
+                        Ok(name) => name.full_path,
+                        Err(err) => {
+                            let display_path = name_path.to_pretty_string(self.metadata());
+                            self.warnings.push(DigestWarning::InvalidPath(display_path, Box::new(err)));
+                            return None;
+                        }
+                    };
+
+                    Some(path)
+                }
+                None => None,
+            };
+
+            let item_type = match item_type_field_val {
+                ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(item_type))) => {
+                    self.digest_type(&item_type).ok()?
+                }
+                _ => return None, // invalid
+            };
+
+            let min = match min_field_val {
+                ir::Value::LiteralI64(min_lit) => IntConstant::from(min_lit as i128),
+                _ => return None,
+            };
+
+            let max = match max_field_val {
+                ir::Value::LiteralI64(min_lit) => IntConstant::from(min_lit as i128),
+                _ => return None,
+            };
+
+            let set_type = Arc::new(SetType {
+                item_type,
+                min,
+                max,
+                name,
+            });
+
+            self.set_types.insert(id, set_type.clone());
+            return Some(set_type);
+        }
+
+        None
+    }
+
+    fn read_interface_type(&mut self, id: ir::InterfaceID) -> DigestResult<Type> {
         let def = self
             .metadata()
             .get_iface_def(id)

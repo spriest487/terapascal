@@ -3,13 +3,21 @@ use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::NamePathExt;
 use crate::ir;
 use crate::typ::SetType;
+use crate::typ::SYSTEM_UNIT_NAME;
 use crate::Operator;
+use bigdecimal::ToPrimitive;
 use ir::InstructionBuilder as _;
+use std::num::Wrapping;
 use std::rc::Rc;
 use terapascal_ir::StructLayout;
 
 pub const WORD_TYPE: ir::Type = ir::Type::U64;
 const WORD_BITS: usize = u64::BITS as usize;
+
+pub const SET_TAG_NAME: &str = "PascalSetType";
+pub const SET_TAG_MIN_FIELD: ir::FieldID = ir::FieldID(0);
+pub const SET_TAG_MAX_FIELD: ir::FieldID = ir::FieldID(1);
+pub const SET_TAG_ITEM_TYPE_FIELD: ir::FieldID = ir::FieldID(2);
 
 fn flags_repr_type(word_count: usize) -> ir::Type {
     match word_count {
@@ -31,14 +39,21 @@ impl SetFlagsType {
     pub fn translate(lib: &mut LibraryBuilder, set_type: &SetType) -> Self {
         let bit_count = set_type.flags_type_bits();
 
-        let struct_identity = match &set_type.name {
+        let (struct_id, struct_identity) = match &set_type.name {
             Some(ident_path) => {
                 let name_path = ir::NamePath::from_parts(ident_path.to_string_path());
-                ir::StructIdentity::Record(name_path)
+
+                let id = lib.metadata_mut().forward_declare_type(&name_path);
+                let identity = ir::StructIdentity::Record(name_path);
+
+                (id, identity)
             }
 
             None => {
-                ir::StructIdentity::Internal(format!("<{}-bit set>", bit_count))
+                let identity = ir::StructIdentity::Internal(format!("<{}-bit set>", bit_count));
+                let id = lib.metadata_mut().new_type();
+
+                (id, identity)
             }
         };
 
@@ -47,13 +62,35 @@ impl SetFlagsType {
         let mut set_struct = ir::StructDef::new(struct_identity, StructLayout::Packed);
         set_struct.fields.insert(ir::FieldID(0), ir::StructFieldDef::new(flags_type.repr_type()));
 
-        let struct_id = lib.metadata_mut().new_type();
+        if let Some(set_tag_info) = Self::build_tag(lib, set_type) {
+            set_struct.tags.push(set_tag_info);
+        }
+
         lib.metadata_mut().define_struct(struct_id, set_struct);
 
         Self {
             struct_id,
             repr_type: flags_type,
         }
+    }
+
+    fn build_tag(lib: &mut LibraryBuilder, set_type: &SetType) -> Option<ir::TagInfo> {
+        let min_val = Wrapping(set_type.min.as_i128()).to_i64()?;
+        let max_val = Wrapping(set_type.max.as_i128()).to_i64()?;
+
+        let item_type = lib.translate_type(&set_type.item_type);
+        let item_type_ref = ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(Rc::new(item_type)));
+
+        let tag_path = ir::NamePath::new([SYSTEM_UNIT_NAME.to_string()], SET_TAG_NAME);
+
+        let tag_class_id = lib.metadata_mut().forward_declare_type(&tag_path);
+
+        let mut tag_info = ir::TagInfo::new(tag_class_id);
+        tag_info.fields.insert(SET_TAG_MIN_FIELD, ir::Value::LiteralI64(min_val));
+        tag_info.fields.insert(SET_TAG_MAX_FIELD, ir::Value::LiteralI64(max_val));
+        tag_info.fields.insert(SET_TAG_ITEM_TYPE_FIELD, item_type_ref.value());
+
+        Some(tag_info)
     }
 
     pub fn flags_ref(&self, self_ref: impl Into<ir::Ref>) -> ir::Ref {

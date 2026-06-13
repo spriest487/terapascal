@@ -45,6 +45,7 @@ pub enum DigestWarning {
     InvalidType(String, Box<DigestError>),
     InvalidFunc(String, Box<DigestError>),
     InvalidMethodList(Type, Box<DigestError>),
+    InvalidPath(String, Box<DigestError>),
 }
 
 impl Display for DigestWarning {
@@ -60,6 +61,10 @@ impl Display for DigestWarning {
 
             DigestWarning::InvalidMethodList(ty, err) => {
                 write!(f, "Method list for type {ty} is invalid: {err}")
+            }
+
+            DigestWarning::InvalidPath(path, err) => {
+                write!(f, "Failed to read path {path}: {err}")
             }
         }
     }

@@ -205,20 +205,27 @@ impl<T: MetadataSource> IRFormatter for T {
     }
 
     fn format_field(&self, of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result {
-        let field_name = of_ty
-            .as_struct()
-            .or_else(|| match of_ty.as_object()? {
-                ObjectID::Class(id) => Some(&id),
-                _ => None,
-            })
-            .and_then(|type_id| self.get_struct_def(type_id.def_id))
-            .and_then(|struct_def| struct_def.fields.get(&field))
-            .and_then(|field| field.name.as_ref());
+        let def_id  = match of_ty {
+            Type::Struct(type_ref) => Some(type_ref.def_id),
+            Type::Object(object_id) | Type::WeakObject(object_id) => {
+                match object_id {
+                    ObjectID::Class(type_ref) => Some(type_ref.def_id),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+
+        let struct_def = def_id.and_then(|id| self.get_struct_def(id));
+        let field_def = struct_def.and_then(|def| def.get_field(field));
+        let field_name = field_def.and_then(|field_def| field_def.name.as_ref());
 
         match field_name {
-            Some(name) => write!(f, "{}", name),
-            _ => RawFormatter.format_field(of_ty, field, f),
-        }
+            Some(name) => write!(f, "{}", name)?,
+            None => RawFormatter.format_field(of_ty, field, f)?,
+        };
+
+        Ok(())
     }
 
     fn format_method(

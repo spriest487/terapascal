@@ -1221,7 +1221,7 @@ impl<'a> LibraryBuilder<'a> {
                     .find_variant_def(&def_name.full_path)
                     .unwrap();
 
-                let def_id = self.metadata.new_type();
+                let def_id = self.metadata.forward_declare_type(&def_path);
 
                 let def_type = typ::Type::variant(def_name);
                 let variant_type = def_id.to_variant_type(def_path.type_args.clone());
@@ -1277,7 +1277,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 let def_src_type = typ::Type::from_struct_type(def_name.clone(), kind);
 
-                let def_id = self.metadata.new_type();
+                let def_id = self.metadata.forward_declare_type(&def_path);
                 let def_type = type_ctor(def_id, &def_path.type_args);
 
                 self.add_cached_type(def_src_type.clone(), def_type);
