@@ -8,7 +8,7 @@ pub mod pp;
 pub mod result;
 pub mod token_tree;
 pub mod typ;
-pub mod digest;
+pub mod import;
 
 pub use self::consts::EnumConstant;
 pub use self::consts::IntConstant;

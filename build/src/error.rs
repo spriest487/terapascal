@@ -11,7 +11,7 @@ use terapascal_common::Severity;
 use terapascal_common::TracedError;
 use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::MainUnitKind;
-use terapascal_frontend::digest::DigestError;
+use terapascal_frontend::import::ImportError;
 use terapascal_frontend::parse::ParseError;
 use terapascal_frontend::pp::error::PreprocessorError;
 use terapascal_frontend::typ::TypeError;
@@ -26,7 +26,7 @@ pub enum BuildError {
     TokenizeError(#[from] TracedError<TokenizeError>),
     ParseError(#[from] TracedError<ParseError>),
     TypecheckError(#[from] TypeError),
-    DigestError(#[from] DigestError),
+    ImportError(#[from] ImportError),
     PreprocessorError(#[from] PreprocessorError),
     FileNotFound(PathBuf, Option<Span>),
     ReadSourceFileFailed {
@@ -71,7 +71,7 @@ impl DiagnosticOutput for BuildError {
             Self::TypecheckError(err) => err.main(),
             Self::PreprocessorError(err) => err.main(),
 
-            Self::DigestError(err) => {
+            Self::ImportError(err) => {
                 DiagnosticMessage::new(Severity::Error, err.to_string())
             },
 
@@ -175,7 +175,7 @@ impl fmt::Display for BuildError {
             Self::ParseError(err) => write!(f, "{}", err.err),
             Self::TypecheckError(err) => write!(f, "{}", err),
             Self::PreprocessorError(err) => write!(f, "{}", err),
-            Self::DigestError(err) => write!(f, "{}", err),
+            Self::ImportError(err) => write!(f, "{}", err),
             Self::ReadSourceFileFailed { msg, .. } => write!(f, "{}", msg),
             Self::DuplicateUnit { .. } => write!(f, "unit was already loaded"),
             Self::FileNotFound(_, _) => write!(f, "file not found"),

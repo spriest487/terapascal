@@ -9,9 +9,9 @@ use crate::ast::Visibility;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::MethodDeclKey;
 use crate::codegen::FunctionInstance;
-use crate::digest::DigestBuilder;
-use crate::digest::DigestError;
-use crate::digest::DigestResult;
+use crate::import::ImportBuilder;
+use crate::import::ImportError;
+use crate::import::ImportResult;
 use crate::ir;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDeclContext;
@@ -27,21 +27,21 @@ use crate::typ::TypeName;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-impl DigestBuilder<'_> {
-    pub fn digest_function(
+impl ImportBuilder<'_> {
+    pub fn read_function(
         &mut self,
         func_id: ir::FunctionID,
         func_info: &ir::FunctionInfo,
-    ) -> DigestResult<()> {
-        let tags = self.digest_tags(&func_info.tags)?;
+    ) -> ImportResult<()> {
+        let tags = self.read_tags(&func_info.tags)?;
 
-        let result_type = self.digest_type(&func_info.sig.result_type)?;
+        let result_type = self.read_type(&func_info.sig.result_type)?;
 
         let mut param_groups = Vec::with_capacity(func_info.sig.param_types.len());
         for (i, param_type) in func_info.sig.param_types.iter().enumerate() {
             let (param_type, modifier) = match param_type {
                 ir::Type::TempRef(deref_type) => {
-                    let param_type = self.digest_type(deref_type)?;
+                    let param_type = self.read_type(deref_type)?;
                     let mod_decl = FunctionParamModDecl {
                         span: self.span(),
                         param_mod: FunctionParamMod::Var,
@@ -50,7 +50,7 @@ impl DigestBuilder<'_> {
                 }
 
                 t => {
-                    let param_type = self.digest_type(t)?;
+                    let param_type = self.read_type(t)?;
                     (param_type, None)
                 }
             };
@@ -69,11 +69,11 @@ impl DigestBuilder<'_> {
 
         match &func_info.identity {
             ir::FunctionIdentity::Path(path) => {
-                self.digest_free_function(func_id, func_info, tags, result_type, param_groups, &path)?;
+                self.read_free_function(func_id, func_info, tags, result_type, param_groups, &path)?;
             }
 
             ir::FunctionIdentity::Method { declaring_type, id, name, type_args } => {
-                self.digest_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, type_args)?;
+                self.read_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, type_args)?;
             }
 
             ir::FunctionIdentity::Destructor { .. } | ir::FunctionIdentity::Internal(..) => {
@@ -84,7 +84,7 @@ impl DigestBuilder<'_> {
         Ok(())
     }
 
-    fn digest_method(&mut self,
+    fn read_method(&mut self,
         func_id: ir::FunctionID,
         tags: Vec<Tag>,
         result_type: Type,
@@ -93,8 +93,8 @@ impl DigestBuilder<'_> {
         method_id: ir::MethodID,
         name: &str,
         type_args: &[ir::Type],
-    ) -> DigestResult<()> {
-        let declaring_type = self.digest_type(declaring_type)?;
+    ) -> ImportResult<()> {
+        let declaring_type = self.read_type(declaring_type)?;
 
         // primitive methods are hardcoded and don't need to be imported
         if let Type::Primitive(..) = declaring_type {
@@ -106,7 +106,7 @@ impl DigestBuilder<'_> {
             method_index: method_id.0,
         });
 
-        let type_params = self.digest_def_type_params(type_args)?;
+        let type_params = self.read_def_type_params(type_args)?;
 
         let func_decl = Arc::new(FunctionDecl {
             span: self.span(),
@@ -145,14 +145,14 @@ impl DigestBuilder<'_> {
         Ok(())
     }
 
-    fn digest_free_function(&mut self,
+    fn read_free_function(&mut self,
         func_id: ir::FunctionID,
         func_info: &ir::FunctionInfo,
         tags: Vec<Tag>,
         result_type: Type,
         param_groups: Vec<FunctionParamGroup>,
         path: &ir::NamePath
-    ) -> DigestResult<()> {
+    ) -> ImportResult<()> {
         let scope = match path.parent() {
             Some(unit_path) => {
                 self.open_unit(&unit_path)?
@@ -163,7 +163,7 @@ impl DigestBuilder<'_> {
         };
 
         let Some(lib_func) = self.library.functions.get(&func_id) else {
-            return Err(DigestError::MissingFuncDef(func_id));
+            return Err(ImportError::MissingFuncDef(func_id));
         };
 
         let decl_mods = match lib_func {
@@ -179,7 +179,7 @@ impl DigestBuilder<'_> {
             },
         };
 
-        let type_params = self.digest_def_type_params(&path.type_args)?;
+        let type_params = self.read_def_type_params(&path.type_args)?;
 
         let func_path = IdentPath::from_parts(path.path
             .iter()

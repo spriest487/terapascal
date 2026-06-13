@@ -30,8 +30,8 @@ use terapascal_frontend::ast::UseDeclItem;
 use terapascal_frontend::codegen::library_builder::LibraryRef;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::codegen_ir;
-use terapascal_frontend::digest::digest;
-use terapascal_frontend::digest::DigestOutput;
+use terapascal_frontend::import::import_lib;
+use terapascal_frontend::import::ImportedLibrary;
 use terapascal_frontend::parse;
 use terapascal_frontend::parse::ParseError;
 use terapascal_frontend::parse::Parser;
@@ -511,11 +511,11 @@ pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
     }
 }
 
-fn load_package(
+fn import_package(
     name: &str,
     input: &BuildInput,
     type_ctx: Option<&mut Context>,
-) -> BuildResult<DigestOutput> {
+) -> BuildResult<ImportedLibrary> {
     let mut search_dirs = Vec::new();
 
     if let Some(current_dir) = input.source_path.parent() {
@@ -537,9 +537,8 @@ fn load_package(
             io::Error::new(io::ErrorKind::NotFound, msg)
         })?;
 
-    let digest = digest(path.as_path(), type_ctx)?;
-
-    Ok(digest)
+    let package = import_lib(path.as_path(), type_ctx)?;
+    Ok(package)
 }
 
 fn build_with_log(
@@ -561,16 +560,16 @@ fn build_with_log(
     let mut package_libs = Vec::with_capacity(input.package_names.len());
 
     for package_name in &input.package_names {
-        let package_digest = load_package(&package_name, &input, root_ctx.as_mut())?;
-        for warning in package_digest.warnings {
+        let package = import_package(&package_name, &input, root_ctx.as_mut())?;
+        for warning in package.warnings {
             log.diagnostic(warning);
         }
 
-        package_namespaces.extend(package_digest.namespaces.clone());
+        package_namespaces.extend(package.namespaces.clone());
 
         package_libs.push(LibraryRef {
-            lib: package_digest.library,
-            imported_funcs: package_digest.imported_funcs,
+            lib: package.library,
+            imported_funcs: package.imported_funcs,
         });
     }
 

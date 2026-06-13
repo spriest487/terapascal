@@ -6,9 +6,9 @@ use crate::ast::LiteralItem;
 use crate::ast::ObjectCtorArgs;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::FunctionInstance;
-use crate::digest::DigestError;
-use crate::digest::DigestResult;
-use crate::digest::DigestWarning;
+use crate::import::ImportError;
+use crate::import::ImportResult;
+use crate::import::ImportWarning;
 use crate::ir;
 use crate::typ::ast::Expr;
 use crate::typ::ast::MethodDecl;
@@ -37,8 +37,8 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 
-pub(super) struct DigestBuilder<'a> {
-    pub digest_span: Span,
+pub(super) struct ImportBuilder<'a> {
+    pub default_span: Span,
 
     pub library: &'a ir::Library,
     pub root_ctx: Option<&'a mut Context>,
@@ -54,14 +54,14 @@ pub(super) struct DigestBuilder<'a> {
 
     pub namespaces: HashSet<IdentPath>,
 
-    pub warnings: Vec<DigestWarning>,
+    pub warnings: Vec<ImportWarning>,
 }
 
-impl<'a> DigestBuilder<'a> {
+impl<'a> ImportBuilder<'a> {
     pub fn new(library: &'a ir::Library, type_ctx: Option<&'a mut Context>) -> Self {
-        DigestBuilder {
+        ImportBuilder {
             library: &library,
-            digest_span: Span::zero(""),
+            default_span: Span::zero(""),
             root_ctx: type_ctx,
             namespaces: HashSet::new(),
 
@@ -78,18 +78,18 @@ impl<'a> DigestBuilder<'a> {
         }
     }
 
-    pub fn digest(&mut self) -> DigestResult<()> {
+    pub fn import(&mut self) -> ImportResult<()> {
         for (type_id, type_decl) in self.library.metadata.type_decls() {
-            if let Err(err) = self.digest_type_decl(type_id, type_decl) {
+            if let Err(err) = self.read_type_decl(type_id, type_decl) {
                 let type_name = type_id.to_pretty_string(self.metadata());
-                self.warnings.push(DigestWarning::InvalidType(type_name, Box::new(err)));
+                self.warnings.push(ImportWarning::InvalidType(type_name, Box::new(err)));
             }
         }
 
         for (func_id, func_info) in self.library.metadata.functions() {
-            if let Err(err) = self.digest_function(func_id, func_info) {
+            if let Err(err) = self.read_function(func_id, func_info) {
                 let func_name = ir::FunctionRef::new(func_id).to_pretty_string(self.metadata());
-                self.warnings.push(DigestWarning::InvalidFunc(func_name, Box::new(err)));
+                self.warnings.push(ImportWarning::InvalidFunc(func_name, Box::new(err)));
             }
         }
 
@@ -99,23 +99,23 @@ impl<'a> DigestBuilder<'a> {
     }
 
     pub fn span(&self) -> Span {
-        self.digest_span.clone()
+        self.default_span.clone()
     }
 
     pub fn metadata(&self) -> &ir::Metadata {
         &self.library.metadata
     }
 
-    pub fn digest_tags(&mut self, tags: &[ir::TagInfo]) -> DigestResult<Vec<Tag>> {
+    pub fn read_tags(&mut self, tags: &[ir::TagInfo]) -> ImportResult<Vec<Tag>> {
         let mut result = Vec::with_capacity(tags.len());
         for tag in tags {
-            let tag_type = self.digest_type(&tag.class_id.to_class_ptr_type([]))?;
+            let tag_type = self.read_type(&tag.class_id.to_class_ptr_type([]))?;
 
             let tag_def = self.library.metadata
                 .get_struct_def(tag.class_id)
                 .ok_or_else(|| {
                     let class_name = tag.class_id.to_pretty_string(self.metadata());
-                    DigestError::MissingTypeDef(class_name)
+                    ImportError::MissingTypeDef(class_name)
                 })?;
 
             let mut ctor_members =  Vec::with_capacity(tag.fields.len());
@@ -125,10 +125,10 @@ impl<'a> DigestBuilder<'a> {
                     .and_then(|field_def| field_def.name.as_ref())
                     .ok_or_else(|| {
                         let msg = format!("tag object references invalid field index {}", field_id.0);
-                        DigestError::InvalidData(msg)
+                        ImportError::InvalidData(msg)
                     })?;
 
-                let member_val = self.digest_value(field_val)?;
+                let member_val = self.read_value(field_val)?;
 
                 ctor_members.push(ObjectCtorMember {
                     ident: Ident::new(member_name, self.span()),
@@ -158,18 +158,18 @@ impl<'a> DigestBuilder<'a> {
         Ok(result)
     }
 
-    pub fn digest_sig(&mut self, sig: &ir::FunctionSig) -> DigestResult<FunctionSig> {
-        let result_ty = self.digest_type(&sig.result_type)?;
+    pub fn read_sig(&mut self, sig: &ir::FunctionSig) -> ImportResult<FunctionSig> {
+        let result_ty = self.read_type(&sig.result_type)?;
 
         let mut params = Vec::with_capacity(sig.param_types.len());
         for param_type in &sig.param_types {
             let (param_type, param_mod) = match param_type {
                 ir::Type::TempRef(deref_type) => {
-                    (self.digest_type(deref_type)?, Some(FunctionParamMod::Var))
+                    (self.read_type(deref_type)?, Some(FunctionParamMod::Var))
                 }
 
                 t => {
-                    (self.digest_type(t)?, None)
+                    (self.read_type(t)?, None)
                 }
             };
 
@@ -186,7 +186,7 @@ impl<'a> DigestBuilder<'a> {
         })
     }
 
-    fn digest_value(&mut self, ir_value: &ir::Value) -> DigestResult<Value> {
+    fn read_value(&mut self, ir_value: &ir::Value) -> ImportResult<Value> {
         let result = match ir_value {
             ir::Value::LiteralNil => {
                 Value::from(ConstValue::literal(Literal::Nil, Type::Nothing.ptr(), self.span()))
@@ -209,19 +209,19 @@ impl<'a> DigestBuilder<'a> {
             ir::Value::LiteralF64(val) => self.make_real_literal(*val, Primitive::Real64),
 
             ir::Value::SizeOf(of_type) => {
-                let of_type = TypeName::Unspecified(self.digest_type(of_type)?);
+                let of_type = TypeName::Unspecified(self.read_type(of_type)?);
                 let size_lit = Literal::SizeOf(Box::new(of_type));
 
                 Value::from(ConstValue::literal(size_lit, Primitive::Int32, self.span()))
             }
             ir::Value::Default(of_type) => {
-                let of_type = TypeName::Unspecified(self.digest_type(of_type)?);
+                let of_type = TypeName::Unspecified(self.read_type(of_type)?);
                 let default_lit = Literal::DefaultValue(Box::new(of_type));
 
                 Value::from(ConstValue::literal(default_lit, Primitive::Int32, self.span()))
             }
             ir::Value::Ref(r) => {
-                self.digest_ref(r)?
+                self.read_ref(r)?
             }
         };
 
@@ -240,7 +240,7 @@ impl<'a> DigestBuilder<'a> {
         Value::from(ConstValue::literal(literal, ty, self.span()))
     }
 
-    fn digest_ref(&mut self, r: &ir::Ref) -> DigestResult<Value> {
+    fn read_ref(&mut self, r: &ir::Ref) -> ImportResult<Value> {
         match r {
             ir::Ref::Global(ir::GlobalRef::Variable(id)) => {
                 let var_info = self.library
@@ -248,15 +248,15 @@ impl<'a> DigestBuilder<'a> {
                     .get_variable(*id)
                     .ok_or_else(|| {
                         let msg = format!("reference to missing global variable {}", id.0);
-                        DigestError::InvalidData(msg)
+                        ImportError::InvalidData(msg)
                     })?;
 
-                let var_type = self.digest_type(&var_info.r#type)?;
+                let var_type = self.read_type(&var_info.r#type)?;
 
                 // there should be no references to unnamed vars in a package's interface
                 let Some(name_path) = &var_info.name else {
                     let msg = format!("reference to anonymous global variable {}", id.0);
-                    return Err(DigestError::InvalidData(msg));
+                    return Err(ImportError::InvalidData(msg));
                 };
 
                 let decl = IdentPath::from_parts(name_path.path
@@ -270,14 +270,14 @@ impl<'a> DigestBuilder<'a> {
             ir::Ref::Global(ir::GlobalRef::StringLiteral(string_id)) => {
                 let string_text = self.library.metadata
                     .get_string(*string_id)
-                    .ok_or_else(|| DigestError::MissingString(*string_id))?;
+                    .ok_or_else(|| ImportError::MissingString(*string_id))?;
 
                 let string_val = ConstValue::string_literal(string_text.clone(), self.span());
                 Ok(Value::from(string_val))
             }
 
             ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(ty)) => {
-                let typeinfo_type = self.digest_type(&ty)?;
+                let typeinfo_type = self.read_type(&ty)?;
                 let typeinfo_literal = Literal::TypeInfo(Box::new(TypeName::Unspecified(typeinfo_type)));
                 let typeinfo_class = Type::class(builtin_typeinfo_name());
 
@@ -286,12 +286,12 @@ impl<'a> DigestBuilder<'a> {
 
             // most ref types should never appear in the interface and can be ignored
             _ => {
-                Err(DigestError::UnsupportedRef(r.to_pretty_string(self.metadata())))
+                Err(ImportError::UnsupportedRef(r.to_pretty_string(self.metadata())))
             },
         }
     }
 
-    pub fn open_unit(&mut self, path: &ir::NamePath) -> DigestResult<ScopeID> {
+    pub fn open_unit(&mut self, path: &ir::NamePath) -> ImportResult<ScopeID> {
         assert!(path.type_args.is_empty());
 
         let unit_path = IdentPath::from_parts(path.path.iter()

@@ -9,7 +9,7 @@ use terapascal_common::Severity;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum DigestError {
+pub enum ImportError {
     #[error("{0}")]
     IOError(#[from] io::Error),
 
@@ -38,39 +38,39 @@ pub enum DigestError {
     UnsupportedFeature(String),
 }
 
-pub type DigestResult<T> = Result<T, DigestError>;
+pub type ImportResult<T> = Result<T, ImportError>;
 
 #[derive(Debug, Error)]
-pub enum DigestWarning {
-    InvalidType(String, Box<DigestError>),
-    InvalidFunc(String, Box<DigestError>),
-    InvalidMethodList(Type, Box<DigestError>),
-    InvalidPath(String, Box<DigestError>),
+pub enum ImportWarning {
+    InvalidType(String, Box<ImportError>),
+    InvalidFunc(String, Box<ImportError>),
+    InvalidMethodList(Type, Box<ImportError>),
+    InvalidPath(String, Box<ImportError>),
 }
 
-impl Display for DigestWarning {
+impl Display for ImportWarning {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            DigestWarning::InvalidType(name, err) => {
+            ImportWarning::InvalidType(name, err) => {
                 write!(f, "Invalid type `{}`: {}", name, err)
             }
 
-            DigestWarning::InvalidFunc(name, err) => {
+            ImportWarning::InvalidFunc(name, err) => {
                 write!(f, "Invalid function `{}`: {}", name, err)
             }
 
-            DigestWarning::InvalidMethodList(ty, err) => {
+            ImportWarning::InvalidMethodList(ty, err) => {
                 write!(f, "Method list for type {ty} is invalid: {err}")
             }
 
-            DigestWarning::InvalidPath(path, err) => {
+            ImportWarning::InvalidPath(path, err) => {
                 write!(f, "Failed to read path {path}: {err}")
             }
         }
     }
 }
 
-impl DiagnosticOutput for DigestWarning {
+impl DiagnosticOutput for ImportWarning {
     fn severity(&self) -> Severity {
         Severity::Warning
     }

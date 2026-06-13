@@ -1,13 +1,13 @@
-mod digest_function;
-mod digest_type;
+mod read_function;
+mod read_type;
 mod error;
-mod digest_builder;
+mod builder;
 
 pub use self::error::*;
 use crate::ast::IdentPath;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::FunctionInstance;
-use crate::digest::digest_builder::DigestBuilder;
+use crate::import::builder::ImportBuilder;
 use crate::ir;
 use crate::typ::Context;
 use std::collections::HashMap;
@@ -19,16 +19,16 @@ use std::path::Path;
 use terapascal_ir::decode_lib;
 
 #[derive(Debug)]
-pub struct DigestOutput {
+pub struct ImportedLibrary {
     pub library: ir::Library,
     pub imported_funcs: HashMap<FunctionDeclKey, FunctionInstance>,
 
-    pub warnings: Vec<DigestWarning>,
+    pub warnings: Vec<ImportWarning>,
 
     pub namespaces: HashSet<IdentPath>,
 }
 
-pub fn digest(path: &Path, type_ctx: Option<&mut Context>) -> DigestResult<DigestOutput> {
+pub fn import_lib(path: &Path, type_ctx: Option<&mut Context>) -> ImportResult<ImportedLibrary> {
     let mut file = fs::File::open(path)?;
 
     let mut lib_bytes = Vec::new();
@@ -37,14 +37,14 @@ pub fn digest(path: &Path, type_ctx: Option<&mut Context>) -> DigestResult<Diges
     let library = decode_lib(&lib_bytes)
         .map_err(|err| {
             let msg = format!("failed to decode {}: {err}", path.display());
-            DigestError::IOError(io::Error::new(err.kind(), msg))
+            ImportError::IOError(io::Error::new(err.kind(), msg))
         })?;
 
-    let mut builder = DigestBuilder::new(&library, type_ctx);
+    let mut builder = ImportBuilder::new(&library, type_ctx);
 
-    builder.digest()?;
+    builder.import()?;
 
-    Ok(DigestOutput {
+    Ok(ImportedLibrary {
         namespaces: builder.namespaces,
         warnings: builder.warnings,
         imported_funcs: builder.imported_funcs,

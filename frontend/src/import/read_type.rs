@@ -7,10 +7,10 @@ use crate::codegen::SET_TAG_ITEM_TYPE_FIELD;
 use crate::codegen::SET_TAG_MAX_FIELD;
 use crate::codegen::SET_TAG_MIN_FIELD;
 use crate::codegen::SET_TAG_NAME;
-use crate::digest::DigestBuilder;
-use crate::digest::DigestError;
-use crate::digest::DigestResult;
-use crate::digest::DigestWarning;
+use crate::import::ImportBuilder;
+use crate::import::ImportError;
+use crate::import::ImportResult;
+use crate::import::ImportWarning;
 use crate::ir;
 use crate::typ::ast::FieldDecl;
 use crate::typ::ast::MethodDecl;
@@ -37,26 +37,26 @@ use std::mem;
 use std::sync::Arc;
 use terapascal_ir::MetadataSource as _;
 
-impl DigestBuilder<'_> {
-    pub fn digest_type_decl(&mut self, id: ir::TypeDefID, decl: &ir::TypeDecl) -> DigestResult<()> {
+impl ImportBuilder<'_> {
+    pub fn read_type_decl(&mut self, id: ir::TypeDefID, decl: &ir::TypeDecl) -> ImportResult<()> {
         match decl {
             ir::TypeDecl::Reserved | ir::TypeDecl::Forward(..) => {
                 Ok(())
             }
 
             ir::TypeDecl::Def(ir::TypeDef::Variant(variant_def)) => {
-                self.digest_variant_def(variant_def)?;
+                self.read_variant_def(variant_def)?;
                 Ok(())
             }
 
             ir::TypeDecl::Def(ir::TypeDef::Struct(struct_def)) => {
                 match &struct_def.identity {
                     ir::StructIdentity::Class(class_path) => {
-                        self.digest_struct_def(id, class_path, struct_def, StructKind::Class)
+                        self.read_struct_def(id, class_path, struct_def, StructKind::Class)
                     }
 
                     ir::StructIdentity::Record(record_path) => {
-                        self.digest_struct_def(id, record_path, struct_def, StructKind::Record)
+                        self.read_struct_def(id, record_path, struct_def, StructKind::Record)
                     }
 
                     ir::StructIdentity::Internal(..)
@@ -69,11 +69,11 @@ impl DigestBuilder<'_> {
         }
     }
 
-    fn digest_variant_def(
+    fn read_variant_def(
         &mut self,
         def: &ir::VariantDef,
-    ) -> DigestResult<()> {
-        let name = self.digest_def_path(&def.name)?;
+    ) -> ImportResult<()> {
+        let name = self.read_def_path(&def.name)?;
         let variant_type = Type::variant(name.clone());
 
         let def_path = name.full_path.clone();
@@ -83,7 +83,7 @@ impl DigestBuilder<'_> {
             let data_type = match &case_def.ty {
                 None => None,
                 Some(t) => {
-                    let data_type = self.digest_type(t)?;
+                    let data_type = self.read_type(t)?;
 
                     Some(VariantCaseData {
                         ty: TypeName::Unspecified(data_type),
@@ -102,7 +102,7 @@ impl DigestBuilder<'_> {
         let implements = None;
         let where_clause = None;
 
-        let tags = self.digest_tags(&def.tags)?;
+        let tags = self.read_tags(&def.tags)?;
 
         let variant_decl = VariantDecl {
             name: Arc::new(name),
@@ -128,20 +128,20 @@ impl DigestBuilder<'_> {
         Ok(())
     }
 
-    fn digest_struct_def(
+    fn read_struct_def(
         &mut self,
         id: ir::TypeDefID,
         name_path: &ir::NamePath,
         def: &ir::StructDef,
         kind: StructKind,
-    ) -> DigestResult<()> {
+    ) -> ImportResult<()> {
         // if the typedecl is a set, its members are internal and the type info we need for
         // typechecking is stored in the compiler-generated tag
         if self.read_set_type_tag(id).is_some() {
             return Ok(());
         }
 
-        let name = self.digest_def_path(&name_path)?;
+        let name = self.read_def_path(&name_path)?;
         let struct_type = Type::from_struct_type(name.clone(), kind);
 
         let def_path = name.full_path.clone();
@@ -154,7 +154,7 @@ impl DigestBuilder<'_> {
                 continue;
             };
 
-            let field_type = self.digest_type(&field.ty)?;
+            let field_type = self.read_type(&field.ty)?;
 
             sections.push(StructDeclSection {
                 members: vec![StructMemberDecl::Field(FieldDecl {
@@ -168,7 +168,7 @@ impl DigestBuilder<'_> {
             });
         }
 
-        let tags = self.digest_tags(&def.tags)?;
+        let tags = self.read_tags(&def.tags)?;
 
         // TODO
         let implements = None;
@@ -199,7 +199,7 @@ impl DigestBuilder<'_> {
         Ok(())
     }
 
-    fn declare_type(&mut self, name_path: &ir::NamePath, as_type: Type) -> DigestResult<()> {
+    fn declare_type(&mut self, name_path: &ir::NamePath, as_type: Type) -> ImportResult<()> {
         let span = self.span();
 
         let unit_scope = if let Some(unit_path) = name_path.parent() {
@@ -218,7 +218,7 @@ impl DigestBuilder<'_> {
         Ok(())
     }
 
-    pub fn digest_type(&mut self, ir_type: &ir::Type) -> DigestResult<Type> {
+    pub fn read_type(&mut self, ir_type: &ir::Type) -> ImportResult<Type> {
         let result = match ir_type {
             ir::Type::Nothing => {
                 Type::Nothing
@@ -227,27 +227,27 @@ impl DigestBuilder<'_> {
                 Type::generic_param(Ident::new(name.as_str(), self.span()))
             },
             ir::Type::Pointer(deref_ty) | ir::Type::TempRef(deref_ty) => {
-                self.digest_type(deref_ty)?.ptr()
+                self.read_type(deref_ty)?.ptr()
             }
 
             ir::Type::Struct(type_ref) | ir::Type::Variant(type_ref) => {
-                self.digest_type_ref(type_ref)?
+                self.read_type_ref(type_ref)?
             }
 
             ir::Type::Array { element, dim } => {
-                let element_type = self.digest_type(element)?;
+                let element_type = self.read_type(element)?;
                 Type::array(element_type, *dim)
             }
 
             ir::Type::Object(object_id) => {
-                self.digest_object_type(object_id)?
+                self.read_object_type(object_id)?
             }
             ir::Type::WeakObject(object_id) => {
-                Type::Weak(Arc::new(self.digest_object_type(object_id)?))
+                Type::Weak(Arc::new(self.read_object_type(object_id)?))
             }
 
             ir::Type::Function(sig) => {
-                Type::Function(Arc::new(self.digest_sig(sig)?))
+                Type::Function(Arc::new(self.read_sig(sig)?))
             },
 
             ir::Type::Bool => Type::Primitive(Primitive::Boolean),
@@ -268,17 +268,12 @@ impl DigestBuilder<'_> {
         Ok(result)
     }
 
-    #[expect(unused)]
-    fn digest_struct_ref(&mut self, type_ref: &ir::TypeRef) -> DigestResult<Symbol> {
-        todo!()
-    }
-
-    fn digest_object_type(&mut self, object_id: &ir::ObjectID) -> DigestResult<Type> {
+    fn read_object_type(&mut self, object_id: &ir::ObjectID) -> ImportResult<Type> {
         match object_id {
             ir::ObjectID::Any => Ok(Type::Any),
 
             ir::ObjectID::Class(class_ref) => {
-                self.digest_type_ref(class_ref)
+                self.read_type_ref(class_ref)
             }
 
             ir::ObjectID::Interface(iface_id) => {
@@ -286,23 +281,23 @@ impl DigestBuilder<'_> {
             }
 
             ir::ObjectID::AnyClosure(sig) => {
-                let sig = self.digest_sig(sig)?;
+                let sig = self.read_sig(sig)?;
                 Ok(Type::Function(Arc::new(sig)))
             },
 
             ir::ObjectID::Array(element_type) => {
-                let element_type = self.digest_type(element_type)?;
+                let element_type = self.read_type(element_type)?;
                 Ok(element_type.dyn_array())
             },
 
             ir::ObjectID::Box(value_type) => {
-                let value_type = self.digest_type(value_type)?;
+                let value_type = self.read_type(value_type)?;
                 Ok(value_type.boxed())
             }
         }
     }
 
-    fn digest_type_ref(&mut self, type_ref: &ir::TypeRef) -> DigestResult<Type> {
+    fn read_type_ref(&mut self, type_ref: &ir::TypeRef) -> ImportResult<Type> {
         if type_ref.args.is_empty()
             && let Some(set_type) = self.read_set_type_tag(type_ref.def_id)
         {
@@ -311,7 +306,7 @@ impl DigestBuilder<'_> {
 
         let mut type_args = Vec::with_capacity(type_ref.args.len());
         for type_arg in &type_ref.args {
-            type_args.push(TypeName::Unspecified(self.digest_type(type_arg)?));
+            type_args.push(TypeName::Unspecified(self.read_type(type_arg)?));
         }
 
         let type_decl = self
@@ -319,19 +314,19 @@ impl DigestBuilder<'_> {
             .get_type_decl(type_ref.def_id)
             .ok_or_else(|| {
                 let type_name = type_ref.def_id.to_pretty_string(self.metadata());
-                DigestError::MissingTypeDef(type_name)
+                ImportError::MissingTypeDef(type_name)
             })?;
 
         match type_decl {
             ir::TypeDecl::Reserved | ir::TypeDecl::Forward(..) => {
-                Err(DigestError::InvalidData("Type is undefined".to_string()))
+                Err(ImportError::InvalidData("Type is undefined".to_string()))
             }
 
             ir::TypeDecl::Def(ir::TypeDef::Struct(struct_def)) => {
                 match &struct_def.identity {
                     ir::StructIdentity::Record(name)
                     | ir::StructIdentity::Class(name) => {
-                        let path = self.digest_def_path(name)?;
+                        let path = self.read_def_path(name)?;
                         let kind = if struct_def.identity.is_ref_type() {
                             StructKind::Class
                         } else {
@@ -343,17 +338,17 @@ impl DigestBuilder<'_> {
 
                     ir::StructIdentity::ClosureObject(..) => {
                         // shouldn't appear in library interface
-                        Err(DigestError::UnsupportedFeature("closure types".to_string()))
+                        Err(ImportError::UnsupportedFeature("closure types".to_string()))
                     }
 
                     ir::StructIdentity::Internal(debug_name) => {
-                        Err(DigestError::UnsupportedFeature(format!("internal type: {debug_name}")))
+                        Err(ImportError::UnsupportedFeature(format!("internal type: {debug_name}")))
                     }
                 }
             }
 
             ir::TypeDecl::Def(ir::TypeDef::Variant(variant_def)) => {
-                let path = self.digest_def_path(&variant_def.name)?;
+                let path = self.read_def_path(&variant_def.name)?;
                 Ok(Type::variant(path))
             }
         }
@@ -389,11 +384,11 @@ impl DigestBuilder<'_> {
 
             let name = match struct_def.identity.name() {
                 Some(name_path) => {
-                    let path = match self.digest_def_path(name_path) {
+                    let path = match self.read_def_path(name_path) {
                         Ok(name) => name.full_path,
                         Err(err) => {
                             let display_path = name_path.to_pretty_string(self.metadata());
-                            self.warnings.push(DigestWarning::InvalidPath(display_path, Box::new(err)));
+                            self.warnings.push(ImportWarning::InvalidPath(display_path, Box::new(err)));
                             return None;
                         }
                     };
@@ -405,7 +400,7 @@ impl DigestBuilder<'_> {
 
             let item_type = match item_type_field_val {
                 ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(item_type))) => {
-                    self.digest_type(&item_type).ok()?
+                    self.read_type(&item_type).ok()?
                 }
                 _ => return None, // invalid
             };
@@ -434,31 +429,31 @@ impl DigestBuilder<'_> {
         None
     }
 
-    fn read_interface_type(&mut self, id: ir::InterfaceID) -> DigestResult<Type> {
+    fn read_interface_type(&mut self, id: ir::InterfaceID) -> ImportResult<Type> {
         let def = self
             .metadata()
             .get_iface_def(id)
             .ok_or_else(|| {
                 let type_name = id.to_interface_ptr_type().to_pretty_string(self.metadata());
-                DigestError::MissingTypeDef(type_name)
+                ImportError::MissingTypeDef(type_name)
             })?;
 
-        let name = self.digest_def_path(&def.name)?;
+        let name = self.read_def_path(&def.name)?;
 
         Ok(Type::interface(name))
     }
 
-    fn digest_def_path(&self, name_path: &ir::NamePath) -> DigestResult<Symbol> {
+    fn read_def_path(&self, name_path: &ir::NamePath) -> ImportResult<Symbol> {
         let ident_path = IdentPath::from_parts(name_path.path
             .iter()
             .map(|part| Ident::new(part, self.span())));
 
-        let type_params = self.digest_def_type_params(&name_path.type_args)?;
+        let type_params = self.read_def_type_params(&name_path.type_args)?;
 
         Ok(Symbol::from(ident_path).with_ty_params(type_params))
     }
 
-    pub(super) fn digest_def_type_params(&self, type_params: &[ir::Type]) -> DigestResult<Option<TypeParamList>> {
+    pub(super) fn read_def_type_params(&self, type_params: &[ir::Type]) -> ImportResult<Option<TypeParamList>> {
         if type_params.is_empty() {
             return Ok(None);
         }
@@ -470,7 +465,7 @@ impl DigestBuilder<'_> {
                 let type_name = type_arg.to_pretty_string(self.metadata());
                 let msg = format!("definition has invalid type parameter: {type_name}");
 
-                return Err(DigestError::InvalidData(msg));
+                return Err(ImportError::InvalidData(msg));
             };
 
             params.push(TypeParam {
@@ -489,7 +484,7 @@ impl DigestBuilder<'_> {
 
         for (declaring_type, type_methods) in type_methods {
             if let Err(err) = self.finish_type_def(&declaring_type, type_methods) {
-                self.warnings.push(DigestWarning::InvalidMethodList(declaring_type, Box::new(err)));
+                self.warnings.push(ImportWarning::InvalidMethodList(declaring_type, Box::new(err)));
             }
         }
 
@@ -500,12 +495,12 @@ impl DigestBuilder<'_> {
         &mut self,
         declaring_type: &Type,
         mut method_map: BTreeMap<usize, MethodDecl>,
-    ) -> DigestResult<()> {
+    ) -> ImportResult<()> {
         let mut method_list = Vec::with_capacity(method_map.len());
 
         for method_index in 0..method_map.len() {
             let Some(method_decl) = method_map.remove(&method_index) else {
-                return Err(DigestError::MissingMethodDef(ir::MethodID(method_index)));
+                return Err(ImportError::MissingMethodDef(ir::MethodID(method_index)));
             };
 
             method_list.push(method_decl)
@@ -523,7 +518,7 @@ impl DigestBuilder<'_> {
             // Type::Interface(_) => {}
 
             _ => {
-                Err(DigestError::InvalidData(format!("invalid declaring type for method: {declaring_type}",)))
+                Err(ImportError::InvalidData(format!("invalid declaring type for method: {declaring_type}",)))
             }
         }
     }
@@ -532,11 +527,11 @@ impl DigestBuilder<'_> {
         &mut self,
         path: &IdentPath,
         method_list: Vec<MethodDecl>,
-    ) -> DigestResult<()> {
+    ) -> ImportResult<()> {
         let struct_def = self.struct_defs
             .get_mut(path)
             .ok_or_else(|| {
-                DigestError::MissingTypeDef(path.to_string())
+                ImportError::MissingTypeDef(path.to_string())
             })?;
 
         struct_def.sections.push(StructDeclSection {
@@ -555,11 +550,11 @@ impl DigestBuilder<'_> {
         &mut self,
         path: &IdentPath,
         method_list: Vec<MethodDecl>,
-    ) -> DigestResult<()> {
+    ) -> ImportResult<()> {
         let variant_def = self.variant_defs
             .get_mut(path)
             .ok_or_else(|| {
-                DigestError::MissingTypeDef(path.to_string())
+                ImportError::MissingTypeDef(path.to_string())
             })?;
 
         variant_def.sections.push(MethodDeclSection {
