@@ -339,23 +339,28 @@ impl<'a> LibraryBuilder<'a> {
             }, None);
         }
 
-        for iface_decl in &unit.iface_section.decls {
-            match iface_decl {
-                typ::ast::UnitDecl::FunctionDecl { decl }
-                if decl.name.type_params.is_none() => {
-                    self.translate_unit_func_decl(&unit.ident, decl);
-                }
-
-                typ::ast::UnitDecl::FunctionDef { def }
-                if def.decl.name.type_params.is_none() => {
-                    self.translate_unit_func_decl(&unit.ident, &def.decl);
-                }
-
-                _ => {
-                    continue;
-                }
-            };
+        for unit_decl in &unit.iface_section.decls {
+            self.translate_unit_decl(&unit.ident, unit_decl);
         }
+
+        for unit_decl in &unit.impl_section.decls {
+            self.translate_unit_decl(&unit.ident, unit_decl);
+        }
+    }
+
+    fn translate_unit_decl(&mut self, unit_ident: &IdentPath, unit_decl: &typ::ast::UnitDecl) {
+        match unit_decl {
+            typ::ast::UnitDecl::FunctionDecl { decl } => {
+                self.translate_unit_func_decl(&unit_ident, decl);
+            }
+
+            typ::ast::UnitDecl::FunctionDef { def } => {
+                self.translate_unit_func_decl(&unit_ident, &def.decl);
+            }
+
+            _ => {
+            }
+        };
     }
 
     pub(crate) fn instantiate_func(&mut self, key: &FunctionDeclKey) -> FunctionInstance {
@@ -915,11 +920,44 @@ impl<'a> LibraryBuilder<'a> {
         if decl.type_params_len() > 0 {
             return None;
         }
-        
-        let func_name = unit_name.clone().child(decl.name.ident.clone());
-        let func_sig = decl.sig();
 
-        let instance = self.translate_func(func_name, Arc::new(func_sig));
+        match &decl.name.context {
+            FunctionDeclContext::FreeFunction => {
+                let func_name = unit_name.clone().child(decl.name.ident.clone());
+                let func_sig = decl.sig();
+
+                let instance = self.translate_func(func_name, Arc::new(func_sig));
+                Some(instance)
+            }
+
+            FunctionDeclContext::MethodDecl { enclosing_type } => {
+                self.translate_unit_method(enclosing_type, decl)
+            }
+
+            FunctionDeclContext::MethodDef { declaring_type } => {
+                self.translate_unit_method(declaring_type.ty(), decl)
+            }
+        }
+    }
+
+    fn translate_unit_method(
+        &mut self,
+        declaring_type: &typ::Type,
+        decl: &typ::ast::FunctionDecl,
+    ) -> Option<FunctionInstance> {
+        let (method_index, _method_decl) = declaring_type
+            .find_method(&decl.name.ident, &decl.sig(), &self.src_metadata)
+            .unwrap()
+            .unwrap();
+
+        let self_ty = if let Some(type_args) = declaring_type.type_params() {
+            let generic_args = type_args.clone().into_type_args();
+            declaring_type.specialize(&generic_args, &self.src_metadata).unwrap().into_owned()
+        } else {
+            declaring_type.clone()
+        };
+
+        let instance = self.translate_method(self_ty, method_index);
         Some(instance)
     }
 
