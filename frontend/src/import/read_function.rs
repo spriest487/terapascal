@@ -76,7 +76,11 @@ impl ImportBuilder<'_> {
                 self.read_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, type_args)?;
             }
 
-            ir::FunctionIdentity::Destructor { .. } | ir::FunctionIdentity::Internal(..) => {
+            ir::FunctionIdentity::Destructor { declaring_type, id, name} => {
+                self.read_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, &[])?;
+            }
+
+            ir::FunctionIdentity::Internal(..) => {
                 // ignored
             }
         }
@@ -96,8 +100,8 @@ impl ImportBuilder<'_> {
     ) -> ImportResult<()> {
         let declaring_type = self.read_type(declaring_type)?;
 
-        // primitive methods are hardcoded and don't need to be imported
-        if let Type::Primitive(..) = declaring_type {
+        // primitive and pointer methods are hardcoded and don't need to be imported
+        if matches!(declaring_type, Type::Primitive(..) | Type::Pointer(..)) {
             return Ok(());
         }
 

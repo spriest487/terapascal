@@ -282,11 +282,12 @@ pub fn instantiate_func(
             ir::FunctionIdentity::Internal(Rc::new(name))
         }
 
-        ir::FunctionIdentity::Destructor { declaring_type, name } => {
+        ir::FunctionIdentity::Destructor { declaring_type, id, name } => {
             let declaring_type = instantiate_type(declaring_type, &types);
 
             ir::FunctionIdentity::Destructor {
                 declaring_type,
+                id: *id,
                 name: name.clone(),
             }
         }

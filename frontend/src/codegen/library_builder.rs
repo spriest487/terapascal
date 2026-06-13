@@ -881,6 +881,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 ir::FunctionIdentity::Destructor {
                     declaring_type,
+                    id: ir::MethodID(method_index),
                     name
                 }
             }

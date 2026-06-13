@@ -157,6 +157,7 @@ pub enum FunctionIdentity {
     // user-defined destructor method associated with a type
     Destructor {
         declaring_type: Type,
+        id: MethodID,
         name: String,
     },
 
@@ -175,7 +176,7 @@ impl FunctionIdentity {
                 Cow::Owned(path.to_pretty_string(formatter))
             },
 
-            FunctionIdentity::Destructor { name, declaring_type } => {
+            FunctionIdentity::Destructor { name, id: _, declaring_type } => {
                 Cow::Owned(format!("{}.{name}", declaring_type.to_pretty_string(formatter)))
             }
 

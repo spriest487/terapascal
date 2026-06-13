@@ -66,10 +66,10 @@ type
 
     public
         function Length: Integer;
-        
+
         function Compare(other: String): Integer;
         function ToString: String;
-        
+
         function SubString(at, len: Integer): String;
         function CharAt(at: Integer): Byte;
         function Concat(other: String): String;
