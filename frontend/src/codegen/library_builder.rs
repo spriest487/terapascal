@@ -690,7 +690,7 @@ impl<'a> LibraryBuilder<'a> {
             .find_method(&decl_self_ty, &method_decl.func_decl.ident(), &method_sig)
             .cloned()
             .unwrap_or_else(|| {
-                panic!("instantiate_method: missing method def: {} method {}", decl_self_ty, method_key.method_index)
+                panic!("instantiate_method: missing method def: {} (method {})", method_decl.func_decl, method_key.method_index)
             });
 
         let id = self.declare_method(&method_def.decl, method_key.method_index);

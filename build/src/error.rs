@@ -50,6 +50,11 @@ pub enum BuildError {
     },
     UnitNotLoaded {
         unit_name: IdentPath,
+        used_in_unit: IdentPath,
+    },
+    UnitAlreadyImported {
+        unit_ident: IdentPath,
+        new_path: PathBuf,
     },
     IOError(#[from] io::Error),
 
@@ -130,12 +135,22 @@ impl DiagnosticOutput for BuildError {
                         .with_text("unit used here".to_string()))
             }
 
-            Self::UnitNotLoaded { unit_name } => {
-                let title = "used units must be referenced by the main unit or on the command line";
-                DiagnosticMessage::new(self.severity(), title)
-                    .with_label(DiagnosticLabel::new(unit_name.path_span().clone()))
-                    .with_note(format!("unit `{}` is not loaded", unit_name))
+            Self::UnitNotLoaded { unit_name, used_in_unit } => {
+                DiagnosticMessage::new(self.severity(), "reference to unit not loaded or imported by this project")
+                    .with_label(DiagnosticLabel::new(unit_name.path_span()).with_text(format!("used unit `{unit_name}`")))
+                    .with_note(format!("used by unit `{used_in_unit}`"))
             },
+
+            Self::UnitAlreadyImported { unit_ident, new_path } => {
+                let title = format!(
+                    "unit `{}` used from `{}` is already provided by a referenced package",
+                    unit_ident,
+                    new_path.display(),
+                );
+
+                DiagnosticMessage::new(self.severity(), title)
+                    .with_label(DiagnosticLabel::new(unit_ident.path_span()))
+            }
             
             Self::IOError(err) => {
                 DiagnosticMessage::new(Severity::Error, err.to_string())
@@ -182,6 +197,7 @@ impl fmt::Display for BuildError {
             Self::CircularDependency { .. } => write!(f, "circular unit reference"),
             Self::UnexpectedMainUnit { .. } => write!(f, "unexpected main unit"),
             Self::UnitNotLoaded { .. } => write!(f, "unit not loaded"),
+            Self::UnitAlreadyImported { .. } => write!(f, "unit already imported"),
             Self::IOError(err) => write!(f, "{}", err),
             Self::InternalError(err) => write!(f, "{}", err),
         }

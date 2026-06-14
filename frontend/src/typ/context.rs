@@ -995,7 +995,7 @@ impl Context {
 
     pub fn find_method(&self, ty: &Type, method: &Ident, sig: &Arc<FunctionSig>) -> Option<&FunctionDef> {
         let method_defs = self.method_defs.get(ty)?;
-        
+
         let key = MethodKey {
             name: method.clone(),
             sig: sig.clone(),
@@ -1438,7 +1438,9 @@ impl Context {
                 as_iface => Ok(as_iface == iface_ty),
             },
 
-            Type::Primitive(..) => Ok(self.primitive_implements.contains(iface_ty)),
+            Type::Primitive(..) => {
+                Ok(self.primitive_implements.contains(iface_ty))
+            },
 
             Type::Record(name) | Type::Class(name) => {
                 let struct_kind = self_ty.struct_kind().unwrap();

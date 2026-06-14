@@ -9,7 +9,6 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
-use std::io;
 use std::path::PathBuf;
 use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
@@ -164,6 +163,14 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
             // if this unit matches a namespace in a loaded library, the unit will be loaded
             // from that library and we shouldn't try to load it from disk
             if self.imported_namespaces.contains(&used_unit.ident) {
+                if let Some(use_path) = &used_unit.path {
+                    // if an explicit path was provided, it's an error, because we can't load it
+                    // from a second location
+                    return Err(BuildError::UnitAlreadyImported {
+                        new_path: PathBuf::from(use_path),
+                        unit_ident: used_unit.ident.clone(),
+                    });
+                }
                 continue;
             }
 
@@ -174,6 +181,7 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
                 if main_unit_kind.is_none() {
                     return Err(BuildError::UnitNotLoaded {
                         unit_name: used_unit.ident.clone(),
+                        used_in_unit: unit_ident.clone(),
                     });
                 }
 
@@ -197,14 +205,18 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
                     },
 
                     None => {
-                        self.sources.add_used_unit(&unit_filename, &used_unit.ident, self.log)?
+                        // units loaded from the main unit must have explicit paths if they don't come
+                        // from an imported package
+                        return Err(BuildError::UnitNotLoaded {
+                            unit_name: used_unit.ident,
+                            used_in_unit: unit_ident.clone(),
+                        });
                     },
                 };
 
                 self.add_unit_path(&used_unit.ident, &used_unit_path)?;
             }
 
-            let is_package_unit = matches!(main_unit_kind, Some(MainUnitKind::Package));
             if !is_package_unit {
                 self.add_unit_dep(&unit_ident, &used_unit.ident)?;
             }
@@ -533,8 +545,7 @@ fn import_package(
             full_path.exists().then_some(full_path)
         })
         .ok_or_else(|| {
-            let msg = format!("failed to locate library {name}.{IR_LIB_EXT}");
-            io::Error::new(io::ErrorKind::NotFound, msg)
+            BuildError::FileNotFound(PathBuf::from(name).with_added_extension(IR_LIB_EXT), None)
         })?;
 
     let package = import_lib(path.as_path(), type_ctx)?;
