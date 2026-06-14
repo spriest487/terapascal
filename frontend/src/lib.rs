@@ -117,7 +117,7 @@ pub fn typecheck<'a>(
 pub fn codegen_ir(
     module: &Module,
     type_ctx: &Context,
-    refs: impl IntoIterator<Item=LibraryRef>,
+    refs: &[LibraryRef],
     opts: CodegenOpts,
 ) -> ir::Library {
     codegen::gen_lib(module, type_ctx, refs, opts)

@@ -40,7 +40,7 @@ impl Default for CodegenOpts {
 pub fn gen_lib(
     module: &typ::Module,
     type_ctx: &typ::Context,
-    refs: impl IntoIterator<Item=LibraryRef>,
+    refs: &[LibraryRef],
     opts: CodegenOpts,
 ) -> ir::Library {
     let mut lib = LibraryBuilder::new(module.name.as_str(), module.version, type_ctx, refs, opts);

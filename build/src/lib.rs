@@ -610,7 +610,7 @@ fn build_with_log(
         return Err(BuildError::CompletedWithErrors);
     }
 
-    let library = codegen_ir(&typed_module, &root_ctx, package_libs, input.codegen_opts);
+    let library = codegen_ir(&typed_module, &root_ctx, &package_libs, input.codegen_opts);
 
     Ok(BuildArtifact::Library(library))
 }

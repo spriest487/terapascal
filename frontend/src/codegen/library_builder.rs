@@ -47,7 +47,7 @@ pub struct LibraryBuilder<'a> {
     name: String,
     version: Version,
 
-    references: Vec<LibraryRef>,
+    references: &'a [LibraryRef],
 
     src_metadata: &'a typ::Context,
 
@@ -105,13 +105,12 @@ impl<'a> LibraryBuilder<'a> {
         name: impl Into<String>,
         version: Version,
         src_metadata: &'a typ::Context,
-        refs: impl IntoIterator<Item=LibraryRef>,
+        refs: &'a [LibraryRef],
         opts: CodegenOpts
     ) -> Self {
         let builtin_classes = BUILTIN_CLASS_INFO
             .with(|class_infos| class_infos.to_vec());
 
-        let refs: Vec<_> = refs.into_iter().collect();
         let metadata_refs = refs.iter().map(|r| r.lib.metadata.clone());
 
         let mut metadata = ir::MetadataBuilder::with_refs(metadata_refs);
@@ -239,8 +238,8 @@ impl<'a> LibraryBuilder<'a> {
         let metadata = self.metadata.build();
 
         let ref_names: Vec<_> = self.references
-            .into_iter()
-            .map(|lib_ref| lib_ref.lib.name)
+            .iter()
+            .map(|lib_ref| lib_ref.lib.name.clone())
             .collect();
 
         let mut lib = ir::Library::new(self.name, self.version, ref_names, metadata);
@@ -404,7 +403,7 @@ impl<'a> LibraryBuilder<'a> {
     }
 
     fn find_imported_func(&self, key: &FunctionDeclKey) -> Option<&FunctionInstance> {
-        for lib_ref in &self.references {
+        for lib_ref in self.references {
             if let Some(imported_func) = lib_ref.imported_funcs.get(key) {
                 return Some(imported_func);
             }
