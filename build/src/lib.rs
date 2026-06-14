@@ -39,7 +39,7 @@ use terapascal_frontend::parse::Parser;
 use terapascal_frontend::pp::PreprocessedUnit;
 use terapascal_frontend::tokenize;
 use terapascal_frontend::typ;
-use terapascal_frontend::typ::builtin_ident;
+use terapascal_frontend::typ::{builtin_ident, SYSTEM_PACKAGE_NAME};
 use terapascal_frontend::typ::Context;
 use terapascal_frontend::typ::SYSTEM_UNIT_NAME;
 use terapascal_frontend::typecheck;
@@ -597,7 +597,12 @@ fn build_with_log(
     let mut package_namespaces = HashSet::new();
     let mut package_libs = Vec::with_capacity(input.package_names.len());
 
-    for package_name in &input.package_names {
+    let mut package_names = input.package_names.clone();
+    if !package_names.iter().any(|p| p == SYSTEM_PACKAGE_NAME) {
+        package_names.insert(0, String::from(SYSTEM_PACKAGE_NAME));
+    }
+
+    for package_name in package_names {
         let package = import_package(&package_name, &input, root_ctx.as_mut())?;
         for warning in package.warnings {
             log.diagnostic(warning);

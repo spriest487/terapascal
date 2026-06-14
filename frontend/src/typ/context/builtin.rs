@@ -31,6 +31,7 @@ thread_local! {
 }
 
 pub const SYSTEM_UNIT_NAME: &str = "System";
+pub const SYSTEM_PACKAGE_NAME: &str = "System";
 
 pub const NIL_NAME: &str = "nil";
 
