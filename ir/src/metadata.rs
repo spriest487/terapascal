@@ -203,15 +203,14 @@ impl Metadata {
             }
         }
 
-        for (ty, funcs) in &other.type_info {
-            if self.type_info.contains_key(ty) {
-                panic!(
-                    "duplicate RTTI definitions for type {}",
-                    self.pretty_type_name(ty)
-                );
+        for (ty, type_info) in &other.type_info {
+            if let Some(existing) = self.type_info.get(ty) {
+                if existing != type_info {
+                    panic!("duplicate RTTI definitions for type {}", self.pretty_type_name(ty));
+                }
+            } else {
+                self.type_info.insert(ty.clone(), type_info.clone());
             }
-
-            self.type_info.insert(ty.clone(), funcs.clone());
         }
     }
 

@@ -13,7 +13,7 @@ pub const TYPE_FLAG_WEAK: u64 = 1 << 1;
 pub const TYPE_FLAG_ARRAY: u64 = 1 << 2;
 pub const TYPE_FLAG_FUNCTION: u64 = 1 << 3;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TypeInfo {
     pub name: Option<StringID>,
     pub debug_name: Option<String>,
@@ -61,7 +61,7 @@ impl TypeInfo {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MethodInfo {
     pub name: StringID,
     pub index: usize,
