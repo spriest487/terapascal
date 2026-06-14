@@ -12,11 +12,6 @@ use crate::ir;
 use crate::typ::Context;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::fs;
-use std::io;
-use std::io::Read;
-use std::path::Path;
-use terapascal_ir::decode_lib;
 
 #[derive(Debug)]
 pub struct ImportedLibrary {
@@ -28,18 +23,7 @@ pub struct ImportedLibrary {
     pub namespaces: HashSet<IdentPath>,
 }
 
-pub fn import_lib(path: &Path, type_ctx: Option<&mut Context>) -> ImportResult<ImportedLibrary> {
-    let mut file = fs::File::open(path)?;
-
-    let mut lib_bytes = Vec::new();
-    file.read_to_end(&mut lib_bytes)?;
-
-    let library = decode_lib(&lib_bytes)
-        .map_err(|err| {
-            let msg = format!("failed to decode {}: {err}", path.display());
-            ImportError::IOError(io::Error::new(err.kind(), msg))
-        })?;
-
+pub fn import_lib(library: ir::Library, type_ctx: Option<&mut Context>) -> ImportResult<ImportedLibrary> {
     let mut builder = ImportBuilder::new(&library, type_ctx);
 
     builder.import()?;

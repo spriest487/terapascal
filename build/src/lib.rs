@@ -9,6 +9,8 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
+use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
@@ -523,16 +525,13 @@ pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
     }
 }
 
-fn import_package(
-    name: &str,
-    input: &BuildInput,
-    type_ctx: Option<&mut Context>,
-) -> BuildResult<ImportedLibrary> {
-    let mut search_dirs = Vec::new();
+pub fn load_lib(
+    name: impl Into<PathBuf>,
+    additional_search_dirs: &[PathBuf],
+) -> BuildResult<ir::Library> {
+    let name = name.into();
 
-    if let Some(current_dir) = input.source_path.parent() {
-        search_dirs.push(current_dir.to_path_buf());
-    }
+    let mut search_dirs = additional_search_dirs.to_vec();
 
     if let Ok(lib_path) = env::var(LIB_DIR_VAR) {
         search_dirs.push(PathBuf::from(lib_path));
@@ -541,14 +540,42 @@ fn import_package(
     let path = search_dirs
         .iter()
         .find_map(|dir| {
-            let full_path = dir.join(name).with_added_extension(IR_LIB_EXT);
+            let full_path = dir.join(&name).with_added_extension(IR_LIB_EXT);
             full_path.exists().then_some(full_path)
         })
         .ok_or_else(|| {
             BuildError::FileNotFound(PathBuf::from(name).with_added_extension(IR_LIB_EXT), None)
         })?;
 
-    let package = import_lib(path.as_path(), type_ctx)?;
+    let mut file = fs::File::open(&path)?;
+
+    let mut lib_bytes = Vec::new();
+    file.read_to_end(&mut lib_bytes)?;
+
+    let library = ir::decode_lib(&lib_bytes)
+        .map_err(|err| {
+            BuildError::ReadSourceFileFailed {
+                msg: err.to_string(),
+                path,
+            }
+        })?;
+
+    Ok(library)
+}
+
+fn import_package(
+    name: &str,
+    input: &BuildInput,
+    type_ctx: Option<&mut Context>,
+) -> BuildResult<ImportedLibrary> {
+    let search_dirs = match input.source_path.parent() {
+        Some(parent_dir) => vec![parent_dir.to_path_buf()],
+        None => Vec::new(),
+    };
+
+    let lib = load_lib(name, &search_dirs)?;
+
+    let package = import_lib(lib, type_ctx)?;
     Ok(package)
 }
 

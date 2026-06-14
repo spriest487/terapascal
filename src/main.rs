@@ -9,20 +9,17 @@ mod dotnet;
 
 use crate::args::*;
 use crate::error::*;
+use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::process;
 use std::time::Duration;
-use std::env;
 use structopt::StructOpt;
-use terapascal_build::build;
-use terapascal_build::error::BuildError;
-use terapascal_build::error::BuildResult;
+use terapascal_build::{build, load_lib};
 use terapascal_build::BuildArtifact;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildOutput;
@@ -49,6 +46,7 @@ use clang::clang_print;
 
 #[cfg(feature = "backend-cil")]
 use dotnet::dotnet_build;
+use terapascal_ir::MetadataSource;
 use terapascal_vm::result::ExecResult;
 
 fn compile(args: Args) -> Result<(), RunError> {
@@ -88,7 +86,7 @@ fn compile(args: Args) -> Result<(), RunError> {
             log.trace(format!("loading existing module: {}", args.file.display()));
         }
 
-        let artifact = load_lib(&args.file)
+        let artifact = load_lib(&args.file, &[])
             .map(BuildArtifact::Library);
 
         return handle_output(BuildOutput {
@@ -111,25 +109,6 @@ fn compile(args: Args) -> Result<(), RunError> {
     let output = build(&DefaultFilesystem, input);
     
     handle_output(output, &args)
-}
-
-fn load_lib(path: &Path) -> BuildResult<ir::Library> {
-    let mut module_bytes = Vec::new();
-
-    File::open(&path)
-        .and_then(|mut file| {
-            file.read_to_end(&mut module_bytes)
-        })
-        .map_err(|err| {
-            BuildError::ReadSourceFileFailed {
-                msg: err.to_string(),
-                path: path.to_path_buf(),
-            }
-        })?;
-
-    let module: ir::Library = ir::decode_lib(&module_bytes)?;
-
-    Ok(module)
 }
 
 fn print_output<F>(out_path: Option<&Path>, f: F) -> Result<(), RunError>
@@ -227,7 +206,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     .unwrap_or_else(OsString::new);
 
                 if output_ext.eq_ignore_ascii_case("c") {
-                    clang_print(&lib, args, out_path)?;                    
+                    clang_print(&lib, args, out_path)?;
                     Ok(())
                 } else if output_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
                     // the IR object is the output
@@ -247,8 +226,18 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     return Err(RunError::UnknownOutputExt(output_ext))
                 }
             } else {
-                exec_vm(args, &lib).map_err(|err| err.map_types(|ty| {
-                    ty.to_pretty_string(lib.metadata.as_ref())
+                let metadata = lib.metadata.clone();
+
+                let mut exec_libs = Vec::with_capacity(lib.references.len() + 1);
+
+                for lib_ref in &lib.references {
+                    let ref_lib = load_lib(lib_ref, &[])?;
+                    exec_libs.push(ref_lib);
+                }
+                exec_libs.push(lib);
+
+                exec_vm(args, &exec_libs).map_err(|err| err.map_types(|ty| {
+                    ty.to_pretty_string(metadata.as_formatter())
                 }))?;
 
                 Ok(())
@@ -257,7 +246,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
     }
 }
 
-fn exec_vm(args: &Args, lib: &ir::Library) -> ExecResult<()> {
+fn exec_vm(args: &Args, libs: &[ir::Library]) -> ExecResult<()> {
     // execute the IR immediately
     let exec_opts = ExecOpts {
         trace_rc: args.trace_rc,
@@ -273,7 +262,9 @@ fn exec_vm(args: &Args, lib: &ir::Library) -> ExecResult<()> {
     };
 
     let mut vm = Vm::new(exec_opts)?;
-    vm.load_lib(lib)?;
+    for lib in libs {
+        vm.load_lib(lib)?;
+    }
     vm.shutdown()?;
 
     Ok(())
