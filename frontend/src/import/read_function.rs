@@ -116,7 +116,7 @@ impl ImportBuilder<'_> {
             span: self.span(),
             name: FunctionName {
                 ident: Ident::new(name, self.span()),
-                span: self.span(),
+                span: None,
                 context: FunctionDeclContext::MethodDecl {
                     enclosing_type: declaring_type.clone(),
                 },
@@ -195,7 +195,7 @@ impl ImportBuilder<'_> {
             span: self.span(),
             name: FunctionName {
                 ident: func_ident.clone(),
-                span: self.span(),
+                span: None,
                 context: FunctionDeclContext::FreeFunction,
                 type_params,
             },

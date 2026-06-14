@@ -920,19 +920,30 @@ impl DiagnosticOutput for TypeError {
                     let decl_msg = "declared here".to_string();
                     let actual_msg = "mismatched implementation here".to_string();
 
-                    vec![
-                        DiagnosticMessage::info(decl_msg)
-                            .with_label(DiagnosticLabel::new(i.iface_method_name.span.clone()))
-                            .with_note(i.expect_sig.to_string()),
-                        DiagnosticMessage::info(actual_msg)
-                            .with_label(DiagnosticLabel::new(i.impl_method_name.span.clone()))
-                            .with_note(i.actual_sig.to_string()),
-                    ]
+                    let mut expected_message = DiagnosticMessage::info(decl_msg)
+                        .with_note(i.expect_sig.to_string());
+
+                    expected_message.label = i.iface_method_name.span
+                        .clone()
+                        .map(DiagnosticLabel::new);
+
+                    let mut actual_message = DiagnosticMessage::info(actual_msg)
+                        .with_note(i.expect_sig.to_string());
+
+                    actual_message.label = i.impl_method_name.span
+                        .clone()
+                        .map(DiagnosticLabel::new);
+
+                    vec![expected_message, actual_message]
                 }));
 
                 messages.extend(missing.iter().map(|i| {
-                    DiagnosticMessage::info(format!("{} declared here", i.method_name))
-                        .with_label(DiagnosticLabel::new(i.method_name.span.clone()))
+                    let msg = DiagnosticMessage::info(format!("{} declared here", i.method_name));
+
+                    match i.method_name.span.clone() {
+                        Some(span) => msg.with_label(DiagnosticLabel::new(span)),
+                        None => msg,
+                    }
                 }));
                 messages
             },

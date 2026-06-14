@@ -108,7 +108,7 @@ pub struct FunctionName {
     #[derivative(Debug = "ignore")]
     #[derivative(Hash = "ignore")]
     #[derivative(PartialEq = "ignore")]
-    pub span: Span,
+    pub span: Option<Span>,
 }
 
 impl FunctionName {
@@ -116,12 +116,12 @@ impl FunctionName {
         ident: impl Into<Ident>,
         type_params: Option<TypeParamList>,
         enclosing_type: Type,
-        span: impl Into<Span>
+        span: Option<Span>
     ) -> Self {
         Self {
             ident: ident.into(),
             type_params,
-            span: span.into(),
+            span,
             context: FunctionDeclContext::method_decl(enclosing_type),
         }
     }
@@ -431,7 +431,7 @@ impl FunctionDecl {
                     ident: decl.name.ident.clone(),
                     type_params: type_params.clone(),
                     context: decl_context,
-                    span: decl.name.span(),
+                    span: Some(decl.name.span()),
                 },
                 tags,
                 kind: decl.kind,
@@ -725,8 +725,12 @@ pub fn typecheck_func_def(
         if let Some(decl_type_params) = decl.name.type_params.as_ref() {
             ctx.declare_type_params(&decl_type_params);
         }
+        
+        let name_span = decl.name.span.as_ref()
+            .or_else(|| decl.kw_span.as_ref())
+            .unwrap_or_else(|| decl.span());
 
-        declare_func_params_in_body(&decl.param_groups, &decl.name.span, ctx)?;
+        declare_func_params_in_body(&decl.param_groups, name_span, ctx)?;
 
         let locals = declare_locals_in_body(&def, ctx)?;
         let block = typecheck_block(&def.body, &decl.result_ty, ctx);
