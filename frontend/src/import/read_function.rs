@@ -127,7 +127,7 @@ impl ImportBuilder<'_> {
             mods: Vec::new(),
             result_ty: TypeName::Unspecified(result_type),
             param_groups,
-            kw_span: self.span(),
+            kw_span: None,
             where_clause: None,
         });
 
@@ -204,7 +204,7 @@ impl ImportBuilder<'_> {
             mods: decl_mods,
             result_ty: TypeName::Unspecified(result_type),
             param_groups,
-            kw_span: self.span(),
+            kw_span: None,
             where_clause: None,
         };
 

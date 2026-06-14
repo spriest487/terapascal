@@ -227,7 +227,7 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
     let builtin_span = builtin_span();
 
     ast::FunctionDecl {
-        kw_span: builtin_span.clone(),
+        kw_span: None,
         name: ast::FunctionName::new_method_decl(
             builtin_ident(COMPARABLE_COMPARE_NAME),
             None,
@@ -295,7 +295,7 @@ pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Typ
     let builtin_span = builtin_span();
 
     ast::FunctionDecl {
-        kw_span: builtin_span.clone(),
+        kw_span: None,
         name: ast::FunctionName::new_method_decl(
             builtin_ident(DISPLAYABLE_TOSTRING_METHOD),
             None,

@@ -219,7 +219,7 @@ pub struct FunctionDecl<A: Annotation = Span> {
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
     #[derivative(Hash = "ignore")]
-    pub kw_span: Span,
+    pub kw_span: Option<Span>,
 
     pub name: A::FunctionName,
     pub where_clause: Option<WhereClause<A>>,
@@ -284,7 +284,7 @@ impl FunctionDecl<Span> {
             tags,
             kind,
             name,
-            kw_span,
+            kw_span: Some(kw_span),
             param_groups: Vec::new(),
             mods: Vec::new(),
             where_clause: None,
