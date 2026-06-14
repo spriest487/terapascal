@@ -23,6 +23,7 @@ pub use self::result::*;
 pub use self::scope::*;
 pub use self::ufcs::InstanceMethod;
 pub use self::value_kind::*;
+use crate::ast::Access;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::MethodOwner;
@@ -30,7 +31,6 @@ use crate::ast::Path;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
 use crate::ast::IFACE_METHOD_ACCESS;
-use crate::ast::Access;
 use crate::typ::ast::EnumDecl;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;
@@ -45,6 +45,7 @@ use crate::typ::ast::SELF_TY_NAME;
 use crate::typ::completion::CompletionContext;
 use crate::typ::completion::CompletionHint;
 use crate::typ::completion::CompletionHintKind;
+use crate::typ::specialize_by_return_ty;
 use crate::typ::specialize_iface_def;
 use crate::typ::specialize_struct_def;
 use crate::typ::specialize_variant_def;
@@ -57,7 +58,6 @@ use crate::typ::TypeName;
 use crate::typ::TypeParamList;
 use crate::typ::TypeParamListItem;
 use crate::typ::TypeResult;
-use crate::typ::specialize_by_return_ty;
 use linked_hash_map::LinkedHashMap;
 use std::collections::hash_map::Entry;
 use std::collections::hash_map::HashMap;
@@ -72,7 +72,7 @@ pub struct Context {
     scopes: ScopeStack,
 
     // builtin methods declarations for primitive types that can't be declared normally in code
-    primitive_methods: HashMap<Primitive, LinkedHashMap<Ident, MethodDecl>>,
+    primitive_methods: LinkedHashMap<Primitive, LinkedHashMap<Ident, MethodDecl>>,
 
     // all primitives currently implement the same set of non-generic interfaces, so we can
     // just use this same list for all of them
@@ -102,7 +102,7 @@ impl Context {
 
             loop_stack: Default::default(),
 
-            primitive_methods: HashMap::new(),
+            primitive_methods: LinkedHashMap::new(),
             primitive_implements: Vec::new(),
             
             errors: Vec::new(),
@@ -993,14 +993,14 @@ impl Context {
         Ok(())
     }
 
-    pub fn find_method(&self, ty: &Type, method: &Ident, sig: &Arc<FunctionSig>) -> Option<&FunctionDef> {
+    pub fn find_method_def(&self, ty: &Type, method: &Ident, sig: &Arc<FunctionSig>) -> Option<&FunctionDef> {
         let method_defs = self.method_defs.get(ty)?;
 
         let key = MethodKey {
             name: method.clone(),
             sig: sig.clone(),
         };
-        
+
         // if !method_defs.methods.get(&key).is_some() {
         //     eprintln!("missing key for {}.{}: {}", ty, key.name, key.sig);
         //     eprintln!("keys are:");

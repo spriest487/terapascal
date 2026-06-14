@@ -686,43 +686,45 @@ impl<'a> LibraryBuilder<'a> {
 
         let method_sig = Arc::new(method_decl.func_decl.sig());
 
-        let method_def = self.src_metadata
-            .find_method(&decl_self_ty, &method_decl.func_decl.ident(), &method_sig)
-            .cloned()
-            .unwrap_or_else(|| {
-                panic!("instantiate_method: missing method def: {} (method {})", method_decl.func_decl, method_key.method_index)
-            });
-
-        let id = self.declare_method(&method_def.decl, method_key.method_index);
+        let id = self.declare_method(&method_decl.func_decl, method_key.method_index);
+        let sig = Arc::new(method_decl.func_decl.sig());
 
         // cache the function before translating the instantiation, because
         // it may recurse and instantiate itself in its own body
         let func_instance = FunctionInstance {
             id,
-            src_sig: Arc::new(method_def.decl.sig()),
+            src_sig: sig,
             published: method_decl.is_published(),
         };
-
-        let key = FunctionDeclKey::Method(method_key.clone());
-
-        let debug_name = method_def.decl.name.to_debug_string(None);
         
+        let key = FunctionDeclKey::Method(method_key.clone());
         self.translated_funcs.insert(key, func_instance.clone());
 
         let is_instance_method = !method_decl.func_decl.kind.is_static_method();
 
-        let def = build_func_def(
-            self,
-            &method_def.decl.param_groups,
-            method_def.decl.name.type_params.as_ref(),
-            &method_def.decl.result_ty,
-            &method_def.locals,
-            &method_def.body,
-            is_instance_method,
-            Some(&decl_self_ty),
-            Some(debug_name),
-        );
-        self.functions.insert(id, ir::Function::Local(def));
+        // the definitions of primitive types are provided by the runtime and don't have defs
+        if decl_self_ty.as_primitive().is_none() {
+            let method_def = self.src_metadata
+                .find_method_def(&decl_self_ty, &method_decl.func_decl.ident(), &method_sig)
+                .cloned()
+                .unwrap_or_else(|| {
+                    panic!("instantiate_method: missing method def: {} (method {})", method_decl.func_decl, method_key.method_index)
+                });
+            let debug_name = method_def.decl.name.to_debug_string(None);
+
+            let def = build_func_def(
+                self,
+                &method_def.decl.param_groups,
+                method_def.decl.name.type_params.as_ref(),
+                &method_def.decl.result_ty,
+                &method_def.locals,
+                &method_def.body,
+                is_instance_method,
+                Some(&decl_self_ty),
+                Some(debug_name),
+            );
+            self.functions.insert(id, ir::Function::Local(def));
+        }
 
         func_instance
     }
