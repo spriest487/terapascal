@@ -67,7 +67,18 @@ impl Library {
 
 impl fmt::Display for Library {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "* Type Definitions")?;
+        writeln!(f, "Name: {}", self.name)?;
+        writeln!(f, "Version: {}", self.version)?;
+
+        if !self.references.is_empty() {
+            writeln!(f, "References:")?;
+            for ref_name in &self.references {
+                writeln!(f, "\t{}", ref_name)?;
+            }
+            writeln!(f)?;
+        }
+
+        writeln!(f, "Type Definitions:")?;
         writeln!(f)?;
 
         let mut defs: Vec<_> = self.metadata.type_defs().collect();
@@ -138,7 +149,7 @@ impl fmt::Display for Library {
             writeln!(f)?;
         }
 
-        writeln!(f, "* Interfaces: ")?;
+        writeln!(f, "Interfaces:")?;
 
         let mut ifaces: Vec<_> = self.metadata.interfaces().collect();
         ifaces.sort_by_key(|(id, _)| *id);
@@ -165,7 +176,7 @@ impl fmt::Display for Library {
         }
         writeln!(f)?;
 
-        writeln!(f, "* Constants")?;
+        writeln!(f, "Constants:")?;
         for const_info in self.metadata.constants() {
             write!(f, "{} = ", const_info.name)?;
             self.metadata.format_val(&const_info.value, f)?;
@@ -173,7 +184,7 @@ impl fmt::Display for Library {
         }
         writeln!(f)?;
         
-        writeln!(f, "* Variables")?;
+        writeln!(f, "Variables:")?;
         for (var_id, var_info) in self.metadata.variables() {
             writeln!(f, "{}: {}", var_id.0, self.metadata.pretty_type_name(&var_info.r#type))?;
 
@@ -183,7 +194,7 @@ impl fmt::Display for Library {
         }
         writeln!(f)?;
         
-        writeln!(f, "* String literals")?;
+        writeln!(f, "String literals:")?;
         for (id, lit) in self.metadata.strings() {
             writeln!(f, "{}: '{}'", id.0, lit.escape_default())?;
         }
@@ -192,7 +203,7 @@ impl fmt::Display for Library {
         let mut funcs: Vec<_> = self.functions.iter().collect();
         funcs.sort_by_key(|(id, _)| **id);
 
-        writeln!(f, "* Functions")?;
+        writeln!(f, "Functions:")?;
         for (id, func) in funcs {
             write!(f, "{}: {}", id.0, func.sig().to_pretty_string(self.metadata.as_ref()))?;
 
@@ -226,7 +237,7 @@ impl fmt::Display for Library {
             writeln!(f)?;
         }
 
-        writeln!(f, "* Init:")?;
+        writeln!(f, "Init:")?;
         write_instruction_list(f, &self.metadata, &self.init.instructions)?;
         Ok(())
     }
