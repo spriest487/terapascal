@@ -919,7 +919,12 @@ impl Type {
         name: &Ident,
         sig: &FunctionSig,
         ctx: &Context,
-    ) -> NameResult<Option<usize>> {
+    ) -> NameResult<usize> {
+        let not_found_err = || NameError::MemberNotFound {
+            base: NameContainer::Type(self.clone()),
+            member: name.clone(),
+        };
+
         match self {
             Type::Interface(iface_name) => {
                 let iface_def = if iface_name.is_unspecialized_generic() {
@@ -936,7 +941,7 @@ impl Type {
                     }
                 });
 
-                Ok(index)
+                index.ok_or_else(not_found_err)
             },
 
             Type::Record(type_name) | Type::Class(type_name) => {
@@ -947,7 +952,8 @@ impl Type {
                     ctx.instantiate_struct_def(&type_name, struct_kind)?
                 };
 
-                Ok(find_in_method_decls(name, sig, struct_def.methods()))
+                find_in_method_decls(name, sig, struct_def.methods())
+                    .ok_or_else(not_found_err)
             },
 
             Type::Variant(type_name) => {
@@ -957,13 +963,15 @@ impl Type {
                     ctx.instantiate_variant_def(&type_name)?
                 };
 
-                Ok(find_in_method_decls(name, sig, variant_def.methods()))
+                find_in_method_decls(name, sig, variant_def.methods())
+                    .ok_or_else(not_found_err)
             },
 
             Type::Primitive(primitive) => {
                 let methods = ctx.get_primitive_methods(*primitive);
 
-                Ok(find_in_method_decls(name, sig, methods.values()))
+                find_in_method_decls(name, sig, methods.values())
+                    .ok_or_else(not_found_err)
             },
 
             // Type::GenericParam(param) => match &param.is_iface {
@@ -1041,15 +1049,11 @@ impl Type {
         method_ident: &Ident,
         sig: &FunctionSig,
         ctx: &Context,
-    ) -> NameResult<Option<(usize, MethodDecl)>> {
-        match self.find_method_index(method_ident, sig, ctx)? {
-            Some(index) => {
-                let method = self.get_method(index, ctx)?;
-                Ok(Some((index, method)))
-            },
+    ) -> NameResult<(usize, MethodDecl)> {
+        let index = self.find_method_index(method_ident, sig, ctx)?;
+        let method_decl = self.get_method(index, ctx)?;
 
-            None => Ok(None),
-        }
+        Ok((index, method_decl))
     }
 
     pub fn get_current_access(&self, ctx: &Context) -> Access {

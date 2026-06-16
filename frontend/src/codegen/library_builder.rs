@@ -2,11 +2,11 @@ mod init;
 mod function;
 
 use crate::ast;
-use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::StructKind;
+use crate::ast::BindingDeclKind;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::expr::literal_to_val;
@@ -19,17 +19,15 @@ use crate::codegen::SetFlagsType;
 use crate::codegen::*;
 use crate::ir;
 use crate::typ::ast::const_eval::ConstEval;
-use crate::typ::ast::FunctionDeclContext;
-use crate::typ::builtin_ident;
+use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::free_mem_sig;
 use crate::typ::get_mem_sig;
 use crate::typ::seq::TypeSequenceSupport;
-use crate::typ::TypeParamContainer;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::builtin_funcinfo_name;
+use crate::typ::{builtin_ident, Specializable, TypeArgsResult};
 pub use function::*;
 use init::gen_tags_init;
 use ir::InstructionBuilder as _;
@@ -357,9 +355,37 @@ impl<'a> LibraryBuilder<'a> {
                 self.translate_unit_func_decl(&unit_ident, &def.decl);
             }
 
-            _ => {
+            typ::ast::UnitDecl::Type { decl } => {
+                for item in &decl.items {
+                    self.translate_unit_type_decl(item);
+                }
+            }
+
+            typ::ast::UnitDecl::Binding { .. } => {
+                // bindings are handled separately
+            }
+
+            typ::ast::UnitDecl::Uses { .. } => {
+                // uses items are only relevant for the frontend
             }
         };
+    }
+
+    fn translate_unit_type_decl(&mut self, decl: &typ::ast::TypeDeclItem) {
+        match decl {
+            typ::ast::TypeDeclItem::Struct(struct_decl) => {
+                self.translate_struct_type(&struct_decl.name, struct_decl.kind);
+            }
+
+            typ::ast::TypeDeclItem::Interface(iface_decl) => {
+                self.translate_iface_type(&iface_decl.name);
+            }
+
+            typ::ast::TypeDeclItem::Variant(_) => {}
+            typ::ast::TypeDeclItem::Alias(_) => {}
+            typ::ast::TypeDeclItem::Enum(_) => {}
+            typ::ast::TypeDeclItem::Set(_) => {}
+        }
     }
 
     pub(crate) fn instantiate_func(&mut self, key: &FunctionDeclKey) -> FunctionInstance {
@@ -421,11 +447,24 @@ impl<'a> LibraryBuilder<'a> {
     }
     
     pub fn find_method_index(&self, ty: &typ::Type, name: &Ident, sig: &typ::FunctionSig) -> usize {
-        let (index, _) = ty
-            .find_method(name, &sig, &self.src_metadata)
+        let index = ty.find_method_index(name, sig, self.src_metadata)
             .ok()
-            .flatten()
-            .unwrap_or_else(|| panic!("method {} of type {} must exist", name, ty));
+            .unwrap_or_else(|| {
+                let methods = ty
+                    .methods(self.src_metadata)
+                    .unwrap_or_else(|_| Vec::new());
+                let method_count = methods.len();
+
+                let method_list = ty
+                    .methods(self.src_metadata)
+                    .unwrap_or_else(|_| Vec::new())
+                    .into_iter()
+                    .map(|method_decl| format!("\n* {}", method_decl.func_decl))
+                    .collect::<Vec<_>>()
+                    .join("");
+
+                panic!("find_method_index: no such method {} of type {} with sig {}\n{method_count} method(s) found{}", name, ty, sig, method_list)
+            });
 
         index
     }
@@ -798,7 +837,7 @@ impl<'a> LibraryBuilder<'a> {
         namespace: IdentPath,
     ) -> ir::FunctionID {
         let identity = match &func_decl.name.context {
-            FunctionDeclContext::FreeFunction if !func_decl.is_overload() => {
+            typ::ast::FunctionDeclContext::FreeFunction if !func_decl.is_overload() => {
                 let ns: Vec<_> = namespace
                     .iter()
                     .map(|part| part.to_string())
@@ -809,7 +848,8 @@ impl<'a> LibraryBuilder<'a> {
                 ir::FunctionIdentity::Path(path)
             }
 
-            FunctionDeclContext::MethodDef { .. } | FunctionDeclContext::MethodDecl { ..} => {
+            typ::ast::FunctionDeclContext::MethodDef { .. }
+            | typ::ast::FunctionDeclContext::MethodDecl { ..} => {
                 panic!("declare_func: {} is a method", func_decl.name)
             }
 
@@ -827,11 +867,11 @@ impl<'a> LibraryBuilder<'a> {
         method_index: usize,
     ) -> ir::FunctionID {
         let identity = match &method_decl.name.context {
-            FunctionDeclContext::MethodDecl { enclosing_type } => {
+            typ::ast::FunctionDeclContext::MethodDecl { enclosing_type } => {
                 self.method_identity(method_decl, enclosing_type, method_index)
             }
 
-            FunctionDeclContext::MethodDef { declaring_type } => {
+            typ::ast::FunctionDeclContext::MethodDef { declaring_type } => {
                 self.method_identity(method_decl, declaring_type.ty(), method_index)
             }
 
@@ -924,7 +964,7 @@ impl<'a> LibraryBuilder<'a> {
         }
 
         match &decl.name.context {
-            FunctionDeclContext::FreeFunction => {
+            typ::ast::FunctionDeclContext::FreeFunction => {
                 let func_name = unit_name.clone().child(decl.name.ident.clone());
                 let func_sig = decl.sig();
 
@@ -932,12 +972,12 @@ impl<'a> LibraryBuilder<'a> {
                 Some(instance)
             }
 
-            FunctionDeclContext::MethodDecl { enclosing_type } => {
-                self.translate_unit_method(enclosing_type, decl)
+            typ::ast::FunctionDeclContext::MethodDecl { enclosing_type } => {
+                Some(self.translate_unit_method(enclosing_type, decl))
             }
 
-            FunctionDeclContext::MethodDef { declaring_type } => {
-                self.translate_unit_method(declaring_type.ty(), decl)
+            typ::ast::FunctionDeclContext::MethodDef { declaring_type } => {
+                Some(self.translate_unit_method(declaring_type.ty(), decl))
             }
         }
     }
@@ -946,11 +986,13 @@ impl<'a> LibraryBuilder<'a> {
         &mut self,
         declaring_type: &typ::Type,
         decl: &typ::ast::FunctionDecl,
-    ) -> Option<FunctionInstance> {
+    ) -> FunctionInstance {
         let (method_index, _method_decl) = declaring_type
             .find_method(&decl.name.ident, &decl.sig(), &self.src_metadata)
-            .unwrap()
-            .unwrap();
+            .ok()
+            .unwrap_or_else(|| {
+                panic!("translate_unit_method: failed to find method decl for {}", decl)
+            });
 
         let self_ty = if let Some(type_args) = declaring_type.type_params() {
             let generic_args = type_args.clone().into_type_args();
@@ -959,8 +1001,7 @@ impl<'a> LibraryBuilder<'a> {
             declaring_type.clone()
         };
 
-        let instance = self.translate_method(self_ty, method_index);
-        Some(instance)
+        self.translate_method(self_ty, method_index)
     }
 
     pub fn insert_function(&mut self, id: ir::FunctionID, function: ir::Function) {
@@ -1036,7 +1077,7 @@ impl<'a> LibraryBuilder<'a> {
 
     pub fn apply_ty_args<Generic>(&self,
         target: Generic,
-        params: &impl TypeParamContainer,
+        params: &impl typ::TypeParamContainer,
         args: &impl typ::TypeArgResolver
     ) -> Generic 
     where 
@@ -1063,11 +1104,11 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             typ::Type::Record(name) => {
-                self.translate_struct_type(src_ty, name, StructKind::Record)
+                self.translate_struct_type(name, StructKind::Record)
             },
 
             typ::Type::Class(name) => {
-                self.translate_struct_type(src_ty, name, StructKind::Class)
+                self.translate_struct_type(name, StructKind::Class)
             }
             
             typ::Type::Weak(weak_ty) => {
@@ -1082,19 +1123,7 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             typ::Type::Interface(iface_sym) => {
-                let iface_def = self.src_metadata.instantiate_iface_def(iface_sym).unwrap();
-
-                let iface_name = translate_name(&iface_def.name, self);
-                let id = self.metadata.declare_iface(&iface_name);
-                let ty = ir::Type::Object(ir::ObjectID::Interface(id));
-
-                self.add_cached_type(src_ty.clone(), ty.clone());
-
-                let iface_meta = translate_iface(&iface_def, self);
-                let def_id = self.metadata.define_iface(iface_meta);
-                assert_eq!(def_id, id);
-
-                ty
+                self.translate_iface_type(iface_sym)
             },
 
             typ::Type::Array(array_ty) => {
@@ -1286,11 +1315,17 @@ impl<'a> LibraryBuilder<'a> {
 
     fn translate_struct_type(
         &mut self,
-        src_type: &typ::Type,
-        name: &typ::Symbol,
+        name: &Arc<typ::Symbol>,
         kind: StructKind,
     ) -> ir::Type {
-        let def_name = name.clone().to_generic_name();
+        let src_type = typ::Type::from_struct_type(name.clone(), kind);
+
+        if let Some(cached) = self.type_cache.get(&src_type) {
+            let ty = cached.clone();
+            return ty;
+        }
+
+        let def_name = name.as_ref().clone().to_generic_name();
         let def_path = translate_name(&def_name, self);
 
         let type_ctor = |id: ir::TypeDefID, args: &[ir::Type]| match kind {
@@ -1335,6 +1370,29 @@ impl<'a> LibraryBuilder<'a> {
         let instance_type = type_ctor(def_id, &name_path.type_args);
         self.add_cached_type(src_type.clone(), instance_type.clone());
         instance_type
+    }
+
+    fn translate_iface_type(&mut self, src_name: &Arc<typ::Symbol>) -> ir::Type {
+        let src_type = typ::Type::Interface(src_name.clone());
+
+        if let Some(cached) = self.type_cache.get(&src_type) {
+            let ty = cached.clone();
+            return ty;
+        }
+
+        let src_def = self.src_metadata.instantiate_iface_def(src_name).unwrap();
+
+        let iface_name = translate_name(&src_def.name, self);
+        let decl_id = self.metadata.declare_iface(&iface_name);
+        let iface_type = ir::Type::Object(ir::ObjectID::Interface(decl_id));
+
+        self.add_cached_type(src_type.clone(), iface_type.clone());
+
+        let def = translate_iface(&src_def, self);
+        let iface_id = self.metadata.define_iface(def);
+        assert_eq!(iface_id, decl_id);
+
+        iface_type
     }
 
     pub fn find_func_ty(&self, sig: &typ::FunctionSig) -> Option<ir::TypeDefID> {
@@ -1395,8 +1453,19 @@ impl<'a> LibraryBuilder<'a> {
                 done_closures += 1;
             }
 
-            for (src_ty, ty) in populate_types.drain(0..) {
+            for (mut src_ty, ty) in populate_types.drain(0..) {
                 done_types += 1;
+
+                // automatically convert reference to unspecialized types into their generic forms
+                if let TypeArgsResult::Unspecialized(param_list) = src_ty.type_args() {
+                    let generic_args = param_list.clone().into_type_args();
+                    src_ty = src_ty
+                        .specialize(&generic_args, &self.src_metadata)
+                        .unwrap_or_else(|err| {
+                            panic!("build_typeinfo: {err}")
+                        })
+                        .into_owned();
+                }
                 
                 // for any non-object types, ensure boxed versions exist in the type cache
                 // for use with RTTI
@@ -1440,9 +1509,23 @@ impl<'a> LibraryBuilder<'a> {
 
         match &src_ty {
             typ::Type::Record(name) | typ::Type::Class(name) => {
-                let def = self.src_metadata
-                    .instantiate_struct_def(name.as_ref(), src_ty.struct_kind().unwrap())
-                    .unwrap();
+                let name = name.as_ref().clone();
+                let kind = src_ty.struct_kind().unwrap();
+
+                let def = if name.is_unspecialized_generic() {
+                    self.src_metadata
+                        .find_struct_def(&name.full_path, kind)
+                        .cloned()
+                        .unwrap_or_else(|err| {
+                            panic!("populate_runtime_type_info: missing struct def {}: {}", name.full_path, err)
+                        })
+                } else {
+                    self.src_metadata
+                        .instantiate_struct_def(&name, kind)
+                        .unwrap_or_else(|err| {
+                            panic!("populate_runtime_type_info: failed to instantiate struct {}: {}", name, err)
+                        })
+                };
 
                 for (method_index, method) in def.methods().enumerate() {
                     let method_decl = &method.func_decl;

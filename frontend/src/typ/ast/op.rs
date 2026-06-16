@@ -113,12 +113,12 @@ pub fn typecheck_bin_op(
 
             // if one operand is a string, and the other can be converted using ToString, do that
             if lhs_string && !rhs_string {
-                if let Some(rhs_to_string) = typecheck_implicit_tostring(&rhs, &span, ctx) {
+                if let Some(rhs_to_string) = typecheck_implicit_to_string(&rhs, &span, ctx) {
                     rhs = rhs_to_string;
                     rhs_string = true;
                 }
             } else if !lhs_string && lhs_string {
-                if let Some(lhs_to_string) = typecheck_implicit_tostring(&lhs, &span, ctx) {
+                if let Some(lhs_to_string) = typecheck_implicit_to_string(&lhs, &span, ctx) {
                     lhs = lhs_to_string;
                     lhs_string = true;
                 }
@@ -283,12 +283,12 @@ fn typecheck_bitwise_op(
 // turn value `x` that implements the displayable (IToString) interface into a call to 
 // the `ToString(x)` method of that interface, when `x` is evaluated in a context where 
 // a string is expected e.g. string concat
-fn typecheck_implicit_tostring(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
+fn typecheck_implicit_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Option<Expr> {
     let src_ty = expr.annotation().ty();
 
     let to_string_ident = Ident::new(DISPLAYABLE_TOSTRING_METHOD, span.clone());
 
-    let displayable_ty = Type::interface(builtin_displayable_name().full_path);
+    let displayable_ty = Type::interface(builtin_displayable_name());
 
     let is_impl = ctx
         .is_implementation(src_ty.as_ref(), &displayable_ty)
@@ -310,8 +310,7 @@ fn typecheck_implicit_tostring(expr: &Expr, span: &Span, ctx: &Context) -> Optio
 
     let (impl_method_index, impl_method_decl) = src_ty
         .find_method(&to_string_ident, &impl_sig, ctx)
-        .ok()
-        .flatten()?;
+        .ok()?;
 
     let impl_method_val = MethodValue::new(
         src_ty.clone().into_owned(),
@@ -627,7 +626,6 @@ fn typecheck_member_value(
             let (method_index, iface_method) = iface_ty
                 .find_method(method.func_decl.ident(), &sig, ctx)
                 .ok()
-                .flatten()
                 .unwrap_or_else(|| {
                     panic!(
                         "find_instance_member should only return methods that exist - no match for {}.{} : {}",
