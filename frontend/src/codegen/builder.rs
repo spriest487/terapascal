@@ -311,7 +311,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         if self_ty == iface_ty {
             return (iface_ty, iface_method_index);
         }
-        
+
         // a method invocation on a generic type is always translated as a virtual call - if
         // it's not an object type, the call will be devirtualized when the code is instantiated
         if let typ::Type::GenericParam(param) = self_ty {

@@ -612,7 +612,7 @@ pub fn typecheck_variant(
 }
 
 pub fn typecheck_alias(
-    name: Symbol,
+    name: Arc<Symbol>,
     alias: &ast::AliasDecl<Span>,
     ctx: &mut Context,
 ) -> AliasDecl {
@@ -627,7 +627,7 @@ pub fn typecheck_alias(
 }
 
 pub fn typecheck_enum_decl(
-    name: Symbol,
+    name: Arc<Symbol>,
     enum_decl: &ast::EnumDecl<Span>,
     ctx: &mut Context,
 ) -> TypeResult<EnumDecl> {
@@ -698,7 +698,7 @@ pub fn typecheck_enum_decl(
 impl SetDecl {
     pub fn typecheck(
         set_decl: &ast::SetDecl<Span>,
-        name: Symbol,
+        name: Arc<Symbol>,
         ctx: &mut Context,
     ) -> TypeResult<Self> {
         name.expect_no_type_params(InvalidTypeParamsDeclKind::Set)

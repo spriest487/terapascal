@@ -55,7 +55,7 @@ pub type InitBlock = ast::InitBlock<Value>;
 
 #[derive(Debug)]
 pub struct TypeDeclItemInfo {
-    pub name: Symbol,
+    pub name: Arc<Symbol>,
     pub where_clause: Option<WhereClause>,
     pub visibility: Visibility,
 }

@@ -175,7 +175,7 @@ impl ImportBuilder<'_> {
         let where_clause = None;
 
         let struct_decl = StructDecl {
-            name,
+            name: Arc::new(name),
             kind,
             implements,
             where_clause,

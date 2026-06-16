@@ -193,17 +193,17 @@ pub fn string_to_char_lit(string: &str) -> Option<ast::Literal> {
     None
 }
 
-pub fn builtin_comparable_name() -> Symbol {
-    Symbol::from(IdentPath::from_vec(vec![
+pub fn builtin_comparable_name() -> Arc<Symbol> {
+    Arc::new(Symbol::from(IdentPath::from_vec(vec![
         builtin_ident(SYSTEM_UNIT_NAME),
         builtin_ident(COMPARABLE_IFACE_NAME),
-    ]))
+    ])))
 }
 
 pub fn builtin_comparable_iface() -> ast::InterfaceDecl {
     let builtin_span = builtin_span();
     
-    let iface_ty = Type::interface(builtin_comparable_name().full_path);
+    let iface_ty = Type::interface(builtin_comparable_name());
 
     ast::InterfaceDecl {
         name: builtin_comparable_name(),
@@ -261,17 +261,17 @@ pub fn builtin_comparable_compare_method(declaring_ty: Type, self_param_ty: Type
     }
 }
 
-pub fn builtin_displayable_name() -> Symbol {
-    Symbol::from(IdentPath::from_vec(vec![
+pub fn builtin_displayable_name() -> Arc<Symbol> {
+    Arc::new(Symbol::from(IdentPath::from_vec(vec![
         builtin_ident(SYSTEM_UNIT_NAME),
         builtin_ident(DISPLAYABLE_IFACE_NAME),
-    ]))
+    ])))
 }
 
 pub fn builtin_displayable_iface() -> ast::InterfaceDecl {
     let builtin_span = builtin_span();
     
-    let iface_ty = Type::interface(builtin_displayable_name().full_path); 
+    let iface_ty = Type::interface(builtin_displayable_name());
 
     ast::InterfaceDecl {
         name: builtin_displayable_name(),
@@ -291,8 +291,16 @@ pub fn builtin_displayable_iface() -> ast::InterfaceDecl {
     }
 }
 
-pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Type) -> ast::FunctionDecl {
+pub fn builtin_displayable_display_method(
+    declaring_ty: Type,
+    self_param_ty: Type,
+) -> ast::FunctionDecl {
     let builtin_span = builtin_span();
+
+    let class_name = Symbol::from(IdentPath::from_vec(vec![
+        Ident::new(SYSTEM_UNIT_NAME, builtin_span.clone()),
+        Ident::new(STRING_TYPE_NAME, builtin_span.clone()),
+    ]));
 
     ast::FunctionDecl {
         kw_span: None,
@@ -313,10 +321,7 @@ pub fn builtin_displayable_display_method(declaring_ty: Type, self_param_ty: Typ
                 span: None,
             }
         ],
-        result_ty: TypeName::inferred(Type::class(IdentPath::from_vec(vec![
-            Ident::new(SYSTEM_UNIT_NAME, builtin_span.clone()),
-            Ident::new(STRING_TYPE_NAME, builtin_span.clone()),
-        ]))),
+        result_ty: TypeName::inferred(Type::class(class_name)),
         mods: Vec::new(),
         span: builtin_span.clone(),
     }

@@ -18,6 +18,7 @@ use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::specialize_call_args;
 use crate::typ::ast::typecheck_type_args;
 use crate::typ::ast::Expr;
+use crate::typ::ast::FunctionName;
 use crate::typ::ast::Literal;
 use crate::typ::builtin_string_type;
 use crate::typ::completion::CompletionContext;
@@ -857,8 +858,8 @@ impl Spanned for Value {
 impl Annotation for Value {
     type Type = Type;
 
-    type DeclName = Symbol;
-    type FunctionName = crate::typ::ast::FunctionName;
+    type DeclName = Arc<Symbol>;
+    type FunctionName = FunctionName;
 
     type ConstStringExpr = EvaluatedConstExpr<Arc<String>>;
     type ConstIntegerExpr = EvaluatedConstExpr<IntConstant>;

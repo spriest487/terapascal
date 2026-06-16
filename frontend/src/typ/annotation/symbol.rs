@@ -228,7 +228,7 @@ impl From<IdentPath> for Symbol {
     }
 }
 
-impl DeclName for Symbol {
+impl DeclName for Arc<Symbol> {
     fn ident(&self) -> &Ident {
         self.full_path.last()
     }

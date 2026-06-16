@@ -24,7 +24,6 @@ use crate::Separator;
 use crate::TokenTree;
 use derivative::*;
 use std::fmt;
-use std::sync::Arc;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 
@@ -36,7 +35,7 @@ pub struct VariantDecl<A: Annotation = Span> {
     #[derivative(PartialEq = "ignore")]
     pub kw_span: Span,
 
-    pub name: Arc<A::DeclName>,
+    pub name: A::DeclName,
     pub where_clause: Option<WhereClause<A>>,
 
     pub forward: bool,
@@ -127,7 +126,7 @@ impl VariantDecl {
             VariantDecl {
                 kw_span: kw_span.into(),
 
-                name: Arc::new(name),
+                name,
                 where_clause: header.where_clause,
 
                 forward: true,
@@ -175,7 +174,7 @@ impl VariantDecl {
             VariantDecl {
                 kw_span: kw_span.into(),
 
-                name: Arc::new(name),
+                name,
                 where_clause: header.where_clause,
 
                 tags,

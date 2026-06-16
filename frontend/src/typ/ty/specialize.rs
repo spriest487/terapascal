@@ -137,7 +137,7 @@ pub fn specialize_struct_def<'a>(
 
     Ok(Arc::new(StructDecl {
         kw_span: generic_def.kw_span.clone(),
-        name: specialized_name,
+        name: Arc::new(specialized_name),
         where_clause: specialized_where,
         tags: generic_def.tags.clone(),
         packed: generic_def.packed,
@@ -289,7 +289,7 @@ pub fn specialize_iface_def<'a>(
         .collect();
 
     Ok(Arc::new(InterfaceDecl {
-        name: specialized_name,
+        name: Arc::new(specialized_name),
         where_clause: specialized_where,
         tags: generic_def.tags.clone(),
         supers,

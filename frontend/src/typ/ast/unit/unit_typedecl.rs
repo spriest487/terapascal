@@ -67,7 +67,7 @@ fn typecheck_type_decl_item(
     let full_name = Symbol::from_local_decl_name(&type_decl.name(), where_clause.as_ref(), ctx)?;
 
     let item_info = TypeDeclItemInfo {
-        name: full_name,
+        name: Arc::new(full_name),
         where_clause,
         visibility,
     };
@@ -124,7 +124,7 @@ fn typecheck_type_decl_item(
 
 fn typecheck_set_decl_item(
     set_decl: &ast::SetDecl,
-    full_name: Symbol,
+    full_name: Arc<Symbol>,
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<TypeDeclItem> {

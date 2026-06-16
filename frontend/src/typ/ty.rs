@@ -43,6 +43,8 @@ use crate::typ::GenericError;
 use crate::typ::GenericResult;
 use crate::typ::GenericTarget;
 use crate::typ::InvalidTypeParamsDeclKind;
+use crate::typ::NameContainer;
+use crate::typ::NameError;
 use crate::typ::NameResult;
 use crate::typ::Symbol;
 use crate::typ::TypeError;
@@ -99,28 +101,28 @@ impl From<ArrayType> for Type {
 }
 
 impl Type {
-    pub fn record(sym: impl Into<Symbol>) -> Self {
-        Type::Record(Arc::new(sym.into()))
+    pub fn record(sym: impl Into<Arc<Symbol>>) -> Self {
+        Type::Record(sym.into())
     }
 
-    pub fn class(sym: impl Into<Symbol>) -> Self {
-        Type::Class(Arc::new(sym.into()))
+    pub fn class(sym: impl Into<Arc<Symbol>>) -> Self {
+        Type::Class(sym.into())
     }
 
     pub fn variant(sym: impl Into<Arc<Symbol>>) -> Self {
         Type::Variant(sym.into())
     }
 
-    pub fn enumeration(sym: impl Into<IdentPath>) -> Self {
-        Type::Enum(Arc::new(sym.into()))
+    pub fn enumeration(path: impl Into<IdentPath>) -> Self {
+        Type::Enum(Arc::new(path.into()))
     }
 
     pub fn set(set: impl Into<Arc<SetType>>) -> Self {
         Type::Set(set.into())
     }
 
-    pub fn interface(name: impl Into<Symbol>) -> Self {
-        Type::Interface(Arc::new(name.into()))
+    pub fn interface(name: impl Into<Arc<Symbol>>) -> Self {
+        Type::Interface(name.into())
     }
 
     pub fn generic_param(name: Ident) -> Type {
@@ -156,8 +158,8 @@ impl Type {
         Type::GenericParam(Arc::new(ty_param_ty))
     }
 
-    pub fn from_struct_type(sym: impl Into<Symbol>, kind: StructKind) -> Self {
-        let sym = Arc::new(sym.into());
+    pub fn from_struct_type(sym: impl Into<Arc<Symbol>>, kind: StructKind) -> Self {
+        let sym = sym.into();
 
         match kind {
             StructKind::Class => Type::Class(sym),
@@ -316,14 +318,20 @@ impl Type {
     pub fn of_decl(type_decl: &TypeDeclItem, ctx: &Context) -> TypeResult<Self> {
         match type_decl {
             TypeDeclItem::Struct(class) if class.kind == StructKind::Record => {
-                Ok(Type::Record(Arc::new(class.name.clone())))
+                Ok(Type::record(class.name.clone()))
             },
 
-            TypeDeclItem::Struct(class) => Ok(Type::Class(Arc::new(class.name.clone()))),
+            TypeDeclItem::Struct(class) => {
+                Ok(Type::class(class.name.clone()))
+            },
 
-            TypeDeclItem::Variant(variant) => Ok(Type::Variant(variant.name.clone())),
+            TypeDeclItem::Variant(variant) => {
+                Ok(Type::variant(variant.name.clone()))
+            },
 
-            TypeDeclItem::Interface(iface) => Ok(Type::interface(iface.name.clone())),
+            TypeDeclItem::Interface(iface) => {
+                Ok(Type::interface(iface.name.clone()))
+            },
 
             TypeDeclItem::Enum(enum_decl) => {
                 enum_decl.name.expect_no_type_params(InvalidTypeParamsDeclKind::Enum)?;
@@ -348,7 +356,9 @@ impl Type {
                 Ok(Type::set(set_type))
             },
 
-            TypeDeclItem::Alias(alias) => Ok(alias.target.ty().clone()),
+            TypeDeclItem::Alias(alias) => {
+                Ok(alias.target.ty().clone())
+            },
         }
     }
 
@@ -960,7 +970,10 @@ impl Type {
             //     Some(is_iface) => is_iface.find_method_index(name, sig, ctx),
             //     None => Ok(None),
             // }
-            _ => Ok(None),
+
+            _ => {
+                Err(not_found_err())
+            },
         }
     }
 
@@ -1017,7 +1030,9 @@ impl Type {
             //     Some(is_iface) => is_iface.get_method(method_index, ctx),
             //     None => panic!("invalid type for method: {self}"),
             // }
-            _ => panic!("invalid type for method: {self}"),
+            _ => {
+                panic!("invalid type for method: {self}")
+            },
         }
     }
 

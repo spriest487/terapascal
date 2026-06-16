@@ -147,10 +147,10 @@ impl Context {
 
         root_ctx
             .primitive_implements
-            .push(Type::interface(builtin_displayable_name().full_path));
+            .push(Type::interface(builtin_displayable_name()));
         root_ctx
             .primitive_implements
-            .push(Type::interface(builtin_comparable_name().full_path));
+            .push(Type::interface(builtin_comparable_name()));
 
         root_ctx
     }
@@ -622,10 +622,7 @@ impl Context {
     ) -> TypeResult<()> {
         let name = struct_def.name.ident().clone();
 
-        let class_ty = match struct_def.kind {
-            StructKind::Class => Type::class(struct_def.name.clone()),
-            StructKind::Record => Type::record(struct_def.name.clone()),
-        };
+        let class_ty = Type::from_struct_type(struct_def.name.clone(), struct_def.kind);
 
         if self.declare_type(name.clone(), class_ty.clone(), visibility, struct_def.forward) {
             if !struct_def.forward {
