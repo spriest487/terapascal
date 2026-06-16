@@ -36,6 +36,8 @@ use terapascal_common::CIL_LIB_EXT;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
+use terapascal_ir::MetadataSource;
+use terapascal_vm::result::ExecResult;
 use terapascal_vm::ExecOpts;
 use terapascal_vm::Vm;
 
@@ -47,8 +49,6 @@ use clang::clang_print;
 
 #[cfg(feature = "backend-cil")]
 use dotnet::dotnet_build;
-use terapascal_ir::MetadataSource;
-use terapascal_vm::result::ExecResult;
 
 fn compile(args: Args) -> Result<(), RunError> {
     if args.output.is_some() && args.dump_stage.is_some() {
@@ -105,6 +105,7 @@ fn compile(args: Args) -> Result<(), RunError> {
         output_stage: args.dump_stage.unwrap_or(BuildStage::Codegen),
         source_path: args.file.clone(),
         package_names: args.packages.clone(),
+        no_system: args.no_system,
     };
     
     let output = build(&DefaultFilesystem, input);

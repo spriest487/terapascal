@@ -61,6 +61,7 @@ pub struct BuildInput {
     pub search_dirs: Vec<PathBuf>,
 
     pub package_names: Vec<String>,
+    pub no_system: bool,
 
     pub project_name: Option<String>,
     pub project_version: Option<Version>,
@@ -207,12 +208,7 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
                     },
 
                     None => {
-                        // units loaded from the main unit must have explicit paths if they don't come
-                        // from an imported package
-                        return Err(BuildError::UnitNotLoaded {
-                            unit_name: used_unit.ident,
-                            used_in_unit: unit_ident.clone(),
-                        });
+                        self.sources.add_used_unit(&unit_filename, &used_unit.ident, self.log)?
                     },
                 };
 
@@ -555,7 +551,7 @@ pub fn load_lib(
     let library = ir::decode_lib(&lib_bytes)
         .map_err(|err| {
             BuildError::ReadSourceFileFailed {
-                msg: err.to_string(),
+                msg: format!("deserialization failed: {err}"),
                 path,
             }
         })?;
@@ -598,7 +594,8 @@ fn build_with_log(
     let mut package_libs = Vec::with_capacity(input.package_names.len());
 
     let mut package_names = input.package_names.clone();
-    if !package_names.iter().any(|p| p == SYSTEM_PACKAGE_NAME) {
+    if !input.no_system
+        && !package_names.iter().any(|p| p == SYSTEM_PACKAGE_NAME) {
         package_names.insert(0, String::from(SYSTEM_PACKAGE_NAME));
     }
 

@@ -90,9 +90,10 @@ impl DiagnosticOutput for BuildError {
                 }
             },
 
-            Self::ReadSourceFileFailed { path, .. } => {
+            Self::ReadSourceFileFailed { path, msg } => {
                 let title = format!("failed to read source file {}", path.display());
                 DiagnosticMessage::new(self.severity(), title)
+                    .with_note(msg.clone())
             },
 
             Self::DuplicateUnit { unit_ident, new_path, existing_path } => {

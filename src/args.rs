@@ -55,6 +55,11 @@ pub struct Args {
     #[structopt(long = "package", short = "p")]
     pub packages: Vec<String>,
 
+    /// Disable the automatic reference to the "System" package, e.g. for compiling the system
+    /// package itself.
+    #[structopt(long = "no-system")]
+    pub no_system: bool,
+
     /// If set, run compilation to the given stage and print a representation of the output to
     /// stdout as text instead of creating an output file
     #[structopt(long = "dump", parse(try_from_str = parse_build_stage_arg))]
