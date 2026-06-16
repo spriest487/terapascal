@@ -21,6 +21,8 @@ use terapascal_common::version::Version;
 pub struct Library {
     pub name: String,
     pub version: Version,
+    
+    pub tags: Vec<TagInfo>,
 
     pub references: Vec<String>,
 
@@ -41,6 +43,8 @@ impl Library {
         Self {
             name: name.into(),
             version,
+            
+            tags: Vec::new(),
 
             references: references.into_iter().collect(),
 

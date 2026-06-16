@@ -207,13 +207,17 @@ impl Symbol {
     // the generic name of a symbol is one where the type args are populate with its own type
     // parameters, e.g. not unspecialized (unknown type params) or specialized (populated with
     // real types)
-    pub fn to_generic_name(mut self) -> Self {
-        self.type_args = match &self.type_params {
+    pub fn to_generic_name(&self) -> Self {
+        let type_args = match &self.type_params {
             None => None,
             Some(params) => Some(params.clone().into_type_args()),
         };
 
-        self
+        Self {
+            full_path: self.full_path.clone(),
+            type_params: self.type_params.clone(),
+            type_args,
+        }
     }
 }
 

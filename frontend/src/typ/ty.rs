@@ -1100,7 +1100,7 @@ impl Type {
                 let struct_kind = self.struct_kind().unwrap();
 
                 let def_name = if name.is_unspecialized_generic() {
-                    Cow::Owned(name.as_ref().clone().to_generic_name())
+                    Cow::Owned(name.to_generic_name())
                 } else {
                     Cow::Borrowed(name.as_ref())
                 };
@@ -1115,7 +1115,7 @@ impl Type {
 
             Type::Variant(name) => {
                 let def_name = if name.is_unspecialized_generic() {
-                    Cow::Owned(name.as_ref().clone().to_generic_name())
+                    Cow::Owned(name.to_generic_name())
                 } else {
                     Cow::Borrowed(name.as_ref())
                 };

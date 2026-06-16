@@ -19,7 +19,7 @@ pub fn translate_struct_def(
 ) -> ir::StructDef {
     let tags = lib.translate_tag_groups(&struct_def.tags);
 
-    let generic_name = struct_def.name.as_ref().clone().to_generic_name();
+    let generic_name = struct_def.name.to_generic_name();
     let name_path = translate_name(&generic_name, lib);
 
     let mut fields = BTreeMap::new();

@@ -101,6 +101,12 @@ type
     PascalOutParam = class
     end;
 
+    // library-level tag declaring an extra aliased name in this library for any type
+    PascalTypeAlias = class
+        name: String;
+        target: TypeInfo;
+    end;
+
 {$IFDEF RTTI}
     InvokeError = variant of IToString
         InvalidArgs;
