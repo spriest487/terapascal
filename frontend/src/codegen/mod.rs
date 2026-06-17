@@ -6,7 +6,9 @@ mod pattern;
 mod function;
 pub mod library_builder;
 mod set_flags;
+mod alias;
 
+pub use self::alias::*;
 use self::builder::IRBuilder;
 use self::expr::*;
 pub use self::function::*;

@@ -9,6 +9,7 @@ use crate::Operator;
 use derivative::*;
 use std::fmt;
 use std::fmt::Write;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::vec;
 use terapascal_common::span::Span;
@@ -330,5 +331,21 @@ impl<Part: fmt::Display + PathConcat> fmt::Display for Path<Part> {
 impl<Part: fmt::Display + PathConcat> fmt::Debug for Path<Part> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "IdentPath({})", self)
+    }
+}
+
+impl<Part> FromStr for Path<Part> where Part: FromStr {
+    type Err = Part::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = Vec::with_capacity(1);
+        for part_str in s.split('.') {
+            let part = Part::from_str(part_str)?;
+            parts.push(part);
+        }
+
+        Ok(Self {
+            parts
+        })
     }
 }

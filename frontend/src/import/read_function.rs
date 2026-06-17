@@ -159,7 +159,7 @@ impl ImportBuilder<'_> {
     ) -> ImportResult<()> {
         let scope = match path.parent() {
             Some(unit_path) => {
-                self.open_unit(&unit_path)?
+                self.open_unit(self.read_ident_path(&unit_path))?
             }
             None => {
                 ScopeID(0)

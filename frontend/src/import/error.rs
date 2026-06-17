@@ -48,6 +48,7 @@ pub enum ImportWarning {
     InvalidFunc(String, Box<ImportError>),
     InvalidMethodList(Type, BTreeMap<usize, MethodDecl>, Box<ImportError>),
     InvalidPath(String, Box<ImportError>),
+    InvalidLibTag(Box<ImportError>),
 }
 
 impl Display for ImportWarning {
@@ -67,6 +68,10 @@ impl Display for ImportWarning {
 
             ImportWarning::InvalidPath(path, err) => {
                 write!(f, "Failed to read path {path}: {err}")
+            }
+
+            ImportWarning::InvalidLibTag(err) => {
+                write!(f, "Failed to read library tag: {err}")
             }
         }
     }

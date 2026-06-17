@@ -1,9 +1,13 @@
 # IR 2.0
 * type constraints should be stored (if not enforced) in library
+* include enum type aliases in tags
+* the type of set types (as stored in tags) should be the correct enum type
+* store per-param tags for Out tags
 * visibility info
 * .NET:
   * generic method/type instantiation
   * remove flag types
+* remove as many spans as possible, they should all be optional
 
 # impls rework
 * update CIL: remove impls from interface defs, add new map
@@ -21,9 +25,6 @@
 * published methods/types shouldn't ever be stripped
 
 # IR
-* generics
-* include consts in generated libs
-* remove forward types from metadata
 * undefined symbol checking can probably be moved to IR codegen rather than during typechecking
 * make IR function src spans optional?? some builtins don't have them
 

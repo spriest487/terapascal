@@ -1,8 +1,11 @@
-use crate::ast::Access;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
+use crate::ast::Access;
+use crate::codegen::ALIAS_TAG_CLASS_NAME;
+use crate::codegen::ALIAS_TAG_NAME_FIELD;
+use crate::codegen::ALIAS_TAG_TARGET_FIELD;
 use crate::codegen::SET_TAG_ITEM_TYPE_FIELD;
 use crate::codegen::SET_TAG_MAX_FIELD;
 use crate::codegen::SET_TAG_MIN_FIELD;
@@ -203,7 +206,7 @@ impl ImportBuilder<'_> {
         let span = self.span();
 
         let unit_scope = if let Some(unit_path) = name_path.parent() {
-            self.open_unit(&unit_path)?
+            self.open_unit(self.read_ident_path(&unit_path))?
         } else {
             ScopeID(0)
         };
@@ -444,9 +447,7 @@ impl ImportBuilder<'_> {
     }
 
     fn read_def_path(&self, name_path: &ir::NamePath) -> ImportResult<Symbol> {
-        let ident_path = IdentPath::from_parts(name_path.path
-            .iter()
-            .map(|part| Ident::new(part, self.span())));
+        let ident_path = self.read_ident_path(&name_path);
 
         let type_params = self.read_def_type_params(&name_path.type_args)?;
 
@@ -476,6 +477,114 @@ impl ImportBuilder<'_> {
         }
 
         Ok(Some(TypeParamList::new(params, self.span())))
+    }
+
+    pub fn read_alias_types(&mut self) -> ImportResult<()> {
+        if self.root_ctx.is_none() {
+            // aliases only get used during typechecking
+            return Ok(());
+        }
+
+        // the alias tag class must be defined for this
+        let alias_tag_name = ir::NamePath::new([SYSTEM_UNIT_NAME.to_string()], ALIAS_TAG_CLASS_NAME);
+
+        let (alias_tag_class_id, alias_tag_def) = self
+            .metadata()
+            .find_struct_def(&alias_tag_name)
+            .ok_or_else(|| ImportError::UnsupportedFeature("alias tag class definition is not available".to_string()))?;
+
+        let name_field = alias_tag_def
+            .find_field(ALIAS_TAG_NAME_FIELD)
+            .ok_or_else(|| {
+                let msg = format!("alias tag class definition is missing field: `{ALIAS_TAG_NAME_FIELD}`");
+                ImportError::UnsupportedFeature(msg)
+            })?;
+
+        let target_field = alias_tag_def
+            .find_field(ALIAS_TAG_TARGET_FIELD)
+            .ok_or_else(|| {
+                let msg = format!("alias tag class definition is missing field: `{ALIAS_TAG_TARGET_FIELD}`");
+                ImportError::UnsupportedFeature(msg)
+            })?;
+
+        for lib_tag in &self.library.tags {
+            if let Err(err) = self.read_alias_type_tag(lib_tag, alias_tag_class_id, name_field, target_field) {
+                self.warnings.push(ImportWarning::InvalidLibTag(Box::new(err)));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn read_alias_type_tag(
+        &mut self,
+        tag: &ir::TagInfo,
+        alias_tag_class_id: ir::TypeDefID,
+        name_field: ir::FieldID,
+        target_field: ir::FieldID,
+    ) -> ImportResult<()> {
+        if tag.class_id != alias_tag_class_id {
+            return Ok(());
+        }
+
+        let Some(name_val) = tag.fields.get(&name_field) else {
+            let msg = "missing alias tag name field".to_string() ;
+            return Err(ImportError::InvalidData(msg));
+        };
+
+        let Some(target_val) = tag.fields.get(&target_field) else {
+            let msg = "missing alias tag target field".to_string() ;
+            return Err(ImportError::InvalidData(msg));
+        };
+
+        let ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::StringLiteral(name_string))) = name_val else {
+            let msg = "invalid value for alias tag name field".to_string() ;
+            return Err(ImportError::InvalidData(msg))
+        };
+
+        let Some(name) = self.metadata().get_string(*name_string).cloned() else {
+            return Err(ImportError::MissingString(*name_string))
+        };
+
+        let ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(target_type))) = target_val else {
+            let msg = "invalid value for alias tag target field".to_string();
+            return Err(ImportError::InvalidData(msg))
+        };
+        let target_type = self.read_type(target_type)?;
+
+        let mut name_path: Vec<_> = name.split('.')
+            .map(|part| Ident::new(part, self.span()))
+            .collect();
+
+        let Some(alias_name) = name_path.pop() else {
+            let msg = "empty alias name".to_string();
+            return Err(ImportError::InvalidData(msg));
+        };
+
+        if name_path.is_empty() {
+            let msg = format!("alias name missing namespace: {name}");
+            return Err(ImportError::InvalidData(msg));
+        };
+        let unit_path = IdentPath::from_parts(name_path);
+
+        let aliased_path = target_type
+            .full_name()
+            .map(|name| name.full_path.clone())
+            .ok_or_else(|| {
+                ImportError::InvalidData(format!("invalid alias target type: {}", target_type))
+            })?;
+
+        let scope_id  = self.open_unit(unit_path)?;
+
+        let Some(root_ctx) = self.root_ctx.as_mut() else {
+            return Ok(());
+        };
+
+        root_ctx.declare_alias(alias_name, aliased_path)?;
+
+        root_ctx.pop_scope(scope_id);
+
+        Ok(())
     }
 
     pub fn finish_type_defs(&mut self) {

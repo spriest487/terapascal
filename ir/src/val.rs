@@ -239,6 +239,12 @@ impl From<VariableID> for Ref {
     }
 }
 
+impl From<StringID> for Ref {
+    fn from(id: StringID) -> Self {
+        Ref::Global(GlobalRef::StringLiteral(id))
+    }
+}
+
 impl From<FieldRef> for Ref {
     fn from(value: FieldRef) -> Self {
         Ref::Field(Box::new(value))

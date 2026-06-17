@@ -17,13 +17,14 @@ use crate::typ::ast::StructDecl;
 use crate::typ::ast::Tag;
 use crate::typ::ast::TagItem;
 use crate::typ::ast::VariantDecl;
-use crate::typ::{builtin_typeinfo_name, SetType};
+use crate::typ::builtin_typeinfo_name;
 use crate::typ::ConstValue;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
 use crate::typ::Primitive;
 use crate::typ::ScopeID;
+use crate::typ::SetType;
 use crate::typ::Type;
 use crate::typ::TypeName;
 use crate::typ::TypedValue;
@@ -79,6 +80,8 @@ impl<'a> ImportBuilder<'a> {
     }
 
     pub fn import(&mut self) -> ImportResult<()> {
+        self.read_alias_types()?;
+
         for (type_id, type_decl) in self.library.metadata.type_decls() {
             if let Err(err) = self.read_type_decl(type_id, type_decl) {
                 let type_name = type_id.to_pretty_string(self.metadata());
@@ -291,12 +294,12 @@ impl<'a> ImportBuilder<'a> {
         }
     }
 
-    pub fn open_unit(&mut self, path: &ir::NamePath) -> ImportResult<ScopeID> {
-        assert!(path.type_args.is_empty());
+    pub fn read_ident_path(&self, path: &ir::NamePath) -> IdentPath {
+        IdentPath::from_parts(path.path.iter()
+            .map(|part| Ident::new(part, self.span())))
+    }
 
-        let unit_path = IdentPath::from_parts(path.path.iter()
-            .map(|part| Ident::new(part, self.span())));
-
+    pub fn open_unit(&mut self, unit_path: IdentPath) -> ImportResult<ScopeID> {
         self.namespaces.insert(unit_path.clone());
 
         if let Some(ctx) = self.root_ctx.as_mut() {

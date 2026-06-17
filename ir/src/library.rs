@@ -82,6 +82,15 @@ impl fmt::Display for Library {
             writeln!(f)?;
         }
 
+        if !self.tags.is_empty() {
+            writeln!(f, "Tags:")?;
+            for tag in &self.tags {
+                tag.format_pretty(self.metadata.as_formatter(), f)?;
+                writeln!(f)?;
+            }
+            writeln!(f)?;
+        }
+
         writeln!(f, "Type Definitions:")?;
         writeln!(f)?;
 

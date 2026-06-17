@@ -1,6 +1,8 @@
 mod init;
 mod function;
 
+pub use self::function::*;
+use self::init::gen_tags_init;
 use crate::ast;
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
@@ -19,17 +21,17 @@ use crate::codegen::SetFlagsType;
 use crate::codegen::*;
 use crate::ir;
 use crate::typ::ast::const_eval::ConstEval;
+use crate::typ::builtin_funcinfo_name;
+use crate::typ::builtin_ident;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::free_mem_sig;
 use crate::typ::get_mem_sig;
 use crate::typ::seq::TypeSequenceSupport;
+use crate::typ::Specializable;
+use crate::typ::TypeArgsResult;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::builtin_funcinfo_name;
-use crate::typ::{builtin_ident, Specializable, TypeArgsResult};
-pub use function::*;
-use init::gen_tags_init;
 use ir::InstructionBuilder as _;
 use ir::MetadataSource as _;
 use linked_hash_map::LinkedHashMap;
@@ -46,6 +48,8 @@ pub struct LibraryBuilder<'a> {
     version: Version,
 
     references: &'a [LibraryRef],
+
+    tags: Vec<ir::TagInfo>,
 
     root_ctx: &'a typ::Context,
 
@@ -140,6 +144,8 @@ impl<'a> LibraryBuilder<'a> {
             version,
 
             metadata,
+
+            tags: Vec::new(),
 
             opts,
             root_ctx: src_metadata,
@@ -243,6 +249,7 @@ impl<'a> LibraryBuilder<'a> {
         let mut lib = ir::Library::new(self.name, self.version, ref_names, metadata);
         lib.functions = self.functions;
         lib.init = self.init_code;
+        lib.tags.extend(self.tags);
 
         lib
     }
@@ -388,6 +395,8 @@ impl<'a> LibraryBuilder<'a> {
             typ::ast::TypeDeclItem::Alias(alias_type) => {
                 let target_type = alias_type.target.ty();
                 self.translate_type(target_type);
+
+                create_alias_tag(self, &alias_type.name.full_path, target_type);
             }
 
             typ::ast::TypeDeclItem::Enum(enum_decl) => {
@@ -484,6 +493,10 @@ impl<'a> LibraryBuilder<'a> {
 
         index
     }
+    
+    pub fn find_struct_def(&self, name_path: &IdentPath, kind: StructKind) -> Option<&Arc<typ::ast::StructDecl>> {
+        self.root_ctx.find_struct_def(name_path, kind).ok()
+    }
 
     pub fn find_type_seq_support(&self, src_ty: &typ::Type) -> Option<TypeSequenceSupport> {
         TypeSequenceSupport::try_from_type(src_ty, &self.root_ctx).ok()
@@ -512,6 +525,10 @@ impl<'a> LibraryBuilder<'a> {
         self.gen_type_info(&set_flags_type.struct_id.to_struct_type([]));
 
         set_flags_type
+    }
+    
+    pub fn add_tag(&mut self, tag: ir::TagInfo) {
+        self.tags.push(tag);
     }
 
     pub fn translate_tag_groups(&mut self, tags: &[typ::ast::Tag]) -> Vec<ir::TagInfo> {
