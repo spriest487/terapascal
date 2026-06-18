@@ -8,13 +8,13 @@ use crate::GlobalValue;
 use crate::Vm;
 use ir::generic::instantiate_function_def;
 use ir::generic::instantiate_sig;
+use ir::generic::instantiate_type;
+use ir::MetadataSource as _;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::SharedStringKey;
-use terapascal_ir::generic::instantiate_type;
-use terapascal_ir::MetadataSource;
 
 pub mod ffi;
 
@@ -245,7 +245,8 @@ pub fn instantiate_func(
     let generic_func = vm.functions
         .get(&ir::FunctionRef::new(func_ref.id))
         .ok_or_else(|| {
-            let msg = format!("missing generic function definition: {}", func_ref.id);
+            let func_ref_display = func_ref.to_pretty_string(vm.metadata());
+            let msg = format!("missing generic function definition: {func_ref_display}");
             ExecError::illegal_state(msg)
         })?;
 
