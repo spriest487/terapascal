@@ -3,8 +3,8 @@ mod test;
 
 use crate::ast as ast;
 use crate::codegen::expr::literal_to_val;
-use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::LibraryBuilder;
+use crate::codegen::library_builder::{FunctionDeclKey, MethodDeclKey};
 use crate::codegen::metadata::*;
 use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;
@@ -194,7 +194,12 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self_ty: typ::Type,
         self_ty_method_index: usize,
     ) -> FunctionInstance {
-        self.library.translate_method(self_ty, self_ty_method_index)
+        let key = FunctionDeclKey::Method(MethodDeclKey {
+            self_ty,
+            method_index: self_ty_method_index,
+        });
+
+        self.library.instantiate_func(&key)
     }
 
     pub fn translate_func(
