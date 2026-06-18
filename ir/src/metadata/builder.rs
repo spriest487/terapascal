@@ -19,6 +19,7 @@ use crate::StringID;
 use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
+use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
 use crate::Value;
@@ -272,6 +273,10 @@ impl MetadataSource for MetadataBuilder {
 
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {
         self.find_in_self_or_refs(move |metadata| metadata.get_type_decl(id))
+    }
+
+    fn get_type_def(&self, id: TypeDefID) -> Option<&TypeDef> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_type_def(id))
     }
 
     fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath> {

@@ -9,17 +9,19 @@ mod set_flags;
 mod alias;
 
 pub use self::alias::*;
+pub use self::function::*;
+pub use self::set_flags::*;
+
 use self::builder::IRBuilder;
 use self::expr::*;
-pub use self::function::*;
 use self::library_builder::LibraryBuilder;
 use self::metadata::*;
-pub use self::set_flags::*;
 use self::stmt::*;
 use crate::ast::StructKind;
 use crate::codegen::library_builder::LibraryRef;
 use crate::ir;
 use crate::typ as typ;
+use ir::MetadataSource as _;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct CodegenOpts {
@@ -47,6 +49,9 @@ pub fn gen_lib(
 ) -> ir::Library {
     let mut lib = LibraryBuilder::new(module.name.as_str(), module.version, type_ctx, refs, opts);
 
+    // if the system package is excluded, these essential types need to be defined in this library.
+    // normally these defs are loaded from the precompiled system library or, when compiling the
+    // system unit itself, superseded by the defs there
     translate_builtin_class(&mut lib, type_ctx, &typ::builtin_string_name(), ir::STRING_ID);
 
     if opts.rtti {
@@ -68,10 +73,16 @@ fn translate_builtin_class(
     name: &typ::Symbol,
     id: ir::TypeDefID
 ) {
+    // definition must exist in the source module - we can assume builtins always are
     let Ok(class_def) = type_ctx.find_struct_def(&name.full_path, StructKind::Class)
     else {
         return;
     };
+
+    // if there's already a definition loaded, e.g. from a referenced library, skip this item
+    if lib.metadata().get_type_def(id).is_some() {
+        return;
+    }
 
     let name = translate_name(name, lib);
 

@@ -373,7 +373,10 @@ impl Metadata {
             _ => return true,
         };
 
-        !self.type_decls[&id].is_forward()
+        match self.type_decls.get(&id) {
+            Some(decl) => !decl.is_forward(),
+            None => false,
+        }
     }
 
     pub fn impls(&self, ty: &Type) -> Vec<InterfaceID> {
@@ -500,6 +503,15 @@ impl MetadataSource for Metadata {
 
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl> {
         self.type_decls.get(&id)
+    }
+
+    fn get_type_def(&self, id: TypeDefID) -> Option<&TypeDef> {
+        let decl = self.type_decls.get(&id)?;
+
+        match decl {
+            TypeDecl::Def(def) => Some(def),
+            _ => None,
+        }
     }
 
     fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath> {

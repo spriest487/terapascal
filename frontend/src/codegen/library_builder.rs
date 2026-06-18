@@ -33,7 +33,6 @@ use crate::typ::Specializable;
 use crate::typ::TypeArgsResult;
 use crate::typ::SYSTEM_UNIT_NAME;
 use ir::InstructionBuilder as _;
-use ir::MetadataSource as _;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -493,7 +492,7 @@ impl<'a> LibraryBuilder<'a> {
 
         index
     }
-    
+
     pub fn find_struct_def(&self, name_path: &IdentPath, kind: StructKind) -> Option<&Arc<typ::ast::StructDecl>> {
         self.root_ctx.find_struct_def(name_path, kind).ok()
     }
@@ -526,7 +525,7 @@ impl<'a> LibraryBuilder<'a> {
 
         set_flags_type
     }
-    
+
     pub fn add_tag(&mut self, tag: ir::TagInfo) {
         self.tags.push(tag);
     }

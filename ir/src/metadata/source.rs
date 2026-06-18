@@ -46,6 +46,7 @@ pub trait MetadataSource : Sized {
 
     fn type_decls(&self) -> impl Iterator<Item = (TypeDefID, &TypeDecl)>;
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl>;
+    fn get_type_def(&self, id: TypeDefID) -> Option<&TypeDef>;
     fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath>;
     fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID>;
     fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>>;
