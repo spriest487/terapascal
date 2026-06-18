@@ -170,7 +170,7 @@ impl Context {
     }
 
     pub fn pop_scope(&mut self, id: ScopeID) -> Scope {
-        assert_ne!(ScopeID(0), id, "can't pop the root scope");
+        assert!(!id.is_root(), "pop_scope: can't pop the root scope");
 
         loop {
             let popped = self.scopes.pop_scope();

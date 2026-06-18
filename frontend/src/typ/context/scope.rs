@@ -19,6 +19,12 @@ use std::hash::Hash;
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Copy)]
 pub struct ScopeID(pub usize);
 
+impl ScopeID {
+    pub fn is_root(self) -> bool {
+        self.0 == 0
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scope {
     id: ScopeID,

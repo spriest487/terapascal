@@ -309,4 +309,19 @@ impl<'a> ImportBuilder<'a> {
             Ok(ScopeID(0))
         }
     }
+
+    pub fn with_unit_scope<F, T>(&mut self, unit_path: IdentPath, f: F) -> ImportResult<T>
+    where
+        F: FnOnce(&mut Self) -> ImportResult<T>
+    {
+        let scope_id = self.open_unit(unit_path)?;
+
+        let result = f(self);
+
+        if !scope_id.is_root() && let Some(root_ctx) = self.root_ctx.as_mut() {
+            root_ctx.pop_scope(scope_id);
+        }
+
+        result
+    }
 }

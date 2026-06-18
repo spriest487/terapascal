@@ -28,17 +28,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 impl ImportBuilder<'_> {
-    pub fn read_function(
-        &mut self,
-        func_id: ir::FunctionID,
-        func_info: &ir::FunctionInfo,
-    ) -> ImportResult<()> {
-        let tags = self.read_tags(&func_info.tags)?;
-
-        let result_type = self.read_type(&func_info.sig.result_type)?;
-
-        let mut param_groups = Vec::with_capacity(func_info.sig.param_types.len());
-        for (i, param_type) in func_info.sig.param_types.iter().enumerate() {
+    pub fn read_params(&mut self, param_types: &[ir::Type]) -> ImportResult<Vec<FunctionParamGroup>> {
+        let mut param_groups = Vec::with_capacity(param_types.len());
+        for (i, param_type) in param_types.iter().enumerate() {
             let (param_type, modifier) = match param_type {
                 ir::Type::TempRef(deref_type) => {
                     let param_type = self.read_type(deref_type)?;
@@ -66,6 +58,19 @@ impl ImportBuilder<'_> {
                 span: None,
             });
         }
+
+        Ok(param_groups)
+    }
+
+    pub fn read_function(
+        &mut self,
+        func_id: ir::FunctionID,
+        func_info: &ir::FunctionInfo,
+    ) -> ImportResult<()> {
+        let tags = self.read_tags(&func_info.tags)?;
+
+        let result_type = self.read_type(&func_info.sig.result_type)?;
+        let param_groups = self.read_params(&func_info.sig.param_types)?;
 
         match &func_info.identity {
             ir::FunctionIdentity::Path(path) => {

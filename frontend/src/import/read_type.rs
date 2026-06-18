@@ -1,8 +1,9 @@
+use crate::ast::Access;
+use crate::ast::FunctionDeclKind;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
-use crate::ast::Access;
 use crate::codegen::ALIAS_TAG_CLASS_NAME;
 use crate::codegen::ALIAS_TAG_NAME_FIELD;
 use crate::codegen::ALIAS_TAG_TARGET_FIELD;
@@ -16,6 +17,10 @@ use crate::import::ImportResult;
 use crate::import::ImportWarning;
 use crate::ir;
 use crate::typ::ast::FieldDecl;
+use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::FunctionName;
+use crate::typ::ast::InterfaceDecl;
+use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::MethodDeclSection;
 use crate::typ::ast::StructDecl;
@@ -101,9 +106,8 @@ impl ImportBuilder<'_> {
             });
         }
 
-        // TODO
-        let implements = None;
-        let where_clause = None;
+        let implements = None; // TODO
+        let where_clause = None; // TODO: generic constraints in IR
 
         let tags = self.read_tags(&def.tags)?;
 
@@ -173,9 +177,8 @@ impl ImportBuilder<'_> {
 
         let tags = self.read_tags(&def.tags)?;
 
-        // TODO
-        let implements = None;
-        let where_clause = None;
+        let implements = None; // TODO
+        let where_clause = None; // TODO: generic constraints in IR
 
         let struct_decl = StructDecl {
             name: Arc::new(name),
@@ -280,7 +283,7 @@ impl ImportBuilder<'_> {
             }
 
             ir::ObjectID::Interface(iface_id) => {
-                self.read_interface_type(*iface_id)
+                self.read_iface_type(*iface_id)
             }
 
             ir::ObjectID::AnyClosure(sig) => {
@@ -432,18 +435,83 @@ impl ImportBuilder<'_> {
         None
     }
 
-    fn read_interface_type(&mut self, id: ir::InterfaceID) -> ImportResult<Type> {
+    fn read_iface_type(&mut self, id: ir::InterfaceID) -> ImportResult<Type> {
         let def = self
             .metadata()
             .get_iface_def(id)
+            .cloned()
             .ok_or_else(|| {
                 let type_name = id.to_interface_ptr_type().to_pretty_string(self.metadata());
                 ImportError::MissingTypeDef(type_name)
             })?;
 
+        let tags = self.read_tags(&def.tags)?;
         let name = self.read_def_path(&def.name)?;
 
-        Ok(Type::interface(name))
+        let iface_type = Type::interface(name.clone());
+
+        let mut methods = Vec::with_capacity(def.methods.len());
+
+        for method in &def.methods {
+            let method_ident = Ident::new(&method.name, self.span());
+            let method_name = FunctionName::new_method_decl(
+                method_ident,
+                None,
+                iface_type.clone(),
+                None,
+            );
+
+            // TODO: interface method decls can't have tags yet, only impls can
+            let method_tags = Vec::new();
+
+            let result_type = self.read_type(&method.return_ty)?;
+            let param_groups = self.read_params(&method.params)?;
+
+            methods.push(InterfaceMethodDecl {
+                decl: Arc::new(FunctionDecl {
+                    name: method_name,
+                    tags: method_tags,
+                    kind: FunctionDeclKind::Function,
+                    span: self.span(),
+                    param_groups,
+                    result_ty: TypeName::Unspecified(result_type),
+                    mods: vec![],
+                    kw_span: None,
+                    where_clause: None,
+                }),
+            });
+        }
+
+        let name = Arc::new(name);
+
+        let iface_decl = InterfaceDecl {
+            name: name.clone(),
+            tags,
+            methods,
+            supers: None,
+            forward: false,
+            where_clause: None, // TODO: generic constraints in IR
+            end_kw_span: None,
+            kw_span: self.span(),
+            span: self.span(),
+        };
+
+        self.declare_type_def_with(&name.full_path, |builder| {
+            let Some(root_ctx) = builder.root_ctx.as_mut() else {
+                return Ok(());
+            };
+
+            let visibility = Visibility::Interface; // TODO: access modifiers in IR
+
+            if let Err(err) = root_ctx.declare_iface(Arc::new(iface_decl), visibility) {
+                let msg = format!("Declaring interface type {} failed", iface_type);
+                builder.warnings.push(ImportWarning::InvalidType(msg, Box::new(ImportError::from(err))));
+            }
+
+            Ok(())
+        })?;
+
+        Ok(iface_type)
     }
 
     fn read_def_path(&self, name_path: &ir::NamePath) -> ImportResult<Symbol> {
@@ -588,6 +656,7 @@ impl ImportBuilder<'_> {
     }
 
     pub fn finish_type_defs(&mut self) {
+        // add all imported method functions to their appropriate declaring types as members
         let mut type_methods = HashMap::new();
         mem::swap(&mut type_methods, &mut self.type_methods);
 
@@ -598,6 +667,67 @@ impl ImportBuilder<'_> {
         }
 
         assert!(self.type_methods.is_empty());
+
+        let struct_defs: Vec<_> = self.struct_defs.drain().collect();
+        for (path, struct_def) in struct_defs {
+            let struct_def = Arc::new(struct_def);
+
+            if let Err(err) = self.declare_struct_def(&path, struct_def.clone()) {
+                let msg = format!("Declaring struct type {} failed", struct_def.name);
+
+                self.warnings.push(ImportWarning::InvalidType(msg, Box::new(ImportError::from(err))));
+            }
+        }
+
+        let variant_defs: Vec<_> = self.variant_defs.drain().collect();
+        for (path, variant_def) in variant_defs {
+            let variant_def = Arc::new(variant_def);
+
+            if let Err(err) = self.declare_variant_def(&path, variant_def.clone()) {
+                let msg = format!("Declaring variant type {} failed", variant_def.name);
+                self.warnings.push(ImportWarning::InvalidType(msg, Box::new(ImportError::from(err))));
+            }
+        }
+    }
+
+    fn declare_type_def_with<F>(&mut self, type_path: &IdentPath, f: F) -> ImportResult<()>
+        where F: FnOnce(&mut Self) -> ImportResult<()>
+    {
+        let Some(unit_path) = type_path.parent() else {
+            return Err(ImportError::InvalidData(format!("invalid type decl path: {type_path}")));
+        };
+
+        self.with_unit_scope(unit_path, |builder| {
+            f(builder)
+        })?;
+
+        Ok(())
+    }
+
+    fn declare_struct_def(&mut self, path: &IdentPath, struct_def: Arc<StructDecl>) -> ImportResult<()> {
+        self.declare_type_def_with(path, |builder| {
+            let visibility =  Visibility::Interface; // TODO: access modifiers in IR
+
+            let Some(root_ctx) = builder.root_ctx.as_mut() else {
+                return Ok(());
+            };
+
+            root_ctx.declare_struct(struct_def, visibility)?;
+            Ok(())
+        })
+    }
+
+    fn declare_variant_def(&mut self, path: &IdentPath, variant_def: Arc<VariantDecl>) -> ImportResult<()> {
+        self.declare_type_def_with(path, |builder| {
+            let visibility =  Visibility::Interface; // TODO: access modifiers in IR
+
+            let Some(root_ctx) = builder.root_ctx.as_mut() else {
+                return Ok(());
+            };
+
+            root_ctx.declare_variant(variant_def, visibility)?;
+            Ok(())
+        })
     }
 
     fn finish_type_def(
