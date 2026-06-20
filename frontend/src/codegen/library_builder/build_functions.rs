@@ -378,7 +378,15 @@ impl<'a> LibraryBuilder<'a> {
                     .map(|part| part.to_string())
                     .collect();
                 let name = func_decl.name.ident.to_string();
-                let path = ir::NamePath::new(ns, name);
+
+                let mut path = ir::NamePath::new(ns, name);
+
+                if let Some(type_params) = func_decl.name.type_params.as_ref() {
+                    for type_param in &type_params.items {
+                        let generic_type = ir::Type::Generic(Rc::new(type_param.name.to_string()));
+                        path.type_args.push(generic_type)
+                    }
+                }
 
                 ir::FunctionIdentity::Path(path)
             }

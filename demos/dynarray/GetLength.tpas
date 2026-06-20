@@ -5,4 +5,8 @@ initialization
     var a: array of Integer := [];
     var aLen := a.Length;
     WriteLn(aLen.ToString());
+
+    var b: array of Integer := [1, 2, 3];
+    var bLen := b.Length;
+    WriteLn(bLen.ToString());
 end

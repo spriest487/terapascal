@@ -256,6 +256,15 @@ impl Library {
 
             if let Some(func_info) = self.metadata().get_function_info(*id) {
                 write_tag_list(&func_info.tags, formatter, f)?;
+
+                if let Some(path) = func_info.identity.as_path()
+                    && !path.type_args.is_empty()
+                {
+                    writeln!(f, "Type arguments:")?;
+                    for arg in &path.type_args {
+                        writeln!(f, "\t{arg}")?;
+                    }
+                }
             }
 
             match func {

@@ -1,6 +1,6 @@
 # IR 2.0
 * type constraints should be stored (if not enforced) in library
-* include enum type aliases in tags
+* stop interfaces being copied from referenced libs
 * the type of set types (as stored in tags) should be the correct enum type
 * store per-param tags for Out tags
 * visibility info
