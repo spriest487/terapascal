@@ -1,13 +1,15 @@
-use std::rc::Rc;
-use crate::{FunctionID, FunctionIdentity};
+use crate::FunctionID;
+use crate::FunctionIdentity;
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::MetadataBuilder;
+use crate::MetadataCollection;
 use crate::NamePath;
 use crate::StructDef;
 use crate::StructIdentity;
 use crate::TagInfo;
 use crate::TypeDefID;
+use std::rc::Rc;
 
 impl MetadataBuilder {
     pub fn insert_func(

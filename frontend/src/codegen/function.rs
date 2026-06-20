@@ -9,6 +9,7 @@ use std::iter;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_ir::InstructionBuilder;
+use terapascal_ir::MetadataSource;
 
 #[derive(Clone, Debug)]
 pub struct FunctionInstance {

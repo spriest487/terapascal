@@ -536,7 +536,7 @@ impl Vm {
                 let iface_ty = iface_id.to_interface_ptr_type();
                 let _ = self.metadata().format_type(&iface_ty, &mut err);
                 err.push('.');
-                let _ = self.metadata().format_method(iface_id, method, &mut err);
+                let _ = self.metadata().format_iface_method(iface_id, method, &mut err);
                 err.push_str(" missing implementation for ");
                 let _ = self.metadata().format_type(&instance_ty, &mut err);
 
@@ -1988,7 +1988,7 @@ impl Vm {
         }
 
         // method definitions type arg lists are prefixed with the enclosing type's type arg list
-        let func_ref = match self_type.def_id() {
+        let func_ref = match self_type.definition_ref() {
             Some(def_id) => {
                 ir::FunctionRef::new(func).with_args(def_id.args.clone())
             }

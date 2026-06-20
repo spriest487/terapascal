@@ -1,4 +1,3 @@
-use crate::write_instruction_list;
 use crate::ExternalFunctionRef;
 use crate::Function;
 use crate::FunctionDef;
@@ -9,12 +8,13 @@ use crate::Metadata;
 use crate::MetadataSource;
 use crate::TagInfo;
 use crate::TypeDef;
+use crate::write_instruction_list;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::fmt;
 use std::io;
 use std::sync::Arc;
+use std::fmt;
 use terapascal_common::version::Version;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -4,6 +4,7 @@ use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::InterfaceImpl;
 use crate::MetadataBuilder;
+use crate::MetadataCollection;
 use crate::MetadataSource;
 use crate::MethodID;
 use crate::NamePath;
@@ -140,10 +141,6 @@ impl MetadataBuilder {
             }
         }
     }
-    
-    pub fn get_struct_def(&self, id: TypeDefID) -> Option<&StructDef> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_struct_def(id))
-    }
 
     pub fn define_variant(&mut self, id: TypeDefID, variant_def: VariantDef) {
         match &mut self.metadata.type_decls[&id] {
@@ -161,14 +158,6 @@ impl MetadataBuilder {
                 );
             },
         }
-    }
-    
-    pub fn find_variant_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &VariantDef)> {
-        self.find_in_self_or_refs(move |metadata| metadata.find_variant_def(name_path))
-    }
-
-    pub fn get_variant_def(&self, id: TypeDefID) -> Option<&VariantDef> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_variant_def(id))
     }
 
     pub fn declare_iface(&mut self, name: &NamePath) -> InterfaceID {

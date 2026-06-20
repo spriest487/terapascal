@@ -12,6 +12,7 @@ use crate::NamePath;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
 use std::fmt;
+use std::write;
 
 const IX_WIDTH: usize = 8;
 
@@ -147,7 +148,7 @@ pub trait IRFormatter {
                 self.format_type(&Type::Object(ObjectID::Interface(*iface_id)), f)?;
 
                 write!(f, ").")?;
-                self.format_method(*iface_id, *method, f)?;
+                self.format_iface_method(*iface_id, *method, f)?;
                 write!(f, "(")?;
 
                 for (i, arg) in rest_args.iter().enumerate() {
@@ -313,12 +314,21 @@ pub trait IRFormatter {
     fn format_ref(&self, r: &Ref, f: &mut dyn fmt::Write) -> fmt::Result;
     fn format_func_ref(&self, r: &FunctionRef, f: &mut dyn fmt::Write) -> fmt::Result;
     fn format_field(&self, of_ty: &Type, field: FieldID, f: &mut dyn fmt::Write) -> fmt::Result;
-    fn format_method(
+
+    fn format_iface_method(
         &self,
         iface: InterfaceID,
         method: MethodID,
         f: &mut dyn fmt::Write,
     ) -> fmt::Result;
+
+    fn format_type_def_method(
+        &self,
+        def_id: TypeDefID,
+        method: MethodID,
+        f: &mut dyn fmt::Write,
+    ) -> fmt::Result;
+
     fn format_variant_case(&self, of_ty: &Type, tag: usize, f: &mut dyn fmt::Write) -> fmt::Result;
     
     fn format_bin_op_instruction<W: fmt::Write>(&self,
@@ -409,9 +419,17 @@ impl IRFormatter for RawFormatter {
         write!(f, "{}", field)
     }
 
-    fn format_method(
+    fn format_iface_method(
         &self,
         _iface_id: InterfaceID,
+        method: MethodID,
+        f: &mut dyn fmt::Write,
+    ) -> fmt::Result {
+        write!(f, "<method {}>", method.0)
+    }
+
+    fn format_type_def_method(&self,
+        _def_id: TypeDefID,
         method: MethodID,
         f: &mut dyn fmt::Write,
     ) -> fmt::Result {

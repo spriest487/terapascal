@@ -90,11 +90,13 @@ impl TestCase {
     
     fn run_vm<RunFn>(&self, opts: &Opts, run: RunFn) -> io::Result<ExitStatus> 
         where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
-    {        
+    {
         let mut build_stdout = Vec::new();
         let mut build_stderr = Vec::new();
         
         let module_path = target_file_path(&self.path, opts, "lib")?;
+        // eprintln!("module path: {}", module_path.display());
+
         if is_dirty(&module_path, &self.path, opts)? {
             let mut build_command = Command::new(&opts.compiler);
             build_command.arg(&self.path);

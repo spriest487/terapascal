@@ -8,6 +8,7 @@ use crate::typ::Symbol;
 use crate::typ::SYSTEM_UNIT_NAME;
 use std::rc::Rc;
 use terapascal_common::span::Span;
+use terapascal_ir::MetadataSource;
 
 pub const ALIAS_TAG_CLASS_NAME: &str = "PascalTypeAlias";
 pub const ALIAS_TAG_NAME_FIELD: &str = "name";

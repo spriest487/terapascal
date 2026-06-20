@@ -169,6 +169,16 @@ impl FunctionIdentity {
     pub fn internal(name: impl Into<String>) -> Self {
         Self::Internal(Rc::new(name.into()))
     }
+    
+    pub fn declaring_type(&self) -> Option<&Type> {
+        match self {
+            FunctionIdentity::Path(..)
+            | FunctionIdentity::Internal(..) => None,
+
+            FunctionIdentity::Method { declaring_type, .. }
+            | FunctionIdentity::Destructor { declaring_type, .. } => Some(declaring_type),
+        }
+    }
 
     pub fn to_pretty_string(&'_ self, formatter: &impl IRFormatter) -> Cow<'_, String> {
         match self {

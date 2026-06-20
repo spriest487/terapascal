@@ -655,7 +655,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
 
                     // add enclosing type args, if any
                     let mut method_ref = ir::FunctionRef::new(func);
-                    if let Some(self_type_ref) = self_type.def_id() {
+                    if let Some(self_type_ref) = self_type.definition_ref() {
                         method_ref.args = self_type_ref.args.clone();
                     }
 

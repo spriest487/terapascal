@@ -215,10 +215,14 @@ impl Type {
         }
     }
     
-    pub fn def_id(&'_ self) -> Option<Cow<'_, Rc<TypeRef>>> {
+    pub fn definition_ref(&'_ self) -> Option<Cow<'_, Rc<TypeRef>>> {
         match self {
             Type::Variant(id)
             | Type::Struct(id) => {
+                Some(Cow::Borrowed(id))
+            },
+
+            Type::Object(ObjectID::Class(id)) => {
                 Some(Cow::Borrowed(id))
             },
 

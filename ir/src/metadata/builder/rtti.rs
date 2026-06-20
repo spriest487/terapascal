@@ -1,4 +1,5 @@
 use crate::MetadataBuilder;
+use crate::MetadataCollection;
 use crate::MetadataSource;
 use crate::Type;
 use crate::TypeInfo;

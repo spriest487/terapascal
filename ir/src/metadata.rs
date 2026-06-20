@@ -4,13 +4,22 @@ mod source;
 mod tags;
 mod vars;
 mod format;
+mod collection;
 
+pub use self::builder::MetadataBuilder;
+pub use self::collection::MetadataCollection;
+pub use self::ids::*;
 pub use self::source::InterfaceMethodImplRef;
-use crate::metadata::vars::ConstInfo;
+pub use self::source::MetadataSource;
+pub use self::tags::TagInfo;
+pub use self::vars::VariableInfo;
+
+use self::vars::ConstInfo;
 use crate::typeinfo::TypeInfo;
-use crate::{FunctionID, FunctionSig};
+use crate::FunctionID;
 use crate::FunctionIdentity;
 use crate::FunctionInfo;
+use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceDecl;
 use crate::InterfaceDef;
@@ -22,18 +31,13 @@ use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
 use crate::VariantDef;
-pub use builder::MetadataBuilder;
-pub use ids::*;
 use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 use serde::Serialize;
-pub use source::MetadataSource;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
-pub use tags::TagInfo;
-pub use vars::VariableInfo;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
@@ -325,7 +329,7 @@ impl Metadata {
                                 iface_id.to_interface_ptr_type().to_pretty_string(self);
 
                             let mut desc = format!("impl of {}.", iface_name);
-                            let _ = self.format_method(*iface_id, *method, &mut desc);
+                            let _ = self.format_iface_method(*iface_id, *method, &mut desc);
                             desc.push_str(" for ");
                             let _ = self.format_type(impl_ty, &mut desc);
 
@@ -431,28 +435,6 @@ impl Metadata {
         None
     }
 
-    // find the declared ID and definition of a struct. if the struct is only forward-declared
-    // when this call is made, the definition part of the result will be None
-    pub fn find_struct_def(&self, name: &NamePath) -> Option<(TypeDefID, &StructDef)> {
-        self.type_decls.iter().find_map(|(id, def)| match def {
-            TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) => {
-                Some((*id, struct_def))
-            },
-
-            _ => None,
-        })
-    }
-
-    pub fn find_variant_def(&self, name: &NamePath) -> Option<(TypeDefID, &VariantDef)> {
-        self.type_decls.iter().find_map(|(id, def)| match def {
-            TypeDecl::Def(TypeDef::Variant(variant_def)) if variant_def.name == *name => {
-                Some((*id, variant_def))
-            },
-
-            _ => None,
-        })
-    }
-
     pub fn find_string_id(&self, string: &str) -> Option<StringID> {
         self.string_literals.iter().find_map(|(id, string_lit)| {
             if string_lit == string {
@@ -487,6 +469,18 @@ impl MetadataSource for Metadata {
         }
     }
 
+    // find the declared ID and definition of a struct. if the struct is only forward-declared
+    // when this call is made, the definition part of the result will be None
+    fn find_struct_def(&self, name: &NamePath) -> Option<(TypeDefID, &StructDef)> {
+        self.type_decls.iter().find_map(|(id, def)| match def {
+            TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) => {
+                Some((*id, struct_def))
+            },
+
+            _ => None,
+        })
+    }
+
     fn get_variant_def(&self, id: TypeDefID) -> Option<&VariantDef> {
         match self.type_decls.get(&id)? {
             TypeDecl::Reserved | TypeDecl::Forward(..) => None,
@@ -495,6 +489,16 @@ impl MetadataSource for Metadata {
 
             TypeDecl::Def(..) => None,
         }
+    }
+
+    fn find_variant_def(&self, name: &NamePath) -> Option<(TypeDefID, &VariantDef)> {
+        self.type_decls.iter().find_map(|(id, def)| match def {
+            TypeDecl::Def(TypeDef::Variant(variant_def)) if variant_def.name == *name => {
+                Some((*id, variant_def))
+            },
+
+            _ => None,
+        })
     }
 
     fn type_decls(&self) -> impl Iterator<Item=(TypeDefID, &TypeDecl)> {

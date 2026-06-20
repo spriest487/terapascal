@@ -11,24 +11,25 @@ pub mod typeinfo;
 mod instruction_builder;
 pub mod builtin;
 
-pub use formatter::*;
-pub use function::*;
-pub use instruction::*;
-pub use instruction_builder::generic;
-pub use instruction_builder::scope::*;
-pub use instruction_builder::util;
-pub use instruction_builder::InstructionBuilder;
-pub use instruction_builder::LocalBinding;
-pub use instruction_builder::RawInstructionBuilder;
-pub use library::*;
-pub use metadata::*;
+pub use self::formatter::*;
+pub use self::function::*;
+pub use self::instruction::*;
+pub use self::instruction_builder::generic;
+pub use self::instruction_builder::scope::*;
+pub use self::instruction_builder::util;
+pub use self::instruction_builder::InstructionBuilder;
+pub use self::instruction_builder::LocalBinding;
+pub use self::instruction_builder::RawInstructionBuilder;
+pub use self::library::*;
+pub use self::metadata::*;
+pub use self::ty::*;
+pub use self::ty_decl::*;
+pub use self::typeinfo::*;
+pub use self::val::*;
+
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
-pub use ty::*;
-pub use ty_decl::*;
-pub use typeinfo::*;
-pub use val::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct NamePath {

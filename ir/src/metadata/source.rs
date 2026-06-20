@@ -1,6 +1,7 @@
 ﻿use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::vars::ConstInfo;
+use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -22,7 +23,6 @@ use crate::TypeInfo;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
-use crate::FunctionID;
 use std::borrow::Cow;
 use std::rc::Rc;
 
@@ -32,8 +32,11 @@ pub trait MetadataSource : Sized {
     fn get_string(&self, id: StringID) -> Option<&String>;
 
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef>;
+    fn find_struct_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &StructDef)>;
+    
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
-
+    fn find_variant_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &VariantDef)>;
+    
     fn instantiate_struct_def(&'_ self, id: TypeDefID, args: &[Type]) -> Option<Cow<'_, StructDef>> {
         let def = self.get_struct_def(id)?;
         Some(instantiate_struct_def(def, args))

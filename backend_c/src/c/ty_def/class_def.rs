@@ -44,7 +44,7 @@ impl MethodImplFunc {
         // TODO: doesn't support methods with type params yet
         let mut method_instance_key = ir::FunctionRef::new(impl_func_id);
 
-        if let Some(self_type_ref) = self_type.def_id() {
+        if let Some(self_type_ref) = self_type.definition_ref() {
             method_instance_key.args = self_type_ref.args.clone(); 
         }
         
