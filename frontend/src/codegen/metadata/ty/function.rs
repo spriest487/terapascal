@@ -86,7 +86,7 @@ pub fn translate_sig(sig: &typ::FunctionSig, lib: &mut LibraryBuilder) -> ir::Fu
     for param in &sig.params {
         let mut ty = lib.translate_type(&param.ty);
         if param.is_by_ref() {
-            ty = ty.ptr();
+            ty = ty.temp_ref();
         }
 
         param_tys.push(ty);
