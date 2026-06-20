@@ -25,6 +25,7 @@ use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::seq::TypeSequenceSupport;
+use crate::typ::Primitive;
 use crate::typ::Specializable;
 use crate::typ::TypeArgsResult;
 use ir::InstructionBuilder as _;
@@ -70,7 +71,7 @@ pub struct LibraryBuilder<'a> {
     get_mem_func: Option<ir::FunctionID>,
 
     init_code: ir::InstructionList,
-    
+
     metadata: ir::MetadataBuilder,
 }
 
@@ -205,7 +206,9 @@ impl<'a> LibraryBuilder<'a> {
             self.translate_type(&translate_type);
         }
 
-        // ensure methods of all defined types are instantiated
+        // ensure methods of all defined types are instantiated. they might already be instantiated
+        // in another referenced library - we just need to ensure any un-referenced methods are
+        // generated
         let all_defined_methods: Vec<_> = self.root_ctx
             .defined_types()
             .into_iter()
@@ -215,15 +218,27 @@ impl<'a> LibraryBuilder<'a> {
             .flat_map(|ty| {
                 let methods = ty.methods(self.root_ctx).unwrap();
                 (0..methods.len())
-                    .map(move |method_index| MethodDeclKey {
+                    .map(move |method_index| FunctionDeclKey::Method(MethodDeclKey {
                         self_ty: ty.clone(),
                         method_index,
-                    })
+                    }))
             })
+            .chain(Primitive::ALL.iter()
+                // ensure all primitive methods are instantiated too
+                .flat_map(|primitive| {
+                    self.root_ctx
+                        .get_primitive_methods(*primitive)
+                        .iter()
+                        .enumerate()
+                        .map(|(method_index, _)| FunctionDeclKey::Method(MethodDeclKey {
+                            self_ty: typ::Type::from(*primitive),
+                            method_index,
+                        }))
+                }))
             .collect();
 
         for method_key in all_defined_methods {
-            self.instantiate_func(&FunctionDeclKey::Method(method_key));
+            self.instantiate_func(&method_key);
         }
 
         self.build_typeinfo();
@@ -540,10 +555,6 @@ impl<'a> LibraryBuilder<'a> {
         unit_name: &IdentPath,
         decl: &typ::ast::FunctionDecl,
     ) -> Option<FunctionInstance> {
-        if decl.type_params_len() > 0 {
-            return None;
-        }
-
         match &decl.name.context {
             typ::ast::FunctionDeclContext::FreeFunction => {
                 let func_name = unit_name.clone().child(decl.name.ident.clone());
@@ -587,7 +598,10 @@ impl<'a> LibraryBuilder<'a> {
             method_index,
         });
 
-        self.instantiate_func(&func_key)
+        let method_instance = self.instantiate_func(&func_key);
+
+        // eprintln!("translate_unit_method: {decl} ({}.{method_index}) = {}", declaring_type, method_instance.id);
+        method_instance
     }
 
     pub fn find_iface_decl(&mut self, iface_name: &typ::Symbol) -> Option<ir::InterfaceID> {
@@ -1095,9 +1109,19 @@ impl<'a> LibraryBuilder<'a> {
         if !self.opts.rtti {
             return;
         }
-        
-        // should fetch from the cache at this point
-        let mut type_info = (*self.gen_type_info(&ty)).clone();
+
+        self.gen_type_info(&ty);
+
+        // TODO: is there a better way to identify types defined in this library?
+        // only update types where the original entry is not from a referenced metadata
+        let Some(mut type_info) = self.metadata
+            .metadata()
+            .get_type_info(&ty)
+            .map(|type_info_ref| type_info_ref.as_ref().clone())
+        else {
+            return;
+        };
+
         type_info.name = Some(self.metadata.find_or_insert_string(&src_ty.to_string()));
 
         match &src_ty {
@@ -1425,7 +1449,13 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
             continue;
         }
 
-        let target_debug_name = lib.functions[&func.id].debug_name();
+        // TODO: there should be a better way to know which functions belong to this library
+        // skip functions not defined in this lib e.g. imported functions
+        let Some(lib_func) = lib.functions.get(&func.id) else {
+            continue;
+        };
+
+        let target_debug_name = lib_func.debug_name();
         let target_name = match target_debug_name {
             Some(name) => format!("{name} ({})", func.id),
             None => format!("{}", func.id),
@@ -1435,11 +1465,11 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         let debug_name = lib.opts.debug.then(|| internal_name.clone());
         let identity = ir::FunctionIdentity::internal(internal_name);
 
-        let invoker_id = lib.metadata_mut().insert_func(identity, invoker_sig.clone(), false, []);
-        
         // the source sig may be generic, so look up the translated sig rather than attempting
         // to translate it without a generic context
-        let sig = lib.functions[&func.id].sig().clone();
+        let sig = lib_func.sig().clone();
+
+        let invoker_id = lib.metadata_mut().insert_func(identity, invoker_sig.clone(), false, []);
 
         let mut builder = IRBuilder::new(lib);
         builder.bind_result(sig.result_type.clone());

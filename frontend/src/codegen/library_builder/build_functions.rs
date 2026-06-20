@@ -294,29 +294,26 @@ impl<'a> LibraryBuilder<'a> {
 
         let is_instance_method = !method_decl.func_decl.kind.is_static_method();
 
-        // the definitions of primitive types are provided by the runtime and don't have defs
-        if decl_self_ty.as_primitive().is_none() {
-            let method_def = self.root_ctx
-                .find_method_def(&decl_self_ty, &method_decl.func_decl.ident(), &method_sig)
-                .cloned()
-                .unwrap_or_else(|| {
-                    panic!("instantiate_method: missing method def: {} (method {})", method_decl.func_decl, method_key.method_index)
-                });
-            let debug_name = method_def.decl.name.to_debug_string(None);
+        let method_def = self.root_ctx
+            .find_method_def(&decl_self_ty, &method_decl.func_decl.ident(), &method_sig)
+            .cloned()
+            .unwrap_or_else(|| {
+                panic!("instantiate_method: missing method def: {} (method {})", method_decl.func_decl, method_key.method_index)
+            });
+        let debug_name = method_def.decl.name.to_debug_string(None);
 
-            let def = build_func_def(
-                self,
-                &method_def.decl.param_groups,
-                method_def.decl.name.type_params.as_ref(),
-                &method_def.decl.result_ty,
-                &method_def.locals,
-                &method_def.body,
-                is_instance_method,
-                Some(&decl_self_ty),
-                Some(debug_name),
-            );
-            self.functions.insert(id, ir::Function::Local(def));
-        }
+        let def = build_func_def(
+            self,
+            &method_def.decl.param_groups,
+            method_def.decl.name.type_params.as_ref(),
+            &method_def.decl.result_ty,
+            &method_def.locals,
+            &method_def.body,
+            is_instance_method,
+            Some(&decl_self_ty),
+            Some(debug_name),
+        );
+        self.functions.insert(id, ir::Function::Local(def));
 
         func_instance
     }
@@ -328,7 +325,8 @@ impl<'a> LibraryBuilder<'a> {
         let self_ty = self.translate_type(&impl_method.self_ty);
 
         // virtual calls can't have type args yet
-        let impl_func = self.instantiate_method(&impl_method);
+        let impl_key = FunctionDeclKey::Method(impl_method.clone());
+        let impl_func = self.instantiate_func(&impl_key);
 
         let iface_ty_name = virtual_key
             .iface_ty

@@ -232,8 +232,24 @@ impl ImportBuilder<'_> {
             ir::Type::Generic(name) => {
                 Type::generic_param(Ident::new(name.as_str(), self.span()))
             },
-            ir::Type::Pointer(deref_ty) | ir::Type::TempRef(deref_ty) => {
-                self.read_type(deref_ty)?.ptr()
+
+            ir::Type::TempRef(..) => {
+                // these should be handled before calling read_type, so if we reach here, a ref
+                // has appeared somewhere it can't be handled by Pascal
+                let type_name = ir_type.to_pretty_string(self.metadata());
+                let msg = format!("temporary reference type ({type_name}) cannot be imported");
+
+                return Err(ImportError::InvalidData(msg));
+            }
+
+            ir::Type::Pointer(deref_ty) => {
+                let deref_type = self.read_type(deref_ty)?;
+
+                if deref_type == Type::Nothing {
+                    Type::Primitive(Primitive::Pointer)
+                } else {
+                    deref_type.ptr()
+                }
             }
 
             ir::Type::Struct(type_ref) | ir::Type::Variant(type_ref) => {
@@ -661,6 +677,12 @@ impl ImportBuilder<'_> {
         mem::swap(&mut type_methods, &mut self.type_methods);
 
         for (declaring_type, type_methods) in type_methods {
+            // primitive types don't have definitions, so their methods are inherent and don't
+            // need to be declared anywhere
+            if declaring_type.as_primitive().is_some() {
+                continue;
+            }
+
             if let Err(err) = self.finish_type_def(&declaring_type, &type_methods) {
                 self.warnings.push(ImportWarning::InvalidMethodList(declaring_type, type_methods, Box::new(err)));
             }

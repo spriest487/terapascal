@@ -2317,6 +2317,16 @@ impl Vm {
                 GlobalValue::Function(generic_key),
             );
 
+            if self.opts.verbose {
+                eprintln!(
+                    "[vm] loaded function {} `{}` from {}:{}",
+                    func_id.0,
+                    identity.to_pretty_string(lib.metadata()),
+                    lib.name,
+                    lib.version,
+                );
+            }
+
             self.functions.insert(ir::FunctionRef::new(*func_id), FunctionInfo {
                 identity: identity.clone(),
                 func: Rc::new(func),

@@ -105,26 +105,30 @@ pub fn typecheck_bin_op(
             let mut lhs = evaluate_expr(&bin_op.lhs, &Type::Nothing, ctx)?;
             let mut rhs = evaluate_expr(&bin_op.rhs, &lhs.annotation().ty(), ctx)?;
 
-            // if both operands are strings, this will actually call System.StringConcat
+            // if one operand is a string, and the operator is +, this is string concatenation
             let string_ty = Type::class(builtin_string_name());
 
-            let mut lhs_string = *lhs.annotation().ty() == string_ty;
-            let mut rhs_string = *rhs.annotation().ty() == string_ty;
+            let is_string_concat = if bin_op.op == Operator::Add {
+                let mut lhs_string = *lhs.annotation().ty() == string_ty;
+                let mut rhs_string = *rhs.annotation().ty() == string_ty;
 
-            // if one operand is a string, and the other can be converted using ToString, do that
-            if lhs_string && !rhs_string {
-                if let Some(rhs_to_string) = typecheck_implicit_to_string(&rhs, &span, ctx) {
-                    rhs = rhs_to_string;
-                    rhs_string = true;
+                // if one operand is a string, and the other can be converted using ToString, do that
+                if lhs_string && !rhs_string {
+                    if let Some(rhs_to_string) = typecheck_implicit_to_string(&rhs, &span, ctx) {
+                        rhs = rhs_to_string;
+                        rhs_string = true;
+                    }
+                } else if !lhs_string && lhs_string {
+                    if let Some(lhs_to_string) = typecheck_implicit_to_string(&lhs, &span, ctx) {
+                        lhs = lhs_to_string;
+                        lhs_string = true;
+                    }
                 }
-            } else if !lhs_string && lhs_string {
-                if let Some(lhs_to_string) = typecheck_implicit_to_string(&lhs, &span, ctx) {
-                    lhs = lhs_to_string;
-                    lhs_string = true;
-                }
-            }
 
-            let is_string_concat = bin_op.op == Operator::Add && lhs_string && rhs_string;
+                lhs_string && rhs_string
+            } else {
+                false
+            };
 
             // check valid ops etc, result type etc
             let lhs_ty = lhs.annotation().ty();
@@ -288,11 +292,10 @@ fn typecheck_implicit_to_string(expr: &Expr, span: &Span, ctx: &Context) -> Opti
 
     let to_string_ident = Ident::new(DISPLAYABLE_TOSTRING_METHOD, span.clone());
 
-    let displayable_ty = Type::interface(builtin_displayable_name());
+    let to_string_iface_type = Type::interface(builtin_displayable_name());
 
     let is_impl = ctx
-        .is_implementation(src_ty.as_ref(), &displayable_ty)
-        .ok()
+        .is_implementation(src_ty.as_ref(), &to_string_iface_type)
         .unwrap_or(false);
 
     if !is_impl {
@@ -348,56 +351,50 @@ fn typecheck_string_concat(
     let span = bin_op.lhs.span().to(bin_op.rhs.span());
 
     // if LHS and RHS are both string literals, we can concat them ahead of time
-    bin_op.annotation = match (bin_op.lhs.annotation(), bin_op.rhs.annotation()) {
-        (
-            Value::Const(lhs_const),
-            Value::Const(rhs_const),
-        ) if lhs_const.value.as_string().is_some() && rhs_const.value.as_string().is_some() => {
-            let lhs_string = lhs_const.value.as_string().unwrap();
-            let rhs_string = rhs_const.value.as_string().unwrap();
+    bin_op.annotation = if let Some(lhs_string) = bin_op.lhs.annotation().as_const_string()
+        && let Some(rhs_string) = bin_op.rhs.annotation().as_const_string()
+    {
+        let concat_val = lhs_string.clone() + rhs_string.as_str();
 
-            let concat_val = lhs_string.as_ref().clone() + rhs_string.as_ref();
-            Value::from(ConstValue {
-                value: Literal::String(Arc::new(concat_val)),
-                decl: None,
-                span,
-                ty: string_ty.clone(),
-            })
-        }
+        Value::from(ConstValue {
+            value: Literal::String(Arc::new(concat_val)),
+            decl: None,
+            span,
+            ty: string_ty.clone(),
+        })
+    } else {
+        let system_path = IdentPath::from(Ident::new(SYSTEM_UNIT_NAME, span.clone()));
 
-        _ => {
-            let system_path = IdentPath::from(Ident::new(SYSTEM_UNIT_NAME, span.clone()));
-            let concat_path = system_path.child(Ident::new(STRING_CONCAT_FUNC_NAME, span.clone()));
-            let (concat_path, concat_decls) = ctx
-                .find_function(&concat_path)
-                .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
+        let concat_path = system_path.child(Ident::new(STRING_CONCAT_FUNC_NAME, span.clone()));
+        let (concat_path, concat_decls) = ctx
+            .find_function(&concat_path)
+            .map_err(|err| TypeError::from_name_err(err, span.clone()))?;
 
-            assert_eq!(1, concat_decls.len());
+        assert_eq!(1, concat_decls.len());
 
-            let concat_decl = &concat_decls[0];
-            let concat_sym = Symbol::from(concat_path.clone());
+        let concat_decl = &concat_decls[0];
+        let concat_sym = Symbol::from(concat_path.clone());
 
-            let concat_func_val = FunctionValue::new(
-                concat_sym.clone(),
-                concat_decl.visiblity(),
-                concat_decl.decl().clone(),
-                concat_decl.sig().clone(),
-                span.clone(),
-            );
+        let concat_func_val = FunctionValue::new(
+            concat_sym.clone(),
+            concat_decl.visiblity(),
+            concat_decl.decl().clone(),
+            concat_decl.sig().clone(),
+            span.clone(),
+        );
 
-            let concat_args = vec![bin_op.lhs.clone(), bin_op.rhs.clone()];
-            let concat_span = bin_op.span().clone();
+        let concat_args = vec![bin_op.lhs.clone(), bin_op.rhs.clone()];
+        let concat_span = bin_op.span().clone();
 
-            let invocation = Invocation::Function {
-                function: Arc::new(concat_func_val),
-                args: concat_args,
-                args_span: None,
-                type_args: None,
-                span: concat_span,
-            };
+        let invocation = Invocation::Function {
+            function: Arc::new(concat_func_val),
+            args: concat_args,
+            args_span: None,
+            type_args: None,
+            span: concat_span,
+        };
 
-            Value::from(invocation)
-        }
+        Value::from(invocation)
     };
 
     Ok(Expr::from(bin_op))

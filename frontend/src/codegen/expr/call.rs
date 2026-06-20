@@ -213,15 +213,16 @@ pub fn build_method_invocation(
         &self_ty
     };
 
-    // eprintln!("## method invocation");
-    // eprintln!("  iface_ty = {iface_ty}");
-    // eprintln!("   self_ty = {self_ty}");
-    // eprintln!("   decl ty = {method_decl_ty}");
-
     let (method_decl_ty, method_decl_index) = builder.get_impl_method_index(method_decl_ty, &iface_ty, method_index);
 
     let method_decl = builder.get_method(method_decl_ty, method_decl_index);
     let method_decl_sig = method_decl.func_decl.sig().with_self(&self_ty);
+
+    // eprintln!("## method invocation");
+    // eprintln!("  iface_ty = {iface_ty}");
+    // eprintln!("   self_ty = {self_ty}");
+    // eprintln!("   decl ty = {method_decl_ty}");
+    // eprintln!("   method = {}", method_decl.func_decl);
 
     assert_eq!(
         args.len(), 

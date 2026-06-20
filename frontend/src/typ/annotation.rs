@@ -571,6 +571,13 @@ impl Value {
         }
     }
 
+    pub fn as_const_string(&self) -> Option<&String> {
+        let const_val = self.as_const()?;
+        let string_val = const_val.value.as_string()?;
+
+        Some(string_val.as_ref())
+    }
+
     pub fn as_variant_case(&self) -> Option<&VariantCaseValue> {
         match self {
             Value::VariantCase(case_val) => Some(case_val),

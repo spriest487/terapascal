@@ -20,10 +20,10 @@ use crate::typ::ast::FunctionName;
 use crate::typ::ast::FunctionParamGroup;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::Tag;
-use crate::typ::EvaluatedConstExpr;
 use crate::typ::ScopeID;
 use crate::typ::Type;
 use crate::typ::TypeName;
+use crate::typ::EvaluatedConstExpr;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -32,12 +32,15 @@ impl ImportBuilder<'_> {
         let mut param_groups = Vec::with_capacity(param_types.len());
         for (i, param_type) in param_types.iter().enumerate() {
             let (param_type, modifier) = match param_type {
+                // reference params are a per-param modifier in Pascal, and a separate type in IR
                 ir::Type::TempRef(deref_type) => {
                     let param_type = self.read_type(deref_type)?;
+
                     let mod_decl = FunctionParamModDecl {
                         span: self.span(),
                         param_mod: FunctionParamMod::Var,
                     };
+
                     (param_type, Some(mod_decl))
                 }
 
@@ -105,15 +108,14 @@ impl ImportBuilder<'_> {
     ) -> ImportResult<()> {
         let declaring_type = self.read_type(declaring_type)?;
 
-        // primitive and pointer methods are hardcoded and don't need to be imported
-        if matches!(declaring_type, Type::Primitive(..) | Type::Pointer(..)) {
-            return Ok(());
-        }
-
         let decl_key = FunctionDeclKey::Method(MethodDeclKey {
             self_ty: declaring_type.clone(),
             method_index: method_id.0,
         });
+
+        if self.imported_funcs.contains_key(&decl_key) {
+            return Ok(());
+        }
 
         let type_params = self.read_def_type_params(type_args)?;
 
@@ -122,8 +124,8 @@ impl ImportBuilder<'_> {
             name: FunctionName {
                 ident: Ident::new(name, self.span()),
                 span: None,
-                context: FunctionDeclContext::MethodDecl {
-                    enclosing_type: declaring_type.clone(),
+                context: FunctionDeclContext::MethodDef {
+                    declaring_type: TypeName::Unspecified(declaring_type.clone()),
                 },
                 type_params,
             },
@@ -215,16 +217,20 @@ impl ImportBuilder<'_> {
 
         let decl_sig = Arc::new(func_decl.sig());
 
+        let decl_key = FunctionDeclKey::Function {
+            sig: decl_sig.clone(),
+            name: func_path,
+        };
+
+        if self.imported_funcs.contains_key(&decl_key) {
+            return Ok(());
+        }
+
         if let Some(ctx) = self.root_ctx.as_mut() {
             ctx.declare_function(func_ident.clone(), Arc::new(func_decl), Visibility::Interface)?;
 
             ctx.pop_scope(scope);
         }
-
-        let decl_key = FunctionDeclKey::Function {
-            sig: decl_sig.clone(),
-            name: func_path,
-        };
 
         self.imported_funcs.insert(decl_key, FunctionInstance {
             id: func_id,
