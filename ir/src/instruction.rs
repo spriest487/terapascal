@@ -418,6 +418,13 @@ impl InstructionList {
         self.sources.resize(self.instructions.len(), None);
         self.sources.append(&mut other.sources);
     }
+    
+    pub fn extend(&mut self, other: &Self) {
+        self.instructions.extend(other.instructions.iter().cloned());
+
+        self.sources.resize(self.instructions.len(), None);
+        self.sources.extend(other.sources.iter().cloned());
+    } 
 
     pub fn push(&mut self, instruction: Instruction, source: Option<Span>) {
         self.instructions.push(instruction);

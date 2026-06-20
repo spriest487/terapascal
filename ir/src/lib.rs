@@ -1,3 +1,7 @@
+pub mod dep_sort;
+pub mod typeinfo;
+pub mod builtin;
+
 mod formatter;
 mod function;
 mod instruction;
@@ -6,10 +10,7 @@ mod ty;
 mod ty_decl;
 mod val;
 mod library;
-pub mod dep_sort;
-pub mod typeinfo;
 mod instruction_builder;
-pub mod builtin;
 
 pub use self::formatter::*;
 pub use self::function::*;
@@ -125,8 +126,8 @@ impl fmt::Display for NamePath {
 }
 
 pub fn write_instruction_list(
-    f: &mut fmt::Formatter,
-    metadata: &Metadata,
+    f: &mut dyn fmt::Write,
+    metadata: &impl IRFormatter,
     instructions: &[Instruction],
 ) -> fmt::Result {
     let num_len = instructions.len().to_string().len();

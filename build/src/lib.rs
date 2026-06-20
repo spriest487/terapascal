@@ -9,6 +9,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
+use std::iter;
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
@@ -39,8 +40,9 @@ use terapascal_frontend::parse::Parser;
 use terapascal_frontend::pp::PreprocessedUnit;
 use terapascal_frontend::tokenize;
 use terapascal_frontend::typ;
-use terapascal_frontend::typ::{builtin_ident, SYSTEM_PACKAGE_NAME};
+use terapascal_frontend::typ::builtin_ident;
 use terapascal_frontend::typ::Context;
+use terapascal_frontend::typ::SYSTEM_PACKAGE_NAME;
 use terapascal_frontend::typ::SYSTEM_UNIT_NAME;
 use terapascal_frontend::typecheck;
 use terapascal_frontend::TokenStream;
@@ -72,11 +74,38 @@ pub struct BuildInput {
     pub codegen_opts: CodegenOpts,
 }
 
+pub struct LibraryArtifact {
+    pub main: ir::Library,
+    pub refs: Vec<ir::Library>,
+}
+
+impl LibraryArtifact {
+    pub fn merge(mut self) -> ir::Library {
+        for ref_lib in self.refs {
+            self.main.merge_from(&ref_lib);
+        }
+
+        self.main
+    }
+    
+    pub fn to_metadata_builder(&self) -> ir::MetadataBuilder {
+        ir::MetadataBuilder::with_refs(self.refs.iter()
+            .map(|r| r.metadata.clone())
+            .chain(iter::once(self.main.metadata.clone())))
+    }
+
+    pub fn into_vec(self) -> Vec<ir::Library> {
+        let mut libs = self.refs;
+        libs.push(self.main);
+        libs
+    }
+}
+
 pub enum BuildArtifact {
     PreprocessedText(Vec<PreprocessedUnit>),
     ParsedUnits(ParseOutput),
     TypedModule(typ::Module),
-    Library(ir::Library),
+    Library(LibraryArtifact),
 }
 
 pub struct BuildOutput {
@@ -522,9 +551,32 @@ pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
 }
 
 pub fn load_lib(
-    name: impl Into<PathBuf>,
+    name: impl Into<String>,
     additional_search_dirs: &[PathBuf],
-) -> BuildResult<ir::Library> {
+) -> BuildResult<(ir::Library, Vec<ir::Library>)> {
+    let name = name.into();
+
+    let mut lib_collection = LinkedHashMap::new();
+    load_libs_rec(&name, additional_search_dirs, &mut lib_collection)?;
+
+    let Some(main_lib) = lib_collection.remove(&name) else {
+        let msg = format!("main library not found: {}", name);
+        return Err(BuildError::InternalError(msg));
+    };
+
+    let ref_libs: Vec<_> = lib_collection
+        .into_iter()
+        .map(|(_, lib)| lib)
+        .collect();
+
+    Ok((main_lib, ref_libs))
+}
+
+fn load_libs_rec(
+    name: impl Into<String>,
+    additional_search_dirs: &[PathBuf],
+    lib_collection: &mut LinkedHashMap<String, ir::Library>,
+) -> BuildResult<()> {
     let name = name.into();
 
     let mut search_dirs = additional_search_dirs.to_vec();
@@ -540,7 +592,7 @@ pub fn load_lib(
             full_path.exists().then_some(full_path)
         })
         .ok_or_else(|| {
-            BuildError::FileNotFound(PathBuf::from(name).with_added_extension(IR_LIB_EXT), None)
+            BuildError::FileNotFound(PathBuf::from(&name).with_added_extension(IR_LIB_EXT), None)
         })?;
 
     let mut file = fs::File::open(&path)?;
@@ -556,23 +608,57 @@ pub fn load_lib(
             }
         })?;
 
-    Ok(library)
+    let refs = library.references.clone();
+    lib_collection.insert(name, library);
+
+    for ref_name in refs {
+        if lib_collection.contains_key(&ref_name) {
+            continue;
+        }
+
+        load_libs_rec(&ref_name, additional_search_dirs, lib_collection)?;
+    }
+
+    Ok(())
 }
 
 fn import_package(
     name: &str,
     input: &BuildInput,
     type_ctx: Option<&mut Context>,
-) -> BuildResult<ImportedLibrary> {
+) -> BuildResult<Vec<ImportedLibrary>> {
     let search_dirs = match input.source_path.parent() {
         Some(parent_dir) => vec![parent_dir.to_path_buf()],
         None => Vec::new(),
     };
 
-    let lib = load_lib(name, &search_dirs)?;
+    let (lib, ref_libs) = load_lib(name, &search_dirs)?;
 
-    let package = import_lib(lib, type_ctx)?;
-    Ok(package)
+    let mut imported_libs = Vec::new();
+
+    match type_ctx {
+        Some(ctx) => {
+            for ref_lib in ref_libs {
+                let imported_lib = import_lib(ref_lib, Some(ctx))?;
+                imported_libs.push(imported_lib);
+            }
+
+            let imported_lib = import_lib(lib, Some(ctx))?;
+            imported_libs.push(imported_lib);
+        }
+
+        None => {
+            for ref_lib in ref_libs {
+                let imported_lib = import_lib(ref_lib, None)?;
+                imported_libs.push(imported_lib);
+            }
+
+            let imported_lib = import_lib(lib, None)?;
+            imported_libs.push(imported_lib);
+        }
+    };
+
+    Ok(imported_libs)
 }
 
 fn build_with_log(
@@ -600,17 +686,18 @@ fn build_with_log(
     }
 
     for package_name in package_names {
-        let package = import_package(&package_name, &input, root_ctx.as_mut())?;
-        for warning in package.warnings {
-            log.diagnostic(warning);
+        for imported_lib in import_package(&package_name, &input, root_ctx.as_mut())? {
+            for warning in imported_lib.warnings {
+                log.diagnostic(warning);
+            }
+
+            package_namespaces.extend(imported_lib.namespaces.clone());
+
+            package_libs.push(LibraryRef {
+                lib: imported_lib.library,
+                imported_funcs: imported_lib.imported_funcs,
+            });
         }
-
-        package_namespaces.extend(package.namespaces.clone());
-
-        package_libs.push(LibraryRef {
-            lib: package.library,
-            imported_funcs: package.imported_funcs,
-        });
     }
 
     let parse_output = parse_sources(fs, &input, package_namespaces, log)?;
@@ -641,7 +728,12 @@ fn build_with_log(
 
     let library = codegen_ir(&typed_module, &root_ctx, &package_libs, input.codegen_opts);
 
-    Ok(BuildArtifact::Library(library))
+    Ok(BuildArtifact::Library(LibraryArtifact {
+        main: library,
+        refs: package_libs.into_iter()
+            .map(|p| p.lib)
+            .collect()
+    }))
 }
 
 fn preprocess(fs: &impl Filesystem, filename: &PathBuf, opts: CompileOpts) -> Result<PreprocessedUnit, BuildError> {

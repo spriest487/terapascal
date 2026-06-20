@@ -16,6 +16,7 @@ use std::collections::HashSet;
 #[derive(Debug)]
 pub struct ImportedLibrary {
     pub library: ir::Library,
+
     pub imported_funcs: HashMap<FunctionDeclKey, FunctionInstance>,
 
     pub warnings: Vec<ImportWarning>,

@@ -28,7 +28,7 @@ impl TagInfo {
     pub fn format_pretty(
         &self,
         formatter: &impl IRFormatter,
-        f: &mut impl fmt::Write,
+        f: &mut dyn fmt::Write,
     ) -> fmt::Result {
         let class_type = self.class_id.to_struct_type([]);
 

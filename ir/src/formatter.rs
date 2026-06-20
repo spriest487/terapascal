@@ -17,10 +17,10 @@ use std::write;
 const IX_WIDTH: usize = 8;
 
 pub trait IRFormatter {
-    fn format_instruction<W: fmt::Write>(
+    fn format_instruction(
         &self,
         instruction: &Instruction,
-        f: &mut W,
+        f: &mut dyn fmt::Write,
     ) -> fmt::Result {
         match instruction {
             Instruction::Comment(comment) => write!(f, "{:>width$} {}", "//", comment, width = IX_WIDTH),
@@ -331,8 +331,8 @@ pub trait IRFormatter {
 
     fn format_variant_case(&self, of_ty: &Type, tag: usize, f: &mut dyn fmt::Write) -> fmt::Result;
     
-    fn format_bin_op_instruction<W: fmt::Write>(&self,
-        f: &mut W,
+    fn format_bin_op_instruction(&self,
+        f: &mut dyn fmt::Write,
         instruction_name: &str,
         op: &BinOpInstruction,
         operator: &str
@@ -349,8 +349,9 @@ pub trait IRFormatter {
         Ok(())
     }
 
-    fn format_prefix_op_instruction<W: fmt::Write>(&self,
-        f: &mut W,
+    fn format_prefix_op_instruction(
+        &self,
+        f: &mut dyn fmt::Write,
         instruction_name: &str,
         op: &UnaryOpInstruction,
         operator: &str

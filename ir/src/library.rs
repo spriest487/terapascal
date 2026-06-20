@@ -12,9 +12,9 @@ use crate::write_instruction_list;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::io;
 use std::sync::Arc;
-use std::fmt;
 use terapascal_common::version::Version;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -56,6 +56,24 @@ impl Library {
         }
     }
 
+    pub fn merge_from(&mut self, other: &Self) {
+        let mut merged_metadata = self.metadata.as_ref().clone();
+        merged_metadata.merge_from(&other.metadata);
+
+        self.metadata = Arc::new(merged_metadata);
+
+        // if this library has a reference to the merged library, we can remove it
+        if let Some(index) = self.references.iter().position(|r| *r == other.name) {
+            self.references.remove(index);
+        }
+
+        // we should be able to assume that if merging the metadata doesn't raise an error,
+        // merging the libraries is valid
+        self.functions.extend(other.functions.clone());
+        self.tags.extend(other.tags.clone());
+        self.init.extend(&other.init);
+    }
+
     pub fn init(&self) -> &InstructionList {
         &self.init
     }
@@ -67,10 +85,8 @@ impl Library {
     pub fn functions(&self) -> &BTreeMap<FunctionID, Function> {
         &self.functions
     }
-}
 
-impl fmt::Display for Library {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    pub fn format(&self, f: &mut dyn fmt::Write, formatter: &impl IRFormatter) -> fmt::Result {
         writeln!(f, "Name: {}", self.name)?;
         writeln!(f, "Version: {}", self.version)?;
 
@@ -85,7 +101,7 @@ impl fmt::Display for Library {
         if !self.tags.is_empty() {
             writeln!(f, "Tags:")?;
             for tag in &self.tags {
-                tag.format_pretty(self.metadata.as_formatter(), f)?;
+                tag.format_pretty(formatter, f)?;
                 writeln!(f)?;
             }
             writeln!(f)?;
@@ -98,18 +114,18 @@ impl fmt::Display for Library {
         defs.sort_by_key(|(id, _)| *id);
 
         for (id, def) in &defs {
-            writeln!(f, "{id}: {}", def.to_pretty_string(self.metadata()))?;
+            writeln!(f, "{id}: {}", def.to_pretty_string(formatter))?;
 
             match def {
                 TypeDef::Struct(s) => {
-                    write_tag_list(&s.tags, self.metadata(), f)?;
+                    write_tag_list(&s.tags, formatter, f)?;
 
                     if !s.fields. is_empty() {
                         writeln!(f, "Fields:")?;
                     }
                     for (field_id, field) in &s.fields {
                         write!(f, "  {:8>}: ", field_id)?;
-                        self.metadata.format_type(&field.ty, f)?;
+                        formatter.format_type(&field.ty, f)?;
 
                         if let Some(field_name) = &field.name {
                             write!(f, " (`{}`)", field_name)?;
@@ -120,19 +136,19 @@ impl fmt::Display for Library {
                 },
 
                 TypeDef::Variant(v) => {
-                    write_tag_list(&v.tags, self.metadata(), f)?;
-                    writeln!(f, "Discriminator: {}", v.tag_type.to_pretty_string(self.metadata()))?;
+                    write_tag_list(&v.tags, formatter, f)?;
+                    writeln!(f, "Discriminator: {}", v.tag_type.to_pretty_string(formatter))?;
 
                     if !v.cases. is_empty() {
                         writeln!(f, "Cases:")?;
                     }
 
                     for (i, case) in v.cases.iter().enumerate() {
-                        write!(f, "{:8>} ({})", format!("  .{}", i), case.name,)?;
+                        write!(f, "{:8>} ({})", format!("  .{}", i), case.name)?;
 
                         if let Some(ty) = &case.ty {
                             write!(f, ": ")?;
-                            self.metadata.format_type(ty, f)?;
+                            formatter.format_type(ty, f)?;
                         }
                         writeln!(f)?;
                     }
@@ -154,7 +170,11 @@ impl fmt::Display for Library {
                 if !iface_impls.is_empty() {
                     writeln!(f, "  Implements:")?;
                     for iface_id in iface_impls {
-                        writeln!(f, "    {}", self.metadata.iface_name(iface_id))?;
+                        write!(f, "    ")?;
+
+                        formatter.format_type(&iface_id.to_interface_ptr_type(), f)?;
+
+                        writeln!(f)?;
                     }
                 }
             }
@@ -170,15 +190,15 @@ impl fmt::Display for Library {
         for (id, iface) in &ifaces {
             writeln!(f, "{}: {}", id, iface.name)?;
 
-            write_tag_list(&iface.tags, self.metadata(), f)?;
+            write_tag_list(&iface.tags, formatter, f)?;
 
             for (i, method) in iface.methods.iter().enumerate() {
                 let sig_params: Vec<_> = method
                     .params
                     .iter()
-                    .map(|param| self.metadata.pretty_type_name(param))
+                    .map(|param| param.to_pretty_string(formatter))
                     .collect();
-                let return_ty = self.metadata.pretty_type_name(&method.return_ty);
+                let return_ty = method.return_ty.to_pretty_string(formatter);
 
                 let sig = format!("function ({}): {}", sig_params.join("; "), return_ty);
 
@@ -192,21 +212,21 @@ impl fmt::Display for Library {
         writeln!(f, "Constants:")?;
         for const_info in self.metadata.constants() {
             write!(f, "{} = ", const_info.name)?;
-            self.metadata.format_val(&const_info.value, f)?;
+            formatter.format_val(&const_info.value, f)?;
             writeln!(f)?;
         }
         writeln!(f)?;
-        
+
         writeln!(f, "Variables:")?;
         for (var_id, var_info) in self.metadata.variables() {
-            writeln!(f, "{}: {}", var_id.0, self.metadata.pretty_type_name(&var_info.r#type))?;
+            writeln!(f, "{}: {}", var_id.0, var_info.r#type.to_pretty_string(formatter))?;
 
             if let Some(name) = &var_info.name {
                 writeln!(f, " ({})", name)?;
             }
         }
         writeln!(f)?;
-        
+
         writeln!(f, "String literals:")?;
         for (id, lit) in self.metadata.strings() {
             writeln!(f, "{}: '{}'", id.0, lit.escape_default())?;
@@ -218,9 +238,9 @@ impl fmt::Display for Library {
 
         writeln!(f, "Functions:")?;
         for (id, func) in funcs {
-            write!(f, "{}: {}", id.0, func.sig().to_pretty_string(self.metadata.as_ref()))?;
+            write!(f, "{}: {}", id.0, func.sig().to_pretty_string(formatter))?;
 
-            match self.metadata.func_desc(*id) {
+            match self.metadata.func_desc(*id, formatter) {
                 Some(desc_name) => {
                     writeln!(f, " ({})", desc_name)?;
                 },
@@ -235,12 +255,12 @@ impl fmt::Display for Library {
             }
 
             if let Some(func_info) = self.metadata().get_function_info(*id) {
-                write_tag_list(&func_info.tags, self.metadata(), f)?;
+                write_tag_list(&func_info.tags, formatter, f)?;
             }
 
             match func {
                 Function::Local(FunctionDef { body, .. }) => {
-                    write_instruction_list(f, &self.metadata, &body.instructions)?;
+                    write_instruction_list(f, formatter, &body.instructions)?;
                 },
 
                 Function::External(ExternalFunctionRef { symbol, src, .. }) => {
@@ -251,12 +271,18 @@ impl fmt::Display for Library {
         }
 
         writeln!(f, "Init:")?;
-        write_instruction_list(f, &self.metadata, &self.init.instructions)?;
+        write_instruction_list(f, formatter, &self.init.instructions)?;
         Ok(())
     }
 }
 
-fn write_tag_list(tags: &[TagInfo], formatter: &impl IRFormatter, f: &mut impl fmt::Write) -> fmt::Result {
+impl fmt::Display for Library {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.format(f, self.metadata.as_formatter())
+    }
+}
+
+fn write_tag_list(tags: &[TagInfo], formatter: &impl IRFormatter, f: &mut dyn fmt::Write) -> fmt::Result {
     if tags.is_empty() {
         return Ok(());
     }

@@ -11,10 +11,11 @@ use crate::args::*;
 use crate::error::*;
 use std::env;
 use std::ffi::OsString;
+use std::fmt;
 use std::fs;
 use std::fs::File;
 use std::io;
-use std::io::Write;
+use std::io::Write as _;
 use std::path::Path;
 use std::process;
 use std::time::Duration;
@@ -25,6 +26,7 @@ use terapascal_build::BuildArtifact;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildOutput;
 use terapascal_build::BuildStage;
+use terapascal_build::LibraryArtifact;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::build_log::BuildLogEntry;
 use terapascal_common::fs::DefaultFilesystem;
@@ -36,7 +38,8 @@ use terapascal_common::CIL_LIB_EXT;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
-use terapascal_ir::MetadataSource;
+use terapascal_ir::IRFormatter;
+use terapascal_ir::RawFormatter;
 use terapascal_vm::result::ExecResult;
 use terapascal_vm::ExecOpts;
 use terapascal_vm::Vm;
@@ -87,8 +90,16 @@ fn compile(args: Args) -> Result<(), RunError> {
             log.trace(format!("loading existing module: {}", args.file.display()));
         }
 
-        let artifact = load_lib(&args.file, &[])
-            .map(BuildArtifact::Library);
+        let lib_name = args.file
+            .with_extension("")
+            .to_string_lossy()
+            .to_string();
+
+        let artifact = load_lib(lib_name, &args.search_dirs)
+            .map(|(main, refs)| BuildArtifact::Library(LibraryArtifact {
+                main,
+                refs,
+            }));
 
         return handle_output(BuildOutput {
             artifact,
@@ -113,9 +124,9 @@ fn compile(args: Args) -> Result<(), RunError> {
     handle_output(output, &args)
 }
 
-fn print_output<F>(out_path: Option<&Path>, f: F) -> Result<(), RunError>
+fn write_output<OutFn>(out_path: Option<&Path>, f: OutFn) -> Result<(), RunError>
 where
-    F: FnOnce(&mut dyn io::Write) -> io::Result<()>,
+    OutFn: FnOnce(&mut dyn io::Write) -> io::Result<()>,
 {
     let out_span;
 
@@ -130,20 +141,34 @@ where
 
             create_dirs
                 .and_then(|_| File::create(out_path))
-                .and_then(|mut file| f(&mut file))
+                .and_then(|mut file| {
+                    f(&mut file)
+                })
         },
 
         None => {
-            let stdout = io::stdout();
-            let mut stdout_lock = stdout.lock();
-
             out_span = Span::zero("stdout");
 
-            f(&mut stdout_lock)
+            f(&mut io::stdout().lock())
         },
     };
 
     io_result.map_err(|io_err| RunError::OutputFailed(out_span, io_err))
+}
+
+fn print_output<OutFn>(out_path: Option<&Path>, f: OutFn) -> Result<(), RunError>
+where
+    OutFn: FnOnce(&mut dyn fmt::Write) -> fmt::Result,
+{
+    write_output(out_path, |dst| {
+        let mut buf = String::new();
+
+        f(&mut buf).map_err(|err| {
+            io::Error::new(io::ErrorKind::InvalidData, err)
+        })?;
+
+        write!(dst, "{buf}")
+    })
 }
 
 fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
@@ -193,12 +218,12 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
             )
         },
 
-        BuildArtifact::Library(lib) => {
+        BuildArtifact::Library(libs) => {
             if let Some(BuildStage::Codegen) = args.dump_stage {
-                return print_output(
-                    args.output_path(), 
-                    |dst| write!(dst, "{}", lib)
-                );
+                return print_output(args.output_path(), |dst: &mut dyn fmt::Write| {
+                    let metadata = libs.to_metadata_builder();
+                    libs.main.format(dst, &metadata)
+                });
             }
 
             if let Some(out_path) = args.output_path() {
@@ -207,39 +232,41 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     .map(|ext| ext.to_os_string())
                     .unwrap_or_else(OsString::new);
 
-                if output_ext.eq_ignore_ascii_case("c") {
-                    clang_print(&lib, args, out_path)?;
-                    Ok(())
-                } else if output_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
+                if output_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
                     // the IR object is the output
-                    let module_bytes = ir::encode_lib(&lib)?;
+                    let module_bytes = ir::encode_lib(&libs.main)?;
 
-                    print_output(Some(out_path), |dst| {
+                    write_output(Some(out_path), |dst| {
                         dst.write_all(&module_bytes)
                     })
-                } else if output_ext.eq_ignore_ascii_case(env::consts::EXE_EXTENSION) {
-                    clang_compile(&lib, args, out_path)?;
-                    Ok(())
-                } else if output_ext.eq_ignore_ascii_case(CIL_LIB_EXT) && args.arch == TargetArch::Cil {
-                    dotnet_build(&lib, &args, out_path)?;
-
-                    Ok(())
                 } else {
-                    return Err(RunError::UnknownOutputExt(output_ext))
+                    let merged_lib = libs.merge();
+
+                    if output_ext.eq_ignore_ascii_case("c") {
+                        clang_print(&merged_lib, args, out_path)?;
+                        Ok(())
+                    } else if output_ext.eq_ignore_ascii_case(env::consts::EXE_EXTENSION) {
+                        clang_compile(&merged_lib, args, out_path)?;
+                        Ok(())
+                    } else if output_ext.eq_ignore_ascii_case(CIL_LIB_EXT) && args.arch == TargetArch::Cil {
+                        dotnet_build(&merged_lib, &args, out_path)?;
+
+                        Ok(())
+                    } else {
+                        return Err(RunError::UnknownOutputExt(output_ext))
+                    }
                 }
             } else {
-                let metadata = lib.metadata.clone();
+                let err_formatter: Box<dyn IRFormatter> = if args.debug {
+                    Box::new(libs.to_metadata_builder())
+                } else {
+                    Box::new(RawFormatter)
+                };
 
-                let mut exec_libs = Vec::with_capacity(lib.references.len() + 1);
-
-                for lib_ref in &lib.references {
-                    let ref_lib = load_lib(lib_ref, &[])?;
-                    exec_libs.push(ref_lib);
-                }
-                exec_libs.push(lib);
+                let exec_libs = libs.into_vec();
 
                 exec_vm(args, &exec_libs).map_err(|err| err.map_types(|ty| {
-                    ty.to_pretty_string(metadata.as_formatter())
+                    ty.to_pretty_string(err_formatter.as_ref())
                 }))?;
 
                 Ok(())
