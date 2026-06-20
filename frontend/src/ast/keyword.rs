@@ -1,7 +1,9 @@
-use crate::parse::{Matchable, Matcher, SequenceMatcher};
+use crate::parse::Matchable;
+use crate::parse::Matcher;
+use crate::parse::SequenceMatcher;
+use std::fmt;
 use std::ops::Add;
 use std::ops::BitOr;
-use std::fmt;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Keyword {

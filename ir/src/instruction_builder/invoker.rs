@@ -1,5 +1,6 @@
 use crate::instruction_builder::InstructionBuilder;
-use crate::{FunctionID, GlobalRef};
+use crate::FunctionID;
+use crate::GlobalRef;
 use crate::FunctionSig;
 use crate::LocalID;
 use crate::ObjectID;

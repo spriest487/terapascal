@@ -9,6 +9,7 @@ pub use self::const_decl::*;
 pub use self::decl_mod::*;
 pub use self::unit_decl::*;
 pub use self::use_decl::*;
+
 use crate::ast;
 use crate::ast::tag::Tag;
 use crate::ast::Annotation;
@@ -20,8 +21,8 @@ use crate::ast::IdentPath;
 use crate::ast::Stmt;
 use crate::ast::TypeDecl;
 use crate::ast::TypeDeclItem;
-pub use crate::parse::MatchOneOf;
-use crate::parse::{IllegalStatement, Matcher};
+use crate::parse::IllegalStatement;
+use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;

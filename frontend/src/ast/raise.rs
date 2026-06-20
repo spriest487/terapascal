@@ -1,11 +1,12 @@
-use std::fmt;
+use crate::ast::Annotation;
+use crate::ast::Expr;
+use crate::parse::ParseResult;
+use crate::parse::TokenStream;
+use crate::Keyword;
 use derivative::Derivative;
-use terapascal_common::span::{Span, Spanned};
-use crate::{
-    Keyword,
-    ast::{Annotation, Expr},
-    parse::{ParseResult, TokenStream}
-};
+use std::fmt;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]

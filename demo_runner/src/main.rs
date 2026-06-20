@@ -3,7 +3,8 @@ mod test_script;
 mod concat_reader;
 mod test_case;
 
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
+use chrono::Utc;
 use opts::Opts;
 use std::process::Command;
 use structopt::StructOpt;

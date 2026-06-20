@@ -4,8 +4,10 @@ mod rtti;
 
 use crate::dep_sort::sort_defs;
 use crate::metadata::vars::ConstInfo;
+use crate::FunctionID;
 use crate::InterfaceID;
 use crate::Metadata;
+use crate::MetadataCollection;
 use crate::NamePath;
 use crate::StringID;
 use crate::Type;
@@ -17,7 +19,6 @@ use crate::VariableInfo;
 use crate::EMPTY_STRING_ID;
 use crate::RESERVED_STRINGS;
 use crate::RESERVED_TYPES;
-use crate::{FunctionID, MetadataCollection};
 use linked_hash_map::LinkedHashMap;
 use std::iter;
 use std::sync::Arc;

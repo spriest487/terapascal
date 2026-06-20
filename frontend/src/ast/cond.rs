@@ -1,20 +1,23 @@
 #[cfg(test)]
 mod test;
 
-use crate::ast::{Annotation, Ident, MatchPattern};
+use crate::ast::Annotation;
 use crate::ast::Expr;
+use crate::ast::Ident;
+use crate::ast::MatchPattern;
 use crate::ast::Stmt;
-use crate::parse::{IllegalStatement, TryParse};
+use crate::parse::IllegalStatement;
 use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::TokenStream;
+use crate::parse::TryParse;
 use crate::Keyword;
+use derivative::Derivative;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use derivative::Derivative;
-use std::fmt;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]

@@ -1,5 +1,6 @@
 use crate::ast::type_name::TypeName;
-use crate::ast::{Annotation, Ident};
+use crate::ast::Annotation;
+use crate::ast::Ident;
 use crate::ast::Operator;
 use crate::ast::UncheckedType;
 use crate::parse::Parse;

@@ -1,8 +1,10 @@
 use crate::ast::type_name::IdentTypeName;
 use crate::ast::type_name::TypeName;
-use crate::ast::{IdentPath, UncheckedType};
+use crate::ast::Annotation;
+use crate::ast::Ident;
+use crate::ast::IdentPath;
 use crate::ast::Keyword;
-use crate::ast::{Annotation, Ident};
+use crate::ast::UncheckedType;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;

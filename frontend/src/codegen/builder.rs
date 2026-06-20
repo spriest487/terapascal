@@ -3,8 +3,9 @@ mod test;
 
 use crate::ast as ast;
 use crate::codegen::expr::literal_to_val;
+use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::library_builder::{FunctionDeclKey, MethodDeclKey};
+use crate::codegen::library_builder::MethodDeclKey;
 use crate::codegen::metadata::*;
 use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;

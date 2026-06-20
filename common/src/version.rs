@@ -89,7 +89,8 @@ impl FromStr for Version {
 
 #[cfg(test)]
 mod test {
-    use crate::version::{Version, VersionParseError};
+    use crate::version::Version;
+    use crate::version::VersionParseError;
     use std::str::FromStr;
 
     #[test]

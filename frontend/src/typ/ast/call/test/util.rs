@@ -60,7 +60,6 @@ pub fn candidates_from_module(module: &Module, unit_name: &str) -> Vec<OverloadC
                 let ident = func.decl.name.ident.clone();
                 let (method_index, method) = declaring_type
                     .find_method(&ident, &sig, &unit.context)
-                    .unwrap()
                     .expect("method defs in unit must have a corresponding decl in the type");
 
                 Some(OverloadCandidate::Method {

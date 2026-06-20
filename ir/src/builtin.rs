@@ -1,4 +1,5 @@
-use crate::{NamePath, StructLayout};
+use crate::NamePath;
+use crate::StructLayout;
 use crate::StructDef;
 use crate::StructFieldDef;
 use crate::StructIdentity;

@@ -1,8 +1,9 @@
 use crate::c::type_map::TypeID;
+use crate::c::FieldName;
 use crate::c::Type;
 use crate::c::TypeDecl;
 use crate::c::TypeDefName;
-use crate::c::{FieldName, Unit};
+use crate::c::Unit;
 use crate::ir;
 use std::fmt;
 use std::hash::Hash;

@@ -1,7 +1,8 @@
 use crate::c::type_map::TypeID;
-use crate::c::{Type, Unit};
+use crate::c::Type;
 use crate::c::TypeDecl;
 use crate::c::TypeDefName;
+use crate::c::Unit;
 use crate::ir;
 use std::fmt;
 use std::hash::Hash;

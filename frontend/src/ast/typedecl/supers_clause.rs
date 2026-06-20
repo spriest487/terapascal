@@ -6,7 +6,9 @@ use crate::Keyword;
 use crate::Separator;
 use crate::TokenStream;
 use derivative::Derivative;
-use terapascal_common::span::{MaybeSpanned, Span, Spanned};
+use terapascal_common::span::MaybeSpanned;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]

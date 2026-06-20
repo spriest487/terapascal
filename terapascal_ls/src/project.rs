@@ -128,6 +128,9 @@ impl Project {
             output_stage: BuildStage::Codegen,
             search_dirs: Vec::new(),
 
+            // TODO: need to detect if we're looking at the main unit and turn this on
+            no_system: false,
+
             // TODO: package dependencies support
             package_names: Vec::new(),
 

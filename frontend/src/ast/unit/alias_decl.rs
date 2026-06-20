@@ -1,12 +1,13 @@
-use crate::parse::{Parse, ParseResult};
-use crate::{
-    ast::{Annotation, DeclIdent},
-    parse::TokenStream,
-};
-use derivative::Derivative;
-use terapascal_common::span::{Span, Spanned};
-use std::fmt;
 use crate::ast::type_name::TypeName;
+use crate::ast::Annotation;
+use crate::ast::DeclIdent;
+use crate::parse::Parse;
+use crate::parse::ParseResult;
+use crate::parse::TokenStream;
+use derivative::Derivative;
+use std::fmt;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(PartialEq, Hash, Debug)]

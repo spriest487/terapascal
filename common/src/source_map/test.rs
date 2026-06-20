@@ -1,5 +1,6 @@
 use crate::source_map::*;
-use crate::{Location, Span};
+use crate::Location;
+use crate::Span;
 use std::path::PathBuf;
 
 struct TestMapping {

@@ -3,6 +3,8 @@ mod lex;
 #[cfg(test)]
 mod test;
 
+pub use crate::parse::TokenStream;
+
 use crate::ast::Ident;
 use crate::ast::Keyword;
 use crate::ast::Operator;
@@ -12,18 +14,18 @@ use crate::parse::Matchable;
 use crate::parse::Matcher;
 use crate::parse::ParseResult;
 use crate::parse::SequenceMatcher;
-pub use crate::parse::TokenStream;
 use crate::pp::PreprocessedUnit;
 use std::fmt;
 use std::fmt::Write as _;
 use std::ops::Add;
 use std::ops::BitOr;
 use std::sync::Arc;
-use thiserror::Error;
 use terapascal_common::span::*;
+use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticOutput;
+use terapascal_common::Severity;
 use terapascal_common::TracedError;
-use terapascal_common::{DiagnosticLabel, Severity};
+use thiserror::Error;
 
 #[derive(Eq, PartialEq, Copy, Clone, Debug, Hash)]
 pub enum DelimiterPair {

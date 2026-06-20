@@ -1,6 +1,7 @@
+use crate::ast;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::typ;
-use crate::{ast, ir};
+use crate::ir;
 
 pub trait NamePathExt {
     fn from_ident_path(ident: &ast::IdentPath, type_args: impl IntoIterator<Item=ir::Type>) -> Self;

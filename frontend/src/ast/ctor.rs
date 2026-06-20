@@ -1,23 +1,24 @@
 #[cfg(test)]
 mod test;
 
+use crate::ast::Annotation;
 use crate::ast::Expr;
 use crate::ast::Ident;
-use crate::ast::{Annotation, TypeArgList};
+use crate::ast::TypeArgList;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
+use crate::token_tree::DelimitedGroup;
 use crate::DelimiterPair;
 use crate::Separator;
 use crate::TokenTree;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use derivative::*;
 use std::fmt;
-use crate::token_tree::DelimitedGroup;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Eq, Clone, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]

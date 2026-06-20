@@ -1,6 +1,8 @@
+use crate::ExecOpts;
+use crate::Vm;
 use terapascal_common::version::Version;
-use terapascal_ir::{Library, Metadata};
-use crate::{Vm, ExecOpts};
+use terapascal_ir::Library;
+use terapascal_ir::Metadata;
 
 #[test]
 fn empty_library_executes_ok() {

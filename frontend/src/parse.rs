@@ -2,11 +2,13 @@ mod matcher;
 mod token_stream;
 mod result;
 
-use std::ops::{Deref, DerefMut};
+use crate::TokenTree;
 pub use self::matcher::*;
 pub use self::result::*;
 pub use self::token_stream::*;
-use crate::TokenTree;
+
+use std::ops::Deref;
+use std::ops::DerefMut;
 use terapascal_common::TracedError;
 
 pub struct Parser {

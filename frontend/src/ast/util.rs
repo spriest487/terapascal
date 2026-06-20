@@ -1,17 +1,19 @@
-use terapascal_common::aggregate_err::AggregateError;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Unit;
-use crate::parse::{Parse, Parser};
+use crate::parse::Parse;
 use crate::parse::ParseResult;
+use crate::parse::Parser;
 use crate::parse::TokenStream;
 use crate::pp::Preprocessor;
 use crate::TokenTree;
-use terapascal_common::span::{Span, Spanned};
+use terapascal_common::aggregate_err::AggregateError;
+use terapascal_common::fs::DefaultFilesystem;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticOutput;
-use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
 
 pub fn try_tokens_from_string(unit_name: &str, src: &str) -> Result<TokenStream, String> {

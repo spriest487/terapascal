@@ -20,6 +20,12 @@ pub use self::token_tree::TokenStream;
 pub use self::token_tree::TokenTree;
 pub use self::token_tree::TokenizeError;
 pub use self::token_tree::TokenizeResult;
+pub use ast::keyword::Keyword;
+pub use ast::operators::CompoundAssignmentOperator;
+pub use ast::operators::Operator;
+pub use ast::operators::Position;
+
+use crate::codegen::library_builder::LibraryRef;
 use crate::codegen::CodegenOpts;
 use crate::parse::AggregateParseError;
 use crate::parse::ParseError;
@@ -27,11 +33,8 @@ use crate::parse::ParseResult;
 use crate::parse::Parser;
 use crate::pp::error::PreprocessorError;
 use crate::pp::PreprocessedUnit;
-use crate::typ::{Context, Module};
-pub use ast::keyword::Keyword;
-pub use ast::operators::CompoundAssignmentOperator;
-pub use ast::operators::Operator;
-pub use ast::operators::Position;
+use crate::typ::Context;
+use crate::typ::Module;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::aggregate_err::AggregateError;
@@ -43,7 +46,6 @@ use terapascal_common::version::Version;
 use terapascal_common::CompileOpts;
 use terapascal_common::TracedError;
 use terapascal_ir as ir;
-use crate::codegen::library_builder::LibraryRef;
 
 pub fn preprocess(
     fs: &impl Filesystem,

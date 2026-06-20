@@ -1,6 +1,7 @@
-use terapascal_common::{span::*, TracedError};
-
-use crate::{parse::*, token_tree::*};
+use crate::parse::*;
+use crate::token_tree::*;
+use terapascal_common::span::*;
+use terapascal_common::TracedError;
 
 pub struct TokenStream {
     tokens: Vec<TokenTree>,

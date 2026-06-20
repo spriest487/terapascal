@@ -1,5 +1,6 @@
 use crate::ast::Access;
-use crate::typ::test::{expect_type_error, try_module_from_srcs};
+use crate::typ::test::expect_type_error;
+use crate::typ::test::try_module_from_srcs;
 use crate::typ::TypeError;
 
 #[test]

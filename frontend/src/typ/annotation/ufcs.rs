@@ -1,6 +1,7 @@
 use crate::ast::Visibility;
+use crate::typ::ast::specialize_call_args;
+use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
-use crate::typ::ast::{specialize_call_args, Expr};
 use crate::typ::function::FunctionValue;
 use crate::typ::Context;
 use crate::typ::FunctionSig;

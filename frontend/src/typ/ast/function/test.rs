@@ -92,14 +92,14 @@ fn make_decl(
     };
 
     FunctionDecl {
-        kw_span: test_span.clone(),
+        kw_span: None,
         name: FunctionName {
             ident: test_ident(name),
             context: match owning_ty {
                 None => FunctionDeclContext::FreeFunction,
                 Some(ty) => FunctionDeclContext::method_decl(ty),
             },
-            span: test_span.clone(),
+            span: None,
             type_params: ty_params_list,
         },
         tags: Vec::new(),
@@ -175,7 +175,7 @@ fn specialized_func_decl_has_specialized_param_tys() {
 
 #[test]
 fn specialized_func_decl_checks_constraint() {
-    let displayable = Type::interface(builtin_displayable_name().full_path);
+    let displayable = Type::interface(builtin_displayable_name());
 
     let ty_params = [make_ty_param_of("T", displayable)];
 

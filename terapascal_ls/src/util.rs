@@ -1,7 +1,8 @@
 use crate::project::LinksEntry;
 use crate::workspace::Workspace;
 use std::path::PathBuf;
-use terapascal_common::span::{Location, Spanned};
+use terapascal_common::span::Location;
+use terapascal_common::span::Spanned;
 use terapascal_common::span::Span;
 use tower_lsp::lsp_types as lsp;
 use tower_lsp::lsp_types::Url;

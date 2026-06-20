@@ -16,7 +16,7 @@ fn instructions_without_comments(actual: &[DebugInstruction], count: usize) -> V
 #[test]
 fn end_loop_scope_ends_at_right_scope_level() {
     let ctx = typ::Context::root(CompileOpts::default());
-    let mut library = LibraryBuilder::new("test", Version::default(), &ctx, [], CodegenOpts::default());
+    let mut library = LibraryBuilder::new("test", Version::default(), &ctx, &[], CodegenOpts::default());
     let mut builder = IRBuilder::new(&mut library);
 
     let initial_scope = builder.local_stack.len();
@@ -32,7 +32,7 @@ fn end_loop_scope_ends_at_right_scope_level() {
 #[test]
 fn break_cleans_up_loop_locals() {
     let ctx = typ::Context::root(CompileOpts::default());
-    let mut library = LibraryBuilder::new("test", Version::default(), &ctx, [], CodegenOpts::default());
+    let mut library = LibraryBuilder::new("test", Version::default(), &ctx, &[], CodegenOpts::default());
     let mut builder = IRBuilder::new(&mut library);
 
     let continue_label = builder.next_label();

@@ -144,8 +144,10 @@ where
         });
     }
 
-    fn add_keyword(&mut self, span: &Span) {
-        self.add(span, SEMANTIC_KEYWORD, "keyword");
+    fn add_keyword(&mut self, at: &impl MaybeSpanned) {
+        if let Some(span) = at.get_span() {
+            self.add(span, SEMANTIC_KEYWORD, "keyword");
+        }
     }
 
     pub fn add_unit(&mut self, unit: &ast::Unit<A>) {
@@ -358,9 +360,7 @@ where
     }
 
     fn add_type_decl_section(&mut self, section: &impl ast::MemberDeclSection<A>) {
-        if let Some(kw_span) = &section.access_kw_span() {
-            self.add_keyword(kw_span);
-        }
+        self.add_keyword(&section.access_kw_span());
 
         for member in section.members() {
             match member {

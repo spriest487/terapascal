@@ -1,18 +1,19 @@
-use crate::ast::{Annotation, UncheckedType};
+use crate::ast::Annotation;
+use crate::ast::DeclIdent;
 use crate::ast::Expr;
 use crate::ast::IdentTypeName;
-use crate::ast::DeclIdent;
 use crate::ast::TypeName;
+use crate::ast::UncheckedType;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::Keyword;
 use crate::Operator;
 use crate::TokenStream;
+use derivative::Derivative;
+use std::fmt;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use derivative::Derivative;
-use std::fmt;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]

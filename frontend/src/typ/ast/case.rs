@@ -1,5 +1,6 @@
 use crate::ast;
-use crate::ast::{ElseBranch, SemanticHint};
+use crate::ast::ElseBranch;
+use crate::ast::SemanticHint;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::implicit_conversion;
 use crate::typ::ast::typecheck_stmt;

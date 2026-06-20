@@ -1,15 +1,11 @@
-use crate::ast::{Ident, TypeIdentList, Visibility};
-use crate::ast::IdentPath;
-use crate::typ::context::Decl;
-use crate::typ::{FunctionSig, TypeParamList};
-use crate::typ::ScopeMemberKind;
-use crate::typ::Type;
-use crate::typ::Value;
-use terapascal_common::span::*;
+use crate::ast::*;
+use crate::typ::*;
 use std::fmt;
 use std::fmt::Debug;
 use std::path::PathBuf;
-use terapascal_common::{DiagnosticLabel, DiagnosticMessage};
+use terapascal_common::span::*;
+use terapascal_common::DiagnosticLabel;
+use terapascal_common::DiagnosticMessage;
 
 #[derive(Debug, Clone)]
 pub enum GenericTarget {

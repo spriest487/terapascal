@@ -1,4 +1,5 @@
-use crate::{DiagnosticOutput, Severity};
+use crate::DiagnosticOutput;
+use crate::Severity;
 use std::fmt;
 
 pub enum BuildLogEntry {

@@ -1,3 +1,5 @@
+use crate::c::type_map::TypeID;
+use crate::c::BuiltinName;
 use crate::c::Class;
 use crate::c::Expr;
 use crate::c::FieldName;
@@ -7,12 +9,12 @@ use crate::c::FunctionName;
 use crate::c::GlobalName;
 use crate::c::InfixOp;
 use crate::c::Statement;
+use crate::c::StructDef;
+use crate::c::StructMember;
 use crate::c::Type;
 use crate::c::TypeDefName;
 use crate::c::Unit;
 use crate::c::VariableID;
-use crate::c::{BuiltinName, StructDef, StructMember};
-use crate::c::type_map::TypeID;
 use crate::ir;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]

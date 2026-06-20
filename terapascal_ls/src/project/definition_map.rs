@@ -1,17 +1,23 @@
 use crate::project::Project;
+use crate::util::search_in_spanned;
+use crate::util::search_or_insert_spanned;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use terapascal_frontend::ast::{ForLoopCounterInit};
+use terapascal_frontend::ast;
+use terapascal_frontend::ast::Exit;
+use terapascal_frontend::ast::ForLoopCounterInit;
 use terapascal_frontend::ast::ForLoopRange;
+use terapascal_frontend::ast::Ident;
 use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::Literal;
 use terapascal_frontend::ast::SetDeclRange;
 use terapascal_frontend::ast::TypeMemberDecl;
-use terapascal_frontend::ast::{Exit, Ident};
+use terapascal_frontend::typ::ast::member_annotation;
+use terapascal_frontend::typ::ast::AliasDecl;
 use terapascal_frontend::typ::ast::Block;
 use terapascal_frontend::typ::ast::Call;
 use terapascal_frontend::typ::ast::CaseBlock;
@@ -35,9 +41,7 @@ use terapascal_frontend::typ::ast::UnitDecl;
 use terapascal_frontend::typ::ast::VariantDecl;
 use terapascal_frontend::typ::ast::WhereClause;
 use terapascal_frontend::typ::ast::WhileLoop;
-use terapascal_frontend::typ::ast::{member_annotation, AliasDecl};
 use terapascal_frontend::typ::seq::TypeSequenceSupport;
-use terapascal_frontend::typ::{Context, MatchPattern};
 use terapascal_frontend::typ::Invocation;
 use terapascal_frontend::typ::ModuleUnit;
 use terapascal_frontend::typ::ScopeMemberRef;
@@ -46,8 +50,9 @@ use terapascal_frontend::typ::TypeArgList;
 use terapascal_frontend::typ::TypeName;
 use terapascal_frontend::typ::TypeParamList;
 use terapascal_frontend::typ::Value;
-use terapascal_frontend::{ast, Operator};
-use crate::util::{search_in_spanned, search_or_insert_spanned};
+use terapascal_frontend::typ::Context;
+use terapascal_frontend::typ::MatchPattern;
+use terapascal_frontend::Operator;
 
 pub struct LinksEntry {
     pub key: Span,
@@ -635,13 +640,8 @@ impl DefinitionMap {
         let sig = func_decl.sig();
 
         match declaring_type.find_method(&func_decl.name.ident, &sig, ctx) {
-            Ok(Some((_, decl_in_type))) => {
-                Some(decl_in_type.func_decl.name.span.clone())
-            }
-
-            Ok(None) => {
-                eprintln!("[definition_map] missing method decl for {declaring_type}.{}", func_decl.name.ident);
-                None
+            Ok((_, decl_in_type)) => {
+                decl_in_type.func_decl.name.span.clone()
             }
 
             Err(err) => {
@@ -766,19 +766,28 @@ impl DefinitionMap {
             }
 
             Value::Function(function) => {
-                self.add(at_span.clone(), function.decl.name.span.clone());
+                if let Some(name_span) = function.decl.name.span.clone() {
+                    self.add(at_span.clone(), name_span);
+                }
             }
 
             Value::UfcsFunction(ufcs) => {
-                self.add(at_span.clone(), ufcs.decl.name.span.clone());
+                if let Some(name_span) = ufcs.decl.name.span.clone() {
+                    self.add(at_span.clone(), name_span);
+                }
             }
 
             Value::Invocation(invocation) => match invocation.as_ref() {
                 Invocation::Function { function, .. } => {
-                    self.add(at_span.clone(), function.decl.name.span.clone());
+
+                    if let Some(name_span) = function.decl.name.span.clone() {
+                        self.add(at_span.clone(), name_span);
+                    }
                 }
                 Invocation::Method { method, .. } => {
-                    self.add(at_span.clone(), method.decl.func_decl.name.span.clone());
+                    if let Some(name_span) = method.decl.func_decl.name.span.clone() {
+                        self.add(at_span.clone(), name_span);
+                    }
                 }
                 Invocation::ObjectCtor { .. } => {
                     // object ctors must always be call or ctor items
@@ -801,7 +810,9 @@ impl DefinitionMap {
             },
 
             Value::Method(method) => {
-                self.add(at_span.clone(), method.decl.func_decl.name.span.clone());
+                if let Some(name_span) = method.decl.func_decl.name.span.clone() {
+                    self.add(at_span.clone(), name_span);
+                }
             }
 
             Value::Type(ty, ..) => {
@@ -826,7 +837,9 @@ impl DefinitionMap {
 
             Value::Overload(overload) => {
                 for candidate in &overload.candidates {
-                    self.add(at_span.clone(), candidate.decl().name.span.clone());
+                    if let Some(name_span) = candidate.decl().name.span.clone() {
+                        self.add(at_span.clone(), name_span);
+                    }
                 }
             }
 

@@ -1,5 +1,9 @@
 use crate::pp::PreprocessedUnit;
-use crate::token_tree::lex::{lex, STRING_ESCAPE_BACKSPACE, STRING_ESCAPE_CR, STRING_ESCAPE_NEWLINE, STRING_ESCAPE_TAB};
+use crate::token_tree::lex::lex;
+use crate::token_tree::lex::STRING_ESCAPE_BACKSPACE;
+use crate::token_tree::lex::STRING_ESCAPE_CR;
+use crate::token_tree::lex::STRING_ESCAPE_NEWLINE;
+use crate::token_tree::lex::STRING_ESCAPE_TAB;
 use std::path::PathBuf;
 use std::sync::Arc;
 use terapascal_common::source_map::SourceMapBuilder;

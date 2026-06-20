@@ -1,6 +1,7 @@
 use crate::ast;
 use crate::typ;
-use crate::typ::ast::{Call, Stmt};
+use crate::typ::ast::Call;
+use crate::typ::ast::Stmt;
 use crate::typ::ast::StructDecl;
 use crate::typ::context::*;
 use crate::typ::ty::*;

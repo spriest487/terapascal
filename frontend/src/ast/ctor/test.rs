@@ -1,8 +1,9 @@
-use crate::ast::{Expr, ObjectCtor};
+use crate::ast::Expr;
+use crate::ast::ObjectCtor;
 use crate::TokenStream;
+use terapascal_common::fs::DefaultFilesystem;
 use terapascal_common::span::Span;
 use terapascal_common::CompileOpts;
-use terapascal_common::fs::DefaultFilesystem;
 
 fn expr_from_src(src: &str) -> Expr {
     let opts = CompileOpts::default();

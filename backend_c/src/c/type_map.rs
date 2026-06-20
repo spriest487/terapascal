@@ -1,4 +1,15 @@
-use crate::c::{ArrayTypeID, Class, FieldName, FuncAliasDef, StructDef, StructMember, Type, TypeDecl, TypeDef, TypeDefName, Unit, VariantDef};
+use crate::c::ArrayTypeID;
+use crate::c::Class;
+use crate::c::FieldName;
+use crate::c::FuncAliasDef;
+use crate::c::StructDef;
+use crate::c::StructMember;
+use crate::c::Type;
+use crate::c::TypeDecl;
+use crate::c::TypeDef;
+use crate::c::TypeDefName;
+use crate::c::Unit;
+use crate::c::VariantDef;
 use crate::ir;
 use std::borrow::Cow;
 use std::fmt;
