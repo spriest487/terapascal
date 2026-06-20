@@ -21,12 +21,11 @@ use std::process;
 use std::time::Duration;
 use structopt::StructOpt;
 use terapascal_build::build;
-use terapascal_build::load_lib;
+use terapascal_build::load_lib_file;
 use terapascal_build::BuildArtifact;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildOutput;
 use terapascal_build::BuildStage;
-use terapascal_build::LibraryArtifact;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::build_log::BuildLogEntry;
 use terapascal_common::fs::DefaultFilesystem;
@@ -90,16 +89,8 @@ fn compile(args: Args) -> Result<(), RunError> {
             log.trace(format!("loading existing module: {}", args.file.display()));
         }
 
-        let lib_name = args.file
-            .with_extension("")
-            .to_string_lossy()
-            .to_string();
-
-        let artifact = load_lib(lib_name, &args.search_dirs)
-            .map(|(main, refs)| BuildArtifact::Library(LibraryArtifact {
-                main,
-                refs,
-            }));
+        let artifact = load_lib_file(&args.file, &args.search_dirs)
+            .map(BuildArtifact::Library);
 
         return handle_output(BuildOutput {
             artifact,

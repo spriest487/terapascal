@@ -9,9 +9,9 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
-use std::iter;
 use std::fs;
 use std::io::Read;
+use std::iter;
 use std::path::PathBuf;
 use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
@@ -87,7 +87,7 @@ impl LibraryArtifact {
 
         self.main
     }
-    
+
     pub fn to_metadata_builder(&self) -> ir::MetadataBuilder {
         ir::MetadataBuilder::with_refs(self.refs.iter()
             .map(|r| r.metadata.clone())
@@ -550,26 +550,75 @@ pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
     }
 }
 
+fn split_lib_collection(
+    mut lib_collection: LinkedHashMap<String, ir::Library>,
+) -> BuildResult<LibraryArtifact> {
+    let Some((_, main)) = lib_collection.pop_front() else {
+        let msg = "loaded library collection is empty".to_string();
+        return Err(BuildError::InternalError(msg));
+    };
+
+    let refs: Vec<_> = lib_collection
+        .into_iter()
+        .map(|(_, lib)| lib)
+        .collect();
+
+    Ok(LibraryArtifact { main, refs })
+}
+
+pub fn load_lib_file(
+    path: impl Into<PathBuf>,
+    additional_search_paths: &[PathBuf],
+) -> BuildResult<LibraryArtifact> {
+    let mut lib_collection = LinkedHashMap::new();
+    load_lib_file_rec(path, additional_search_paths, &mut lib_collection)?;
+
+    split_lib_collection(lib_collection)
+}
+
 pub fn load_lib(
     name: impl Into<String>,
     additional_search_dirs: &[PathBuf],
-) -> BuildResult<(ir::Library, Vec<ir::Library>)> {
+) -> BuildResult<LibraryArtifact> {
     let name = name.into();
 
     let mut lib_collection = LinkedHashMap::new();
     load_libs_rec(&name, additional_search_dirs, &mut lib_collection)?;
 
-    let Some(main_lib) = lib_collection.remove(&name) else {
-        let msg = format!("main library not found: {}", name);
-        return Err(BuildError::InternalError(msg));
-    };
+    split_lib_collection(lib_collection)
+}
 
-    let ref_libs: Vec<_> = lib_collection
-        .into_iter()
-        .map(|(_, lib)| lib)
-        .collect();
+fn load_lib_file_rec(
+    path: impl Into<PathBuf>,
+    additional_search_dirs: &[PathBuf],
+    lib_collection: &mut LinkedHashMap<String, ir::Library>,
+) -> BuildResult<()> {
+    let path = path.into();
+    let mut file = fs::File::open(&path)?;
 
-    Ok((main_lib, ref_libs))
+    let mut lib_bytes = Vec::new();
+    file.read_to_end(&mut lib_bytes)?;
+
+    let library = ir::decode_lib(&lib_bytes)
+        .map_err(|err| {
+            BuildError::ReadSourceFileFailed {
+                msg: format!("deserialization failed: {err}"),
+                path,
+            }
+        })?;
+
+    let refs = library.references.clone();
+    lib_collection.insert(library.name.clone(), library);
+
+    for ref_name in refs {
+        if lib_collection.contains_key(&ref_name) {
+            continue;
+        }
+
+        load_libs_rec(&ref_name, additional_search_dirs, lib_collection)?;
+    }
+
+    Ok(())
 }
 
 fn load_libs_rec(
@@ -595,30 +644,7 @@ fn load_libs_rec(
             BuildError::FileNotFound(PathBuf::from(&name).with_added_extension(IR_LIB_EXT), None)
         })?;
 
-    let mut file = fs::File::open(&path)?;
-
-    let mut lib_bytes = Vec::new();
-    file.read_to_end(&mut lib_bytes)?;
-
-    let library = ir::decode_lib(&lib_bytes)
-        .map_err(|err| {
-            BuildError::ReadSourceFileFailed {
-                msg: format!("deserialization failed: {err}"),
-                path,
-            }
-        })?;
-
-    let refs = library.references.clone();
-    lib_collection.insert(name, library);
-
-    for ref_name in refs {
-        if lib_collection.contains_key(&ref_name) {
-            continue;
-        }
-
-        load_libs_rec(&ref_name, additional_search_dirs, lib_collection)?;
-    }
-
+    load_lib_file_rec(path, additional_search_dirs, lib_collection)?;
     Ok(())
 }
 
@@ -632,28 +658,28 @@ fn import_package(
         None => Vec::new(),
     };
 
-    let (lib, ref_libs) = load_lib(name, &search_dirs)?;
+    let loaded_lib = load_lib(name, &search_dirs)?;
 
     let mut imported_libs = Vec::new();
 
     match type_ctx {
         Some(ctx) => {
-            for ref_lib in ref_libs {
+            for ref_lib in loaded_lib.refs {
                 let imported_lib = import_lib(ref_lib, Some(ctx))?;
                 imported_libs.push(imported_lib);
             }
 
-            let imported_lib = import_lib(lib, Some(ctx))?;
+            let imported_lib = import_lib(loaded_lib.main, Some(ctx))?;
             imported_libs.push(imported_lib);
         }
 
         None => {
-            for ref_lib in ref_libs {
+            for ref_lib in loaded_lib.refs {
                 let imported_lib = import_lib(ref_lib, None)?;
                 imported_libs.push(imported_lib);
             }
 
-            let imported_lib = import_lib(lib, None)?;
+            let imported_lib = import_lib(loaded_lib.main, None)?;
             imported_libs.push(imported_lib);
         }
     };
