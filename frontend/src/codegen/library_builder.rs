@@ -473,15 +473,10 @@ impl<'a> LibraryBuilder<'a> {
     }
     
     pub fn translate_set_type(&mut self, set_type: &typ::SetType) -> SetFlagsType {
-        // let existing = self.set_flags_type_info.get(&bits).cloned();
-        // if let Some(set_flags_ty) = existing {
-        //     return set_flags_ty;
-        // }
-
         let set_flags_type = SetFlagsType::translate(self, set_type);
-        // self.set_flags_type_info.insert(bits, set_flags_type);
 
         self.gen_type_info(&set_flags_type.struct_id.to_struct_type([]));
+        self.gen_type_info(&set_flags_type.repr_type.repr_type());
 
         set_flags_type
     }

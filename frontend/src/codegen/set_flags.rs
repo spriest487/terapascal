@@ -7,9 +7,9 @@ use crate::typ::SYSTEM_UNIT_NAME;
 use crate::Operator;
 use bigdecimal::ToPrimitive;
 use ir::InstructionBuilder as _;
+use ir::StructLayout;
 use std::num::Wrapping;
 use std::rc::Rc;
-use terapascal_ir::StructLayout;
 
 pub const WORD_TYPE: ir::Type = ir::Type::U64;
 const WORD_BITS: usize = u64::BITS as usize;
@@ -59,14 +59,17 @@ impl SetFlagsType {
 
         let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
 
-        let mut set_struct = ir::StructDef::new(struct_identity, StructLayout::Packed);
-        set_struct.fields.insert(ir::FieldID(0), ir::StructFieldDef::new(flags_type.repr_type()));
+        // this only needs to be defined the first time this is called for any given set type
+        if !lib.metadata().is_defined(&struct_id.to_struct_type([])) {
+            let mut set_struct = ir::StructDef::new(struct_identity, StructLayout::Packed);
+            set_struct.fields.insert(ir::FieldID(0), ir::StructFieldDef::new(flags_type.repr_type()));
 
-        if let Some(set_tag_info) = Self::build_tag(lib, set_type) {
-            set_struct.tags.push(set_tag_info);
+            if let Some(set_tag_info) = Self::build_tag(lib, set_type) {
+                set_struct.tags.push(set_tag_info);
+            }
+
+            lib.metadata_mut().define_struct(struct_id, set_struct);
         }
-
-        lib.metadata_mut().define_struct(struct_id, set_struct);
 
         Self {
             struct_id,
