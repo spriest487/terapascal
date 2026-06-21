@@ -1,11 +1,11 @@
-use crate::ast::{FunctionBody, FunctionDeclKind, FunctionDef};
+use crate::ast::Access;
 use crate::ast::FunctionParamItem;
 use crate::ast::FunctionParamMod;
 use crate::ast::FunctionParamModDecl;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Visibility;
-use crate::ast::Access;
+use crate::ast::FunctionDeclKind;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::MethodDeclKey;
 use crate::codegen::FunctionInstance;
@@ -13,13 +13,13 @@ use crate::import::ImportBuilder;
 use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::ir;
+use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDeclContext;
 use crate::typ::ast::FunctionDeclMod;
 use crate::typ::ast::FunctionName;
 use crate::typ::ast::FunctionParamGroup;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::Tag;
-use crate::typ::ast::FunctionDecl;
 use crate::typ::EvaluatedConstExpr;
 use crate::typ::ScopeID;
 use crate::typ::Type;
@@ -164,6 +164,11 @@ impl ImportBuilder<'_> {
         param_groups: Vec<FunctionParamGroup>,
         path: &ir::NamePath,
     ) -> ImportResult<()> {
+        let Some(lib_func) = self.library.functions.get(&func_id) else {
+            return Err(ImportError::MissingFuncDef(func_id));
+        };
+
+        // no early returns after this! we need to always close the scope
         let scope = match path.parent() {
             Some(unit_path) => {
                 self.open_unit(self.read_ident_path(&unit_path))?
@@ -171,10 +176,6 @@ impl ImportBuilder<'_> {
             None => {
                 ScopeID(0)
             },
-        };
-
-        let Some(lib_func) = self.library.functions.get(&func_id) else {
-            return Err(ImportError::MissingFuncDef(func_id));
         };
 
         let decl_mods = match lib_func {
@@ -222,33 +223,25 @@ impl ImportBuilder<'_> {
             name: func_path,
         };
 
-        if self.imported_funcs.contains_key(&decl_key) {
-            return Ok(());
-        }
+        if !self.imported_funcs.contains_key(&decl_key) {
+            let func_decl = Arc::new(func_decl);
 
-        let func_decl = Arc::new(func_decl);
+            if let Some(ctx) = self.root_ctx.as_mut() {
+                let visibility = Visibility::Interface; // TODO: access modifiers in IR
 
-        if let Some(ctx) = self.root_ctx.as_mut() {
-            ctx.declare_function(func_ident.clone(), func_decl.clone(), Visibility::Interface)?;
-
-            if func_decl.external_src().is_none() {
-                let func_def = Arc::new(FunctionDef {
-                    body: FunctionBody::External,
-                    span: func_decl.span.clone(),
-                    decl: func_decl,
-                });
-
-                ctx.define_function(func_ident.clone(), func_def)?;
+                ctx.declare_external_func(func_decl, visibility)?;
             }
 
-            ctx.pop_scope(scope);
+            self.imported_funcs.insert(decl_key, FunctionInstance {
+                id: func_id,
+                published: func_info.runtime_name.is_some(), // TODO: access modifiers in IR
+                src_sig: decl_sig
+            });
         }
 
-        self.imported_funcs.insert(decl_key, FunctionInstance {
-            id: func_id,
-            published: func_info.runtime_name.is_some(), // TODO: access modifiers in IR
-            src_sig: decl_sig
-        });
+        if let Some(ctx) = self.root_ctx.as_mut() {
+            ctx.pop_scope(scope);
+        }
 
         Ok(())
     }

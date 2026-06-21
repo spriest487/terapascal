@@ -4,7 +4,6 @@ mod unit_typedecl;
 pub use self::unit_typedecl::*;
 use crate::ast;
 use crate::ast::BindingDeclKind;
-use crate::ast::FunctionName;
 use crate::ast::IdentPath;
 use crate::ast::SemanticHint;
 use crate::ast::UnitBindingItemInitializer;
@@ -146,7 +145,6 @@ fn typecheck_unit_func_def(
     ctx: &mut Context,
 ) -> TypeResult<UnitDeclTask> {
     let func_decl = FunctionDecl::typecheck(&func_def.decl, true, ctx);
-    let func_name = &func_decl.name;
 
     // free functions may not already have a declaration in scope if they weren't forward
     // declared, do that now
@@ -154,7 +152,6 @@ fn typecheck_unit_func_def(
         && !ctx.is_function_declared(&func_decl)
     {
         ctx.declare_function(
-            func_name.ident().clone(),
             Arc::new(func_decl.clone()),
             visibility,
         )?;
@@ -174,13 +171,16 @@ fn typecheck_unit_func_decl(
     visibility: Visibility,
     ctx: &mut Context,
 ) -> TypeResult<UnitDecl> {
-    let name = func_decl.name.clone();
     let func_decl = Arc::new(FunctionDecl::typecheck(func_decl, false, ctx));
 
     // this is always true in valid code - only free functions can be declared without definition
     // at the unit level - but we might be typechecking partially parsed code
     if matches!(func_decl.name.context, FunctionDeclContext::FreeFunction) {
-        ctx.declare_function(name.ident().clone(), func_decl.clone(), visibility)?;
+        if func_decl.external_src().is_some() {
+            ctx.declare_external_func(func_decl.clone(), visibility)?;
+        } else {
+            ctx.declare_function(func_decl.clone(), visibility)?;
+        }
     }
 
     Ok(UnitDecl::FunctionDecl { decl: func_decl })

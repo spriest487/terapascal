@@ -763,13 +763,12 @@ impl Context {
 
     pub fn declare_function(
         &mut self,
-        name: Ident,
         func_decl: Arc<FunctionDecl>,
         visibility: Visibility,
     ) -> TypeResult<()> {
         let current_scope = self.scopes.current_mut();
         
-        match current_scope.get_decl_mut(&name) {
+        match current_scope.get_decl_mut(&func_decl.name.ident) {
             Some(Decl::Function {
                 overloads,
                 visibility: existing_visibility,
@@ -807,16 +806,25 @@ impl Context {
                     visibility,
                 };
 
-                self.declare(name.clone(), decl)?;
+                self.declare(func_decl.name.ident.clone(), decl)?;
             },
         };
 
-        if func_decl.external_src().is_some() {
-            let sig_key = DefKey::Sig(Arc::new(func_decl.sig()));
-            let def = Def::External(func_decl);
+        Ok(())
+    }
 
-            self.define(name, sig_key, def, |_| DefDeclMatch::Match, |_, _| unreachable!())?;
-        }
+    pub fn declare_external_func(
+        &mut self,
+        func_decl: Arc<FunctionDecl>,
+        visibility: Visibility,
+    ) -> TypeResult<()> {
+        let name = func_decl.name.ident.clone();
+        let sig_key = DefKey::Sig(Arc::new(func_decl.sig()));
+
+        self.declare_function(func_decl.clone(), visibility)?;
+
+        let def = Def::External(func_decl);
+        self.define(name, sig_key, def, |_| DefDeclMatch::Match, |_, _| unreachable!())?;
 
         Ok(())
     }

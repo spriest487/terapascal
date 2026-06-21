@@ -336,7 +336,7 @@ pub fn declare_builtin_ty(
         
         if displayable {
             let display_method = Arc::new(builtin_displayable_display_method(ty.clone(), ty.clone()));
-            ctx.declare_function(display_method.name.ident.clone(), display_method.clone(), Visibility::Interface)?;
+            ctx.declare_external_func(display_method.clone(), Visibility::Interface)?;
 
             methods.insert(display_method.name.ident.clone(), ast::MethodDecl {
                 func_decl: display_method,
@@ -346,7 +346,7 @@ pub fn declare_builtin_ty(
 
         if comparable {
             let compare_method = Arc::new(builtin_comparable_compare_method(ty.clone(), ty.clone()));
-            ctx.declare_function(compare_method.name.ident.clone(), compare_method.clone(), Visibility::Interface)?;
+            ctx.declare_external_func(compare_method.clone(), Visibility::Interface)?;
             
             methods.insert(compare_method.name.ident.clone(), ast::MethodDecl {
                 func_decl: compare_method,
