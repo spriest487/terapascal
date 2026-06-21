@@ -61,16 +61,44 @@ pub trait InstructionBuilder {
         id
     }
 
-    // creates an autoreleased variable with the given name
+    // creates an auto-released variable with the given name
     fn local_var(&mut self, ty: Type, name: Option<Arc<String>>) -> LocalID {
         assert_ne!(Type::Nothing, ty);
-        
+
         let is_object = ty.is_object() || ty.is_weak();
 
         let id = match name {
-            Some(name) => self.local_stack_mut().bind_var(ty, name),
-            None => self.local_stack_mut().bind_auto_temp(ty),
+            Some(name) => {
+                let id = self.local_stack_mut().bind_var(ty.clone(), name.clone());
+
+                self.comment(format!(
+                    "var {}: {} ({} in scope {})",
+                    name,
+                    ty.to_pretty_string(self.metadata()),
+                    id,
+                    self.local_stack().len() - 1,
+                ));
+
+                id
+            },
+            None => {
+                let id = self.local_stack_mut().bind_auto_temp(ty.clone());
+
+                self.comment(format!(
+                    "var: {} ({} in scope {})",
+                    ty.to_pretty_string(self.metadata()),
+                    id,
+                    self.local_stack().len() - 1,
+                ));
+
+                id
+            },
         };
+
+        if self.is_debug() {
+
+
+        }
 
         if is_object {
             self.mov(id, Value::LiteralNil);
@@ -735,20 +763,22 @@ pub trait InstructionBuilder {
     }
 
     fn release(&mut self, at: impl Into<Ref>, value_type: Type, released_out: impl Into<Ref>) {
-        self.emit(Instruction::Release {
-            at: at.into(),
-            value_type,
-            released_out: released_out.into(),
-        });
+        if value_type.contains_any_object_refs(self.metadata()) {
+            self.emit(Instruction::Release {
+                at: at.into(),
+                value_type,
+                released_out: released_out.into(),
+            });
+        }
     }
 
-    fn retain(&mut self, at: impl Into<Ref>, value_type: Type) -> bool {
-        self.emit(Instruction::Retain {
-            at: at.into(),
-            value_type,
-        });
-
-        true
+    fn retain(&mut self, at: impl Into<Ref>, value_type: Type) {
+        if value_type.contains_any_object_refs(self.metadata()) {
+            self.emit(Instruction::Retain {
+                at: at.into(),
+                value_type,
+            });
+        }
     }
 
     fn ref_to_ptr_val(&mut self, at: impl Into<Ref>, ty: &Type) -> Value {
