@@ -1,0 +1,9 @@
+{
+  "packages": [
+    "MyLib"
+  ],
+  "steps": [
+    { "output": "loaded MyLib" },
+    { "output": "hello, MyLib! 456" }
+  ]
+}

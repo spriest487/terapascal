@@ -24,6 +24,9 @@ pub struct TestScript {
     pub ignore: bool,
 
     #[serde(default)]
+    pub packages: Vec<String>,
+
+    #[serde(default)]
     pub steps: Vec<TestScriptStep>,
 }
 

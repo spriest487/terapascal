@@ -104,9 +104,12 @@ impl TestCase {
 
             if opts.debug {
                 build_command.arg("--debug");
-                build_command.arg("--leak-check");
             }
-            
+
+            for extra_package in &self.script.packages {
+                build_command.arg("-p").arg(extra_package);
+            }
+
             let build_status = try_run_command(
                 &mut build_command,
                 &mut build_stdout,
