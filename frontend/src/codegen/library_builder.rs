@@ -84,7 +84,7 @@ struct BuiltinClassInfo {
 
 #[derive(Debug, Clone)]
 pub struct LibraryRef {
-    pub lib: ir::Library,
+    pub lib: Rc<ir::Library>,
     pub imported_funcs: HashMap<FunctionDeclKey, FunctionInstance>,
 }
 

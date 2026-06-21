@@ -254,9 +254,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     Box::new(RawFormatter)
                 };
 
-                let exec_libs = libs.into_vec();
-
-                exec_vm(args, &exec_libs).map_err(|err| err.map_types(|ty| {
+                exec_vm(args, libs.iter()).map_err(|err| err.map_types(|ty| {
                     ty.to_pretty_string(err_formatter.as_ref())
                 }))?;
 
@@ -266,7 +264,7 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
     }
 }
 
-fn exec_vm(args: &Args, libs: &[ir::Library]) -> ExecResult<()> {
+fn exec_vm<'a>(args: &Args, libs: impl IntoIterator<Item=&'a ir::Library>) -> ExecResult<()> {
     // execute the IR immediately
     let exec_opts = ExecOpts {
         trace_rc: args.trace_rc,
