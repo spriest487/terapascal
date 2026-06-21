@@ -8,7 +8,7 @@ use std::sync::Arc;
 use terapascal_ir::InstructionBuilder;
 
 pub struct PatternMatchBinding {
-    pub name: String,
+    pub name: Arc<String>,
     pub ty: ir::Type,
     pub binding_ref: ir::Ref,
 }
@@ -23,7 +23,7 @@ impl PatternMatchBinding {
             builder.pretty_ty_name(&self.ty)
         ));
 
-        let local = builder.local_var(self.ty.clone(), Some(Arc::new(self.name.clone()))).to_ref();
+        let local = builder.local_var(self.ty.clone(), Some(self.name.clone()));
         builder.mov(local.clone(), self.binding_ref.clone());
         builder.retain(local, self.ty.clone());
     }
@@ -81,7 +81,6 @@ pub fn translate_pattern_match_bindings(
         MatchPattern::Name { annotation: typ::Value::Type(is_ty, _), .. } => {
             match binding {
                 Some(binding) => {
-                    let binding_name = binding.name.to_string();
                     let binding_type = builder.translate_type(is_ty);
 
                     // this needs to create a cast, even for static non-ref types - the binding
@@ -94,11 +93,10 @@ pub fn translate_pattern_match_bindings(
                     builder.make_ref(value_ref, target_val.clone());
 
                     let binding_ref = builder.local_temp(binding_type.temp_ref());
-
                     builder.cast(binding_ref, value_ref, binding_type.temp_ref());
 
                     vec![PatternMatchBinding {
-                        name: binding_name,
+                        name: binding.name.clone(),
                         ty: binding_type,
                         binding_ref: binding_ref.to_deref(),
                     }]
@@ -118,8 +116,6 @@ pub fn translate_pattern_match_bindings(
 
             match binding {
                 Some(binding) => {
-                    let binding_name = binding.name.to_string();
-
                     let case_ty = case_ty
                         .clone()
                         .expect("variant pattern with binding must refer to a case with data");
@@ -127,7 +123,7 @@ pub fn translate_pattern_match_bindings(
                     let data_ref = target_val.vardata_ref(variant_ty.clone(), case_index);
 
                     vec![PatternMatchBinding {
-                        name: binding_name,
+                        name: binding.name.clone(),
                         binding_ref: data_ref.to_deref(),
                         ty: case_ty,
                     }]
