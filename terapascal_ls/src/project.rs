@@ -1,10 +1,11 @@
 mod completion;
 mod definition_map;
 
-use crate::fs::WorkspaceFilesystem;
-use crate::project::completion::resolve_completions;
 pub use crate::project::definition_map::DefinitionMap;
 pub use crate::project::definition_map::LinksEntry;
+
+use crate::fs::WorkspaceFilesystem;
+use crate::project::completion::resolve_completions;
 use crate::semantic_tokens::SemanticTokenBuilder;
 use crate::util::search_in_spanned;
 use crate::util::search_or_insert_spanned;
@@ -12,8 +13,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use terapascal_build::error::BuildError;
 use terapascal_build::parse_sources;
+use terapascal_build::BuildError;
 use terapascal_build::BuildInput;
 use terapascal_build::BuildStage;
 use terapascal_build::ParseOutput;
@@ -21,6 +22,7 @@ use terapascal_common::build_log::BuildLog;
 use terapascal_common::build_log::BuildLogEntry;
 use terapascal_common::span::Location;
 use terapascal_common::span::Spanned;
+use terapascal_common::version::Version;
 use terapascal_common::CompileOpts;
 use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
@@ -29,7 +31,6 @@ use terapascal_frontend::typ;
 use terapascal_frontend::typ::completion::CompletionHint;
 use terapascal_frontend::typecheck;
 use tower_lsp::lsp_types as lsp;
-use terapascal_common::version::Version;
 
 pub struct FileDiagnostics {
     pub messages: Vec<DiagnosticMessage>,

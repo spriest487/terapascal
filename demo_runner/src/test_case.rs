@@ -72,6 +72,7 @@ impl TestCase {
                             .ok()
                     })
                     .flatten()
+                    .filter(|case| !case.script.ignore)
                     .collect()
             )
             .unwrap_or_default()
@@ -102,13 +103,7 @@ impl TestCase {
             build_command.arg(&self.path);
             build_command.arg("-o").arg(&module_path);
 
-            if opts.debug {
-                build_command.arg("--debug");
-            }
-
-            for extra_package in &self.script.packages {
-                build_command.arg("-p").arg(extra_package);
-            }
+            apply_compiler_args(&self.script, opts, &mut build_command);
 
             let build_status = try_run_command(
                 &mut build_command,
@@ -125,13 +120,19 @@ impl TestCase {
         let mut run_command = find_command(&opts.compiler)?;
         run_command.arg(module_path.canonicalize()?)
             .current_dir(self.working_dir());
-        
-        if opts.debug {
-            run_command.arg("--debug");
-        }
+
+        // never run in verbose mode, it affects the output
+        if opts.verbose {
+            let mut run_opts = opts.clone();
+            run_opts.verbose = false;
+            apply_compiler_args(&self.script, &run_opts, &mut run_command);
+        } else {
+            apply_compiler_args(&self.script, opts, &mut run_command);
+        };
 
         try_run_interactive(
             &mut run_command,
+            opts,
             |stdin, stdout, stderr| {
                 let mut stdout = ConcatReader::new(build_stdout.as_slice(), stdout);
                 let mut stderr = ConcatReader::new(build_stderr.as_slice(), stderr);
@@ -156,9 +157,7 @@ impl TestCase {
             build_command.arg("-o").arg(&dll_path);
             build_command.arg("-a").arg("cil");
 
-            if opts.debug {
-                build_command.arg("--debug");
-            }
+            apply_compiler_args(&self.script, opts, &mut build_command);
 
             let build_status = try_run_command(
                 &mut build_command,
@@ -178,6 +177,7 @@ impl TestCase {
 
         try_run_interactive(
             &mut run_command,
+            opts,
             |stdin, stdout, stderr| {
                 let mut stdout = ConcatReader::new(build_stdout.as_slice(), stdout);
                 let mut stderr = ConcatReader::new(build_stderr.as_slice(), stderr);
@@ -206,10 +206,8 @@ impl TestCase {
 
         compile_command.arg(&self.path);
         compile_command.arg("-o").arg(&c_file_path);
-        
-        if opts.debug {
-            compile_command.arg("--debug");
-        }
+
+        apply_compiler_args(&self.script, opts, &mut compile_command);
 
         let compile_status = try_run_command(
             &mut compile_command,
@@ -274,12 +272,13 @@ impl TestCase {
 
         try_run_interactive(
             find_command(&exe_path)?.current_dir(self.working_dir()),
+            opts,
             |stdin, stdout, stderr| {
                 let mut concat_stdout = ConcatReader::new(build_stdout.as_slice(), stdout);
                 let mut concat_stderr = ConcatReader::new(build_stderr.as_slice(), stderr);
 
                 run(stdin, &mut concat_stdout, &mut concat_stderr);
-            }
+            },
         )
     }
     
@@ -443,6 +442,20 @@ fn buf_to_string(buf: Vec<u8>) -> io::Result<String> {
     }
 }
 
+fn apply_compiler_args(script: &TestScript, opts: &Opts, compiler_command: &mut Command) {
+    if opts.verbose {
+        compiler_command.arg("-v");
+    }
+
+    if opts.debug {
+        compiler_command.arg("-g");
+    }
+
+    for extra_package in &script.packages {
+        compiler_command.arg("-p").arg(extra_package);
+    }
+}
+
 fn try_run_command(command: &mut Command, stdout: &mut Vec<u8>, stderr: &mut Vec<u8>) -> io::Result<ExitStatus> {
     let mut output = command.output()?;
 
@@ -452,9 +465,13 @@ fn try_run_command(command: &mut Command, stdout: &mut Vec<u8>, stderr: &mut Vec
     Ok(output.status)
 }
 
-fn try_run_interactive<RunFn>(command: &mut Command, f: RunFn) -> io::Result<ExitStatus> 
+fn try_run_interactive<RunFn>(command: &mut Command, opts: &Opts, f: RunFn) -> io::Result<ExitStatus>
     where RunFn: FnOnce(&mut ChildStdin, &mut ChildStdout, &mut ChildStderr)
 {
+    if opts.verbose {
+        eprintln!("running command: {:?}", command);
+    }
+
     let mut proc = command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

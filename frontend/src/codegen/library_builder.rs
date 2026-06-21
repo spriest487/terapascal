@@ -2,6 +2,7 @@ mod init;
 mod build_functions;
 
 pub use self::build_functions::*;
+
 use self::init::gen_tags_init;
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
@@ -32,6 +33,7 @@ use ir::InstructionBuilder as _;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -85,7 +87,9 @@ struct BuiltinClassInfo {
 #[derive(Debug, Clone)]
 pub struct LibraryRef {
     pub lib: Rc<ir::Library>,
+
     pub imported_funcs: HashMap<FunctionDeclKey, FunctionInstance>,
+    pub imported_namespaces: HashSet<IdentPath>,
 }
 
 thread_local! {

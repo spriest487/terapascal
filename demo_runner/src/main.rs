@@ -26,7 +26,10 @@ fn main() -> Result<(), i32> {
             let modified_date = DateTime::<Utc>::from(modified);
             format!("{}", modified_date.format("%Y-%m-%d %H:%M"))
         }
-        Err(_) => "unknown timestamp".to_string(),
+        Err(err) => {
+            eprintln!("unable to read compiler timestamp: {}", err);
+            "unknown timestamp".to_string()
+        },
     };
 
     let version_check_out = Command::new(opts.compiler.clone())
@@ -40,7 +43,13 @@ fn main() -> Result<(), i32> {
     println!("{} ({})", String::from_utf8(version_check_out.stdout).unwrap().trim(), timestamp);
 
     let test_files = TestCase::find_at_path(&opts.search_path);
-    println!("found {} tests...", test_files.len());
+
+    if opts.verbose {
+        println!("found {} tests:", test_files.len());
+        for test_case in &test_files {
+            println!("\t{}", test_case.path.display());
+        }
+    }
 
     let mut ok_count = 0;
     let mut error_count = 0;

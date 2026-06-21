@@ -10,11 +10,14 @@ pub struct Opts {
     #[structopt(long = "target", parse(from_os_str))]
     pub target_path: PathBuf,
 
-    #[structopt(long, short, parse(from_os_str))]
+    #[structopt(long, parse(from_os_str))]
     pub compiler: PathBuf,
     
     #[structopt(long)]
     pub debug: bool,
+
+    #[structopt(long, short = "v")]
+    pub verbose: bool,
 
     #[structopt(long)]
     pub clean: bool,

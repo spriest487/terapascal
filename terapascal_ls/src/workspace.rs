@@ -3,8 +3,8 @@ use crate::project::BuildDiagnostics;
 use crate::project::Project;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use terapascal_build::error::BuildError;
-use terapascal_build::error::BuildResult;
+use terapascal_build::BuildError;
+use terapascal_build::BuildResult;
 use terapascal_common::fs::Filesystem;
 use tower_lsp::lsp_types::Url;
 

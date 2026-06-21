@@ -89,7 +89,7 @@ fn compile(args: Args) -> Result<(), RunError> {
             log.trace(format!("loading existing module: {}", args.file.display()));
         }
 
-        let mut lib_loader = LibraryLoader::new(args.search_dirs.clone());
+        let mut lib_loader = LibraryLoader::new(args.search_dirs.clone(), &mut log);
 
         let artifact = lib_loader.load_lib_file(&args.file)
             .map(BuildArtifact::Library);
@@ -168,12 +168,12 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
     for log_entry in &output.log.entries {
         match log_entry {
             BuildLogEntry::Trace(trace) => {
-                println!("Trace: {}", trace);
+                println!("[trace] {}", trace);
             }
 
             BuildLogEntry::Diagnostic(warning) => {
                 if report_err(warning.as_ref()).is_err() {
-                    eprintln!("{}: {}", warning.severity(), warning.main());
+                    eprintln!("[{}] {}", warning.severity(), warning.main());
                 }
             }
         }

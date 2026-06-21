@@ -8,28 +8,27 @@ use std::iter;
 use std::path::PathBuf;
 use std::rc::Rc;
 use terapascal_backend_c::ir;
+use terapascal_common::build_log::BuildLog;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_common::LIB_DIR_VAR;
+use terapascal_frontend::codegen::library_builder::LibraryRef;
 use terapascal_frontend::import::import_lib;
-use terapascal_frontend::import::ImportOutput;
 use terapascal_frontend::typ::Context;
 
-pub struct ImportedPackage {
-    pub library: Rc<ir::Library>,
-    pub output: ImportOutput,
-}
-
-pub struct LibraryLoader {
+pub struct LibraryLoader<'a> {
     lib_collection: LinkedHashMap<String, Rc<ir::Library>>,
 
     search_dirs: Vec<PathBuf>,
+
+    log: &'a mut BuildLog,
 }
 
-impl LibraryLoader {
-    pub fn new(search_paths: impl IntoIterator<Item=PathBuf>) -> Self {
+impl<'a> LibraryLoader<'a> {
+    pub fn new(search_paths: impl IntoIterator<Item=PathBuf>, log: &'a mut BuildLog) -> Self {
         Self {
             lib_collection: LinkedHashMap::new(),
             search_dirs: search_paths.into_iter().collect(),
+            log,
         }
     }
 
@@ -95,6 +94,12 @@ impl LibraryLoader {
                 }
             })?;
 
+        // we don't know the library name until we decode it - now check if it's already loaded
+        if self.lib_collection.contains_key(&library.name) {
+            self.log.trace("load_lib_file_rec: library {} was already loaded");
+            return Ok((library.name.clone(), Vec::new()));
+        }
+
         for ref_name in &library.references {
             if self.lib_collection.contains_key(ref_name) {
                 continue;
@@ -141,7 +146,7 @@ impl LibraryLoader {
         &mut self,
         name: &str,
         type_ctx: Option<&mut Context>,
-    ) -> BuildResult<Vec<ImportedPackage>> {
+    ) -> BuildResult<Vec<LibraryRef>> {
         if self.lib_collection.contains_key(name) {
             return Ok(Vec::new());
         }
@@ -149,7 +154,7 @@ impl LibraryLoader {
         let (main_name, mut loaded_libs) = self.load_libs_rec(name)?;
         loaded_libs.push(main_name);
 
-        let mut imported_libs: LinkedHashMap<String, ImportedPackage> = LinkedHashMap::new();
+        let mut imported_libs = Vec::with_capacity(loaded_libs.len());
 
         match type_ctx {
             Some(ctx) => {
@@ -160,11 +165,16 @@ impl LibraryLoader {
                         .iter()
                         .map(|ref_name| self.lib_collection[ref_name].as_ref());
 
-                    let ref_lib_output = import_lib(&loaded_lib, loaded_refs, Some(ctx))?;
+                    let output = import_lib(&loaded_lib, loaded_refs, Some(ctx))?;
 
-                    imported_libs.insert(loaded_lib.name.clone(), ImportedPackage {
-                        library: loaded_lib,
-                        output: ref_lib_output,
+                    for warning in output.warnings {
+                        self.log.diagnostic(warning);
+                    }
+
+                    imported_libs.push(LibraryRef {
+                        lib: loaded_lib,
+                        imported_funcs: output.imported_funcs,
+                        imported_namespaces: output.namespaces,
                     });
                 }
             }
@@ -177,20 +187,22 @@ impl LibraryLoader {
                         .iter()
                         .map(|ref_name| self.lib_collection[ref_name].as_ref());
 
-                    let ref_lib_output = import_lib(&loaded_lib, loaded_refs, None)?;
+                    let output = import_lib(&loaded_lib, loaded_refs, None)?;
 
-                    imported_libs.insert(loaded_lib.name.clone(), ImportedPackage {
-                        library: loaded_lib,
-                        output: ref_lib_output,
+                    for warning in output.warnings {
+                        self.log.diagnostic(warning);
+                    }
+
+                    imported_libs.push(LibraryRef {
+                        lib: loaded_lib,
+                        imported_funcs: output.imported_funcs,
+                        imported_namespaces: output.namespaces,
                     });
                 }
             }
         }
 
-        Ok(imported_libs
-            .into_iter()
-            .map(|(_, lib)| lib)
-            .collect())
+        Ok(imported_libs)
     }
 }
 

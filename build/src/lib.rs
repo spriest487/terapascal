@@ -26,7 +26,6 @@ use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::MainUnitKind;
 use terapascal_frontend::ast::UnitKind;
 use terapascal_frontend::ast::UseDeclItem;
-use terapascal_frontend::codegen::library_builder::LibraryRef;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::codegen_ir;
 use terapascal_frontend::parse;
@@ -554,25 +553,18 @@ fn build_with_log(
             dirs.push(parent_dir.to_path_buf());
             dirs
         },
-        None => { 
+        None => {
             input.search_dirs.clone()
         },
     };
 
-    let mut lib_loader = LibraryLoader::new(lib_search_dirs);
+    let mut lib_loader = LibraryLoader::new(lib_search_dirs, log);
 
     for package_name in package_names {
         for imported_lib in lib_loader.import_package(&package_name, root_ctx.as_mut())? {
-            for warning in imported_lib.output.warnings {
-                log.diagnostic(warning);
-            }
+            package_namespaces.extend(imported_lib.imported_namespaces.clone());
 
-            package_namespaces.extend(imported_lib.output.namespaces.clone());
-
-            package_libs.push(LibraryRef {
-                lib: imported_lib.library,
-                imported_funcs: imported_lib.output.imported_funcs,
-            });
+            package_libs.push(imported_lib);
         }
     }
 
