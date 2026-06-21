@@ -572,7 +572,7 @@ pub fn build(fs: &impl Filesystem, input: BuildInput) -> BuildOutput {
 fn split_lib_collection(
     mut lib_collection: LinkedHashMap<String, Rc<ir::Library>>,
 ) -> BuildResult<LibraryArtifact> {
-    let Some((_, main)) = lib_collection.pop_front() else {
+    let Some((_, main)) = lib_collection.pop_back() else {
         let msg = "loaded library collection is empty".to_string();
         return Err(BuildError::InternalError(msg));
     };
