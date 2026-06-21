@@ -133,6 +133,9 @@ impl<'a> LibraryLoader<'a> {
             .iter()
             .find_map(|dir| {
                 let full_path = dir.join(&name).with_added_extension(IR_LIB_EXT);
+
+                self.log.trace(format!("searching for library {} at {}", name, full_path.display()));
+
                 full_path.exists().then_some(full_path)
             })
             .ok_or_else(|| {
