@@ -14,9 +14,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 #[derive(Debug)]
-pub struct ImportedLibrary {
-    pub library: ir::Library,
-
+pub struct ImportOutput {
     pub imported_funcs: HashMap<FunctionDeclKey, FunctionInstance>,
 
     pub warnings: Vec<ImportWarning>,
@@ -24,15 +22,18 @@ pub struct ImportedLibrary {
     pub namespaces: HashSet<IdentPath>,
 }
 
-pub fn import_lib(library: ir::Library, ref_libs: &[ImportedLibrary], type_ctx: Option<&mut Context>) -> ImportResult<ImportedLibrary> {
+pub fn import_lib<'a>(
+    library: &'a ir::Library,
+    ref_libs: impl IntoIterator<Item=&'a ir::Library>,
+    type_ctx: Option<&'a mut Context>,
+) -> ImportResult<ImportOutput> {
     let mut builder = ImportBuilder::new(&library, ref_libs, type_ctx);
 
     builder.import()?;
 
-    Ok(ImportedLibrary {
+    Ok(ImportOutput {
         namespaces: builder.namespaces,
         warnings: builder.warnings,
         imported_funcs: builder.imported_funcs,
-        library,
     })
 }

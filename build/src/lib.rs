@@ -33,7 +33,7 @@ use terapascal_frontend::codegen::library_builder::LibraryRef;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_frontend::codegen_ir;
 use terapascal_frontend::import::import_lib;
-use terapascal_frontend::import::ImportedLibrary;
+use terapascal_frontend::import::ImportOutput;
 use terapascal_frontend::parse;
 use terapascal_frontend::parse::ParseError;
 use terapascal_frontend::parse::Parser;
@@ -654,6 +654,11 @@ fn load_libs_rec(
     Ok(())
 }
 
+struct ImportedLibrary {
+    pub library: ir::Library,
+    pub output: ImportOutput,
+}
+
 fn import_package(
     name: &str,
     input: &BuildInput,
@@ -666,27 +671,59 @@ fn import_package(
 
     let loaded_lib = load_lib(name, &search_dirs)?;
 
-    let mut imported_libs = Vec::new();
+    let mut imported_libs: Vec<ImportedLibrary> = Vec::new();
 
     match type_ctx {
         Some(ctx) => {
             for ref_lib in loaded_lib.refs {
-                let imported_lib = import_lib(ref_lib, &imported_libs, Some(ctx))?;
-                imported_libs.push(imported_lib);
+                let ref_lib_output = import_lib(
+                    &ref_lib,
+                    imported_libs.iter().map(|i| &i.library),
+                    Some(ctx)
+                )?;
+
+                imported_libs.push(ImportedLibrary {
+                    library: ref_lib,
+                    output: ref_lib_output,
+                });
             }
 
-            let imported_lib = import_lib(loaded_lib.main, &imported_libs, Some(ctx))?;
-            imported_libs.push(imported_lib);
+            let main_lib_output = import_lib(
+                &loaded_lib.main,
+                imported_libs.iter().map(|i| &i.library),
+                Some(ctx)
+            )?;
+
+            imported_libs.push(ImportedLibrary {
+                library: loaded_lib.main,
+                output: main_lib_output,
+            });
         },
 
         None => {
             for ref_lib in loaded_lib.refs {
-                let imported_lib = import_lib(ref_lib, &imported_libs, None)?;
-                imported_libs.push(imported_lib);
+                let ref_lib_output = import_lib(
+                    &ref_lib,
+                    imported_libs.iter().map(|i| &i.library),
+                    None
+                )?;
+
+                imported_libs.push(ImportedLibrary {
+                    library: ref_lib,
+                    output: ref_lib_output,
+                });
             }
 
-            let imported_lib = import_lib(loaded_lib.main, &imported_libs, None)?;
-            imported_libs.push(imported_lib);
+            let main_lib_output = import_lib(
+                &loaded_lib.main,
+                imported_libs.iter().map(|i| &i.library),
+                None
+            )?;
+
+            imported_libs.push(ImportedLibrary {
+                library: loaded_lib.main,
+                output: main_lib_output,
+            });
         },
     };
 
@@ -719,15 +756,15 @@ fn build_with_log(
 
     for package_name in package_names {
         for imported_lib in import_package(&package_name, &input, root_ctx.as_mut())? {
-            for warning in imported_lib.warnings {
+            for warning in imported_lib.output.warnings {
                 log.diagnostic(warning);
             }
 
-            package_namespaces.extend(imported_lib.namespaces.clone());
+            package_namespaces.extend(imported_lib.output.namespaces.clone());
 
             package_libs.push(LibraryRef {
                 lib: imported_lib.library,
-                imported_funcs: imported_lib.imported_funcs,
+                imported_funcs: imported_lib.output.imported_funcs,
             });
         }
     }

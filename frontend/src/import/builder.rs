@@ -9,7 +9,6 @@ use crate::codegen::FunctionInstance;
 use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::import::ImportWarning;
-use crate::import::ImportedLibrary;
 use crate::ir;
 use crate::typ::ast::Expr;
 use crate::typ::ast::MethodDecl;
@@ -43,7 +42,7 @@ use terapascal_ir::Metadata;
 
 pub(super) struct ImportBuilder<'a> {
     pub library: &'a ir::Library,
-    pub library_refs: &'a [ImportedLibrary],
+    pub library_refs: Vec<&'a ir::Library>,
 
     pub root_ctx: Option<&'a mut Context>,
 
@@ -66,12 +65,12 @@ pub(super) struct ImportBuilder<'a> {
 impl<'a> ImportBuilder<'a> {
     pub fn new(
         library: &'a ir::Library,
-        library_refs: &'a [ImportedLibrary],
+        library_refs: impl IntoIterator<Item = &'a ir::Library>,
         type_ctx: Option<&'a mut Context>,
     ) -> Self {
         ImportBuilder {
             library,
-            library_refs,
+            library_refs: library_refs.into_iter().collect(),
 
             root_ctx: type_ctx,
 
@@ -346,7 +345,7 @@ impl<'a> ir::MetadataCollection for ImportBuilder<'a> {
         self.library_refs
             .iter()
             .rev()
-            .map(|ref_lib| ref_lib.library.metadata.as_ref())
+            .map(|ref_lib| ref_lib.metadata.as_ref())
             .chain(iter::once(self.library.metadata.as_ref()))
     }
 }
