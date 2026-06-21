@@ -103,7 +103,7 @@ impl TestCase {
             build_command.arg(&self.path);
             build_command.arg("-o").arg(&module_path);
 
-            apply_compiler_args(&self.script, opts, &mut build_command);
+            apply_compiler_args(&self, opts, &mut build_command);
 
             let build_status = try_run_command(
                 &mut build_command,
@@ -121,14 +121,7 @@ impl TestCase {
         run_command.arg(module_path.canonicalize()?)
             .current_dir(self.working_dir());
 
-        // never run in verbose mode, it affects the output
-        if opts.verbose {
-            let mut run_opts = opts.clone();
-            run_opts.verbose = false;
-            apply_compiler_args(&self.script, &run_opts, &mut run_command);
-        } else {
-            apply_compiler_args(&self.script, opts, &mut run_command);
-        };
+        apply_compiler_args(&self, opts, &mut run_command);
 
         try_run_interactive(
             &mut run_command,
@@ -157,7 +150,7 @@ impl TestCase {
             build_command.arg("-o").arg(&dll_path);
             build_command.arg("-a").arg("cil");
 
-            apply_compiler_args(&self.script, opts, &mut build_command);
+            apply_compiler_args(&self, opts, &mut build_command);
 
             let build_status = try_run_command(
                 &mut build_command,
@@ -207,7 +200,7 @@ impl TestCase {
         compile_command.arg(&self.path);
         compile_command.arg("-o").arg(&c_file_path);
 
-        apply_compiler_args(&self.script, opts, &mut compile_command);
+        apply_compiler_args(&self, opts, &mut compile_command);
 
         let compile_status = try_run_command(
             &mut compile_command,
@@ -218,7 +211,7 @@ impl TestCase {
         if !compile_status.success() {
             return Ok(Some(compile_status)); 
         }
-        
+
         let mut clang_args = Vec::new();
         if opts.clang_debug || opts.clang_codeview {
             clang_args.push(OsStr::new("-g"));
@@ -442,7 +435,7 @@ fn buf_to_string(buf: Vec<u8>) -> io::Result<String> {
     }
 }
 
-fn apply_compiler_args(script: &TestScript, opts: &Opts, compiler_command: &mut Command) {
+fn apply_compiler_args(case: &TestCase, opts: &Opts, compiler_command: &mut Command) {
     if opts.verbose {
         compiler_command.arg("-v");
     }
@@ -451,9 +444,12 @@ fn apply_compiler_args(script: &TestScript, opts: &Opts, compiler_command: &mut 
         compiler_command.arg("-g");
     }
 
-    for extra_package in &script.packages {
+    for extra_package in &case.script.packages {
         compiler_command.arg("-p").arg(extra_package);
     }
+
+    // expect any extra packages to be present in the same dir as the test source file
+    compiler_command.arg("-s").arg(".");
 }
 
 fn try_run_command(command: &mut Command, stdout: &mut Vec<u8>, stderr: &mut Vec<u8>) -> io::Result<ExitStatus> {
