@@ -627,12 +627,20 @@ const LOCAL_INIT_DECL_OPERATOR: Operator = Operator::Equals;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Hash, PartialEq, Debug)]
+pub enum FunctionBody<A: Annotation = Span> {
+    External,
+    Block {
+        block: Block<A>,
+        locals: Vec<FunctionLocalBinding<A>>,
+    }
+}
+
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Hash, PartialEq, Debug)]
 pub struct FunctionDef<A: Annotation = Span> {
     pub decl: Arc<FunctionDecl<A>>,
 
-    pub locals: Vec<FunctionLocalBinding<A>>,
-
-    pub body: Block<A>,
+    pub body: FunctionBody<A>,
 
     #[derivative(Debug = "ignore")]
     #[derivative(PartialEq = "ignore")]
@@ -678,16 +686,18 @@ impl FunctionDef<Span> {
             }
         }
 
-        let body = Block::parse(parser).map_err(|err| {
+        let body_block = Block::parse(parser).map_err(|err| {
             Self::map_unexpected_err_after_locals(err, trailing_semicolon, &locals)
         })?;
 
-        let span = decl.span.to(body.span());
+        let span = decl.span.to(body_block.span());
 
         Ok(FunctionDef {
             decl,
-            locals,
-            body,
+            body: FunctionBody::Block {
+                locals,
+                block: body_block,
+            },
             span,
         })
     }
@@ -787,21 +797,26 @@ impl<A: Annotation> fmt::Display for FunctionDef<A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "{}", self.decl)?;
 
-        let mut last_local_kind = None;
-        for local in &self.locals {
-            if Some(local.kind) != last_local_kind {
-                write!(f, "{}", local.kind)?;
-                last_local_kind = Some(local.kind);
+        if let FunctionBody::Block { block, locals } = &self.body {
+            let mut last_local_kind = None;
+
+            for local in locals {
+                if Some(local.kind) != last_local_kind {
+                    write!(f, "{}", local.kind)?;
+                    last_local_kind = Some(local.kind);
+                }
+
+                write!(f, "  {}: {}", local.ident, local.ty)?;
+                if let Some(initial_val) = &local.initial_val {
+                    write!(f, " = {}", initial_val)?;
+                }
+                writeln!(f, ";")?;
             }
 
-            write!(f, "  {}: {}", local.ident, local.ty)?;
-            if let Some(initial_val) = &local.initial_val {
-                write!(f, " = {}", initial_val)?;
-            }
-            writeln!(f, ";")?;
+            write!(f, "{}", block)?;
         }
 
-        write!(f, "{}", self.body)
+        Ok(())
     }
 }
 

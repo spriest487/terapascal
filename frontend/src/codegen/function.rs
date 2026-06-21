@@ -41,8 +41,7 @@ pub fn build_func_def(
     def_params: &[typ::ast::FunctionParamGroup],
     def_type_params: Option<&typ::TypeParamList>,
     def_return_ty: &typ::Type,
-    def_locals: &[typ::ast::FunctionLocalBinding],
-    def_body: &typ::ast::Block,
+    def_body: &typ::ast::FunctionBody,
     is_instance_method: bool,
     enclosing_type: Option<&typ::Type>,
     debug_name: Option<String>,
@@ -78,9 +77,16 @@ pub fn build_func_def(
             .map(|param| Arc::new(param.name.to_string())))
     );
 
-    init_function_locals(def_locals, &mut body_builder);
+    let body = match def_body {
+        ast::FunctionBody::Block { block, locals } => {
+            init_function_locals(locals, &mut body_builder);
+            build_func_body(block, &return_ty, body_builder)
+        }
 
-    let body = build_func_body(def_body, &return_ty, body_builder);
+        ast::FunctionBody::External => {
+            ir::InstructionList::new()
+        }
+    };
 
     ir::FunctionDef {
         body,

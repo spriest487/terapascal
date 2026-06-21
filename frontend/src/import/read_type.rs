@@ -16,7 +16,6 @@ use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::import::ImportWarning;
 use crate::ir;
-use crate::typ::ast::FieldDecl;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionName;
 use crate::typ::ast::InterfaceDecl;
@@ -29,6 +28,7 @@ use crate::typ::ast::StructMemberDecl;
 use crate::typ::ast::VariantCase;
 use crate::typ::ast::VariantCaseData;
 use crate::typ::ast::VariantDecl;
+use crate::typ::ast::{FieldDecl, FunctionBody, FunctionDef};
 use crate::typ::Primitive;
 use crate::typ::ScopeID;
 use crate::typ::SetType;
@@ -676,15 +676,19 @@ impl ImportBuilder<'_> {
         let mut type_methods = HashMap::new();
         mem::swap(&mut type_methods, &mut self.type_methods);
 
-        for (declaring_type, type_methods) in type_methods {
+        for (declaring_type, type_method_map) in &type_methods {
             // primitive types don't have definitions, so their methods are inherent and don't
             // need to be declared anywhere
             if declaring_type.as_primitive().is_some() {
                 continue;
             }
 
-            if let Err(err) = self.finish_type_def(&declaring_type, &type_methods) {
-                self.warnings.push(ImportWarning::InvalidMethodList(declaring_type, type_methods, Box::new(err)));
+            if let Err(err) = self.finish_type_def(declaring_type, type_method_map) {
+                self.warnings.push(ImportWarning::InvalidMethodList(
+                    declaring_type.clone(),
+                    type_method_map.clone(),
+                    Box::new(err),
+                ));
             }
         }
 
@@ -708,6 +712,28 @@ impl ImportBuilder<'_> {
             if let Err(err) = self.declare_variant_def(&path, variant_def.clone()) {
                 let msg = format!("Declaring variant type {} failed", variant_def.name);
                 self.warnings.push(ImportWarning::InvalidType(msg, Box::new(ImportError::from(err))));
+            }
+        }
+
+        for (declaring_type, type_method_map) in &type_methods {
+            for (_, method_decl) in type_method_map {
+                let method_def = Arc::new(FunctionDef {
+                    body: FunctionBody::External,
+                    span: method_decl.func_decl.span.clone(),
+                    decl: method_decl.func_decl.clone(),
+                });
+
+                if let Some(ctx) = self.root_ctx.as_mut() {
+                    if let Err(err) = ctx.define_method(declaring_type.clone(), method_def) {
+                        let import_err = Box::new(ImportError::from(err));
+
+                        self.warnings.push(ImportWarning::InvalidMethodList(
+                            declaring_type.clone(),
+                            type_method_map.clone(),
+                            import_err,
+                        ));
+                    }
+                }
             }
         }
     }

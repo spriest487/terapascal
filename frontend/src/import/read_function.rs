@@ -1,11 +1,11 @@
-use crate::ast::Access;
-use crate::ast::FunctionDeclKind;
+use crate::ast::{FunctionBody, FunctionDeclKind, FunctionDef};
 use crate::ast::FunctionParamItem;
 use crate::ast::FunctionParamMod;
 use crate::ast::FunctionParamModDecl;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Visibility;
+use crate::ast::Access;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::MethodDeclKey;
 use crate::codegen::FunctionInstance;
@@ -13,17 +13,17 @@ use crate::import::ImportBuilder;
 use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::ir;
-use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDeclContext;
 use crate::typ::ast::FunctionDeclMod;
 use crate::typ::ast::FunctionName;
 use crate::typ::ast::FunctionParamGroup;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::Tag;
+use crate::typ::ast::FunctionDecl;
+use crate::typ::EvaluatedConstExpr;
 use crate::typ::ScopeID;
 use crate::typ::Type;
 use crate::typ::TypeName;
-use crate::typ::EvaluatedConstExpr;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -162,7 +162,7 @@ impl ImportBuilder<'_> {
         tags: Vec<Tag>,
         result_type: Type,
         param_groups: Vec<FunctionParamGroup>,
-        path: &ir::NamePath
+        path: &ir::NamePath,
     ) -> ImportResult<()> {
         let scope = match path.parent() {
             Some(unit_path) => {
@@ -226,8 +226,20 @@ impl ImportBuilder<'_> {
             return Ok(());
         }
 
+        let func_decl = Arc::new(func_decl);
+
         if let Some(ctx) = self.root_ctx.as_mut() {
-            ctx.declare_function(func_ident.clone(), Arc::new(func_decl), Visibility::Interface)?;
+            ctx.declare_function(func_ident.clone(), func_decl.clone(), Visibility::Interface)?;
+
+            if func_decl.external_src().is_none() {
+                let func_def = Arc::new(FunctionDef {
+                    body: FunctionBody::External,
+                    span: func_decl.span.clone(),
+                    decl: func_decl,
+                });
+
+                ctx.define_function(func_ident.clone(), func_def)?;
+            }
 
             ctx.pop_scope(scope);
         }
