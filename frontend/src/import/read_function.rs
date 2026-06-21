@@ -1,11 +1,11 @@
 use crate::ast::Access;
+use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionParamItem;
 use crate::ast::FunctionParamMod;
 use crate::ast::FunctionParamModDecl;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
 use crate::ast::Visibility;
-use crate::ast::FunctionDeclKind;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::MethodDeclKey;
 use crate::codegen::FunctionInstance;
@@ -106,7 +106,28 @@ impl ImportBuilder<'_> {
         name: &str,
         type_args: &[ir::Type],
     ) -> ImportResult<()> {
-        let declaring_type = self.read_type(declaring_type)?;
+        // the type used as the declaring type differs slightly between the IR and Pascal
+        // data: in IR it's the generic name (path parameterized with generic placeholders),
+        // in Pascal it's the unspecialized definition name (path with params but empty args)
+        let declaring_type = match self.read_type(declaring_type)? {
+            Type::Record(name) => {
+                Type::record(name.as_ref().clone().with_ty_args(None))
+            }
+
+            Type::Class(name) => {
+                Type::class(name.as_ref().clone().with_ty_args(None))
+            }
+
+            Type::Variant(name) => {
+                Type::variant(name.as_ref().clone().with_ty_args(None))
+            }
+
+            Type::Interface(name) => {
+                Type::interface(name.as_ref().clone().with_ty_args(None))
+            }
+
+            ty => ty.clone(),
+        };
 
         let decl_key = FunctionDeclKey::Method(MethodDeclKey {
             self_ty: declaring_type.clone(),

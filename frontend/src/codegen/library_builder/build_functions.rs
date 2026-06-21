@@ -322,12 +322,19 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             MethodDef::External(decl) => {
+                // different to the instance key (self type is unspecialized)
+                let decl_key = FunctionDeclKey::Method(MethodDeclKey {
+                    method_index: method_key.method_index,
+                    self_ty: decl_self_ty.clone(),
+                });
+
                 // we shouldn't be trying to instantiate it - it should already be in the cache
-                return self.find_imported_func(&FunctionDeclKey::Method(method_key.clone()))
+                self.find_imported_func(&decl_key)
                     .unwrap_or_else(|| {
+                        eprintln!("{:#?}", decl_self_ty);
                         panic!("instantiate_method: reference to external method `{}` which is not imported", decl.name)
                     })
-                    .clone();
+                    .clone()
             }
         }
     }

@@ -53,6 +53,7 @@ use crate::typ::FunctionSig;
 use crate::typ::Primitive;
 use crate::typ::Symbol;
 use crate::typ::Type;
+use crate::typ::TypeArgsResult;
 use crate::typ::TypeError;
 use crate::typ::TypeName;
 use crate::typ::TypeParamList;
@@ -888,6 +889,15 @@ impl Context {
 
     fn insert_method_def(&mut self, ty: Type, def: MethodDef) -> NameResult<()> {
         let method_ident = def.decl().ident();
+
+        if let TypeArgsResult::Specialized(_params, args) = ty.type_args() {
+            // methods should be defined for the unspecialized type only
+            return Err(NameError::from(GenericError::ArgsLenMismatch {
+                target: GenericTarget::Type(ty.clone()),
+                actual: args.len(),
+                expected: 0,
+            }));
+        }
 
         match ty {
             Type::Interface(iface_name) => {
