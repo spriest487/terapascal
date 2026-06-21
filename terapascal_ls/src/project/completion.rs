@@ -8,7 +8,9 @@ use terapascal_frontend::typ::ast::OverloadCandidate;
 use terapascal_frontend::typ::completion::CompletionHint;
 use terapascal_frontend::typ::completion::CompletionHintKind;
 use terapascal_frontend::typ::Binding;
+use terapascal_frontend::typ::Context;
 use terapascal_frontend::typ::Decl;
+use terapascal_frontend::typ::Environment;
 use terapascal_frontend::typ::InstanceMember;
 use terapascal_frontend::typ::Scope;
 use terapascal_frontend::typ::ScopeMember;
@@ -16,7 +18,6 @@ use terapascal_frontend::typ::ScopeMemberRef;
 use terapascal_frontend::typ::ScopePathRef;
 use terapascal_frontend::typ::Type;
 use terapascal_frontend::typ::Value;
-use terapascal_frontend::typ::{Context, Environment};
 use terapascal_frontend::Operator;
 use tower_lsp::lsp_types as lsp;
 
