@@ -317,12 +317,18 @@ function ArrayCreateInternal(var arr: Object; len: Integer); external 'rt';
 }
 function CreateArrayDefault[T](length: Integer): array of T;
 begin
-    var arr: array of T := [];
-    var arrRef := arr as Object;
-    
-    ArrayCreateInternal(arrRef, length);
+    var arrRef: Object;
+    begin
+        var arr: array of T := [];
+        arrRef := arr as Object;
 
-    exit Downcast[array of T](arrRef).Get;
+        ArrayCreateInternal(arrRef, length);
+    end;
+
+    if arrRef is array of T newArr then
+        newArr
+    else
+        [] // unreachable
 end;
 
 function CreateArray[T](element: T; length: Integer): array of T;
