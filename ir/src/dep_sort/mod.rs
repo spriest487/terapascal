@@ -1,4 +1,3 @@
-use crate::metadata::Metadata;
 use crate::MetadataSource;
 use crate::StructDef;
 use crate::Type;
@@ -15,7 +14,7 @@ use topological_sort::TopologicalSort;
 // guaranteed from the pascal end to be non-recursive, because they must be declared
 // in order).
 // this will panic if any defs depend on themselves.
-pub fn sort_defs<Defs>(defs: Defs, metadata: &Metadata) -> LinkedHashMap<TypeDefID, TypeDef>
+pub fn sort_defs<Defs>(defs: Defs, metadata: &impl MetadataSource) -> LinkedHashMap<TypeDefID, TypeDef>
 where
     Defs: IntoIterator<Item = (TypeDefID, TypeDef)>,
 {
@@ -36,7 +35,12 @@ where
     }
 
     let sorted: Vec<_> = sort
-        .map(|id| (id, defs.remove(&id).unwrap()))
+        .filter_map(|id| {
+            // IDs in the sort may come from referenced metadata, and not be present in this library
+            let def = defs.remove(&id)?;
+
+            Some((id, def))
+        })
         .collect();
     
     sorted
@@ -45,7 +49,7 @@ where
         .collect()
 }
 
-pub fn find_deps(def: &TypeDef, metadata: &Metadata) -> HashSet<TypeDefID> {
+pub fn find_deps(def: &TypeDef, metadata: &impl MetadataSource) -> HashSet<TypeDefID> {
     let mut deps = HashSet::new();
 
     match def {
@@ -61,13 +65,13 @@ pub fn find_deps(def: &TypeDef, metadata: &Metadata) -> HashSet<TypeDefID> {
     deps
 }
 
-fn add_struct_deps(struct_def: &StructDef, deps: &mut HashSet<TypeDefID>, metadata: &Metadata) {
+fn add_struct_deps(struct_def: &StructDef, deps: &mut HashSet<TypeDefID>, metadata: &impl MetadataSource) {
     for (_, field) in &struct_def.fields {
         add_dep(&field.ty, deps, metadata);
     }
 }
 
-fn add_variant_deps(variant_def: &VariantDef, deps: &mut HashSet<TypeDefID>, metadata: &Metadata) {
+fn add_variant_deps(variant_def: &VariantDef, deps: &mut HashSet<TypeDefID>, metadata: &impl MetadataSource) {
     for case in &variant_def.cases {
         if let Some(case_ty) = &case.ty {
             add_dep(case_ty, deps, metadata);
@@ -75,7 +79,7 @@ fn add_variant_deps(variant_def: &VariantDef, deps: &mut HashSet<TypeDefID>, met
     }
 }
 
-fn add_dep(ty: &Type, deps: &mut HashSet<TypeDefID>, metadata: &Metadata) {
+fn add_dep(ty: &Type, deps: &mut HashSet<TypeDefID>, metadata: &impl MetadataSource) {
     match ty {
         Type::Variant(id) => {
             deps.insert(id.def_id);

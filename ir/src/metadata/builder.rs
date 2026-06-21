@@ -176,7 +176,7 @@ impl MetadataBuilder {
             }
         }
 
-        let sorted_defs = sort_defs(defs, &self.metadata);
+        let sorted_defs = sort_defs(defs, self);
 
         self.metadata.type_decls = decls;
         for (id, def) in sorted_defs {
