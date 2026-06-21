@@ -24,8 +24,8 @@ pub struct ImportedLibrary {
     pub namespaces: HashSet<IdentPath>,
 }
 
-pub fn import_lib(library: ir::Library, type_ctx: Option<&mut Context>) -> ImportResult<ImportedLibrary> {
-    let mut builder = ImportBuilder::new(&library, type_ctx);
+pub fn import_lib(library: ir::Library, ref_libs: &[ImportedLibrary], type_ctx: Option<&mut Context>) -> ImportResult<ImportedLibrary> {
+    let mut builder = ImportBuilder::new(&library, ref_libs, type_ctx);
 
     builder.import()?;
 

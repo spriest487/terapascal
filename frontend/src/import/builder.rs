@@ -9,6 +9,7 @@ use crate::codegen::FunctionInstance;
 use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::import::ImportWarning;
+use crate::import::ImportedLibrary;
 use crate::ir;
 use crate::typ::ast::Expr;
 use crate::typ::ast::MethodDecl;
@@ -35,13 +36,15 @@ use ir::MetadataSource as _;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::iter;
 use std::sync::Arc;
 use terapascal_common::span::Span;
+use terapascal_ir::Metadata;
 
 pub(super) struct ImportBuilder<'a> {
-    pub default_span: Span,
-
     pub library: &'a ir::Library,
+    pub library_refs: &'a [ImportedLibrary],
+
     pub root_ctx: Option<&'a mut Context>,
 
     pub imported_funcs: HashMap<FunctionDeclKey, FunctionInstance>,
@@ -56,14 +59,22 @@ pub(super) struct ImportBuilder<'a> {
     pub namespaces: HashSet<IdentPath>,
 
     pub warnings: Vec<ImportWarning>,
+
+    pub default_span: Span,
 }
 
 impl<'a> ImportBuilder<'a> {
-    pub fn new(library: &'a ir::Library, type_ctx: Option<&'a mut Context>) -> Self {
+    pub fn new(
+        library: &'a ir::Library,
+        library_refs: &'a [ImportedLibrary],
+        type_ctx: Option<&'a mut Context>,
+    ) -> Self {
         ImportBuilder {
-            library: &library,
-            default_span: Span::zero(""),
+            library,
+            library_refs,
+
             root_ctx: type_ctx,
+
             namespaces: HashSet::new(),
 
             struct_defs: HashMap::new(),
@@ -76,6 +87,8 @@ impl<'a> ImportBuilder<'a> {
             imported_funcs: HashMap::new(),
 
             warnings: Vec::new(),
+
+            default_span: Span::zero(""),
         }
     }
 
@@ -105,8 +118,8 @@ impl<'a> ImportBuilder<'a> {
         self.default_span.clone()
     }
 
-    pub fn metadata(&self) -> &ir::Metadata {
-        &self.library.metadata
+    pub fn metadata(&self) -> &impl ir::MetadataCollection {
+        self
     }
 
     pub fn read_tags(&mut self, tags: &[ir::TagInfo]) -> ImportResult<Vec<Tag>> {
@@ -114,12 +127,13 @@ impl<'a> ImportBuilder<'a> {
         for tag in tags {
             let tag_type = self.read_type(&tag.class_id.to_class_ptr_type([]))?;
 
-            let tag_def = self.library.metadata
+            let tag_def = self.metadata()
                 .get_struct_def(tag.class_id)
                 .ok_or_else(|| {
                     let class_name = tag.class_id.to_pretty_string(self.metadata());
                     ImportError::MissingTypeDef(class_name)
-                })?;
+                })?
+                .clone();
 
             let mut ctor_members =  Vec::with_capacity(tag.fields.len());
             for (field_id, field_val) in &tag.fields {
@@ -271,7 +285,8 @@ impl<'a> ImportBuilder<'a> {
             }
 
             ir::Ref::Global(ir::GlobalRef::StringLiteral(string_id)) => {
-                let string_text = self.library.metadata
+                let string_text = self
+                    .metadata()
                     .get_string(*string_id)
                     .ok_or_else(|| ImportError::MissingString(*string_id))?;
 
@@ -323,5 +338,15 @@ impl<'a> ImportBuilder<'a> {
         }
 
         result
+    }
+}
+
+impl<'a> ir::MetadataCollection for ImportBuilder<'a> {
+    fn all_metadata(&self) -> impl Iterator<Item=&Metadata> {
+        self.library_refs
+            .iter()
+            .rev()
+            .map(|ref_lib| ref_lib.library.metadata.as_ref())
+            .chain(iter::once(self.library.metadata.as_ref()))
     }
 }

@@ -275,7 +275,8 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
         Ok(())
     }
 
-    fn add_unit_path(&mut self,
+    fn add_unit_path(
+        &mut self,
         unit_ident: &IdentPath,
         unit_path: &PathBuf,
     ) -> Result<(), BuildError> {
@@ -307,7 +308,8 @@ impl<'a, Fs: Filesystem> ProjectLoader<'a, Fs> {
         }
     }
 
-    fn try_set_main_unit(&mut self,
+    fn try_set_main_unit(
+        &mut self,
         unit_path: &PathBuf,
         unit_ident: &IdentPath,
         kind: MainUnitKind,
@@ -464,10 +466,10 @@ pub fn parse_sources(
                     other => {
                         return Err(BuildError::from(TracedError {
                             err: other,
-                            bt: err.bt
+                            bt: err.bt,
                         }));
                     },
-                }
+                },
             };
 
             project.add_unit_path(&parsed_unit.ident, &unit_filename)?;
@@ -477,7 +479,11 @@ pub fn parse_sources(
 
             let unit = &project.parsed_units[&unit_filename];
             if verbose {
-                project.log.trace(format!("{}: parsed unit @ {}", unit.ident, unit_filename.display()));
+                project.log.trace(format!(
+                    "{}: parsed unit @ {}",
+                    unit.ident,
+                    unit_filename.display()
+                ));
             }
 
             let is_main_unit = MainUnitKind::try_from(unit.kind).is_ok();
@@ -511,11 +517,11 @@ pub fn parse_sources(
 
     let project_name = project.name()?;
     let project_version = project.version();
-    
+
     let mut sorted_unit_names: Vec<_> = project.dep_sort.collect();
     sorted_unit_names.reverse();
 
-    let mut sorted_units = LinkedHashMap::new();    
+    let mut sorted_units = LinkedHashMap::new();
     for unit_name in sorted_unit_names {
         let unit_path = &project.used_unit_paths[&unit_name];
         let unit = project.parsed_units.remove(unit_path).ok_or_else(|| {
@@ -665,23 +671,23 @@ fn import_package(
     match type_ctx {
         Some(ctx) => {
             for ref_lib in loaded_lib.refs {
-                let imported_lib = import_lib(ref_lib, Some(ctx))?;
+                let imported_lib = import_lib(ref_lib, &imported_libs, Some(ctx))?;
                 imported_libs.push(imported_lib);
             }
 
-            let imported_lib = import_lib(loaded_lib.main, Some(ctx))?;
+            let imported_lib = import_lib(loaded_lib.main, &imported_libs, Some(ctx))?;
             imported_libs.push(imported_lib);
-        }
+        },
 
         None => {
             for ref_lib in loaded_lib.refs {
-                let imported_lib = import_lib(ref_lib, None)?;
+                let imported_lib = import_lib(ref_lib, &imported_libs, None)?;
                 imported_libs.push(imported_lib);
             }
 
-            let imported_lib = import_lib(loaded_lib.main, None)?;
+            let imported_lib = import_lib(loaded_lib.main, &imported_libs, None)?;
             imported_libs.push(imported_lib);
-        }
+        },
     };
 
     Ok(imported_libs)
