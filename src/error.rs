@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::io;
-use terapascal_build::error::BuildError;
+use terapascal_build::BuildError;
 use terapascal_common::span::Span;
 use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticMessage;
