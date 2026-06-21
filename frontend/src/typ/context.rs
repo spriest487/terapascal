@@ -886,8 +886,8 @@ impl Context {
         }
     }
 
-    fn insert_method_def(&mut self, ty: Type, def: Arc<FunctionDef>) -> NameResult<()> {
-        let method = &def.decl.name.ident;
+    fn insert_method_def(&mut self, ty: Type, def: MethodDef) -> NameResult<()> {
+        let method_ident = def.decl().ident();
 
         match ty {
             Type::Interface(iface_name) => {
@@ -895,8 +895,8 @@ impl Context {
 
                 // check the method exists
                 let generic_def = self.instantiate_iface_def(&iface_name)?;
-                if generic_def.get_method(&def.decl.name.ident).is_none() {
-                    return Err(NameError::type_member_not_found(iface_ty, method.clone()));
+                if generic_def.get_method(method_ident).is_none() {
+                    return Err(NameError::type_member_not_found(iface_ty, method_ident.clone()));
                 }
 
                 self.insert_method_def_entry(iface_ty, def)
@@ -915,10 +915,10 @@ impl Context {
                 let variant_ty = Type::variant((*sym).clone());
 
                 variant_def
-                    .find_methods(&method)
-                    .find(|(_, m)| m.func_decl.sig() == def.decl.sig())
+                    .find_methods(&method_ident)
+                    .find(|(_, m)| m.func_decl.sig() == def.decl().sig())
                     .ok_or_else(|| {
-                        NameError::type_member_not_found(variant_ty.clone(), method.clone())
+                        NameError::type_member_not_found(variant_ty.clone(), method_ident.clone())
                     })?;
 
                 self.insert_method_def_entry(variant_ty, def)
@@ -929,8 +929,8 @@ impl Context {
                 let primitive_ty = Type::Primitive(primitive);
 
                 ty_methods
-                    .get(method)
-                    .ok_or_else(|| NameError::type_member_not_found(primitive, method.clone()))?;
+                    .get(method_ident)
+                    .ok_or_else(|| NameError::type_member_not_found(primitive, method_ident.clone()))?;
 
                 self.insert_method_def_entry(primitive_ty, def)
             },
@@ -942,32 +942,32 @@ impl Context {
     }
     
     fn insert_struct_method_def(&mut self,
-        def: Arc<FunctionDef>,
+        def: MethodDef,
         struct_name: &Symbol,
         struct_kind: StructKind
     ) -> NameResult<()> {
-        let method = def.decl.ident();
+        let method = def.decl().ident();
 
         let struct_def = self.find_struct_def(&struct_name.full_path, struct_kind)?;
         let struct_ty = Type::from_struct_type((*struct_name).clone(), struct_def.kind);
 
         struct_def
             .find_methods(&method)
-            .find(|(_, m)| m.func_decl.sig() == def.decl.sig())
+            .find(|(_, m)| m.func_decl.sig() == def.decl().sig())
             .ok_or_else(|| NameError::type_member_not_found(struct_ty.clone(), method.clone()))?;
 
         self.insert_method_def_entry(struct_ty, def)
     }
 
-    fn insert_method_def_entry(&mut self, ty: Type, def: Arc<FunctionDef>) -> NameResult<()> {
+    fn insert_method_def_entry(&mut self, ty: Type, def: MethodDef) -> NameResult<()> {
         let methods = self
             .method_defs
             .entry(ty.clone())
             .or_insert_with(MethodCollection::new);
 
         let key = MethodKey {
-            name: def.decl.ident().clone(),
-            sig: Arc::new(def.decl.sig()),
+            name: def.decl().ident().clone(),
+            sig: Arc::new(def.decl().sig()),
         };
 
         match methods.methods.entry(key) {
@@ -976,29 +976,48 @@ impl Context {
                 Ok(())
             },
 
-            Entry::Occupied(mut occupied) => match occupied.get_mut() {
-                Some(existing) => Err(NameError::AlreadyDefined {
-                    ident: IdentPath::from(def.decl.name.ident.clone()),
-                    existing: existing.decl.span().clone(),
-                }),
+            Entry::Occupied(mut occupied) => {
+                match occupied.get_mut() {
+                    Some(def) => {
+                        Err(NameError::AlreadyDefined {
+                            ident: IdentPath::from(def.decl().ident().clone()),
+                            existing: def.decl().span().clone(),
+                        })
+                    },
 
-                empty => {
-                    *empty = Some(def);
-                    Ok(())
-                },
+                    empty => {
+                        *empty = Some(def);
+                        Ok(())
+                    },
+                }
             },
         }
     }
 
     pub fn define_method(&mut self, ty: Type, method_def: Arc<FunctionDef>) -> TypeResult<()> {
         let span = method_def.decl.span().clone();
-        self.insert_method_def(ty, method_def)
+
+        self.insert_method_def(ty, MethodDef::Function(method_def))
             .map_err(|err| TypeError::from_name_err(err, span))?;
 
         Ok(())
     }
 
-    pub fn find_method_def(&self, ty: &Type, method: &Ident, sig: &Arc<FunctionSig>) -> Option<&FunctionDef> {
+    pub fn define_external_method(&mut self, ty: Type, method_decl: Arc<FunctionDecl>) -> TypeResult<()> {
+        let span = method_decl.span().clone();
+
+        self.insert_method_def(ty, MethodDef::External(method_decl))
+            .map_err(|err| TypeError::from_name_err(err, span))?;
+
+        Ok(())
+    }
+
+    pub fn find_method_def(
+        &self,
+        ty: &Type,
+        method: &Ident,
+        sig: &Arc<FunctionSig>,
+    ) -> Option<&MethodDef> {
         let method_defs = self.method_defs.get(ty)?;
 
         let key = MethodKey {

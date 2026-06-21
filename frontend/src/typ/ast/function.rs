@@ -10,7 +10,7 @@ use crate::ast::Ident;
 use crate::ast::SemanticHint;
 use crate::result::ErrorContinue;
 use crate::typ::ast::const_eval::ConstEval;
-use crate::typ::ast::typecheck_block;
+use crate::typ::ast::{typecheck_block, Block};
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::where_clause::WhereClause;
 use crate::typ::ast::Tag;
@@ -59,7 +59,6 @@ pub const SELF_TY_NAME: &str = "Self";
 pub type FunctionDecl = ast::FunctionDecl<Value>;
 pub type FunctionDeclMod = ast::FunctionDeclMod<Value>;
 pub type FunctionDef = ast::FunctionDef<Value>;
-pub type FunctionBody = ast::FunctionBody<Value>;
 pub type FunctionParamGroup = ast::FunctionParamGroup<Value>;
 pub type InterfaceMethodDecl = ast::InterfaceMethodDecl<Value>;
 pub type AnonymousFunctionDef = ast::AnonymousFunctionDef<Value>;
@@ -713,7 +712,7 @@ pub fn typecheck_func_def(
         self_ty: decl.method_declaring_type().cloned(),
     };
 
-    let body_result: TypeResult<FunctionBody> = ctx.scope(body_env, |ctx| {
+    let body_result: TypeResult<(Block, Vec<FunctionLocalBinding>)> = ctx.scope(body_env, |ctx| {
         // declare type parameters from the owning type, if this is a method
         if let Some(owning_ty) = decl.method_declaring_type() {
             if let Some(enclosing_ty_params) = owning_ty.type_params() {
@@ -732,45 +731,44 @@ pub fn typecheck_func_def(
 
         declare_func_params_in_body(&decl.param_groups, name_span, ctx)?;
 
-        let body = match &def.body {
-            ast::FunctionBody::Block { block, .. } => {
-                let locals = declare_locals_in_body(&def, ctx)?;
-                let block = typecheck_block(block, &decl.result_ty, ctx);
+        let locals = declare_locals_in_body(&def.locals, ctx)?;
+        let block = typecheck_block(&def.body, &decl.result_ty, ctx);
 
-                FunctionBody::Block { block, locals }
-            }
-            ast::FunctionBody::External => {
-                FunctionBody::External
-            },
-        };
-
-        Ok(body)
+        Ok((block, locals))
     });
 
-    let body = match body_result {
-        Ok(body) => body,
+    let (body, locals) = match body_result {
+        Ok(body) => {
+            body
+        },
 
         Err(err) => {
             ctx.error(err);
-            FunctionBody::External
+
+            let empty_block = Block {
+                begin_end: def.body.begin_end.clone(),
+                unsafe_kw: def.body.unsafe_kw.clone(),
+                annotation: Value::from(TypedValue::temp(Type::Nothing, def.body.span().clone())),
+                output: None,
+                stmts: Vec::new(),
+            };
+
+            (empty_block, Vec::new())
         }
     };
 
     Ok(FunctionDef {
         decl,
         body,
+        locals,
         span: def.span.clone(),
     })
 }
 
 fn declare_locals_in_body(
-    def: &ast::FunctionDef,
+    def_locals: &[ast::FunctionLocalBinding],
     ctx: &mut Context
 ) -> TypeResult<Vec<FunctionLocalBinding>> {
-    let ast::FunctionBody::Block { locals: def_locals, .. } = &def.body else {
-        return Ok(Vec::new());
-    };
-
     let mut locals = Vec::new();
 
     for local in def_locals {

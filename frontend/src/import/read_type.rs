@@ -16,6 +16,7 @@ use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::import::ImportWarning;
 use crate::ir;
+use crate::typ::ast::FieldDecl;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionName;
 use crate::typ::ast::InterfaceDecl;
@@ -28,8 +29,6 @@ use crate::typ::ast::StructMemberDecl;
 use crate::typ::ast::VariantCase;
 use crate::typ::ast::VariantCaseData;
 use crate::typ::ast::VariantDecl;
-use crate::typ::ast::{FieldDecl, FunctionBody, FunctionDef};
-use crate::typ::Primitive;
 use crate::typ::ScopeID;
 use crate::typ::SetType;
 use crate::typ::Symbol;
@@ -38,6 +37,7 @@ use crate::typ::TypeName;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamList;
 use crate::typ::SYSTEM_UNIT_NAME;
+use crate::typ::Primitive;
 use crate::IntConstant;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -717,22 +717,20 @@ impl ImportBuilder<'_> {
 
         for (declaring_type, type_method_map) in &type_methods {
             for (_, method_decl) in type_method_map {
-                let method_def = Arc::new(FunctionDef {
-                    body: FunctionBody::External,
-                    span: method_decl.func_decl.span.clone(),
-                    decl: method_decl.func_decl.clone(),
-                });
+                let Some(ctx) = self.root_ctx.as_mut() else {
+                    continue;
+                };
 
-                if let Some(ctx) = self.root_ctx.as_mut() {
-                    if let Err(err) = ctx.define_method(declaring_type.clone(), method_def) {
-                        let import_err = Box::new(ImportError::from(err));
+                let func_decl = method_decl.func_decl.clone();
 
-                        self.warnings.push(ImportWarning::InvalidMethodList(
-                            declaring_type.clone(),
-                            type_method_map.clone(),
-                            import_err,
-                        ));
-                    }
+                if let Err(err) = ctx.define_external_method(declaring_type.clone(), func_decl) {
+                    let import_err = Box::new(ImportError::from(err));
+
+                    self.warnings.push(ImportWarning::InvalidMethodList(
+                        declaring_type.clone(),
+                        type_method_map.clone(),
+                        import_err,
+                    ));
                 }
             }
         }

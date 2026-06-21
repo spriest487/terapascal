@@ -1,6 +1,6 @@
 use crate::ast::Access;
 use crate::ast::Ident;
-use crate::typ::ast::FunctionDef;
+use crate::typ::ast::{FunctionDecl, FunctionDef};
 use crate::typ::ast::MethodDecl;
 use crate::typ::FunctionSig;
 use crate::typ::Type;
@@ -52,8 +52,23 @@ pub(super) struct MethodKey {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum MethodDef {
+    Function(Arc<FunctionDef>),
+    External(Arc<FunctionDecl>),
+}
+
+impl MethodDef {
+    pub fn decl(&self) -> &Arc<FunctionDecl> {
+        match self {
+            MethodDef::Function(def) => &def.decl,
+            MethodDef::External(decl) => decl,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct MethodCollection {
-    pub(super) methods: HashMap<MethodKey, Option<Arc<FunctionDef>>>,
+    pub(super) methods: HashMap<MethodKey, Option<MethodDef>>,
 }
 
 impl MethodCollection {

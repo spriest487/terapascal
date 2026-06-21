@@ -8,7 +8,7 @@ use crate::codegen::metadata::translate_sig;
 use crate::codegen::FunctionInstance;
 use crate::ir;
 use crate::typ;
-use crate::typ::builtin_ident;
+use crate::typ::{builtin_ident, MethodDef};
 use crate::typ::free_mem_sig;
 use crate::typ::get_mem_sig;
 use crate::typ::SYSTEM_UNIT_NAME;
@@ -180,6 +180,7 @@ impl<'a> LibraryBuilder<'a> {
             func_def.decl.name.type_params.as_ref(),
             &func_def.decl.result_ty,
             &func_def.body,
+            &func_def.locals,
             false,
             None,
             Some(debug_name),
@@ -277,43 +278,58 @@ impl<'a> LibraryBuilder<'a> {
 
         let method_sig = Arc::new(method_decl.func_decl.sig());
 
-        let id = self.declare_method(&method_decl.func_decl, method_key.method_index);
-        let sig = Arc::new(method_decl.func_decl.sig());
-
-        // cache the function before translating the instantiation, because
-        // it may recurse and instantiate itself in its own body
-        let func_instance = FunctionInstance {
-            id,
-            src_sig: sig,
-            published: method_decl.is_published(),
-        };
-
-        let key = FunctionDeclKey::Method(method_key.clone());
-        self.translated_funcs.insert(key, func_instance.clone());
-
         let is_instance_method = !method_decl.func_decl.kind.is_static_method();
 
         let method_def = self.root_ctx
-            .find_method_def(&decl_self_ty, &method_decl.func_decl.ident(), &method_sig)
+            .find_method_def(&decl_self_ty, method_decl.func_decl.ident(), &method_sig)
             .cloned()
             .unwrap_or_else(|| {
                 panic!("instantiate_method: missing method def: {} (method {})", method_decl.func_decl, method_key.method_index)
             });
-        let debug_name = method_def.decl.name.to_debug_string(None);
 
-        let def = build_func_def(
-            self,
-            &method_def.decl.param_groups,
-            method_def.decl.name.type_params.as_ref(),
-            &method_def.decl.result_ty,
-            &method_def.body,
-            is_instance_method,
-            Some(&decl_self_ty),
-            Some(debug_name),
-        );
-        self.functions.insert(id, ir::Function::Local(def));
+        match method_def {
+            MethodDef::Function(func_def) => {
+                let id = self.declare_method(&method_decl.func_decl, method_key.method_index);
+                let sig = Arc::new(method_decl.func_decl.sig());
 
-        func_instance
+                // cache the function before translating the instantiation, because
+                // it may recurse and instantiate itself in its own body
+                let func_instance = FunctionInstance {
+                    id,
+                    src_sig: sig,
+                    published: method_decl.is_published(),
+                };
+
+                let key = FunctionDeclKey::Method(method_key.clone());
+                self.translated_funcs.insert(key, func_instance.clone());
+
+                let debug_name = func_def.decl.name.to_debug_string(None);
+
+                let def = build_func_def(
+                    self,
+                    &func_def.decl.param_groups,
+                    func_def.decl.name.type_params.as_ref(),
+                    &func_def.decl.result_ty,
+                    &func_def.body,
+                    &func_def.locals,
+                    is_instance_method,
+                    Some(&decl_self_ty),
+                    Some(debug_name),
+                );
+                self.functions.insert(id, ir::Function::Local(def));
+
+                func_instance
+            }
+
+            MethodDef::External(decl) => {
+                // we shouldn't be trying to instantiate it - it should already be in the cache
+                return self.find_imported_func(&FunctionDeclKey::Method(method_key.clone()))
+                    .unwrap_or_else(|| {
+                        panic!("instantiate_method: reference to external method `{}` which is not imported", decl.name)
+                    })
+                    .clone();
+            }
+        }
     }
 
     fn instantiate_virtual_method(&mut self, virtual_key: &VirtualMethodKey) -> FunctionInstance {
