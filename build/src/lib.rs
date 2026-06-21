@@ -576,8 +576,6 @@ fn build_with_log(
 
     let mut root_ctx = root_ctx.unwrap();
 
-    // reverse the compilation order for typechecking, modules should be processed after all their
-    // dependencies
     let typed_module = typecheck(
         parse_output.project_name,
         parse_output.project_version,

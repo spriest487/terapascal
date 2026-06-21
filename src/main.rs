@@ -168,7 +168,9 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
     for log_entry in &output.log.entries {
         match log_entry {
             BuildLogEntry::Trace(trace) => {
-                println!("[trace] {}", trace);
+                if args.verbose {
+                    println!("[trace] {}", trace);
+                }
             }
 
             BuildLogEntry::Diagnostic(warning) => {
