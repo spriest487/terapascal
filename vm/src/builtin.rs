@@ -3,6 +3,7 @@ use crate::ir;
 use crate::DynValue;
 use crate::ExecError;
 use crate::ExecResult;
+use crate::ObjectHeader;
 use crate::ObjectID;
 use crate::Pointer;
 use crate::Vm;
@@ -217,11 +218,13 @@ pub(super) fn array_create(state: &mut Vm) -> ExecResult<()> {
     let array_header = state.marshaller()
         .unmarshal_dyn_array_header_at(&array_ptr)?;
 
-    if array_header.object_header.is_immortal() {
+    let object_header = array_header.object_header;
+
+    if object_header.is_immortal() {
         return Err(ExecError::illegal_state("array_create: array is immortal and cannot be resized"));
     }
 
-    let ObjectID::Array(element_id) = &array_header.object_header.id else {
+    let ObjectID::Array(element_id) = &object_header.id else {
         return Err(ExecError::illegal_state("array_create: array pointer points to an invalid array object"));
     };
     let element_type = state.marshaller().get_type(*element_id)?.clone();
@@ -231,8 +234,8 @@ pub(super) fn array_create(state: &mut Vm) -> ExecResult<()> {
 
     state.release_dyn_val(&DynValue::Pointer(array_ptr.clone()), &element_type.dyn_array())?;
 
-    // keep the exact same RC state
-    array_ptr = state.new_dyn_array_with_header(&element_type, elements, array_header.object_header.clone())?;
+    let new_array_header = ObjectHeader::new(object_header.id, false);
+    array_ptr = state.new_dyn_array_with_header(&element_type, elements, new_array_header)?;
     
     state.store(&array_ref_arg.to_deref(), DynValue::Pointer(array_ptr))?;
 
