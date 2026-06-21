@@ -30,6 +30,7 @@ use crate::typ::ast::VariantCase;
 use crate::typ::ast::VariantCaseData;
 use crate::typ::ast::VariantDecl;
 use crate::typ::ScopeID;
+use crate::typ::TypeArgList;
 use crate::typ::SetType;
 use crate::typ::Symbol;
 use crate::typ::Type;
@@ -320,16 +321,26 @@ impl ImportBuilder<'_> {
     }
 
     fn read_type_ref(&mut self, type_ref: &ir::TypeRef) -> ImportResult<Type> {
-        if type_ref.args.is_empty()
-            && let Some(set_type) = self.read_set_type_tag(type_ref.def_id)
-        {
-            return Ok(Type::Set(set_type));
+        if let Some(set_type) = self.read_set_type_tag(type_ref.def_id) {
+            let ty = Type::Set(set_type);
+
+            if !type_ref.args.is_empty() {
+                let err = ImportError::InvalidData("type def with set type tag must not have type arguments".to_string());
+                self.warnings.push(ImportWarning::InvalidType(ty.to_string(), Box::new(err)));
+            }
+
+            return Ok(ty);
         }
 
-        let mut type_args = Vec::with_capacity(type_ref.args.len());
-        for type_arg in &type_ref.args {
-            type_args.push(TypeName::Unspecified(self.read_type(type_arg)?));
-        }
+        let type_args_list = if type_ref.args.is_empty() {
+            None
+        } else {
+            let mut type_args = Vec::with_capacity(type_ref.args.len());
+            for type_arg in &type_ref.args {
+                type_args.push(TypeName::Unspecified(self.read_type(type_arg)?));
+            }
+            Some(TypeArgList::new(type_args, self.span()))
+        };
 
         let type_decl = self
             .metadata()
@@ -355,7 +366,7 @@ impl ImportBuilder<'_> {
                             StructKind::Record
                         };
 
-                        Ok(Type::from_struct_type(path, kind))
+                        Ok(Type::from_struct_type(path.with_ty_args(type_args_list), kind))
                     }
 
                     ir::StructIdentity::ClosureObject(..) => {
@@ -371,7 +382,7 @@ impl ImportBuilder<'_> {
 
             ir::TypeDecl::Def(ir::TypeDef::Variant(variant_def)) => {
                 let path = self.read_def_path(&variant_def.name)?;
-                Ok(Type::variant(path))
+                Ok(Type::variant(path.with_ty_args(type_args_list)))
             }
         }
     }
