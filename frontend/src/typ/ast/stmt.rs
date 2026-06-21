@@ -138,7 +138,7 @@ pub fn typecheck_local_binding(
     }
 
     if binding_ty.is_unspecialized_generic() {
-        return Err(TypeError::from_generic_err(
+        ctx.error(TypeError::from_generic_err(
             GenericError::IllegalUnspecialized { ty: binding_ty.ty().clone() },
             binding.span().clone(),
         ));
