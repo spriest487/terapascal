@@ -342,10 +342,10 @@ pub fn translate_block(block: &typ::ast::Block, out_ref: ir::Ref, builder: &mut 
         translate_stmt(stmt, builder);
     }
 
-    if let Some(out) = &block.output {
-        let result_val = translate_expr(out, builder);
-        builder.mov(out_ref, result_val.clone());
-        builder.retain(result_val, out_ty);
+    if let Some(out_expr) = &block.output {
+        let result_val = translate_expr(out_expr, builder);
+        builder.mov(out_ref.clone(), result_val.clone());
+        builder.retain(out_ref, out_ty);
     }
 
     builder.local_end();
