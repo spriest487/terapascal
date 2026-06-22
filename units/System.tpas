@@ -107,6 +107,11 @@ type
         target: TypeInfo;
     end;
 
+    // indicates that a constant should be treated as a member of the named enum instead of a unit-level constant
+    PascalEnumMember = class
+        enumName: String;
+    end;
+
 {$IFDEF RTTI}
     InvokeError = variant of IToString
         InvalidArgs;

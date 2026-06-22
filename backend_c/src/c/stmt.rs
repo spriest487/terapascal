@@ -918,7 +918,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
             ir::Ref::Global(ir::GlobalRef::Variable(var_id)) => {
                 let var = self.unit.metadata.get_variable(*var_id)?;
                 
-                Some(var.r#type.clone())
+                Some(var.value_type.clone())
             }
             
             ir::Ref::Global(ir::GlobalRef::StaticTagArray(..)) => {

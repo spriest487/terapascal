@@ -1,6 +1,7 @@
 use crate::ast::Access;
 use crate::ast::Ident;
-use crate::typ::ast::{FunctionDecl, FunctionDef};
+use crate::typ::ast::FunctionDecl;
+use crate::typ::ast::FunctionDef;
 use crate::typ::ast::MethodDecl;
 use crate::typ::FunctionSig;
 use crate::typ::Type;

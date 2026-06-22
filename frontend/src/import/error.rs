@@ -46,6 +46,7 @@ pub type ImportResult<T> = Result<T, ImportError>;
 pub enum ImportWarning {
     InvalidType(String, Box<ImportError>),
     InvalidFunc(String, Box<ImportError>),
+    InvalidConst(String, Box<ImportError>),
     InvalidMethodList(Type, BTreeMap<usize, MethodDecl>, Box<ImportError>),
     InvalidPath(String, Box<ImportError>),
     InvalidLibTag(Box<ImportError>),
@@ -60,6 +61,10 @@ impl Display for ImportWarning {
 
             ImportWarning::InvalidFunc(name, err) => {
                 write!(f, "Invalid function `{}`: {}", name, err)
+            }
+
+            ImportWarning::InvalidConst(name, err) => {
+                write!(f, "Invalid constant declaration `{}`: {}", name, err)
             }
 
             ImportWarning::InvalidMethodList(ty, _method_list, err) => {

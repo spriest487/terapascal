@@ -13,8 +13,8 @@ pub use self::source::InterfaceMethodImplRef;
 pub use self::source::MetadataSource;
 pub use self::tags::TagInfo;
 pub use self::vars::VariableInfo;
+pub use self::vars::ConstInfo;
 
-use self::vars::ConstInfo;
 use crate::typeinfo::TypeInfo;
 use crate::FunctionID;
 use crate::FunctionIdentity;

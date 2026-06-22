@@ -7,10 +7,6 @@ use crate::ast::Visibility;
 use crate::codegen::ALIAS_TAG_CLASS_NAME;
 use crate::codegen::ALIAS_TAG_NAME_FIELD;
 use crate::codegen::ALIAS_TAG_TARGET_FIELD;
-use crate::codegen::SET_TAG_ITEM_TYPE_FIELD;
-use crate::codegen::SET_TAG_MAX_FIELD;
-use crate::codegen::SET_TAG_MIN_FIELD;
-use crate::codegen::SET_TAG_NAME;
 use crate::import::ImportBuilder;
 use crate::import::ImportError;
 use crate::import::ImportResult;
@@ -29,17 +25,16 @@ use crate::typ::ast::StructMemberDecl;
 use crate::typ::ast::VariantCase;
 use crate::typ::ast::VariantCaseData;
 use crate::typ::ast::VariantDecl;
+use crate::typ::Primitive;
 use crate::typ::ScopeID;
-use crate::typ::TypeArgList;
 use crate::typ::SetType;
 use crate::typ::Symbol;
 use crate::typ::Type;
+use crate::typ::TypeArgList;
 use crate::typ::TypeName;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamList;
 use crate::typ::SYSTEM_UNIT_NAME;
-use crate::typ::Primitive;
-use crate::IntConstant;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
@@ -145,7 +140,7 @@ impl ImportBuilder<'_> {
     ) -> ImportResult<()> {
         // if the typedecl is a set, its members are internal and the type info we need for
         // typechecking is stored in the compiler-generated tag
-        if self.read_set_type_tag(id).is_some() {
+        if self.read_type_as_set(id).is_some() {
             return Ok(());
         }
 
@@ -321,7 +316,7 @@ impl ImportBuilder<'_> {
     }
 
     fn read_type_ref(&mut self, type_ref: &ir::TypeRef) -> ImportResult<Type> {
-        if let Some(set_type) = self.read_set_type_tag(type_ref.def_id) {
+        if let Some(set_type) = self.read_type_as_set(type_ref.def_id) {
             let ty = Type::Set(set_type);
 
             if !type_ref.args.is_empty() {
@@ -387,33 +382,19 @@ impl ImportBuilder<'_> {
         }
     }
 
-    pub fn read_set_type_tag(&mut self, id: ir::TypeDefID) -> Option<Arc<SetType>> {
+    pub fn read_type_as_set(&mut self, id: ir::TypeDefID) -> Option<Arc<SetType>> {
         if let Some(set_type) = self.set_types.get(&id) {
             return Some(set_type.clone());
         }
 
-        // look up the struct again in each loop since we need mutable access to self
+        let struct_def = self.metadata().get_struct_def(id)?.clone();
+
         let tag_count = self.metadata().get_struct_def(id)?.tags.len();
 
         for i in 0..tag_count {
-            let struct_def = self.metadata().get_struct_def(id)?;
             let tag_info = &struct_def.tags[i];
 
-            // check that this tag is the set type tag
-            // TODO: cache the ID instead of looking up by name
-            let tag_def = self.metadata().get_struct_def(tag_info.class_id)?;
-
-            let tag_struct_name = tag_def.identity.name()?;
-            if tag_struct_name.path.len() != 2
-                || tag_struct_name.path[0] != SYSTEM_UNIT_NAME
-                || tag_struct_name.path[1] != SET_TAG_NAME
-            {
-                return None;
-            }
-
-            let item_type_field_val = tag_info.fields.get(&SET_TAG_ITEM_TYPE_FIELD)?.clone();
-            let min_field_val = tag_info.fields.get(&SET_TAG_MIN_FIELD)?.clone();
-            let max_field_val = tag_info.fields.get(&SET_TAG_MAX_FIELD)?.clone();
+            let imported_set_info = self.read_set_tag(&tag_info)?;
 
             let name = match struct_def.identity.name() {
                 Some(name_path) => {
@@ -431,27 +412,10 @@ impl ImportBuilder<'_> {
                 None => None,
             };
 
-            let item_type = match item_type_field_val {
-                ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(item_type))) => {
-                    self.read_type(&item_type).ok()?
-                }
-                _ => return None, // invalid
-            };
-
-            let min = match min_field_val {
-                ir::Value::LiteralI64(min_lit) => IntConstant::from(min_lit as i128),
-                _ => return None,
-            };
-
-            let max = match max_field_val {
-                ir::Value::LiteralI64(min_lit) => IntConstant::from(min_lit as i128),
-                _ => return None,
-            };
-
             let set_type = Arc::new(SetType {
-                item_type,
-                min,
-                max,
+                item_type: imported_set_info.item_type,
+                min: imported_set_info.min,
+                max: imported_set_info.max,
                 name,
             });
 
@@ -541,7 +505,7 @@ impl ImportBuilder<'_> {
         Ok(iface_type)
     }
 
-    fn read_def_path(&self, name_path: &ir::NamePath) -> ImportResult<Symbol> {
+    pub fn read_def_path(&self, name_path: &ir::NamePath) -> ImportResult<Symbol> {
         let ident_path = self.read_ident_path(&name_path);
 
         let type_params = self.read_def_type_params(&name_path.type_args)?;
@@ -722,6 +686,26 @@ impl ImportBuilder<'_> {
 
             if let Err(err) = self.declare_variant_def(&path, variant_def.clone()) {
                 let msg = format!("Declaring variant type {} failed", variant_def.name);
+                self.warnings.push(ImportWarning::InvalidType(msg, Box::new(ImportError::from(err))));
+            }
+        }
+
+        let enum_defs: Vec<_> = self.enum_defs.drain().collect();
+        for (path, enum_def) in enum_defs {
+            let enum_def = Arc::new(enum_def);
+            let visibility =  Visibility::Interface; // TODO: access modifiers in IR
+
+            let result = self.declare_type_def_with(&path, |builder| {
+                let Some(ctx) = builder.root_ctx.as_mut() else {
+                    return Ok(());
+                };
+
+                ctx.declare_enum(enum_def.clone(), visibility)?;
+                Ok(())
+            });
+
+            if let Err(err) = result {
+                let msg = format!("Declaring enum type {} failed", enum_def.name);
                 self.warnings.push(ImportWarning::InvalidType(msg, Box::new(ImportError::from(err))));
             }
         }

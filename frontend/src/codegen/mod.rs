@@ -1,16 +1,19 @@
+pub mod metadata;
+pub mod library_builder;
+
 mod builder;
 mod expr;
-pub mod metadata;
 mod stmt;
 mod pattern;
 mod function;
-pub mod library_builder;
 mod set_flags;
 mod alias;
+mod enum_type;
 
 pub use self::alias::*;
 pub use self::function::*;
 pub use self::set_flags::*;
+pub use self::enum_type::*;
 
 use self::builder::IRBuilder;
 use self::expr::*;

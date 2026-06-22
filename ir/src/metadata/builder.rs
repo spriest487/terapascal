@@ -10,6 +10,7 @@ use crate::Metadata;
 use crate::MetadataCollection;
 use crate::NamePath;
 use crate::StringID;
+use crate::TagInfo;
 use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDefID;
@@ -106,7 +107,12 @@ impl MetadataBuilder {
         &self.metadata
     }
     
-    pub fn new_variable(&mut self, name: Option<NamePath>, ty: Type) -> VariableID {
+    pub fn new_variable(
+        &mut self,
+        name: Option<NamePath>,
+        value_type: Type,
+        tags: impl IntoIterator<Item=TagInfo>,
+    ) -> VariableID {
         let id = self.next_variable_id;
 
         while let Some(..) = self.metadata.variables.get(&self.next_variable_id) {
@@ -115,7 +121,8 @@ impl MetadataBuilder {
 
         self.metadata.variables.insert(id, VariableInfo {
             name,
-            r#type: ty,
+            value_type,
+            tags: tags.into_iter().collect(),
         });
 
         self.next_variable_id.0 += 1;
@@ -123,10 +130,18 @@ impl MetadataBuilder {
         id
     }
 
-    pub fn new_const(&mut self, name: NamePath, value: Value) {
+    pub fn new_const(
+        &mut self,
+        name: NamePath,
+        value: Value,
+        value_type: Type,
+        tags: impl IntoIterator<Item=TagInfo>,
+    ) {
         self.metadata.constants.insert(name.clone(), ConstInfo {
             name,
             value,
+            value_type,
+            tags: tags.into_iter().collect(),
         });
     }
     

@@ -1,9 +1,11 @@
-mod read_function;
-mod read_type;
 mod error;
 mod builder;
+mod read_function;
+mod read_type;
+mod read_tags;
 
 pub use self::error::*;
+
 use crate::ast::IdentPath;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::FunctionInstance;

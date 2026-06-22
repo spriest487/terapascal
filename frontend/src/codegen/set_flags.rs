@@ -19,6 +19,31 @@ pub const SET_TAG_MIN_FIELD: ir::FieldID = ir::FieldID(0);
 pub const SET_TAG_MAX_FIELD: ir::FieldID = ir::FieldID(1);
 pub const SET_TAG_ITEM_TYPE_FIELD: ir::FieldID = ir::FieldID(2);
 
+#[derive(Copy, Clone)]
+pub struct SetTypeTagInfo {
+    pub class_id: ir::TypeDefID,
+
+    pub min_field: ir::FieldID,
+    pub max_field: ir::FieldID,
+
+    pub item_type_field: ir::FieldID,
+}
+
+impl SetTypeTagInfo {
+    pub fn find_in_metadata(metadata: &impl ir::MetadataSource) -> Option<Self> {
+        let name_path = ir::NamePath::new([SYSTEM_UNIT_NAME.to_string()], SET_TAG_NAME);
+
+        let (id, _def) = metadata.find_struct_def(&name_path)?;
+
+        Some(Self {
+            class_id: id,
+            item_type_field: SET_TAG_ITEM_TYPE_FIELD,
+            max_field: SET_TAG_MAX_FIELD,
+            min_field: SET_TAG_MIN_FIELD,
+        })
+    }
+}
+
 fn flags_repr_type(word_count: usize) -> ir::Type {
     match word_count {
         1 => ir::Type::U64,

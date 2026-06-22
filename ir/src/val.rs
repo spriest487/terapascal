@@ -117,7 +117,7 @@ impl Ref {
 
             Ref::Global(GlobalRef::Variable(id)) => {
                 let var_info = metadata.get_variable(*id)?;
-                Some(Cow::Borrowed(&var_info.r#type))
+                Some(Cow::Borrowed(&var_info.value_type))
             }
 
             Ref::Global(GlobalRef::StaticTagArray(..)) => {

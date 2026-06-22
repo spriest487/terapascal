@@ -211,15 +211,24 @@ impl Library {
 
         writeln!(f, "Constants:")?;
         for const_info in self.metadata.constants() {
-            write!(f, "{} = ", const_info.name)?;
+            write!(f, "{}", const_info.name)?;
+
+            write!(f," (")?;
+            formatter.format_type(&const_info.value_type, f)?;
+            writeln!(f, "):")?;
+
+            write_tag_list(&const_info.tags, formatter, f)?;
+            write!(f, "Value: ")?;
             formatter.format_val(&const_info.value, f)?;
+
+            writeln!(f)?;
             writeln!(f)?;
         }
         writeln!(f)?;
 
         writeln!(f, "Variables:")?;
         for (var_id, var_info) in self.metadata.variables() {
-            writeln!(f, "{}: {}", var_id.0, var_info.r#type.to_pretty_string(formatter))?;
+            writeln!(f, "{}: {}", var_id.0, var_info.value_type.to_pretty_string(formatter))?;
 
             if let Some(name) = &var_info.name {
                 writeln!(f, " ({})", name)?;

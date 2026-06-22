@@ -286,7 +286,7 @@ impl<'a> Unit<'a> {
         
         for (var_id, var_info) in library.metadata.variables() {
             let name = GlobalName::Variable(var_id);
-            let ty = self.translate_type(&var_info.r#type);
+            let ty = self.translate_type(&var_info.value_type);
             
             self.global_vars.push(GlobalVar {
                 name,

@@ -4,33 +4,21 @@ use crate::ast::IdentPath;
 use crate::ast::Literal;
 use crate::ast::LiteralItem;
 use crate::ast::ObjectCtorArgs;
+use crate::ast::Visibility;
 use crate::codegen::library_builder::FunctionDeclKey;
+use crate::codegen::EnumMemberTagInfo;
 use crate::codegen::FunctionInstance;
+use crate::codegen::SetTypeTagInfo;
+use crate::import::read_tags::ImportedEnumMember;
 use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::import::ImportWarning;
 use crate::ir;
-use crate::typ::ast::Expr;
-use crate::typ::ast::MethodDecl;
-use crate::typ::ast::ObjectCtorMember;
-use crate::typ::ast::StructDecl;
-use crate::typ::ast::Tag;
-use crate::typ::ast::TagItem;
-use crate::typ::ast::VariantDecl;
-use crate::typ::builtin_typeinfo_name;
-use crate::typ::ConstValue;
-use crate::typ::Context;
-use crate::typ::FunctionSig;
-use crate::typ::FunctionSigParam;
-use crate::typ::Primitive;
-use crate::typ::ScopeID;
-use crate::typ::SetType;
-use crate::typ::Type;
-use crate::typ::TypeName;
-use crate::typ::TypedValue;
-use crate::typ::Value;
+use crate::typ::ast::*;
+use crate::typ::*;
 use crate::IntConstant;
 use crate::RealConstant;
+use ir::Metadata;
 use ir::MetadataSource as _;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -38,7 +26,6 @@ use std::collections::HashSet;
 use std::iter;
 use std::sync::Arc;
 use terapascal_common::span::Span;
-use terapascal_ir::Metadata;
 
 pub(super) struct ImportBuilder<'a> {
     pub library: &'a ir::Library,
@@ -50,6 +37,7 @@ pub(super) struct ImportBuilder<'a> {
 
     pub struct_defs: HashMap<IdentPath, StructDecl>,
     pub variant_defs: HashMap<IdentPath, VariantDecl>,
+    pub enum_defs: HashMap<IdentPath, EnumDecl>,
 
     pub set_types: BTreeMap<ir::TypeDefID, Arc<SetType>>,
 
@@ -60,6 +48,9 @@ pub(super) struct ImportBuilder<'a> {
     pub warnings: Vec<ImportWarning>,
 
     pub default_span: Span,
+
+    pub enum_member_tag_info: Option<EnumMemberTagInfo>,
+    pub set_type_tag_info: Option<SetTypeTagInfo>,
 }
 
 impl<'a> ImportBuilder<'a> {
@@ -68,7 +59,7 @@ impl<'a> ImportBuilder<'a> {
         library_refs: impl IntoIterator<Item = &'a ir::Library>,
         type_ctx: Option<&'a mut Context>,
     ) -> Self {
-        ImportBuilder {
+        let mut builder = ImportBuilder {
             library,
             library_refs: library_refs.into_iter().collect(),
 
@@ -78,6 +69,7 @@ impl<'a> ImportBuilder<'a> {
 
             struct_defs: HashMap::new(),
             variant_defs: HashMap::new(),
+            enum_defs: HashMap::new(),
 
             set_types: BTreeMap::new(),
 
@@ -88,7 +80,15 @@ impl<'a> ImportBuilder<'a> {
             warnings: Vec::new(),
 
             default_span: Span::zero(""),
-        }
+
+            enum_member_tag_info: None,
+            set_type_tag_info: None,
+        };
+
+        builder.set_type_tag_info = SetTypeTagInfo::find_in_metadata(&builder);
+        builder.enum_member_tag_info = EnumMemberTagInfo::find_in_metadata(&builder);
+
+        builder
     }
 
     pub fn import(&mut self) -> ImportResult<()> {
@@ -96,15 +96,22 @@ impl<'a> ImportBuilder<'a> {
 
         for (type_id, type_decl) in self.library.metadata.type_decls() {
             if let Err(err) = self.read_type_decl(type_id, type_decl) {
-                let type_name = type_id.to_pretty_string(self.metadata());
+                let type_name = type_id.to_pretty_string(self);
                 self.warnings.push(ImportWarning::InvalidType(type_name, Box::new(err)));
             }
         }
 
         for (func_id, func_info) in self.library.metadata.functions() {
             if let Err(err) = self.read_function(func_id, func_info) {
-                let func_name = ir::FunctionRef::new(func_id).to_pretty_string(self.metadata());
+                let func_name = ir::FunctionRef::new(func_id).to_pretty_string(self);
                 self.warnings.push(ImportWarning::InvalidFunc(func_name, Box::new(err)));
+            }
+        }
+
+        for const_info in self.library.metadata.constants() {
+            if let Err(err) = self.read_const(const_info) {
+                let const_name = const_info.name.to_pretty_string(self);
+                self.warnings.push(ImportWarning::InvalidConst(const_name, Box::new(err)));
             }
         }
 
@@ -126,10 +133,10 @@ impl<'a> ImportBuilder<'a> {
         for tag in tags {
             let tag_type = self.read_type(&tag.class_id.to_class_ptr_type([]))?;
 
-            let tag_def = self.metadata()
+            let tag_def = self
                 .get_struct_def(tag.class_id)
                 .ok_or_else(|| {
-                    let class_name = tag.class_id.to_pretty_string(self.metadata());
+                    let class_name = tag.class_id.to_pretty_string(self);
                     ImportError::MissingTypeDef(class_name)
                 })?
                 .clone();
@@ -172,6 +179,91 @@ impl<'a> ImportBuilder<'a> {
         }
 
         Ok(result)
+    }
+
+    pub fn read_const(
+        &mut self,
+        const_info: &ir::ConstInfo,
+    ) -> ImportResult<()> {
+        let path = self.read_ident_path(&const_info.name);
+
+        if !const_info.name.type_args.is_empty() {
+            let name_display = const_info.name.to_pretty_string(self);
+            let msg = format!("path of constant item {path} has type parameters: {name_display}");
+            return Err(ImportError::InvalidData(msg))
+        }
+
+        let name_ident = path.last().clone();
+        let span = self.span();
+
+        let unit_path = path
+            .parent()
+            .ok_or_else(|| ImportError::InvalidData(format!("path {path} does not contain a unit namespace")))?;
+
+        let const_val = match self.read_value(&const_info.value)? {
+            Value::Const(val) => val,
+            other => {
+                let msg = format!("value of constant item {path} could not be converted to a constant: {other}");
+                return Err(ImportError::InvalidData(msg));
+            }
+        };
+
+        for tag in &const_info.tags {
+            // if this const is tagged as an enum member, declare it as part of an enum decl instead
+            if let Some(member_tag) = self.read_enum_member_tag(tag) {
+                self.read_const_as_enum_member(path, unit_path, const_val, member_tag)?;
+                return Ok(());
+            }
+        }
+
+        let value_type = self.read_type(&const_info.value_type)?;
+
+        self.with_unit_scope(unit_path, |builder| {
+            let visibility = Visibility::Interface; // TODO: access modifiers in IR
+
+            if let Some(ctx) = builder.root_ctx.as_mut() {
+                ctx.declare_global_const(name_ident, const_val.value.clone(), value_type, visibility, span)?;
+            }
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    fn read_const_as_enum_member(&mut self,
+        path: IdentPath,
+        unit_path: IdentPath,
+        const_val: Arc<ConstValue>,
+        enum_member: ImportedEnumMember,
+    ) -> ImportResult<()> {
+        let name_ident = path.last().clone();
+        let span = self.span();
+
+        let enum_name = unit_path.child(Ident::new(&enum_member.enum_name, self.span()));
+
+        let enum_def = self.enum_defs
+            .entry(enum_name)
+            .or_insert_with_key(|enum_name| EnumDecl {
+                span,
+                name: Arc::new(Symbol::from(enum_name.clone())),
+                items: Vec::new(),
+            });
+
+        let Some(ord_val) = const_val.value.clone().try_into_int() else {
+            let msg = format!("value of constant item {path} is not an ordinal value: {}", const_val.value);
+            return Err(ImportError::InvalidData(msg));
+        };
+
+        enum_def.items.push(EnumDeclItem {
+            annotation: Value::Const(const_val.clone()),
+            value: Some(EvaluatedConstExpr {
+                value: ord_val,
+                expr: Box::new(Expr::Ident(name_ident.clone(), Value::Const(const_val))),
+            }),
+            ident: name_ident,
+        });
+
+        Ok(())
     }
 
     pub fn read_sig(&mut self, sig: &ir::FunctionSig) -> ImportResult<FunctionSig> {
@@ -267,7 +359,7 @@ impl<'a> ImportBuilder<'a> {
                         ImportError::InvalidData(msg)
                     })?;
 
-                let var_type = self.read_type(&var_info.r#type)?;
+                let var_type = self.read_type(&var_info.value_type)?;
 
                 // there should be no references to unnamed vars in a package's interface
                 let Some(name_path) = &var_info.name else {

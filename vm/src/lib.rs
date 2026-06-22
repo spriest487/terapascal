@@ -2394,13 +2394,13 @@ impl Vm {
         // declare global variables
         for (var_id, var) in lib.metadata.variables() {
             // global variables start zero-initialized
-            let marshal_ty = self.heap.marshaller.create_native_type(&var.r#type)?;
+            let marshal_ty = self.heap.marshaller.create_native_type(&var.value_type)?;
             let zero_val = vec![0u8; marshal_ty.size()];
 
             self.globals
                 .insert(ir::GlobalRef::Variable(var_id), GlobalValue::Variable {
                     value: zero_val.into_boxed_slice(),
-                    ty: var.r#type.clone(),
+                    ty: var.value_type.clone(),
                 });
         }
 

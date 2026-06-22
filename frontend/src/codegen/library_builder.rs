@@ -21,14 +21,18 @@ use crate::codegen::SetFlagsType;
 use crate::codegen::*;
 use crate::ir;
 use crate::typ::ast::const_eval::ConstEval;
+use crate::typ::ast::ENUM_ORD_TYPE;
 use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::seq::TypeSequenceSupport;
+use crate::typ::Def;
+use crate::typ::DefKey;
 use crate::typ::Primitive;
-use crate::typ::Specializable;
+use crate::typ::Specializable as _;
 use crate::typ::TypeArgsResult;
+use crate::typ::SYSTEM_UNIT_NAME;
 use ir::InstructionBuilder as _;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
@@ -294,7 +298,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 let value = literal_to_val(&literal_val, &binding_ty, self);
 
-                self.metadata.new_const(binding_path, value);
+                self.metadata.new_const(binding_path, value, binding_ty.clone(), []);
             }
         }
 
@@ -305,7 +309,7 @@ impl<'a> LibraryBuilder<'a> {
                 let var_name = unit.ident.clone().child(ident.clone());
                 let var_path = ir::NamePath::from_ident_path(&var_name, None);
 
-                let id = self.metadata.new_variable(Some(var_path), var_ty.clone());
+                let id = self.metadata.new_variable(Some(var_path), var_ty.clone(), []);
 
                 self.variables_by_name.insert(var_name, id);
                 self.variables.insert(id, var_ty.clone());
@@ -483,6 +487,53 @@ impl<'a> LibraryBuilder<'a> {
         self.gen_type_info(&set_flags_type.repr_type.repr_type());
 
         set_flags_type
+    }
+
+    fn build_enum_def(&mut self, enum_name: &IdentPath) {
+        let find_def = self.root_ctx.find_def(enum_name, &DefKey::Unique);
+
+        let Some(Def::Enum(enum_def)) = find_def else {
+            panic!("build_enum_def: missing definition for {enum_name}");
+        };
+
+        let Some(namespace) = enum_name.parent() else {
+            panic!("build_enum_def: invalid enum path {enum_name}");
+        };
+
+        let namespace_path = ir::NamePath::from_ident_path(&namespace, []);
+
+        let ord_type = self.translate_type(&ENUM_ORD_TYPE);
+
+        let enum_member_tag_id = match EnumMemberTagInfo::find_in_metadata(&self.metadata) {
+            Some(info) => {
+                info.class_id
+            },
+            None => {
+                self.metadata.forward_declare_type(&ir::NamePath::new(
+                    [SYSTEM_UNIT_NAME.to_string()],
+                    ENUM_MEMBER_TAG_NAME,
+                ))
+            }
+        };
+
+        for item in &enum_def.items {
+            let item_path = namespace_path.clone().child(item.ident.as_str());
+
+            // typechecked enum items must have statically-known values
+            let Some(const_val) = item.annotation.as_const() else {
+                panic!("build_enum_def: enum item {item_path} does not have a const value");
+            };
+
+            let value = literal_to_val(&const_val.value, &ord_type, self);
+
+            let enum_type_name = enum_def.name.full_path.last().as_str();
+            let name_value = self.metadata.find_or_insert_string(enum_type_name);
+
+            let mut member_tag = ir::TagInfo::new(enum_member_tag_id);
+            member_tag.fields.insert(ENUM_MEMBER_TAG_NAME_FIELD, ir::Ref::from(name_value).value());
+
+            self.metadata_mut().new_const(item_path, value, ord_type.clone(), [member_tag]);
+        }
     }
 
     pub fn add_tag(&mut self, tag: ir::TagInfo) {
@@ -838,7 +889,9 @@ impl<'a> LibraryBuilder<'a> {
                 boxed_type
             }
 
-            typ::Type::Enum(..) => {
+            typ::Type::Enum(name) => {
+                self.build_enum_def(name);
+
                 let ord_type = self.translate_type(&typ::ast::ENUM_ORD_TYPE);
                 self.add_cached_type(src_ty.clone(), ord_type.clone());
                 ord_type
@@ -1355,7 +1408,7 @@ impl<'a> LibraryBuilder<'a> {
             return self.static_closures.get(id).unwrap();
         }
 
-        let id = self.metadata.new_variable(None, closure.sig.to_closure_ptr_type());
+        let id = self.metadata.new_variable(None, closure.sig.to_closure_ptr_type(), []);
         let instance = build_static_closure_impl(closure, id, self);
 
         self.static_closures.insert(id, instance);
