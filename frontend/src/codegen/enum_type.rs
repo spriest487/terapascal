@@ -2,7 +2,7 @@ use crate::ir;
 use crate::typ::SYSTEM_UNIT_NAME;
 
 pub const ENUM_MEMBER_TAG_NAME: &str = "PascalEnumMember";
-pub const ENUM_MEMBER_TAG_NAME_FIELD: ir::FieldID = ir::FieldID(0);
+pub const ENUM_MEMBER_TAG_TYPE_FIELD: ir::FieldID = ir::FieldID(0);
 
 #[derive(Copy, Clone)]
 pub struct EnumMemberTagInfo {
@@ -19,7 +19,7 @@ impl EnumMemberTagInfo {
 
         Some(Self {
             class_id: id,
-            name_field: ENUM_MEMBER_TAG_NAME_FIELD,
+            name_field: ENUM_MEMBER_TAG_TYPE_FIELD,
         })
     }
 }

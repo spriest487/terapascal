@@ -18,6 +18,7 @@ use std::sync::Arc;
 use terapascal_common::span::Span;
 
 pub type Literal = ast::Literal<Value>;
+pub type LiteralItem = ast::LiteralItem<Value>;
 
 impl Literal {
     pub fn as_string(&self) -> Option<&Arc<String>> {

@@ -11,7 +11,7 @@ pub struct ImportedSetType {
 }
 
 pub struct ImportedEnumMember {
-    pub enum_name: String,
+    pub enum_type_id: ir::TypeDefID,
 }
 
 impl<'a> ImportBuilder<'a> {
@@ -28,9 +28,25 @@ impl<'a> ImportBuilder<'a> {
 
         let item_type = match item_type_field_val {
             ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(item_type))) => {
-                self.read_type(&item_type).ok()?
+                // any struct type used as the item type of a set is assumed to be an enum ID
+                match item_type.as_ref() {
+                    ir::Type::Struct(enum_ref) => {
+                        let enum_path = self.get_type_decl(enum_ref.def_id)?.name()?;
+                        let enum_def_name = self.read_ident_path(&enum_path);
+
+                        Type::enumeration(enum_def_name)
+                    }
+
+                    ty => {
+                        self.read_type(ty).ok()?
+                    }
+                }
             }
-            _ => return None, // invalid
+
+            _ => {
+                // invalid
+                return None
+            },
         };
 
         let min = match min_field_val {
@@ -57,15 +73,15 @@ impl<'a> ImportBuilder<'a> {
             return None;
         }
 
-        let enum_name = match tag_info.fields.get(&enum_member_tag_info.name_field)? {
-            ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::StringLiteral(name_id))) => {
-                self.metadata().get_string(*name_id)?.clone()
+        let enum_type_id = match tag_info.fields.get(&enum_member_tag_info.name_field)? {
+            ir::Value::Ref(ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(enum_type))) => {
+                enum_type.definition_ref()?.def_id
             }
             _ => return None,
         };
 
         Some(ImportedEnumMember {
-            enum_name,
+            enum_type_id,
         })
     }
 }

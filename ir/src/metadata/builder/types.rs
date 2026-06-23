@@ -25,7 +25,7 @@ impl MetadataBuilder {
     }
     
     pub fn is_defined(&self, ty: &Type) -> bool {
-        self.find_in_self_or_refs(move |metadata| Some(metadata.is_defined(ty)))
+        self.find_in_self_or_refs(move |metadata| metadata.is_defined(ty).then_some(true))
             .unwrap_or(false)
     }
     

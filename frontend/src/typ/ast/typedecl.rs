@@ -9,7 +9,6 @@ use crate::ast::IdentPath;
 use crate::ast::Literal;
 use crate::ast::MemberDeclSection;
 use crate::ast::MethodOwner;
-use crate::ast::SetDeclRange;
 use crate::ast::TypeMemberDeclRef;
 use crate::result::ErrorContinue;
 use crate::typ::ast::const_eval::ConstEval;
@@ -63,6 +62,7 @@ pub type AliasDecl = ast::AliasDecl<Value>;
 pub type EnumDecl = ast::EnumDecl<Value>;
 pub type EnumDeclItem = ast::EnumDeclItem<Value>;
 pub type SetDecl = ast::SetDecl<Value>;
+pub type SetDeclRange = ast::SetDeclRange<Value>;
 pub type SupersClause = ast::SupersClause<Value>;
 
 pub type Tag = ast::tag::Tag<Value>;
@@ -707,7 +707,7 @@ impl SetDecl {
         assert!(name.type_args.is_none());
 
         let range = match set_decl.range.as_ref() {
-            SetDeclRange::Range { from, to, span: range_span, range_op_span } => {
+            ast::SetDeclRange::Range { from, to, span: range_span, range_op_span } => {
                 let from = typecheck_expr(from, &Type::Primitive(Primitive::UInt8), ctx)?;
                 let val_ty = from.annotation().ty().into_owned();
                 let to = typecheck_expr(to, &val_ty, ctx)?;
@@ -754,8 +754,8 @@ impl SetDecl {
                     range_op_span: range_op_span.clone(),
                 }
             }
-            
-            SetDeclRange::Type { ty, span, .. } => {
+
+            ast::SetDeclRange::Type { ty, span, .. } => {
                 let range_ty = typecheck_typename(ty, ctx)
                     .or_continue_with(ctx, || TypeName::nothing());
 

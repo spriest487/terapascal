@@ -516,6 +516,12 @@ impl<'a> LibraryBuilder<'a> {
             }
         };
 
+        // insert a forward type def for the enum type itself - this type will not actually
+        // be defined beyond giving it this name, but it means we can refer to it as a type
+        let enum_type_path = namespace_path.clone().child(enum_name.last().as_str());
+        let enum_type_id = self.metadata.forward_declare_type(&enum_type_path);
+        let enum_type_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(enum_type_id.to_struct_type([])));
+
         for item in &enum_def.items {
             let item_path = namespace_path.clone().child(item.ident.as_str());
 
@@ -526,11 +532,8 @@ impl<'a> LibraryBuilder<'a> {
 
             let value = literal_to_val(&const_val.value, &ord_type, self);
 
-            let enum_type_name = enum_def.name.full_path.last().as_str();
-            let name_value = self.metadata.find_or_insert_string(enum_type_name);
-
             let mut member_tag = ir::TagInfo::new(enum_member_tag_id);
-            member_tag.fields.insert(ENUM_MEMBER_TAG_NAME_FIELD, ir::Ref::from(name_value).value());
+            member_tag.fields.insert(ENUM_MEMBER_TAG_TYPE_FIELD, enum_type_ref.clone().to_ref().value());
 
             self.metadata_mut().new_const(item_path, value, ord_type.clone(), [member_tag]);
         }

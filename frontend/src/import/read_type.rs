@@ -12,19 +12,7 @@ use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::import::ImportWarning;
 use crate::ir;
-use crate::typ::ast::FieldDecl;
-use crate::typ::ast::FunctionDecl;
-use crate::typ::ast::FunctionName;
-use crate::typ::ast::InterfaceDecl;
-use crate::typ::ast::InterfaceMethodDecl;
-use crate::typ::ast::MethodDecl;
-use crate::typ::ast::MethodDeclSection;
-use crate::typ::ast::StructDecl;
-use crate::typ::ast::StructDeclSection;
-use crate::typ::ast::StructMemberDecl;
-use crate::typ::ast::VariantCase;
-use crate::typ::ast::VariantCaseData;
-use crate::typ::ast::VariantDecl;
+use crate::typ::ast::*;
 use crate::typ::Primitive;
 use crate::typ::ScopeID;
 use crate::typ::SetType;
@@ -389,7 +377,7 @@ impl ImportBuilder<'_> {
 
         let struct_def = self.metadata().get_struct_def(id)?.clone();
 
-        let tag_count = self.metadata().get_struct_def(id)?.tags.len();
+        let tag_count = struct_def.tags.len();
 
         for i in 0..tag_count {
             let tag_info = &struct_def.tags[i];
@@ -416,15 +404,55 @@ impl ImportBuilder<'_> {
                 item_type: imported_set_info.item_type,
                 min: imported_set_info.min,
                 max: imported_set_info.max,
-                name,
+                name: name.clone(),
             });
 
             self.set_types.insert(id, set_type.clone());
+
+            // if let Some(decl_name) = name {
+            //     let min_lit = self.make_literal_item(
+            //         Literal::Integer(set_type.min),
+            //         set_type.item_type.clone(),
+            //     );
+            //     let max_lit = self.make_literal_item(
+            //         Literal::Integer(set_type.max),
+            //         set_type.item_type.clone(),
+            //     );
+            //
+            //     let set_decl = SetDecl {
+            //         name: Arc::new(Symbol::from(decl_name.clone())),
+            //         range: Box::new(SetDeclRange::Range {
+            //             from: Expr::Literal(min_lit),
+            //             to: Expr::Literal(max_lit),
+            //             span: self.span(),
+            //             range_op_span: self.span(),
+            //         }),
+            //         span: self.span(),
+            //     };
+            //
+            //     let decl_result = self.declare_type_def_with(&decl_name, |builder| {
+            //         let Some(ctx) = builder.root_ctx else {
+            //             return Ok(());
+            //         };
+            //
+            //         ctx.declare_set(&set_decl)
+            //     });
+            // }
+
             return Some(set_type);
         }
 
         None
     }
+
+    // fn make_literal_item(&self, value: Literal, value_type: Type) -> LiteralItem {
+    //     let const_val = ConstValue::literal(value.clone(), value_type, self.span());
+    //
+    //     LiteralItem {
+    //         annotation: Value::Const(Arc::new(const_val)),
+    //         literal: value,
+    //     }
+    // }
 
     fn read_iface_type(&mut self, id: ir::InterfaceID) -> ImportResult<Type> {
         let def = self

@@ -3,6 +3,7 @@ use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::NamePathExt;
 use crate::ir;
 use crate::typ::SetType;
+use crate::typ::Type;
 use crate::typ::SYSTEM_UNIT_NAME;
 use crate::Operator;
 use bigdecimal::ToPrimitive;
@@ -62,39 +63,24 @@ impl SetFlagsType {
     // full-size 256-bit flag struct, the max number of values supported by
     // delphi/FPC sets
     pub fn translate(lib: &mut LibraryBuilder, set_type: &SetType) -> Self {
-        let bit_count = set_type.flags_type_bits();
-
-        let (struct_id, struct_identity) = match &set_type.name {
+        let struct_id = match &set_type.name {
             Some(ident_path) => {
-                let name_path = ir::NamePath::from_parts(ident_path.to_string_path());
-
-                let id = lib.metadata_mut().forward_declare_type(&name_path);
-                let identity = ir::StructIdentity::Record(name_path);
-
-                (id, identity)
+                let name_path = ir::NamePath::from_ident_path(ident_path, []);
+                lib.metadata_mut().forward_declare_type(&name_path)
             }
 
             None => {
-                let identity = ir::StructIdentity::Internal(format!("<{}-bit set>", bit_count));
-                let id = lib.metadata_mut().new_type();
-
-                (id, identity)
+                lib.metadata_mut().new_type()
             }
         };
 
-        let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
 
         // this only needs to be defined the first time this is called for any given set type
         if !lib.metadata().is_defined(&struct_id.to_struct_type([])) {
-            let mut set_struct = ir::StructDef::new(struct_identity, StructLayout::Packed);
-            set_struct.fields.insert(ir::FieldID(0), ir::StructFieldDef::new(flags_type.repr_type()));
-
-            if let Some(set_tag_info) = Self::build_tag(lib, set_type) {
-                set_struct.tags.push(set_tag_info);
-            }
-
-            lib.metadata_mut().define_struct(struct_id, set_struct);
+            Self::define_set_struct(set_type, struct_id, lib);
         }
+
+        let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
 
         Self {
             struct_id,
@@ -102,11 +88,49 @@ impl SetFlagsType {
         }
     }
 
+    fn define_set_struct(set_type: &SetType, id: ir::TypeDefID, lib: &mut LibraryBuilder) {
+        let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
+
+        let struct_identity = match &set_type.name {
+            Some(ident_path) => {
+                let name_path = ir::NamePath::from_parts(ident_path.to_string_path());
+                ir::StructIdentity::Record(name_path)
+            }
+
+            None => {
+                ir::StructIdentity::Internal(format!("<{}-bit set>", set_type.flags_type_bits()))
+            }
+        };
+
+        let mut set_struct = ir::StructDef::new(struct_identity, StructLayout::Packed);
+        set_struct.fields.insert(ir::FieldID(0), ir::StructFieldDef::new(flags_type.repr_type()));
+
+        if let Some(set_tag_info) = Self::build_tag(lib, set_type) {
+            set_struct.tags.push(set_tag_info);
+        }
+
+        lib.metadata_mut().define_struct(id, set_struct);
+    }
+
     fn build_tag(lib: &mut LibraryBuilder, set_type: &SetType) -> Option<ir::TagInfo> {
         let min_val = Wrapping(set_type.min.as_i128()).to_i64()?;
         let max_val = Wrapping(set_type.max.as_i128()).to_i64()?;
 
-        let item_type = lib.translate_type(&set_type.item_type);
+        // enums don't have an IR type def, but do reserve a unique ID. when reading a library,
+        // we assume any struct type referenced as a set item type is referring to an enum ID
+        let item_type = match &set_type.item_type {
+            Type::Enum(path) => {
+                let enum_name_path = ir::NamePath::from_ident_path(path, []);
+                let enum_id= lib.metadata_mut().forward_declare_type(&enum_name_path);
+
+                enum_id.to_struct_type([])
+            },
+
+            ty => {
+                lib.translate_type(ty)
+            },
+        };
+
         let item_type_ref = ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(Rc::new(item_type)));
 
         let tag_path = ir::NamePath::new([SYSTEM_UNIT_NAME.to_string()], SET_TAG_NAME);

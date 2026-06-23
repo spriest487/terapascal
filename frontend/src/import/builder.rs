@@ -196,10 +196,6 @@ impl<'a> ImportBuilder<'a> {
         let name_ident = path.last().clone();
         let span = self.span();
 
-        let unit_path = path
-            .parent()
-            .ok_or_else(|| ImportError::InvalidData(format!("path {path} does not contain a unit namespace")))?;
-
         let const_val = match self.read_value(&const_info.value)? {
             Value::Const(val) => val,
             other => {
@@ -211,10 +207,14 @@ impl<'a> ImportBuilder<'a> {
         for tag in &const_info.tags {
             // if this const is tagged as an enum member, declare it as part of an enum decl instead
             if let Some(member_tag) = self.read_enum_member_tag(tag) {
-                self.read_const_as_enum_member(path, unit_path, const_val, member_tag)?;
+                self.read_const_as_enum_member(path, const_val, member_tag)?;
                 return Ok(());
             }
         }
+
+        let unit_path = path
+            .parent()
+            .ok_or_else(|| ImportError::InvalidData(format!("path {path} does not contain a unit namespace")))?;
 
         let value_type = self.read_type(&const_info.value_type)?;
 
@@ -232,14 +232,22 @@ impl<'a> ImportBuilder<'a> {
 
     fn read_const_as_enum_member(&mut self,
         path: IdentPath,
-        unit_path: IdentPath,
         const_val: Arc<ConstValue>,
         enum_member: ImportedEnumMember,
     ) -> ImportResult<()> {
         let name_ident = path.last().clone();
         let span = self.span();
 
-        let enum_name = unit_path.child(Ident::new(&enum_member.enum_name, self.span()));
+        let enum_path = match self.get_type_decl(enum_member.enum_type_id) {
+            Some(ir::TypeDecl::Forward(enum_path)) if enum_path.type_args.is_empty() => {
+                enum_path.clone()
+            },
+            _ => {
+                return Err(ImportError::MissingTypeDef(format!("enum type of {path}")));
+            },
+        };
+
+        let enum_name = self.read_ident_path(&enum_path);
 
         let enum_def = self.enum_defs
             .entry(enum_name)

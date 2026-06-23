@@ -679,8 +679,9 @@ impl Context {
         Ok(())
     }
     
-    pub fn declare_set(&mut self,
-        set_decl: &Arc<SetDecl>,
+    pub fn declare_set(
+        &mut self,
+        set_decl: &SetDecl,
         visibility: Visibility
     ) -> bool {
         let decl_ty = match set_decl.to_set_type(self) {
