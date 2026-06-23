@@ -112,46 +112,52 @@ impl Context {
         };
 
         let system_path = IdentPath::new(builtin_ident(SYSTEM_UNIT_NAME), []);
+        
+        // add primitive declarations that are present in every context
+        // these don't translate to any actual code and are implemented by the runtime
         root_ctx
-            .unit_scope(system_path, |ctx| {
-                let builtin_ifaces = [
-                    builtin_displayable_iface(),
-                    builtin_comparable_iface(),
-                ];
-
-                for builtin_iface in builtin_ifaces {
-                    ctx.declare_iface(Arc::new(builtin_iface), Visibility::Interface)
-                        .expect("builtin interface decl must not fail");
-                }
-
+            .unit_scope(system_path.clone(), |ctx| {
                 declare_builtin_ty(ctx, NOTHING_TYPE_NAME, Type::Nothing, false, false)
                     .expect("builtin type decl must not fail");
                 declare_builtin_ty(ctx, ANY_TYPE_NAME, Type::Any, false, false)
                     .expect("builtin type decl must not fail");
-                
-                let typeinfo_ty = Type::class(builtin_typeinfo_name());
-                declare_builtin_ty(ctx, TYPEINFO_TYPE_NAME, typeinfo_ty, false, false)
-                    .expect("typeinfo type decl must not fail");
 
                 for primitive in &Primitive::ALL {
                     let primitive_ty = Type::Primitive(*primitive);
                     let methods =
                         declare_builtin_ty(ctx, primitive.name(), primitive_ty, true, true)
                             .expect("primitive type decl must not fail");
-
+    
                     ctx.primitive_methods.insert(*primitive, methods);
                 }
-
+                
                 Ok(())
             })
-            .expect("builtin unit definition must not fail");
+            .expect("builtin definitions must not fail");
 
-        root_ctx
-            .primitive_implements
-            .push(Type::interface(builtin_displayable_name()));
-        root_ctx
-            .primitive_implements
-            .push(Type::interface(builtin_comparable_name()));
+        // system declarations required for language features that must be added here if
+        // we are not expecting to load the system package. when compiling the system unit itself,
+        // the declarations in the code there replace these.
+        if root_ctx.opts.no_system {
+            root_ctx
+                .unit_scope(system_path, |ctx| {
+                    ctx.declare_iface(builtin_displayable_iface(), Visibility::Interface)?;
+                    ctx.declare_iface(builtin_comparable_iface(), Visibility::Interface)?;
+
+                    let typeinfo_ty = Type::class(builtin_typeinfo_name());
+                    declare_builtin_ty(ctx, TYPEINFO_TYPE_NAME, typeinfo_ty, false, false)?;
+
+                    Ok(())
+                })
+                .expect("builtin unit definition must not fail");
+
+            root_ctx
+                .primitive_implements
+                .push(Type::interface(builtin_displayable_name()));
+            root_ctx
+                .primitive_implements
+                .push(Type::interface(builtin_comparable_name()));
+        }
 
         root_ctx
     }
@@ -569,9 +575,11 @@ impl Context {
 
     pub fn declare_iface(
         &mut self,
-        iface: Arc<InterfaceDecl>,
+        iface: impl Into<Arc<InterfaceDecl>>,
         visibility: Visibility,
     ) -> TypeResult<()> {
+        let iface = iface.into();
+
         let name = iface.name.ident().clone();
         let iface_ty = Type::interface(iface.name.clone());
 

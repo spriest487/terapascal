@@ -62,6 +62,7 @@ fn compile(args: Args) -> Result<(), RunError> {
     compile_opts.verbose = args.verbose;
     compile_opts.lang_mode = args.lang_mode;
     compile_opts.allow_unsafe = args.allow_unsafe;
+    compile_opts.no_system = args.no_system;
 
     if args.rtti {
         compile_opts.define("RTTI");

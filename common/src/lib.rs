@@ -298,6 +298,8 @@ pub struct CompileOpts {
 
     pub rtti: bool,
     pub allow_unsafe: bool,
+    
+    pub no_system: bool,
 
     pp_symbols: HashSet<String>,
     switches: HashMap<String, bool>,
@@ -315,6 +317,8 @@ impl Default for CompileOpts {
 
             pp_symbols: HashSet::new(),
             switches: HashMap::new(),
+            
+            no_system: false,
             
             allow_unsafe: false,
             rtti: true,

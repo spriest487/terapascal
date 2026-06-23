@@ -333,7 +333,7 @@ pub fn declare_builtin_ty(
     let type_env = Environment::TypeDecl { ty: ty.clone() };
     ctx.scope(type_env, |ctx| {
         let mut methods = LinkedHashMap::new();
-        
+
         if displayable {
             let display_method = Arc::new(builtin_displayable_display_method(ty.clone(), ty.clone()));
             ctx.declare_external_func(display_method.clone(), Visibility::Interface)?;
