@@ -2376,8 +2376,8 @@ impl Vm {
 
             // allocate static arrays for runtime tag objects (must exist before RTTI init)
             for (tag_loc, tag_count) in tag_counts {
-                let nil_any = DynValue::Pointer(Pointer::nil(ir::ANY_TYPE));
-                let elements = iter::repeat(nil_any).take(tag_count).collect();
+                let nil_ptr = DynValue::Pointer(Pointer::nil(ir::Type::Nothing));
+                let elements = iter::repeat(nil_ptr).take(tag_count).collect();
 
                 let empty_tag_array = self.new_dyn_array(&ir::ANY_TYPE, elements, true)?;
 

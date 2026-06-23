@@ -6,7 +6,8 @@ use terapascal_ir::InstructionBuilder;
 use terapascal_ir::MetadataSource;
 
 pub fn gen_tags_init(lib: &mut LibraryBuilder) -> Option<ir::FunctionID> {
-    let locations: Vec<_> = lib.metadata.all_tags()
+    let locations: Vec<_> = lib.metadata
+        .all_tags()
         .map(|(loc, tags)| (loc, tags.to_vec()))
         .collect();
     

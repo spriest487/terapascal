@@ -89,7 +89,7 @@ pub trait MetadataSource : Sized {
         let type_tags = self.type_defs().map(|(id, def)| {
             let tags = match def {
                 TypeDef::Struct(struct_def) => struct_def.tags.as_slice(),
-                TypeDef::Variant(struct_def) => struct_def.tags.as_slice(),
+                TypeDef::Variant(variant_def) => variant_def.tags.as_slice(),
             };
 
             (TagLocation::TypeDef(id), tags)

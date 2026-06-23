@@ -520,7 +520,8 @@ impl<'a> LibraryBuilder<'a> {
         // be defined beyond giving it this name, but it means we can refer to it as a type
         let enum_type_path = namespace_path.clone().child(enum_name.last().as_str());
         let enum_type_id = self.metadata.forward_declare_type(&enum_type_path);
-        let enum_type_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(enum_type_id.to_struct_type([])));
+        let enum_def_type = enum_type_id.to_struct_type([]);
+        let enum_type_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(enum_def_type.clone()));
 
         for item in &enum_def.items {
             let item_path = namespace_path.clone().child(item.ident.as_str());
@@ -537,6 +538,17 @@ impl<'a> LibraryBuilder<'a> {
 
             self.metadata_mut().new_const(item_path, value, ord_type.clone(), [member_tag]);
         }
+
+        // custom typeinfo because it's not a real type def
+        let runtime_name = enum_type_path.to_pretty_string(self.metadata());
+        let runtime_name_id = self.metadata.find_or_insert_string(&runtime_name);
+
+        self.metadata.insert_type_info(enum_def_type, ir::TypeInfo {
+            name: Some(runtime_name_id),
+            flags: ir::TYPE_FLAG_VALUE,
+            debug_name: Some(runtime_name),
+            methods: Vec::new(),
+        });
     }
 
     pub fn add_tag(&mut self, tag: ir::TagInfo) {
