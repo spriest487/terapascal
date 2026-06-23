@@ -548,8 +548,21 @@ impl ImportBuilder<'_> {
             // TODO: interface method decls can't have tags yet, only impls can
             let method_tags = Vec::new();
 
-            let result_type = self.read_type(&method.return_ty)?;
-            let param_groups = self.read_params(&method.params)?;
+            let mut result_type = self.read_type(&method.return_ty)?;
+            let mut param_groups = self.read_params(&method.params)?;
+
+            // TODO: rework self refs
+            // is this ambiguous if a method uses both a Self ref and the name of the interface?
+            // in interface method signatures, a reference to the interface type itself is
+            // read as a Self type
+            if result_type == iface_type {
+                result_type = Type::MethodSelf;
+            }
+            for param in &mut param_groups {
+                if param.ty == iface_type {
+                    param.ty = TypeName::Unspecified(Type::MethodSelf);
+                }
+            }
 
             methods.push(InterfaceMethodDecl {
                 decl: Arc::new(FunctionDecl {
