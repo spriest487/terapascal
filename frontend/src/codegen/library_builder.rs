@@ -1045,28 +1045,40 @@ impl<'a> LibraryBuilder<'a> {
             return ty;
         }
 
-        let src_def = if src_name.is_unspecialized_generic() {
-            self.root_ctx
-                .find_iface_def(&src_name.full_path)
-                .unwrap_or_else(|err| panic!("translate_iface_type: {err}"))
-                .clone()
-        } else {
-            self.root_ctx
-                .instantiate_iface_def(src_name)
-                .unwrap_or_else(|err| panic!("translate_iface_type: {err}"))
-        };
+        let iface_name = translate_name(&src_name, self);
 
-        let iface_name = translate_name(&src_def.name, self);
-        let decl_id = self.metadata.declare_iface(&iface_name);
-        let iface_type = ir::Type::Object(ir::ObjectID::Interface(decl_id));
+        match self.metadata.find_iface(&iface_name) {
+            Some(id) => {
+                let iface_type = id.to_interface_ptr_type();
+                self.add_cached_type(src_type.clone(), iface_type.clone());
+                iface_type
+            }
 
-        self.add_cached_type(src_type.clone(), iface_type.clone());
+            None => {
+                let decl_id = self.metadata.declare_iface(&iface_name);
+                let iface_type = decl_id.to_interface_ptr_type();
 
-        let def = translate_iface(&src_def, self);
-        let iface_id = self.metadata.define_iface(def);
-        assert_eq!(iface_id, decl_id);
+                self.add_cached_type(src_type.clone(), iface_type.clone());
 
-        iface_type
+                let src_def = if src_name.is_unspecialized_generic() {
+                    self.root_ctx
+                        .find_iface_def(&src_name.full_path)
+                        .unwrap_or_else(|err| panic!("translate_iface_type: {err}"))
+                        .clone()
+                } else {
+                    self.root_ctx
+                        .instantiate_iface_def(src_name)
+                        .unwrap_or_else(|err| panic!("translate_iface_type: {err}"))
+                };
+
+                let def = translate_iface(&src_def, self);
+                let id = self.metadata.define_iface(def);
+
+                assert_eq!(id, decl_id);
+
+                iface_type
+            }
+        }
     }
 
     pub fn find_func_ty(&self, sig: &typ::FunctionSig) -> Option<ir::TypeDefID> {
