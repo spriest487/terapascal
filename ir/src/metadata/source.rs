@@ -1,12 +1,13 @@
 ﻿use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::vars::ConstInfo;
-use crate::{FunctionID, InterfaceImpl};
+use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
+use crate::InterfaceImpl;
 use crate::MethodID;
 use crate::MethodInfo;
 use crate::NamePath;

@@ -8,6 +8,7 @@ use crate::FunctionID;
 use crate::InterfaceID;
 use crate::Metadata;
 use crate::MetadataCollection;
+use crate::MetadataSource;
 use crate::NamePath;
 use crate::StringID;
 use crate::TagInfo;
@@ -137,6 +138,10 @@ impl MetadataBuilder {
         value_type: Type,
         tags: impl IntoIterator<Item=TagInfo>,
     ) {
+        if let Some(..) = self.find_constant(&name) {
+            panic!("new_const: constant {} was already declared", name);
+        }
+
         self.metadata.constants.insert(name.clone(), ConstInfo {
             name,
             value,

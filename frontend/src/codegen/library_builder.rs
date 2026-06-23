@@ -504,6 +504,15 @@ impl<'a> LibraryBuilder<'a> {
 
         let ord_type = self.translate_type(&ENUM_ORD_TYPE);
 
+        let enum_type_path = namespace_path.clone().child(enum_name.last().as_str());
+
+        // enum types have no actual definition but also only get declared once (below) by the
+        // library they're in, so assume if there's even a forward decl, the constants are
+        // stored in another library
+        if self.metadata.find_type_decl(&enum_type_path).is_some() {
+            return;
+        }
+
         let enum_member_tag_id = match EnumMemberTagInfo::find_in_metadata(&self.metadata) {
             Some(info) => {
                 info.class_id
@@ -516,9 +525,8 @@ impl<'a> LibraryBuilder<'a> {
             }
         };
 
-        // insert a forward type def for the enum type itself - this type will not actually
+        // insert a forward type def for the enum type itself - this type will never actually
         // be defined beyond giving it this name, but it means we can refer to it as a type
-        let enum_type_path = namespace_path.clone().child(enum_name.last().as_str());
         let enum_type_id = self.metadata.forward_declare_type(&enum_type_path);
         let enum_def_type = enum_type_id.to_struct_type([]);
         let enum_type_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(enum_def_type.clone()));

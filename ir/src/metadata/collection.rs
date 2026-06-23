@@ -1,9 +1,10 @@
-use std::rc::Rc;
-use crate::{IRFormatter, InterfaceImpl};
-use crate::FunctionInfo;
+use crate::metadata::vars::ConstInfo;
 use crate::FunctionID;
+use crate::FunctionInfo;
+use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
+use crate::InterfaceImpl;
 use crate::InterfaceMethodImplRef;
 use crate::Metadata;
 use crate::MetadataSource;
@@ -20,7 +21,7 @@ use crate::TypeInfo;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
-use crate::metadata::vars::ConstInfo;
+use std::rc::Rc;
 
 pub trait MetadataCollection {
     fn all_metadata(&self) -> impl Iterator<Item=&Metadata>;

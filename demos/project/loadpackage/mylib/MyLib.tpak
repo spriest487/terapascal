@@ -1,6 +1,4 @@
 package MyLib;
 contains
-    System,
     MyLib in 'MyLib.tpas';
-
 end.
