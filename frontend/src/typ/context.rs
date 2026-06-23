@@ -112,7 +112,7 @@ impl Context {
         };
 
         let system_path = IdentPath::new(builtin_ident(SYSTEM_UNIT_NAME), []);
-        
+
         // add primitive declarations that are present in every context
         // these don't translate to any actual code and are implemented by the runtime
         root_ctx
@@ -127,10 +127,19 @@ impl Context {
                     let methods =
                         declare_builtin_ty(ctx, primitive.name(), primitive_ty, true, true)
                             .expect("primitive type decl must not fail");
-    
+
                     ctx.primitive_methods.insert(*primitive, methods);
                 }
-                
+
+                // even if the interface types aren't defined, these implementations
+                // aren't declared in the system module
+                ctx
+                    .primitive_implements
+                    .push(Type::interface(builtin_displayable_name()));
+                ctx
+                    .primitive_implements
+                    .push(Type::interface(builtin_comparable_name()));
+
                 Ok(())
             })
             .expect("builtin definitions must not fail");
@@ -150,13 +159,6 @@ impl Context {
                     Ok(())
                 })
                 .expect("builtin unit definition must not fail");
-
-            root_ctx
-                .primitive_implements
-                .push(Type::interface(builtin_displayable_name()));
-            root_ctx
-                .primitive_implements
-                .push(Type::interface(builtin_comparable_name()));
         }
 
         root_ctx
