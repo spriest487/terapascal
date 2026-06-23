@@ -209,7 +209,7 @@ impl Class {
 
         let mut impls = BTreeMap::new();
 
-        for (iface_id, iface_impl) in unit.metadata.find_impls(class_ty) {
+        for (iface_id, iface_impl) in unit.metadata.type_impls(class_ty) {
             let mut method_impls = BTreeMap::new();
 
             let iface = unit.metadata.get_iface_def(iface_id).unwrap();

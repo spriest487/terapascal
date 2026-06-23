@@ -1,3 +1,8 @@
+mod read_function;
+mod read_type;
+mod read_tags;
+
+use self::read_tags::ImportedEnumMember;
 use crate::ast::FunctionParamMod;
 use crate::ast::Ident;
 use crate::ast::IdentPath;
@@ -9,7 +14,6 @@ use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::EnumMemberTagInfo;
 use crate::codegen::FunctionInstance;
 use crate::codegen::SetTypeTagInfo;
-use crate::import::read_tags::ImportedEnumMember;
 use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::import::ImportWarning;
@@ -29,28 +33,30 @@ use terapascal_common::span::Span;
 
 pub(super) struct ImportBuilder<'a> {
     pub library: &'a ir::Library,
-    pub library_refs: Vec<&'a ir::Library>,
-
-    pub root_ctx: Option<&'a mut Context>,
 
     pub imported_funcs: HashMap<FunctionDeclKey, FunctionInstance>,
-
-    pub struct_defs: HashMap<IdentPath, StructDecl>,
-    pub variant_defs: HashMap<IdentPath, VariantDecl>,
-    pub enum_defs: HashMap<IdentPath, EnumDecl>,
-
-    pub set_types: BTreeMap<ir::TypeDefID, Arc<SetType>>,
-
-    pub type_methods: HashMap<Type, BTreeMap<usize, MethodDecl>>,
-
-    pub namespaces: HashSet<IdentPath>,
+    pub imported_namespaces: HashSet<IdentPath>,
 
     pub warnings: Vec<ImportWarning>,
 
-    pub default_span: Span,
+    library_refs: Vec<&'a ir::Library>,
 
-    pub enum_member_tag_info: Option<EnumMemberTagInfo>,
-    pub set_type_tag_info: Option<SetTypeTagInfo>,
+    root_ctx: Option<&'a mut Context>,
+
+    types: HashMap<ir::Type, Type>,
+
+    struct_defs: HashMap<IdentPath, StructDecl>,
+    variant_defs: HashMap<IdentPath, VariantDecl>,
+    enum_defs: HashMap<IdentPath, EnumDecl>,
+
+    set_types: BTreeMap<ir::TypeDefID, Arc<SetType>>,
+
+    type_methods: HashMap<Type, BTreeMap<usize, MethodDecl>>,
+
+    default_span: Span,
+
+    enum_member_tag_info: Option<EnumMemberTagInfo>,
+    set_type_tag_info: Option<SetTypeTagInfo>,
 }
 
 impl<'a> ImportBuilder<'a> {
@@ -65,7 +71,9 @@ impl<'a> ImportBuilder<'a> {
 
             root_ctx: type_ctx,
 
-            namespaces: HashSet::new(),
+            imported_namespaces: HashSet::new(),
+
+            types: HashMap::new(),
 
             struct_defs: HashMap::new(),
             variant_defs: HashMap::new(),
@@ -414,7 +422,7 @@ impl<'a> ImportBuilder<'a> {
     }
 
     pub fn open_unit(&mut self, unit_path: IdentPath) -> ImportResult<ScopeID> {
-        self.namespaces.insert(unit_path.clone());
+        self.imported_namespaces.insert(unit_path.clone());
 
         if let Some(ctx) = self.root_ctx.as_mut() {
             let scope_id = ctx.push_unit_scope(unit_path)?;

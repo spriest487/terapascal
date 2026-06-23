@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use crate::IRFormatter;
+use crate::{IRFormatter, InterfaceImpl};
 use crate::FunctionInfo;
 use crate::FunctionID;
 use crate::InterfaceDef;
@@ -106,6 +106,20 @@ impl<T: MetadataCollection> MetadataSource for T {
 
     fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
         self.find_in_self_or_refs(move |metadata| metadata.get_iface_def(iface_id))
+    }
+
+    fn is_impl(&self, ty: &Type, iface_id: InterfaceID) -> bool {
+        self.find_in_self_or_refs(
+            move |metadata| metadata.is_impl(ty, iface_id).then_some(true)
+        ).unwrap_or(false)
+    }
+
+    fn type_impls(&self, ty: &Type) -> Vec<(InterfaceID, &InterfaceImpl)> {
+        let mut impls = Vec::new();
+        for metadata in self.all_metadata() {
+            impls.extend(metadata.type_impls(ty));
+        }
+        impls
     }
 
     fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {

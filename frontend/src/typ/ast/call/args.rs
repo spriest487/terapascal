@@ -168,7 +168,9 @@ pub fn infer_from_structural_ty_args(
                 inferred_ty_args.add(inferred_param, actual_ty_arg.clone());
             }
 
-            _ => infer_from_structural_ty_args(param_ty_arg, actual_ty_arg, inferred_ty_args, span),
+            _ => {
+                infer_from_structural_ty_args(param_ty_arg, actual_ty_arg, inferred_ty_args, span)
+            },
         }
     }
 }

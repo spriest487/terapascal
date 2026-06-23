@@ -1,9 +1,32 @@
 use crate::DiagnosticOutput;
 use crate::Severity;
+use std::fmt;
 
 pub enum BuildLogEntry {
     Trace(String),
     Diagnostic(Box<dyn DiagnosticOutput>),
+}
+
+impl fmt::Display for BuildLogEntry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            BuildLogEntry::Trace(message) => {
+                write!(f, "[trace] {message}")?;
+            }
+
+            BuildLogEntry::Diagnostic(diagnostic) => {
+                write!(f, "[{}]", diagnostic.severity().to_string().to_lowercase())?;
+                
+                write!(f, " {}", diagnostic.main())?;
+                for see_also in diagnostic.see_also() {
+                    writeln!(f)?;
+                    write!(f, "{}", see_also)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Default)]

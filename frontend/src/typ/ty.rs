@@ -230,7 +230,6 @@ impl Type {
             Type::Nothing => false,
             Type::Primitive(_) => false,
             Type::Pointer(_) => false,
-            Type::Function(_) => false,
             Type::Record(_) => false,
             Type::Variant(_) => false,
             Type::Array { .. } => false,
@@ -238,6 +237,7 @@ impl Type {
             Type::Enum(..) => false,
             Type::Set(..) => false,
 
+            Type::Function(_) => true, // closure object
             Type::Class(_) => true,
             Type::Interface(_) => true,
             Type::DynArray { .. } => true,
@@ -604,7 +604,7 @@ impl Type {
             _ => false,
         }
     }
-    
+
     pub fn is_any_object_ref(&self) -> bool {
         self.is_strong_object_ref() || self.is_weak_object_ref()
     }
@@ -653,7 +653,7 @@ impl Type {
 
         Ok(())
     }
-    
+
     pub fn is_func_with_sig(&self, sig: &FunctionSig) -> bool {
         match self {
             Type::Function(ty_sig) => **ty_sig == *sig,
@@ -671,6 +671,10 @@ impl Type {
 
     pub fn ptr(self) -> Self {
         Type::Pointer(Arc::new(self))
+    }
+
+    pub fn to_weak(&self) -> Self {
+        Type::Weak(Arc::new(self.clone()))
     }
 
     pub fn indirect_by(self, indirection: usize) -> Self {
@@ -1482,10 +1486,10 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
 
     // validate type params, it's an error to write a path with mismatched type params
     let expect_params = ty.type_params().cloned();
-    
+
     let expect_params_count = expect_params.as_ref().map(ast::TypeList::len).unwrap_or(0);
     let actual_params_count = path.type_params.as_ref().map(ast::TypeList::len).unwrap_or(0);
-    
+
     if expect_params_count != actual_params_count {
         return Err(TypeError::generic_args_len_mismatch(
             expect_params_count,
@@ -1509,7 +1513,7 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
                         actual: path.type_params.clone(),
                     }, path.span.clone()));
                 }
-                
+
                 let arg_typename = TypeName::Ident(IdentTypeName {
                     ident: IdentPath::from(actual_param.clone()),
                     indirection: 0,
@@ -1543,10 +1547,10 @@ pub fn typecheck_type_path(path: &ast::TypePath, ctx: &mut Context) -> TypeResul
         //
         //     (ty, Some(generic_args))
         // }
-        
+
         _ => (ty, None),
     };
-    
+
     let ident_name = IdentTypeName {
         ident: path.name.clone(),
         type_args: path_args,
@@ -1788,7 +1792,7 @@ impl TypeName {
     pub fn inferred(ty: impl Into<Type>) -> Self {
         Self::Unspecified(ty.into())
     }
-    
+
     pub fn nothing() -> Self {
         TypeName::inferred(Type::Nothing)
     }

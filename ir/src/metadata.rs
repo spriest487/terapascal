@@ -395,33 +395,6 @@ impl Metadata {
         }
     }
 
-    pub fn impls(&self, ty: &Type) -> Vec<InterfaceID> {
-        let Some(impls) = self.iface_impls.get(ty) else {
-            return Vec::new();
-        };
-
-        impls.keys().cloned().collect()
-    }
-
-    pub fn is_impl(&self, ty: &Type, iface_id: InterfaceID) -> bool {
-        let Some(impls) = self.iface_impls.get(ty) else {
-            return false;
-        };
-
-        impls.contains_key(&iface_id)
-    }
-
-    pub fn find_impls(&self, ty: &Type) -> Vec<(InterfaceID, &InterfaceImpl)> {
-        let Some(impls) = self.iface_impls.get(ty) else {
-            return Vec::new();
-        };
-
-        impls
-            .iter()
-            .map(|(iface_id, iface_impl)| (*iface_id, iface_impl))
-            .collect()
-    }
-
     pub fn insert_closure(&mut self, virtual_sig: impl Into<Rc<FunctionSig>>, closure_id: TypeDefID) {
         let closures = self.closures
             .entry(virtual_sig.into())
@@ -575,6 +548,25 @@ impl MetadataSource for Metadata {
             InterfaceDecl::Def(def) => Some(def),
             InterfaceDecl::Forward(..) => None,
         }
+    }
+
+    fn is_impl(&self, ty: &Type, iface_id: InterfaceID) -> bool {
+        let Some(impls) = self.iface_impls.get(ty) else {
+            return false;
+        };
+
+        impls.contains_key(&iface_id)
+    }
+
+    fn type_impls(&self, ty: &Type) -> Vec<(InterfaceID, &InterfaceImpl)> {
+        let Some(impls) = self.iface_impls.get(ty) else {
+            return Vec::new();
+        };
+
+        impls
+            .iter()
+            .map(|(iface_id, iface_impl)| (*iface_id, iface_impl))
+            .collect()
     }
 
     fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {

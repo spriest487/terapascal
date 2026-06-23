@@ -1,8 +1,5 @@
 mod error;
 mod builder;
-mod read_function;
-mod read_type;
-mod read_tags;
 
 pub use self::error::*;
 
@@ -34,7 +31,7 @@ pub fn import_lib<'a>(
     builder.import()?;
 
     Ok(ImportOutput {
-        namespaces: builder.namespaces,
+        namespaces: builder.imported_namespaces,
         warnings: builder.warnings,
         imported_funcs: builder.imported_funcs,
     })

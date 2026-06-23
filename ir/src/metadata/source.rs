@@ -1,7 +1,7 @@
 ﻿use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::vars::ConstInfo;
-use crate::FunctionID;
+use crate::{FunctionID, InterfaceImpl};
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -59,6 +59,9 @@ pub trait MetadataSource : Sized {
 
     fn interfaces(&self) -> impl Iterator<Item = (InterfaceID, &InterfaceDef)>;
     fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef>;
+
+    fn is_impl(&self, ty: &Type, iface_id: InterfaceID) -> bool;
+    fn type_impls(&self, ty: &Type) -> Vec<(InterfaceID, &InterfaceImpl)>;
     fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>>;
     fn find_virtual_impl(&self, impl_type: &Type, iface_id: InterfaceID, method_id: MethodID) -> Option<FunctionID>;
 

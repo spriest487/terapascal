@@ -165,11 +165,11 @@ impl Library {
             };
 
             if let Some(self_ty) = impl_self_ty {
-                let iface_impls = self.metadata.impls(&self_ty);
+                let iface_impls = self.metadata.type_impls(&self_ty);
 
                 if !iface_impls.is_empty() {
                     writeln!(f, "  Implements:")?;
-                    for iface_id in iface_impls {
+                    for (iface_id, _) in iface_impls {
                         write!(f, "    ")?;
 
                         formatter.format_type(&iface_id.to_interface_ptr_type(), f)?;

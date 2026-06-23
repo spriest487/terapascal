@@ -26,8 +26,10 @@ use crate::typ::SYSTEM_UNIT_NAME;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
+use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_ir::MetadataSource as _;
+use terapascal_ir::StructIdentity;
 
 impl ImportBuilder<'_> {
     pub fn read_type_decl(&mut self, id: ir::TypeDefID, decl: &ir::TypeDecl) -> ImportResult<()> {
@@ -37,7 +39,7 @@ impl ImportBuilder<'_> {
             }
 
             ir::TypeDecl::Def(ir::TypeDef::Variant(variant_def)) => {
-                self.read_variant_def(variant_def)?;
+                self.read_variant_def(id, variant_def)?;
                 Ok(())
             }
 
@@ -63,6 +65,7 @@ impl ImportBuilder<'_> {
 
     fn read_variant_def(
         &mut self,
+        id: ir::TypeDefID,
         def: &ir::VariantDef,
     ) -> ImportResult<()> {
         let name = self.read_def_path(&def.name)?;
@@ -90,7 +93,9 @@ impl ImportBuilder<'_> {
             });
         }
 
-        let implements = None; // TODO
+        let def_type = id.to_variant_type(def.name.type_args.clone());
+        let implements = self.read_type_impls(&def_type)?;
+
         let where_clause = None; // TODO: generic constraints in IR
 
         let tags = self.read_tags(&def.tags)?;
@@ -117,6 +122,31 @@ impl ImportBuilder<'_> {
         self.variant_defs.insert(def_path, variant_decl);
 
         Ok(())
+    }
+
+    fn read_type_impls(&mut self, ty: &ir::Type) -> ImportResult<Option<SupersClause>> {
+        let iface_impls: Vec<_> = self
+            .type_impls(ty)
+            .into_iter()
+            .map(|(iface_id, _)| iface_id)
+            .collect();
+
+        if iface_impls.is_empty() {
+            return Ok(None);
+        }
+
+        let mut types = Vec::with_capacity(iface_impls.len());
+        for iface_id in iface_impls {
+            let iface_type = self.read_type(&iface_id.to_interface_ptr_type())?;
+
+            types.push(TypeName::Unspecified(iface_type));
+        }
+
+        Ok(Some(SupersClause {
+            span: self.span(),
+            kw_span: self.span(),
+            types,
+        }))
     }
 
     fn read_struct_def(
@@ -161,7 +191,8 @@ impl ImportBuilder<'_> {
 
         let tags = self.read_tags(&def.tags)?;
 
-        let implements = None; // TODO
+        let implements = self.read_type_impls(&def.identity.to_definition_type(id))?;
+
         let where_clause = None; // TODO: generic constraints in IR
 
         let struct_decl = StructDecl {
@@ -209,53 +240,12 @@ impl ImportBuilder<'_> {
     }
 
     pub fn read_type(&mut self, ir_type: &ir::Type) -> ImportResult<Type> {
+        if let Some(cached) = self.types.get(ir_type) {
+            return Ok(cached.clone());
+        }
+
         let result = match ir_type {
-            ir::Type::Nothing => {
-                Type::Nothing
-            },
-            ir::Type::Generic(name) => {
-                Type::generic_param(Ident::new(name.as_str(), self.span()))
-            },
-
-            ir::Type::TempRef(..) => {
-                // these should be handled before calling read_type, so if we reach here, a ref
-                // has appeared somewhere it can't be handled by Pascal
-                let type_name = ir_type.to_pretty_string(self.metadata());
-                let msg = format!("temporary reference type ({type_name}) cannot be imported");
-
-                return Err(ImportError::InvalidData(msg));
-            }
-
-            ir::Type::Pointer(deref_ty) => {
-                let deref_type = self.read_type(deref_ty)?;
-
-                if deref_type == Type::Nothing {
-                    Type::Primitive(Primitive::Pointer)
-                } else {
-                    deref_type.ptr()
-                }
-            }
-
-            ir::Type::Struct(type_ref) | ir::Type::Variant(type_ref) => {
-                self.read_type_ref(type_ref)?
-            }
-
-            ir::Type::Array { element, dim } => {
-                let element_type = self.read_type(element)?;
-                Type::array(element_type, *dim)
-            }
-
-            ir::Type::Object(object_id) => {
-                self.read_object_type(object_id)?
-            }
-            ir::Type::WeakObject(object_id) => {
-                Type::Weak(Arc::new(self.read_object_type(object_id)?))
-            }
-
-            ir::Type::Function(sig) => {
-                Type::Function(Arc::new(self.read_sig(sig)?))
-            },
-
+            // don't need to cache these
             ir::Type::Bool => Type::Primitive(Primitive::Boolean),
             ir::Type::U8 => Type::Primitive(Primitive::UInt8),
             ir::Type::I8 => Type::Primitive(Primitive::Int8),
@@ -269,43 +259,143 @@ impl ImportBuilder<'_> {
             ir::Type::ISize => Type::Primitive(Primitive::NativeInt),
             ir::Type::F32 => Type::Primitive(Primitive::Real32),
             ir::Type::F64 => Type::Primitive(Primitive::Real64),
+
+            ir::Type::Nothing => Type::Nothing,
+
+            ir::Type::TempRef(..) => {
+                // these should be handled before calling read_type, so if we reach here, a ref
+                // has appeared somewhere it can't be handled by Pascal
+                let type_name = ir_type.to_pretty_string(self.metadata());
+                let msg = format!("temporary reference type ({type_name}) cannot be imported");
+
+                return Err(ImportError::InvalidData(msg));
+            }
+
+            ir::Type::Generic(name) => {
+                let param_type = Type::generic_param(Ident::new(name.as_str(), self.span()));
+                self.types.insert(ir_type.clone(), param_type.clone());
+
+                param_type
+            },
+
+            ir::Type::Pointer(deref_ty) => {
+                let deref_type = self.read_type(deref_ty)?;
+
+                let pointer_type = if deref_type == Type::Nothing {
+                    Type::Primitive(Primitive::Pointer)
+                } else {
+                    deref_type.ptr()
+                };
+
+                self.types.insert(ir_type.clone(), pointer_type.clone());
+
+                pointer_type
+            }
+
+            ir::Type::Struct(type_ref) | ir::Type::Variant(type_ref) => {
+                self.read_type_ref(type_ref)?
+            }
+
+            ir::Type::Array { element, dim } => {
+                let element_type = self.read_type(element)?;
+                Type::array(element_type, *dim)
+            }
+
+            ir::Type::Object(object_id) => {
+                self.build_object_type(object_id)?
+            }
+
+            ir::Type::WeakObject(object_id) => {
+                let weak_type = Type::Weak(Arc::new(self.build_object_type(object_id)?));
+                self.types.insert(ir_type.clone(), weak_type.clone());
+                weak_type
+            }
+
+            ir::Type::Function(sig) => {
+                let func_type = Type::Function(Arc::new(self.read_sig(sig)?));
+                self.types.insert(ir_type.clone(), func_type.clone());
+                func_type
+            },
         };
 
         Ok(result)
     }
 
-    fn read_object_type(&mut self, object_id: &ir::ObjectID) -> ImportResult<Type> {
-        match object_id {
-            ir::ObjectID::Any => Ok(Type::Any),
+    fn build_object_type(&mut self, object_id: &ir::ObjectID) -> ImportResult<Type> {
+        let strong_type = object_id.to_object_type();
+        let weak_type = object_id.to_weak_object_type();
 
-            ir::ObjectID::Class(class_ref) => {
-                self.read_type_ref(class_ref)
-            }
-
-            ir::ObjectID::Interface(iface_id) => {
-                self.read_iface_type(*iface_id)
-            }
+        let result_type = match object_id {
+            ir::ObjectID::Any => {
+                Type::Any
+            },
 
             ir::ObjectID::AnyClosure(sig) => {
                 let sig = self.read_sig(sig)?;
-                Ok(Type::Function(Arc::new(sig)))
+
+                let func_type = Type::Function(Arc::new(sig));
+
+                self.types.insert(strong_type.clone(), func_type.clone());
+                self.types.insert(weak_type.clone(), func_type.to_weak());
+
+                func_type
             },
 
             ir::ObjectID::Array(element_type) => {
                 let element_type = self.read_type(element_type)?;
-                Ok(element_type.dyn_array())
+
+                let array_type = element_type.dyn_array();
+                self.types.insert(object_id.to_object_type(), array_type.clone());
+                self.types.insert(object_id.to_weak_object_type(), array_type.to_weak());
+
+                array_type
             },
 
             ir::ObjectID::Box(value_type) => {
                 let value_type = self.read_type(value_type)?;
-                Ok(value_type.boxed())
+
+                let box_type = value_type.boxed();
+                self.types.insert(object_id.to_object_type(), box_type.clone());
+                self.types.insert(object_id.to_weak_object_type(), box_type.to_weak());
+
+                box_type
             }
-        }
+
+            ir::ObjectID::Class(class_ref) => {
+                let class_type = self.read_type_ref(class_ref)?;
+
+                assert!(class_type.is_object());
+                assert!(self.types.contains_key(&object_id.to_object_type()));
+                assert!(self.types.contains_key(&object_id.to_object_type()));
+
+                class_type
+            }
+
+            ir::ObjectID::Interface(iface_id) => {
+                let iface_type = self.read_iface_type(*iface_id)?;
+
+                assert!(iface_type.as_iface().is_some());
+                assert!(self.types.contains_key(&object_id.to_object_type()));
+                assert!(self.types.contains_key(&object_id.to_object_type()));
+
+                iface_type
+            }
+        };
+
+        assert!(
+            result_type.is_object(),
+            "expected type {} to be translated as an object type, was {}",
+            object_id.to_object_type().to_pretty_string(self),
+            result_type
+        );
+
+        Ok(result_type)
     }
 
-    fn read_type_ref(&mut self, type_ref: &ir::TypeRef) -> ImportResult<Type> {
+    fn read_type_ref(&mut self, type_ref: &Rc<ir::TypeRef>) -> ImportResult<Type> {
         if let Some(set_type) = self.read_type_as_set(type_ref.def_id) {
             let ty = Type::Set(set_type);
+            self.types.insert(type_ref.to_struct_type(), ty.clone());
 
             if !type_ref.args.is_empty() {
                 let err = ImportError::InvalidData("type def with set type tag must not have type arguments".to_string());
@@ -343,13 +433,21 @@ impl ImportBuilder<'_> {
                     ir::StructIdentity::Record(name)
                     | ir::StructIdentity::Class(name) => {
                         let path = self.read_def_path(name)?;
-                        let kind = if struct_def.identity.is_ref_type() {
-                            StructKind::Class
-                        } else {
-                            StructKind::Record
-                        };
 
-                        Ok(Type::from_struct_type(path.with_ty_args(type_args_list), kind))
+                        match struct_def.identity {
+                            StructIdentity::Internal(_) | StructIdentity::Record(_) => {
+                                let struct_type = Type::from_struct_type(path.with_ty_args(type_args_list), StructKind::Record);
+                                self.types.insert(type_ref.to_struct_type(), struct_type.clone());
+                                Ok(struct_type)
+                            }
+
+                            StructIdentity::Class(_) | StructIdentity::ClosureObject(_) => {
+                                let class_type = Type::from_struct_type(path.with_ty_args(type_args_list), StructKind::Class);
+                                self.types.insert(type_ref.to_class_object_type(), class_type.clone());
+                                self.types.insert(type_ref.to_weak_class_object_type(), class_type.to_weak());
+                                Ok(class_type)
+                            }
+                        }
                     }
 
                     ir::StructIdentity::ClosureObject(..) => {
@@ -365,7 +463,11 @@ impl ImportBuilder<'_> {
 
             ir::TypeDecl::Def(ir::TypeDef::Variant(variant_def)) => {
                 let path = self.read_def_path(&variant_def.name)?;
-                Ok(Type::variant(path.with_ty_args(type_args_list)))
+                let variant_type = Type::variant(path.with_ty_args(type_args_list));
+
+                self.types.insert(type_ref.to_variant_type(), variant_type.clone());
+
+                Ok(variant_type)
             }
         }
     }
@@ -409,50 +511,11 @@ impl ImportBuilder<'_> {
 
             self.set_types.insert(id, set_type.clone());
 
-            // if let Some(decl_name) = name {
-            //     let min_lit = self.make_literal_item(
-            //         Literal::Integer(set_type.min),
-            //         set_type.item_type.clone(),
-            //     );
-            //     let max_lit = self.make_literal_item(
-            //         Literal::Integer(set_type.max),
-            //         set_type.item_type.clone(),
-            //     );
-            //
-            //     let set_decl = SetDecl {
-            //         name: Arc::new(Symbol::from(decl_name.clone())),
-            //         range: Box::new(SetDeclRange::Range {
-            //             from: Expr::Literal(min_lit),
-            //             to: Expr::Literal(max_lit),
-            //             span: self.span(),
-            //             range_op_span: self.span(),
-            //         }),
-            //         span: self.span(),
-            //     };
-            //
-            //     let decl_result = self.declare_type_def_with(&decl_name, |builder| {
-            //         let Some(ctx) = builder.root_ctx else {
-            //             return Ok(());
-            //         };
-            //
-            //         ctx.declare_set(&set_decl)
-            //     });
-            // }
-
             return Some(set_type);
         }
 
         None
     }
-
-    // fn make_literal_item(&self, value: Literal, value_type: Type) -> LiteralItem {
-    //     let const_val = ConstValue::literal(value.clone(), value_type, self.span());
-    //
-    //     LiteralItem {
-    //         annotation: Value::Const(Arc::new(const_val)),
-    //         literal: value,
-    //     }
-    // }
 
     fn read_iface_type(&mut self, id: ir::InterfaceID) -> ImportResult<Type> {
         let def = self
@@ -468,6 +531,8 @@ impl ImportBuilder<'_> {
         let name = self.read_def_path(&def.name)?;
 
         let iface_type = Type::interface(name.clone());
+
+        self.types.insert(id.to_interface_ptr_type(), iface_type.clone());
 
         let mut methods = Vec::with_capacity(def.methods.len());
 
