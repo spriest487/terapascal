@@ -313,7 +313,7 @@ pub fn instantiate_struct_def<'a>(
         None => &mut [],
     };
 
-    assert_eq!(type_args.len(), name_params.len(), "instantiate_struct_def: type arg count mismatch");
+    assert_eq!(type_args.len(), name_params.len(), "instantiate_struct_def: type arg count mismatch ({})", generic_struct.identity);
 
     for (param, arg) in name_params.iter_mut().zip(type_args.iter()) {
         let Type::Generic(param_name) = param else {
@@ -352,7 +352,7 @@ pub fn instantiate_variant_def<'a>(
     let mut types = HashMap::new();
 
     let mut name = generic_variant.name.clone();
-    assert_eq!(type_args.len(), name.type_args.len(), "instantiate_variant_def: type arg count mismatch");
+    assert_eq!(type_args.len(), name.type_args.len(), "instantiate_variant_def: type arg count mismatch ({})", generic_variant.name);
 
     for (param, arg) in name.type_args.iter_mut().zip(type_args.iter()) {
         let Type::Generic(param_name) = param else {
