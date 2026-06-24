@@ -32,6 +32,8 @@ pub struct CodegenOpts {
     // translation/vm stage
     pub debug: bool,
     
+    pub no_system: bool,
+    
     pub rtti: bool,
 }
 
@@ -39,6 +41,7 @@ impl Default for CodegenOpts {
     fn default() -> Self {
         Self {
             debug: true,
+            no_system: false,
             rtti: true,
         }
     }

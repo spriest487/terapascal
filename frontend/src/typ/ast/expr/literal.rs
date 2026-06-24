@@ -377,8 +377,8 @@ pub fn typecheck_literal(
                 });
             }
             
-            let ty = typecheck_typename(typename, ctx)?; 
-            
+            let ty = typecheck_typename(typename, ctx)?;
+
             let typeinfo_type = Type::Class(Arc::new(builtin_typeinfo_name()));
             let val = TypedValue::temp(typeinfo_type, span.clone());
             

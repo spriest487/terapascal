@@ -25,12 +25,14 @@ use crate::typ::ast::ENUM_ORD_TYPE;
 use crate::typ::builtin_funcinfo_name;
 use crate::typ::builtin_methodinfo_name;
 use crate::typ::builtin_string_name;
+use crate::typ::builtin_string_type;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Def;
 use crate::typ::DefKey;
 use crate::typ::Primitive;
 use crate::typ::Specializable as _;
+use crate::typ::Type;
 use crate::typ::TypeArgsResult;
 use crate::typ::SYSTEM_UNIT_NAME;
 use ir::InstructionBuilder as _;
@@ -58,6 +60,8 @@ pub struct LibraryBuilder<'a> {
 
     type_cache: LinkedHashMap<typ::Type, ir::Type>,
     cached_types: LinkedHashMap<ir::Type, typ::Type>,
+
+    defined_types: HashSet<typ::Type>,
 
     // key is size (bits)
     flags_repr_types: BTreeMap<usize, FlagsReprType>,
@@ -140,6 +144,17 @@ impl<'a> LibraryBuilder<'a> {
             .map(|(src_ty, ty)| (ty.clone(), src_ty.clone()))
             .collect();
 
+        let mut defined_types = HashSet::new();
+
+        if opts.no_system {
+            for primitive in Primitive::ALL {
+                defined_types.insert(Type::Primitive(primitive));
+            }
+
+            defined_types.insert(Type::Any);
+            defined_types.insert(builtin_string_type());
+        }
+
         let builder = LibraryBuilder {
             name: name.into(),
             references: refs,
@@ -155,6 +170,8 @@ impl<'a> LibraryBuilder<'a> {
 
             type_cache,
             cached_types,
+
+            defined_types,
 
             flags_repr_types: BTreeMap::new(),
             
@@ -249,7 +266,7 @@ impl<'a> LibraryBuilder<'a> {
             self.instantiate_func(&method_key);
         }
 
-        self.build_typeinfo();
+        self.build_type_info();
 
         self.gen_static_closure_init();
         self.gen_static_type_init();
@@ -398,15 +415,27 @@ impl<'a> LibraryBuilder<'a> {
     fn translate_unit_type_decl(&mut self, decl: &typ::ast::TypeDeclItem) {
         match decl {
             typ::ast::TypeDeclItem::Struct(struct_decl) => {
-                self.translate_type(&typ::Type::from_struct_type(struct_decl.name.clone(), struct_decl.kind));
+                let name = struct_decl.name.clone();
+                let struct_type = typ::Type::from_struct_type(name, struct_decl.kind);
+
+                self.translate_type(&struct_type);
+
+                let generic_name = struct_decl.name.to_generic_name();
+                self.defined_types.insert(typ::Type::from_struct_type(generic_name, struct_decl.kind));
             }
 
             typ::ast::TypeDeclItem::Interface(iface_decl) => {
                 self.translate_type(&typ::Type::interface(iface_decl.name.clone()));
+
+                let generic_name = iface_decl.name.to_generic_name();
+                self.defined_types.insert(typ::Type::interface(generic_name));
             }
 
             typ::ast::TypeDeclItem::Variant(variant_decl) => {
                 self.translate_type(&typ::Type::variant(variant_decl.name.clone()));
+
+                let generic_name = variant_decl.name.to_generic_name();
+                self.defined_types.insert(typ::Type::variant(generic_name));
             }
 
             typ::ast::TypeDeclItem::Alias(alias_type) => {
@@ -421,11 +450,14 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             typ::ast::TypeDeclItem::Set(set_decl) => {
-                let set_type = set_decl
+                let set_info = set_decl
                     .to_set_type(&self.root_ctx)
                     .unwrap_or_else(|err| panic!("translate_unit_type_decl: {err}"));
+                let set_type = typ::Type::Set(Arc::new(set_info));
 
-                self.translate_type(&typ::Type::Set(Arc::new(set_type)));
+                self.translate_type(&set_type);
+
+                self.defined_types.insert(set_type);
             }
         }
     }
@@ -931,11 +963,6 @@ impl<'a> LibraryBuilder<'a> {
             }
         };
 
-        // ensure the runtime type info exists for all referenced types
-        if self.metadata.metadata().is_defined(&ty) {
-            self.gen_type_info(&ty);
-        }
-
         ty
     }
 
@@ -1037,12 +1064,14 @@ impl<'a> LibraryBuilder<'a> {
             }
         };
 
-        let name_path = translate_name(name, self);
-        if name_path == def_path {
+        // if this instance of the type is the same as the definition type (non generic, or
+        // referenced via its definition name),
+        let instance_path = translate_name(name, self);
+        if instance_path == def_path {
             return type_ctor(def_id, &def_path.type_args);
         }
 
-        let instance_type = type_ctor(def_id, &name_path.type_args);
+        let instance_type = type_ctor(def_id, &instance_path.type_args);
         self.add_cached_type(src_type.clone(), instance_type.clone());
         instance_type
     }
@@ -1121,33 +1150,29 @@ impl<'a> LibraryBuilder<'a> {
         self.metadata.insert_type_info(ty.clone(), rtti)
     }
 
-    fn build_typeinfo(&mut self) {
-        // TODO: this might be overly defensive, maybe the type cache will never change here?
-        // clone the type cache for iteration
-        // the RTTI generation process can touch new parts of code and
-        // cause the type cache to expand, so repeat until it stops growing
+    fn build_type_info(&mut self) {
+        if self.opts.rtti {
+            // generate related box and dyn array type info for all types defined in this library
+            for defined_type in self.defined_types.clone() {
+                if !defined_type.is_sized(&self.root_ctx).unwrap_or(false) {
+                    continue;
+                }
+
+                let ir_type = self.translate_type(&defined_type);
+                self.gen_type_info(&ir_type.boxed());
+                self.gen_type_info(&ir_type.dyn_array());
+            }
+        }
+
         let mut done_types = 0;
-        let mut done_closures = 0;
 
         let mut populate_types = Vec::new();
-        let mut populate_closures = Vec::new();
 
         loop {
             populate_types.extend(self.type_cache
                 .iter()
                 .skip(done_types)
                 .map(|(src_ty, ty)| (src_ty.clone(), ty.clone())));
-            
-            let closure_types = self.metadata.closures();
-            populate_closures.extend(closure_types.skip(done_closures));
-            
-            for closure_id in populate_closures.drain(0..) {
-                gen_closure_runtime_type(self, closure_id);
-
-                self.gen_type_info(&closure_id.to_class_ptr_type([]));
-                self.gen_type_info(&closure_id.to_class_weak_type([]));
-                done_closures += 1;
-            }
 
             for (mut src_ty, ty) in populate_types.drain(0..) {
                 done_types += 1;
@@ -1198,8 +1223,6 @@ impl<'a> LibraryBuilder<'a> {
         if !self.opts.rtti {
             return;
         }
-
-        self.gen_type_info(&ty);
 
         // TODO: is there a better way to identify types defined in this library?
         // only update types where the original entry is not from a referenced metadata
@@ -1480,26 +1503,6 @@ impl<'a> LibraryBuilder<'a> {
         instructions.append(&mut self.init_code);
         self.init_code = instructions;
     }
-}
-
-fn gen_closure_runtime_type(lib: &mut LibraryBuilder, closure_id: ir::TypeDefID) {
-    let type_id = ir::TypeRef::new(closure_id, []);
-    let closure_class_ty = type_id.to_class_object_type();
-    let closure_weak_ty = type_id.to_weak_class_object_type();
-
-    let runtime_type = lib.gen_type_info(&closure_class_ty);
-    let mut runtime_type = (*runtime_type).clone();
-
-    let mut weak_runtime_type = lib.gen_type_info(&closure_weak_ty)
-        .as_ref()
-        .clone();
-
-    // this type is the unnamed class implementing a closure, give it the function flag too
-    runtime_type.flags |= ir::TYPE_FLAG_FUNCTION;
-    weak_runtime_type.flags |= ir::TYPE_FLAG_FUNCTION;
-    
-    lib.metadata.insert_type_info(closure_class_ty, runtime_type);
-    lib.metadata.insert_type_info(closure_weak_ty, weak_runtime_type);
 }
 
 // class types must generate cleanup code for their inner struct which isn't
