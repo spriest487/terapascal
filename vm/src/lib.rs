@@ -407,25 +407,22 @@ impl Vm {
                 Ok(DynValue::Function(function_ref.clone()))
             },
 
-            ir::Ref::Global(name) => match self.globals.get(name) {
-                Some(GlobalValue::Function(key)) => {
-                    Ok(DynValue::Function(key.clone()))
-                }
+            ir::Ref::Global(global_ref @ ir::GlobalRef::StaticTypeInfo(ty)) => {
+                if let Some(global_value) = self.globals.get(global_ref) {
+                    return self.load_global_value(global_value);
+                };
 
-                Some(GlobalValue::Variable { value, ty }) => {
-                    let val = self.marshaller().unmarshal(value, ty)?;
-                    Ok(val.value)
-                }
+                self.synthesize_type_info(ty)
+            }
 
-                Some(GlobalValue::StaticTagArray(loc)) => {
-                    Ok(DynValue::from(loc.clone()))
-                },
-
-                None => {
+            ir::Ref::Global(name) => {
+                let Some(global_value) = self.globals.get(name) else {
                     let ref_name = at.to_pretty_string(self.metadata());
                     let msg = format!("global {ref_name} is not allocated");
-                    Err(ExecError::illegal_state(msg))
-                }
+                    return Err(ExecError::illegal_state(msg));
+                };
+
+                self.load_global_value(global_value)
             },
 
             ir::Ref::Deref(inner) => match self.evaluate(inner)? {
@@ -469,6 +466,23 @@ impl Vm {
                 )?;
                 Ok(DynValue::Pointer(data_ptr))
             }
+        }
+    }
+
+    fn load_global_value(&self, global_value: &GlobalValue) -> ExecResult<DynValue> {
+        match global_value {
+            GlobalValue::Function(key) => {
+                Ok(DynValue::Function(key.clone()))
+            }
+
+            GlobalValue::Variable { value, ty } => {
+                let val = self.marshaller().unmarshal(value, ty)?;
+                Ok(val.value)
+            }
+
+            GlobalValue::StaticTagArray(loc) => {
+                Ok(DynValue::from(loc.clone()))
+            },
         }
     }
 
@@ -2841,6 +2855,54 @@ impl Vm {
 
         let object_ptr = self.new_object(fields, true)?;
         Ok(DynValue::Pointer(object_ptr))
+    }
+
+    fn synthesize_type_info(&mut self, ty: &ir::Type) -> ExecResult<DynValue> {
+        assert!(self.typeinfo_map.find_by_key(ty).is_none(), "synthesize_type_info: type info must not already exist");
+
+        let type_info_type = &ir::TYPEINFO_ID.to_class_ptr_type([]);
+        self.heap.marshaller.create_native_type(&type_info_type)?;
+
+        let type_info_struct_id = self.heap.marshaller.get_type_index(&ir::TYPEINFO_ID.to_struct_type([]))?;
+
+        match ty {
+            // array types are distinct per size but don't exist in metadata
+            ir::Type::Array { element, dim } => {
+                let mut type_info_value = StructValue {
+                    type_index: type_info_struct_id,
+                    fields: Vec::new(),
+                };
+
+                let name = format!("array[{dim}] of {}", element.to_pretty_string(self.metadata()));
+                let name_string = self.create_string(&name, true)?;
+
+                let flags = DynValue::U64(ir::TYPE_FLAG_ARRAY | ir::TYPE_FLAG_VALUE);
+
+                type_info_value.fields.push(name_string); // field 0: name
+                type_info_value.fields.push(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))); // field 1: methods
+                type_info_value.fields.push(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))); // field 2: tags
+                type_info_value.fields.push(DynValue::Pointer(Pointer::nil(ir::Type::Nothing))); // field 3: impl
+                type_info_value.fields.push(flags); // field 4: flags
+
+                let type_info_obj = self.new_object(type_info_value, true)?;
+                let type_info_val = DynValue::Pointer(type_info_obj);
+
+                let global_val = GlobalValue::Variable {
+                    value: self.heap.marshaller.marshal_to_vec(&type_info_val)?.into_boxed_slice(),
+                    ty: ir::Type::Nothing.ptr(),
+                };
+
+                self.globals.insert(ir::GlobalRef::StaticTypeInfo(Rc::new(ty.clone())), global_val);
+
+                Ok(type_info_val)
+            },
+
+            _ => {
+                let ty_display = ty.to_pretty_string(self.metadata());
+                let msg = format!("can't create missing typeinfo object for type {}", ty_display);
+                Err(ExecError::illegal_state(msg))
+            }
+        }
     }
 
     pub fn runtime_invoke(
