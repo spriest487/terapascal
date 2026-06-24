@@ -932,7 +932,7 @@ impl<'a> LibraryBuilder<'a> {
         };
 
         // ensure the runtime type info exists for all referenced types
-        if self.metadata().is_defined(&ty) {
+        if self.metadata.metadata().is_defined(&ty) {
             self.gen_type_info(&ty);
         }
 
