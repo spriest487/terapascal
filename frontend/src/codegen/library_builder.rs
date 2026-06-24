@@ -29,12 +29,6 @@ use crate::typ::builtin_string_type;
 use crate::typ::builtin_typeinfo_name;
 use crate::typ::seq::TypeSequenceSupport;
 use crate::typ::Def;
-use crate::typ::DefKey;
-use crate::typ::Primitive;
-use crate::typ::Specializable as _;
-use crate::typ::Type;
-use crate::typ::TypeArgsResult;
-use crate::typ::SYSTEM_UNIT_NAME;
 use ir::InstructionBuilder as _;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
@@ -44,6 +38,7 @@ use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::version::Version;
+use typ::*;
 
 #[derive(Debug)]
 pub struct LibraryBuilder<'a> {
@@ -61,7 +56,7 @@ pub struct LibraryBuilder<'a> {
     type_cache: LinkedHashMap<typ::Type, ir::Type>,
     cached_types: LinkedHashMap<ir::Type, typ::Type>,
 
-    defined_types: HashSet<typ::Type>,
+    defined_types: HashSet<Type>,
 
     // key is size (bits)
     flags_repr_types: BTreeMap<usize, FlagsReprType>,
@@ -69,7 +64,7 @@ pub struct LibraryBuilder<'a> {
     translated_funcs: LinkedHashMap<FunctionDeclKey, FunctionInstance>,
 
     functions: BTreeMap<ir::FunctionID, ir::Function>,
-    function_types_by_sig: HashMap<typ::FunctionSig, ir::TypeDefID>,
+    function_types_by_sig: HashMap<FunctionSig, ir::TypeDefID>,
 
     variables: BTreeMap<ir::VariableID, ir::Type>,
     variables_by_name: HashMap<IdentPath, ir::VariableID>,
@@ -87,7 +82,7 @@ pub struct LibraryBuilder<'a> {
 
 #[derive(Debug, Clone)]
 struct BuiltinClassInfo {
-    name: typ::Symbol,
+    name: Symbol,
     id: ir::TypeDefID,
     rtti: bool,
 }
@@ -113,7 +108,7 @@ impl<'a> LibraryBuilder<'a> {
     pub fn new(
         name: impl Into<String>,
         version: Version,
-        src_metadata: &'a typ::Context,
+        src_metadata: &'a Context,
         refs: &'a [LibraryRef],
         opts: CodegenOpts
     ) -> Self {
@@ -132,7 +127,7 @@ impl<'a> LibraryBuilder<'a> {
             .iter()
             .filter(|class_info| !class_info.rtti || opts.rtti)
             .map(|class_info| {
-                let src_type = typ::Type::class(class_info.name.clone());
+                let src_type = Type::class(class_info.name.clone());
                 let result_type = class_info.id.to_class_ptr_type([]);
 
                 (src_type, result_type)
@@ -201,28 +196,28 @@ impl<'a> LibraryBuilder<'a> {
         for defined_type in self.root_ctx.defined_types() {
             // defined generic types need to be translated with their placeholders
             let translate_type = match &defined_type {
-                typ::Type::Record(sym) if let Some(params) = &sym.type_params => {
+                Type::Record(sym) if let Some(params) = &sym.type_params => {
                     let type_args = params.clone().into_type_args();
                     let sym = sym.specialize(&type_args, &self.root_ctx).unwrap();
-                    typ::Type::Record(Arc::new(sym.into_owned()))
+                    Type::Record(Arc::new(sym.into_owned()))
                 }
 
-                typ::Type::Class(sym) if let Some(params) = &sym.type_params => {
+                Type::Class(sym) if let Some(params) = &sym.type_params => {
                     let type_args = params.clone().into_type_args();
                     let sym = sym.specialize(&type_args, &self.root_ctx).unwrap();
-                    typ::Type::Class(Arc::new(sym.into_owned()))
+                    Type::Class(Arc::new(sym.into_owned()))
                 }
 
-                typ::Type::Variant(sym) if let Some(params) = &sym.type_params => {
+                Type::Variant(sym) if let Some(params) = &sym.type_params => {
                     let type_args = params.clone().into_type_args();
                     let sym = sym.specialize(&type_args, &self.root_ctx).unwrap();
-                    typ::Type::Variant(Arc::new(sym.into_owned()))
+                    Type::Variant(Arc::new(sym.into_owned()))
                 }
 
-                typ::Type::Interface(sym) if let Some(params) = &sym.type_params => {
+                Type::Interface(sym) if let Some(params) = &sym.type_params => {
                     let type_args = params.clone().into_type_args();
                     let sym = sym.specialize(&type_args, &self.root_ctx).unwrap();
-                    typ::Type::Interface(Arc::new(sym.into_owned()))
+                    Type::Interface(Arc::new(sym.into_owned()))
                 }
 
                 _ => defined_type,
@@ -256,7 +251,7 @@ impl<'a> LibraryBuilder<'a> {
                         .iter()
                         .enumerate()
                         .map(|(method_index, _)| FunctionDeclKey::Method(MethodDeclKey {
-                            self_ty: typ::Type::from(*primitive),
+                            self_ty: Type::from(*primitive),
                             method_index,
                         }))
                 }))
@@ -300,7 +295,7 @@ impl<'a> LibraryBuilder<'a> {
         &mut self.metadata
     }
 
-    pub fn translate_unit(&mut self, unit: &typ::ast::Unit) {
+    pub fn translate_unit(&mut self, unit: &ast::Unit) {
         for (_, const_binding) in unit.binding_items(BindingDeclKind::Const) {
             let literal_val = const_binding.init
                 .as_ref()
@@ -386,74 +381,74 @@ impl<'a> LibraryBuilder<'a> {
         }
     }
 
-    fn translate_unit_decl(&mut self, unit_ident: &IdentPath, unit_decl: &typ::ast::UnitDecl) {
+    fn translate_unit_decl(&mut self, unit_ident: &IdentPath, unit_decl: &ast::UnitDecl) {
         match unit_decl {
-            typ::ast::UnitDecl::FunctionDecl { decl } => {
+            ast::UnitDecl::FunctionDecl { decl } => {
                 self.translate_unit_func_decl(&unit_ident, decl);
             }
 
-            typ::ast::UnitDecl::FunctionDef { def } => {
+            ast::UnitDecl::FunctionDef { def } => {
                 self.translate_unit_func_decl(&unit_ident, &def.decl);
             }
 
-            typ::ast::UnitDecl::Type { decl } => {
+            ast::UnitDecl::Type { decl } => {
                 for item in &decl.items {
                     self.translate_unit_type_decl(item);
                 }
             }
 
-            typ::ast::UnitDecl::Binding { .. } => {
+            ast::UnitDecl::Binding { .. } => {
                 // bindings are handled separately
             }
 
-            typ::ast::UnitDecl::Uses { .. } => {
+            ast::UnitDecl::Uses { .. } => {
                 // uses items are only relevant for the frontend
             }
         };
     }
 
-    fn translate_unit_type_decl(&mut self, decl: &typ::ast::TypeDeclItem) {
+    fn translate_unit_type_decl(&mut self, decl: &ast::TypeDeclItem) {
         match decl {
-            typ::ast::TypeDeclItem::Struct(struct_decl) => {
+            ast::TypeDeclItem::Struct(struct_decl) => {
                 let name = struct_decl.name.clone();
-                let struct_type = typ::Type::from_struct_type(name, struct_decl.kind);
+                let struct_type = Type::from_struct_type(name, struct_decl.kind);
 
                 self.translate_type(&struct_type);
 
                 let generic_name = struct_decl.name.to_generic_name();
-                self.defined_types.insert(typ::Type::from_struct_type(generic_name, struct_decl.kind));
+                self.defined_types.insert(Type::from_struct_type(generic_name, struct_decl.kind));
             }
 
-            typ::ast::TypeDeclItem::Interface(iface_decl) => {
-                self.translate_type(&typ::Type::interface(iface_decl.name.clone()));
+            ast::TypeDeclItem::Interface(iface_decl) => {
+                self.translate_type(&Type::interface(iface_decl.name.clone()));
 
                 let generic_name = iface_decl.name.to_generic_name();
-                self.defined_types.insert(typ::Type::interface(generic_name));
+                self.defined_types.insert(Type::interface(generic_name));
             }
 
-            typ::ast::TypeDeclItem::Variant(variant_decl) => {
-                self.translate_type(&typ::Type::variant(variant_decl.name.clone()));
+            ast::TypeDeclItem::Variant(variant_decl) => {
+                self.translate_type(&Type::variant(variant_decl.name.clone()));
 
                 let generic_name = variant_decl.name.to_generic_name();
-                self.defined_types.insert(typ::Type::variant(generic_name));
+                self.defined_types.insert(Type::variant(generic_name));
             }
 
-            typ::ast::TypeDeclItem::Alias(alias_type) => {
+            ast::TypeDeclItem::Alias(alias_type) => {
                 let target_type = alias_type.target.ty();
                 self.translate_type(target_type);
 
                 create_alias_tag(self, &alias_type.name.full_path, target_type);
             }
 
-            typ::ast::TypeDeclItem::Enum(enum_decl) => {
-                self.translate_type(&typ::Type::Enum(Arc::new(enum_decl.name.full_path.clone())));
+            ast::TypeDeclItem::Enum(enum_decl) => {
+                self.translate_type(&Type::Enum(Arc::new(enum_decl.name.full_path.clone())));
             }
 
-            typ::ast::TypeDeclItem::Set(set_decl) => {
+            ast::TypeDeclItem::Set(set_decl) => {
                 let set_info = set_decl
                     .to_set_type(&self.root_ctx)
                     .unwrap_or_else(|err| panic!("translate_unit_type_decl: {err}"));
-                let set_type = typ::Type::Set(Arc::new(set_info));
+                let set_type = Type::Set(Arc::new(set_info));
 
                 self.translate_type(&set_type);
 
@@ -462,7 +457,7 @@ impl<'a> LibraryBuilder<'a> {
         }
     }
 
-    pub fn get_method(&self, ty: &typ::Type, index: usize) -> typ::ast::MethodDecl {
+    pub fn get_method(&self, ty: &Type, index: usize) -> ast::MethodDecl {
         let method =  ty.get_method(index, &self.root_ctx);
         
         method.unwrap_or_else(|e| {
@@ -470,7 +465,7 @@ impl<'a> LibraryBuilder<'a> {
         })
     }
     
-    pub fn find_method_index(&self, ty: &typ::Type, name: &Ident, sig: &typ::FunctionSig) -> usize {
+    pub fn find_method_index(&self, ty: &Type, name: &Ident, sig: &FunctionSig) -> usize {
         let index = ty.find_method_index(name, sig, self.root_ctx)
             .ok()
             .unwrap_or_else(|| {
@@ -493,11 +488,11 @@ impl<'a> LibraryBuilder<'a> {
         index
     }
 
-    pub fn find_struct_def(&self, name_path: &IdentPath, kind: StructKind) -> Option<&Arc<typ::ast::StructDecl>> {
+    pub fn find_struct_def(&self, name_path: &IdentPath, kind: StructKind) -> Option<&Arc<ast::StructDecl>> {
         self.root_ctx.find_struct_def(name_path, kind).ok()
     }
 
-    pub fn find_type_seq_support(&self, src_ty: &typ::Type) -> Option<TypeSequenceSupport> {
+    pub fn find_type_seq_support(&self, src_ty: &Type) -> Option<TypeSequenceSupport> {
         TypeSequenceSupport::try_from_type(src_ty, &self.root_ctx).ok()
     }
 
@@ -512,7 +507,7 @@ impl<'a> LibraryBuilder<'a> {
         repr_type
     }
     
-    pub fn translate_set_type(&mut self, set_type: &typ::SetType) -> SetFlagsType {
+    pub fn translate_set_type(&mut self, set_type: &SetType) -> SetFlagsType {
         let set_flags_type = SetFlagsType::translate(self, set_type);
 
         self.gen_type_info(&set_flags_type.struct_id.to_struct_type([]));
@@ -597,7 +592,7 @@ impl<'a> LibraryBuilder<'a> {
         self.tags.push(tag);
     }
 
-    pub fn translate_tag_groups(&mut self, tags: &[typ::ast::Tag]) -> Vec<ir::TagInfo> {
+    pub fn translate_tag_groups(&mut self, tags: &[ast::Tag]) -> Vec<ir::TagInfo> {
         // most groups will probably contain 1 tag
         let mut result = Vec::with_capacity(tags.len());
         
@@ -608,7 +603,7 @@ impl<'a> LibraryBuilder<'a> {
         result
     }
 
-    pub fn translate_tags(&mut self, tags: &[typ::ast::TagItem]) -> Vec<ir::TagInfo> {
+    pub fn translate_tags(&mut self, tags: &[ast::TagItem]) -> Vec<ir::TagInfo> {
         let mut result = Vec::with_capacity(tags.len());
         
         for item in tags {
@@ -640,7 +635,7 @@ impl<'a> LibraryBuilder<'a> {
                 };
 
                 match arg.value.annotation() {
-                    typ::Value::Const(const_val) => {
+                    Value::Const(const_val) => {
                         let field_val = literal_to_val(&const_val.value, field_type, self);
                         tag_info.fields.insert(field_id, field_val);
                     }
@@ -660,10 +655,10 @@ impl<'a> LibraryBuilder<'a> {
     fn translate_unit_func_decl(
         &mut self,
         unit_name: &IdentPath,
-        decl: &typ::ast::FunctionDecl,
+        decl: &ast::FunctionDecl,
     ) -> Option<FunctionInstance> {
         match &decl.name.context {
-            typ::ast::FunctionDeclContext::FreeFunction => {
+            ast::FunctionDeclContext::FreeFunction => {
                 let func_name = unit_name.clone().child(decl.name.ident.clone());
                 let func_sig = decl.sig();
 
@@ -671,11 +666,11 @@ impl<'a> LibraryBuilder<'a> {
                 Some(instance)
             }
 
-            typ::ast::FunctionDeclContext::MethodDecl { enclosing_type } => {
+            ast::FunctionDeclContext::MethodDecl { enclosing_type } => {
                 Some(self.translate_unit_method(enclosing_type, decl))
             }
 
-            typ::ast::FunctionDeclContext::MethodDef { declaring_type } => {
+            ast::FunctionDeclContext::MethodDef { declaring_type } => {
                 Some(self.translate_unit_method(declaring_type.ty(), decl))
             }
         }
@@ -683,8 +678,8 @@ impl<'a> LibraryBuilder<'a> {
 
     fn translate_unit_method(
         &mut self,
-        declaring_type: &typ::Type,
-        decl: &typ::ast::FunctionDecl,
+        declaring_type: &Type,
+        decl: &ast::FunctionDecl,
     ) -> FunctionInstance {
         let (method_index, _method_decl) = declaring_type
             .find_method(&decl.name.ident, &decl.sig(), &self.root_ctx)
@@ -711,7 +706,7 @@ impl<'a> LibraryBuilder<'a> {
         method_instance
     }
 
-    pub fn find_iface_decl(&mut self, iface_name: &typ::Symbol) -> Option<ir::InterfaceID> {
+    pub fn find_iface_decl(&mut self, iface_name: &Symbol) -> Option<ir::InterfaceID> {
         let name = translate_name(iface_name, self);
 
         self.metadata
@@ -728,7 +723,7 @@ impl<'a> LibraryBuilder<'a> {
     // interface methods may not be statically referenced for every type that implements them due to
     // dynamic dispatch, so we need to cover all possible combinations and generate function bodies for
     // every interface method implemented by a class at the end of codegen
-    fn gen_iface_impls(&mut self, src_self_ty: &typ::Type, self_ty: &ir::Type) {
+    fn gen_iface_impls(&mut self, src_self_ty: &Type, self_ty: &ir::Type) {
         let ifaces = src_self_ty
             .implemented_ifaces(&self.root_ctx)
             .unwrap_or_else(|err| {
@@ -775,21 +770,21 @@ impl<'a> LibraryBuilder<'a> {
 
     pub fn apply_ty_args<Generic>(&self,
         target: Generic,
-        params: &impl typ::TypeParamContainer,
-        args: &impl typ::TypeArgResolver
+        params: &impl TypeParamContainer,
+        args: &impl TypeArgResolver
     ) -> Generic 
     where 
-        Generic: typ::Specializable,
+        Generic: Specializable,
     {
         target.apply_type_args(params, args)
     }
     
-    fn add_cached_type(&mut self, src_ty: typ::Type, ty: ir::Type) {
+    fn add_cached_type(&mut self, src_ty: Type, ty: ir::Type) {
         self.type_cache.insert(src_ty.clone(), ty.clone());
         self.cached_types.insert(ty.clone(), src_ty.clone());
     }
 
-    pub fn translate_type(&mut self, src_ty: &typ::Type) -> ir::Type {
+    pub fn translate_type(&mut self, src_ty: &Type) -> ir::Type {
         if let Some(cached) = self.type_cache.get(&src_ty) {
             let ty = cached.clone();
             return ty;
@@ -797,19 +792,19 @@ impl<'a> LibraryBuilder<'a> {
 
         // instantiate types which may contain generic params
         let ty = match &src_ty {
-            typ::Type::Variant(name) => {
+            Type::Variant(name) => {
                 self.translate_variant_type(name)
             }
 
-            typ::Type::Record(name) => {
+            Type::Record(name) => {
                 self.translate_struct_type(name, StructKind::Record)
             },
 
-            typ::Type::Class(name) => {
+            Type::Class(name) => {
                 self.translate_struct_type(name, StructKind::Class)
             }
             
-            typ::Type::Weak(weak_ty) => {
+            Type::Weak(weak_ty) => {
                 let ty = match self.translate_type(weak_ty) {
                     ir::Type::Object(id) => ir::Type::WeakObject(id),
                     other => unreachable!("only RC class types can be weak, found: {}", other),
@@ -820,11 +815,11 @@ impl<'a> LibraryBuilder<'a> {
                 ty
             }
 
-            typ::Type::Interface(iface_sym) => {
+            Type::Interface(iface_sym) => {
                 self.translate_iface_type(iface_sym)
             },
 
-            typ::Type::Array(array_ty) => {
+            Type::Array(array_ty) => {
                 let elem_ty = self.translate_type(&array_ty.element_ty);
                 let ty = elem_ty.array(array_ty.dim);
 
@@ -832,7 +827,7 @@ impl<'a> LibraryBuilder<'a> {
                 ty
             },
 
-            typ::Type::DynArray(element) => {
+            Type::DynArray(element) => {
                 let ty = self.translate_type(element).dyn_array();
 
                 self.add_cached_type(src_ty.clone(), ty.clone());
@@ -840,7 +835,7 @@ impl<'a> LibraryBuilder<'a> {
                 ty
             },
 
-            typ::Type::Function(func_sig) => {
+            Type::Function(func_sig) => {
                 let sig = translate_sig(func_sig, self);
 
                 // values of function type will always be translated as closure references,
@@ -852,7 +847,7 @@ impl<'a> LibraryBuilder<'a> {
                 closure_type
             },
             
-            typ::Type::Set(set_ty) => {
+            Type::Set(set_ty) => {
                 let flags_ty = self.translate_set_type(set_ty);
 
                 let ty = flags_ty.struct_id.to_struct_type([]);
@@ -862,103 +857,103 @@ impl<'a> LibraryBuilder<'a> {
                 ty
             }
 
-            typ::Type::Nothing => {
+            Type::Nothing => {
                 self.add_cached_type(src_ty.clone(), ir::Type::Nothing);
                 ir::Type::Nothing
             },
 
-            typ::Type::Primitive(typ::Primitive::Boolean) => {
+            Type::Primitive(Primitive::Boolean) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::Bool);
                 ir::Type::Bool
             },
 
-            typ::Type::Primitive(typ::Primitive::Int8) => {
+            Type::Primitive(Primitive::Int8) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::I8);
                 ir::Type::I8
             },
-            typ::Type::Primitive(typ::Primitive::UInt8) => {
+            Type::Primitive(Primitive::UInt8) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::U8);
                 ir::Type::U8
             },
-            typ::Type::Primitive(typ::Primitive::Int16) => {
+            Type::Primitive(Primitive::Int16) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::I16);
                 ir::Type::I16
             },
-            typ::Type::Primitive(typ::Primitive::UInt16) => {
+            Type::Primitive(Primitive::UInt16) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::U16);
                 ir::Type::U16
             },
-            typ::Type::Primitive(typ::Primitive::Int32) => {
+            Type::Primitive(Primitive::Int32) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::I32);
                 ir::Type::I32
             },
-            typ::Type::Primitive(typ::Primitive::UInt32) => {
+            Type::Primitive(Primitive::UInt32) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::U32);
                 ir::Type::U32
             },
-            typ::Type::Primitive(typ::Primitive::Int64) => {
+            Type::Primitive(Primitive::Int64) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::I64);
                 ir::Type::I64
             },
-            typ::Type::Primitive(typ::Primitive::UInt64) => {
+            Type::Primitive(Primitive::UInt64) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::U64);
                 ir::Type::U64
             },
-            typ::Type::Primitive(typ::Primitive::NativeInt) => {
+            Type::Primitive(Primitive::NativeInt) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::ISize);
                 ir::Type::ISize
             },
-            typ::Type::Primitive(typ::Primitive::NativeUInt) => {
+            Type::Primitive(Primitive::NativeUInt) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::USize);
                 ir::Type::USize
             },
 
-            typ::Type::Primitive(typ::Primitive::Real32) => {
+            Type::Primitive(Primitive::Real32) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::F32);
                 ir::Type::F32
             },
-            typ::Type::Primitive(typ::Primitive::Real64) => {
+            Type::Primitive(Primitive::Real64) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::F64);
                 ir::Type::F64
             },
 
-            typ::Type::Primitive(typ::Primitive::Pointer) => {
+            Type::Primitive(Primitive::Pointer) => {
                 self.add_cached_type(src_ty.clone(), ir::Type::Nothing.ptr());
                 ir::Type::Nothing.ptr()
             },
 
-            typ::Type::Any => {
+            Type::Any => {
                 self.add_cached_type(src_ty.clone(), ir::ANY_TYPE);
                 ir::ANY_TYPE
             }
 
-            typ::Type::Pointer(inner) => {
+            Type::Pointer(inner) => {
                 let inner_type = self.translate_type(inner);
                 let ptr_type = inner_type.ptr();
                 self.add_cached_type(src_ty.clone(), ptr_type.clone());
                 ptr_type
             }
 
-            typ::Type::Box(inner) => {
+            Type::Box(inner) => {
                 let inner_type = self.translate_type(inner);
                 let boxed_type = inner_type.boxed();
                 self.add_cached_type(src_ty.clone(), boxed_type.clone());
                 boxed_type
             }
 
-            typ::Type::Enum(name) => {
+            Type::Enum(name) => {
                 self.build_enum_def(name);
 
-                let ord_type = self.translate_type(&typ::ast::ENUM_ORD_TYPE);
+                let ord_type = self.translate_type(&ast::ENUM_ORD_TYPE);
                 self.add_cached_type(src_ty.clone(), ord_type.clone());
                 ord_type
             }
 
-            typ::Type::GenericParam(param) => {
+            Type::GenericParam(param) => {
                 ir::Type::Generic(Rc::new(param.name.name.to_string()))
             }
 
-            typ::Type::MethodSelf => {
+            Type::MethodSelf => {
                 panic!("translate_type: unresolved Self type")
             }
         };
@@ -966,8 +961,8 @@ impl<'a> LibraryBuilder<'a> {
         ty
     }
 
-    fn translate_variant_type(&mut self, name: &Arc<typ::Symbol>) -> ir::Type {
-        let src_type = typ::Type::variant(name.clone());
+    fn translate_variant_type(&mut self, name: &Arc<Symbol>) -> ir::Type {
+        let src_type = Type::variant(name.clone());
 
         if let Some(cached) = self.type_cache.get(&src_type) {
             let ty = cached.clone();
@@ -991,7 +986,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 let def_id = self.metadata.forward_declare_type(&def_path);
 
-                let def_type = typ::Type::variant(def_name);
+                let def_type = Type::variant(def_name);
                 let variant_type = def_id.to_variant_type(def_path.type_args.clone());
 
                 self.add_cached_type(def_type.clone(), variant_type.clone());
@@ -1017,10 +1012,10 @@ impl<'a> LibraryBuilder<'a> {
 
     fn translate_struct_type(
         &mut self,
-        name: &Arc<typ::Symbol>,
+        name: &Arc<Symbol>,
         kind: StructKind,
     ) -> ir::Type {
-        let src_type = typ::Type::from_struct_type(name.clone(), kind);
+        let src_type = Type::from_struct_type(name.clone(), kind);
 
         if let Some(cached) = self.type_cache.get(&src_type) {
             let ty = cached.clone();
@@ -1049,7 +1044,7 @@ impl<'a> LibraryBuilder<'a> {
                     .find_struct_def(&name.full_path, kind)
                     .unwrap_or_else(|e| panic!("translate_struct_type: {}", e));
 
-                let def_src_type = typ::Type::from_struct_type(def_name.clone(), kind);
+                let def_src_type = Type::from_struct_type(def_name.clone(), kind);
 
                 let def_id = self.metadata.forward_declare_type(&def_path);
                 let def_type = type_ctor(def_id, &def_path.type_args);
@@ -1076,8 +1071,8 @@ impl<'a> LibraryBuilder<'a> {
         instance_type
     }
 
-    fn translate_iface_type(&mut self, src_name: &Arc<typ::Symbol>) -> ir::Type {
-        let src_type = typ::Type::Interface(src_name.clone());
+    fn translate_iface_type(&mut self, src_name: &Arc<Symbol>) -> ir::Type {
+        let src_type = Type::Interface(src_name.clone());
 
         if let Some(cached) = self.type_cache.get(&src_type) {
             let ty = cached.clone();
@@ -1120,7 +1115,7 @@ impl<'a> LibraryBuilder<'a> {
         }
     }
 
-    pub fn find_func_ty(&self, sig: &typ::FunctionSig) -> Option<ir::TypeDefID> {
+    pub fn find_func_ty(&self, sig: &FunctionSig) -> Option<ir::TypeDefID> {
         self.function_types_by_sig.get(&sig).cloned()
     }
 
@@ -1219,7 +1214,7 @@ impl<'a> LibraryBuilder<'a> {
         }
     }
 
-    fn populate_runtime_type_info(&mut self, src_ty: typ::Type, ty: ir::Type) {
+    fn populate_runtime_type_info(&mut self, src_ty: Type, ty: ir::Type) {
         if !self.opts.rtti {
             return;
         }
@@ -1237,7 +1232,7 @@ impl<'a> LibraryBuilder<'a> {
         type_info.name = Some(self.metadata.find_or_insert_string(&src_ty.to_string()));
 
         match &src_ty {
-            typ::Type::Record(name) | typ::Type::Class(name) => {
+            Type::Record(name) | Type::Class(name) => {
                 let name = name.as_ref().clone();
                 let kind = src_ty.struct_kind().unwrap();
 
@@ -1266,7 +1261,7 @@ impl<'a> LibraryBuilder<'a> {
                 }
             }
             
-            typ::Type::Interface(name) => {
+            Type::Interface(name) => {
                 let def = self.root_ctx
                     .instantiate_iface_def(name.as_ref())
                     .unwrap();
@@ -1292,10 +1287,10 @@ impl<'a> LibraryBuilder<'a> {
 
     fn create_method_info(&mut self,
         instance_ty: ir::Type,
-        src_ty: &typ::Type,
+        src_ty: &Type,
         method_index: usize,
         is_abstract: bool,
-        decl: &typ::ast::FunctionDecl,
+        decl: &ast::FunctionDecl,
     ) -> ir::MethodInfo {
         let tags = self.translate_tag_groups(&decl.tags);
         
@@ -1307,7 +1302,7 @@ impl<'a> LibraryBuilder<'a> {
             .map(|(param, _)| {
                 // in RTTI, "self" params for interfaces become untyped pointers
                 let mut param_ty = match param.ty.ty() {
-                    typ::Type::MethodSelf => ir::Type::Nothing.ptr(),
+                    Type::MethodSelf => ir::Type::Nothing.ptr(),
                     ty => self.translate_type(ty)
                 };
 
@@ -1344,12 +1339,12 @@ impl<'a> LibraryBuilder<'a> {
 
     pub fn build_closure_instance(
         &mut self,
-        func: &typ::ast::AnonymousFunctionDef,
+        func: &ast::AnonymousFunctionDef,
     ) -> ClosureInstance {
         // this is the signature of the *function type* of the closure, not the signature of
         // the real method implementing the closure, which has an extra type-erased parameter
         // for the closure itself
-        let src_virtual_sig = typ::FunctionSig::of_anonymous_func(func);
+        let src_virtual_sig = FunctionSig::of_anonymous_func(func);
         let virtual_sig = Rc::new(translate_sig(&src_virtual_sig, self));
 
         // since we're translating a closure function, the sig needs to include the implicit
