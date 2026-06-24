@@ -120,9 +120,7 @@ impl SetFlagsType {
         // we assume any struct type referenced as a set item type is referring to an enum ID
         let item_type = match &set_type.item_type {
             Type::Enum(path) => {
-                let enum_name_path = ir::NamePath::from_ident_path(path, []);
-                let enum_id= lib.metadata_mut().forward_declare_type(&enum_name_path);
-
+                let enum_id = lib.build_enum_def(path);
                 enum_id.to_struct_type([])
             },
 

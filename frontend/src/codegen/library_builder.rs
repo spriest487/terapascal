@@ -489,7 +489,7 @@ impl<'a> LibraryBuilder<'a> {
         set_flags_type
     }
 
-    fn build_enum_def(&mut self, enum_name: &IdentPath) {
+    pub(crate) fn build_enum_def(&mut self, enum_name: &IdentPath) -> ir::TypeDefID {
         let find_def = self.root_ctx.find_def(enum_name, &DefKey::Unique);
 
         let Some(Def::Enum(enum_def)) = find_def else {
@@ -509,8 +509,8 @@ impl<'a> LibraryBuilder<'a> {
         // enum types have no actual definition but also only get declared once (below) by the
         // library they're in, so assume if there's even a forward decl, the constants are
         // stored in another library
-        if self.metadata.find_type_decl(&enum_type_path).is_some() {
-            return;
+        if let Some(id) = self.metadata.find_type_decl(&enum_type_path) {
+            return id;
         }
 
         let enum_member_tag_id = match EnumMemberTagInfo::find_in_metadata(&self.metadata) {
@@ -557,6 +557,8 @@ impl<'a> LibraryBuilder<'a> {
             debug_name: Some(runtime_name),
             methods: Vec::new(),
         });
+
+        enum_type_id
     }
 
     pub fn add_tag(&mut self, tag: ir::TagInfo) {
