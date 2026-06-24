@@ -510,9 +510,6 @@ impl<'a> LibraryBuilder<'a> {
     pub fn translate_set_type(&mut self, set_type: &SetType) -> SetFlagsType {
         let set_flags_type = SetFlagsType::translate(self, set_type);
 
-        self.gen_type_info(&set_flags_type.struct_id.to_struct_type([]));
-        self.gen_type_info(&set_flags_type.repr_type.repr_type());
-
         set_flags_type
     }
 
@@ -996,6 +993,8 @@ impl<'a> LibraryBuilder<'a> {
                 let def = translate_variant_def(&src_def, self);
                 self.metadata.define_variant(def_id, def);
 
+                self.gen_type_info(&variant_type);
+
                 def_id
             }
         };
@@ -1049,11 +1048,16 @@ impl<'a> LibraryBuilder<'a> {
                 let def_id = self.metadata.forward_declare_type(&def_path);
                 let def_type = type_ctor(def_id, &def_path.type_args);
 
-                self.add_cached_type(def_src_type.clone(), def_type);
+                self.add_cached_type(def_src_type.clone(), def_type.clone());
                 self.metadata.declare_type(def_id, &def_path);
 
                 let def = translate_struct_def(&src_def, self);
                 self.metadata.define_struct(def_id, def);
+
+                self.gen_type_info(&def_type);
+                if let ir::Type::Object(object_id) = &def_type {
+                    self.gen_type_info(&object_id.to_weak_object_type());
+                }
 
                 def_id
             }
@@ -1068,6 +1072,7 @@ impl<'a> LibraryBuilder<'a> {
 
         let instance_type = type_ctor(def_id, &instance_path.type_args);
         self.add_cached_type(src_type.clone(), instance_type.clone());
+        
         instance_type
     }
 
@@ -1109,6 +1114,9 @@ impl<'a> LibraryBuilder<'a> {
                 let id = self.metadata.define_iface(def);
 
                 assert_eq!(id, decl_id);
+
+                self.gen_type_info(&iface_type);
+                self.gen_type_info(&id.to_weak_interface_ptr_type());
 
                 iface_type
             }
@@ -1197,10 +1205,6 @@ impl<'a> LibraryBuilder<'a> {
 
                 if !self.metadata.is_defined(&ty) {
                     continue;
-                }
-
-                if src_ty.as_class().is_ok() {
-                    gen_class_runtime_type(self, &ty);
                 }
 
                 self.gen_iface_impls(&src_ty, &ty);
@@ -1498,22 +1502,6 @@ impl<'a> LibraryBuilder<'a> {
         instructions.append(&mut self.init_code);
         self.init_code = instructions;
     }
-}
-
-// class types must generate cleanup code for their inner struct which isn't
-// explicitly called in IR but must be called dynamically by the target to
-// clean up the inner structs of class RC cells.
-// for example, a class instance maybe be stored behind an `Any` reference,
-// at which point rc instructions must discover the actual class type
-// dynamically from the rc cell's class pointer/class ID
-fn gen_class_runtime_type(lib: &mut LibraryBuilder, class_ty: &ir::Type) {
-    let class_id = class_ty
-        .as_object()
-        .and_then(|class_id| class_id.as_class())
-        .expect("gen_class_runtime_type: resource class of translated class type was not a struct");
-
-    lib.gen_type_info(&class_id.to_class_object_type());
-    lib.gen_type_info(&class_id.to_weak_class_object_type());
 }
 
 fn gen_func_invokers(lib: &mut LibraryBuilder) {

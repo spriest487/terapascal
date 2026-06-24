@@ -74,13 +74,15 @@ impl SetFlagsType {
             }
         };
 
+        let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
 
         // this only needs to be defined the first time this is called for any given set type
         if !lib.metadata().is_defined(&struct_id.to_struct_type([])) {
             Self::define_set_struct(set_type, struct_id, lib);
-        }
 
-        let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
+            lib.gen_type_info(&struct_id.to_struct_type([]));
+            lib.gen_type_info(&flags_type.repr_type());
+        }
 
         Self {
             struct_id,

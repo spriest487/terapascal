@@ -138,7 +138,11 @@ pub struct InterfaceID(pub usize);
 
 impl InterfaceID {
     pub fn to_interface_ptr_type(self) -> Type {
-        Type::Object(ObjectID::Interface(self))
+        ObjectID::Interface(self).to_object_type()
+    }
+
+    pub fn to_weak_interface_ptr_type(self) -> Type {
+        ObjectID::Interface(self).to_weak_object_type()
     }
 }
 
