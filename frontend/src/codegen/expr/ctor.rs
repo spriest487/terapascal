@@ -7,6 +7,7 @@ use crate::ir;
 use crate::typ;
 use bigdecimal::BigDecimal;
 use bigdecimal::Zero;
+use std::sync::Arc;
 use terapascal_ir::InstructionBuilder as _;
 use terapascal_ir::MetadataSource as _;
 
@@ -164,7 +165,7 @@ fn translate_dyn_array_ctor(
 
 fn translate_set_ctor(
     ctor: &typ::ast::CollectionCtor,
-    set_type: &typ::SetType,
+    set_type: &Arc<typ::SetType>,
     flags_type: ir::Type,
     builder: &mut IRBuilder,
 ) -> ir::Ref {

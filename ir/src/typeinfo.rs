@@ -15,7 +15,7 @@ pub const TYPE_FLAG_FUNCTION: u64 = 1 << 3;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TypeInfo {
-    pub name: Option<StringID>,
+    pub name: StringID,
     pub debug_name: Option<String>,
 
     pub flags: u64,
@@ -24,7 +24,7 @@ pub struct TypeInfo {
 }
 
 impl TypeInfo {
-    pub fn new(name: Option<StringID>, flags: u64) -> Self {
+    pub fn new(name: StringID, flags: u64) -> Self {
         Self {
             name,
             debug_name: None,
@@ -36,8 +36,7 @@ impl TypeInfo {
     }
 
     pub fn get_name_string<'m>(&self, metadata: &'m Metadata) -> Option<&'m String> {
-        let id = self.name?;
-        metadata.get_string(id)
+        metadata.get_string(self.name)
     }
 
     pub fn type_runtime_flags(ty: &Type) -> u64 {

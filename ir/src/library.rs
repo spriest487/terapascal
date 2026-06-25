@@ -242,6 +242,21 @@ impl Library {
         }
         writeln!(f)?;
 
+        writeln!(f, "Type Info:")?;
+
+        for (ty, type_info) in self.metadata.type_info() {
+            self.metadata.format_type(ty, f)?;
+
+            let type_name = self.metadata
+                .get_string(type_info.name)
+                .map(String::as_str)
+                .unwrap_or("");
+
+            writeln!(f, ": '{}'", type_name)?;
+        }
+
+        writeln!(f)?;
+
         let mut funcs: Vec<_> = self.functions.iter().collect();
         funcs.sort_by_key(|(id, _)| **id);
 

@@ -11,6 +11,7 @@ use ir::InstructionBuilder as _;
 use ir::StructLayout;
 use std::num::Wrapping;
 use std::rc::Rc;
+use std::sync::Arc;
 
 pub const WORD_TYPE: ir::Type = ir::Type::U64;
 const WORD_BITS: usize = u64::BITS as usize;
@@ -62,7 +63,7 @@ pub struct SetFlagsType {
 impl SetFlagsType {
     // full-size 256-bit flag struct, the max number of values supported by
     // delphi/FPC sets
-    pub fn translate(lib: &mut LibraryBuilder, set_type: &SetType) -> Self {
+    pub fn translate(lib: &mut LibraryBuilder, set_type: &Arc<SetType>) -> Self {
         let struct_id = match &set_type.name {
             Some(ident_path) => {
                 let name_path = ir::NamePath::from_ident_path(ident_path, []);
@@ -80,8 +81,10 @@ impl SetFlagsType {
         if !lib.metadata().is_defined(&struct_id.to_struct_type([])) {
             Self::define_set_struct(set_type, struct_id, lib);
 
-            lib.gen_type_info(&struct_id.to_struct_type([]));
-            lib.gen_type_info(&flags_type.repr_type());
+            lib.defined_types.insert(Type::Set(set_type.clone()));
+            if let Some(name) = &set_type.name {
+                lib.gen_type_info(&struct_id.to_struct_type([]), &name.to_string());
+            }
         }
 
         Self {

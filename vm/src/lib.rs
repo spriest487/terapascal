@@ -2457,9 +2457,7 @@ impl Vm {
                 });
 
             let runtime_name = runtime_type
-                .name
-                .as_ref()
-                .and_then(|str_id| self.metadata().get_string(*str_id))
+                .get_name_string(self.metadata())
                 .cloned();
 
             // let object_id = ObjectID::try_from_type(ty);
@@ -2726,7 +2724,7 @@ impl Vm {
         let (_, methodinfo_index) = self.heap.marshaller
             .add_struct_type(&ir::METHODINFO_ID.to_struct_type([]))?;
 
-        let type_name_string = self.load_string_lit(type_info.name.unwrap_or(ir::EMPTY_STRING_ID))?;
+        let type_name_string = self.load_string_lit(type_info.name)?;
 
         let ty_tags_loc = match ty {
             ir::Type::Object(ir::ObjectID::Interface(iface_id)) => {

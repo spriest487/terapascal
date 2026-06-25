@@ -14,7 +14,6 @@ use crate::codegen::expr::expr_to_val;
 use crate::codegen::expr::literal_to_val;
 use crate::codegen::metadata::*;
 use crate::codegen::stmt::translate_stmt;
-use crate::codegen::typ;
 use crate::codegen::CodegenOpts;
 use crate::codegen::FunctionInstance;
 use crate::codegen::SetFlagsType;
@@ -49,14 +48,13 @@ pub struct LibraryBuilder<'a> {
 
     tags: Vec<ir::TagInfo>,
 
-    root_ctx: &'a typ::Context,
+    root_ctx: &'a Context,
 
     opts: CodegenOpts,
 
-    type_cache: LinkedHashMap<typ::Type, ir::Type>,
-    cached_types: LinkedHashMap<ir::Type, typ::Type>,
-
-    defined_types: HashSet<Type>,
+    pub(super) defined_types: HashSet<Type>,
+    type_cache: LinkedHashMap<Type, ir::Type>,
+    cached_types: LinkedHashMap<ir::Type, Type>,
 
     // key is size (bits)
     flags_repr_types: BTreeMap<usize, FlagsReprType>,
@@ -229,9 +227,8 @@ impl<'a> LibraryBuilder<'a> {
         // ensure methods of all defined types are instantiated. they might already be instantiated
         // in another referenced library - we just need to ensure any un-referenced methods are
         // generated
-        let all_defined_methods: Vec<_> = self.root_ctx
-            .defined_types()
-            .into_iter()
+        let all_defined_methods: Vec<_> = self.defined_types
+            .iter()
             .filter(|ty| {
                 !ty.is_abstract() && !ty.contains_unresolved_params(self.root_ctx)
             })
@@ -261,7 +258,7 @@ impl<'a> LibraryBuilder<'a> {
             self.instantiate_func(&method_key);
         }
 
-        self.build_type_info();
+        self.build_defined_type_info();
 
         self.gen_static_closure_init();
         self.gen_static_type_init();
@@ -414,23 +411,14 @@ impl<'a> LibraryBuilder<'a> {
                 let struct_type = Type::from_struct_type(name, struct_decl.kind);
 
                 self.translate_type(&struct_type);
-
-                let generic_name = struct_decl.name.to_generic_name();
-                self.defined_types.insert(Type::from_struct_type(generic_name, struct_decl.kind));
             }
 
             ast::TypeDeclItem::Interface(iface_decl) => {
                 self.translate_type(&Type::interface(iface_decl.name.clone()));
-
-                let generic_name = iface_decl.name.to_generic_name();
-                self.defined_types.insert(Type::interface(generic_name));
             }
 
             ast::TypeDeclItem::Variant(variant_decl) => {
                 self.translate_type(&Type::variant(variant_decl.name.clone()));
-
-                let generic_name = variant_decl.name.to_generic_name();
-                self.defined_types.insert(Type::variant(generic_name));
             }
 
             ast::TypeDeclItem::Alias(alias_type) => {
@@ -507,7 +495,7 @@ impl<'a> LibraryBuilder<'a> {
         repr_type
     }
     
-    pub fn translate_set_type(&mut self, set_type: &SetType) -> SetFlagsType {
+    pub fn translate_set_type(&mut self, set_type: &Arc<SetType>) -> SetFlagsType {
         let set_flags_type = SetFlagsType::translate(self, set_type);
 
         set_flags_type
@@ -576,7 +564,7 @@ impl<'a> LibraryBuilder<'a> {
         let runtime_name_id = self.metadata.find_or_insert_string(&runtime_name);
 
         self.metadata.insert_type_info(enum_def_type, ir::TypeInfo {
-            name: Some(runtime_name_id),
+            name: runtime_name_id,
             flags: ir::TYPE_FLAG_VALUE,
             debug_name: Some(runtime_name),
             methods: Vec::new(),
@@ -983,17 +971,17 @@ impl<'a> LibraryBuilder<'a> {
 
                 let def_id = self.metadata.forward_declare_type(&def_path);
 
-                let def_type = Type::variant(def_name);
+                let def_src_type = Type::variant(def_name);
                 let variant_type = def_id.to_variant_type(def_path.type_args.clone());
 
-                self.add_cached_type(def_type.clone(), variant_type.clone());
+                self.add_cached_type(def_src_type.clone(), variant_type.clone());
 
                 self.metadata.declare_type(def_id, &def_path);
 
                 let def = translate_variant_def(&src_def, self);
                 self.metadata.define_variant(def_id, def);
 
-                self.gen_type_info(&variant_type);
+                self.defined_types.insert(def_src_type);
 
                 def_id
             }
@@ -1054,10 +1042,12 @@ impl<'a> LibraryBuilder<'a> {
                 let def = translate_struct_def(&src_def, self);
                 self.metadata.define_struct(def_id, def);
 
-                self.gen_type_info(&def_type);
+                self.gen_type_info(&def_type, &def_src_type.to_string());
                 if let ir::Type::Object(object_id) = &def_type {
-                    self.gen_type_info(&object_id.to_weak_object_type());
+                    self.gen_type_info(&object_id.to_weak_object_type(), &def_src_type.to_weak().to_string());
                 }
+
+                self.defined_types.insert(def_src_type);
 
                 def_id
             }
@@ -1072,7 +1062,7 @@ impl<'a> LibraryBuilder<'a> {
 
         let instance_type = type_ctor(def_id, &instance_path.type_args);
         self.add_cached_type(src_type.clone(), instance_type.clone());
-        
+
         instance_type
     }
 
@@ -1115,8 +1105,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 assert_eq!(id, decl_id);
 
-                self.gen_type_info(&iface_type);
-                self.gen_type_info(&id.to_weak_interface_ptr_type());
+                self.defined_types.insert(src_type);
 
                 iface_type
             }
@@ -1134,7 +1123,7 @@ impl<'a> LibraryBuilder<'a> {
     // get or generate runtime type for a given type, which contains the function IDs etc
     // used for RC operations at runtime. the rest of the RTTI info will be filled in later 
     // in a separate pass
-    pub fn gen_type_info(&mut self, ty: &ir::Type) -> Rc<ir::TypeInfo> {
+    pub fn gen_type_info(&mut self, ty: &ir::Type, name: &str) -> Rc<ir::TypeInfo> {
         if let Some(existing) = self.metadata.get_type_info(&ty) {
             return existing;
         }
@@ -1144,7 +1133,9 @@ impl<'a> LibraryBuilder<'a> {
         let flags = ir::TypeInfo::type_runtime_flags(ty);
 
         // type names and methods will be added after codegen
-        let mut rtti = ir::TypeInfo::new(None, flags);
+        let name_string = self.metadata.find_or_insert_string(name);
+
+        let mut rtti = ir::TypeInfo::new(name_string, flags);
 
         if self.opts.debug && self.opts.rtti {
             rtti.debug_name = Some(self.metadata().pretty_type_name(&ty).into_owned());
@@ -1153,77 +1144,42 @@ impl<'a> LibraryBuilder<'a> {
         self.metadata.insert_type_info(ty.clone(), rtti)
     }
 
-    fn build_type_info(&mut self) {
-        if self.opts.rtti {
-            // generate related box and dyn array type info for all types defined in this library
-            for defined_type in self.defined_types.clone() {
-                if !defined_type.is_sized(&self.root_ctx).unwrap_or(false) {
-                    continue;
-                }
-
-                let ir_type = self.translate_type(&defined_type);
-                self.gen_type_info(&ir_type.boxed());
-                self.gen_type_info(&ir_type.dyn_array());
-            }
-        }
-
-        let mut done_types = 0;
-
-        let mut populate_types = Vec::new();
-
-        loop {
-            populate_types.extend(self.type_cache
-                .iter()
-                .skip(done_types)
-                .map(|(src_ty, ty)| (src_ty.clone(), ty.clone())));
-
-            for (mut src_ty, ty) in populate_types.drain(0..) {
-                done_types += 1;
-
-                // automatically convert reference to unspecialized types into their generic forms
-                if let TypeArgsResult::Unspecialized(param_list) = src_ty.type_args() {
-                    let generic_args = param_list.clone().into_type_args();
-                    src_ty = src_ty
-                        .specialize(&generic_args, &self.root_ctx)
-                        .unwrap_or_else(|err| {
-                            panic!("build_typeinfo: {err}")
-                        })
-                        .into_owned();
-                }
-                
-                // for any non-object types, ensure boxed versions exist in the type cache
-                // for use with RTTI
-                if !src_ty.is_object() 
-                    && self.opts().rtti 
-                    && let Ok(true) = src_ty.is_sized(&self.root_ctx)
-                {
-                    let box_src_type  = src_ty.clone().boxed();
-                    let box_type = self.translate_type(&box_src_type);
-
-                    self.gen_type_info(&box_type);
-                }
-
-                if !self.metadata.is_defined(&ty) {
-                    continue;
-                }
-
-                self.gen_iface_impls(&src_ty, &ty);
-
-                self.populate_runtime_type_info(src_ty, ty.clone());
-            }
-
-            if done_types == self.type_cache.len() {
-                break;
-            }
-        }
-    }
-
-    fn populate_runtime_type_info(&mut self, src_ty: Type, ty: ir::Type) {
+    fn build_defined_type_info(&mut self) {
         if !self.opts.rtti {
             return;
         }
 
-        // TODO: is there a better way to identify types defined in this library?
+        // generate related box and dyn array type info for all types defined in this library
+        for defined_type in self.defined_types.clone() {
+            let Some(ir_type) = self.type_cache.get(&defined_type).cloned() else {
+                // should be unreachable
+                continue;
+            };
+
+            let type_name = defined_type.to_string();
+
+            self.gen_type_info(&ir_type, &defined_type.to_string());
+
+            let box_name = format!("box of {type_name}");
+            let dyn_array_name = format!("array of {type_name}");
+
+            self.gen_type_info(&ir_type.boxed(), &box_name);
+            self.gen_type_info(&ir_type.dyn_array(), &dyn_array_name);
+
+            if let ir::Type::Object(object_id) = &ir_type {
+                self.gen_type_info(&object_id.to_weak_object_type(), &format!("weak {type_name}"));
+            }
+
+            self.gen_iface_impls(&defined_type, &ir_type);
+            self.populate_method_info(defined_type, ir_type);
+        }
+    }
+
+    fn populate_method_info(&mut self, src_ty: Type, ty: ir::Type) {
+        if !self.opts.rtti {
+            return;
+        }
+
         // only update types where the original entry is not from a referenced metadata
         let Some(mut type_info) = self.metadata
             .metadata()
@@ -1232,8 +1188,6 @@ impl<'a> LibraryBuilder<'a> {
         else {
             return;
         };
-
-        type_info.name = Some(self.metadata.find_or_insert_string(&src_ty.to_string()));
 
         match &src_ty {
             Type::Record(name) | Type::Class(name) => {

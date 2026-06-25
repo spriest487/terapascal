@@ -284,7 +284,7 @@ impl Metadata {
         let (ty, runtime_type) = self
             .type_info
             .iter()
-            .find(|(_, t)| t.name == Some(type_name_str))?;
+            .find(|(_, t)| t.name == type_name_str)?;
 
         let method_name_str = self.find_string_id(method_name)?;
 

@@ -175,13 +175,17 @@ impl<'a> Unit<'a> {
     }
 
     pub fn pretty_type(&self, ir_ty: &ir::Type) -> Cow<'_, str> {
-        match self.type_infos.get(ir_ty).and_then(|typeinfo| typeinfo.name) {
+        match self.type_infos.get(ir_ty).map(|typeinfo| typeinfo.name) {
             Some(name_id) => {
-                let name = &self.string_literals[&StringLiteralKey::StringID(name_id)];
+                let key = StringLiteralKey::StringID(name_id);
+                let name = &self.string_literals[&key];
+
                 Cow::Borrowed(name.as_str())
             },
 
-            None => Cow::Owned(ir_ty.to_string()),
+            None => {
+                Cow::Owned(ir_ty.to_pretty_string(self.metadata))
+            },
         }
     }
 
@@ -687,8 +691,8 @@ impl<'a> fmt::Display for Unit<'a> {
                 let typeinfo = &self.type_infos[&ty];
 
                 if self.opts.debug {
-                    let debug_name = typeinfo.name
-                        .and_then(|id| self.get_string_lit(id))
+                    let debug_name = self
+                        .get_string_lit(typeinfo.name)
                         .map(str::to_string)
                         .unwrap_or_else(|| ty.to_string());
 
@@ -703,8 +707,7 @@ impl<'a> fmt::Display for Unit<'a> {
 
                 write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
 
-                let type_name_id = typeinfo.name.unwrap_or(ir::EMPTY_STRING_ID);
-                let type_name_str = GlobalName::StringLiteral(type_name_id);
+                let type_name_str = GlobalName::StringLiteral(typeinfo.name);
 
                 writeln!(f, "&{},", type_name_str)?;
 

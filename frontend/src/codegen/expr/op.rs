@@ -100,7 +100,7 @@ pub fn translate_bin_op(
             match out_ty {
                 typ::Type::Set(set_type) => {
                     let b = expr::translate_expr(&bin_op.rhs, builder);
-                    builder.set_eq(out_val, lhs_val, b, set_type.as_ref())
+                    builder.set_eq(out_val, lhs_val, b, set_type)
                 }
                 
                 _ => {
@@ -214,7 +214,7 @@ pub fn translate_bin_op(
                 typ::Type::Set(set_type) => {
                     let b = expr::translate_expr(&bin_op.rhs, builder);
                     builder.mov(out_val, lhs_val);
-                    builder.set_bit_and(out_val, b, set_type.as_ref());
+                    builder.set_bit_and(out_val, b, set_type);
                 }
 
                 _ => {
@@ -229,7 +229,7 @@ pub fn translate_bin_op(
                 typ::Type::Set(set_type) => {
                     let b = expr::translate_expr(&bin_op.rhs, builder);
                     builder.mov(out_val, lhs_val);
-                    builder.set_bit_or(out_val, b, set_type.as_ref());
+                    builder.set_bit_or(out_val, b, set_type);
                 }
 
                 _ => {
@@ -244,7 +244,7 @@ pub fn translate_bin_op(
                 typ::Type::Set(set_type) => {
                     let b = expr::translate_expr(&bin_op.rhs, builder);
                     builder.mov(out_val, lhs_val);
-                    builder.set_bit_xor(out_val, b, set_type.as_ref());
+                    builder.set_bit_xor(out_val, b, set_type);
                 }
 
                 _ => {
@@ -283,7 +283,7 @@ pub fn translate_bin_op(
             let bit_num_byte = builder.local_temp(ir::Type::U8);
             builder.cast(bit_num_byte.clone(), bit_num, ir::Type::U8);
             
-            builder.set_contains(out_val, set_val, bit_num_byte, set_type.as_ref());
+            builder.set_contains(out_val, set_val, bit_num_byte, set_type);
             builder.jmp(break_label);
 
             builder.label(fail_label);
@@ -411,7 +411,7 @@ pub fn translate_unary_op(
             match out_ty {
                 typ::Type::Set(set_type) => {
                     builder.mov(result_val.clone(), operand_ref.clone());
-                    builder.set_bit_not(result_val.clone(), set_type.as_ref());
+                    builder.set_bit_not(result_val.clone(), set_type);
                 }
                 
                 _ => {

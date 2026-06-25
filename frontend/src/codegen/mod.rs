@@ -90,15 +90,14 @@ fn translate_builtin_class(
         return;
     }
 
-    let name = translate_name(name, lib);
+    let def_path = translate_name(name, lib);
 
-    lib.metadata_mut().declare_type(id, &name);
+    lib.metadata_mut().declare_type(id, &def_path);
 
     let resource_ty = translate_struct_def(class_def.as_ref(), lib);
 
     lib.metadata_mut().define_struct(id, resource_ty);
 
     // assume builtin classes don't have type params
-    lib.gen_type_info(&id.to_class_ptr_type([]));
-    lib.gen_type_info(&id.to_class_weak_type([]));
+    lib.gen_type_info(&id.to_class_ptr_type([]), &name.to_string());
 }
