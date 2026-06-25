@@ -85,7 +85,7 @@ pub enum Type {
     Weak(Arc<Type>),
     Any,
     Enum(Arc<IdentPath>),
-    Set(Arc<SetType>),
+    Set(Arc<SetDef>),
 }
 
 impl From<Primitive> for Type {
@@ -117,7 +117,7 @@ impl Type {
         Type::Enum(Arc::new(path.into()))
     }
 
-    pub fn set(set: impl Into<Arc<SetType>>) -> Self {
+    pub fn set(set: impl Into<Arc<SetDef>>) -> Self {
         Type::Set(set.into())
     }
 
@@ -1205,7 +1205,7 @@ impl Type {
         }
     }
 
-    pub fn as_set(&self) -> Option<&Arc<SetType>> {
+    pub fn as_set(&self) -> Option<&Arc<SetDef>> {
         match self {
             Type::Set(set_type) => Some(set_type),
             _ => None,

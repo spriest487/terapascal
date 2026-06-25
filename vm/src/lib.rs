@@ -545,16 +545,20 @@ impl Vm {
         self.metadata()
             .find_virtual_impl(&instance_ty, iface_id, method)
             .ok_or_else(|| {
-                let mut err = "virtual call ".to_string();
-
                 let iface_ty = iface_id.to_interface_ptr_type();
+
+                let mut err = String::new();
+                err.push_str("missing implementation of virtual method ");
+
                 let _ = self.metadata().format_type(&iface_ty, &mut err);
                 err.push('.');
                 let _ = self.metadata().format_iface_method(iface_id, method, &mut err);
-                err.push_str(" missing implementation for ");
+
+                err.push_str(" for ");
+
                 let _ = self.metadata().format_type(&instance_ty, &mut err);
 
-                ExecError::illegal_state(format!("{}", err))
+                ExecError::illegal_state(err)
             })
     }
 

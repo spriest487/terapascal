@@ -597,7 +597,8 @@ impl MetadataSource for Metadata {
         iface_id: InterfaceID,
         method: MethodID,
     ) -> Option<FunctionID> {
-        let iface_impl = self.iface_impls.get(ty)?.get(&iface_id)?;
+        let type_impls = self.iface_impls.get(ty)?;
+        let iface_impl = type_impls.get(&iface_id)?;
 
         iface_impl.methods.get(&method).cloned()
     }

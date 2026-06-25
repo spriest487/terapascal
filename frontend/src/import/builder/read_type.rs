@@ -15,7 +15,7 @@ use crate::ir;
 use crate::typ::ast::*;
 use crate::typ::Primitive;
 use crate::typ::ScopeID;
-use crate::typ::SetType;
+use crate::typ::SetDef;
 use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeArgList;
@@ -472,7 +472,7 @@ impl ImportBuilder<'_> {
         }
     }
 
-    pub fn read_type_as_set(&mut self, id: ir::TypeDefID) -> Option<Arc<SetType>> {
+    pub fn read_type_as_set(&mut self, id: ir::TypeDefID) -> Option<Arc<SetDef>> {
         if let Some(set_type) = self.set_types.get(&id) {
             return Some(set_type.clone());
         }
@@ -502,7 +502,7 @@ impl ImportBuilder<'_> {
                 None => None,
             };
 
-            let set_type = Arc::new(SetType {
+            let set_type = Arc::new(SetDef {
                 item_type: imported_set_info.item_type,
                 min: imported_set_info.min,
                 max: imported_set_info.max,

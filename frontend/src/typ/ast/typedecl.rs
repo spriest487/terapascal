@@ -19,7 +19,7 @@ use crate::typ::ast::Expr;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::InterfaceMethodDecl;
 use crate::typ::ast::TypeDeclItemInfo;
-use crate::typ::set::SetType;
+use crate::typ::set::SetDef;
 use crate::typ::typecheck_typename;
 use crate::typ::ConstValue;
 use crate::typ::Context;
@@ -785,7 +785,7 @@ impl SetDecl {
         }
     }
     
-    pub fn to_set_type(&self, ctx: &Context) -> TypeResult<SetType> {
+    pub fn to_set_type(&self, ctx: &Context) -> TypeResult<SetDef> {
         let name = self.name.full_path.clone();
 
         let (from_const, to_const) = match self.range.as_ref() {
@@ -807,7 +807,7 @@ impl SetDecl {
             }
         };
 
-        Ok(SetType {
+        Ok(SetDef {
             min: from_const,
             max: to_const,
             name: Some(name),
@@ -815,7 +815,7 @@ impl SetDecl {
         })
     }
     
-    pub fn items_to_set_type(name: Option<IdentPath>, items: &[Expr], at: &Span, ctx: &Context) -> TypeResult<SetType> {
+    pub fn items_to_set_type(name: Option<IdentPath>, items: &[Expr], at: &Span, ctx: &Context) -> TypeResult<SetDef> {
         if items.is_empty() {
             return Err(TypeError::EmptySetDecl {
                 span: at.clone(),
@@ -844,7 +844,7 @@ impl SetDecl {
             })
         }
 
-        Ok(SetType {
+        Ok(SetDef {
             name,
             min: IntConstant::from(min),
             max: IntConstant::from(max),

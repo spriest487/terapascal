@@ -2,7 +2,7 @@ use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::NamePathExt;
 use crate::ir;
-use crate::typ::SetType;
+use crate::typ::SetDef;
 use crate::typ::Type;
 use crate::typ::SYSTEM_UNIT_NAME;
 use crate::Operator;
@@ -63,8 +63,8 @@ pub struct SetFlagsType {
 impl SetFlagsType {
     // full-size 256-bit flag struct, the max number of values supported by
     // delphi/FPC sets
-    pub fn translate(lib: &mut LibraryBuilder, set_type: &Arc<SetType>) -> Self {
-        let struct_id = match &set_type.name {
+    pub fn translate(lib: &mut LibraryBuilder, set_def: &Arc<SetDef>) -> Self {
+        let struct_id = match &set_def.name {
             Some(ident_path) => {
                 let name_path = ir::NamePath::from_ident_path(ident_path, []);
                 lib.metadata_mut().forward_declare_type(&name_path)
@@ -75,15 +75,19 @@ impl SetFlagsType {
             }
         };
 
-        let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
+        let flags_type = lib.get_flags_repr_type(set_def.flags_type_bits());
+        let set_type = struct_id.to_struct_type([]);
 
         // this only needs to be defined the first time this is called for any given set type
-        if !lib.metadata().is_defined(&struct_id.to_struct_type([])) {
-            Self::define_set_struct(set_type, struct_id, lib);
+        if !lib.metadata().is_defined(&set_type) {
+            Self::define_set_struct(set_def, struct_id, lib);
 
-            lib.defined_types.insert(Type::Set(set_type.clone()));
-            if let Some(name) = &set_type.name {
-                lib.gen_type_info(&struct_id.to_struct_type([]), &name.to_string());
+            lib.defined_types.insert(Type::Set(set_def.clone()));
+ 
+            if let Some(name) = &set_def.name {
+                lib.gen_type_info(&set_type, &name.to_string());
+            } else {
+                lib.gen_type_info(&set_type, "");
             }
         }
 
@@ -93,7 +97,7 @@ impl SetFlagsType {
         }
     }
 
-    fn define_set_struct(set_type: &SetType, id: ir::TypeDefID, lib: &mut LibraryBuilder) {
+    fn define_set_struct(set_type: &SetDef, id: ir::TypeDefID, lib: &mut LibraryBuilder) {
         let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
 
         let struct_identity = match &set_type.name {
@@ -117,7 +121,7 @@ impl SetFlagsType {
         lib.metadata_mut().define_struct(id, set_struct);
     }
 
-    fn build_tag(lib: &mut LibraryBuilder, set_type: &SetType) -> Option<ir::TagInfo> {
+    fn build_tag(lib: &mut LibraryBuilder, set_type: &SetDef) -> Option<ir::TagInfo> {
         let min_val = Wrapping(set_type.min.as_i128()).to_i64()?;
         let max_val = Wrapping(set_type.max.as_i128()).to_i64()?;
 

@@ -8,7 +8,7 @@ pub const MAX_FLAGS_BITS: usize = 256;
 
 #[derive(Derivative, Clone, Eq)]
 #[derivative(Debug, PartialEq, Hash)]
-pub struct SetType {
+pub struct SetDef {
     pub name: Option<IdentPath>,
     pub item_type: Type,
 
@@ -16,7 +16,7 @@ pub struct SetType {
     pub max: IntConstant,
 }
 
-impl SetType {
+impl SetDef {
     pub fn flags_type_bits(&self) -> usize {
         let range = self.max.as_i128() - self.min.as_i128();
         if range <= 64 {
@@ -29,7 +29,7 @@ impl SetType {
     }
 }
 
-impl fmt::Display for SetType {
+impl fmt::Display for SetDef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(name) = &self.name {
             write!(f, "{}", name)

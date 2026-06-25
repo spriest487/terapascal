@@ -495,7 +495,7 @@ impl<'a> LibraryBuilder<'a> {
         repr_type
     }
     
-    pub fn translate_set_type(&mut self, set_type: &Arc<SetType>) -> SetFlagsType {
+    pub fn translate_set_type(&mut self, set_type: &Arc<SetDef>) -> SetFlagsType {
         let set_flags_type = SetFlagsType::translate(self, set_type);
 
         set_flags_type
@@ -1074,9 +1074,10 @@ impl<'a> LibraryBuilder<'a> {
             return ty;
         }
 
-        let iface_name = translate_name(&src_name, self);
+        let def_name = Arc::new(src_name.to_generic_name());
+        let def_path = translate_name(&def_name, self);
 
-        match self.metadata.find_iface(&iface_name) {
+        match self.metadata.find_iface(&def_path) {
             Some(id) => {
                 let iface_type = id.to_interface_ptr_type();
                 self.add_cached_type(src_type.clone(), iface_type.clone());
@@ -1084,28 +1085,22 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             None => {
-                let decl_id = self.metadata.declare_iface(&iface_name);
-                let iface_type = decl_id.to_interface_ptr_type();
+                let iface_id = self.metadata.declare_iface(&def_path);
+                let iface_type = iface_id.to_interface_ptr_type();
 
-                self.add_cached_type(src_type.clone(), iface_type.clone());
+                let src_def_type = Type::interface(def_name.clone());
+                self.add_cached_type(src_def_type.clone(), iface_type.clone());
 
-                let src_def = if src_name.is_unspecialized_generic() {
-                    self.root_ctx
-                        .find_iface_def(&src_name.full_path)
-                        .unwrap_or_else(|err| panic!("translate_iface_type: {err}"))
-                        .clone()
-                } else {
-                    self.root_ctx
-                        .instantiate_iface_def(src_name)
-                        .unwrap_or_else(|err| panic!("translate_iface_type: {err}"))
-                };
+                let src_def = self.root_ctx
+                    .instantiate_iface_def(&def_name)
+                    .unwrap_or_else(|err| panic!("translate_iface_type: {err}"));
 
                 let def = translate_iface(&src_def, self);
-                let id = self.metadata.define_iface(def);
+                let def_id = self.metadata.define_iface(def);
 
-                assert_eq!(id, decl_id);
+                assert_eq!(def_id, iface_id);
 
-                self.defined_types.insert(src_type);
+                self.defined_types.insert(src_def_type);
 
                 iface_type
             }

@@ -49,7 +49,7 @@ pub(super) struct ImportBuilder<'a> {
     variant_defs: HashMap<IdentPath, VariantDecl>,
     enum_defs: HashMap<IdentPath, EnumDecl>,
 
-    set_types: BTreeMap<ir::TypeDefID, Arc<SetType>>,
+    set_types: BTreeMap<ir::TypeDefID, Arc<SetDef>>,
 
     type_methods: HashMap<Type, BTreeMap<usize, MethodDecl>>,
 

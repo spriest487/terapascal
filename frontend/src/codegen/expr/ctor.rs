@@ -165,7 +165,7 @@ fn translate_dyn_array_ctor(
 
 fn translate_set_ctor(
     ctor: &typ::ast::CollectionCtor,
-    set_type: &Arc<typ::SetType>,
+    set_type: &Arc<typ::SetDef>,
     flags_type: ir::Type,
     builder: &mut IRBuilder,
 ) -> ir::Ref {

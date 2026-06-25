@@ -149,7 +149,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         (id, case_index, variant_def.cases[case_index].ty.clone())
     }
 
-    pub fn translate_set_type(&mut self, set_type: &Arc<typ::SetType>) -> SetFlagsType {
+    pub fn translate_set_type(&mut self, set_type: &Arc<typ::SetDef>) -> SetFlagsType {
         self.library.translate_set_type(set_type)
     }
     
@@ -395,7 +395,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         &mut self,
         set_ref: impl Into<ir::Ref>,
         bit_val: impl Into<ir::Value>,
-        set_type: &Arc<typ::SetType>,
+        set_type: &Arc<typ::SetDef>,
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
         let flags_ref = self.set_flags_ref(set_ref, &flags_type_info);
@@ -412,7 +412,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         &mut self,
         set_ref: impl Into<ir::Ref>,
         bit_val: impl Into<ir::Value>,
-        set_type: &Arc<typ::SetType>,
+        set_type: &Arc<typ::SetDef>,
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
         let flags_ref = self.set_flags_ref(set_ref, &flags_type_info);
@@ -427,7 +427,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         out: impl Into<ir::Ref>,
         set_ref: impl Into<ir::Ref>,
         bit_val: impl Into<ir::Value>,
-        set_type: &Arc<typ::SetType>
+        set_type: &Arc<typ::SetDef>
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
         let flags_ref = self.set_flags_ref(set_ref, &flags_type_info);
@@ -442,7 +442,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         out: impl Into<ir::Ref>,
         a: impl Into<ir::Ref>,
         b: impl Into<ir::Ref>,
-        set_type: &Arc<typ::SetType>,
+        set_type: &Arc<typ::SetDef>,
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
         let a_ref = self.set_flags_ref(a, &flags_type_info);
@@ -456,7 +456,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
 
     pub fn set_bit_not(&mut self,
         a: impl Into<ir::Ref>,
-        set_type: &Arc<typ::SetType>,
+        set_type: &Arc<typ::SetDef>,
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
         let a_ref = self.set_flags_ref(a, &flags_type_info);
@@ -469,7 +469,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     fn set_bitwise_op(&mut self,
         a: impl Into<ir::Ref>,
         b: impl Into<ir::Ref>,
-        set_type: &Arc<typ::SetType>,
+        set_type: &Arc<typ::SetDef>,
         get_func_id: fn(&SetFlagsType) -> ir::FunctionID,
     ) {
         let flags_type_info = self.library.translate_set_type(set_type);
@@ -485,7 +485,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn set_bit_and(&mut self,
         a: impl Into<ir::Ref>,
         b: impl Into<ir::Ref>,
-        set_type: &Arc<typ::SetType>,
+        set_type: &Arc<typ::SetDef>,
     ) {
         self.set_bitwise_op(a, b, set_type, |i| i.repr_type.bit_and_func)
     }
@@ -493,7 +493,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn set_bit_or(&mut self,
         a: impl Into<ir::Ref>,
         b: impl Into<ir::Ref>,
-        set_type: &Arc<typ::SetType>,
+        set_type: &Arc<typ::SetDef>,
     ) {
         self.set_bitwise_op(a, b, set_type, |i| i.repr_type.bit_or_func)
     }
@@ -501,7 +501,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
     pub fn set_bit_xor(&mut self,
         a: impl Into<ir::Ref>,
         b: impl Into<ir::Ref>,
-        set_type: &Arc<typ::SetType>,
+        set_type: &Arc<typ::SetDef>,
     ) {
         self.set_bitwise_op(a, b, set_type, |i| i.repr_type.bit_xor_func)
     }
