@@ -100,12 +100,16 @@ impl Type {
         Type::Object(ObjectID::Array(Rc::new(self.clone())))
     }
 
-    pub fn weak_dyn_array(self) -> Self {
-        Type::WeakObject(ObjectID::Array(Rc::new(self)))
+    pub fn weak_dyn_array(&self) -> Self {
+        Type::WeakObject(ObjectID::Array(Rc::new(self.clone())))
     }
 
     pub fn boxed(&self) -> Self {
         Type::Object(ObjectID::Box(Rc::new(self.clone())))
+    }
+
+    pub fn weak_boxed(&self) -> Self {
+        Type::WeakObject(ObjectID::Box(Rc::new(self.clone())))
     }
 
     pub fn as_generic_param(&self) -> Option<&Rc<String>> {

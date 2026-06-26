@@ -359,18 +359,10 @@ fn get_object_type_info(state: &mut Vm) -> ExecResult<()> {
     }
     
     let obj_header = state.heap.load_object_header(&obj_ptr)?;
+    let obj_type = obj_header.id.to_type(&state.heap.marshaller)?;
+
+    let type_info_ptr = state.load_type_info(&obj_type)?;
     
-    let type_info_ref =  state.typeinfo_map
-        .find_by_key(&obj_header.id.to_type(state.marshaller())?)
-        .ok_or_else(|| {
-            ExecError::illegal_state(format!(
-                "missing type info for object type {}",
-                obj_header.id.to_pretty_name(state.marshaller()),
-            ))
-        })?
-        .clone();
-    
-    let type_info_ptr = state.load(&ir::Ref::Global(type_info_ref))?;
     state.store(&ir::RESULT_REF, type_info_ptr)?;
     
     Ok(())

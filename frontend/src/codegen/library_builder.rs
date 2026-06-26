@@ -1160,7 +1160,9 @@ impl<'a> LibraryBuilder<'a> {
             let dyn_array_name = format!("array of {type_name}");
 
             self.gen_type_info(&ir_type.boxed(), &box_name);
+            self.gen_type_info(&ir_type.weak_boxed(), &box_name);
             self.gen_type_info(&ir_type.dyn_array(), &dyn_array_name);
+            self.gen_type_info(&ir_type.weak_dyn_array(), &dyn_array_name);
 
             if let ir::Type::Object(object_id) = &ir_type {
                 self.gen_type_info(&object_id.to_weak_object_type(), &format!("weak {type_name}"));
