@@ -2865,35 +2865,40 @@ impl Vm {
         match ty {
             // array types are distinct per size but don't exist in metadata
             ir::Type::Array { element, dim } => {
-                let name = format!("array[{dim}] of {}", element.to_pretty_string(self.metadata()));
+                let name = self.find_type_info_name(element)?
+                    .map(|element_name| format!("array[{dim}] of {element_name}"))
+                    .unwrap_or(String::new());
+
                 let flags = ir::TYPE_FLAG_ARRAY | ir::TYPE_FLAG_VALUE;
 
                 self.new_type_info(ty, &name, flags)
             },
 
             ir::Type::WeakObject(object_id) => {
-                let name = format!("weak {}", object_id.to_object_type().to_pretty_string(self.metadata()));
+                let name = self.find_type_info_name(&object_id.to_object_type())?
+                    .map(|object_name| format!("weak {object_name}"))
+                    .unwrap_or(String::new());
+
                 let flags = ir::TYPE_FLAG_WEAK;
 
                 self.new_type_info(ty, &name, flags)
             },
 
             ir::Type::Object(ir::ObjectID::Box(value_type)) => {
-                let name = format!("box of {}", value_type.to_pretty_string(self.metadata()));
+                let name = self.find_type_info_name(value_type)?
+                    .map(|value_name| format!("box of {value_name}"))
+                    .unwrap_or(String::new());
+
                 let flags = 0;
                 self.new_type_info(ty, &name, flags)
             }
 
             ir::Type::Object(ir::ObjectID::Array(element_type)) => {
-                let name = format!("array of {}", element_type.to_pretty_string(self.metadata()));
+                let name = self.find_type_info_name(element_type)?
+                    .map(|element_name| format!("array of {element_name}"))
+                    .unwrap_or(String::new());
+
                 let flags = 0;
-                self.new_type_info(ty, &name, flags)
-            }
-
-            ir::Type::Object(ir::ObjectID::AnyClosure(sig)) => {
-                let name = sig.to_pretty_string(self.metadata());
-                let flags = ir::TYPE_FLAG_FUNCTION;
-
                 self.new_type_info(ty, &name, flags)
             }
 
@@ -2945,6 +2950,12 @@ impl Vm {
         self.typeinfo_map.add(Some(for_type.clone()), Some(name.to_string()), global_ref);
 
         Ok(type_info_val)
+    }
+
+    fn find_type_info_name(&mut self, ty: &ir::Type) -> ExecResult<Option<&str>> {
+        self.load_type_info(ty)?;
+
+        Ok(self.typeinfo_map.name_by_key(ty))
     }
 
     pub fn runtime_invoke(
