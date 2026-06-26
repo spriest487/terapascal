@@ -1087,7 +1087,7 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             None => {
-                let decl_id = self.metadata.declare_iface(&instance_path);
+                let decl_id = self.metadata.declare_iface(&def_path);
 
                 let src_def_type = Type::interface(src_name.clone());
                 let instance_type = decl_id.to_interface_type(instance_path.type_args.clone());
