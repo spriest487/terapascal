@@ -1043,9 +1043,6 @@ impl<'a> LibraryBuilder<'a> {
                 self.metadata.define_struct(def_id, def);
 
                 self.gen_type_info(&def_type, &def_src_type.to_string());
-                if let ir::Type::Object(object_id) = &def_type {
-                    self.gen_type_info(&object_id.to_weak_object_type(), &def_src_type.to_weak().to_string());
-                }
 
                 self.defined_types.insert(def_src_type);
 
@@ -1152,21 +1149,7 @@ impl<'a> LibraryBuilder<'a> {
                 continue;
             };
 
-            let type_name = defined_type.to_string();
-
             self.gen_type_info(&ir_type, &defined_type.to_string());
-
-            let box_name = format!("box of {type_name}");
-            let dyn_array_name = format!("array of {type_name}");
-
-            self.gen_type_info(&ir_type.boxed(), &box_name);
-            self.gen_type_info(&ir_type.weak_boxed(), &box_name);
-            self.gen_type_info(&ir_type.dyn_array(), &dyn_array_name);
-            self.gen_type_info(&ir_type.weak_dyn_array(), &dyn_array_name);
-
-            if let ir::Type::Object(object_id) = &ir_type {
-                self.gen_type_info(&object_id.to_weak_object_type(), &format!("weak {type_name}"));
-            }
 
             self.gen_iface_impls(&defined_type, &ir_type);
             self.populate_method_info(defined_type, ir_type);

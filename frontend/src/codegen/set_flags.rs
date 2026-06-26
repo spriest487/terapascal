@@ -83,11 +83,9 @@ impl SetFlagsType {
             Self::define_set_struct(set_def, struct_id, lib);
 
             lib.defined_types.insert(Type::Set(set_def.clone()));
- 
+
             if let Some(name) = &set_def.name {
                 lib.gen_type_info(&set_type, &name.to_string());
-            } else {
-                lib.gen_type_info(&set_type, "");
             }
         }
 
