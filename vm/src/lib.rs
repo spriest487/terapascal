@@ -2898,13 +2898,13 @@ impl Vm {
                     .map(|element_name| format!("array of {element_name}"))
                     .unwrap_or(String::new());
 
-                let flags = 0;
+                let flags = ir::TYPE_FLAG_ARRAY;
                 self.new_type_info(ty, &name, flags)
             }
 
             _ => {
                 let name = "";
-                let flags = ir::TypeInfo::type_runtime_flags(ty);
+                let flags = ir::TypeInfo::type_runtime_flags(ty, self.metadata());
                 self.new_type_info(ty, &name, flags)
             }
         }
@@ -2955,7 +2955,10 @@ impl Vm {
     fn find_type_info_name(&mut self, ty: &ir::Type) -> ExecResult<Option<&str>> {
         self.load_type_info(ty)?;
 
-        Ok(self.typeinfo_map.name_by_key(ty))
+        match self.typeinfo_map.name_by_key(ty) {
+            None | Some("") => Ok(None),
+            Some(name) => Ok(Some(name)),
+        }
     }
 
     pub fn runtime_invoke(

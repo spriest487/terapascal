@@ -1123,7 +1123,7 @@ impl<'a> LibraryBuilder<'a> {
 
         assert!(self.metadata().is_defined(ty), "gen_runtime_type: type {} ({:?}) is not defined yet", self.metadata().pretty_type_name(ty), ty);
         
-        let flags = ir::TypeInfo::type_runtime_flags(ty);
+        let flags = ir::TypeInfo::type_runtime_flags(ty, self.metadata());
 
         // type names and methods will be added after codegen
         let name_string = self.metadata.find_or_insert_string(name);

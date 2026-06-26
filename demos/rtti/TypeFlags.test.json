@@ -2,20 +2,25 @@
   "steps": [
     { "output": "flags for System.Int32:" },
     { "output": "* Value" },
+
     { "output": "flags for System.String:" },
+
     { "output": "flags for array of Object:" },
     { "output": "* Array" },
+
     { "output": "flags for weak array of Object:" },
-    { "output": "* Array" },
     { "output": "* Weak" },
+
     { "output": "flags for weak Object:" },
     { "output": "* Weak" },
+
     { "output": "flags for <anonymous type>:" },
     { "output": "* Function" },
-    { "output": "flags for function:" },
+
+    { "output": "flags for <anonymous type>:" },
     { "output": "* Function" },
-    { "output": "flags for weak function:" },
-    { "output": "* Weak" },
-    { "output": "* Function" }
+
+    { "output": "flags for <anonymous type>:" },
+    { "output": "* Weak" }
   ]
 }

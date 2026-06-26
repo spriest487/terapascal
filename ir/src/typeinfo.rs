@@ -1,4 +1,4 @@
-use crate::FunctionID;
+use crate::{FunctionID, StructIdentity};
 use crate::Metadata;
 use crate::MetadataSource;
 use crate::ObjectID;
@@ -39,20 +39,29 @@ impl TypeInfo {
         metadata.get_string(self.name)
     }
 
-    pub fn type_runtime_flags(ty: &Type) -> u64 {
+    pub fn type_runtime_flags(ty: &Type, metadata: &impl MetadataSource) -> u64 {
         let mut flags = 0;
+
         if !ty.is_object() {
             flags |= TYPE_FLAG_VALUE;
         }
+
         if matches!(ty, Type::Array {..} | Type::Object(ObjectID::Array(..))) {
             flags |= TYPE_FLAG_ARRAY;
         }
         if let Type::WeakObject(class_id) = ty {
             // weak pointers should have the same flags as their non-weak version + the weak flag
-            flags |= Self::type_runtime_flags(&Type::Object(class_id.clone()));
+            flags |= Self::type_runtime_flags(&Type::Object(class_id.clone()), metadata);
             flags |= TYPE_FLAG_WEAK;
         }
         if matches!(ty, Type::Function(..) | Type::Object(ObjectID::AnyClosure(..))) {
+            flags |= TYPE_FLAG_FUNCTION;
+        }
+
+        if let Type::Object(ObjectID::Class(class_ref)) = ty
+            && let Some(class_def) = metadata.get_struct_def(class_ref.def_id)
+            && matches!(class_def.identity, StructIdentity::ClosureObject(..))
+        {
             flags |= TYPE_FLAG_FUNCTION;
         }
 
