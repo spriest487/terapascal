@@ -16,9 +16,11 @@ use crate::c::Unit;
 use crate::c::VariableID;
 use crate::ir;
 use ir::MetadataSource as _;
+use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write;
+use terapascal_ir::generic::instantiate_interface_def;
 use terapascal_ir::InstructionBuilder;
 
 #[derive(Clone, Debug)]
@@ -30,7 +32,7 @@ struct MethodImplFunc {
 
 impl MethodImplFunc {
     fn new(
-        iface_id: ir::InterfaceID,
+        iface_ref: ir::InterfaceRef,
         self_class: ClassIdentity,
         method_id: ir::MethodID,
         iface_method: &ir::Method,
@@ -38,7 +40,7 @@ impl MethodImplFunc {
         metadata: &ir::Metadata,
         unit: &mut Unit,
     ) -> Self {
-        let iface_ty = ir::Type::Object(ir::ObjectID::Interface(iface_id));
+        let iface_type = iface_ref.to_interface_type();
         let self_type = self_class.to_ir_type(unit);
 
         // TODO: doesn't support methods with type params yet
@@ -50,7 +52,8 @@ impl MethodImplFunc {
         
         let method_instance = unit.translate_func_ref(&method_instance_key);
 
-        let vcall_wrapper_name = FunctionName::MethodWrapper(iface_id, method_id, self_class.to_def_name());
+        let iface_type_id = unit.create_type_id(&iface_type);
+        let vcall_wrapper_name = FunctionName::VirtualMethodWrapper(iface_type_id, method_id, self_class.to_def_name());
 
         // generate virtual call wrapper with the param types of the virtually called iface method
         let wrapper_param_tys: Vec<_> = iface_method
@@ -65,7 +68,7 @@ impl MethodImplFunc {
             vcall_wrapper_decl: FunctionDecl {
                 comment: Some(format!(
                     "virtual call wrapper impl of {}.{} for {}",
-                    metadata.pretty_type_name(&iface_ty),
+                    metadata.pretty_type_name(&iface_type),
                     iface_method.name,
                     metadata.pretty_type_name(&self_class.to_ir_type(unit)),
                 )),
@@ -191,7 +194,7 @@ pub struct Class {
     identity: ClassIdentity,
     class_type: ir::Type,
 
-    impls: BTreeMap<ir::InterfaceID, InterfaceImpl>,
+    impls: LinkedHashMap<TypeID, InterfaceImpl>,
 
     dtor: Option<FunctionName>,
 
@@ -207,18 +210,22 @@ impl Class {
         unit.translate_type(class_ty);
         let class_index = unit.get_type_id(class_ty);
 
-        let mut impls = BTreeMap::new();
+        let mut impls = LinkedHashMap::new();
 
-        for (iface_id, iface_impl) in unit.metadata.type_impls(class_ty) {
+        for (iface_ref, iface_impl) in unit.metadata.type_impls(class_ty) {
             let mut method_impls = BTreeMap::new();
 
-            let iface = unit.metadata.get_iface_def(iface_id).unwrap();
+            let generic_def = unit.metadata.get_interface_def(iface_ref.def_id).unwrap();
+            let iface_def = instantiate_interface_def(&generic_def, &iface_ref.args);
+
+            let iface_type = iface_ref.to_interface_type();
+            let iface_type_id = unit.create_type_id(&iface_type);
 
             for (method_id, impl_func_id) in iface_impl.methods.iter() {
-                let method_def = iface.get_method(*method_id).unwrap();
+                let method_def = iface_def.get_method(*method_id).unwrap();
 
                 let impl_func = MethodImplFunc::new(
-                    iface_id,
+                    iface_ref.clone(),
                     ClassIdentity::Class(class_index),
                     *method_id,
                     method_def,
@@ -234,7 +241,7 @@ impl Class {
                 continue;
             }
 
-            impls.insert(iface_id, InterfaceImpl { method_impls });
+            impls.insert(iface_type_id, InterfaceImpl { method_impls });
         }
 
         let comment = class_ty.to_pretty_string(unit.metadata);
@@ -299,7 +306,7 @@ impl Class {
 
         Class {
             identity: ClassIdentity::DynArrayClass(id),
-            impls: BTreeMap::new(),
+            impls: Default::default(),
             dtor,
             comment: Some(comment),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &array_type),
@@ -329,7 +336,7 @@ impl Class {
 
         Class {
             identity: ClassIdentity::BoxClass(id),
-            impls: BTreeMap::new(),
+            impls: Default::default(),
             dtor,
             comment: Some(comment),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &box_type),
@@ -400,7 +407,7 @@ impl Class {
         for (iface_id, _) in &self.impls {
             decls.write_fmt(format_args!(
                 "struct MethodTable_{} ImplTable_{}_{};\n",
-                iface_id.0, self.identity, iface_id.0
+                iface_id, self.identity, iface_id
             )).unwrap();
         }
 
@@ -427,7 +434,7 @@ impl Class {
         for (i, (iface_id, iface_impl)) in &impls {
             def.push_str(&format!(
                 "struct MethodTable_{} ImplTable_{}_{} = {{\n",
-                iface_id.0, self.identity, iface_id.0
+                iface_id, self.identity, iface_id
             ));
 
             def.push_str("  .base = {\n");
@@ -456,7 +463,7 @@ impl Class {
             def.push_str("\n");
             
             for (method_id, _method_name) in &iface_impl.method_impls {
-                let wrapper_name = FunctionName::MethodWrapper(
+                let wrapper_name = FunctionName::VirtualMethodWrapper(
                     **iface_id,
                     *method_id,
                     self.identity.to_def_name(),
@@ -518,7 +525,7 @@ impl Class {
     fn write_class_field_init(&self,
         out: &mut String,
         enable_rtti: bool,
-        impls: &[(usize, (&ir::InterfaceID, &InterfaceImpl))]
+        impls: &[(usize, (&TypeID, &InterfaceImpl))]
     ) {
         writeln!(
             out,
@@ -561,22 +568,25 @@ impl Interface {
     pub fn translate(
         iface_id: ir::InterfaceID,
         iface: &ir::InterfaceDef,
-        module: &mut Unit,
+        unit: &mut Unit,
     ) -> Self {
+        let iface_type = iface_id.to_interface_type(iface.name.type_args.clone());
+        let iface_type_id = unit.create_type_id(&iface_type);
+
         let methods = iface
             .methods
             .iter()
             .enumerate()
             .map(|(method_index, method)| {
-                let return_ty = module.translate_type(&method.return_ty);
+                let return_ty = unit.translate_type(&method.return_ty);
                 let method_id = ir::MethodID(method_index);
                 let params = method
                     .params
                     .iter()
-                    .map(|param| module.translate_type(param))
+                    .map(|param| unit.translate_type(param))
                     .collect();
 
-                let name = FunctionName::Method(iface_id, method_id);
+                let name = FunctionName::Method(iface_type_id, method_id);
 
                 let comment = Some(format!(
                     "Method {} of interface {}",

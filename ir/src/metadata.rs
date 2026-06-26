@@ -43,8 +43,8 @@ use std::fmt;
 pub struct Metadata {
     type_decls: LinkedHashMap<TypeDefID, TypeDecl>,
     string_literals: LinkedHashMap<StringID, String>,
-    ifaces: LinkedHashMap<InterfaceID, InterfaceDecl>,
-    iface_impls: HashMap<Type, BTreeMap<InterfaceID, InterfaceImpl>>,
+    interface_defs: LinkedHashMap<InterfaceID, InterfaceDecl>,
+    iface_impls: HashMap<Type, HashMap<InterfaceRef, InterfaceImpl>>,
 
     variables: BTreeMap<VariableID, VariableInfo>,
     constants: HashMap<NamePath, ConstInfo>,
@@ -61,7 +61,7 @@ impl Metadata {
         Self {
             type_decls: LinkedHashMap::new(),
             string_literals: LinkedHashMap::new(),
-            ifaces: LinkedHashMap::new(),
+            interface_defs: LinkedHashMap::new(),
             iface_impls: HashMap::new(),
 
             variables: BTreeMap::new(),
@@ -134,8 +134,8 @@ impl Metadata {
             self.string_literals.insert(*id, string_lit.clone());
         }
 
-        for (id, iface_decl) in &other.ifaces {
-            if let Some(conflict) = self.ifaces.get(id) {
+        for (id, iface_decl) in &other.interface_defs {
+            if let Some(conflict) = self.interface_defs.get(id) {
                 Self::check_conflict(
                     "interface ID",
                     id,
@@ -144,21 +144,21 @@ impl Metadata {
                 );
             }
 
-            self.ifaces.insert(*id, iface_decl.clone());
+            self.interface_defs.insert(*id, iface_decl.clone());
         }
 
         for (impl_ty, other_impls) in &other.iface_impls {
             let impls = self
                 .iface_impls
                 .entry(impl_ty.clone())
-                .or_insert_with(|| BTreeMap::new());
+                .or_insert_with(Default::default);
 
-            for (iface_id, other_iface_impl) in other_impls {
+            for (iface_ref, other_iface_impl) in other_impls {
                 let iface_impl = impls
-                    .entry(*iface_id)
+                    .entry(iface_ref.clone())
                     .or_insert_with(|| InterfaceImpl::new(other_iface_impl.methods.len()));
 
-                let conflict_name = format!("method of interface {}", iface_id);
+                let conflict_name = format!("method of interface {}", iface_ref);
                 for (method_id, impl_func_id) in &other_iface_impl.methods {
                     if let Some(existing) = iface_impl.methods.get(method_id) {
                         if *existing != *impl_func_id {
@@ -327,7 +327,7 @@ impl Metadata {
                     .find_map(|(impl_ty, impls)| {
                         impls
                             .iter()
-                            .find_map(|(iface_id, iface_impl)| {
+                            .find_map(|(iface_ref, iface_impl)| {
                                 iface_impl.methods
                                     .iter()
                                     .find_map(|(method, impl_id)| {
@@ -335,12 +335,13 @@ impl Metadata {
                                             return None;
                                         }
 
-                                        let iface_name = iface_id
-                                            .to_interface_ptr_type()
+                                        let iface_name = iface_ref
+                                            .to_object_id()
+                                            .to_object_type()
                                             .to_pretty_string(formatter);
 
                                         let mut desc = format!("impl of {}.", iface_name);
-                                        let _ = formatter.format_iface_method(*iface_id, *method, &mut desc);
+                                        let _ = formatter.format_iface_method(iface_ref, *method, &mut desc);
                                         desc.push_str(" for ");
                                         let _ = formatter.format_type(impl_ty, &mut desc);
 
@@ -364,18 +365,18 @@ impl Metadata {
 
     pub fn is_defined(&self, ty: &Type) -> bool {
         let id = match ty {
-            Type::Struct(id)
-            | Type::Variant(id) => {
-                id.def_id
+            Type::Struct(type_ref)
+            | Type::Variant(type_ref) => {
+                type_ref.def_id
             }
 
             Type::Object(object_id) | Type::WeakObject(object_id) => {
                 match object_id {
                     ObjectID::Class(generic_id) => generic_id.def_id,
 
-                    ObjectID::Interface(id) => {
-                        return self.ifaces.contains_key(id);
-                    },
+                    ObjectID::Interface(iface_ref) => {
+                        return self.interface_defs.contains_key(&iface_ref.def_id);
+                    }
 
                     | ObjectID::Any
                     | ObjectID::AnyClosure(..)
@@ -534,8 +535,8 @@ impl MetadataSource for Metadata {
         self.function_info.get(&id)
     }
 
-    fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
-        self.ifaces
+    fn interface_defs(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
+        self.interface_defs
             .iter()
             .filter_map(|(id, iface_decl)| match iface_decl {
                 InterfaceDecl::Def(iface_def) => Some((*id, iface_def)),
@@ -543,14 +544,14 @@ impl MetadataSource for Metadata {
             })
     }
 
-    fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
-        match self.ifaces.get(&iface_id)? {
+    fn get_interface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
+        match self.interface_defs.get(&iface_id)? {
             InterfaceDecl::Def(def) => Some(def),
             InterfaceDecl::Forward(..) => None,
         }
     }
 
-    fn is_impl(&self, ty: &Type, iface_id: InterfaceID) -> bool {
+    fn is_impl(&self, ty: &Type, iface_id: &InterfaceRef) -> bool {
         let Some(impls) = self.iface_impls.get(ty) else {
             return false;
         };
@@ -558,23 +559,23 @@ impl MetadataSource for Metadata {
         impls.contains_key(&iface_id)
     }
 
-    fn type_impls(&self, ty: &Type) -> Vec<(InterfaceID, &InterfaceImpl)> {
+    fn type_impls(&self, ty: &Type) -> Vec<(&InterfaceRef, &InterfaceImpl)> {
         let Some(impls) = self.iface_impls.get(ty) else {
             return Vec::new();
         };
 
         impls
             .iter()
-            .map(|(iface_id, iface_impl)| (*iface_id, iface_impl))
+            .map(|(iface_ref, iface_impl)| (iface_ref, iface_impl))
             .collect()
     }
 
-    fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {
+    fn find_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {
         for (impl_type, impls) in &self.iface_impls {
-            for (iface_id, iface_impl) in impls {
+            for (iface_ref, iface_impl) in impls {
                 for (method_id, method_func_id) in &iface_impl.methods {
                     if *method_func_id == func_id {
-                        let iface = self.get_iface_def(*iface_id).unwrap();
+                        let iface = self.get_interface_def(iface_ref.def_id).unwrap();
                         let method = iface.get_method(*method_id).unwrap();
 
                         return Some(InterfaceMethodImplRef {
@@ -591,14 +592,14 @@ impl MetadataSource for Metadata {
     }
 
     /// Find the method instance that implements the given interface method for `ty`
-    fn find_virtual_impl(
+    fn get_interface_method(
         &self,
         ty: &Type,
-        iface_id: InterfaceID,
+        iface_ref: &InterfaceRef,
         method: MethodID,
     ) -> Option<FunctionID> {
         let type_impls = self.iface_impls.get(ty)?;
-        let iface_impl = type_impls.get(&iface_id)?;
+        let iface_impl = type_impls.get(iface_ref)?;
 
         iface_impl.methods.get(&method).cloned()
     }

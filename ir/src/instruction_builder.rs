@@ -7,15 +7,12 @@ mod object;
 
 use self::object::gen_class_object_dtor_body;
 use self::scope::ScopedBinding;
-use crate::BinOpInstruction;
 use crate::FieldID;
 use crate::FunctionID;
 use crate::FunctionSig;
-use crate::TypeRef;
 use crate::IRFormatter;
 use crate::Instruction;
 use crate::InstructionList;
-use crate::InterfaceID;
 use crate::Label;
 use crate::LocalID;
 use crate::MetadataSource;
@@ -23,9 +20,11 @@ use crate::MethodID;
 use crate::Ref;
 use crate::Type;
 use crate::TypeDefID;
+use crate::TypeRef;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::EXIT_LABEL;
+use crate::{BinOpInstruction, InterfaceRef};
 use dyn_array::gen_dyn_array_dtor_body;
 use dyn_array::new_array_from;
 use scope::LocalStack;
@@ -697,14 +696,14 @@ pub trait InstructionBuilder {
 
     fn vcall(
         &mut self,
-        iface_id: InterfaceID,
+        iface_ref: InterfaceRef,
         method: MethodID,
         self_arg: impl Into<Ref>,
         rest_args: impl IntoIterator<Item = Value>,
         out: Option<Ref>,
     ) {
         self.emit(Instruction::VirtualCall {
-            iface_id,
+            iface_ref,
             method,
             self_arg: self_arg.into(),
             rest_args: rest_args.into_iter().map(|arg| arg.into()).collect(),

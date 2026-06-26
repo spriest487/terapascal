@@ -128,7 +128,7 @@ impl ImportBuilder<'_> {
         let iface_impls: Vec<_> = self
             .type_impls(ty)
             .into_iter()
-            .map(|(iface_id, _)| iface_id)
+            .map(|(iface_id, _)| iface_id.clone())
             .collect();
 
         if iface_impls.is_empty() {
@@ -137,7 +137,7 @@ impl ImportBuilder<'_> {
 
         let mut types = Vec::with_capacity(iface_impls.len());
         for iface_id in iface_impls {
-            let iface_type = self.read_type(&iface_id.to_interface_ptr_type())?;
+            let iface_type = self.read_type(&iface_id.to_interface_type())?;
 
             types.push(TypeName::Unspecified(iface_type));
         }
@@ -371,8 +371,8 @@ impl ImportBuilder<'_> {
                 class_type
             }
 
-            ir::ObjectID::Interface(iface_id) => {
-                let iface_type = self.read_iface_type(*iface_id)?;
+            ir::ObjectID::Interface(iface_ref) => {
+                let iface_type = self.read_iface_type(iface_ref)?;
 
                 assert!(iface_type.as_iface().is_some());
                 assert!(self.types.contains_key(&object_id.to_object_type()));
@@ -517,13 +517,13 @@ impl ImportBuilder<'_> {
         None
     }
 
-    fn read_iface_type(&mut self, id: ir::InterfaceID) -> ImportResult<Type> {
+    fn read_iface_type(&mut self, iface_ref: &ir::InterfaceRef) -> ImportResult<Type> {
         let def = self
             .metadata()
-            .get_iface_def(id)
+            .get_interface_def(iface_ref.def_id)
             .cloned()
             .ok_or_else(|| {
-                let type_name = id.to_interface_ptr_type().to_pretty_string(self.metadata());
+                let type_name = iface_ref.to_pretty_string(self);
                 ImportError::MissingTypeDef(type_name)
             })?;
 
@@ -532,7 +532,7 @@ impl ImportBuilder<'_> {
 
         let iface_type = Type::interface(name.clone());
 
-        self.types.insert(id.to_interface_ptr_type(), iface_type.clone());
+        self.types.insert(iface_ref.to_interface_type(), iface_type.clone());
 
         let mut methods = Vec::with_capacity(def.methods.len());
 

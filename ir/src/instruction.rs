@@ -2,11 +2,11 @@ use crate::formatter::IRFormatter;
 use crate::formatter::RawFormatter;
 use crate::metadata::MethodID;
 use crate::ty::Type;
-use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
 use crate::val::LocalID;
 use crate::val::Ref;
 use crate::val::Value;
+use crate::InterfaceRef;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -77,7 +77,7 @@ pub enum Instruction {
     },
     VirtualCall {
         out: Option<Ref>,
-        iface_id: InterfaceID,
+        iface_ref: InterfaceRef,
         method: MethodID,
         self_arg: Ref,
         rest_args: Vec<Value>,

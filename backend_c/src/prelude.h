@@ -80,10 +80,10 @@ struct DynArrayClass {
 
 static void DynArrayBoundsCheck(OBJECT_PTR arr, int32_t index); 
 
-static bool IsImpl(struct Class* class, size_t iface) {
+static bool IsImpl(struct Class* class, size_t iface_type_id) {
     struct MethodTable* next = class->iface_methods;
     while (next) {
-        if (next->iface == iface) {
+        if (next->iface == iface_type_id) {
             return true;
         }
         next = next->next;

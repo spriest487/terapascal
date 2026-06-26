@@ -135,8 +135,9 @@ impl Marshaller {
             };
         }
 
-        for (iface_id, _) in metadata.interfaces() {
-            self.add_iface(iface_id)?;
+        for (iface_id, iface_def) in metadata.interface_defs() {
+            let iface_ref = ir::InterfaceRef::new(iface_id, iface_def.name.type_args.clone());
+            self.add_iface_type(&iface_ref)?;
         }
 
         for (ty, _) in metadata.type_info() {
@@ -228,9 +229,9 @@ impl Marshaller {
         Some((cached.clone(), *type_index))
     }
 
-    pub fn add_iface(&mut self, id: ir::InterfaceID) -> MarshalResult<TypeID> {
-        let iface_ty = id.to_interface_ptr_type();
-        
+    pub fn add_iface_type(&mut self, id: &ir::InterfaceRef) -> MarshalResult<TypeID> {
+        let iface_ty = id.to_interface_type();
+
         self.add_dyn_array_type(iface_ty)
     }
 

@@ -156,7 +156,7 @@ enum CallTarget {
         closure_ptr: ir::Value,
     },
     Virtual {
-        iface_id: ir::InterfaceID,
+        iface_id: ir::InterfaceRef,
         iface_method_id: ir::MethodID,
     },
 }

@@ -530,7 +530,7 @@ impl Vm {
     fn virtual_call_dyn_lookup(
         &self,
         self_val: &DynValue,
-        iface_id: ir::InterfaceID,
+        iface_ref: &ir::InterfaceRef,
         method: ir::MethodID,
     ) -> ExecResult<ir::FunctionID> {
         let self_ptr = self_val.as_pointer().ok_or_else(|| {
@@ -543,16 +543,16 @@ impl Vm {
         let instance_ty = object_header.id.to_type(self.marshaller())?;
 
         self.metadata()
-            .find_virtual_impl(&instance_ty, iface_id, method)
+            .get_interface_method(&instance_ty, iface_ref, method)
             .ok_or_else(|| {
-                let iface_ty = iface_id.to_interface_ptr_type();
+                let iface_ty = iface_ref.to_interface_type();
 
                 let mut err = String::new();
                 err.push_str("missing implementation of virtual method ");
 
                 let _ = self.metadata().format_type(&iface_ty, &mut err);
                 err.push('.');
-                let _ = self.metadata().format_iface_method(iface_id, method, &mut err);
+                let _ = self.metadata().format_iface_method(iface_ref, method, &mut err);
 
                 err.push_str(" for ");
 
@@ -1162,12 +1162,12 @@ impl Vm {
 
             ir::Instruction::VirtualCall {
                 out,
-                iface_id,
+                iface_ref,
                 method,
                 self_arg,
                 rest_args,
             } => {
-                self.exec_virtual_call(out.as_ref(), *iface_id, *method, &self_arg, rest_args)?
+                self.exec_virtual_call(out.as_ref(), iface_ref, *method, &self_arg, rest_args)?
             },
 
             ir::Instruction::IsType { out, a, value_type, is_type } => {
@@ -1957,7 +1957,7 @@ impl Vm {
     fn exec_virtual_call(
         &mut self,
         out: Option<&ir::Ref>,
-        iface_id: ir::InterfaceID,
+        iface_ref: &ir::InterfaceRef,
         method: ir::MethodID,
         self_arg: &ir::Ref,
         rest_args: &[ir::Value],
@@ -1972,17 +1972,17 @@ impl Vm {
         // if the self-arg is not an object, we are not actually doing a virtual call
         let (self_val, func) = if self_type.is_abstract() {
             let self_val = self.load(&self_arg)?;
-            let func = self.virtual_call_dyn_lookup(&self_val, iface_id, method)?;
+            let func = self.virtual_call_dyn_lookup(&self_val, iface_ref, method)?;
 
             (self_val, func)
         } else {
             let func = self
                 .metadata()
-                .find_virtual_impl(&self_type, iface_id, method)
+                .get_interface_method(&self_type, iface_ref, method)
                 .ok_or_else(|| {
                     ExecError::illegal_state(format!(
                         "missing implementation of {} for {}",
-                        self.metadata().iface_name(iface_id),
+                        self.metadata().iface_name(iface_ref),
                         self_type.to_pretty_string(self.metadata())
                     ))
                 })?;
@@ -2065,9 +2065,9 @@ impl Vm {
         let is = match is_object_id {
             ir::ObjectID::Any => true,
 
-            ir::ObjectID::Interface(iface_id) => {
+            ir::ObjectID::Interface(iface_ref) => {
                 let object_type = object_header.id.to_type(self.marshaller())?;
-                self.metadata().is_impl(&object_type, *iface_id)
+                self.metadata().is_impl(&object_type, iface_ref)
             }
 
             ir::ObjectID::Class(class_id) => {
@@ -2731,8 +2731,8 @@ impl Vm {
         let type_name_string = self.load_string_lit(type_info.name)?;
 
         let ty_tags_loc = match ty {
-            ir::Type::Object(ir::ObjectID::Interface(iface_id)) => {
-                Some(ir::TagLocation::Interface(*iface_id))
+            ir::Type::Object(ir::ObjectID::Interface(iface_ref)) => {
+                Some(ir::TagLocation::Interface(iface_ref.def_id))
             }
 
             ir::Type::Object(ir::ObjectID::Class(id))

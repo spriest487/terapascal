@@ -178,8 +178,9 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         translate_name(name, self.library)
     }
 
-    pub fn translate_iface(&mut self, iface_def: &typ::ast::InterfaceDecl) -> ir::InterfaceDef {
-        translate_iface(iface_def, self.library)
+    #[expect(unused)]
+    pub fn translate_iface(&mut self, id: ir::InterfaceID, iface_def: &typ::ast::InterfaceDecl) -> ir::InterfaceDef {
+        translate_iface(id, iface_def, self.library)
     }
 
     pub fn translate_type(&mut self, src_ty: &typ::Type) -> ir::Type {

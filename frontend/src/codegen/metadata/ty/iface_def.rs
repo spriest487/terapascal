@@ -4,6 +4,7 @@ use crate::codegen::typ;
 use crate::codegen::ir;
 
 pub fn translate_iface(
+    id: ir::InterfaceID,
     iface_def: &typ::ast::InterfaceDecl,
     lib: &mut LibraryBuilder,
 ) -> ir::InterfaceDef {
@@ -11,25 +12,22 @@ pub fn translate_iface(
     
     let name = translate_name(&iface_def.name, lib);
 
-    // it needs to be declared to reference its own ID in the Self type
-    let id = lib.metadata_mut().declare_iface(&name);
+    let self_type = id.to_interface_type(name.type_args.clone());
     
     let mut methods = Vec::with_capacity(iface_def.methods.len());
     
     for def_method in &iface_def.methods {
-        let self_ty = ir::Type::Object(ir::ObjectID::Interface(id));
-
         let method = ir::Method {
             name: def_method.ident().to_string(),
             return_ty: match def_method.decl.result_ty.ty() {
-                typ::Type::MethodSelf => self_ty.clone(),
+                typ::Type::MethodSelf => self_type.clone(),
                 return_ty => lib.translate_type(return_ty),
             },
             params: def_method
                 .decl
                 .params()
                 .map(|(param, _)| match param.ty.ty() {
-                    typ::Type::MethodSelf => self_ty.clone(),
+                    typ::Type::MethodSelf => self_type.clone(),
                     param_ty => lib.translate_type(param_ty),
                 })
                 .collect(),
@@ -38,6 +36,5 @@ pub fn translate_iface(
         methods.push(method);
     }
 
-    ir::InterfaceDef::new(name, methods)
-        .with_tags(tags)
+    ir::InterfaceDef::new(name, methods).with_tags(tags)
 }

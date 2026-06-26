@@ -3,7 +3,7 @@ use crate::FunctionIdentity;
 use crate::FunctionRef;
 use crate::GlobalRef;
 use crate::IRFormatter;
-use crate::InterfaceID;
+use crate::InterfaceRef;
 use crate::MetadataSource;
 use crate::MethodID;
 use crate::ObjectID;
@@ -170,13 +170,14 @@ impl<T: MetadataSource> IRFormatter for T {
                         write!(f, "{}", type_def_id.to_pretty_string(self))?;
                     }
                     TagLocation::Interface(iface_id) => {
-                        write!(f, "{}", iface_id.to_interface_ptr_type().to_pretty_string(self))?;
+                        write!(f, "{}", iface_id.to_object_id([]).to_object_type().to_pretty_string(self))?;
                     }
                     TagLocation::Method { type_id, method_index } => {
                         self.format_type_def_method(*type_id, MethodID(*method_index), f)?;
                     }
                     TagLocation::InterfaceMethod { iface_id, method_index } => {
-                        self.format_iface_method(*iface_id, MethodID(*method_index), f)?;
+                        let iface_ref = InterfaceRef::new(*iface_id, []);
+                        self.format_iface_method(&iface_ref, MethodID(*method_index), f)?;
                     }
                     TagLocation::Function(id) => {
                         write!(f, "{}", FunctionRef::new(*id).to_pretty_string(self))?;
@@ -207,7 +208,7 @@ impl<T: MetadataSource> IRFormatter for T {
             },
 
             None => {
-                match self.find_iface_impl(r.id) {
+                match self.find_impl(r.id) {
                     Some(impl_ref) => {
                         let iface_pretty_name = impl_ref.interface.to_pretty_string(self);
                         write!(f, "{}.{} impl for ", iface_pretty_name, impl_ref.method_name)?;
@@ -253,45 +254,13 @@ impl<T: MetadataSource> IRFormatter for T {
         Ok(())
     }
 
-    fn format_type_def_method(
-        &self,
-        def_id: TypeDefID,
-        method: MethodID,
-        f: &mut dyn fmt::Write,
-    ) -> fmt::Result {
-        let Some(name) = self
-            .functions()
-            .find_map(|(_id, m)| {
-                let (declaring_type_ref, name) = match &m.identity {
-                    FunctionIdentity::Method { declaring_type, name, .. } => {
-                        (declaring_type.definition_ref()?, name) 
-                    }
-
-                    FunctionIdentity::Destructor { declaring_type, name, .. } => {
-                        (declaring_type.definition_ref()?, name)
-                    }
-
-                    _ => {
-                        return None;
-                    }
-                };
-
-                (declaring_type_ref.def_id == def_id).then_some(name)
-            }) 
-        else {
-            return RawFormatter.format_type_def_method(def_id, method, f);
-        };
-        
-        write!(f, "{}", name)
-    }
-
     fn format_iface_method(
         &self,
-        iface_id: InterfaceID,
+        iface_id: &InterfaceRef,
         method: MethodID,
         f: &mut dyn fmt::Write,
     ) -> fmt::Result {
-        let iface = match self.get_iface_def(iface_id) {
+        let iface = match self.get_interface_def(iface_id.def_id) {
             Some(iface) => iface,
             None => return RawFormatter.format_iface_method(iface_id, method, f),
         };
@@ -304,6 +273,38 @@ impl<T: MetadataSource> IRFormatter for T {
         };
 
         write!(f, "{}", method.name)
+    }
+
+    fn format_type_def_method(
+        &self,
+        def_id: TypeDefID,
+        method: MethodID,
+        f: &mut dyn fmt::Write,
+    ) -> fmt::Result {
+        let Some(name) = self
+            .functions()
+            .find_map(|(_id, m)| {
+                let (declaring_type_ref, name) = match &m.identity {
+                    FunctionIdentity::Method { declaring_type, name, .. } => {
+                        (declaring_type.definition_ref()?, name)
+                    }
+
+                    FunctionIdentity::Destructor { declaring_type, name, .. } => {
+                        (declaring_type.definition_ref()?, name)
+                    }
+
+                    _ => {
+                        return None;
+                    }
+                };
+
+                (declaring_type_ref.def_id == def_id).then_some(name)
+            })
+        else {
+            return RawFormatter.format_type_def_method(def_id, method, f);
+        };
+
+        write!(f, "{}", name)
     }
 
     fn format_variant_case(&self, of_ty: &Type, tag: usize, f: &mut dyn fmt::Write) -> fmt::Result {

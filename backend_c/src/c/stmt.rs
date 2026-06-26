@@ -610,7 +610,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
 
             ir::Instruction::VirtualCall {
                 out,
-                iface_id,
+                iface_ref,
                 method,
                 self_arg,
                 rest_args,
@@ -636,19 +636,22 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                         .map(|arg| Expr::translate_val(arg, self)),
                 );
 
+                let interface_type = iface_ref.to_interface_type();
+                let iface_type_id = self.create_type_id(&interface_type);
+
                 // virtual call instructions may have a known type, in which case we need to
                 // devirtualize them, since the type may not actually support virtual calls -
                 // e.g. methods called in a generic function where the self type is a value type
                 let method_func = if self_type.is_abstract() {
-                    Expr::Function(FunctionName::Method(*iface_id, *method))
+                    Expr::Function(FunctionName::Method(iface_type_id, *method))
                 } else {
                     let func = self.unit
                         .metadata
-                        .find_virtual_impl(&self_type, *iface_id, *method)
+                        .get_interface_method(&self_type, iface_ref, *method)
                         .unwrap_or_else(|| {
                             panic!(
                                 "missing implementation of {} for {}",
-                                self.unit.metadata.iface_name(*iface_id),
+                                self.unit.metadata.iface_name(iface_ref),
                                 self_type.to_pretty_string(self.unit.metadata)
                             )
                         });
@@ -878,10 +881,11 @@ impl<'a, 'b> CBuilder<'a, 'b> {
 
                 ir::ObjectID::Interface(iface_id) => {
                     let is_impl_func = Expr::Function(FunctionName::Builtin(BuiltinName::IsImpl));
+                    let type_id = self.create_type_id(&iface_id.to_interface_type());
 
                     Expr::call(
                         is_impl_func,
-                        vec![actual_class_ptr, Expr::LitInt(iface_id.0 as i128)],
+                        vec![actual_class_ptr, type_id.as_lit_int()],
                     )
                 },
             };

@@ -1,7 +1,7 @@
 ﻿use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::vars::ConstInfo;
-use crate::FunctionID;
+use crate::{FunctionID, InterfaceRef};
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -58,26 +58,35 @@ pub trait MetadataSource : Sized {
     fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)>;
     fn get_function_info(&self, id: FunctionID) -> Option<&FunctionInfo>;
 
-    fn interfaces(&self) -> impl Iterator<Item = (InterfaceID, &InterfaceDef)>;
-    fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef>;
+    fn interface_defs(&self) -> impl Iterator<Item = (InterfaceID, &InterfaceDef)>;
+    fn get_interface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef>;
 
-    fn is_impl(&self, ty: &Type, iface_id: InterfaceID) -> bool;
-    fn type_impls(&self, ty: &Type) -> Vec<(InterfaceID, &InterfaceImpl)>;
-    fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>>;
-    fn find_virtual_impl(&self, impl_type: &Type, iface_id: InterfaceID, method_id: MethodID) -> Option<FunctionID>;
+    fn is_impl(&self, ty: &Type, iface_ref: &InterfaceRef) -> bool;
+    fn type_impls(&self, ty: &Type) -> Vec<(&InterfaceRef, &InterfaceImpl)>;
+    fn find_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>>;
+    fn get_interface_method(&self, impl_type: &Type, iface_ref: &InterfaceRef, method_id: MethodID) -> Option<FunctionID>;
 
     fn find_iface(&self, name: &NamePath) -> Option<InterfaceID> {
-        self.interfaces()
+        self.interface_defs()
             .filter_map(|(id, def)| {
                 (def.name == *name).then_some(id)
             })
             .next()
     }
 
-    fn iface_name(&self, iface_id: InterfaceID) -> String {
-        self.get_iface_def(iface_id)
-            .map(|def| def.name.to_pretty_string(self.as_formatter()))
-            .unwrap_or_else(|| format!("interface({})", iface_id))
+    fn iface_name(&self, iface_ref: &InterfaceRef) -> String {
+        self.get_interface_def(iface_ref.def_id)
+            .map(|def| {
+                if iface_ref.args != *def.name.type_args {
+                    let mut instance_name = def.name.clone();
+                    instance_name.type_args = iface_ref.args.clone();
+
+                    instance_name.to_pretty_string(self.as_formatter())
+                } else {
+                    def.name.to_pretty_string(self.as_formatter())
+                }
+            })
+            .unwrap_or_else(|| format!("interface({})", iface_ref))
     }
 
     fn methods(&self) -> impl Iterator<Item = &MethodInfo>;
@@ -100,7 +109,7 @@ pub trait MetadataSource : Sized {
         });
 
         let iface_tags = self
-            .interfaces()
+            .interface_defs()
             .map(|(id, iface_def)| (TagLocation::Interface(id), iface_def.tags.as_slice()));
 
         let func_tags = self
@@ -109,9 +118,11 @@ pub trait MetadataSource : Sized {
 
         let method_tags = self.methods().map(|method_info| {
             let loc = match &method_info.instance_ty {
-                Type::Object(ObjectID::Interface(iface_id)) => TagLocation::InterfaceMethod {
-                    iface_id: *iface_id,
-                    method_index: method_info.index,
+                Type::Object(ObjectID::Interface(iface_id)) => {
+                    TagLocation::InterfaceMethod {
+                        iface_id: iface_id.def_id,
+                        method_index: method_info.index,
+                    }
                 },
 
                 Type::Object(ObjectID::Class(type_id))
@@ -214,7 +225,9 @@ pub trait MetadataSource : Sized {
         match id {
             ObjectID::Any => Cow::Borrowed("any"),
 
-            ObjectID::Interface(iface_id) => Cow::Owned(self.iface_name(*iface_id)),
+            ObjectID::Interface(iface_ref) => {
+                Cow::Owned(self.iface_name(iface_ref))
+            },
 
             ObjectID::AnyClosure(sig) => {
                 let closure_name = format!("closure of {}", self.pretty_func_sig(sig));

@@ -2,7 +2,6 @@ use crate::ast;
 use crate::ast::FunctionParamMod;
 use crate::ast::IdentPath;
 use crate::codegen::build_func_def;
-use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::translate_sig;
 use crate::codegen::FunctionInstance;
@@ -350,10 +349,10 @@ impl<'a> LibraryBuilder<'a> {
         let impl_key = FunctionDeclKey::Method(impl_method.clone());
         let impl_func = self.instantiate_func(&impl_key);
 
-        let iface_ty_name = virtual_key
-            .iface_ty
-            .full_name()
-            .expect("interface type must not be unnamed");
+        let iface_type = self.translate_type(&virtual_key.iface_ty);
+        let ir::Type::Object(ir::ObjectID::Interface(iface_ref)) = iface_type else {
+            panic!("instantiate_virtual_method: interface type {} did not translate to an interface", virtual_key.iface_ty);
+        };
 
         let iface_method_decl = virtual_key.iface_ty
             .get_method(virtual_key.iface_method_index, &self.root_ctx)
@@ -363,23 +362,7 @@ impl<'a> LibraryBuilder<'a> {
 
         let method_name = iface_method_decl.func_decl.ident().to_string();
 
-        let iface_id = self
-            .find_iface_decl(&iface_ty_name)
-            .unwrap_or_else(|| {
-                let src_iface_def = self
-                    .root_ctx
-                    .instantiate_iface_def(&iface_ty_name)
-                    .unwrap_or_else(|_err| panic!(
-                        "instantiate_virtual_method: failed to get interface def {} referenced in metadata",
-                        iface_ty_name,
-                    ));
-
-                let mut builder = IRBuilder::new(self);
-                let iface_meta = builder.translate_iface(&src_iface_def);
-                self.metadata.define_iface(iface_meta)
-            });
-
-        self.metadata.impl_method(iface_id, self_ty, method_name, impl_func.id);
+        self.metadata.impl_method(iface_ref, self_ty, method_name, impl_func.id);
 
         let key = FunctionDeclKey::VirtualMethod(virtual_key.clone());
 

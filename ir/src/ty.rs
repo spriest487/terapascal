@@ -1,13 +1,12 @@
 pub use crate::metadata::ids::FieldID;
 pub use crate::metadata::ids::ObjectID;
-use crate::ty_decl::InterfaceID;
 use crate::ty_decl::TypeDefID;
-use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::MetadataSource;
 use crate::TagLocation;
 use crate::TypeRef;
 use crate::Value;
+use crate::{FunctionSig, InterfaceRef};
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -129,15 +128,10 @@ impl Type {
             _ => None,
         }
     }
-    
-    pub fn iface_ptr(id: InterfaceID) -> Self {
-        Type::Object(ObjectID::Interface(id))
-    }
 
-    pub fn as_iface(&self) -> Option<InterfaceID> {
-        match self {
-            Type::Object(ObjectID::Interface(id)) => Some(*id),
-            Type::WeakObject(ObjectID::Interface(id)) => Some(*id),
+    pub fn as_iface(&self) -> Option<&InterfaceRef> {
+        match self.as_object()? {
+            ObjectID::Interface(iface_ref) => Some(iface_ref),
             _ => None,
         }
     }
@@ -272,8 +266,8 @@ impl Type {
                 Some(TagLocation::TypeDef(id.def_id))
             },
 
-            | Type::Object(ObjectID::Interface(id)) => {
-                Some(TagLocation::Interface(*id))
+            | Type::Object(ObjectID::Interface(iface_ref)) => {
+                Some(TagLocation::Interface(iface_ref.def_id))
             },
 
             | _ => None,

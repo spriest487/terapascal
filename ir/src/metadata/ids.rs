@@ -137,12 +137,62 @@ impl fmt::Display for TypeRef {
 pub struct InterfaceID(pub usize);
 
 impl InterfaceID {
-    pub fn to_interface_ptr_type(self) -> Type {
-        ObjectID::Interface(self).to_object_type()
+    pub fn to_object_id(self, args: impl IntoIterator<Item=Type>) -> ObjectID {
+        ObjectID::Interface(InterfaceRef::new(self, args))
+    }
+    
+    pub fn to_interface_type(&self, args: impl IntoIterator<Item=Type>) -> Type {
+        self.to_object_id(args).to_object_type()
     }
 
-    pub fn to_weak_interface_ptr_type(self) -> Type {
-        ObjectID::Interface(self).to_weak_object_type()
+    pub fn to_interface_weak_type(&self, args: impl IntoIterator<Item=Type>) -> Type {
+        self.to_object_id(args).to_weak_object_type()
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct InterfaceRef {
+    pub def_id: InterfaceID,
+    pub args: Vec<Type>,
+}
+
+impl InterfaceRef {
+    pub fn new(id: InterfaceID, args: impl IntoIterator<Item=Type>) -> Self {
+        Self {
+            def_id: id,
+            args: args.into_iter().collect(),
+        }
+    }
+
+    pub fn to_object_id(&self) -> ObjectID {
+        ObjectID::Interface(self.clone())
+    }
+
+    pub fn to_interface_type(&self) -> Type {
+        self.to_object_id().to_object_type()
+    }
+
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
+        self.to_interface_type().to_pretty_string(formatter)
+    }
+}
+
+impl fmt::Display for InterfaceRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.def_id)?;
+
+        if !self.args.is_empty() {
+            write!(f, "[")?;
+            for (i, arg) in self.args.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{arg}")?;
+            }
+            write!(f, "]")?;
+        }
+
+        Ok(())
     }
 }
 
@@ -155,7 +205,7 @@ pub enum ObjectID {
     Class(Rc<TypeRef>),
 
     // instance of an unknown class that implements the interface with this interface ID
-    Interface(InterfaceID),
+    Interface(InterfaceRef),
 
     // closure of an unknown structure that calls the function type with this virtual sig
     AnyClosure(Rc<FunctionSig>),
@@ -202,7 +252,7 @@ impl fmt::Display for ObjectID {
         match self {
             ObjectID::Any => write!(f, "any"),
             ObjectID::Class(class_id) => write!(f, "{}", class_id),
-            ObjectID::Interface(iface_id) => write!(f, "{}", iface_id),
+            ObjectID::Interface(iface_ref) => write!(f, "{}", iface_ref),
             ObjectID::AnyClosure(closure_id) => write!(f, "{}", closure_id),
             ObjectID::Array(element_type) => write!(f, "array of {}", element_type),
             ObjectID::Box(element_type) => write!(f, "box of {}", element_type),

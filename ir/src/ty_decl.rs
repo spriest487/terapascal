@@ -3,6 +3,12 @@ mod variant;
 mod interface;
 mod tags;
 
+pub use crate::metadata::ids::TypeDefID;
+pub use interface::*;
+pub use r#struct::*;
+pub use tags::*;
+pub use variant::*;
+
 use crate::FunctionID;
 use crate::FunctionRef;
 use crate::FunctionSig;
@@ -13,17 +19,10 @@ use crate::RawFormatter;
 use crate::Ref;
 use crate::TagInfo;
 use crate::Type;
-pub use interface::*;
-pub use r#struct::*;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
 use std::rc::Rc;
-pub use tags::*;
-pub use variant::*;
-
-pub use crate::metadata::ids::InterfaceID;
-pub use crate::metadata::ids::TypeDefID;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum StructIdentity {

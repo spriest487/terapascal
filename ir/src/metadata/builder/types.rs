@@ -1,4 +1,3 @@
-use crate::FunctionID;
 use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceID;
@@ -15,8 +14,8 @@ use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
 use crate::VariantDef;
+use crate::{FunctionID, InterfaceRef};
 use linked_hash_map::Entry;
-use std::collections::BTreeMap;
 use std::rc::Rc;
 
 impl MetadataBuilder {
@@ -161,7 +160,7 @@ impl MetadataBuilder {
     }
 
     pub fn declare_iface(&mut self, name: &NamePath) -> InterfaceID {
-        let existing = self.metadata.ifaces.iter().find_map(|(id, decl)| match decl {
+        let existing = self.metadata.interface_defs.iter().find_map(|(id, decl)| match decl {
             InterfaceDecl::Forward(decl_name) if decl_name == name => Some(*id),
             InterfaceDecl::Def(iface) if iface.name == *name => Some(*id),
             _ => None,
@@ -172,7 +171,7 @@ impl MetadataBuilder {
         }
 
         let id = self.next_iface_id;
-        self.metadata.ifaces.insert(id, InterfaceDecl::Forward(name.clone()));
+        self.metadata.interface_defs.insert(id, InterfaceDecl::Forward(name.clone()));
         self.next_iface_id.0 += 1;
         id
     }
@@ -180,71 +179,66 @@ impl MetadataBuilder {
     pub fn define_iface(&mut self, iface_def: InterfaceDef) -> InterfaceID {
         let id = self.declare_iface(&iface_def.name);
 
-        self.metadata.ifaces.insert(id, InterfaceDecl::Def(iface_def));
+        self.metadata.interface_defs.insert(id, InterfaceDecl::Def(iface_def));
 
         id
     }
 
     pub fn get_iface_def(&self, id: InterfaceID) -> Option<&InterfaceDef> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_iface_def(id))
+        self.find_in_self_or_refs(move |metadata| metadata.get_interface_def(id))
     }
 
-    pub fn find_iface(&self, name: &NamePath) -> Option<InterfaceID> {
+    pub fn find_iface_def(&self, name: &NamePath) -> Option<InterfaceID> {
         self.find_in_self_or_refs(move |metadata| metadata
-            .interfaces()
+            .interface_defs()
             .find_map(|(id, def)| {
                 (def.name == *name).then_some(id)
             }))
     }
 
-    pub fn declare_empty_impl(&mut self, iface_id: InterfaceID, implementor: Type) {
+    pub fn declare_empty_impl(&mut self, iface_ref: InterfaceRef, implementor: Type) {
         let impl_ty_entry = self.metadata.iface_impls
             .entry(implementor)
-            .or_insert_with(|| BTreeMap::new());
+            .or_insert_with(Default::default);
 
-        impl_ty_entry.entry(iface_id)
-            .or_insert_with(|| InterfaceImpl::new(0));
+        impl_ty_entry.entry(iface_ref).or_insert_with(|| InterfaceImpl::new(0));
     }
 
     pub fn impl_method(
         &mut self,
-        iface_id: InterfaceID,
+        iface_ref: InterfaceRef,
         for_ty: Type,
         method_name: impl Into<String>,
         func_id: FunctionID,
     ) {
         let method_name = method_name.into();
         
-        let iface_def = self
-            .interfaces()
-            .find_map(|(id, def)| (id == iface_id).then(|| {
-                def
-            }));
+        let iface_def = self.get_iface_def(iface_ref.def_id);
         
         match iface_def {
             Some(iface_def) => {
                 let index = iface_def
                     .method_index(&method_name)
-                    .unwrap_or_else(|| panic!("expected {} (interface {}) to contain method {}", iface_def.name, iface_id, method_name));
+                    .unwrap_or_else(|| panic!("expected {} (interface {}) to contain method {}", iface_def.name, iface_ref, method_name));
 
-                self.add_impl(for_ty, iface_id, index, func_id);
+                self.add_impl(for_ty, iface_ref, index, func_id);
             },
 
             None => panic!(
                 "trying to impl method {} for missing interface {}",
-                method_name, iface_id
+                method_name, iface_ref
             ),
         }
     }
 
     fn add_impl(&mut self,
         implementor: Type,
-        iface_id: InterfaceID,
+        iface_ref: InterfaceRef,
         method_id: MethodID,
         func_id: FunctionID,
     ) {
-        let Some(def) = self.get_iface_def(iface_id) else {
-            panic!("add_impl: missing definition for interface {iface_id}");
+        let Some(def) = self.get_iface_def(iface_ref.def_id) else {
+            panic!("add_impl: missing definition for interface {}", iface_ref.def_id);
         };
 
         assert!(method_id.0 < def.methods.len());
@@ -253,17 +247,17 @@ impl MetadataBuilder {
         
         let type_impls = self.metadata.iface_impls
             .entry(implementor.clone())
-            .or_insert_with(|| BTreeMap::new());
+            .or_insert_with(Default::default);
 
         let impl_entry = type_impls
-            .entry(iface_id)
+            .entry(iface_ref.clone())
             .or_insert_with(|| InterfaceImpl::new(methods_len));
 
         assert!(
             !impl_entry.methods.contains_key(&method_id),
             "adding duplicate impl ({}) of iface {}/method {} for {}, already defined as {}",
             func_id,
-            iface_id,
+            iface_ref,
             method_id.0,
             implementor,
             impl_entry.methods[&method_id],
@@ -272,7 +266,7 @@ impl MetadataBuilder {
         impl_entry.methods.insert(method_id, func_id);
     }
     
-    pub fn declare_iface_impl(&mut self, iface_id: InterfaceID, self_ty: Type) {
-        self.declare_empty_impl(iface_id, self_ty);
+    pub fn declare_iface_impl(&mut self, iface_ref: InterfaceRef, self_ty: Type) {
+        self.declare_empty_impl(iface_ref, self_ty);
     }
 }

@@ -68,7 +68,7 @@ impl MetadataBuilder {
             if let Some(max_id) = ref_metadata.type_decls.keys().max() {
                 next_type_id.0 = usize::max(max_id.0 + 1, next_type_id.0);
             }
-            if let Some(max_id) = ref_metadata.ifaces.keys().max() {
+            if let Some(max_id) = ref_metadata.interface_defs.keys().max() {
                 next_iface_id.0 = usize::max(max_id.0 + 1, next_iface_id.0);
             }
             if let Some(max_id) = ref_metadata.variables.keys().max() {

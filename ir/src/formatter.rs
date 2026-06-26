@@ -2,15 +2,13 @@ use crate::instruction::BinOpInstruction;
 use crate::instruction::Instruction;
 use crate::metadata::MethodID;
 use crate::ty::FieldID;
-use crate::ty::ObjectID;
 use crate::ty::Type;
-use crate::ty_decl::InterfaceID;
 use crate::val::Ref;
 use crate::val::Value;
-use crate::FunctionRef;
 use crate::NamePath;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
+use crate::{FunctionRef, InterfaceRef};
 use std::fmt;
 use std::write;
 
@@ -130,7 +128,7 @@ pub trait IRFormatter {
 
             Instruction::VirtualCall {
                 out,
-                iface_id,
+                iface_ref,
                 method,
                 self_arg,
                 rest_args,
@@ -145,10 +143,10 @@ pub trait IRFormatter {
 
                 self.format_ref(self_arg, f)?;
                 write!(f, " as ")?;
-                self.format_type(&Type::Object(ObjectID::Interface(*iface_id)), f)?;
+                self.format_type(&iface_ref.to_object_id().to_object_type(), f)?;
 
                 write!(f, ").")?;
-                self.format_iface_method(*iface_id, *method, f)?;
+                self.format_iface_method(iface_ref, *method, f)?;
                 write!(f, "(")?;
 
                 for (i, arg) in rest_args.iter().enumerate() {
@@ -317,7 +315,7 @@ pub trait IRFormatter {
 
     fn format_iface_method(
         &self,
-        iface: InterfaceID,
+        iface: &InterfaceRef,
         method: MethodID,
         f: &mut dyn fmt::Write,
     ) -> fmt::Result;
@@ -422,7 +420,7 @@ impl IRFormatter for RawFormatter {
 
     fn format_iface_method(
         &self,
-        _iface_id: InterfaceID,
+        _iface_id: &InterfaceRef,
         method: MethodID,
         f: &mut dyn fmt::Write,
     ) -> fmt::Result {

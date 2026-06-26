@@ -695,7 +695,7 @@ impl<'a> LibraryBuilder<'a> {
         let name = translate_name(iface_name, self);
 
         self.metadata
-            .interfaces()
+            .interface_defs()
             .find_map(|(id, decl)| {
                 if decl.name == name {
                     Some(id)
@@ -715,8 +715,8 @@ impl<'a> LibraryBuilder<'a> {
                 panic!("failed to retrieve implementation list for type {}: {}", src_self_ty, err)
             });
 
-        for iface_ty in &ifaces {
-            let iface_methods: Vec<_> = iface_ty
+        for src_iface_type in &ifaces {
+            let iface_methods: Vec<_> = src_iface_type
                 .methods(&self.root_ctx)
                 .unwrap()
                 .into_iter()
@@ -732,7 +732,7 @@ impl<'a> LibraryBuilder<'a> {
                 let impl_index = self.find_method_index(&src_self_ty, &method_name, &impl_sig);
 
                 let virtual_key = VirtualMethodKey {
-                    iface_ty: iface_ty.clone(),
+                    iface_ty: src_iface_type.clone(),
                     iface_method_index,
 
                     impl_method: MethodDeclKey {
@@ -744,12 +744,12 @@ impl<'a> LibraryBuilder<'a> {
                 self.instantiate_func(&FunctionDeclKey::VirtualMethod(virtual_key));
             }
 
-            let iface_name = iface_ty.full_name()
-                .expect("interface types must have names");
-            let iface_id = self.find_iface_decl(iface_name.as_ref())
-                .expect("implemented interface type must already be declared");
+            let iface_type = self.translate_type(src_iface_type);
+            let Some(iface_ref) = iface_type.as_iface().cloned() else {
+                panic!("gen_iface_impls: interface type {} did not translate to an interface", src_iface_type);
+            };
 
-            self.metadata_mut().declare_iface_impl(iface_id, self_ty.clone());
+            self.metadata_mut().declare_iface_impl(iface_ref, self_ty.clone());
         }
     }
 
@@ -1076,33 +1076,34 @@ impl<'a> LibraryBuilder<'a> {
 
         let def_name = Arc::new(src_name.to_generic_name());
         let def_path = translate_name(&def_name, self);
+        let instance_path = translate_name(src_name, self);
 
-        match self.metadata.find_iface(&def_path) {
+        match self.metadata.find_iface_def(&def_path) {
             Some(id) => {
-                let iface_type = id.to_interface_ptr_type();
-                self.add_cached_type(src_type.clone(), iface_type.clone());
-                iface_type
+                let instance_type = id.to_interface_type(instance_path.type_args.clone());
+
+                self.add_cached_type(src_type.clone(), instance_type.clone());
+                instance_type
             }
 
             None => {
-                let iface_id = self.metadata.declare_iface(&def_path);
-                let iface_type = iface_id.to_interface_ptr_type();
+                let decl_id = self.metadata.declare_iface(&instance_path);
 
-                let src_def_type = Type::interface(def_name.clone());
-                self.add_cached_type(src_def_type.clone(), iface_type.clone());
+                let src_def_type = Type::interface(src_name.clone());
+                let instance_type = decl_id.to_interface_type(instance_path.type_args.clone());
+
+                self.add_cached_type(src_def_type.clone(), instance_type.clone());
+                self.defined_types.insert(src_def_type);
 
                 let src_def = self.root_ctx
                     .instantiate_iface_def(&def_name)
                     .unwrap_or_else(|err| panic!("translate_iface_type: {err}"));
 
-                let def = translate_iface(&src_def, self);
+                let def = translate_iface(decl_id, &src_def, self);
                 let def_id = self.metadata.define_iface(def);
+                assert_eq!(def_id, decl_id);
 
-                assert_eq!(def_id, iface_id);
-
-                self.defined_types.insert(src_def_type);
-
-                iface_type
+                instance_type
             }
         }
     }

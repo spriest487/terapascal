@@ -1,5 +1,5 @@
 use crate::metadata::vars::ConstInfo;
-use crate::FunctionID;
+use crate::{FunctionID, InterfaceRef};
 use crate::FunctionInfo;
 use crate::IRFormatter;
 use crate::InterfaceDef;
@@ -101,21 +101,21 @@ impl<T: MetadataCollection> MetadataSource for T {
         self.find_in_self_or_refs(move |metadata| metadata.get_function_info(id))
     }
 
-    fn interfaces(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
-        self.iter_in_self_or_refs(move |metadata| metadata.interfaces())
+    fn interface_defs(&self) -> impl Iterator<Item=(InterfaceID, &InterfaceDef)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.interface_defs())
     }
 
-    fn get_iface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
-        self.find_in_self_or_refs(move |metadata| metadata.get_iface_def(iface_id))
+    fn get_interface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_interface_def(iface_id))
     }
 
-    fn is_impl(&self, ty: &Type, iface_id: InterfaceID) -> bool {
+    fn is_impl(&self, ty: &Type, iface_ref: &InterfaceRef) -> bool {
         self.find_in_self_or_refs(
-            move |metadata| metadata.is_impl(ty, iface_id).then_some(true)
+            move |metadata| metadata.is_impl(ty, iface_ref).then_some(true)
         ).unwrap_or(false)
     }
 
-    fn type_impls(&self, ty: &Type) -> Vec<(InterfaceID, &InterfaceImpl)> {
+    fn type_impls(&self, ty: &Type) -> Vec<(&InterfaceRef, &InterfaceImpl)> {
         let mut impls = Vec::new();
         for metadata in self.all_metadata() {
             impls.extend(metadata.type_impls(ty));
@@ -123,12 +123,12 @@ impl<T: MetadataCollection> MetadataSource for T {
         impls
     }
 
-    fn find_iface_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {
-        self.find_in_self_or_refs(move |metadata| metadata.find_iface_impl(func_id))
+    fn find_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {
+        self.find_in_self_or_refs(move |metadata| metadata.find_impl(func_id))
     }
 
-    fn find_virtual_impl(&self, impl_type: &Type, iface_id: InterfaceID, method_id: MethodID) -> Option<FunctionID> {
-        self.find_in_self_or_refs(move |metadata| metadata.find_virtual_impl(impl_type, iface_id, method_id))
+    fn get_interface_method(&self, impl_type: &Type, iface_ref: &InterfaceRef, method_id: MethodID) -> Option<FunctionID> {
+        self.find_in_self_or_refs(move |metadata| metadata.get_interface_method(impl_type, iface_ref, method_id))
     }
 
     fn methods(&self) -> impl Iterator<Item=&MethodInfo> {

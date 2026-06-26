@@ -1,7 +1,6 @@
-use crate::BinOpInstruction;
 use crate::FunctionDef;
+use crate::FunctionRef;
 use crate::FunctionSig;
-use crate::TypeRef;
 use crate::GlobalRef;
 use crate::Instruction;
 use crate::InstructionBuilder;
@@ -11,12 +10,13 @@ use crate::Ref;
 use crate::StructDef;
 use crate::StructFieldDef;
 use crate::Type;
+use crate::TypeRef;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VariantCase;
 use crate::VariantDef;
-use crate::ArgID;
-use crate::FunctionRef;
+use crate::{ArgID, InterfaceDef};
+use crate::{BinOpInstruction, Method};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -177,7 +177,7 @@ pub fn instantiate_function_def(
                 })
             },
 
-            Instruction::VirtualCall { out, iface_id, method, self_arg, rest_args } => {
+            Instruction::VirtualCall { out, iface_ref, method, self_arg, rest_args } => {
                 let out = out.as_ref().map(|r| remap_ref(r, &locals, &types));
                 let self_arg = remap_ref(self_arg, &locals, &types);
 
@@ -189,7 +189,7 @@ pub fn instantiate_function_def(
                     out,
                     self_arg,
                     rest_args,
-                    iface_id: *iface_id,
+                    iface_ref: iface_ref.clone(),
                     method: *method,
                 })
             }
@@ -296,6 +296,22 @@ pub fn instantiate_sig(sig: &FunctionSig, types: &TypeMap) -> FunctionSig {
     FunctionSig::new(param_types, result_type)
 }
 
+pub fn instantiate_name_path(name_params: &mut [Type], type_args: &[Type], types: &mut TypeMap) {
+    assert_eq!(type_args.len(), name_params.len(), "instantiate_name_path: type arg count mismatch");
+
+    for (param, arg) in name_params.iter_mut().zip(type_args.iter()) {
+        let Type::Generic(param_name) = param else {
+            panic!("instantiate_name_path: generic name must only contain named parameter types");
+        };
+
+        if let Some(prev) = types.insert(SharedStringKey(Arc::new(param_name.to_string())), arg.clone()) {
+            assert_eq!(prev, *arg, "instantiate_name_path: inconsistent arg types");
+        }
+
+        *param = arg.clone();
+    }
+}
+
 pub fn instantiate_struct_def<'a>(
     generic_struct: &'a StructDef,
     type_args: &[Type],
@@ -313,16 +329,7 @@ pub fn instantiate_struct_def<'a>(
         None => &mut [],
     };
 
-    assert_eq!(type_args.len(), name_params.len(), "instantiate_struct_def: type arg count mismatch ({})", generic_struct.identity);
-
-    for (param, arg) in name_params.iter_mut().zip(type_args.iter()) {
-        let Type::Generic(param_name) = param else {
-            panic!("instantiate_struct_def: generic name must only contain named parameter types");
-        };
-
-        types.insert(SharedStringKey(Arc::new(param_name.to_string())), arg.clone());
-        *param = arg.clone();
-    }
+    instantiate_name_path(name_params, type_args, &mut types);
 
     let mut fields = BTreeMap::new();
     for (field_id, field_def) in &generic_struct.fields {
@@ -352,16 +359,8 @@ pub fn instantiate_variant_def<'a>(
     let mut types = HashMap::new();
 
     let mut name = generic_variant.name.clone();
-    assert_eq!(type_args.len(), name.type_args.len(), "instantiate_variant_def: type arg count mismatch ({})", generic_variant.name);
 
-    for (param, arg) in name.type_args.iter_mut().zip(type_args.iter()) {
-        let Type::Generic(param_name) = param else {
-            panic!("instantiate_variant_def: generic name must only contain named parameter types");
-        };
-
-        types.insert(SharedStringKey(Arc::new(param_name.to_string())), arg.clone());
-        *param = arg.clone();
-    }
+    instantiate_name_path(&mut name.type_args, type_args, &mut types);
 
     let tag_type = instantiate_type(&generic_variant.tag_type, &types);
 
@@ -383,6 +382,42 @@ pub fn instantiate_variant_def<'a>(
         cases,
         tags: generic_variant.tags.clone(),
         tag_type,
+    })
+}
+
+pub fn instantiate_interface_def<'a>(
+    generic_def: &'a InterfaceDef,
+    type_args: &[Type],
+) -> Cow<'a, InterfaceDef> {
+    if !generic_def.name.is_generic() {
+        assert_eq!(0, type_args.len(), "instantiate_interface_def: type is not generic");
+        return Cow::Borrowed(generic_def);
+    }
+
+    let mut types = TypeMap::new();
+
+    let mut name = generic_def.name.clone();
+    instantiate_name_path(&mut name.type_args, type_args, &mut types);
+
+    let mut methods = Vec::with_capacity(generic_def.methods.len());
+
+    for def_method in &generic_def.methods {
+        let mut params = Vec::with_capacity(def_method.params.len());
+        for def_param in &def_method.params {
+            params.push(instantiate_type(def_param, &mut types));
+        }
+
+        methods.push(Method {
+            name: def_method.name.clone(),
+            return_ty: instantiate_type(&def_method.return_ty, &mut types),
+            params,
+        });
+    }
+
+    Cow::Owned(InterfaceDef {
+        name,
+        tags: generic_def.tags.clone(),
+        methods,
     })
 }
 

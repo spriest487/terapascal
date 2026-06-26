@@ -1,4 +1,4 @@
-use crate::c::ArrayTypeID;
+use crate::c::{ArrayTypeID, Expr};
 use crate::c::Class;
 use crate::c::FieldName;
 use crate::c::FuncAliasDef;
@@ -22,6 +22,12 @@ use terapascal_ir::MetadataSource as _;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct TypeID(NonZeroUsize);
+
+impl TypeID {
+    pub fn as_lit_int(&self) -> Expr {
+        Expr::LitInt(self.0.get() as i128)
+    }
+}
 
 impl fmt::Display for TypeID {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {

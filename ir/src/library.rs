@@ -172,7 +172,7 @@ impl Library {
                     for (iface_id, _) in iface_impls {
                         write!(f, "    ")?;
 
-                        formatter.format_type(&iface_id.to_interface_ptr_type(), f)?;
+                        formatter.format_type(&iface_id.to_object_id().to_object_type(), f)?;
 
                         writeln!(f)?;
                     }
@@ -184,7 +184,7 @@ impl Library {
 
         writeln!(f, "Interfaces:")?;
 
-        let mut ifaces: Vec<_> = self.metadata.interfaces().collect();
+        let mut ifaces: Vec<_> = self.metadata.interface_defs().collect();
         ifaces.sort_by_key(|(id, _)| *id);
 
         for (id, iface) in &ifaces {

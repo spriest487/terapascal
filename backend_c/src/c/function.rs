@@ -20,6 +20,7 @@ use terapascal_common::SharedStringKey;
 use terapascal_ir as ir;
 use terapascal_ir::generic::instantiate_function_def;
 use terapascal_ir::generic::instantiate_sig;
+use crate::c::type_map::TypeID;
 
 #[derive(Copy, Clone)]
 pub struct FunctionInstance {
@@ -49,9 +50,9 @@ pub enum FunctionName {
 
     ID(FuncInstanceID),
     Extern(ir::FunctionID),
-    Method(ir::InterfaceID, ir::MethodID),
+    Method(TypeID, ir::MethodID),
     Destructor(TypeDefName),
-    MethodWrapper(ir::InterfaceID, ir::MethodID, TypeDefName),
+    VirtualMethodWrapper(TypeID, ir::MethodID, TypeDefName),
 
     // generated dynarray methods
     DynArrayGetElement(DynArrayTypeID),
@@ -83,7 +84,7 @@ impl fmt::Display for FunctionName {
             FunctionName::Method(iface, method) => {
                 write!(f, "Method_{}_{}", iface, method.0)
             },
-            FunctionName::MethodWrapper(iface, method, self_ty) => {
+            FunctionName::VirtualMethodWrapper(iface, method, self_ty) => {
                 write!(f, "Method_{}_{}_Wrapper_{}", iface, method.0, self_ty)
             },
 
