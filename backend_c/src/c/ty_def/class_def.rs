@@ -116,7 +116,7 @@ impl MethodImplFunc {
 }
 
 #[derive(Clone, Debug)]
-pub struct InterfaceImpl {
+pub struct MethodTable {
     method_impls: BTreeMap<ir::MethodID, MethodImplFunc>,
 }
 
@@ -194,7 +194,7 @@ pub struct Class {
     identity: ClassIdentity,
     class_type: ir::Type,
 
-    impls: LinkedHashMap<TypeID, InterfaceImpl>,
+    method_tables: LinkedHashMap<TypeID, MethodTable>,
 
     dtor: Option<FunctionName>,
 
@@ -241,7 +241,7 @@ impl Class {
                 continue;
             }
 
-            impls.insert(iface_type_id, InterfaceImpl { method_impls });
+            impls.insert(iface_type_id, MethodTable { method_impls });
         }
 
         let comment = class_ty.to_pretty_string(unit.metadata);
@@ -251,7 +251,7 @@ impl Class {
         Class {
             identity: ClassIdentity::Class(class_index),
             class_type: class_ty.clone(),
-            impls,
+            method_tables: impls,
             dtor: None,
             comment: Some(comment),
             typeinfo_global_name: typeinfo_name,
@@ -306,7 +306,7 @@ impl Class {
 
         Class {
             identity: ClassIdentity::DynArrayClass(id),
-            impls: Default::default(),
+            method_tables: Default::default(),
             dtor,
             comment: Some(comment),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &array_type),
@@ -336,7 +336,7 @@ impl Class {
 
         Class {
             identity: ClassIdentity::BoxClass(id),
-            impls: Default::default(),
+            method_tables: Default::default(),
             dtor,
             comment: Some(comment),
             typeinfo_global_name: global_typeinfo_decl_name(unit, &box_type),
@@ -346,7 +346,7 @@ impl Class {
 
     pub fn gen_vcall_wrappers(&self, unit: &Unit) -> Vec<FunctionDef> {
         let mut wrappers = Vec::new();
-        for (_iface_id, iface_impl) in &self.impls {
+        for (_iface_id, iface_impl) in &self.method_tables {
             for (_method_id, method_impl) in &iface_impl.method_impls {
                 wrappers.push(method_impl.gen_vcall_wrapper(unit));
             }
@@ -404,7 +404,7 @@ impl Class {
     pub fn to_decl_string(&self) -> String {
         let mut decls = String::new();
 
-        for (iface_id, _) in &self.impls {
+        for (iface_id, _) in &self.method_tables {
             decls.write_fmt(format_args!(
                 "struct MethodTable_{} ImplTable_{}_{};\n",
                 iface_id, self.identity, iface_id
@@ -429,7 +429,7 @@ impl Class {
         }
 
         // impl method tables
-        let impls: Vec<_> = self.impls.iter().enumerate().collect();
+        let impls: Vec<_> = self.method_tables.iter().enumerate().collect();
 
         for (i, (iface_id, iface_impl)) in &impls {
             def.push_str(&format!(
@@ -447,7 +447,7 @@ impl Class {
             match impls.get(i + 1) {
                 Some((_, (next_impl_id, _))) => {
                     def.push_str(&format!(
-                        "&ImplTable_{}_{}.base",
+                        "(struct MethodTable*)&ImplTable_{}_{}",
                         self.identity, next_impl_id
                     ));
                 },
@@ -525,7 +525,7 @@ impl Class {
     fn write_class_field_init(&self,
         out: &mut String,
         enable_rtti: bool,
-        impls: &[(usize, (&TypeID, &InterfaceImpl))]
+        impls: &[(usize, (&TypeID, &MethodTable))]
     ) {
         writeln!(
             out,
@@ -560,7 +560,7 @@ impl Class {
 }
 
 pub struct Interface {
-    id: ir::InterfaceID,
+    id: TypeID,
     methods: Vec<FunctionDecl>,
 }
 
@@ -603,13 +603,13 @@ impl Interface {
             .collect();
 
         Self {
-            id: iface_id,
+            id: iface_type_id,
             methods,
         }
     }
 
     pub fn method_table_string(&self) -> String {
-        let mut table = format!("struct MethodTable_{} {{\n", self.id.0);
+        let mut table = format!("struct MethodTable_{} {{\n", self.id);
         table.push_str("  struct MethodTable base;\n");
 
         for (method_index, method) in self.methods.iter().enumerate() {
@@ -635,10 +635,10 @@ impl Interface {
                 self_arg_rc
             ));
             table.push_str("  while (table) {\n");
-            table.push_str(&format!("    if (table->iface == {}) {{\n", self.id.0));
+            table.push_str(&format!("    if (table->iface == {}) {{\n", self.id));
             table.push_str(&format!(
                 "      struct MethodTable_{}* my_table = (struct MethodTable_{}*) table;\n",
-                self.id.0, self.id.0
+                self.id, self.id
             ));
 
             // get the pointer from the table

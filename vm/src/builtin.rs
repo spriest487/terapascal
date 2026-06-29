@@ -352,19 +352,19 @@ fn get_type_info_count(state: &mut Vm) -> ExecResult<()> {
 fn get_object_type_info(state: &mut Vm) -> ExecResult<()> {
     let obj_ptr_arg = ir::ArgID(0);
     let obj_ptr = load_pointer(state, &obj_ptr_arg.to_ref())?;
-    
+
     if obj_ptr.is_null() {
         state.store(&ir::RESULT_REF, DynValue::nil(ir::Type::Nothing))?;
         return Ok(());
     }
-    
+
     let obj_header = state.heap.load_object_header(&obj_ptr)?;
     let obj_type = obj_header.id.to_type(&state.heap.marshaller)?;
 
     let type_info_ptr = state.load_type_info(&obj_type)?;
-    
+
     state.store(&ir::RESULT_REF, type_info_ptr)?;
-    
+
     Ok(())
 }
 
