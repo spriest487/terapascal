@@ -425,7 +425,15 @@ impl<'a> Unit<'a> {
         let type_info_keys: Vec<_> = self.type_infos.keys().cloned().collect();
 
         for ty in type_info_keys {
-            let type_id = self.create_type_id(&ty);
+            // it's valid for a type registered in type info to be undefined - the frontend may
+            // register a type used in the context of the source language that has no IR
+            // representation (e.g. Pascal enums), but which code may still request type info for
+            let type_id = if self.metadata.is_defined(&ty) {
+                self.create_type_id(&ty)
+            } else {
+                self.create_empty_type_id(&ty)
+            };
+
             let type_info_name = GlobalName::StaticTypeInfo(type_id);
 
             let type_info = self.type_infos[&ty].clone();

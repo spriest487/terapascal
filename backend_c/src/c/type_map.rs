@@ -92,6 +92,14 @@ impl<'a> Unit<'a> {
         self.get_type_id(ir_ty)
     }
 
+    pub fn create_empty_type_id(&mut self, ir_ty: &ir::Type) -> TypeID {
+        if let Some(id) = self.types.get_by_right(ir_ty) {
+            return *id;
+        }
+
+        self.register_type(ir_ty.clone(), Type::Void)
+    }
+
     fn build_type(&mut self, ty: &ir::Type) -> TypeID {
         // types containing any generic placeholders e.g. T, Struct<T>, array of T, etc, aren't real
         // types but need an index too, so map them to `void`
