@@ -29,6 +29,8 @@ _Noreturn static void fatal(const char* msg, ...) {
     va_list args;
     va_start(args, msg);
 
+    fflush(stdout);
+
     vfprintf(stderr, msg, args);
     fputs("\n", stderr);
     fflush(stderr);
@@ -42,6 +44,8 @@ _Noreturn static void Raise(STRING_STRUCT* msg_str) {
     if (msg_str && msg_str->rc.strong_count != 0) {
         int32_t msg_len = STRING_LEN(msg_str);
         char* msg_chars = (char*) STRING_CHARS(msg_str);
+
+        fflush(stdout);
 
         fprintf(stderr, "Runtime error raised: %.*s\n", (int) msg_len, msg_chars);
         fflush(stderr);
