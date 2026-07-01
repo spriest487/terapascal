@@ -148,8 +148,7 @@ impl<'a> Unit<'a> {
         }
 
         for (iface_id, iface_def) in metadata.interface_defs() {
-            let iface = Interface::translate(iface_id, iface_def, &mut unit);
-            unit.ifaces.push(iface);
+            unit.translate_type(&iface_id.to_interface_type(iface_def.name.type_args.clone()));
         }
 
         for (func_id, func_info) in metadata.functions() {

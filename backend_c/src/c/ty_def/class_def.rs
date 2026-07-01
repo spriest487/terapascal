@@ -566,13 +566,10 @@ pub struct Interface {
 
 impl Interface {
     pub fn translate(
-        iface_id: ir::InterfaceID,
+        iface_type_id: TypeID,
         iface: &ir::InterfaceDef,
         unit: &mut Unit,
     ) -> Self {
-        let iface_type = iface_id.to_interface_type(iface.name.type_args.clone());
-        let iface_type_id = unit.create_type_id(&iface_type);
-
         let methods = iface
             .methods
             .iter()

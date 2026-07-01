@@ -1,7 +1,9 @@
-use crate::c::{ArrayTypeID, Expr};
+use crate::c::ArrayTypeID;
 use crate::c::Class;
+use crate::c::Expr;
 use crate::c::FieldName;
 use crate::c::FuncAliasDef;
+use crate::c::Interface;
 use crate::c::StructDef;
 use crate::c::StructMember;
 use crate::c::Type;
@@ -16,6 +18,7 @@ use std::fmt;
 use std::fmt::Formatter;
 use std::num::NonZeroUsize;
 use std::rc::Rc;
+use terapascal_ir::generic::instantiate_interface_def;
 use terapascal_ir::generic::instantiate_struct_def;
 use terapascal_ir::generic::instantiate_variant_def;
 use terapascal_ir::MetadataSource as _;
@@ -131,9 +134,12 @@ impl<'a> Unit<'a> {
 
             ir::Type::Object(object_id)| ir::Type::WeakObject(object_id) => {
                 match object_id {
-                    ir::ObjectID::Any
-                    | ir::ObjectID::Interface(..) => {
+                    ir::ObjectID::Any => {
                         self.register_type(ty.clone(), Type::Rc.ptr())
+                    }
+
+                    | ir::ObjectID::Interface(..) => {
+                        self.translate_interface_type(ty)
                     }
 
                     ir::ObjectID::AnyClosure(..) => {
@@ -308,18 +314,18 @@ impl<'a> Unit<'a> {
             return existing_id;
         }
 
-        let ir::Type::Variant(variant_id) = ty else {
+        let ir::Type::Variant(type_ref) = ty else {
             panic!("{} is not a variant type", ty.to_pretty_string(self.metadata));
         };
 
         let generic_def = self.metadata
-            .get_variant_def(variant_id.def_id)
+            .get_variant_def(type_ref.def_id)
             .cloned()
             .unwrap_or_else(|| {
-                panic!("missing struct def: {}", variant_id.def_id)
+                panic!("missing variant def: {}", type_ref.def_id)
             });
 
-        match instantiate_variant_def(&generic_def, &variant_id.args) {
+        match instantiate_variant_def(&generic_def, &type_ref.args) {
             Cow::Borrowed(..) => {
                 // not a specialized generic
                 self.define_variant(ty.clone(), Rc::new(generic_def))
@@ -377,6 +383,61 @@ impl<'a> Unit<'a> {
             TypeDef::Variant(variant_def) => variant_def.clone(),
             _ => panic!("def {id} is not a variant"),
         }
+    }
+
+    pub fn translate_interface_type(&mut self, iface_type: &ir::Type) -> TypeID {
+        // strong and weak pointers translate to the same type ID
+        let iface_type = match iface_type {
+            ir::Type::WeakObject(object_id) => object_id.to_object_type(),
+            _ => iface_type.clone(),
+        };
+
+        if let Some(existing_id) = self.try_get_type_id(&iface_type) {
+            // eprintln!("{} = {} ({})", ty.to_pretty_string(self.metadata), existing_id, self.c_types[&existing_id].typename());
+            return existing_id;
+        }
+
+        let Some(iface_ref) = iface_type.as_iface() else {
+            panic!("translate_interface_type: unsupported interface type {}", iface_type.to_pretty_string(self.metadata))
+        };
+
+        let generic_def = self.metadata
+            .get_interface_def(iface_ref.def_id)
+            .cloned()
+            .unwrap_or_else(|| {
+                panic!("translate_interface_type: missing interface def: {}", iface_ref.def_id)
+            });
+
+        match instantiate_interface_def(&generic_def, &iface_ref.args) {
+            Cow::Borrowed(..) => {
+                // not a specialized generic
+                self.define_interface(iface_type, Rc::new(generic_def))
+            },
+
+            Cow::Owned(new_def) => {
+                if self.opts.trace_generics {
+                    let generic_name = generic_def.name.to_pretty_string(self.metadata);
+                    let new_name = new_def.name.to_pretty_string(self.metadata);
+
+                    eprintln!("new instantiation of interface {}: {}", generic_name, new_name);
+                }
+
+                self.define_interface(iface_type, Rc::new(new_def))
+            },
+        }
+    }
+
+    fn define_interface(
+        &mut self,
+        ty: ir::Type,
+        def: Rc<ir::InterfaceDef>,
+    ) -> TypeID {
+        let id = self.register_type(ty.clone(), Type::Rc.ptr());
+        let c_def = Interface::translate(id, &def, self);
+
+        self.ifaces.push(c_def);
+
+        id
     }
 
     pub fn translate_array_type(
