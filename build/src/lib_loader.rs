@@ -216,13 +216,16 @@ pub struct LibraryCollection {
 
 impl LibraryCollection {
     pub fn merge(&self) -> ir::Library {
-        let mut merged = self.main.as_ref().clone();
+        match self.refs.get(0) {
+            Some(first_lib) => {
+                let rest_libs = self.refs.iter().map(Rc::as_ref).skip(1);
+                first_lib.merge(rest_libs.chain(iter::once(self.main.as_ref())))
+            }
 
-        for ref_lib in self.refs.iter() {
-            merged.merge_from(ref_lib.as_ref());
+            None => {
+                self.main.as_ref().clone()
+            },
         }
-
-        merged
     }
 
     pub fn to_metadata_builder(&self) -> ir::MetadataBuilder {

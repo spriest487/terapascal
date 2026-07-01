@@ -1,3 +1,4 @@
+use crate::write_instruction_list;
 use crate::ExternalFunctionRef;
 use crate::Function;
 use crate::FunctionDef;
@@ -8,12 +9,12 @@ use crate::Metadata;
 use crate::MetadataSource;
 use crate::TagInfo;
 use crate::TypeDef;
-use crate::write_instruction_list;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::io;
+use std::iter;
 use std::sync::Arc;
 use terapascal_common::version::Version;
 
@@ -56,22 +57,51 @@ impl Library {
         }
     }
 
-    pub fn merge_from(&mut self, other: &Self) {
-        let mut merged_metadata = self.metadata.as_ref().clone();
-        merged_metadata.merge_from(&other.metadata);
+    pub fn merge<'a>(&'a self, ref_libs: impl IntoIterator<Item=&'a Self>) -> Self {
+        let mut ref_libs = ref_libs.into_iter();
+        let Some(first_lib) = ref_libs.next() else {
+            return self.clone();
+        };
 
-        self.metadata = Arc::new(merged_metadata);
+        let mut merged_lib = first_lib.clone();
+        let mut merged_metadata = first_lib.metadata.as_ref().clone();
 
-        // if this library has a reference to the merged library, we can remove it
-        if let Some(index) = self.references.iter().position(|r| *r == other.name) {
-            self.references.remove(index);
+        let mut merged_libs_names = vec![first_lib.name.clone()];
+
+        let mut all_libs = ref_libs.chain(iter::once(self));
+
+        while let Some(ref_lib) = all_libs.next() {
+            merged_lib.references.retain(|r| {
+                *r != ref_lib.name && !merged_libs_names.contains(&ref_lib.name)
+            });
+
+            merged_libs_names.push(ref_lib.name.clone());
+
+            // add any new references (that aren't this library)
+            for transitive_ref in &ref_lib.references {
+                if !merged_libs_names.contains(&transitive_ref)
+                    && !merged_lib.references.contains(transitive_ref)
+                {
+                    merged_lib.references.push(transitive_ref.clone());
+                }
+            }
+
+            merged_metadata.merge_from(&ref_lib.metadata);
+
+            // we should be able to assume that if merging the metadata doesn't raise an error,
+            // merging the libraries is valid
+            merged_lib.functions.extend(ref_lib.functions.clone());
+            merged_lib.tags.extend(ref_lib.tags.clone());
+            merged_lib.init.extend(&ref_lib.init);
+
+            merged_libs_names.push(ref_lib.name.clone());
         }
 
-        // we should be able to assume that if merging the metadata doesn't raise an error,
-        // merging the libraries is valid
-        self.functions.extend(other.functions.clone());
-        self.tags.extend(other.tags.clone());
-        self.init.extend(&other.init);
+        merged_lib.metadata = Arc::new(merged_metadata);
+        merged_lib.version = self.version;
+        merged_lib.name = self.name.clone();
+
+        merged_lib
     }
 
     pub fn init(&self) -> &InstructionList {
