@@ -586,6 +586,10 @@ end;
 
 function TypeInfo.FindMethod(methodName: String): Option[MethodInfo];
 begin
+    // it's up to the runtime to set the method array correctly, so raise an error if it failed to do so
+    if self.methods is not array of MethodInfo then
+        raise 'missing method array for ' + self.Name;
+
     for var method in self.methods do
     begin
         if method.Name.Compare(methodName) = 0 then
