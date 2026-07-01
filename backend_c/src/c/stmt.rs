@@ -34,6 +34,7 @@ pub enum GlobalName {
 
     TypeInfoList,
     TypeInfoCount,
+    TypeNameString(TypeID),
     StaticTypeInfo(TypeID),
     GenericStaticTypeInfo(TypeDefID),
 
@@ -88,6 +89,7 @@ impl fmt::Display for GlobalName {
 
             GlobalName::TypeInfoList => write!(f, "typeinfo_list"),
             GlobalName::TypeInfoCount => write!(f, "typeinfo_count"),
+            GlobalName::TypeNameString(id) => write!(f, "TypeName_{id}"),
 
             GlobalName::FuncInfoList => write!(f, "funcinfo_list"),
             GlobalName::FuncInfoCount => write!(f, "funcinfo_count"),
@@ -100,7 +102,9 @@ impl fmt::Display for GlobalName {
                 write_global_generic_typeinfo_decl_name(f, *def_id)
             }
             
-            GlobalName::StaticFuncInfo(id) => write!(f, "FuncInfo_{}", id.0),
+            GlobalName::StaticFuncInfo(id) => {
+                write!(f, "FuncInfo_{}", id.0)
+            },
             
             GlobalName::InvokeArgsError => {
                 write!(f, "Error_InvokeArgs")

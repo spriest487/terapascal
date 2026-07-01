@@ -1,4 +1,3 @@
-mod rtti;
 pub mod c;
 pub use terapascal_ir as ir;
 

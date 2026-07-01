@@ -1,6 +1,6 @@
 use crate::c::type_map::TypeID;
-use crate::c::CBuilder;
 use crate::c::BuiltinName;
+use crate::c::CBuilder;
 use crate::c::DynArrayTypeID;
 use crate::c::FieldName;
 use crate::c::FunctionName;
@@ -10,7 +10,6 @@ use crate::c::Type;
 use crate::c::Unit;
 use crate::c::VariableID;
 use crate::ir;
-use ir::MetadataSource as _;
 use std::fmt;
 
 #[allow(unused)]
@@ -231,18 +230,7 @@ impl Expr {
                 Expr::Global(name).addr_of()
             }
             ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(ty)) => {
-                if builder.opts().debug {
-                    let comment = format!("typeinfo ref: {}", ty.to_pretty_string(builder.metadata()));
-                    builder.stmts.push(Statement::Comment(comment));
-                }
-
-                if builder.metadata().get_type_info(ty).is_some() {
-                    let type_id = builder.create_type_id(ty);
-                    let name = GlobalName::StaticTypeInfo(type_id);
-                    Expr::Global(name).addr_of()
-                } else {
-                    Expr::Null
-                }
+                Expr::translate_type_info_ref(ty, builder)
             }
             ir::Ref::Global(ir::GlobalRef::StaticFuncInfo(id)) => {
                 let name = GlobalName::StaticFuncInfo(*id);
@@ -263,22 +251,34 @@ impl Expr {
         }
     }
 
+    fn translate_type_info_ref(ty: &ir::Type, builder: &mut CBuilder) -> Self {
+        if builder.opts().debug {
+            let comment = format!("typeinfo ref: {}", ty.to_pretty_string(builder.metadata()));
+            builder.stmts.push(Statement::Comment(comment));
+        }
+
+        let type_id = builder.create_type_id(ty);
+        let name = GlobalName::StaticTypeInfo(type_id);
+
+        Expr::Global(name).addr_of()
+    }
+
     pub fn result_var() -> Self {
         Expr::Variable(VariableID::Result)
     }
-    
+
     pub fn local_var(id: ir::LocalID) -> Self {
         Expr::Variable(VariableID::Local(id))
     }
-    
+
     pub fn arg_var(id: ir::ArgID) -> Self {
         Expr::Variable(VariableID::Arg(id))
     }
-    
+
     pub fn named_var(name: impl Into<String>) -> Self {
         Expr::Variable(VariableID::Named(Box::new(name.into())))
     }
-    
+
     pub fn call(self, args: impl IntoIterator<Item=Self>) -> Self {
         Expr::Call {
             func: Box::new(self),

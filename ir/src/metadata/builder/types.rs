@@ -1,7 +1,9 @@
+use crate::FunctionID;
 use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::InterfaceImpl;
+use crate::InterfaceRef;
 use crate::MetadataBuilder;
 use crate::MetadataCollection;
 use crate::MetadataSource;
@@ -14,7 +16,6 @@ use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
 use crate::VariantDef;
-use crate::{FunctionID, InterfaceRef};
 use linked_hash_map::Entry;
 use std::rc::Rc;
 

@@ -3,7 +3,7 @@ use std::fmt;
 use crate::c::GlobalName;
 use crate::ir;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub enum StringLiteralKey {
     StringID(ir::StringID),
     Named(GlobalName),

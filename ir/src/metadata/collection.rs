@@ -1,11 +1,12 @@
 use crate::metadata::vars::ConstInfo;
-use crate::{FunctionID, InterfaceRef};
+use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::InterfaceImpl;
 use crate::InterfaceMethodImplRef;
+use crate::InterfaceRef;
 use crate::Metadata;
 use crate::MetadataSource;
 use crate::MethodID;

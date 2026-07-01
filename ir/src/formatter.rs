@@ -5,10 +5,11 @@ use crate::ty::FieldID;
 use crate::ty::Type;
 use crate::val::Ref;
 use crate::val::Value;
+use crate::FunctionRef;
+use crate::InterfaceRef;
 use crate::NamePath;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
-use crate::{FunctionRef, InterfaceRef};
 use std::fmt;
 use std::write;
 

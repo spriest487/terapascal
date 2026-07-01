@@ -7,6 +7,7 @@ mod array;
 mod boxed;
 mod builtin;
 mod type_map;
+mod rtti;
 
 pub use self::array::*;
 pub use self::boxed::*;
@@ -14,12 +15,13 @@ pub use self::expr::*;
 pub use self::function::*;
 pub use self::stmt::*;
 pub use self::ty_def::*;
+use crate::c::rtti::FuncInfo;
+use crate::c::rtti::TypeInfo;
 use crate::c::string_lit::StringLiteral;
 use crate::c::string_lit::StringLiteralKey;
 use crate::c::type_map::ArraySig;
 use crate::c::type_map::TypeID;
 use crate::ir;
-use crate::rtti::RuntimeFuncInfo;
 use crate::Options;
 use bimap::BiBTreeMap;
 use bimap::BiHashMap;
@@ -47,6 +49,8 @@ pub struct Unit<'a> {
     dyn_array_types_by_element: BiBTreeMap<TypeID, DynArrayTypeID>,
     box_types_by_element: BiBTreeMap<TypeID, BoxTypeID>,
 
+    type_info: BTreeMap<TypeID, TypeInfo>,
+
     static_array_types: HashMap<ArraySig, TypeID>,
 
     type_defs: BTreeMap<TypeID, TypeDef>,
@@ -63,14 +67,12 @@ pub struct Unit<'a> {
     string_literals: HashMap<StringLiteralKey, StringLiteral>,
 
     tag_arrays: HashMap<ir::TagLocation, usize>,
-    
+
     object_array_id: DynArrayTypeID,
 
     opts: Options,
 
-    type_infos: HashMap<ir::Type, Rc<ir::TypeInfo>>,
-    
-    runtime_func_infos: Vec<RuntimeFuncInfo>,
+    runtime_func_infos: Vec<FuncInfo>,
 }
 
 impl<'a> Unit<'a> {
@@ -80,11 +82,6 @@ impl<'a> Unit<'a> {
             .map(|(id, str)| (
                 StringLiteralKey::StringID(id), 
                 StringLiteral::from(str.to_string())))
-            .collect();
-        
-        let type_infos = metadata
-            .type_info()
-            .map(|(ty, rtti)| (ty.clone(), rtti.clone()))
             .collect();
 
         let tag_arrays = metadata
@@ -97,6 +94,8 @@ impl<'a> Unit<'a> {
 
             types: BiHashMap::new(),
             c_types: BTreeMap::new(),
+
+            type_info: BTreeMap::new(),
 
             dyn_array_types_by_element: BiBTreeMap::new(),
             box_types_by_element: BiBTreeMap::new(),
@@ -121,8 +120,6 @@ impl<'a> Unit<'a> {
             ifaces: Vec::new(),
 
             opts,
-
-            type_infos,
 
             runtime_func_infos: Vec::new(),
             
@@ -163,7 +160,7 @@ impl<'a> Unit<'a> {
 
             let name = func_info.runtime_name;
 
-            unit.runtime_func_infos.push(RuntimeFuncInfo {
+            unit.runtime_func_infos.push(FuncInfo {
                 name,
                 id: func_id,
                 invoker,
@@ -174,7 +171,7 @@ impl<'a> Unit<'a> {
     }
 
     pub fn pretty_type(&self, ir_ty: &ir::Type) -> Cow<'_, str> {
-        match self.type_infos.get(ir_ty).map(|typeinfo| typeinfo.name) {
+        match self.metadata.get_type_info(ir_ty).map(|typeinfo| typeinfo.name) {
             Some(name_id) => {
                 let key = StringLiteralKey::StringID(name_id);
                 let name = &self.string_literals[&key];
@@ -240,64 +237,9 @@ impl<'a> Unit<'a> {
             self.function_types.insert(*func_id, func.sig().clone());
         }
 
-        let init_index = self
-            .functions
-            .iter()
-            .position(|f| f.decl.name == FunctionName::Init);
-        let mut init_func = match init_index {
-            Some(index) => self.functions.remove(index),
-            None => FunctionDef {
-                decl: FunctionDecl {
-                    name: FunctionName::Init,
-                    params: Vec::new(),
-                    return_ty: Type::Void,
-                    comment: None,
-                },
-                body: Vec::new(),
-            },
-        };
-        
-        let mut init_stmts = Vec::new();
-
-        let mut class_index = 0;
-        while class_index < self.classes.len() {
-            let class = &self.classes[class_index];
-            if let ClassIdentity::Class(id) = class.identity().clone() {
-                let class_type = class.class_type().clone();
-
-                if let Some(dtor) = Class::gen_class_dtor(self, &class_type, id) {
-                    self.classes[class_index].add_dtor(dtor);
-                }
-            }
-
-            class_index += 1;
+        for (ty, type_info) in library.metadata.type_info() {
+            self.translate_type_info(ty, type_info, &library.metadata);
         }
-
-        self.gen_rtti_init(&mut init_stmts);
-
-        // look up FFI functions
-        for ffi_func in &self.ffi_funcs {
-            init_stmts.push(ffi_func.init_statement());
-        }
-
-        let mut init_builder = CBuilder::new(self, &[], ir::Type::Nothing);
-        init_builder.stmts.append(&mut init_stmts);
-
-        // translate initialization blocks from library
-        init_builder.translate_instructions(library.init());
-        init_func.body.extend(init_builder.stmts);
-        
-        for (var_id, var_info) in library.metadata.variables() {
-            let name = GlobalName::Variable(var_id);
-            let ty = self.translate_type(&var_info.value_type);
-            
-            self.global_vars.push(GlobalVar {
-                name,
-                ty,
-            });
-        }
-
-        self.functions.push(init_func);
 
         while self.func_instances.len() < self.function_refs.len() {
             let func_keys: Vec<_> = self.function_refs
@@ -327,225 +269,78 @@ impl<'a> Unit<'a> {
                 self.functions.push(wrapper_func_def);
             }
         }
+
+        let init_index = self
+            .functions
+            .iter()
+            .position(|f| f.decl.name == FunctionName::Init);
+        let mut init_func = match init_index {
+            Some(index) => self.functions.remove(index),
+            None => FunctionDef {
+                decl: FunctionDecl {
+                    name: FunctionName::Init,
+                    params: Vec::new(),
+                    return_ty: Type::Void,
+                    comment: None,
+                },
+                body: Vec::new(),
+            },
+        };
+
+        let mut init_stmts = Vec::new();
+
+        let mut class_index = 0;
+        while class_index < self.classes.len() {
+            let class = &self.classes[class_index];
+            if let ClassIdentity::Class(id) = class.identity().clone() {
+                let class_type = class.class_type().clone();
+
+                if let Some(dtor) = Class::gen_class_dtor(self, &class_type, id) {
+                    self.classes[class_index].add_dtor(dtor);
+                }
+            }
+
+            class_index += 1;
+        }
+
+        // look up FFI functions
+        for ffi_func in &self.ffi_funcs {
+            init_stmts.push(ffi_func.init_statement());
+        }
+
+        let mut init_builder = CBuilder::new(self, &[], ir::Type::Nothing);
+        init_builder.stmts.append(&mut init_stmts);
+
+        // translate initialization blocks from library
+        init_builder.translate_instructions(library.init());
+        init_func.body.extend(init_builder.stmts);
+
+        for (var_id, var_info) in library.metadata.variables() {
+            let name = GlobalName::Variable(var_id);
+            let ty = self.translate_type(&var_info.value_type);
+
+            self.global_vars.push(GlobalVar {
+                name,
+                ty,
+            });
+        }
+
+        if self.opts.enable_rtti {
+            let mut rtti_init_stmts = Vec::new();
+            self.gen_rtti_init(&mut rtti_init_stmts);
+
+            init_stmts.splice(0..0, rtti_init_stmts);
+        }
+
+        self.functions.push(init_func);
     }
     
     fn create_named_string_lit(&mut self, name: GlobalName, text: &str) {
         self.string_literals.insert(StringLiteralKey::Named(name), StringLiteral(text.to_string()));
     }
 
-    fn get_string_lit(&self, id: ir::StringID) -> Option<&str> {
-        self.string_literals
-            .get(&StringLiteralKey::StringID(id))
-            .map(|s| s.0.as_str())
-    }
-    
-    fn gen_rtti_init(&mut self, init_stmts: &mut Vec<Statement>) {
-        if !self.opts.enable_rtti {
-            return;
-        }
-
-        let typeinfo_ty = self.translate_type(&ir::TYPEINFO_ID.to_class_ptr_type([]));
-        let funcinfo_ty = self.translate_type(&ir::FUNCINFO_ID.to_class_ptr_type([]));
-
-        let typeinfo_count = i32::try_from(self.type_infos.len()).unwrap_or(i32::MAX);
-        let funcinfo_count = i32::try_from(self.runtime_func_infos.len()).unwrap_or(i32::MAX);
-
-        // allocate the global typeinfo and funcinfo lists
-        init_stmts.push(Statement::assign(
-            Expr::Global(GlobalName::TypeInfoCount),
-            Expr::LitInt(typeinfo_count as i128),
-        ));
-        init_stmts.push(Statement::assign(
-            Expr::Global(GlobalName::FuncInfoCount),
-            Expr::LitInt(funcinfo_count as i128),
-        ));
-
-        init_stmts.push(Statement::assign(
-            Expr::Global(GlobalName::TypeInfoList),
-            Expr::Function(FunctionName::Builtin(BuiltinName::GetMem))
-                .call([Expr::infix_op(
-                    Expr::LitInt(typeinfo_count as i128),
-                    InfixOp::Mul,
-                    Expr::SizeOf(typeinfo_ty.clone()),
-                )])
-                .cast(typeinfo_ty.ptr()),
-        ));
-        init_stmts.push(Statement::Expr(Expr::Function(FunctionName::Forget).call([
-            Expr::Global(GlobalName::TypeInfoList),
-            Expr::LitCString("forget".to_string()),
-        ])));
-        
-        init_stmts.push(Statement::assign(
-            Expr::Global(GlobalName::FuncInfoList),
-            Expr::Function(FunctionName::Builtin(BuiltinName::GetMem))
-                .call([Expr::infix_op(
-                    Expr::LitInt(funcinfo_count as i128),
-                    InfixOp::Mul,
-                    Expr::SizeOf(funcinfo_ty.clone()),
-                )])
-                .cast(funcinfo_ty.ptr()),
-        ));
-        init_stmts.push(Statement::Expr(Expr::Function(FunctionName::Forget).call([
-            Expr::Global(GlobalName::FuncInfoList),
-            Expr::LitCString("forget".to_string()),
-        ])));
-
-        let method_info_class_type = ir::Type::method_info();
-        let method_info_class_id = self.get_type_id(&method_info_class_type);
-
-        let (_, method_info_array_id) = self.translate_dyn_array_type(&method_info_class_type);
-
-        // initialize type info fields that can't be statically initialized
-        const METHODS_ARRAY_NAME: &str = "methods_array";
-        init_stmts.push(Statement::VariableDecl {
-            ty: Type::dyn_array_ptr(method_info_array_id),
-            id: VariableID::named(METHODS_ARRAY_NAME),
-            null_init: false,
-        });
-
-        const METHODINFO_NAME: &str = "methodinfo";
-        init_stmts.push(Statement::VariableDecl {
-            ty: self.translate_type(&ir::METHODINFO_ID.to_class_ptr_type([])).ptr(),
-            id: VariableID::named(METHODINFO_NAME),
-            null_init: false,
-        });
-
-        const METHODNULL_NAME: &str = "method_null";
-        init_stmts.push(Statement::VariableDecl {
-            ty: self.translate_type(&ir::METHODINFO_ID.to_class_ptr_type([])),
-            id: VariableID::named(METHODNULL_NAME),
-            null_init: true,
-        });
-
-        let mut typeinfo_index = 0i128;
-
-        let new_method_info_expr = Expr::call_new(&method_info_class_type, true, self);
-
-        let type_info_keys: Vec<_> = self.type_infos.keys().cloned().collect();
-
-        for ty in type_info_keys {
-            // it's valid for a type registered in type info to be undefined - the frontend may
-            // register a type used in the context of the source language that has no IR
-            // representation (e.g. Pascal enums), but which code may still request type info for
-            let type_id = if self.metadata.is_defined(&ty) {
-                self.create_type_id(&ty)
-            } else {
-                self.create_empty_type_id(&ty)
-            };
-
-            let type_info_name = GlobalName::StaticTypeInfo(type_id);
-
-            let type_info = self.type_infos[&ty].clone();
-
-            // allocate the method dynarray instance for this typeinfo
-            let method_array_class_ptr = Expr::dyn_array_class(method_info_array_id).addr_of();
-            let methods_array_var = Expr::named_var(METHODS_ARRAY_NAME);
-
-            init_stmts.push(Statement::Expr(Expr::assign(
-                methods_array_var.clone(),
-                Expr::call_newarray(
-                    method_info_array_id, 
-                    Expr::LitInt(type_info.methods.len() as i128),
-                    true
-                )
-            )));
-
-            let type_info_expr = Expr::Global(type_info_name);
-
-            // typeinfo_list[typeinfo_index] = &typeinfo
-            init_stmts.push(Statement::Expr(Expr::assign(
-                Expr::Global(GlobalName::TypeInfoList).index(Expr::LitInt(typeinfo_index)),
-                type_info_expr.clone().addr_of(),
-            )));
-
-            typeinfo_index += 1;
-
-            for method_index in 0..type_info.methods.len() {
-                init_stmts.push(Statement::Expr(Expr::assign(
-                    Expr::named_var(METHODINFO_NAME), 
-                    method_array_class_ptr
-                        .clone()
-                        .arrow(FieldName::DynArrayClassElement)
-                        .call([
-                            methods_array_var.clone().cast(Type::object_ptr()),
-                            Expr::LitInt(method_index as i128)
-                        ])
-                        .cast(Type::class_instance_ptr(method_info_class_id).ptr())
-                )));
-                
-                // *methodinfo = RcNew(..method info class, immortal: true)
-                let method_info_var = Expr::named_var(METHODINFO_NAME).deref();
-
-                init_stmts.push(Statement::Expr(
-                    method_info_var.clone().assign_from(new_method_info_expr.clone())
-                ));
-
-                let method = &type_info.methods[method_index];
-                init_stmts.push(Statement::Expr(Expr::assign(
-                    method_info_var.clone().clone().arrow(FieldName::ID(ir::METHODINFO_NAME_FIELD)),
-                    Expr::Global(GlobalName::StringLiteral(method.name)).addr_of(),
-                )));
-
-                init_stmts.push(Statement::Expr(Expr::assign(
-                    method_info_var.clone().arrow(FieldName::ID(ir::METHODINFO_OWNER_FIELD)),
-                    type_info_expr.clone().addr_of(),
-                )));
-
-                let impl_ptr_expr = if let Some(method_func_id) = method.function
-                    && let Some(invoker_id) = self.metadata
-                    .get_function_info(method_func_id)
-                    .and_then(|f| f.invoker)
-                {
-                    let invoker_key = ir::FunctionRef::new(invoker_id);
-                    let invoker_instance = self.translate_func_ref(&invoker_key);
-
-                    Expr::Function(invoker_instance.name).addr_of()
-                } else {
-                    Expr::Null
-                };
-
-                init_stmts.push(Statement::Expr(Expr::assign(
-                    method_info_var.clone().arrow(FieldName::ID(ir::METHODINFO_IMPL_FIELD)),
-                    impl_ptr_expr,
-                )));
-
-                let tag_loc = ty
-                    .tags_loc()
-                    .and_then(|loc| {
-                        let method_loc = loc.method_loc(method_index)?;
-                        let tag_count = *self.tag_arrays.get(&method_loc)?;
-                        if tag_count > 0 {
-                            Some(method_loc)
-                        } else {
-                            None
-                        }
-                    });
-
-                init_stmts.push(Statement::assign(
-                    method_info_var.clone().clone().arrow(FieldName::ID(ir::METHODINFO_TAGS_FIELD)),
-                    match tag_loc {
-                        Some(loc) => Expr::Global(GlobalName::StaticTagArray(loc)).addr_of(),
-                        None => Expr::Null,
-                    },
-                ));
-            }
-
-            // typeinfo.methods = methods_array
-            init_stmts.push(Statement::Expr(Expr::assign(
-                type_info_expr.field(FieldName::ID(ir::TYPEINFO_METHODS_FIELD)),
-                methods_array_var.clone(),
-            )));
-        }
-
-        for funcinfo_index in 0..self.runtime_func_infos.len() {
-            let func_id = self.runtime_func_infos[funcinfo_index].id;
-            let func_info_expr = Expr::Global(GlobalName::StaticFuncInfo(func_id));
-
-            init_stmts.push(Statement::Expr(Expr::assign(
-                Expr::Global(GlobalName::FuncInfoList).index(Expr::LitInt(funcinfo_index as i128)),
-                func_info_expr.clone().addr_of(),
-            )));
-        }
+    fn get_string_lit(&self, key: StringLiteralKey) -> Option<&str> {
+        self.string_literals.get(&key).map(|s| s.0.as_str())
     }
 }
 
@@ -688,18 +483,12 @@ impl<'a> fmt::Display for Unit<'a> {
             let flags_type_id = self.get_type_id(&flags_field.ty);
             let flags_type_name = TypeDefName::Struct(flags_type_id);
 
-            let type_info_keys: Vec<_> = self.type_infos.keys().cloned().collect();
-
-            for ty in type_info_keys {
-                let Some(type_id) = self.try_get_type_id(&ty) else {
-                    continue;
-                };
-
-                let typeinfo = &self.type_infos[&ty];
+            for (type_id, type_info) in &self.type_info {
+                let ty = self.get_type(*type_id);
 
                 if self.opts.debug {
                     let debug_name = self
-                        .get_string_lit(typeinfo.name)
+                        .get_string_lit(type_info.name_key)
                         .map(str::to_string)
                         .unwrap_or_else(|| ty.to_string());
 
@@ -707,23 +496,21 @@ impl<'a> fmt::Display for Unit<'a> {
                 }
 
                 write!(f, "static struct {} ", typeinfo_struct_name)?;
-                write_global_typeinfo_decl_name(f, type_id)?;
+                write_global_typeinfo_decl_name(f, *type_id)?;
                 writeln!(f, " = {{")?;
 
                 writeln!(f, "  .{} = MAKE_RC({}, -1, 0),", FieldName::Rc, typeinfo_class)?;
 
                 write!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_NAME_FIELD))?;
 
-                let type_name_str = GlobalName::StringLiteral(typeinfo.name);
-
-                writeln!(f, "&{},", type_name_str)?;
+                writeln!(f, "&{},", type_info.name_key.global_name())?;
 
                 // initialized at runtime for now
                 writeln!(f, "  .{} = NULL,", FieldName::ID(ir::TYPEINFO_METHODS_FIELD))?;
 
                 // should be a single 1-word flag type
                 writeln!(f, "  .{} = (struct {flags_type_name}) {{", FieldName::ID(ir::TYPEINFO_FLAGS_FIELD))?;
-                writeln!(f, "       .{} = {}", FieldName::ID(ir::FieldID(0)), typeinfo.flags)?;
+                writeln!(f, "       .{} = {}", FieldName::ID(ir::FieldID(0)), type_info.flags)?;
                 writeln!(f, "}},")?;
 
                 writeln!(f, "  .{} = ", FieldName::ID(ir::TYPEINFO_TAGS_FIELD))?;
@@ -754,7 +541,7 @@ impl<'a> fmt::Display for Unit<'a> {
 
                 if self.opts.debug {
                     let debug_name = func.name
-                        .and_then(|id| self.get_string_lit(id))
+                        .and_then(|id| self.get_string_lit(StringLiteralKey::StringID(id)))
                         .map(str::to_string)
                         .unwrap_or_else(|| func.id.to_string());
                     writeln!(f, "/** static FunctionInfo of {} */", debug_name)?;
