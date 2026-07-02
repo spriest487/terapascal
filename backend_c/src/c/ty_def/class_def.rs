@@ -1,5 +1,4 @@
 use crate::c::boxed::BoxTypeID;
-use crate::c::global_typeinfo_decl_name;
 use crate::c::type_map::TypeID;
 use crate::c::CBuilder;
 use crate::c::DynArrayTypeID;
@@ -200,7 +199,7 @@ pub struct Class {
 
     comment: Option<String>,
 
-    typeinfo_global_name: Option<String>,
+    typeinfo_global_name: GlobalName,
 }
 
 impl Class {
@@ -208,7 +207,7 @@ impl Class {
         // eprintln!("Class::translate: {}", class_ty.to_pretty_string(unit.metadata));
 
         unit.translate_type(class_ty);
-        let class_index = unit.get_type_id(class_ty);
+        let class_type_id = unit.get_type_id(class_ty);
 
         let mut impls = LinkedHashMap::new();
 
@@ -226,7 +225,7 @@ impl Class {
 
                 let impl_func = MethodImplFunc::new(
                     iface_ref.clone(),
-                    ClassIdentity::Class(class_index),
+                    ClassIdentity::Class(class_type_id),
                     *method_id,
                     method_def,
                     *impl_func_id,
@@ -246,15 +245,13 @@ impl Class {
 
         let comment = class_ty.to_pretty_string(unit.metadata);
 
-        let typeinfo_name = global_typeinfo_decl_name(unit, class_ty);
-
         Class {
-            identity: ClassIdentity::Class(class_index),
+            identity: ClassIdentity::Class(class_type_id),
             class_type: class_ty.clone(),
             method_tables: impls,
             dtor: None,
             comment: Some(comment),
-            typeinfo_global_name: typeinfo_name,
+            typeinfo_global_name: GlobalName::StaticTypeInfo(class_type_id),
         }
     }
 
@@ -294,6 +291,8 @@ impl Class {
         let comment = format!("generated dynarray class (array of {})", element_type.to_pretty_string(unit.metadata));
 
         let array_type = element_type.dyn_array();
+        let array_type_id = unit.create_type_id(&array_type);
+
         let array_def_name = TypeDefName::DynArray(id);
 
         let mut dtor = None;
@@ -309,7 +308,7 @@ impl Class {
             method_tables: Default::default(),
             dtor,
             comment: Some(comment),
-            typeinfo_global_name: global_typeinfo_decl_name(unit, &array_type),
+            typeinfo_global_name: GlobalName::StaticTypeInfo(array_type_id),
             class_type: array_type,
         }
     }
@@ -322,6 +321,8 @@ impl Class {
         let comment = format!("generated box class (box of {})", value_type.to_pretty_string(unit.metadata));
 
         let box_type = value_type.boxed();
+        let box_type_id = unit.create_type_id(&box_type);
+
         let box_def_name = TypeDefName::Box(id);
 
         let mut dtor = None;
@@ -339,7 +340,7 @@ impl Class {
             method_tables: Default::default(),
             dtor,
             comment: Some(comment),
-            typeinfo_global_name: global_typeinfo_decl_name(unit, &box_type),
+            typeinfo_global_name: GlobalName::StaticTypeInfo(box_type_id),
             class_type: box_type,
         }
     }
@@ -540,10 +541,8 @@ impl Class {
         };
 
         write!(out, "  .typeinfo =").unwrap();
-        if enable_rtti && let Some(typeinfo_name) = &self.typeinfo_global_name {
-            writeln!(out, "&{},", typeinfo_name).unwrap();
-        } else {
-            writeln!(out, "NULL,").unwrap()
+        if enable_rtti {
+            writeln!(out, "&{},", self.typeinfo_global_name).unwrap();
         }
 
         if let Some((_, (first_iface_id, _))) = impls.get(0) {

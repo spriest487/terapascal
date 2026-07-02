@@ -121,16 +121,6 @@ pub fn write_global_generic_typeinfo_decl_name(f: &mut fmt::Formatter, id: TypeD
     write!(f, "GenericTypeInfo_{id}")
 }
 
-pub fn global_typeinfo_decl_name(unit: &mut Unit, ty: &ir::Type) -> Option<String> {
-    let type_id = unit.create_type_id(ty);
-
-    if unit.metadata.get_type_info(ty).is_some() {
-        Some(format!("TypeInfo_{type_id}"))
-    } else {
-        None
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum VariableID {
     Result,

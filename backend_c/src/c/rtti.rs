@@ -322,7 +322,19 @@ impl<'a> Unit<'a> {
                     None => value_type.to_pretty_string(self.metadata),
                 };
 
-                format!("box of of {value_name}")
+                format!("box of {value_name}")
+            }
+
+            ir::Type::WeakObject(object_id) => {
+                let strong_type = object_id.to_object_type();
+
+                let strong_name_key = self.type_info_name(&strong_type);
+                let strong_name = match self.get_string_lit(strong_name_key) {
+                    Some(name_str) => name_str.to_string(),
+                    None => strong_type.to_pretty_string(self.metadata),
+                };
+
+                format!("weak {strong_name}")
             }
 
             _ => {
