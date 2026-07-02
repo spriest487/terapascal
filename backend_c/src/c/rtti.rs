@@ -46,10 +46,41 @@ impl<'a> Unit<'a> {
 
         let new_method_info_expr = Expr::call_new(&method_info_class_type, true, self);
 
-        let types = self.types.clone();
+        let mut types: Vec<_> = self.types
+            .iter()
+            .map(|(id, ty)| (id.clone(), ty.clone()))
+            .collect();
+        types.sort_by_key(|(id, _)| *id);
+
         let mut type_info_refs = Vec::with_capacity(types.len());
 
+        // this variable (the method array ptr) is reused for all type info
+        let methods_array_var = Expr::named_var(METHODS_ARRAY_NAME);
+
+        const METHODS_ARRAY_NAME: &str = "methods_array";
+        init_stmts.push(Statement::VariableDecl {
+            ty: Type::dyn_array_ptr(method_info_array_id),
+            id: VariableID::named(METHODS_ARRAY_NAME),
+            null_init: false,
+        });
+
+        const METHODINFO_NAME: &str = "methodinfo";
+        init_stmts.push(Statement::VariableDecl {
+            ty: self.translate_type(&ir::METHODINFO_ID.to_class_ptr_type([])).ptr(),
+            id: VariableID::named(METHODINFO_NAME),
+            null_init: false,
+        });
+
+        const METHODNULL_NAME: &str = "method_null";
+        init_stmts.push(Statement::VariableDecl {
+            ty: self.translate_type(&ir::METHODINFO_ID.to_class_ptr_type([])),
+            id: VariableID::named(METHODNULL_NAME),
+            null_init: true,
+        });
+
         for (type_id, ty) in types {
+            init_stmts.push(Statement::Comment(format!("type info init: {}", ty.to_pretty_string(self.metadata))));
+
             let type_info = match self.type_info.get(&type_id) {
                 Some(type_info) => {
                     type_info.clone()
@@ -63,7 +94,9 @@ impl<'a> Unit<'a> {
 
             // allocate the method dynarray instance for this typeinfo
             let method_array_class_ptr = Expr::dyn_array_class(method_info_array_id).addr_of();
-            let methods_array_var = Expr::named_var(METHODS_ARRAY_NAME);
+
+            let type_info_expr = Expr::Global(GlobalName::StaticTypeInfo(type_id));
+            type_info_refs.push(type_info_expr.clone());
 
             init_stmts.push(Statement::Expr(Expr::assign(
                 methods_array_var.clone(),
@@ -73,10 +106,6 @@ impl<'a> Unit<'a> {
                     true,
                 )
             )));
-
-            let type_info_expr = Expr::Global(GlobalName::StaticTypeInfo(type_id));
-
-            type_info_refs.push(type_info_expr.clone());
 
             for method_index in 0..type_info.methods.len() {
                 init_stmts.push(Statement::Expr(Expr::assign(
@@ -155,8 +184,8 @@ impl<'a> Unit<'a> {
             )));
         }
 
-        let typeinfo_count = i32::try_from(self.type_info.len()).unwrap_or(i32::MAX);
-        let funcinfo_count = i32::try_from(type_info_refs.len()).unwrap_or(i32::MAX);
+        let typeinfo_count = i32::try_from(type_info_refs.len()).unwrap_or(i32::MAX);
+        let funcinfo_count = i32::try_from(self.runtime_func_infos.len()).unwrap_or(i32::MAX);
 
         // allocate the global typeinfo and funcinfo lists
         init_stmts.push(Statement::assign(
@@ -199,27 +228,6 @@ impl<'a> Unit<'a> {
         ])));
 
         // initialize type info fields that can't be statically initialized
-        const METHODS_ARRAY_NAME: &str = "methods_array";
-        init_stmts.push(Statement::VariableDecl {
-            ty: Type::dyn_array_ptr(method_info_array_id),
-            id: VariableID::named(METHODS_ARRAY_NAME),
-            null_init: false,
-        });
-
-        const METHODINFO_NAME: &str = "methodinfo";
-        init_stmts.push(Statement::VariableDecl {
-            ty: self.translate_type(&ir::METHODINFO_ID.to_class_ptr_type([])).ptr(),
-            id: VariableID::named(METHODINFO_NAME),
-            null_init: false,
-        });
-
-        const METHODNULL_NAME: &str = "method_null";
-        init_stmts.push(Statement::VariableDecl {
-            ty: self.translate_type(&ir::METHODINFO_ID.to_class_ptr_type([])),
-            id: VariableID::named(METHODNULL_NAME),
-            null_init: true,
-        });
-
         for typeinfo_index in 0..type_info_refs.len() {
             let type_info_ref = &type_info_refs[typeinfo_index];
 

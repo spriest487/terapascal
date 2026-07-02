@@ -309,9 +309,10 @@ impl<'a> Unit<'a> {
         }
 
         let mut init_builder = CBuilder::new(self, &[], ir::Type::Nothing);
-        init_builder.stmts.append(&mut init_stmts);
+        init_builder.stmts.extend(init_stmts);
 
         // translate initialization blocks from library
+        init_builder.stmts.push(Statement::Comment(format!("library init: {} {}", library.name, library.version)));
         init_builder.translate_instructions(library.init());
         init_func.body.extend(init_builder.stmts);
 
@@ -329,7 +330,7 @@ impl<'a> Unit<'a> {
             let mut rtti_init_stmts = Vec::new();
             self.gen_rtti_init(&mut rtti_init_stmts);
 
-            init_stmts.splice(0..0, rtti_init_stmts);
+            init_func.body.splice(0..0, rtti_init_stmts);
         }
 
         self.functions.push(init_func);
