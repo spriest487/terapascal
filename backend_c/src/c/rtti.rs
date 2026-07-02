@@ -278,7 +278,8 @@ impl<'a> Unit<'a> {
             self.create_empty_type_id(ty)
         };
 
-        let name = self.type_info_name(ty);
+        let name = self.type_info_name(ty)
+            .unwrap_or_else(|| StringLiteralKey::StringID(ir::EMPTY_STRING_ID));
 
         self.type_info.insert(type_id, TypeInfo {
             flags: ir::TypeInfo::type_runtime_flags(ty, self.metadata),
@@ -289,38 +290,29 @@ impl<'a> Unit<'a> {
         &self.type_info[&type_id]
     }
 
-    fn type_info_name(&mut self, ty: &ir::Type) -> StringLiteralKey {
+    fn type_info_name(&mut self, ty: &ir::Type) -> Option<StringLiteralKey> {
         if let Some(type_info) = self.metadata.get_type_info(ty) {
-            return StringLiteralKey::StringID(type_info.name);
+            return Some(StringLiteralKey::StringID(type_info.name));
         }
 
         let name_string = match ty {
             ir::Type::Array { element, dim } => {
-                let element_name_key = self.type_info_name(element);
-                let element_name = match self.get_string_lit(element_name_key) {
-                    Some(name_str) => name_str.to_string(),
-                    None => element.to_pretty_string(self.metadata),
-                };
+                let element_name_key = self.type_info_name(element)?;
+                let element_name = self.get_string_lit(element_name_key)?;
 
                 format!("array[{dim}] of {element_name}")
             }
 
             ir::Type::Object(ir::ObjectID::Array(element_type)) => {
-                let element_name_key = self.type_info_name(element_type);
-                let element_name = match self.get_string_lit(element_name_key) {
-                    Some(name_str) => name_str.to_string(),
-                    None => element_type.to_pretty_string(self.metadata),
-                };
+                let element_name_key = self.type_info_name(element_type)?;
+                let element_name = self.get_string_lit(element_name_key)?;
 
                 format!("array of {element_name}")
             }
 
             ir::Type::Object(ir::ObjectID::Box(value_type)) => {
-                let value_name_key = self.type_info_name(value_type);
-                let value_name = match self.get_string_lit(value_name_key) {
-                    Some(name_str) => name_str.to_string(),
-                    None => value_type.to_pretty_string(self.metadata),
-                };
+                let value_name_key = self.type_info_name(value_type)?;
+                let value_name = self.get_string_lit(value_name_key)?;
 
                 format!("box of {value_name}")
             }
@@ -328,28 +320,25 @@ impl<'a> Unit<'a> {
             ir::Type::WeakObject(object_id) => {
                 let strong_type = object_id.to_object_type();
 
-                let strong_name_key = self.type_info_name(&strong_type);
-                let strong_name = match self.get_string_lit(strong_name_key) {
-                    Some(name_str) => name_str.to_string(),
-                    None => strong_type.to_pretty_string(self.metadata),
-                };
+                let strong_name_key = self.type_info_name(&strong_type)?;
+                let strong_name = self.get_string_lit(strong_name_key)?;
 
                 format!("weak {strong_name}")
             }
 
             _ => {
-                return StringLiteralKey::StringID(ir::EMPTY_STRING_ID);
+                return None;
             }
         };
 
         if let Some(id) = self.metadata.find_string_id(&name_string) {
-            return StringLiteralKey::StringID(id);
+            return Some(StringLiteralKey::StringID(id));
         };
 
         let type_id = self.get_type_id(ty);
         let key = StringLiteralKey::Named(GlobalName::TypeNameString(type_id));
 
         self.string_literals.insert(key, StringLiteral(name_string));
-        key
+        Some(key)
     }
 }

@@ -2971,7 +2971,8 @@ impl Vm {
             // array types are distinct per size but don't exist in metadata
             ir::Type::Array { element, dim } => {
                 let name = self.find_type_info_name(element)?
-                    .map(|element_name| format!("array[{dim}] of {element_name}"))
+                    .and_then(|element_name| (!element_name.is_empty())
+                        .then(|| format!("array {dim} of {element_name}")))
                     .unwrap_or(String::new());
 
                 self.new_type_info(ty, &name, flags)
@@ -2979,7 +2980,8 @@ impl Vm {
 
             ir::Type::WeakObject(object_id) => {
                 let name = self.find_type_info_name(&object_id.to_object_type())?
-                    .map(|object_name| format!("weak {object_name}"))
+                    .and_then(|object_name| (!object_name.is_empty())
+                        .then(|| format!("weak {object_name}")))
                     .unwrap_or(String::new());
 
                 self.new_type_info(ty, &name, flags)
@@ -2987,7 +2989,8 @@ impl Vm {
 
             ir::Type::Object(ir::ObjectID::Box(value_type)) => {
                 let name = self.find_type_info_name(value_type)?
-                    .map(|value_name| format!("box of {value_name}"))
+                    .and_then(|value_name| (!value_name.is_empty())
+                        .then(|| format!("box of {value_name}")))
                     .unwrap_or(String::new());
 
                 self.new_type_info(ty, &name, flags)
@@ -2995,7 +2998,8 @@ impl Vm {
 
             ir::Type::Object(ir::ObjectID::Array(element_type)) => {
                 let name = self.find_type_info_name(element_type)?
-                    .map(|element_name| format!("array of {element_name}"))
+                    .and_then(|element_name| (!element_name.is_empty())
+                        .then(|| format!("array of {element_name}")))
                     .unwrap_or(String::new());
 
                 self.new_type_info(ty, &name, flags)
