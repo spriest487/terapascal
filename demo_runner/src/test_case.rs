@@ -5,6 +5,7 @@ use crate::test_script::TestScript;
 use crate::test_script::TestScriptStep;
 use regex::Regex;
 use std::env;
+use std::env::consts::EXE_EXTENSION;
 use std::ffi::OsStr;
 use std::fs;
 use std::fs::DirEntry;
@@ -22,6 +23,7 @@ use std::process::ExitStatus;
 use std::process::Output;
 use std::process::Stdio;
 use std::time::SystemTime;
+use terapascal_common::IR_LIB_EXT;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
 
 #[derive(Clone)]
@@ -88,37 +90,53 @@ impl TestCase {
 
         dump_output_buffers(&stdout, &stderr);
     }
+
+    fn compile_lib(
+        &self,
+        opts: &Opts,
+        build_stdout: &mut Vec<u8>,
+        build_stderr: &mut Vec<u8>,
+    ) -> io::Result<Result<PathBuf, ExitStatus>> {
+        let lib_path = target_file_path(&self.path, opts, IR_LIB_EXT)?;
+        // eprintln!("module path: {}", module_path.display());
+
+        if is_dirty(&lib_path, &self.path, opts)? {
+            let mut build_command = Command::new(&opts.compiler);
+            build_command.arg(&self.path);
+            build_command.arg("-o").arg(&lib_path);
+
+            apply_compiler_args(&self, opts, &mut build_command);
+
+            let build_status = try_run_command(
+                &mut build_command,
+                build_stdout,
+                build_stderr
+            )?;
+
+            if !build_status.success() {
+                return Ok(Err(build_status));
+            }
+        }
+
+        Ok(Ok(lib_path))
+    }
     
     fn run_vm<RunFn>(&self, opts: &Opts, run: RunFn) -> io::Result<ExitStatus> 
         where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
     {
         let mut build_stdout = Vec::new();
         let mut build_stderr = Vec::new();
-        
-        let module_path = target_file_path(&self.path, opts, "lib")?;
-        // eprintln!("module path: {}", module_path.display());
 
-        if is_dirty(&module_path, &self.path, opts)? {
-            let mut build_command = Command::new(&opts.compiler);
-            build_command.arg(&self.path);
-            build_command.arg("-o").arg(&module_path);
-
-            apply_compiler_args(&self, opts, &mut build_command);
-
-            let build_status = try_run_command(
-                &mut build_command,
-                &mut build_stdout,
-                &mut build_stderr
-            )?;
-
-            if !build_status.success() {
+        let lib_path = match self.compile_lib(opts, &mut build_stdout, &mut build_stderr)? {
+            Ok(path) => path,
+            Err(status) => {
                 Self::run_after_build_err(&mut build_stdout, &mut build_stderr, run);
-                return Ok(build_status);
+                return Ok(status);
             }
-        }
+        };
 
         let mut run_command = find_command(&opts.compiler)?;
-        run_command.arg(module_path.canonicalize()?)
+        run_command.arg(lib_path.canonicalize()?)
             .current_dir(self.working_dir());
 
         apply_compiler_args(&self, opts, &mut run_command);
@@ -187,18 +205,25 @@ impl TestCase {
         build_stdout: &mut Vec<u8>,
         build_stderr: &mut Vec<u8>,
         opts: &Opts
-    ) -> io::Result<Option<ExitStatus>> {
+    ) -> io::Result<Result<(), ExitStatus>> {
         if !is_dirty(exe_path, &self.path, opts)? {
-            return Ok(None);
+            return Ok(Ok(()));
         }
 
-        let mut c_file_path = exe_path.clone();
-        c_file_path.set_extension("c");
+        let lib_path = match self.compile_lib(opts, build_stdout, build_stderr)? {
+            Ok(path) => path,
+            Err(err_status) => {
+                return Ok(Err(err_status));
+            }
+        };
+
+        let mut exe_file_path = exe_path.clone();
+        exe_file_path.set_extension(EXE_EXTENSION);
 
         let mut compile_command = find_command(&opts.compiler)?;
 
-        compile_command.arg(&self.path);
-        compile_command.arg("-o").arg(&c_file_path);
+        compile_command.arg(&lib_path);
+        compile_command.arg("-o").arg(&exe_file_path);
 
         apply_compiler_args(&self, opts, &mut compile_command);
 
@@ -209,41 +234,10 @@ impl TestCase {
         )?;
 
         if !compile_status.success() {
-            return Ok(Some(compile_status)); 
+            return Ok(Err(compile_status));
         }
 
-        let mut clang_args = Vec::new();
-        if opts.clang_debug || opts.clang_codeview {
-            clang_args.push(OsStr::new("-g"));
-            clang_args.push(OsStr::new("-O0"));
-        }
-        if opts.clang_codeview {
-            clang_args.push(OsStr::new("-gcodeview"));
-        }
-
-        let clang_status = try_run_command(
-            Command::new("clang")
-                .arg(c_file_path)
-                .arg("-Werror")
-                .arg("-Wall")
-                .arg("-Wextra")
-                .arg("-Wno-unused-function")
-                .arg("-Wno-unused-parameter")
-                .arg("-Wno-unused-variable")
-                .arg("-Wno-unused-label")
-                .arg("-Wno-address-of-packed-member")
-                .arg("-Wno-parentheses-equality")
-                .arg("-o").arg(exe_path)
-                .args(clang_args),
-            build_stdout,
-            build_stderr
-        )?;
-        
-        if !clang_status.success() {
-            return Ok(Some(clang_status));
-        }
-
-        Ok(None)
+        Ok(Ok(()))
     }
 
     fn run_clang<RunFn>(&self, opts: &Opts, run: RunFn) -> io::Result<ExitStatus>
@@ -253,8 +247,8 @@ impl TestCase {
 
         let mut build_stdout = Vec::new();
         let mut build_stderr = Vec::new();
-                
-        if let Some(err_status) = self.build_clang(&exe_path, &mut build_stdout, &mut build_stderr, opts)? {
+
+        if let Err(err_status) = self.build_clang(&exe_path, &mut build_stdout, &mut build_stderr, opts)? {
             let mut no_write = Vec::new();
             run(&mut no_write, &mut build_stdout.as_slice(), &mut build_stderr.as_slice());
             
@@ -446,6 +440,11 @@ fn apply_compiler_args(case: &TestCase, opts: &Opts, compiler_command: &mut Comm
 
     for extra_package in &case.script.packages {
         compiler_command.arg("-p").arg(extra_package);
+    }
+
+    // ensure the source path is in the lib search dirs
+    if let Some(parent_dir) = case.path.parent() {
+        compiler_command.arg("-s").arg(parent_dir);
     }
 
     // expect any extra packages to be present in the same dir as the test source file

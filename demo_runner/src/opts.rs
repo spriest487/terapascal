@@ -22,12 +22,6 @@ pub struct Opts {
     #[structopt(long)]
     pub clean: bool,
 
-    #[structopt(long)]
-    pub clang_debug: bool,
-
-    #[structopt(long)]
-    pub clang_codeview: bool,
-
     #[structopt(long = "continue")]
     pub error_continue: bool,
 
