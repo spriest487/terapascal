@@ -17,8 +17,12 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::iter;
 use terapascal_ir as ir;
+use terapascal_ir::InterfaceRef;
 use terapascal_ir::MetadataSource;
+use terapascal_ir::MethodID;
+use terapascal_ir::Ref;
 use terapascal_ir::TypeDefID;
+use terapascal_ir::Value;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
@@ -609,65 +613,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                 self_arg,
                 rest_args,
             } => {
-                let self_type = self_arg
-                    .find_type(self, self.unit.metadata)
-                    .expect("unable to determine type of self arg in virtual call instruction")
-                    .into_owned();
-
-                let self_arg = Expr::translate_ref(self_arg, self);
-                let mut args = Vec::with_capacity(rest_args.len() + 1);
-
-                // if the self-arg is not an object type, we pass in its address instead
-                if self_type.is_object() {
-                    args.push(self_arg)
-                } else {
-                    args.push(self_arg.addr_of())
-                }
-
-                args.extend(
-                    rest_args
-                        .iter()
-                        .map(|arg| Expr::translate_val(arg, self)),
-                );
-
-                let interface_type = iface_ref.to_interface_type();
-                let iface_type_id = self.create_type_id(&interface_type);
-
-                // virtual call instructions may have a known type, in which case we need to
-                // devirtualize them, since the type may not actually support virtual calls -
-                // e.g. methods called in a generic function where the self type is a value type
-                let method_func = if self_type.is_abstract() {
-                    Expr::Function(FunctionName::Method(iface_type_id, *method))
-                } else {
-                    let func = self.unit
-                        .metadata
-                        .get_interface_method(&self_type, iface_ref, *method)
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "missing implementation of {} for {}",
-                                self.unit.metadata.iface_name(iface_ref),
-                                self_type.to_pretty_string(self.unit.metadata)
-                            )
-                        });
-
-                    // add enclosing type args, if any
-                    let mut method_ref = ir::FunctionRef::new(func);
-                    if let Some(self_type_ref) = self_type.definition_ref() {
-                        method_ref.args = self_type_ref.args.clone();
-                    }
-
-                    let func_instance = self.translate_function_ref(&method_ref);
-                    Expr::Function(func_instance.name)
-                };
-
-                let call = method_func.call(args);
-
-                let result_expr = match out {
-                    Some(out) => Expr::translate_assign(out, call, self),
-                    None => call,
-                };
-
-                self.stmts.push(Statement::Expr(result_expr));
+                self.translate_virtual_call(out, iface_ref, method, self_arg, rest_args);
             },
 
             ir::Instruction::IsType { out, a, value_type, is_type } => {
@@ -689,6 +635,79 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                 self.assign_ref(out, cast_result);
             },
         }
+    }
+
+    fn translate_virtual_call(
+        &mut self,
+        out: &Option<Ref>,
+        iface_ref: &InterfaceRef,
+        method: &MethodID,
+        self_arg: &Ref,
+        rest_args: &Vec<Value>,
+    ) {
+        let self_type = self_arg
+            .find_type(self, self.unit.metadata)
+            .expect("unable to determine type of self arg in virtual call instruction")
+            .into_owned();
+
+        let self_arg = Expr::translate_ref(self_arg, self);
+        let mut args = Vec::with_capacity(rest_args.len() + 1);
+
+        // if the self-arg is not an object type, we pass in its address instead
+        if self_type.is_object() {
+            args.push(self_arg)
+        } else {
+            args.push(self_arg.addr_of())
+        }
+
+        args.extend(
+            rest_args
+                .iter()
+                .map(|arg| Expr::translate_val(arg, self)),
+        );
+
+        let interface_type = iface_ref.to_interface_type();
+        let iface_type_id = self.create_type_id(&interface_type);
+
+        // virtual call instructions may have a known type, in which case we need to
+        // devirtualize them, since the type may not actually support virtual calls -
+        // e.g. methods called in a generic function where the self type is a value type
+        let method_func = if self_type.is_abstract() {
+            Expr::Function(FunctionName::Method(iface_type_id, *method))
+        } else {
+            let self_def_type = self.unit.metadata
+                .find_definition_type(&self_type)
+                .unwrap_or_else(|err| panic!("translate_virtual_call: {err}"));
+
+            let func = self.unit
+                .metadata
+                .get_interface_method(self_def_type.as_ref(), iface_ref, *method)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "missing implementation of {} for {}",
+                        self.unit.metadata.iface_name(iface_ref),
+                        self_type.to_pretty_string(self.unit.metadata)
+                    )
+                });
+
+            // add enclosing type args, if any
+            let mut method_ref = ir::FunctionRef::new(func);
+            if let Some(self_type_ref) = self_type.definition_ref() {
+                method_ref.args = self_type_ref.args.clone();
+            }
+
+            let func_instance = self.translate_function_ref(&method_ref);
+            Expr::Function(func_instance.name)
+        };
+
+        let call = method_func.call(args);
+
+        let result_expr = match out {
+            Some(out) => Expr::translate_assign(out, call, self),
+            None => call,
+        };
+
+        self.stmts.push(Statement::Expr(result_expr));
     }
 
     fn visit_deep<F>(&mut self, value: Expr, value_type: &ir::Type, out: &mut Vec<Statement>, f: &F)

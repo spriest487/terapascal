@@ -12,7 +12,6 @@ mod stack;
 #[cfg(test)]
 mod test;
 
-use std::borrow::Cow;
 pub use self::dyn_value::*;
 pub use self::ptr::Pointer;
 
@@ -1975,7 +1974,9 @@ impl Vm {
         } else {
             // if the type is generic, we need to search for the impls (which will be generic funcs)
             // by the generic version of the type, not the specialized one
-            let def_type = self.find_def_type(&self_type)?;
+            let def_type = self
+                .metadata()
+                .find_definition_type(&self_type)?;
 
             let func = self
                 .metadata()
@@ -2025,104 +2026,6 @@ impl Vm {
             unexpected => {
                 let msg = format!("invalid function val: {:?}", unexpected);
                 Err(ExecError::illegal_state(msg))
-            }
-        }
-    }
-
-    fn find_def_type<'a>(&self, ty: &'a ir::Type) -> ExecResult<Cow<'a, ir::Type>> {
-        match &ty {
-            ir::Type::Object(ir::ObjectID::Class(class_ref))
-            | ir::Type::WeakObject(ir::ObjectID::Class(class_ref)) => {
-                if class_ref.args.is_empty() {
-                    return Ok(Cow::Borrowed(ty));
-                }
-
-                let def = self
-                    .metadata()
-                    .get_class_def(class_ref.def_id)
-                    .ok_or_else(|| {
-                        let msg = format!("missing definition for {}", ty.to_pretty_string(self.metadata()));
-                        ExecError::illegal_state(msg)
-                    })?;
-
-                let def_type = if let Some(def_name) = def.name() {
-                    let def_ref = ir::TypeRef::new(class_ref.def_id, def_name.type_args.clone());
-                    if ty.is_weak() {
-                        Cow::Owned(def_ref.to_weak_class_object_type())
-                    } else {
-                        Cow::Owned(def_ref.to_class_object_type())
-                    }
-                } else {
-                    Cow::Borrowed(ty)
-                };
-
-                Ok(def_type)
-            }
-
-            ir::Type::Variant(variant_ref) => {
-                if variant_ref.args.is_empty() {
-                    return Ok(Cow::Borrowed(ty));
-                }
-
-                let def = self
-                    .metadata()
-                    .get_variant_def(variant_ref.def_id)
-                    .ok_or_else(|| {
-                        let msg = format!("missing definition for {}", ty.to_pretty_string(self.metadata()));
-                        ExecError::illegal_state(msg)
-                    })?;
-
-                let def_type = ir::TypeRef::new(variant_ref.def_id, def.name.type_args.clone())
-                    .to_variant_type();
-
-                Ok(Cow::Owned(def_type))
-            }
-
-            ir::Type::Struct(struct_ref) => {
-                if struct_ref.args.is_empty() {
-                    return Ok(Cow::Borrowed(ty));
-                }
-
-                let def = self
-                    .metadata()
-                    .get_struct_def(struct_ref.def_id)
-                    .ok_or_else(|| {
-                        let msg = format!("missing definition for {}", ty.to_pretty_string(self.metadata()));
-                        ExecError::illegal_state(msg)
-                    })?;
-
-                let def_type = if let Some(def_name) = def.name() {
-                    Cow::Owned(ir::TypeRef::new(struct_ref.def_id, def_name.type_args.clone())
-                        .to_struct_type())
-                } else {
-                    Cow::Borrowed(ty)
-                };
-
-                Ok(def_type)
-            }
-
-            ir::Type::Object(ir::ObjectID::Interface(iface_ref))
-            | ir::Type::WeakObject(ir::ObjectID::Interface(iface_ref)) => {
-                if iface_ref.args.is_empty() {
-                    return Ok(Cow::Borrowed(ty));
-                }
-
-                let def = self
-                    .metadata()
-                    .get_interface_def(iface_ref.def_id)
-                    .ok_or_else(|| {
-                        let msg = format!("missing definition for {}", ty.to_pretty_string(self.metadata()));
-                        ExecError::illegal_state(msg)
-                    })?;
-
-                let def_type = Cow::Owned(ir::InterfaceRef::new(iface_ref.def_id, def.name.type_args.clone())
-                    .to_interface_type());
-
-                Ok(def_type)
-            }
-
-            _ => {
-                Ok(Cow::Borrowed(ty))
             }
         }
     }

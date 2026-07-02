@@ -198,3 +198,13 @@ impl<Ty> From<MarshalError<Ty>> for ExecError<Ty> {
 }
 
 pub type ExecResult<T, Ty = ir::Type> = Result<T, ExecError<Ty>>;
+
+impl From<ir::MetadataError> for ExecError<ir::Type> {
+    fn from(value: ir::MetadataError) -> Self {
+        match value {
+            ir::MetadataError::MissingTypeDef(ty) => {
+                ExecError::MarshalError(MarshalError::MissingTypeDef(ty))
+            }
+        }
+    }
+}

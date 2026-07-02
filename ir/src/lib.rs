@@ -11,7 +11,9 @@ mod ty_decl;
 mod val;
 mod library;
 mod instruction_builder;
+mod error;
 
+pub use self::error::MetadataError;
 pub use self::formatter::*;
 pub use self::function::*;
 pub use self::instruction::*;

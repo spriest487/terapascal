@@ -1,4 +1,5 @@
-﻿use crate::generic::instantiate_struct_def;
+﻿use crate::error::MetadataResult;
+use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::vars::ConstInfo;
 use crate::FunctionID;
@@ -9,6 +10,7 @@ use crate::InterfaceDef;
 use crate::InterfaceID;
 use crate::InterfaceImpl;
 use crate::InterfaceRef;
+use crate::MetadataError;
 use crate::MethodID;
 use crate::MethodInfo;
 use crate::NamePath;
@@ -22,6 +24,7 @@ use crate::TypeDecl;
 use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
+use crate::TypeRef;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
@@ -267,6 +270,100 @@ pub trait MetadataSource : Sized {
         pretty.push_str(self.pretty_type_name(&sig.result_type).as_ref());
 
         pretty
+    }
+
+    // Find the type that represents the definition type of any given type. For non-generic types
+    // this is the type itself, and for generic types this is the type with its generic type params
+    // e.g. the definition type of Option[String] is Option[T]
+    fn find_definition_type<'a>(&self, ty: &'a Type) -> MetadataResult<Cow<'a, Type>> {
+        match &ty {
+            Type::Object(ObjectID::Class(class_ref))
+            | Type::WeakObject(ObjectID::Class(class_ref)) => {
+                if class_ref.args.is_empty() {
+                    return Ok(Cow::Borrowed(ty));
+                }
+
+                let def = self
+                    .get_struct_def(class_ref.def_id)
+                    .and_then(|def| def.is_class().then_some(def))
+                    .ok_or_else(|| {
+                        MetadataError::MissingTypeDef(ty.clone())
+                    })?;
+
+                let def_type = if let Some(def_name) = def.name() {
+                    let def_ref = TypeRef::new(class_ref.def_id, def_name.type_args.clone());
+                    if ty.is_weak() {
+                        Cow::Owned(def_ref.to_weak_class_object_type())
+                    } else {
+                        Cow::Owned(def_ref.to_class_object_type())
+                    }
+                } else {
+                    Cow::Borrowed(ty)
+                };
+
+                Ok(def_type)
+            }
+
+            Type::Variant(variant_ref) => {
+                if variant_ref.args.is_empty() {
+                    return Ok(Cow::Borrowed(ty));
+                }
+
+                let def = self
+                    .get_variant_def(variant_ref.def_id)
+                    .ok_or_else(|| {
+                        MetadataError::MissingTypeDef(ty.clone())
+                    })?;
+
+                let def_type = TypeRef::new(variant_ref.def_id, def.name.type_args.clone())
+                    .to_variant_type();
+
+                Ok(Cow::Owned(def_type))
+            }
+
+            Type::Struct(struct_ref) => {
+                if struct_ref.args.is_empty() {
+                    return Ok(Cow::Borrowed(ty));
+                }
+
+                let def = self
+                    .get_struct_def(struct_ref.def_id)
+                    .ok_or_else(|| {
+                        MetadataError::MissingTypeDef(ty.clone())
+                    })?;
+
+                let def_type = if let Some(def_name) = def.name() {
+                    Cow::Owned(TypeRef::new(struct_ref.def_id, def_name.type_args.clone())
+                        .to_struct_type())
+                } else {
+                    Cow::Borrowed(ty)
+                };
+
+                Ok(def_type)
+            }
+
+            Type::Object(ObjectID::Interface(iface_ref))
+            | Type::WeakObject(ObjectID::Interface(iface_ref)) => {
+                if iface_ref.args.is_empty() {
+                    return Ok(Cow::Borrowed(ty));
+                }
+
+                let def = self
+                    .get_interface_def(iface_ref.def_id)
+                    .ok_or_else(|| {
+                        MetadataError::MissingTypeDef(ty.clone())
+                    })?;
+
+                let def_type = Cow::Owned(InterfaceRef::new(iface_ref.def_id, def.name.type_args.clone())
+                    .to_interface_type());
+
+                Ok(def_type)
+            }
+
+            _ => {
+                Ok(Cow::Borrowed(ty))
+            }
+        }
     }
 }
 

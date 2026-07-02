@@ -1,16 +1,15 @@
 pub use crate::metadata::ids::FieldID;
 pub use crate::metadata::ids::ObjectID;
 use crate::ty_decl::TypeDefID;
-use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceRef;
 use crate::MetadataSource;
 use crate::TagLocation;
 use crate::TypeRef;
 use crate::Value;
+use crate::FunctionSig;
 use serde::Deserialize;
 use serde::Serialize;
-use std::borrow::Cow;
 use std::fmt;
 use std::rc::Rc;
 
@@ -215,15 +214,15 @@ impl Type {
         }
     }
     
-    pub fn definition_ref(&'_ self) -> Option<Cow<'_, Rc<TypeRef>>> {
+    pub fn definition_ref(&'_ self) -> Option<&Rc<TypeRef>> {
         match self {
-            Type::Variant(id)
-            | Type::Struct(id) => {
-                Some(Cow::Borrowed(id))
-            },
+            Type::Variant(type_ref)
+            | Type::Struct(type_ref) => {
+                Some(type_ref)
+            }
 
-            Type::Object(ObjectID::Class(id)) => {
-                Some(Cow::Borrowed(id))
+            Type::Object(ObjectID::Class(type_ref)) => {
+                Some(type_ref)
             },
 
             _ => None,
