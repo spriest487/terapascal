@@ -1087,7 +1087,6 @@ impl<'a, 'b> CBuilder<'a, 'b> {
         self.assign(box_value_field.clone(), value);
 
         if value_type.is_object() {
-            // TODO: deep retain
             self.retain(box_value_field.cast(Type::Rc.ptr()), false);
         }
 

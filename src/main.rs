@@ -84,24 +84,6 @@ fn compile(args: Args) -> Result<(), RunError> {
         compile_opts.define(define_sym.clone());
     }
 
-    let source_ext = get_extension(&args.file);
-    if source_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
-        let mut log = BuildLog::new();
-        if compile_opts.verbose {
-            log.trace(format!("loading existing module: {}", args.file.display()));
-        }
-
-        let mut lib_loader = LibraryLoader::new(args.search_dirs.clone(), &mut log);
-
-        let artifact = lib_loader.load_lib_file(&args.file)
-            .map(BuildArtifact::Library);
-
-        return handle_output(BuildOutput {
-            artifact,
-            log,
-        }, &args);
-    }
-    
     let input = BuildInput {
         compile_opts,
         codegen_opts,
@@ -113,6 +95,25 @@ fn compile(args: Args) -> Result<(), RunError> {
         package_names: args.packages.clone(),
         no_system: args.no_system,
     };
+
+    let source_ext = get_extension(&args.file);
+    if source_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
+        let mut log = BuildLog::new();
+        if input.compile_opts.verbose {
+            log.trace(format!("loading existing module: {}", args.file.display()));
+        }
+
+        let mut lib_loader = LibraryLoader::new(args.search_dirs.clone(), &mut log);
+
+        let artifact = lib_loader
+            .load_lib_file(&args.file)
+            .map(BuildArtifact::Library);
+
+        return handle_output(BuildOutput {
+            artifact,
+            log,
+        }, &args);
+    }
     
     let output = build(&DefaultFilesystem, input);
     

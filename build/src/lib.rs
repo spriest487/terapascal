@@ -68,6 +68,21 @@ pub struct BuildInput {
     pub codegen_opts: CodegenOpts,
 }
 
+impl BuildInput {
+    pub fn lib_search_dirs(&self) -> Vec<PathBuf> {
+        match self.source_path.parent() {
+            Some(parent_dir) => {
+                let mut dirs = self.search_dirs.clone();
+                dirs.push(parent_dir.to_path_buf());
+                dirs
+            },
+            None => {
+                self.search_dirs.clone()
+            },
+        }
+    }
+}
+
 pub enum BuildArtifact {
     PreprocessedText(Vec<PreprocessedUnit>),
     ParsedUnits(ParseOutput),
@@ -547,17 +562,7 @@ fn build_with_log(
         package_names.insert(0, String::from(SYSTEM_PACKAGE_NAME));
     }
 
-    let lib_search_dirs = match input.source_path.parent() {
-        Some(parent_dir) => {
-            let mut dirs = input.search_dirs.clone();
-            dirs.push(parent_dir.to_path_buf());
-            dirs
-        },
-        None => {
-            input.search_dirs.clone()
-        },
-    };
-
+    let lib_search_dirs = input.lib_search_dirs();
     let mut lib_loader = LibraryLoader::new(lib_search_dirs, log);
 
     for package_name in package_names {
