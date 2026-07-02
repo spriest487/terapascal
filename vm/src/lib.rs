@@ -2965,14 +2965,14 @@ impl Vm {
             return self.load_global_value(global_value);
         };
 
+        let flags = ir::TypeInfo::type_runtime_flags(ty, self.metadata());
+
         match ty {
             // array types are distinct per size but don't exist in metadata
             ir::Type::Array { element, dim } => {
                 let name = self.find_type_info_name(element)?
                     .map(|element_name| format!("array[{dim}] of {element_name}"))
                     .unwrap_or(String::new());
-
-                let flags = ir::TYPE_FLAG_ARRAY | ir::TYPE_FLAG_VALUE;
 
                 self.new_type_info(ty, &name, flags)
             },
@@ -2982,8 +2982,6 @@ impl Vm {
                     .map(|object_name| format!("weak {object_name}"))
                     .unwrap_or(String::new());
 
-                let flags = ir::TYPE_FLAG_WEAK;
-
                 self.new_type_info(ty, &name, flags)
             },
 
@@ -2992,7 +2990,6 @@ impl Vm {
                     .map(|value_name| format!("box of {value_name}"))
                     .unwrap_or(String::new());
 
-                let flags = 0;
                 self.new_type_info(ty, &name, flags)
             }
 
@@ -3001,13 +2998,11 @@ impl Vm {
                     .map(|element_name| format!("array of {element_name}"))
                     .unwrap_or(String::new());
 
-                let flags = ir::TYPE_FLAG_ARRAY;
                 self.new_type_info(ty, &name, flags)
             }
 
             _ => {
                 let name = "";
-                let flags = ir::TypeInfo::type_runtime_flags(ty, self.metadata());
                 self.new_type_info(ty, &name, flags)
             }
         }

@@ -1,5 +1,4 @@
 use crate::FunctionID;
-use crate::Metadata;
 use crate::MetadataSource;
 use crate::ObjectID;
 use crate::StringID;
@@ -36,7 +35,7 @@ impl TypeInfo {
         }
     }
 
-    pub fn get_name_string<'m>(&self, metadata: &'m Metadata) -> Option<&'m String> {
+    pub fn get_name_string<'m>(&self, metadata: &'m impl MetadataSource) -> Option<&'m String> {
         metadata.get_string(self.name)
     }
 

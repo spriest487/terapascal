@@ -9,6 +9,7 @@
     { "output": "* Array" },
 
     { "output": "flags for weak array of Object:" },
+    { "output": "* Array" },
     { "output": "* Weak" },
 
     { "output": "flags for weak Object:" },
@@ -21,6 +22,7 @@
     { "output": "* Function" },
 
     { "output": "flags for <anonymous type>:" },
-    { "output": "* Weak" }
+    { "output": "* Weak" },
+    { "output": "* Function" }
   ]
 }
