@@ -1,5 +1,4 @@
 use crate::ast;
-use crate::ast::FunctionParamMod;
 use crate::ast::IdentPath;
 use crate::codegen::build_func_def;
 use crate::codegen::library_builder::LibraryBuilder;
@@ -207,8 +206,12 @@ impl<'a> LibraryBuilder<'a> {
             .map(|sig_param| {
                 let param_ty = self.translate_type(&sig_param.ty);
                 match sig_param.modifier {
-                    None => param_ty,
-                    Some(FunctionParamMod::Var | FunctionParamMod::Out) => param_ty.ptr(),
+                    None => {
+                        param_ty
+                    },
+                    Some(ast::FunctionParamMod::Var | ast::FunctionParamMod::Out) => {
+                        param_ty.temp_ref()
+                    },
                 }
             })
             .collect();
@@ -438,19 +441,35 @@ impl<'a> LibraryBuilder<'a> {
         let mut param_infos = Vec::with_capacity(groups.len());
 
         for group in groups {
+            let group_type = self.translate_type(&group.ty);
+
             for item in &group.param_items {
                 let mut tags = Vec::new();
 
-                if let Some(modifier_decl) = &group.modifier
-                    && modifier_decl.param_mod == ast::FunctionParamMod::Out
-                    && let Some(out_tag_info) = OutParamTagInfo::find_in_metadata(&self.metadata)
+                let param_type = match group.modifier
+                    .as_ref()
+                    .map(|decl| decl.param_mod)
                 {
-                    tags.push(ir::TagInfo::new(out_tag_info.class_id));
-                }
+                    Some(ast::FunctionParamMod::Var) => {
+                        group_type.temp_ref()
+                    }
+
+                    Some(ast::FunctionParamMod::Out) => {
+                        if let Some(out_tag_info) = OutParamTagInfo::find_in_metadata(&self.metadata) {
+                            tags.push(ir::TagInfo::new(out_tag_info.class_id));
+                        }
+
+                        group_type.temp_ref()
+                    }
+
+                    _ => {
+                        group_type.clone()
+                    },
+                };
 
                 param_infos.push(ir::FunctionParamInfo {
                     name: Some(item.name.clone()),
-                    param_type: self.translate_type(&group.ty),
+                    param_type,
                     tags,
                 });
             }

@@ -36,9 +36,22 @@ impl ImportBuilder<'_> {
                 ir::Type::TempRef(deref_type) => {
                     let param_type = self.read_type(deref_type)?;
 
+                    let has_out_tag = self.out_param_tag_info
+                        .map(|out_info| param_info.tags
+                            .iter()
+                            .any(|t| t.class_id == out_info.class_id))
+                        .unwrap_or(false);
+
+                    // out params are marked by Terapascal with a tag
+                    let param_mod = if has_out_tag {
+                        FunctionParamMod::Out
+                    } else {
+                        FunctionParamMod::Var
+                    };
+
                     let mod_decl = FunctionParamModDecl {
                         span: self.span(),
-                        param_mod: FunctionParamMod::Var,
+                        param_mod,
                     };
 
                     (param_type, Some(mod_decl))
@@ -71,6 +84,10 @@ impl ImportBuilder<'_> {
         func_info: &ir::FunctionInfo,
     ) -> ImportResult<()> {
         let tags = self.read_tags(&func_info.tags)?;
+
+        if func_info.identity.to_string().contains("MyLibOutParam") {
+            eprintln!("here");
+        }
 
         let result_type = self.read_type(&func_info.result_type)?;
         let param_groups = self.read_params(&func_info.params)?;

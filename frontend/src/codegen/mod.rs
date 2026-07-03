@@ -15,6 +15,7 @@ pub use self::alias::*;
 pub use self::function::*;
 pub use self::set_flags::*;
 pub use self::enum_type::*;
+pub use self::var_param::*;
 
 use self::builder::IRBuilder;
 use self::expr::*;

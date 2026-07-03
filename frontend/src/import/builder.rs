@@ -11,9 +11,9 @@ use crate::ast::LiteralItem;
 use crate::ast::ObjectCtorArgs;
 use crate::ast::Visibility;
 use crate::codegen::library_builder::FunctionDeclKey;
-use crate::codegen::EnumMemberTagInfo;
 use crate::codegen::FunctionInstance;
 use crate::codegen::SetTypeTagInfo;
+use crate::codegen::{EnumMemberTagInfo, OutParamTagInfo};
 use crate::import::ImportError;
 use crate::import::ImportResult;
 use crate::import::ImportWarning;
@@ -57,6 +57,7 @@ pub(super) struct ImportBuilder<'a> {
 
     enum_member_tag_info: Option<EnumMemberTagInfo>,
     set_type_tag_info: Option<SetTypeTagInfo>,
+    out_param_tag_info: Option<OutParamTagInfo>,
 }
 
 impl<'a> ImportBuilder<'a> {
@@ -91,10 +92,12 @@ impl<'a> ImportBuilder<'a> {
 
             enum_member_tag_info: None,
             set_type_tag_info: None,
+            out_param_tag_info: None,
         };
 
         builder.set_type_tag_info = SetTypeTagInfo::find_in_metadata(&builder);
         builder.enum_member_tag_info = EnumMemberTagInfo::find_in_metadata(&builder);
+        builder.out_param_tag_info = OutParamTagInfo::find_in_metadata(&builder);
 
         builder
     }
