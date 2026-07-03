@@ -294,17 +294,20 @@ impl Library {
         for (id, func) in funcs {
             write!(f, "{}: {}", id.0, func.sig().to_pretty_string(formatter))?;
 
-            match self.metadata.func_desc(*id) {
-                Some(desc_name) => {
-                    writeln!(f, " ({})", desc_name)?;
-                },
-
-                None => {
-                    writeln!(f)?;
-                },
+            if let Some(desc_name) = self.metadata.func_desc(*id) {
+                write!(f, " ({})", desc_name)?;
             }
 
+            writeln!(f)?;
+
             if let Some(func_info) = self.metadata().get_function_info(*id) {
+                for (i, param) in func_info.params.iter().enumerate() {
+                    if !param.tags.is_empty() {
+                        write!(f, "Param {i} ")?;
+                        write_tag_list(&param.tags, formatter, f)?;
+                    }
+                }
+
                 write_tag_list(&func_info.tags, formatter, f)?;
 
                 if let Some(path) = func_info.identity.as_path()
