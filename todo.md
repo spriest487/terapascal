@@ -1,5 +1,4 @@
 # IR 2.0
-* tag init is duplicated
 * type constraints should be stored (if not enforced) in library
 * store per-param tags for Out tags
 * visibility info

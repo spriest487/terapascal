@@ -3,7 +3,7 @@
 .vs/
 *.dll
 *.exp
-*.lib
+target/**/*.lib
 **/node_modules
 vscode-extension/terapascal/dist
 *.vsix
