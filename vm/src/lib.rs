@@ -2424,9 +2424,26 @@ impl Vm {
                 });
         }
 
+        if !disable_rtti {
+            // run the tag init boilerplate
+            let mut tag_init_builder = ir::RawInstructionBuilder::new(self.metadata(), true);
+            ir::util::gen_tags_init(&mut tag_init_builder);
+
+            let init_name = "vm: tag initialization function".to_string();
+            let init_func = Function::new_internal(init_name, ir::FunctionDef {
+                body: tag_init_builder.finish(),
+                debug_name: None,
+                type_params: Vec::new(),
+                sig: Rc::new(ir::FunctionSig::new([], ir::Type::Nothing)),
+            });
+
+            self.invoke_func(&init_func, &[])?;
+        }
+
         let init_stack_size = self.heap.marshaller
             .stack_alloc_size(&lib.init().instructions)
             .map_err(|err| self.add_stack_trace(err))?;
+
 
         if !lib.init.instructions.is_empty() {
             if self.opts.verbose {

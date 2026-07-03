@@ -1,8 +1,6 @@
 # IR 2.0
+* tag init is duplicated
 * type constraints should be stored (if not enforced) in library
-* remove ir::TypeDecl::Forward?
-* stop interfaces being copied from referenced libs
-* the type of set types (as stored in tags) should be the correct enum type
 * store per-param tags for Out tags
 * visibility info
 * .NET:

@@ -1,9 +1,7 @@
-mod init;
 mod build_functions;
 
 pub use self::build_functions::*;
 
-use self::init::gen_tags_init;
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
 use crate::ast::Ident;
@@ -261,7 +259,6 @@ impl<'a> LibraryBuilder<'a> {
         self.build_defined_type_info();
 
         self.gen_static_closure_init();
-        self.gen_static_type_init();
 
         gen_func_invokers(&mut self);
 
@@ -1421,21 +1418,6 @@ impl<'a> LibraryBuilder<'a> {
         }
         static_closures_init.append(&mut self.init_code);
         self.init_code = static_closures_init;
-    }
-
-    fn gen_static_type_init(&mut self) {
-        let mut instructions = ir::InstructionList::new();
-
-        if self.opts.rtti && let Some(tag_init_func) = gen_tags_init(self) {
-            instructions.push(ir::Instruction::Call {
-                args: Vec::new(),
-                out: None,
-                function: ir::GlobalRef::func(tag_init_func, []).to_ref().value(),
-            }, None);
-        };
-
-        instructions.append(&mut self.init_code);
-        self.init_code = instructions;
     }
 }
 

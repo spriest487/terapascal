@@ -179,7 +179,9 @@ impl Function {
                 (def.func)(state)?
             }
 
-            Function::External(def) => def.invoker.invoke(state)?,
+            Function::External(def) => {
+                def.invoker.invoke(state)?
+            },
             
             Function::IR(func) => {
                 if state.opts().trace_ir {

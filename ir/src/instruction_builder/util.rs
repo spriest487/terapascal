@@ -1,11 +1,11 @@
 use crate::instruction_builder::InstructionBuilder;
-use crate::Instruction;
+use crate::AsInstruction;
 use crate::Label;
 use crate::MetadataSource as _;
 use crate::Ref;
 use crate::Type;
 use crate::Value;
-use crate::AsInstruction;
+use crate::{GlobalRef, Instruction, TagInfo, ANY_TYPE};
 
 pub fn if_then<B, Branch>(builder: &mut B, cond: impl Into<Value>, then_branch: Branch)
 where
@@ -303,4 +303,55 @@ pub fn jmp_exists(instructions: &[impl AsInstruction], to_label: Label) -> bool 
         Instruction::Jump { dest } | Instruction::JumpIf { dest, .. } => *dest == to_label,
         _ => false,
     })
+}
+
+/// generate boilerplate code to initialize all tags in the given builder's metadata source
+pub fn gen_tags_init(builder: &mut impl InstructionBuilder) {
+    let locations: Vec<_> = builder
+        .metadata()
+        .all_tags()
+        .map(|(loc, tags)| (loc, tags.to_vec()))
+        .collect();
+
+    // type of field that stores tags in TypeInfo/MethodInfo class (array of object)
+    for (loc, tags) in locations {
+        let array_ref = Ref::Global(GlobalRef::StaticTagArray(loc));
+        gen_create_tags(builder, array_ref, tags);
+    }
+}
+
+fn gen_create_tags(
+    builder: &mut impl InstructionBuilder,
+    tag_array: Ref,
+    tags: Vec<TagInfo>,
+) {
+    if tags.is_empty() {
+        return;
+    }
+
+    let tag_array_ty = ANY_TYPE.dyn_array();
+
+    builder.local_begin();
+
+    for i in 0..tags.len() {
+        let tag_info = &tags[i];
+
+        let tag_class = tag_info.class_id.to_class_ptr_type([]);
+
+        let tag_instance = builder.local_temp(tag_class.clone());
+        builder.new_object(tag_instance, tag_info.class_id, [], true);
+
+        let index_val = Value::LiteralI32(i as i32);
+
+        let element_ref = tag_array.clone().element_ref(tag_array_ty.clone(), index_val);
+        builder.cast(element_ref.to_deref(), tag_instance, ANY_TYPE);
+
+        for (field_id, field_val) in tag_info.fields.iter() {
+            let field_ref = tag_instance.to_ref().field_ref(tag_class.clone(), *field_id);
+
+            builder.mov(field_ref.to_deref(), field_val.clone());
+        }
+    }
+
+    builder.local_end();
 }

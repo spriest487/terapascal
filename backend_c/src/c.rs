@@ -270,25 +270,6 @@ impl<'a> Unit<'a> {
             }
         }
 
-        let init_index = self
-            .functions
-            .iter()
-            .position(|f| f.decl.name == FunctionName::Init);
-        let mut init_func = match init_index {
-            Some(index) => self.functions.remove(index),
-            None => FunctionDef {
-                decl: FunctionDecl {
-                    name: FunctionName::Init,
-                    params: Vec::new(),
-                    return_ty: Type::Void,
-                    comment: None,
-                },
-                body: Vec::new(),
-            },
-        };
-
-        let mut init_stmts = Vec::new();
-
         let mut class_index = 0;
         while class_index < self.classes.len() {
             let class = &self.classes[class_index];
@@ -303,12 +284,40 @@ impl<'a> Unit<'a> {
             class_index += 1;
         }
 
+        let init_index = self
+            .functions
+            .iter()
+            .position(|f| f.decl.name == FunctionName::Init);
+        let mut init_func = match init_index {
+            Some(index) => {
+                self.functions.remove(index)
+            },
+            None => FunctionDef {
+                decl: FunctionDecl {
+                    name: FunctionName::Init,
+                    params: Vec::new(),
+                    return_ty: Type::Void,
+                    comment: None,
+                },
+                body: Vec::new(),
+            },
+        };
+
+        let mut init_stmts = Vec::new();
+
         // look up FFI functions
         for ffi_func in &self.ffi_funcs {
             init_stmts.push(ffi_func.init_statement());
         }
 
+        // generate tag initialization
+        let mut tag_init_builder = ir::RawInstructionBuilder::new(library.metadata.as_ref(), self.opts.debug);
+        ir::util::gen_tags_init(&mut tag_init_builder);
+        let tag_init_instructions = tag_init_builder.finish();
+
         let mut init_builder = CBuilder::new(self, &[], ir::Type::Nothing);
+        init_builder.translate_instructions(&tag_init_instructions);
+
         init_builder.stmts.extend(init_stmts);
 
         // translate initialization blocks from library
