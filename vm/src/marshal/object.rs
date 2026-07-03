@@ -242,7 +242,6 @@ impl Marshaller {
         let dtor_def = ir::FunctionDef {
             body: dtor_body,
             type_params: Vec::new(),
-            debug_name: Some(dtor_name.clone()),
             sig: Rc::new(ir::FunctionSig::new([object_type.clone()], ir::Type::Nothing)),
         };
 

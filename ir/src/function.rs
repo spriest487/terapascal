@@ -248,8 +248,6 @@ impl FunctionInfo {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FunctionDef {
-    pub debug_name: Option<String>,
-
     pub type_params: Vec<Arc<String>>,
 
     pub body: InstructionList,
@@ -265,24 +263,15 @@ pub enum Function {
 
 impl Function {
     pub fn new_local_def(
-        debug_name: Option<String>,
         type_params: Vec<Arc<String>>,
         sig: impl Into<Rc<FunctionSig>>,
         body: InstructionList,
     ) -> Self {
         Function::Local(FunctionDef {
-            debug_name,
             type_params,
             sig: sig.into(),
             body,
         })
-    }
-    
-    pub fn debug_name(&self) -> Option<&String> {
-        match self {
-            Function::External(ExternalFunctionRef { symbol, .. }) => Some(symbol),
-            Function::Local(FunctionDef { debug_name, .. }) => debug_name.as_ref(),
-        }
     }
 
     pub fn sig(&self) -> &Rc<FunctionSig> {
@@ -295,21 +284,21 @@ impl Function {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct FunctionRef {
-    pub id: FunctionID,
+    pub def_id: FunctionID,
     pub args: Vec<Type>
 }
 
 impl FunctionRef {
-    pub fn new(id: FunctionID) -> Self {
+    pub fn new(def_id: FunctionID) -> Self {
         Self {
-            id,
+            def_id,
             args: Vec::new(),
         }
     }
 
     pub fn with_args(self, args: impl IntoIterator<Item=Type>) -> Self {
         Self {
-            id: self.id,
+            def_id: self.def_id,
             args: args.into_iter().collect(),
         }
     }

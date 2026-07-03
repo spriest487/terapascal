@@ -406,7 +406,7 @@ impl IRFormatter for RawFormatter {
     }
 
     fn format_func_ref(&self, r: &FunctionRef, f: &mut dyn fmt::Write) -> fmt::Result {
-        write!(f, "{}", r.id)?;
+        write!(f, "{}", r.def_id)?;
 
         if !r.args.is_empty() {
             self.format_type_args(&r.args, f)?;

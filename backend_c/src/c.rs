@@ -255,7 +255,7 @@ impl<'a> Unit<'a> {
 
                 self.func_instances.insert(instance_id, instance.name);
 
-                let Some(ir::Function::Local(def)) = library.functions.get(&key.id) else {
+                let Some(ir::Function::Local(def)) = library.functions.get(&key.def_id) else {
                     continue;
                 };
 

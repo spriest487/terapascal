@@ -7,11 +7,24 @@ type
 
 function MyLibFunc: Integer;
 
+function MyLibOutParam(out a: Integer);
+function MyLibRefParam(var a: Integer);
+
 implementation
 
 function MyLibFunc: Integer;
 begin
     456
+end;
+
+function MyLibOutParam(out a: Integer);
+begin
+    a := 987;
+end;
+
+function MyLibRefParam(var a: Integer);
+begin
+    a := 876;
 end;
 
 initialization

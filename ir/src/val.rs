@@ -133,7 +133,7 @@ impl Ref {
             }
 
             Ref::Global(GlobalRef::Function(key)) => {
-                let func_info = metadata.get_function_info(key.id)?;
+                let func_info = metadata.get_function_info(key.def_id)?;
                 Some(Cow::Owned(Type::Function(func_info.sig.clone())))
             }
 

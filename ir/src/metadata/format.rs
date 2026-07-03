@@ -199,7 +199,7 @@ impl<T: MetadataSource> IRFormatter for T {
 
     fn format_func_ref(&self, r: &FunctionRef, f: &mut dyn fmt::Write) -> fmt::Result {
         let func_name = self
-            .get_function_info(r.id)
+            .get_function_info(r.def_id)
             .and_then(|f| f.identity.as_path());
 
         match func_name {
@@ -208,7 +208,7 @@ impl<T: MetadataSource> IRFormatter for T {
             },
 
             None => {
-                match self.find_impl(r.id) {
+                match self.find_impl(r.def_id) {
                     Some(impl_ref) => {
                         let iface_pretty_name = impl_ref.interface.to_pretty_string(self);
                         write!(f, "{}.{} impl for ", iface_pretty_name, impl_ref.method_name)?;
@@ -217,7 +217,7 @@ impl<T: MetadataSource> IRFormatter for T {
                     },
 
                     None => {
-                        write!(f, "{}", r.id)?
+                        write!(f, "{}", r.def_id)?
                     },
                 }
             },

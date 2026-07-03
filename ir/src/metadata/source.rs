@@ -66,6 +66,7 @@ pub trait MetadataSource : Sized {
     fn get_interface_def(&self, iface_id: InterfaceID) -> Option<&InterfaceDef>;
 
     fn is_impl(&self, ty: &Type, iface_ref: &InterfaceRef) -> bool;
+    fn iface_impls(&self) -> impl Iterator<Item=(&Type, impl Iterator<Item=(&InterfaceRef, &InterfaceImpl)>)>;
     fn type_impls(&self, ty: &Type) -> Vec<(&InterfaceRef, &InterfaceImpl)>;
     fn find_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>>;
     fn get_interface_method(&self, impl_type: &Type, iface_ref: &InterfaceRef, method_id: MethodID) -> Option<FunctionID>;
@@ -251,6 +252,41 @@ pub trait MetadataSource : Sized {
                 Cow::Owned(format!("box of {}", self.pretty_type_name(element_type)))
             },
         }
+    }
+
+    fn func_desc(&self, id: FunctionID) -> Option<String> {
+        if let Some(path) = self
+            .get_function_info(id)
+            .and_then(|decl| decl.identity.as_path())
+        {
+            return Some(path.to_pretty_string(self));
+        }
+
+        self.iface_impls()
+            .find_map(|(impl_ty, mut impls)| {
+                impls
+                    .find_map(|(iface_ref, iface_impl)| {
+                        iface_impl.methods
+                            .iter()
+                            .find_map(|(method, impl_id)| {
+                                if *impl_id != id {
+                                    return None;
+                                }
+
+                                let iface_name = iface_ref
+                                    .to_object_id()
+                                    .to_object_type()
+                                    .to_pretty_string(self);
+
+                                let mut desc = format!("impl of {}.", iface_name);
+                                let _ = self.format_iface_method(iface_ref, *method, &mut desc);
+                                desc.push_str(" for ");
+                                let _ = self.format_type(impl_ty, &mut desc);
+
+                                Some(desc)
+                            })
+                    })
+            })
     }
 
     fn pretty_func_sig(&self, sig: &FunctionSig) -> String {

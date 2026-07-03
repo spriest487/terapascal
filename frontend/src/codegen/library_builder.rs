@@ -342,7 +342,6 @@ impl<'a> LibraryBuilder<'a> {
             let unit_init = init_builder.finish();
             
             let internal_name = format!("{}.<init>", unit.ident);
-            let debug_name = self.opts.debug.then(|| internal_name.clone());
             let identity = ir::FunctionIdentity::internal(internal_name);
 
             let init_sig = Rc::new(ir::FunctionSig {
@@ -353,7 +352,6 @@ impl<'a> LibraryBuilder<'a> {
                 body: unit_init,
                 sig: init_sig.clone(),
                 type_params: Vec::new(),
-                debug_name,
             };
 
             let init_func_id = self.metadata.insert_func(identity, init_sig, false, []);
@@ -1338,11 +1336,6 @@ impl<'a> LibraryBuilder<'a> {
 
         let virtual_sig = Rc::new(translate_sig(func.src_sig.as_ref(), self));
 
-        let ir_func = self.functions
-            .get(&func.id)
-            .expect("function passed to build_function_closure_instance must have been previously translated")
-            .clone();
-
         let closure_identity = ir::ClosureIdentity {
             sig: virtual_sig.clone(),
             id: func.id,
@@ -1364,7 +1357,7 @@ impl<'a> LibraryBuilder<'a> {
         let identity = ir::FunctionIdentity::internal(internal_name);
 
         let thunk_id = self.metadata.insert_func(identity, closure_func_sig, false, []);
-        let thunk_def = build_func_static_closure_def(self, func, &virtual_sig, &ir_func);
+        let thunk_def = build_func_static_closure_def(self, func, &virtual_sig, func.id);
 
         self.functions.insert(thunk_id, ir::Function::Local(thunk_def));
 
@@ -1447,14 +1440,12 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
             continue;
         };
 
-        let target_debug_name = lib_func.debug_name();
-        let target_name = match target_debug_name {
+        let target_name = match lib.metadata.func_desc(func.id) {
             Some(name) => format!("{name} ({})", func.id),
             None => format!("{}", func.id),
         };
 
         let internal_name = format!("generated invoker for {}", target_name);
-        let debug_name = lib.opts.debug.then(|| internal_name.clone());
         let identity = ir::FunctionIdentity::internal(internal_name);
 
         // the source sig may be generic, so look up the translated sig rather than attempting
@@ -1486,7 +1477,6 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         
         let invoker_func = ir::FunctionDef {
             sig: Rc::new(invoker_sig.clone()),
-            debug_name,
             body,
             type_params: Vec::new(),
         };

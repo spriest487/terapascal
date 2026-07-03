@@ -486,7 +486,7 @@ fn remap_ref(r: &Ref, locals: &LocalMap, types: &TypeMap) -> Ref {
             for arg in &func_ref.args {
                 type_args.push(instantiate_type(arg, types));
             }
-            Ref::from(FunctionRef::new(func_ref.id).with_args(type_args))
+            Ref::from(FunctionRef::new(func_ref.def_id).with_args(type_args))
         }
         _ => r.clone(),
     }

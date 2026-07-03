@@ -2,8 +2,20 @@ program LoadPackage;
 uses
     MyLib;
 
+function MyA(out a: Integer);
+begin
+    a := 777;
+end;
+
 begin
     //var x := MyLibClass();
 
     WriteLn('hello, MyLib! ' + MyLibFunc);
+
+    var a: Integer;
+    MyLibOutParam(a);
+    WriteLn('a is ' + a);
+
+    MyLibRefParam(a);
+    WriteLn('a is ' + a);
 end.

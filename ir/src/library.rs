@@ -294,17 +294,13 @@ impl Library {
         for (id, func) in funcs {
             write!(f, "{}: {}", id.0, func.sig().to_pretty_string(formatter))?;
 
-            match self.metadata.func_desc(*id, formatter) {
+            match self.metadata.func_desc(*id) {
                 Some(desc_name) => {
                     writeln!(f, " ({})", desc_name)?;
                 },
 
                 None => {
-                    if let Some(debug_name) = func.debug_name() {
-                        writeln!(f, " ({})", debug_name)?;
-                    } else {
-                        writeln!(f)?;
-                    }
+                    writeln!(f)?;
                 },
             }
 

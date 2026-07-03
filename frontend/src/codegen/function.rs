@@ -88,7 +88,6 @@ pub fn build_func_def(
             result_type: return_ty,
         }),
         type_params,
-        debug_name,
     }
 }
 
@@ -96,7 +95,7 @@ pub fn build_func_static_closure_def(
     library: &mut LibraryBuilder,
     target_func: &FunctionInstance,
     closure_sig: &Rc<ir::FunctionSig>,
-    target_ir_func: &ir::Function,
+    target_func_id: ir::FunctionID,
 ) -> ir::FunctionDef {
     let params = target_func
         .src_sig
@@ -112,7 +111,7 @@ pub fn build_func_static_closure_def(
         })
         .collect::<Vec<_>>();
 
-    let debug_name = match target_ir_func.debug_name() {
+    let debug_name = match library.metadata().func_desc(target_func_id) {
         Some(func_name) if library.opts().debug => {
             Some(format!("static closure def ({func_name})"))
         },
@@ -161,7 +160,6 @@ pub fn build_func_static_closure_def(
             result_type: return_ty,
         }),
         type_params: Vec::new(),
-        debug_name,
         body: body_builder.finish(),
     }
 }
@@ -243,7 +241,6 @@ pub fn build_closure_function_def(
             result_type: return_ty,
         }),
         type_params: Vec::new(),
-        debug_name,
     }
 }
 
@@ -396,8 +393,6 @@ pub fn build_static_closure_impl(
     let init_body = init_builder.finish();
 
     let internal_name = format!("static closure init for {}", closure);
-    let debug_name = library.opts().debug.then(|| internal_name.clone());
-
     let identity = ir::FunctionIdentity::internal(internal_name);
 
     let init_sig = Rc::new(ir::FunctionSig {
@@ -413,7 +408,6 @@ pub fn build_static_closure_impl(
         init_func_id,
         ir::Function::Local(ir::FunctionDef {
             body: init_body,
-            debug_name,
             sig: init_sig,
             type_params: Vec::new(),
         }),

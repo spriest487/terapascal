@@ -67,12 +67,8 @@ impl Function {
         let identity = func_info
             .map(|func_info| func_info.identity.clone())
             .unwrap_or_else(|| {
-                let func_name = def.debug_name
-                    .clone()
-                    .unwrap_or_else(|| id.to_string());
-
                 let internal_name = Function::make_debug_name(
-                    &func_name,
+                    &id.to_string(),
                     &def.sig.param_types,
                     metadata,
                 );
@@ -245,7 +241,7 @@ pub fn instantiate_func(
     }
 
     let generic_func = vm.functions
-        .get(&ir::FunctionRef::new(func_ref.id))
+        .get(&ir::FunctionRef::new(func_ref.def_id))
         .ok_or_else(|| {
             let func_ref_display = func_ref.to_pretty_string(vm.metadata());
             let msg = format!("missing generic function definition: {func_ref_display}");
@@ -331,7 +327,6 @@ pub fn instantiate_func(
 
     let def = ir::FunctionDef {
         body: builder.finish(),
-        debug_name: Some(func_name.to_string()),
         type_params: Vec::new(),
         sig: Rc::new(sig),
     };

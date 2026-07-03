@@ -944,7 +944,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
 
             ir::Ref::Global(ir::GlobalRef::Function(key)) => {
                 assert!(key.args.is_empty(), "find_ref_type: type of generic function");
-                let sig = self.unit.function_types.get(&key.id)?;
+                let sig = self.unit.function_types.get(&key.def_id)?;
                 Some(ir::Type::Function(sig.clone()))
             }
 

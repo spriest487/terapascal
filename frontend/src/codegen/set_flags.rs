@@ -249,7 +249,6 @@ impl FlagsReprType {
         sig: ir::FunctionSig,
         lib: &mut LibraryBuilder,
     ) -> ir::FunctionID {
-        let debug_name = lib.opts().debug.then(|| name.clone());
         let identity = ir::FunctionIdentity::internal(name);
 
         let sig = Rc::new(sig);
@@ -257,7 +256,6 @@ impl FlagsReprType {
         let func = ir::Function::Local(ir::FunctionDef {
             sig: sig.clone(),
             type_params: Vec::new(),
-            debug_name,
             body,
         });
 

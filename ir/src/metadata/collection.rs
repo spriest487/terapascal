@@ -116,6 +116,10 @@ impl<T: MetadataCollection> MetadataSource for T {
         ).unwrap_or(false)
     }
 
+    fn iface_impls(&self) -> impl Iterator<Item=(&Type, impl Iterator<Item=(&InterfaceRef, &InterfaceImpl)>)> {
+        self.iter_in_self_or_refs(move |metadata| metadata.iface_impls())
+    }
+
     fn type_impls(&self, ty: &Type) -> Vec<(&InterfaceRef, &InterfaceImpl)> {
         let mut impls = Vec::new();
         for metadata in self.all_metadata() {

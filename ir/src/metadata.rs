@@ -312,47 +312,6 @@ impl Metadata {
         })
     }
 
-    pub fn func_desc(&self, id: FunctionID, formatter: &impl IRFormatter) -> Option<String> {
-        match self.function_info
-            .get(&id)
-            .and_then(|decl| decl.identity.as_path()) 
-        {
-            Some(path) => {
-                Some(path.to_pretty_string(formatter))
-            },
-
-            None => {
-                self.iface_impls
-                    .iter()
-                    .find_map(|(impl_ty, impls)| {
-                        impls
-                            .iter()
-                            .find_map(|(iface_ref, iface_impl)| {
-                                iface_impl.methods
-                                    .iter()
-                                    .find_map(|(method, impl_id)| {
-                                        if *impl_id != id {
-                                            return None;
-                                        }
-
-                                        let iface_name = iface_ref
-                                            .to_object_id()
-                                            .to_object_type()
-                                            .to_pretty_string(formatter);
-
-                                        let mut desc = format!("impl of {}.", iface_name);
-                                        let _ = formatter.format_iface_method(iface_ref, *method, &mut desc);
-                                        desc.push_str(" for ");
-                                        let _ = formatter.format_type(impl_ty, &mut desc);
-
-                                        Some(desc)
-                                    })
-                            })
-                })
-            }
-        }
-    }
-
     pub fn variables(&self) -> impl Iterator<Item = (VariableID, &VariableInfo)> {
         self.variables
             .iter()
@@ -568,6 +527,12 @@ impl MetadataSource for Metadata {
             .iter()
             .map(|(iface_ref, iface_impl)| (iface_ref, iface_impl))
             .collect()
+    }
+
+    fn iface_impls(&self) -> impl Iterator<Item=(&Type, impl Iterator<Item=(&InterfaceRef, &InterfaceImpl)>)> {
+        self.iface_impls
+            .iter()
+            .map(|(ty, impls)| (ty, impls.iter()))
     }
 
     fn find_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>> {

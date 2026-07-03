@@ -2,6 +2,7 @@ mod builder;
 
 use crate::c::boxed::BoxTypeID;
 use crate::c::function::builder::FuncInstanceBuilder;
+use crate::c::type_map::TypeID;
 use crate::c::CBuilder;
 use crate::c::DynArrayTypeID;
 use crate::c::Expr;
@@ -20,7 +21,7 @@ use terapascal_common::SharedStringKey;
 use terapascal_ir as ir;
 use terapascal_ir::generic::instantiate_function_def;
 use terapascal_ir::generic::instantiate_sig;
-use crate::c::type_map::TypeID;
+use terapascal_ir::MetadataSource;
 
 #[derive(Copy, Clone)]
 pub struct FunctionInstance {
@@ -254,8 +255,14 @@ pub struct FunctionDecl {
 }
 
 impl FunctionDecl {
-    pub fn translate(id: FuncInstanceID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
-        let name = FunctionName::ID(id);
+    pub fn translate(
+        def_id: ir::FunctionID,
+        instance_id: FuncInstanceID,
+        func: &ir::FunctionDef,
+        module: &mut Unit,
+    ) -> Self {
+        let name = FunctionName::ID(instance_id);
+
         let return_ty = module.translate_type(&func.sig.result_type);
         let params = func
             .sig
@@ -264,9 +271,11 @@ impl FunctionDecl {
             .map(|param| module.translate_type(param))
             .collect();
 
-        let mut comment = match &func.debug_name {
+        let func_desc = module.metadata.func_desc(def_id);
+
+        let mut comment = match func_desc {
             Some(name) => name.clone(),
-            None => format!("function {}", id),
+            None => format!("function {}", instance_id),
         };
 
         comment.push_str(": (");
@@ -325,7 +334,12 @@ pub struct FunctionDef {
 }
 
 impl FunctionDef {
-    pub fn translate(id: FuncInstanceID, func: &ir::FunctionDef, module: &mut Unit) -> Self {
+    pub fn translate(
+        def_id: ir::FunctionID,
+        instance_id: FuncInstanceID,
+        func: &ir::FunctionDef,
+        module: &mut Unit,
+    ) -> Self {
         let result_type = func.sig.result_type.clone();
         let mut builder = CBuilder::new(module, &func.sig.param_types, result_type);
 
@@ -333,7 +347,7 @@ impl FunctionDef {
 
         Self {
             body: builder.stmts,
-            decl: FunctionDecl::translate(id, func, module),
+            decl: FunctionDecl::translate(def_id, instance_id, func, module),
         }
     }
 }
@@ -544,13 +558,12 @@ impl<'a> Unit<'a> {
 
             Cow::Owned(ir::FunctionDef {
                 body,
-                debug_name: None,
                 type_params: Vec::new(),
                 sig: Rc::new(sig),
             })
         };
 
-        let c_def = FunctionDef::translate(instance_id, &def, self);
+        let c_def = FunctionDef::translate(func_ref.def_id, instance_id, &def, self);
         self.functions.push(c_def);
     }
 }

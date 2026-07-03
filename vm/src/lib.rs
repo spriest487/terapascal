@@ -2432,7 +2432,6 @@ impl Vm {
             let init_name = "vm: tag initialization function".to_string();
             let init_func = Function::new_internal(init_name, ir::FunctionDef {
                 body: tag_init_builder.finish(),
-                debug_name: None,
                 type_params: Vec::new(),
                 sig: Rc::new(ir::FunctionSig::new([], ir::Type::Nothing)),
             });
