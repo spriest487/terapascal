@@ -259,7 +259,11 @@ impl FlagsReprType {
             body,
         });
 
-        let func_id = lib.metadata_mut().insert_func(identity, sig, false, []);
+        let func_params = sig.param_types
+            .iter()
+            .map(|ty| ir::FunctionParamInfo::new(ty.clone()));
+
+        let func_id = lib.metadata_mut().insert_func(identity, func_params, sig.result_type.clone(), false, []);
         lib.insert_function(func_id, func);
 
         func_id

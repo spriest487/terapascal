@@ -1,13 +1,13 @@
 pub use crate::metadata::ids::FieldID;
 pub use crate::metadata::ids::ObjectID;
 use crate::ty_decl::TypeDefID;
+use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceRef;
 use crate::MetadataSource;
 use crate::TagLocation;
 use crate::TypeRef;
 use crate::Value;
-use crate::FunctionSig;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;

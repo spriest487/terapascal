@@ -1,6 +1,7 @@
 use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FunctionDef;
+use crate::FunctionParamInfo;
 use crate::FunctionRef;
 use crate::FunctionSig;
 use crate::GlobalRef;
@@ -406,7 +407,13 @@ pub fn instantiate_interface_def<'a>(
     for def_method in &generic_def.methods {
         let mut params = Vec::with_capacity(def_method.params.len());
         for def_param in &def_method.params {
-            params.push(instantiate_type(def_param, &mut types));
+            let param_type = instantiate_type(&def_param.param_type, &mut types);
+
+            params.push(FunctionParamInfo {
+                param_type,
+                name: def_param.name.clone(),
+                tags: def_param.tags.clone(),
+            });
         }
 
         methods.push(Method {

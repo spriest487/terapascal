@@ -1,4 +1,5 @@
 use crate::FunctionID;
+use crate::FunctionParamInfo;
 use crate::MethodID;
 use crate::NamePath;
 use crate::TagInfo;
@@ -11,7 +12,7 @@ use std::collections::HashMap;
 pub struct Method {
     pub name: String,
     pub return_ty: Type,
-    pub params: Vec<Type>,
+    pub params: Vec<FunctionParamInfo>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

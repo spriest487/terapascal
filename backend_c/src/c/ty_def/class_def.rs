@@ -58,7 +58,7 @@ impl MethodImplFunc {
         let wrapper_param_tys: Vec<_> = iface_method
             .params
             .iter()
-            .map(|ty| unit.translate_type(ty))
+            .map(|param| unit.translate_type(&param.param_type))
             .collect();
         let wrapper_return_ty = unit.translate_type(&iface_method.return_ty);
 
@@ -576,10 +576,10 @@ impl Interface {
             .map(|(method_index, method)| {
                 let return_ty = unit.translate_type(&method.return_ty);
                 let method_id = ir::MethodID(method_index);
-                let params = method
+                let param_types = method
                     .params
                     .iter()
-                    .map(|param| unit.translate_type(param))
+                    .map(|param| unit.translate_type(&param.param_type))
                     .collect();
 
                 let name = FunctionName::Method(iface_type_id, method_id);
@@ -591,7 +591,7 @@ impl Interface {
 
                 FunctionDecl {
                     return_ty,
-                    params,
+                    params: param_types,
                     name,
                     comment,
                 }

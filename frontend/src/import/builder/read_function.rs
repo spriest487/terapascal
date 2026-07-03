@@ -28,10 +28,10 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 impl ImportBuilder<'_> {
-    pub fn read_params(&mut self, param_types: &[ir::Type]) -> ImportResult<Vec<FunctionParamGroup>> {
-        let mut param_groups = Vec::with_capacity(param_types.len());
-        for (i, param_type) in param_types.iter().enumerate() {
-            let (param_type, modifier) = match param_type {
+    pub fn read_params(&mut self, params: &[ir::FunctionParamInfo]) -> ImportResult<Vec<FunctionParamGroup>> {
+        let mut param_groups = Vec::with_capacity(params.len());
+        for (i, param_info) in params.iter().enumerate() {
+            let (param_type, modifier) = match &param_info.param_type {
                 // reference params are a per-param modifier in Pascal, and a separate type in IR
                 ir::Type::TempRef(deref_type) => {
                     let param_type = self.read_type(deref_type)?;
@@ -72,8 +72,8 @@ impl ImportBuilder<'_> {
     ) -> ImportResult<()> {
         let tags = self.read_tags(&func_info.tags)?;
 
-        let result_type = self.read_type(&func_info.sig.result_type)?;
-        let param_groups = self.read_params(&func_info.sig.param_types)?;
+        let result_type = self.read_type(&func_info.result_type)?;
+        let param_groups = self.read_params(&func_info.params)?;
 
         match &func_info.identity {
             ir::FunctionIdentity::Path(path) => {

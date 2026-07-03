@@ -402,7 +402,7 @@ pub fn build_static_closure_impl(
 
     let init_func_id = library
         .metadata_mut()
-        .insert_func(identity, init_sig.clone(), false, []);
+        .insert_func(identity, [], ir::Type::Nothing, false, []);
 
     library.insert_function(
         init_func_id,

@@ -226,7 +226,7 @@ impl Library {
                 let sig_params: Vec<_> = method
                     .params
                     .iter()
-                    .map(|param| param.to_pretty_string(formatter))
+                    .map(|param| param.param_type.to_pretty_string(formatter))
                     .collect();
                 let return_ty = method.return_ty.to_pretty_string(formatter);
 

@@ -228,12 +228,39 @@ impl fmt::Display for FunctionIdentity {
     }
 }
 
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionParamInfo {
+    pub name: Option<Arc<String>>,
+
+    pub param_type: Type,
+
+    pub tags: Vec<TagInfo>,
+}
+
+impl FunctionParamInfo {
+    pub fn new(param_type: Type) -> Self {
+        Self {
+            name: None,
+            param_type,
+            tags: Vec::new(),
+        }
+    }
+
+    pub fn with_name(mut self, name: impl Into<Arc<String>>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionInfo {
     pub identity: FunctionIdentity,
 
     pub runtime_name: Option<StringID>,
-    pub sig: Rc<FunctionSig>,
+
+    pub params: Vec<FunctionParamInfo>,
+    pub result_type: Type,
 
     pub invoker: Option<FunctionID>,
 
@@ -243,6 +270,16 @@ pub struct FunctionInfo {
 impl FunctionInfo {
     pub fn tags_of_class(&self, id: TypeDefID) -> impl Iterator<Item=&TagInfo> {
         self.tags.iter().filter(move |t| t.class_id == id)
+    }
+
+    pub fn sig(&self) -> FunctionSig {
+        FunctionSig {
+            result_type: self.result_type.clone(),
+            param_types: self.params
+                .iter()
+                .map(|p| p.param_type.clone())
+                .collect(),
+        }
     }
 }
 

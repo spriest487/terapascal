@@ -1,11 +1,14 @@
 use crate::instruction_builder::InstructionBuilder;
 use crate::AsInstruction;
+use crate::GlobalRef;
+use crate::Instruction;
 use crate::Label;
 use crate::MetadataSource as _;
 use crate::Ref;
+use crate::TagInfo;
 use crate::Type;
 use crate::Value;
-use crate::{GlobalRef, Instruction, TagInfo, ANY_TYPE};
+use crate::ANY_TYPE;
 
 pub fn if_then<B, Branch>(builder: &mut B, cond: impl Into<Value>, then_branch: Branch)
 where

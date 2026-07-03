@@ -9,6 +9,7 @@ mod function;
 mod set_flags;
 mod alias;
 mod enum_type;
+mod var_param;
 
 pub use self::alias::*;
 pub use self::function::*;

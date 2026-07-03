@@ -26,9 +26,13 @@ pub fn translate_iface(
             params: def_method
                 .decl
                 .params()
-                .map(|(param, _)| match param.ty.ty() {
-                    typ::Type::MethodSelf => self_type.clone(),
-                    param_ty => lib.translate_type(param_ty),
+                .map(|(param, item)| {
+                    let param_type = match param.ty.ty() {
+                        typ::Type::MethodSelf => self_type.clone(),
+                        param_ty => lib.translate_type(param_ty),
+                    };
+
+                    ir::FunctionParamInfo::new(param_type).with_name(item.name.clone())
                 })
                 .collect(),
         };

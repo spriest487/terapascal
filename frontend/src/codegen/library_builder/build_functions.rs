@@ -3,7 +3,7 @@ use crate::ast::FunctionParamMod;
 use crate::ast::IdentPath;
 use crate::codegen::build_func_def;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::metadata::translate_sig;
+use crate::codegen::var_param::OutParamTagInfo;
 use crate::codegen::FunctionInstance;
 use crate::ir;
 use crate::typ;
@@ -431,6 +431,34 @@ impl<'a> LibraryBuilder<'a> {
         self.insert_func_decl(identity, method_decl)
     }
 
+    pub fn translate_param_groups(
+        &mut self,
+        groups: &[typ::ast::FunctionParamGroup],
+    ) -> Vec<ir::FunctionParamInfo> {
+        let mut param_infos = Vec::with_capacity(groups.len());
+
+        for group in groups {
+            for item in &group.param_items {
+                let mut tags = Vec::new();
+
+                if let Some(modifier_decl) = &group.modifier
+                    && modifier_decl.param_mod == ast::FunctionParamMod::Out
+                    && let Some(out_tag_info) = OutParamTagInfo::find_in_metadata(&self.metadata)
+                {
+                    tags.push(ir::TagInfo::new(out_tag_info.class_id));
+                }
+
+                param_infos.push(ir::FunctionParamInfo {
+                    name: Some(item.name.clone()),
+                    param_type: self.translate_type(&group.ty),
+                    tags,
+                });
+            }
+        }
+
+        param_infos
+    }
+
     fn insert_func_decl(
         &mut self,
         identity: ir::FunctionIdentity,
@@ -438,10 +466,10 @@ impl<'a> LibraryBuilder<'a> {
     ) -> ir::FunctionID {
         let tags = self.translate_tag_groups(&func_decl.tags);
 
-        let sig = func_decl.sig();
-        let ir_sig = translate_sig(&sig, self);
+        let params = self.translate_param_groups(&func_decl.param_groups);
+        let result_type = self.translate_type(&func_decl.result_ty);
 
-        self.metadata.insert_func(identity, ir_sig, self.opts.rtti, tags)
+        self.metadata.insert_func(identity, params, result_type, self.opts.rtti, tags)
     }
 
     fn method_identity(
