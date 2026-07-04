@@ -210,10 +210,8 @@ impl<T: MetadataSource> IRFormatter for T {
             None => {
                 match self.find_impl(r.def_id) {
                     Some(impl_ref) => {
-                        let iface_pretty_name = impl_ref.interface.to_pretty_string(self);
-                        write!(f, "{}.{} impl for ", iface_pretty_name, impl_ref.method_name)?;
-
                         self.format_type(impl_ref.impl_type, f)?;
+                        write!(f, ".{}", impl_ref.method_name)?;
                     },
 
                     None => {
