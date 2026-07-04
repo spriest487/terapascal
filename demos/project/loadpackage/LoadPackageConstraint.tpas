@@ -1,4 +1,4 @@
-program LoadPackage;
+program LoadPackageConstraint;
 uses
     MyLib;
 
