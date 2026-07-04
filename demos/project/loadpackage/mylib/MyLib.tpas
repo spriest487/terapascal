@@ -5,7 +5,7 @@ type
     MyInterface = interface
     end;
 
-    MyLibClass = class of MyInterface
+    MyClass = class of MyInterface
     end;
 
     MyConstrainedClass[T] = class where T is MyInterface

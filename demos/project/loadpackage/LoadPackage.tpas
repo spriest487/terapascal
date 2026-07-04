@@ -8,7 +8,7 @@ begin
 end;
 
 begin
-    var x := MyLibClass();
+    var x := MyClass();
 
     WriteLn('hello, MyLib! ' + MyLibFunc);
 

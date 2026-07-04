@@ -3,6 +3,9 @@ uses
     MyLib;
 
 begin
+    var myObj := MyClass();
+    MyConstrained(myObj);
+
     // has a constraint not implemented by Integer,
     // so this should not compile
     MyConstrained(123);
