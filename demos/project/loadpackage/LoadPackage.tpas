@@ -8,14 +8,17 @@ begin
 end;
 
 begin
-    //var x := MyLibClass();
+    var x := MyLibClass();
 
     WriteLn('hello, MyLib! ' + MyLibFunc);
 
+    // params marked as "out" should be marked with a tag in library data,
+    // so they should behave as out params (value does not need to be initialized)
     var a: Integer;
     MyLibOutParam(a);
     WriteLn('a is ' + a);
 
+    // ref params should still require the variable to be initialized
     MyLibRefParam(a);
     WriteLn('a is ' + a);
 end.

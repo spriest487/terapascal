@@ -1,0 +1,8 @@
+{
+  "packages": [
+    "MyLib"
+  ],
+  "steps": [
+    { "error_regex": "constraint not satisfied" }
+  ]
+}

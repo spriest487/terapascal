@@ -2,13 +2,22 @@ unit MyLib;
 interface
 
 type
-    MyLibClass = class
+    MyInterface = interface
+    end;
+
+    MyLibClass = class of MyInterface
+    end;
+
+    MyConstrainedClass[T] = class where T is MyInterface
     end;
 
 function MyLibFunc: Integer;
 
 function MyLibOutParam(out a: Integer);
 function MyLibRefParam(var a: Integer);
+
+function MyConstrained[T](t: T)
+    where T is MyInterface;
 
 implementation
 
@@ -25,6 +34,13 @@ end;
 function MyLibRefParam(var a: Integer);
 begin
     a := 876;
+end;
+
+function MyConstrained[T](t: T)
+    where T is MyInterface;
+begin
+    if t is not MyInterface then
+        raise 'constraint violated!';
 end;
 
 initialization

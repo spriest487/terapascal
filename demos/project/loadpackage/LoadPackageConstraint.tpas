@@ -1,0 +1,9 @@
+program LoadPackage;
+uses
+    MyLib;
+
+begin
+    // has a constraint not implemented by Integer,
+    // so this should not compile
+    MyConstrained(123);
+end.
