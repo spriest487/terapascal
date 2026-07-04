@@ -544,7 +544,7 @@ impl<'a> Unit<'a> {
         } else {
             let mut types = HashMap::new();
             for (param, arg) in generic_def.type_params.iter().zip(func_ref.args.iter()) {
-                if types.insert(SharedStringKey(param.clone()), arg.clone()).is_some() {
+                if types.insert(SharedStringKey(param.name.clone()), arg.clone()).is_some() {
                     panic!("invalid function def: type param names are not unique");
                 }
             }

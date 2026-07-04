@@ -36,7 +36,7 @@ pub fn instantiate_function_def(
     types: &TypeMap,
     builder: &mut impl InstructionBuilder,
 ) {
-    assert!(def.type_params.iter().all(|param| types.contains_key(param)));
+    assert!(def.type_params.iter().all(|param| types.contains_key(&param.name)));
 
     let mut locals = LocalMap::new();
 

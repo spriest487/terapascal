@@ -30,6 +30,7 @@ use crate::typ::MAX_FLAGS_BITS;
 use crate::IntConstant;
 use std::fmt;
 use terapascal_common::span::*;
+use terapascal_common::write_joined;
 use terapascal_common::Backtrace;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;
@@ -1210,13 +1211,7 @@ impl fmt::Display for TypeError {
                     "the following members are missing from the constructor for type `{}`: ",
                     ctor_ty
                 )?;
-                for (i, member) in members.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", member)?;
-                }
-                Ok(())
+                write_joined(f, ", ", members.iter())
             },
             
             TypeError::InvalidBoxCtorElementCount { actual, .. } => {
@@ -1615,12 +1610,7 @@ impl fmt::Display for TypeError {
                 )?;
                 if missing_cases.len() > 0 {
                     write!(f, " (unhandled cases: ")?;
-                    for (i, missing_case) in missing_cases.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{}", missing_case)?;
-                    }
+                    write_joined(f, ", ", missing_cases.iter())?;
                     write!(f, ")")?;
                 }
                 Ok(())

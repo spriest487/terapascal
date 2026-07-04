@@ -11,6 +11,7 @@ use crate::StringID;
 use crate::TagInfo;
 use crate::Type;
 use crate::TypeDefID;
+use crate::TypeParam;
 use crate::VariableID;
 use serde::Deserialize;
 use serde::Serialize;
@@ -285,7 +286,7 @@ impl FunctionInfo {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FunctionDef {
-    pub type_params: Vec<Arc<String>>,
+    pub type_params: Vec<TypeParam>,
 
     pub body: InstructionList,
 
@@ -300,7 +301,7 @@ pub enum Function {
 
 impl Function {
     pub fn new_local_def(
-        type_params: Vec<Arc<String>>,
+        type_params: Vec<TypeParam>,
         sig: impl Into<Rc<FunctionSig>>,
         body: InstructionList,
     ) -> Self {
@@ -315,6 +316,13 @@ impl Function {
         match self {
             Function::External(external_func) => &external_func.sig,
             Function::Local(local_func) => &local_func.sig,
+        }
+    }
+
+    pub fn type_params(&self) -> &[TypeParam] {
+        match self {
+            Function::External(..) => &[],
+            Function::Local(def) => &def.type_params,
         }
     }
 }

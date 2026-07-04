@@ -1,5 +1,8 @@
 mod generic;
 
+pub use self::generic::TypeParam;
+pub use self::generic::format_type_args;
+
 use crate::metadata::ids::ObjectID;
 use crate::type_decl::TypeDefID;
 use crate::FunctionSig;
@@ -438,21 +441,4 @@ fn format_object_id(f: &mut fmt::Formatter, id: &ObjectID) -> fmt::Result {
         ObjectID::Array(element) => write!(f, "array of {}", element),
         ObjectID::Box(element) => write!(f, "box of {}", element),
     }
-}
-
-fn format_type_args(f: &mut fmt::Formatter, args: &[Type]) -> fmt::Result {
-    if args.is_empty() {
-        return Ok(());
-    }
-
-    write!(f, "[")?;
-
-    for (i, arg) in args.iter().enumerate() {
-        if i > 0 {
-            write!(f, ", ")?;
-        }
-        write!(f, "{}", arg)?;
-    }
-
-    write!(f, "]")
 }

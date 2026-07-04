@@ -418,3 +418,21 @@ impl Borrow<String> for SharedStringKey {
         self.0.as_ref()
     }
 }
+
+pub fn write_joined<T>(
+    f: &mut fmt::Formatter,
+    sep: impl fmt::Display,
+    items: impl Iterator<Item=T>,
+) -> fmt::Result
+where
+    T: fmt::Display,
+{
+    for (i, arg) in items.enumerate() {
+        if i > 0 {
+            sep.fmt(f)?;
+        }
+        write!(f, "{}", arg)?;
+    }
+
+    Ok(())
+}

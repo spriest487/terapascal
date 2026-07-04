@@ -292,13 +292,14 @@ impl Library {
 
         writeln!(f, "Functions:")?;
         for (id, func) in funcs {
-            write!(f, "{}: {}", id.0, func.sig().to_pretty_string(formatter))?;
+            let func_desc = self.metadata.func_desc(*id);
+            let sig_display = func.sig().to_pretty_string(formatter);
 
-            if let Some(desc_name) = self.metadata.func_desc(*id) {
-                write!(f, " ({})", desc_name)?;
+            if let Some(desc_name) = func_desc {
+                writeln!(f, "{}: {} ({})", id.0, desc_name, sig_display)?;
+            } else {
+                writeln!(f, "{}: {}", id.0, sig_display)?;
             }
-
-            writeln!(f)?;
 
             if let Some(func_info) = self.metadata().get_function_info(*id) {
                 for (i, param) in func_info.params.iter().enumerate() {
@@ -310,13 +311,25 @@ impl Library {
 
                 write_tag_list(&func_info.tags, formatter, f)?;
 
+                let type_params = func.type_params();
+                if !type_params.is_empty() {
+                    writeln!(f, "Type parameters:")?;
+                    for param in type_params {
+                        write!(f, "\t{}", param.name)?;
+
+                        if let Some(constraint) = &param.constraint {
+                            write!(f, " = ")?;
+                            formatter.format_type(constraint, f)?;
+                        }
+
+                        writeln!(f)?;
+                    }
+                }
+
                 if let Some(path) = func_info.identity.as_path()
                     && !path.type_args.is_empty()
                 {
-                    writeln!(f, "Type arguments:")?;
-                    for arg in &path.type_args {
-                        writeln!(f, "\t{arg}")?;
-                    }
+
                 }
             }
 

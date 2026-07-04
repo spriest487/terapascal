@@ -11,6 +11,7 @@ use crate::c::Unit;
 use crate::c::VariableID;
 use crate::ir;
 use std::fmt;
+use terapascal_common::write_joined;
 
 #[allow(unused)]
 #[derive(Clone, PartialEq, Debug)]
@@ -605,12 +606,7 @@ impl fmt::Display for Expr {
             Expr::Function(name) => write!(f, "{}", name),
             Expr::Call { func, args } => {
                 write!(f, "{}(", func)?;
-                for (i, arg) in args.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", arg)?;
-                }
+                write_joined(f, ", ", args.iter())?;
                 write!(f, ")")
             },
             Expr::Field { base, field } => write!(f, "({}).{}", base, field),

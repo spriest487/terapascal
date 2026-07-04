@@ -13,7 +13,6 @@ use ir::MetadataSource as _;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
-use std::sync::Arc;
 use terapascal_common::SharedStringKey;
 
 pub mod ffi;
@@ -136,7 +135,7 @@ impl Function {
         }
     }
 
-    pub fn type_params(&self) -> &[Arc<String>] {
+    pub fn type_params(&self) -> &[ir::TypeParam] {
         match self {
             Function::Builtin(..) => &[],
             Function::External(..) => &[],
@@ -268,7 +267,7 @@ pub fn instantiate_func(
 
     let mut types = HashMap::new();
     for (param, arg) in generic_def.type_params.iter().zip(func_ref.args.iter()) {
-        if types.insert(SharedStringKey(param.clone()), arg.clone()).is_some() {
+        if types.insert(SharedStringKey(param.name.clone()), arg.clone()).is_some() {
             return Err(ExecError::illegal_state("invalid function def: type param names are not unique"));
         }
     }
@@ -347,7 +346,7 @@ pub fn instantiate_func(
 }
 
 fn format_type_arg_list(
-    params: &[Arc<String>],
+    params: &[ir::TypeParam],
     types: &HashMap<SharedStringKey, ir::Type>,
     formatter: &impl ir::IRFormatter,
 ) -> String {
@@ -358,9 +357,9 @@ fn format_type_arg_list(
             result.push_str(", ");
         }
 
-        result.push_str(param.as_str());
+        result.push_str(param.name.as_str());
         result.push_str("=");
-        result.push_str(&types[param].to_pretty_string(formatter));
+        result.push_str(&types[&param.name].to_pretty_string(formatter));
     }
 
     result.push_str("]");

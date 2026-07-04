@@ -36,6 +36,21 @@ fn create_function_body_builder<'m, 'l: 'm>(
     builder
 }
 
+fn build_type_param(lib: &mut LibraryBuilder, param: &typ::TypeParam) -> ir::TypeParam {
+    let constraint = match &param.constraint {
+        None => None,
+        Some(is_type) => {
+            let constraint_type = lib.translate_type(&is_type.is_ty);
+            Some(constraint_type)
+        }
+    };
+
+    ir::TypeParam {
+        name: param.name.name.clone(),
+        constraint,
+    }
+}
+
 pub fn build_func_def(
     module: &mut LibraryBuilder,
     def_params: &[typ::ast::FunctionParamGroup],
@@ -47,6 +62,23 @@ pub fn build_func_def(
     enclosing_type: Option<&typ::Type>,
     debug_name: Option<String>,
 ) -> ir::FunctionDef {
+    let mut type_params = Vec::new();
+
+    // if the self param is a specialized generic name, add its type parameters to the
+    // beginning of the method function's type param list
+    if let Some(enclosing_params) = enclosing_type.and_then(|t| t.type_params()) {
+        for enclosing_type_param in &enclosing_params.items {
+            type_params.push(build_type_param(module, enclosing_type_param));
+        }
+    }
+
+    for def_type_param in def_type_params
+        .into_iter()
+        .flat_map(|param_list| param_list.items.iter())
+    {
+        type_params.push(build_type_param(module, def_type_param));
+    }
+
     let mut body_builder = create_function_body_builder(
         module,
         debug_name.clone()
@@ -59,24 +91,6 @@ pub fn build_func_def(
         .flat_map(|param| FunctionParam::from_ast(param, &mut body_builder))
         .collect();
     let bound_params = bind_function_params(bind_params, is_instance_method, ir::ArgID(0), &mut body_builder);
-
-    let mut type_params = Vec::new();
-
-    // if the self param is a specialized generic name, add its type parameters to the
-    // beginning of the method function's type param list
-    if let Some(enclosing_params) = enclosing_type.and_then(|t| t.type_params()) {
-        for param in &enclosing_params.items {
-            let param_name = Arc::new(param.name.name.to_string());
-            type_params.push(param_name);
-        }
-    }
-
-    type_params.extend(def_type_params
-        .into_iter()
-        .flat_map(|param_list| param_list.items
-            .iter()
-            .map(|param| Arc::new(param.name.to_string())))
-    );
 
     init_function_locals(def_locals, &mut body_builder);
     let body = build_func_body(def_body, &return_ty, body_builder);
