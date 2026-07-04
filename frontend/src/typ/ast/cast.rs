@@ -22,12 +22,15 @@ enum Conversion {
 }
 
 pub fn implicit_conversion(expr: Expr, to: &Type, ctx: &Context) -> TypeResult<Expr> {
-    assert_ne!(
-        Type::Nothing,
-        *to,
-        "bad usage of implicit_conversion: can't convert {} to nothing ({expr})",
-        expr.annotation().ty()
-    );
+    // a conversion to nothing probably means a missing type due to earlier typechecking errors,
+    // and is never valid
+    if *to == Type::Nothing {
+        return Err(TypeError::type_mismatch(
+            to.clone(),
+            expr.annotation().ty().into_owned(),
+            expr.span().clone(),
+        ));
+    }
 
     expr.annotation().expect_any_value()?;
 
