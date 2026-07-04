@@ -85,10 +85,6 @@ impl ImportBuilder<'_> {
     ) -> ImportResult<()> {
         let tags = self.read_tags(&func_info.tags)?;
 
-        if func_info.identity.to_string().contains("MyLibOutParam") {
-            eprintln!("here");
-        }
-
         let result_type = self.read_type(&func_info.result_type)?;
         let param_groups = self.read_params(&func_info.params)?;
 
