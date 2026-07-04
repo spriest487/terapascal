@@ -1,10 +1,10 @@
 use crate::instruction::BinOpInstruction;
 use crate::instruction::Instruction;
 use crate::metadata::MethodID;
-use crate::ty::FieldID;
-use crate::ty::Type;
+use crate::types::Type;
 use crate::val::Ref;
 use crate::val::Value;
+use crate::FieldID;
 use crate::FunctionRef;
 use crate::InterfaceRef;
 use crate::NamePath;

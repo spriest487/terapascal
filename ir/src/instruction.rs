@@ -1,8 +1,8 @@
 use crate::formatter::IRFormatter;
 use crate::formatter::RawFormatter;
 use crate::metadata::MethodID;
-use crate::ty::Type;
-use crate::ty_decl::TypeDefID;
+use crate::types::Type;
+use crate::type_decl::TypeDefID;
 use crate::val::LocalID;
 use crate::val::Ref;
 use crate::val::Value;

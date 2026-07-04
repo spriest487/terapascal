@@ -1,8 +1,8 @@
 use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::StringID;
-use crate::ty::Type;
-use crate::ty_decl::TagLocation;
+use crate::types::Type;
+use crate::type_decl::TagLocation;
 use crate::FieldID;
 use crate::FunctionRef;
 use crate::RawFormatter;

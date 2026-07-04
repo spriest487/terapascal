@@ -1,6 +1,7 @@
-pub use crate::metadata::ids::FieldID;
-pub use crate::metadata::ids::ObjectID;
-use crate::ty_decl::TypeDefID;
+mod generic;
+
+use crate::metadata::ids::ObjectID;
+use crate::type_decl::TypeDefID;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceRef;
