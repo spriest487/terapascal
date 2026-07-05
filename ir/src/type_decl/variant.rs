@@ -1,7 +1,6 @@
-use crate::TagInfo;
 use crate::Type;
 use crate::Value;
-use crate::NamePath;
+use crate::{DeclPath, TagInfo};
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -29,7 +28,7 @@ impl VariantCase {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VariantDef {
-    pub name: NamePath,
+    pub name: DeclPath,
     pub tag_type: Type,
 
     pub cases: Vec<VariantCase>,
@@ -39,6 +38,6 @@ pub struct VariantDef {
 
 impl VariantDef {
     pub fn is_generic(&self) -> bool {
-        self.name.is_generic()
+        !self.name.type_params.is_empty()
     }
 }

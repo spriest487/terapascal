@@ -1,4 +1,4 @@
-﻿use crate::NamePath;
+﻿use crate::StringPath;
 use crate::TagInfo;
 use crate::Type;
 use crate::Value;
@@ -7,7 +7,7 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VariableInfo {
-    pub name: Option<NamePath>,
+    pub name: Option<StringPath>,
     pub value_type: Type,
 
     pub tags: Vec<TagInfo>,
@@ -15,7 +15,7 @@ pub struct VariableInfo {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConstInfo {
-    pub name: NamePath,
+    pub name: StringPath,
     
     pub value: Value,
     pub value_type: Type,

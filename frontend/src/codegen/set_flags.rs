@@ -1,6 +1,6 @@
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::metadata::NamePathExt;
+use crate::codegen::metadata::PathExt;
 use crate::ir;
 use crate::typ::SetDef;
 use crate::typ::Type;
@@ -33,7 +33,7 @@ pub struct SetTypeTagInfo {
 
 impl SetTypeTagInfo {
     pub fn find_in_metadata(metadata: &impl ir::MetadataSource) -> Option<Self> {
-        let name_path = ir::NamePath::new([SYSTEM_UNIT_NAME.to_string()], SET_TAG_NAME);
+        let name_path = ir::DeclPath::new([SYSTEM_UNIT_NAME.to_string()], SET_TAG_NAME.to_string());
 
         let (id, _def) = metadata.find_struct_def(&name_path)?;
 
@@ -66,7 +66,7 @@ impl SetFlagsType {
     pub fn translate(lib: &mut LibraryBuilder, set_def: &Arc<SetDef>) -> Self {
         let struct_id = match &set_def.name {
             Some(ident_path) => {
-                let name_path = ir::NamePath::from_ident_path(ident_path, []);
+                let name_path = ir::DeclPath::from_ident_path(ident_path, []);
                 lib.metadata_mut().forward_declare_type(&name_path)
             }
 
@@ -100,7 +100,7 @@ impl SetFlagsType {
 
         let struct_identity = match &set_type.name {
             Some(ident_path) => {
-                let name_path = ir::NamePath::from_parts(ident_path.to_string_path());
+                let name_path = ir::DeclPath::from_parts(ident_path.map(|p| p.name.clone()));
                 ir::StructIdentity::Record(name_path)
             }
 
@@ -138,7 +138,7 @@ impl SetFlagsType {
 
         let item_type_ref = ir::Ref::Global(ir::GlobalRef::StaticTypeInfo(Rc::new(item_type)));
 
-        let tag_path = ir::NamePath::new([SYSTEM_UNIT_NAME.to_string()], SET_TAG_NAME);
+        let tag_path = ir::DeclPath::new([SYSTEM_UNIT_NAME.to_string()], SET_TAG_NAME.to_string());
 
         let tag_class_id = lib.metadata_mut().forward_declare_type(&tag_path);
 

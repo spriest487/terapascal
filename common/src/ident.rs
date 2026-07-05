@@ -1,5 +1,4 @@
 use crate::path::Path;
-use crate::path::PathConcat;
 use crate::span::Span;
 use crate::span::Spanned;
 use derivative::Derivative;
@@ -97,21 +96,11 @@ impl IdentPath {
             }
         }
     }
-
-    pub fn to_string_path(&self) -> Path<String> {
-        Path::from_parts(self.iter().map(|p| (*p.name).clone()))
-    }
 }
 
 impl Spanned for Path<Ident> {
     fn span(&self) -> &Span {
         self.last().span()
-    }
-}
-
-impl PathConcat for Ident {
-    fn separator() -> &'static str {
-        "."
     }
 }
 

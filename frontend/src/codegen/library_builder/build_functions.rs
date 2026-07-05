@@ -1,6 +1,5 @@
 use crate::ast;
 use crate::codegen::build_func_def;
-use crate::codegen::build_type_param_list;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::var_param::OutParamTagInfo;
 use crate::codegen::FunctionInstance;
@@ -380,7 +379,7 @@ impl<'a> LibraryBuilder<'a> {
 
         let identity = match &func_decl.name.context {
             typ::ast::FunctionDeclContext::FreeFunction if func_decl.is_overload() => {
-                let type_params = build_type_param_list(self, decl_type_params);
+                let type_params = self.translate_type_param_list(decl_type_params);
                 ir::FunctionIdentity::internal(func_decl.to_string(), type_params)
             }
 
@@ -393,7 +392,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 let mut func_name = ir::DeclPath::new(ns, name);
 
-                let type_params = build_type_param_list(self, decl_type_params);
+                let type_params = self.translate_type_param_list(decl_type_params);
                 func_name.type_params = type_params;
 
                 ir::FunctionIdentity::Global(func_name)
@@ -519,10 +518,7 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             _ => {
-                let type_params = build_type_param_list(
-                    self,
-                    func_decl.name.type_params.as_ref(),
-                );
+                let type_params = self.translate_type_param_list(func_decl.name.type_params.as_ref());
 
                 ir::FunctionIdentity::Method {
                     declaring_type,

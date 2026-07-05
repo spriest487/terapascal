@@ -40,9 +40,9 @@ impl<Part> Path<Part> {
         self.parts.iter()
     }
 
-    pub fn map<IntoPart: fmt::Debug>(self, f: impl FnMut(Part) -> IntoPart) -> Path<IntoPart> {
+    pub fn map<IntoPart: fmt::Debug>(&self, f: impl FnMut(&Part) -> IntoPart) -> Path<IntoPart> {
         Path {
-            parts: self.parts.into_iter().map(f).collect(),
+            parts: self.parts.iter().map(f).collect(),
         }
     }
 
@@ -113,6 +113,12 @@ impl<Part: PartialEq> Path<Part> {
     }
 }
 
+impl<Part> FromIterator<Part> for Path<Part> {
+    fn from_iter<T: IntoIterator<Item=Part>>(iter: T) -> Self {
+        Self::from_parts(iter)
+    }
+}
+
 impl<Part> IntoIterator for Path<Part> {
     type Item = Part;
     type IntoIter = vec::IntoIter<Part>;
@@ -167,13 +173,8 @@ impl<Part> From<Part> for Path<Part> {
     }
 }
 
-pub trait PathConcat {
-    fn separator() -> &'static str;
-}
-
-impl<Part: fmt::Display + PathConcat> fmt::Display for Path<Part> {
+impl<Part: fmt::Display> fmt::Display for Path<Part> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let sep = Part::separator();
-        write!(f, "{}", self.join(sep))
+        write!(f, "{}", self.join('.'))
     }
 }

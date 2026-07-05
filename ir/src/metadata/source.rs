@@ -2,7 +2,6 @@
 use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::vars::ConstInfo;
-use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceDef;
@@ -27,7 +26,8 @@ use crate::TypeRef;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
-use crate::FunctionID;
+use crate::{DeclPath, FunctionInfo};
+use crate::{FunctionID, StringPath};
 use std::borrow::Cow;
 use std::rc::Rc;
 
@@ -37,10 +37,10 @@ pub trait MetadataSource : Sized {
     fn get_string(&self, id: StringID) -> Option<&String>;
 
     fn get_struct_def(&self, struct_id: TypeDefID) -> Option<&StructDef>;
-    fn find_struct_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &StructDef)>;
+    fn find_struct_def(&self, name_path: &DeclPath) -> Option<(TypeDefID, &StructDef)>;
     
     fn get_variant_def(&self, struct_id: TypeDefID) -> Option<&VariantDef>;
-    fn find_variant_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &VariantDef)>;
+    fn find_variant_def(&self, name_path: &DeclPath) -> Option<(TypeDefID, &VariantDef)>;
     
     fn instantiate_struct_def(&'_ self, id: TypeDefID, args: &[Type]) -> Option<Cow<'_, StructDef>> {
         let def = self.get_struct_def(id)?;
@@ -55,8 +55,8 @@ pub trait MetadataSource : Sized {
     fn type_decls(&self) -> impl Iterator<Item = (TypeDefID, &TypeDecl)>;
     fn get_type_decl(&self, id: TypeDefID) -> Option<&TypeDecl>;
     fn get_type_def(&self, id: TypeDefID) -> Option<&TypeDef>;
-    fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath>;
-    fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID>;
+    fn get_type_name(&self, id: TypeDefID) -> Option<&DeclPath>;
+    fn find_type_decl(&self, name: &DeclPath) -> Option<TypeDefID>;
     fn get_type_info(&self, of_type: &Type) -> Option<Rc<TypeInfo>>;
 
     fn functions(&self) -> impl Iterator<Item = (FunctionID, &FunctionInfo)>;
@@ -71,7 +71,7 @@ pub trait MetadataSource : Sized {
     fn find_impl(&'_ self, func_id: FunctionID) -> Option<InterfaceMethodImplRef<'_>>;
     fn get_interface_method(&self, impl_type: &Type, iface_ref: &InterfaceRef, method_id: MethodID) -> Option<FunctionID>;
 
-    fn find_iface(&self, name: &NamePath) -> Option<InterfaceID> {
+    fn find_iface(&self, name: &DeclPath) -> Option<InterfaceID> {
         self.interface_defs()
             .filter_map(|(id, def)| {
                 (def.name == *name).then_some(id)
@@ -82,13 +82,15 @@ pub trait MetadataSource : Sized {
     fn iface_name(&self, iface_ref: &InterfaceRef) -> String {
         self.get_interface_def(iface_ref.def_id)
             .map(|def| {
-                if iface_ref.args != *def.name.type_args {
-                    let mut instance_name = def.name.clone();
+                let def_generic_name = def.name.to_generic_name();
+
+                if iface_ref.args != def_generic_name.type_args {
+                    let mut instance_name = def_generic_name.clone();
                     instance_name.type_args = iface_ref.args.clone();
 
                     instance_name.to_pretty_string(self.as_formatter())
                 } else {
-                    def.name.to_pretty_string(self.as_formatter())
+                    def_generic_name.to_pretty_string(self.as_formatter())
                 }
             })
             .unwrap_or_else(|| format!("interface({})", iface_ref))
@@ -97,10 +99,10 @@ pub trait MetadataSource : Sized {
     fn methods(&self) -> impl Iterator<Item = &MethodInfo>;
     fn get_dtor_method(&self, for_type: &Type) -> Option<FunctionID>;
 
-    fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)>;
+    fn find_variable(&self, name: &StringPath) -> Option<(VariableID, &VariableInfo)>;
     fn get_variable(&self, id: VariableID) -> Option<&VariableInfo>;
-    
-    fn find_constant(&self, name: &NamePath) -> Option<&ConstInfo>;
+
+    fn find_constant(&self, name: &StringPath) -> Option<&ConstInfo>;
     fn constants(&self) -> impl Iterator<Item = &ConstInfo>;
 
     fn all_tags(&self) -> impl Iterator<Item = (TagLocation, &[TagInfo])> {
@@ -167,29 +169,31 @@ pub trait MetadataSource : Sized {
 
     fn pretty_type_name(&self, ty: &Type) -> Cow<'_, str> {
         match ty {
-            Type::Struct(id) | Type::Variant(id) => {
+            Type::Struct(type_ref) | Type::Variant(type_ref) => {
                 // if the type has a fully-qualified path, display that
-                if let Some(name_path) = self.get_type_name(id.def_id) {
-                    if id.args == name_path.type_args {
-                        return Cow::Owned(name_path.to_pretty_string(self))
+                if let Some(decl_path) = self.get_type_name(type_ref.def_id) {
+                    let generic_name = decl_path.to_generic_name();
+
+                    if type_ref.args == generic_name.type_args {
+                        return Cow::Owned(generic_name.to_pretty_string(self))
                     }
 
                     let name = NamePath {
-                        path: name_path.path.clone(),
-                        type_args: id.args.clone()
+                        path: decl_path.path.clone(),
+                        type_args: type_ref.args.clone()
                     };
 
                     return Cow::Owned(name.to_pretty_string(self));
                 }
 
                 // if the type has a struct identity, display that
-                match self.get_type_decl(id.def_id) {
+                match self.get_type_decl(type_ref.def_id) {
                     Some(TypeDecl::Def(TypeDef::Struct(struct_def))) => {
                         Cow::Owned(struct_def.identity.to_pretty_string(self))
                     }
 
                     _ => {
-                        Cow::Owned(id.to_string())
+                        Cow::Owned(type_ref.to_string())
                     }
                 }
             }
@@ -327,7 +331,7 @@ pub trait MetadataSource : Sized {
                     })?;
 
                 let def_type = if let Some(def_name) = def.name() {
-                    let def_ref = TypeRef::new(class_ref.def_id, def_name.type_args.clone());
+                    let def_ref = TypeRef::new(class_ref.def_id, def_name.generic_args());
                     if ty.is_weak() {
                         Cow::Owned(def_ref.to_weak_class_object_type())
                     } else {
@@ -351,7 +355,7 @@ pub trait MetadataSource : Sized {
                         MetadataError::MissingTypeDef(ty.clone())
                     })?;
 
-                let def_type = TypeRef::new(variant_ref.def_id, def.name.type_args.clone())
+                let def_type = TypeRef::new(variant_ref.def_id, def.name.generic_args())
                     .to_variant_type();
 
                 Ok(Cow::Owned(def_type))
@@ -369,7 +373,7 @@ pub trait MetadataSource : Sized {
                     })?;
 
                 let def_type = if let Some(def_name) = def.name() {
-                    Cow::Owned(TypeRef::new(struct_ref.def_id, def_name.type_args.clone())
+                    Cow::Owned(TypeRef::new(struct_ref.def_id, def_name.generic_args())
                         .to_struct_type())
                 } else {
                     Cow::Borrowed(ty)
@@ -390,7 +394,7 @@ pub trait MetadataSource : Sized {
                         MetadataError::MissingTypeDef(ty.clone())
                     })?;
 
-                let def_type = Cow::Owned(InterfaceRef::new(iface_ref.def_id, def.name.type_args.clone())
+                let def_type = Cow::Owned(InterfaceRef::new(iface_ref.def_id, def.name.generic_args())
                     .to_interface_type());
 
                 Ok(def_type)
@@ -405,7 +409,7 @@ pub trait MetadataSource : Sized {
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub struct InterfaceMethodImplRef<'a> {
-    pub interface: &'a NamePath,
+    pub interface: &'a InterfaceRef,
     pub impl_type: &'a Type,
     pub method_name: &'a str,
 }

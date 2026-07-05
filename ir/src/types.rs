@@ -1,7 +1,7 @@
 mod generic;
 
-pub use self::generic::TypeParam;
 pub use self::generic::format_type_args;
+pub use self::generic::TypeParam;
 
 use crate::metadata::ids::ObjectID;
 use crate::type_decl::TypeDefID;
@@ -16,6 +16,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
 use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Type {
@@ -23,7 +24,7 @@ pub enum Type {
     Nothing,
 
     /// Named generic placeholder
-    Generic(Rc<String>),
+    Generic(Arc<String>),
 
     Pointer(Rc<Type>),
     TempRef(Rc<Type>),
@@ -116,7 +117,7 @@ impl Type {
         Type::WeakObject(ObjectID::Box(Rc::new(self.clone())))
     }
 
-    pub fn as_generic_param(&self) -> Option<&Rc<String>> {
+    pub fn as_generic_param(&self) -> Option<&Arc<String>> {
         match self {
             Type::Generic(name) => Some(name),
             _ => None,

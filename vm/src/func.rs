@@ -9,7 +9,6 @@ use crate::Vm;
 use ir::generic::*;
 use ir::DeclPath;
 use ir::MetadataSource as _;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
@@ -255,7 +254,8 @@ pub fn instantiate_func(
         }
     };
 
-    let invocation_type_params = invocation_type_params(&func_info.identity, vm.metadata());
+    let invocation_type_params: Vec<_> = invocation_type_params(&func_info.identity, vm.metadata())
+        .collect();
 
     if func_ref.args.len() != invocation_type_params.len() {
         let msg = format!(
@@ -268,7 +268,7 @@ pub fn instantiate_func(
     }
 
     let mut types = HashMap::with_capacity(invocation_type_params.len());
-    build_type_map(invocation_type_params.iter().map(Cow::as_ref), &func_ref.args, &mut types);
+    build_type_map(invocation_type_params, &func_ref.args, &mut types);
 
     let identity = match &generic_instance.identity {
         ir::FunctionIdentity::Internal { name, type_params } => {

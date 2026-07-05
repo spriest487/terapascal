@@ -4,7 +4,7 @@ mod builder;
 pub use self::error::*;
 
 use terapascal_common::ident::IdentPath;
-use crate::codegen::library_builder::FunctionDeclKey;
+use crate::codegen::FunctionDeclKey;
 use crate::codegen::FunctionInstance;
 use crate::import::builder::ImportBuilder;
 use crate::ir;

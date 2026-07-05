@@ -148,7 +148,7 @@ impl<T: MetadataSource> IRFormatter for T {
             Ref::Global(GlobalRef::Variable(id)) => {
                 match self.get_variable(*id) {
                     Some(VariableInfo { name: Some(var_name), .. }) => {
-                        write!(f, "{}", var_name.to_pretty_string(self.as_formatter()))
+                        write!(f, "{}", var_name)
                     },
 
                     _ => {

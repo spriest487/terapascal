@@ -31,10 +31,10 @@ impl<'a> ImportBuilder<'a> {
                 // any struct type used as the item type of a set is assumed to be an enum ID
                 match item_type.as_ref() {
                     ir::Type::Struct(enum_ref) => {
-                        let enum_path = self.get_type_decl(enum_ref.def_id)?.name()?;
-                        let enum_def_name = self.read_ident_path(&enum_path);
+                        let enum_path = self.get_type_decl(enum_ref.def_id)?.name()?.clone();
+                        let enum_def_name = self.read_decl_path(&enum_path).ok()?;
 
-                        Type::enumeration(enum_def_name)
+                        Type::enumeration(enum_def_name.full_path)
                     }
 
                     ty => {

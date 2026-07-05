@@ -148,7 +148,7 @@ impl<'a> Unit<'a> {
         }
 
         for (iface_id, iface_def) in metadata.interface_defs() {
-            unit.translate_type(&iface_id.to_interface_type(iface_def.name.type_args.clone()));
+            unit.translate_type(&iface_id.to_interface_type(iface_def.name.generic_args()));
         }
 
         for (func_id, func_info) in metadata.functions() {

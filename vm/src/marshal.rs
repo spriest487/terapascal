@@ -129,7 +129,7 @@ impl Marshaller {
                 }
                 ir::TypeDef::Variant(variant_def) => {
                     if !variant_def.is_generic() {
-                        let variant_type = id.to_variant_type(variant_def.name.type_args.clone());
+                        let variant_type = id.to_variant_type(variant_def.name.generic_args());
                         self.add_variant_type(&variant_type)?;
                     }
                 }
@@ -137,7 +137,7 @@ impl Marshaller {
         }
 
         for (iface_id, iface_def) in metadata.interface_defs() {
-            let iface_ref = ir::InterfaceRef::new(iface_id, iface_def.name.type_args.clone());
+            let iface_ref = ir::InterfaceRef::new(iface_id, iface_def.name.generic_args());
             self.add_iface_type(&iface_ref)?;
         }
 

@@ -1,7 +1,7 @@
-use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::translate_name;
-use crate::codegen::typ;
 use crate::codegen::ir;
+use crate::codegen::library_builder::LibraryBuilder;
+use crate::codegen::metadata::translate_decl_name;
+use crate::codegen::typ;
 
 pub fn translate_iface(
     id: ir::InterfaceID,
@@ -10,9 +10,9 @@ pub fn translate_iface(
 ) -> ir::InterfaceDef {
     let tags = lib.translate_tag_groups(&iface_def.tags);
     
-    let name = translate_name(&iface_def.name, lib);
+    let name = translate_decl_name(&iface_def.name, lib);
 
-    let self_type = id.to_interface_type(name.type_args.clone());
+    let generic_self_type = id.to_interface_type(name.generic_args());
     
     let mut methods = Vec::with_capacity(iface_def.methods.len());
     
@@ -20,7 +20,7 @@ pub fn translate_iface(
         let method = ir::Method {
             name: def_method.ident().to_string(),
             return_ty: match def_method.decl.result_ty.ty() {
-                typ::Type::MethodSelf => self_type.clone(),
+                typ::Type::MethodSelf => generic_self_type.clone(),
                 return_ty => lib.translate_type(return_ty),
             },
             params: def_method
@@ -28,7 +28,7 @@ pub fn translate_iface(
                 .params()
                 .map(|(param, item)| {
                     let param_type = match param.ty.ty() {
-                        typ::Type::MethodSelf => self_type.clone(),
+                        typ::Type::MethodSelf => generic_self_type.clone(),
                         param_ty => lib.translate_type(param_ty),
                     };
 

@@ -4,9 +4,9 @@ use crate::ast::FunctionParamItem;
 use crate::ast::FunctionParamMod;
 use crate::ast::FunctionParamModDecl;
 use crate::ast::Visibility;
-use crate::codegen::library_builder::FunctionDeclKey;
-use crate::codegen::library_builder::MethodDeclKey;
+use crate::codegen::FunctionDeclKey;
 use crate::codegen::FunctionInstance;
+use crate::codegen::MethodDeclKey;
 use crate::import::ImportBuilder;
 use crate::import::ImportError;
 use crate::import::ImportResult;
@@ -20,16 +20,17 @@ use crate::typ::ast::MethodDecl;
 use crate::typ::ast::Tag;
 use crate::typ::EvaluatedConstExpr;
 use crate::typ::ScopeID;
-use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeName;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use terapascal_common::ident::Ident;
-use terapascal_common::ident::IdentPath;
 
 impl ImportBuilder<'_> {
-    pub fn read_params(&mut self, params: &[ir::FunctionParamInfo]) -> ImportResult<Vec<FunctionParamGroup>> {
+    pub fn read_params(
+        &mut self,
+        params: &[ir::FunctionParamInfo],
+    ) -> ImportResult<Vec<FunctionParamGroup>> {
         let mut param_groups = Vec::with_capacity(params.len());
         for (i, param_info) in params.iter().enumerate() {
             let (param_type, modifier) = match &param_info.param_type {
@@ -191,17 +192,6 @@ impl ImportBuilder<'_> {
         Ok(())
     }
 
-    fn read_func_name(&mut self, name: &ir::DeclPath) -> ImportResult<Symbol> {
-        let ident_path = IdentPath::from_parts(name.path
-            .iter()
-            .map(|part| Ident { name: part.clone(), span: self.span() }));
-
-        let type_params = self.read_def_params(&name.type_params)?;
-
-        Ok(Symbol::from(ident_path)
-            .with_type_params(type_params))
-    }
-
     fn read_free_function(
         &mut self,
         func_id: ir::FunctionID,
@@ -215,7 +205,7 @@ impl ImportBuilder<'_> {
             return Err(ImportError::MissingFuncDef(func_id));
         };
 
-        let func_name = self.read_func_name(func_name)?;
+        let func_name = self.read_decl_path(func_name)?;
 
         // no early returns after this! we need to always close the scope
         let scope = match func_name.full_path.parent() {

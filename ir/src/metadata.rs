@@ -19,19 +19,18 @@ use crate::typeinfo::TypeInfo;
 use crate::FunctionID;
 use crate::FunctionIdentity;
 use crate::FunctionInfo;
-use crate::DeclPath;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceImpl;
 use crate::MethodInfo;
-use crate::NamePath;
 use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
 use crate::TypeDef;
 use crate::VariantDef;
+use crate::{DeclPath, StringPath};
 use linked_hash_map::LinkedHashMap;
 use serde::Deserialize;
 use serde::Serialize;
@@ -48,7 +47,7 @@ pub struct Metadata {
     iface_impls: HashMap<Type, HashMap<InterfaceRef, InterfaceImpl>>,
 
     variables: BTreeMap<VariableID, VariableInfo>,
-    constants: HashMap<NamePath, ConstInfo>,
+    constants: HashMap<StringPath, ConstInfo>,
 
     type_info: HashMap<Type, Rc<TypeInfo>>,
     function_info: LinkedHashMap<FunctionID, FunctionInfo>,
@@ -417,7 +416,7 @@ impl MetadataSource for Metadata {
 
     // find the declared ID and definition of a struct. if the struct is only forward-declared
     // when this call is made, the definition part of the result will be None
-    fn find_struct_def(&self, name: &NamePath) -> Option<(TypeDefID, &StructDef)> {
+    fn find_struct_def(&self, name: &DeclPath) -> Option<(TypeDefID, &StructDef)> {
         self.type_decls.iter().find_map(|(id, def)| match def {
             TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) => {
                 Some((*id, struct_def))
@@ -437,7 +436,7 @@ impl MetadataSource for Metadata {
         }
     }
 
-    fn find_variant_def(&self, name: &NamePath) -> Option<(TypeDefID, &VariantDef)> {
+    fn find_variant_def(&self, name: &DeclPath) -> Option<(TypeDefID, &VariantDef)> {
         self.type_decls.iter().find_map(|(id, def)| match def {
             TypeDecl::Def(TypeDef::Variant(variant_def)) if variant_def.name == *name => {
                 Some((*id, variant_def))
@@ -464,12 +463,12 @@ impl MetadataSource for Metadata {
         }
     }
 
-    fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath> {
+    fn get_type_name(&self, id: TypeDefID) -> Option<&DeclPath> {
         let decl = self.get_type_decl(id)?;
         decl.name()
     }
 
-    fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
+    fn find_type_decl(&self, name: &DeclPath) -> Option<TypeDefID> {
         self.type_decls.iter().find_map(|(id, def)| match def {
             TypeDecl::Def(TypeDef::Struct(struct_def)) if struct_def.name() == Some(name) => {
                 Some(*id)
@@ -545,7 +544,7 @@ impl MetadataSource for Metadata {
                         let method = iface.get_method(*method_id).unwrap();
 
                         return Some(InterfaceMethodImplRef {
-                            interface: &iface.name,
+                            interface: iface_ref,
                             impl_type,
                             method_name: method.name.as_str(),
                         });
@@ -588,7 +587,7 @@ impl MetadataSource for Metadata {
         })
     }
 
-    fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)> {
+    fn find_variable(&self, name: &StringPath) -> Option<(VariableID, &VariableInfo)> {
         self.variables.iter().find_map(|(id, var_info)| {
             let Some(var_name) = var_info.name.as_ref() else {
                 return None;
@@ -606,7 +605,7 @@ impl MetadataSource for Metadata {
         self.variables.get(&id)
     }
 
-    fn find_constant(&self, name: &NamePath) -> Option<&ConstInfo> {
+    fn find_constant(&self, name: &StringPath) -> Option<&ConstInfo> {
         self.constants.get(name)
     }
 

@@ -1,6 +1,6 @@
 use crate::codegen::ir;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::translate_name;
+use crate::codegen::metadata::translate_decl_name;
 use crate::codegen::typ;
 use crate::typ::ast::VARIANT_TAG_TYPE;
 
@@ -10,7 +10,7 @@ pub fn translate_variant_def(
 ) -> ir::VariantDef {
     let tags = lib.translate_tag_groups(&variant_def.tags);
 
-    let name_path = translate_name(&variant_def.name.to_generic_name(), lib);
+    let name_path = translate_decl_name(&variant_def.name, lib);
 
     let tag_type = lib.translate_type(&VARIANT_TAG_TYPE);
 

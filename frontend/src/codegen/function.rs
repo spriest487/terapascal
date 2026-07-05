@@ -36,37 +36,6 @@ fn create_function_body_builder<'m, 'l: 'm>(
     builder
 }
 
-pub fn build_type_param(lib: &mut LibraryBuilder, param: &typ::TypeParam) -> ir::TypeParam {
-    let constraint = match &param.constraint {
-        None => None,
-        Some(is_type) => {
-            let constraint_type = lib.translate_type(&is_type.is_ty);
-            Some(constraint_type)
-        }
-    };
-
-    ir::TypeParam {
-        name: param.name.name.clone(),
-        constraint,
-    }
-}
-
-pub fn build_type_param_list(
-    lib: &mut LibraryBuilder,
-    param_list: Option<&typ::TypeParamList>,
-) -> Vec<ir::TypeParam> {
-    let Some(param_list) = param_list else {
-        return Vec::new();
-    };
-
-    let mut params = Vec::with_capacity(param_list.len());
-    for param in param_list.iter() {
-        params.push(build_type_param(lib, param));
-    }
-
-    params
-}
-
 pub fn build_func_def(
     module: &mut LibraryBuilder,
     def_params: &[typ::ast::FunctionParamGroup],

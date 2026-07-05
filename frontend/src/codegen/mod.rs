@@ -1,5 +1,5 @@
-pub mod metadata;
-pub mod library_builder;
+mod metadata;
+mod library_builder;
 
 mod builder;
 mod expr;
@@ -12,18 +12,17 @@ mod enum_type;
 mod var_param;
 
 pub use self::alias::*;
+pub use self::enum_type::*;
 pub use self::function::*;
 pub use self::set_flags::*;
-pub use self::enum_type::*;
 pub use self::var_param::*;
 
 use self::builder::IRBuilder;
 use self::expr::*;
-use self::library_builder::LibraryBuilder;
+pub use self::library_builder::*;
 use self::metadata::*;
 use self::stmt::*;
 use crate::ast::StructKind;
-use crate::codegen::library_builder::LibraryRef;
 use crate::ir;
 use crate::typ as typ;
 use ir::MetadataSource as _;
@@ -92,7 +91,7 @@ fn translate_builtin_class(
         return;
     }
 
-    let def_path = translate_name(name, lib);
+    let def_path = translate_decl_name(name, lib);
 
     lib.metadata_mut().declare_type(id, &def_path);
 

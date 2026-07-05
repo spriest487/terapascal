@@ -25,7 +25,7 @@ pub use ast::operators::CompoundAssignmentOperator;
 pub use ast::operators::Operator;
 pub use ast::operators::Position;
 
-use crate::codegen::library_builder::LibraryRef;
+use crate::codegen::LibraryRef;
 use crate::codegen::CodegenOpts;
 use crate::parse::AggregateParseError;
 use crate::parse::ParseError;

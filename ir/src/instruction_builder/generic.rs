@@ -1,3 +1,4 @@
+use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FunctionDef;
 use crate::FunctionIdentity;
@@ -11,7 +12,6 @@ use crate::InterfaceDef;
 use crate::LocalID;
 use crate::MetadataSource;
 use crate::Method;
-use crate::NamePath;
 use crate::ObjectID;
 use crate::Ref;
 use crate::StructDef;
@@ -24,7 +24,6 @@ use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VariantCase;
 use crate::VariantDef;
-use crate::ArgID;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -38,19 +37,18 @@ type LocalMap = BTreeMap<LocalID, LocalID>;
 /// Calculates the list of type params required to call a function with the given identity.
 /// The argument list passed to an invocation of a method belonging to a generic type is expected
 /// to provide both the type's arguments and the method's type arguments (if any) consecutively
-/// in the same list of args, in that order.
-// todo: this can return an iterator of borrows once types contain type params
+/// in the same list of args, in that order
 pub fn invocation_type_params<'a>(
     identity: &'a FunctionIdentity,
     metadata: &'a impl MetadataSource,
-) -> Vec<Cow<'a, TypeParam>> {
+) -> impl Iterator<Item=&'a TypeParam> {
     let enclosing_type_params = match identity {
         FunctionIdentity::Method { declaring_type, .. } => {
             type_def_type_params(declaring_type, metadata)
         }
 
         _ => {
-            Vec::new()
+            &[]
         }
     };
 
@@ -73,13 +71,12 @@ pub fn invocation_type_params<'a>(
     };
 
     enclosing_type_params
-        .into_iter().map(Cow::Owned)
-        .chain(func_type_params.iter().map(Cow::Borrowed))
-        .collect()
+        .iter()
+        .chain(func_type_params.iter())
 }
 
 // todo: should return borrowed refs once types actually contain type params
-fn type_def_type_params(def_type: &Type, metadata: &impl MetadataSource) -> Vec<TypeParam> {
+fn type_def_type_params<'a>(def_type: &'a Type, metadata: &'a impl MetadataSource) -> &'a [TypeParam] {
     match def_type {
         Type::Struct(struct_ref) => {
             type_params_from_struct(struct_ref.def_id, metadata)
@@ -90,7 +87,7 @@ fn type_def_type_params(def_type: &Type, metadata: &impl MetadataSource) -> Vec<
                 panic!("build_invocation_type_map: missing def for variant {}", variant_ref.def_id.0);
             };
 
-            type_params_from_generic_name(&variant_def.name)
+            &variant_def.name.type_params
         }
 
         Type::Object(object_id) | Type::WeakObject(object_id) => {
@@ -103,16 +100,14 @@ fn type_def_type_params(def_type: &Type, metadata: &impl MetadataSource) -> Vec<
                         panic!("build_invocation_type_map: missing def for interface {}", iface_ref.def_id.0);
                     };
 
-                    type_params_from_generic_name(&iface_def.name)
+                    &iface_def.name.type_params
                 }
 
-                _ => Vec::new(),
+                _ => &[],
             }
         }
 
-        _ => {
-            Vec::new()
-        },
+        _ => &[],
     }
 }
 
@@ -124,7 +119,7 @@ pub fn build_invocation_type_map(
     let all_type_params = invocation_type_params(identity, metadata);
 
     let mut invocation_type_map = TypeMap::new();
-    build_type_map(all_type_params.iter().map(Cow::as_ref), args, &mut invocation_type_map);
+    build_type_map(all_type_params, args, &mut invocation_type_map);
 
     invocation_type_map
 }
@@ -145,27 +140,16 @@ pub fn build_type_map<'a>(
     }
 }
 
-// todo: defined types should have a type params list instead of using generic names
-fn type_params_from_generic_name(name: &NamePath) -> Vec<TypeParam> {
-    let mut params = Vec::with_capacity(name.type_args.len());
-
-    for arg in &name.type_args {
-        params.push(type_param_from_generic_arg(arg));
-    }
-
-    params
-}
-
-fn type_params_from_struct(id: TypeDefID, metadata: &impl MetadataSource) -> Vec<TypeParam> {
+fn type_params_from_struct(id: TypeDefID, metadata: &impl MetadataSource) -> &[TypeParam] {
     let Some(def) = metadata.get_struct_def(id) else {
         panic!("build_invocation_type_map: missing def for struct {}", id.0);
     };
 
     let Some(name) = def.identity.name() else {
-        return Vec::new();
+        return &[];
     };
 
-    type_params_from_generic_name(name)
+    &name.type_params
 }
 
 // TODO: errors
@@ -471,13 +455,11 @@ pub fn instantiate_struct_def<'a>(
 
     let mut types = HashMap::new();
 
-    let mut identity = generic_struct.identity.clone();
-    let name_params = match identity.name_mut() {
-        Some(name) => name.type_args.as_mut_slice(),
-        None => &mut [],
+    let name_params = match generic_struct.identity.name() {
+        Some(name) => name.type_params.as_slice(),
+        None => &[],
     };
-
-    instantiate_name_path(name_params, type_args, &mut types);
+    build_type_map(name_params, type_args, &mut types);
 
     let mut fields = BTreeMap::new();
     for (field_id, field_def) in &generic_struct.fields {
@@ -490,7 +472,7 @@ pub fn instantiate_struct_def<'a>(
     Cow::Owned(StructDef {
         fields,
         tags: generic_struct.tags.clone(),
-        identity,
+        identity: generic_struct.identity.clone(),
         layout: generic_struct.layout,
     })
 }
@@ -505,10 +487,7 @@ pub fn instantiate_variant_def<'a>(
     }
 
     let mut types = HashMap::new();
-
-    let mut name = generic_variant.name.clone();
-
-    instantiate_name_path(&mut name.type_args, type_args, &mut types);
+    build_type_map(&generic_variant.name.type_params, type_args, &mut types);
 
     let tag_type = instantiate_type(&generic_variant.tag_type, &types);
 
@@ -526,7 +505,7 @@ pub fn instantiate_variant_def<'a>(
     }
 
     Cow::Owned(VariantDef {
-        name,
+        name: generic_variant.name.clone(),
         cases,
         tags: generic_variant.tags.clone(),
         tag_type,
@@ -537,15 +516,14 @@ pub fn instantiate_interface_def<'a>(
     generic_def: &'a InterfaceDef,
     type_args: &[Type],
 ) -> Cow<'a, InterfaceDef> {
-    if !generic_def.name.is_generic() {
+    if generic_def.name.type_params.is_empty() {
         assert_eq!(0, type_args.len(), "instantiate_interface_def: type is not generic");
         return Cow::Borrowed(generic_def);
     }
 
     let mut types = TypeMap::new();
 
-    let mut name = generic_def.name.clone();
-    instantiate_name_path(&mut name.type_args, type_args, &mut types);
+    build_type_map(&generic_def.name.type_params, type_args, &mut types);
 
     let mut methods = Vec::with_capacity(generic_def.methods.len());
 
@@ -569,7 +547,7 @@ pub fn instantiate_interface_def<'a>(
     }
 
     Cow::Owned(InterfaceDef {
-        name,
+        name: generic_def.name.clone(),
         tags: generic_def.tags.clone(),
         methods,
     })

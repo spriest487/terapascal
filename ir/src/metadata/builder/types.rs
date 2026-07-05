@@ -1,4 +1,3 @@
-use crate::FunctionID;
 use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceID;
@@ -8,7 +7,6 @@ use crate::MetadataBuilder;
 use crate::MetadataCollection;
 use crate::MetadataSource;
 use crate::MethodID;
-use crate::NamePath;
 use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
@@ -16,6 +14,7 @@ use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
 use crate::VariantDef;
+use crate::{DeclPath, FunctionID};
 use linked_hash_map::Entry;
 use std::rc::Rc;
 
@@ -53,7 +52,7 @@ impl MetadataBuilder {
     }
 
     /// If the type with this name already exists, return its ID, otherwise forward declare it
-    pub fn forward_declare_type(&mut self, name: &NamePath) -> TypeDefID {
+    pub fn forward_declare_type(&mut self, name: &DeclPath) -> TypeDefID {
         if let Some(existing_id) = self.find_type_decl(name) {
             return existing_id;
         }
@@ -82,7 +81,7 @@ impl MetadataBuilder {
     }
 
     // turn a reserved ID into a forward decl by name
-    pub fn declare_type(&mut self, id: TypeDefID, name: &NamePath) {
+    pub fn declare_type(&mut self, id: TypeDefID, name: &DeclPath) {
         match &mut self.metadata.type_decls[&id] {
             reserved @ TypeDecl::Reserved => {
                 *reserved = TypeDecl::Forward(name.clone());
@@ -111,7 +110,7 @@ impl MetadataBuilder {
         removed
     }
 
-    pub fn find_struct_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &StructDef)> {
+    pub fn find_struct_def(&self, name_path: &DeclPath) -> Option<(TypeDefID, &StructDef)> {
         self.find_in_self_or_refs(move |metadata| metadata.find_struct_def(name_path))
     }
 
@@ -160,7 +159,7 @@ impl MetadataBuilder {
         }
     }
 
-    pub fn declare_iface(&mut self, name: &NamePath) -> InterfaceID {
+    pub fn declare_iface(&mut self, name: &DeclPath) -> InterfaceID {
         let existing = self.metadata.interface_defs.iter().find_map(|(id, decl)| match decl {
             InterfaceDecl::Forward(decl_name) if decl_name == name => Some(*id),
             InterfaceDecl::Def(iface) if iface.name == *name => Some(*id),
@@ -189,7 +188,7 @@ impl MetadataBuilder {
         self.find_in_self_or_refs(move |metadata| metadata.get_interface_def(id))
     }
 
-    pub fn find_iface_def(&self, name: &NamePath) -> Option<InterfaceID> {
+    pub fn find_iface_def(&self, name: &DeclPath) -> Option<InterfaceID> {
         self.find_in_self_or_refs(move |metadata| metadata
             .interface_defs()
             .find_map(|(id, def)| {

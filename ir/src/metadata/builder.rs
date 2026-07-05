@@ -4,12 +4,10 @@ mod rtti;
 
 use crate::dep_sort::sort_defs;
 use crate::metadata::vars::ConstInfo;
-use crate::FunctionID;
 use crate::InterfaceID;
 use crate::Metadata;
 use crate::MetadataCollection;
 use crate::MetadataSource;
-use crate::NamePath;
 use crate::StringID;
 use crate::TagInfo;
 use crate::Type;
@@ -21,6 +19,7 @@ use crate::VariableInfo;
 use crate::EMPTY_STRING_ID;
 use crate::RESERVED_STRINGS;
 use crate::RESERVED_TYPES;
+use crate::{FunctionID, StringPath};
 use linked_hash_map::LinkedHashMap;
 use std::iter;
 use std::sync::Arc;
@@ -110,7 +109,7 @@ impl MetadataBuilder {
     
     pub fn new_variable(
         &mut self,
-        name: Option<NamePath>,
+        name: Option<StringPath>,
         value_type: Type,
         tags: impl IntoIterator<Item=TagInfo>,
     ) -> VariableID {
@@ -133,13 +132,13 @@ impl MetadataBuilder {
 
     pub fn new_const(
         &mut self,
-        name: NamePath,
+        name: StringPath,
         value: Value,
         value_type: Type,
         tags: impl IntoIterator<Item=TagInfo>,
     ) {
         if let Some(..) = self.find_constant(&name) {
-            panic!("new_const: constant {} was already declared", name);
+            panic!("new_const: constant {} was already declared", name.join("."));
         }
 
         self.metadata.constants.insert(name.clone(), ConstInfo {

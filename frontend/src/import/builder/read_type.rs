@@ -1,7 +1,5 @@
 use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
-use terapascal_common::ident::Ident;
-use terapascal_common::ident::IdentPath;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
 use crate::codegen::ALIAS_TAG_CLASS_NAME;
@@ -23,12 +21,14 @@ use crate::typ::TypeName;
 use crate::typ::TypeParam;
 use crate::typ::TypeParamList;
 use crate::typ::SYSTEM_UNIT_NAME;
+use ir::MetadataSource as _;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
-use ir::MetadataSource as _;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 
 impl ImportBuilder<'_> {
     pub fn read_type_decl(&mut self, id: ir::TypeDefID, decl: &ir::TypeDecl) -> ImportResult<()> {
@@ -67,7 +67,7 @@ impl ImportBuilder<'_> {
         id: ir::TypeDefID,
         def: &ir::VariantDef,
     ) -> ImportResult<()> {
-        let name = self.read_def_path(&def.name)?;
+        let name = self.read_decl_path(&def.name)?;
         let variant_type = Type::variant(name.clone());
 
         let def_path = name.full_path.clone();
@@ -92,7 +92,7 @@ impl ImportBuilder<'_> {
             });
         }
 
-        let def_type = id.to_variant_type(def.name.type_args.clone());
+        let def_type = id.to_variant_type(def.name.generic_args());
         let implements = self.read_type_impls(&def_type)?;
 
         let where_clause = None; // TODO: generic constraints in IR
@@ -151,7 +151,7 @@ impl ImportBuilder<'_> {
     fn read_struct_def(
         &mut self,
         id: ir::TypeDefID,
-        name_path: &ir::NamePath,
+        name_path: &ir::DeclPath,
         def: &ir::StructDef,
         kind: StructKind,
     ) -> ImportResult<()> {
@@ -161,7 +161,7 @@ impl ImportBuilder<'_> {
             return Ok(());
         }
 
-        let name = self.read_def_path(&name_path)?;
+        let name = self.read_decl_path(&name_path)?;
         let struct_type = Type::from_struct_type(name.clone(), kind);
 
         let def_path = name.full_path.clone();
@@ -219,17 +219,17 @@ impl ImportBuilder<'_> {
         Ok(())
     }
 
-    fn declare_type(&mut self, name_path: &ir::NamePath, as_type: Type) -> ImportResult<()> {
+    fn declare_type(&mut self, name_path: &ir::DeclPath, as_type: Type) -> ImportResult<()> {
         let span = self.span();
 
         let unit_scope = if let Some(unit_path) = name_path.parent() {
-            self.open_unit(self.read_ident_path(&unit_path))?
+            self.open_unit(self.read_string_path(&unit_path))?
         } else {
             ScopeID(0)
         };
 
         if let Some(ctx) = self.root_ctx.as_mut() {
-            let ident = Ident::new(&name_path.path.last().unwrap(), span);
+            let ident = Ident::new(&name_path.path.last(), span);
             ctx.declare_type(ident, as_type, Visibility::Interface, true);
 
             ctx.pop_scope(unit_scope);
@@ -420,7 +420,8 @@ impl ImportBuilder<'_> {
             .ok_or_else(|| {
                 let type_name = type_ref.def_id.to_pretty_string(self.metadata());
                 ImportError::MissingTypeDef(type_name)
-            })?;
+            })?
+            .clone();
 
         match type_decl {
             ir::TypeDecl::Reserved | ir::TypeDecl::Forward(..) => {
@@ -431,7 +432,7 @@ impl ImportBuilder<'_> {
                 match &struct_def.identity {
                     ir::StructIdentity::Record(name)
                     | ir::StructIdentity::Class(name) => {
-                        let path = self.read_def_path(name)?;
+                        let path = self.read_decl_path(name)?;
 
                         match struct_def.identity {
                             ir::StructIdentity::Internal(_) | ir::StructIdentity::Record(_) => {
@@ -461,7 +462,7 @@ impl ImportBuilder<'_> {
             }
 
             ir::TypeDecl::Def(ir::TypeDef::Variant(variant_def)) => {
-                let path = self.read_def_path(&variant_def.name)?;
+                let path = self.read_decl_path(&variant_def.name)?;
                 let variant_type = Type::variant(path.with_type_args(type_args_list));
 
                 self.types.insert(type_ref.to_variant_type(), variant_type.clone());
@@ -487,8 +488,10 @@ impl ImportBuilder<'_> {
 
             let name = match struct_def.identity.name() {
                 Some(name_path) => {
-                    let path = match self.read_def_path(name_path) {
-                        Ok(name) => name.full_path,
+                    let path = match self.read_decl_path(name_path) {
+                        Ok(name) => {
+                            name.full_path
+                        },
                         Err(err) => {
                             let display_path = name_path.to_pretty_string(self.metadata());
                             self.warnings.push(ImportWarning::InvalidPath(display_path, Box::new(err)));
@@ -527,7 +530,7 @@ impl ImportBuilder<'_> {
             })?;
 
         let tags = self.read_tags(&def.tags)?;
-        let name = self.read_def_path(&def.name)?;
+        let name = self.read_decl_path(&def.name)?;
 
         let iface_type = Type::interface(name.clone());
 
@@ -610,36 +613,14 @@ impl ImportBuilder<'_> {
         Ok(iface_type)
     }
 
-    pub fn read_def_path(&self, name_path: &ir::NamePath) -> ImportResult<Symbol> {
-        let ident_path = self.read_ident_path(&name_path);
+    pub fn read_decl_path(&mut self, name: &ir::DeclPath) -> ImportResult<Symbol> {
+        let ident_path = IdentPath::from_parts(name.path
+            .iter()
+            .map(|part| Ident { name: part.clone(), span: self.span() }));
 
-        let type_params = self.read_name_type_params(&name_path.type_args)?;
+        let type_params = self.read_def_params(&name.type_params)?;
 
         Ok(Symbol::from(ident_path).with_type_params(type_params))
-    }
-
-    fn read_name_type_params(
-        &self,
-        type_params: &[ir::Type],
-    ) -> ImportResult<Option<TypeParamList>> {
-        if type_params.is_empty() {
-            return Ok(None);
-        }
-
-        let mut params = Vec::with_capacity(type_params.len());
-
-        for type_arg in type_params {
-            let ir::Type::Generic(param_name) = type_arg else {
-                let type_name = type_arg.to_pretty_string(self.metadata());
-                let msg = format!("definition has invalid type parameter: {type_name}");
-
-                return Err(ImportError::InvalidData(msg));
-            };
-
-            params.push(TypeParam::new(Ident::new(param_name, self.span())));
-        }
-
-        Ok(Some(TypeParamList::new(params, self.span())))
     }
 
     pub(super) fn read_def_params(
@@ -686,7 +667,7 @@ impl ImportBuilder<'_> {
         }
 
         // the alias tag class must be defined for this
-        let alias_tag_name = ir::NamePath::new([SYSTEM_UNIT_NAME.to_string()], ALIAS_TAG_CLASS_NAME);
+        let alias_tag_name = ir::DeclPath::new([SYSTEM_UNIT_NAME.to_string()], ALIAS_TAG_CLASS_NAME.to_string());
 
         let (alias_tag_class_id, alias_tag_def) = self
             .metadata()

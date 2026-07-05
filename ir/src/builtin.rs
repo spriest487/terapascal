@@ -1,14 +1,14 @@
-use crate::NamePath;
-use crate::StructLayout;
 use crate::StructDef;
 use crate::StructFieldDef;
 use crate::StructIdentity;
+use crate::StructLayout;
 use crate::Type;
 use crate::STRING_CHARS_FIELD;
 use crate::STRING_LEN_FIELD;
+use crate::DeclPath;
 
 pub fn string_def() -> StructDef {
-    let name = NamePath::new(["System".to_string()], "String");
+    let name = DeclPath::new(["System".to_string()], "String".to_string());
 
     let mut def = StructDef::new(StructIdentity::Class(name.clone()), StructLayout::Default);
 

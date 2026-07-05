@@ -1,17 +1,9 @@
 use crate::ast::StructKind;
 use crate::codegen::library_builder::LibraryBuilder;
-use crate::codegen::translate_name;
+use crate::codegen::metadata::translate_decl_name;
 use crate::codegen::typ;
 use crate::ir;
 use std::collections::BTreeMap;
-use std::rc::Rc;
-
-pub fn class_dtor_sig(class_id: &Rc<ir::TypeRef>) -> ir::FunctionSig {
-    ir::FunctionSig {
-        param_types: vec![class_id.to_class_object_type()],
-        result_type: ir::Type::Nothing,
-    }
-}
 
 pub fn translate_struct_def(
     struct_def: &typ::ast::StructDecl,
@@ -19,8 +11,7 @@ pub fn translate_struct_def(
 ) -> ir::StructDef {
     let tags = lib.translate_tag_groups(&struct_def.tags);
 
-    let generic_name = struct_def.name.to_generic_name();
-    let name_path = translate_name(&generic_name, lib);
+    let name_path = translate_decl_name(&struct_def.name, lib);
 
     let mut fields = BTreeMap::new();
     let mut next_id = ir::FieldID(0);

@@ -9,7 +9,6 @@ pub use r#struct::*;
 pub use tags::*;
 pub use variant::*;
 
-use crate::FunctionID;
 use crate::FunctionRef;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -19,6 +18,7 @@ use crate::RawFormatter;
 use crate::Ref;
 use crate::TagInfo;
 use crate::Type;
+use crate::{DeclPath, FunctionID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -30,10 +30,10 @@ pub enum StructIdentity {
     Internal(String),
 
     /// Named type used as a value
-    Record(NamePath),
+    Record(DeclPath),
 
     /// Named type used as the memory layout for a class object
-    Class(NamePath),
+    Class(DeclPath),
 
     /// Unnamed type used as the memory layout for a closure object
     ClosureObject(ClosureIdentity),
@@ -64,19 +64,27 @@ impl StructIdentity {
 
     pub fn to_definition_type(&self, id: TypeDefID) -> Type {
         match self {
-            StructIdentity::Internal(..) => id.to_struct_type([]),
+            StructIdentity::Internal(..) => {
+                id.to_struct_type([])
+            },
 
-            StructIdentity::Record(name) => id.to_struct_type(name.type_args.clone()),
+            StructIdentity::Record(name) => {
+                id.to_struct_type(name.to_generic_name().type_args.clone())
+            },
 
-            StructIdentity::Class(name) => id.to_class_ptr_type(name.type_args.clone()),
+            StructIdentity::Class(name) => {
+                id.to_class_ptr_type(name.to_generic_name().type_args.clone())
+            },
 
             // the type of a closure definition is not a (virtual) closure pointer object, it's
             // an anonymous class
-            StructIdentity::ClosureObject(..) => id.to_class_ptr_type([]),
+            StructIdentity::ClosureObject(..) => {
+                id.to_class_ptr_type([])
+            },
         }
     }
 
-    pub fn name(&self) -> Option<&NamePath> {
+    pub fn name(&self) -> Option<&DeclPath> {
         match self {
             StructIdentity::Internal(..) => None,
 
@@ -87,7 +95,7 @@ impl StructIdentity {
         }
     }
 
-    pub fn name_mut(&mut self) -> Option<&mut NamePath> {
+    pub fn name_mut(&mut self) -> Option<&mut DeclPath> {
         match self {
             StructIdentity::Internal(..) => None,
 
@@ -136,12 +144,12 @@ impl StructIdentity {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TypeDecl {
     Reserved,
-    Forward(NamePath),
+    Forward(DeclPath),
     Def(TypeDef),
 }
 
 impl TypeDecl {
-    pub fn name(&self) -> Option<&NamePath> {
+    pub fn name(&self) -> Option<&DeclPath> {
         match self {
             TypeDecl::Reserved => None,
             TypeDecl::Forward(name) => Some(name),
@@ -171,7 +179,7 @@ pub enum TypeDef {
 }
 
 impl TypeDef {
-    pub fn name(&self) -> Option<&NamePath> {
+    pub fn name(&self) -> Option<&DeclPath> {
         match self {
             TypeDef::Struct(s) => s.name(),
             TypeDef::Variant(v) => Some(&v.name),

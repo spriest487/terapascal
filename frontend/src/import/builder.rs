@@ -10,7 +10,7 @@ use crate::ast::Literal;
 use crate::ast::LiteralItem;
 use crate::ast::ObjectCtorArgs;
 use crate::ast::Visibility;
-use crate::codegen::library_builder::FunctionDeclKey;
+use crate::codegen::FunctionDeclKey;
 use crate::codegen::EnumMemberTagInfo;
 use crate::codegen::FunctionInstance;
 use crate::codegen::OutParamTagInfo;
@@ -122,7 +122,7 @@ impl<'a> ImportBuilder<'a> {
 
         for const_info in self.library.metadata.constants() {
             if let Err(err) = self.read_const(const_info) {
-                let const_name = const_info.name.to_pretty_string(self);
+                let const_name = const_info.name.to_string();
                 self.warnings.push(ImportWarning::InvalidConst(const_name, Box::new(err)));
             }
         }
@@ -197,13 +197,7 @@ impl<'a> ImportBuilder<'a> {
         &mut self,
         const_info: &ir::ConstInfo,
     ) -> ImportResult<()> {
-        let path = self.read_ident_path(&const_info.name);
-
-        if !const_info.name.type_args.is_empty() {
-            let name_display = const_info.name.to_pretty_string(self);
-            let msg = format!("path of constant item {path} has type parameters: {name_display}");
-            return Err(ImportError::InvalidData(msg))
-        }
+        let path = self.read_string_path(&const_info.name);
 
         let name_ident = path.last().clone();
         let span = self.span();
@@ -251,7 +245,7 @@ impl<'a> ImportBuilder<'a> {
         let span = self.span();
 
         let enum_path = match self.get_type_decl(enum_member.enum_type_id) {
-            Some(ir::TypeDecl::Forward(enum_path)) if enum_path.type_args.is_empty() => {
+            Some(ir::TypeDecl::Forward(enum_path)) if enum_path.type_params.is_empty() => {
                 enum_path.clone()
             },
             _ => {
@@ -259,7 +253,7 @@ impl<'a> ImportBuilder<'a> {
             },
         };
 
-        let enum_name = self.read_ident_path(&enum_path);
+        let enum_name = self.read_ident_decl_path(&enum_path);
 
         let enum_def = self.enum_defs
             .entry(enum_name)
@@ -387,8 +381,7 @@ impl<'a> ImportBuilder<'a> {
                     return Err(ImportError::InvalidData(msg));
                 };
 
-                let decl = IdentPath::from_parts(name_path.path
-                    .iter()
+                let decl = IdentPath::from_parts(name_path
                     .map(|part| Ident::new(part, self.span())));
 
                 let var_value = TypedValue::unit_var(var_type, decl, self.span());
@@ -420,9 +413,18 @@ impl<'a> ImportBuilder<'a> {
         }
     }
 
-    pub fn read_ident_path(&self, path: &ir::NamePath) -> IdentPath {
-        IdentPath::from_parts(path.path.iter()
-            .map(|part| Ident::new(part, self.span())))
+    pub fn read_string_path(&self, path: &ir::StringPath) -> IdentPath {
+        IdentPath::from_parts(path
+            .iter()
+            .map(|part| Ident::new(part, self.span()))
+        )
+    }
+
+    pub fn read_ident_decl_path(&self, path: &ir::DeclPath) -> IdentPath {
+        IdentPath::from_parts(path.path
+            .iter()
+            .map(|part| Ident::new(part, self.span()))
+        )
     }
 
     pub fn open_unit(&mut self, unit_path: IdentPath) -> ImportResult<ScopeID> {

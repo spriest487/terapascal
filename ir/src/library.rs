@@ -187,7 +187,7 @@ impl Library {
 
             let impl_self_ty = match def {
                 TypeDef::Variant(def) => {
-                    Some(id.to_variant_type(def.name.type_args.clone()))
+                    Some(id.to_variant_type(def.name.generic_args()))
                 },
                 TypeDef::Struct(struct_def) => {
                     Some(struct_def.identity.to_definition_type(*id))

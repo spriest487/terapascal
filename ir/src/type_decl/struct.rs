@@ -1,8 +1,7 @@
-use crate::FieldID;
-use crate::NamePath;
 use crate::StructIdentity;
 use crate::TagInfo;
 use crate::Type;
+use crate::{DeclPath, FieldID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -41,9 +40,7 @@ impl StructDef {
     
     pub fn is_generic(&self) -> bool {
         match self.name() {
-            Some(name) => {
-                name.is_generic()
-            }
+            Some(name) => !name.type_params.is_empty(),
             None => false,
         }
     }
@@ -79,7 +76,7 @@ impl StructDef {
         }
     }
 
-    pub fn name(&self) -> Option<&NamePath> {
+    pub fn name(&self) -> Option<&DeclPath> {
         self.identity.name()
     }
     

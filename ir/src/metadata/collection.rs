@@ -1,6 +1,4 @@
 use crate::metadata::vars::ConstInfo;
-use crate::FunctionID;
-use crate::FunctionInfo;
 use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
@@ -11,7 +9,6 @@ use crate::Metadata;
 use crate::MetadataSource;
 use crate::MethodID;
 use crate::MethodInfo;
-use crate::NamePath;
 use crate::StringID;
 use crate::StructDef;
 use crate::Type;
@@ -22,6 +19,8 @@ use crate::TypeInfo;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
+use crate::{DeclPath, FunctionID};
+use crate::{FunctionInfo, StringPath};
 use std::rc::Rc;
 
 pub trait MetadataCollection {
@@ -58,7 +57,7 @@ impl<T: MetadataCollection> MetadataSource for T {
         self.find_in_self_or_refs(move |metadata| metadata.get_struct_def(def_id))
     }
 
-    fn find_struct_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &StructDef)> {
+    fn find_struct_def(&self, name_path: &DeclPath) -> Option<(TypeDefID, &StructDef)> {
         self.find_in_self_or_refs(move |metadata| metadata.find_struct_def(name_path))
     }
 
@@ -66,7 +65,7 @@ impl<T: MetadataCollection> MetadataSource for T {
         self.find_in_self_or_refs(move |metadata| metadata.get_variant_def(def_id))
     }
 
-    fn find_variant_def(&self, name_path: &NamePath) -> Option<(TypeDefID, &VariantDef)> {
+    fn find_variant_def(&self, name_path: &DeclPath) -> Option<(TypeDefID, &VariantDef)> {
         self.find_in_self_or_refs(move |metadata| metadata.find_variant_def(name_path))
     }
 
@@ -82,11 +81,11 @@ impl<T: MetadataCollection> MetadataSource for T {
         self.find_in_self_or_refs(move |metadata| metadata.get_type_def(id))
     }
 
-    fn get_type_name(&self, id: TypeDefID) -> Option<&NamePath> {
+    fn get_type_name(&self, id: TypeDefID) -> Option<&DeclPath> {
         self.find_in_self_or_refs(move |metadata| metadata.get_type_name(id))
     }
 
-    fn find_type_decl(&self, name: &NamePath) -> Option<TypeDefID> {
+    fn find_type_decl(&self, name: &DeclPath) -> Option<TypeDefID> {
         self.find_in_self_or_refs(move |metadata| metadata.find_type_decl(name))
     }
 
@@ -144,7 +143,7 @@ impl<T: MetadataCollection> MetadataSource for T {
         self.find_in_self_or_refs(move |metadata| metadata.get_dtor_method(for_type))
     }
 
-    fn find_variable(&self, name: &NamePath) -> Option<(VariableID, &VariableInfo)> {
+    fn find_variable(&self, name: &StringPath) -> Option<(VariableID, &VariableInfo)> {
         self.find_in_self_or_refs(move |metadata| metadata.find_variable(name))
     }
 
@@ -152,7 +151,7 @@ impl<T: MetadataCollection> MetadataSource for T {
         self.find_in_self_or_refs(move |metadata| metadata.get_variable(id))
     }
 
-    fn find_constant(&self, name: &NamePath) -> Option<&ConstInfo> {
+    fn find_constant(&self, name: &StringPath) -> Option<&ConstInfo> {
         self.find_in_self_or_refs(move |metadata| metadata.find_constant(name))
     }
 

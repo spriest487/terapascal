@@ -1,9 +1,8 @@
-use crate::FunctionID;
 use crate::FunctionParamInfo;
 use crate::MethodID;
-use crate::NamePath;
 use crate::TagInfo;
 use crate::Type;
+use crate::{DeclPath, FunctionID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -17,14 +16,14 @@ pub struct Method {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InterfaceDef {
-    pub name: NamePath,
+    pub name: DeclPath,
     pub methods: Vec<Method>,
     
     pub tags: Vec<TagInfo>,
 }
 
 impl InterfaceDef {
-    pub fn new(name: impl Into<NamePath>, methods: impl Into<Vec<Method>>) -> Self {
+    pub fn new(name: impl Into<DeclPath>, methods: impl Into<Vec<Method>>) -> Self {
         Self {
             name: name.into(),
             methods: methods.into(),
@@ -66,12 +65,12 @@ impl InterfaceImpl {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum InterfaceDecl {
-    Forward(NamePath),
+    Forward(DeclPath),
     Def(InterfaceDef),
 }
 
 impl InterfaceDecl {
-    pub fn name(&self) -> &NamePath {
+    pub fn name(&self) -> &DeclPath {
         match self {
             InterfaceDecl::Def(def) => &def.name,
             InterfaceDecl::Forward(name) => name,

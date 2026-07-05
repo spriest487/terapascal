@@ -11,7 +11,7 @@ use terapascal_backend_c::ir;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_common::LIB_DIR_VAR;
-use terapascal_frontend::codegen::library_builder::LibraryRef;
+use terapascal_frontend::codegen::LibraryRef;
 use terapascal_frontend::import::import_lib;
 use terapascal_frontend::typ::Context;
 

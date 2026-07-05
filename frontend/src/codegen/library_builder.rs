@@ -1,11 +1,10 @@
 mod build_functions;
+mod build_types;
 
 pub use self::build_functions::*;
 
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
-use terapascal_common::ident::Ident;
-use terapascal_common::ident::IdentPath;
 use crate::ast::StructKind;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::expr_to_val;
@@ -34,6 +33,8 @@ use std::collections::HashSet;
 use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::version::Version;
 use typ::*;
 
@@ -300,7 +301,7 @@ impl<'a> LibraryBuilder<'a> {
 
             for ident in &const_binding.idents {
                 let binding_name = unit.ident.clone().child(ident.clone());
-                let binding_path = ir::NamePath::from_ident_path(&binding_name, []);
+                let binding_path = binding_name.map(|p| p.name.clone());
 
                 let value = literal_to_val(&literal_val, &binding_ty, self);
 
@@ -313,7 +314,7 @@ impl<'a> LibraryBuilder<'a> {
 
             for ident in &var.idents {
                 let var_name = unit.ident.clone().child(ident.clone());
-                let var_path = ir::NamePath::from_ident_path(&var_name, None);
+                let var_path = var_name.map(|p| p.name.clone());
 
                 let id = self.metadata.new_variable(Some(var_path), var_ty.clone(), []);
 
@@ -502,20 +503,18 @@ impl<'a> LibraryBuilder<'a> {
             panic!("build_enum_def: missing definition for {enum_name}");
         };
 
-        let Some(namespace) = enum_name.parent() else {
+        let enum_decl_path = translate_decl_name(&enum_def.name, self);
+
+        let Some(namespace_path) = enum_decl_path.parent() else {
             panic!("build_enum_def: invalid enum path {enum_name}");
         };
 
-        let namespace_path = ir::NamePath::from_ident_path(&namespace, []);
-
         let ord_type = self.translate_type(&ENUM_ORD_TYPE);
-
-        let enum_type_path = namespace_path.clone().child(enum_name.last().as_str());
 
         // enum types have no actual definition but also only get declared once (below) by the
         // library they're in, so assume if there's even a forward decl, the constants are
         // stored in another library
-        if let Some(id) = self.metadata.find_type_decl(&enum_type_path) {
+        if let Some(id) = self.metadata.find_type_decl(&enum_decl_path) {
             return id;
         }
 
@@ -524,25 +523,25 @@ impl<'a> LibraryBuilder<'a> {
                 info.class_id
             },
             None => {
-                self.metadata.forward_declare_type(&ir::NamePath::new(
+                self.metadata.forward_declare_type(&ir::DeclPath::new(
                     [SYSTEM_UNIT_NAME.to_string()],
-                    ENUM_MEMBER_TAG_NAME,
+                    ENUM_MEMBER_TAG_NAME.to_string(),
                 ))
             }
         };
 
         // insert a forward type def for the enum type itself - this type will never actually
         // be defined beyond giving it this name, but it means we can refer to it as a type
-        let enum_type_id = self.metadata.forward_declare_type(&enum_type_path);
+        let enum_type_id = self.metadata.forward_declare_type(&enum_decl_path);
         let enum_def_type = enum_type_id.to_struct_type([]);
         let enum_type_ref = ir::GlobalRef::StaticTypeInfo(Rc::new(enum_def_type.clone()));
 
         for item in &enum_def.items {
-            let item_path = namespace_path.clone().child(item.ident.as_str());
+            let item_path = namespace_path.clone().child(item.ident.name.clone());
 
             // typechecked enum items must have statically-known values
             let Some(const_val) = item.annotation.as_const() else {
-                panic!("build_enum_def: enum item {item_path} does not have a const value");
+                panic!("build_enum_def: enum item {} does not have a const value", item_path.join("."));
             };
 
             let value = literal_to_val(&const_val.value, &ord_type, self);
@@ -554,7 +553,7 @@ impl<'a> LibraryBuilder<'a> {
         }
 
         // custom typeinfo because it's not a real type def
-        let runtime_name = enum_type_path.to_pretty_string(self.metadata());
+        let runtime_name = enum_decl_path.to_pretty_string(self.metadata());
         let runtime_name_id = self.metadata.find_or_insert_string(&runtime_name);
 
         self.metadata.insert_type_info(enum_def_type, ir::TypeInfo {
@@ -686,7 +685,7 @@ impl<'a> LibraryBuilder<'a> {
     }
 
     pub fn find_iface_decl(&mut self, iface_name: &Symbol) -> Option<ir::InterfaceID> {
-        let name = translate_name(iface_name, self);
+        let name = translate_decl_name(iface_name, self);
 
         self.metadata
             .interface_defs()
@@ -929,7 +928,7 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             Type::GenericParam(param) => {
-                ir::Type::Generic(Rc::new(param.name.name.to_string()))
+                ir::Type::Generic(Arc::new(param.name.name.to_string()))
             }
 
             Type::MethodSelf => {
@@ -951,7 +950,7 @@ impl<'a> LibraryBuilder<'a> {
         // the definition uses the generic (unspecialized) type, which is
         // shared between all specializations
         let def_name = name.to_generic_name();
-        let def_path = translate_name(&def_name, self);
+        let def_path = translate_decl_name(&def_name, self);
 
         let def_id = match self.metadata.find_variant_def(&def_path) {
             Some((def_id, _)) => {
@@ -966,7 +965,7 @@ impl<'a> LibraryBuilder<'a> {
                 let def_id = self.metadata.forward_declare_type(&def_path);
 
                 let def_src_type = Type::variant(def_name);
-                let variant_type = def_id.to_variant_type(def_path.type_args.clone());
+                let variant_type = def_id.to_variant_type(def_path.generic_args());
 
                 self.add_cached_type(def_src_type.clone(), variant_type.clone());
 
@@ -982,8 +981,9 @@ impl<'a> LibraryBuilder<'a> {
         };
 
         let name_path = translate_name(name, self);
-        if name_path == def_path {
-            return def_id.to_variant_type(def_path.type_args.clone());
+        let generic_name = def_path.to_generic_name();
+        if name_path == generic_name {
+            return def_id.to_variant_type(generic_name.type_args);
         }
 
         let instance_type = def_id.to_variant_type(name_path.type_args.clone());
@@ -1004,14 +1004,14 @@ impl<'a> LibraryBuilder<'a> {
         }
 
         let def_name = name.to_generic_name();
-        let def_path = translate_name(&def_name, self);
+        let def_path = translate_decl_name(&def_name, self);
 
-        let type_ctor = |id: ir::TypeDefID, args: &[ir::Type]| match kind {
+        let type_ctor = |id: ir::TypeDefID, args: Vec<ir::Type>| match kind {
             StructKind::Class => {
-                id.to_class_ptr_type(args.to_vec())
+                id.to_class_ptr_type(args)
             },
             StructKind::Record => {
-                id.to_struct_type(args.to_vec())
+                id.to_struct_type(args)
             },
         };
 
@@ -1028,7 +1028,7 @@ impl<'a> LibraryBuilder<'a> {
                 let def_src_type = Type::from_struct_type(def_name.clone(), kind);
 
                 let def_id = self.metadata.forward_declare_type(&def_path);
-                let def_type = type_ctor(def_id, &def_path.type_args);
+                let def_type = type_ctor(def_id, def_path.generic_args());
 
                 self.add_cached_type(def_src_type.clone(), def_type.clone());
                 self.metadata.declare_type(def_id, &def_path);
@@ -1047,11 +1047,12 @@ impl<'a> LibraryBuilder<'a> {
         // if this instance of the type is the same as the definition type (non generic, or
         // referenced via its definition name),
         let instance_path = translate_name(name, self);
-        if instance_path == def_path {
-            return type_ctor(def_id, &def_path.type_args);
+        let generic_path = def_path.to_generic_name();
+        if instance_path == generic_path {
+            return type_ctor(def_id, generic_path.type_args);
         }
 
-        let instance_type = type_ctor(def_id, &instance_path.type_args);
+        let instance_type = type_ctor(def_id, instance_path.type_args);
         self.add_cached_type(src_type.clone(), instance_type.clone());
 
         instance_type
@@ -1066,7 +1067,7 @@ impl<'a> LibraryBuilder<'a> {
         }
 
         let def_name = Arc::new(src_name.to_generic_name());
-        let def_path = translate_name(&def_name, self);
+        let def_path = translate_decl_name(&def_name, self);
         let instance_path = translate_name(src_name, self);
 
         match self.metadata.find_iface_def(&def_path) {
