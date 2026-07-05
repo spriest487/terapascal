@@ -1,3 +1,4 @@
+use terapascal_common::ident::IdentPath;
 use terapascal_frontend::ast::Access;
 use terapascal_frontend::ast::FunctionDeclKind;
 use terapascal_frontend::ast::Visibility;

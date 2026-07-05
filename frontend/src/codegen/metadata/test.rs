@@ -4,12 +4,12 @@ use crate::ir;
 use crate::ir::dep_sort::find_deps;
 use crate::ir::dep_sort::sort_defs;
 use crate::ir::Metadata;
-use crate::ir::NamePath;
 use crate::ir::TypeDef;
 use crate::ir::TypeDefID;
 use crate::typ;
 use ir::MetadataSource as _;
 use std::collections::HashMap;
+use terapascal_ir::DeclPath;
 
 fn defs_from_src(src: &str) -> (HashMap<TypeDefID, TypeDef>, Metadata) {
     let test_module = typ::test::module_from_src("test", src);
@@ -23,7 +23,7 @@ fn defs_from_src(src: &str) -> (HashMap<TypeDefID, TypeDef>, Metadata) {
 }
 
 fn get_id(metadata: &Metadata, name: &str) -> TypeDefID {
-    let name_path = NamePath::new(vec!["test".to_string()], name.to_string());
+    let name_path = DeclPath::new(vec!["test".to_string()], name.to_string());
 
     match metadata.find_struct_def(&name_path) {
         Some((id, _)) => { id },
@@ -149,7 +149,7 @@ fn sorts_record_deps() {
     let sorted = sort_defs(unsorted_defs, &metadata);
 
     let mut sorted_it = sorted.into_iter();
-    assert_eq!("A", sorted_it.next().unwrap().1.name().unwrap().path.last().unwrap());
-    assert_eq!("B", sorted_it.next().unwrap().1.name().unwrap().path.last().unwrap());
-    assert_eq!("C", sorted_it.next().unwrap().1.name().unwrap().path.last().unwrap());
+    assert_eq!("A", sorted_it.next().unwrap().1.name().unwrap().path.last().as_str());
+    assert_eq!("B", sorted_it.next().unwrap().1.name().unwrap().path.last().as_str());
+    assert_eq!("C", sorted_it.next().unwrap().1.name().unwrap().path.last().as_str());
 }

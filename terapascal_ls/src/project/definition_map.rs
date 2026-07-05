@@ -4,6 +4,8 @@ use crate::util::search_or_insert_spanned;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
@@ -40,7 +42,9 @@ use terapascal_frontend::typ::ast::VariantDecl;
 use terapascal_frontend::typ::ast::WhereClause;
 use terapascal_frontend::typ::ast::WhileLoop;
 use terapascal_frontend::typ::seq::TypeSequenceSupport;
+use terapascal_frontend::typ::Context;
 use terapascal_frontend::typ::Invocation;
+use terapascal_frontend::typ::MatchPattern;
 use terapascal_frontend::typ::ModuleUnit;
 use terapascal_frontend::typ::ScopeMemberRef;
 use terapascal_frontend::typ::Type;
@@ -48,8 +52,6 @@ use terapascal_frontend::typ::TypeArgList;
 use terapascal_frontend::typ::TypeName;
 use terapascal_frontend::typ::TypeParamList;
 use terapascal_frontend::typ::Value;
-use terapascal_frontend::typ::Context;
-use terapascal_frontend::typ::MatchPattern;
 use terapascal_frontend::Operator;
 
 pub struct LinksEntry {
