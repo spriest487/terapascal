@@ -18,6 +18,7 @@ use crate::TypeDefID;
 use crate::Value;
 use crate::VariableID;
 use crate::VariableInfo;
+use crate::Visibility;
 use crate::EMPTY_STRING_ID;
 use crate::RESERVED_STRINGS;
 use crate::RESERVED_TYPES;
@@ -112,6 +113,7 @@ impl MetadataBuilder {
         &mut self,
         name: Option<StringPath>,
         value_type: Type,
+        visibility: Visibility,
         tags: impl IntoIterator<Item=TagInfo>,
     ) -> VariableID {
         let id = self.next_variable_id;
@@ -123,6 +125,7 @@ impl MetadataBuilder {
         self.metadata.variables.insert(id, VariableInfo {
             name,
             value_type,
+            visibility,
             tags: tags.into_iter().collect(),
         });
 
@@ -136,6 +139,7 @@ impl MetadataBuilder {
         name: StringPath,
         value: Value,
         value_type: Type,
+        visibility: Visibility,
         tags: impl IntoIterator<Item=TagInfo>,
     ) {
         if let Some(..) = self.find_constant(&name) {
@@ -146,6 +150,7 @@ impl MetadataBuilder {
             name,
             value,
             value_type,
+            visibility,
             tags: tags.into_iter().collect(),
         });
     }

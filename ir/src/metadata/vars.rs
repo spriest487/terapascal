@@ -2,6 +2,7 @@
 use crate::TagInfo;
 use crate::Type;
 use crate::Value;
+use crate::Visibility;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -11,6 +12,8 @@ pub struct VariableInfo {
     pub value_type: Type,
 
     pub tags: Vec<TagInfo>,
+
+    pub visibility: Visibility,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,4 +24,6 @@ pub struct ConstInfo {
     pub value_type: Type,
 
     pub tags: Vec<TagInfo>,
+
+    pub visibility: Visibility,
 }

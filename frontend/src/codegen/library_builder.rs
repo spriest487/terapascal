@@ -293,7 +293,9 @@ impl<'a> LibraryBuilder<'a> {
     }
 
     pub fn translate_unit(&mut self, unit: &ast::Unit) {
-        for (_, const_binding) in unit.binding_items(BindingDeclKind::Const) {
+        for (decl_visibility, const_binding) in unit
+            .binding_items(BindingDeclKind::Const)
+        {
             let literal_val = const_binding.init
                 .as_ref()
                 .and_then(|init| init.expr.const_eval(&self.root_ctx))
@@ -301,24 +303,28 @@ impl<'a> LibraryBuilder<'a> {
 
             let binding_ty = self.translate_type(&const_binding.ty);
 
+            let visibility = self.translate_decl_visibility(decl_visibility);
+
             for ident in &const_binding.idents {
                 let binding_name = unit.ident.clone().child(ident.clone());
                 let binding_path = binding_name.map(|p| p.name.clone());
 
                 let value = literal_to_val(&literal_val, &binding_ty, self);
 
-                self.metadata.new_const(binding_path, value, binding_ty.clone(), []);
+                self.metadata.new_const(binding_path, value, binding_ty.clone(), visibility, []);
             }
         }
 
-        for (_, var) in unit.binding_items(BindingDeclKind::Var) {
+        for (decl_visibility, var) in unit.binding_items(BindingDeclKind::Var) {
             let var_ty = self.translate_type(&var.ty);
+
+            let visibility = self.translate_decl_visibility(decl_visibility);
 
             for ident in &var.idents {
                 let var_name = unit.ident.clone().child(ident.clone());
                 let var_path = var_name.map(|p| p.name.clone());
 
-                let id = self.metadata.new_variable(Some(var_path), var_ty.clone(), []);
+                let id = self.metadata.new_variable(Some(var_path), var_ty.clone(), visibility, []);
 
                 self.variables_by_name.insert(var_name, id);
                 self.variables.insert(id, var_ty.clone());
@@ -519,6 +525,8 @@ impl<'a> LibraryBuilder<'a> {
             panic!("build_enum_def: invalid enum path {enum_name}");
         };
 
+        let visibility = self.translate_name_visibility(enum_name);
+
         let ord_type = self.translate_type(&ENUM_ORD_TYPE);
 
         // enum types have no actual definition but also only get declared once (below) by the
@@ -559,7 +567,7 @@ impl<'a> LibraryBuilder<'a> {
             let mut member_tag = ir::TagInfo::new(enum_member_tag_id);
             member_tag.fields.insert(ENUM_MEMBER_TAG_TYPE_FIELD, enum_type_ref.clone().to_ref().value());
 
-            self.metadata_mut().new_const(item_path, value, ord_type.clone(), [member_tag]);
+            self.metadata_mut().new_const(item_path, value, ord_type.clone(), visibility, [member_tag]);
         }
 
         // custom typeinfo because it's not a real type def
@@ -1454,7 +1462,11 @@ impl<'a> LibraryBuilder<'a> {
             return self.static_closures.get(id).unwrap();
         }
 
-        let id = self.metadata.new_variable(None, closure.sig.to_closure_ptr_type(), []);
+        let instance_visibility = ir::Visibility::Internal;
+        let instance_type = closure.sig.to_closure_ptr_type();
+
+        let id = self.metadata.new_variable(None, instance_type, instance_visibility, []);
+
         let instance = build_static_closure_impl(closure, id, self);
 
         self.static_closures.insert(id, instance);
