@@ -1,5 +1,4 @@
 use crate::ast;
-use crate::typ;
 use crate::typ::Context;
 use crate::typ::FunctionSig;
 use crate::typ::FunctionSigParam;
@@ -74,7 +73,10 @@ where
 
     let units_by_path = units.iter().map(|(p, u)| (p, u));
 
-    let mut root_ctx = typ::Context::root(CompileOpts::default());
+    let mut opts = CompileOpts::default();
+    opts.no_system = true;
+
+    let mut root_ctx = Context::root(opts);
 
     let module = Module::typecheck("test", Version::default(), units_by_path, &mut root_ctx, &mut log);
 
@@ -91,7 +93,15 @@ where
 pub fn print_errors(errors: &[TypeError]) {
     for error in errors {
         for message in error.to_messages() {
-            eprintln!("{}", message);
+            eprintln!("[{}] {}", message.severity, message.title);
+            if let Some(label) = message.label {
+                eprint!("\t{}", label.span);
+
+                if let Some(label_text) = label.text {
+                    eprint!(": {label_text}");
+                }
+                eprintln!();
+            }
         }
     }
 }
