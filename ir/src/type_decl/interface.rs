@@ -1,8 +1,9 @@
+use crate::DeclPath;
+use crate::FunctionID;
 use crate::FunctionParamInfo;
 use crate::MethodID;
 use crate::TagInfo;
 use crate::Type;
-use crate::{DeclPath, FunctionID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;

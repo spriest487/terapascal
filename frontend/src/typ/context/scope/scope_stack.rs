@@ -60,7 +60,9 @@ impl ScopeStack {
         let new_key = member_key.clone();
         let new_member = ScopeMember::Decl(decl);
 
-        if let Err((existing_key, existing_member)) = top.try_add_member(&new_key, new_member) {
+        if let Err((existing_key, existing_member)) = top
+            .try_add_member(&new_key, new_member)
+        {
             let existing_path = self
                 .current_path()
                 .to_namespace()
@@ -88,9 +90,11 @@ impl ScopeStack {
                 Ok(())
             },
 
-            None => Err(NameError::NotFound {
-                ident: IdentPath::from(member_key),
-            }),
+            None => {
+                Err(NameError::NotFound {
+                    ident: IdentPath::from(member_key),
+                })
+            },
         }
     }
 

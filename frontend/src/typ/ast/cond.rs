@@ -98,7 +98,7 @@ pub fn typecheck_if_cond_stmt(
             let mut else_ctx = ctx.branch();
             let else_stmt = typecheck_stmt(&branch.item, &Type::Nothing, &mut else_ctx)?;
 
-            ctx.consolidate_branches([then_ctx, else_ctx]);
+            ctx.join_branches([then_ctx, else_ctx]);
 
             Some(ElseBranch {
                 item: Box::new(else_stmt),
@@ -107,7 +107,7 @@ pub fn typecheck_if_cond_stmt(
         }
 
         None => {
-            ctx.consolidate_branches([then_ctx]);
+            ctx.join_branches([then_ctx]);
             None
         },
     };
@@ -158,7 +158,7 @@ pub fn typecheck_if_cond_expr(
                 },
             };
 
-            ctx.consolidate_branches([then_ctx, else_ctx]);
+            ctx.join_branches([then_ctx, else_ctx]);
 
             Some(ElseBranch {
                 item: Box::new(else_expr),
@@ -167,7 +167,7 @@ pub fn typecheck_if_cond_expr(
         }
 
         None => {
-            ctx.consolidate_branches([then_ctx]);
+            ctx.join_branches([then_ctx]);
             None
         },
     };

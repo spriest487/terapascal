@@ -2,6 +2,9 @@
 use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::vars::ConstInfo;
+use crate::DeclPath;
+use crate::FunctionID;
+use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceDef;
@@ -14,6 +17,7 @@ use crate::MethodInfo;
 use crate::NamePath;
 use crate::ObjectID;
 use crate::StringID;
+use crate::StringPath;
 use crate::StructDef;
 use crate::TagInfo;
 use crate::TagLocation;
@@ -26,8 +30,6 @@ use crate::TypeRef;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
-use crate::{DeclPath, FunctionInfo};
-use crate::{FunctionID, StringPath};
 use std::borrow::Cow;
 use std::rc::Rc;
 

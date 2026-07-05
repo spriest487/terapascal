@@ -1,3 +1,5 @@
+use crate::ClosureIdentity;
+use crate::DeclPath;
 use crate::IRFormatter;
 use crate::InstructionList;
 use crate::Label;
@@ -11,7 +13,6 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::TypeParam;
 use crate::VariableID;
-use crate::{ClosureIdentity, DeclPath};
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;

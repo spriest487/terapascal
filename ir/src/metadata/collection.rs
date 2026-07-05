@@ -1,4 +1,7 @@
 use crate::metadata::vars::ConstInfo;
+use crate::DeclPath;
+use crate::FunctionID;
+use crate::FunctionInfo;
 use crate::IRFormatter;
 use crate::InterfaceDef;
 use crate::InterfaceID;
@@ -10,6 +13,7 @@ use crate::MetadataSource;
 use crate::MethodID;
 use crate::MethodInfo;
 use crate::StringID;
+use crate::StringPath;
 use crate::StructDef;
 use crate::Type;
 use crate::TypeDecl;
@@ -19,8 +23,6 @@ use crate::TypeInfo;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
-use crate::{DeclPath, FunctionID};
-use crate::{FunctionInfo, StringPath};
 use std::rc::Rc;
 
 pub trait MetadataCollection {

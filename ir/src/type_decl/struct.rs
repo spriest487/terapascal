@@ -1,7 +1,8 @@
+use crate::DeclPath;
+use crate::FieldID;
 use crate::StructIdentity;
 use crate::TagInfo;
 use crate::Type;
-use crate::{DeclPath, FieldID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;

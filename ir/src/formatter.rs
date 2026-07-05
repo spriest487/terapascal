@@ -4,12 +4,14 @@ use crate::metadata::MethodID;
 use crate::types::Type;
 use crate::val::Ref;
 use crate::val::Value;
+use crate::DeclPath;
+use crate::FieldID;
 use crate::FunctionRef;
 use crate::InterfaceRef;
 use crate::NamePath;
 use crate::TypeDefID;
+use crate::TypeParam;
 use crate::UnaryOpInstruction;
-use crate::{DeclPath, FieldID, TypeParam};
 use std::fmt;
 use std::write;
 

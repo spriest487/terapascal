@@ -1,6 +1,7 @@
+use crate::DeclPath;
+use crate::TagInfo;
 use crate::Type;
 use crate::Value;
-use crate::{DeclPath, TagInfo};
 use serde::Deserialize;
 use serde::Serialize;
 

@@ -1,3 +1,5 @@
+use crate::DeclPath;
+use crate::FunctionID;
 use crate::InterfaceDecl;
 use crate::InterfaceDef;
 use crate::InterfaceID;
@@ -14,7 +16,6 @@ use crate::TypeDef;
 use crate::TypeDefID;
 use crate::TypeInfo;
 use crate::VariantDef;
-use crate::{DeclPath, FunctionID};
 use linked_hash_map::Entry;
 use std::rc::Rc;
 

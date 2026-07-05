@@ -628,6 +628,7 @@ impl DiagnosticOutput for TypeError {
         String::from(match self {
             TypeError::NameError { err, .. } => match err {
                 NameError::NotFound { .. } => "Name not found",
+                NameError::NotDefined { .. } => "Name not defined",
                 NameError::MemberNotFound { .. } => "Named member not found",
                 NameError::Unexpected { .. } => "Name had unexpected type",
                 NameError::AlreadyDeclared { .. } => "Name already declared",

@@ -87,7 +87,7 @@ where
         branch_ctxs.push(branch_ctx);
     }
 
-    ctx.consolidate_branches(branch_ctxs);
+    ctx.join_branches(branch_ctxs);
 
     Ok(branches)
 }

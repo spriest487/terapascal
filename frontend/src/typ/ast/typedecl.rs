@@ -99,7 +99,8 @@ impl SupersClause {
 
             match implements_ty.ty() {
                 Type::Interface(iface_name) => {
-                    let iface_def = ctx.find_iface_def(&iface_name.full_path)
+                    let iface_def = ctx
+                        .find_iface_def(&iface_name.full_path)
                         .map_err(|err| {
                             TypeError::from_name_err(err, iface_name.full_path.path_span())
                         })?;

@@ -534,13 +534,15 @@ impl Context {
                 }
             },
 
-            _ => self
-                .scopes
-                .insert_decl(name.clone(), decl)
-                .map_err(|err| TypeError::NameError {
-                    err,
-                    span: name.span().clone(),
-                }),
+            _ => {
+                self
+                    .scopes
+                    .insert_decl(name.clone(), decl)
+                    .map_err(|err| TypeError::NameError {
+                        err,
+                        span: name.span().clone(),
+                    })
+            },
         }
     }
 
@@ -585,17 +587,17 @@ impl Context {
         let name = iface.name.ident().clone();
         let iface_ty = Type::interface(iface.name.clone());
 
-        if self.declare_type(name.clone(), iface_ty, visibility, iface.forward) {
-            if !iface.forward {
-                let map_unexpected = |_, _| unreachable!();
-                self.define(
-                    name,
-                    DefKey::Unique,
-                    Def::Interface(iface.clone()),
-                    DefDeclMatch::always_match,
-                    map_unexpected,
-                )?;
-            }
+        if self.declare_type(name.clone(), iface_ty, visibility, iface.forward)
+            || self.can_define_type(&name, visibility)
+        {
+            let map_unexpected = |_, _| unreachable!();
+            self.define(
+                name,
+                DefKey::Unique,
+                Def::Interface(iface.clone()),
+                DefDeclMatch::always_match,
+                map_unexpected,
+            )?;
         }
 
         Ok(())
@@ -610,7 +612,9 @@ impl Context {
 
         let variant_ty = Type::variant(variant.name.clone());
         
-        if self.declare_type(name.clone(), variant_ty, visibility, variant.forward) {
+        if self.declare_type(name.clone(), variant_ty, visibility, variant.forward)
+            || self.can_define_type(&name, visibility)
+        {
             if !variant.forward {
                 let map_unexpected = |_, _| unreachable!();
                 self.define(
@@ -635,7 +639,9 @@ impl Context {
 
         let class_ty = Type::from_struct_type(struct_def.name.clone(), struct_def.kind);
 
-        if self.declare_type(name.clone(), class_ty.clone(), visibility, struct_def.forward) {
+        if self.declare_type(name.clone(), class_ty.clone(), visibility, struct_def.forward)
+            || self.can_define_type(&name, visibility)
+        {
             if !struct_def.forward {
                 let map_unexpected = |_, _| unreachable!();
                 self.define(
@@ -660,7 +666,9 @@ impl Context {
 
         let enum_ty = Type::enumeration(enum_decl.name.full_path.clone());
 
-        if self.declare_type(name.clone(), enum_ty.clone(), visibility, false) {
+        if self.declare_type(name.clone(), enum_ty.clone(), visibility, false)
+            || self.can_define_type(&name, visibility)
+        {
             self.define(
                 name,
                 DefKey::Unique,
@@ -718,6 +726,7 @@ impl Context {
                 .map(|c| c.is_ty.clone())
                 .unwrap_or(TypeName::inferred(Type::Any));
 
+            // expect every type param declaration to declare a new type
             ok &= self.declare_type(
                 param.name.clone(),
                 Type::GenericParam(Arc::new(TypeParamListItem {
@@ -737,6 +746,7 @@ impl Context {
         self.declare_type(self_ident, ty, Visibility::Implementation, false)
     }
 
+    /// Returns true if a new declaration was created in the current scope
     pub fn declare_type(
         &mut self,
         name: Ident,
@@ -754,8 +764,35 @@ impl Context {
             self.error(err);
             return false;
         }
-        
+
         true
+    }
+
+    /// Returns true if the given name is either not declared in this scope, or is a forward
+    /// declaration in this scope which can be replaced by a type definition using the same name.
+    pub fn can_define_type(&self, name: &Ident, visibility: Visibility) -> bool {
+        match self.find_name(name) {
+            Some(existing) => {
+                match existing {
+                    ScopeMemberRef::Decl { value, parent_path, .. } => {
+                        if self.is_current_namespace(&parent_path.to_namespace()) {
+                            return false;
+                        }
+
+                        match value {
+                            Decl::Type { forward, visibility: existing_vis, .. } => {
+                                *forward && (visibility == *existing_vis)
+                            }
+
+                            _ => false
+                        }
+                    }
+
+                    ScopeMemberRef::Scope { .. } => false,
+                }
+            }
+            None => true,
+        }
     }
 
     pub fn is_function_declared(&self, decl: &FunctionDecl) -> bool {
@@ -1411,13 +1448,25 @@ impl Context {
 
     pub fn find_iface_def(&self, name: &IdentPath) -> NameResult<&Arc<InterfaceDecl>> {
         match self.find_type_def(name) {
-            Some(Def::Interface(iface_def)) => Ok(iface_def),
+            Some(Def::Interface(iface_def)) => {
+                Ok(iface_def)
+            },
 
             Some(..) => {
                 Err(self.unexpected_err_for_existing_def(name, ExpectedKind::Interface))
             },
 
-            None => Err(NameError::not_found(name.clone())),
+            None => {
+                match self.find_path(name) {
+                    Some(ScopeMemberRef::Decl { value: Decl::Type { forward: true, .. }, .. }) => {
+                        Err(NameError::NotDefined { ident: name.clone() })
+                    }
+
+                    _ => {
+                        Err(NameError::not_found(name.clone()))
+                    }
+                }
+            },
         }
     }
     
@@ -2168,7 +2217,7 @@ impl Context {
         result
     }
 
-    pub fn consolidate_branches(&mut self, branch_contexts: impl IntoIterator<Item=Self>) {
+    pub fn join_branches(&mut self, branch_contexts: impl IntoIterator<Item=Self>) {
         let branch_contexts: Vec<_> = branch_contexts.into_iter().collect();
         
         let scope = self.scopes.current_path();

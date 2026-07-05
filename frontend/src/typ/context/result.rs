@@ -249,6 +249,9 @@ pub enum NameError {
     NotFound {
         ident: IdentPath,
     },
+    NotDefined {
+        ident: IdentPath,
+    },
     MemberNotFound {
         base: NameContainer,
         member: Ident,
@@ -419,6 +422,9 @@ impl fmt::Display for NameError {
             NameError::NotFound { ident, .. } => {
                 write!(f, "`{}` is not found in this scope", ident)
             },
+            NameError::NotDefined { ident } => {
+                write!(f, "`{}` is not defined", ident)
+            }
             NameError::MemberNotFound { base, member, .. } => {
                 write!(f, "{} does not have a member named `{}`", base, member)
             },

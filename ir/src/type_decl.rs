@@ -9,6 +9,8 @@ pub use r#struct::*;
 pub use tags::*;
 pub use variant::*;
 
+use crate::DeclPath;
+use crate::FunctionID;
 use crate::FunctionRef;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -18,7 +20,6 @@ use crate::RawFormatter;
 use crate::Ref;
 use crate::TagInfo;
 use crate::Type;
-use crate::{DeclPath, FunctionID};
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
