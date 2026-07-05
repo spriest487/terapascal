@@ -1,5 +1,5 @@
 use crate::ast::Access;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::SemanticHint;
 use crate::ast::Visibility;
 use crate::typ::ast::FieldDecl;

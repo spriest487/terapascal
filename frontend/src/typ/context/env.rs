@@ -1,7 +1,7 @@
-use crate::ast::IdentPath;
+use terapascal_common::ident::IdentPath;
 use crate::typ::Type;
 use crate::typ::TypeParamList;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use linked_hash_map::LinkedHashMap;
 
 #[derive(Clone, Debug, PartialEq)]

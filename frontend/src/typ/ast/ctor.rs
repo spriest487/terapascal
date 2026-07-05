@@ -28,7 +28,7 @@ use std::iter;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use crate::ast::Access;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::result::ErrorContinue;
 
 pub type ObjectCtor = ast::ObjectCtor<Value>;

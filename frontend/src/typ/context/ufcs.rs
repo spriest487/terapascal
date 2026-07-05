@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod test;
 
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::Visibility;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::MethodDecl;
@@ -105,7 +105,7 @@ fn find_ufcs_free_functions(ty: &Type, ctx: &Context) -> Vec<InstanceMethod> {
 
             if self_ty.ty().can_specialize_to(ty, ctx) {
                 let func_name = Symbol::from(decl_path.clone())
-                    .with_ty_params(overload.decl().name.type_params.clone());
+                    .with_type_params(overload.decl().name.type_params.clone());
 
                 methods.push(InstanceMethod::FreeFunction {
                     func_name,

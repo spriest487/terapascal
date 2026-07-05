@@ -13,6 +13,7 @@ use crate::codegen::IRBuilder;
 use crate::typ::TypedValue;
 use std::rc::Rc;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
 use terapascal_common::span::*;
 use terapascal_ir::InstructionBuilder as _;
 
@@ -280,7 +281,7 @@ pub fn literal_to_val(
     }
 }
 
-fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &mut IRBuilder) -> ir::Ref {
+fn translate_ident_expr(ident: &Ident, annotation: &typ::Value, builder: &mut IRBuilder) -> ir::Ref {
     match annotation {
         typ::Value::Function(func) => {
             let func = builder.translate_func(&func.name, &func.sig);
@@ -314,7 +315,7 @@ fn translate_ident_expr(ident: &ast::Ident, annotation: &typ::Value, builder: &m
     }
 }
 
-fn find_named_binding(ident: &ast::Ident, builder: &IRBuilder) -> Option<ir::Ref> {
+fn find_named_binding(ident: &Ident, builder: &IRBuilder) -> Option<ir::Ref> {
     let binding = builder.find_named(ident.name.as_str())?;
     Some(binding.to_ref())
 }

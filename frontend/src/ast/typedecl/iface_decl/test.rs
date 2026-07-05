@@ -1,6 +1,6 @@
 use crate::ast::util::tokens_from_string;
 use crate::ast::DeclIdent;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::InterfaceDecl;
 use crate::parse::ParseError;
 use crate::parse::Parser;

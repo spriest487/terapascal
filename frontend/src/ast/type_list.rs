@@ -1,4 +1,4 @@
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::TypeName;
 use crate::ast::TypeParam;
 use crate::parse::Match;

@@ -19,7 +19,7 @@ use crate::ast::unit::AliasDecl;
 use crate::ast::Annotation;
 use crate::ast::DeclName;
 use crate::ast::FunctionDeclKind;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::Keyword;
 use crate::ast::Operator;
 use crate::ast::TypeList;

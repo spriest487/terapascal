@@ -3,7 +3,7 @@ use crate::ast::type_method_start;
 use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::FunctionDecl;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::StructDeclSection;
 use crate::ast::TypeName;
 use crate::parse::Matcher;

@@ -1,4 +1,4 @@
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::SemanticHint;
 use crate::typ::ast::Expr;
 use crate::typ::ast::ObjectCtorMember;

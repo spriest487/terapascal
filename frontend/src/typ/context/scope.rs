@@ -6,8 +6,8 @@ mod test;
 
 pub use self::path_ref::*;
 pub use self::scope_stack::*;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::typ::Decl;
 use crate::typ::Environment;
 use std::cmp::Ordering;

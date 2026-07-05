@@ -576,7 +576,7 @@ fn typecheck_ufcs_invocation(
     let func_val = FunctionValue {
         name: ufcs.function_name
             .clone()
-            .with_ty_args(specialized_call_args.type_args.clone()),
+            .with_type_args(specialized_call_args.type_args.clone()),
         span: span.clone(),
         sig: Arc::new(specialized_call_args.sig),
         decl: ufcs.decl.clone(),

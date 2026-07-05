@@ -1,7 +1,7 @@
 use crate::ast::DeclIdent;
 use crate::ast::DeclName;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::typ::ast::WhereClause;
 use crate::typ::typecheck_type_params;
 use crate::typ::validate_generic_constraints;
@@ -34,14 +34,14 @@ pub struct Symbol {
 }
 
 impl Symbol {   
-    pub fn with_ty_params(self, type_params: Option<TypeParamList>) -> Self {
+    pub fn with_type_params(self, type_params: Option<TypeParamList>) -> Self {
         Self {
             type_params,
             ..self
         }
     }
     
-    pub fn with_ty_args(self, type_args: Option<TypeArgList>) -> Self {
+    pub fn with_type_args(self, type_args: Option<TypeArgList>) -> Self {
         Self {
             type_args,
             ..self

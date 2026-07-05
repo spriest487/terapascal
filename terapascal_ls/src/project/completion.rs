@@ -1,6 +1,5 @@
 use terapascal_frontend::ast::Access;
 use terapascal_frontend::ast::FunctionDeclKind;
-use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::Visibility;
 use terapascal_frontend::typ::ast::FunctionDecl;
 use terapascal_frontend::typ::ast::Literal;

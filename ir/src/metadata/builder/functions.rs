@@ -1,11 +1,11 @@
 use crate::FunctionID;
 use crate::FunctionIdentity;
 use crate::FunctionInfo;
+use crate::FunctionName;
 use crate::FunctionParamInfo;
 use crate::FunctionSig;
 use crate::MetadataBuilder;
 use crate::MetadataCollection;
-use crate::NamePath;
 use crate::StructDef;
 use crate::StructIdentity;
 use crate::TagInfo;
@@ -26,7 +26,7 @@ impl MetadataBuilder {
 
         let runtime_name = if gen_runtime_name {
             match &identity {
-                FunctionIdentity::Path(path) => {
+                FunctionIdentity::Global(path) => {
                     let path_string = path.path.join(".");
                     let id = self.find_or_insert_string(&path_string);
 
@@ -107,7 +107,7 @@ impl MetadataBuilder {
         self.define_struct(id, closure_def);
     }
 
-    pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {
+    pub fn find_function(&self, name: &FunctionName) -> Option<FunctionID> {
         self.find_in_self_or_refs(|metadata| metadata.find_function(name))
     }
 }

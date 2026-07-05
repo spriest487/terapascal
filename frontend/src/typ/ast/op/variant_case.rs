@@ -9,7 +9,7 @@ use crate::typ::TypeError;
 use crate::typ::TypeResult;
 use crate::typ::Value;
 use crate::typ::VariantCaseValue;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use std::sync::Arc;
 use terapascal_common::span::Span;
 

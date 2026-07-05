@@ -4,7 +4,7 @@ mod unit_typedecl;
 pub use self::unit_typedecl::*;
 use crate::ast;
 use crate::ast::BindingDeclKind;
-use crate::ast::IdentPath;
+use terapascal_common::ident::IdentPath;
 use crate::ast::SemanticHint;
 use crate::ast::UnitBindingItemInitializer;
 use crate::ast::UnitDeclSection;

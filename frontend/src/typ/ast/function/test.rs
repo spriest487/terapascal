@@ -1,6 +1,6 @@
 use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionParamItem;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::TypeConstraint;
 use crate::typ::ast::specialize_func_decl;
 use crate::typ::ast::FunctionDecl;

@@ -110,7 +110,7 @@ pub fn report_err(err: &dyn DiagnosticOutput) -> Result<(), FileError> {
             message_severity,
         )?;
 
-        codespan_reporting::term::emit(&mut out.lock(), &config, &code_map, &main_diag)?;
+        codespan_reporting::term::emit_to_write_style(&mut out.lock(), &config, &code_map, &main_diag)?;
     }
 
     out.flush()?;

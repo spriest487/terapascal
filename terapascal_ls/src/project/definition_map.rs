@@ -11,8 +11,6 @@ use terapascal_frontend::ast;
 use terapascal_frontend::ast::Exit;
 use terapascal_frontend::ast::ForLoopCounterInit;
 use terapascal_frontend::ast::ForLoopRange;
-use terapascal_frontend::ast::Ident;
-use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::Literal;
 use terapascal_frontend::ast::SetDeclRange;
 use terapascal_frontend::ast::TypeMemberDecl;

@@ -577,8 +577,8 @@ fn apply_ty_args_to_sig_with_array_of_param_ty_produces_correct_ty() {
     ], builtin_span());
 
     let sym = Symbol::from(class_path)
-        .with_ty_params(Some(ty_params.clone()))
-        .with_ty_args(Some(ty_params.into_type_args()));
+        .with_type_params(Some(ty_params.clone()))
+        .with_type_args(Some(ty_params.into_type_args()));
 
     let sym_result = sym.clone().apply_type_args(&generic_ctx, &generic_ctx);
     assert_eq!("Box[array of T]", sym_result.to_string());

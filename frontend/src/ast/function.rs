@@ -3,19 +3,17 @@ mod test;
 
 use crate::ast::tag::Tag;
 use crate::ast::type_name::TypeName;
+use crate::ast::Annotation;
 use crate::ast::BindingDeclKind;
 use crate::ast::Block;
-use crate::ast::FunctionDeclMod;
 use crate::ast::Expr;
+use crate::ast::FunctionDeclMod;
 use crate::ast::FunctionName;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use crate::ast::IdentTypeName;
 use crate::ast::TypeList;
 use crate::ast::TypePath;
 use crate::ast::UncheckedType;
 use crate::ast::WhereClause;
-use crate::ast::Annotation;
-use crate::ast::IdentTypeName;
 use crate::parse::MatchOneOf;
 use crate::parse::Matcher;
 use crate::parse::Parse;
@@ -25,7 +23,9 @@ use crate::parse::ParseSeq;
 use crate::parse::Parser;
 use crate::parse::TokenStream;
 use crate::parse::TryParse;
+use crate::result::ErrorContinue;
 use crate::token_tree::DelimitedGroup;
+use crate::typ::ast::SELF_PARAM_NAME;
 use crate::DelimiterPair;
 use crate::Keyword;
 use crate::Operator;
@@ -35,12 +35,12 @@ use derivative::*;
 use linked_hash_map::LinkedHashMap;
 use std::fmt;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use crate::result::ErrorContinue;
-use crate::typ::ast::SELF_PARAM_NAME;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum FunctionDeclKind {

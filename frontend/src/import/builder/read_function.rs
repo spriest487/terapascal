@@ -3,8 +3,8 @@ use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionParamItem;
 use crate::ast::FunctionParamMod;
 use crate::ast::FunctionParamModDecl;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::Visibility;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::MethodDeclKey;
@@ -20,7 +20,7 @@ use crate::typ::ast::FunctionName;
 use crate::typ::ast::FunctionParamGroup;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::Tag;
-use crate::typ::EvaluatedConstExpr;
+use crate::typ::{EvaluatedConstExpr, Symbol};
 use crate::typ::ScopeID;
 use crate::typ::Type;
 use crate::typ::TypeName;
@@ -89,12 +89,12 @@ impl ImportBuilder<'_> {
         let param_groups = self.read_params(&func_info.params)?;
 
         match &func_info.identity {
-            ir::FunctionIdentity::Path(path) => {
-                self.read_free_function(func_id, func_info, tags, result_type, param_groups, &path)?;
+            ir::FunctionIdentity::Global(func_name) => {
+                self.read_free_function(func_id, func_info, tags, result_type, param_groups, &func_name)?;
             }
 
-            ir::FunctionIdentity::Method { declaring_type, id, name, type_args } => {
-                self.read_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, type_args)?;
+            ir::FunctionIdentity::Method { declaring_type, id, name, type_params } => {
+                self.read_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, type_params)?;
             }
 
             ir::FunctionIdentity::Destructor { declaring_type, id, name} => {
@@ -117,26 +117,26 @@ impl ImportBuilder<'_> {
         declaring_type: &ir::Type,
         method_id: ir::MethodID,
         name: &str,
-        type_args: &[ir::Type],
+        type_params: &[ir::TypeParam],
     ) -> ImportResult<()> {
         // the type used as the declaring type differs slightly between the IR and Pascal
         // data: in IR it's the generic name (path parameterized with generic placeholders),
         // in Pascal it's the unspecialized definition name (path with params but empty args)
         let declaring_type = match self.read_type(declaring_type)? {
             Type::Record(name) => {
-                Type::record(name.as_ref().clone().with_ty_args(None))
+                Type::record(name.as_ref().clone().with_type_args(None))
             }
 
             Type::Class(name) => {
-                Type::class(name.as_ref().clone().with_ty_args(None))
+                Type::class(name.as_ref().clone().with_type_args(None))
             }
 
             Type::Variant(name) => {
-                Type::variant(name.as_ref().clone().with_ty_args(None))
+                Type::variant(name.as_ref().clone().with_type_args(None))
             }
 
             Type::Interface(name) => {
-                Type::interface(name.as_ref().clone().with_ty_args(None))
+                Type::interface(name.as_ref().clone().with_type_args(None))
             }
 
             ty => ty.clone(),
@@ -151,7 +151,7 @@ impl ImportBuilder<'_> {
             return Ok(());
         }
 
-        let type_params = self.read_def_type_params(type_args)?;
+        let type_params = self.read_def_params(type_params)?;
 
         let func_decl = Arc::new(FunctionDecl {
             span: self.span(),
@@ -190,22 +190,36 @@ impl ImportBuilder<'_> {
         Ok(())
     }
 
-    fn read_free_function(&mut self,
+    fn read_func_name(&mut self, name: &ir::FunctionName) -> ImportResult<Symbol> {
+        let ident_path = IdentPath::from_parts(name.path
+            .iter()
+            .map(|part| Ident { name: part.clone(), span: self.span() }));
+
+        let type_params = self.read_def_params(&name.type_params)?;
+
+        Ok(Symbol::from(ident_path)
+            .with_type_params(type_params))
+    }
+
+    fn read_free_function(
+        &mut self,
         func_id: ir::FunctionID,
         func_info: &ir::FunctionInfo,
         tags: Vec<Tag>,
         result_type: Type,
         param_groups: Vec<FunctionParamGroup>,
-        path: &ir::NamePath,
+        func_name: &ir::FunctionName,
     ) -> ImportResult<()> {
         let Some(lib_func) = self.library.functions.get(&func_id) else {
             return Err(ImportError::MissingFuncDef(func_id));
         };
 
+        let func_name = self.read_func_name(func_name)?;
+
         // no early returns after this! we need to always close the scope
-        let scope = match path.parent() {
+        let scope = match func_name.full_path.parent() {
             Some(unit_path) => {
-                self.open_unit(self.read_ident_path(&unit_path))?
+                self.open_unit(unit_path)?
             }
             None => {
                 ScopeID(0)
@@ -225,13 +239,7 @@ impl ImportBuilder<'_> {
             },
         };
 
-        let type_params = self.read_def_type_params(&path.type_args)?;
-
-        let func_path = IdentPath::from_parts(path.path
-            .iter()
-            .map(|part| Ident::new(part, self.span())));
-
-        let func_ident = func_path.last().clone();
+        let func_ident = func_name.full_path.last().clone();
 
         let func_decl = FunctionDecl {
             span: self.span(),
@@ -239,7 +247,7 @@ impl ImportBuilder<'_> {
                 ident: func_ident.clone(),
                 span: None,
                 context: FunctionDeclContext::FreeFunction,
-                type_params,
+                type_params: func_name.type_params.clone(),
             },
             kind: FunctionDeclKind::Function,
             tags,
@@ -254,7 +262,7 @@ impl ImportBuilder<'_> {
 
         let decl_key = FunctionDeclKey::Function {
             sig: decl_sig.clone(),
-            name: func_path,
+            name: func_name.full_path,
         };
 
         if !self.imported_funcs.contains_key(&decl_key) {

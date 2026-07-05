@@ -1,4 +1,4 @@
-use crate::ast::IdentPath;
+use terapascal_common::ident::IdentPath;
 use crate::typ::Type;
 use crate::IntConstant;
 use derivative::Derivative;

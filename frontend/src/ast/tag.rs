@@ -1,5 +1,4 @@
 use crate::ast::Annotation;
-use crate::ast::IdentPath;
 use crate::ast::IdentTypeName;
 use crate::ast::ObjectCtorArgs;
 use crate::ast::TypeName;
@@ -13,6 +12,7 @@ use crate::DelimiterPair;
 use crate::Separator;
 use crate::TokenStream;
 use derivative::Derivative;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 

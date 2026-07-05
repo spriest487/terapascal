@@ -1,7 +1,7 @@
 use crate::ast::Annotation;
 use crate::ast::TypeName;
 use crate::ast::FunctionParamModDecl;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::parse::LookAheadTokenStream;
 use crate::parse::Parse;
 use crate::parse::ParseResult;

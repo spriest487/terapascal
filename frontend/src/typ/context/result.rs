@@ -3,6 +3,7 @@ use crate::typ::*;
 use std::fmt;
 use std::fmt::Debug;
 use std::path::PathBuf;
+use terapascal_common::ident::{Ident, IdentPath};
 use terapascal_common::span::*;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticMessage;

@@ -1,4 +1,4 @@
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::typ::ast::EnumDecl;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::FunctionDef;

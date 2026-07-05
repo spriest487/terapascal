@@ -3,6 +3,6 @@
     "MyLib"
   ],
   "steps": [
-    { "error_regex": "constraint not satisfied" }
+    { "error_regex": "cannot infer type arguments" }
   ]
 }

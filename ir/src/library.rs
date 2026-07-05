@@ -325,12 +325,6 @@ impl Library {
                         writeln!(f)?;
                     }
                 }
-
-                if let Some(path) = func_info.identity.as_path()
-                    && !path.type_args.is_empty()
-                {
-
-                }
             }
 
             match func {

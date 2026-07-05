@@ -2,7 +2,7 @@ use crate::ast::type_name::TypeName;
 use crate::ast::Annotation;
 use crate::ast::BindingDeclKind;
 use crate::ast::Expr;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::parse::MatchOneOf;
 use crate::parse::Matcher;
 use crate::parse::Parse;

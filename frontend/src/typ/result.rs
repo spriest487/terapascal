@@ -1,8 +1,8 @@
 use crate::ast;
 use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::Operator;
 use crate::parse::IllegalStatement;
 use crate::result::ErrorContinue;

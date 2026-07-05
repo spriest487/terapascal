@@ -1,7 +1,6 @@
 use crate::ast;
 use crate::ast::Annotation;
 use crate::ast::Expr;
-use crate::ast::Ident;
 use crate::ast::ObjectCtor;
 use crate::ast::TypeArgList;
 use crate::parse::LookAheadTokenStream;
@@ -16,6 +15,7 @@ use crate::TokenTree;
 use derivative::*;
 use std::fmt;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 

@@ -4,8 +4,9 @@ mod explicit_spec;
 #[cfg(test)]
 pub(crate) mod test;
 
+pub use self::explicit_spec::ExplicitSpecExpr;
+
 use crate::ast::expression::parse::CompoundExpressionParser;
-use crate::ast::ident::*;
 use crate::ast::match_block::MatchExpr;
 use crate::ast::Annotation;
 use crate::ast::AnonymousFunctionDef;
@@ -26,9 +27,10 @@ use crate::consts::*;
 use crate::parse::*;
 use crate::Operator;
 use derivative::Derivative;
-pub use explicit_spec::ExplicitSpecExpr;
 use std::fmt;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::*;
 use terapascal_common::TracedError;
 

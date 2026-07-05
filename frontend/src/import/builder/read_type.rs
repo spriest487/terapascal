@@ -1,7 +1,7 @@
 use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
 use crate::codegen::ALIAS_TAG_CLASS_NAME;
@@ -436,13 +436,13 @@ impl ImportBuilder<'_> {
 
                         match struct_def.identity {
                             StructIdentity::Internal(_) | StructIdentity::Record(_) => {
-                                let struct_type = Type::from_struct_type(path.with_ty_args(type_args_list), StructKind::Record);
+                                let struct_type = Type::from_struct_type(path.with_type_args(type_args_list), StructKind::Record);
                                 self.types.insert(type_ref.to_struct_type(), struct_type.clone());
                                 Ok(struct_type)
                             }
 
                             StructIdentity::Class(_) | StructIdentity::ClosureObject(_) => {
-                                let class_type = Type::from_struct_type(path.with_ty_args(type_args_list), StructKind::Class);
+                                let class_type = Type::from_struct_type(path.with_type_args(type_args_list), StructKind::Class);
                                 self.types.insert(type_ref.to_class_object_type(), class_type.clone());
                                 self.types.insert(type_ref.to_weak_class_object_type(), class_type.to_weak());
                                 Ok(class_type)
@@ -463,7 +463,7 @@ impl ImportBuilder<'_> {
 
             ir::TypeDecl::Def(ir::TypeDef::Variant(variant_def)) => {
                 let path = self.read_def_path(&variant_def.name)?;
-                let variant_type = Type::variant(path.with_ty_args(type_args_list));
+                let variant_type = Type::variant(path.with_type_args(type_args_list));
 
                 self.types.insert(type_ref.to_variant_type(), variant_type.clone());
 
@@ -614,12 +614,15 @@ impl ImportBuilder<'_> {
     pub fn read_def_path(&self, name_path: &ir::NamePath) -> ImportResult<Symbol> {
         let ident_path = self.read_ident_path(&name_path);
 
-        let type_params = self.read_def_type_params(&name_path.type_args)?;
+        let type_params = self.read_name_type_params(&name_path.type_args)?;
 
-        Ok(Symbol::from(ident_path).with_ty_params(type_params))
+        Ok(Symbol::from(ident_path).with_type_params(type_params))
     }
 
-    pub(super) fn read_def_type_params(&self, type_params: &[ir::Type]) -> ImportResult<Option<TypeParamList>> {
+    fn read_name_type_params(
+        &self,
+        type_params: &[ir::Type],
+    ) -> ImportResult<Option<TypeParamList>> {
         if type_params.is_empty() {
             return Ok(None);
         }
@@ -634,11 +637,44 @@ impl ImportBuilder<'_> {
                 return Err(ImportError::InvalidData(msg));
             };
 
-            params.push(TypeParam {
-                span: self.span(),
-                name: Ident::new(param_name, self.span()),
-                constraint: None,
-            });
+            params.push(TypeParam::new(Ident::new(param_name, self.span())));
+        }
+
+        Ok(Some(TypeParamList::new(params, self.span())))
+    }
+
+    pub(super) fn read_def_params(
+        &mut self,
+        type_params: &[ir::TypeParam],
+    ) -> ImportResult<Option<TypeParamList>> {
+        if type_params.is_empty() {
+            return Ok(None);
+        }
+
+        let mut params = Vec::with_capacity(type_params.len());
+
+        for type_param in type_params {
+            let param_name = Ident { name: type_param.name.clone(), span: self.span() };
+
+            let constraint = match &type_param.constraint {
+                Some(ty) => {
+                    let is_type = self.read_type(ty)?;
+
+                    Some(TypeConstraint {
+                        span: self.span(),
+                        name: param_name.clone(),
+                        is_ty: TypeName::Unspecified(is_type),
+                        is_kw_span: None,
+                    })
+                }
+
+                None => None,
+            };
+
+            let mut param = TypeParam::new(param_name);
+            param.constraint = constraint;
+
+            params.push(param);
         }
 
         Ok(Some(TypeParamList::new(params, self.span())))

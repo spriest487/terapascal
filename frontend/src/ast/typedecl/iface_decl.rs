@@ -9,7 +9,7 @@ use crate::ast::Annotation;
 use crate::ast::DeclIdent;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionName;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::SupersClause;
 use crate::ast::TypeName;
 use crate::ast::WhereClause;

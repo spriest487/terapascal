@@ -40,6 +40,7 @@ use std::sync::Arc;
 use terapascal_common::aggregate_err::AggregateError;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::Filesystem;
+use terapascal_common::ident::{Ident, IdentPath};
 use terapascal_common::span::Location;
 use terapascal_common::span::Span;
 use terapascal_common::version::Version;
@@ -76,11 +77,11 @@ pub fn parse(
         .with_extension("")
         .file_name()
         .map(|file_name| {
-            let unit_ident = ast::IdentPath::from_parts(
+            let unit_ident = IdentPath::from_parts(
                 file_name
                     .to_string_lossy()
                     .split('.')
-                    .map(|part| ast::Ident::new(part, file_span.clone())),
+                    .map(|part| Ident::new(part, file_span.clone())),
             );
 
             unit_ident

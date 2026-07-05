@@ -14,7 +14,6 @@ use crate::ast::CollectionCtor;
 use crate::ast::Exit;
 use crate::ast::Expr;
 use crate::ast::ExprGroup;
-use crate::ast::Ident;
 use crate::ast::IfCond;
 use crate::ast::IncompleteExpr;
 use crate::ast::Literal;
@@ -28,6 +27,7 @@ use crate::parse::*;
 use crate::token_tree::*;
 use crate::Keyword;
 use std::fmt;
+use terapascal_common::ident::Ident;
 use terapascal_common::span::*;
 use terapascal_common::TracedError;
 

@@ -5,9 +5,12 @@ pub mod fs;
 pub mod aggregate_err;
 pub mod reporting;
 pub mod version;
+pub mod path;
+pub mod ident;
+
+pub use std::backtrace::Backtrace;
 
 use crate::span::*;
-pub use std::backtrace::Backtrace;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::hash_map::HashMap;
@@ -377,15 +380,6 @@ impl fmt::Display for LanguageMode {
     }
 }
 
-// pub fn path_relative_to_cwd(path: &Path) -> &Path {
-//     env::current_dir()
-//         .ok()
-//         .and_then(|cwd| cwd.canonicalize().ok())
-//         .and_then(|cwd| path.strip_prefix(cwd).ok())
-//         .unwrap_or(path)
-// }
-
-
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct SharedStringKey(pub Arc<String>);
 
@@ -420,7 +414,7 @@ impl Borrow<String> for SharedStringKey {
 }
 
 pub fn write_joined<T>(
-    f: &mut fmt::Formatter,
+    f: &mut impl fmt::Write,
     sep: impl fmt::Display,
     items: impl Iterator<Item=T>,
 ) -> fmt::Result
@@ -429,7 +423,7 @@ where
 {
     for (i, arg) in items.enumerate() {
         if i > 0 {
-            sep.fmt(f)?;
+            write!(f, "{}", sep)?;
         }
         write!(f, "{}", arg)?;
     }

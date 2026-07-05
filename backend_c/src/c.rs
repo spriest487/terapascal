@@ -136,10 +136,12 @@ impl<'a> Unit<'a> {
         let system_funcs = builtin::system_funcs();
 
         for (pas_name, c_name, _return_ty, _params) in &system_funcs {
-            let global_name = &ir::NamePath::new(vec!["System".to_string()], *pas_name);
+            let func_name = ir::FunctionName::new([
+                "System".to_string(),
+            ], pas_name.to_string());
 
             // if a function isn't used then it won't be included in the metadata
-            if let Some(func_id) = metadata.find_function(global_name) {
+            if let Some(func_id) = metadata.find_function(&func_name) {
                 unit.add_builtin_func(func_id, *c_name);
             }
         }

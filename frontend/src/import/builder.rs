@@ -4,8 +4,8 @@ mod read_tags;
 
 use self::read_tags::ImportedEnumMember;
 use crate::ast::FunctionParamMod;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::Literal;
 use crate::ast::LiteralItem;
 use crate::ast::ObjectCtorArgs;

@@ -1,9 +1,8 @@
 use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionParamItem;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
-use crate::ast::Path;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::Visibility;
 use crate::typ;
 use crate::typ::*;
@@ -107,7 +106,7 @@ pub fn builtin_string_name() -> Symbol {
     let string_ident = Ident::new(STRING_TYPE_NAME, builtin_span.clone());
 
     Symbol {
-        full_path: Path::from(system_ident).child(string_ident),
+        full_path: IdentPath::from(system_ident).child(string_ident),
         type_args: None,
         type_params: None,
     }
@@ -130,14 +129,14 @@ pub fn system_option_type() -> Symbol {
         builtin_ident(OPTION_TYPE_NAME),
     ]);
 
-    Symbol::from(path).with_ty_params(Some(TypeParamList::new(
+    Symbol::from(path).with_type_params(Some(TypeParamList::new(
         [TypeParam::new(builtin_ident(OPTION_TYPE_PARAM_NAME))],
         builtin_span(),
     )))
 }
 
 pub fn system_option_type_of(item_type: Type) -> Symbol {
-    system_option_type().with_ty_args(Some(typ::TypeArgList::new(
+    system_option_type().with_type_args(Some(typ::TypeArgList::new(
         [TypeName::inferred(item_type)], 
         builtin_span(),
     )))

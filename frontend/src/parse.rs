@@ -2,13 +2,16 @@ mod matcher;
 mod token_stream;
 mod result;
 
-use crate::TokenTree;
 pub use self::matcher::*;
 pub use self::result::*;
 pub use self::token_stream::*;
+use crate::Operator;
+use crate::TokenTree;
 
 use std::ops::Deref;
 use std::ops::DerefMut;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::TracedError;
 
 pub struct Parser {
@@ -90,5 +93,40 @@ where
         } else {
             Ok(None)
         }
+    }
+}
+
+impl Parse for Ident {
+    fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
+        tokens
+            .match_one(Matcher::AnyIdent)
+            .map(|tt| tt.into_ident().unwrap())
+    }
+}
+
+impl Parse for IdentPath {
+    fn parse(tokens: &mut TokenStream) -> ParseResult<Self> {
+        let path = tokens.match_repeating(|i, tokens| {
+            if i > 0 && tokens.match_one_maybe(Operator::Period).is_none() {
+                return Ok(Generate::Break);
+            }
+
+            let ident_tt = tokens.match_one(Matcher::AnyIdent)?;
+            let ident = ident_tt.into_ident().unwrap();
+            Ok(Generate::Yield(ident))
+        })?;
+
+        assert!(
+            !path.is_empty(),
+            "parsed ident path must always have 1+ parts"
+        );
+
+        Ok(IdentPath::from_parts(path))
+    }
+}
+
+impl Match for Ident {
+    fn is_match(tokens: &mut LookAheadTokenStream) -> bool {
+        tokens.match_one(Matcher::AnyIdent).is_some()
     }
 }

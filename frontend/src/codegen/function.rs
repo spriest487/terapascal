@@ -36,7 +36,7 @@ fn create_function_body_builder<'m, 'l: 'm>(
     builder
 }
 
-fn build_type_param(lib: &mut LibraryBuilder, param: &typ::TypeParam) -> ir::TypeParam {
+pub fn build_type_param(lib: &mut LibraryBuilder, param: &typ::TypeParam) -> ir::TypeParam {
     let constraint = match &param.constraint {
         None => None,
         Some(is_type) => {
@@ -51,6 +51,22 @@ fn build_type_param(lib: &mut LibraryBuilder, param: &typ::TypeParam) -> ir::Typ
     }
 }
 
+pub fn build_type_param_list(
+    lib: &mut LibraryBuilder,
+    param_list: Option<&typ::TypeParamList>,
+) -> Vec<ir::TypeParam> {
+    let Some(param_list) = param_list else {
+        return Vec::new();
+    };
+
+    let mut params = Vec::with_capacity(param_list.len());
+    for param in param_list.iter() {
+        params.push(build_type_param(lib, param));
+    }
+
+    params
+}
+
 pub fn build_func_def(
     module: &mut LibraryBuilder,
     def_params: &[typ::ast::FunctionParamGroup],
@@ -62,22 +78,14 @@ pub fn build_func_def(
     enclosing_type: Option<&typ::Type>,
     debug_name: Option<String>,
 ) -> ir::FunctionDef {
-    let mut type_params = Vec::new();
-
     // if the self param is a specialized generic name, add its type parameters to the
     // beginning of the method function's type param list
-    if let Some(enclosing_params) = enclosing_type.and_then(|t| t.type_params()) {
-        for enclosing_type_param in &enclosing_params.items {
-            type_params.push(build_type_param(module, enclosing_type_param));
-        }
-    }
+    let mut type_params = build_type_param_list(
+        module,
+        enclosing_type.and_then(|t| t.type_params()),
+    );
 
-    for def_type_param in def_type_params
-        .into_iter()
-        .flat_map(|param_list| param_list.items.iter())
-    {
-        type_params.push(build_type_param(module, def_type_param));
-    }
+    type_params.extend(build_type_param_list(module, def_type_params));
 
     let mut body_builder = create_function_body_builder(
         module,

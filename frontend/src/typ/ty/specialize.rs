@@ -343,7 +343,7 @@ pub fn specialize_by_return_ty<'a>(
 
     let specialized = name
         .clone()
-        .with_ty_args(Some(ty_args));
+        .with_type_args(Some(ty_args));
 
     Ok(Cow::Owned(specialized))
 }

@@ -1,6 +1,6 @@
 use crate::ast::Access;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::Visibility;
 use crate::typ::Decl;
 use crate::typ::DeclConflict;

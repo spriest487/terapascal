@@ -6,10 +6,10 @@ use std::path::Path;
 use std::path::PathBuf;
 use terapascal_common::build_log::BuildLog;
 use terapascal_common::fs::Filesystem;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::*;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
 use terapascal_common::UNITS_DIR_VAR;
-use terapascal_frontend::ast::IdentPath;
 
 pub struct SourceCollection<'fs, Fs: Filesystem> {
     filesystem: &'fs Fs,

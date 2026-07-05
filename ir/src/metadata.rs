@@ -16,7 +16,7 @@ pub use self::vars::VariableInfo;
 pub use self::vars::ConstInfo;
 
 use crate::typeinfo::TypeInfo;
-use crate::FunctionID;
+use crate::{FunctionID, FunctionName};
 use crate::FunctionIdentity;
 use crate::FunctionInfo;
 use crate::FunctionSig;
@@ -303,11 +303,11 @@ impl Metadata {
             .flat_map(|src_ty| src_ty.methods.iter())
     }
 
-    pub fn find_function(&self, name: &NamePath) -> Option<FunctionID> {
+    pub fn find_function(&self, name: &FunctionName) -> Option<FunctionID> {
         // do a linear search for now because we don't want to store a redundant map of names,
         // and a user can always make a hashmap themselves if looking up names this way is too slow.
         self.function_info.iter().find_map(|(id, func)| {
-            let func_name = func.identity.as_path()?;
+            let func_name = func.identity.global_name()?;
             if func_name == name { Some(*id) } else { None }
         })
     }

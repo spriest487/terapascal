@@ -5,7 +5,6 @@ mod test;
 
 pub use crate::parse::TokenStream;
 
-use crate::ast::Ident;
 use crate::ast::Keyword;
 use crate::ast::Operator;
 use crate::consts::IntConstant;
@@ -20,6 +19,7 @@ use std::fmt::Write as _;
 use std::ops::Add;
 use std::ops::BitOr;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
 use terapascal_common::span::*;
 use terapascal_common::DiagnosticLabel;
 use terapascal_common::DiagnosticOutput;

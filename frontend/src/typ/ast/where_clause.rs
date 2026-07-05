@@ -10,7 +10,7 @@ use crate::typ::TypeParamList;
 use crate::typ::TypeResult;
 use crate::typ::GenericError;
 use crate::typ::Value;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use std::mem;
 
 pub type WhereClause = ast::WhereClause<Value>;

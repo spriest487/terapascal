@@ -1,6 +1,7 @@
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::Backtrace;
@@ -9,7 +10,6 @@ use terapascal_common::DiagnosticMessage;
 use terapascal_common::DiagnosticOutput;
 use terapascal_common::Severity;
 use terapascal_common::TracedError;
-use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::MainUnitKind;
 use terapascal_frontend::import::ImportError;
 use terapascal_frontend::parse::ParseError;

@@ -10,8 +10,8 @@ use crate::typ::Type;
 use crate::typ::ScopeID;
 use terapascal_common::span::Span;
 use crate::ast::Visibility;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 
 fn new_global_scope() -> ScopeStack {
     ScopeStack::new(Scope::new(ScopeID(0), Environment::Global))

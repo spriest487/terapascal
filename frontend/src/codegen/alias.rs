@@ -1,5 +1,5 @@
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::StructKind;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::ir;

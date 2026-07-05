@@ -4,8 +4,8 @@ mod test;
 mod variant_case;
 
 use crate::ast;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::IncompleteExpr;
 use crate::ast::Literal;
 use crate::ast::Operator;

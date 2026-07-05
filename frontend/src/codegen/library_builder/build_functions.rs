@@ -1,6 +1,6 @@
 use crate::ast;
-use crate::ast::IdentPath;
-use crate::codegen::build_func_def;
+use terapascal_common::ident::IdentPath;
+use crate::codegen::{build_func_def, build_type_param_list};
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::var_param::OutParamTagInfo;
 use crate::codegen::FunctionInstance;
@@ -248,15 +248,15 @@ impl<'a> LibraryBuilder<'a> {
         // def here, since only the original declared version will be in the definition map
         let decl_self_ty = match &method_key.self_ty {
             typ::Type::Class(sym) if sym.type_args.is_some() => {
-                typ::Type::class(sym.as_ref().clone().with_ty_args(None))
+                typ::Type::class(sym.as_ref().clone().with_type_args(None))
             }
 
             typ::Type::Record(sym) if sym.type_args.is_some() => {
-                typ::Type::record(sym.as_ref().clone().with_ty_args(None))
+                typ::Type::record(sym.as_ref().clone().with_type_args(None))
             }
 
             typ::Type::Variant(sym) if sym.type_args.is_some() => {
-                typ::Type::variant(sym.as_ref().clone().with_ty_args(None))
+                typ::Type::variant(sym.as_ref().clone().with_type_args(None))
             }
 
             // nothing to do if the type isn't parameterized
@@ -383,20 +383,16 @@ impl<'a> LibraryBuilder<'a> {
             typ::ast::FunctionDeclContext::FreeFunction if !func_decl.is_overload() => {
                 let ns: Vec<_> = namespace
                     .iter()
-                    .map(|part| part.to_string())
+                    .map(|part| Arc::new(part.to_string()))
                     .collect();
-                let name = func_decl.name.ident.to_string();
+                let name = func_decl.name.ident.name.clone();
 
-                let mut path = ir::NamePath::new(ns, name);
+                let mut func_name = ir::FunctionName::new(ns, name);
 
-                if let Some(type_params) = func_decl.name.type_params.as_ref() {
-                    for type_param in &type_params.items {
-                        let generic_type = ir::Type::Generic(Rc::new(type_param.name.to_string()));
-                        path.type_args.push(generic_type)
-                    }
-                }
+                let type_params = build_type_param_list(self, func_decl.name.type_params.as_ref());
+                func_name.type_params = type_params;
 
-                ir::FunctionIdentity::Path(path)
+                ir::FunctionIdentity::Global(func_name)
             }
 
             typ::ast::FunctionDeclContext::MethodDef { .. }
@@ -523,17 +519,16 @@ impl<'a> LibraryBuilder<'a> {
             }
 
             _ => {
-                let type_args = func_decl.name.type_params
-                    .iter()
-                    .flat_map(|param_list| param_list.items.iter())
-                    .map(|p| ir::Type::Generic(Rc::new(p.name.to_string())))
-                    .collect();
+                let type_params = build_type_param_list(
+                    self,
+                    func_decl.name.type_params.as_ref(),
+                );
 
                 ir::FunctionIdentity::Method {
                     declaring_type,
                     id: ir::MethodID(method_index),
                     name,
-                    type_args,
+                    type_params,
                 }
             }
         }

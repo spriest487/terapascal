@@ -4,7 +4,7 @@ mod test;
 use crate::ast::keyword::Keyword;
 use crate::ast::operators::CompoundAssignmentOperator;
 use crate::ast::operators::Operator;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::consts::IntConstant;
 use crate::consts::RealConstant;
 use crate::pp::PreprocessedUnit;

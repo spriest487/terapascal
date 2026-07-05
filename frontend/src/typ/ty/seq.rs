@@ -7,7 +7,7 @@ use crate::typ::is_system_option_name;
 use crate::typ::Context;
 use crate::typ::NameError;
 use crate::typ::Type;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use std::sync::Arc;
 
 pub const SEQUENCE_METHOD_NAME: &str = "Sequence";

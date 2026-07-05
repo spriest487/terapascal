@@ -1,7 +1,7 @@
 use crate::ast::Annotation;
 use crate::ast::ElseBranch;
 use crate::ast::Expr;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::MatchPattern;
 use crate::ast::Stmt;
 use crate::parse::Parse;

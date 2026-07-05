@@ -200,11 +200,11 @@ impl<T: MetadataSource> IRFormatter for T {
     fn format_func_ref(&self, r: &FunctionRef, f: &mut dyn fmt::Write) -> fmt::Result {
         let func_name = self
             .get_function_info(r.def_id)
-            .and_then(|f| f.identity.as_path());
+            .and_then(|f| f.identity.global_name());
 
         match func_name {
             Some(name) => {
-                write!(f, "{}", name.to_pretty_string(self))?
+                write!(f, "{}", name)?
             },
 
             None => {

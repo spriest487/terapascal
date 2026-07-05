@@ -1,8 +1,8 @@
 use crate::ast::type_name::IdentTypeName;
 use crate::ast::type_name::TypeName;
 use crate::ast::Annotation;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::Keyword;
 use crate::ast::UncheckedType;
 use crate::parse::LookAheadTokenStream;

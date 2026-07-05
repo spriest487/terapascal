@@ -17,7 +17,7 @@ use crate::ast::BindingDeclKind;
 use crate::ast::Block;
 use crate::ast::FunctionDecl;
 use crate::ast::FunctionDef;
-use crate::ast::IdentPath;
+use terapascal_common::ident::IdentPath;
 use crate::ast::Stmt;
 use crate::ast::TypeDecl;
 use crate::ast::TypeDeclItem;

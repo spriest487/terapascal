@@ -1,18 +1,18 @@
-use crate::ast::IdentPath;
-use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
+use crate::parse::{LookAheadTokenStream, Parse};
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
+use derivative::*;
+use std::fmt;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;
-use derivative::*;
-use std::fmt;
 
 #[derive(Clone, Debug)]
 pub struct UseDecl {

@@ -22,7 +22,6 @@ use terapascal_common::TracedError;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
 use terapascal_frontend::ast;
 use terapascal_frontend::ast::package::PackageUnit;
-use terapascal_frontend::ast::IdentPath;
 use terapascal_frontend::ast::MainUnitKind;
 use terapascal_frontend::ast::UnitKind;
 use terapascal_frontend::ast::UseDeclItem;
@@ -41,6 +40,7 @@ use terapascal_frontend::typ::SYSTEM_UNIT_NAME;
 use terapascal_frontend::typecheck;
 use terapascal_frontend::TokenStream;
 use topological_sort::TopologicalSort;
+use terapascal_common::ident::IdentPath;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
 pub enum BuildStage {

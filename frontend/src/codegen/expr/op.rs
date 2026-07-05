@@ -5,6 +5,7 @@ use crate::codegen::typ;
 use crate::ir;
 use crate::IntConstant;
 use bigdecimal::BigDecimal;
+use terapascal_common::ident::Ident;
 use terapascal_common::span::Spanned;
 use terapascal_ir::InstructionBuilder as _;
 use terapascal_ir::MetadataSource as _;
@@ -65,7 +66,7 @@ pub fn translate_bin_op(
             let member_name = bin_op
                 .rhs
                 .as_ident()
-                .map(ast::Ident::to_string)
+                .map(Ident::to_string)
                 .unwrap_or_else(|| panic!("rhs of member expression {bin_op} must be an ident"));
 
             let field = struct_def

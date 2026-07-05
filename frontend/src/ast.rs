@@ -1,30 +1,29 @@
 pub mod block;
 pub mod call;
-mod case;
 pub mod cast;
 pub mod cond;
 pub mod ctor;
 pub mod expression;
 pub mod function;
-mod ident;
 pub mod iter;
 pub mod keyword;
-mod match_block;
 pub mod op;
 pub mod operators;
 pub mod raise;
 pub mod statement;
 pub mod tag;
 pub mod type_constraint;
-mod type_list;
-mod type_name;
-mod type_name_pattern;
 pub mod typedecl;
 pub mod unit;
 pub mod util;
 pub mod package;
 
-use crate::IntConstant;
+mod case;
+mod match_block;
+mod type_list;
+mod type_name;
+mod type_name_pattern;
+
 pub use block::*;
 pub use call::*;
 pub use case::CaseBlock;
@@ -36,7 +35,6 @@ pub use cond::*;
 pub use ctor::*;
 pub use expression::*;
 pub use function::*;
-pub use ident::*;
 pub use iter::*;
 pub use keyword::*;
 pub use match_block::*;
@@ -44,18 +42,21 @@ pub use op::*;
 pub use operators::*;
 pub use raise::*;
 pub use statement::*;
-use std::fmt;
-use std::hash::Hash;
-use std::hash::Hasher;
-use std::sync::Arc;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 pub use type_constraint::*;
 pub use type_list::*;
 pub use type_name::*;
 pub use type_name_pattern::*;
 pub use typedecl::*;
 pub use unit::*;
+
+use crate::IntConstant;
+use std::fmt;
+use std::hash::Hash;
+use std::hash::Hasher;
+use std::sync::Arc;
+use terapascal_common::ident::Ident;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 pub trait FunctionName<A: Annotation>:
     fmt::Debug + fmt::Display + Clone + PartialEq + Eq + Hash

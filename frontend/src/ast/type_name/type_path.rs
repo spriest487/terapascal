@@ -1,10 +1,10 @@
-use crate::ast::IdentPath;
+use terapascal_common::ident::IdentPath;
 use crate::ast::TypeList;
 use crate::parse::ParseResult;
 use crate::parse::Parse;
 use crate::parse::TryParse;
 use crate::TokenStream;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use derivative::Derivative;

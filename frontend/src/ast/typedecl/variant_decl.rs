@@ -7,7 +7,7 @@ use crate::ast::Access;
 use crate::ast::Annotation;
 use crate::ast::DeclIdent;
 use crate::ast::FunctionDecl;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::Keyword;
 use crate::ast::MethodDecl;
 use crate::ast::MethodDeclSection;

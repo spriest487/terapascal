@@ -1,4 +1,3 @@
-use crate::ast;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::typ;
 use crate::codegen::FunctionInstance;
@@ -7,6 +6,7 @@ use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
+use terapascal_common::ident::Ident;
 use terapascal_ir::StructLayout;
 
 #[derive(Debug, Clone)]
@@ -43,7 +43,7 @@ impl fmt::Display for ClosureInstance {
 
 pub fn translate_closure_struct(
     identity: ir::ClosureIdentity,
-    captures: &LinkedHashMap<ast::Ident, typ::Type>,
+    captures: &LinkedHashMap<Ident, typ::Type>,
     lib: &mut LibraryBuilder,
 ) -> ir::TypeDefID {
     let id = lib.metadata_mut().new_type();

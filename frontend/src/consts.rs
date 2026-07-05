@@ -1,7 +1,6 @@
-use crate::ast::Ident;
-use bigdecimal::ToPrimitive;
 use bigdecimal::BigDecimal;
 use bigdecimal::FromPrimitive;
+use bigdecimal::ToPrimitive;
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::Write;
@@ -10,6 +9,7 @@ use std::ops::Add;
 use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Sub;
+use terapascal_common::ident::Ident;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct IntConstant(i128);

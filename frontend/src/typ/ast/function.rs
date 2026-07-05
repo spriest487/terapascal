@@ -6,7 +6,7 @@ pub use self::decl_mod::*;
 use crate::ast;
 use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionParamItem;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::SemanticHint;
 use crate::result::ErrorContinue;
 use crate::typ::ast::const_eval::ConstEval;

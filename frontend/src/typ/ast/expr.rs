@@ -3,8 +3,8 @@ mod literal;
 
 use crate::ast;
 use crate::ast::ExprGroup;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::IncompleteExpr;
 use crate::ast::SemanticHint;
 pub use crate::typ::ast::call::typecheck_call;
@@ -382,7 +382,7 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
                 // to specialize the expr to add some
                 let func_path = parent_path.to_namespace().child((*key).clone());
                 let func_sym =
-                    Symbol::from(func_path).with_ty_params(decl.name.type_params.clone());
+                    Symbol::from(func_path).with_type_params(decl.name.type_params.clone());
 
                 let sig = decl.sig();
 
@@ -398,7 +398,7 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
                     .iter()
                     .map(|overload| {
                         let func_sym = Symbol::from(func_path.clone())
-                            .with_ty_params(overload.decl().name.type_params.clone());
+                            .with_type_params(overload.decl().name.type_params.clone());
 
                         OverloadCandidate::Function {
                             decl_name: func_sym,

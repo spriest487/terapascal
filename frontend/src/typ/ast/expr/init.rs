@@ -1,6 +1,6 @@
 use crate::ast;
 use crate::ast::FunctionParamMod;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::typ::ast::Block;
 use crate::typ::ast::Call;
 use crate::typ::ast::CaseExpr;

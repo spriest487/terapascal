@@ -3,7 +3,6 @@ mod test;
 
 use crate::ast::Annotation;
 use crate::ast::Expr;
-use crate::ast::Ident;
 use crate::ast::MatchPattern;
 use crate::ast::Stmt;
 use crate::parse::IllegalStatement;
@@ -15,6 +14,7 @@ use crate::parse::TryParse;
 use crate::Keyword;
 use derivative::Derivative;
 use std::fmt;
+use terapascal_common::ident::Ident;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
 use terapascal_common::TracedError;

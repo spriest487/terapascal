@@ -1,5 +1,5 @@
 use super::*;
-use crate::ast::IdentPath;
+use terapascal_common::ident::IdentPath;
 use crate::pp::Preprocessor;
 use terapascal_common::aggregate_err::AggregateError;
 use terapascal_common::fs::DefaultFilesystem;

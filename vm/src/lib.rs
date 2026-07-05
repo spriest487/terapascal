@@ -2212,7 +2212,7 @@ impl Vm {
 
     pub fn define_builtin(
         &mut self,
-        name: ir::NamePath,
+        name: ir::FunctionName,
         func: BuiltinFn,
         ret: ir::Type,
         params: Vec<ir::Type>,
@@ -2249,7 +2249,7 @@ impl Vm {
 
         self.functions.insert(ir::FunctionRef::new(func_id), FunctionInfo {
             func: Rc::new(func),
-            identity: ir::FunctionIdentity::Path(name),
+            identity: ir::FunctionIdentity::Global(name),
             invoker,
         });
     }
@@ -2295,7 +2295,7 @@ impl Vm {
         let system_funcs: Vec<_> = builtin::system_funcs().into_iter().collect();
 
         for (ident, func, ret, params) in system_funcs {
-            let name = ir::NamePath::new(vec!["System".to_string()], ident.to_string());
+            let name = ir::FunctionName::new(["System".to_string()], ident.to_string());
             self.define_builtin(name, func, ret, params);
         }
     }

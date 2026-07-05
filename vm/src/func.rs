@@ -14,6 +14,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 use terapascal_common::SharedStringKey;
+use terapascal_ir::FunctionName;
+use terapascal_ir::generic::instantiate_type_param;
 
 pub mod ffi;
 
@@ -290,22 +292,26 @@ pub fn instantiate_func(
             }
         }
 
-        ir::FunctionIdentity::Method { declaring_type, id, name, type_args} => {
+        ir::FunctionIdentity::Method { declaring_type, id, name, type_params} => {
             let declaring_type = instantiate_type(declaring_type, &types);
-            let type_args = type_args.iter().map(|t| instantiate_type(t, &types)).collect();
+            let type_params = type_params.iter().map(|t| instantiate_type_param(t, &types)).collect();
 
             ir::FunctionIdentity::Method {
                 declaring_type,
                 id: *id,
                 name: name.clone(),
-                type_args,
+                type_params,
             }
         }
 
-        ir::FunctionIdentity::Path(path) => {
-            let mut path = path.clone();
-            path.type_args = func_ref.args.clone();
-            ir::FunctionIdentity::Path(path)
+        ir::FunctionIdentity::Global(func_name) => {
+            ir::FunctionIdentity::Global(FunctionName {
+                path: func_name.path.clone(),
+                type_params: func_name.type_params
+                    .iter()
+                    .map(|p| instantiate_type_param(p, &types))
+                    .collect(),
+            })
         }
     };
 

@@ -1,6 +1,6 @@
 use crate::ast;
 use crate::ast::util::tokens_from_string;
-use crate::ast::IdentPath;
+use terapascal_common::ident::IdentPath;
 use crate::ast::TypeName;
 use crate::parse::Parse;
 use crate::pp::Preprocessor;

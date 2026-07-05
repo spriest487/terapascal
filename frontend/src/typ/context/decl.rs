@@ -1,4 +1,4 @@
-use crate::ast::IdentPath;
+use terapascal_common::ident::IdentPath;
 use crate::ast::Visibility;
 use crate::typ::ast::FunctionDecl;
 use crate::typ::ast::Literal;

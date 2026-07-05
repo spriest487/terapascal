@@ -1,7 +1,7 @@
 use crate::ast::Annotation;
 use crate::ast::DeclIdent;
 use crate::ast::Expr;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::parse::Matcher;
 use crate::parse::Parse;
 use crate::parse::ParseResult;

@@ -1,6 +1,6 @@
 use crate::ast;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::IdentTypeName;
 use crate::typ::ast::member_annotation;
 use crate::typ::ast::typecheck_type_args;

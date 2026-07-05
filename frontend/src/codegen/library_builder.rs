@@ -4,8 +4,8 @@ pub use self::build_functions::*;
 
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
-use crate::ast::Ident;
-use crate::ast::IdentPath;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use crate::ast::StructKind;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::expr_to_val;

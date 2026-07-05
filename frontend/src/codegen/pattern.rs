@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::codegen::ir;
 use crate::codegen::IRBuilder;
 use crate::typ;

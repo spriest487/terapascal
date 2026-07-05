@@ -1,4 +1,3 @@
-use crate::ArgID;
 use crate::BinOpInstruction;
 use crate::FunctionDef;
 use crate::FunctionParamInfo;
@@ -20,6 +19,7 @@ use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VariantCase;
 use crate::VariantDef;
+use crate::{ArgID, TypeParam};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -504,6 +504,17 @@ fn remap_val(v: &Value, locals: &LocalMap, types: &TypeMap) -> Value {
         Value::Ref(r) => remap_ref(r, locals, types).value(),
         Value::Default(t) => Value::Default(instantiate_type(t, types)),
         _ => v.clone(),
+    }
+}
+
+pub fn instantiate_type_param(p: &TypeParam, types: &TypeMap) -> TypeParam {
+    let constraint = p.constraint
+        .as_ref()
+        .map(|t| instantiate_type(t, types));
+
+    TypeParam {
+        name: p.name.clone(),
+        constraint,
     }
 }
 

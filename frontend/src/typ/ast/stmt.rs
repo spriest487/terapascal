@@ -3,7 +3,7 @@ mod assign;
 pub use self::assign::Assignment;
 pub use self::assign::CompoundAssignment;
 use crate::ast;
-use crate::ast::Ident;
+use terapascal_common::ident::Ident;
 use crate::ast::Operator;
 use crate::ast::SemanticHint;
 use crate::parse::IllegalStatement;

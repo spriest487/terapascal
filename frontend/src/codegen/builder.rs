@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod test;
 
-use crate::ast as ast;
 use crate::codegen::expr::literal_to_val;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::LibraryBuilder;
@@ -16,6 +15,7 @@ use crate::typ::seq::TypeSequenceSupport;
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::sync::Arc;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::Span;
 use terapascal_ir::InstructionBuilder;
 use terapascal_ir::MetadataSource;
@@ -542,7 +542,7 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         self.local_stack_mut().bind_unnamed_param(id, sig.to_closure_ptr_type(), false)
     }
 
-    pub fn find_global_var(&self, name_path: &ast::IdentPath) -> Option<ir::VariableID> {
+    pub fn find_global_var(&self, name_path: &IdentPath) -> Option<ir::VariableID> {
         self.library.find_global_var(name_path)
     }
 

@@ -3,7 +3,6 @@ use crate::IRFormatter;
 use crate::InstructionList;
 use crate::Label;
 use crate::MethodID;
-use crate::NamePath;
 use crate::ObjectID;
 use crate::RawFormatter;
 use crate::Ref;
@@ -16,9 +15,12 @@ use crate::VariableID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::fmt;
+use std::fmt::Formatter;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::{fmt, iter};
+use terapascal_common::path::Path;
+use terapascal_common::write_joined;
 
 pub const BUILTIN_SRC: &str = "rt";
 
@@ -144,15 +146,60 @@ pub struct ExternalFunctionRef {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub struct FunctionName {
+    pub path: Path<Arc<String>>,
+    pub type_params: Vec<TypeParam>,
+}
+
+impl FunctionName {
+    pub fn new<P>(namespace: impl IntoIterator<Item=P>, name: impl Into<Arc<String>>) -> Self
+    where
+        P: Into<Arc<String>>,
+    {
+        let namespace_parts = namespace
+            .into_iter()
+            .map(|part| part.into());
+
+        Self {
+            path: Path::from_parts(namespace_parts.chain(iter::once(name.into()))),
+            type_params: Vec::new(),
+        }
+    }
+
+    pub fn with_type_params(mut self, type_params: impl IntoIterator<Item=TypeParam>) -> Self {
+        self.type_params = type_params.into_iter().collect();
+        self
+    }
+}
+
+impl fmt::Display for FunctionName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.path.join("."))?;
+
+        if !self.type_params.is_empty() {
+            write!(f, "[")?;
+
+            write_joined(f, ", ", self.type_params
+                .iter()
+                .map(|ty| ty.name.as_str()))?;
+
+            write!(f, "]")?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub enum FunctionIdentity {
     // function has a global path
-    Path(NamePath),
+    Global(FunctionName),
 
     Method {
         declaring_type: Type,
         id: MethodID,
         name: String,
-        type_args: Vec<Type>,
+        type_params: Vec<TypeParam>,
     },
 
     // user-defined destructor method associated with a type
@@ -173,7 +220,7 @@ impl FunctionIdentity {
     
     pub fn declaring_type(&self) -> Option<&Type> {
         match self {
-            FunctionIdentity::Path(..)
+            FunctionIdentity::Global { .. }
             | FunctionIdentity::Internal(..) => None,
 
             FunctionIdentity::Method { declaring_type, .. }
@@ -183,25 +230,25 @@ impl FunctionIdentity {
 
     pub fn to_pretty_string(&'_ self, formatter: &impl IRFormatter) -> Cow<'_, String> {
         match self {
-            FunctionIdentity::Path(path) => {
-                Cow::Owned(path.to_pretty_string(formatter))
+            FunctionIdentity::Global(path) => {
+                Cow::Owned(path.to_string())
             },
 
             FunctionIdentity::Destructor { name, id: _, declaring_type } => {
                 Cow::Owned(format!("{}.{name}", declaring_type.to_pretty_string(formatter)))
             }
 
-            FunctionIdentity::Method { declaring_type, id: _, name, type_args } => {
+            FunctionIdentity::Method { declaring_type, id: _, name, type_params } => {
                 let mut result = declaring_type.to_pretty_string(formatter);
                 result.push('.');
                 result.push_str(name);
-                if !type_args.is_empty() {
+                if !type_params.is_empty() {
                     result.push('[');
-                    for (i, arg) in type_args.iter().enumerate() {
+                    for (i, param) in type_params.iter().enumerate() {
                         if i > 0 {
                             result.push_str(", ");
                         }
-                        result.push_str(&arg.to_pretty_string(formatter));
+                        result.push_str(param.name.as_str());
                     }
                     result.push(']');
                 }
@@ -215,9 +262,9 @@ impl FunctionIdentity {
         }
     }
 
-    pub fn as_path(&self) -> Option<&NamePath> {
+    pub fn global_name(&self) -> Option<&FunctionName> {
         match self {
-            FunctionIdentity::Path(path) => Some(path),
+            FunctionIdentity::Global(path) => Some(path),
             _ => None,
         }
     }

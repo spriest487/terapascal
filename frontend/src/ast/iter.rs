@@ -1,5 +1,4 @@
 use crate::ast::Annotation;
-use crate::ast::Ident;
 use crate::ast::Expr;
 use crate::ast::Stmt;
 use crate::ast::TypeName;
@@ -9,10 +8,11 @@ use crate::parse::TokenStream;
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;
-use terapascal_common::span::Span;
-use terapascal_common::span::Spanned;
 use derivative::Derivative;
 use std::fmt;
+use terapascal_common::ident::Ident;
+use terapascal_common::span::Span;
+use terapascal_common::span::Spanned;
 
 #[derive(Clone, Eq, Derivative)]
 #[derivative(Debug, PartialEq, Hash)]

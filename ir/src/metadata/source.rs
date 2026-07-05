@@ -257,9 +257,9 @@ pub trait MetadataSource : Sized {
     fn func_desc(&self, id: FunctionID) -> Option<String> {
         if let Some(path) = self
             .get_function_info(id)
-            .and_then(|decl| decl.identity.as_path())
+            .and_then(|decl| decl.identity.global_name())
         {
-            return Some(path.to_pretty_string(self));
+            return Some(path.to_string());
         }
 
         self.iface_impls()
