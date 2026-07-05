@@ -6,6 +6,7 @@ use crate::typ::ast::call::test::util::expr_from_str;
 use crate::typ::ast::call::test::util::type_args_from_str;
 use crate::typ::test::expect_type_error;
 use crate::typ::test::module_from_src;
+use crate::typ::test::print_errors;
 use crate::typ::test::try_module_from_src;
 use crate::typ::test::try_module_from_srcs;
 use crate::typ::Invocation;
@@ -486,9 +487,10 @@ fn overload_with_inaccessible_method_is_not_ambiguous() {
         end
     ";
 
-    let result = try_module_from_srcs([("UnitA", a_src), ("UnitB", b_src)]);
-
-    result.expect("call to A should not be ambiguous");
+    if let Err(errs) = try_module_from_srcs([("UnitA", a_src), ("UnitB", b_src)]) {
+        print_errors(&errs);
+        panic!("failed with the above errors");
+    }
 }
 
 /// if an inaccessible method and a function have the same name, but only the method matches,
