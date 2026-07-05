@@ -379,7 +379,7 @@ pub fn build_static_closure_impl(
 
     let init_func_id = library
         .metadata_mut()
-        .insert_func(identity, [], ir::Type::Nothing, false, []);
+        .insert_func(identity, ir::Visibility::Internal, [], ir::Type::Nothing, false, []);
 
     library.insert_function(
         init_func_id,

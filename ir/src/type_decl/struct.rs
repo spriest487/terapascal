@@ -3,6 +3,7 @@ use crate::FieldID;
 use crate::StructIdentity;
 use crate::TagInfo;
 use crate::Type;
+use crate::Visibility;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -11,6 +12,9 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StructDef {
     pub identity: StructIdentity,
+
+    pub access: Visibility,
+
     pub tags: Vec<TagInfo>,
 
     pub fields: BTreeMap<FieldID, StructFieldDef>,
@@ -68,9 +72,10 @@ impl StructDef {
         true
     }
 
-    pub fn new(identity: StructIdentity, layout: StructLayout) -> Self {
+    pub fn new(identity: StructIdentity, access: Visibility, layout: StructLayout) -> Self {
         Self {
             identity,
+            access,
             fields: BTreeMap::new(),
             tags: Vec::new(),
             layout,

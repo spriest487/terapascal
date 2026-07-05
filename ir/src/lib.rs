@@ -32,7 +32,15 @@ pub use self::typeinfo::*;
 pub use self::types::*;
 pub use self::val::*;
 
+use serde::Deserialize;
+use serde::Serialize;
 use std::fmt;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+pub enum Visibility {
+    Internal,
+    Public,
+}
 
 pub fn write_instruction_list(
     f: &mut dyn fmt::Write,

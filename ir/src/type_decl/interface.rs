@@ -4,29 +4,34 @@ use crate::FunctionParamInfo;
 use crate::MethodID;
 use crate::TagInfo;
 use crate::Type;
+use crate::Visibility;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Method {
+pub struct InterfaceMethod {
     pub name: String,
-    pub return_ty: Type,
+
+    pub result_type: Type,
     pub params: Vec<FunctionParamInfo>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InterfaceDef {
     pub name: DeclPath,
-    pub methods: Vec<Method>,
+    pub access: Visibility,
+
+    pub methods: Vec<InterfaceMethod>,
     
     pub tags: Vec<TagInfo>,
 }
 
 impl InterfaceDef {
-    pub fn new(name: impl Into<DeclPath>, methods: impl Into<Vec<Method>>) -> Self {
+    pub fn new(name: impl Into<DeclPath>, access: Visibility, methods: impl Into<Vec<InterfaceMethod>>) -> Self {
         Self {
             name: name.into(),
+            access,
             methods: methods.into(),
             tags: Vec::new(),
         }
@@ -39,7 +44,7 @@ impl InterfaceDef {
             .map(MethodID)
     }
 
-    pub fn get_method(&self, id: MethodID) -> Option<&Method> {
+    pub fn get_method(&self, id: MethodID) -> Option<&InterfaceMethod> {
         self.methods.get(id.0)
     }
     

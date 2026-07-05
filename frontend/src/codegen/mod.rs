@@ -95,7 +95,7 @@ fn translate_builtin_class(
 
     lib.metadata_mut().declare_type(id, &def_path);
 
-    let resource_ty = translate_struct_def(class_def.as_ref(), lib);
+    let resource_ty = translate_struct_def(class_def.as_ref(), ir::Visibility::Public, lib);
 
     lib.metadata_mut().define_struct(id, resource_ty);
 

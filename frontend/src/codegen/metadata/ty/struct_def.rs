@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 pub fn translate_struct_def(
     struct_def: &typ::ast::StructDecl,
+    visibility: ir::Visibility,
     lib: &mut LibraryBuilder,
 ) -> ir::StructDef {
     let tags = lib.translate_tag_groups(&struct_def.tags);
@@ -39,7 +40,7 @@ pub fn translate_struct_def(
         ir::StructLayout::Default
     };
 
-    ir::StructDef::new(identity, layout)
+    ir::StructDef::new(identity, visibility, layout)
         .with_tags(tags)
         .with_fields(fields)
 }

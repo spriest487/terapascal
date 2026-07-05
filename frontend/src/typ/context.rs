@@ -2274,10 +2274,14 @@ impl Context {
         self.scopes.is_visible(name)
     }
 
+    pub fn get_visibility(&self, name: &IdentPath) -> Option<Visibility> {
+        self.scopes.get_visibility(name)
+    }
+
     pub fn get_access(&self, name: &IdentPath) -> Access {
         self.scopes.get_access(name)
     }
-    
+
     pub fn error(&mut self, err: impl Into<TypeError>) {
         self.errors.push(err.into());
     }

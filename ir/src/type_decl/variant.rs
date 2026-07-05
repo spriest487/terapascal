@@ -2,6 +2,7 @@ use crate::DeclPath;
 use crate::TagInfo;
 use crate::Type;
 use crate::Value;
+use crate::Visibility;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -31,6 +32,8 @@ impl VariantCase {
 pub struct VariantDef {
     pub name: DeclPath,
     pub tag_type: Type,
+
+    pub access: Visibility,
 
     pub cases: Vec<VariantCase>,
     

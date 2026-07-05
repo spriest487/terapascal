@@ -228,7 +228,7 @@ impl Library {
                     .iter()
                     .map(|param| param.param_type.to_pretty_string(formatter))
                     .collect();
-                let return_ty = method.return_ty.to_pretty_string(formatter);
+                let return_ty = method.result_type.to_pretty_string(formatter);
 
                 let sig = format!("function ({}): {}", sig_params.join("; "), return_ty);
 

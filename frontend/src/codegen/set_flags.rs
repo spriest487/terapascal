@@ -64,14 +64,18 @@ impl SetFlagsType {
     // full-size 256-bit flag struct, the max number of values supported by
     // delphi/FPC sets
     pub fn translate(lib: &mut LibraryBuilder, set_def: &Arc<SetDef>) -> Self {
-        let struct_id = match &set_def.name {
+        let (struct_id, visibility) = match &set_def.name {
             Some(ident_path) => {
                 let name_path = ir::DeclPath::from_ident_path(ident_path, []);
-                lib.metadata_mut().forward_declare_type(&name_path)
+
+                let id = lib.metadata_mut().forward_declare_type(&name_path);
+                let visibility = lib.translate_name_visibility(ident_path);
+
+                (id, visibility)
             }
 
             None => {
-                lib.metadata_mut().new_type()
+                (lib.metadata_mut().new_type(), ir::Visibility::Internal)
             }
         };
 
@@ -80,7 +84,7 @@ impl SetFlagsType {
 
         // this only needs to be defined the first time this is called for any given set type
         if !lib.metadata().is_defined(&set_type) {
-            Self::define_set_struct(set_def, struct_id, lib);
+            Self::define_set_struct(set_def, struct_id, visibility, lib);
 
             lib.defined_types.insert(Type::Set(set_def.clone()));
 
@@ -95,7 +99,12 @@ impl SetFlagsType {
         }
     }
 
-    fn define_set_struct(set_type: &SetDef, id: ir::TypeDefID, lib: &mut LibraryBuilder) {
+    fn define_set_struct(
+        set_type: &SetDef,
+        id: ir::TypeDefID,
+        visibility: ir::Visibility,
+        lib: &mut LibraryBuilder,
+    ) {
         let flags_type = lib.get_flags_repr_type(set_type.flags_type_bits());
 
         let struct_identity = match &set_type.name {
@@ -109,7 +118,12 @@ impl SetFlagsType {
             }
         };
 
-        let mut set_struct = ir::StructDef::new(struct_identity, StructLayout::Packed);
+        let mut set_struct = ir::StructDef::new(
+            struct_identity,
+            visibility,
+            StructLayout::Packed,
+        );
+
         set_struct.fields.insert(ir::FieldID(0), ir::StructFieldDef::new(flags_type.repr_type()));
 
         if let Some(set_tag_info) = Self::build_tag(lib, set_type) {
@@ -262,7 +276,14 @@ impl FlagsReprType {
             .iter()
             .map(|ty| ir::FunctionParamInfo::new(ty.clone()));
 
-        let func_id = lib.metadata_mut().insert_func(identity, func_params, sig.result_type.clone(), false, []);
+        let func_id = lib.metadata_mut().insert_func(
+            identity,
+            ir::Visibility::Internal,
+            func_params,
+            sig.result_type.clone(),
+            false,
+            [],
+        );
         lib.insert_function(func_id, func);
 
         func_id

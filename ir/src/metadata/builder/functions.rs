@@ -1,7 +1,7 @@
+use crate::DeclPath;
 use crate::FunctionID;
 use crate::FunctionIdentity;
 use crate::FunctionInfo;
-use crate::DeclPath;
 use crate::FunctionParamInfo;
 use crate::FunctionSig;
 use crate::MetadataBuilder;
@@ -11,12 +11,14 @@ use crate::StructIdentity;
 use crate::TagInfo;
 use crate::Type;
 use crate::TypeDefID;
+use crate::Visibility;
 use std::rc::Rc;
 
 impl MetadataBuilder {
     pub fn insert_func(
         &mut self,
         identity: FunctionIdentity,
+        visibility: Visibility,
         params: impl IntoIterator<Item = FunctionParamInfo>,
         result_type: Type,
         gen_runtime_name: bool,
@@ -42,6 +44,8 @@ impl MetadataBuilder {
         let func_info = FunctionInfo {
             identity,
             runtime_name,
+
+            access: visibility,
 
             params: params.into_iter().collect(),
             result_type,

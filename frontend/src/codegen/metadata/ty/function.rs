@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 use terapascal_common::ident::Ident;
+use terapascal_ir::Visibility;
 
 #[derive(Debug, Clone)]
 pub struct ClosureInstance {
@@ -72,7 +73,7 @@ pub fn translate_closure_struct(
     }
 
     let struct_identity = ir::StructIdentity::ClosureObject(identity);
-    let struct_def = ir::StructDef::new(struct_identity, StructLayout::Default)
+    let struct_def = ir::StructDef::new(struct_identity, Visibility::Internal, StructLayout::Default)
         .with_fields(fields);
 
     lib.metadata_mut().define_closure_ty(id, struct_def);

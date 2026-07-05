@@ -6,6 +6,7 @@ use crate::codegen::typ;
 pub fn translate_iface(
     id: ir::InterfaceID,
     iface_def: &typ::ast::InterfaceDecl,
+    visibility: ir::Visibility,
     lib: &mut LibraryBuilder,
 ) -> ir::InterfaceDef {
     let tags = lib.translate_tag_groups(&iface_def.tags);
@@ -17,9 +18,9 @@ pub fn translate_iface(
     let mut methods = Vec::with_capacity(iface_def.methods.len());
     
     for def_method in &iface_def.methods {
-        let method = ir::Method {
+        let method = ir::InterfaceMethod {
             name: def_method.ident().to_string(),
-            return_ty: match def_method.decl.result_ty.ty() {
+            result_type: match def_method.decl.result_ty.ty() {
                 typ::Type::MethodSelf => generic_self_type.clone(),
                 return_ty => lib.translate_type(return_ty),
             },
@@ -40,5 +41,5 @@ pub fn translate_iface(
         methods.push(method);
     }
 
-    ir::InterfaceDef::new(name, methods).with_tags(tags)
+    ir::InterfaceDef::new(name, visibility, methods).with_tags(tags)
 }

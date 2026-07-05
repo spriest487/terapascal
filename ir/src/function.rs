@@ -13,6 +13,7 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::TypeParam;
 use crate::VariableID;
+use crate::Visibility;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
@@ -276,6 +277,8 @@ impl FunctionParamInfo {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionInfo {
     pub identity: FunctionIdentity,
+
+    pub access: Visibility,
 
     pub runtime_name: Option<StringID>,
 

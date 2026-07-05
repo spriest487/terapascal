@@ -550,7 +550,7 @@ impl ImportBuilder<'_> {
             // TODO: interface method decls can't have tags yet, only impls can
             let method_tags = Vec::new();
 
-            let mut result_type = self.read_type(&method.return_ty)?;
+            let mut result_type = self.read_type(&method.result_type)?;
             let mut param_groups = self.read_params(&method.params)?;
 
             // TODO: rework self refs

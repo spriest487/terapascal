@@ -173,16 +173,6 @@ impl<'m, 'l: 'm> IRBuilder<'m, 'l> {
         out.to_ref()
     }
 
-    #[expect(unused)]
-    pub fn translate_name(&mut self, name: &typ::Symbol) -> ir::NamePath {
-        translate_name(name, self.library)
-    }
-
-    #[expect(unused)]
-    pub fn translate_iface(&mut self, id: ir::InterfaceID, iface_def: &typ::ast::InterfaceDecl) -> ir::InterfaceDef {
-        translate_iface(id, iface_def, self.library)
-    }
-
     pub fn translate_type(&mut self, src_ty: &typ::Type) -> ir::Type {
         self.library.translate_type(src_ty)
     }

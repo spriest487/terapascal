@@ -72,13 +72,15 @@ impl<'a> LibraryBuilder<'a> {
 
         match key {
             FunctionDeclKey::Function { name, sig } => {
+                let visibility = self.translate_name_visibility(name);
+
                 match self.root_ctx.find_func_def(&name, sig.clone()).cloned() {
                     Some(typ::Def::Function(func_def)) => {
-                        self.instantiate_func_def(&func_def, key.clone())
+                        self.instantiate_func_def(&func_def, visibility, key.clone())
                     },
 
                     Some(typ::Def::External(extern_decl)) => {
-                        self.instantiate_func_external(&extern_decl, key.clone())
+                        self.instantiate_func_external(&extern_decl, visibility, key.clone())
                     },
 
                     Some(other) => {
@@ -149,6 +151,7 @@ impl<'a> LibraryBuilder<'a> {
     fn instantiate_func_def(
         &mut self,
         func_def: &typ::ast::FunctionDef,
+        visibility: ir::Visibility,
         key: FunctionDeclKey,
     ) -> FunctionInstance {
         // eprintln!("instantiate_func_def: {}", func_def.decl.name);
@@ -160,7 +163,7 @@ impl<'a> LibraryBuilder<'a> {
 
         let src_sig = Arc::new(func_def.decl.sig());
 
-        let id = self.declare_func(&func_def.decl, ns);
+        let id = self.declare_func(&func_def.decl, visibility, ns);
 
         // cache the function before translating the instantiation, because
         // it may recurse and instantiate itself in its own body
@@ -191,10 +194,12 @@ impl<'a> LibraryBuilder<'a> {
     fn instantiate_func_external(
         &mut self,
         extern_decl: &typ::ast::FunctionDecl,
+        visibility: ir::Visibility,
         key: FunctionDeclKey,
     ) -> FunctionInstance {
         let decl_namespace = key.namespace().into_owned();
-        let id = self.declare_func(&extern_decl, decl_namespace);
+
+        let id = self.declare_func(&extern_decl, visibility, decl_namespace);
 
         let sig = extern_decl.sig();
         let result_type = self.translate_type(&sig.result_ty);
@@ -290,7 +295,7 @@ impl<'a> LibraryBuilder<'a> {
 
         match method_def {
             MethodDef::Function(func_def) => {
-                let id = self.declare_method(&method_decl.func_decl, method_key.method_index);
+                let id = self.declare_method(&method_decl, method_key.method_index);
                 let sig = Arc::new(method_decl.func_decl.sig());
 
                 // cache the function before translating the instantiation, because
@@ -373,6 +378,7 @@ impl<'a> LibraryBuilder<'a> {
     pub fn declare_func(
         &mut self,
         func_decl: &typ::ast::FunctionDecl,
+        visibility: ir::Visibility,
         namespace: IdentPath,
     ) -> ir::FunctionID {
         let decl_type_params = func_decl.name.type_params.as_ref();
@@ -404,29 +410,31 @@ impl<'a> LibraryBuilder<'a> {
             }
         };
 
-        self.insert_func_decl(identity, func_decl)
+        self.insert_func_decl(identity, visibility, func_decl)
     }
 
     pub fn declare_method(
         &mut self,
-        method_decl: &typ::ast::FunctionDecl,
+        method_decl: &typ::ast::MethodDecl,
         method_index: usize,
     ) -> ir::FunctionID {
-        let identity = match &method_decl.name.context {
+        let identity = match &method_decl.func_decl.name.context {
             typ::ast::FunctionDeclContext::MethodDecl { enclosing_type } => {
-                self.method_identity(method_decl, enclosing_type, method_index)
+                self.method_identity(&method_decl.func_decl, enclosing_type, method_index)
             }
 
             typ::ast::FunctionDeclContext::MethodDef { declaring_type } => {
-                self.method_identity(method_decl, declaring_type.ty(), method_index)
+                self.method_identity(&method_decl.func_decl, declaring_type.ty(), method_index)
             }
 
             _ => {
-                panic!("declare_method: {} is not a method", method_decl.name)
+                panic!("declare_method: {} is not a method", method_decl.func_decl.name)
             }
         };
 
-        self.insert_func_decl(identity, method_decl)
+        let visibility = self.translate_member_visibility(method_decl.access);
+
+        self.insert_func_decl(identity, visibility, &method_decl.func_decl)
     }
 
     pub fn translate_param_groups(
@@ -476,6 +484,7 @@ impl<'a> LibraryBuilder<'a> {
     fn insert_func_decl(
         &mut self,
         identity: ir::FunctionIdentity,
+        visibility: ir::Visibility,
         func_decl: &typ::ast::FunctionDecl,
     ) -> ir::FunctionID {
         let tags = self.translate_tag_groups(&func_decl.tags);
@@ -483,7 +492,7 @@ impl<'a> LibraryBuilder<'a> {
         let params = self.translate_param_groups(&func_decl.param_groups);
         let result_type = self.translate_type(&func_decl.result_ty);
 
-        self.metadata.insert_func(identity, params, result_type, self.opts.rtti, tags)
+        self.metadata.insert_func(identity, visibility, params, result_type, self.opts.rtti, tags)
     }
 
     fn method_identity(

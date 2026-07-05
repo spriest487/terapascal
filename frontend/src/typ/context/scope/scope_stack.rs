@@ -270,6 +270,16 @@ impl ScopeStack {
             None => false,
         }
     }
+
+    pub fn get_visibility(&self, name: &IdentPath) -> Option<Visibility> {
+        match self.resolve_path(name) {
+            Some(ScopeMemberRef::Decl { value, .. }) => {
+                value.visibility()
+            },
+
+            _ => None,
+        }
+    }
 }
 
 fn visit_member<Predicate, Visitor>(

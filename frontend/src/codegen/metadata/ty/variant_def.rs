@@ -6,6 +6,7 @@ use crate::typ::ast::VARIANT_TAG_TYPE;
 
 pub fn translate_variant_def(
     variant_def: &typ::ast::VariantDecl,
+    visibility: ir::Visibility,
     lib: &mut LibraryBuilder,
 ) -> ir::VariantDef {
     let tags = lib.translate_tag_groups(&variant_def.tags);
@@ -39,6 +40,7 @@ pub fn translate_variant_def(
 
     ir::VariantDef {
         name: name_path,
+        access: visibility,
         tag_type,
         tags,
         cases,

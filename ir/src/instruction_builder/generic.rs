@@ -11,7 +11,7 @@ use crate::InstructionBuilder;
 use crate::InterfaceDef;
 use crate::LocalID;
 use crate::MetadataSource;
-use crate::Method;
+use crate::InterfaceMethod;
 use crate::ObjectID;
 use crate::Ref;
 use crate::StructDef;
@@ -458,6 +458,7 @@ pub fn instantiate_struct_def<'a>(
 
     Cow::Owned(StructDef {
         fields,
+        access: generic_struct.access,
         tags: generic_struct.tags.clone(),
         identity: generic_struct.identity.clone(),
         layout: generic_struct.layout,
@@ -493,6 +494,7 @@ pub fn instantiate_variant_def<'a>(
 
     Cow::Owned(VariantDef {
         name: generic_variant.name.clone(),
+        access: generic_variant.access,
         cases,
         tags: generic_variant.tags.clone(),
         tag_type,
@@ -526,15 +528,16 @@ pub fn instantiate_interface_def<'a>(
             });
         }
 
-        methods.push(Method {
+        methods.push(InterfaceMethod {
             name: def_method.name.clone(),
-            return_ty: instantiate_type(&def_method.return_ty, &mut types),
+            result_type: instantiate_type(&def_method.result_type, &mut types),
             params,
         });
     }
 
     Cow::Owned(InterfaceDef {
         name: generic_def.name.clone(),
+        access: generic_def.access,
         tags: generic_def.tags.clone(),
         methods,
     })

@@ -34,7 +34,7 @@ impl MethodImplFunc {
         iface_ref: ir::InterfaceRef,
         self_class: ClassIdentity,
         method_id: ir::MethodID,
-        iface_method: &ir::Method,
+        iface_method: &ir::InterfaceMethod,
         impl_func_id: ir::FunctionID,
         metadata: &ir::Metadata,
         unit: &mut Unit,
@@ -60,7 +60,7 @@ impl MethodImplFunc {
             .iter()
             .map(|param| unit.translate_type(&param.param_type))
             .collect();
-        let wrapper_return_ty = unit.translate_type(&iface_method.return_ty);
+        let wrapper_return_ty = unit.translate_type(&iface_method.result_type);
 
         Self {
             name: method_instance.name,
@@ -574,7 +574,7 @@ impl Interface {
             .iter()
             .enumerate()
             .map(|(method_index, method)| {
-                let return_ty = unit.translate_type(&method.return_ty);
+                let return_ty = unit.translate_type(&method.result_type);
                 let method_id = ir::MethodID(method_index);
                 let param_types = method
                     .params

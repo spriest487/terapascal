@@ -3,9 +3,11 @@ mod build_types;
 
 pub use self::build_functions::*;
 
+use crate::ast::Access;
 use crate::ast::BindingDeclKind;
 use crate::ast::FunctionParamMod;
 use crate::ast::StructKind;
+use crate::ast::Visibility;
 use crate::codegen::builder::IRBuilder;
 use crate::codegen::expr::expr_to_val;
 use crate::codegen::expr::literal_to_val;
@@ -354,7 +356,15 @@ impl<'a> LibraryBuilder<'a> {
                 sig: init_sig.clone(),
             };
 
-            let init_func_id = self.metadata.insert_func(identity, [], ir::Type::Nothing, false, []);
+            let init_func_id = self.metadata.insert_func(
+                identity,
+                ir::Visibility::Internal,
+                [],
+                ir::Type::Nothing,
+                false,
+                [],
+            );
+
             self.functions.insert(init_func_id, ir::Function::Local(init_func));
 
             self.init_code.push(ir::Instruction::Call {
@@ -971,7 +981,12 @@ impl<'a> LibraryBuilder<'a> {
 
                 self.metadata.declare_type(def_id, &def_path);
 
-                let def = translate_variant_def(&src_def, self);
+                let visibility = match self.root_ctx.get_visibility(&name.full_path) {
+                    Some(Visibility::Interface) => ir::Visibility::Public,
+                    _ => ir::Visibility::Internal,
+                };
+
+                let def = translate_variant_def(&src_def, visibility, self);
                 self.metadata.define_variant(def_id, def);
 
                 self.defined_types.insert(def_src_type);
@@ -989,6 +1004,27 @@ impl<'a> LibraryBuilder<'a> {
         let instance_type = def_id.to_variant_type(name_path.type_args.clone());
         self.add_cached_type(src_type.clone(), instance_type.clone());
         instance_type
+    }
+
+    pub fn translate_name_visibility(&self, name: &IdentPath) -> ir::Visibility {
+        match self.root_ctx.get_visibility(&name) {
+            Some(v) => self.translate_decl_visibility(v),
+            None => ir::Visibility::Internal,
+        }
+    }
+
+    fn translate_decl_visibility(&self, visibility: Visibility) -> ir::Visibility {
+        match visibility {
+            Visibility::Interface => ir::Visibility::Public,
+            Visibility::Implementation => ir::Visibility::Internal,
+        }
+    }
+
+    fn translate_member_visibility(&self, access: Access) -> ir::Visibility {
+        match access {
+            Access::Published | Access::Public => ir::Visibility::Public,
+            Access::Private => ir::Visibility::Internal,
+        }
     }
 
     fn translate_struct_type(
@@ -1033,7 +1069,9 @@ impl<'a> LibraryBuilder<'a> {
                 self.add_cached_type(def_src_type.clone(), def_type.clone());
                 self.metadata.declare_type(def_id, &def_path);
 
-                let def = translate_struct_def(&src_def, self);
+                let visibility = self.translate_name_visibility(&def_name.full_path);
+
+                let def = translate_struct_def(&src_def, visibility, self);
                 self.metadata.define_struct(def_id, def);
 
                 self.gen_type_info(&def_type, &def_src_type.to_string());
@@ -1091,7 +1129,12 @@ impl<'a> LibraryBuilder<'a> {
                     .instantiate_iface_def(&def_name)
                     .unwrap_or_else(|err| panic!("translate_iface_type: {err}"));
 
-                let def = translate_iface(decl_id, &src_def, self);
+                let visibility = match self.root_ctx.get_visibility(&src_def.name.full_path) {
+                    Some(Visibility::Interface) => ir::Visibility::Public,
+                    _ => ir::Visibility::Internal,
+                };
+
+                let def = translate_iface(decl_id, &src_def, visibility, self);
                 let def_id = self.metadata.define_iface(def);
                 assert_eq!(def_id, decl_id);
 
@@ -1293,7 +1336,14 @@ impl<'a> LibraryBuilder<'a> {
         let internal_name = format!("<anonymous {}>", closure_sig.to_pretty_string(self.metadata()));
         let identity = ir::FunctionIdentity::internal(internal_name.clone(), []);
 
-        let id = self.metadata.insert_func(identity, closure_params, closure_sig.result_type.clone(), false, []);
+        let id = self.metadata.insert_func(
+            identity,
+            ir::Visibility::Internal,
+            closure_params,
+            closure_sig.result_type.clone(),
+            false,
+            [],
+        );
 
         let closure_identity = ir::ClosureIdentity {
             sig: virtual_sig.clone(),
@@ -1361,7 +1411,14 @@ impl<'a> LibraryBuilder<'a> {
             .map(|ty| ir::FunctionParamInfo::new(ty.clone()))
             .collect();
 
-        let thunk_id = self.metadata.insert_func(identity, closure_params, closure_sig.result_type.clone(), false, []);
+        let thunk_id = self.metadata.insert_func(
+            identity,
+            ir::Visibility::Internal,
+            closure_params,
+            closure_sig.result_type.clone(),
+            false,
+            [],
+        );
         let thunk_def = build_func_static_closure_def(self, func, &virtual_sig, func.id);
 
         self.functions.insert(thunk_id, ir::Function::Local(thunk_def));
@@ -1462,7 +1519,14 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
             .map(|ty| ir::FunctionParamInfo::new(ty.clone()))
             .collect();
 
-        let invoker_id = lib.metadata_mut().insert_func(identity, invoker_params, invoker_sig.result_type.clone(), false, []);
+        let invoker_id = lib.metadata_mut().insert_func(
+            identity,
+            ir::Visibility::Internal,
+            invoker_params,
+            invoker_sig.result_type.clone(),
+            false,
+            []
+        );
 
         let mut builder = IRBuilder::new(lib);
         builder.bind_result(sig.result_type.clone());
