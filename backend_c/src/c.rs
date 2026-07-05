@@ -226,7 +226,13 @@ impl<'a> Unit<'a> {
                         continue;
                     };
 
-                    if func_info.identity.type_params().is_empty() {
+                    // we can only eagerly instantiate functions that aren't generic and don't
+                    // belong to generic types
+                    let has_type_params = ir::generic::invocation_type_params(&func_info.identity, self.metadata)
+                        .next()
+                        .is_some();
+
+                    if !has_type_params {
                         self.translate_func_ref(&ir::FunctionRef::new(*func_id));
                     }
                 },
