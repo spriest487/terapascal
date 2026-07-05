@@ -1,5 +1,6 @@
 use crate::codegen::gen_lib;
 use crate::codegen::CodegenOpts;
+use crate::ir;
 use crate::ir::dep_sort::find_deps;
 use crate::ir::dep_sort::sort_defs;
 use crate::ir::Metadata;
@@ -7,8 +8,8 @@ use crate::ir::NamePath;
 use crate::ir::TypeDef;
 use crate::ir::TypeDefID;
 use crate::typ;
+use ir::MetadataSource as _;
 use std::collections::HashMap;
-use terapascal_ir::MetadataSource;
 
 fn defs_from_src(src: &str) -> (HashMap<TypeDefID, TypeDef>, Metadata) {
     let test_module = typ::test::module_from_src("test", src);

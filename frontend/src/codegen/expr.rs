@@ -11,11 +11,11 @@ use crate::codegen::translate_stmt;
 use crate::codegen::typ;
 use crate::codegen::IRBuilder;
 use crate::typ::TypedValue;
+use ir::InstructionBuilder as _;
 use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::ident::Ident;
 use terapascal_common::span::*;
-use terapascal_ir::InstructionBuilder as _;
 
 pub fn expr_to_val(expr: &typ::ast::Expr, builder: &mut IRBuilder) -> ir::Value {
     match expr.annotation() {

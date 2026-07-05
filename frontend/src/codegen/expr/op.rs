@@ -5,10 +5,10 @@ use crate::codegen::typ;
 use crate::ir;
 use crate::IntConstant;
 use bigdecimal::BigDecimal;
+use ir::InstructionBuilder as _;
+use ir::MetadataSource as _;
 use terapascal_common::ident::Ident;
 use terapascal_common::span::Spanned;
-use terapascal_ir::InstructionBuilder as _;
-use terapascal_ir::MetadataSource as _;
 
 pub fn translate_bin_op(
     bin_op: &typ::ast::BinOp,

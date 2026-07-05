@@ -1,8 +1,8 @@
-use std::fmt;
-use std::sync::Arc;
 use crate::Type;
 use serde::Deserialize;
 use serde::Serialize;
+use std::fmt;
+use std::sync::Arc;
 use terapascal_common::write_joined;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]

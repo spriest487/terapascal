@@ -2,7 +2,6 @@
 use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::vars::ConstInfo;
-use crate::FunctionID;
 use crate::FunctionInfo;
 use crate::FunctionSig;
 use crate::IRFormatter;
@@ -28,6 +27,7 @@ use crate::TypeRef;
 use crate::VariableID;
 use crate::VariableInfo;
 use crate::VariantDef;
+use crate::FunctionID;
 use std::borrow::Cow;
 use std::rc::Rc;
 

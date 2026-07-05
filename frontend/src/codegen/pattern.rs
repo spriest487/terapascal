@@ -1,11 +1,11 @@
-use std::rc::Rc;
-use terapascal_common::ident::Ident;
-use crate::codegen::ir;
 use crate::codegen::IRBuilder;
+use crate::ir;
 use crate::typ;
 use crate::typ::MatchPattern;
+use ir::InstructionBuilder;
+use std::rc::Rc;
 use std::sync::Arc;
-use terapascal_ir::InstructionBuilder;
+use terapascal_common::ident::Ident;
 
 pub struct PatternMatchBinding {
     pub name: Arc<String>,

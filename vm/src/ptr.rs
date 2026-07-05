@@ -7,7 +7,7 @@ use std::fmt;
 use std::mem::size_of;
 use std::ptr::slice_from_raw_parts;
 use std::ptr::slice_from_raw_parts_mut;
-use terapascal_ir::MetadataSource;
+use ir::MetadataSource as _;
 
 pub const POINTER_FMT_WIDTH: usize = size_of::<usize>() * 2;
 

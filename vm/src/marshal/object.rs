@@ -14,7 +14,7 @@ use crate::ObjectID;
 use crate::ObjectValue;
 use crate::Pointer;
 use std::rc::Rc;
-use terapascal_ir::InstructionBuilder;
+use ir::InstructionBuilder as _;
 
 impl Marshaller {
     pub fn marshal_object_at(
@@ -241,7 +241,6 @@ impl Marshaller {
 
         let dtor_def = ir::FunctionDef {
             body: dtor_body,
-            type_params: Vec::new(),
             sig: Rc::new(ir::FunctionSig::new([object_type.clone()], ir::Type::Nothing)),
         };
 

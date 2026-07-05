@@ -198,7 +198,7 @@ pub enum FunctionIdentity {
     Method {
         declaring_type: Type,
         id: MethodID,
-        name: String,
+        name: Arc<String>,
         type_params: Vec<TypeParam>,
     },
 
@@ -206,25 +206,44 @@ pub enum FunctionIdentity {
     Destructor {
         declaring_type: Type,
         id: MethodID,
-        name: String,
+        name: Arc<String>,
     },
 
     // function is anonymous (e.g. generated functions) but has a debug name
-    Internal(Rc<String>),
+    Internal {
+        name: Arc<String>,
+        type_params: Vec<TypeParam>,
+    },
 }
 
 impl FunctionIdentity {
-    pub fn internal(name: impl Into<String>) -> Self {
-        Self::Internal(Rc::new(name.into()))
+    pub fn internal(
+        name: impl Into<Arc<String>>,
+        type_params: impl IntoIterator<Item=TypeParam>,
+    ) -> Self {
+        Self::Internal {
+            name: name.into(),
+            type_params: type_params.into_iter().collect(),
+        }
     }
     
     pub fn declaring_type(&self) -> Option<&Type> {
         match self {
             FunctionIdentity::Global { .. }
-            | FunctionIdentity::Internal(..) => None,
+            | FunctionIdentity::Internal { .. } => None,
 
             FunctionIdentity::Method { declaring_type, .. }
             | FunctionIdentity::Destructor { declaring_type, .. } => Some(declaring_type),
+        }
+    }
+
+    pub fn type_params(&self) -> &[TypeParam] {
+        match self {
+            FunctionIdentity::Global(func_name) => &func_name.type_params,
+            FunctionIdentity::Method { type_params, .. } => type_params,
+            FunctionIdentity::Internal { type_params, .. } => type_params,
+
+            FunctionIdentity::Destructor { .. } => &[],
         }
     }
 
@@ -256,7 +275,7 @@ impl FunctionIdentity {
                 Cow::Owned(result)
             }
 
-            FunctionIdentity::Internal(name) => {
+            FunctionIdentity::Internal { name, .. } => {
                 Cow::Borrowed(name.as_ref())
             }
         }
@@ -333,8 +352,6 @@ impl FunctionInfo {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FunctionDef {
-    pub type_params: Vec<TypeParam>,
-
     pub body: InstructionList,
 
     pub sig: Rc<FunctionSig>,
@@ -348,12 +365,10 @@ pub enum Function {
 
 impl Function {
     pub fn new_local_def(
-        type_params: Vec<TypeParam>,
         sig: impl Into<Rc<FunctionSig>>,
         body: InstructionList,
     ) -> Self {
         Function::Local(FunctionDef {
-            type_params,
             sig: sig.into(),
             body,
         })
@@ -363,13 +378,6 @@ impl Function {
         match self {
             Function::External(external_func) => &external_func.sig,
             Function::Local(local_func) => &local_func.sig,
-        }
-    }
-
-    pub fn type_params(&self) -> &[TypeParam] {
-        match self {
-            Function::External(..) => &[],
-            Function::Local(def) => &def.type_params,
         }
     }
 }

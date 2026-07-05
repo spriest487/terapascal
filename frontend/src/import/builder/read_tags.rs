@@ -1,8 +1,8 @@
-use terapascal_ir::MetadataSource;
 use crate::import::builder::ImportBuilder;
 use crate::ir;
 use crate::typ::Type;
 use crate::IntConstant;
+use ir::MetadataSource as _;
 
 pub struct ImportedSetType {
     pub item_type: Type,

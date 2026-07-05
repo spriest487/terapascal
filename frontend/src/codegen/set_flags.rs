@@ -249,13 +249,12 @@ impl FlagsReprType {
         sig: ir::FunctionSig,
         lib: &mut LibraryBuilder,
     ) -> ir::FunctionID {
-        let identity = ir::FunctionIdentity::internal(name);
+        let identity = ir::FunctionIdentity::internal(name, []);
 
         let sig = Rc::new(sig);
 
         let func = ir::Function::Local(ir::FunctionDef {
             sig: sig.clone(),
-            type_params: Vec::new(),
             body,
         });
 

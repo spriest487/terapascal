@@ -12,8 +12,7 @@ use std::borrow::Cow;
 use std::cmp::max;
 use std::iter;
 use std::rc::Rc;
-use terapascal_ir::generic::instantiate_variant_def;
-use terapascal_ir::MetadataSource;
+use ir::MetadataSource as _;
 
 #[derive(Debug, Clone)]
 pub struct VariantLayout {
@@ -182,7 +181,7 @@ impl Marshaller {
                 MarshalError::MissingTypeDef(variant_type.clone())
             })?;
 
-        match instantiate_variant_def(&generic_def, &id.args) {
+        match ir::generic::instantiate_variant_def(&generic_def, &id.args) {
             Cow::Borrowed(def) => {
                 let def = Rc::new(def.clone());
                 let type_index = self.define_variant(variant_type, def.clone())?;

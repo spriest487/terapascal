@@ -10,8 +10,8 @@ use crate::ArrayValue;
 use crate::ObjectHeader;
 use crate::ObjectID;
 use crate::Pointer;
+use ir::InstructionBuilder as _;
 use std::ptr::slice_from_raw_parts;
-use terapascal_ir::InstructionBuilder;
 
 // dynamic array values in memory are marshalled as a set of header fields followed by a variably
 // sized sequence of elements

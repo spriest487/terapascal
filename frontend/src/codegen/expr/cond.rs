@@ -5,7 +5,7 @@ use crate::codegen::pattern::translate_pattern_match_bindings;
 use crate::codegen::pattern::translate_pattern_match_is;
 use crate::codegen::stmt::build_case_block;
 use crate::codegen::typ;
-use terapascal_ir::InstructionBuilder;
+use ir::InstructionBuilder as _;
 
 pub fn translate_if_cond<B, BranchTranslateFn>(
     if_cond: &typ::ast::IfCond<B>,

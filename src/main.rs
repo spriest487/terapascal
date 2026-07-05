@@ -37,8 +37,6 @@ use terapascal_common::CIL_LIB_EXT;
 use terapascal_common::IR_LIB_EXT;
 use terapascal_frontend::codegen::CodegenOpts;
 use terapascal_ir as ir;
-use terapascal_ir::IRFormatter;
-use terapascal_ir::RawFormatter;
 use terapascal_vm::result::ExecResult;
 use terapascal_vm::ExecOpts;
 use terapascal_vm::Vm;
@@ -255,10 +253,10 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     }
                 }
             } else {
-                let err_formatter: Box<dyn IRFormatter> = if args.debug {
+                let err_formatter: Box<dyn ir::IRFormatter> = if args.debug {
                     Box::new(libs.to_metadata_builder())
                 } else {
-                    Box::new(RawFormatter)
+                    Box::new(ir::RawFormatter)
                 };
 
                 exec_vm(args, libs.iter()).map_err(|err| err.map_types(|ty| {

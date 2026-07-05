@@ -7,9 +7,9 @@ use crate::ir;
 use crate::typ;
 use bigdecimal::BigDecimal;
 use bigdecimal::Zero;
+use ir::InstructionBuilder as _;
+use ir::MetadataSource as _;
 use std::sync::Arc;
-use terapascal_ir::InstructionBuilder as _;
-use terapascal_ir::MetadataSource as _;
 
 pub fn build_object_ctor_invocation(
     object_ty: &typ::Type,

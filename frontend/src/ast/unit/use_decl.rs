@@ -1,9 +1,10 @@
+use crate::parse::LookAheadTokenStream;
 use crate::parse::Matcher;
+use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::TokenStream;
-use crate::parse::{LookAheadTokenStream, Parse};
 use crate::Keyword;
 use crate::Operator;
 use crate::Separator;

@@ -5,11 +5,11 @@ use crate::codegen::typ;
 use crate::codegen::ClosureInstance;
 use crate::codegen::IRBuilder;
 use crate::ir;
+use ir::InstructionBuilder as _;
+use ir::MetadataSource as _;
 use std::iter;
 use std::rc::Rc;
 use std::sync::Arc;
-use terapascal_ir::InstructionBuilder;
-use terapascal_ir::MetadataSource;
 
 #[derive(Clone, Debug)]
 pub struct FunctionInstance {
@@ -70,23 +70,12 @@ pub fn build_type_param_list(
 pub fn build_func_def(
     module: &mut LibraryBuilder,
     def_params: &[typ::ast::FunctionParamGroup],
-    def_type_params: Option<&typ::TypeParamList>,
     def_return_ty: &typ::Type,
     def_body: &typ::ast::Block,
     def_locals: &[typ::ast::FunctionLocalBinding],
     is_instance_method: bool,
-    enclosing_type: Option<&typ::Type>,
     debug_name: Option<String>,
 ) -> ir::FunctionDef {
-    // if the self param is a specialized generic name, add its type parameters to the
-    // beginning of the method function's type param list
-    let mut type_params = build_type_param_list(
-        module,
-        enclosing_type.and_then(|t| t.type_params()),
-    );
-
-    type_params.extend(build_type_param_list(module, def_type_params));
-
     let mut body_builder = create_function_body_builder(
         module,
         debug_name.clone()
@@ -109,7 +98,6 @@ pub fn build_func_def(
             param_types: bound_params.into_iter().map(|(_id, ty)| ty).collect(),
             result_type: return_ty,
         }),
-        type_params,
     }
 }
 
@@ -181,7 +169,6 @@ pub fn build_func_static_closure_def(
                 .collect(),
             result_type: return_ty,
         }),
-        type_params: Vec::new(),
         body: body_builder.finish(),
     }
 }
@@ -262,7 +249,6 @@ pub fn build_closure_function_def(
             param_types: actual_params,
             result_type: return_ty,
         }),
-        type_params: Vec::new(),
     }
 }
 
@@ -415,7 +401,7 @@ pub fn build_static_closure_impl(
     let init_body = init_builder.finish();
 
     let internal_name = format!("static closure init for {}", closure);
-    let identity = ir::FunctionIdentity::internal(internal_name);
+    let identity = ir::FunctionIdentity::internal(internal_name, []);
 
     let init_sig = Rc::new(ir::FunctionSig {
         param_types: Vec::new(),
@@ -431,7 +417,6 @@ pub fn build_static_closure_impl(
         ir::Function::Local(ir::FunctionDef {
             body: init_body,
             sig: init_sig,
-            type_params: Vec::new(),
         }),
     );
 

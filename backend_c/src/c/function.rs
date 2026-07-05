@@ -13,15 +13,14 @@ use crate::c::TypeDefName;
 use crate::c::Unit;
 use crate::c::VariableID;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::env;
 use std::fmt;
 use std::rc::Rc;
-use terapascal_common::SharedStringKey;
 use terapascal_ir as ir;
-use terapascal_ir::generic::instantiate_function_def;
-use terapascal_ir::generic::instantiate_sig;
-use terapascal_ir::MetadataSource;
+use ir::generic::build_invocation_type_map;
+use ir::generic::instantiate_function_def;
+use ir::generic::instantiate_sig;
+use ir::MetadataSource;
 
 #[derive(Copy, Clone)]
 pub struct FunctionInstance {
@@ -530,35 +529,36 @@ impl<'a> Unit<'a> {
         func_ref: ir::FunctionRef,
         generic_def: &ir::FunctionDef,
     ) {
-        if func_ref.args.len() != generic_def.type_params.len() {
+        let Some(func_info) = self.metadata.get_function_info(func_ref.def_id) else {
+            let func_display = func_ref.to_pretty_string(self.metadata);
+            panic!("build_func_ref: missing function info for {}", func_display);
+        };
+
+        let def_type_params = func_info.identity.type_params();
+
+        if func_ref.args.len() != def_type_params.len() {
             panic!(
-                "incorrect number of type parameters for {} (invocation has {}, expected: {})",
+                "build_func_ref: incorrect number of type parameters for {} (invocation has {}, expected: {})",
                 func_ref.to_pretty_string(self.metadata),
                 func_ref.args.len(),
-                generic_def.type_params.len(),
+                def_type_params.len(),
             );
         }
 
         let def = if func_ref.args.len() == 0 {
             Cow::Borrowed(generic_def)
         } else {
-            let mut types = HashMap::new();
-            for (param, arg) in generic_def.type_params.iter().zip(func_ref.args.iter()) {
-                if types.insert(SharedStringKey(param.name.clone()), arg.clone()).is_some() {
-                    panic!("invalid function def: type param names are not unique");
-                }
-            }
+            let types = build_invocation_type_map(&func_info.identity, &func_ref.args, self.metadata);
 
             let mut builder = FuncInstanceBuilder::new(self);
             let sig = instantiate_sig(&generic_def.sig, &types);
 
-            instantiate_function_def(&generic_def, &types, &mut builder);
+            instantiate_function_def(&generic_def, def_type_params, &types, &mut builder);
 
             let body = builder.finish();
 
             Cow::Owned(ir::FunctionDef {
                 body,
-                type_params: Vec::new(),
                 sig: Rc::new(sig),
             })
         };

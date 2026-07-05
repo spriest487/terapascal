@@ -17,8 +17,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use terapascal_common::ident::IdentPath;
 use terapascal_common::span::Span;
-use terapascal_ir::InstructionBuilder;
-use terapascal_ir::MetadataSource;
+use ir::InstructionBuilder;
+use ir::MetadataSource;
 
 #[derive(Debug)]
 pub struct IRBuilder<'m, 'l: 'm> {

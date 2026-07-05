@@ -18,10 +18,7 @@ use std::fmt;
 use std::fmt::Formatter;
 use std::num::NonZeroUsize;
 use std::rc::Rc;
-use terapascal_ir::generic::instantiate_interface_def;
-use terapascal_ir::generic::instantiate_struct_def;
-use terapascal_ir::generic::instantiate_variant_def;
-use terapascal_ir::MetadataSource as _;
+use ir::MetadataSource as _;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct TypeID(NonZeroUsize);
@@ -225,7 +222,7 @@ impl<'a> Unit<'a> {
                 panic!("missing struct def: {def_id}")
             });
 
-        match instantiate_struct_def(&generic_def, args) {
+        match ir::generic::instantiate_struct_def(&generic_def, args) {
             Cow::Borrowed(..) => {
                 // not a specialized generic
                 self.define_struct(ty.clone(), generic_def);
@@ -325,7 +322,7 @@ impl<'a> Unit<'a> {
                 panic!("missing variant def: {}", type_ref.def_id)
             });
 
-        match instantiate_variant_def(&generic_def, &type_ref.args) {
+        match ir::generic::instantiate_variant_def(&generic_def, &type_ref.args) {
             Cow::Borrowed(..) => {
                 // not a specialized generic
                 self.define_variant(ty.clone(), Rc::new(generic_def))
@@ -408,7 +405,7 @@ impl<'a> Unit<'a> {
                 panic!("translate_interface_type: missing interface def: {}", iface_ref.def_id)
             });
 
-        match instantiate_interface_def(&generic_def, &iface_ref.args) {
+        match ir::generic::instantiate_interface_def(&generic_def, &iface_ref.args) {
             Cow::Borrowed(..) => {
                 // not a specialized generic
                 self.define_interface(iface_type, Rc::new(generic_def))

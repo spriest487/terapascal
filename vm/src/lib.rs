@@ -30,6 +30,7 @@ use crate::result::ExecResult;
 use crate::rtti_map::RttiMap;
 use crate::stack::NativeStack;
 use ir::IRFormatter as _;
+use ir::MetadataSource as _;
 use smallvec::SmallVec;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
@@ -41,7 +42,6 @@ use std::ops::BitXor;
 use std::rc::Rc;
 use terapascal_common::span::Span;
 use terapascal_ir as ir;
-use terapascal_ir::MetadataSource as _;
 
 #[derive(Debug)]
 pub struct Vm {
@@ -589,7 +589,7 @@ impl Vm {
         args: &[DynValue],
     ) -> ExecResult<Option<DynValue>> {
         let func_info = instantiate_func(self, func_ref)?;
-        let func = func_info.func.clone();
+        let func = func_info.function.clone();
 
         self.invoke_func(&func, args)
     }
@@ -2248,7 +2248,7 @@ impl Vm {
             .and_then(|f| f.invoker);
 
         self.functions.insert(ir::FunctionRef::new(func_id), FunctionInfo {
-            func: Rc::new(func),
+            function: Rc::new(func),
             identity: ir::FunctionIdentity::Global(name),
             invoker,
         });
@@ -2325,8 +2325,9 @@ impl Vm {
             let func_info = self.metadata().get_function_info(*func_id);
             let invoker = func_info.and_then(|f| f.invoker);
 
-            let identity = func_info.map(|info| info.identity.clone())
-                .unwrap_or_else(|| ir::FunctionIdentity::internal(func_id.to_string()));
+            let identity = func_info
+                .map(|info| info.identity.clone())
+                .unwrap_or_else(|| ir::FunctionIdentity::internal(func_id.to_string(), []));
 
             // if this function is generic, the specialized instances will be registered later
             // as they're used, and only the generic version is registered now
@@ -2349,7 +2350,7 @@ impl Vm {
 
             self.functions.insert(ir::FunctionRef::new(*func_id), FunctionInfo {
                 identity: identity.clone(),
-                func: Rc::new(func),
+                function: Rc::new(func),
                 invoker,
             });
 
@@ -2432,7 +2433,6 @@ impl Vm {
             let init_name = "vm: tag initialization function".to_string();
             let init_func = Function::new_internal(init_name, ir::FunctionDef {
                 body: tag_init_builder.finish(),
-                type_params: Vec::new(),
                 sig: Rc::new(ir::FunctionSig::new([], ir::Type::Nothing)),
             });
 

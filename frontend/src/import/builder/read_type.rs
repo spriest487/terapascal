@@ -28,8 +28,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
-use terapascal_ir::MetadataSource as _;
-use terapascal_ir::StructIdentity;
+use ir::MetadataSource as _;
 
 impl ImportBuilder<'_> {
     pub fn read_type_decl(&mut self, id: ir::TypeDefID, decl: &ir::TypeDecl) -> ImportResult<()> {
@@ -435,13 +434,13 @@ impl ImportBuilder<'_> {
                         let path = self.read_def_path(name)?;
 
                         match struct_def.identity {
-                            StructIdentity::Internal(_) | StructIdentity::Record(_) => {
+                            ir::StructIdentity::Internal(_) | ir::StructIdentity::Record(_) => {
                                 let struct_type = Type::from_struct_type(path.with_type_args(type_args_list), StructKind::Record);
                                 self.types.insert(type_ref.to_struct_type(), struct_type.clone());
                                 Ok(struct_type)
                             }
 
-                            StructIdentity::Class(_) | StructIdentity::ClosureObject(_) => {
+                            ir::StructIdentity::Class(_) | ir::StructIdentity::ClosureObject(_) => {
                                 let class_type = Type::from_struct_type(path.with_type_args(type_args_list), StructKind::Class);
                                 self.types.insert(type_ref.to_class_object_type(), class_type.clone());
                                 self.types.insert(type_ref.to_weak_class_object_type(), class_type.to_weak());

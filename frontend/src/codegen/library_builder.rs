@@ -342,7 +342,7 @@ impl<'a> LibraryBuilder<'a> {
             let unit_init = init_builder.finish();
             
             let internal_name = format!("{}.<init>", unit.ident);
-            let identity = ir::FunctionIdentity::internal(internal_name);
+            let identity = ir::FunctionIdentity::internal(internal_name, []);
 
             let init_sig = Rc::new(ir::FunctionSig {
                 param_types: Vec::new(),
@@ -351,7 +351,6 @@ impl<'a> LibraryBuilder<'a> {
             let init_func = ir::FunctionDef {
                 body: unit_init,
                 sig: init_sig.clone(),
-                type_params: Vec::new(),
             };
 
             let init_func_id = self.metadata.insert_func(identity, [], ir::Type::Nothing, false, []);
@@ -1291,7 +1290,7 @@ impl<'a> LibraryBuilder<'a> {
             .collect();
 
         let internal_name = format!("<anonymous {}>", closure_sig.to_pretty_string(self.metadata()));
-        let identity = ir::FunctionIdentity::internal(internal_name.clone());
+        let identity = ir::FunctionIdentity::internal(internal_name.clone(), []);
 
         let id = self.metadata.insert_func(identity, closure_params, closure_sig.result_type.clone(), false, []);
 
@@ -1354,7 +1353,7 @@ impl<'a> LibraryBuilder<'a> {
         let closure_sig = virtual_sig.to_closure_function_ptr_sig();
 
         let internal_name = "<static closure function>".to_string();
-        let identity = ir::FunctionIdentity::internal(internal_name);
+        let identity = ir::FunctionIdentity::internal(internal_name, []);
 
         let closure_params: Vec<_> = closure_sig.param_types
             .iter()
@@ -1451,7 +1450,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         };
 
         let internal_name = format!("generated invoker for {}", target_name);
-        let identity = ir::FunctionIdentity::internal(internal_name);
+        let identity = ir::FunctionIdentity::internal(internal_name, []);
 
         // the source sig may be generic, so look up the translated sig rather than attempting
         // to translate it without a generic context
@@ -1488,7 +1487,6 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
         let invoker_func = ir::FunctionDef {
             sig: Rc::new(invoker_sig.clone()),
             body,
-            type_params: Vec::new(),
         };
 
         lib.functions.insert(invoker_id, ir::Function::Local(invoker_func));

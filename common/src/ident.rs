@@ -1,5 +1,7 @@
-use crate::path::{Path, PathConcat};
-use crate::span::{Span, Spanned};
+use crate::path::Path;
+use crate::path::PathConcat;
+use crate::span::Span;
+use crate::span::Spanned;
 use derivative::Derivative;
 use std::fmt;
 use std::str::FromStr;

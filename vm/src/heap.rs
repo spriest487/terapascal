@@ -9,10 +9,10 @@ use crate::ObjectHeader;
 use crate::ObjectID;
 use crate::ObjectValue;
 use crate::Pointer;
+use ir::MetadataSource as _;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::fmt;
-use terapascal_ir::MetadataSource as _;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Error)]

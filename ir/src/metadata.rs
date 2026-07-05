@@ -12,13 +12,14 @@ pub use self::ids::*;
 pub use self::source::InterfaceMethodImplRef;
 pub use self::source::MetadataSource;
 pub use self::tags::TagInfo;
-pub use self::vars::VariableInfo;
 pub use self::vars::ConstInfo;
+pub use self::vars::VariableInfo;
 
 use crate::typeinfo::TypeInfo;
-use crate::{FunctionID, FunctionName};
+use crate::FunctionID;
 use crate::FunctionIdentity;
 use crate::FunctionInfo;
+use crate::FunctionName;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceDecl;
@@ -36,8 +37,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::fmt;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {

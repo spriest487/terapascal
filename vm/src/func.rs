@@ -6,16 +6,15 @@ use crate::result::ExecError;
 use crate::ExecResult;
 use crate::GlobalValue;
 use crate::Vm;
-use ir::generic::instantiate_function_def;
-use ir::generic::instantiate_sig;
-use ir::generic::instantiate_type;
+use ir::generic::*;
+use ir::FunctionName;
 use ir::MetadataSource as _;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+use std::sync::Arc;
 use terapascal_common::SharedStringKey;
-use terapascal_ir::FunctionName;
-use terapascal_ir::generic::instantiate_type_param;
 
 pub mod ffi;
 
@@ -51,7 +50,7 @@ pub enum Function {
 
 #[derive(Debug, Clone)]
 pub struct FunctionInfo {
-    pub func: Rc<Function>,
+    pub function: Rc<Function>,
 
     pub identity: ir::FunctionIdentity,
 
@@ -73,7 +72,7 @@ impl Function {
                     &def.sig.param_types,
                     metadata,
                 );
-                ir::FunctionIdentity::internal(internal_name)
+                ir::FunctionIdentity::internal(internal_name, [])
             });
 
         let name = identity.to_pretty_string(metadata).into_owned();
@@ -134,14 +133,6 @@ impl Function {
             Function::Builtin(builtin_fn) => &builtin_fn.param_tys,
             Function::External(external_fn) => &external_fn.param_tys,
             Function::IR(func) => &func.def.sig.param_types,
-        }
-    }
-
-    pub fn type_params(&self) -> &[ir::TypeParam] {
-        match self {
-            Function::Builtin(..) => &[],
-            Function::External(..) => &[],
-            Function::IR(func) => &func.def.type_params,
         }
     }
 
@@ -235,13 +226,19 @@ pub fn instantiate_func(
     vm: &mut Vm,
     func_ref: &ir::FunctionRef,
 ) -> ExecResult<FunctionInfo> {
-    if let Some(func_info) = vm.functions.get(func_ref).cloned()
-        && func_info.func.type_params().len() == func_ref.args.len()
-    {
-        return Ok(func_info);
+    if let Some(existing_instance) = vm.functions.get(func_ref) {
+        return Ok(existing_instance.clone());
     }
 
-    let generic_func = vm.functions
+    let Some(func_info) = vm.metadata().get_function_info(func_ref.def_id) else {
+        let func_ref_display = func_ref.to_pretty_string(vm.metadata());
+        let msg = format!("missing function metadata: {func_ref_display}");
+        return Err(ExecError::illegal_state(msg))
+    };
+
+    let def_type_params = func_info.identity.type_params();
+
+    let generic_instance = vm.functions
         .get(&ir::FunctionRef::new(func_ref.def_id))
         .ok_or_else(|| {
             let func_ref_display = func_ref.to_pretty_string(vm.metadata());
@@ -249,37 +246,49 @@ pub fn instantiate_func(
             ExecError::illegal_state(msg)
         })?;
 
-    let generic_def = match generic_func.func.as_ref() {
+    let generic_def = match generic_instance.function.as_ref() {
         Function::IR(func) => &func.def,
         _ => {
-            let msg = "definition of generic function must not be external";
+            let func_display = func_ref.to_pretty_string(vm.metadata());
+            let msg = format!("definition of generic function {func_display} must not be external");
             return Err(ExecError::illegal_state(msg))
         }
     };
 
-    if func_ref.args.len() != generic_def.type_params.len() {
+    let invocation_type_params = invocation_type_params(&func_info.identity, vm.metadata());
+
+    if func_ref.args.len() != invocation_type_params.len() {
         let msg = format!(
             "incorrect number of type parameters for function {} (invocation has {}, expected: {})",
-            generic_func.identity.to_pretty_string(vm.metadata()),
+            generic_instance.identity.to_pretty_string(vm.metadata()),
             func_ref.args.len(),
-            generic_def.type_params.len(),
+            invocation_type_params.len(),
         );
         return Err(ExecError::illegal_state(msg))
     }
 
-    let mut types = HashMap::new();
-    for (param, arg) in generic_def.type_params.iter().zip(func_ref.args.iter()) {
-        if types.insert(SharedStringKey(param.name.clone()), arg.clone()).is_some() {
-            return Err(ExecError::illegal_state("invalid function def: type param names are not unique"));
-        }
-    }
+    let mut types = HashMap::with_capacity(invocation_type_params.len());
+    build_type_map(invocation_type_params.iter().map(Cow::as_ref), &func_ref.args, &mut types);
 
-    let identity = match &generic_func.identity {
-        ir::FunctionIdentity::Internal(name) => {
-            let type_args_formatted = format_type_arg_list(&generic_def.type_params, &types, vm.metadata());
-            let name = format!("{name} {}", type_args_formatted);
+    let identity = match &generic_instance.identity {
+        ir::FunctionIdentity::Internal { name, type_params } => {
+            let type_params: Vec<_> = type_params
+                .iter()
+                .map(|t| instantiate_type_param(t, &types))
+                .collect();
 
-            ir::FunctionIdentity::Internal(Rc::new(name))
+            let instance_name = if !type_params.is_empty() {
+                let mut name = name.to_string();
+                name.push_str(&format_type_arg_list(&type_params, &types, vm.metadata()));
+                Arc::new(name)
+            } else {
+                name.clone()
+            };
+
+            ir::FunctionIdentity::Internal {
+                name: instance_name,
+                type_params,
+            }
         }
 
         ir::FunctionIdentity::Destructor { declaring_type, id, name } => {
@@ -320,7 +329,7 @@ pub fn instantiate_func(
     if vm.opts.trace_generics {
         eprintln!(
             "[vm] new instantiation of function {}: {}",
-            generic_func.identity.to_pretty_string(vm.metadata()),
+            generic_instance.identity.to_pretty_string(vm.metadata()),
             func_name,
         );
     }
@@ -328,16 +337,15 @@ pub fn instantiate_func(
     let mut builder = ir::RawInstructionBuilder::new(vm.metadata(), true);
     let sig = instantiate_sig(&generic_def.sig, &types);
 
-    instantiate_function_def(&generic_def, &types, &mut builder);
+    instantiate_function_def(&generic_def, def_type_params, &types, &mut builder);
 
     let def = ir::FunctionDef {
         body: builder.finish(),
-        type_params: Vec::new(),
         sig: Rc::new(sig),
     };
 
     let func_info = FunctionInfo {
-        func: Rc::new(Function::IR(IRFunction {
+        function: Rc::new(Function::IR(IRFunction {
             name: func_name,
             def,
         })),

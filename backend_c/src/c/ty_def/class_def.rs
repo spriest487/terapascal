@@ -14,13 +14,13 @@ use crate::c::TypeDefName;
 use crate::c::Unit;
 use crate::c::VariableID;
 use crate::ir;
+use ir::generic::instantiate_interface_def;
+use ir::InstructionBuilder as _;
 use ir::MetadataSource as _;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fmt::Write;
-use terapascal_ir::generic::instantiate_interface_def;
-use terapascal_ir::InstructionBuilder;
 
 #[derive(Clone, Debug)]
 struct MethodImplFunc {

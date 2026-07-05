@@ -13,16 +13,11 @@ use crate::c::Type;
 use crate::c::TypeDefName;
 use crate::c::Unit;
 use crate::Options;
+use ir::MetadataSource as _;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::iter;
 use terapascal_ir as ir;
-use terapascal_ir::InterfaceRef;
-use terapascal_ir::MetadataSource;
-use terapascal_ir::MethodID;
-use terapascal_ir::Ref;
-use terapascal_ir::TypeDefID;
-use terapascal_ir::Value;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
 pub enum GlobalName {
@@ -40,7 +35,7 @@ pub enum GlobalName {
     TypeInfoCount,
     TypeNameString(TypeID),
     StaticTypeInfo(TypeID),
-    GenericStaticTypeInfo(TypeDefID),
+    GenericStaticTypeInfo(ir::TypeDefID),
 
     FuncInfoList,
     FuncInfoCount,
@@ -121,7 +116,10 @@ pub fn write_global_typeinfo_decl_name(f: &mut fmt::Formatter, id: TypeID) -> fm
     write!(f, "TypeInfo_{id}")
 }
 
-pub fn write_global_generic_typeinfo_decl_name(f: &mut fmt::Formatter, id: TypeDefID) -> fmt::Result {
+pub fn write_global_generic_typeinfo_decl_name(
+    f: &mut fmt::Formatter,
+    id: ir::TypeDefID,
+) -> fmt::Result {
     write!(f, "GenericTypeInfo_{id}")
 }
 
@@ -639,11 +637,11 @@ impl<'a, 'b> CBuilder<'a, 'b> {
 
     fn translate_virtual_call(
         &mut self,
-        out: &Option<Ref>,
-        iface_ref: &InterfaceRef,
-        method: &MethodID,
-        self_arg: &Ref,
-        rest_args: &Vec<Value>,
+        out: &Option<ir::Ref>,
+        iface_ref: &ir::InterfaceRef,
+        method: &ir::MethodID,
+        self_arg: &ir::Ref,
+        rest_args: &Vec<ir::Value>,
     ) {
         let self_type = self_arg
             .find_type(self, self.unit.metadata)

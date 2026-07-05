@@ -11,7 +11,7 @@ use crate::c::Type;
 use crate::c::Unit;
 use crate::c::VariableID;
 use crate::ir;
-use terapascal_ir::MetadataSource as _;
+use ir::MetadataSource as _;
 
 #[derive(Debug, Clone)]
 pub struct TypeInfo {

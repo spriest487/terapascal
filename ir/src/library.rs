@@ -311,7 +311,7 @@ impl Library {
 
                 write_tag_list(&func_info.tags, formatter, f)?;
 
-                let type_params = func.type_params();
+                let type_params = func_info.identity.type_params();
                 if !type_params.is_empty() {
                     writeln!(f, "Type parameters:")?;
                     for param in type_params {

@@ -1,10 +1,11 @@
 use crate::ast::UseDeclItem;
+use crate::parse::AggregateParseError;
 use crate::parse::Matcher;
+use crate::parse::Parse;
 use crate::parse::ParseError;
 use crate::parse::ParseResult;
 use crate::parse::ParseSeq;
 use crate::parse::Parser;
-use crate::parse::{AggregateParseError, Parse};
 use crate::result::ErrorContinue;
 use crate::Keyword;
 use crate::Operator;

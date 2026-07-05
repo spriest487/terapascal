@@ -15,6 +15,7 @@ pub use self::expr::*;
 pub use self::function::*;
 pub use self::stmt::*;
 pub use self::ty_def::*;
+
 use crate::c::rtti::FuncInfo;
 use crate::c::rtti::TypeInfo;
 use crate::c::string_lit::StringLiteral;
@@ -30,7 +31,7 @@ use std::collections::hash_map::HashMap;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
-use terapascal_ir::MetadataSource;
+use ir::MetadataSource;
 use topological_sort::TopologicalSort;
 
 pub struct Unit<'a> {
@@ -220,8 +221,12 @@ impl<'a> Unit<'a> {
 
         for (func_id, func) in library.functions() {
             match func {
-                ir::Function::Local(func_def) => {
-                    if func_def.type_params.is_empty() {
+                ir::Function::Local(..) => {
+                    let Some(func_info) = library.metadata.get_function_info(*func_id) else {
+                        continue;
+                    };
+
+                    if func_info.identity.type_params().is_empty() {
                         self.translate_func_ref(&ir::FunctionRef::new(*func_id));
                     }
                 },

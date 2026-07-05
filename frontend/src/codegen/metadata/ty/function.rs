@@ -2,12 +2,12 @@ use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::typ;
 use crate::codegen::FunctionInstance;
 use crate::ir;
+use ir::StructLayout;
 use linked_hash_map::LinkedHashMap;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 use terapascal_common::ident::Ident;
-use terapascal_ir::StructLayout;
 
 #[derive(Debug, Clone)]
 pub struct ClosureInstance {

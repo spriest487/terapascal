@@ -6,7 +6,7 @@ use crate::ir;
 use crate::typ::ast::apply_func_decl_ty_args;
 use crate::typ::GenericContext;
 use std::sync::Arc;
-use terapascal_ir::InstructionBuilder;
+use ir::InstructionBuilder as _;
 
 fn translate_args(
     args: &[typ::ast::Expr],

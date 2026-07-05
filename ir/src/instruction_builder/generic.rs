@@ -1,5 +1,6 @@
 use crate::BinOpInstruction;
 use crate::FunctionDef;
+use crate::FunctionIdentity;
 use crate::FunctionParamInfo;
 use crate::FunctionRef;
 use crate::FunctionSig;
@@ -8,18 +9,22 @@ use crate::Instruction;
 use crate::InstructionBuilder;
 use crate::InterfaceDef;
 use crate::LocalID;
+use crate::MetadataSource;
 use crate::Method;
+use crate::NamePath;
 use crate::ObjectID;
 use crate::Ref;
 use crate::StructDef;
 use crate::StructFieldDef;
 use crate::Type;
+use crate::TypeDefID;
+use crate::TypeParam;
 use crate::TypeRef;
 use crate::UnaryOpInstruction;
 use crate::Value;
 use crate::VariantCase;
 use crate::VariantDef;
-use crate::{ArgID, TypeParam};
+use crate::ArgID;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -30,13 +35,147 @@ use terapascal_common::SharedStringKey;
 type TypeMap = HashMap<SharedStringKey, Type>;
 type LocalMap = BTreeMap<LocalID, LocalID>;
 
+/// Calculates the list of type params required to call a function with the given identity.
+/// The argument list passed to an invocation of a method belonging to a generic type is expected
+/// to provide both the type's arguments and the method's type arguments (if any) consecutively
+/// in the same list of args, in that order.
+// todo: this can return an iterator of borrows once types contain type params
+pub fn invocation_type_params<'a>(
+    identity: &'a FunctionIdentity,
+    metadata: &'a impl MetadataSource,
+) -> Vec<Cow<'a, TypeParam>> {
+    let enclosing_type_params = match identity {
+        FunctionIdentity::Method { declaring_type, .. } => {
+            type_def_type_params(declaring_type, metadata)
+        }
+
+        _ => {
+            Vec::new()
+        }
+    };
+
+    let func_type_params = match identity {
+        FunctionIdentity::Global(func_name) => {
+            func_name.type_params.as_slice()
+        }
+
+        FunctionIdentity::Method { type_params, .. } => {
+            type_params.as_slice()
+        }
+
+        FunctionIdentity::Internal { type_params, .. } => {
+            type_params.as_slice()
+        }
+
+        _ => {
+            &[]
+        },
+    };
+
+    enclosing_type_params
+        .into_iter().map(Cow::Owned)
+        .chain(func_type_params.iter().map(Cow::Borrowed))
+        .collect()
+}
+
+// todo: should return borrowed refs once types actually contain type params
+fn type_def_type_params(def_type: &Type, metadata: &impl MetadataSource) -> Vec<TypeParam> {
+    match def_type {
+        Type::Struct(struct_ref) => {
+            type_params_from_struct(struct_ref.def_id, metadata)
+        }
+
+        Type::Variant(variant_ref) => {
+            let Some(variant_def) = metadata.get_variant_def(variant_ref.def_id) else {
+                panic!("build_invocation_type_map: missing def for variant {}", variant_ref.def_id.0);
+            };
+
+            type_params_from_generic_name(&variant_def.name)
+        }
+
+        Type::Object(object_id) | Type::WeakObject(object_id) => {
+            match object_id {
+                ObjectID::Class(class_ref) => {
+                    type_params_from_struct(class_ref.def_id, metadata)
+                }
+                ObjectID::Interface(iface_ref) => {
+                    let Some(iface_def) = metadata.get_interface_def(iface_ref.def_id) else {
+                        panic!("build_invocation_type_map: missing def for interface {}", iface_ref.def_id.0);
+                    };
+
+                    type_params_from_generic_name(&iface_def.name)
+                }
+
+                _ => Vec::new(),
+            }
+        }
+
+        _ => {
+            Vec::new()
+        },
+    }
+}
+
+pub fn build_invocation_type_map(
+    identity: &FunctionIdentity,
+    args: &[Type],
+    metadata: &impl MetadataSource,
+) -> TypeMap {
+    let all_type_params = invocation_type_params(identity, metadata);
+
+    let mut invocation_type_map = TypeMap::new();
+    build_type_map(all_type_params.iter().map(Cow::as_ref), args, &mut invocation_type_map);
+
+    invocation_type_map
+}
+
+pub fn build_type_map<'a>(
+    params: impl IntoIterator<Item=&'a TypeParam>,
+    args: &[Type],
+    types: &mut TypeMap,
+) {
+    for (position, type_param) in params.into_iter().enumerate() {
+        let arg_type = &args[position];
+
+        let param_name = type_param.name.clone();
+
+        if let Some(prev) = types.insert(SharedStringKey(param_name), arg_type.clone()) {
+            assert_eq!(prev, *arg_type, "build_type_map: inconsistent arg types");
+        }
+    }
+}
+
+// todo: defined types should have a type params list instead of using generic names
+fn type_params_from_generic_name(name: &NamePath) -> Vec<TypeParam> {
+    let mut params = Vec::with_capacity(name.type_args.len());
+
+    for arg in &name.type_args {
+        params.push(type_param_from_generic_arg(arg));
+    }
+
+    params
+}
+
+fn type_params_from_struct(id: TypeDefID, metadata: &impl MetadataSource) -> Vec<TypeParam> {
+    let Some(def) = metadata.get_struct_def(id) else {
+        panic!("build_invocation_type_map: missing def for struct {}", id.0);
+    };
+
+    let Some(name) = def.identity.name() else {
+        return Vec::new();
+    };
+
+    type_params_from_generic_name(name)
+}
+
 // TODO: errors
 pub fn instantiate_function_def(
     def: &FunctionDef,
+    type_params: &[TypeParam],
     types: &TypeMap,
     builder: &mut impl InstructionBuilder,
 ) {
-    assert!(def.type_params.iter().all(|param| types.contains_key(&param.name)));
+    assert!(type_params.iter().all(|param| types.contains_key(&param.name)));
 
     let mut locals = LocalMap::new();
 
@@ -299,20 +438,26 @@ pub fn instantiate_sig(sig: &FunctionSig, types: &TypeMap) -> FunctionSig {
     FunctionSig::new(param_types, result_type)
 }
 
+fn type_param_from_generic_arg(arg_type: &Type) -> TypeParam {
+    let Type::Generic(param_name) = arg_type else {
+        panic!("type_param_from_generic_arg: generic name must only contain named parameter types");
+    };
+
+    TypeParam {
+        name: Arc::new(param_name.to_string()),
+        constraint: None,
+    }
+}
+
 pub fn instantiate_name_path(name_params: &mut [Type], type_args: &[Type], types: &mut TypeMap) {
     assert_eq!(type_args.len(), name_params.len(), "instantiate_name_path: type arg count mismatch");
 
-    for (param, arg) in name_params.iter_mut().zip(type_args.iter()) {
-        let Type::Generic(param_name) = param else {
-            panic!("instantiate_name_path: generic name must only contain named parameter types");
-        };
+    let type_params: Vec<_> = name_params
+        .iter()
+        .map(type_param_from_generic_arg)
+        .collect();
 
-        if let Some(prev) = types.insert(SharedStringKey(Arc::new(param_name.to_string())), arg.clone()) {
-            assert_eq!(prev, *arg, "instantiate_name_path: inconsistent arg types");
-        }
-
-        *param = arg.clone();
-    }
+    build_type_map(type_params.iter(), type_args, types)
 }
 
 pub fn instantiate_struct_def<'a>(

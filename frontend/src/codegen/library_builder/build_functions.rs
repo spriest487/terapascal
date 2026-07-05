@@ -1,6 +1,6 @@
 use crate::ast;
-use terapascal_common::ident::IdentPath;
-use crate::codegen::{build_func_def, build_type_param_list};
+use crate::codegen::build_func_def;
+use crate::codegen::build_type_param_list;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::var_param::OutParamTagInfo;
 use crate::codegen::FunctionInstance;
@@ -15,6 +15,7 @@ use ir::MetadataSource;
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::sync::Arc;
+use terapascal_common::ident::IdentPath;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum FunctionDeclKey {
@@ -176,12 +177,10 @@ impl<'a> LibraryBuilder<'a> {
         let def = build_func_def(
             self,
             &func_def.decl.param_groups,
-            func_def.decl.name.type_params.as_ref(),
             &func_def.decl.result_ty,
             &func_def.body,
             &func_def.locals,
             false,
-            None,
             Some(debug_name),
         );
 
@@ -311,12 +310,10 @@ impl<'a> LibraryBuilder<'a> {
                 let def = build_func_def(
                     self,
                     &func_def.decl.param_groups,
-                    func_def.decl.name.type_params.as_ref(),
                     &func_def.decl.result_ty,
                     &func_def.body,
                     &func_def.locals,
                     is_instance_method,
-                    Some(&decl_self_ty),
                     Some(debug_name),
                 );
                 self.functions.insert(id, ir::Function::Local(def));
@@ -379,8 +376,15 @@ impl<'a> LibraryBuilder<'a> {
         func_decl: &typ::ast::FunctionDecl,
         namespace: IdentPath,
     ) -> ir::FunctionID {
+        let decl_type_params = func_decl.name.type_params.as_ref();
+
         let identity = match &func_decl.name.context {
-            typ::ast::FunctionDeclContext::FreeFunction if !func_decl.is_overload() => {
+            typ::ast::FunctionDeclContext::FreeFunction if func_decl.is_overload() => {
+                let type_params = build_type_param_list(self, decl_type_params);
+                ir::FunctionIdentity::internal(func_decl.to_string(), type_params)
+            }
+
+            typ::ast::FunctionDeclContext::FreeFunction => {
                 let ns: Vec<_> = namespace
                     .iter()
                     .map(|part| Arc::new(part.to_string()))
@@ -389,7 +393,7 @@ impl<'a> LibraryBuilder<'a> {
 
                 let mut func_name = ir::FunctionName::new(ns, name);
 
-                let type_params = build_type_param_list(self, func_decl.name.type_params.as_ref());
+                let type_params = build_type_param_list(self, decl_type_params);
                 func_name.type_params = type_params;
 
                 ir::FunctionIdentity::Global(func_name)
@@ -398,10 +402,6 @@ impl<'a> LibraryBuilder<'a> {
             typ::ast::FunctionDeclContext::MethodDef { .. }
             | typ::ast::FunctionDeclContext::MethodDecl { ..} => {
                 panic!("declare_func: {} is a method", func_decl.name)
-            }
-
-            _ => {
-                ir::FunctionIdentity::internal(func_decl.to_string())
             }
         };
 
@@ -504,7 +504,7 @@ impl<'a> LibraryBuilder<'a> {
             other => other.clone(),
         };
 
-        let name = func_decl.name.ident.to_string();
+        let name = func_decl.name.ident.name.clone();
         let declaring_type = self.translate_type(&declaring_type);
 
         match func_decl.kind {

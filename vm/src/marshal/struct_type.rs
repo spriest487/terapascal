@@ -12,10 +12,8 @@ use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::rc::Rc;
-use terapascal_ir::generic::instantiate_struct_def;
-use terapascal_ir::TypeRef;
-use terapascal_ir::InstructionBuilder;
-use terapascal_ir::MetadataSource;
+use ir::InstructionBuilder as _;
+use ir::MetadataSource as _;
 
 #[derive(Debug, Clone)]
 pub struct StructFieldInfo {
@@ -125,7 +123,10 @@ impl Marshaller {
                 MarshalError::MissingTypeDef(struct_type.clone())
             })?;
 
-        let (def, type_index) = match instantiate_struct_def(&generic_def, &type_def_id.args) {
+        let (def, type_index) = match ir::generic::instantiate_struct_def(
+            &generic_def,
+            &type_def_id.args
+        ) {
             Cow::Borrowed(..) => {
                 // not generic
                 let def = Rc::new(generic_def);
@@ -156,7 +157,7 @@ impl Marshaller {
         Ok((def, type_index))
     }
 
-    pub(crate) fn gen_class_dtor(&mut self, type_def_id: &Rc<TypeRef>) -> MarshalResult<()> {
+    pub(crate) fn gen_class_dtor(&mut self, type_def_id: &Rc<ir::TypeRef>) -> MarshalResult<()> {
         let class_type = type_def_id.to_class_object_type();
 
         self.gen_runtime_dtor(&class_type, |builder, self_arg| {

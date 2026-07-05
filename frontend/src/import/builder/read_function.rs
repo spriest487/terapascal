@@ -3,8 +3,6 @@ use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionParamItem;
 use crate::ast::FunctionParamMod;
 use crate::ast::FunctionParamModDecl;
-use terapascal_common::ident::Ident;
-use terapascal_common::ident::IdentPath;
 use crate::ast::Visibility;
 use crate::codegen::library_builder::FunctionDeclKey;
 use crate::codegen::library_builder::MethodDeclKey;
@@ -20,12 +18,15 @@ use crate::typ::ast::FunctionName;
 use crate::typ::ast::FunctionParamGroup;
 use crate::typ::ast::MethodDecl;
 use crate::typ::ast::Tag;
-use crate::typ::{EvaluatedConstExpr, Symbol};
+use crate::typ::EvaluatedConstExpr;
 use crate::typ::ScopeID;
+use crate::typ::Symbol;
 use crate::typ::Type;
 use crate::typ::TypeName;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 
 impl ImportBuilder<'_> {
     pub fn read_params(&mut self, params: &[ir::FunctionParamInfo]) -> ImportResult<Vec<FunctionParamGroup>> {
@@ -101,7 +102,7 @@ impl ImportBuilder<'_> {
                 self.read_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, &[])?;
             }
 
-            ir::FunctionIdentity::Internal(..) => {
+            ir::FunctionIdentity::Internal { .. } => {
                 // ignored
             }
         }
