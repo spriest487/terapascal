@@ -24,7 +24,13 @@ type
         function IsSome: Boolean;
     end;
 
-    IToString = interface;
+    IComparable = interface
+        function Compare(other: Self): Integer;
+    end;
+
+    IToString = interface
+        function ToString: String;
+    end;
 
     Result[T, E] = variant where E is IToString
         Ok: T;
@@ -80,14 +86,7 @@ type
         function Sequence: CharSequence;
     end;
 
-    IComparable = interface
-        function Compare(other: Self): Integer;
-    end;
-
-    IToString = interface
-        function ToString: String;
-    end;
-
+{$IFDEF RTTI}
     // compiler attributes for identifying Pascal types in compiled libraries
 
     // indicates that a record type represents a set
@@ -112,7 +111,6 @@ type
         enumType: TypeInfo;
     end;
 
-{$IFDEF RTTI}
     InvokeError = variant of IToString
         InvalidArgs;
         NotInvokable;
