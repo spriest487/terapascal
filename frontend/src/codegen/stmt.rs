@@ -16,9 +16,9 @@ use crate::typ::system_option_type_of;
 use crate::typ::TypeArgsResult;
 use crate::typ::OPTION_NONE_CASE;
 use crate::typ::OPTION_SOME_CASE;
+use ir::InstructionBuilder as _;
 use std::sync::Arc;
 use terapascal_common::span::Spanned;
-use terapascal_ir::InstructionBuilder;
 
 pub fn translate_stmt(stmt: &typ::ast::Stmt, builder: &mut IRBuilder) {
     builder.push_source(stmt.annotation().span().clone());

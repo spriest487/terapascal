@@ -1,7 +1,7 @@
 mod builder;
 
+use self::builder::FuncInstanceBuilder;
 use crate::c::boxed::BoxTypeID;
-use crate::c::function::builder::FuncInstanceBuilder;
 use crate::c::type_map::TypeID;
 use crate::c::CBuilder;
 use crate::c::DynArrayTypeID;
@@ -12,11 +12,9 @@ use crate::c::TypeDecl;
 use crate::c::TypeDefName;
 use crate::c::Unit;
 use crate::c::VariableID;
-use ir::generic::build_invocation_type_map;
-use ir::generic::instantiate_function_def;
-use ir::generic::instantiate_sig;
 use ir::MetadataSource;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::env;
 use std::fmt;
 use std::rc::Rc;
@@ -535,26 +533,29 @@ impl<'a> Unit<'a> {
             panic!("build_func_ref: missing function info for {}", func_display);
         };
 
-        let def_type_params = func_info.identity.type_params();
+        let required_type_params: Vec<_> = ir::generic::invocation_type_params(&func_info.identity, self.metadata)
+            .cloned()
+            .collect();
 
-        if func_ref.args.len() != def_type_params.len() {
+        if func_ref.args.len() != required_type_params.len() {
             panic!(
                 "build_func_ref: incorrect number of type parameters for {} (invocation has {}, expected: {})",
                 func_ref.to_pretty_string(self.metadata),
                 func_ref.args.len(),
-                def_type_params.len(),
+                required_type_params.len(),
             );
         }
 
         let def = if func_ref.args.len() == 0 {
             Cow::Borrowed(generic_def)
         } else {
-            let types = build_invocation_type_map(&func_info.identity, &func_ref.args, self.metadata);
+            let mut types = HashMap::new();
+            ir::generic::build_type_map(&required_type_params, &func_ref.args, &mut types);
 
             let mut builder = FuncInstanceBuilder::new(self);
-            let sig = instantiate_sig(&generic_def.sig, &types);
+            let sig = ir::generic::instantiate_sig(&generic_def.sig, &types);
 
-            instantiate_function_def(&generic_def, def_type_params, &types, &mut builder);
+            ir::generic::instantiate_function_def(&generic_def, &required_type_params, &types, &mut builder);
 
             let body = builder.finish();
 

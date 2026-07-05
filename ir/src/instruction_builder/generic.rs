@@ -111,19 +111,6 @@ fn type_def_type_params<'a>(def_type: &'a Type, metadata: &'a impl MetadataSourc
     }
 }
 
-pub fn build_invocation_type_map(
-    identity: &FunctionIdentity,
-    args: &[Type],
-    metadata: &impl MetadataSource,
-) -> TypeMap {
-    let all_type_params = invocation_type_params(identity, metadata);
-
-    let mut invocation_type_map = TypeMap::new();
-    build_type_map(all_type_params, args, &mut invocation_type_map);
-
-    invocation_type_map
-}
-
 pub fn build_type_map<'a>(
     params: impl IntoIterator<Item=&'a TypeParam>,
     args: &[Type],
