@@ -15,10 +15,11 @@ use crate::VariableID;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
+use std::fmt;
 use std::fmt::Formatter;
+use std::iter;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::{fmt, iter};
 use terapascal_common::path::Path;
 use terapascal_common::write_joined;
 
