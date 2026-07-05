@@ -229,8 +229,8 @@ impl<'a> LibraryBuilder<'a> {
         self.functions.insert(
             id,
             ir::Function::External(ir::ExternalFunctionRef {
-                src: extern_src.value.as_ref().clone(),
-                symbol: (*extern_decl.name.ident.name).clone(),
+                src: extern_src.value.clone(),
+                symbol: extern_decl.name.ident.name.clone(),
                 sig: Rc::new(ir::FunctionSig::new(param_types, result_type))
             }),
         );
@@ -391,7 +391,7 @@ impl<'a> LibraryBuilder<'a> {
                     .collect();
                 let name = func_decl.name.ident.name.clone();
 
-                let mut func_name = ir::FunctionName::new(ns, name);
+                let mut func_name = ir::DeclPath::new(ns, name);
 
                 let type_params = build_type_param_list(self, decl_type_params);
                 func_name.type_params = type_params;

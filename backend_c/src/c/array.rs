@@ -218,7 +218,7 @@ impl<'a> Unit<'a> {
                     [
                         Statement::Expr(forget_mem.call([
                             arr_elements_ptr,
-                            Expr::LitCString("forget".to_string()),
+                            Expr::lit_c_string("forget".to_string()),
                         ])),
                     ]
                 ),

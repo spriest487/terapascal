@@ -96,6 +96,10 @@ impl<Part> Path<Part> {
         self.parts.as_slice()
     }
 
+    pub fn as_mut_slice(&mut self) -> &mut [Part] {
+        self.parts.as_mut_slice()
+    }
+
     pub fn child(mut self, part: Part) -> Self {
         self.parts.push(part);
         self

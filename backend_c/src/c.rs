@@ -137,7 +137,7 @@ impl<'a> Unit<'a> {
         let system_funcs = builtin::system_funcs();
 
         for (pas_name, c_name, _return_ty, _params) in &system_funcs {
-            let func_name = ir::FunctionName::new([
+            let func_name = ir::DeclPath::new([
                 "System".to_string(),
             ], pas_name.to_string());
 
@@ -233,7 +233,7 @@ impl<'a> Unit<'a> {
 
                 ir::Function::External(func_ref) => {
                     // builtin functions should already be added
-                    if func_ref.src == ir::BUILTIN_SRC {
+                    if func_ref.src.as_str() == ir::BUILTIN_SRC {
                         continue;
                     }
 

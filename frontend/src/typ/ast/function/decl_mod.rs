@@ -69,7 +69,7 @@ impl DeclMod {
                     let src_str = typecheck_expr(src, &string_ty, ctx)
                         .and_then(|src| const_eval_string(&src, ctx))
                         .or_continue_with(ctx, || {
-                            EvaluatedConstExpr::create_string("", src.span().clone())
+                            EvaluatedConstExpr::create_string("".to_string(), src.span().clone())
                         });
 
                     let extern_mod = DeclMod::External {

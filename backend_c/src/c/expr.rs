@@ -11,6 +11,7 @@ use crate::c::Unit;
 use crate::c::VariableID;
 use crate::ir;
 use std::fmt;
+use std::sync::Arc;
 use terapascal_common::write_joined;
 
 #[allow(unused)]
@@ -85,7 +86,7 @@ pub enum Expr {
     Function(FunctionName),
     Deref(Box<Expr>),
     Global(GlobalName), // global value
-    LitCString(String), // C string literal
+    LitCString(Arc<String>), // C string literal
     LitBool(bool),
     LitInt(i128),
     LitFloat(f64),
@@ -374,6 +375,10 @@ impl Expr {
             op: PrefixOp::Not,
             operand: Box::new(self),
         }
+    }
+
+    pub fn lit_c_string(s: impl Into<Arc<String>>) -> Self {
+        Self::LitCString(s.into())
     }
 
     pub(crate) fn translate_infix_op(

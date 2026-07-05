@@ -209,7 +209,7 @@ impl<'a> Unit<'a> {
         ));
         init_stmts.push(Statement::Expr(Expr::Function(FunctionName::Forget).call([
             Expr::Global(GlobalName::TypeInfoList),
-            Expr::LitCString("forget".to_string()),
+            Expr::lit_c_string("forget".to_string()),
         ])));
 
         init_stmts.push(Statement::assign(
@@ -224,7 +224,7 @@ impl<'a> Unit<'a> {
         ));
         init_stmts.push(Statement::Expr(Expr::Function(FunctionName::Forget).call([
             Expr::Global(GlobalName::FuncInfoList),
-            Expr::LitCString("forget".to_string()),
+            Expr::lit_c_string("forget".to_string()),
         ])));
 
         // initialize type info fields that can't be statically initialized

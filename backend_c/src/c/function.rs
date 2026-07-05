@@ -12,15 +12,16 @@ use crate::c::TypeDecl;
 use crate::c::TypeDefName;
 use crate::c::Unit;
 use crate::c::VariableID;
-use std::borrow::Cow;
-use std::env;
-use std::fmt;
-use std::rc::Rc;
-use terapascal_ir as ir;
 use ir::generic::build_invocation_type_map;
 use ir::generic::instantiate_function_def;
 use ir::generic::instantiate_sig;
 use ir::MetadataSource;
+use std::borrow::Cow;
+use std::env;
+use std::fmt;
+use std::rc::Rc;
+use std::sync::Arc;
+use terapascal_ir as ir;
 
 #[derive(Copy, Clone)]
 pub struct FunctionInstance {
@@ -374,8 +375,8 @@ impl fmt::Display for FunctionDef {
 
 pub struct FfiFunction {
     pub decl: FunctionDecl,
-    pub symbol: String,
-    pub src: String,
+    pub symbol: Arc<String>,
+    pub src: Arc<String>,
 }
 
 impl FfiFunction {
@@ -413,8 +414,8 @@ impl FfiFunction {
         Statement::Expr(
             Expr::Function(self.decl.name).assign_from(
                 Expr::Function(FunctionName::LoadSymbol).call([
-                    Expr::LitCString(lib_filename),
-                    Expr::LitCString(self.symbol.clone()),
+                    Expr::lit_c_string(lib_filename),
+                    Expr::lit_c_string(self.symbol.clone()),
                 ])
             )
         )

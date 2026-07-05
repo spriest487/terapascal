@@ -32,7 +32,73 @@ pub use self::val::*;
 
 use serde::Deserialize;
 use serde::Serialize;
-use std::fmt;
+use std::{fmt, iter};
+use std::sync::Arc;
+use terapascal_common::path::Path;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub struct DeclPath {
+    pub path: Path<Arc<String>>,
+    pub type_params: Vec<TypeParam>,
+}
+
+impl DeclPath {
+    pub fn new<P>(namespace: impl IntoIterator<Item=P>, name: impl Into<Arc<String>>) -> Self
+    where
+        P: Into<Arc<String>>,
+    {
+        let namespace_parts = namespace
+            .into_iter()
+            .map(|part| part.into());
+
+        Self {
+            path: Path::from_parts(namespace_parts.chain(iter::once(name.into()))),
+            type_params: Vec::new(),
+        }
+    }
+
+    pub fn with_type_params(mut self, type_params: impl IntoIterator<Item=TypeParam>) -> Self {
+        self.type_params = type_params.into_iter().collect();
+        self
+    }
+
+    pub fn name(&self) -> &Arc<String> {
+        &self.path.as_slice()[self.path.len() - 1]
+    }
+
+    pub fn name_mut (&mut self) -> &mut Arc<String> {
+        let index = self.path.len() - 1;
+        &mut self.path.as_mut_slice()[index]
+    }
+
+    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
+        let mut buf = String::new();
+        _ = formatter.format_decl(self, &mut buf);
+        buf
+    }
+
+    pub fn parent(&self) -> Option<Path<Arc<String>>> {
+        if self.path.len() < 2 {
+            return None;
+        }
+
+        let mut path = self.path.clone();
+        path.pop();
+
+        Some(path)
+    }
+
+    pub fn child(mut self, name: impl Into<Arc<String>>) -> Self {
+        self.path.push(name.into());
+        self
+    }
+}
+
+impl fmt::Display for DeclPath {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        RawFormatter.format_decl(self, f)
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct NamePath {
@@ -73,21 +139,8 @@ impl NamePath {
     }
 
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
-        let mut buf = self.path.join(".");
-
-        if !self.type_args.is_empty() {
-            buf.push('[');
-            for (i, ty_arg) in self.type_args.iter().enumerate() {
-                if i > 0 {
-                    buf.push_str(", ");
-                }
-
-                let ty_name = ty_arg.to_pretty_string(formatter);
-                buf.push_str(&ty_name);
-            }
-            buf.push(']');
-        }
-
+        let mut buf = String::new();
+        _ = formatter.format_name(self, &mut buf);
         buf
     }
 

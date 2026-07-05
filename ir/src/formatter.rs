@@ -4,12 +4,12 @@ use crate::metadata::MethodID;
 use crate::types::Type;
 use crate::val::Ref;
 use crate::val::Value;
-use crate::FieldID;
 use crate::FunctionRef;
 use crate::InterfaceRef;
 use crate::NamePath;
 use crate::TypeDefID;
 use crate::UnaryOpInstruction;
+use crate::{DeclPath, FieldID, TypeParam};
 use std::fmt;
 use std::write;
 
@@ -364,6 +364,15 @@ pub trait IRFormatter {
         Ok(())
     }
 
+    fn format_decl(&self, name: &DeclPath, f: &mut dyn fmt::Write) -> fmt::Result {
+        write!(f, "{}", name.path.join("."))?;
+
+        if !name.type_params.is_empty() {
+            self.format_type_params(&name.type_params, f)?;
+        }
+        Ok(())
+    }
+
     fn format_name(&self, name: &NamePath, f: &mut dyn fmt::Write) -> fmt::Result {
         write!(f, "{}", name.path.join("."))?;
 
@@ -371,6 +380,23 @@ pub trait IRFormatter {
             self.format_type_args(&name.type_args, f)?;
         }
         Ok(())
+    }
+
+    fn format_type_params(&self, params: &[TypeParam], f: &mut dyn fmt::Write) -> fmt::Result {
+        write!(f, "[")?;
+        for (i, param) in params.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+
+            write!(f, "{}", param.name)?;
+
+            if let Some(constraint) = &param.constraint {
+                write!(f, " is ")?;
+                self.format_type(constraint, f)?;
+            }
+        }
+        write!(f, "]")
     }
     
     fn format_type_args(&self, args: &[Type], f: &mut dyn fmt::Write) -> fmt::Result {

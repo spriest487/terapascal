@@ -19,7 +19,7 @@ use crate::typeinfo::TypeInfo;
 use crate::FunctionID;
 use crate::FunctionIdentity;
 use crate::FunctionInfo;
-use crate::FunctionName;
+use crate::DeclPath;
 use crate::FunctionSig;
 use crate::IRFormatter;
 use crate::InterfaceDecl;
@@ -304,7 +304,7 @@ impl Metadata {
             .flat_map(|src_ty| src_ty.methods.iter())
     }
 
-    pub fn find_function(&self, name: &FunctionName) -> Option<FunctionID> {
+    pub fn find_function(&self, name: &DeclPath) -> Option<FunctionID> {
         // do a linear search for now because we don't want to store a redundant map of names,
         // and a user can always make a hashmap themselves if looking up names this way is too slow.
         self.function_info.iter().find_map(|(id, func)| {

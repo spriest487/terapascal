@@ -7,7 +7,7 @@ use crate::ExecResult;
 use crate::GlobalValue;
 use crate::Vm;
 use ir::generic::*;
-use ir::FunctionName;
+use ir::DeclPath;
 use ir::MetadataSource as _;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -314,7 +314,7 @@ pub fn instantiate_func(
         }
 
         ir::FunctionIdentity::Global(func_name) => {
-            ir::FunctionIdentity::Global(FunctionName {
+            ir::FunctionIdentity::Global(DeclPath {
                 path: func_name.path.clone(),
                 type_params: func_name.type_params
                     .iter()

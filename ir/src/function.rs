@@ -1,4 +1,3 @@
-use crate::ClosureIdentity;
 use crate::IRFormatter;
 use crate::InstructionList;
 use crate::Label;
@@ -12,16 +11,13 @@ use crate::Type;
 use crate::TypeDefID;
 use crate::TypeParam;
 use crate::VariableID;
+use crate::{ClosureIdentity, DeclPath};
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::fmt;
-use std::fmt::Formatter;
-use std::iter;
 use std::rc::Rc;
 use std::sync::Arc;
-use terapascal_common::path::Path;
-use terapascal_common::write_joined;
 
 pub const BUILTIN_SRC: &str = "rt";
 
@@ -140,61 +136,16 @@ impl fmt::Display for FunctionSig {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalFunctionRef {
-    pub symbol: String,
-    pub src: String,
+    pub symbol: Arc<String>,
+    pub src: Arc<String>,
 
     pub sig: Rc<FunctionSig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
-pub struct FunctionName {
-    pub path: Path<Arc<String>>,
-    pub type_params: Vec<TypeParam>,
-}
-
-impl FunctionName {
-    pub fn new<P>(namespace: impl IntoIterator<Item=P>, name: impl Into<Arc<String>>) -> Self
-    where
-        P: Into<Arc<String>>,
-    {
-        let namespace_parts = namespace
-            .into_iter()
-            .map(|part| part.into());
-
-        Self {
-            path: Path::from_parts(namespace_parts.chain(iter::once(name.into()))),
-            type_params: Vec::new(),
-        }
-    }
-
-    pub fn with_type_params(mut self, type_params: impl IntoIterator<Item=TypeParam>) -> Self {
-        self.type_params = type_params.into_iter().collect();
-        self
-    }
-}
-
-impl fmt::Display for FunctionName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.path.join("."))?;
-
-        if !self.type_params.is_empty() {
-            write!(f, "[")?;
-
-            write_joined(f, ", ", self.type_params
-                .iter()
-                .map(|ty| ty.name.as_str()))?;
-
-            write!(f, "]")?;
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub enum FunctionIdentity {
     // function has a global path
-    Global(FunctionName),
+    Global(DeclPath),
 
     Method {
         declaring_type: Type,
@@ -282,7 +233,7 @@ impl FunctionIdentity {
         }
     }
 
-    pub fn global_name(&self) -> Option<&FunctionName> {
+    pub fn global_name(&self) -> Option<&DeclPath> {
         match self {
             FunctionIdentity::Global(path) => Some(path),
             _ => None,

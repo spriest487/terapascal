@@ -2212,7 +2212,7 @@ impl Vm {
 
     pub fn define_builtin(
         &mut self,
-        name: ir::FunctionName,
+        name: ir::DeclPath,
         func: BuiltinFn,
         ret: ir::Type,
         params: Vec<ir::Type>,
@@ -2295,7 +2295,7 @@ impl Vm {
         let system_funcs: Vec<_> = builtin::system_funcs().into_iter().collect();
 
         for (ident, func, ret, params) in system_funcs {
-            let name = ir::FunctionName::new(["System".to_string()], ident.to_string());
+            let name = ir::DeclPath::new(["System".to_string()], ident.to_string());
             self.define_builtin(name, func, ret, params);
         }
     }
@@ -2312,7 +2312,7 @@ impl Vm {
                 }
 
                 ir::Function::External(external_ref)
-                if external_ref.src == ir::BUILTIN_SRC => {
+                if external_ref.src.as_str() == ir::BUILTIN_SRC => {
                     continue;
                 }
 

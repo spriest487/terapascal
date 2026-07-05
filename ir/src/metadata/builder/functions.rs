@@ -1,7 +1,7 @@
 use crate::FunctionID;
 use crate::FunctionIdentity;
 use crate::FunctionInfo;
-use crate::FunctionName;
+use crate::DeclPath;
 use crate::FunctionParamInfo;
 use crate::FunctionSig;
 use crate::MetadataBuilder;
@@ -107,7 +107,7 @@ impl MetadataBuilder {
         self.define_struct(id, closure_def);
     }
 
-    pub fn find_function(&self, name: &FunctionName) -> Option<FunctionID> {
+    pub fn find_function(&self, name: &DeclPath) -> Option<FunctionID> {
         self.find_in_self_or_refs(|metadata| metadata.find_function(name))
     }
 }

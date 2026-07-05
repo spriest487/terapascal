@@ -37,13 +37,14 @@ use std::mem::size_of;
 use std::path::PathBuf;
 use std::ptr::slice_from_raw_parts_mut;
 use std::rc::Rc;
+use terapascal_common::SharedStringKey;
 
 #[derive(Debug, Clone)]
 pub struct Marshaller {
     metadata: ir::Metadata,
 
     types: BTreeMap<TypeID, NativeType>,
-    libs: HashMap<String, Rc<dlopen::Library>>,
+    libs: HashMap<SharedStringKey, Rc<dlopen::Library>>,
 
     struct_layouts: BTreeMap<TypeID, StructLayout>,
     variant_layouts: BTreeMap<TypeID, VariantLayout>,
@@ -271,22 +272,22 @@ impl Marshaller {
         };
 
         let sym_load_err = |err: DlopenError| MarshalError::ExternSymbolLoadFailed {
-            lib: func_ref.src.clone(),
-            symbol: func_ref.symbol.clone(),
+            lib: func_ref.src.to_string(),
+            symbol: func_ref.symbol.to_string(),
             path: lib_path.clone(),
             #[allow(deprecated)]
             msg: err.description().to_string(),
             cause: err.source().map(|e| e.to_string())
         };
 
-        let lib = match self.libs.get(&func_ref.src) {
+        let lib = match self.libs.get(func_ref.src.as_ref()) {
             Some(lib_rc) => lib_rc.clone(),
             None => {
                 let lib = dlopen::Library::open(&lib_path)
                     .map_err(sym_load_err)?;
 
                 let lib_rc = Rc::new(lib);
-                self.libs.insert(func_ref.src.clone(), lib_rc.clone());
+                self.libs.insert(SharedStringKey(func_ref.src.clone()), lib_rc.clone());
                 lib_rc
             },
         };

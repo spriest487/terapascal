@@ -382,8 +382,8 @@ pub struct EvaluatedConstExpr<Val> {
 }
 
 impl EvaluatedConstExpr<Arc<String>> {
-    pub fn create_string(s: impl Into<String>, span: Span) -> Self {
-        let s = Arc::new(s.into());
+    pub fn create_string(s: impl Into<Arc<String>>, span: Span) -> Self {
+        let s = s.into();
 
         let literal = Literal::String(s.clone());
         let value = ConstValue::string_literal(s.clone(), span);

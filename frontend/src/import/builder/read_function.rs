@@ -191,7 +191,7 @@ impl ImportBuilder<'_> {
         Ok(())
     }
 
-    fn read_func_name(&mut self, name: &ir::FunctionName) -> ImportResult<Symbol> {
+    fn read_func_name(&mut self, name: &ir::DeclPath) -> ImportResult<Symbol> {
         let ident_path = IdentPath::from_parts(name.path
             .iter()
             .map(|part| Ident { name: part.clone(), span: self.span() }));
@@ -209,7 +209,7 @@ impl ImportBuilder<'_> {
         tags: Vec<Tag>,
         result_type: Type,
         param_groups: Vec<FunctionParamGroup>,
-        func_name: &ir::FunctionName,
+        func_name: &ir::DeclPath,
     ) -> ImportResult<()> {
         let Some(lib_func) = self.library.functions.get(&func_id) else {
             return Err(ImportError::MissingFuncDef(func_id));
