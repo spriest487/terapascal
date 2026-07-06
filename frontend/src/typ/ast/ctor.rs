@@ -215,20 +215,27 @@ fn typecheck_object_ctor_type(
         None => None,
     };
 
+    let ctor_type_span = type_expr
+        .as_ref()
+        .map(|expr| expr.span())
+        .unwrap_or(ctor_span);
+
     let ctor_ty = find_ctor_ty(
         expect_ty,
         ty_args.as_ref(),
         type_expr.as_ref(),
-        ctor_span,
+        ctor_type_span,
         ctx,
     )?;
 
     let Some(ctor_ty_name) = ctor_ty.full_name() else {
         return Err(TypeError::InvalidCtorType {
             ty: ctor_ty.into(),
-            span: ctor_span.clone(),
+            span: ctor_type_span.clone(),
         });
     };
+
+    ctx.expect_visible(&ctor_ty_name.full_path, ctor_type_span)?;
 
     if ctor_ty.is_unspecialized_generic() {
         let err = GenericError::CannotInferArgs {
@@ -237,15 +244,8 @@ fn typecheck_object_ctor_type(
         };
 
         return Err(TypeError::NameError {
-            span: ctor_span.clone(),
+            span: ctor_type_span.clone(),
             err: NameError::GenericError(err),
-        });
-    }
-
-    if !ctx.is_visible(&ctor_ty_name.full_path) {
-        return Err(TypeError::NameNotVisible {
-            name: ctor_ty_name.into_owned().full_path,
-            span: ctor_span.clone(),
         });
     }
 

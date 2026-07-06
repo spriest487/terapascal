@@ -97,18 +97,24 @@ impl SupersClause {
         for base_ty_name in &src.types {
             let implements_ty = typecheck_typename(base_ty_name, ctx)?;
 
+            let item_span = base_ty_name.get_span()
+                .cloned()
+                .unwrap_or_else(|| src.kw_span.clone());
+
             match implements_ty.ty() {
                 Type::Interface(iface_name) => {
                     let iface_def = ctx
                         .find_iface_def(&iface_name.full_path)
                         .map_err(|err| {
-                            TypeError::from_name_err(err, iface_name.full_path.path_span())
+                            TypeError::from_name_err(err, item_span.clone())
                         })?;
+
+                    ctx.expect_visible(&iface_name.full_path, &item_span)?;
 
                     if iface_def.forward {
                         return Err(TypeError::InvalidBaseType {
                             ty: self_ty.clone(),
-                            span: iface_name.full_path.path_span(),
+                            span: item_span,
                             invalid_base_ty: implements_ty.into(),
                             reason: InvalidBaseTypeReason::Forward,
                         })
@@ -121,7 +127,7 @@ impl SupersClause {
                     ty: self_ty.clone(),
                     invalid_base_ty: implements_ty.into(),
                     reason: InvalidBaseTypeReason::NotInterface,
-                    span: base_ty_name.get_span().unwrap_or(&src.span).clone(),
+                    span: item_span,
                 }),
             }
         }
