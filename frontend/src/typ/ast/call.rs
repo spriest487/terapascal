@@ -252,7 +252,7 @@ pub fn typecheck_call(
         }
 
         // object constructor invocation without args is indistinguishable from a call expression
-        Value::Type(target_type, _span) => {
+        Value::Type(target_type, span) => {
             let Some(ctor) = func_call.clone().try_into_empty_object_ctor() else {
                 return Err(TypeError::NotCallable(Box::new(target.annotation().clone())))
             };
@@ -261,10 +261,14 @@ pub fn typecheck_call(
                 Some(list) => Some(typecheck_type_args(&list, ctx)?),
                 None => None,
             };
-            
+
             assert_eq!(0, ctor.args.members.len());
             
             let object_type = target_type.clone();
+
+            if let Some(target_type_name) = target_type.full_name() {
+                ctx.expect_visible(&target_type_name.full_path, span)?;
+            }
             
             Arc::new(Invocation::ObjectCtor {
                 span: ctor.annotation.clone(),

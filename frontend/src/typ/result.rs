@@ -1520,7 +1520,7 @@ impl fmt::Display for TypeError {
             },
 
             TypeError::NameNotVisible { name, .. } => {
-                write!(f, "`{}` is not is not visible in the current context", name)
+                write!(f, "`{}` is not visible in the current context", name)
             },
 
             TypeError::TypeMemberInaccessible {

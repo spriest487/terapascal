@@ -2274,6 +2274,17 @@ impl Context {
         self.scopes.is_visible(name)
     }
 
+    pub fn expect_visible(&self, name: &IdentPath, at: &Span) -> TypeResult<()> {
+        if self.is_visible(name) {
+            return Ok(());
+        }
+
+        Err(TypeError::NameNotVisible {
+            name: name.clone(),
+            span: at.clone(),
+        })
+    }
+
     pub fn get_visibility(&self, name: &IdentPath) -> Option<Visibility> {
         self.scopes.get_visibility(name)
     }
