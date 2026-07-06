@@ -1,9 +1,7 @@
-use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionParamItem;
 use crate::ast::FunctionParamMod;
 use crate::ast::FunctionParamModDecl;
-use crate::ast::Visibility;
 use crate::codegen::FunctionDeclKey;
 use crate::codegen::FunctionInstance;
 use crate::codegen::MethodDeclKey;
@@ -148,10 +146,7 @@ impl ImportBuilder<'_> {
         // TODO: import published members
         // if necessary, we can inspect the method's RTTI metadata to determine if this method
         // was marked as published instead of public
-        let member_access = match func_info.visibility {
-            ir::Visibility::Internal => Access::Private,
-            ir::Visibility::Public => Access::Public,
-        };
+        let member_access = Self::read_member_visibility(func_info.visibility);
 
         let decl_key = FunctionDeclKey::Method(MethodDeclKey {
             self_ty: declaring_type.clone(),
@@ -265,11 +260,7 @@ impl ImportBuilder<'_> {
             name: func_name.full_path,
         };
 
-        let visibility = match func_info.visibility {
-            ir::Visibility::Public => Visibility::Interface,
-            ir::Visibility::Internal => Visibility::Implementation,
-        };
-
+        let visibility = Self::read_visibility(func_info.visibility);
         let published = func_info.invoker.is_some();
 
         if !self.imported_funcs.contains_key(&decl_key) {

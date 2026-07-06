@@ -33,7 +33,7 @@ pub struct VariantDef {
     pub name: DeclPath,
     pub tag_type: Type,
 
-    pub access: Visibility,
+    pub visibility: Visibility,
 
     pub cases: Vec<VariantCase>,
     

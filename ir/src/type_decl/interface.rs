@@ -20,7 +20,7 @@ pub struct InterfaceMethod {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InterfaceDef {
     pub name: DeclPath,
-    pub access: Visibility,
+    pub visibility: Visibility,
 
     pub methods: Vec<InterfaceMethod>,
     
@@ -31,7 +31,7 @@ impl InterfaceDef {
     pub fn new(name: impl Into<DeclPath>, access: Visibility, methods: impl Into<Vec<InterfaceMethod>>) -> Self {
         Self {
             name: name.into(),
-            access,
+            visibility: access,
             methods: methods.into(),
             tags: Vec::new(),
         }

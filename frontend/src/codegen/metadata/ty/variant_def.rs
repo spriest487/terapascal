@@ -40,7 +40,7 @@ pub fn translate_variant_def(
 
     ir::VariantDef {
         name: name_path,
-        access: visibility,
+        visibility: visibility,
         tag_type,
         tags,
         cases,

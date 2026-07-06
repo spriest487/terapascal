@@ -1,4 +1,5 @@
-use crate::ast::{Access, StructKind};
+use crate::ast::Access;
+use crate::ast::StructKind;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::translate_decl_name;
 use crate::codegen::typ;

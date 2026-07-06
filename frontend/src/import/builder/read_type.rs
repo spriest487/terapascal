@@ -1,4 +1,3 @@
-use crate::ast::Access;
 use crate::ast::FunctionDeclKind;
 use crate::ast::StructKind;
 use crate::ast::Visibility;
@@ -99,6 +98,8 @@ impl ImportBuilder<'_> {
 
         let tags = self.read_tags(&def.tags)?;
 
+        let visibility = Self::read_visibility(def.visibility);
+
         let variant_decl = VariantDecl {
             name: Arc::new(name),
             implements,
@@ -116,9 +117,9 @@ impl ImportBuilder<'_> {
             kw_span: self.span(),
         };
 
-        self.declare_type(&def.name, variant_type)?;
+        self.declare_type(&def.name, variant_type, visibility)?;
 
-        self.variant_defs.insert(def_path, variant_decl);
+        self.variant_defs.insert(def_path, (variant_decl, visibility));
 
         Ok(())
     }
@@ -176,10 +177,7 @@ impl ImportBuilder<'_> {
 
             let field_type = self.read_type(&field.ty)?;
 
-            let access = match field.visibility {
-                ir::Visibility::Internal => Access::Private,
-                ir::Visibility::Public => Access::Public,
-            };
+            let access = Self::read_member_visibility(field.visibility);
 
             sections.push(StructDeclSection {
                 members: vec![StructMemberDecl::Field(FieldDecl {
@@ -199,6 +197,8 @@ impl ImportBuilder<'_> {
 
         let where_clause = None; // TODO: generic constraints in IR
 
+        let visibility = Self::read_visibility(def.visibility);
+
         let struct_decl = StructDecl {
             name: Arc::new(name),
             kind,
@@ -217,14 +217,14 @@ impl ImportBuilder<'_> {
             kw_span: self.span(),
         };
 
-        self.declare_type(name_path, struct_type)?;
+        self.declare_type(name_path, struct_type, visibility)?;
 
-        self.struct_defs.insert(def_path, struct_decl);
+        self.struct_defs.insert(def_path, (struct_decl, visibility));
 
         Ok(())
     }
 
-    fn declare_type(&mut self, name_path: &ir::DeclPath, as_type: Type) -> ImportResult<()> {
+    fn declare_type(&mut self, name_path: &ir::DeclPath, as_type: Type, visibility: Visibility) -> ImportResult<()> {
         let span = self.span();
 
         let unit_scope = if let Some(unit_path) = name_path.parent() {
@@ -235,7 +235,7 @@ impl ImportBuilder<'_> {
 
         if let Some(ctx) = self.root_ctx.as_mut() {
             let ident = Ident::new(&name_path.path.last(), span);
-            ctx.declare_type(ident, as_type, Visibility::Interface, true);
+            ctx.declare_type(ident, as_type, visibility, true);
 
             ctx.pop_scope(unit_scope);
         }
@@ -534,6 +534,8 @@ impl ImportBuilder<'_> {
                 ImportError::MissingTypeDef(type_name)
             })?;
 
+        let visibility = Self::read_visibility(def.visibility);
+
         let tags = self.read_tags(&def.tags)?;
         let name = self.read_decl_path(&def.name)?;
 
@@ -604,8 +606,6 @@ impl ImportBuilder<'_> {
             let Some(root_ctx) = builder.root_ctx.as_mut() else {
                 return Ok(());
             };
-
-            let visibility = Visibility::Interface; // TODO: access modifiers in IR
 
             if let Err(err) = root_ctx.declare_iface(Arc::new(iface_decl), visibility) {
                 let msg = format!("Declaring interface type {} failed", iface_type);
@@ -797,10 +797,10 @@ impl ImportBuilder<'_> {
         assert!(self.type_methods.is_empty());
 
         let struct_defs: Vec<_> = self.struct_defs.drain().collect();
-        for (path, struct_def) in struct_defs {
+        for (path, (struct_def, visibility)) in struct_defs {
             let struct_def = Arc::new(struct_def);
 
-            if let Err(err) = self.declare_struct_def(&path, struct_def.clone()) {
+            if let Err(err) = self.declare_struct_def(&path, struct_def.clone(), visibility) {
                 let msg = format!("Declaring struct type {} failed", struct_def.name);
 
                 self.warnings.push(ImportWarning::InvalidType(msg, Box::new(ImportError::from(err))));
@@ -808,19 +808,18 @@ impl ImportBuilder<'_> {
         }
 
         let variant_defs: Vec<_> = self.variant_defs.drain().collect();
-        for (path, variant_def) in variant_defs {
+        for (path, (variant_def, visibility)) in variant_defs {
             let variant_def = Arc::new(variant_def);
 
-            if let Err(err) = self.declare_variant_def(&path, variant_def.clone()) {
+            if let Err(err) = self.declare_variant_def(&path, variant_def.clone(), visibility) {
                 let msg = format!("Declaring variant type {} failed", variant_def.name);
                 self.warnings.push(ImportWarning::InvalidType(msg, Box::new(ImportError::from(err))));
             }
         }
 
         let enum_defs: Vec<_> = self.enum_defs.drain().collect();
-        for (path, enum_def) in enum_defs {
+        for (path, (enum_def, visibility)) in enum_defs {
             let enum_def = Arc::new(enum_def);
-            let visibility =  Visibility::Interface; // TODO: access modifiers in IR
 
             let result = self.declare_type_def_with(&path, |builder| {
                 let Some(ctx) = builder.root_ctx.as_mut() else {
@@ -872,10 +871,12 @@ impl ImportBuilder<'_> {
         Ok(())
     }
 
-    fn declare_struct_def(&mut self, path: &IdentPath, struct_def: Arc<StructDecl>) -> ImportResult<()> {
+    fn declare_struct_def(&mut self,
+        path: &IdentPath,
+        struct_def: Arc<StructDecl>,
+        visibility: Visibility,
+    ) -> ImportResult<()> {
         self.declare_type_def_with(path, |builder| {
-            let visibility =  Visibility::Interface; // TODO: access modifiers in IR
-
             let Some(root_ctx) = builder.root_ctx.as_mut() else {
                 return Ok(());
             };
@@ -885,10 +886,12 @@ impl ImportBuilder<'_> {
         })
     }
 
-    fn declare_variant_def(&mut self, path: &IdentPath, variant_def: Arc<VariantDecl>) -> ImportResult<()> {
+    fn declare_variant_def(&mut self,
+        path: &IdentPath,
+        variant_def: Arc<VariantDecl>,
+        visibility: Visibility,
+    ) -> ImportResult<()> {
         self.declare_type_def_with(path, |builder| {
-            let visibility =  Visibility::Interface; // TODO: access modifiers in IR
-
             let Some(root_ctx) = builder.root_ctx.as_mut() else {
                 return Ok(());
             };
@@ -935,20 +938,19 @@ impl ImportBuilder<'_> {
         path: &IdentPath,
         method_list: Vec<MethodDecl>,
     ) -> ImportResult<()> {
-        let struct_def = self.struct_defs
+        let (struct_def, _) = self.struct_defs
             .get_mut(path)
             .ok_or_else(|| {
                 ImportError::MissingTypeDef(path.to_string())
             })?;
 
-        struct_def.sections.push(StructDeclSection {
-            members: method_list
-                .into_iter()
-                .map(|method| StructMemberDecl::Method(method))
-                .collect(),
-            access: Access::Published, // TODO: access modifiers in IR
-            access_kw_span: None,
-        });
+        for method in method_list {
+            struct_def.sections.push(StructDeclSection {
+                access: method.access,
+                members: vec![StructMemberDecl::Method(method)],
+                access_kw_span: None,
+            });
+        }
 
         Ok(())
     }
@@ -958,17 +960,19 @@ impl ImportBuilder<'_> {
         path: &IdentPath,
         method_list: Vec<MethodDecl>,
     ) -> ImportResult<()> {
-        let variant_def = self.variant_defs
+        let (variant_def, _) = self.variant_defs
             .get_mut(path)
             .ok_or_else(|| {
                 ImportError::MissingTypeDef(path.to_string())
             })?;
 
-        variant_def.sections.push(MethodDeclSection {
-            methods: method_list,
-            access: Access::Published, // TODO: access modifiers in IR
-            access_kw_span: None,
-        });
+        for method in method_list {
+            variant_def.sections.push(MethodDeclSection {
+                access: method.access,
+                methods: vec![method],
+                access_kw_span: None,
+            });
+        }
 
         Ok(())
     }

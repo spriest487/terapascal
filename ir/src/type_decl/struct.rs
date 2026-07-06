@@ -13,7 +13,7 @@ use std::fmt;
 pub struct StructDef {
     pub identity: StructIdentity,
 
-    pub access: Visibility,
+    pub visibility: Visibility,
 
     pub tags: Vec<TagInfo>,
 
@@ -75,7 +75,7 @@ impl StructDef {
     pub fn new(identity: StructIdentity, access: Visibility, layout: StructLayout) -> Self {
         Self {
             identity,
-            access,
+            visibility: access,
             fields: BTreeMap::new(),
             tags: Vec::new(),
             layout,

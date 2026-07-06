@@ -459,7 +459,7 @@ pub fn instantiate_struct_def<'a>(
 
     Cow::Owned(StructDef {
         fields,
-        access: generic_struct.access,
+        visibility: generic_struct.visibility,
         tags: generic_struct.tags.clone(),
         identity: generic_struct.identity.clone(),
         layout: generic_struct.layout,
@@ -495,7 +495,7 @@ pub fn instantiate_variant_def<'a>(
 
     Cow::Owned(VariantDef {
         name: generic_variant.name.clone(),
-        access: generic_variant.access,
+        visibility: generic_variant.visibility,
         cases,
         tags: generic_variant.tags.clone(),
         tag_type,
@@ -538,7 +538,7 @@ pub fn instantiate_interface_def<'a>(
 
     Cow::Owned(InterfaceDef {
         name: generic_def.name.clone(),
-        access: generic_def.access,
+        visibility: generic_def.visibility,
         tags: generic_def.tags.clone(),
         methods,
     })

@@ -3,11 +3,13 @@ mod read_type;
 mod read_tags;
 
 use self::read_tags::ImportedEnumMember;
-use crate::ast::{Literal, SemanticHint};
+use crate::ast::Access;
+use crate::ast::FunctionParamMod;
+use crate::ast::Literal;
 use crate::ast::LiteralItem;
 use crate::ast::ObjectCtorArgs;
+use crate::ast::SemanticHint;
 use crate::ast::Visibility;
-use crate::ast::FunctionParamMod;
 use crate::codegen::EnumMemberTagInfo;
 use crate::codegen::FunctionDeclKey;
 use crate::codegen::FunctionInstance;
@@ -46,9 +48,9 @@ pub(super) struct ImportBuilder<'a> {
 
     types: HashMap<ir::Type, Type>,
 
-    struct_defs: HashMap<IdentPath, StructDecl>,
-    variant_defs: HashMap<IdentPath, VariantDecl>,
-    enum_defs: HashMap<IdentPath, EnumDecl>,
+    struct_defs: HashMap<IdentPath, (StructDecl, Visibility)>,
+    variant_defs: HashMap<IdentPath, (VariantDecl, Visibility)>,
+    enum_defs: HashMap<IdentPath, (EnumDecl, Visibility)>,
 
     set_types: BTreeMap<ir::TypeDefID, Arc<SetDef>>,
 
@@ -205,6 +207,20 @@ impl<'a> ImportBuilder<'a> {
         Ok(result)
     }
 
+    pub fn read_visibility(visibility: ir::Visibility) -> Visibility {
+        match visibility {
+            ir::Visibility::Internal => Visibility::Implementation,
+            ir::Visibility::Public => Visibility::Interface,
+        }
+    }
+
+    pub fn read_member_visibility(visibility: ir::Visibility) -> Access {
+        match visibility {
+            ir::Visibility::Internal => Access::Private,
+            ir::Visibility::Public => Access::Public,
+        }
+    }
+
     pub fn read_const(
         &mut self,
         const_info: &ir::ConstInfo,
@@ -225,7 +241,7 @@ impl<'a> ImportBuilder<'a> {
         for tag in &const_info.tags {
             // if this const is tagged as an enum member, declare it as part of an enum decl instead
             if let Some(member_tag) = self.read_enum_member_tag(tag) {
-                self.read_const_as_enum_member(path, const_val, member_tag)?;
+                self.read_const_as_enum_member(path, &const_info, const_val, member_tag)?;
                 return Ok(());
             }
         }
@@ -236,10 +252,7 @@ impl<'a> ImportBuilder<'a> {
 
         let value_type = self.read_type(&const_info.value_type)?;
 
-        let visibility = match const_info.visibility {
-            ir::Visibility::Public => Visibility::Interface,
-            ir::Visibility::Internal => Visibility::Implementation,
-        };
+        let visibility = Self::read_visibility(const_info.visibility);
 
         self.with_unit_scope(unit_path, |builder| {
             if let Some(ctx) = builder.root_ctx.as_mut() {
@@ -266,10 +279,7 @@ impl<'a> ImportBuilder<'a> {
 
         let value_type = self.read_type(&var_info.value_type)?;
 
-        let visibility = match var_info.visibility {
-            ir::Visibility::Public => Visibility::Interface,
-            ir::Visibility::Internal => Visibility::Implementation,
-        };
+        let visibility = Self::read_visibility(var_info.visibility);
 
         let binding = Binding {
             ty: value_type,
@@ -290,6 +300,7 @@ impl<'a> ImportBuilder<'a> {
 
     fn read_const_as_enum_member(&mut self,
         path: IdentPath,
+        const_info: &ir::ConstInfo,
         const_val: Arc<ConstValue>,
         enum_member: ImportedEnumMember,
     ) -> ImportResult<()> {
@@ -307,13 +318,25 @@ impl<'a> ImportBuilder<'a> {
 
         let enum_name = self.read_ident_decl_path(&enum_path);
 
-        let enum_def = self.enum_defs
+        let enum_visibility = Self::read_visibility(const_info.visibility);
+
+        let (enum_def, def_visibility) = self.enum_defs
             .entry(enum_name)
-            .or_insert_with_key(|enum_name| EnumDecl {
-                span,
-                name: Arc::new(Symbol::from(enum_name.clone())),
-                items: Vec::new(),
+            .or_insert_with_key(|enum_name| {
+                let decl = EnumDecl {
+                    span,
+                    name: Arc::new(Symbol::from(enum_name.clone())),
+                    items: Vec::new(),
+                };
+                (decl, enum_visibility)
             });
+
+        // if a different visibility was declared by a different constant in the same enum group,
+        // emit a warning
+        if *def_visibility != enum_visibility {
+            let err = ImportError::InvalidData("inconsistent visibility for enum member consts".to_string());
+            self.warnings.push(ImportWarning::InvalidConst(const_info.name.to_string(), Box::new(err)));
+        }
 
         let Some(ord_val) = const_val.value.clone().try_into_int() else {
             let msg = format!("value of constant item {path} is not an ordinal value: {}", const_val.value);
