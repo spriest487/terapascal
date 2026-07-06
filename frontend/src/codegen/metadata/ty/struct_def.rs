@@ -1,4 +1,4 @@
-use crate::ast::Access;
+use crate::ast::{Access, MemberDeclSection};
 use crate::ast::StructKind;
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::translate_decl_name;
@@ -24,7 +24,7 @@ pub fn translate_struct_def(
             Access::Private => ir::Visibility::Internal,
         };
 
-        for field_decl in struct_def.fields() {
+        for field_decl in section.fields() {
             for i in 0..field_decl.idents.len() {
                 let name = field_decl.idents[i].to_string();
                 let ty = lib.translate_type(&field_decl.ty);
