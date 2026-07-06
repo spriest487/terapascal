@@ -253,14 +253,10 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
                     }
                 }
             } else {
-                let err_formatter: Box<dyn ir::IRFormatter> = if args.debug {
-                    Box::new(libs.to_metadata_builder())
-                } else {
-                    Box::new(ir::RawFormatter)
-                };
+                let err_formatter = libs.to_metadata_builder();
 
                 exec_vm(args, libs.iter()).map_err(|err| err.map_types(|ty| {
-                    ty.to_pretty_string(err_formatter.as_ref())
+                    ty.to_pretty_string(&err_formatter)
                 }))?;
 
                 Ok(())
