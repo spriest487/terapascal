@@ -162,50 +162,46 @@ impl<'a> LibraryLoader<'a> {
         match type_ctx {
             Some(ctx) => {
                 for lib_name in &loaded_libs {
-                    let loaded_lib = self.lib_collection[lib_name].clone();
-
-                    let loaded_refs = loaded_lib.references
-                        .iter()
-                        .map(|ref_name| self.lib_collection[ref_name].as_ref());
-
-                    let output = import_lib(&loaded_lib, loaded_refs, Some(ctx))?;
-
-                    for warning in output.warnings {
-                        self.log.diagnostic(warning);
-                    }
-
-                    imported_libs.push(LibraryRef {
-                        lib: loaded_lib,
-                        imported_funcs: output.imported_funcs,
-                        imported_namespaces: output.namespaces,
-                    });
+                    Self::import_from_lib(lib_name, &mut self.lib_collection, &mut imported_libs, Some(ctx), self.log)?;
                 }
             }
 
             None => {
                 for lib_name in &loaded_libs {
-                    let loaded_lib = self.lib_collection[lib_name].clone();
-
-                    let loaded_refs = loaded_lib.references
-                        .iter()
-                        .map(|ref_name| self.lib_collection[ref_name].as_ref());
-
-                    let output = import_lib(&loaded_lib, loaded_refs, None)?;
-
-                    for warning in output.warnings {
-                        self.log.diagnostic(warning);
-                    }
-
-                    imported_libs.push(LibraryRef {
-                        lib: loaded_lib,
-                        imported_funcs: output.imported_funcs,
-                        imported_namespaces: output.namespaces,
-                    });
+                    Self::import_from_lib(lib_name, &mut self.lib_collection, &mut imported_libs, None, self.log)?;
                 }
             }
         }
 
         Ok(imported_libs)
+    }
+
+    fn import_from_lib(
+        lib_name: &String,
+        lib_collection: &mut LinkedHashMap<String, Rc<ir::Library>>,
+        imported_libs: &mut Vec<LibraryRef>,
+        ctx: Option<&mut Context>,
+        log: &mut BuildLog,
+    ) -> BuildResult<()> {
+        let loaded_lib = lib_collection[lib_name].clone();
+
+        let loaded_refs = loaded_lib.references
+            .iter()
+            .map(|ref_name| lib_collection[ref_name].as_ref());
+
+        let output = import_lib(&loaded_lib, loaded_refs, ctx)?;
+
+        for warning in output.warnings {
+            log.diagnostic(warning);
+        }
+
+        imported_libs.push(LibraryRef {
+            lib: loaded_lib,
+            imported_funcs: output.imported_funcs,
+            imported_namespaces: output.namespaces,
+        });
+
+        Ok(())
     }
 }
 
