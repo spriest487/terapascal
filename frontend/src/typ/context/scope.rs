@@ -256,4 +256,15 @@ impl<'s> ScopeMemberRef<'s> {
             ScopeMemberRef::Scope { .. } => ScopeMemberKind::Scope,
         }
     }
+
+    pub fn to_path(&self) -> IdentPath {
+        match self {
+            ScopeMemberRef::Decl { parent_path, key, .. } => {
+                parent_path.to_namespace().child((*key).clone())
+            }
+            ScopeMemberRef::Scope { path } => {
+                path.to_namespace()
+            }
+        }
+    }
 }

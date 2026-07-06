@@ -264,18 +264,28 @@ fn typecheck_ident(ident: &Ident, span: &Span, ctx: &mut Context) -> TypeResult<
             member_ident_expr(decl_annotation, ident, ctx)
         },
 
-        ScopeMemberRef::Decl {
-            value: Decl::GlobalConst { val, .. } | Decl::LocalConst { val, .. },
-            ..
-        } => {
+        ScopeMemberRef::Decl { value: Decl::GlobalConst { val, .. }, .. } => {
             let value = member_annotation(&decl, span.clone(), ctx);
 
+            ctx.expect_visible(&decl.to_path(), span)?;
             Ok(Expr::literal(val.clone(), value))
+        }
+
+        ScopeMemberRef::Decl { value: Decl::LocalConst { val, .. }, .. } => {
+            let value = member_annotation(&decl, span.clone(), ctx);
+            Ok(Expr::literal(val.clone(), value))
+        }
+
+        ScopeMemberRef::Decl { value: Decl::GlobalVariable { .. }, .. } => {
+            let value = member_annotation(&decl, span.clone(), ctx);
+
+            ctx.expect_visible(&decl.to_path(), span)?;
+            member_ident_expr(value, ident, ctx)
         },
 
         _ => {
-            let decl_annotation = member_annotation(&decl, span.clone(), ctx);
-            member_ident_expr(decl_annotation, ident, ctx)
+            let value = member_annotation(&decl, span.clone(), ctx);
+            member_ident_expr(value, ident, ctx)
         },
     }
 }
