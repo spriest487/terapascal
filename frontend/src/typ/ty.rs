@@ -23,8 +23,6 @@ use crate::ast;
 use crate::ast::Access;
 use crate::ast::FunctionTypeName;
 use crate::ast::FunctionTypeNameParam;
-use terapascal_common::ident::Ident;
-use terapascal_common::ident::IdentPath;
 use crate::ast::IdentTypeName;
 use crate::ast::MethodOwner;
 use crate::ast::SemanticHint;
@@ -63,6 +61,8 @@ use std::mem;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::MaybeSpanned;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
@@ -362,8 +362,8 @@ impl Type {
         }
     }
 
-    pub fn find_field_decl(
-        &self,
+    pub fn find_field_decl<'a>(
+        &'a self,
         member: &str,
         ctx: &Context,
     ) -> NameResult<Option<(FieldDecl, usize)>> {

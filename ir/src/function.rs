@@ -278,7 +278,11 @@ impl FunctionParamInfo {
 pub struct FunctionInfo {
     pub identity: FunctionIdentity,
 
-    pub access: Visibility,
+    // a private free function hints that the function should not be used by code from
+    // outside its declaring library.
+    // a private method function hints that the function should not be used by code outside
+    // the family of the type it belongs to.
+    pub visibility: Visibility,
 
     pub runtime_name: Option<StringID>,
 

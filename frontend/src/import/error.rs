@@ -47,6 +47,7 @@ pub enum ImportWarning {
     InvalidType(String, Box<ImportError>),
     InvalidFunc(String, Box<ImportError>),
     InvalidConst(String, Box<ImportError>),
+    InvalidVariable(String, Box<ImportError>),
     InvalidMethodList(Type, BTreeMap<usize, MethodDecl>, Box<ImportError>),
     InvalidPath(String, Box<ImportError>),
     InvalidLibTag(Box<ImportError>),
@@ -65,6 +66,10 @@ impl Display for ImportWarning {
 
             ImportWarning::InvalidConst(name, err) => {
                 write!(f, "Invalid constant declaration `{}`: {}", name, err)
+            }
+
+            ImportWarning::InvalidVariable(name, err) => {
+                write!(f, "Invalid variable declaration `{}`: {}", name, err)
             }
 
             ImportWarning::InvalidMethodList(ty, _method_list, err) => {

@@ -56,7 +56,7 @@ pub fn translate_closure_struct(
     let mut fields = BTreeMap::new();
     fields.insert(
         ir::CLOSURE_PTR_FIELD,
-        ir::StructFieldDef::new(func_ptr_sig.into_function_type()),
+        ir::StructFieldDef::new(func_ptr_sig.into_function_type(), Visibility::Internal),
     );
 
     let mut field_id = ir::FieldID(ir::CLOSURE_PTR_FIELD.0 + 1);
@@ -66,7 +66,8 @@ pub fn translate_closure_struct(
 
         fields.insert(
             field_id,
-            ir::StructFieldDef::new(ty).with_name((*capture_name.name).clone()),
+            ir::StructFieldDef::new(ty, Visibility::Internal)
+                .with_name((*capture_name.name).clone()),
         );
 
         field_id.0 += 1;

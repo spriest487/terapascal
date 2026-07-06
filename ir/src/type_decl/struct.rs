@@ -95,9 +95,9 @@ impl StructDef {
             .unwrap_or(FieldID(0))
     }
 
-    pub fn with_field(mut self, name: impl Into<String>, ty: Type) -> Self {
+    pub fn with_field(mut self, name: impl Into<String>, ty: Type, vis: Visibility) -> Self {
         let id = self.next_field_id();
-        self.fields.insert(id, StructFieldDef::new(ty).with_name(name));
+        self.fields.insert(id, StructFieldDef::new(ty, vis).with_name(name));
         self
     }
 
@@ -132,13 +132,16 @@ impl fmt::Display for StructDef {
 pub struct StructFieldDef {
     pub name: Option<String>,
     pub ty: Type,
+
+    pub visibility: Visibility,
 }
 
 impl StructFieldDef {
-    pub fn new(ty: Type) -> Self {
+    pub fn new(ty: Type, visibility: Visibility) -> Self {
         Self {
             ty,
             name: None,
+            visibility,
         }
     }
 

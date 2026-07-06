@@ -45,7 +45,7 @@ impl MetadataBuilder {
             identity,
             runtime_name,
 
-            access: visibility,
+            visibility: visibility,
 
             params: params.into_iter().collect(),
             result_type,

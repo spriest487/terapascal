@@ -3,15 +3,13 @@ mod read_type;
 mod read_tags;
 
 use self::read_tags::ImportedEnumMember;
-use crate::ast::FunctionParamMod;
-use terapascal_common::ident::Ident;
-use terapascal_common::ident::IdentPath;
-use crate::ast::Literal;
+use crate::ast::{Literal, SemanticHint};
 use crate::ast::LiteralItem;
 use crate::ast::ObjectCtorArgs;
 use crate::ast::Visibility;
-use crate::codegen::FunctionDeclKey;
+use crate::ast::FunctionParamMod;
 use crate::codegen::EnumMemberTagInfo;
+use crate::codegen::FunctionDeclKey;
 use crate::codegen::FunctionInstance;
 use crate::codegen::OutParamTagInfo;
 use crate::codegen::SetTypeTagInfo;
@@ -30,6 +28,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter;
 use std::sync::Arc;
+use terapascal_common::ident::Ident;
+use terapascal_common::ident::IdentPath;
 use terapascal_common::span::Span;
 
 pub(super) struct ImportBuilder<'a> {
@@ -124,6 +124,18 @@ impl<'a> ImportBuilder<'a> {
             if let Err(err) = self.read_const(const_info) {
                 let const_name = const_info.name.to_string();
                 self.warnings.push(ImportWarning::InvalidConst(const_name, Box::new(err)));
+            }
+        }
+
+        for (_, var_info) in self.library.metadata.variables() {
+            // unnamed vars are always internal and don't need to be imported
+            let Some(var_name) = &var_info.name else {
+                continue;
+            };
+
+            if let Err(err) = self.read_variable(var_name, var_info) {
+                let const_name = var_name.to_string();
+                self.warnings.push(ImportWarning::InvalidVariable(const_name, Box::new(err)));
             }
         }
 
@@ -224,11 +236,51 @@ impl<'a> ImportBuilder<'a> {
 
         let value_type = self.read_type(&const_info.value_type)?;
 
-        self.with_unit_scope(unit_path, |builder| {
-            let visibility = Visibility::Interface; // TODO: access modifiers in IR
+        let visibility = match const_info.visibility {
+            ir::Visibility::Public => Visibility::Interface,
+            ir::Visibility::Internal => Visibility::Implementation,
+        };
 
+        self.with_unit_scope(unit_path, |builder| {
             if let Some(ctx) = builder.root_ctx.as_mut() {
                 ctx.declare_global_const(name_ident, const_val.value.clone(), value_type, visibility, span)?;
+            }
+            Ok(())
+        })?;
+
+        Ok(())
+    }
+
+    pub fn read_variable(
+        &mut self,
+        name: &ir::StringPath,
+        var_info: &ir::VariableInfo,
+    ) -> ImportResult<()> {
+        let path = self.read_string_path(name);
+
+        let name_ident = path.last().clone();
+
+        let unit_path = path
+            .parent()
+            .ok_or_else(|| ImportError::InvalidData(format!("path {path} does not contain a unit namespace")))?;
+
+        let value_type = self.read_type(&var_info.value_type)?;
+
+        let visibility = match var_info.visibility {
+            ir::Visibility::Public => Visibility::Interface,
+            ir::Visibility::Internal => Visibility::Implementation,
+        };
+
+        let binding = Binding {
+            ty: value_type,
+            kind: ValueKind::Mutable,
+            def: None,
+            semantic_hint: SemanticHint::Variable,
+        };
+
+        self.with_unit_scope(unit_path, |builder| {
+            if let Some(ctx) = builder.root_ctx.as_mut() {
+                ctx.declare_global_var(name_ident, binding, visibility)?;
             }
             Ok(())
         })?;

@@ -96,11 +96,11 @@ impl ImportBuilder<'_> {
             }
 
             ir::FunctionIdentity::Method { declaring_type, id, name, type_params } => {
-                self.read_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, type_params)?;
+                self.read_method(func_id, func_info, tags, result_type, param_groups, declaring_type, *id, name, type_params)?;
             }
 
             ir::FunctionIdentity::Destructor { declaring_type, id, name} => {
-                self.read_method(func_id, tags, result_type, param_groups, declaring_type, *id, name, &[])?;
+                self.read_method(func_id, func_info, tags, result_type, param_groups, declaring_type, *id, name, &[])?;
             }
 
             ir::FunctionIdentity::Internal { .. } => {
@@ -113,6 +113,7 @@ impl ImportBuilder<'_> {
 
     fn read_method(&mut self,
         func_id: ir::FunctionID,
+        func_info: &ir::FunctionInfo,
         tags: Vec<Tag>,
         result_type: Type,
         param_groups: Vec<FunctionParamGroup>,
@@ -142,6 +143,14 @@ impl ImportBuilder<'_> {
             }
 
             ty => ty.clone(),
+        };
+
+        // TODO: import published members
+        // if necessary, we can inspect the method's RTTI metadata to determine if this method
+        // was marked as published instead of public
+        let member_access = match func_info.visibility {
+            ir::Visibility::Internal => Access::Private,
+            ir::Visibility::Public => Access::Public,
         };
 
         let decl_key = FunctionDeclKey::Method(MethodDeclKey {
@@ -181,7 +190,7 @@ impl ImportBuilder<'_> {
             .or_insert_with(|| BTreeMap::new());
         method_list.insert(method_id.0, MethodDecl {
             func_decl,
-            access: Access::Published, // TODO: access modifiers in IR
+            access: member_access,
         });
 
         self.imported_funcs.insert(decl_key, FunctionInstance {
@@ -256,18 +265,23 @@ impl ImportBuilder<'_> {
             name: func_name.full_path,
         };
 
+        let visibility = match func_info.visibility {
+            ir::Visibility::Public => Visibility::Interface,
+            ir::Visibility::Internal => Visibility::Implementation,
+        };
+
+        let published = func_info.invoker.is_some();
+
         if !self.imported_funcs.contains_key(&decl_key) {
             let func_decl = Arc::new(func_decl);
 
             if let Some(ctx) = self.root_ctx.as_mut() {
-                let visibility = Visibility::Interface; // TODO: access modifiers in IR
-
                 ctx.declare_external_func(func_decl, visibility)?;
             }
 
             self.imported_funcs.insert(decl_key, FunctionInstance {
                 id: func_id,
-                published: func_info.runtime_name.is_some(), // TODO: access modifiers in IR
+                published,
                 src_sig: decl_sig
             });
         }

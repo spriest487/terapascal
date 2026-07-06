@@ -176,15 +176,20 @@ impl ImportBuilder<'_> {
 
             let field_type = self.read_type(&field.ty)?;
 
+            let access = match field.visibility {
+                ir::Visibility::Internal => Access::Private,
+                ir::Visibility::Public => Access::Public,
+            };
+
             sections.push(StructDeclSection {
                 members: vec![StructMemberDecl::Field(FieldDecl {
                     span: self.span(),
                     ty: TypeName::Unspecified(field_type),
                     idents: vec![Ident::new(field_name, self.span())],
-                    access: Access::Published, // TODO: access modifiers in IR
+                    access,
                 })],
                 access_kw_span: None,
-                access: Access::Published, // TODO: access modifiers in IR
+                access,
             });
         }
 

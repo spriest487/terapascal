@@ -1,4 +1,4 @@
-use crate::ast::StructKind;
+use crate::ast::{Access, StructKind};
 use crate::codegen::library_builder::LibraryBuilder;
 use crate::codegen::metadata::translate_decl_name;
 use crate::codegen::typ;
@@ -17,14 +17,22 @@ pub fn translate_struct_def(
     let mut fields = BTreeMap::new();
     let mut next_id = ir::FieldID(0);
 
-    for field_decl in struct_def.fields() {
-        for i in 0..field_decl.idents.len() {
-            let name = field_decl.idents[i].to_string();
-            let ty = lib.translate_type(&field_decl.ty);
+    for section in &struct_def.sections {
+        let visibility = match section.access {
+            Access::Published | Access::Public => ir::Visibility::Public,
+            Access::Private => ir::Visibility::Internal,
+        };
 
-            fields.insert(next_id, ir::StructFieldDef::new(ty).with_name(name));
+        for field_decl in struct_def.fields() {
+            for i in 0..field_decl.idents.len() {
+                let name = field_decl.idents[i].to_string();
+                let ty = lib.translate_type(&field_decl.ty);
 
-            next_id.0 += 1;
+                fields.insert(next_id, ir::StructFieldDef::new(ty, visibility)
+                    .with_name(name));
+
+                next_id.0 += 1;
+            }
         }
     }
 

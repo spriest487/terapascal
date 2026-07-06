@@ -17,8 +17,8 @@ pub fn string_def() -> StructDef {
         StructLayout::Default
     );
 
-    def.fields.insert(STRING_CHARS_FIELD, StructFieldDef::new(Type::U8.ptr()));
-    def.fields.insert(STRING_LEN_FIELD, StructFieldDef::new(Type::I32));
+    def.fields.insert(STRING_CHARS_FIELD, StructFieldDef::new(Type::U8.ptr(), Visibility::Internal));
+    def.fields.insert(STRING_LEN_FIELD, StructFieldDef::new(Type::I32, Visibility::Internal));
     
     def
 }

@@ -124,7 +124,8 @@ impl SetFlagsType {
             StructLayout::Packed,
         );
 
-        set_struct.fields.insert(ir::FieldID(0), ir::StructFieldDef::new(flags_type.repr_type()));
+        let repr_field = ir::StructFieldDef::new(flags_type.repr_type(), ir::Visibility::Internal);
+        set_struct.fields.insert(ir::FieldID(0), repr_field);
 
         if let Some(set_tag_info) = Self::build_tag(lib, set_type) {
             set_struct.tags.push(set_tag_info);

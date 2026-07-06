@@ -1,11 +1,10 @@
 # IR 2.0
-* type constraints should be stored (if not enforced) in library
-* store per-param tags for Out tags
-* visibility info
+* make context non-optional in import builder??
 * .NET:
   * generic method/type instantiation
   * remove flag types
 * remove as many spans as possible, they should all be optional
+  * AND/OR add spans as optional debug info to IR
 
 # impls rework
 * update CIL: remove impls from interface defs, add new map

@@ -9,9 +9,9 @@ use crate::GlobalRef;
 use crate::Instruction;
 use crate::InstructionBuilder;
 use crate::InterfaceDef;
+use crate::InterfaceMethod;
 use crate::LocalID;
 use crate::MetadataSource;
-use crate::InterfaceMethod;
 use crate::ObjectID;
 use crate::Ref;
 use crate::StructDef;
@@ -453,6 +453,7 @@ pub fn instantiate_struct_def<'a>(
         fields.insert(*field_id, StructFieldDef {
             ty: instantiate_type(&field_def.ty, &types),
             name: field_def.name.clone(),
+            visibility: field_def.visibility,
         });
     }
 
