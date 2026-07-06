@@ -1,0 +1,10 @@
+program LoadPackagePrivateInterface;
+uses
+    MyLib;
+
+type
+    NewClass = class of IMyPrivateInterface
+    end;
+
+begin
+end.

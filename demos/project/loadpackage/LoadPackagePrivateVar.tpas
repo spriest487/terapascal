@@ -1,0 +1,7 @@
+program LoadPackagePrivateVar;
+uses
+    MyLib;
+
+begin
+    var x := MyPrivateVar;
+end.

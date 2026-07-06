@@ -1,0 +1,7 @@
+program LoadPackagePrivateFunc;
+uses
+    MyLib;
+
+begin
+    MyPrivateFunc();
+end.

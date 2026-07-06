@@ -1,0 +1,7 @@
+program LoadPackagePrivateVariant;
+uses
+    MyLib;
+
+begin
+    var x := MyPrivateVariant.Secret();
+end.

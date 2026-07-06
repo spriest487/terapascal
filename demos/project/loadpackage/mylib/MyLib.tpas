@@ -43,6 +43,24 @@ begin
         raise 'constraint violated!';
 end;
 
+function MyPrivateFunc;
+begin
+end;
+
+var MyPrivateVar: Integer;
+const MY_PRIVATE_CONST: Integer = 123;
+
+type
+    MyPrivateClass = class
+    end;
+
+    MyPrivateVariant = variant
+        Secret;
+    end;
+
+    IMyPrivateInterface = interface
+    end;
+
 initialization
     WriteLn('loaded MyLib');
 end.

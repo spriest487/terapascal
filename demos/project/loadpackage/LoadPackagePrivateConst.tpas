@@ -1,0 +1,7 @@
+program LoadPackagePrivateConst;
+uses
+    MyLib;
+
+begin
+    var x := MY_PRIVATE_CONST;
+end.

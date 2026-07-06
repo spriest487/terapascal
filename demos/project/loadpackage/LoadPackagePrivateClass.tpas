@@ -1,0 +1,7 @@
+program LoadPackagePrivateClass;
+uses
+    MyLib;
+
+begin
+    var x := MyPrivateClass();
+end.

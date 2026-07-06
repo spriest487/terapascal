@@ -1,0 +1,8 @@
+{
+  "packages": [
+    "MyLib"
+  ],
+  "steps": [
+    { "error_regex": "is not visible in the current context" }
+  ]
+}
