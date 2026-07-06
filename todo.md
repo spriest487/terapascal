@@ -1,13 +1,10 @@
 # IR 2.0
-* make context non-optional in import builder??
 * .NET:
   * generic method/type instantiation
   * remove flag types
+  * remove impls from interface defs, add new map
 * remove as many spans as possible, they should all be optional
   * AND/OR add spans as optional debug info to IR
-
-# impls rework
-* update CIL: remove impls from interface defs, add new map
 
 # refcounting cleanup pass
 * taking the address of any type containing rc refs should be unsafe
