@@ -577,7 +577,6 @@ impl<'a> LibraryBuilder<'a> {
         self.metadata.insert_type_info(enum_def_type, ir::TypeInfo {
             name: runtime_name_id,
             flags: ir::TYPE_FLAG_VALUE,
-            debug_name: Some(runtime_name),
             methods: Vec::new(),
         });
 
@@ -1174,11 +1173,7 @@ impl<'a> LibraryBuilder<'a> {
         // type names and methods will be added after codegen
         let name_string = self.metadata.find_or_insert_string(name);
 
-        let mut rtti = ir::TypeInfo::new(name_string, flags);
-
-        if self.opts.debug && self.opts.rtti {
-            rtti.debug_name = Some(self.metadata().pretty_type_name(&ty).into_owned());
-        }
+        let rtti = ir::TypeInfo::new(name_string, flags);
 
         self.metadata.insert_type_info(ty.clone(), rtti)
     }

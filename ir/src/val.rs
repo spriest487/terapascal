@@ -1,15 +1,17 @@
+use crate::generic::build_type_map;
+use crate::generic::instantiate_sig;
 use crate::generic::instantiate_struct_def;
 use crate::generic::instantiate_variant_def;
 use crate::metadata::StringID;
-use crate::types::Type;
 use crate::type_decl::TagLocation;
+use crate::types::Type;
 use crate::FieldID;
-use crate::FunctionRef;
-use crate::RawFormatter;
 use crate::FunctionID;
+use crate::FunctionRef;
 use crate::IRFormatter;
 use crate::MetadataSource;
 use crate::ObjectID;
+use crate::RawFormatter;
 use crate::VariableID;
 use bigdecimal::BigDecimal;
 use bigdecimal::FromPrimitive;
@@ -17,6 +19,7 @@ use bigdecimal::ToPrimitive;
 use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fmt;
 use std::ops::Add;
 use std::ops::AddAssign;
@@ -132,9 +135,14 @@ impl Ref {
                 Some(Cow::Owned(Type::func_info()))
             }
 
-            Ref::Global(GlobalRef::Function(key)) => {
-                let func_info = metadata.get_function_info(key.def_id)?;
-                Some(Cow::Owned(Type::Function(Rc::new(func_info.sig()))))
+            Ref::Global(GlobalRef::Function(func_ref)) => {
+                let func_info = metadata.get_function_info(func_ref.def_id)?;
+
+                let mut types = HashMap::new();
+                build_type_map(func_info.identity.type_params(), &func_ref.args, &mut types);
+                let ref_sig = instantiate_sig(&func_info.sig(), &types);
+
+                Some(Cow::Owned(Type::Function(Rc::new(ref_sig))))
             }
 
             Ref::Deref(target) => {

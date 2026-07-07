@@ -43,13 +43,14 @@ pub enum StructIdentity {
 impl StructIdentity {
     pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
         match self {
-            StructIdentity::Internal(debug_name) => {
-                debug_name.clone()
+            StructIdentity::Internal(internal_name) => {
+                internal_name.clone()
             }
 
             StructIdentity::Record(name) | StructIdentity::Class(name) => {
                 name.to_pretty_string(formatter)
             },
+
             StructIdentity::ClosureObject(id) => {
                 let func_ref = Ref::from(FunctionRef::new(id.id));
                 let func_ty = Type::Function(id.sig.clone());

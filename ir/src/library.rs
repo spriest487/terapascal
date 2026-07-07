@@ -22,7 +22,7 @@ use terapascal_common::version::Version;
 pub struct Library {
     pub name: String,
     pub version: Version,
-    
+
     pub tags: Vec<TagInfo>,
 
     pub references: Vec<String>,

@@ -16,7 +16,6 @@ pub const TYPE_FLAG_FUNCTION: u64 = 1 << 3;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TypeInfo {
     pub name: StringID,
-    pub debug_name: Option<String>,
 
     pub flags: u64,
     
@@ -27,8 +26,7 @@ impl TypeInfo {
     pub fn new(name: StringID, flags: u64) -> Self {
         Self {
             name,
-            debug_name: None,
-            
+
             flags,
             
             methods: Vec::new(),

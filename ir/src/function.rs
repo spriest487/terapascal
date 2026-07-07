@@ -1,22 +1,22 @@
+mod function_identity;
+mod function_sig;
+
+pub use self::function_identity::*;
+pub use self::function_sig::*;
+
 use crate::ClosureIdentity;
-use crate::DeclPath;
 use crate::IRFormatter;
 use crate::InstructionList;
 use crate::Label;
-use crate::MethodID;
-use crate::ObjectID;
-use crate::RawFormatter;
 use crate::Ref;
 use crate::StringID;
 use crate::TagInfo;
 use crate::Type;
 use crate::TypeDefID;
-use crate::TypeParam;
 use crate::VariableID;
 use crate::Visibility;
 use serde::Deserialize;
 use serde::Serialize;
-use std::borrow::Cow;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -47,95 +47,6 @@ pub struct StaticClosure {
     pub closure_id: TypeDefID,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct FunctionSig {
-    pub result_type: Type,
-    pub param_types: Vec<Type>,
-}
-
-impl FunctionSig {
-    pub fn new(param_tys: impl IntoIterator<Item=Type>, return_ty: Type) -> Self {
-        Self {
-            result_type: return_ty,
-            param_types: param_tys.into_iter().collect(),
-        }
-    }
-    
-    pub fn to_pretty_string(&self, formatter: &impl IRFormatter) -> String {
-        let mut result = String::from("function");
-
-        if !self.param_types.is_empty() {
-            result.push('(');
-
-            for (i, param_ty) in self.param_types.iter().enumerate() {
-                if i > 0 {
-                    result.push_str("; ");
-                }
-                
-                formatter.format_type(param_ty, &mut result).unwrap();
-            }
-
-            result.push(')');
-        }
-
-        if self.result_type != Type::Nothing {
-            result.push_str(": ");
-            formatter.format_type(&self.result_type, &mut result).unwrap();
-        }
-        
-        result
-    }
-
-    pub fn contains_generic_params(&self) -> bool {
-        self.result_type.contains_generic_params()
-            || self.param_types.iter().any(|ty| ty.contains_generic_params())
-    }
-
-    pub fn to_function_type(self: &Rc<Self>) -> Type {
-        Type::Function(self.clone())
-    }
-
-    pub fn into_function_type(self) -> Type {
-        Rc::new(self).to_function_type()
-    }
-
-    pub fn to_closure_id(self: &Rc<Self>) -> ObjectID {
-        ObjectID::AnyClosure(self.clone())
-    }
-
-    pub fn into_closure_id(self) -> ObjectID {
-        Rc::new(self).to_closure_id()
-    }
-
-    pub fn to_closure_ptr_type(self: &Rc<Self>) -> Type {
-        self.to_closure_id().to_object_type()
-    }
-
-    pub fn into_closure_ptr_type(self) -> Type {
-        self.into_closure_id().to_object_type()
-    }
-
-    /// Create the sig of the function pointer type that needs to be stored in a closure
-    /// that calls a function with this sig. Inserts a new 0th parameter of the anonymous
-    /// closure type.
-    pub fn to_closure_function_ptr_sig(self: &Rc<Self>) -> Self {
-        let mut sig = (**self).clone();
-        sig.param_types.insert(0, self.to_closure_ptr_type());
-
-        sig
-    }
-
-    pub fn into_closure_function_ptr_sig(self) -> Self {
-        Rc::new(self).to_closure_function_ptr_sig()
-    }
-}
-
-impl fmt::Display for FunctionSig {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_pretty_string(&RawFormatter))
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalFunctionRef {
     pub symbol: Arc<String>,
@@ -143,112 +54,6 @@ pub struct ExternalFunctionRef {
 
     pub sig: Rc<FunctionSig>,
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
-pub enum FunctionIdentity {
-    // function has a global path
-    Global(DeclPath),
-
-    Method {
-        declaring_type: Type,
-        id: MethodID,
-        name: Arc<String>,
-        type_params: Vec<TypeParam>,
-    },
-
-    // user-defined destructor method associated with a type
-    Destructor {
-        declaring_type: Type,
-        id: MethodID,
-        name: Arc<String>,
-    },
-
-    // function is anonymous (e.g. generated functions) but has a debug name
-    Internal {
-        name: Arc<String>,
-        type_params: Vec<TypeParam>,
-    },
-}
-
-impl FunctionIdentity {
-    pub fn internal(
-        name: impl Into<Arc<String>>,
-        type_params: impl IntoIterator<Item=TypeParam>,
-    ) -> Self {
-        Self::Internal {
-            name: name.into(),
-            type_params: type_params.into_iter().collect(),
-        }
-    }
-    
-    pub fn declaring_type(&self) -> Option<&Type> {
-        match self {
-            FunctionIdentity::Global { .. }
-            | FunctionIdentity::Internal { .. } => None,
-
-            FunctionIdentity::Method { declaring_type, .. }
-            | FunctionIdentity::Destructor { declaring_type, .. } => Some(declaring_type),
-        }
-    }
-
-    pub fn type_params(&self) -> &[TypeParam] {
-        match self {
-            FunctionIdentity::Global(func_name) => &func_name.type_params,
-            FunctionIdentity::Method { type_params, .. } => type_params,
-            FunctionIdentity::Internal { type_params, .. } => type_params,
-
-            FunctionIdentity::Destructor { .. } => &[],
-        }
-    }
-
-    pub fn to_pretty_string(&'_ self, formatter: &impl IRFormatter) -> Cow<'_, String> {
-        match self {
-            FunctionIdentity::Global(path) => {
-                Cow::Owned(path.to_string())
-            },
-
-            FunctionIdentity::Destructor { name, id: _, declaring_type } => {
-                Cow::Owned(format!("{}.{name}", declaring_type.to_pretty_string(formatter)))
-            }
-
-            FunctionIdentity::Method { declaring_type, id: _, name, type_params } => {
-                let mut result = declaring_type.to_pretty_string(formatter);
-                result.push('.');
-                result.push_str(name);
-                if !type_params.is_empty() {
-                    result.push('[');
-                    for (i, param) in type_params.iter().enumerate() {
-                        if i > 0 {
-                            result.push_str(", ");
-                        }
-                        result.push_str(param.name.as_str());
-                    }
-                    result.push(']');
-                }
-
-                Cow::Owned(result)
-            }
-
-            FunctionIdentity::Internal { name, .. } => {
-                Cow::Borrowed(name.as_ref())
-            }
-        }
-    }
-
-    pub fn global_name(&self) -> Option<&DeclPath> {
-        match self {
-            FunctionIdentity::Global(path) => Some(path),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for FunctionIdentity {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_pretty_string(&RawFormatter))
-    }
-}
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionParamInfo {
@@ -284,11 +89,11 @@ pub struct FunctionInfo {
     // the family of the type it belongs to.
     pub visibility: Visibility,
 
-    pub runtime_name: Option<StringID>,
-
     pub params: Vec<FunctionParamInfo>,
     pub result_type: Type,
 
+    // RTTI fields
+    pub runtime_name: Option<StringID>,
     pub invoker: Option<FunctionID>,
 
     pub tags: Vec<TagInfo>,
