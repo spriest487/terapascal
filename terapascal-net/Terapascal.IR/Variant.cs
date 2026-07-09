@@ -29,7 +29,7 @@ public record VariantDef {
         init => field = value.ToArrayNonNull();
     }
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         var result = new StringBuilder();
 
         for (var caseIndex = 0; caseIndex < this.Cases.Count; caseIndex += 1) {

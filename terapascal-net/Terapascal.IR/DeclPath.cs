@@ -16,7 +16,7 @@ public class DeclPath {
     [MemberNotNullWhen(true, nameof(TypeParams))]
     public bool HasTypeParams => this.TypeParams is { Count: > 0 };
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         var path = new StringBuilder(this.Path.ToString());
         
         if (this.TypeParams is { Count: > 0 }) {

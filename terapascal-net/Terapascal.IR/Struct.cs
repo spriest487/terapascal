@@ -101,7 +101,7 @@ public readonly record struct StructFieldDef {
 public interface IStructIdentity {
     bool IsValueType { get; }
 
-    string ToPrettyString(Metadata metadata);
+    string ToPrettyString(IMetadataSource metadata);
 
     DeclPath? GetDeclPath();
 
@@ -112,7 +112,7 @@ public interface IStructIdentity {
 public record RecordStructIdentity(DeclPath Name) : IStructIdentity {
     public bool IsValueType => true;
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return this.Name.ToPrettyString(metadata);
     }
 
@@ -128,7 +128,7 @@ public record RecordStructIdentity(DeclPath Name) : IStructIdentity {
 public record ClassStructIdentity(DeclPath Name) : IStructIdentity {
     public bool IsValueType => false;
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return this.Name.ToPrettyString(metadata);
     }
 
@@ -144,7 +144,7 @@ public record ClassStructIdentity(DeclPath Name) : IStructIdentity {
 public record InternalStructIdentity(string InternalName) : IStructIdentity {
     public bool IsValueType => true;
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return this.InternalName;
     }
 
@@ -160,7 +160,7 @@ public record InternalStructIdentity(string InternalName) : IStructIdentity {
 public record ClosureStructIdentity(ClosureIdentity Identity) : IStructIdentity {
     public bool IsValueType => false;
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         var result = new StringBuilder("closure object(");
 
         metadata.FormatFunctionRef(this.Identity.ID.ToFunctionRef([]), result);
@@ -212,7 +212,9 @@ public class StructIdentityFormatter : IMessagePackFormatter<IStructIdentity> {
             }
             
             case "Internal": {
-                var name = reader.ReadString();
+                var name = reader.ReadString()
+                    ?? throw new MessagePackSerializationException("missing name value for internal struct identity");
+
                 return new InternalStructIdentity(name);
             }
             

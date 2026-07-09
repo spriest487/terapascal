@@ -140,11 +140,11 @@ public class TypeBuilder {
         this.staticArrayElementMethods = new Dictionary<ArraySig, MethodReference>();
     }
 
-    public TypeReference BuildType(IR.IType type, IR.Library library) {
-        return this.BuildType(type, library, out _);
+    public TypeReference BuildType(IR.IType type) {
+        return this.BuildType(type, out _);
     }
 
-    public TypeReference BuildType(IR.IType type, IR.Library library, out TypeID typeID) {
+    public TypeReference BuildType(IR.IType type, out TypeID typeID) {
         if (this.cache.TryGetType(type, out typeID, out var typeRef)) {
             return typeRef;
         }
@@ -167,14 +167,14 @@ public class TypeBuilder {
             IR.F32Type => this.RegisterSimpleType(type, typeSystem.Single),
             IR.F64Type => this.RegisterSimpleType(type, typeSystem.Double),
             IR.ArrayType { Element: var element, Length: var length } =>
-                this.BuildArrayTypeRef(element, length, library),
-            IR.StructType(var structRef) => this.BuildStructDef(structRef, library),
-            IR.VariantType(var variantRef) => this.BuildVariantDef(variantRef, library),
-            IR.FunctionType(var sig) => this.BuildFunctionTypeDef(sig, library),
-            IR.PointerType(var inner) => this.BuildType(inner, library).MakePointerType(),
-            IR.TempRefType(var inner) => this.BuildType(inner, library).MakeByReferenceType(),
-            IR.ObjectType(var id) => this.BuildClassTypeRef(id, library),
-            IR.WeakObjectType(var id) => this.BuildClassTypeRef(id, library),
+                this.BuildArrayTypeRef(element, length),
+            IR.StructType(var structRef) => this.BuildStructDef(structRef),
+            IR.VariantType(var variantRef) => this.BuildVariantDef(variantRef),
+            IR.FunctionType(var sig) => this.BuildFunctionTypeDef(sig),
+            IR.PointerType(var inner) => this.BuildType(inner).MakePointerType(),
+            IR.TempRefType(var inner) => this.BuildType(inner).MakeByReferenceType(),
+            IR.ObjectType(var id) => this.BuildClassTypeRef(id),
+            IR.WeakObjectType(var id) => this.BuildClassTypeRef(id),
             _ => throw new ArgumentException($"unhandled IR type: {type}"),
         };
     }
@@ -205,19 +205,19 @@ public class TypeBuilder {
             });
     }
 
-    private string CreateUniqueTypeName(IR.NamePath globalName, IR.Metadata metadata, out string ns) {
+    private string CreateUniqueTypeName(IR.NamePath globalName, out string ns) {
         var name = globalName.ToGlobalName(out ns);
         
         if (globalName.HasTypeArgs) {
-            var argNames = globalName.TypeArgs!.Select(arg => arg.ToPrettyString(metadata));
+            var argNames = globalName.TypeArgs!.Select(arg => arg.ToPrettyString(this.assemblyBuilder.LoadedMetadata));
             name += $"_<{string.Join(",", argNames)}>";
         }
 
         return name;
     }
 
-    private TypeReference BuildArrayTypeRef(IR.IType element, ulong length, IR.Library library) {
-        this.BuildType(element, library, out var elementID);
+    private TypeReference BuildArrayTypeRef(IR.IType element, ulong length) {
+        this.BuildType(element, out var elementID);
         var arraySig = new ArraySig(elementID, length);
 
         if (this.staticArrayTypes.TryGetValue(arraySig, out var arrayTypeRef)) {
@@ -226,21 +226,21 @@ public class TypeBuilder {
 
         var id = this.staticArrayTypes.Count;
 
-        var typeDef = this.staticArrayBuilder.BuildArrayTypeRef(element, id, (int)length, library, out var elementMethod);
+        var typeDef = this.staticArrayBuilder.BuildArrayTypeRef(element, id, (int)length, out var elementMethod);
         this.staticArrayTypes.Add(arraySig, typeDef);
         this.staticArrayElementMethods.Add(arraySig, elementMethod);
 
         return typeDef;
     }
 
-    private TypeReference BuildClassTypeRef(IR.IObjectID id, IR.Library library) {
+    private TypeReference BuildClassTypeRef(IR.IObjectID id) {
         var classTypeRef = id switch {
             IR.AnyObjectID => this.assemblyBuilder.Module.TypeSystem.Object,
-            IR.ClassObjectID(var classID) => this.BuildStructDef(classID, library),
-            IR.InterfaceObjectID(var interfaceID) => this.BuildInterfaceDef(interfaceID, library),
+            IR.ClassObjectID(var classID) => this.BuildStructDef(classID),
+            IR.InterfaceObjectID(var interfaceID) => this.BuildInterfaceDef(interfaceID),
             IR.AnyClosureObjectID => this.ClosureBaseType,
-            IR.ArrayObjectID(var arrayElement) => this.BuildType(arrayElement, library).MakeArrayType(),
-            IR.BoxObjectID(var boxValue) => this.BuildBoxTypeRef(boxValue, library),
+            IR.ArrayObjectID(var arrayElement) => this.BuildType(arrayElement).MakeArrayType(),
+            IR.BoxObjectID(var boxValue) => this.BuildBoxTypeRef(boxValue),
             _ => throw new NotImplementedException($"unsupported virtual type ID: {id}"),
         };
 
@@ -248,10 +248,10 @@ public class TypeBuilder {
         return classTypeRef;
     }
 
-    private TypeReference BuildStructDef(IR.TypeRef structRef, IR.Library library) {
+    private TypeReference BuildStructDef(IR.TypeRef structRef) {
         var structType = structRef.ToStructType();
 
-        if (!library.Metadata.FindStructDef(structRef.DefID, out var structDef)) {
+        if (!this.assemblyBuilder.LoadedMetadata.FindStructDef(structRef.DefID, out var structDef)) {
             throw new InvalidDataException($"missing metadata definition for struct {structRef.DefID}");
         }
 
@@ -286,9 +286,9 @@ public class TypeBuilder {
             var typeMap = IR.Util.BuildGenericTypeMap(declName.TypeParams ?? [], structRef.Args ?? []);
             var refName = declName.ResolveGeneric(typeMap);
 
-            name = this.CreateUniqueTypeName(refName, library.Metadata, out ns);
+            name = this.CreateUniqueTypeName(refName, out ns);
         } else {
-            name = structDef.Identity.ToPrettyString(library.Metadata);
+            name = structDef.Identity.ToPrettyString(this.assemblyBuilder.LoadedMetadata);
             ns = "";
         }
 
@@ -303,10 +303,10 @@ public class TypeBuilder {
             typeDef = new TypeDefinition(ns, name, attrs, baseType);
             var typeID = this.cache.RegisterType(structType, typeDef);
 
-            this.BuildStructLayoutFromDef(typeID, typeDef, structDef, closureSig, library);
+            this.BuildStructLayoutFromDef(typeID, typeDef, structDef, closureSig);
 
             // TODO: native generics
-            this.BuildInterfaceImpls(structType, typeDef, library);
+            this.BuildInterfaceImpls(structType, typeDef);
 
             this.BuildDefaultConstructor(typeDef);
 
@@ -322,8 +322,7 @@ public class TypeBuilder {
         TypeID typeID,
         TypeDefinition typeDef,
         IR.StructDef structDef,
-        IR.FunctionSig? closureSig,
-        IR.Library library
+        IR.FunctionSig? closureSig
     ) {
         var fieldLayout = new SortedDictionary<IR.FieldID, LayoutField>();
         this.structFieldMaps[typeID] = new StructLayout {
@@ -345,7 +344,7 @@ public class TypeBuilder {
                 continue;
             }
 
-            var fieldType = this.BuildType(structFieldDef.Type, library);
+            var fieldType = this.BuildType(structFieldDef.Type);
 
             var fieldAttrs = FieldAttributes.Assembly;
 
@@ -358,7 +357,7 @@ public class TypeBuilder {
             });
 
             if (typeDef.IsValueType) {
-                valueSize += this.GetValueLayoutSize(structFieldDef.Type, library);
+                valueSize += this.GetValueLayoutSize(structFieldDef.Type);
             }
         }
 
@@ -391,10 +390,10 @@ public class TypeBuilder {
         }
     }
 
-    public int GetValueLayoutSize(IR.IType type, IR.Library library) {
+    public int GetValueLayoutSize(IR.IType type) {
         switch (type) {
             case IR.ArrayType arrayType: {
-                var elementSize = this.GetValueLayoutSize(arrayType.Element, library);
+                var elementSize = this.GetValueLayoutSize(arrayType.Element);
                 return elementSize * (int)arrayType.Length;
             }
 
@@ -436,11 +435,11 @@ public class TypeBuilder {
             }
 
             case IR.StructType(var typeRef): {
-                return this.GetStructLayoutSize(typeRef, library);
+                return this.GetStructLayoutSize(typeRef);
             }
 
             case IR.VariantType(var typeRef): {
-                return this.GetVariantLayoutSize(typeRef, library);
+                return this.GetVariantLayoutSize(typeRef);
             }
 
             default: {
@@ -449,8 +448,8 @@ public class TypeBuilder {
         }
     }
 
-    private int GetStructLayoutSize(IR.TypeRef typeRef, IR.Library library) {
-        if (!library.Metadata.FindStructDef(typeRef.DefID, out var structDef)) {
+    private int GetStructLayoutSize(IR.TypeRef typeRef) {
+        if (!this.assemblyBuilder.LoadedMetadata.FindStructDef(typeRef.DefID, out var structDef)) {
             throw new InvalidDataException($"type def not found in metadata: struct {typeRef.DefID}");
         }
 
@@ -464,14 +463,14 @@ public class TypeBuilder {
         // assume structs are tightly packed + padding is handled by the compiler
         var dataSize = 0;
         foreach (var (_, fieldDef) in structDef.Fields) {
-            dataSize += this.GetValueLayoutSize(fieldDef.Type, library);
+            dataSize += this.GetValueLayoutSize(fieldDef.Type);
         }
 
         return dataSize;
     }
 
-    private int GetVariantLayoutSize(IR.TypeRef typeRef, IR.Library library) {
-        if (!library.Metadata.FindVariantDef(typeRef.DefID, out var variantDef)) {
+    private int GetVariantLayoutSize(IR.TypeRef typeRef) {
+        if (!this.assemblyBuilder.LoadedMetadata.FindVariantDef(typeRef.DefID, out var variantDef)) {
             throw new InvalidDataException($"type def not found in metadata: variant {typeRef.DefID}");
         }
 
@@ -481,10 +480,10 @@ public class TypeBuilder {
             variantDef = variantDef.ResolveGeneric(typeMap);
         }
 
-        return this.GetVariantLayoutSize(variantDef, library);
+        return this.GetVariantLayoutSize(variantDef);
     }
 
-    private int GetVariantLayoutSize(IR.VariantDef variantDef, IR.Library library) {
+    private int GetVariantLayoutSize(IR.VariantDef variantDef) {
         var hasObjectData = false;
         var maxDataSize = 0;
         foreach (var caseDef in variantDef.Cases) {
@@ -495,7 +494,7 @@ public class TypeBuilder {
             if (caseDef.Type.IsObjectType()) {
                 hasObjectData = true;
             } else {
-                maxDataSize += this.GetValueLayoutSize(caseDef.Type, library);
+                maxDataSize += this.GetValueLayoutSize(caseDef.Type);
             }
         }
 
@@ -507,14 +506,14 @@ public class TypeBuilder {
         return totalSize;
     }
 
-    private TypeDefinition BuildVariantDef(IR.TypeRef variantRef, IR.Library library) {
+    private TypeDefinition BuildVariantDef(IR.TypeRef variantRef) {
         const TypeAttributes defAttrs = TypeAttributes.Sealed
             | TypeAttributes.NotPublic
             | TypeAttributes.ExplicitLayout;
 
         var variantType = variantRef.ToVariantType();
 
-        if (!library.Metadata.FindVariantDef(variantRef.DefID, out var variantDef)) {
+        if (!this.assemblyBuilder.LoadedMetadata.FindVariantDef(variantRef.DefID, out var variantDef)) {
             throw new InvalidDataException($"missing definition for variant {variantRef.DefID}");
         }
 
@@ -529,7 +528,7 @@ public class TypeBuilder {
         }
 
         var (typeID, typeDef) = this.cache.RegisterTypeWith(variantType, typeID => {
-            var name = this.CreateUniqueTypeName(variantName, library.Metadata, out var ns);
+            var name = this.CreateUniqueTypeName(variantName, out var ns);
 
             var typeDef = new TypeDefinition(ns,
                 name,
@@ -540,7 +539,7 @@ public class TypeBuilder {
             return typeDef;
         });
 
-        var discTypeRef = this.BuildType(variantDef.TagType, library);
+        var discTypeRef = this.BuildType(variantDef.TagType);
         var discField = new FieldDefinition(VariantTagName, FieldAttributes.Assembly, discTypeRef) {
             Offset = 0,
         };
@@ -556,7 +555,7 @@ public class TypeBuilder {
                 continue;
             }
 
-            caseTypeRefs[i] = (dataType, this.BuildType(dataType, library));
+            caseTypeRefs[i] = (dataType, this.BuildType(dataType));
         }
 
         // it's safe to overlap object references of different types in a union, as long as we use them correctly,
@@ -585,10 +584,10 @@ public class TypeBuilder {
         }
 
         // discriminator (pointer sized) + any value members
-        typeDef.ClassSize = this.GetVariantLayoutSize(variantDef, library);
+        typeDef.ClassSize = this.GetVariantLayoutSize(variantDef);
         typeDef.PackingSize = 0;
 
-        this.BuildInterfaceImpls(new IR.VariantType(variantRef), typeDef, library);
+        this.BuildInterfaceImpls(new IR.VariantType(variantRef), typeDef);
 
         this.BuildDefaultConstructor(typeDef);
 
@@ -605,20 +604,20 @@ public class TypeBuilder {
         return typeDef;
     }
 
-    private void BuildInterfaceImpls(IR.IType type, TypeDefinition typeDef, IR.Library library) {
-        if (!library.Metadata.InterfaceImpls.TryGetValue(type, out var typeImpls)) {
+    private void BuildInterfaceImpls(IR.IType type, TypeDefinition typeDef) {
+        if (!this.assemblyBuilder.LoadedMetadata.GetInterfaceImpls(type, out var typeImpls)) {
             return;
         }
 
         foreach (var ifaceRef in typeImpls.Keys) {
-            var interfaceTypeRef = this.BuildType(ifaceRef.ToObjectID().ToObjectType(), library);
+            var interfaceTypeRef = this.BuildType(ifaceRef.ToObjectID().ToObjectType());
 
             typeDef.Interfaces.Add(new InterfaceImplementation(interfaceTypeRef));
         }
     }
 
-    private TypeReference BuildBoxTypeRef(IR.IType valueType, IR.Library library) {
-        this.BuildType(valueType, library, out var valueTypeID);
+    private TypeReference BuildBoxTypeRef(IR.IType valueType) {
+        this.BuildType(valueType, out var valueTypeID);
 
         if (this.boxTypes.TryGetValue(valueTypeID, out var boxInfo)) {
             return boxInfo.TypeRef;
@@ -636,7 +635,7 @@ public class TypeBuilder {
 
         var typeDef = new TypeDefinition(systemTypesNamespace, typeName, attrs, this.ObjectBaseType);
 
-        var valueFieldType = this.BuildType(valueType, library);
+        var valueFieldType = this.BuildType(valueType);
         var valueFieldDef = new FieldDefinition("value", FieldAttributes.Assembly, valueFieldType);
         typeDef.Fields.Add(valueFieldDef);
 
@@ -656,21 +655,21 @@ public class TypeBuilder {
         return this.boxTypes[valueTypeID];
     }
 
-    private FunctionPointerType BuildFunctionTypeDef(IR.FunctionSig sig, IR.Library library) {
+    private FunctionPointerType BuildFunctionTypeDef(IR.FunctionSig sig) {
         var pointerType = new FunctionPointerType {
-            ReturnType = this.BuildType(sig.ResultType, library),
+            ReturnType = this.BuildType(sig.ResultType),
         };
 
         foreach (var paramType in sig.ParameterTypes) {
-            var parameterType = this.BuildType(paramType, library);
+            var parameterType = this.BuildType(paramType);
             pointerType.Parameters.Add(new ParameterDefinition(parameterType));
         }
 
         return pointerType;
     }
 
-    private TypeDefinition BuildInterfaceDef(IR.InterfaceRef ifaceRef, IR.Library library) {
-        if (!library.Metadata.Interfaces.TryGetValue(ifaceRef.DefID, out var ifaceDecl)
+    private TypeDefinition BuildInterfaceDef(IR.InterfaceRef ifaceRef) {
+        if (!this.assemblyBuilder.LoadedMetadata.FindInterfaceDecl(ifaceRef.DefID, out var ifaceDecl)
             || ifaceDecl is not IR.DefInterfaceDecl(var ifaceDef)
         ) {
             throw new InvalidDataException($"missing interface definition: {ifaceRef.DefID}");
@@ -681,7 +680,7 @@ public class TypeBuilder {
 
         var interfaceName = declName.ResolveGeneric(typeMap);
 
-        var name = this.CreateUniqueTypeName(interfaceName, library.Metadata, out var ns);
+        var name = this.CreateUniqueTypeName(interfaceName, out var ns);
 
         const TypeAttributes attrs = TypeAttributes.NotPublic
             | TypeAttributes.Interface
@@ -712,7 +711,7 @@ public class TypeBuilder {
                 methodAttrs |= MethodAttributes.Static;
             }
 
-            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(ifaceMethod.ResultType, library);
+            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(ifaceMethod.ResultType);
             var methodDef = new MethodDefinition(ifaceMethod.Name, methodAttrs, returnTypeRef) {
                 HasThis = hasThis,
             };
@@ -723,7 +722,7 @@ public class TypeBuilder {
                 : ifaceMethod.Parameters;
 
             foreach (var methodParam in restParams) {
-                var paramTypeRef = this.BuildType(methodParam.Type, library);
+                var paramTypeRef = this.BuildType(methodParam.Type);
                 methodDef.Parameters.Add(new ParameterDefinition(paramTypeRef));
             }
 
@@ -769,14 +768,14 @@ public class TypeBuilder {
         typeDef.Methods.Add(methodDef);
     }
 
-    internal LayoutField GetFieldRef(IR.IType baseType, IR.FieldID fieldID, IR.Library library) {
+    internal LayoutField GetFieldRef(IR.IType baseType, IR.FieldID fieldID) {
         // the closure field pointer can be accessed either through a closure object pointer
         // (accessing the pointer of an unknown closure type to call it) or directly as a member of a
         // specific closure class (setting the pointer during construction)
         if (fieldID.Equals(IR.FieldID.ClosurePointerField)) {
             if (baseType is IR.ObjectType(IR.AnyClosureObjectID(var sig))
                 || (baseType is IR.StructType(var closureStructID)
-                    && this.assemblyBuilder.FindClosureStruct(closureStructID.DefID, out sig))
+                    && this.assemblyBuilder.LoadedMetadata.FindClosureSig(closureStructID.DefID, out sig))
             ) {
                 return new LayoutField {
                     Field = this.closurePointerField,
@@ -785,12 +784,12 @@ public class TypeBuilder {
             }
         }
 
-        this.BuildType(baseType, library, out var baseTypeID);
+        this.BuildType(baseType, out var baseTypeID);
 
         if (!this.structFieldMaps.TryGetValue(baseTypeID, out var structFieldRefs)
             || !structFieldRefs.Fields.TryGetValue(fieldID, out var fieldRef)
         ) {
-            var typeDisplay = baseType.ToPrettyString(library.Metadata);
+            var typeDisplay = baseType.ToPrettyString(this.assemblyBuilder.LoadedMetadata);
 
             throw new ArgumentException($"{typeDisplay} does not have field {fieldID.ID}");
         }
@@ -798,29 +797,29 @@ public class TypeBuilder {
         return fieldRef;
     }
 
-    public MethodReference GetStaticArrayElementMethodRef(IR.IType elementType, ulong dim, IR.Library library) {
-        this.BuildType(elementType, library, out var elementTypeID);
+    public MethodReference GetStaticArrayElementMethodRef(IR.IType elementType, ulong dim) {
+        this.BuildType(elementType, out var elementTypeID);
 
         var arraySig = new ArraySig(elementTypeID, dim);
 
         return this.staticArrayElementMethods[arraySig];
     }
 
-    internal LayoutField GetVariantTagFieldRef(IR.IType baseType, IR.Library library) {
-        this.BuildType(baseType, library, out var baseTypeID);
+    internal LayoutField GetVariantTagFieldRef(IR.IType baseType) {
+        this.BuildType(baseType, out var baseTypeID);
 
         if (!this.variantLayouts.TryGetValue(baseTypeID, out var variantLayout)) {
-            var typeDisplay = baseType.ToPrettyString(library.Metadata);
+            var typeDisplay = baseType.ToPrettyString(this.assemblyBuilder.LoadedMetadata);
             throw new ArgumentException($"variant {typeDisplay} is not defined yet");
         }
 
         return variantLayout.TagField;
     }
 
-    internal LayoutField GetVariantDataFieldRef(IR.IType baseType, ulong caseIndex, IR.Library library) {
-        this.BuildType(baseType, library, out var baseTypeID);
+    internal LayoutField GetVariantDataFieldRef(IR.IType baseType, ulong caseIndex) {
+        this.BuildType(baseType, out var baseTypeID);
 
-        var typeDisplay = baseType.ToPrettyString(library.Metadata);
+        var typeDisplay = baseType.ToPrettyString(this.assemblyBuilder.LoadedMetadata);
 
         if (!this.variantLayouts.TryGetValue(baseTypeID, out var variantRefs)) {
             throw new ArgumentException($"variant ID {typeDisplay} is not defined yet");
@@ -830,10 +829,10 @@ public class TypeBuilder {
             ?? throw new ArgumentException($"invalid index {caseIndex} for variant type {typeDisplay}");
     }
 
-    public GenericInstanceMethod GetObjectCreateMethod(IR.IObjectID classID, IR.Library library) {
+    public GenericInstanceMethod GetObjectCreateMethod(IR.IObjectID classID) {
         var module = this.assemblyBuilder.Module;
 
-        var classTypeRef = this.BuildType(new IR.ObjectType(classID), library);
+        var classTypeRef = this.BuildType(new IR.ObjectType(classID));
 
         var methodInstance = new GenericInstanceMethod(module.ImportReference(this.ObjectCreateMethod));
         methodInstance.GenericArguments.Add(module.ImportReference(classTypeRef));
@@ -841,10 +840,10 @@ public class TypeBuilder {
         return methodInstance;
     }
 
-    public GenericInstanceMethod GetArrayCreateMethod(IR.IType elementType, IR.Library library) {
+    public GenericInstanceMethod GetArrayCreateMethod(IR.IType elementType) {
         var module = this.assemblyBuilder.Module;
         
-        var elementTypeRef = this.BuildType(elementType, library);
+        var elementTypeRef = this.BuildType(elementType);
 
         var methodInstance = new GenericInstanceMethod(module.ImportReference(this.ArrayCreateMethod));
         methodInstance.GenericArguments.Add(module.ImportReference(elementTypeRef));

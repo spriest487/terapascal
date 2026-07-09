@@ -93,7 +93,7 @@ public sealed class NamePath : IEquatable<NamePath> {
         return result.ToString();
     }
     
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         var result = new StringBuilder();
         result.AppendJoin(".", this.Path);
 

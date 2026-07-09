@@ -14,7 +14,7 @@ public class TagInfo {
         init => field = value!.ToDictionaryNonNull();
     }
 
-    public void ToPrettyString(Metadata metadata, StringBuilder result) {
+    public void ToPrettyString(IMetadataSource metadata, StringBuilder result) {
         result.Append('[');
         result.Append(this.ClassID.ToObjectType([]).ToPrettyString(metadata));
         

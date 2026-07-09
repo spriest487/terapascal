@@ -217,7 +217,7 @@ impl<'a> Unit<'a> {
 
         let generic_def = self.metadata
             .get_struct_def(def_id)
-            .map(|def| Rc::new(def.clone()))
+            .cloned()
             .unwrap_or_else(|| {
                 panic!("missing struct def: {def_id}")
             });
@@ -225,7 +225,7 @@ impl<'a> Unit<'a> {
         match ir::generic::instantiate_struct_def(&generic_def, args) {
             Cow::Borrowed(..) => {
                 // not a specialized generic
-                self.define_struct(ty.clone(), generic_def);
+                self.define_struct(ty.clone(), Rc::new(generic_def));
             },
 
             Cow::Owned(new_def) => {

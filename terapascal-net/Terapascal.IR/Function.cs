@@ -113,7 +113,7 @@ public record FunctionRef {
         return (this.TypeArgs ?? []).SequenceEqual(other.TypeArgs ?? []);
     }
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         var result = new StringBuilder();
         metadata.FormatFunctionRef(this, result);
         return result.ToString();
@@ -162,7 +162,7 @@ public class FunctionSig : IEquatable<FunctionSig> {
         return hashCode.ToHashCode();
     }
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         var result = new StringBuilder("function(");
 
         for (var i = 0; i < this.ParameterTypes.Count; i += 1) {

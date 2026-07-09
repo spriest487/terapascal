@@ -3,7 +3,7 @@ using MessagePack;
 namespace Terapascal.IR;
 
 [MessagePackObject]
-public class TypeRef {
+public record TypeRef {
     [Key("def_id")]
     public TypeDefID DefID { get; init; }
 
@@ -30,16 +30,29 @@ public class TypeRef {
     }
 
     public IType ToVariantType() {
-        return new StructType(this);
+        return new VariantType(this);
     }
 
     public IObjectID ToClassObjectID() {
         return new ClassObjectID(this);
     }
+
+    public override int GetHashCode() {
+        var hashCode = new HashCode();
+        hashCode.Add(this.DefID);
+
+        if (this.Args != null) {
+            foreach (var typeArg in this.Args) {
+                hashCode.Add(typeArg);
+            }
+        }
+
+        return hashCode.ToHashCode();
+    }
 }
 
 [MessagePackObject]
-public class InterfaceRef {
+public record InterfaceRef {
     [Key("def_id")]
     public InterfaceID DefID { get; init; }
 
@@ -51,8 +64,7 @@ public class InterfaceRef {
             return this;
         }
 
-        return new InterfaceRef {
-            DefID = this.DefID,
+        return this with {
             Args = this.Args?
                 .Select(a => a.ResolveGeneric(typeMap))
                 .ToArray(),
@@ -61,5 +73,18 @@ public class InterfaceRef {
 
     public IObjectID ToObjectID() {
         return new InterfaceObjectID(this);
+    }
+
+    public override int GetHashCode() {
+        var hashCode = new HashCode();
+        hashCode.Add(this.DefID);
+
+        if (this.Args != null) {
+            foreach (var typeArg in this.Args) {
+                hashCode.Add(typeArg);
+            }
+        }
+
+        return hashCode.ToHashCode();
     }
 }

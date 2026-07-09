@@ -7,7 +7,7 @@ namespace Terapascal.IR;
 public interface IValue {
     bool IsLiteral => false;
 
-    string ToPrettyString(Metadata libraryMetadata) {
+    string ToPrettyString(IMetadataSource libraryMetadata) {
         var result = new StringBuilder();
         libraryMetadata.FormatValue(this, result);
         return result.ToString();

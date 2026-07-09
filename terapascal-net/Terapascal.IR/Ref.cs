@@ -33,7 +33,7 @@ public readonly record struct FunctionID(ulong ID) : IComparable<FunctionID> {
         return $"function {this.ID}";
     }
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         var result = new StringBuilder();
         metadata.FormatFunctionName(this, result);
         return result.ToString();
@@ -110,7 +110,7 @@ public class StringIDFormatter : IMessagePackFormatter<StringID> {
 }
 
 public interface IRef {
-    string ToPrettyString(Metadata libraryMetadata) {
+    string ToPrettyString(IMetadataSource libraryMetadata) {
         var result = new StringBuilder();
         libraryMetadata.FormatRef(this, result);
         return result.ToString();

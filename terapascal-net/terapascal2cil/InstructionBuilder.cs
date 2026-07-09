@@ -243,7 +243,7 @@ public class InstructionBuilder {
 
                             case IR.ObjectType:
                             case IR.WeakObjectType: {
-                                var typeRef = typeBuilder.BuildType(castToType, this.library);
+                                var typeRef = typeBuilder.BuildType(castToType);
                                 this.body.Emit(OpCodes.Castclass, typeRef);
                                 break;
                             }
@@ -270,7 +270,7 @@ public class InstructionBuilder {
                     Arg: var argVal,
                     ValueType: var valueType,
                 }: {
-                    var valueTypeRef = typeBuilder.BuildType(valueType, this.library);
+                    var valueTypeRef = typeBuilder.BuildType(valueType);
                     
                     var isMethodRef = this.assemblyBuilder.TypeBuilder.ObjectIsMethod;
 
@@ -468,7 +468,7 @@ public class InstructionBuilder {
     private void LoadFieldRef(IR.IRef argRef, IR.FieldID fieldID, IR.IType baseType) {
         var typeBuilder = this.assemblyBuilder.TypeBuilder;
                     
-        var fieldRef = typeBuilder.GetFieldRef(baseType, fieldID, this.library);
+        var fieldRef = typeBuilder.GetFieldRef(baseType, fieldID);
 
         // for object types Ldfld(a) expects an object ref on the stack so load it directly, but for
         // value types we need to load a reference (address) to the object
@@ -489,14 +489,14 @@ public class InstructionBuilder {
                 this.LoadRefAddr(baseRef);
                 this.LoadValue(indexVal);
                         
-                var elementMethod = typeBuilder.GetStaticArrayElementMethodRef(elementType, length, this.library);
+                var elementMethod = typeBuilder.GetStaticArrayElementMethodRef(elementType, length);
                         
                 this.body.Emit(OpCodes.Call, elementMethod);
                 break;
             }
 
             case IR.ObjectType(IR.ArrayObjectID(var elementType)): {
-                var elementTypeRef = typeBuilder.BuildType(elementType, this.library);
+                var elementTypeRef = typeBuilder.BuildType(elementType);
 
                 this.LoadRef(baseRef);
                 this.LoadValue(indexVal);
@@ -505,7 +505,7 @@ public class InstructionBuilder {
             }
 
             case IR.ObjectType(IR.BoxObjectID(var valueType)): {
-                typeBuilder.BuildType(valueType, this.library, out var valueTypeID);
+                typeBuilder.BuildType(valueType, out var valueTypeID);
                 var boxTypeInfo = typeBuilder.GetBoxTypeInfo(valueTypeID);
 
                 this.LoadRef(baseRef);
@@ -590,7 +590,7 @@ public class InstructionBuilder {
 
     private void BuildNewObject(IR.IRef outRef, IR.TypeRef typeRef, bool immortal) {
         var classID = new IR.ClassObjectID(typeRef);
-        var createMethodInst = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(classID, this.library);
+        var createMethodInst = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(classID);
 
         this.StoreRef(outRef, () => {
             this.body.Emit(immortal ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
@@ -599,7 +599,7 @@ public class InstructionBuilder {
     }
 
     private void BuildNewArray(IR.IRef outRef, IR.IValue countVal, IR.IType elementType, bool immortal) {
-        var createMethodInst = this.assemblyBuilder.TypeBuilder.GetArrayCreateMethod(elementType, this.library);
+        var createMethodInst = this.assemblyBuilder.TypeBuilder.GetArrayCreateMethod(elementType);
         
         this.StoreRef(outRef, () => {
             this.LoadValue(countVal);
@@ -609,10 +609,8 @@ public class InstructionBuilder {
     }
     
     private void BuildNewBox(IR.IRef outRef, IR.IType valueType, bool immortal) {
-        var boxCreateMethod = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(
-            new IR.BoxObjectID(valueType), 
-            this.library
-        );
+        var boxObjectID = new IR.BoxObjectID(valueType);
+        var boxCreateMethod = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(boxObjectID);
 
         this.StoreRef(outRef, () => {
             this.body.Emit(immortal ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
@@ -655,7 +653,7 @@ public class InstructionBuilder {
 
         var intrinsicSize = type.IntrinsicSize();
         if (intrinsicSize == null) {
-            var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type, this.library);
+            var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type);
             this.body.Emit(OpCodes.Sizeof, typeRef);
         } else {
             this.body.Emit(OpCodes.Ldc_I4, intrinsicSize.Value);
@@ -668,7 +666,7 @@ public class InstructionBuilder {
         } else if (type.IsInteger()) {
             this.body.Emit(OpCodes.Ldc_I4_0);
         } else {
-            var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type, this.library);
+            var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type);
             var typeDef = this.assemblyBuilder.TypeBuilder.ResolveCore(typeRef) ?? typeRef.Resolve();
 
             if (typeDef?.FindConstructor([]) is { } defaultCtor) {
@@ -691,7 +689,7 @@ public class InstructionBuilder {
     }
 
     private void BuildLocalAlloc(IR.LocalID at, IR.IType type) {
-        var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type, this.library);
+        var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type);
         
         var index = this.AllocLocal(typeRef);
 
@@ -728,7 +726,7 @@ public class InstructionBuilder {
             // must be a value referencing a function pointer
             this.LoadValue(target);
 
-            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(sig.ResultType, this.library);
+            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(sig.ResultType);
             var callSite = new CallSite(returnTypeRef) {
                 HasThis = false,
                 ExplicitThis = false,
@@ -736,7 +734,7 @@ public class InstructionBuilder {
             };
 
             foreach (var paramType in sig.ParameterTypes) {
-                var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(paramType, this.library);
+                var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(paramType);
                 callSite.Parameters.Add(new ParameterDefinition(paramTypeRef));
             }
 
@@ -766,11 +764,8 @@ public class InstructionBuilder {
         IR.InterfaceRef ifaceRef,
         IR.MethodID methodID
     ) {
-        this.assemblyBuilder.TypeBuilder.BuildType(
-            ifaceRef.ToObjectID().ToObjectType(),
-            this.library,
-            out var ifaceTypeID
-        );
+        var ifaceType = ifaceRef.ToObjectID().ToObjectType();
+        this.assemblyBuilder.TypeBuilder.BuildType(ifaceType, out var ifaceTypeID);
 
         var ifaceDef = ((IR.DefInterfaceDecl)this.library.Metadata.Interfaces[ifaceRef.DefID]).Def;
         var ifaceMethod = ifaceDef.Methods[(int)methodID.ID];
@@ -1051,20 +1046,19 @@ public class InstructionBuilder {
                     return funcPtrType.MakeTempRef();
                 }
 
-                var layoutField = this.assemblyBuilder.TypeBuilder.GetFieldRef(fieldRef.InstanceType, fieldRef.FieldID, this.library);
+                var layoutField = this.assemblyBuilder.TypeBuilder.GetFieldRef(fieldRef.InstanceType, fieldRef.FieldID);
                 return layoutField.Type.MakeTempRef();
             }
 
             case IR.VariantTagRef(var tagRef): {
-                var field = this.assemblyBuilder.TypeBuilder.GetVariantTagFieldRef(tagRef.InstanceType, this.library);
+                var field = this.assemblyBuilder.TypeBuilder.GetVariantTagFieldRef(tagRef.InstanceType);
                 return field.Type.MakeTempRef();
             }
             
             case IR.VariantDataRef(var dataRef): {
                 var caseLayout = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(
                     dataRef.InstanceType,
-                    dataRef.CaseIndex,
-                    this.library
+                    dataRef.CaseIndex
                 );
 
                 return caseLayout.Type.MakeTempRef();
@@ -1156,7 +1150,7 @@ public class InstructionBuilder {
                     throw new InvalidDataException($"invalid value for dereference instruction: {atRef.ToPrettyString(this.library.Metadata)}");
                 }
 
-                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(derefType, this.library);
+                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(derefType);
 
                 this.LoadValue(atRef);
                 this.body.Emit(OpCodes.Ldobj, targetTypeRef);
@@ -1179,14 +1173,14 @@ public class InstructionBuilder {
             }
 
             case IR.VariantTagRef(var tagRef): {
-                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantTagFieldRef(tagRef.InstanceType, this.library);
+                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantTagFieldRef(tagRef.InstanceType);
                 this.LoadRefAddr(tagRef.Instance);
                 this.body.Emit(OpCodes.Ldflda, fieldRef.Field);
                 return;
             }
             
             case IR.VariantDataRef(var tagRef): {
-                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(tagRef.InstanceType, tagRef.CaseIndex, this.library);
+                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(tagRef.InstanceType, tagRef.CaseIndex);
                 this.LoadRefAddr(tagRef.Instance);
                 this.body.Emit(OpCodes.Ldflda, fieldRef.Field);
                 return;
@@ -1258,7 +1252,7 @@ public class InstructionBuilder {
                     throw new InvalidDataException($"invalid ref type for dereference instruction: {refType}");
                 }
                 
-                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(derefType, this.library);
+                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(derefType);
 
                 this.LoadValue(atRef);
                 

@@ -25,7 +25,7 @@ public class InstructionList {
 
     public static void FormatInstructions(
         IReadOnlyList<IInstruction> instructions,
-        Metadata metadata,
+        IMetadataSource metadata,
         StringBuilder result
     ) {
         foreach (var instruction in instructions) {

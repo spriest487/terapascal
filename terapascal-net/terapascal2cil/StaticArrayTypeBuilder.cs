@@ -22,10 +22,10 @@ public class StaticArrayTypeBuilder {
         this.typeBuilder = typeBuilder;
     }
 
-    public TypeReference BuildArrayTypeRef(IR.IType element, int id, int length, IR.Library library, out MethodDefinition elementRefMethodDef) {
+    public TypeReference BuildArrayTypeRef(IR.IType element, int id, int length, out MethodDefinition elementRefMethodDef) {
         var typeName = $"StaticArray_Internal{id}";
 
-        var elementTypeRef = this.typeBuilder.BuildType(element, library);
+        var elementTypeRef = this.typeBuilder.BuildType(element);
 
         var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
     
@@ -36,45 +36,45 @@ public class StaticArrayTypeBuilder {
         // reference type elements must be represented as sequential fields with runtime code to look up by index
         switch (elementTypeRef.Namespace, elementTypeRef.Name) {
             case (nameof(System), nameof(SByte)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_I1, OpCodes.Stind_I1, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I1, OpCodes.Stind_I1, out elementRefMethodDef);
                 break;
             }
             case (nameof(System), nameof(Byte)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_U1, OpCodes.Stind_I1, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_U1, OpCodes.Stind_I1, out elementRefMethodDef);
                 break;
             }
             case (nameof(System), nameof(Int16)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_I2, OpCodes.Stind_I2, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I2, OpCodes.Stind_I2, out elementRefMethodDef);
                 break;
             }
             case (nameof(System), nameof(UInt16)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_U2, OpCodes.Stind_I2, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_U2, OpCodes.Stind_I2, out elementRefMethodDef);
                 break;
             }
             case (nameof(System), nameof(Int32)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_I4, OpCodes.Stind_I4, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I4, OpCodes.Stind_I4, out elementRefMethodDef);
                 break;
             }
             case (nameof(System), nameof(UInt32)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_U4, OpCodes.Stind_I4, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_U4, OpCodes.Stind_I4, out elementRefMethodDef);
                 break;
             }
             case (nameof(System), nameof(Single)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_R4, OpCodes.Stind_R4, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_R4, OpCodes.Stind_R4, out elementRefMethodDef);
                 break;
             }
             case (nameof(System), nameof(Double)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_R8, OpCodes.Stind_R8, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_R8, OpCodes.Stind_R8, out elementRefMethodDef);
                 break;
             }
             case (nameof(System), nameof(Int64)):
             case (nameof(System), nameof(UInt64)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_I8, OpCodes.Stind_I8, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I8, OpCodes.Stind_I8, out elementRefMethodDef);
                 break;
             }
             case (nameof(System), nameof(IntPtr)):
             case (nameof(System), nameof(UIntPtr)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, library, OpCodes.Ldind_I, OpCodes.Stind_I, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I, OpCodes.Stind_I, out elementRefMethodDef);
                 break;
             }
 
@@ -108,14 +108,13 @@ public class StaticArrayTypeBuilder {
         TypeReference elementTypeRef,
         IR.IType element,
         int length,
-        IR.Library library,
         OpCode loadIndOp,
         OpCode storeIndOp,
         out MethodDefinition elementRefMethodDef
     ) {
-        var elementSize = this.typeBuilder.GetValueLayoutSize(element, library);
+        var elementSize = this.typeBuilder.GetValueLayoutSize(element);
 
-        var bufferElementTypeDef = this.BuildArrayFixedBufferType(ElementsFieldName, element, length, elementSize, library);
+        var bufferElementTypeDef = this.BuildArrayFixedBufferType(ElementsFieldName, element, length, elementSize);
         typeDef.NestedTypes.Add(bufferElementTypeDef);
 
         var elementField = new FieldDefinition(ElementsFieldName, FieldAttributes.Public, bufferElementTypeDef);
@@ -160,8 +159,7 @@ public class StaticArrayTypeBuilder {
         string fieldName,
         IR.IType elementType,
         int length,
-        int elementSize,
-        IR.Library library
+        int elementSize
     ) {
         var attrs = TypeAttributes.NestedPublic 
             | TypeAttributes.Sealed 
@@ -180,7 +178,7 @@ public class StaticArrayTypeBuilder {
         typeDef.CustomAttributes.Add(new CustomAttribute(unsafeValAttrCtor));
         typeDef.CustomAttributes.Add(new CustomAttribute(compilerGenCtor));
 
-        var fieldTypeRef = this.typeBuilder.BuildType(elementType, library);
+        var fieldTypeRef = this.typeBuilder.BuildType(elementType);
 
         var fieldAttrs = FieldAttributes.Public;
         typeDef.Fields.Add(new FieldDefinition("FixedElementField", fieldAttrs, fieldTypeRef));

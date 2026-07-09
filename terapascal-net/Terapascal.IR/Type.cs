@@ -239,7 +239,7 @@ public interface IType : IEquatable<IType> {
         _ => null,
     };
 
-    string ToPrettyString(Metadata metadata);
+    string ToPrettyString(IMetadataSource metadata);
 
     IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap);
 
@@ -249,7 +249,7 @@ public interface IType : IEquatable<IType> {
 }
 
 public sealed record NothingType : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "nothing";
     }
 
@@ -259,7 +259,7 @@ public sealed record NothingType : IType {
 }
 
 public sealed record GenericType(string Name) : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return this.Name;
     }
 
@@ -273,7 +273,7 @@ public sealed record GenericType(string Name) : IType {
 }
 
 public sealed record PointerType(IType Inner) : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return $"^{this.Inner.ToPrettyString(metadata)}";
     }
 
@@ -284,7 +284,7 @@ public sealed record PointerType(IType Inner) : IType {
 }
 
 public sealed record TempRefType(IType Inner) : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return $"&{this.Inner.ToPrettyString(metadata)}";
     }
 
@@ -295,7 +295,7 @@ public sealed record TempRefType(IType Inner) : IType {
 }
 
 public sealed record StructType(TypeRef TypeRef) : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         if (!metadata.FindStructDef(this.TypeRef.DefID, out var def)) {
             return $"{{struct {this.TypeRef.DefID}}}";
         }
@@ -315,7 +315,7 @@ public sealed record StructType(TypeRef TypeRef) : IType {
 }
 
 public sealed record VariantType(TypeRef TypeRef) : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         if (!metadata.FindVariantDef(this.TypeRef.DefID, out var def)) {
             return $"{{struct {this.TypeRef.DefID}}}";
         }
@@ -334,7 +334,7 @@ public sealed record VariantType(TypeRef TypeRef) : IType {
 }
 
 public sealed record FunctionType(FunctionSig Sig) : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return this.Sig.ToPrettyString(metadata);
     }
 
@@ -344,7 +344,7 @@ public sealed record FunctionType(FunctionSig Sig) : IType {
 }
 
 public sealed record BoolType : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "bool";
     }
 
@@ -354,7 +354,7 @@ public sealed record BoolType : IType {
 }
 
 public sealed record U8Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "u8";
     }
 
@@ -364,7 +364,7 @@ public sealed record U8Type : IType {
 }
 
 public sealed record I8Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "i8";
     }
 
@@ -374,7 +374,7 @@ public sealed record I8Type : IType {
 }
 
 public sealed record U16Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "u16";
     }
 
@@ -384,7 +384,7 @@ public sealed record U16Type : IType {
 }
 
 public sealed record I16Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "i16";
     }
 
@@ -394,7 +394,7 @@ public sealed record I16Type : IType {
 }
 
 public sealed record U32Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "u32";
     }
 
@@ -404,7 +404,7 @@ public sealed record U32Type : IType {
 }
 
 public sealed record I32Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "i32";
     }
 
@@ -414,7 +414,7 @@ public sealed record I32Type : IType {
 }
 
 public sealed record U64Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "u64";
     }
 
@@ -424,7 +424,7 @@ public sealed record U64Type : IType {
 }
 
 public sealed record I64Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "i64";
     }
 
@@ -434,7 +434,7 @@ public sealed record I64Type : IType {
 }
 
 public sealed record USizeType : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "usize";
     }
 
@@ -444,7 +444,7 @@ public sealed record USizeType : IType {
 }
 
 public sealed record ISizeType : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "isize";
     }
 
@@ -454,7 +454,7 @@ public sealed record ISizeType : IType {
 }
 
 public sealed record F32Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "f32";
     }
 
@@ -464,7 +464,7 @@ public sealed record F32Type : IType {
 }
 
 public sealed record F64Type : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "f64";
     }
 
@@ -484,7 +484,7 @@ public sealed record ArrayType : IType {
     [Key("dim")]
     public required ulong Length { get; init; }
 
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return $"array[{this.Length}] of {this.Element.ToPrettyString(metadata)}";
     }
 
@@ -497,7 +497,7 @@ public sealed record ArrayType : IType {
 }
 
 public sealed record ObjectType(IObjectID ID) : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return $"*{this.ID.ToPrettyString(metadata)}";
     }
 
@@ -507,7 +507,7 @@ public sealed record ObjectType(IObjectID ID) : IType {
 }
 
 public sealed record WeakObjectType(IObjectID ID) : IType {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return $"weak *{this.ID.ToPrettyString(metadata)}";
     }
 
@@ -623,7 +623,7 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
 }
 
 public interface IObjectID : IEquatable<IObjectID> {
-    string ToPrettyString(Metadata metadata);
+    string ToPrettyString(IMetadataSource metadata);
     
     IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap);
     
@@ -641,7 +641,7 @@ public interface IObjectID : IEquatable<IObjectID> {
 }
 
 public sealed record AnyObjectID : IObjectID {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return "any";
     }
 
@@ -656,7 +656,7 @@ public sealed record ClassObjectID(TypeRef TypeRef) : IObjectID {
     public static ClassObjectID MethodInfo => new ClassObjectID(new TypeRef { DefID = TypeDefID.MethodInfo });
     public static ClassObjectID FunctionInfo => new ClassObjectID(new TypeRef { DefID = TypeDefID.FunctionInfo });
     
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         if (!metadata.FindStructDef(this.TypeRef.DefID, out var def)) {
             return $"{{class {this.TypeRef.DefID}}}";
         }
@@ -676,8 +676,8 @@ public sealed record ClassObjectID(TypeRef TypeRef) : IObjectID {
 }
 
 public sealed record InterfaceObjectID(InterfaceRef InterfaceRef) : IObjectID {
-    public string ToPrettyString(Metadata metadata) {
-        if (!metadata.Interfaces.TryGetValue(this.InterfaceRef.DefID, out var ifaceDecl)) {
+    public string ToPrettyString(IMetadataSource metadata) {
+        if (!metadata.FindInterfaceDecl(this.InterfaceRef.DefID, out var ifaceDecl)) {
             return $"{{interface {this.InterfaceRef.DefID}}}";
         }
 
@@ -693,7 +693,7 @@ public sealed record InterfaceObjectID(InterfaceRef InterfaceRef) : IObjectID {
 }
 
 public sealed record AnyClosureObjectID(FunctionSig Sig) : IObjectID {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return $"closure of {this.Sig.ToPrettyString(metadata)}";
     }
 
@@ -703,7 +703,7 @@ public sealed record AnyClosureObjectID(FunctionSig Sig) : IObjectID {
 }
 
 public sealed record ArrayObjectID(IType Element) : IObjectID {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return $"array of {this.Element.ToPrettyString(metadata)}";
     }
 
@@ -713,7 +713,7 @@ public sealed record ArrayObjectID(IType Element) : IObjectID {
 }
 
 public sealed record BoxObjectID(IType Value) : IObjectID {
-    public string ToPrettyString(Metadata metadata) {
+    public string ToPrettyString(IMetadataSource metadata) {
         return $"box of {this.Value.ToPrettyString(metadata)}";
     }
 
