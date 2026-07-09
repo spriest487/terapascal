@@ -249,8 +249,6 @@ public class TypeBuilder {
     }
 
     private TypeReference BuildStructDef(IR.TypeRef structRef) {
-        var structType = structRef.ToStructType();
-
         if (!this.assemblyBuilder.LoadedMetadata.FindStructDef(structRef.DefID, out var structDef)) {
             throw new InvalidDataException($"missing metadata definition for struct {structRef.DefID}");
         }
@@ -260,12 +258,17 @@ public class TypeBuilder {
         var isValueType = !isClass && closureSig == null;
 
         TypeReference baseType;
+        IR.IType structType;
+
         if (isClass) {
             baseType = this.ObjectBaseType;
+            structType = structRef.ToClassObjectID().ToObjectType();
         } else if (closureSig != null) {
             baseType = this.ClosureBaseType;
+            structType = structRef.ToClassObjectID().ToObjectType();
         } else {
             baseType = this.ValueType;
+            structType = structRef.ToStructType();
         }
 
         string ns;
