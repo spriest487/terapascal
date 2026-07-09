@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
@@ -221,6 +222,11 @@ public class AssemblyBuilder : IDisposable {
         var globalsInit = this.GetGlobalsCCtor().Body.GetILProcessor();
 
         foreach (var (id, stringLit) in library.Metadata.StringLiterals) {
+            if (this.stringLitFields.ContainsKey(id)) {
+                Debug.Print($"duplicate string literal: {id.ID}");
+                continue;
+            }
+
             var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.InitOnly | FieldAttributes.Static;
             var fieldDef = new FieldDefinition($"String_{id.ID}", fieldAttrs, stringTypeRef);
 
@@ -237,7 +243,7 @@ public class AssemblyBuilder : IDisposable {
         const FieldAttributes globalVarFieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
 
         foreach (var (id, varInfo) in library.Metadata.Variables) {
-            var typeRef = this.TypeBuilder.BuildTypeRef(varInfo.Type, library);
+            var typeRef = this.TypeBuilder.BuildType(varInfo.Type, library);
 
             TypeDefinition typeDef;
             if (varInfo.Name?.GetParent() is { } unitPath) {
@@ -267,14 +273,22 @@ public class AssemblyBuilder : IDisposable {
                     
                     switch (def) {
                         case IR.StructTypeDef { Def: var structDef }: {
-                            var structRef = id.ToTypeRef(structDef.Identity.GetDeclPath()?.GetGenericArgs());
-                            this.TypeBuilder.BuildTypeRef(structRef.ToStructType(), library);
+                            var isGeneric = structDef.Identity.GetDeclPath()?.HasTypeParams ?? false;
+                            if (!isGeneric) {
+                                var structRef = id.ToTypeRef(structDef.Identity.GetDeclPath()?.GetGenericArgs());
+                                this.TypeBuilder.BuildType(structRef.ToStructType(), library);
+                            }
+
                             break;
                         }
 
                         case IR.VariantTypeDef { Def: var variantDef }: {
-                            var variantRef = id.ToTypeRef(variantDef.Name.GetGenericArgs());
-                            this.TypeBuilder.BuildTypeRef(variantRef.ToVariantType(), library);
+                            var isGeneric = variantDef.Name.HasTypeParams;
+                            if (!isGeneric) {
+                                var variantRef = id.ToTypeRef(variantDef.Name.GetGenericArgs());
+                                this.TypeBuilder.BuildType(variantRef.ToVariantType(), library);
+                            }
+
                             break;
                         }
                     }
@@ -299,7 +313,7 @@ public class AssemblyBuilder : IDisposable {
         foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
             if (ifaceDecl is IR.DefInterfaceDecl(_)) {
                 var ifaceType = id.ToInterfacePointerType(ifaceDecl.GetGlobalName().GetGenericArgs());
-                this.TypeBuilder.BuildTypeRef(ifaceType, library);
+                this.TypeBuilder.BuildType(ifaceType, library);
             }
         }
 
@@ -337,7 +351,7 @@ public class AssemblyBuilder : IDisposable {
     }
 
     private void BuildStaticTagsArrayField(IR.ITagLocation tagLoc, int count, IR.Library library) {
-        var tagArrayTypeRef = this.TypeBuilder.BuildTypeRef(IR.IType.Any.MakeDynArray(), library);
+        var tagArrayTypeRef = this.TypeBuilder.BuildType(IR.IType.Any.MakeDynArray(), library);
         var arrayCreateInstance = this.TypeBuilder.GetArrayCreateMethod(IR.IType.Any, library);
 
         if (count == 0) {
@@ -363,7 +377,9 @@ public class AssemblyBuilder : IDisposable {
         TypeDefinition globals,
         IR.Library library
     ) {
-        var typeRef = this.TypeBuilder.BuildTypeRef(type, library);
+        this.TypeBuilder.BuildType(IR.TypeDefID.TypeInfo.ToObjectType([]), library);
+
+        var typeRef = this.TypeBuilder.BuildType(type, library);
 
         var typeInfoClassID = IR.TypeDefID.TypeInfo.ToObjectID([]);
         var typeInfoType = typeInfoClassID.ToObjectType();
@@ -375,7 +391,7 @@ public class AssemblyBuilder : IDisposable {
 
         var typeInfoTypeRef = this.Module
             .ImportReference(this.TypeBuilder
-            .BuildTypeRef(typeInfoType, library));
+            .BuildType(typeInfoType, library));
 
         var fieldName = $"StaticTypeInfo_{type.GetUniqueName(this.TypeBuilder.Cache)}";
 
@@ -443,7 +459,7 @@ public class AssemblyBuilder : IDisposable {
         var initBody = initBuilder.Body.GetILProcessor();
 
         var methodInfoClassID = IR.TypeDefID.MethodInfo.ToObjectID([]);
-        var methodInfoTypeRef = this.TypeBuilder.BuildTypeRef(methodInfoClassID.ToObjectType(), library);
+        var methodInfoTypeRef = this.TypeBuilder.BuildType(methodInfoClassID.ToObjectType(), library);
         var methodInfoTypeDef = methodInfoTypeRef.Resolve();
             
         var createMethodInfoInst = this.TypeBuilder.GetObjectCreateMethod(methodInfoClassID, library);
@@ -500,7 +516,7 @@ public class AssemblyBuilder : IDisposable {
 
     private void CreateStaticFuncInfoVariable(IR.FunctionID funcID, IR.Library library) {
         var funcInfoType = IR.TypeDefID.FunctionInfo.ToObjectType([]);
-        var funcInfoTypeRef = this.TypeBuilder.BuildTypeRef(funcInfoType, library);
+        var funcInfoTypeRef = this.TypeBuilder.BuildType(funcInfoType, library);
 
         var fieldName = $"StaticFuncInfo_{funcID.ID}";
 
@@ -517,6 +533,7 @@ public class AssemblyBuilder : IDisposable {
         var funcObjectID = IR.TypeDefID.FunctionInfo.ToObjectID([]);
         var funcInfoType = funcObjectID.ToObjectType();
 
+        this.TypeBuilder.BuildType(funcInfoType, library);
         var nameField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoName, library);
         var implField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoImpl, library);
         var tagsField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoTags, library);

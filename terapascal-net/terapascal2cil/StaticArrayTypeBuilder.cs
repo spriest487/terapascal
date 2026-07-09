@@ -25,7 +25,7 @@ public class StaticArrayTypeBuilder {
     public TypeReference BuildArrayTypeRef(IR.IType element, int id, int length, IR.Library library, out MethodDefinition elementRefMethodDef) {
         var typeName = $"StaticArray_Internal{id}";
 
-        var elementTypeRef = this.typeBuilder.BuildTypeRef(element, library);
+        var elementTypeRef = this.typeBuilder.BuildType(element, library);
 
         var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
     
@@ -180,7 +180,7 @@ public class StaticArrayTypeBuilder {
         typeDef.CustomAttributes.Add(new CustomAttribute(unsafeValAttrCtor));
         typeDef.CustomAttributes.Add(new CustomAttribute(compilerGenCtor));
 
-        var fieldTypeRef = this.typeBuilder.BuildTypeRef(elementType, library);
+        var fieldTypeRef = this.typeBuilder.BuildType(elementType, library);
 
         var fieldAttrs = FieldAttributes.Public;
         typeDef.Fields.Add(new FieldDefinition("FixedElementField", fieldAttrs, fieldTypeRef));

@@ -4,10 +4,41 @@ using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
+public enum StructLayout {
+    Default,
+    Packed,
+}
+
+public class StructLayoutFormatter : IMessagePackFormatter<StructLayout> {
+    public void Serialize(ref MessagePackWriter writer, StructLayout value, MessagePackSerializerOptions options) {
+        throw new NotImplementedException();
+    }
+
+    public StructLayout Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
+        var name = reader.ReadString();
+        switch (name) {
+            case "Default": {
+                return StructLayout.Default;
+            }
+
+            case "Packed": {
+                return StructLayout.Packed;
+            }
+
+            default: {
+                throw new MessagePackSerializationException("invalid value for StructLayout enum: {name}");
+            }
+        }
+    }
+}
+
 [MessagePackObject]
 public record StructDef {
     [Key("identity")]
     public required IStructIdentity Identity { get; init; }
+
+    [Key("visibility")]
+    public required Visibility Visibility { get; init; }
     
     [Key("fields")]
     public required SortedDictionary<FieldID, StructFieldDef> Fields { get; init; }
@@ -17,6 +48,9 @@ public record StructDef {
         get;
         init => field = value.ToArrayNonNull();
     }
+
+    [Key("layout")]
+    public required StructLayout Layout { get; init; }
 
     public string ToPrettyString(Metadata metadata) {
         var result = new StringBuilder();
@@ -46,6 +80,8 @@ public record StructDef {
             Identity = this.Identity,
             Tags = this.Tags,
             Fields = fields,
+            Visibility = this.Visibility,
+            Layout = this.Layout,
         };
     }
 }

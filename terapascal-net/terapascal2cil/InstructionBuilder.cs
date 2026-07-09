@@ -243,7 +243,7 @@ public class InstructionBuilder {
 
                             case IR.ObjectType:
                             case IR.WeakObjectType: {
-                                var typeRef = typeBuilder.BuildTypeRef(castToType, this.library);
+                                var typeRef = typeBuilder.BuildType(castToType, this.library);
                                 this.body.Emit(OpCodes.Castclass, typeRef);
                                 break;
                             }
@@ -265,17 +265,17 @@ public class InstructionBuilder {
                     break;
                 }
 
-                case IR.ClassIsInstruction {
+                case IR.IsTypeInstruction {
                     Out: var outRef,
                     Arg: var argVal,
-                    ClassID: var classID,
+                    ValueType: var valueType,
                 }: {
-                    var classTypeRef = typeBuilder.BuildTypeRef(classID.ToObjectType(), this.library);
+                    var valueTypeRef = typeBuilder.BuildType(valueType, this.library);
                     
                     var isMethodRef = this.assemblyBuilder.TypeBuilder.ObjectIsMethod;
 
                     var isMethodInstance = new GenericInstanceMethod(isMethodRef);
-                    isMethodInstance.GenericArguments.Add(classTypeRef);
+                    isMethodInstance.GenericArguments.Add(valueTypeRef);
 
                     var isMethodInstanceRef = this.assemblyBuilder.Module.ImportReference(isMethodInstance);
 
@@ -496,7 +496,7 @@ public class InstructionBuilder {
             }
 
             case IR.ObjectType(IR.ArrayObjectID(var elementType)): {
-                var elementTypeRef = typeBuilder.BuildTypeRef(elementType, this.library);
+                var elementTypeRef = typeBuilder.BuildType(elementType, this.library);
 
                 this.LoadRef(baseRef);
                 this.LoadValue(indexVal);
@@ -505,7 +505,7 @@ public class InstructionBuilder {
             }
 
             case IR.ObjectType(IR.BoxObjectID(var valueType)): {
-                typeBuilder.BuildTypeRef(valueType, this.library, out var valueTypeID);
+                typeBuilder.BuildType(valueType, this.library, out var valueTypeID);
                 var boxTypeInfo = typeBuilder.GetBoxTypeInfo(valueTypeID);
 
                 this.LoadRef(baseRef);
@@ -655,7 +655,7 @@ public class InstructionBuilder {
 
         var intrinsicSize = type.IntrinsicSize();
         if (intrinsicSize == null) {
-            var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
+            var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type, this.library);
             this.body.Emit(OpCodes.Sizeof, typeRef);
         } else {
             this.body.Emit(OpCodes.Ldc_I4, intrinsicSize.Value);
@@ -668,7 +668,7 @@ public class InstructionBuilder {
         } else if (type.IsInteger()) {
             this.body.Emit(OpCodes.Ldc_I4_0);
         } else {
-            var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
+            var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type, this.library);
             var typeDef = this.assemblyBuilder.TypeBuilder.ResolveCore(typeRef) ?? typeRef.Resolve();
 
             if (typeDef?.FindConstructor([]) is { } defaultCtor) {
@@ -691,7 +691,7 @@ public class InstructionBuilder {
     }
 
     private void BuildLocalAlloc(IR.LocalID at, IR.IType type) {
-        var typeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(type, this.library);
+        var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type, this.library);
         
         var index = this.AllocLocal(typeRef);
 
@@ -728,7 +728,7 @@ public class InstructionBuilder {
             // must be a value referencing a function pointer
             this.LoadValue(target);
 
-            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(sig.ResultType, this.library);
+            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(sig.ResultType, this.library);
             var callSite = new CallSite(returnTypeRef) {
                 HasThis = false,
                 ExplicitThis = false,
@@ -736,7 +736,7 @@ public class InstructionBuilder {
             };
 
             foreach (var paramType in sig.ParameterTypes) {
-                var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType, this.library);
+                var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(paramType, this.library);
                 callSite.Parameters.Add(new ParameterDefinition(paramTypeRef));
             }
 
@@ -766,7 +766,7 @@ public class InstructionBuilder {
         IR.InterfaceRef ifaceRef,
         IR.MethodID methodID
     ) {
-        this.assemblyBuilder.TypeBuilder.BuildTypeRef(
+        this.assemblyBuilder.TypeBuilder.BuildType(
             ifaceRef.ToObjectID().ToObjectType(),
             this.library,
             out var ifaceTypeID
@@ -1045,7 +1045,7 @@ public class InstructionBuilder {
             }
             
             case IR.FieldRef(var fieldRef): {
-                if (fieldRef.InstanceType is IR.ObjectType(IR.ClosureObjectID(var funcTypeID))
+                if (fieldRef.InstanceType is IR.ObjectType(IR.AnyClosureObjectID(var funcTypeID))
                     && fieldRef.FieldID == IR.FieldID.ClosurePointerField) {
                     var funcPtrType = (IR.IType)new IR.FunctionType(funcTypeID);
                     return funcPtrType.MakeTempRef();
@@ -1156,7 +1156,7 @@ public class InstructionBuilder {
                     throw new InvalidDataException($"invalid value for dereference instruction: {atRef.ToPrettyString(this.library.Metadata)}");
                 }
 
-                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType, this.library);
+                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(derefType, this.library);
 
                 this.LoadValue(atRef);
                 this.body.Emit(OpCodes.Ldobj, targetTypeRef);
@@ -1258,7 +1258,7 @@ public class InstructionBuilder {
                     throw new InvalidDataException($"invalid ref type for dereference instruction: {refType}");
                 }
                 
-                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType, this.library);
+                var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(derefType, this.library);
 
                 this.LoadValue(atRef);
                 

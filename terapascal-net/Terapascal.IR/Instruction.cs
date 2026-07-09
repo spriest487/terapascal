@@ -196,7 +196,7 @@ public record VirtualCallInstruction : IInstruction {
 }
 
 [MessagePackObject]
-public record ClassIsInstruction : IInstruction {
+public record IsTypeInstruction : IInstruction {
     [Key("out")]
     public required IRef Out {
         get;
@@ -209,8 +209,14 @@ public record ClassIsInstruction : IInstruction {
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    [Key("class_id")]
-    public required IObjectID ClassID {
+    [Key("value_type")]
+    public required IType ValueType {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    [Key("is_type")]
+    public required IType IsType {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -495,8 +501,8 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
                 return MessagePackSerializer.Deserialize<VirtualCallInstruction>(ref reader, options);
             }
 
-            case "ClassIs": {
-                return MessagePackSerializer.Deserialize<ClassIsInstruction>(ref reader, options);
+            case "IsType": {
+                return MessagePackSerializer.Deserialize<IsTypeInstruction>(ref reader, options);
             }
 
             case "Label": {

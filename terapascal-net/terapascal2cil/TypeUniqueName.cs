@@ -33,7 +33,7 @@ internal static class TypeUniqueName {
         return classID switch {
             IR.AnyObjectID => "Any",
             IR.ClassObjectID(_) => $"Class_{typeCache.GetTypeID(classID.ToObjectType())}",
-            IR.ClosureObjectID(_) => $"AnyClosure_{typeCache.GetTypeID(classID.ToObjectType())}",
+            IR.AnyClosureObjectID(_) => $"AnyClosure_{typeCache.GetTypeID(classID.ToObjectType())}",
             IR.InterfaceObjectID(_) => $"Interface_{typeCache.GetTypeID(classID.ToObjectType())}",
             IR.ArrayObjectID(var elementType) => $"DynArray_{elementType.GetUniqueName(typeCache)}",
             IR.BoxObjectID(var valueType) => $"Box_{valueType.GetUniqueName(typeCache)}",

@@ -65,7 +65,7 @@ public class FunctionBuilder {
                 }
 
                 var ifaceType = ifaceRef.ToObjectID().ToObjectType();
-                var ifaceTypeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(ifaceType, lib).Resolve();
+                var ifaceTypeDef = this.assemblyBuilder.TypeBuilder.BuildType(ifaceType, lib).Resolve();
                 
                 foreach (var (methodID, implID) in ifaceImpl.Methods) {
                     this.BuildInterfaceMethodImpl(ifaceDef, ifaceTypeDef, methodID, implID, selfType, lib);
@@ -82,7 +82,7 @@ public class FunctionBuilder {
         IR.IType implType,
         IR.Library lib
     ) {
-        var implTypeDef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(implType, lib).Resolve();
+        var implTypeDef = this.assemblyBuilder.TypeBuilder.BuildType(implType, lib).Resolve();
         
         var method = ifaceDef.Methods[(int)methodID.ID];
         if (!lib.Metadata.Functions.TryGetValue(implID, out var implFuncMetadata)) {
@@ -187,12 +187,12 @@ public class FunctionBuilder {
         IR.FunctionSig sig,
         IR.Library library
     ) {
-        var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(sig.ResultType, library);
+        var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(sig.ResultType, library);
         
         var methodDef = new MethodDefinition(name, attrs, returnTypeRef);
 
         foreach (var paramType in sig.ParameterTypes) {
-            var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(paramType, library);
+            var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(paramType, library);
 
             methodDef.Parameters.Add(new ParameterDefinition(paramTypeRef));
         }

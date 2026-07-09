@@ -622,7 +622,7 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
     }
 }
 
-public interface IObjectID {
+public interface IObjectID : IEquatable<IObjectID> {
     string ToPrettyString(Metadata metadata);
     
     IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap);
@@ -633,6 +633,10 @@ public interface IObjectID {
 
     IType ToWeakObjectType() {
         return new WeakObjectType(this);
+    }
+
+    bool IEquatable<IObjectID>.Equals(IObjectID? other) {
+        return Equals(this, other);
     }
 }
 
@@ -688,7 +692,7 @@ public sealed record InterfaceObjectID(InterfaceRef InterfaceRef) : IObjectID {
     }
 }
 
-public sealed record ClosureObjectID(FunctionSig Sig) : IObjectID {
+public sealed record AnyClosureObjectID(FunctionSig Sig) : IObjectID {
     public string ToPrettyString(Metadata metadata) {
         return $"closure of {this.Sig.ToPrettyString(metadata)}";
     }
@@ -748,9 +752,9 @@ public class ObjectIDFormatter : IMessagePackFormatter<IObjectID> {
                 return new InterfaceObjectID(ifaceRef);
             }
             
-            case "Closure": {
+            case "AnyClosure": {
                 var sig = MessagePackSerializer.Deserialize<FunctionSig>(ref reader, options);
-                return new ClosureObjectID(sig);
+                return new AnyClosureObjectID(sig);
             }
             
             case "Array": {

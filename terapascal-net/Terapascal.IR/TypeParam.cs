@@ -8,5 +8,6 @@ public record TypeParam {
     public required string Name { get; init; }
 
     [Key("constraint")]
+    [MessagePackFormatter(typeof(NullableTypeFormatter))]
     public IType? Constraint { get; init; }
 }

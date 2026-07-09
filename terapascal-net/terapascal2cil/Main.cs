@@ -146,5 +146,7 @@ async Task AddLibraryRecursive(AssemblyBuilder builder, IR.Library library, Hash
         await AddLibraryRecursive(builder, refLib, loadedRefs);
     }
 
-    builder.AddLibrary(mainLib);
+
+    Console.WriteLine($"Building {library.Name} ({library.Version})...");
+    builder.AddLibrary(library);
 }

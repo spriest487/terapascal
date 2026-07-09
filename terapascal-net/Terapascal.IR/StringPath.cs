@@ -56,11 +56,26 @@ public class StringPathFormatter : IMessagePackFormatter<StringPath> {
     }
 
     public StringPath Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
-        if (reader.TryReadNil()) {
-            return null!;
-        }
+        switch (reader.NextMessagePackType) {
+            case MessagePackType.Nil:
+                return null!;
 
-        var parts = MessagePackSerializer.Deserialize<string[]>(ref reader, options);
-        return new StringPath { Parts = parts };
+            case MessagePackType.Map: {
+                var count = reader.ReadMapHeader();
+                for (var i = 0; i < count; i += 1) {
+                    if (reader.ReadString() == "parts") {
+                        goto case MessagePackType.Array;
+                    }
+                }
+                throw new MessagePackSerializationException("string path missing parts key");
+            }
+
+            case MessagePackType.Array:
+                var parts = MessagePackSerializer.Deserialize<string[]>(ref reader, options);
+                return new StringPath { Parts = parts };
+
+            default:
+                throw new MessagePackSerializationException($"invalid type in string path: {reader.NextMessagePackType}");
+        }
     }
 }
