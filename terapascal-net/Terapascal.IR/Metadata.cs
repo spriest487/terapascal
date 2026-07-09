@@ -14,23 +14,17 @@ public class Metadata {
     [Key("string_literals")]
     public required OrderedDictionary<StringID, string> StringLiterals { get; init; }
 
-    [Key("ifaces")]
+    [Key("interface_defs")]
     public required OrderedDictionary<InterfaceID, IInterfaceDecl> Interfaces { get; init; }
-    
+
     [Key("iface_impls")]
-    public required IReadOnlyDictionary<IType, SortedDictionary<InterfaceID, InterfaceImpl>> InterfaceImpls { get; init; }
+    public required Dictionary<IType, SortedDictionary<InterfaceRef, InterfaceImpl>> InterfaceImpls { get; init; }
 
     [Key("variables")]
-    public required OrderedDictionary<VariableID, VariableInfo> Variables { get; init; }
+    public required SortedDictionary<VariableID, VariableInfo> Variables { get; init; }
 
-    [Key("function_info")]
-    public required OrderedDictionary<FunctionID, FunctionInfo> Functions { get; init; }
-
-    [Key("closures")]
-    public required SortedDictionary<TypeDefID, List<TypeDefID>> Closures {
-        get;
-        init => field = value!.ToDictionaryNonNull();
-    }
+    [Key("constants")]
+    public required Dictionary<StringPath, ConstInfo> ConstantInfos { get; init; }
 
     [Key("type_info")]
     public required Dictionary<IType, TypeInfo> TypeInfo {
@@ -38,26 +32,13 @@ public class Metadata {
         init => field = value!.ToDictionaryNonNull();
     }
 
-    [Key("bounds_check_functions")]
-    public required Dictionary<IType, FunctionID> BoundsCheckFunctions {
+    [Key("function_info")]
+    public required OrderedDictionary<FunctionID, FunctionInfo> Functions { get; init; }
+
+    [Key("closures")]
+    public required Dictionary<FunctionSig, List<TypeDefID>> Closures {
         get;
         init => field = value!.ToDictionaryNonNull();
-    }
-
-    public bool FindFunctionType(FunctionSig withSig, out TypeDefID id) {
-        foreach (var (declID, typeDecl) in this.TypeDecls) {
-            if (typeDecl is not DefTypeDecl(FunctionTypeDef(var sig))) {
-                continue;
-            }
-
-            if (sig.Equals(withSig)) {
-                id = declID;
-                return true;
-            }
-        }
-
-        id = default;
-        return false;
     }
 
     public bool FindVariantDef(TypeDefID id, [NotNullWhen(true)] out VariantDef? def) {
@@ -73,7 +54,7 @@ public class Metadata {
         def = declDef;
         return true;
     }
-    
+
     public bool FindStructDef(TypeDefID id, [NotNullWhen(true)] out StructDef? def) {
         def = null;
         if (!this.TypeDecls.TryGetValue(id, out var typeDecl)) {
@@ -126,24 +107,20 @@ public class Metadata {
             .SelectMany(typeInfo => typeInfo.Methods)
             .Select(methodInfo => {
                 var loc = (ITagLocation)(methodInfo.InstanceType switch {
-                    ObjectType(InterfaceObjectID(var ifaceID)) => new InterfaceMethodTagLocation {
-                        InterfaceID = ifaceID,
+                    ObjectType(InterfaceObjectID(var ifaceRef)) => new InterfaceMethodTagLocation {
+                        InterfaceID = ifaceRef.DefID,
                         MethodIndex = methodInfo.Index,
                     },
-                    ObjectType(ClassObjectID(var classID)) => new MethodTagLocation {
-                        TypeID = classID,
+                    ObjectType(ClassObjectID(var classRef)) => new MethodTagLocation {
+                        TypeID = classRef.DefID,
                         MethodIndex = methodInfo.Index,
                     },
-                    StructType(var structID) => new MethodTagLocation {
-                        TypeID = structID,
+                    StructType(var structRef) => new MethodTagLocation {
+                        TypeID = structRef.DefID,
                         MethodIndex = methodInfo.Index,
                     },
-                    VariantType(var variantID) => new MethodTagLocation {
-                        TypeID = variantID,
-                        MethodIndex = methodInfo.Index,
-                    },
-                    FlagsType(var aliasID) => new MethodTagLocation {
-                        TypeID = aliasID,
+                    VariantType(var variantRef) => new MethodTagLocation {
+                        TypeID = variantRef.DefID,
                         MethodIndex = methodInfo.Index,
                     },
                     _ => throw new InvalidDataException(
@@ -171,14 +148,14 @@ public class Metadata {
 
     public bool TryGetInterfaceImpl(FunctionID functionID, out InterfaceMethodImplRef result) {
         foreach (var (implType, impls) in this.InterfaceImpls) {
-            foreach (var (interfaceID, interfaceImpl) in impls) {
+            foreach (var (interfaceRef, interfaceImpl) in impls) {
                 foreach (var (methodID, methodFuncID) in interfaceImpl.Methods) {
                     if (methodFuncID == functionID 
-                        && this.TryGetInterfaceDef(interfaceID, out var interfaceDef)
+                        && this.TryGetInterfaceDef(interfaceRef.DefID, out var interfaceDef)
                         && interfaceDef.TryFindMethod(methodID, out var methodDef)
                     ) {
                         result = new InterfaceMethodImplRef {
-                            Interface = interfaceDef.Name,
+                            Interface = interfaceRef,
                             ImplType = implType,
                             MethodName = methodDef.Name,
                         };
@@ -317,21 +294,14 @@ public class Metadata {
                     this.FormatOutputRef(callInstruction.Out, result);
                 }
 
-                if (this.TryGetInterfaceDef(callInstruction.InterfaceID, out var interfaceDef)
-                    && interfaceDef.TryFindMethod(callInstruction.MethodID, out var methodDef)
-                   ) {
-                    this.FormatValue(callInstruction.SelfArg, result);
-                    result.Append('.');
-                    result.Append(methodDef.Name);
-                } else {
-                    var interfaceType = callInstruction.InterfaceID.InterfacePointerType();
-                    var interfaceName = interfaceType.ToPrettyString(this);
+                result.Append('(');
+                this.FormatRef(callInstruction.SelfArg, result);
 
-                    result.Append('(');
-                    this.FormatValue(callInstruction.SelfArg, result);
-                    result.Append($" as {interfaceName}).{callInstruction.MethodID.ID}");
-                }
+                var ifaceTypeDisplay = callInstruction.InterfaceRef.ToObjectID().ToPrettyString(this);
+                result.Append($" as {ifaceTypeDisplay}).");
 
+                this.FormatInterfaceMethod(callInstruction.InterfaceRef, callInstruction.MethodID, result);
+                
                 result.Append('(');
                 if (callInstruction.RestArgs != null) {
                     for (var i = 0; i < callInstruction.RestArgs.Count; i += 1) {
@@ -453,11 +423,13 @@ public class Metadata {
                 break;
             }
 
-            case NewInstruction newInstruction: {
+            case NewObjectInstruction newInstruction: {
                 this.FormatInstructionPrefix("new", result);
 
                 this.FormatOutputRef(newInstruction.Out, result);
-                result.Append($" new {newInstruction.TypeID.ToObjectType().ToPrettyString(this)}");
+                
+                var objectType = newInstruction.TypeID.ToObjectType(newInstruction.TypeArgs ?? []);
+                result.Append($" new {objectType.ToPrettyString(this)}");
                 
                 if (newInstruction.Immortal) {
                     result.Append(" (immortal)");
@@ -503,6 +475,17 @@ public class Metadata {
                 break;
             }
         }
+    }
+
+    private void FormatInterfaceMethod(InterfaceRef ifaceRef, MethodID methodID, StringBuilder result) {
+        if (!this.TryGetInterfaceDef(ifaceRef.DefID, out var interfaceDef)
+            || !interfaceDef.TryFindMethod(methodID, out var methodDef)
+        ) {
+            result.Append($"<method {methodID}>");
+            return;
+        }
+
+        result.Append(methodDef.Name);
     }
 
     private void FormatOutputRef(IRef outRef, StringBuilder result) {
@@ -635,8 +618,8 @@ public class Metadata {
             case FieldRef(var field): {
                 string? fieldName = null;
 
-                var structID = field.InstanceType.GetTypeDefID();
-                if (structID != null && this.FindStructDef(structID.Value, out var structDef)) {
+                var structTypeRef = field.InstanceType.GetTypeRef();
+                if (structTypeRef != null && this.FindStructDef(structTypeRef.DefID, out var structDef)) {
                     if (structDef.Fields.TryGetValue(field.FieldID, out var fieldDef)) {
                         fieldName = fieldDef.Name;
                     }
@@ -652,9 +635,9 @@ public class Metadata {
 
             case VariantDataRef(var varData): {
                 string? caseName = null;
-                var typeDefID = varData.InstanceType.GetTypeDefID();
+                var typeDefID = varData.InstanceType.GetTypeRef();
                 if (typeDefID != null
-                    && this.FindVariantDef(typeDefID.Value, out var variantDef)
+                    && this.FindVariantDef(typeDefID.DefID, out var variantDef)
                     && varData.CaseIndex < (ulong)variantDef.Cases.Count
                 ) {
                     caseName = variantDef.Cases[(int)varData.CaseIndex].Name;
@@ -675,14 +658,14 @@ public class Metadata {
                 break;
             }
 
-            case GlobalRef(FunctionGlobalRef(var id)): {
-                this.FormatFunctionName(id, result);
+            case GlobalRef(FunctionGlobalRef(var funcRef)): {
+                this.FormatFunctionRef(funcRef, result);
                 break;
             }
 
             case GlobalRef(VariableGlobalRef(var id)): {
                 if (this.Variables.TryGetValue(id, out var variableInfo) && variableInfo.Name != null) {
-                    result.Append(variableInfo.Name.ToPrettyString(this));
+                    result.Append(variableInfo.Name);
                 } else {
                     result.Append(id.ToString());
                 }
@@ -691,7 +674,7 @@ public class Metadata {
 
             case GlobalRef(StaticFuncInfoGlobalRef(var funcID)): {
                 result.Append("funcinfo(");
-                this.FormatFunctionName(funcID, result);
+                this.FormatFunctionRef(funcID.ToFunctionRef([]), result);
                 result.Append(')');
                 break;
             }
@@ -724,14 +707,31 @@ public class Metadata {
         }
     }
 
+    internal void FormatFunctionRef(FunctionRef funcRef, StringBuilder result) {
+        this.FormatFunctionName(funcRef.DefID, result);
+        
+        if (funcRef.TypeArgs is { Count: > 0 }) {
+            result.Append('[');
+            for (var i = 0; i < funcRef.TypeArgs.Count; i += 1) {
+                if (i > 0) {
+                    result.Append(", ");
+                } 
+                
+                result.Append(funcRef.TypeArgs[i].ToPrettyString(this));
+            }
+
+            result.Append(']');
+        }
+    }
+
     internal void FormatFunctionName(FunctionID id, StringBuilder result) {
         string? funcName = null;
         if (this.Functions.TryGetValue(id, out var funcInfo)) {
-            funcName = funcInfo.GlobalName?.ToPrettyString(this);
+            funcName = funcInfo.Identity.ToPrettyString(this);
         }
 
         if (funcName == null && this.TryGetInterfaceImpl(id, out var methodImplRef)) {
-            var interfaceName = methodImplRef.Interface.ToPrettyString(this);
+            var interfaceName = methodImplRef.Interface.ToObjectID().ToPrettyString(this);
             var implTypeName = methodImplRef.ImplType.ToPrettyString(this);
                     
             funcName = $"{interfaceName} ({implTypeName}).{methodImplRef.MethodName}";
@@ -746,12 +746,6 @@ public class Metadata {
 public class TypeInfo {
     [Key("name")]
     public StringID? Name { get; init; }
-    
-    [Key("debug_name")]
-    public string? DebugName { get; init; }
-    
-    [Key("dtor")]
-    public FunctionID? Destructor { get; init; }
 
     [Key("methods")]
     public required IReadOnlyList<MethodInfo> Methods {
@@ -761,49 +755,4 @@ public class TypeInfo {
     
     [Key("flags")]
     public ulong Flags { get; init; }
-}
-
-[MessagePackObject]
-public class MethodInfo {
-    [Key("name")]
-    public required StringID Name { get; init; }
-    
-    [Key("index")]
-    public required ulong Index { get; init; }
-
-    [Key("instance_ty")]
-    public required IType InstanceType {
-        get;
-        set => field = value ?? IType.Nothing;
-    }
-
-    [Key("function")]
-    public FunctionID? Function { get; init; }
-
-    [Key("result_ty")]
-    public required IType ResultType {
-        get;
-        set => field = value ?? IType.Nothing;
-    }
-
-    [Key("params")]
-    public required IReadOnlyList<IType> ParameterTypes {
-        get;
-        init => field = value.ToArrayNonNull();
-    }
-
-    [Key("tags")]
-    public required IReadOnlyList<TagInfo> Tags {
-        get;
-        init => field = value.ToArrayNonNull();
-    }
-}
-
-[MessagePackObject]
-public class VariableInfo {
-    [Key("name")]
-    public NamePath? Name { get; init; }
-    
-    [Key("type")]
-    public required IType Type { get; init; }
 }

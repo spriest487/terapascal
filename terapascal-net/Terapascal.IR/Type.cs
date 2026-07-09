@@ -13,16 +13,31 @@ public readonly record struct TypeDefID(ulong ID) : IComparable<TypeDefID> {
         return this.ID.CompareTo(other.ID);
     }
 
-    public IType ToObjectType() {
-        return new ObjectType(new ClassObjectID(this));
+    public TypeRef ToTypeRef(IReadOnlyList<IType>? typeArgs) {
+        return new TypeRef {
+            DefID = this,
+            Args = typeArgs,
+        };
     }
-    
-    public IType ToWeakObjectType() {
-        return new WeakObjectType(new ClassObjectID(this));
+
+    public IObjectID ToObjectID(IReadOnlyList<IType> typeArgs) {
+        return this.ToTypeRef(typeArgs).ToClassObjectID();
     }
-    
-    public IType ToStructType() {
-        return new StructType(this);
+
+    public IType ToObjectType(IReadOnlyList<IType> typeArgs) {
+        return this.ToObjectID(typeArgs).ToObjectType();
+    }
+
+    public IType ToWeakObjectType(IReadOnlyList<IType> typeArgs) {
+        return this.ToObjectID(typeArgs).ToWeakObjectType();
+    }
+
+    public IType ToStructType(IReadOnlyList<IType> typeArgs) {
+        return this.ToTypeRef(typeArgs).ToStructType();
+    }
+
+    public override string ToString() {
+        return this.ID.ToString();
     }
 }
 
@@ -42,8 +57,11 @@ public readonly record struct InterfaceID(ulong ID) : IComparable<InterfaceID> {
         return this.ID.CompareTo(other.ID);
     }
 
-    public IType InterfacePointerType() {
-        return new ObjectType(new InterfaceObjectID(this));
+    public IType ToInterfacePointerType(IReadOnlyList<IType> typeArgs) {
+        return new ObjectType(new InterfaceObjectID(new InterfaceRef {
+            DefID = this,
+            Args = typeArgs,
+        }));
     }
 }
 
@@ -111,7 +129,7 @@ public class MethodIDFormatter : IMessagePackFormatter<MethodID> {
     }
 }
 
-public interface IType {
+public interface IType : IEquatable<IType> {
     static IType String => new ObjectType(ClassObjectID.String);
     static IType TypeInfo => new ObjectType(ClassObjectID.TypeInfo);
     static IType MethodInfo => new ObjectType(ClassObjectID.MethodInfo);
@@ -133,22 +151,21 @@ public interface IType {
     static IType ISize { get; } = new ISizeType();
     static IType F32 { get; } = new F32Type();
     static IType F64 { get; } = new F64Type();
-    
-    public bool IsObjectType() => this switch {
+
+    bool IsObjectType() => this switch {
         ObjectType => true,
         WeakObjectType => true,
         _ => false,
     };
 
-    public bool IsComplex() => this switch {
+    bool IsComplex() => this switch {
         StructType => true,
         VariantType => true,
         ArrayType => true,
-        FlagsType => true,
         _ => false,
     };
-        
-    public bool IsInteger() => this switch {
+
+    bool IsInteger() => this switch {
         F32Type or
             F64Type or
             I16Type or
@@ -164,15 +181,15 @@ public interface IType {
         _ => false,
     };
 
-    public IType? GetDerefType() {
+    IType? GetDerefType() {
         return this switch {
             PointerType(var inner) => inner,
             TempRefType(var inner) => inner,
             _ => null,
         };
     }
-    
-    public IType? GetElementType() {
+
+    IType? GetElementType() {
         return this switch {
             PointerType(var inner) => inner,
             ArrayType { Element: var elementType } => elementType,
@@ -182,23 +199,23 @@ public interface IType {
         };
     }
 
-    public IType MakeDynArray() {
+    IType MakeDynArray() {
         return new ObjectType(new ArrayObjectID(this));
     }
 
-    public IType MakeBox() {
+    IType MakeBox() {
         return new ObjectType(new BoxObjectID(this));
     }
 
-    public IType MakePointer() {
+    IType MakePointer() {
         return new PointerType(this);
     }
-    
-    public IType MakeTempRef() {
+
+    IType MakeTempRef() {
         return new TempRefType(this);
     }
 
-    public int? IntrinsicSize() => this switch {
+    int? IntrinsicSize() => this switch {
         BoolType or U8Type or I8Type => 1,
         I16Type or U16Type => 2,
         F32Type or U32Type or I32Type => 4,
@@ -206,7 +223,7 @@ public interface IType {
         _ => null,
     };
 
-    public TypeDefID? GetTypeDefID() => this switch {
+    TypeRef? GetTypeRef() => this switch {
         ObjectType(ClassObjectID(var id)) => id,
         WeakObjectType(ClassObjectID(var id)) => id,
         StructType(var id) => id,
@@ -214,20 +231,44 @@ public interface IType {
         _ => null,
     };
 
-    public ITagLocation? GetTagsLocation() => this switch {
-        VariantType(var id) => new TypeDefTagLocation(id),
-        StructType(var id) => new TypeDefTagLocation(id),
-        ObjectType(ClassObjectID(var id)) => new TypeDefTagLocation(id),
-        ObjectType(InterfaceObjectID(var id)) => new InterfaceTagLocation(id),
+    ITagLocation? GetTagsLocation() => this switch {
+        VariantType(var id) => new TypeDefTagLocation(id.DefID),
+        StructType(var id) => new TypeDefTagLocation(id.DefID),
+        ObjectType(ClassObjectID(var id)) => new TypeDefTagLocation(id.DefID),
+        ObjectType(InterfaceObjectID(var id)) => new InterfaceTagLocation(id.DefID),
         _ => null,
     };
 
     string ToPrettyString(Metadata metadata);
+
+    IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap);
+
+    bool IEquatable<IType>.Equals(IType? other) {
+        return Equals(this, other);
+    }
 }
 
 public sealed record NothingType : IType {
     public string ToPrettyString(Metadata metadata) {
         return "nothing";
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
+}
+
+public sealed record GenericType(string Name) : IType {
+    public string ToPrettyString(Metadata metadata) {
+        return this.Name;
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        if (!typeMap.TryGetValue(this.Name, out var resolvedType)) {
+            throw new InvalidDataException($"missing generic type in type map: {this.Name}");
+        }
+
+        return resolvedType;
     }
 }
 
@@ -235,54 +276,70 @@ public sealed record PointerType(IType Inner) : IType {
     public string ToPrettyString(Metadata metadata) {
         return $"^{this.Inner.ToPrettyString(metadata)}";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        var inner = this.Inner.ResolveGeneric(typeMap);
+        return new PointerType(inner);
+    }
 }
 
 public sealed record TempRefType(IType Inner) : IType {
     public string ToPrettyString(Metadata metadata) {
         return $"&{this.Inner.ToPrettyString(metadata)}";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        var inner = this.Inner.ResolveGeneric(typeMap);
+        return new TempRefType(inner);
+    }
 }
 
-public sealed record StructType(TypeDefID ID) : IType {
+public sealed record StructType(TypeRef TypeRef) : IType {
     public string ToPrettyString(Metadata metadata) {
-        if (metadata.FindStructDef(this.ID, out var def)) {
+        if (!metadata.FindStructDef(this.TypeRef.DefID, out var def)) {
+            return $"{{struct {this.TypeRef.DefID}}}";
+        }
+
+        var path = def.Identity.GetDeclPath();
+        if (path == null) {
             return def.Identity.ToPrettyString(metadata);
         }
-        
-        return $"{{struct {this.ID.ID}}}";
+
+        var typeMap = Util.BuildGenericTypeMap(path.TypeParams ?? [], this.TypeRef.Args ?? []);
+        return path.ToGenericName().ResolveGeneric(typeMap).ToPrettyString(metadata);
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new StructType(this.TypeRef.ResolveGeneric(typeMap));
     }
 }
 
-public sealed record VariantType(TypeDefID ID) : IType {
+public sealed record VariantType(TypeRef TypeRef) : IType {
     public string ToPrettyString(Metadata metadata) {
-        if (metadata.FindVariantDef(this.ID, out var def)) {
-            return def.Name.ToPrettyString(metadata);
+        if (!metadata.FindVariantDef(this.TypeRef.DefID, out var def)) {
+            return $"{{struct {this.TypeRef.DefID}}}";
         }
-        
-        return $"{{struct {this.ID.ID}}}";
+
+        var typeMap = Util.BuildGenericTypeMap(
+            def.Name.TypeParams ?? [], 
+            this.TypeRef.Args ?? []
+        );
+            
+        return def.Name.ResolveGeneric(typeMap).ToPrettyString(metadata);
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new StructType(this.TypeRef.ResolveGeneric(typeMap));
     }
 }
 
-public sealed record FlagsType(TypeDefID ID) : IType {
+public sealed record FunctionType(FunctionSig Sig) : IType {
     public string ToPrettyString(Metadata metadata) {
-        if (metadata.TypeDecls.TryGetValue(this.ID, out var decl)
-            && decl is DefTypeDecl(StructTypeDef(var structDef))
-            && structDef.Identity is SetFlagsStructIdentity setIdentity) {
-            return $"set<{setIdentity.Bits}>";
-        }
-
-        return $"{{flags {this.ID.ID}}}";
+        return this.Sig.ToPrettyString(metadata);
     }
-}
 
-public sealed record FunctionType(TypeDefID ID) : IType {
-    public string ToPrettyString(Metadata metadata) {
-        if (metadata.TypeDecls.TryGetValue(this.ID, out var decl) 
-            && decl is DefTypeDecl(FunctionTypeDef(var sig))) {
-            return sig.ToPrettyString(metadata);
-        }
-
-        return $"function pointer {this.ID}";
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new FunctionType(this.Sig.ResolveGeneric(typeMap));
     }
 }
 
@@ -290,11 +347,19 @@ public sealed record BoolType : IType {
     public string ToPrettyString(Metadata metadata) {
         return "bool";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
 public sealed record U8Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "u8";
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
     }
 }
 
@@ -302,11 +367,19 @@ public sealed record I8Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "i8";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
 public sealed record U16Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "u16";
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
     }
 }
 
@@ -314,11 +387,19 @@ public sealed record I16Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "i16";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
 public sealed record U32Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "u32";
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
     }
 }
 
@@ -326,11 +407,19 @@ public sealed record I32Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "i32";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
 public sealed record U64Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "u64";
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
     }
 }
 
@@ -338,11 +427,19 @@ public sealed record I64Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "i64";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
 public sealed record USizeType : IType {
     public string ToPrettyString(Metadata metadata) {
         return "usize";
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
     }
 }
 
@@ -350,17 +447,29 @@ public sealed record ISizeType : IType {
     public string ToPrettyString(Metadata metadata) {
         return "isize";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
 public sealed record F32Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "f32";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
 public sealed record F64Type : IType {
     public string ToPrettyString(Metadata metadata) {
         return "f64";
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
     }
 }
 
@@ -378,17 +487,32 @@ public sealed record ArrayType : IType {
     public string ToPrettyString(Metadata metadata) {
         return $"array[{this.Length}] of {this.Element.ToPrettyString(metadata)}";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new ArrayType {
+            Element = this.Element.ResolveGeneric(typeMap),
+            Length = this.Length,
+        };
+    }
 }
 
 public sealed record ObjectType(IObjectID ID) : IType {
     public string ToPrettyString(Metadata metadata) {
         return $"*{this.ID.ToPrettyString(metadata)}";
     }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new ObjectType(this.ID.ResolveGeneric(typeMap));
+    }
 }
 
 public sealed record WeakObjectType(IObjectID ID) : IType {
     public string ToPrettyString(Metadata metadata) {
         return $"weak *{this.ID.ToPrettyString(metadata)}";
+    }
+
+    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new WeakObjectType(this.ID.ResolveGeneric(typeMap));
     }
 }
 
@@ -443,18 +567,13 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
             }
 
             case "Struct": {
-                var id = reader.ReadUInt64();
-                return new StructType(new TypeDefID(id));
+                var typeRef = MessagePackSerializer.Deserialize<TypeRef>(ref reader, options);
+                return new StructType(typeRef);
             }
             
             case "Variant": {
-                var id = reader.ReadUInt64();
-                return new VariantType(new TypeDefID(id));
-            }
-            
-            case "Flags": {
-                var id = reader.ReadUInt64();
-                return new FlagsType(new TypeDefID(id));
+                var typeRef = MessagePackSerializer.Deserialize<TypeRef>(ref reader, options);
+                return new VariantType(typeRef);
             }
 
             case "Array": {
@@ -472,8 +591,8 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
             }
             
             case "Function": {
-                var id = reader.ReadUInt64();
-                return new FunctionType(new TypeDefID(id));
+                var sig = MessagePackSerializer.Deserialize<FunctionSig>(ref reader, options);
+                return new FunctionType(sig);
             }
             
             case "Bool": return IType.Bool;
@@ -498,58 +617,78 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
 }
 
 public interface IObjectID {
+    string ToPrettyString(Metadata metadata);
+    
+    IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap);
+    
     IType ToObjectType() {
         return new ObjectType(this);
     }
 
-    string ToPrettyString(Metadata metadata);
+    IType ToWeakObjectType() {
+        return new WeakObjectType(this);
+    }
 }
 
 public sealed record AnyObjectID : IObjectID {
     public string ToPrettyString(Metadata metadata) {
         return "any";
     }
+
+    public IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
-public sealed record ClassObjectID(TypeDefID ID) : IObjectID {
-    public static ClassObjectID String => new ClassObjectID(TypeDefID.String);
-    public static ClassObjectID TypeInfo => new ClassObjectID(TypeDefID.TypeInfo);
-    public static ClassObjectID MethodInfo => new ClassObjectID(TypeDefID.MethodInfo);
-    public static ClassObjectID FunctionInfo => new ClassObjectID(TypeDefID.FunctionInfo);
+public sealed record ClassObjectID(TypeRef TypeRef) : IObjectID {
+    public static ClassObjectID String => new ClassObjectID(new TypeRef { DefID = TypeDefID.String });
+    public static ClassObjectID TypeInfo => new ClassObjectID(new TypeRef { DefID = TypeDefID.TypeInfo });
+    public static ClassObjectID MethodInfo => new ClassObjectID(new TypeRef { DefID = TypeDefID.MethodInfo });
+    public static ClassObjectID FunctionInfo => new ClassObjectID(new TypeRef { DefID = TypeDefID.FunctionInfo });
     
     public string ToPrettyString(Metadata metadata) {
-        if (metadata.FindStructDef(this.ID, out var def)) {
+        if (!metadata.FindStructDef(this.TypeRef.DefID, out var def)) {
+            return $"{{class {this.TypeRef.DefID}}}";
+        }
+
+        var path = def.Identity.GetDeclPath();
+        if (path == null) {
             return def.Identity.ToPrettyString(metadata);
         }
+
+        var typeMap = Util.BuildGenericTypeMap(path.TypeParams ?? [], this.TypeRef.Args ?? []);
+        return path.ToGenericName().ResolveGeneric(typeMap).ToPrettyString(metadata);
+    }
+
+    public IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new ClassObjectID(this.TypeRef.ResolveGeneric(typeMap));
+    }
+}
+
+public sealed record InterfaceObjectID(InterfaceRef InterfaceRef) : IObjectID {
+    public string ToPrettyString(Metadata metadata) {
+        if (!metadata.Interfaces.TryGetValue(this.InterfaceRef.DefID, out var ifaceDecl)) {
+            return $"{{interface {this.InterfaceRef.DefID}}}";
+        }
+
+        var name = ifaceDecl.GetGlobalName();
+        var typeMap = Util.BuildGenericTypeMap(name.TypeParams ?? [], this.InterfaceRef.Args ?? []);
         
-        return $"{{class {this.ID.ID}}}";
+        return name.ToGenericName().ResolveGeneric(typeMap).ToPrettyString(metadata);
+    }
+
+    public IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new InterfaceObjectID(this.InterfaceRef.ResolveGeneric(typeMap));
     }
 }
 
-public sealed record InterfaceObjectID(InterfaceID ID) : IObjectID {
+public sealed record ClosureObjectID(FunctionSig Sig) : IObjectID {
     public string ToPrettyString(Metadata metadata) {
-        if (metadata.Interfaces.TryGetValue(this.ID, out var ifaceDecl)) {
-            if (ifaceDecl is DefInterfaceDecl(var def)) {
-                return def.Name.ToPrettyString(metadata);
-            }
-
-            if (ifaceDecl is ForwardInterfaceDecl(var name)) {
-                return name.ToPrettyString(metadata);
-            }
-        }
-
-        return $"{{interface {this.ID.ID}}}";
+        return $"closure of {this.Sig.ToPrettyString(metadata)}";
     }
-}
 
-public sealed record ClosureObjectID(TypeDefID FunctionTypeID) : IObjectID {
-    public string ToPrettyString(Metadata metadata) {
-        if (metadata.TypeDecls.TryGetValue(this.FunctionTypeID, out var typeDecl)
-            && typeDecl is DefTypeDecl(FunctionTypeDef(var sig))) {
-            return $"closure of {sig.ToPrettyString(metadata)}";
-        }
-
-        return $"closure of function {this.FunctionTypeID}";
+    public IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
     }
 }
 
@@ -557,11 +696,19 @@ public sealed record ArrayObjectID(IType Element) : IObjectID {
     public string ToPrettyString(Metadata metadata) {
         return $"array of {this.Element.ToPrettyString(metadata)}";
     }
+
+    public IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new ArrayObjectID(this.Element.ResolveGeneric(typeMap));
+    }
 }
 
 public sealed record BoxObjectID(IType Value) : IObjectID {
     public string ToPrettyString(Metadata metadata) {
         return $"box of {this.Value.ToPrettyString(metadata)}";
+    }
+
+    public IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new BoxObjectID(this.Value.ResolveGeneric(typeMap));
     }
 }
 
@@ -586,18 +733,18 @@ public class ObjectIDFormatter : IMessagePackFormatter<IObjectID> {
             }
 
             case "Class": {
-                var id = reader.ReadUInt64();
-                return new ClassObjectID(new TypeDefID(id));
+                var typeRef =  MessagePackSerializer.Deserialize<TypeRef>(ref reader, options);
+                return new ClassObjectID(typeRef);
             }
 
             case "Interface": {
-                var id = reader.ReadUInt64();
-                return new InterfaceObjectID(new InterfaceID(id));
+                var ifaceRef =  MessagePackSerializer.Deserialize<InterfaceRef>(ref reader, options);
+                return new InterfaceObjectID(ifaceRef);
             }
             
             case "Closure": {
-                var id = reader.ReadUInt64();
-                return new ClosureObjectID(new TypeDefID(id));
+                var sig = MessagePackSerializer.Deserialize<FunctionSig>(ref reader, options);
+                return new ClosureObjectID(sig);
             }
             
             case "Array": {

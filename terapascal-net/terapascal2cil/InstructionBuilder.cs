@@ -51,7 +51,7 @@ public class InstructionBuilder {
     public void BeginFunction(IR.FunctionDef function) {
         this.method.Body.InitLocals = true;
 
-        var returnType = function.Signature.ReturnType;
+        var returnType = function.Signature.ResultType;
 
         // create a variable to hold the result variable %0 if there's a return type
         if (this.HasReturnValue) {
@@ -149,12 +149,13 @@ public class InstructionBuilder {
                     break;
                 }
 
-                case IR.NewInstruction {
+                case IR.NewObjectInstruction {
                     Out: var outRef,
                     TypeID: var typeID,
+                    TypeArgs: var typeArgs,
                     Immortal: var immortal,
                 }: {
-                    this.BuildNewObject(outRef, typeID, immortal);
+                    this.BuildNewObject(outRef, typeID.ToTypeRef(typeArgs), immortal);
 
                     break;
                 }
@@ -248,7 +249,6 @@ public class InstructionBuilder {
                             }
 
                             case IR.NothingType:
-                            case IR.FlagsType:
                             case IR.FunctionType:
                             case IR.StructType:
                             case IR.VariantType:
@@ -434,10 +434,10 @@ public class InstructionBuilder {
                     Out: var outRef,
                     SelfArg: var selfArg,
                     RestArgs: var restArgs,
-                    InterfaceID: var ifaceID,
+                    InterfaceRef: var interfaceRef,
                     MethodID: var methodID,
                 }: {
-                    this.BuildVirtualCall(outRef, selfArg, restArgs, ifaceID, methodID);
+                    this.BuildVirtualCall(outRef, selfArg, restArgs, interfaceRef, methodID);
                     break;
                 }
 
@@ -467,16 +467,6 @@ public class InstructionBuilder {
 
     private void LoadFieldRef(IR.IRef argRef, IR.FieldID fieldID, IR.IType baseType) {
         var typeBuilder = this.assemblyBuilder.TypeBuilder;
-
-        // the 64-bit flags struct gets translated to a plain U64, so its "field" is just itself
-        if (baseType is IR.FlagsType { ID: var structID }
-            && structID == typeBuilder.Flags64StructID
-            && fieldID.ID == 0
-           ) {
-            this.LoadRefAddr(argRef);
-
-            return;
-        }
                     
         var fieldRef = typeBuilder.GetFieldRef(baseType, fieldID, this.library);
 
@@ -488,7 +478,7 @@ public class InstructionBuilder {
             this.LoadRefAddr(argRef);
         }
 
-        this.body.Emit(OpCodes.Ldflda, fieldRef);
+        this.body.Emit(OpCodes.Ldflda, fieldRef.Field);
     }
 
     private void LoadElementRef(IR.IRef baseRef, IR.IValue indexVal, IR.IType baseType) {
@@ -499,7 +489,7 @@ public class InstructionBuilder {
                 this.LoadRefAddr(baseRef);
                 this.LoadValue(indexVal);
                         
-                var elementMethod = typeBuilder.GetStaticArrayElementMethodRef(elementType, length);
+                var elementMethod = typeBuilder.GetStaticArrayElementMethodRef(elementType, length, this.library);
                         
                 this.body.Emit(OpCodes.Call, elementMethod);
                 break;
@@ -515,7 +505,8 @@ public class InstructionBuilder {
             }
 
             case IR.ObjectType(IR.BoxObjectID(var valueType)): {
-                var boxTypeInfo = typeBuilder.GetBoxTypeInfo(valueType);
+                typeBuilder.BuildTypeRef(valueType, this.library, out var valueTypeID);
+                var boxTypeInfo = typeBuilder.GetBoxTypeInfo(valueTypeID);
 
                 this.LoadRef(baseRef);
                 this.body.Emit(OpCodes.Ldflda, boxTypeInfo.ValueFieldRef);
@@ -597,8 +588,8 @@ public class InstructionBuilder {
         });
     }
 
-    private void BuildNewObject(IR.IRef outRef, IR.TypeDefID typeID, bool immortal) {
-        var classID = new IR.ClassObjectID(typeID);
+    private void BuildNewObject(IR.IRef outRef, IR.TypeRef typeRef, bool immortal) {
+        var classID = new IR.ClassObjectID(typeRef);
         var createMethodInst = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(classID, this.library);
 
         this.StoreRef(outRef, () => {
@@ -714,33 +705,30 @@ public class InstructionBuilder {
         }
     }
 
-    private void BuildCall(IR.IRef? outRef, IR.IValue funcVal, IReadOnlyList<IR.IValue> argVals) {
-        if (funcVal is not IR.RefValue(var funcRef)) {
+    private void BuildCall(IR.IRef? outRef, IR.IValue target, IReadOnlyList<IR.IValue> argVals) {
+        if (target is not IR.RefValue(var targetRef)) {
             throw new InvalidDataException("illegal instruction: call target value may only be a ref");
         }
         
-        if (funcRef is IR.GlobalRef(IR.FunctionGlobalRef(var funcID))) {
-            if (this.library.Functions[funcID].Signature().ReturnType is not IR.NothingType) {
-                this.StoreRef(outRef, () => EmitCall(funcID));
+        if (targetRef is IR.GlobalRef(IR.FunctionGlobalRef(var funcRef))) {
+            if (this.library.Functions[funcRef.DefID].Signature().ResultType is not IR.NothingType) {
+                this.StoreRef(outRef, () => this.EmitCall(funcRef, argVals));
             } else {
-                EmitCall(funcID);
+                this.EmitCall(funcRef, argVals);
             }    
         } else {
-            if (this.GetRefType(funcRef) is not IR.FunctionType(var funcTypeID)) {
-                throw new InvalidDataException($"illegal instruction: call target value {funcRef} is not a function value");
+            if (this.GetRefType(targetRef) is not IR.FunctionType(var sig)) {
+                throw new InvalidDataException($"illegal instruction: call target value {targetRef} is not a function value");
             }
 
-            var sig = this.assemblyBuilder.GetFunctionPointerType(funcTypeID)
-                ?? throw new InvalidDataException($"function pointer type not found for type ID {funcTypeID}");
-            
             foreach (var argVal in argVals) {
                 this.LoadValue(argVal);
             }
             
             // must be a value referencing a function pointer
-            this.LoadValue(funcVal);
+            this.LoadValue(target);
 
-            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(sig.ReturnType, this.library);
+            var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(sig.ResultType, this.library);
             var callSite = new CallSite(returnTypeRef) {
                 HasThis = false,
                 ExplicitThis = false,
@@ -752,56 +740,64 @@ public class InstructionBuilder {
                 callSite.Parameters.Add(new ParameterDefinition(paramTypeRef));
             }
 
-            if (sig.ReturnType is not IR.NothingType) {
+            if (sig.ResultType is not IR.NothingType) {
                 this.StoreRef(outRef, () => { this.body.Emit(OpCodes.Calli, callSite); });
             } else {
                 this.body.Emit(OpCodes.Calli, callSite);
             }
         }
+    }
 
-        return;
-
-        void EmitCall(IR.FunctionID id) {
-            foreach (var argVal in argVals) {
-                this.LoadValue(argVal);
-            }
-
-            var funcRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(id) 
-                ?? throw new InvalidDataException($"invalid instruction: couldn't find function {id.ID}");
-
-            this.body.Emit(OpCodes.Call, funcRef);
+    private void EmitCall(IR.FunctionRef funcRef, IEnumerable<IR.IValue> argVals) {
+        foreach (var argVal in argVals) {
+            this.LoadValue(argVal);
         }
+
+        var funcMethod = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcRef) 
+                         ?? throw new InvalidDataException($"invalid instruction: couldn't find function {funcRef.DefID}");
+
+        this.body.Emit(OpCodes.Call, funcMethod);
     }
 
     private void BuildVirtualCall(
         IR.IRef? outRef,
-        IR.IValue selfArg,
+        IR.IRef selfArg,
         IReadOnlyList<IR.IValue>? restArgs,
-        IR.InterfaceID ifaceID,
+        IR.InterfaceRef ifaceRef,
         IR.MethodID methodID
     ) {
-        var ifaceDef = ((IR.DefInterfaceDecl)this.library.Metadata.Interfaces[ifaceID]).Def;
+        this.assemblyBuilder.TypeBuilder.BuildTypeRef(
+            ifaceRef.ToObjectID().ToObjectType(),
+            this.library,
+            out var ifaceTypeID
+        );
+
+        var ifaceDef = ((IR.DefInterfaceDecl)this.library.Metadata.Interfaces[ifaceRef.DefID]).Def;
         var ifaceMethod = ifaceDef.Methods[(int)methodID.ID];
 
-        var methodRef = this.assemblyBuilder.TypeBuilder.GetInterfaceMethod(ifaceID, methodID);
+        var methodRef = this.assemblyBuilder.TypeBuilder.GetInterfaceMethod(ifaceTypeID, methodID);
 
-        if (ifaceMethod.ReturnType is IR.NothingType) {
-            EmitCall();
+        if (ifaceMethod.ResultType is IR.NothingType) {
+            this.EmitVirtualCall(methodRef, selfArg, restArgs);
         } else {
-            this.StoreRef(outRef, EmitCall);
+            this.StoreRef(outRef, () => this.EmitVirtualCall(methodRef, selfArg, restArgs));
         }
+    }
 
-        void EmitCall() {
-            this.LoadValue(selfArg);
+    private void EmitVirtualCall(
+        MethodReference methodRef,
+        IR.IRef selfArg,
+        IReadOnlyList<IR.IValue>? restArgs = null
+    ) {
+        this.LoadRef(selfArg);
 
-            if (restArgs != null) {
-                foreach (var argVal in restArgs) {
-                    this.LoadValue(argVal);
-                }
+        if (restArgs != null) {
+            foreach (var argVal in restArgs) {
+                this.LoadValue(argVal);
             }
-
-            this.body.Emit(OpCodes.Callvirt, methodRef);
         }
+
+        this.body.Emit(OpCodes.Callvirt, methodRef);
     }
 
     private void LoadValue(IR.IValue loadValue) {
@@ -1008,13 +1004,12 @@ public class InstructionBuilder {
                 return derefType;
             }
 
-            case IR.GlobalRef(IR.FunctionGlobalRef(var funcID)): {
-                if (this.library.Functions.TryGetValue(funcID, out var func) 
-                    && metadata.FindFunctionType(func.Signature(), out var typeID)) {
-                    return new IR.FunctionType(typeID);
+            case IR.GlobalRef(IR.FunctionGlobalRef(var funcRef)): {
+                if (!this.library.Functions.TryGetValue(funcRef.DefID, out var funcInfo)) {
+                    throw new InvalidDataException($"reference to missing function {funcRef.DefID}");
                 }
 
-                break;
+                return new IR.FunctionType(funcInfo.Signature());
             }
             
             case IR.GlobalRef(IR.VariableGlobalRef(var varID)): {
@@ -1055,62 +1050,24 @@ public class InstructionBuilder {
                     var funcPtrType = (IR.IType)new IR.FunctionType(funcTypeID);
                     return funcPtrType.MakeTempRef();
                 }
-                
-                IR.StructDef? structDef;
 
-                var found = fieldRef.InstanceType switch {
-                    IR.StructType(var id) => metadata.FindStructDef(id, out structDef),
-                    IR.FlagsType(var id) => metadata.FindStructDef(id, out structDef),
-                    IR.ObjectType(IR.ClassObjectID(var id)) => metadata.FindStructDef(id, out structDef),
-
-                    _ => throw new InvalidDataException($"invalid field instruction - {fieldRef.InstanceType.ToPrettyString(metadata)} does not have fields")
-                };
-
-                if (!found) {
-                    throw new InvalidDataException($"invalid field instruction - missing definition for type {fieldRef.InstanceType}");
-                }
-
-                var fieldID = fieldRef.FieldID;
-
-                if (!structDef!.Fields.TryGetValue(fieldID, out var fieldDef)) {
-                    var typeName = fieldRef.InstanceType.ToPrettyString(metadata);
-                    throw new InvalidDataException($"invalid field instruction - missing definition for field {fieldID} of type {typeName}");
-                }
-                
-                return fieldDef.Type.MakeTempRef();
+                var layoutField = this.assemblyBuilder.TypeBuilder.GetFieldRef(fieldRef.InstanceType, fieldRef.FieldID, this.library);
+                return layoutField.Type.MakeTempRef();
             }
 
             case IR.VariantTagRef(var tagRef): {
-                if (tagRef.InstanceType is not IR.VariantType(var id)) {
-                    throw new InvalidDataException($"invalid variant tag ref - {tagRef.InstanceType.ToPrettyString(metadata)} is not a variant");
-                }
-
-                if (!metadata.FindVariantDef(id, out var def)) {
-                    throw new InvalidDataException($"invalid variant tag ref - missing definition for variant type {tagRef.InstanceType.ToPrettyString(metadata)}");
-                }
-
-                return def.TagType.MakeTempRef();
+                var field = this.assemblyBuilder.TypeBuilder.GetVariantTagFieldRef(tagRef.InstanceType, this.library);
+                return field.Type.MakeTempRef();
             }
             
             case IR.VariantDataRef(var dataRef): {
-                if (dataRef.InstanceType is not IR.VariantType(var id)) {
-                    throw new InvalidDataException($"invalid variant data ref - {dataRef.InstanceType.ToPrettyString(metadata)} is not a variant");
-                }
+                var caseLayout = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(
+                    dataRef.InstanceType,
+                    dataRef.CaseIndex,
+                    this.library
+                );
 
-                if (!metadata.FindVariantDef(id, out var def)) {
-                    throw new InvalidDataException($"invalid variant data ref - missing definition for variant type {dataRef.InstanceType.ToPrettyString(metadata)}");
-                }
-                
-                if ((int)dataRef.CaseIndex >= def.Cases.Count) {
-                    throw new InvalidDataException($"invalid variant data ref - missing definition for variant case {dataRef.InstanceType.ToPrettyString(metadata)}.{dataRef.CaseIndex}");
-                }
-
-                var caseDef = def.Cases[(int)dataRef.CaseIndex];
-                if (caseDef.Type == null) {
-                    throw new InvalidDataException($"invalid variant data ref - variant case {dataRef.InstanceType.ToPrettyString(metadata)}.{caseDef.Name} has no data");
-                }
-
-                return caseDef.Type.MakeTempRef();
+                return caseLayout.Type.MakeTempRef();
             }
         }
 
@@ -1185,9 +1142,9 @@ public class InstructionBuilder {
                 break;
             }
             
-            case IR.GlobalRef(IR.FunctionGlobalRef(var id)): {
-                var methodRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(id)
-                    ?? throw new InvalidDataException($"reference to missing function: {id.ID}");
+            case IR.GlobalRef(IR.FunctionGlobalRef(var funcRef)): {
+                var methodRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcRef)
+                    ?? throw new InvalidDataException($"reference to missing function: {funcRef.ToPrettyString(this.library.Metadata)}");
 
                 this.body.Emit(OpCodes.Ldftn, methodRef);
                 break;
@@ -1196,7 +1153,7 @@ public class InstructionBuilder {
             case IR.Deref(var atRef): {
                 if (atRef is not IR.RefValue(var targetRef) 
                     || this.GetRefType(targetRef).GetDerefType() is not {} derefType) {
-                    throw new InvalidDataException($"invalid value for dereference instruction: {atRef}");
+                    throw new InvalidDataException($"invalid value for dereference instruction: {atRef.ToPrettyString(this.library.Metadata)}");
                 }
 
                 var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildTypeRef(derefType, this.library);
@@ -1222,16 +1179,16 @@ public class InstructionBuilder {
             }
 
             case IR.VariantTagRef(var tagRef): {
-                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDiscriminatorFieldRef(tagRef.InstanceType);
+                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantTagFieldRef(tagRef.InstanceType, this.library);
                 this.LoadRefAddr(tagRef.Instance);
-                this.body.Emit(OpCodes.Ldflda, fieldRef);
+                this.body.Emit(OpCodes.Ldflda, fieldRef.Field);
                 return;
             }
             
             case IR.VariantDataRef(var tagRef): {
-                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(tagRef.InstanceType, tagRef.CaseIndex);
+                var fieldRef = this.assemblyBuilder.TypeBuilder.GetVariantDataFieldRef(tagRef.InstanceType, tagRef.CaseIndex, this.library);
                 this.LoadRefAddr(tagRef.Instance);
-                this.body.Emit(OpCodes.Ldflda, fieldRef);
+                this.body.Emit(OpCodes.Ldflda, fieldRef.Field);
                 return;
             }
 

@@ -1,4 +1,5 @@
-﻿using Mono.Cecil;
+﻿using System.Diagnostics.CodeAnalysis;
+using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
@@ -96,7 +97,7 @@ public class AssemblyBuilder : IDisposable {
         return this.globalsClass;
     }
 
-    public TypeDefinition GetUnitClass(IR.NamePath unitPath) {
+    public TypeDefinition GetUnitClass(IR.StringPath unitPath) {
         var ns = unitPath.ToString();
         
         // we use the unit name as the namespace for type declared within it, so the unit class for free functions
@@ -266,15 +267,14 @@ public class AssemblyBuilder : IDisposable {
                     
                     switch (def) {
                         case IR.StructTypeDef { Def: var structDef }: {
-                            this.TypeBuilder.BuildStructDef(id, structDef, library);
+                            var structRef = id.ToTypeRef(structDef.Identity.GetDeclPath()?.GetGenericArgs());
+                            this.TypeBuilder.BuildTypeRef(structRef.ToStructType(), library);
                             break;
                         }
+
                         case IR.VariantTypeDef { Def: var variantDef }: {
-                            this.TypeBuilder.BuildVariantDef(id, variantDef, library);
-                            break;
-                        }
-                        case IR.FunctionTypeDef { Sig: var sig }: {
-                            this.TypeBuilder.BuildFunctionTypeDef(id, sig, library);
+                            var variantRef = id.ToTypeRef(variantDef.Name.GetGenericArgs());
+                            this.TypeBuilder.BuildTypeRef(variantRef.ToVariantType(), library);
                             break;
                         }
                     }
@@ -297,8 +297,9 @@ public class AssemblyBuilder : IDisposable {
         }
 
         foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
-            if (ifaceDecl is IR.DefInterfaceDecl(var ifaceDef)) {
-                this.TypeBuilder.BuildInterfaceDef(id, ifaceDef, library);
+            if (ifaceDecl is IR.DefInterfaceDecl(_)) {
+                var ifaceType = id.ToInterfacePointerType(ifaceDecl.GetGlobalName().GetGenericArgs());
+                this.TypeBuilder.BuildTypeRef(ifaceType, library);
             }
         }
 
@@ -364,8 +365,8 @@ public class AssemblyBuilder : IDisposable {
     ) {
         var typeRef = this.TypeBuilder.BuildTypeRef(type, library);
 
-        var typeInfoClassID = new IR.ClassObjectID(IR.TypeDefID.TypeInfo);
-        var typeInfoType = IR.TypeDefID.TypeInfo.ToObjectType();
+        var typeInfoClassID = IR.TypeDefID.TypeInfo.ToObjectID([]);
+        var typeInfoType = typeInfoClassID.ToObjectType();
 
         var nameField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoName, library);
         var implField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoImpl, library);
@@ -376,7 +377,7 @@ public class AssemblyBuilder : IDisposable {
             .ImportReference(this.TypeBuilder
             .BuildTypeRef(typeInfoType, library));
 
-        var fieldName = $"StaticTypeInfo_{type.GetUniqueName()}";
+        var fieldName = $"StaticTypeInfo_{type.GetUniqueName(this.TypeBuilder.Cache)}";
 
         const FieldAttributes fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
         var fieldDef = new FieldDefinition(fieldName, fieldAttrs, typeInfoTypeRef);
@@ -400,20 +401,20 @@ public class AssemblyBuilder : IDisposable {
         var nameStringFieldRef = this.GetStringLiteralRef(typeInfo.Name ?? IR.StringID.EmptyString);
         initBody.Emit(OpCodes.Ldsfld, fieldDef);
         initBody.Emit(OpCodes.Ldsfld, nameStringFieldRef);
-        initBody.Emit(OpCodes.Stfld, nameField);
+        initBody.Emit(OpCodes.Stfld, nameField.Field);
 
         // set type pointer
         initBody.Emit(OpCodes.Ldsfld, fieldDef);
         initBody.Emit(OpCodes.Ldtoken, typeRef);
         initBody.Emit(OpCodes.Call, this.TypeBuilder.GetTypeFromHandleMethod);
-        initBody.Emit(OpCodes.Stfld, implField);
+        initBody.Emit(OpCodes.Stfld, implField.Field);
         
         // set tags array
         var typeTagsLoc = type.GetTagsLocation();
         if (typeTagsLoc != null && this.GetStaticTagArrayFieldRef(typeTagsLoc) is {} tagsArrayFieldRef) {
             initBody.Emit(OpCodes.Ldsfld, fieldDef);
             initBody.Emit(OpCodes.Ldsfld, tagsArrayFieldRef);
-            initBody.Emit(OpCodes.Stfld, tagsField);
+            initBody.Emit(OpCodes.Stfld, tagsField.Field);
         }
         
         // set flags
@@ -421,7 +422,7 @@ public class AssemblyBuilder : IDisposable {
         unchecked {
             initBody.Emit(OpCodes.Ldc_I8, (long)typeInfo.Flags);
         }
-        initBody.Emit(OpCodes.Stfld, flagsField);
+        initBody.Emit(OpCodes.Stfld, flagsField.Field);
     }
 
     private void BuildTypeInfoMethodsInit(
@@ -435,14 +436,14 @@ public class AssemblyBuilder : IDisposable {
             throw new InvalidDataException(msg);
         }
 
-        var typeInfoType = IR.TypeDefID.TypeInfo.ToObjectType();
+        var typeInfoType = IR.TypeDefID.TypeInfo.ToObjectType([]);
         var methodsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoMethods, library);
 
         var initBuilder = this.GetGlobalsCCtor();
         var initBody = initBuilder.Body.GetILProcessor();
-        
-        var methodInfoClassID = new IR.ClassObjectID(IR.TypeDefID.MethodInfo);
-        var methodInfoTypeRef = this.TypeBuilder.BuildTypeRef(IR.TypeDefID.MethodInfo.ToObjectType(), library);
+
+        var methodInfoClassID = IR.TypeDefID.MethodInfo.ToObjectID([]);
+        var methodInfoTypeRef = this.TypeBuilder.BuildTypeRef(methodInfoClassID.ToObjectType(), library);
         var methodInfoTypeDef = methodInfoTypeRef.Resolve();
             
         var createMethodInfoInst = this.TypeBuilder.GetObjectCreateMethod(methodInfoClassID, library);
@@ -494,11 +495,11 @@ public class AssemblyBuilder : IDisposable {
             initBody.Emit(OpCodes.Stelem_Any, methodInfoTypeRef);
         }
 
-        initBody.Emit(OpCodes.Stfld, methodsField);
+        initBody.Emit(OpCodes.Stfld, methodsField.Field);
     }
 
     private void CreateStaticFuncInfoVariable(IR.FunctionID funcID, IR.Library library) {
-        var funcInfoType = IR.TypeDefID.FunctionInfo.ToObjectType();
+        var funcInfoType = IR.TypeDefID.FunctionInfo.ToObjectType([]);
         var funcInfoTypeRef = this.TypeBuilder.BuildTypeRef(funcInfoType, library);
 
         var fieldName = $"StaticFuncInfo_{funcID.ID}";
@@ -513,8 +514,8 @@ public class AssemblyBuilder : IDisposable {
     private void BuildStaticFuncInfo(IR.FunctionID funcID, IR.FunctionInfo funcInfo, IR.Library library) {
         var fieldRef = this.GetStaticFuncInfoFieldRef(funcID)!;
 
-        var funcInfoType = IR.TypeDefID.FunctionInfo.ToObjectType();
-        var funcObjectID = new IR.ClassObjectID(IR.TypeDefID.FunctionInfo);
+        var funcObjectID = IR.TypeDefID.FunctionInfo.ToObjectID([]);
+        var funcInfoType = funcObjectID.ToObjectType();
 
         var nameField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoName, library);
         var implField = this.TypeBuilder.GetFieldRef(funcInfoType, IR.FieldID.FunctionInfoImpl, library);
@@ -531,19 +532,19 @@ public class AssemblyBuilder : IDisposable {
         var nameStringFieldRef = this.GetStringLiteralRef(funcInfo.RuntimeName ?? IR.StringID.EmptyString);
         initBody.Emit(OpCodes.Dup);
         initBody.Emit(OpCodes.Ldsfld, nameStringFieldRef);
-        initBody.Emit(OpCodes.Stfld, nameField);
+        initBody.Emit(OpCodes.Stfld, nameField.Field);
 
         // set impl pointer
         initBody.Emit(OpCodes.Dup);
         this.BuildFunctionInfoImplObject(initBody, funcID, funcInfo.Invoker);
-        initBody.Emit(OpCodes.Stfld, implField);
+        initBody.Emit(OpCodes.Stfld, implField.Field);
 
         // set tags array
         var funcTagsLocation = new IR.FunctionTagLocation(funcID);
         if (this.GetStaticTagArrayFieldRef(funcTagsLocation) is {} tagsArrayFieldRef) {
             initBody.Emit(OpCodes.Dup);
             initBody.Emit(OpCodes.Ldsfld, tagsArrayFieldRef);
-            initBody.Emit(OpCodes.Stfld, tagsField);
+            initBody.Emit(OpCodes.Stfld, tagsField.Field);
         }
         
         // register in RTTI list
@@ -560,7 +561,7 @@ public class AssemblyBuilder : IDisposable {
         var implMethodField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.method))!);
         var implInvokerField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.invoker))!);
 
-        var methodRef = this.FunctionBuilder.FindFunctionMethod(funcID)
+        var methodRef = this.FunctionBuilder.FindFunctionMethod(funcID.ToFunctionRef([]))
             ?? throw new InvalidDataException($"function {funcID.ID} was not defined");
 
         body.Emit(OpCodes.Newobj, implTypeCtor);
@@ -571,25 +572,11 @@ public class AssemblyBuilder : IDisposable {
         body.Emit(OpCodes.Stfld, implMethodField);
 
         if (invokerID != null) {
-            var invokerRef = this.FunctionBuilder.FindFunctionMethod(invokerID.Value)!;
+            var invokerRef = this.FunctionBuilder.FindFunctionMethod(invokerID.Value.ToFunctionRef([]))!;
             body.Emit(OpCodes.Dup);
             body.Emit(OpCodes.Ldftn, invokerRef);
             body.Emit(OpCodes.Stfld, implInvokerField);
         }
-    }
-
-    public IR.FunctionSig? GetFunctionPointerType(IR.TypeDefID id) {
-        foreach (var lib in this.libraries) {
-            if (!lib.Metadata.TypeDecls.TryGetValue(id, out var decl)) {
-                continue;
-            }
-
-            if (decl is IR.DefTypeDecl(IR.FunctionTypeDef(var sig))) {
-                return sig;
-            } 
-        }
-
-        return null;
     }
 
     public FieldReference? GetStaticTypeInfoFieldRef(IR.IType type) {
@@ -604,9 +591,18 @@ public class AssemblyBuilder : IDisposable {
         return this.tagArrayFields.GetValueOrDefault(tagLocation);
     }
 
-    public bool IsClosureStruct(IR.TypeDefID closureStructID) {
-        return this.libraries.Any(lib => lib.Metadata.Closures
-            .Any(funcClosures => funcClosures.Value.Contains(closureStructID)));
+    public bool FindClosureStruct(IR.TypeDefID closureStructID, [NotNullWhen(true)] out IR.FunctionSig? sig) {
+        foreach (var library in this.libraries) {
+            foreach (var (closureSig, closureTypeIDs) in library.Metadata.Closures) {
+                if (closureTypeIDs.Contains(closureStructID)) {
+                    sig = closureSig;
+                    return true;
+                }
+            }
+        }
+
+        sig = null;
+        return false;
     }
 
     public void Finish() {

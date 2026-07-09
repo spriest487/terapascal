@@ -49,7 +49,6 @@ public class TypeDeclFormatter : IMessagePackFormatter<ITypeDecl> {
 public interface ITypeDef;
 public record StructTypeDef(StructDef Def) : ITypeDef;
 public record VariantTypeDef(VariantDef Def) : ITypeDef;
-public record FunctionTypeDef(FunctionSig Sig) : ITypeDef;
 
 public class TypeDefFormatter : IMessagePackFormatter<ITypeDef> {
     public void Serialize(ref MessagePackWriter writer, ITypeDef? value, MessagePackSerializerOptions options) {
@@ -73,11 +72,6 @@ public class TypeDefFormatter : IMessagePackFormatter<ITypeDef> {
             case "Variant": {
                 var def = MessagePackSerializer.Deserialize<VariantDef>(ref reader, options);
                 return new VariantTypeDef(def);
-            }
-
-            case "Function": {
-                var sig = MessagePackSerializer.Deserialize<FunctionSig>(ref reader, options);
-                return new FunctionTypeDef(sig);
             }
             
             default: {

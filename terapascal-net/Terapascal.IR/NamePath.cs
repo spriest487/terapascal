@@ -7,39 +7,30 @@ namespace Terapascal.IR;
 [MessagePackObject]
 public sealed class NamePath : IEquatable<NamePath> {
     [Key("path")]
-    public required IReadOnlyList<string> Path {
+    public required StringPath Path {
         get;
-        init {
-            var parts = value!.ToArrayNonNull();
-            if (parts.Length < 1) {
-                throw new ArgumentException("empty path", nameof(value));
-            }
-            field = parts;
-        }
+        init => field = value ?? new StringPath { Path = [] };
     }
 
     [Key("type_args")]
-    public required IReadOnlyList<IType> TypeArgs {
-        get;
-        init => field = value!.ToArrayNonNull();
-    }
+    public IReadOnlyList<IType>? TypeArgs { get; init; }
+
+    [IgnoreMember, MemberNotNullWhen(true, nameof(TypeArgs))]
+    public bool HasTypeArgs => this.TypeArgs is { Count: > 0 };
 
     [IgnoreMember]
-    public bool HasTypeArgs => this.TypeArgs.Count > 0;
-
-    [IgnoreMember]
-    public string Last => this.Path[^1];
+    public string Last => this.Path.Path[^1];
 
     public bool Equals(NamePath? other) {
         if (other == null) {
             return false;
         }
 
-        if (!this.Path.SequenceEqual(other.Path)) {
+        if (!this.Path.Equals(other.Path)) {
             return false;
         }
 
-        return this.TypeArgs.SequenceEqual(other.TypeArgs);
+        return (this.TypeArgs ?? []).SequenceEqual(other.TypeArgs ?? []);
     }
 
     public override bool Equals(object? obj) {
@@ -47,46 +38,45 @@ public sealed class NamePath : IEquatable<NamePath> {
     }
 
     public override int GetHashCode() {
-        var hashCode = 123456;
-        foreach (var part in this.Path) {
-            hashCode ^= part.GetHashCode();
+        var hashCode = new HashCode();
+        hashCode.Add(this.Path);
+
+        if (this.TypeArgs != null) {
+            foreach (var type in this.TypeArgs) {
+                hashCode.Add(type.GetHashCode());
+            }
         }
 
-        foreach (var type in this.TypeArgs) {
-            hashCode ^= type.GetHashCode();
-        }
-
-        return hashCode;
+        return hashCode.ToHashCode();
     }
 
-    public NamePath? GetParent() {
+    public StringPath? GetParent() {
         if (this.Path.Count == 1) {
             return null;
         }
 
-        return new NamePath {
-            Path = this.Path.Take(this.Path.Count - 1).ToList(),
-            TypeArgs = null,
+        return new StringPath {
+            Path = this.Path.Take(this.Path.Count - 1).ToArray(),
         };
     }
 
     public NamePath CreateChild(string childName) {
-        if (this.TypeArgs != null && this.TypeArgs.Count > 0) {
+        if (this.TypeArgs is { Count: > 0 }) {
             throw new InvalidOperationException("can't create a child of a path with type args");
         }
         
         var path = new List<string>(this.Path) { childName };
 
         return new NamePath {
-            Path = path,
-            TypeArgs = null,
+            Path = new StringPath { Path = path },
+            TypeArgs = [],
         };
     }
 
     public static NamePath WithParts(params ReadOnlySpan<string> parts) {
         return new NamePath {
-            Path = parts.ToArray(),
-            TypeArgs = null,
+            Path = new StringPath { Path = parts.ToArray() },
+            TypeArgs = [],
         };
     }
 
@@ -94,7 +84,7 @@ public sealed class NamePath : IEquatable<NamePath> {
         var result = new StringBuilder();
         result.AppendJoin(".", this.Path);
 
-        if (this.TypeArgs.Count > 0) {
+        if (this.TypeArgs is { Count: > 0 }) {
             result.Append('[');
             result.AppendJoin(", ", this.TypeArgs);
             result.Append(']');
@@ -124,5 +114,16 @@ public sealed class NamePath : IEquatable<NamePath> {
         }
 
         return this.Last;
+    }
+
+    public NamePath ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        var args = this.TypeArgs?
+            .Select(t => t.ResolveGeneric(typeMap))
+            .ToArray();
+
+        return new NamePath {
+            Path = this.Path,
+            TypeArgs = args,
+        };
     }
 }

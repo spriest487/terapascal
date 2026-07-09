@@ -1,10 +1,17 @@
-﻿using MessagePack;
+﻿using System.Text;
+using MessagePack;
 using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
 public interface IValue {
     bool IsLiteral => false;
+
+    string ToPrettyString(Metadata libraryMetadata) {
+        var result = new StringBuilder();
+        libraryMetadata.FormatValue(this, result);
+        return result.ToString();
+    }
 }
 
 public record RefValue(IRef Ref) : IValue {}

@@ -1,5 +1,4 @@
 ﻿using MessagePack;
-using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
@@ -73,5 +72,24 @@ public static class Util {
         var second = MessagePackSerializer.Deserialize<TSecond>(ref reader, options);
 
         return (first, second);
+    }
+
+    public static Dictionary<string, IType> BuildGenericTypeMap(
+        IReadOnlyList<TypeParam> typeParams,
+        IReadOnlyList<IType> typeArgs
+    ) {
+        var typeMap = new Dictionary<string, IType>();
+
+        for (var i = 0; i < typeParams.Count; i += 1) {
+            var argType = typeArgs[i];
+
+            if (!typeMap.TryAdd(typeParams[i].Name, argType)) {
+                if (typeMap[typeParams[i].Name] != argType) {
+                    throw new InvalidDataException("inconsistent generic arg types");
+                }
+            }
+        }
+        
+        return typeMap;
     }
 }

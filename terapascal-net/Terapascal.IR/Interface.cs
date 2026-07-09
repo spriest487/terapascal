@@ -5,17 +5,17 @@ using MessagePack.Formatters;
 namespace Terapascal.IR;
 
 public interface IInterfaceDecl {
-    NamePath GetGlobalName();
+    DeclPath GetGlobalName();
 }
 
-public record ForwardInterfaceDecl(NamePath Name) : IInterfaceDecl {
-    public NamePath GetGlobalName() {
+public record ForwardInterfaceDecl(DeclPath Name) : IInterfaceDecl {
+    public DeclPath GetGlobalName() {
         return this.Name;
     }
 }
 
 public record DefInterfaceDecl(InterfaceDef Def) : IInterfaceDecl {
-    public NamePath GetGlobalName() {
+    public DeclPath GetGlobalName() {
         return this.Def.Name;
     }
 }
@@ -23,13 +23,13 @@ public record DefInterfaceDecl(InterfaceDef Def) : IInterfaceDecl {
 [MessagePackObject]
 public record InterfaceDef {
     [Key("name")]
-    public required NamePath Name {
+    public required DeclPath Name {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
     [Key("methods")]
-    public required IReadOnlyList<Method> Methods { 
+    public required IReadOnlyList<InterfaceMethod> Methods { 
         get;
         init => field = value!.ToArrayNonNull();
     }
@@ -40,7 +40,7 @@ public record InterfaceDef {
         init => field = value.ToArrayNonNull();
     }
 
-    public bool TryFindMethod(string name, [NotNullWhen(true)] out Method? result) {
+    public bool TryFindMethod(string name, [NotNullWhen(true)] out InterfaceMethod? result) {
         foreach (var method in this.Methods) {
             if (method.Name == name) {
                 result = method;
@@ -52,7 +52,7 @@ public record InterfaceDef {
         return false;
     }
     
-    public bool TryFindMethod(MethodID id, [NotNullWhen(true)] out Method? result) {
+    public bool TryFindMethod(MethodID id, [NotNullWhen(true)] out InterfaceMethod? result) {
         if (id.ID >= (ulong)this.Methods.Count) {
             result = null;
             return false;
@@ -64,21 +64,21 @@ public record InterfaceDef {
 }
 
 [MessagePackObject]
-public record Method {
+public record InterfaceMethod {
     [Key("name")]
     public required string Name {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    [Key("return_ty")]
-    public required IType ReturnType {
+    [Key("result_type")]
+    public required IType ResultType {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
     
     [Key("params")]
-    public required IReadOnlyList<IType> Parameters { 
+    public required IReadOnlyList<FunctionParamInfo> Parameters { 
         get;
         init => field = value!.ToArrayNonNull();
     }
@@ -108,7 +108,7 @@ public class InterfaceDeclFormatter : IMessagePackFormatter<IInterfaceDecl> {
 
         switch (key) {
             case "Forward": {
-                var name = MessagePackSerializer.Deserialize<NamePath>(ref reader, options);
+                var name = MessagePackSerializer.Deserialize<DeclPath>(ref reader, options);
                 return new ForwardInterfaceDecl(name);
             }
 
@@ -125,7 +125,7 @@ public class InterfaceDeclFormatter : IMessagePackFormatter<IInterfaceDecl> {
 }
 
 public readonly record struct InterfaceMethodImplRef {
-    public required NamePath Interface { get; init; }
+    public required InterfaceRef Interface { get; init; }
     public required IType ImplType { get; init; }
     public required string MethodName { get; init; }
 }

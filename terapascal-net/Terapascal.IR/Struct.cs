@@ -30,6 +30,24 @@ public record StructDef {
 
         return result.ToString();
     }
+
+    public StructDef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        var fields = new SortedDictionary<FieldID, StructFieldDef>();
+        foreach (var (fieldID, fieldDef) in this.Fields) {
+            var fieldType = fieldDef.Type.ResolveGeneric(typeMap);
+
+            fields.Add(fieldID, new StructFieldDef {
+                Name = fieldDef.Name,
+                Type = fieldType,
+            });
+        }
+
+        return new StructDef {
+            Identity = this.Identity,
+            Tags = this.Tags,
+            Fields = fields,
+        };
+    }
 }
 
 [MessagePackObject]
@@ -45,61 +63,92 @@ public readonly record struct StructFieldDef {
 }
 
 public interface IStructIdentity {
+    bool IsValueType { get; }
+
     string ToPrettyString(Metadata metadata);
+
+    DeclPath? GetDeclPath();
+
+    IType ToDefinitionType(TypeDefID id);
+
 }
 
-public record RecordStructIdentity(NamePath Name) : IStructIdentity {
+public record RecordStructIdentity(DeclPath Name) : IStructIdentity {
+    public bool IsValueType => true;
+
     public string ToPrettyString(Metadata metadata) {
         return this.Name.ToPrettyString(metadata);
     }
+
+    public DeclPath GetDeclPath() {
+        return this.Name;
+    }
+
+    public IType ToDefinitionType(TypeDefID id) {
+        return id.ToStructType(this.Name.GetGenericArgs());
+    }
 }
 
-public record ClassStructIdentity(NamePath Name) : IStructIdentity {
+public record ClassStructIdentity(DeclPath Name) : IStructIdentity {
+    public bool IsValueType => false;
+
     public string ToPrettyString(Metadata metadata) {
         return this.Name.ToPrettyString(metadata);
     }
-}
 
-public record ArrayStructIdentity(IType ElementType, ulong Size) : IStructIdentity {
-    public string ToPrettyString(Metadata metadata) {
-        return $"array[{this.Size}] of {this.ElementType.ToPrettyString(metadata)}";
+    public DeclPath GetDeclPath() {
+        return this.Name;
+    }
+
+    public IType ToDefinitionType(TypeDefID id) {
+        return id.ToObjectType(this.Name.GetGenericArgs());
     }
 }
 
-public record DynArrayStructIdentity(IType Type) : IStructIdentity {
+public record InternalStructIdentity(string InternalName) : IStructIdentity {
+    public bool IsValueType => true;
+
     public string ToPrettyString(Metadata metadata) {
-        return $"array of {this.Type.ToPrettyString(metadata)}";
+        return this.InternalName;
+    }
+
+    public DeclPath? GetDeclPath() {
+        return null;
+    }
+
+    public IType ToDefinitionType(TypeDefID id) {
+        return id.ToStructType([]);
     }
 }
 
 public record ClosureStructIdentity(ClosureIdentity Identity) : IStructIdentity {
-    public string ToPrettyString(Metadata metadata) {
-        if (metadata.TypeDecls.TryGetValue(this.Identity.VirtualFunctionType, out var typeDecl)
-            && typeDecl is DefTypeDecl(FunctionTypeDef(var sig))) {
-            return $"closure of {sig.ToPrettyString(metadata)}";
-        }
+    public bool IsValueType => false;
 
-        return $"closure of function {this.Identity.VirtualFunctionType.ID}";
+    public string ToPrettyString(Metadata metadata) {
+        var result = new StringBuilder("closure object(");
+
+        metadata.FormatFunctionRef(this.Identity.ID.ToFunctionRef([]), result);
+        result.Append($": {this.Identity.Sig.ToPrettyString(metadata)})");
+
+        return result.Append(')').ToString();
+    }
+
+    public DeclPath? GetDeclPath() {
+        return null;
+    }
+
+    public IType ToDefinitionType(TypeDefID id) {
+        return id.ToObjectType([]);
     }
 }
 
 [MessagePackObject]
 public readonly record struct ClosureIdentity {
-    [Key("virt_func_ty")]
-    public TypeDefID VirtualFunctionType { get; init; }
+    [Key("sig")]
+    public FunctionSig Sig { get; init; }
     
     [Key("id")]
     public FunctionID ID { get; init; }
-}
-
-[MessagePackObject]
-public readonly record struct SetFlagsStructIdentity : IStructIdentity {
-    [Key("bits")]
-    public required ulong Bits { get; init; }
-
-    public string ToPrettyString(Metadata metadata) {
-        return $"set<{this.Bits}>";
-    }
 }
 
 public class StructIdentityFormatter : IMessagePackFormatter<IStructIdentity> {
@@ -117,32 +166,23 @@ public class StructIdentityFormatter : IMessagePackFormatter<IStructIdentity> {
 
         switch (key) {
             case "Record": {
-                var name = MessagePackSerializer.Deserialize<NamePath>(ref reader, options);
+                var name = MessagePackSerializer.Deserialize<DeclPath>(ref reader, options);
                 return new RecordStructIdentity(name);
             }
 
             case "Class": {
-                var name = MessagePackSerializer.Deserialize<NamePath>(ref reader, options);
+                var name = MessagePackSerializer.Deserialize<DeclPath>(ref reader, options);
                 return new ClassStructIdentity(name);
             }
-
-            case "Array": {
-                var (elementType, size) = reader.ReadPair<IType, ulong>(options);
-                return new ArrayStructIdentity(elementType, size);
-            }
             
-            case "DynArray": {
-                var elementType = MessagePackSerializer.Deserialize<IType>(ref reader, options);
-                return new DynArrayStructIdentity(elementType);
+            case "Internal": {
+                var name = reader.ReadString();
+                return new InternalStructIdentity(name);
             }
             
             case "Closure": {
                 var sig = MessagePackSerializer.Deserialize<ClosureIdentity>(ref reader, options);
                 return new ClosureStructIdentity(sig);
-            }
-            
-            case "SetFlags": {
-                return MessagePackSerializer.Deserialize<SetFlagsStructIdentity>(ref reader, options);
             }
             
             default: {

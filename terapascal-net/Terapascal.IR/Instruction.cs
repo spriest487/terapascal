@@ -176,14 +176,14 @@ public record VirtualCallInstruction : IInstruction {
     [MessagePackFormatter(typeof(NullableRefFormatter))]
     public required IRef? Out { get; init; }
 
-    [Key("iface_id")]
-    public required InterfaceID InterfaceID { get; init; }
+    [Key("iface_ref")]
+    public required InterfaceRef InterfaceRef { get; init; }
 
     [Key("method")]
     public required MethodID MethodID { get; init; }
 
     [Key("self_arg")]
-    public required IValue SelfArg {
+    public required IRef SelfArg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -254,7 +254,7 @@ public record JumpIfInstruction : IInstruction {
 }
 
 [MessagePackObject]
-public record NewInstruction : IInstruction {
+public record NewObjectInstruction : IInstruction {
     [Key("out")]
     public required IRef Out {
         get;
@@ -263,6 +263,9 @@ public record NewInstruction : IInstruction {
 
     [Key("type_id")]
     public required TypeDefID TypeID { get; init; }
+
+    [Key("type_args")]
+    public IReadOnlyList<IType>? TypeArgs { get; init; }
 
     [Key("immortal")]
     public required bool Immortal { get; init; }
@@ -510,7 +513,7 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
             }
 
             case "NewObject": {
-                return MessagePackSerializer.Deserialize<NewInstruction>(ref reader, options);
+                return MessagePackSerializer.Deserialize<NewObjectInstruction>(ref reader, options);
             }
 
             case "NewArray": {

@@ -13,11 +13,17 @@ public class Library {
 
     [Key("version")]
     public required Version Version { get; init; }
+
+    [Key("tags")]
+    public required IReadOnlyList<TagInfo> Tags {
+        get;
+        init => field = value.ToArrayNonNull();
+    }
     
     [Key("references")]
     public required IReadOnlyList<string> References {
         get;
-        init => field = value!.ToArrayNonNull();
+        init => field = value.ToArrayNonNull();
     }
     
     [Key("metadata")]

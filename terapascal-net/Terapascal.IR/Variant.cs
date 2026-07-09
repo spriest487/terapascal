@@ -6,7 +6,7 @@ namespace Terapascal.IR;
 [MessagePackObject]
 public record VariantDef {
     [Key("name")]
-    public required NamePath Name {
+    public required DeclPath Name {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
@@ -46,6 +46,29 @@ public record VariantDef {
         }
 
         return result.ToString();
+    }
+
+    public VariantDef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        var cases = new VariantCase[this.Cases.Count];
+
+        for (var i = 0; i < this.Cases.Count; i += 1) {
+            var caseDef = this.Cases[i];
+
+            var dataType = caseDef.Type?.ResolveGeneric(typeMap);
+
+            cases[i] = new VariantCase {
+                Name = caseDef.Name,
+                Type = dataType,
+                Tag = caseDef.Tag,
+            };
+        }
+
+        return new VariantDef {
+            Name = this.Name,
+            Tags = this.Tags,
+            Cases = cases,
+            TagType = this.TagType,
+        };
     }
 }
 
