@@ -28,8 +28,14 @@ public record InterfaceDef {
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
+    [Key("visibility")]
+    public required Visibility Visibility {
+        get;
+        init;
+    }
+
     [Key("methods")]
-    public required IReadOnlyList<InterfaceMethod> Methods { 
+    public required IReadOnlyList<InterfaceMethod> Methods {
         get;
         init => field = value!.ToArrayNonNull();
     }

@@ -552,6 +552,12 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
                 return IType.Nothing;
             }
 
+            case "Generic": {
+                var name = reader.ReadString()
+                    ?? throw new MessagePackSerializationException("expected name for generic type");;
+                return new GenericType(name);
+            }
+
             case "Pointer": {
                 var inner = MessagePackSerializer.Deserialize<IType>(ref reader, options) 
                     ?? throw new MessagePackSerializationException("expected inner type for pointer");

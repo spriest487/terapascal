@@ -6,7 +6,7 @@ namespace Terapascal.IR;
 public interface ITypeDecl;
 
 public record ReservedTypeDecl : ITypeDecl;
-public record ForwardTypeDecl(NamePath Name) : ITypeDecl;
+public record ForwardTypeDecl(DeclPath Name) : ITypeDecl;
 public record DefTypeDecl(ITypeDef Def) : ITypeDecl;
 
 public class TypeDeclFormatter : IMessagePackFormatter<ITypeDecl> {
@@ -30,8 +30,8 @@ public class TypeDeclFormatter : IMessagePackFormatter<ITypeDecl> {
             }
 
             case "Forward": {
-                var namePath = MessagePackSerializer.Deserialize<NamePath>(ref reader, options);
-                return new ForwardTypeDecl(namePath);
+                var path = MessagePackSerializer.Deserialize<DeclPath>(ref reader, options);
+                return new ForwardTypeDecl(path);
             }
 
             case "Def": {

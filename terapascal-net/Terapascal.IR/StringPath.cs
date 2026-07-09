@@ -1,46 +1,42 @@
-using System.Collections;
 using MessagePack;
+using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
-[MessagePackObject]
-public record StringPath : IReadOnlyList<string> {
-    [Key("path")]
-    public required IReadOnlyList<string> Path {
+[MessagePackObject(SuppressSourceGeneration = true)]
+public record StringPath {
+    [Key("parts")]
+    public required IReadOnlyList<string> Parts {
         get;
         init => field = value.ToArrayNonNull();
     }
 
     [IgnoreMember]
-    public int Count => this.Path.Count;
+    public int Count => this.Parts.Count;
 
     [IgnoreMember]
-    public string Last => this.Path[^1];
+    public string Last => this.Parts[^1];
 
-    public string this[int index] => this.Path[index];
+    public string this[int index] => this.Parts[index];
 
     public virtual bool Equals(StringPath? other) {
-        return other is not null && other.Path.SequenceEqual(this.Path);
+        return other is not null && other.Parts.SequenceEqual(this.Parts);
     }
 
     public IEnumerator<string> GetEnumerator() {
-        return this.Path.GetEnumerator();
+        return this.Parts.GetEnumerator();
     }
 
     public override int GetHashCode() {
         var hashCode = new HashCode();
-        foreach (var part in this.Path) {
+        foreach (var part in this.Parts) {
             hashCode.Add(part);
         }
         return hashCode.ToHashCode();
     }
 
     public override string ToString() {
-        return string.Join(".", this.Path);
-    }
-
-    IEnumerator IEnumerable.GetEnumerator() {
-        return ((IEnumerable)this.Path).GetEnumerator();
+        return string.Join(".", this.Parts);
     }
 
     public StringPath? GetParent() {
@@ -48,7 +44,23 @@ public record StringPath : IReadOnlyList<string> {
             return null;
         }
 
-        var parts = this.Path.Take(this.Path.Count - 1).ToArray();
-        return new StringPath { Path = parts };
+        var parts = this.Parts.Take(this.Parts.Count - 1).ToArray();
+        return new StringPath { Parts = parts };
+    }
+}
+
+[MessagePackFormatter(typeof(StringPath))]
+public class StringPathFormatter : IMessagePackFormatter<StringPath> {
+    public void Serialize(ref MessagePackWriter writer, StringPath? value, MessagePackSerializerOptions options) {
+        throw new NotImplementedException();
+    }
+
+    public StringPath Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
+        if (reader.TryReadNil()) {
+            return null!;
+        }
+
+        var parts = MessagePackSerializer.Deserialize<string[]>(ref reader, options);
+        return new StringPath { Parts = parts };
     }
 }

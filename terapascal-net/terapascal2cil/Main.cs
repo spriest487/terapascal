@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Diagnostics;
+using MessagePack;
 using MessagePack.Resolvers;
 using Mono.Cecil;
 using Terapascal.CIL;
@@ -8,22 +9,8 @@ if (!Args.Parse(args, out var parsedArgs)) {
     return 1;
 }
 
-var mpOptions = MessagePackSerializerOptions.Standard.WithResolver(CompositeResolver.Create([
-    IR.Library.FormatterResolver,
-    StandardResolver.Instance,
-]));
-
-IR.Library library;
-await using (var input = OpenInputStream(parsedArgs.LibPath)) {
-    library = await MessagePackSerializer.DeserializeAsync<IR.Library>(input, mpOptions);
-}
-
-if (!Enum.TryParse(parsedArgs.ModuleKind, out ModuleKind moduleKind)) {
-    moduleKind = ModuleKind.Dll;
-}
-
-if (parsedArgs.Verbose) {
-    Console.WriteLine($"generating assembly: {library.Name} {library.Version} ({moduleKind})");
+if (parsedArgs.LibPath == null) {
+    return 0;
 }
 
 var refLibPath = await SDKUtils.FindReferenceLibPath(parsedArgs.SDKVersion, parsedArgs.Verbose);
@@ -33,13 +20,43 @@ if (targetVersion == null) {
     targetVersion = await SDKUtils.FindTargetRuntimeVersion(parsedArgs.Verbose);
 }
 
-using (var assemblyBuilder = new AssemblyBuilder(library.Name,
-    library.Version,
+var mpOptions = MessagePackSerializerOptions.Standard.WithResolver(CompositeResolver.Create([
+    IR.Library.FormatterResolver,
+    StandardResolver.Instance,
+]));
+
+if (!Enum.TryParse(parsedArgs.ModuleKind, out ModuleKind moduleKind)) {
+    moduleKind = ModuleKind.Dll;
+}
+
+var mainLib = await LoadLibrary(parsedArgs.LibPath);
+
+if (parsedArgs.Verbose) {
+    Console.WriteLine($"generating assembly: {mainLib.Name} {mainLib.Version} ({moduleKind})");
+}
+
+var libSearchPaths = new List<string>();
+
+var mainLibDir = Path.GetDirectoryName(parsedArgs.LibPath);
+if (mainLibDir != null) {
+    libSearchPaths.Add(mainLibDir);
+}
+
+var libEnvDir = Environment.GetEnvironmentVariable("TERAPASCAL_LIB");
+if (libEnvDir != null) {
+    libSearchPaths.Add(libEnvDir);
+}
+
+using (var assemblyBuilder = new AssemblyBuilder(
+    mainLib.Name,
+    mainLib.Version,
     moduleKind,
     "Terapascal.Runtime.dll",
     refLibPath)
 ) {
-    assemblyBuilder.AddLibrary(library);
+    var loadedRefs = new HashSet<string>();
+    await AddLibraryRecursive(assemblyBuilder, mainLib, loadedRefs);
+
     assemblyBuilder.Finish();
 
     var outputPath = Path.GetFullPath(parsedArgs.OutputPath);
@@ -93,4 +110,41 @@ Stream OpenInputStream(string? libPath) {
     return libPath != null
         ? File.OpenRead(libPath)
         : Console.OpenStandardInput();
+}
+
+async Task<IR.Library> LoadLibrary(string path) {
+    await using var input = OpenInputStream(path);
+    return await MessagePackSerializer.DeserializeAsync<IR.Library>(input, mpOptions);
+}
+
+string FindLibPath(string libName) {
+    var filename = libName + ".lib";
+    foreach (var searchPath in libSearchPaths) {
+        var fullPath = Path.Combine(searchPath, filename);
+
+        if (File.Exists(fullPath)) {
+            return fullPath;
+        }
+    }
+
+    throw new FileNotFoundException(filename);
+}
+
+async Task AddLibraryRecursive(AssemblyBuilder builder, IR.Library library, HashSet<string> loadedRefs) {
+    foreach (var refName in library.References) {
+        if (!loadedRefs.Add(refName)) {
+            continue;
+        }
+
+        var refPath = FindLibPath(refName);
+        if (parsedArgs.Verbose) {
+            Console.WriteLine($"Loading referenced library {refName} at {refPath}");
+        }
+
+        var refLib = await LoadLibrary(refPath);
+
+        await AddLibraryRecursive(builder, refLib, loadedRefs);
+    }
+
+    builder.AddLibrary(mainLib);
 }

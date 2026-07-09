@@ -27,7 +27,7 @@ public class Library {
     }
     
     [Key("metadata")]
-    public required Metadata Metadata { get; set; }
+    public required Metadata Metadata { get; init; }
 
     [Key("functions")]
     public required IReadOnlyDictionary<FunctionID, IFunction> Functions {

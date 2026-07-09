@@ -9,7 +9,7 @@ public sealed class NamePath : IEquatable<NamePath> {
     [Key("path")]
     public required StringPath Path {
         get;
-        init => field = value ?? new StringPath { Path = [] };
+        init => field = value ?? new StringPath { Parts = [] };
     }
 
     [Key("type_args")]
@@ -19,7 +19,7 @@ public sealed class NamePath : IEquatable<NamePath> {
     public bool HasTypeArgs => this.TypeArgs is { Count: > 0 };
 
     [IgnoreMember]
-    public string Last => this.Path.Path[^1];
+    public string Last => this.Path.Parts[^1];
 
     public bool Equals(NamePath? other) {
         if (other == null) {
@@ -56,7 +56,7 @@ public sealed class NamePath : IEquatable<NamePath> {
         }
 
         return new StringPath {
-            Path = this.Path.Take(this.Path.Count - 1).ToArray(),
+            Parts = this.Path.Parts.Take(this.Path.Count - 1).ToArray(),
         };
     }
 
@@ -65,17 +65,17 @@ public sealed class NamePath : IEquatable<NamePath> {
             throw new InvalidOperationException("can't create a child of a path with type args");
         }
         
-        var path = new List<string>(this.Path) { childName };
+        var path = new List<string>(this.Path.Parts) { childName };
 
         return new NamePath {
-            Path = new StringPath { Path = path },
+            Path = new StringPath { Parts = path },
             TypeArgs = [],
         };
     }
 
     public static NamePath WithParts(params ReadOnlySpan<string> parts) {
         return new NamePath {
-            Path = new StringPath { Path = parts.ToArray() },
+            Path = new StringPath { Parts = parts.ToArray() },
             TypeArgs = [],
         };
     }
@@ -108,7 +108,7 @@ public sealed class NamePath : IEquatable<NamePath> {
 
     public string ToGlobalName(out string ns) {
         if (this.Path.Count > 1) {
-            ns = string.Join('.', this.Path.Take(this.Path.Count - 1));
+            ns = string.Join('.', this.Path.Parts.Take(this.Path.Count - 1));
         } else {
             ns = "";
         }

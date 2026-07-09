@@ -4,16 +4,13 @@ using CommandLine;
 namespace Terapascal.CIL;
 
 public record Args {
-    [Option("assembly-version", Required = false)]
-    public Version? Version { get; init; }
-
-    [Option("module-kind", Default = "Dll", Required = false)]
+    [Option('k', "module-kind", Default = "Dll", Required = false)]
     public string? ModuleKind { get; init; }
         
-    [Option("output-path", Default = false, Required = true)]
+    [Option('o', "output-path", Default = false, Required = true)]
     public required string OutputPath { get; init; }
 
-    [Option("verbose", Default = false, Required = false)]
+    [Option('v', "verbose", Default = false, Required = false)]
     public bool Verbose { get; init; }
 
     [Option("sdk-version", Default = null, Required = false)]

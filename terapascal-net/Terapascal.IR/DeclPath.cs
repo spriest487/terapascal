@@ -62,7 +62,7 @@ public class DeclPath {
 
     public string ToGlobalName(out string ns) {
         if (this.Path.Count > 1) {
-            ns = string.Join('.', this.Path.Take(this.Path.Count - 1));
+            ns = string.Join('.', this.Path.Parts.Take(this.Path.Count - 1));
         } else {
             ns = "";
         }
