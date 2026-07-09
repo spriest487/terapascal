@@ -16,7 +16,7 @@ public class TagInfo {
 
     public void ToPrettyString(IMetadataSource metadata, StringBuilder result) {
         result.Append('[');
-        result.Append(this.ClassID.ToObjectType([]).ToPrettyString(metadata));
+        result.Append(this.ClassID.ToObjectType([]).ToString(metadata));
         
         if (this.Fields.Count > 0) {
             result.Append('(');

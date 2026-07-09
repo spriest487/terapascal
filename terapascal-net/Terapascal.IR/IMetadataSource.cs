@@ -163,7 +163,7 @@ public interface IMetadataSource {
                 result.Append('(');
                 this.FormatRef(callInstruction.SelfArg, result);
 
-                var ifaceTypeDisplay = callInstruction.InterfaceRef.ToObjectID().ToPrettyString(this);
+                var ifaceTypeDisplay = callInstruction.InterfaceRef.ToObjectID().ToString(this);
                 result.Append($" as {ifaceTypeDisplay}).");
 
                 this.FormatInterfaceMethod(callInstruction.InterfaceRef, callInstruction.MethodID, result);
@@ -188,7 +188,7 @@ public interface IMetadataSource {
 
                 this.FormatOutputRef(castInstruction.Out, result);
                 this.FormatValue(castInstruction.Value, result);
-                result.Append($" as {castInstruction.Type.ToPrettyString(this)}");
+                result.Append($" as {castInstruction.Type.ToString(this)}");
                 break;
             }
 
@@ -197,7 +197,7 @@ public interface IMetadataSource {
 
                 this.FormatOutputRef(classIsInstruction.Out, result);
                 this.FormatValue(classIsInstruction.Arg, result);
-                result.Append($" is {classIsInstruction.IsType.ToPrettyString(this)}");
+                result.Append($" is {classIsInstruction.IsType.ToString(this)}");
                 break;
             }
 
@@ -249,7 +249,7 @@ public interface IMetadataSource {
                 this.FormatInstructionPrefix("local", result);
                 result.Append(localAllocInstruction.At.ToString());
                 result.Append(" of ");
-                result.Append(localAllocInstruction.Type.ToPrettyString(this));
+                result.Append(localAllocInstruction.Type.ToString(this));
                 break;
             }
 
@@ -265,7 +265,7 @@ public interface IMetadataSource {
 
                 this.FormatOutputRef(newArrayInstruction.Out, result);
 
-                result.Append($"[{newArrayInstruction.ElementType.ToPrettyString(this)}, ");
+                result.Append($"[{newArrayInstruction.ElementType.ToString(this)}, ");
                 this.FormatValue(newArrayInstruction.Count, result);
                 result.Append(']');
 
@@ -280,7 +280,7 @@ public interface IMetadataSource {
                 this.FormatInstructionPrefix("newbox", result);
 
                 this.FormatOutputRef(newBoxInstruction.Out, result);
-                result.Append($"[{newBoxInstruction.ElementType.ToPrettyString(this)}]");
+                result.Append($"[{newBoxInstruction.ElementType.ToString(this)}]");
 
                 if (newBoxInstruction.Immortal) {
                     result.Append(" (immortal)");
@@ -295,7 +295,7 @@ public interface IMetadataSource {
                 this.FormatOutputRef(newInstruction.Out, result);
 
                 var objectType = newInstruction.TypeID.ToObjectType(newInstruction.TypeArgs ?? []);
-                result.Append($" new {objectType.ToPrettyString(this)}");
+                result.Append($" new {objectType.ToString(this)}");
 
                 if (newInstruction.Immortal) {
                     result.Append(" (immortal)");
@@ -385,9 +385,9 @@ public interface IMetadataSource {
 
     void FormatValue(IValue v, StringBuilder result) {
         switch (v) {
-            case DefaultValue(var ty): result.Append($"default({ty.ToPrettyString(this)})"); break;
+            case DefaultValue(var ty): result.Append($"default({ty.ToString(this)})"); break;
 
-            case SizeOfValue(var ty): result.Append($"sizeof({ty.ToPrettyString(this)})"); break;
+            case SizeOfValue(var ty): result.Append($"sizeof({ty.ToString(this)})"); break;
 
             case LiteralNilValue: result.Append("NIL"); break;
 
@@ -512,7 +512,7 @@ public interface IMetadataSource {
 
             case GlobalRef(StaticTypeInfoGlobalRef(var ty)): {
                 result.Append("typeinfo(");
-                result.Append(ty.ToPrettyString(this));
+                result.Append(ty.ToString(this));
                 result.Append(')');
                 break;
             }
@@ -542,29 +542,18 @@ public interface IMetadataSource {
     internal void FormatFunctionRef(FunctionRef funcRef, StringBuilder result) {
         this.FormatFunctionName(funcRef.DefID, result);
 
-        if (funcRef.TypeArgs is { Count: > 0 }) {
-            result.Append('[');
-            for (var i = 0; i < funcRef.TypeArgs.Count; i += 1) {
-                if (i > 0) {
-                    result.Append(", ");
-                }
-
-                result.Append(funcRef.TypeArgs[i].ToPrettyString(this));
-            }
-
-            result.Append(']');
-        }
+        NamePath.FormatTypeArgsList(funcRef.TypeArgs, this, result);
     }
 
     internal void FormatFunctionName(FunctionID id, StringBuilder result) {
         string? funcName = null;
         if (this.FindFunction(id, out var funcInfo)) {
-            funcName = funcInfo.Identity.ToPrettyString(this);
+            funcName = funcInfo.Identity.ToString(this);
         }
 
         if (funcName == null && this.TryGetInterfaceImpl(id, out var methodImplRef)) {
-            var interfaceName = methodImplRef.Interface.ToObjectID().ToPrettyString(this);
-            var implTypeName = methodImplRef.ImplType.ToPrettyString(this);
+            var interfaceName = methodImplRef.Interface.ToObjectID().ToString(this);
+            var implTypeName = methodImplRef.ImplType.ToString(this);
 
             funcName = $"{interfaceName} ({implTypeName}).{methodImplRef.MethodName}";
         }

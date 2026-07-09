@@ -113,10 +113,22 @@ public record FunctionRef {
         return (this.TypeArgs ?? []).SequenceEqual(other.TypeArgs ?? []);
     }
 
-    public string ToPrettyString(IMetadataSource metadata) {
+    public string ToString(IMetadataSource? metadata) {
         var result = new StringBuilder();
+
+        if (metadata == null) {
+            result.Append($"{{function {this.DefID}}}");
+            NamePath.FormatTypeArgsList(this.TypeArgs, metadata, result);
+
+            return result.ToString();
+        }
+
         metadata.FormatFunctionRef(this, result);
         return result.ToString();
+    }
+
+    public override string ToString() {
+        return this.ToString(null);
     }
 }
 
@@ -162,7 +174,7 @@ public class FunctionSig : IEquatable<FunctionSig> {
         return hashCode.ToHashCode();
     }
 
-    public string ToPrettyString(IMetadataSource metadata) {
+    public string ToString(IMetadataSource? metadata) {
         var result = new StringBuilder("function(");
 
         for (var i = 0; i < this.ParameterTypes.Count; i += 1) {
@@ -170,11 +182,11 @@ public class FunctionSig : IEquatable<FunctionSig> {
                 result.Append(", ");
             }
 
-            result.Append(this.ParameterTypes[i].ToPrettyString(metadata));
+            result.Append(this.ParameterTypes[i].ToString(metadata));
         }
         
         result.Append("): ");
-        result.Append(this.ResultType.ToPrettyString(metadata));
+        result.Append(this.ResultType.ToString(metadata));
 
         return result.ToString();
     }

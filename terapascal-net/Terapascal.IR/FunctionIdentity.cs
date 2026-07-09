@@ -4,14 +4,14 @@ using MessagePack.Formatters;
 namespace Terapascal.IR;
 
 public interface IFunctionIdentity {
-    string ToPrettyString(IMetadataSource metadata);
+    string ToString(IMetadataSource? metadata);
     
     IReadOnlyList<TypeParam>? TypeParams { get; }
 }
 
 public record GlobalFunctionIdentity(DeclPath Path) : IFunctionIdentity {
-    public string ToPrettyString(IMetadataSource metadata) {
-        return this.Path.ToPrettyString(metadata);
+    public string ToString(IMetadataSource? metadata) {
+        return this.Path.ToString(metadata);
     }
 
     public IReadOnlyList<TypeParam>? TypeParams => this.Path.TypeParams;
@@ -31,8 +31,8 @@ public record MethodFunctionIdentity : IFunctionIdentity {
     [Key("type_params")]
     public IReadOnlyList<TypeParam>? TypeParams { get; init; }
 
-    public string ToPrettyString(IMetadataSource metadata) {
-        return $"{this.DeclaringType.ToPrettyString(metadata)}.{this.Name}";
+    public string ToString(IMetadataSource? metadata) {
+        return $"{this.DeclaringType.ToString(metadata)}.{this.Name}";
     }
 }
 
@@ -47,8 +47,8 @@ public record DestructorFunctionIdentity : IFunctionIdentity {
     [Key("name")]
     public required string Name { get; init; }
 
-    public string ToPrettyString(IMetadataSource metadata) {
-        return $"{this.DeclaringType.ToPrettyString(metadata)}.{this.Name}";
+    public string ToString(IMetadataSource? metadata) {
+        return $"{this.DeclaringType.ToString(metadata)}.{this.Name}";
     }
 
     [IgnoreMember]
@@ -63,7 +63,7 @@ public record InternalFunctionIdentity : IFunctionIdentity {
     [Key("type_params")]
     public IReadOnlyList<TypeParam>? TypeParams { get; init; }
 
-    public string ToPrettyString(IMetadataSource metadata) {
+    public string ToString(IMetadataSource? metadata) {
         return this.Name;
     }
 }

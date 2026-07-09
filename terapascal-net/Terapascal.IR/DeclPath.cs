@@ -16,29 +16,16 @@ public class DeclPath {
     [MemberNotNullWhen(true, nameof(TypeParams))]
     public bool HasTypeParams => this.TypeParams is { Count: > 0 };
 
-    public string ToPrettyString(IMetadataSource metadata) {
+    public string ToString(IMetadataSource? metadata) {
         var path = new StringBuilder(this.Path.ToString());
-        
-        if (this.TypeParams is { Count: > 0 }) {
-            path.Append('[');
 
-            for (var i = 0; i < this.TypeParams.Count; i += 1) {
-                if (i > 0) {
-                    path.Append(", ");
-                }
-
-                var param = this.TypeParams[i];
-                path.Append(param.Name);
-
-                if (param.Constraint != null) {
-                    path.Append($" is {param.Constraint.ToPrettyString(metadata)}");
-                }
-            }
-            
-            path.Append(']');
-        }
+        FormatTypeParamsList(this.TypeParams, metadata, path);
         
         return path.ToString();
+    }
+
+    public override string ToString() {
+        return this.ToString(null);
     }
 
     public StringPath? GetParent() {
@@ -72,5 +59,32 @@ public class DeclPath {
     
     public NamePath ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
         return this.ToGenericName().ResolveGeneric(typeMap);
+    }
+
+    public static void FormatTypeParamsList(
+        IReadOnlyList<TypeParam>? paramsList,
+        IMetadataSource? metadata,
+        StringBuilder result
+    ) {
+        if (paramsList is not { Count: > 0 }) {
+            return;
+        }
+
+        result.Append('[');
+
+        for (var i = 0; i < paramsList.Count; i += 1) {
+            if (i > 0) {
+                result.Append(", ");
+            }
+
+            var param = paramsList[i];
+            result.Append(param.Name);
+
+            if (param.Constraint != null) {
+                result.Append($" is {param.Constraint.ToString(metadata)}");
+            }
+        }
+
+        result.Append(']');
     }
 }

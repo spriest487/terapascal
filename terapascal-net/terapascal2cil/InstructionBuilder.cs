@@ -258,7 +258,7 @@ public class InstructionBuilder {
                             }
                             
                             default: {
-                                throw new NotImplementedException($"conversion to {castToType.ToPrettyString(this.library.Metadata)}");
+                                throw new NotImplementedException($"conversion to {castToType.ToString(this.library.Metadata)}");
                             }
                         }
                     });
@@ -1138,7 +1138,7 @@ public class InstructionBuilder {
             
             case IR.GlobalRef(IR.FunctionGlobalRef(var funcRef)): {
                 var methodRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcRef)
-                    ?? throw new InvalidDataException($"reference to missing function: {funcRef.ToPrettyString(this.library.Metadata)}");
+                    ?? throw new InvalidDataException($"reference to missing function: {funcRef.ToString(this.library.Metadata)}");
 
                 this.body.Emit(OpCodes.Ldftn, methodRef);
                 break;
@@ -1147,7 +1147,7 @@ public class InstructionBuilder {
             case IR.Deref(var atRef): {
                 if (atRef is not IR.RefValue(var targetRef) 
                     || this.GetRefType(targetRef).GetDerefType() is not {} derefType) {
-                    throw new InvalidDataException($"invalid value for dereference instruction: {atRef.ToPrettyString(this.library.Metadata)}");
+                    throw new InvalidDataException($"invalid value for dereference instruction: {atRef.ToString(this.library.Metadata)}");
                 }
 
                 var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(derefType);

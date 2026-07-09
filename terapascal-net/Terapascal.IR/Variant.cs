@@ -39,7 +39,7 @@ public record VariantDef {
             metadata.FormatValue(caseDef.Tag, result);
             
             if (caseDef.Type != null) {
-                result.Append($"({caseDef.Type.ToPrettyString(metadata)})");
+                result.Append($"({caseDef.Type.ToString(metadata)})");
             }
 
             result.AppendLine();

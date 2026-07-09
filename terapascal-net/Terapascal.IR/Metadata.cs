@@ -133,7 +133,7 @@ public class Metadata : IMetadataSource {
                         MethodIndex = methodInfo.Index,
                     },
                     _ => throw new InvalidDataException(
-                        $"unexpected base type for method: {methodInfo.InstanceType.ToPrettyString(this)}"),
+                        $"unexpected base type for method: {methodInfo.InstanceType.ToString(this)}"),
                 });
 
                 return (loc, methodInfo.Tags);

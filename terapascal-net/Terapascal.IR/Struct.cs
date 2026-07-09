@@ -57,7 +57,7 @@ public record StructDef {
 
         foreach (var (fieldID, fieldDef) in this.Fields) {
             result.Append($"{fieldID.ID}: {fieldDef.Name}");
-            result.Append($"({fieldDef.Type.ToPrettyString(metadata)})");
+            result.Append($"({fieldDef.Type.ToString(metadata)})");
 
             result.AppendLine();
         }
@@ -101,7 +101,7 @@ public readonly record struct StructFieldDef {
 public interface IStructIdentity {
     bool IsValueType { get; }
 
-    string ToPrettyString(IMetadataSource metadata);
+    string ToString(IMetadataSource? metadata);
 
     DeclPath? GetDeclPath();
 
@@ -112,8 +112,12 @@ public interface IStructIdentity {
 public record RecordStructIdentity(DeclPath Name) : IStructIdentity {
     public bool IsValueType => true;
 
-    public string ToPrettyString(IMetadataSource metadata) {
-        return this.Name.ToPrettyString(metadata);
+    public string ToString(IMetadataSource? metadata) {
+        return this.Name.ToString(metadata);
+    }
+
+    public override string ToString() {
+        return this.ToString(null);
     }
 
     public DeclPath GetDeclPath() {
@@ -128,8 +132,12 @@ public record RecordStructIdentity(DeclPath Name) : IStructIdentity {
 public record ClassStructIdentity(DeclPath Name) : IStructIdentity {
     public bool IsValueType => false;
 
-    public string ToPrettyString(IMetadataSource metadata) {
-        return this.Name.ToPrettyString(metadata);
+    public string ToString(IMetadataSource? metadata) {
+        return this.Name.ToString(metadata);
+    }
+
+    public override string ToString() {
+        return this.ToString(null);
     }
 
     public DeclPath GetDeclPath() {
@@ -144,8 +152,12 @@ public record ClassStructIdentity(DeclPath Name) : IStructIdentity {
 public record InternalStructIdentity(string InternalName) : IStructIdentity {
     public bool IsValueType => true;
 
-    public string ToPrettyString(IMetadataSource metadata) {
+    public string ToString(IMetadataSource? metadata) {
         return this.InternalName;
+    }
+
+    public override string ToString() {
+        return this.ToString(null);
     }
 
     public DeclPath? GetDeclPath() {
@@ -160,13 +172,24 @@ public record InternalStructIdentity(string InternalName) : IStructIdentity {
 public record ClosureStructIdentity(ClosureIdentity Identity) : IStructIdentity {
     public bool IsValueType => false;
 
-    public string ToPrettyString(IMetadataSource metadata) {
+    public string ToString(IMetadataSource? metadata) {
         var result = new StringBuilder("closure object(");
 
-        metadata.FormatFunctionRef(this.Identity.ID.ToFunctionRef([]), result);
-        result.Append($": {this.Identity.Sig.ToPrettyString(metadata)})");
+        var functionRef = this.Identity.ID.ToFunctionRef([]);
+
+        if (metadata != null) {
+            metadata.FormatFunctionRef(functionRef, result);
+        } else {
+            result.Append(functionRef.ToString(null));
+        }
+
+        result.Append($": {this.Identity.Sig.ToString(metadata)})");
 
         return result.Append(')').ToString();
+    }
+
+    public override string ToString() {
+        return this.ToString(null);
     }
 
     public DeclPath? GetDeclPath() {

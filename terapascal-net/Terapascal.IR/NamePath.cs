@@ -81,27 +81,14 @@ public sealed class NamePath : IEquatable<NamePath> {
     }
 
     public override string ToString() {
-        var result = new StringBuilder();
-        result.AppendJoin(".", this.Path);
-
-        if (this.TypeArgs is { Count: > 0 }) {
-            result.Append('[');
-            result.AppendJoin(", ", this.TypeArgs);
-            result.Append(']');
-        }
-
-        return result.ToString();
+        return this.ToString(null);
     }
     
-    public string ToPrettyString(IMetadataSource metadata) {
+    public string ToString(IMetadataSource? metadata) {
         var result = new StringBuilder();
         result.AppendJoin(".", this.Path);
 
-        if (this.HasTypeArgs) {
-            result.Append('[');
-            result.AppendJoin(", ", this.TypeArgs.Select(t => t.ToPrettyString(metadata)));
-            result.Append(']');
-        }
+        FormatTypeArgsList(this.TypeArgs, metadata, result);
 
         return result.ToString();
     }
@@ -125,5 +112,13 @@ public sealed class NamePath : IEquatable<NamePath> {
             Path = this.Path,
             TypeArgs = args,
         };
+    }
+
+    public static void FormatTypeArgsList(IReadOnlyList<IType>? args, IMetadataSource? metadata, StringBuilder result) {
+        if (args != null && args.Count > 0) {
+            result.Append('[');
+            result.AppendJoin(", ", args.Select(t => t.ToString(metadata)));
+            result.Append(']');
+        }
     }
 }

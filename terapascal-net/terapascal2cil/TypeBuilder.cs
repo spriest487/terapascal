@@ -209,7 +209,7 @@ public class TypeBuilder {
         var name = globalName.ToGlobalName(out ns);
         
         if (globalName.HasTypeArgs) {
-            var argNames = globalName.TypeArgs!.Select(arg => arg.ToPrettyString(this.assemblyBuilder.LoadedMetadata));
+            var argNames = globalName.TypeArgs!.Select(arg => arg.ToString(this.assemblyBuilder.LoadedMetadata));
             name += $"_<{string.Join(",", argNames)}>";
         }
 
@@ -291,7 +291,7 @@ public class TypeBuilder {
 
             name = this.CreateUniqueTypeName(refName, out ns);
         } else {
-            name = structDef.Identity.ToPrettyString(this.assemblyBuilder.LoadedMetadata);
+            name = structDef.Identity.ToString(this.assemblyBuilder.LoadedMetadata);
             ns = "";
         }
 
@@ -792,7 +792,7 @@ public class TypeBuilder {
         if (!this.structFieldMaps.TryGetValue(baseTypeID, out var structFieldRefs)
             || !structFieldRefs.Fields.TryGetValue(fieldID, out var fieldRef)
         ) {
-            var typeDisplay = baseType.ToPrettyString(this.assemblyBuilder.LoadedMetadata);
+            var typeDisplay = baseType.ToString(this.assemblyBuilder.LoadedMetadata);
 
             throw new ArgumentException($"{typeDisplay} does not have field {fieldID.ID}");
         }
@@ -812,7 +812,7 @@ public class TypeBuilder {
         this.BuildType(baseType, out var baseTypeID);
 
         if (!this.variantLayouts.TryGetValue(baseTypeID, out var variantLayout)) {
-            var typeDisplay = baseType.ToPrettyString(this.assemblyBuilder.LoadedMetadata);
+            var typeDisplay = baseType.ToString(this.assemblyBuilder.LoadedMetadata);
             throw new ArgumentException($"variant {typeDisplay} is not defined yet");
         }
 
@@ -822,7 +822,7 @@ public class TypeBuilder {
     internal LayoutField GetVariantDataFieldRef(IR.IType baseType, ulong caseIndex) {
         this.BuildType(baseType, out var baseTypeID);
 
-        var typeDisplay = baseType.ToPrettyString(this.assemblyBuilder.LoadedMetadata);
+        var typeDisplay = baseType.ToString(this.assemblyBuilder.LoadedMetadata);
 
         if (!this.variantLayouts.TryGetValue(baseTypeID, out var variantRefs)) {
             throw new ArgumentException($"variant ID {typeDisplay} is not defined yet");

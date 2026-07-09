@@ -37,7 +37,7 @@ public class AssemblyBuilder : IDisposable {
     public AssemblyDefinition StandardLibrary { get; }
     public AssemblyDefinition RuntimeLibrary { get; }
     public AssemblyDefinition Assembly { get; }
-    
+
     public TypeBuilder TypeBuilder { get; }
     public FunctionBuilder FunctionBuilder { get; }
 
@@ -90,7 +90,7 @@ public class AssemblyBuilder : IDisposable {
 
     public void Dispose() {
         this.Assembly.Dispose();
-        
+
         this.RuntimeLibrary.Dispose();
 
         this.StandardLibrary.Dispose();
@@ -107,7 +107,7 @@ public class AssemblyBuilder : IDisposable {
 
     public TypeDefinition GetUnitClass(IR.StringPath unitPath) {
         var ns = unitPath.ToString();
-        
+
         // we use the unit name as the namespace for type declared within it, so the unit class for free functions
         // etc must be differently named. we don't expect these to be accessible to other CLR code (since free
         // functions don't exist in CLR), so use an internal name
@@ -130,7 +130,7 @@ public class AssemblyBuilder : IDisposable {
             TypeAttributes.Sealed | TypeAttributes.Class | TypeAttributes.Public,
             objectType
         );
-        
+
         this.Module.Types.Add(newClass);
 
         return newClass;
@@ -140,7 +140,7 @@ public class AssemblyBuilder : IDisposable {
         if (this.mainMethod != null) {
             return this.mainMethod;
         }
-        
+
         var globalsClass = this.GetInternalClass();
 
         var attrs = MethodAttributes.Public | MethodAttributes.Static;
@@ -176,7 +176,7 @@ public class AssemblyBuilder : IDisposable {
 
         return methodDef;
     }
-        
+
     public MethodReference FindRuntimeFunction(string name) {
         var systemFuncsName = typeof(Runtime.SystemFunctions).FullName;
 
@@ -195,7 +195,7 @@ public class AssemblyBuilder : IDisposable {
         return this.Module.ImportReference(methodDef);
     }
 
-    
+
     public TypeReference GetRuntimeTypeRef(string name, bool valueType) {
         var typeRef = new TypeReference("Terapascal.Runtime",
             name,
@@ -210,7 +210,7 @@ public class AssemblyBuilder : IDisposable {
     public FieldReference GetStringLiteralRef(IR.StringID id) {
         return this.stringLitFields[id];
     }
-    
+
     public FieldReference GetGlobalVariableRef(IR.VariableID id) {
         return this.globalVarFields[id];
     }
@@ -218,7 +218,7 @@ public class AssemblyBuilder : IDisposable {
     public void AddLibrary(IR.Library library) {
         this.libraries.Add(library);
         this.loadedMetadata.Add(library.Metadata);
-        
+
         // TODO: native strings
         // we have to copy the string literals into pascal strings for now
 
@@ -264,21 +264,21 @@ public class AssemblyBuilder : IDisposable {
 
             var varFieldDef = new FieldDefinition(varName, globalVarFieldAttrs, typeRef);
             typeDef.Fields.Add(varFieldDef);
-            
+
             this.globalVarFields.Add(id, varFieldDef);
         }
-        
+
         foreach (var (id, typeDecl) in library.Metadata.TypeDecls) {
             switch (typeDecl) {
                 case IR.DefTypeDecl { Def: var def }: {
-                    if (id == IR.TypeDefID.String 
-                        || id == IR.TypeDefID.TypeInfo 
-                        || id == IR.TypeDefID.MethodInfo 
+                    if (id == IR.TypeDefID.String
+                        || id == IR.TypeDefID.TypeInfo
+                        || id == IR.TypeDefID.MethodInfo
                         || id == IR.TypeDefID.FunctionInfo) {
                         // skip classes defined in the runtime DLL
                         continue;
                     }
-                    
+
                     switch (def) {
                         case IR.StructTypeDef { Def: var structDef }: {
                             var isGeneric = structDef.Identity.GetDeclPath()?.HasTypeParams ?? false;
@@ -351,7 +351,7 @@ public class AssemblyBuilder : IDisposable {
             } else {
                 globalsInit.Emit(OpCodes.Call, initMethod);
             }
-            
+
             var initBuilder = new InstructionBuilder(this, library, initMethod);
             initBuilder.AddInstructions(library.Initialization.Instructions);
             initBuilder.Finish();
@@ -375,7 +375,7 @@ public class AssemblyBuilder : IDisposable {
         initBody.Emit(OpCodes.Ldc_I4_1); // immortal
         initBody.Emit(OpCodes.Call, arrayCreateInstance);
         initBody.Emit(OpCodes.Stsfld, tagFieldDef);
-            
+
         this.tagArrayFields.Add(tagLoc, tagFieldDef);
     }
 
@@ -412,7 +412,7 @@ public class AssemblyBuilder : IDisposable {
         var initBody = initBuilder.Body.GetILProcessor();
 
         var createTypeInfoInst = this.TypeBuilder.GetObjectCreateMethod(typeInfoClassID);
-        
+
         initBody.Emit(OpCodes.Ldc_I4_1); // immortal: true
         initBody.Emit(OpCodes.Call, createTypeInfoInst);
         initBody.Emit(OpCodes.Stsfld, fieldDef);
@@ -431,7 +431,7 @@ public class AssemblyBuilder : IDisposable {
         initBody.Emit(OpCodes.Ldtoken, typeRef);
         initBody.Emit(OpCodes.Call, this.TypeBuilder.GetTypeFromHandleMethod);
         initBody.Emit(OpCodes.Stfld, implField.Field);
-        
+
         // set tags array
         var typeTagsLoc = type.GetTagsLocation();
         if (typeTagsLoc != null && this.GetStaticTagArrayFieldRef(typeTagsLoc) is {} tagsArrayFieldRef) {
@@ -439,7 +439,7 @@ public class AssemblyBuilder : IDisposable {
             initBody.Emit(OpCodes.Ldsfld, tagsArrayFieldRef);
             initBody.Emit(OpCodes.Stfld, tagsField.Field);
         }
-        
+
         // set flags
         initBody.Emit(OpCodes.Ldsfld, fieldDef);
         unchecked {
@@ -454,7 +454,7 @@ public class AssemblyBuilder : IDisposable {
     ) {
         var typeInfoFieldRef = this.GetStaticTypeInfoFieldRef(type);
         if (typeInfoFieldRef == null) {
-            var msg = $"missing typeinfo field: typeinfo was not built yet for {type.ToPrettyString(this.loadedMetadata)}";
+            var msg = $"missing typeinfo field: typeinfo was not built yet for {type.ToString(this.loadedMetadata)}";
             throw new InvalidDataException(msg);
         }
 
@@ -467,7 +467,7 @@ public class AssemblyBuilder : IDisposable {
         var methodInfoClassID = IR.TypeDefID.MethodInfo.ToObjectID([]);
         var methodInfoTypeRef = this.TypeBuilder.BuildType(methodInfoClassID.ToObjectType());
         var methodInfoTypeDef = methodInfoTypeRef.Resolve();
-            
+
         var createMethodInfoInst = this.TypeBuilder.GetObjectCreateMethod(methodInfoClassID);
         var methodNameField =  this.Module.ImportReference(methodInfoTypeDef.GetFieldByName(nameof(Runtime.MethodInfo.name)));
         var methodImplField =  this.Module.ImportReference(methodInfoTypeDef.GetFieldByName(nameof(Runtime.MethodInfo.impl)));
@@ -548,7 +548,7 @@ public class AssemblyBuilder : IDisposable {
         var initBody = initBuilder.Body.GetILProcessor();
 
         var createTypeInfoInst = this.TypeBuilder.GetObjectCreateMethod(funcObjectID);
-        
+
         initBody.Emit(OpCodes.Ldc_I4_1); // immortal: true
         initBody.Emit(OpCodes.Call, createTypeInfoInst);
 
@@ -569,7 +569,7 @@ public class AssemblyBuilder : IDisposable {
             initBody.Emit(OpCodes.Ldsfld, tagsArrayFieldRef);
             initBody.Emit(OpCodes.Stfld, tagsField.Field);
         }
-        
+
         // register in RTTI list
         initBody.Emit(OpCodes.Dup);
         initBody.Emit(OpCodes.Call, this.rttiAddFuncMethod);
@@ -580,7 +580,7 @@ public class AssemblyBuilder : IDisposable {
     private void BuildFunctionInfoImplObject(ILProcessor body, IR.FunctionID funcID, IR.FunctionID? invokerID) {
         var implTypeDef = this.GetRuntimeTypeRef(nameof(Runtime.FunctionInfoImpl), false).Resolve();
         var implTypeCtor = this.Module.ImportReference(implTypeDef.FindConstructor([]));
-        
+
         var implMethodField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.method))!);
         var implInvokerField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.invoker))!);
 
@@ -605,7 +605,7 @@ public class AssemblyBuilder : IDisposable {
     public FieldReference? GetStaticTypeInfoFieldRef(IR.IType type) {
         return this.staticTypeInfoFields.GetValueOrDefault(type);
     }
-    
+
     public FieldReference? GetStaticFuncInfoFieldRef(IR.FunctionID funcID) {
         return this.staticFuncInfoFields.GetValueOrDefault(funcID);
     }

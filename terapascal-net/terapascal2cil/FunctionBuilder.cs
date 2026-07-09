@@ -87,7 +87,7 @@ public class FunctionBuilder {
 
         var method = ifaceDef.Methods[(int)methodID.ID];
         if (!metadata.FindFunction(implID, out var implFuncMetadata)) {
-            Debug.Print($"Missing func info {implID} for method {implType.ToPrettyString(metadata)}.{method.Name}");
+            Debug.Print($"Missing func info {implID} for method {implType.ToString(metadata)}.{method.Name}");
             return;
         }
 
