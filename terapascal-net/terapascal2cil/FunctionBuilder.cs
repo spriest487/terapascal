@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using Mono.Cecil;
+﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
 
 namespace Terapascal.CIL;
@@ -7,41 +6,50 @@ namespace Terapascal.CIL;
 public class FunctionBuilder {
     private readonly AssemblyBuilder assemblyBuilder;
 
-    private readonly Dictionary<IR.FunctionRef, MethodReference> functionMethods;
+    private readonly SortedDictionary<IR.FunctionID, IR.FunctionDef> functionDefs;
+
+    private readonly Queue<IR.FunctionRef> funcsToBuild;
+    private readonly Dictionary<IR.FunctionRef, MethodReference> funcInstances;
 
     public FunctionBuilder(AssemblyBuilder assemblyBuilder) {
         this.assemblyBuilder = assemblyBuilder;
 
-        this.functionMethods = new Dictionary<IR.FunctionRef, MethodReference>();
+        this.functionDefs = new SortedDictionary<IR.FunctionID, IR.FunctionDef>();
+
+        this.funcInstances = new Dictionary<IR.FunctionRef, MethodReference>();
+        this.funcsToBuild = new Queue<IR.FunctionRef>();
     }
 
     public void BuildFunctions(IR.Library lib) {
-        var definedFuncs = new List<(MethodDefinition, IR.FunctionDef)>(lib.Functions.Count);
-
         var invocationParams = new List<IR.TypeParam>(8);
 
         foreach (var (id, func) in lib.Functions) {
             switch (func) {
                 case IR.ExternalFunction(var externRef): {
-                    this.ResolveExternalRef(id, externRef);
+                    var methodRef = this.ResolveExternalRef(id, externRef);
+                    this.funcInstances.Add(id.ToFunctionRef([]), methodRef);
                     break;
                 }
 
                 case IR.LocalFunction(var def): {
+                    this.functionDefs.Add(id, def);
+
                     if (!lib.Metadata.Functions.TryGetValue(id, out var funcInfo)) {
-                        Debug.Print($"Missing function info: {id}");
+                        Console.Error.WriteLine($"Missing function info: {id}");
                         continue;
                     }
 
                     // TODO: native generics
-                    // only eagerly instantiate non-generic functions
+                    // eagerly instantiate non-generic functions
                     invocationParams.Clear();
                     funcInfo.Identity.GetInvocationTypeParams(this.assemblyBuilder.LoadedMetadata, invocationParams);
 
                     if (invocationParams.Count == 0) {
                         var funcRef = id.ToFunctionRef([]);
-                        var methodDef = this.CreateFunctionMethod(funcRef, def.Signature);
-                        definedFuncs.Add((methodDef, def));
+                        var methodDef = this.CreateFunctionMethod(funcRef);
+
+                        this.funcInstances.Add(funcRef, methodDef);
+                        this.funcsToBuild.Enqueue(funcRef);
                     }
                     
                     break;
@@ -50,14 +58,6 @@ public class FunctionBuilder {
                 default: {
                     throw new ArgumentOutOfRangeException(nameof(func));
                 }
-            }
-        }
-
-        foreach (var (method, def) in definedFuncs) {
-            try {
-                this.BuildFunctionBody(lib, method, def);
-            } catch (Exception e) {
-                Debug.Print($"Failed to build function body of {method.Name}: {e}");
             }
         }
 
@@ -97,7 +97,7 @@ public class FunctionBuilder {
 
         var method = ifaceDef.Methods[(int)methodID.ID];
         if (!metadata.FindFunction(implID, out var implFuncMetadata)) {
-            Debug.Print($"Missing func info {implID} for method {implType.ToString(metadata)}.{method.Name}");
+            Console.Error.WriteLine($"Missing func info {implID} for method {implType.ToString(metadata)}.{method.Name}");
             return;
         }
 
@@ -106,7 +106,7 @@ public class FunctionBuilder {
             return;
         }
 
-        var implFuncRef = this.FindFunctionMethod(implID.ToFunctionRef([]))
+        var implFuncRef = this.GetFunctionMethod(implID.ToFunctionRef([]))
             ?? throw new InvalidDataException($"missing function {implID.ID} in metadata");
 
         var implAttrs = MethodAttributes.Public 
@@ -151,19 +151,16 @@ public class FunctionBuilder {
         implBody.Emit(OpCodes.Ret);
     }
 
-    private void ResolveExternalRef(IR.FunctionID id, IR.ExternalFunctionRef externRef) {
+    private MethodReference ResolveExternalRef(IR.FunctionID id, IR.ExternalFunctionRef externRef) {
         // external refs are never generic
         var functionRef = id.ToFunctionRef([]);
 
         // builtin methods
         if (externRef.Source == "rt") {
-            var methodRef = this.assemblyBuilder.FindRuntimeFunction(externRef.Symbol);
-
-            this.functionMethods.Add(functionRef, methodRef);
-            return;
+            return this.assemblyBuilder.FindRuntimeFunction(externRef.Symbol);
         }
 
-        var externMethod = this.CreateFunctionMethod(functionRef, externRef.Signature);
+        var externMethod = this.CreateFunctionMethod(functionRef);
         externMethod.Attributes |= MethodAttributes.PInvokeImpl;
         externMethod.ImplAttributes |= MethodImplAttributes.PreserveSig;
 
@@ -183,10 +180,57 @@ public class FunctionBuilder {
         externMethod.PInvokeInfo = new PInvokeInfo(pInvokeAttrs, externRef.Symbol, moduleRef);
 
         externMethod.Body = null;
+
+        return externMethod;
     }
 
-    private void BuildFunctionBody(IR.Library lib, MethodDefinition method, IR.FunctionDef def) {
-        var builder = new InstructionBuilder(this.assemblyBuilder, lib, method);
+    public void BuildFunctionBodies() {
+        while (this.funcsToBuild.TryDequeue(out var funcRef)) {
+            if (!this.funcInstances.TryGetValue(funcRef, out var methodRef)
+                || methodRef is not MethodDefinition methodDef
+            ) {
+                var funcDisplay = funcRef.ToString(this.assemblyBuilder.LoadedMetadata);
+                throw new InvalidOperationException($"func ref {funcDisplay} was queued for building but has no definition");
+            }
+
+            try {
+                this.BuildFunctionBody(funcRef, methodDef);
+            } catch (Exception e) {
+                Console.Error.WriteLine($"Failed to build function body of {methodDef.Name}: {e}");
+
+                methodDef.DeclaringType.Methods.Remove(methodDef);
+            }
+        }
+    }
+
+    private void BuildFunctionBody(IR.FunctionRef funcRef, MethodDefinition methodDef) {
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+
+        // if there's no IR definition for this function, this is an error, because
+        if (!this.functionDefs.TryGetValue(funcRef.DefID, out var def)) {
+            var msg = $"reference to {funcRef.ToString(metadata)} has no corresponding function definition";
+            throw new InvalidDataException(msg);
+        }
+
+        if (!metadata.FindFunction(funcRef.DefID, out var funcInfo)) {
+            var msg = $"reference to {funcRef.ToString(metadata)} has no corresponding function metadata";
+            throw new InvalidDataException(msg);
+        }
+
+        // TODO: native generics
+        // monomorphize any generic defs
+        if (funcRef.HasTypeArgs) {
+            var typeParams = funcInfo.Identity.TypeParams ?? [];
+            if (typeParams.Count != funcRef.TypeArgs.Count) {
+                throw new InvalidDataException($"reference to {funcRef.ToString(metadata)} with incorrect type arg count");
+            }
+
+            var typeMap = IR.Util.BuildGenericTypeMap(typeParams, funcRef.TypeArgs);
+
+            def = def.ResolveGeneric(typeMap);
+        }
+
+        var builder = new InstructionBuilder(this.assemblyBuilder, methodDef);
         builder.BeginFunction(def);
         builder.AddInstructions(def.Body.Instructions);
         builder.Finish();
@@ -210,45 +254,77 @@ public class FunctionBuilder {
         return methodDef;
     }
 
-    private MethodDefinition CreateFunctionMethod(IR.FunctionRef funcRef, IR.FunctionSig sig) {
+    private MethodDefinition CreateFunctionMethod(IR.FunctionRef funcRef) {
         const MethodAttributes attrs = MethodAttributes.Static | MethodAttributes.Assembly;
 
-        TypeDefinition typeDef;
+        TypeDefinition declaringTypeDef;
         string name;
 
-        if (this.assemblyBuilder.LoadedMetadata.FindFunction(funcRef.DefID, out var funcInfo)) {
-            funcInfo = null;
+        if (!this.assemblyBuilder.LoadedMetadata.FindFunction(funcRef.DefID, out var funcInfo)) {
+            var msg = $"missing function metadata for referenced function {funcRef.ToString(this.assemblyBuilder.LoadedMetadata)}";
+            throw new InvalidDataException(msg);
         }
 
-        switch (funcInfo?.Identity) {
+        var sig = new IR.FunctionSig {
+            ResultType = funcInfo.ResultType,
+            ParameterTypes = funcInfo.Params.Select(p => p.Type).ToArray(),
+        };
+
+        if (funcRef.TypeArgs is { Count: > 0 }) {
+            var typeParams = funcInfo.Identity.TypeParams;
+            if (typeParams == null || typeParams.Count != funcRef.TypeArgs.Count) {
+                var msg = $"expected {typeParams?.Count ?? 0} type params for function referenced by {funcRef.ToString(this.assemblyBuilder.LoadedMetadata)}";
+                throw new InvalidDataException(msg);
+            }
+
+            var typeMap = IR.Util.BuildGenericTypeMap(typeParams, funcRef.TypeArgs);
+            sig = sig.ResolveGeneric(typeMap);
+        }
+
+        switch (funcInfo.Identity) {
             case IR.GlobalFunctionIdentity(var globalPath): {
                 if (globalPath.GetParent() is { } unitPath) {
-                    typeDef = this.assemblyBuilder.GetUnitClass(unitPath);
+                    declaringTypeDef = this.assemblyBuilder.GetUnitClass(unitPath);
                 } else {
-                    typeDef = this.assemblyBuilder.GetInternalClass();
+                    declaringTypeDef = this.assemblyBuilder.GetInternalClass();
                 }
 
                 name = globalPath.Path.Last;
                 break;
             }
+
+            case IR.InternalFunctionIdentity internalIdentity: {
+                name = internalIdentity.Name;
+                declaringTypeDef = this.assemblyBuilder.GetInternalClass();
+                break;
+            }
                 
             default: {
                 name = FunctionMethodName(funcRef.DefID);
-                typeDef = this.assemblyBuilder.GetInternalClass();
+                declaringTypeDef = this.assemblyBuilder.GetInternalClass();
                 break;
             }
-        }           
+        }
 
         var methodDef = this.CreateMethodWithSig(name, attrs, sig);
+        declaringTypeDef.Methods.Add(methodDef);
 
-        typeDef.Methods.Add(methodDef);
-
-        this.functionMethods.Add(funcRef, methodDef);
         return methodDef;
     }
 
-    public MethodReference? FindFunctionMethod(IR.FunctionRef funcRef) {
-        return this.functionMethods.GetValueOrDefault(funcRef);
+    /// <summary>
+    /// Get or create the CLR method which the given function reference is translated to.
+    /// If the function hasn't been translated yet, an empty method will be added to be populated later.
+    /// </summary>
+    public MethodReference GetFunctionMethod(IR.FunctionRef funcRef) {
+        if (this.funcInstances.TryGetValue(funcRef, out var methodRef)) {
+            return methodRef;
+        }
+
+        methodRef = this.CreateFunctionMethod(funcRef);
+        this.funcsToBuild.Enqueue(funcRef);
+
+        return methodRef;
     }
 
     private static string FunctionMethodName(IR.FunctionID id) {

@@ -226,7 +226,7 @@ public class AssemblyBuilder : IDisposable {
 
         foreach (var (id, stringLit) in library.Metadata.StringLiterals) {
             if (this.stringLitFields.ContainsKey(id)) {
-                Debug.Print($"duplicate string literal: {id.ID}");
+                Console.Error.WriteLine($"duplicate string literal: {id.ID}");
                 continue;
             }
 
@@ -370,7 +370,7 @@ public class AssemblyBuilder : IDisposable {
                 globalsInit.Emit(OpCodes.Call, initMethod);
             }
 
-            var initBuilder = new InstructionBuilder(this, library, initMethod);
+            var initBuilder = new InstructionBuilder(this, initMethod);
             initBuilder.AddInstructions(library.Initialization.Instructions);
             initBuilder.Finish();
         }
@@ -607,7 +607,7 @@ public class AssemblyBuilder : IDisposable {
         var implMethodField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.method))!);
         var implInvokerField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.invoker))!);
 
-        var methodRef = this.FunctionBuilder.FindFunctionMethod(funcID.ToFunctionRef([]));
+        var methodRef = this.FunctionBuilder.GetFunctionMethod(funcID.ToFunctionRef([]));
         if (methodRef == null) {
             throw new InvalidDataException($"function {funcID.ID} was not defined");
         }
@@ -620,7 +620,7 @@ public class AssemblyBuilder : IDisposable {
         body.Emit(OpCodes.Stfld, implMethodField);
 
         if (invokerID != null) {
-            var invokerRef = this.FunctionBuilder.FindFunctionMethod(invokerID.Value.ToFunctionRef([]))!;
+            var invokerRef = this.FunctionBuilder.GetFunctionMethod(invokerID.Value.ToFunctionRef([]))!;
             body.Emit(OpCodes.Dup);
             body.Emit(OpCodes.Ldftn, invokerRef);
             body.Emit(OpCodes.Stfld, implInvokerField);
@@ -640,6 +640,8 @@ public class AssemblyBuilder : IDisposable {
     }
 
     public void Finish() {
+        this.FunctionBuilder.BuildFunctionBodies();
+
         var initFunction = this.GetGlobalsCCtor();
         var globalsInit = initFunction.Body.GetILProcessor();
 

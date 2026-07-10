@@ -33,4 +33,13 @@ public class InstructionList {
             result.AppendLine();
         }
     }
+
+    public InstructionList ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new InstructionList {
+            Instructions = this.Instructions
+                .Select(i => i.ResolveGeneric(typeMap))
+                .ToArray(),
+            Sources = this.Sources,
+        };
+    }
 }

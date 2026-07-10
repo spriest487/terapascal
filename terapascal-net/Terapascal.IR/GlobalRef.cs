@@ -3,11 +3,31 @@ using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
-public interface IGlobalRef;
+public interface IGlobalRef {
+    IGlobalRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
+}
 
-public record FunctionGlobalRef(FunctionRef Ref) : IGlobalRef;
+public record FunctionGlobalRef(FunctionRef Ref) : IGlobalRef {
+    public IGlobalRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new FunctionGlobalRef(new FunctionRef {
+            DefID = this.Ref.DefID,
+            TypeArgs = this.Ref.TypeArgs?
+                .Select(t => t.ResolveGeneric(typeMap))
+                .ToArray(),
+        });
+    }
+}
+
 public record StringLiteralGlobalRef(StringID ID) : IGlobalRef;
-public record StaticTypeInfoGlobalRef(IType Type) : IGlobalRef;
+
+public record StaticTypeInfoGlobalRef(IType Type) : IGlobalRef {
+    public IGlobalRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new StaticTypeInfoGlobalRef(this.Type.ResolveGeneric(typeMap));
+    }
+}
+
 public record StaticFuncInfoGlobalRef(FunctionID ID) : IGlobalRef;
 public record VariableGlobalRef(VariableID ID) : IGlobalRef;
 public record StaticTagArrayGlobalRef(ITagLocation Location) : IGlobalRef;

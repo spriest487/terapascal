@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using MessagePack;
 using MessagePack.Formatters;
 
@@ -82,6 +83,13 @@ public record FunctionDef {
         get;
         init => field = value ?? throw new ArgumentException(nameof(value));
     }
+
+    public FunctionDef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new FunctionDef {
+            Signature = this.Signature.ResolveGeneric(typeMap),
+            Body = this.Body.ResolveGeneric(typeMap),
+        };
+    }
 }
 
 [MessagePackObject]
@@ -91,6 +99,10 @@ public record FunctionRef {
     
     [Key("args")]
     public IReadOnlyList<IType>? TypeArgs { get; init; }
+
+    [IgnoreMember]
+    [MemberNotNullWhen(true, nameof(TypeArgs))]
+    public bool HasTypeArgs => this.TypeArgs is { Count: > 0 };
 
     public override int GetHashCode() {
         var hashCode = new HashCode();
@@ -252,5 +264,12 @@ public record FunctionInfo {
     public required IReadOnlyList<TagInfo> Tags {
         get;
         init => field = value.ToArrayNonNull();
+    }
+
+    public FunctionSig Signature() {
+        return new FunctionSig {
+            ResultType = this.ResultType,
+            ParameterTypes = this.Params.Select(p => p.Type).ToArray(),
+        };
     }
 }

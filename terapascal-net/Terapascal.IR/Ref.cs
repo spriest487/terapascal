@@ -110,10 +110,8 @@ public class StringIDFormatter : IMessagePackFormatter<StringID> {
 }
 
 public interface IRef {
-    string ToPrettyString(IMetadataSource libraryMetadata) {
-        var result = new StringBuilder();
-        libraryMetadata.FormatRef(this, result);
-        return result.ToString();
+    IRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
     }
 }
 
@@ -125,8 +123,18 @@ public record ResultRef : IRef {
 
 public record ArgRef(ArgID ID) : IRef;
 public record LocalRef(LocalID ID) : IRef;
-public record GlobalRef(IGlobalRef Global) : IRef;
-public record Deref(IValue Value) : IRef;
+
+public record GlobalRef(IGlobalRef Global) : IRef {
+    public IRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new GlobalRef(this.Global.ResolveGeneric(typeMap));
+    }
+}
+
+public record Deref(IValue Value) : IRef {
+    public IRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new Deref(this.Value.ResolveGeneric(typeMap));
+    }
+}
 
 public record DiscardRef : IRef {
     public override string ToString() {
@@ -134,7 +142,14 @@ public record DiscardRef : IRef {
     }
 }
 
-public record FieldRef(FieldRefData Data) : IRef;
+public record FieldRef(FieldRefData Data) : IRef {
+    public IRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new FieldRef(this.Data with {
+            Instance = this.Data.Instance.ResolveGeneric(typeMap),
+            InstanceType = this.Data.InstanceType.ResolveGeneric(typeMap),
+        });
+    }
+}
 
 [MessagePackObject]
 public record FieldRefData {
@@ -154,7 +169,15 @@ public record FieldRefData {
     public required FieldID FieldID { get; init; }
 }
 
-public record ElementRef(ElementRefData Data) : IRef;
+public record ElementRef(ElementRefData Data) : IRef {
+    public IRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new ElementRef(new ElementRefData {
+            Instance = this.Data.Instance.ResolveGeneric(typeMap),
+            Index = this.Data.Index.ResolveGeneric(typeMap),
+            InstanceType = this.Data.InstanceType.ResolveGeneric(typeMap),
+        });
+    }
+}
 
 [MessagePackObject]
 public record ElementRefData {
@@ -177,7 +200,14 @@ public record ElementRefData {
     }
 }
 
-public record VariantTagRef(VariantTagRefData Data) : IRef;
+public record VariantTagRef(VariantTagRefData Data) : IRef {
+    public IRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new VariantTagRef(new VariantTagRefData {
+            Instance = this.Data.Instance.ResolveGeneric(typeMap),
+            InstanceType = this.Data.InstanceType.ResolveGeneric(typeMap),
+        });
+    }
+}
 
 [MessagePackObject]
 public record VariantTagRefData {
@@ -194,7 +224,15 @@ public record VariantTagRefData {
     }
 }
 
-public record VariantDataRef(VariantDataRefData Data) : IRef;
+public record VariantDataRef(VariantDataRefData Data) : IRef {
+    public IRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new VariantDataRef(new VariantDataRefData {
+            Instance = this.Data.Instance.ResolveGeneric(typeMap),
+            InstanceType = this.Data.InstanceType.ResolveGeneric(typeMap),
+            CaseIndex = this.Data.CaseIndex,
+        });
+    }
+}
 
 [MessagePackObject]
 public record VariantDataRefData {

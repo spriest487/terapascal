@@ -3,11 +3,21 @@ using MessagePack.Formatters;
 
 namespace Terapascal.IR;
 
-public interface IInstruction;
+public interface IInstruction {
+    IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap);
+}
 
-public record CommentInstruction(string Text) : IInstruction;
+public record CommentInstruction(string Text) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
+}
 
-public record LocalAllocInstruction(LocalID At, IType Type) : IInstruction;
+public record LocalAllocInstruction(LocalID At, IType Type) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this with { Type = this.Type.ResolveGeneric(typeMap) };
+    }
+}
 
 [MessagePackObject]
 public record MoveInstruction : IInstruction {
@@ -22,46 +32,125 @@ public record MoveInstruction : IInstruction {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new MoveInstruction {
+            Out = this.Out.ResolveGeneric(typeMap),
+            NewValue = this.NewValue.ResolveGeneric(typeMap),
+        };
+    }
 }
 
-public record AddInstruction(BinOpInstruction Op) : IInstruction;
+public record AddInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new AddInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record SubInstruction(BinOpInstruction Op) : IInstruction;
+public record SubInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new SubInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record MulInstruction(BinOpInstruction Op) : IInstruction;
+public record MulInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new MulInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record IDivInstruction(BinOpInstruction Op) : IInstruction;
+public record IntDivInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new IntDivInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record FDivInstruction(BinOpInstruction Op) : IInstruction;
+public record FloatDivInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new FloatDivInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record ModInstruction(BinOpInstruction Op) : IInstruction;
+public record ModInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new ModInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record ShlInstruction(BinOpInstruction Op) : IInstruction;
+public record ShlInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new ShlInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record ShrInstruction(BinOpInstruction Op) : IInstruction;
+public record ShrInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new ShrInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record BitAndInstruction(BinOpInstruction Op) : IInstruction;
+public record BitAndInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new BitAndInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record BitOrInstruction(BinOpInstruction Op) : IInstruction;
+public record BitOrInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new BitOrInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record BitXorInstruction(BinOpInstruction Op) : IInstruction;
+public record BitXorInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new BitXorInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record EqInstruction(BinOpInstruction Op) : IInstruction;
+public record EqInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new EqInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record GtInstruction(BinOpInstruction Op) : IInstruction;
+public record GtInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new GtInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record LtInstruction(BinOpInstruction Op) : IInstruction;
+public record LtInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new LtInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record LteInstruction(BinOpInstruction Op) : IInstruction;
+public record LteInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new LteInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record GteInstruction(BinOpInstruction Op) : IInstruction;
+public record GteInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new GteInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record AndInstruction(BinOpInstruction Op) : IInstruction;
+public record AndInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new AndInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record OrInstruction(BinOpInstruction Op) : IInstruction;
+public record OrInstruction(BinOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new OrInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
 [MessagePackObject]
-public record BinOpInstruction {
+public record BinOpInstructionData {
     [Key("out")]
     public required IRef Out {
         get;
@@ -79,14 +168,30 @@ public record BinOpInstruction {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
+
+    public BinOpInstructionData ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new BinOpInstructionData {
+            Out = this.Out.ResolveGeneric(typeMap),
+            ArgA = this.ArgA.ResolveGeneric(typeMap),
+            ArgB = this.ArgB.ResolveGeneric(typeMap),
+        };
+    }
 }
 
-public record NotInstruction(UnaryOpInstruction Op) : IInstruction;
+public record NotInstruction(UnaryOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new NotInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
-public record BitNotInstruction(UnaryOpInstruction Op) : IInstruction;
+public record BitNotInstruction(UnaryOpInstructionData Op) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new BitNotInstruction(this.Op.ResolveGeneric(typeMap));
+    }
+}
 
 [MessagePackObject]
-public sealed record UnaryOpInstruction {
+public sealed record UnaryOpInstructionData {
     [Key("out")]
     public required IRef Out {
         get;
@@ -97,6 +202,13 @@ public sealed record UnaryOpInstruction {
     public required IValue Arg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    public UnaryOpInstructionData ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new UnaryOpInstructionData {
+            Out = this.Out.ResolveGeneric(typeMap),
+            Arg = this.Arg.ResolveGeneric(typeMap),
+        };
     }
 }
 
@@ -113,6 +225,13 @@ public record AddrOfInstruction : IInstruction {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new AddrOfInstruction {
+            Out = this.Out.ResolveGeneric(typeMap),
+            Arg = this.Arg.ResolveGeneric(typeMap),
+        };
+    }
 }
 
 [MessagePackObject]
@@ -127,6 +246,13 @@ public record MakeRefInstruction : IInstruction {
     public required IRef Arg {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new MakeRefInstruction {
+            Out = this.Out.ResolveGeneric(typeMap),
+            Arg = this.Arg.ResolveGeneric(typeMap),
+        };
     }
 }
 
@@ -149,6 +275,14 @@ public record LengthInstruction : IInstruction {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new LengthInstruction {
+            Out = this.Out.ResolveGeneric(typeMap),
+            Arg = this.Arg.ResolveGeneric(typeMap),
+            ArrayType = this.ArrayType.ResolveGeneric(typeMap),
+        };
+    }
 }
 
 [MessagePackObject]
@@ -167,6 +301,14 @@ public record CallInstruction : IInstruction {
     public required IReadOnlyList<IValue> Args {
         get;
         init => field = value.ToArrayNonNull();
+    }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new CallInstruction {
+            Out = this.Out?.ResolveGeneric(typeMap),
+            Args = this.Args.Select(val => val.ResolveGeneric(typeMap)).ToArray(),
+            Function = this.Function.ResolveGeneric(typeMap),
+        };
     }
 }
 
@@ -192,6 +334,16 @@ public record VirtualCallInstruction : IInstruction {
     public required IReadOnlyList<IValue>? RestArgs {
         get;
         init => field = value.ToArrayNonNull();
+    }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new VirtualCallInstruction {
+            Out = this.Out?.ResolveGeneric(typeMap),
+            InterfaceRef = this.InterfaceRef.ResolveGeneric(typeMap),
+            MethodID = this.MethodID,
+            SelfArg = this.SelfArg,
+            RestArgs = this.RestArgs?.Select(val => val.ResolveGeneric(typeMap)).ToArray(),
+        };
     }
 }
 
@@ -220,9 +372,22 @@ public record IsTypeInstruction : IInstruction {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new IsTypeInstruction {
+            Out = this.Out.ResolveGeneric(typeMap),
+            Arg = this.Arg.ResolveGeneric(typeMap),
+            ValueType = this.ValueType.ResolveGeneric(typeMap),
+            IsType = this.IsType.ResolveGeneric(typeMap),
+        };
+    }
 }
 
-public record LabelInstruction(Label Label) : IInstruction;
+public record LabelInstruction(Label Label) : IInstruction {
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
+}
 
 public readonly record struct Label(ulong ID) {
     public override string ToString() {
@@ -245,6 +410,10 @@ public class LabelFormatter : IMessagePackFormatter<Label> {
 public record JumpInstruction : IInstruction {
     [Key("dest")]
     public required Label Destination { get; init; }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
 [MessagePackObject]
@@ -256,6 +425,13 @@ public record JumpIfInstruction : IInstruction {
     public required IValue Condition {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new JumpIfInstruction {
+            Destination = this.Destination,
+            Condition = this.Condition.ResolveGeneric(typeMap),
+        };
     }
 }
 
@@ -275,6 +451,15 @@ public record NewObjectInstruction : IInstruction {
 
     [Key("immortal")]
     public required bool Immortal { get; init; }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new NewObjectInstruction {
+            Out = this.Out.ResolveGeneric(typeMap),
+            Immortal = this.Immortal,
+            TypeID = this.TypeID,
+            TypeArgs = this.TypeArgs?.Select(t => t.ResolveGeneric(typeMap)).ToArray(),
+        };
+    }
 }
 
 [MessagePackObject]
@@ -293,6 +478,15 @@ public record NewArrayInstruction : IInstruction {
 
     [Key("immortal")]
     public required bool Immortal { get; init; }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new NewArrayInstruction {
+            Out = this.Out.ResolveGeneric(typeMap),
+            ElementType = this.ElementType.ResolveGeneric(typeMap),
+            Count = this.Count.ResolveGeneric(typeMap),
+            Immortal = this.Immortal,
+        };
+    }
 }
 
 [MessagePackObject]
@@ -308,6 +502,14 @@ public record NewBoxInstruction : IInstruction {
 
     [Key("immortal")]
     public required bool Immortal { get; init; }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new NewBoxInstruction {
+            Out = this.Out.ResolveGeneric(typeMap),
+            ElementType = this.ElementType.ResolveGeneric(typeMap),
+            Immortal = this.Immortal,
+        };
+    }
 }
 
 [MessagePackObject]
@@ -327,6 +529,14 @@ public record ReleaseInstruction : IInstruction {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new ReleaseInstruction {
+            At = this.At.ResolveGeneric(typeMap),
+            ReleasedOut = this.ReleasedOut?.ResolveGeneric(typeMap),
+            Weak = this.Weak,
+        };
+    }
 }
 
 [MessagePackObject]
@@ -339,6 +549,13 @@ public record RetainInstruction : IInstruction {
 
     [Key("weak")]
     public required bool Weak { get; init; }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new RetainInstruction {
+            At = this.At.ResolveGeneric(typeMap),
+            Weak = this.Weak,
+        };
+    }
 }
 
 [MessagePackObject]
@@ -347,6 +564,12 @@ public record RaiseInstruction : IInstruction {
     public required IRef Value {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new RaiseInstruction {
+            Value = this.Value.ResolveGeneric(typeMap),
+        };
     }
 }
 
@@ -368,6 +591,14 @@ public record CastInstruction : IInstruction {
     public required IValue Value {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new CastInstruction {
+            Out = this.Out.ResolveGeneric(typeMap),
+            Type = this.Type.ResolveGeneric(typeMap),
+            Value = this.Value.ResolveGeneric(typeMap),
+        };
     }
 }
 
@@ -401,83 +632,83 @@ public class InstructionFormatter : IMessagePackFormatter<IInstruction> {
             }
 
             case "Add": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new AddInstruction(op);
             }
             case "Sub": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new SubInstruction(op);
             }
             case "Mul": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new MulInstruction(op);
             }
             case "IDiv": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
-                return new IDivInstruction(op);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
+                return new IntDivInstruction(op);
             }
             case "FDiv": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
-                return new FDivInstruction(op);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
+                return new FloatDivInstruction(op);
             }
             case "Mod": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new ModInstruction(op);
             }
             case "Shl": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new ShlInstruction(op);
             }
             case "Shr": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new ShrInstruction(op);
             }
             case "BitAnd": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new BitAndInstruction(op);
             }
             case "BitOr": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new BitOrInstruction(op);
             }
             case "BitXor": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new BitXorInstruction(op);
             }
             case "Eq": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new EqInstruction(op);
             }
             case "Gt": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new GtInstruction(op);
             }
             case "Lt": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new LtInstruction(op);
             }
             case "Lte": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new LteInstruction(op);
             }
             case "Gte": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new GteInstruction(op);
             }
             case "And": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new AndInstruction(op);
             }
             case "Or": {
-                var op = MessagePackSerializer.Deserialize<BinOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<BinOpInstructionData>(ref reader, options);
                 return new OrInstruction(op);
             }
             case "Not": {
-                var op = MessagePackSerializer.Deserialize<UnaryOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<UnaryOpInstructionData>(ref reader, options);
                 return new NotInstruction(op);
             }
             case "BitNot": {
-                var op = MessagePackSerializer.Deserialize<UnaryOpInstruction>(ref reader, options);
+                var op = MessagePackSerializer.Deserialize<UnaryOpInstructionData>(ref reader, options);
                 return new BitNotInstruction(op);
             }
 

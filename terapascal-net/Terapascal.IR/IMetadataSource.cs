@@ -79,11 +79,11 @@ public interface IMetadataSource {
                 this.FormatInstruction(op, "mul", "*", result);
                 break;
             }
-            case FDivInstruction(var op): {
+            case FloatDivInstruction(var op): {
                 this.FormatInstruction(op, "fdiv", "/", result);
                 break;
             }
-            case IDivInstruction(var op): {
+            case IntDivInstruction(var op): {
                 this.FormatInstruction(op, "div", "div", result);
                 break;
             }
@@ -362,23 +362,23 @@ public interface IMetadataSource {
         result.Append(" := ");
     }
 
-    private void FormatInstruction(BinOpInstruction instruction, string name, string op, StringBuilder result) {
+    private void FormatInstruction(BinOpInstructionData instructionData, string name, string op, StringBuilder result) {
         this.FormatInstructionPrefix(name, result);
 
-        this.FormatOutputRef(instruction.Out, result);
+        this.FormatOutputRef(instructionData.Out, result);
 
-        this.FormatValue(instruction.ArgA, result);
+        this.FormatValue(instructionData.ArgA, result);
         result.Append($" {op} ");
-        this.FormatValue(instruction.ArgB, result);
+        this.FormatValue(instructionData.ArgB, result);
     }
 
-    private void FormatInstruction(UnaryOpInstruction instruction, string name, string op, StringBuilder result) {
+    private void FormatInstruction(UnaryOpInstructionData instructionData, string name, string op, StringBuilder result) {
         this.FormatInstructionPrefix(name, result);
 
-        this.FormatOutputRef(instruction.Out, result);
+        this.FormatOutputRef(instructionData.Out, result);
 
         result.Append($"{op} ");
-        this.FormatValue(instruction.Arg, result);
+        this.FormatValue(instructionData.Arg, result);
     }
 
     private void FormatInstructionPrefix(string name, StringBuilder result) {

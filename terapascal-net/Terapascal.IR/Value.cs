@@ -18,9 +18,17 @@ public interface IValue {
 
         return result.ToString();
     }
+
+    IValue ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return this;
+    }
 }
 
-public record RefValue(IRef Ref) : IValue {}
+public record RefValue(IRef Ref) : IValue {
+    public IValue ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new RefValue(this.Ref.ResolveGeneric(typeMap));
+    }
+}
 
 public record LiteralNilValue : IValue {
     public bool IsLiteral => true;
@@ -32,10 +40,18 @@ public record LiteralValue<T>(T Value) : IValue {
 
 public record SizeOfValue(IType Type) : IValue {
     public bool IsLiteral => true;
+
+    public IValue ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new SizeOfValue(this.Type.ResolveGeneric(typeMap));
+    }
 }
 
 public record DefaultValue(IType Type) : IValue {
     public bool IsLiteral => true;
+
+    public IValue ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new DefaultValue(this.Type.ResolveGeneric(typeMap));
+    }
 }
 
 public class NullableValueFormatter : IMessagePackFormatter<IValue?> {

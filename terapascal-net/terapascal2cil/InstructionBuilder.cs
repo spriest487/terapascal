@@ -8,8 +8,6 @@ namespace Terapascal.CIL;
 internal readonly record struct LocalMapping(IR.IType Type, int VariableIndex);
 
 public class InstructionBuilder {
-    private readonly IR.Library library;
-
     private readonly AssemblyBuilder assemblyBuilder;
 
     private readonly MethodDefinition method;
@@ -29,12 +27,7 @@ public class InstructionBuilder {
 
     private bool HasReturnValue => !this.method.ReturnType.Equals(this.assemblyBuilder.TypeSystem.Void);
 
-    public InstructionBuilder(
-        AssemblyBuilder assemblyBuilder,
-        IR.Library library,
-        MethodDefinition method
-    ) {
-        this.library = library;
+    public InstructionBuilder(AssemblyBuilder assemblyBuilder, MethodDefinition method) {
         this.method = method;
         this.assemblyBuilder = assemblyBuilder;
 
@@ -258,7 +251,7 @@ public class InstructionBuilder {
                             }
                             
                             default: {
-                                throw new NotImplementedException($"conversion to {castToType.ToString(this.library.Metadata)}");
+                                throw new NotImplementedException($"conversion to {castToType.ToString(this.assemblyBuilder.LoadedMetadata)}");
                             }
                         }
                     });
@@ -404,12 +397,12 @@ public class InstructionBuilder {
                     break;
                 }
 
-                case IR.IDivInstruction(var op): {
+                case IR.IntDivInstruction(var op): {
                     this.BuildBinOp(op, OpCodes.Div);
                     break;
                 }
 
-                case IR.FDivInstruction(var op): {
+                case IR.FloatDivInstruction(var op): {
                     this.BuildBinOp(op, OpCodes.Div);
                     break;
                 }
@@ -520,7 +513,7 @@ public class InstructionBuilder {
         }
     }
 
-    private void BuildAdd(IR.BinOpInstruction op) {
+    private void BuildAdd(IR.BinOpInstructionData op) {
         this.body.Emit(OpCodes.Nop);
         this.body.Emit(OpCodes.Nop);
         this.body.Emit(OpCodes.Nop);
@@ -562,7 +555,7 @@ public class InstructionBuilder {
         this.body.Emit(OpCodes.Nop);
     }
 
-    private void BuildSubtract(IR.BinOpInstruction op) {
+    private void BuildSubtract(IR.BinOpInstructionData op) {
         var aType = this.GetValueType(op.ArgA);
         var bType = this.GetValueType(op.ArgB);
 
@@ -631,7 +624,10 @@ public class InstructionBuilder {
         // as an optimization, if the value is a string literal, we can supply that directly rather than
         // converting the pascal string back to a CLR one
         if (val is IR.GlobalRef(IR.StringLiteralGlobalRef(var stringID))) {
-            var stringLit = this.library.Metadata.StringLiterals[stringID];
+            if (!this.assemblyBuilder.LoadedMetadata.FindStringLiteral(stringID, out var stringLit)) {
+                throw new InvalidDataException($"reference to missing string {stringID}");
+            }
+
             this.body.Emit(OpCodes.Ldstr, stringLit);
         } else {
             this.LoadRef(val);
@@ -708,8 +704,15 @@ public class InstructionBuilder {
             throw new InvalidDataException("illegal instruction: call target value may only be a ref");
         }
         
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+        
         if (targetRef is IR.GlobalRef(IR.FunctionGlobalRef(var funcRef))) {
-            if (this.library.Functions[funcRef.DefID].Signature().ResultType is not IR.NothingType) {
+            if (!metadata.FindFunction(funcRef.DefID, out var funcInfo)) {
+                var msg = $"missing function metadata for function call instruction: {funcRef.ToString(metadata)}";
+                throw new InvalidDataException(msg);
+            }
+
+            if (funcInfo.ResultType is not IR.NothingType) {
                 this.StoreRef(outRef, () => this.EmitCall(funcRef, argVals));
             } else {
                 this.EmitCall(funcRef, argVals);
@@ -751,8 +754,12 @@ public class InstructionBuilder {
             this.LoadValue(argVal);
         }
 
-        var funcMethod = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcRef) 
-                         ?? throw new InvalidDataException($"invalid instruction: couldn't find function {funcRef.DefID}");
+        var funcMethod = this.assemblyBuilder.FunctionBuilder.GetFunctionMethod(funcRef);
+        if (funcMethod == null) {
+            var funcDisplay = funcRef.ToString(this.assemblyBuilder.LoadedMetadata);
+            var msg = $"invalid instruction: couldn't find function: {funcDisplay}";
+            throw new InvalidDataException(msg);
+        }
 
         this.body.Emit(OpCodes.Call, funcMethod);
     }
@@ -767,7 +774,11 @@ public class InstructionBuilder {
         var ifaceType = ifaceRef.ToObjectID().ToObjectType();
         this.assemblyBuilder.TypeBuilder.BuildType(ifaceType, out var ifaceTypeID);
 
-        var ifaceDef = ((IR.DefInterfaceDecl)this.library.Metadata.Interfaces[ifaceRef.DefID]).Def;
+        if (!this.assemblyBuilder.LoadedMetadata.TryGetInterfaceDef(ifaceRef.DefID, out var ifaceDef)) {
+            var msg = $"missing interface definition for virtual call: {ifaceRef.ToString(this.assemblyBuilder.LoadedMetadata)}";
+            throw new InvalidDataException(msg);
+        }
+
         var ifaceMethod = ifaceDef.Methods[(int)methodID.ID];
 
         var methodRef = this.assemblyBuilder.TypeBuilder.GetInterfaceMethod(ifaceTypeID, methodID);
@@ -962,7 +973,7 @@ public class InstructionBuilder {
     }
 
     private IR.IType GetRefType(IR.IRef @ref) {
-        var metadata = this.library.Metadata;
+        var metadata = this.assemblyBuilder.LoadedMetadata;
 
         switch (@ref) {
             case IR.ResultRef: {
@@ -1000,7 +1011,7 @@ public class InstructionBuilder {
             }
 
             case IR.GlobalRef(IR.FunctionGlobalRef(var funcRef)): {
-                if (!this.library.Functions.TryGetValue(funcRef.DefID, out var funcInfo)) {
+                if (!metadata.FindFunction(funcRef.DefID, out var funcInfo)) {
                     throw new InvalidDataException($"reference to missing function {funcRef.DefID}");
                 }
 
@@ -1008,7 +1019,7 @@ public class InstructionBuilder {
             }
             
             case IR.GlobalRef(IR.VariableGlobalRef(var varID)): {
-                if (metadata.Variables.TryGetValue(varID, out var varInfo)) {
+                if (metadata.FindVariable(varID, out var varInfo)) {
                     return varInfo.Type;
                 }
                 break;
@@ -1137,8 +1148,8 @@ public class InstructionBuilder {
             }
             
             case IR.GlobalRef(IR.FunctionGlobalRef(var funcRef)): {
-                var methodRef = this.assemblyBuilder.FunctionBuilder.FindFunctionMethod(funcRef)
-                    ?? throw new InvalidDataException($"reference to missing function: {funcRef.ToString(this.library.Metadata)}");
+                var methodRef = this.assemblyBuilder.FunctionBuilder.GetFunctionMethod(funcRef)
+                    ?? throw new InvalidDataException($"reference to missing function: {funcRef.ToString(this.assemblyBuilder.LoadedMetadata)}");
 
                 this.body.Emit(OpCodes.Ldftn, methodRef);
                 break;
@@ -1147,7 +1158,7 @@ public class InstructionBuilder {
             case IR.Deref(var atRef): {
                 if (atRef is not IR.RefValue(var targetRef) 
                     || this.GetRefType(targetRef).GetDerefType() is not {} derefType) {
-                    throw new InvalidDataException($"invalid value for dereference instruction: {atRef.ToString(this.library.Metadata)}");
+                    throw new InvalidDataException($"invalid value for dereference instruction: {atRef.ToString(this.assemblyBuilder.LoadedMetadata)}");
                 }
 
                 var targetTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(derefType);
@@ -1297,7 +1308,7 @@ public class InstructionBuilder {
         throw new InvalidDataException($"invalid instruction: {local} was not found in this scope");
     }
 
-    private void BuildBinOp(IR.BinOpInstruction binOp, OpCode op) {
+    private void BuildBinOp(IR.BinOpInstructionData binOp, OpCode op) {
         this.StoreRef(binOp.Out, () => {
             this.LoadValue(binOp.ArgA);
             this.LoadValue(binOp.ArgB);
@@ -1305,7 +1316,7 @@ public class InstructionBuilder {
         });
     }
 
-    private void BuildCompareOrEqualOperation(IR.BinOpInstruction binOp, OpCode invCompareOp) {
+    private void BuildCompareOrEqualOperation(IR.BinOpInstructionData binOp, OpCode invCompareOp) {
         this.StoreRef(binOp.Out, () => {
             this.LoadValue(binOp.ArgA);
             this.LoadValue(binOp.ArgB);
