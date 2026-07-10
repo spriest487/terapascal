@@ -58,6 +58,10 @@ public class MetadataCollection : IMetadataSource {
         return this.TryFind((m, out result) => m.FindTypeDef(id, out result), out def);
     }
 
+    public bool FindTypeDecl(TypeDefID id, [NotNullWhen(true)] out ITypeDecl? decl) {
+        return this.TryFind((m, out result) => m.FindTypeDecl(id, out result), out decl);
+    }
+
     public bool IsTypeDefined(IType type) {
         return this.collection.Any(m => m.IsTypeDefined(type));
     }

@@ -15,6 +15,7 @@ public interface IMetadataSource {
 
     IEnumerable<(TypeDefID ID, ITypeDef TypeDef)> GetTypeDefs();
     bool FindTypeDef(TypeDefID id, [NotNullWhen(true)] out ITypeDef? def);
+    bool FindTypeDecl(TypeDefID id, [NotNullWhen(true)] out ITypeDecl? decl);
     bool IsTypeDefined(IType type);
 
     IEnumerable<(ITagLocation, IReadOnlyList<TagInfo>)> GetAllTags();
@@ -562,5 +563,81 @@ public interface IMetadataSource {
 
         funcName ??= id.ToString();
         result.Append(funcName);
+    }
+
+    bool FindDeclPath(IType type, [NotNullWhen(true)] out DeclPath? path) {
+        switch (type) {
+            case StructType(var typeRef): return this.FindDeclPath(typeRef, out path);
+            case VariantType(var typeRef): return this.FindDeclPath(typeRef, out path);
+
+            case ObjectType(var objectID): return this.FindDeclPath(objectID, out path);
+            case WeakObjectType(var objectID): return this.FindDeclPath(objectID, out path);
+
+            default: {
+                path = null;
+                return false;
+            }
+        }
+    }
+
+    bool FindDeclPath(TypeRef typeRef, [NotNullWhen(true)] out DeclPath? path) {
+        path = null;
+
+        if (!this.FindTypeDecl(typeRef.DefID, out var decl)) {
+            return false;
+        }
+
+        switch (decl) {
+            case DefTypeDecl(StructTypeDef(var structDef)): {
+                path = structDef.Identity.GetDeclPath();
+                return path != null;
+            }
+
+            case DefTypeDecl(VariantTypeDef(var variantDef)): {
+                path = variantDef.Name;
+                return true;
+            };
+
+            case ForwardTypeDecl(var forwardPath): {
+                path = forwardPath;
+                return true;
+            }
+
+            case ReservedTypeDecl: {
+                return false;
+            }
+
+            default: {
+                throw new ArgumentOutOfRangeException(nameof(decl));
+            }
+        }
+    }
+
+    bool FindDeclPath(IObjectID objectID, [NotNullWhen(true)] out DeclPath? path) {
+        path = null;
+
+        switch (objectID) {
+
+            case ClassObjectID(var classRef): {
+                return this.FindDeclPath(classRef, out path);
+            }
+            case InterfaceObjectID(var ifaceRef): {
+                if (!this.FindInterfaceDecl(ifaceRef.DefID, out var ifaceDecl)) {
+                    return false;
+                }
+
+                path = ifaceDecl.GetDeclName();
+                return true;
+            }
+
+            case AnyClosureObjectID:
+            case AnyObjectID:
+            case ArrayObjectID:
+            case BoxObjectID: {
+                return false;
+            }
+
+            default: throw new ArgumentOutOfRangeException(nameof(objectID));
+        }
     }
 }

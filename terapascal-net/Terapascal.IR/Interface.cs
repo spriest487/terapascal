@@ -5,17 +5,17 @@ using MessagePack.Formatters;
 namespace Terapascal.IR;
 
 public interface IInterfaceDecl {
-    DeclPath GetGlobalName();
+    DeclPath GetDeclName();
 }
 
 public record ForwardInterfaceDecl(DeclPath Name) : IInterfaceDecl {
-    public DeclPath GetGlobalName() {
+    public DeclPath GetDeclName() {
         return this.Name;
     }
 }
 
 public record DefInterfaceDecl(InterfaceDef Def) : IInterfaceDecl {
-    public DeclPath GetGlobalName() {
+    public DeclPath GetDeclName() {
         return this.Def.Name;
     }
 }

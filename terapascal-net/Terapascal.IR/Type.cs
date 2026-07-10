@@ -1,4 +1,5 @@
-﻿using MessagePack;
+﻿using System.Text;
+using MessagePack;
 using MessagePack.Formatters;
 
 namespace Terapascal.IR;
@@ -327,7 +328,12 @@ public sealed record StructType(TypeRef TypeRef) : IType {
 
     public string ToString(IMetadataSource? metadata) {
         if (metadata == null || !metadata.FindStructDef(this.TypeRef.DefID, out var def)) {
-            return $"{{struct {this.TypeRef.DefID}}}";
+            var result = new StringBuilder($"{{struct {this.TypeRef.DefID}");
+
+            NamePath.FormatTypeArgsList(this.TypeRef.Args, metadata, result);
+
+            result.Append('}');
+            return result.ToString();
         }
 
         var path = def.Identity.GetDeclPath();
@@ -702,7 +708,7 @@ public sealed record InterfaceObjectID(InterfaceRef InterfaceRef) : IObjectID {
             return $"{{interface {this.InterfaceRef.DefID}}}";
         }
 
-        var name = ifaceDecl.GetGlobalName();
+        var name = ifaceDecl.GetDeclName();
         var typeMap = Util.BuildGenericTypeMap(name.TypeParams ?? [], this.InterfaceRef.Args ?? []);
         
         return name.ToGenericName().ResolveGeneric(typeMap).ToString(metadata);

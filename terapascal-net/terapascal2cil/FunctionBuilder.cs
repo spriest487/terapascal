@@ -18,6 +18,8 @@ public class FunctionBuilder {
     public void BuildFunctions(IR.Library lib) {
         var definedFuncs = new List<(MethodDefinition, IR.FunctionDef)>(lib.Functions.Count);
 
+        var invocationParams = new List<IR.TypeParam>(8);
+
         foreach (var (id, func) in lib.Functions) {
             switch (func) {
                 case IR.ExternalFunction(var externRef): {
@@ -33,7 +35,10 @@ public class FunctionBuilder {
 
                     // TODO: native generics
                     // only eagerly instantiate non-generic functions
-                    if (funcInfo.Identity.TypeParams == null || funcInfo.Identity.TypeParams.Count == 0) {
+                    invocationParams.Clear();
+                    funcInfo.Identity.GetInvocationTypeParams(this.assemblyBuilder.LoadedMetadata, invocationParams);
+
+                    if (invocationParams.Count == 0) {
                         var funcRef = id.ToFunctionRef([]);
                         var methodDef = this.CreateFunctionMethod(funcRef, def.Signature);
                         definedFuncs.Add((methodDef, def));
@@ -57,6 +62,11 @@ public class FunctionBuilder {
         }
 
         foreach (var (selfType, impls) in lib.Metadata.InterfaceImpls) {
+            // TODO: native generics
+            if (selfType.ContainsGenericParams) {
+                continue;
+            }
+
             foreach (var (ifaceRef, ifaceImpl) in impls) {
                 if (!lib.Metadata.Interfaces.TryGetValue(ifaceRef.DefID, out var ifaceDecl)
                     || ifaceDecl is not IR.DefInterfaceDecl(var ifaceDef)
@@ -188,7 +198,7 @@ public class FunctionBuilder {
         IR.FunctionSig sig
     ) {
         var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(sig.ResultType);
-        
+
         var methodDef = new MethodDefinition(name, attrs, returnTypeRef);
 
         foreach (var paramType in sig.ParameterTypes) {
@@ -209,7 +219,7 @@ public class FunctionBuilder {
         if (this.assemblyBuilder.LoadedMetadata.FindFunction(funcRef.DefID, out var funcInfo)) {
             funcInfo = null;
         }
-        
+
         switch (funcInfo?.Identity) {
             case IR.GlobalFunctionIdentity(var globalPath): {
                 if (globalPath.GetParent() is { } unitPath) {

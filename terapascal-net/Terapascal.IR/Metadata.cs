@@ -97,6 +97,10 @@ public class Metadata : IMetadataSource {
         return true;
     }
 
+    public bool FindTypeDecl(TypeDefID id, [NotNullWhen(true)] out ITypeDecl? decl) {
+        return this.TypeDecls.TryGetValue(id, out decl);
+    }
+
     public bool IsTypeDefined(IType type) {
         return type switch {
             StructType(var typeRef) => this.IsTypeDefined(typeRef),

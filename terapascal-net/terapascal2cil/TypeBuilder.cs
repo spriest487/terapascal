@@ -289,6 +289,8 @@ public class TypeBuilder {
             var typeMap = IR.Util.BuildGenericTypeMap(declName.TypeParams ?? [], structRef.Args ?? []);
             var refName = declName.ResolveGeneric(typeMap);
 
+            structDef = structDef.ResolveGeneric(typeMap);
+
             name = this.CreateUniqueTypeName(refName, out ns);
         } else {
             name = structDef.Identity.ToString(this.assemblyBuilder.LoadedMetadata);
@@ -678,7 +680,7 @@ public class TypeBuilder {
             throw new InvalidDataException($"missing interface definition: {ifaceRef.DefID}");
         }
 
-        var declName = ifaceDecl.GetGlobalName();
+        var declName = ifaceDecl.GetDeclName();
         var typeMap = IR.Util.BuildGenericTypeMap(declName.TypeParams ?? [], ifaceRef.Args ?? []);
 
         var interfaceName = declName.ResolveGeneric(typeMap);

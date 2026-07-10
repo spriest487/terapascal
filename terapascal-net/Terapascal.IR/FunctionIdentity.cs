@@ -9,6 +9,26 @@ public interface IFunctionIdentity {
     IReadOnlyList<TypeParam>? TypeParams { get; }
 
     bool HasTypeParams => this.TypeParams is { Count: > 0 };
+
+    void GetInvocationTypeParams(IMetadataSource metadata, List<TypeParam> result);
+
+    protected static void GetInvocationTypeParams(
+        IType? declaringType,
+        IReadOnlyList<TypeParam>? typeParams,
+        IMetadataSource metadata,
+        List<TypeParam> result
+    ) {
+        if (declaringType != null
+            && metadata.FindDeclPath(declaringType, out var declPath)
+            && declPath.HasTypeParams
+        ) {
+            result.AddRange(declPath.TypeParams);
+        }
+
+        if (typeParams != null) {
+            result.AddRange(typeParams);
+        }
+    }
 }
 
 public record GlobalFunctionIdentity(DeclPath Path) : IFunctionIdentity {
@@ -17,6 +37,10 @@ public record GlobalFunctionIdentity(DeclPath Path) : IFunctionIdentity {
     }
 
     public IReadOnlyList<TypeParam>? TypeParams => this.Path.TypeParams;
+
+    public void GetInvocationTypeParams(IMetadataSource metadata, List<TypeParam> result) {
+        IFunctionIdentity.GetInvocationTypeParams(null, this.TypeParams, metadata, result);
+    }
 }
 
 [MessagePackObject]
@@ -32,6 +56,10 @@ public record MethodFunctionIdentity : IFunctionIdentity {
 
     [Key("type_params")]
     public IReadOnlyList<TypeParam>? TypeParams { get; init; }
+
+    public void GetInvocationTypeParams(IMetadataSource metadata, List<TypeParam> result) {
+        IFunctionIdentity.GetInvocationTypeParams(this.DeclaringType, this.TypeParams, metadata, result);
+    }
 
     public string ToString(IMetadataSource? metadata) {
         return $"{this.DeclaringType.ToString(metadata)}.{this.Name}";
@@ -55,6 +83,10 @@ public record DestructorFunctionIdentity : IFunctionIdentity {
 
     [IgnoreMember]
     public IReadOnlyList<TypeParam>? TypeParams => null;
+
+    public void GetInvocationTypeParams(IMetadataSource metadata, List<TypeParam> result) {
+        IFunctionIdentity.GetInvocationTypeParams(this.DeclaringType, this.TypeParams, metadata, result);
+    }
 }
 
 [MessagePackObject]
@@ -67,6 +99,10 @@ public record InternalFunctionIdentity : IFunctionIdentity {
 
     public string ToString(IMetadataSource? metadata) {
         return this.Name;
+    }
+
+    public void GetInvocationTypeParams(IMetadataSource metadata, List<TypeParam> result) {
+        IFunctionIdentity.GetInvocationTypeParams(null, this.TypeParams, metadata, result);
     }
 }
 

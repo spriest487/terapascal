@@ -117,7 +117,7 @@ public record FunctionRef {
         var result = new StringBuilder();
 
         if (metadata == null) {
-            result.Append($"{{function {this.DefID}}}");
+            result.Append(this.DefID);
             NamePath.FormatTypeArgsList(this.TypeArgs, metadata, result);
 
             return result.ToString();
