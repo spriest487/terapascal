@@ -67,6 +67,7 @@ pub fn build_assembly(
     
     if verbose {
         tool_command.arg("--verbose");
+        println!("terapascl2cil command line: {tool_command:?}");
     }
     
     tool_command.stdin(Stdio::piped());
