@@ -8,6 +8,7 @@ use crate::InstructionList;
 use crate::Metadata;
 use crate::MetadataSource;
 use crate::TagInfo;
+use crate::TypeDecl;
 use crate::TypeDef;
 use serde::Deserialize;
 use serde::Serialize;
@@ -137,74 +138,88 @@ impl Library {
             writeln!(f)?;
         }
 
-        writeln!(f, "Type Definitions:")?;
+        writeln!(f, "Types:")?;
         writeln!(f)?;
 
-        let mut defs: Vec<_> = self.metadata.type_defs().collect();
-        defs.sort_by_key(|(id, _)| *id);
+        let mut type_decls: Vec<_> = self.metadata.type_decls().collect();
+        type_decls.sort_by_key(|(id, _)| *id);
 
-        for (id, def) in &defs {
-            writeln!(f, "{id}: {}", def.to_pretty_string(formatter))?;
+        for (id, type_decl) in &type_decls {
+            write!(f, "{id}: ")?;
 
-            match def {
-                TypeDef::Struct(s) => {
-                    write_tag_list(&s.tags, formatter, f)?;
+            match type_decl {
+                TypeDecl::Reserved => {
+                    writeln!(f, "reserved")?;
+                }
 
-                    if !s.fields. is_empty() {
-                        writeln!(f, "Fields:")?;
+                TypeDecl::Forward(path) => {
+                    writeln!(f, "{} (forward)", path.to_pretty_string(formatter))?;
+                }
+
+                TypeDecl::Def(def) => {
+                    writeln!(f, "{}", def.to_pretty_string(formatter))?;
+
+                    match def {
+                        TypeDef::Struct(s) => {
+                            write_tag_list(&s.tags, formatter, f)?;
+
+                            if !s.fields. is_empty() {
+                                writeln!(f, "Fields:")?;
+                            }
+                            for (field_id, field) in &s.fields {
+                                write!(f, "  {:8>}: ", field_id)?;
+                                formatter.format_type(&field.ty, f)?;
+
+                                if let Some(field_name) = &field.name {
+                                    write!(f, " (`{}`)", field_name)?;
+                                }
+
+                                writeln!(f)?;
+                            }
+                        },
+
+                        TypeDef::Variant(v) => {
+                            write_tag_list(&v.tags, formatter, f)?;
+                            writeln!(f, "Discriminator: {}", v.tag_type.to_pretty_string(formatter))?;
+
+                            if !v.cases. is_empty() {
+                                writeln!(f, "Cases:")?;
+                            }
+
+                            for (i, case) in v.cases.iter().enumerate() {
+                                write!(f, "{:8>} ({})", format!("  .{}", i), case.name)?;
+
+                                if let Some(ty) = &case.ty {
+                                    write!(f, ": ")?;
+                                    formatter.format_type(ty, f)?;
+                                }
+                                writeln!(f)?;
+                            }
+                        },
                     }
-                    for (field_id, field) in &s.fields {
-                        write!(f, "  {:8>}: ", field_id)?;
-                        formatter.format_type(&field.ty, f)?;
 
-                        if let Some(field_name) = &field.name {
-                            write!(f, " (`{}`)", field_name)?;
+                    let impl_self_ty = match def {
+                        TypeDef::Variant(def) => {
+                            Some(id.to_variant_type(def.name.generic_args()))
+                        },
+                        TypeDef::Struct(struct_def) => {
+                            Some(struct_def.identity.to_definition_type(*id))
+                        },
+                    };
+
+                    if let Some(self_ty) = impl_self_ty {
+                        let iface_impls = self.metadata.type_impls(&self_ty);
+
+                        if !iface_impls.is_empty() {
+                            writeln!(f, "  Implements:")?;
+                            for (iface_id, _) in iface_impls {
+                                write!(f, "    ")?;
+
+                                formatter.format_type(&iface_id.to_object_id().to_object_type(), f)?;
+
+                                writeln!(f)?;
+                            }
                         }
-
-                        writeln!(f)?;
-                    }
-                },
-
-                TypeDef::Variant(v) => {
-                    write_tag_list(&v.tags, formatter, f)?;
-                    writeln!(f, "Discriminator: {}", v.tag_type.to_pretty_string(formatter))?;
-
-                    if !v.cases. is_empty() {
-                        writeln!(f, "Cases:")?;
-                    }
-
-                    for (i, case) in v.cases.iter().enumerate() {
-                        write!(f, "{:8>} ({})", format!("  .{}", i), case.name)?;
-
-                        if let Some(ty) = &case.ty {
-                            write!(f, ": ")?;
-                            formatter.format_type(ty, f)?;
-                        }
-                        writeln!(f)?;
-                    }
-                },
-            }
-
-            let impl_self_ty = match def {
-                TypeDef::Variant(def) => {
-                    Some(id.to_variant_type(def.name.generic_args()))
-                },
-                TypeDef::Struct(struct_def) => {
-                    Some(struct_def.identity.to_definition_type(*id))
-                },
-            };
-
-            if let Some(self_ty) = impl_self_ty {
-                let iface_impls = self.metadata.type_impls(&self_ty);
-
-                if !iface_impls.is_empty() {
-                    writeln!(f, "  Implements:")?;
-                    for (iface_id, _) in iface_impls {
-                        write!(f, "    ")?;
-
-                        formatter.format_type(&iface_id.to_object_id().to_object_type(), f)?;
-
-                        writeln!(f)?;
                     }
                 }
             }
