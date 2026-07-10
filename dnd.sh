@@ -1,6 +1,6 @@
 set -e
-dotnet build terapascal-net
-cargo run --features backend-cil -- demos/$1.tpas -a cil --debug --print-stage=ir > target/$1.txt
+dotnet build terapascal-net/terapascal2cil
+cargo run --features backend-cil -- demos/$1.tpas -a cil --debug --dump=ir > target/$1.txt
 cargo run --features backend-cil -- demos/$1.tpas -a cil --debug -o target/$1.lib
-cargo run --features backend-cil -- demos/$1.tpas -a cil --debug -o target/$1.dll
+cargo run --features backend-cil -- target/$1.lib -a cil -v --debug -o target/$1.dll
 dotnet target/$1.dll
