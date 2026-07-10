@@ -84,7 +84,7 @@ public record InterfaceMethod {
     }
     
     [Key("params")]
-    public required IReadOnlyList<FunctionParamInfo> Parameters { 
+    public required IReadOnlyList<FunctionParamInfo> Params {
         get;
         init => field = value!.ToArrayNonNull();
     }

@@ -324,35 +324,27 @@ impl Metadata {
     }
 
     pub fn is_defined(&self, ty: &Type) -> bool {
-        let id = match ty {
+        match ty {
             Type::Struct(type_ref)
-            | Type::Variant(type_ref) => {
-                type_ref.def_id
+            | Type::Variant(type_ref)
+            | Type::Object(ObjectID::Class(type_ref))
+            | Type::WeakObject(ObjectID::Class(type_ref)) => {
+                match self.type_decls.get(&type_ref.def_id) {
+                    Some(decl) => !decl.is_forward(),
+                    None => false,
+                }
             }
 
-            Type::Object(object_id) | Type::WeakObject(object_id) => {
-                match object_id {
-                    ObjectID::Class(generic_id) => generic_id.def_id,
-
-                    ObjectID::Interface(iface_ref) => {
-                        return self.interface_defs.contains_key(&iface_ref.def_id);
-                    }
-
-                    | ObjectID::Any
-                    | ObjectID::AnyClosure(..)
-                    | ObjectID::Array(..)
-                    | ObjectID::Box(..) => {
-                        return true;
-                    },
+            Type::Object(ObjectID::Interface(iface_ref))
+            | Type::WeakObject(ObjectID::Interface(iface_ref)) => {
+                match self.interface_defs.get(&iface_ref.def_id) {
+                    Some(InterfaceDecl::Forward(..)) => false,
+                    Some(InterfaceDecl::Def(..)) => true,
+                    None => false,
                 }
             }
 
             _ => return true,
-        };
-
-        match self.type_decls.get(&id) {
-            Some(decl) => !decl.is_forward(),
-            None => false,
         }
     }
 

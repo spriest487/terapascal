@@ -152,6 +152,8 @@ public interface IType : IEquatable<IType> {
     static IType F32 { get; } = new F32Type();
     static IType F64 { get; } = new F64Type();
 
+    bool ContainsGenericParams { get; }
+
     bool IsObjectType() => this switch {
         ObjectType => true,
         WeakObjectType => true,
@@ -248,13 +250,11 @@ public interface IType : IEquatable<IType> {
     }
 }
 
-public sealed record NothingType : IType {
-    public string ToString(IMetadataSource? metadata) {
-        return "nothing";
-    }
+public abstract record PrimitiveType : IType {
+    public bool ContainsGenericParams => false;
 
-    public override string ToString() {
-        return this.ToString(null);
+    public string ToString(IMetadataSource? metadata) {
+        return this.ToString();
     }
 
     public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
@@ -263,6 +263,8 @@ public sealed record NothingType : IType {
 }
 
 public sealed record GenericType(string Name) : IType {
+    public bool ContainsGenericParams => true;
+
     public string ToString(IMetadataSource? metadata) {
         return this.Name;
     }
@@ -280,7 +282,15 @@ public sealed record GenericType(string Name) : IType {
     }
 }
 
+public sealed record NothingType : PrimitiveType {
+    public override string ToString() {
+        return "nothing";
+    }
+}
+
 public sealed record PointerType(IType Inner) : IType {
+    public bool ContainsGenericParams => this.Inner.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         return $"^{this.Inner.ToString(metadata)}";
     }
@@ -296,6 +306,8 @@ public sealed record PointerType(IType Inner) : IType {
 }
 
 public sealed record TempRefType(IType Inner) : IType {
+    public bool ContainsGenericParams => this.Inner.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         return $"&{this.Inner.ToString(metadata)}";
     }
@@ -311,6 +323,8 @@ public sealed record TempRefType(IType Inner) : IType {
 }
 
 public sealed record StructType(TypeRef TypeRef) : IType {
+    public bool ContainsGenericParams => this.TypeRef.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         if (metadata == null || !metadata.FindStructDef(this.TypeRef.DefID, out var def)) {
             return $"{{struct {this.TypeRef.DefID}}}";
@@ -335,6 +349,8 @@ public sealed record StructType(TypeRef TypeRef) : IType {
 }
 
 public sealed record VariantType(TypeRef TypeRef) : IType {
+    public bool ContainsGenericParams => this.TypeRef.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         if (metadata == null || !metadata.FindVariantDef(this.TypeRef.DefID, out var def)) {
             return $"{{struct {this.TypeRef.DefID}}}";
@@ -358,6 +374,8 @@ public sealed record VariantType(TypeRef TypeRef) : IType {
 }
 
 public sealed record FunctionType(FunctionSig Sig) : IType {
+    public bool ContainsGenericParams => this.Sig.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         return this.Sig.ToString(metadata);
     }
@@ -371,181 +389,81 @@ public sealed record FunctionType(FunctionSig Sig) : IType {
     }
 }
 
-public sealed record BoolType : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record BoolType : PrimitiveType {
+    public override string ToString() {
         return "bool";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record U8Type : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record U8Type : PrimitiveType {
+    public override string ToString() {
         return "u8";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record I8Type : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record I8Type : PrimitiveType {
+    public override string ToString() {
         return "i8";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record U16Type : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record U16Type : PrimitiveType {
+    public override string ToString() {
         return "u16";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record I16Type : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record I16Type : PrimitiveType {
+    public override string ToString() {
         return "i16";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record U32Type : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record U32Type : PrimitiveType {
+    public override string ToString() {
         return "u32";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record I32Type : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record I32Type : PrimitiveType {
+    public override string ToString() {
         return "i32";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record U64Type : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record U64Type : PrimitiveType {
+    public override string ToString() {
         return "u64";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record I64Type : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record I64Type : PrimitiveType {
+    public override string ToString() {
         return "i64";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record USizeType : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record USizeType : PrimitiveType {
+    public override string ToString() {
         return "usize";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record ISizeType : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record ISizeType : PrimitiveType {
+    public override string ToString() {
         return "isize";
     }
-
-    public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record F32Type : IType {
-    public string ToString(IMetadataSource? metadata) {
+public sealed record F32Type : PrimitiveType {
+    public override string ToString() {
         return "f32";
     }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
-    }
 }
 
-public sealed record F64Type : IType {
-    public string ToString(IMetadataSource? metadata) {
-        return "f64";
-    }
-
+public sealed record F64Type : PrimitiveType {
     public override string ToString() {
-        return this.ToString(null);
-    }
-
-    public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
+        return "f64";
     }
 }
 
@@ -559,6 +477,9 @@ public sealed record ArrayType : IType {
     
     [Key("dim")]
     public required ulong Length { get; init; }
+
+    [IgnoreMember]
+    public bool ContainsGenericParams => this.Element.ContainsGenericParams;
 
     public string ToString(IMetadataSource? metadata) {
         return $"array[{this.Length}] of {this.Element.ToString(metadata)}";
@@ -577,6 +498,8 @@ public sealed record ArrayType : IType {
 }
 
 public sealed record ObjectType(IObjectID ID) : IType {
+    public bool ContainsGenericParams => this.ID.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         return $"*{this.ID.ToString(metadata)}";
     }
@@ -591,6 +514,8 @@ public sealed record ObjectType(IObjectID ID) : IType {
 }
 
 public sealed record WeakObjectType(IObjectID ID) : IType {
+    public bool ContainsGenericParams => this.ID.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         return $"weak *{this.ID.ToString(metadata)}";
     }
@@ -711,6 +636,8 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
 }
 
 public interface IObjectID : IEquatable<IObjectID> {
+    bool ContainsGenericParams { get; }
+
     string ToString(IMetadataSource? metadata);
     
     IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap);
@@ -729,6 +656,8 @@ public interface IObjectID : IEquatable<IObjectID> {
 }
 
 public sealed record AnyObjectID : IObjectID {
+    public bool ContainsGenericParams => false;
+
     public string ToString(IMetadataSource? metadata) {
         return "any";
     }
@@ -739,6 +668,8 @@ public sealed record AnyObjectID : IObjectID {
 }
 
 public sealed record ClassObjectID(TypeRef TypeRef) : IObjectID {
+    public bool ContainsGenericParams => this.TypeRef.ContainsGenericParams;
+
     public static ClassObjectID String => new ClassObjectID(new TypeRef { DefID = TypeDefID.String });
     public static ClassObjectID TypeInfo => new ClassObjectID(new TypeRef { DefID = TypeDefID.TypeInfo });
     public static ClassObjectID MethodInfo => new ClassObjectID(new TypeRef { DefID = TypeDefID.MethodInfo });
@@ -764,6 +695,8 @@ public sealed record ClassObjectID(TypeRef TypeRef) : IObjectID {
 }
 
 public sealed record InterfaceObjectID(InterfaceRef InterfaceRef) : IObjectID {
+    public bool ContainsGenericParams => this.InterfaceRef.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         if (metadata == null || !metadata.FindInterfaceDecl(this.InterfaceRef.DefID, out var ifaceDecl)) {
             return $"{{interface {this.InterfaceRef.DefID}}}";
@@ -781,6 +714,8 @@ public sealed record InterfaceObjectID(InterfaceRef InterfaceRef) : IObjectID {
 }
 
 public sealed record AnyClosureObjectID(FunctionSig Sig) : IObjectID {
+    public bool ContainsGenericParams => this.Sig.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         return $"closure of {this.Sig.ToString(metadata)}";
     }
@@ -791,6 +726,8 @@ public sealed record AnyClosureObjectID(FunctionSig Sig) : IObjectID {
 }
 
 public sealed record ArrayObjectID(IType Element) : IObjectID {
+    public bool ContainsGenericParams => this.Element.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         return $"array of {this.Element.ToString(metadata)}";
     }
@@ -801,6 +738,8 @@ public sealed record ArrayObjectID(IType Element) : IObjectID {
 }
 
 public sealed record BoxObjectID(IType Value) : IObjectID {
+    public bool ContainsGenericParams => this.Value.ContainsGenericParams;
+
     public string ToString(IMetadataSource? metadata) {
         return $"box of {this.Value.ToString(metadata)}";
     }

@@ -255,6 +255,10 @@ impl Type {
                         class_id.args.iter().any(|t| t.contains_generic_params())
                     },
 
+                    ObjectID::AnyClosure(sig) => {
+                        sig.contains_generic_params()
+                    }
+
                     ObjectID::Array(element)
                     | ObjectID::Box(element) => {
                         element.contains_generic_params()
@@ -263,6 +267,11 @@ impl Type {
                     _ => false,
                 }
             }
+
+            Type::Function(sig) => {
+                sig.contains_generic_params()
+            }
+
             _ => false,
         }
     }

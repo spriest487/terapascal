@@ -81,7 +81,47 @@ public class Metadata : IMetadataSource {
             }
         }
     }
-    
+
+    public bool FindTypeDef(TypeDefID id, [NotNullWhen(true)] out ITypeDef? def) {
+        def = null;
+
+        if (!this.TypeDecls.TryGetValue(id, out var decl)) {
+            return false;
+        }
+
+        if (decl is not DefTypeDecl(var declDef)) {
+            return false;
+        }
+
+        def = declDef;
+        return true;
+    }
+
+    public bool IsTypeDefined(IType type) {
+        return type switch {
+            StructType(var typeRef) => this.IsTypeDefined(typeRef),
+            VariantType(var typeRef) => this.IsTypeDefined(typeRef),
+            ObjectType(var objectID) => this.IsTypeDefined(objectID),
+            WeakObjectType(var objectID) => this.IsTypeDefined(objectID),
+            _ => true,
+        };
+    }
+
+    private bool IsTypeDefined(TypeRef typeRef) {
+        return this.FindTypeDef(typeRef.DefID, out _);
+    }
+
+    private bool IsTypeDefined(IObjectID objectID) {
+        return objectID switch {
+            InterfaceObjectID(var ifaceRef) => this.FindInterfaceDecl(ifaceRef.DefID, out var ifaceDecl)
+                && ifaceDecl is DefInterfaceDecl,
+
+            ClassObjectID(var typeRef) => this.IsTypeDefined(typeRef),
+
+            _ => true,
+        };
+    }
+
     public IEnumerable<(InterfaceID ID, InterfaceDef InterfaceDef)> GetInterfaceDefs() {
         foreach (var (id, decl) in this.Interfaces) {
             if (decl is DefInterfaceDecl(var def)) {

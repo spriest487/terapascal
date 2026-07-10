@@ -707,7 +707,7 @@ public class TypeBuilder {
                 | MethodAttributes.Virtual
                 | MethodAttributes.NewSlot;
 
-            var selfParam = ifaceMethod.Parameters.FirstOrDefault();
+            var selfParam = ifaceMethod.Params.FirstOrDefault();
 
             var hasThis = selfParam != null && ifaceType.Equals(selfParam.Type);
             if (!hasThis) {
@@ -721,8 +721,8 @@ public class TypeBuilder {
 
             // if the method isn't static, the params list implicitly includes the self-type
             var restParams = !methodDef.IsStatic
-                ? ifaceMethod.Parameters.Skip(1)
-                : ifaceMethod.Parameters;
+                ? ifaceMethod.Params.Skip(1)
+                : ifaceMethod.Params;
 
             foreach (var methodParam in restParams) {
                 var paramTypeRef = this.BuildType(methodParam.Type);

@@ -1,3 +1,4 @@
+using System.Text;
 using MessagePack;
 
 namespace Terapascal.IR;
@@ -13,10 +14,14 @@ public record TypeRef {
     [IgnoreMember]
     public bool HasArgs => this.Args is { Count: > 0 };
 
+    [IgnoreMember]
+    public bool ContainsGenericParams => this.Args != null
+        && this.Args.Any(t => t.ContainsGenericParams);
+
     public TypeRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
         var args = this.Args?
-            .Select(a => a.ResolveGeneric(typeMap))
-            .ToArray()
+                .Select(a => a.ResolveGeneric(typeMap))
+                .ToArray()
             ?? [];
 
         return new TypeRef {
@@ -49,6 +54,19 @@ public record TypeRef {
 
         return hashCode.ToHashCode();
     }
+
+    public string ToString(IMetadataSource? metadata) {
+        var result = new StringBuilder($"{nameof(TypeRef)}(");
+        result.Append(this.DefID);
+        NamePath.FormatTypeArgsList(this.Args, metadata, result);
+
+        result.Append(')');
+        return result.ToString();
+    }
+
+    public override string ToString() {
+        return this.ToString(null);
+    }
 }
 
 [MessagePackObject]
@@ -58,6 +76,9 @@ public record InterfaceRef {
 
     [Key("args")]
     public IReadOnlyList<IType>? Args { get; init; }
+
+    [IgnoreMember]
+    public bool ContainsGenericParams => this.Args != null && this.Args.Any(t => t.ContainsGenericParams);
 
     public InterfaceRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
         if (this.Args == null || this.Args.Count == 0) {
@@ -86,5 +107,18 @@ public record InterfaceRef {
         }
 
         return hashCode.ToHashCode();
+    }
+
+    public string ToString(IMetadataSource? metadata) {
+        var result = new StringBuilder($"{nameof(InterfaceRef)}(");
+        result.Append(this.DefID);
+        NamePath.FormatTypeArgsList(this.Args, metadata, result);
+
+        result.Append(')');
+        return result.ToString();
+    }
+
+    public override string ToString() {
+        return this.ToString(null);
     }
 }

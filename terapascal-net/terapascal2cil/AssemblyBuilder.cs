@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
@@ -11,7 +10,6 @@ using Version = System.Version;
 namespace Terapascal.CIL;
 
 public class AssemblyBuilder : IDisposable {
-    private readonly List<IR.Library> libraries;
     private readonly IR.MetadataCollection loadedMetadata;
 
     private TypeDefinition? globalsClass;
@@ -53,8 +51,6 @@ public class AssemblyBuilder : IDisposable {
         string rtLibPath,
         string refLibPath
     ) {
-        this.libraries = new List<IR.Library>(1);
-
         this.loadedMetadata = new IR.MetadataCollection();
 
         this.Assembly = AssemblyDefinition.CreateAssembly(
@@ -216,7 +212,6 @@ public class AssemblyBuilder : IDisposable {
     }
 
     public void AddLibrary(IR.Library library) {
-        this.libraries.Add(library);
         this.loadedMetadata.Add(library.Metadata);
 
         // TODO: native strings
@@ -311,11 +306,17 @@ public class AssemblyBuilder : IDisposable {
         }
 
         foreach (var (type, typeInfo) in library.Metadata.TypeInfo) {
-            this.BuildStaticTypeInfo(type, typeInfo, globals);
+            // TODO: native generics
+            if (!type.ContainsGenericParams) {
+                this.BuildStaticTypeInfo(type, typeInfo, globals);
+            }
         }
 
-        foreach (var (funcID, _) in library.Metadata.Functions) {
-            this.CreateStaticFuncInfoVariable(funcID);
+        foreach (var (funcID, functionInfo) in library.Metadata.Functions) {
+            // TODO: native generics
+            if (!functionInfo.Identity.HasTypeParams) {
+                this.CreateStaticFuncInfoVariable(funcID);
+            }
         }
 
         foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
@@ -385,6 +386,11 @@ public class AssemblyBuilder : IDisposable {
         TypeDefinition globals
     ) {
         this.TypeBuilder.BuildType(IR.TypeDefID.TypeInfo.ToObjectType([]));
+
+        // skip undefined types (reserved but not defined e.g. Terapascal enums)
+        if (!this.loadedMetadata.IsTypeDefined(type)) {
+            return;
+        }
 
         var typeRef = this.TypeBuilder.BuildType(type);
 

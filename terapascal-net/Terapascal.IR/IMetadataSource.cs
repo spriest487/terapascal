@@ -14,6 +14,8 @@ public interface IMetadataSource {
     bool FindStringLiteral(StringID id, [NotNullWhen(true)] out string? literal);
 
     IEnumerable<(TypeDefID ID, ITypeDef TypeDef)> GetTypeDefs();
+    bool FindTypeDef(TypeDefID id, [NotNullWhen(true)] out ITypeDef? def);
+    bool IsTypeDefined(IType type);
 
     IEnumerable<(ITagLocation, IReadOnlyList<TagInfo>)> GetAllTags();
 

@@ -7,6 +7,8 @@ public interface IFunctionIdentity {
     string ToString(IMetadataSource? metadata);
     
     IReadOnlyList<TypeParam>? TypeParams { get; }
+
+    bool HasTypeParams => this.TypeParams is { Count: > 0 };
 }
 
 public record GlobalFunctionIdentity(DeclPath Path) : IFunctionIdentity {

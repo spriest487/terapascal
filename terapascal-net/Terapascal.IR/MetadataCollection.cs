@@ -54,6 +54,14 @@ public class MetadataCollection : IMetadataSource {
         return this.FindAll(m => m.GetTypeDefs());
     }
 
+    public bool FindTypeDef(TypeDefID id, [NotNullWhen(true)] out ITypeDef? def) {
+        return this.TryFind((m, out result) => m.FindTypeDef(id, out result), out def);
+    }
+
+    public bool IsTypeDefined(IType type) {
+        return this.collection.Any(m => m.IsTypeDefined(type));
+    }
+
     public IEnumerable<(InterfaceID ID, InterfaceDef InterfaceDef)> GetInterfaceDefs() {
         return this.FindAll(m => m.GetInterfaceDefs());
     }

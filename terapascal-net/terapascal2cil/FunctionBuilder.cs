@@ -105,10 +105,10 @@ public class FunctionBuilder {
             | MethodAttributes.NewSlot 
             | MethodAttributes.Final;
 
-        var implParams = new List<IR.IType>(method.Parameters.Count - 1);
+        var implParams = new List<IR.IType>(method.Params.Count - 1);
 
         // impl methods' parameter lists implicitly include an initial self arg, which we skip here
-        implParams.AddRange(method.Parameters.Skip(1).Select(p => p.Type));
+        implParams.AddRange(method.Params.Skip(1).Select(p => p.Type));
 
         var methodSig = new IR.FunctionSig {
             ResultType = method.ResultType,

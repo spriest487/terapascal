@@ -146,6 +146,10 @@ public class FunctionSig : IEquatable<FunctionSig> {
         init => field = value ?? [];
     }
 
+    [IgnoreMember]
+    public bool ContainsGenericParams => this.ResultType.ContainsGenericParams
+        || this.ParameterTypes.Any(t => t.ContainsGenericParams);
+
     public bool Equals(FunctionSig? other) {
         if (other == null) {
             return false;
