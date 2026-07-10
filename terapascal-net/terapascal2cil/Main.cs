@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using MessagePack;
+﻿using MessagePack;
 using MessagePack.Resolvers;
 using Mono.Cecil;
 using Terapascal.CIL;
@@ -13,49 +12,50 @@ if (parsedArgs.LibPath == null) {
     return 0;
 }
 
-var refLibPath = await SDKUtils.FindReferenceLibPath(parsedArgs.SDKVersion, parsedArgs.Verbose);
+try {
+    var refLibPath = await SDKUtils.FindReferenceLibPath(parsedArgs.SDKVersion, parsedArgs.Verbose);
 
-var targetVersion = parsedArgs.TargetRuntimeVersion;
-if (targetVersion == null) {
-    targetVersion = await SDKUtils.FindTargetRuntimeVersion(parsedArgs.Verbose);
-}
+    var targetVersion = parsedArgs.TargetRuntimeVersion;
+    if (targetVersion == null) {
+        targetVersion = await SDKUtils.FindTargetRuntimeVersion(parsedArgs.Verbose);
+    }
 
-var mpOptions = MessagePackSerializerOptions.Standard.WithResolver(CompositeResolver.Create([
-    IR.Library.FormatterResolver,
-    StandardResolver.Instance,
-]));
+    var mpOptions = MessagePackSerializerOptions.Standard.WithResolver(CompositeResolver.Create([
+        IR.Library.FormatterResolver,
+        StandardResolver.Instance,
+    ]));
 
-if (!Enum.TryParse(parsedArgs.ModuleKind, out ModuleKind moduleKind)) {
-    moduleKind = ModuleKind.Dll;
-}
+    if (!Enum.TryParse(parsedArgs.ModuleKind, out ModuleKind moduleKind)) {
+        moduleKind = ModuleKind.Dll;
+    }
 
-var mainLib = await LoadLibrary(parsedArgs.LibPath);
+    var mainLib = await LoadLibrary(parsedArgs.LibPath, mpOptions);
 
-if (parsedArgs.Verbose) {
-    Console.WriteLine($"generating assembly: {mainLib.Name} {mainLib.Version} ({moduleKind})");
-}
+    if (parsedArgs.Verbose) {
+        Console.WriteLine($"generating assembly: {mainLib.Name} {mainLib.Version} ({moduleKind})");
+    }
 
-var libSearchPaths = new List<string>();
+    var libSearchPaths = new List<string>();
 
-var mainLibDir = Path.GetDirectoryName(parsedArgs.LibPath);
-if (mainLibDir != null) {
-    libSearchPaths.Add(mainLibDir);
-}
+    var mainLibDir = Path.GetDirectoryName(parsedArgs.LibPath);
+    if (mainLibDir != null) {
+        libSearchPaths.Add(mainLibDir);
+    }
 
-var libEnvDir = Environment.GetEnvironmentVariable("TERAPASCAL_LIB");
-if (libEnvDir != null) {
-    libSearchPaths.Add(libEnvDir);
-}
+    var libEnvDir = Environment.GetEnvironmentVariable("TERAPASCAL_LIB");
+    if (libEnvDir != null) {
+        libSearchPaths.Add(libEnvDir);
+    }
 
-using (var assemblyBuilder = new AssemblyBuilder(
-    mainLib.Name,
-    mainLib.Version,
-    moduleKind,
-    "Terapascal.Runtime.dll",
-    refLibPath)
-) {
+    using var assemblyBuilder = new AssemblyBuilder(
+        mainLib.Name,
+        mainLib.Version,
+        moduleKind,
+        "Terapascal.Runtime.dll",
+        refLibPath);
+
     var loadedRefs = new HashSet<string>();
-    await AddLibraryRecursive(assemblyBuilder, mainLib, loadedRefs);
+    await AddLibraryRecursive(assemblyBuilder, mainLib, libSearchPaths, mpOptions, loadedRefs);
 
     assemblyBuilder.Finish();
 
@@ -102,6 +102,9 @@ using (var assemblyBuilder = new AssemblyBuilder(
             Console.WriteLine($"runtimeconfig file written to {runtimeConfigPath}");
         }
     }
+} catch (Exception e) {
+    Console.Error.WriteLine(e);
+    return 1;
 }
 
 return 0;
@@ -112,12 +115,12 @@ Stream OpenInputStream(string? libPath) {
         : Console.OpenStandardInput();
 }
 
-async Task<IR.Library> LoadLibrary(string path) {
+async Task<IR.Library> LoadLibrary(string path, MessagePackSerializerOptions mpOptions) {
     await using var input = OpenInputStream(path);
     return await MessagePackSerializer.DeserializeAsync<IR.Library>(input, mpOptions);
 }
 
-string FindLibPath(string libName) {
+string FindLibPath(string libName, IReadOnlyList<string> libSearchPaths) {
     var filename = libName + ".lib";
     foreach (var searchPath in libSearchPaths) {
         var fullPath = Path.Combine(searchPath, filename);
@@ -130,20 +133,26 @@ string FindLibPath(string libName) {
     throw new FileNotFoundException(filename);
 }
 
-async Task AddLibraryRecursive(AssemblyBuilder builder, IR.Library library, HashSet<string> loadedRefs) {
+async Task AddLibraryRecursive(
+    AssemblyBuilder builder,
+    IR.Library library,
+    IReadOnlyList<string> libSearchPaths,
+    MessagePackSerializerOptions mpOptions,
+    HashSet<string> loadedRefs
+) {
     foreach (var refName in library.References) {
         if (!loadedRefs.Add(refName)) {
             continue;
         }
 
-        var refPath = FindLibPath(refName);
+        var refPath = FindLibPath(refName, libSearchPaths);
         if (parsedArgs.Verbose) {
             Console.WriteLine($"Loading referenced library {refName} at {refPath}");
         }
 
-        var refLib = await LoadLibrary(refPath);
+        var refLib = await LoadLibrary(refPath, mpOptions);
 
-        await AddLibraryRecursive(builder, refLib, loadedRefs);
+        await AddLibraryRecursive(builder, refLib, libSearchPaths, mpOptions, loadedRefs);
     }
 
 
