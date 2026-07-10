@@ -278,8 +278,7 @@ public class AssemblyBuilder : IDisposable {
                         case IR.StructTypeDef { Def: var structDef }: {
                             var isGeneric = structDef.Identity.GetDeclPath()?.HasTypeParams ?? false;
                             if (!isGeneric) {
-                                var structRef = id.ToTypeRef(structDef.Identity.GetDeclPath()?.GetGenericArgs());
-                                this.TypeBuilder.BuildType(structRef.ToStructType());
+                                this.TypeBuilder.BuildType(structDef.Identity.ToDefinitionType(id));
                             }
 
                             break;

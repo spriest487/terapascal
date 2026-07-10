@@ -2,6 +2,7 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using ArrayType = Terapascal.IR.ArrayType;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodAttributes = Mono.Cecil.MethodAttributes;
 using ParameterAttributes = Mono.Cecil.ParameterAttributes;
@@ -22,81 +23,92 @@ public class StaticArrayTypeBuilder {
         this.typeBuilder = typeBuilder;
     }
 
-    public TypeReference BuildArrayTypeRef(IR.IType element, int id, int length, out MethodDefinition elementRefMethodDef) {
-        var typeName = $"StaticArray_Internal{id}";
+    public TypeReference BuildArrayTypeRef(
+        IR.IType element,
+        ulong length,
+        out MethodDefinition elementRefMethod
+    ) {
+        var arrayType = new ArrayType { Element = element, Length = length };
+
+        var (_, typeDef) = this.typeBuilder.Cache.RegisterTypeWith(arrayType, typeID => {
+            var typeName = $"StaticArray_Internal_{typeID}";
+
+            var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
+
+            var typeAttributes = TypeAttributes.Public | TypeAttributes.Sealed | TypeAttributes.SequentialLayout |
+                TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit;
+            var typeDef = new TypeDefinition(systemTypesNamespace, typeName, typeAttributes, this.typeBuilder.ValueType);
+
+            return typeDef;
+        });
 
         var elementTypeRef = this.typeBuilder.BuildType(element);
-
-        var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
-    
-        var typeAttributes = TypeAttributes.Public | TypeAttributes.Sealed | TypeAttributes.SequentialLayout | TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit;
-        var typeDef = new TypeDefinition(systemTypesNamespace, typeName, typeAttributes, this.typeBuilder.ValueType);
 
         // value types can be represented as a fixed buffer (C#'s fixed array syntax).
         // reference type elements must be represented as sequential fields with runtime code to look up by index
         switch (elementTypeRef.Namespace, elementTypeRef.Name) {
             case (nameof(System), nameof(SByte)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I1, OpCodes.Stind_I1, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I1, OpCodes.Stind_I1, out elementRefMethod);
                 break;
             }
             case (nameof(System), nameof(Byte)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_U1, OpCodes.Stind_I1, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_U1, OpCodes.Stind_I1, out elementRefMethod);
                 break;
             }
             case (nameof(System), nameof(Int16)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I2, OpCodes.Stind_I2, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I2, OpCodes.Stind_I2, out elementRefMethod);
                 break;
             }
             case (nameof(System), nameof(UInt16)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_U2, OpCodes.Stind_I2, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_U2, OpCodes.Stind_I2, out elementRefMethod);
                 break;
             }
             case (nameof(System), nameof(Int32)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I4, OpCodes.Stind_I4, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I4, OpCodes.Stind_I4, out elementRefMethod);
                 break;
             }
             case (nameof(System), nameof(UInt32)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_U4, OpCodes.Stind_I4, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_U4, OpCodes.Stind_I4, out elementRefMethod);
                 break;
             }
             case (nameof(System), nameof(Single)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_R4, OpCodes.Stind_R4, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_R4, OpCodes.Stind_R4, out elementRefMethod);
                 break;
             }
             case (nameof(System), nameof(Double)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_R8, OpCodes.Stind_R8, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_R8, OpCodes.Stind_R8, out elementRefMethod);
                 break;
             }
             case (nameof(System), nameof(Int64)):
             case (nameof(System), nameof(UInt64)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I8, OpCodes.Stind_I8, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I8, OpCodes.Stind_I8, out elementRefMethod);
                 break;
             }
             case (nameof(System), nameof(IntPtr)):
             case (nameof(System), nameof(UIntPtr)): {
-                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I, OpCodes.Stind_I, out elementRefMethodDef);
+                this.BuildPrimitiveFixedArray(typeDef, elementTypeRef, element, length, OpCodes.Ldind_I, OpCodes.Stind_I, out elementRefMethod);
                 break;
             }
 
             default: {
-                for (var i = 0; i < length; i += 1) {
+                for (var i = 0UL; i < length; i += 1) {
                     var elementField = new FieldDefinition($"element{i}", FieldAttributes.Public, elementTypeRef);
                     typeDef.Fields.Add(elementField);
                 }
-            
+
                 var indexer = this.BuildIndexerProperty(typeDef, elementTypeRef);
                 this.BuildElementIndexerMethods(indexer);
 
-                elementRefMethodDef = this.BuildElementReferenceFunction(typeDef, elementTypeRef);
-                this.BuildElementReferenceMethodBody(elementRefMethodDef, typeDef);
+                elementRefMethod = this.BuildElementReferenceFunction(typeDef, elementTypeRef);
+                this.BuildElementReferenceMethodBody(elementRefMethod, typeDef);
 
                 break;
             }
         }
-        
+
         this.typeBuilder.BuildDefaultConstructor(typeDef);
-        
-        typeDef.Methods.Add(elementRefMethodDef);
+
+        typeDef.Methods.Add(elementRefMethod);
 
         this.assemblyBuilder.Module.Types.Add(typeDef);
 
@@ -107,10 +119,10 @@ public class StaticArrayTypeBuilder {
         TypeDefinition typeDef,
         TypeReference elementTypeRef,
         IR.IType element,
-        int length,
+        ulong length,
         OpCode loadIndOp,
         OpCode storeIndOp,
-        out MethodDefinition elementRefMethodDef
+        out MethodDefinition elementRefMethod
     ) {
         var elementSize = this.typeBuilder.GetValueLayoutSize(element);
 
@@ -138,9 +150,9 @@ public class StaticArrayTypeBuilder {
         var indexer = this.BuildIndexerProperty(typeDef, elementTypeRef);
         this.BuildPrimitiveElementIndexer(indexer, bufferElementTypeDef, elementSize, loadIndOp, storeIndOp);
 
-        elementRefMethodDef = this.BuildElementReferenceFunction(typeDef, elementTypeRef);
+        elementRefMethod = this.BuildElementReferenceFunction(typeDef, elementTypeRef);
         this.BuildPrimitiveElementReferenceMethodBody(
-            elementRefMethodDef,
+            elementRefMethod,
             typeDef,
             bufferElementTypeDef,
             elementSize
@@ -158,7 +170,7 @@ public class StaticArrayTypeBuilder {
     private TypeDefinition BuildArrayFixedBufferType(
         string fieldName,
         IR.IType elementType,
-        int length,
+        ulong length,
         int elementSize
     ) {
         var attrs = TypeAttributes.NestedPublic 
@@ -168,7 +180,7 @@ public class StaticArrayTypeBuilder {
             | TypeAttributes.BeforeFieldInit;
 
         var typeDef = new TypeDefinition(null, $"<{fieldName}>e__FixedBuffer", attrs, this.typeBuilder.ValueType) {
-            ClassSize = elementSize * length,
+            ClassSize = elementSize * (int)length,
             PackingSize = 0,
         };
 

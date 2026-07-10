@@ -39,7 +39,6 @@ public class TypeBuilder {
 
     private readonly TypeCache cache;
 
-    private readonly Dictionary<ArraySig, TypeReference> staticArrayTypes;
     private readonly Dictionary<ArraySig, MethodReference> staticArrayElementMethods;
 
     private readonly SortedDictionary<TypeID, StructLayout> structFieldMaps;
@@ -136,7 +135,6 @@ public class TypeBuilder {
         this.boxTypes = new SortedDictionary<TypeID, BoxTypeInfo>();
 
         this.staticArrayBuilder = new StaticArrayTypeBuilder(this.assemblyBuilder, this);
-        this.staticArrayTypes = new Dictionary<ArraySig, TypeReference>();
         this.staticArrayElementMethods = new Dictionary<ArraySig, MethodReference>();
     }
 
@@ -151,7 +149,7 @@ public class TypeBuilder {
 
         var typeSystem = this.assemblyBuilder.TypeSystem;
 
-        return type switch {
+        typeRef = type switch {
             IR.NothingType => this.RegisterSimpleType(type, typeSystem.Void),
             IR.BoolType => this.RegisterSimpleType(type, typeSystem.Boolean),
             IR.U8Type => this.RegisterSimpleType(type, typeSystem.Byte),
@@ -171,12 +169,16 @@ public class TypeBuilder {
             IR.StructType(var structRef) => this.BuildStructDef(structRef),
             IR.VariantType(var variantRef) => this.BuildVariantDef(variantRef),
             IR.FunctionType(var sig) => this.BuildFunctionTypeDef(sig),
-            IR.PointerType(var inner) => this.BuildType(inner).MakePointerType(),
-            IR.TempRefType(var inner) => this.BuildType(inner).MakeByReferenceType(),
+            IR.PointerType(var inner) => this.RegisterSimpleType(type, this.BuildType(inner).MakePointerType()),
+            IR.TempRefType(var inner) => this.RegisterSimpleType(type, this.BuildType(inner).MakeByReferenceType()),
             IR.ObjectType(var id) => this.BuildClassTypeRef(id),
             IR.WeakObjectType(var id) => this.BuildClassTypeRef(id),
             _ => throw new ArgumentException($"unhandled IR type: {type}"),
         };
+
+        typeID = this.cache.GetTypeID(type);
+
+        return typeRef;
     }
 
     private TypeReference RegisterSimpleType(IR.IType type, TypeReference simpleTypeRef) {
@@ -220,14 +222,7 @@ public class TypeBuilder {
         this.BuildType(element, out var elementID);
         var arraySig = new ArraySig(elementID, length);
 
-        if (this.staticArrayTypes.TryGetValue(arraySig, out var arrayTypeRef)) {
-            return arrayTypeRef;
-        }
-
-        var id = this.staticArrayTypes.Count;
-
-        var typeDef = this.staticArrayBuilder.BuildArrayTypeRef(element, id, (int)length, out var elementMethod);
-        this.staticArrayTypes.Add(arraySig, typeDef);
+        var typeDef = this.staticArrayBuilder.BuildArrayTypeRef(element, length, out var elementMethod);
         this.staticArrayElementMethods.Add(arraySig, elementMethod);
 
         return typeDef;
@@ -245,6 +240,7 @@ public class TypeBuilder {
         };
 
         this.cache.RegisterType(id.ToObjectType(), classTypeRef);
+        this.cache.RegisterType(id.ToWeakObjectType(), classTypeRef);
         return classTypeRef;
     }
 
