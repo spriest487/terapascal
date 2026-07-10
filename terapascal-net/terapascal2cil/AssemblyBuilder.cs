@@ -306,17 +306,21 @@ public class AssemblyBuilder : IDisposable {
         }
 
         foreach (var (type, typeInfo) in library.Metadata.TypeInfo) {
-            // TODO: native generics
-            if (!type.ContainsGenericParams) {
-                this.BuildStaticTypeInfo(type, typeInfo, globals);
+            if (type.ContainsGenericParams) {
+                // TODO: native generics
+                continue;
             }
+
+            this.BuildStaticTypeInfo(type, typeInfo, globals);
         }
 
         foreach (var (funcID, functionInfo) in library.Metadata.Functions) {
-            // TODO: native generics
-            if (!functionInfo.Identity.HasTypeParams) {
-                this.CreateStaticFuncInfoVariable(funcID);
+            if (functionInfo.Identity.HasTypeParams) {
+                // TODO: native generics
+                continue;
             }
+
+            this.CreateStaticFuncInfoVariable(funcID);
         }
 
         foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
@@ -328,11 +332,24 @@ public class AssemblyBuilder : IDisposable {
 
         this.FunctionBuilder.BuildFunctions(library);
 
+        var invocationParams = new List<IR.TypeParam>(8);
         foreach (var (funcID, funcInfo) in library.Metadata.Functions) {
+            funcInfo.Identity.GetInvocationTypeParams(this.loadedMetadata, invocationParams);
+
+            if (invocationParams.Count > 0) {
+                // TODO: native generics
+                continue;
+            }
+
             this.BuildStaticFuncInfo(funcID, funcInfo);
         }
 
         foreach (var (type, typeInfo) in library.Metadata.TypeInfo) {
+            if (type.ContainsGenericParams || !library.Metadata.IsTypeDefined(type)) {
+                // TODO: native generics
+                continue;
+            }
+
             this.BuildTypeInfoMethodsInit(type, typeInfo);
         }
 
@@ -590,8 +607,10 @@ public class AssemblyBuilder : IDisposable {
         var implMethodField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.method))!);
         var implInvokerField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.invoker))!);
 
-        var methodRef = this.FunctionBuilder.FindFunctionMethod(funcID.ToFunctionRef([]))
-            ?? throw new InvalidDataException($"function {funcID.ID} was not defined");
+        var methodRef = this.FunctionBuilder.FindFunctionMethod(funcID.ToFunctionRef([]));
+        if (methodRef == null) {
+            throw new InvalidDataException($"function {funcID.ID} was not defined");
+        }
 
         body.Emit(OpCodes.Newobj, implTypeCtor);
 
