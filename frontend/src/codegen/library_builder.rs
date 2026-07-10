@@ -350,7 +350,7 @@ impl<'a> LibraryBuilder<'a> {
             
             let unit_init = init_builder.finish();
             
-            let internal_name = format!("{}.<init>", unit.ident);
+            let internal_name = format!("{}.initialization", unit.ident);
             let identity = ir::FunctionIdentity::internal(internal_name, []);
 
             let init_sig = Rc::new(ir::FunctionSig {
