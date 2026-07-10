@@ -297,16 +297,20 @@ public class TypeBuilder {
             ns = "";
         }
 
-        TypeDefinition typeDef;
+        TypeReference typeRef;
         if (this.builtinStructNames.TryGetValue(structRef.DefID, out var builtinName)) {
-            var builtinTypeRef = this.assemblyBuilder.GetRuntimeTypeRef(builtinName, false);
-            var builtinTypeID = this.cache.RegisterType(structType, builtinTypeRef);
+            var builtinTypeDef = this.assemblyBuilder.GetRuntimeTypeRef(builtinName, false).Resolve();
 
-            typeDef = builtinTypeRef.Resolve();
-            this.BuildStructLayoutFromBuiltinType(typeDef, builtinTypeID, structDef);
+            typeRef = this.assemblyBuilder.Module.ImportReference(builtinTypeDef);
+
+            var builtinTypeID = this.cache.RegisterType(structType, typeRef);
+
+            this.BuildStructLayoutFromBuiltinType(builtinTypeDef, builtinTypeID, structDef);
         } else {
-            typeDef = new TypeDefinition(ns, name, attrs, baseType);
-            var typeID = this.cache.RegisterType(structType, typeDef);
+            var typeDef = new TypeDefinition(ns, name, attrs, baseType);
+            typeRef = typeDef;
+
+            var typeID = this.cache.RegisterType(structType, typeRef);
 
             this.BuildStructLayoutFromDef(typeID, typeDef, structDef, closureSig);
 
@@ -318,9 +322,9 @@ public class TypeBuilder {
             this.assemblyBuilder.Module.Types.Add(typeDef);
         }
 
-        Debug.Assert(isValueType == typeDef.IsValueType);
+        Debug.Assert(isValueType == typeRef.IsValueType);
 
-        return typeDef;
+        return typeRef;
     }
 
     private void BuildStructLayoutFromDef(
@@ -389,7 +393,7 @@ public class TypeBuilder {
             var nativeField = builtinType.Fields[(int)fieldID.ID];
 
             fieldLayout.Add(fieldID, new LayoutField {
-                Field = nativeField,
+                Field = this.assemblyBuilder.Module.ImportReference(nativeField),
                 Type = fieldDef.Type,
             });
         }
