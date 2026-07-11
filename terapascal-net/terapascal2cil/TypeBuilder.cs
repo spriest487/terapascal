@@ -532,17 +532,15 @@ public class TypeBuilder {
             variantName = new IR.NamePath { Path = variantDef.Name.Path };
         }
 
-        var (typeID, typeDef) = this.cache.RegisterTypeWith(variantType, typeID => {
-            var name = this.CreateUniqueTypeName(variantName, out var ns);
+        var name = this.CreateUniqueTypeName(variantName, out var ns);
 
-            var typeDef = new TypeDefinition(ns,
-                name,
-                defAttrs,
-                this.ValueType
-            );
+        var typeDef = new TypeDefinition(ns,
+            name,
+            defAttrs,
+            this.ValueType
+        );
 
-            return typeDef;
-        });
+        var typeID = this.cache.RegisterType(variantType, typeDef);
 
         var discTypeRef = this.BuildType(variantDef.TagType);
         var discField = new FieldDefinition(VariantTagName, FieldAttributes.Assembly, discTypeRef) {

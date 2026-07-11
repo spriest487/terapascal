@@ -118,11 +118,9 @@ public record FunctionRef {
     }
 
     public virtual bool Equals(FunctionRef? other) {
-        if (other == null || !this.DefID.Equals(other.DefID)) {
-            return false;
-        }
-
-        return (this.TypeArgs ?? []).SequenceEqual(other.TypeArgs ?? []);
+        return other != null
+            && this.DefID == other.DefID
+            && (this.TypeArgs ?? []).SequenceEqual(other.TypeArgs ?? []);
     }
 
     public string ToString(IMetadataSource? metadata) {

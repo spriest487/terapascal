@@ -242,12 +242,14 @@ public class FunctionBuilder {
         MethodAttributes attrs,
         IR.FunctionSig sig
     ) {
-        var returnTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(sig.ResultType);
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
+
+        var returnTypeRef = typeBuilder.BuildType(sig.ResultType);
 
         var methodDef = new MethodDefinition(name, attrs, returnTypeRef);
 
         foreach (var paramType in sig.ParameterTypes) {
-            var paramTypeRef = this.assemblyBuilder.TypeBuilder.BuildType(paramType);
+            var paramTypeRef = typeBuilder.BuildType(paramType);
 
             methodDef.Parameters.Add(new ParameterDefinition(paramTypeRef));
         }
@@ -303,11 +305,23 @@ public class FunctionBuilder {
                 declaringTypeDef = this.assemblyBuilder.GetInternalClass();
                 break;
             }
-                
-            default: {
+
+            // TODO: declare methods directly in their declaring types (might need to skip runtime provided types)
+            case IR.MethodFunctionIdentity: {
                 name = FunctionMethodName(funcRef.DefID);
                 declaringTypeDef = this.assemblyBuilder.GetInternalClass();
                 break;
+            }
+
+            case IR.DestructorFunctionIdentity: {
+                name = FunctionMethodName(funcRef.DefID);
+                declaringTypeDef = this.assemblyBuilder.GetInternalClass();
+                break;
+            }
+
+            default: {
+                var msg = $"unsupported function identity type: {funcInfo.Identity.ToString(metadata)}";
+                throw new InvalidDataException(msg);
             }
         }
 

@@ -1,10 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using MessagePack;
 
 namespace Terapascal.IR;
 
 [MessagePackObject]
-public record TypeRef {
+public sealed record TypeRef {
     [Key("def_id")]
     public TypeDefID DefID { get; init; }
 
@@ -12,6 +13,7 @@ public record TypeRef {
     public IReadOnlyList<IType>? Args { get; init; }
 
     [IgnoreMember]
+    [MemberNotNullWhen(true, nameof(this.Args))]
     public bool HasArgs => this.Args is { Count: > 0 };
 
     [IgnoreMember]
@@ -42,6 +44,12 @@ public record TypeRef {
         return new ClassObjectID(this);
     }
 
+    public bool Equals(TypeRef? other) {
+        return other != null
+            && this.DefID == other.DefID
+            && (this.Args ?? []).SequenceEqual(other.Args ?? []);
+    }
+
     public override int GetHashCode() {
         var hashCode = new HashCode();
         hashCode.Add(this.DefID);
@@ -70,7 +78,7 @@ public record TypeRef {
 }
 
 [MessagePackObject]
-public record InterfaceRef {
+public sealed record InterfaceRef {
     [Key("def_id")]
     public InterfaceID DefID { get; init; }
 
@@ -94,6 +102,12 @@ public record InterfaceRef {
 
     public IObjectID ToObjectID() {
         return new InterfaceObjectID(this);
+    }
+
+    public bool Equals(InterfaceRef? other) {
+        return other != null
+            && this.DefID == other.DefID
+            && (this.Args ?? []).SequenceEqual(other.Args ?? []);
     }
 
     public override int GetHashCode() {
