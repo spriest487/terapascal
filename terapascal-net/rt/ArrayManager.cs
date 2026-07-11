@@ -1,6 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-
-namespace Terapascal.Runtime;
+﻿namespace Terapascal.Runtime;
 
 public static class ArrayManager {
     private static readonly object globalLock = new object();
@@ -50,7 +48,7 @@ public static class ArrayManager {
     public static void RetainArray(Array array, bool weak) {
         lock (globalLock) {
             if (arrayObjects.TryGetValue(array, out var arrayObj)) {
-                SystemFunctions.RcRetain(arrayObj, weak);
+                SystemFunctions.RcRetain(ref arrayObj, weak);
             }
         }
     }
@@ -61,7 +59,7 @@ public static class ArrayManager {
                 return false;
             }
 
-            var dead = SystemFunctions.RcRelease(arrayObj, weak);
+            var dead = SystemFunctions.RcRelease(ref arrayObj, weak);
             if (dead) {
                 arrayObjects.Remove(array);
             }

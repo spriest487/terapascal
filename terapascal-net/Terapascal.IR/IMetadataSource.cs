@@ -320,7 +320,7 @@ public interface IMetadataSource {
                 }
 
                 result.Append("--");
-                result.Append(releaseInstruction.Weak ? "weak" : "strong");
+                result.Append(releaseInstruction.ValueType.ToString(this));
                 result.Append(' ');
 
                 this.FormatRef(releaseInstruction.At, result);
@@ -332,7 +332,7 @@ public interface IMetadataSource {
                 this.FormatInstructionPrefix("retain", result);
 
                 result.Append("++");
-                result.Append(retainInstruction.Weak ? "weak" : "strong");
+                result.Append(retainInstruction.ValueType.ToString(this));
                 result.Append(' ');
 
                 this.FormatRef(retainInstruction.At, result);

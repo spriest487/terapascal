@@ -520,8 +520,11 @@ public record ReleaseInstruction : IInstruction {
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    [Key("weak")]
-    public required bool Weak { get; init; }
+    [Key("value_type")]
+    public required IType ValueType {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     [Key("released_out")]
     [MessagePackFormatter(typeof(NullableRefFormatter))]
@@ -534,7 +537,7 @@ public record ReleaseInstruction : IInstruction {
         return new ReleaseInstruction {
             At = this.At.ResolveGeneric(typeMap),
             ReleasedOut = this.ReleasedOut?.ResolveGeneric(typeMap),
-            Weak = this.Weak,
+            ValueType = this.ValueType.ResolveGeneric(typeMap),
         };
     }
 }
@@ -547,13 +550,16 @@ public record RetainInstruction : IInstruction {
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    [Key("weak")]
-    public required bool Weak { get; init; }
+    [Key("value_type")]
+    public required IType ValueType {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
         return new RetainInstruction {
             At = this.At.ResolveGeneric(typeMap),
-            Weak = this.Weak,
+            ValueType = this.ValueType.ResolveGeneric(typeMap),
         };
     }
 }

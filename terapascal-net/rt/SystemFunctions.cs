@@ -184,7 +184,7 @@ public static class SystemFunctions {
         return DateTime.UtcNow.Subtract(startTime).TotalSeconds;
     }
 
-    public static void RcRetain(object? obj, bool weak) {
+    public static void RcRetain<T>(ref T? obj, bool weak) {
         switch (obj) {
             case Object runtimeObj: {
                 if (runtimeObj.strongCount < 0) {
@@ -197,8 +197,7 @@ public static class SystemFunctions {
                 } else {
                     var strongCount = Interlocked.Increment(ref runtimeObj.strongCount);
                     if (strongCount == 1) {
-                        var err =
-                            $"resurrected {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
+                        var err = $"resurrected {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
                         throw new Error(err);
                     }
                 }
@@ -213,7 +212,7 @@ public static class SystemFunctions {
         }
     }
 
-    public static bool RcRelease(object? obj, bool weak) {
+    public static bool RcRelease<T>(ref T? obj, bool weak) {
         switch (obj) {
             case Object runtimeObj: {
                 if (runtimeObj.strongCount < 0) {

@@ -78,27 +78,41 @@ public class InstructionBuilder {
                     break;
                 }
 
-                case IR.RetainInstruction { At: var atRef, Weak: var weak }: {
+                case IR.RetainInstruction { At: var atRef, ValueType: var valueType }: {
+                    var retainType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
+
                     const string methodName = nameof(Runtime.SystemFunctions.RcRetain);
                     this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
+
+                    var retainInstance = new GenericInstanceMethod(this.rcRetainMethod);
+                    retainInstance.GenericArguments.Add(retainType);
+
+                    // weak flag
+                    this.LoadRefAddr(atRef);
+                    this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
                     
-                    this.LoadRef(atRef);
-                    this.body.Emit(weak ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
-                    
-                    this.body.Emit(OpCodes.Call, this.rcRetainMethod);
+                    this.body.Emit(OpCodes.Call, retainInstance);
                     break;
                 }
 
-                case IR.ReleaseInstruction { At: var atRef, Weak: var weak, ReleasedOut: var outRef }: {
+                case IR.ReleaseInstruction { At: var atRef, ValueType: var valueType, ReleasedOut: var outRef }: {
+                    var releaseType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
+
                     const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
                     this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
+
+                    var releaseInstance = new GenericInstanceMethod(this.rcReleaseMethod);
+                    releaseInstance.GenericArguments.Add(releaseType);
                     
                     this.StoreRef(outRef, () => {
-                        this.LoadRef(atRef);
-                        this.body.Emit(weak ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+                        // pass arg by ref
+                        this.LoadRefAddr(atRef);
 
-                        this.body.Emit(OpCodes.Call, this.rcReleaseMethod);
-                        
+                        // weak flag
+                        this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+
+                        this.body.Emit(OpCodes.Call, releaseInstance);
+
                         // if the result is true (destroyed), always reset the pointer to null
                         var aliveLabel = Instruction.Create(OpCodes.Nop);
                         
