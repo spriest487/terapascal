@@ -349,8 +349,9 @@ impl<'a> LibraryBuilder<'a> {
             }
             
             let unit_init = init_builder.finish();
-            
-            let internal_name = format!("{}.initialization", unit.ident);
+
+            // this is a reserved word, so it's safe to use as the internal function name
+            let internal_name = "initialization".to_string();
             let identity = ir::FunctionIdentity::internal(internal_name, []);
 
             let init_sig = Rc::new(ir::FunctionSig {
