@@ -220,13 +220,14 @@ public class FunctionBuilder {
         // TODO: native generics
         // monomorphize any generic defs
         if (funcRef.HasTypeArgs) {
-            var typeParams = funcInfo.Identity.TypeParams ?? [];
-            if (typeParams.Count != funcRef.TypeArgs.Count) {
+            var invocationTypeParams = new List<IR.TypeParam>(funcRef.TypeArgs.Count);
+            funcInfo.Identity.GetInvocationTypeParams(metadata, invocationTypeParams);
+
+            if (invocationTypeParams.Count != funcRef.TypeArgs.Count) {
                 throw new InvalidDataException($"reference to {funcRef.ToString(metadata)} with incorrect type arg count");
             }
 
-            var typeMap = IR.Util.BuildGenericTypeMap(typeParams, funcRef.TypeArgs);
-
+            var typeMap = IR.Util.BuildGenericTypeMap(invocationTypeParams, funcRef.TypeArgs);
             def = def.ResolveGeneric(typeMap);
         }
 
@@ -257,11 +258,13 @@ public class FunctionBuilder {
     private MethodDefinition CreateFunctionMethod(IR.FunctionRef funcRef) {
         const MethodAttributes attrs = MethodAttributes.Static | MethodAttributes.Assembly;
 
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+
         TypeDefinition declaringTypeDef;
         string name;
 
-        if (!this.assemblyBuilder.LoadedMetadata.FindFunction(funcRef.DefID, out var funcInfo)) {
-            var msg = $"missing function metadata for referenced function {funcRef.ToString(this.assemblyBuilder.LoadedMetadata)}";
+        if (!metadata.FindFunction(funcRef.DefID, out var funcInfo)) {
+            var msg = $"missing function metadata for referenced function {funcRef.ToString(metadata)}";
             throw new InvalidDataException(msg);
         }
 
@@ -271,13 +274,15 @@ public class FunctionBuilder {
         };
 
         if (funcRef.TypeArgs is { Count: > 0 }) {
-            var typeParams = funcInfo.Identity.TypeParams;
-            if (typeParams == null || typeParams.Count != funcRef.TypeArgs.Count) {
-                var msg = $"expected {typeParams?.Count ?? 0} type params for function referenced by {funcRef.ToString(this.assemblyBuilder.LoadedMetadata)}";
+            var invocationParams = new List<IR.TypeParam>(funcRef.TypeArgs.Count);
+            funcInfo.Identity.GetInvocationTypeParams(metadata, invocationParams);
+
+            if (invocationParams.Count != funcRef.TypeArgs.Count) {
+                var msg = $"expected {invocationParams.Count} type params for function referenced by {funcRef.ToString(metadata)}";
                 throw new InvalidDataException(msg);
             }
 
-            var typeMap = IR.Util.BuildGenericTypeMap(typeParams, funcRef.TypeArgs);
+            var typeMap = IR.Util.BuildGenericTypeMap(invocationParams, funcRef.TypeArgs);
             sig = sig.ResolveGeneric(typeMap);
         }
 
@@ -322,7 +327,9 @@ public class FunctionBuilder {
         }
 
         methodRef = this.CreateFunctionMethod(funcRef);
+
         this.funcsToBuild.Enqueue(funcRef);
+        this.funcInstances.Add(funcRef, methodRef);
 
         return methodRef;
     }
