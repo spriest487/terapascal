@@ -359,7 +359,7 @@ public sealed record VariantType(TypeRef TypeRef) : IType {
 
     public string ToString(IMetadataSource? metadata) {
         if (metadata == null || !metadata.FindVariantDef(this.TypeRef.DefID, out var def)) {
-            return $"{{struct {this.TypeRef.DefID}}}";
+            return $"{{variant {this.TypeRef.DefID}}}";
         }
 
         var typeMap = Util.BuildGenericTypeMap(
@@ -375,7 +375,7 @@ public sealed record VariantType(TypeRef TypeRef) : IType {
     }
 
     public IType ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return new StructType(this.TypeRef.ResolveGeneric(typeMap));
+        return new VariantType(this.TypeRef.ResolveGeneric(typeMap));
     }
 }
 
