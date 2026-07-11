@@ -8,10 +8,6 @@ if (!Args.Parse(args, out var parsedArgs)) {
     return 1;
 }
 
-if (parsedArgs.LibPath == null) {
-    return 0;
-}
-
 try {
     var refLibPath = await SDKUtils.FindReferenceLibPath(parsedArgs.SDKVersion, parsedArgs.Verbose);
 
@@ -29,7 +25,16 @@ try {
         moduleKind = ModuleKind.Dll;
     }
 
-    var mainLib = await LoadLibrary(parsedArgs.LibPath, mpOptions);
+    IR.Library mainLib;
+
+    if (parsedArgs.LibPath != null) {
+        await using var input = File.OpenRead(parsedArgs.LibPath);
+        mainLib = await LoadLibrary(input, mpOptions);
+    } else {
+        // expect to read from stidn
+        await using var stdin = Console.OpenStandardInput();
+        mainLib = await LoadLibrary(stdin, mpOptions);
+    }
 
     if (parsedArgs.Verbose) {
         Console.WriteLine($"generating assembly: {mainLib.Name} {mainLib.Version} ({moduleKind})");
@@ -109,14 +114,7 @@ try {
 
 return 0;
 
-Stream OpenInputStream(string? libPath) {
-    return libPath != null
-        ? File.OpenRead(libPath)
-        : Console.OpenStandardInput();
-}
-
-async Task<IR.Library> LoadLibrary(string path, MessagePackSerializerOptions mpOptions) {
-    await using var input = OpenInputStream(path);
+async Task<IR.Library> LoadLibrary(Stream input, MessagePackSerializerOptions mpOptions) {
     return await MessagePackSerializer.DeserializeAsync<IR.Library>(input, mpOptions);
 }
 
@@ -150,7 +148,10 @@ async Task AddLibraryRecursive(
             Console.WriteLine($"Loading referenced library {refName} at {refPath}");
         }
 
-        var refLib = await LoadLibrary(refPath, mpOptions);
+        IR.Library refLib;
+        await using (var refLibStream = File.OpenRead(refPath)) {
+            refLib = await LoadLibrary(refLibStream, mpOptions);
+        }
 
         await AddLibraryRecursive(builder, refLib, libSearchPaths, mpOptions, loadedRefs);
     }

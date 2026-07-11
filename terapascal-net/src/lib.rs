@@ -58,7 +58,7 @@ pub fn build_assembly(
         println!("terapascal2cil tool directory: {}", tool_dir.display());
         println!("terapascal2cil output path: {}", out_path.display());
     }
-    
+
     let mut tool_command = Command::new(tool_dir.join("terapascal2cil"));
 
     tool_command.current_dir(tool_dir);
