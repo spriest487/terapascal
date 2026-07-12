@@ -2,6 +2,8 @@
 mod test;
 
 use crate::ast;
+use crate::ast::Access;
+use crate::result::ErrorContinue;
 use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::create_default_literal;
 use crate::typ::ast::evaluate_expr;
@@ -25,17 +27,167 @@ use crate::typ::TypedValue;
 use crate::typ::Value;
 use linked_hash_map::LinkedHashMap;
 use std::iter;
+use terapascal_common::ident::Ident;
 use terapascal_common::span::Span;
 use terapascal_common::span::Spanned;
-use crate::ast::Access;
-use terapascal_common::ident::Ident;
-use crate::result::ErrorContinue;
 
 pub type ObjectCtor = ast::ObjectCtor<Value>;
 pub type ObjectCtorMember = ast::ObjectCtorMember<Value>;
 pub type ObjectCtorArgs = ast::ObjectCtorArgs<Value>;
 pub type CollectionCtor = ast::CollectionCtor<Value>;
 pub type CollectionCtorElement = ast::CollectionCtorElement<Value>;
+
+pub struct ObjectCtorBuilder {
+    ctor_type: Type,
+    ctor_span: Span,
+
+    expect_members: LinkedHashMap<Ident, ObjectCtorMemberInfo>,
+
+    checked_members: Vec<ObjectCtorMember>,
+}
+
+struct ObjectCtorMemberInfo {
+    pub member_type: Type,
+    pub access: Access,
+    pub span: Span,
+}
+
+impl ObjectCtorBuilder {
+    pub fn new(
+        ctor_type: Type,
+        ctor_span: Span,
+        ctx: &Context,
+    ) -> TypeResult<Self> {
+        let ty_fields = ctor_type
+            .fields(ctx)
+            .map_err(|err| TypeError::NameError {
+                err,
+                span: ctor_span.clone(),
+            })?;
+
+        let expect_members: LinkedHashMap<_, _> = ty_fields
+            .into_iter()
+            .flat_map(|member| {
+                member.idents.into_iter().map(move |ident| {
+                    (
+                        ident,
+                        ObjectCtorMemberInfo {
+                            member_type: member.ty.ty().clone(),
+                            span: member.span.clone(),
+                            access: member.access,
+                        }
+                    )
+                })
+            })
+            .collect();
+
+        Ok(Self {
+            ctor_type,
+            ctor_span,
+            checked_members: Vec::with_capacity(expect_members.len()),
+            expect_members,
+        })
+    }
+
+    fn typecheck_arg(
+        &mut self,
+        member: &ast::ObjectCtorMember,
+        ctx: &mut Context,
+    ) {
+        if let Err(err) = self.try_typecheck_arg(member, ctx) {
+            ctx.error(err);
+        }
+    }
+
+    fn try_typecheck_arg(
+        &mut self,
+        member: &ast::ObjectCtorMember,
+        ctx: &mut Context,
+    ) -> TypeResult<()> {
+        let member_info = match self.expect_members.remove(&member.ident) {
+            Some(member) => member,
+            None => {
+                // ctor has a named argument which doesn't exist in the type
+                return Err(TypeError::from_name_err(
+                    NameError::type_member_not_found(self.ctor_type.clone(), member.ident.clone()),
+                    member.span().clone(),
+                ));
+            },
+        };
+
+        // check for duplicate items for the same field
+        let find_prev = self.checked_members
+            .iter()
+            .find(|a| a.ident == member.ident);
+
+        if let Some(prev) = find_prev {
+            return Err(TypeError::DuplicateNamedArg {
+                name: member.ident.clone(),
+                span: member.span().clone(),
+                previous: Some(prev.span().clone()),
+            });
+        }
+
+        if self.ctor_type.get_current_access(ctx) < member_info.access {
+            return Err(TypeError::TypeMemberInaccessible {
+                span: member.span.clone(),
+                access: member_info.access,
+                ty: self.ctor_type.clone(),
+                member: member.ident.clone(),
+            });
+        }
+
+        let val_expr = evaluate_expr(&member.value, &member_info.member_type, ctx)?;
+
+        let value = implicit_conversion(
+            val_expr,
+            &member_info.member_type,
+            ctx,
+        )?;
+
+        let member = ObjectCtorMember {
+            ident: member.ident.clone(),
+            value,
+            span: member.span.clone(),
+        };
+        self.checked_members.push(member);
+
+        Ok(())
+    }
+
+    pub fn finish(mut self, ctx: &mut Context) -> TypeResult<Vec<ObjectCtorMember>> {
+        // any remaining members must have valid default values
+        let mut missing_members = Vec::new();
+
+        for (member_ident, member_info) in self.expect_members {
+            let has_default = member_info.member_type
+                .has_default(ctx)
+                .map_err(|e| TypeError::from_name_err(e, member_info.span.clone()))?;
+
+            if has_default {
+                let default_typename = TypeName::inferred(member_info.member_type);
+
+                self.checked_members.push(ObjectCtorMember {
+                    ident: member_ident,
+                    span: member_info.span.clone(),
+                    value: create_default_literal(default_typename, self.ctor_span.clone()),
+                });
+            } else {
+                missing_members.push(member_ident);
+            }
+        }
+
+        if !missing_members.is_empty() {
+            return Err(TypeError::CtorMissingMembers {
+                ctor_ty: self.ctor_type,
+                span: self.ctor_span,
+                members: missing_members,
+            });
+        }
+
+        Ok(self.checked_members)
+    }
+}
 
 pub fn typecheck_object_ctor(
     ctor: &ast::ObjectCtor<Span>,
@@ -74,66 +226,13 @@ pub fn typecheck_object_ctor_args(
     src: &ast::ObjectCtorArgs,
     ctx: &mut Context,
 ) -> TypeResult<ObjectCtorArgs> {
-    let ty_fields = ctor_ty.fields(ctx).map_err(|err| TypeError::NameError {
-        err,
-        span: ctor_span.clone(),
-    })?;
-
-    let mut expect_fields: LinkedHashMap<_, _> = ty_fields
-        .into_iter()
-        .flat_map(|member| {
-            member.idents.into_iter().map(move |ident| {
-                (
-                    ident,
-                    (member.ty.clone(), member.span.clone(), member.access),
-                )
-            })
-        })
-        .collect();
-
-    let mut members: Vec<ObjectCtorMember> = Vec::new();
+    let mut builder = ObjectCtorBuilder::new(ctor_ty.clone(), ctor_span.clone(), ctx)?;
 
     for member in &src.members {
-        match typecheck_object_ctor_arg(
-            ctor_ty,
-            ctx,
-            &mut expect_fields,
-            &mut members,
-            &member
-        ) {
-            Ok(member) => members.push(member),
-            Err(err) => ctx.error(err),
-        }
+        builder.typecheck_arg(member, ctx);
     }
 
-    // any remaining members must have valid default values
-    let mut missing_members = Vec::new();
-
-    for (member_ident, (member_ty, member_span, _)) in expect_fields {
-        let has_default = member_ty
-            .has_default(ctx)
-            .map_err(|e| TypeError::from_name_err(e, member_span.clone()))?;
-
-        if has_default {
-            let default_typename = TypeName::inferred(member_ty);
-            
-            members.push(ObjectCtorMember {
-                ident: member_ident,
-                span: member_span.clone(),
-                value: create_default_literal(default_typename, ctor_span.clone()),
-            });
-        } else {
-            missing_members.push(member_ident);
-        }
-    }
-
-    if !missing_members.is_empty() {
-        return Err(TypeError::CtorMissingMembers {
-            ctor_ty: ctor_ty.clone(),
-            span: ctor_span.clone(),
-            members: missing_members,
-        });
-    }
+    let members = builder.finish(ctx)?;
 
     let args = ObjectCtorArgs {
         span: src.span.clone(),
@@ -141,61 +240,6 @@ pub fn typecheck_object_ctor_args(
     };
 
     Ok(args)
-}
-
-fn typecheck_object_ctor_arg(
-    ctor_ty: &Type,
-    ctx: &mut Context,
-    expect_fields: &mut LinkedHashMap<Ident, (TypeName, Span, Access)>,
-    prev_members: &mut Vec<ObjectCtorMember>,
-    member: &ast::ObjectCtorMember
-) -> TypeResult<ObjectCtorMember> {
-    let (member_ty, _member_span, member_access) = match expect_fields.remove(&member.ident) {
-        Some(member) => member,
-        None => {
-            // ctor has a named argument which doesn't exist in the type
-            return Err(TypeError::from_name_err(
-                NameError::type_member_not_found(ctor_ty.clone(), member.ident.clone()),
-                member.span().clone(),
-            ));
-        },
-    };
-
-    // check for duplicate items for the same field
-    let find_prev = prev_members.iter().find(|a| a.ident == member.ident);
-
-    if let Some(prev) = find_prev {
-        return Err(TypeError::DuplicateNamedArg {
-            name: member.ident.clone(),
-            span: member.span().clone(),
-            previous: Some(prev.span().clone()),
-        });
-    }
-
-    if ctor_ty.get_current_access(ctx) < member_access {
-        return Err(TypeError::TypeMemberInaccessible {
-            span: member.span.clone(),
-            access: member_access,
-            ty: ctor_ty.clone(),
-            member: member.ident.clone(),
-        });
-    }
-
-    let val_expr = evaluate_expr(&member.value, &member_ty, ctx)?;
-
-    let value = implicit_conversion(
-        val_expr,
-        &member_ty,
-        ctx,
-    )?;
-
-    let member = ObjectCtorMember {
-        ident: member.ident.clone(),
-        value,
-        span: member.span.clone(),
-    };
-    
-    Ok(member)
 }
 
 fn typecheck_object_ctor_type(

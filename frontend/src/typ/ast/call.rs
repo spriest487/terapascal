@@ -10,6 +10,7 @@ use crate::typ::ast::cast::implicit_conversion;
 use crate::typ::ast::evaluate_expr;
 use crate::typ::ast::typecheck_expr;
 use crate::typ::ast::Expr;
+use crate::typ::ast::ObjectCtorBuilder;
 use crate::typ::function::FunctionValue;
 use crate::typ::method::MethodValue;
 use crate::typ::overload::OverloadValue;
@@ -269,11 +270,15 @@ pub fn typecheck_call(
             if let Some(target_type_name) = target_type.full_name() {
                 ctx.expect_visible(&target_type_name.full_path, span)?;
             }
+
+            // even though we have no args to check, we need to validate + generate default args
+            let members = ObjectCtorBuilder::new(target_type.clone(), span.clone(), ctx)?
+                .finish(ctx)?;
             
             Arc::new(Invocation::ObjectCtor {
                 span: ctor.annotation.clone(),
                 type_args,
-                members: Vec::new(),
+                members,
                 object_type, 
             })
         }
