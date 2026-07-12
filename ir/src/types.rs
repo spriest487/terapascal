@@ -345,8 +345,10 @@ impl Type {
             // for them, to be replaced as appropriate later
             Type::Generic(..) => true,
 
-            Type::Struct(id) => {
-                let Some(def) = metadata.get_struct_def(id.def_id) else {
+            Type::Struct(struct_ref) => {
+                let Some(def) = metadata
+                    .instantiate_struct_def(struct_ref.def_id, &struct_ref.args)
+                else {
                     return false;
                 };
 
@@ -355,8 +357,10 @@ impl Type {
                     .any(|f| f.ty.contains_any_object_refs(metadata))
             }
 
-            Type::Variant(id) => {
-                let Some(def) = metadata.get_variant_def(id.def_id) else {
+            Type::Variant(variant_ref) => {
+                let Some(def) = metadata
+                    .instantiate_variant_def(variant_ref.def_id, &variant_ref.args)
+                else {
                     return false;
                 };
 
