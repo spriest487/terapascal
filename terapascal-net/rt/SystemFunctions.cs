@@ -186,6 +186,18 @@ public static class SystemFunctions {
 
     public static void RcRetain<T>(ref T? obj, bool weak) {
         switch (obj) {
+            case var value when typeof(T).IsValueType: {
+                if (Object.retainers.TryGetValue(typeof(T), out var retainer)) {
+                    unsafe {
+#pragma warning disable CS8500
+                        retainer(&value, weak);
+#pragma warning restore CS8500
+                    }
+                }
+
+                break;
+            }
+
             case Object runtimeObj: {
                 if (runtimeObj.strongCount < 0) {
                     // immortal
@@ -212,12 +224,26 @@ public static class SystemFunctions {
         }
     }
 
-    public static bool RcRelease<T>(ref T? obj, bool weak) {
+    public static void RcRelease<T>(ref T? obj, bool weak) {
         switch (obj) {
+            case var value when typeof(T).IsValueType: {
+                if (Object.releasers.TryGetValue(typeof(T), out var releaser)) {
+                    unsafe {
+#pragma warning disable CS8500
+                        if (releaser(&value, weak)) {
+#pragma warning restore CS8500
+                            obj = default;
+                        }
+                    }
+                }
+
+                break;
+            }
+
             case Object runtimeObj: {
                 if (runtimeObj.strongCount < 0) {
                     // immortal
-                    return false;
+                    break;
                 }
 
                 if (!weak) {
@@ -229,7 +255,7 @@ public static class SystemFunctions {
                         runtimeObj.Destroy();
                         runtimeObj.strongCount = 0;
                         obj = default;
-                        return true;
+                        break;
                     }
 
                     var strongCount = Interlocked.Decrement(ref runtimeObj.strongCount);
@@ -244,20 +270,15 @@ public static class SystemFunctions {
                     }
                 }
 
-                return false;
+                break;
             }
 
             case Array array: {
-                var dead = ArrayManager.ReleaseArray(array, weak);
-                if (dead) {
+                if (ArrayManager.ReleaseArray(array, weak)) {
                     obj = default;
                 }
 
-                return dead;
-            }
-
-            default: {
-                return false;
+                break;
             }
         }
     }

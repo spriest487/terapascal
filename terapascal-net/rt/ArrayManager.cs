@@ -39,27 +39,30 @@ public static class ArrayManager {
             var newArray = Array.CreateInstance(elementType, length);
             arrayObjects.Add(newArray, arrayObj);
 
-            ReleaseArray(array, false);
-
+            var oldArray = array;
             array = newArray;
+
+            ReleaseArray(oldArray, false);
         }
     }
 
-    public static void RetainArray(Array array, bool weak) {
+    public static void RetainArray(Array? array, bool weak) {
         lock (globalLock) {
-            if (arrayObjects.TryGetValue(array, out var arrayObj)) {
+            if (array != null && arrayObjects.TryGetValue(array, out var arrayObj)) {
                 SystemFunctions.RcRetain(ref arrayObj, weak);
             }
         }
     }
 
-    public static bool ReleaseArray(Array array, bool weak) {
+    public static bool ReleaseArray(Array? array, bool weak) {
         lock (globalLock) {
-            if (!arrayObjects.TryGetValue(array, out var arrayObj)) {
+            if (array == null || !arrayObjects.TryGetValue(array, out var arrayObj)) {
                 return false;
             }
 
-            var dead = SystemFunctions.RcRelease(ref arrayObj, weak);
+            SystemFunctions.RcRelease(ref arrayObj, weak);
+
+            var dead = arrayObj == null;
             if (dead) {
                 arrayObjects.Remove(array);
             }

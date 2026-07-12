@@ -102,7 +102,7 @@ public class InstructionBuilder {
                     break;
                 }
 
-                case IR.ReleaseInstruction { At: var atRef, ValueType: var valueType, ReleasedOut: var outRef }: {
+                case IR.ReleaseInstruction { At: var atRef, ValueType: var valueType }: {
                     // TODO: native generics
                     // TODO: deep object refs in structs
                     // TODO: generic param types may be objects
@@ -117,17 +117,14 @@ public class InstructionBuilder {
 
                     var releaseInstance = new GenericInstanceMethod(this.rcReleaseMethod);
                     releaseInstance.GenericArguments.Add(releaseType);
-                    
-                    this.StoreRef(outRef, () => {
-                        // pass arg by ref
-                        this.LoadRefAddr(atRef);
 
-                        // weak flag
-                        this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+                    // pass arg by ref
+                    this.LoadRefAddr(atRef);
 
-                        this.body.Emit(OpCodes.Call, releaseInstance);
-                    });
-                    
+                    // weak flag
+                    this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+
+                    this.body.Emit(OpCodes.Call, releaseInstance);
                     break;
                 }
 

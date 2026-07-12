@@ -759,8 +759,9 @@ public class TypeBuilder {
         if (!typeDef.IsValueType) {
             var baseType = this.ResolveCore(typeDef.BaseType) ?? typeDef.BaseType.Resolve();
 
-            var baseCtor = baseType.GetConstructors()
-                .Single(ctor => ctor.Parameters.Count == 0);
+            var baseCtor = baseType
+                .GetConstructors()
+                .Single(ctor => !ctor.IsStatic && ctor.Parameters.Count == 0);
 
             var baseCtorRef = this.assemblyBuilder.Module.ImportReference(baseCtor);
 

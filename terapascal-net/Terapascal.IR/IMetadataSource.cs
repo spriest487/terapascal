@@ -315,9 +315,6 @@ public interface IMetadataSource {
 
             case ReleaseInstruction releaseInstruction: {
                 this.FormatInstructionPrefix("release", result);
-                if (releaseInstruction.ReleasedOut != null) {
-                    this.FormatOutputRef(releaseInstruction.ReleasedOut, result);
-                }
 
                 result.Append("--");
                 result.Append(releaseInstruction.ValueType.ToString(this));

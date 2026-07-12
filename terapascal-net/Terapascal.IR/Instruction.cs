@@ -526,17 +526,9 @@ public record ReleaseInstruction : IInstruction {
         init => field = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    [Key("released_out")]
-    [MessagePackFormatter(typeof(NullableRefFormatter))]
-    public required IRef? ReleasedOut {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
     public IInstruction ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
         return new ReleaseInstruction {
             At = this.At.ResolveGeneric(typeMap),
-            ReleasedOut = this.ReleasedOut?.ResolveGeneric(typeMap),
             ValueType = this.ValueType.ResolveGeneric(typeMap),
         };
     }
