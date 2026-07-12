@@ -3,16 +3,17 @@ uses System;
 
 initialization
     var x: array of Integer := [];
-    WriteLn(x.Length.ToString);
+    SetLength(x, 0, 0);
 
+    WriteLn(x.Length.ToString);
     SetLength(x, 2, 0);
     WriteLn(x.Length.ToString);
-    
+
     var boxes: array of box of Integer := [[1], [2]];
-    boxes.SetLength(0, [0]);
+    boxes.SetLength(1, [0]);
     
     for var b in boxes do 
     begin
-        WriteLn('array now contains:' + b^);
+        WriteLn('array now contains: ' + b^);
     end;
 end

@@ -617,10 +617,10 @@ public interface IMetadataSource {
         path = null;
 
         switch (objectID) {
-
             case ClassObjectID(var classRef): {
                 return this.FindDeclPath(classRef, out path);
             }
+
             case InterfaceObjectID(var ifaceRef): {
                 if (!this.FindInterfaceDecl(ifaceRef.DefID, out var ifaceDecl)) {
                     return false;
@@ -639,5 +639,129 @@ public interface IMetadataSource {
 
             default: throw new ArgumentOutOfRangeException(nameof(objectID));
         }
+    }
+
+    bool FindDefinitionType(IType type, [NotNullWhen(true)] out IType? defType) {
+        defType = null;
+
+        switch (type) {
+            case ObjectType(var objectID): {
+                return this.FindDefinitionType(objectID, weak: false, out defType);
+            }
+            case WeakObjectType(var objectID): {
+                return this.FindDefinitionType(objectID, weak: true, out defType);
+            }
+
+            case VariantType(var variantRef): {
+                if (!variantRef.HasArgs) {
+                    goto default;
+                }
+
+                if (!this.FindVariantDef(variantRef.DefID, out var variantDef)) {
+                    return false;
+                }
+
+                defType = new TypeRef {
+                    DefID = variantRef.DefID,
+                    Args = variantDef.Name.GetGenericArgs(),
+                }.ToVariantType();
+
+                return true;
+            }
+
+            case StructType(var structRef): {
+                if (!structRef.HasArgs) {
+                    goto default;
+                }
+
+                if (!this.FindStructDef(structRef.DefID, out var structDef)) {
+                    return false;
+                }
+
+                var declPath = structDef.Identity.GetDeclPath();
+                if (declPath == null) {
+                    // must have a path because type args were provided
+                    return false;
+                }
+
+                defType = new TypeRef {
+                    DefID = structRef.DefID,
+                    Args = declPath.GetGenericArgs(),
+                }.ToStructType();
+
+                return true;
+            }
+
+            default: {
+                defType = type;
+                return true;
+            }
+        }
+    }
+
+    private bool FindDefinitionType(IObjectID objectID, bool weak, [NotNullWhen(true)] out IType? defType) {
+        defType = null;
+
+        switch (objectID) {
+            case ClassObjectID(var classRef): {
+                if (!classRef.HasArgs) {
+                    goto default;
+                }
+
+                if (!this.FindStructDef(classRef.DefID, out var structDef)) {
+                    return false;
+                }
+
+                var declPath = structDef.Identity.GetDeclPath();
+                if (declPath == null) {
+                    // must have a path because type args were provided
+                    return false;
+                }
+
+                var defID = new TypeRef {
+                    DefID = classRef.DefID,
+                    Args = declPath.GetGenericArgs(),
+                }.ToClassObjectID();
+
+                defType = weak ? defID.ToWeakObjectType() : defID.ToObjectType();
+                return true;
+            }
+
+            case InterfaceObjectID(var ifaceRef): {
+                if (!ifaceRef.HasArgs) {
+                    goto default;
+                }
+
+                if (!this.FindInterfaceDecl(ifaceRef.DefID, out var ifaceDecl)) {
+                    return false;
+                }
+
+                var defID = new InterfaceRef {
+                    DefID = ifaceRef.DefID,
+                    Args = ifaceDecl.GetDeclName().GetGenericArgs(),
+                }.ToObjectID();
+
+                defType = weak ? defID.ToWeakObjectType() : defID.ToObjectType();
+                return true;
+            }
+
+            default: {
+                defType = weak ? objectID.ToWeakObjectType() : objectID.ToObjectType();
+                return true;
+            }
+        }
+    }
+
+    bool FindInterfaceMethod(
+        IType type,
+        InterfaceRef ifaceRef,
+        MethodID methodID,
+        out FunctionID methodFuncID
+    ) {
+        methodFuncID = default;
+
+        return this.GetInterfaceImpls(type, out var typeImpls)
+            && typeImpls.TryGetValue(ifaceRef, out var ifaceImpl)
+            && ifaceImpl.Methods.TryGetValue(methodID, out methodFuncID);
     }
 }

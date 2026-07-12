@@ -86,6 +86,10 @@ public sealed record InterfaceRef {
     public IReadOnlyList<IType>? Args { get; init; }
 
     [IgnoreMember]
+    [MemberNotNullWhen(true, nameof(this.Args))]
+    public bool HasArgs => this.Args is { Count: > 0 };
+
+    [IgnoreMember]
     public bool ContainsGenericParams => this.Args != null && this.Args.Any(t => t.ContainsGenericParams);
 
     public InterfaceRef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {

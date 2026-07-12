@@ -787,9 +787,6 @@ public class InstructionBuilder {
         IR.InterfaceRef ifaceRef,
         IR.MethodID methodID
     ) {
-        var ifaceType = ifaceRef.ToObjectID().ToObjectType();
-        this.assemblyBuilder.TypeBuilder.BuildType(ifaceType, out var ifaceTypeID);
-
         if (!this.assemblyBuilder.LoadedMetadata.TryGetInterfaceDef(ifaceRef.DefID, out var ifaceDef)) {
             var msg = $"missing interface definition for virtual call: {ifaceRef.ToString(this.assemblyBuilder.LoadedMetadata)}";
             throw new InvalidDataException(msg);
@@ -797,21 +794,32 @@ public class InstructionBuilder {
 
         var ifaceMethod = ifaceDef.Methods[(int)methodID.ID];
 
-        var methodRef = this.assemblyBuilder.TypeBuilder.GetInterfaceMethod(ifaceTypeID, methodID);
-
         if (ifaceMethod.ResultType is IR.NothingType) {
-            this.EmitVirtualCall(methodRef, selfArg, restArgs);
+            this.EmitVirtualCall(ifaceRef, methodID, selfArg, restArgs);
         } else {
-            this.StoreRef(outRef, () => this.EmitVirtualCall(methodRef, selfArg, restArgs));
+            this.StoreRef(outRef, () => this.EmitVirtualCall(ifaceRef, methodID, selfArg, restArgs));
         }
     }
 
     private void EmitVirtualCall(
-        MethodReference methodRef,
+        IR.InterfaceRef ifaceRef,
+        IR.MethodID methodID,
         IR.IRef selfArg,
         IReadOnlyList<IR.IValue>? restArgs = null
     ) {
-        this.LoadRef(selfArg);
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
+
+        var ifaceType = ifaceRef.ToObjectID().ToObjectType();
+        var selfType = this.GetRefType(selfArg);
+
+        typeBuilder.BuildType(ifaceType, out var ifaceTypeID);
+
+        if (selfType.IsObjectType()) {
+            this.LoadRef(selfArg);
+        } else {
+            this.LoadRefAddr(selfArg);
+        }
 
         if (restArgs != null) {
             foreach (var argVal in restArgs) {
@@ -819,7 +827,30 @@ public class InstructionBuilder {
             }
         }
 
-        this.body.Emit(OpCodes.Callvirt, methodRef);
+        if (selfType.IsAbstract()) {
+            var methodRef = typeBuilder.GetInterfaceMethod(ifaceTypeID, methodID);
+            this.body.Emit(OpCodes.Callvirt, methodRef);
+        } else {
+            // devirtualize
+            if (!metadata.FindDefinitionType(selfType, out var selfDefType)) {
+                throw new InvalidDataException($"unable to determine def type of {selfType.ToString(metadata)}");
+            }
+
+            if (!metadata.FindInterfaceMethod(selfDefType, ifaceRef, methodID, out var ifaceMethod)) {
+                throw new InvalidDataException($"missing implementation of {ifaceRef.ToString(metadata)} for {selfType.ToString(metadata)}");
+            }
+
+            var methodFuncRef = new IR.FunctionRef {
+                DefID = ifaceMethod,
+
+                // add enclosing type args, if any
+                TypeArgs = selfType.GetTypeRef()?.Args,
+            };
+
+            var funcMethod = this.assemblyBuilder.FunctionBuilder.GetFunctionMethod(methodFuncRef);
+
+            this.body.Emit(OpCodes.Call, funcMethod);
+        }
     }
 
     private void LoadValue(IR.IValue loadValue) {

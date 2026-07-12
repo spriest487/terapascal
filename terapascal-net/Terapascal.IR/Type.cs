@@ -161,6 +161,12 @@ public interface IType : IEquatable<IType> {
         _ => false,
     };
 
+    bool IsAbstract() => this switch {
+        ObjectType(var objectID) => objectID.IsAbstract,
+        WeakObjectType(var objectID) => objectID.IsAbstract,
+        _ => false,
+    };
+
     bool IsComplex() => this switch {
         StructType => true,
         VariantType => true,
@@ -643,6 +649,7 @@ public class TypeFormatter : IMessagePackFormatter<IType> {
 
 public interface IObjectID : IEquatable<IObjectID> {
     bool ContainsGenericParams { get; }
+    bool IsAbstract { get; }
 
     string ToString(IMetadataSource? metadata);
     
@@ -663,6 +670,7 @@ public interface IObjectID : IEquatable<IObjectID> {
 
 public sealed record AnyObjectID : IObjectID {
     public bool ContainsGenericParams => false;
+    public bool IsAbstract => true;
 
     public string ToString(IMetadataSource? metadata) {
         return "any";
@@ -675,6 +683,7 @@ public sealed record AnyObjectID : IObjectID {
 
 public sealed record ClassObjectID(TypeRef TypeRef) : IObjectID {
     public bool ContainsGenericParams => this.TypeRef.ContainsGenericParams;
+    public bool IsAbstract => false;
 
     public static ClassObjectID String => new ClassObjectID(new TypeRef { DefID = TypeDefID.String });
     public static ClassObjectID TypeInfo => new ClassObjectID(new TypeRef { DefID = TypeDefID.TypeInfo });
@@ -702,6 +711,7 @@ public sealed record ClassObjectID(TypeRef TypeRef) : IObjectID {
 
 public sealed record InterfaceObjectID(InterfaceRef InterfaceRef) : IObjectID {
     public bool ContainsGenericParams => this.InterfaceRef.ContainsGenericParams;
+    public bool IsAbstract => true;
 
     public string ToString(IMetadataSource? metadata) {
         if (metadata == null || !metadata.FindInterfaceDecl(this.InterfaceRef.DefID, out var ifaceDecl)) {
@@ -721,6 +731,7 @@ public sealed record InterfaceObjectID(InterfaceRef InterfaceRef) : IObjectID {
 
 public sealed record AnyClosureObjectID(FunctionSig Sig) : IObjectID {
     public bool ContainsGenericParams => this.Sig.ContainsGenericParams;
+    public bool IsAbstract => true;
 
     public string ToString(IMetadataSource? metadata) {
         return $"closure of {this.Sig.ToString(metadata)}";
@@ -733,6 +744,7 @@ public sealed record AnyClosureObjectID(FunctionSig Sig) : IObjectID {
 
 public sealed record ArrayObjectID(IType Element) : IObjectID {
     public bool ContainsGenericParams => this.Element.ContainsGenericParams;
+    public bool IsAbstract => false;
 
     public string ToString(IMetadataSource? metadata) {
         return $"array of {this.Element.ToString(metadata)}";
@@ -745,6 +757,7 @@ public sealed record ArrayObjectID(IType Element) : IObjectID {
 
 public sealed record BoxObjectID(IType Value) : IObjectID {
     public bool ContainsGenericParams => this.Value.ContainsGenericParams;
+    public bool IsAbstract => false;
 
     public string ToString(IMetadataSource? metadata) {
         return $"box of {this.Value.ToString(metadata)}";

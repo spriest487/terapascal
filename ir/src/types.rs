@@ -151,7 +151,7 @@ impl Type {
 
     pub fn is_abstract(&self) -> bool {
         match self {
-            Type::Object(id) => id.is_abstract(),
+            Type::Object(id) | Type::WeakObject(id) => id.is_abstract(),
             _ => false,
         }
     }
@@ -226,7 +226,8 @@ impl Type {
                 Some(type_ref)
             }
 
-            Type::Object(ObjectID::Class(type_ref)) => {
+            Type::WeakObject(ObjectID::Class(type_ref))
+            | Type::Object(ObjectID::Class(type_ref)) => {
                 Some(type_ref)
             },
 
