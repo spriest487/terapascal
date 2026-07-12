@@ -1,0 +1,10 @@
+{
+  "steps": [
+    { "output": "resizing to 1..." },
+    { "output": "resizing to 2..." },
+    { "output": "resizing to 0..." },
+    { "output": "first destroyed" },
+    { "output": "second destroyed" },
+    { "output": "done" }
+  ]
+}

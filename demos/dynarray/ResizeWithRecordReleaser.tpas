@@ -1,13 +1,33 @@
 implementation
 uses System;
 
-type A = record
-    value: String;
+type
+    B = class
+        name: String;
+        destructor Destroy;
+    end;
+
+    A = record
+        value: B;
+    end;
+
+destructor B.Destroy;
+begin
+    if self.name <> '' then
+        WriteLn(self.name + ' destroyed');
 end;
 
 initialization
     var arrayOfA: array of A := [];
-    
-    var a := A(value: 'hello'.Concat(', world'));
-    SetLength(arrayOfA, 1, a);
+
+    WriteLn('resizing to 1...');
+    SetLength(arrayOfA, 1, A(value: B(name: 'first')));
+
+    WriteLn('resizing to 2...');
+    SetLength(arrayOfA, 2, A(value: B(name: 'second')));
+
+    WriteLn('resizing to 0...');
+    SetLength(arrayOfA, 0, A(value: B(name: ''))); // don't log the temporary item here
+
+    WriteLn('done');
 end
