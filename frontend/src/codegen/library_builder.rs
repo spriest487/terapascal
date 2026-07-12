@@ -1500,6 +1500,7 @@ fn gen_func_invokers(lib: &mut LibraryBuilder) {
     ], ir::ANY_TYPE);
 
     for (_, func) in &all_funcs {
+        // only published functions can be invoked via RTTI
         if !func.published {
             continue;
         }

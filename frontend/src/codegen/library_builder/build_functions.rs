@@ -489,7 +489,14 @@ impl<'a> LibraryBuilder<'a> {
     ) -> ir::FunctionID {
         let tags = self.translate_tag_groups(&func_decl.tags);
 
-        let params = self.translate_param_groups(&func_decl.param_groups);
+        let mut params = self.translate_param_groups(&func_decl.param_groups);
+        if func_decl.is_instance_method() {
+            assert!(!params.is_empty(), "insert_func_decl: signature of instance method must contain a self-param");
+
+            let self_param = &mut params[0];
+            self_param.param_type = self_param.param_type.temp_ref();
+        }
+
         let result_type = self.translate_type(&func_decl.result_ty);
 
         self.metadata.insert_func(identity, visibility, params, result_type, self.opts.rtti, tags)

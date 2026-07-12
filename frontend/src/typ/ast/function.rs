@@ -484,6 +484,10 @@ impl FunctionDecl {
         self.name.context.method_declaring_type()
     }
 
+    pub fn is_instance_method(&self) -> bool {
+        self.name.context.method_declaring_type().is_some() && !self.kind.is_static_method()
+    }
+
     pub fn sig(&self) -> FunctionSig {
         FunctionSig::from_decl(self.clone())
     }
