@@ -668,6 +668,8 @@ public class TypeBuilder {
             pointerType.Parameters.Add(new ParameterDefinition(parameterType));
         }
 
+        this.RegisterSimpleType(sig.ToFunctionType(), pointerType);
+
         return pointerType;
     }
 
