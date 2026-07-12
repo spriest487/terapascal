@@ -589,10 +589,13 @@ impl<'a, 'b> CBuilder<'a, 'b> {
 
                         let release = Expr::Function(FunctionName::Builtin(BuiltinName::RcRelease));
 
-                        let rc_ptr = value_expr.cast(Type::object_ptr());
+                        let rc_ptr = value_expr.clone().cast(Type::object_ptr());
+
                         let call_release = release.call([rc_ptr, Expr::LitBool(value_type.is_weak())]);
 
-                        stmts.push(Statement::Expr(call_release));
+                        stmts.push(Statement::if_then(call_release, [
+                            Statement::assign(value_expr, Expr::Null),
+                        ]));
                     }
                 );
 
