@@ -1065,9 +1065,19 @@ public class InstructionBuilder {
             }
             
             case IR.FieldRef(var fieldRef): {
-                if (fieldRef.InstanceType is IR.ObjectType(IR.AnyClosureObjectID(var funcTypeID))
-                    && fieldRef.FieldID == IR.FieldID.ClosurePointerField) {
-                    var funcPtrType = (IR.IType)new IR.FunctionType(funcTypeID);
+                if (fieldRef.InstanceType is IR.ObjectType(IR.AnyClosureObjectID(var sig))
+                    && fieldRef.FieldID == IR.FieldID.ClosurePointerField
+                ) {
+                    // the actual type of the closure function pointer contains the self-arg of the closure object
+                    var closureParams = new List<IR.IType>(sig.ParameterTypes.Count + 1);
+                    closureParams.Add(sig.ToClosureID().ToObjectType());
+                    closureParams.AddRange(sig.ParameterTypes);
+
+                    var closureFuncSig = sig with {
+                        ParameterTypes = closureParams,
+                    };
+
+                    var funcPtrType = (IR.IType)new IR.FunctionType(closureFuncSig);
                     return funcPtrType.MakeTempRef();
                 }
 

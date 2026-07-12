@@ -143,7 +143,7 @@ public record FunctionRef {
 }
 
 [MessagePackObject]
-public class FunctionSig : IEquatable<FunctionSig> {
+public sealed record FunctionSig : IEquatable<FunctionSig> {
     [Key("result_type")]
     public required IType ResultType {
         get;
@@ -167,14 +167,6 @@ public class FunctionSig : IEquatable<FunctionSig> {
 
         return this.ResultType.Equals(other.ResultType)
             && this.ParameterTypes.SequenceEqual(other.ParameterTypes);
-    }
-
-    public override bool Equals(object? obj) {
-        if (obj is not FunctionSig other) {
-            return false;
-        }
-
-        return this.Equals(other);
     }
 
     public override int GetHashCode() {
@@ -217,6 +209,10 @@ public class FunctionSig : IEquatable<FunctionSig> {
 
     public IType ToFunctionType() {
         return new FunctionType(this);
+    }
+
+    public IObjectID ToClosureID() {
+        return new AnyClosureObjectID(this);
     }
 }
 
