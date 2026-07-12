@@ -436,7 +436,7 @@ pub fn validate_args(
     }
 
     let args_and_params = args.iter().zip(params.iter());
-    for (arg, param) in args_and_params {
+    for (i, (arg, param)) in args_and_params.enumerate() {
         let (is_in_ref, is_out_ref) = match &param.modifier {
             None => (false, false),
             Some(FunctionParamMod::Out) => (false, true),
@@ -449,9 +449,11 @@ pub fn validate_args(
                 // in a separate pass
                 Some(ValueKind::Mutable) | Some(ValueKind::Uninitialized) => {},
                 _ => {
-                    return Err(TypeError::NotMutable {
+                    return Err(TypeError::RefArgNotMutable {
                         expr: Box::new(arg.clone()),
-                        decl: None,
+                        param_index: i,
+                        param_type: param.ty.clone(),
+                        span: span.clone(),
                     });
                 },
             }

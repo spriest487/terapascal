@@ -74,6 +74,12 @@ pub enum TypeError {
         span: Span,
         completion_op: Option<Operator>,
     },
+    RefArgNotMutable {
+        expr: Box<Expr>,
+        param_index: usize,
+        param_type: Type,
+        span: Span,
+    },
     NotMutable {
         expr: Box<Expr>,
         decl: Option<IdentPath>,
@@ -527,6 +533,7 @@ impl Spanned for TypeError {
             TypeError::IndexOutOfBounds { span, .. } => span,
             TypeError::TypeMismatch { span, .. } => span,
             TypeError::NotMutable { expr, .. } => expr.annotation().span(),
+            TypeError::RefArgNotMutable { span, .. } => span,
             TypeError::NotAddressable { span, .. } => span,
             TypeError::NotDerefable { span, .. } => span,
             TypeError::NameNotMatchable { span, .. } => span,
@@ -661,6 +668,7 @@ impl DiagnosticOutput for TypeError {
             TypeError::IndexOutOfBounds { .. } => "Index out of bounds",
             TypeError::TypeMismatch { .. } => "Type mismatch",
             TypeError::NotMutable { .. } => "Value not mutable",
+            TypeError::RefArgNotMutable { .. } => "Argument to reference parameter is not mutable",
             TypeError::NotAddressable { .. } => "Value not addressable",
             TypeError::NotDerefable { .. } => "Value cannot be dereferenced",
             TypeError::NameNotMatchable { .. } => "Type is not matchable",
@@ -1051,6 +1059,10 @@ impl fmt::Display for TypeError {
 
             TypeError::NotMutable { expr, .. } => {
                 write!(f, "`{}` does not refer to a mutable value", expr)
+            },
+
+            TypeError::RefArgNotMutable { expr, param_type, param_index, .. } => {
+                write!(f, "expected a reference argument of type `{param_type}` for parameter {param_index}, but `{expr}` does not refer to a mutable value")
             },
 
             TypeError::NotAddressable { ty, value_kind, .. } => match value_kind {
