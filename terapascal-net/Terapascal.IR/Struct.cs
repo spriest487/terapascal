@@ -241,7 +241,7 @@ public class StructIdentityFormatter : IMessagePackFormatter<IStructIdentity> {
                 return new InternalStructIdentity(name);
             }
             
-            case "Closure": {
+            case "ClosureObject": {
                 var sig = MessagePackSerializer.Deserialize<ClosureIdentity>(ref reader, options);
                 return new ClosureStructIdentity(sig);
             }

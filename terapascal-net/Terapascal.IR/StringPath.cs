@@ -57,8 +57,10 @@ public class StringPathFormatter : IMessagePackFormatter<StringPath> {
 
     public StringPath Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options) {
         switch (reader.NextMessagePackType) {
-            case MessagePackType.Nil:
+            case MessagePackType.Nil: {
+                reader.ReadNil();
                 return null!;
+            }
 
             case MessagePackType.Map: {
                 var count = reader.ReadMapHeader();
