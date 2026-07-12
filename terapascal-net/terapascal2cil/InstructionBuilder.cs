@@ -79,6 +79,13 @@ public class InstructionBuilder {
                 }
 
                 case IR.RetainInstruction { At: var atRef, ValueType: var valueType }: {
+                    // TODO: native generics
+                    // TODO: deep object refs in structs
+                    // TODO: generic param types may be objects
+                    if (!valueType.IsObjectType()) {
+                        continue;
+                    }
+
                     var retainType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
 
                     const string methodName = nameof(Runtime.SystemFunctions.RcRetain);
@@ -96,6 +103,13 @@ public class InstructionBuilder {
                 }
 
                 case IR.ReleaseInstruction { At: var atRef, ValueType: var valueType, ReleasedOut: var outRef }: {
+                    // TODO: native generics
+                    // TODO: deep object refs in structs
+                    // TODO: generic param types may be objects
+                    if (!valueType.IsObjectType()) {
+                        continue;
+                    }
+
                     var releaseType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
 
                     const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
@@ -112,18 +126,6 @@ public class InstructionBuilder {
                         this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
 
                         this.body.Emit(OpCodes.Call, releaseInstance);
-
-                        // if the result is true (destroyed), always reset the pointer to null
-                        var aliveLabel = Instruction.Create(OpCodes.Nop);
-                        
-                        this.body.Emit(OpCodes.Dup);
-                        this.body.Emit(OpCodes.Brfalse, aliveLabel);
-
-                        this.StoreRef(atRef, () => {
-                            this.body.Emit(OpCodes.Ldnull);
-                        });
-                        
-                        this.body.Append(aliveLabel);
                     });
                     
                     break;
@@ -671,7 +673,7 @@ public class InstructionBuilder {
     }
     
     private void EmitDefault(IR.IType type) {
-        if (type.IsObjectType() || type is IR.PointerType) {
+        if (type.IsObjectType() || type is IR.PointerType or IR.TempRefType) {
             this.body.Emit(OpCodes.Ldnull);
         } else if (type.IsInteger()) {
             this.body.Emit(OpCodes.Ldc_I4_0);

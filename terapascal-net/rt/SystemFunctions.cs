@@ -223,22 +223,23 @@ public static class SystemFunctions {
                 if (!weak) {
                     // make objects temporarily immortal while the destructor runs so the ref count can't
                     // change again for any reason
-                    if (Interlocked.CompareExchange(ref runtimeObj.strongCount, -1, 1) == 1) {
+                    var dead = Interlocked.CompareExchange(ref runtimeObj.strongCount, -1, 1) == 1;
+
+                    if (dead) {
                         runtimeObj.Destroy();
                         runtimeObj.strongCount = 0;
+                        obj = default;
                         return true;
                     }
 
                     var strongCount = Interlocked.Decrement(ref runtimeObj.strongCount);
                     if (strongCount < 0) {
-                        var err =
-                            $"released {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
+                        var err = $"released {runtimeObj.GetType().FullName} with 0 strong refs (+ {runtimeObj.weakCount} weak refs remain)";
                         throw new Error(err);
                     }
                 } else {
                     if (Interlocked.Decrement(ref runtimeObj.weakCount) < 0) {
-                        var err =
-                            $"released {runtimeObj.GetType().FullName} with 0 weak refs (+ {runtimeObj.strongCount} strong refs remain)";
+                        var err = $"released {runtimeObj.GetType().FullName} with 0 weak refs (+ {runtimeObj.strongCount} strong refs remain)";
                         throw new Error(err);
                     }
                 }
@@ -247,7 +248,12 @@ public static class SystemFunctions {
             }
 
             case Array array: {
-                return ArrayManager.ReleaseArray(array, weak);
+                var dead = ArrayManager.ReleaseArray(array, weak);
+                if (dead) {
+                    obj = default;
+                }
+
+                return dead;
             }
 
             default: {
