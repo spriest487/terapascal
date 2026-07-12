@@ -36,8 +36,10 @@ pub fn translate_iface(
                     ir::FunctionParamInfo::new(param_type).with_name(item.name.clone())
                 })
                 .collect(),
+
+            is_instance_method: def_method.decl.is_instance_method(),
         };
-        
+
         methods.push(method);
     }
 

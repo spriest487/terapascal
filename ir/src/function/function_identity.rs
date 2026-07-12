@@ -20,6 +20,11 @@ pub enum FunctionIdentity {
         id: MethodID,
         name: Arc<String>,
         type_params: Vec<TypeParam>,
+
+        // hint indicating this method is intended to be called as an instance method of the
+        // declaring type. this does not implicitly add any extra self parameters but may be used
+        // informationally when processing the parameters defined in the function's metadata
+        is_instance_method: bool,
     },
 
     // user-defined destructor method associated with a type
@@ -77,7 +82,7 @@ impl FunctionIdentity {
                 Cow::Owned(format!("{}.{name}", declaring_type.to_pretty_string(formatter)))
             }
 
-            FunctionIdentity::Method { declaring_type, id: _, name, type_params } => {
+            FunctionIdentity::Method { declaring_type, name, type_params, .. } => {
                 let mut result = declaring_type.to_pretty_string(formatter);
                 result.push('.');
                 result.push_str(name);

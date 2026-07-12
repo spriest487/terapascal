@@ -88,6 +88,9 @@ public record InterfaceMethod {
         get;
         init => field = value!.ToArrayNonNull();
     }
+
+    [Key("is_instance_method")]
+    public required bool IsInstanceMethod { get; init; }
 }
 
 [MessagePackObject]

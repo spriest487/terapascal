@@ -541,6 +541,7 @@ impl<'a> LibraryBuilder<'a> {
                     id: ir::MethodID(method_index),
                     name,
                     type_params,
+                    is_instance_method: func_decl.is_instance_method(),
                 }
             }
         }

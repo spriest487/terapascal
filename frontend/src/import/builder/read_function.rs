@@ -28,33 +28,43 @@ impl ImportBuilder<'_> {
     pub fn read_params(
         &mut self,
         params: &[ir::FunctionParamInfo],
+        is_instance_method: bool,
     ) -> ImportResult<Vec<FunctionParamGroup>> {
         let mut param_groups = Vec::with_capacity(params.len());
+
         for (i, param_info) in params.iter().enumerate() {
             let (param_type, modifier) = match &param_info.param_type {
                 // reference params are a per-param modifier in Pascal, and a separate type in IR
                 ir::Type::TempRef(deref_type) => {
                     let param_type = self.read_type(deref_type)?;
-
-                    let has_out_tag = self.out_param_tag_info
-                        .map(|out_info| param_info.tags
-                            .iter()
-                            .any(|t| t.class_id == out_info.class_id))
-                        .unwrap_or(false);
-
-                    // out params are marked by Terapascal with a tag
-                    let param_mod = if has_out_tag {
-                        FunctionParamMod::Out
+                    
+                    // param 0 of an instance method can only be a ref if it's a value type
+                    // method, where the implicit self-arg is translated into a ref, so in
+                    // Pascal it's translated back into the non-reference type
+                    if i == 0 && is_instance_method {
+                        (param_type, None)
                     } else {
-                        FunctionParamMod::Var
-                    };
+                        // regular reference parameter
+                        let has_out_tag = self.out_param_tag_info
+                            .map(|out_info| param_info.tags
+                                .iter()
+                                .any(|t| t.class_id == out_info.class_id))
+                            .unwrap_or(false);
 
-                    let mod_decl = FunctionParamModDecl {
-                        span: self.span(),
-                        param_mod,
-                    };
+                        // out params are marked by Terapascal with a tag
+                        let param_mod = if has_out_tag {
+                            FunctionParamMod::Out
+                        } else {
+                            FunctionParamMod::Var
+                        };
 
-                    (param_type, Some(mod_decl))
+                        let mod_decl = FunctionParamModDecl {
+                            span: self.span(),
+                            param_mod,
+                        };
+                        
+                        (param_type, Some(mod_decl))
+                    }
                 }
 
                 t => {
@@ -86,18 +96,26 @@ impl ImportBuilder<'_> {
         let tags = self.read_tags(&func_info.tags)?;
 
         let result_type = self.read_type(&func_info.result_type)?;
-        let param_groups = self.read_params(&func_info.params)?;
 
         match &func_info.identity {
             ir::FunctionIdentity::Global(func_name) => {
+                let param_groups = self.read_params(&func_info.params, false)?;
                 self.read_free_function(func_id, func_info, tags, result_type, param_groups, &func_name)?;
             }
 
-            ir::FunctionIdentity::Method { declaring_type, id, name, type_params } => {
+            ir::FunctionIdentity::Method {
+                declaring_type,
+                id,
+                name,
+                type_params,
+                is_instance_method,
+            } => {
+                let param_groups = self.read_params(&func_info.params, *is_instance_method)?;
                 self.read_method(func_id, func_info, tags, result_type, param_groups, declaring_type, *id, name, type_params)?;
             }
 
             ir::FunctionIdentity::Destructor { declaring_type, id, name} => {
+                let param_groups = self.read_params(&func_info.params, false)?;
                 self.read_method(func_id, func_info, tags, result_type, param_groups, declaring_type, *id, name, &[])?;
             }
 

@@ -558,7 +558,7 @@ impl ImportBuilder<'_> {
             let method_tags = Vec::new();
 
             let mut result_type = self.read_type(&method.result_type)?;
-            let mut param_groups = self.read_params(&method.params)?;
+            let mut param_groups = self.read_params(&method.params, method.is_instance_method)?;
 
             // TODO: rework self refs
             // is this ambiguous if a method uses both a Self ref and the name of the interface?

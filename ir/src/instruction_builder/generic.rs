@@ -533,6 +533,7 @@ pub fn instantiate_interface_def<'a>(
             name: def_method.name.clone(),
             result_type: instantiate_type(&def_method.result_type, &mut types),
             params,
+            is_instance_method: def_method.is_instance_method,
         });
     }
 

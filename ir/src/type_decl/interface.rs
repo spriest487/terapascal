@@ -15,6 +15,8 @@ pub struct InterfaceMethod {
 
     pub result_type: Type,
     pub params: Vec<FunctionParamInfo>,
+
+    pub is_instance_method: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

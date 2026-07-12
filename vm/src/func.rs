@@ -301,7 +301,13 @@ pub fn instantiate_func(
             }
         }
 
-        ir::FunctionIdentity::Method { declaring_type, id, name, type_params} => {
+        ir::FunctionIdentity::Method {
+            declaring_type,
+            id,
+            name,
+            type_params,
+            is_instance_method,
+        } => {
             let declaring_type = instantiate_type(declaring_type, &types);
             let type_params = type_params.iter().map(|t| instantiate_type_param(t, &types)).collect();
 
@@ -310,6 +316,7 @@ pub fn instantiate_func(
                 id: *id,
                 name: name.clone(),
                 type_params,
+                is_instance_method: *is_instance_method,
             }
         }
 

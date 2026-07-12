@@ -57,6 +57,9 @@ public record MethodFunctionIdentity : IFunctionIdentity {
     [Key("type_params")]
     public IReadOnlyList<TypeParam>? TypeParams { get; init; }
 
+    [Key("is_instance_method")]
+    public required bool IsInstanceMethod { get; init; }
+
     public void GetInvocationTypeParams(IMetadataSource metadata, List<TypeParam> result) {
         IFunctionIdentity.GetInvocationTypeParams(this.DeclaringType, this.TypeParams, metadata, result);
     }
