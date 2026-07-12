@@ -214,7 +214,7 @@ pub(super) fn array_create(state: &mut Vm) -> ExecResult<()> {
 
     let new_len = load_integer(state, &new_len_arg.to_ref())?;
 
-    let mut array_ptr = load_pointer(state, &array_ref_arg.to_deref())?;
+    let array_ptr = load_pointer(state, &array_ref_arg.to_deref())?;
     let array_header = state.marshaller()
         .unmarshal_dyn_array_header_at(&array_ptr)?;
 
@@ -232,12 +232,15 @@ pub(super) fn array_create(state: &mut Vm) -> ExecResult<()> {
     let default_val = state.default_val(&element_type)?;
     let elements = iter::repeat(default_val).take(new_len as usize).collect();
 
-    state.release_dyn_val(&DynValue::Pointer(array_ptr.clone()), &element_type.dyn_array())?;
+    let mut array_ptr_val = DynValue::Pointer(array_ptr);
+    if state.release_dyn_val(&mut array_ptr_val, &element_type.dyn_array())? {
+        state.store(&array_ref_arg.to_deref(), array_ptr_val)?;
+    }
 
     let new_array_header = ObjectHeader::new(object_header.id, false);
-    array_ptr = state.new_dyn_array_with_header(&element_type, elements, new_array_header)?;
-    
-    state.store(&array_ref_arg.to_deref(), DynValue::Pointer(array_ptr))?;
+    let new_array_ptr = state.new_dyn_array_with_header(&element_type, elements, new_array_header)?;
+
+    state.store(&array_ref_arg.to_deref(), DynValue::Pointer(new_array_ptr))?;
 
     Ok(())
 }

@@ -702,9 +702,9 @@ impl Vm {
         Ok((struct_val, object_val.header))
     }
 
-    fn visit_deep<F>(&mut self, val: &DynValue, ty: &ir::Type, f: &mut F) -> ExecResult<()>
+    fn visit_deep<F>(&mut self, val: &mut DynValue, ty: &ir::Type, f: &mut F) -> ExecResult<()>
     where
-        F: FnMut(&mut Self, &ir::Type, &DynValue) -> ExecResult<()>
+        F: FnMut(&mut Self, &ir::Type, &mut DynValue) -> ExecResult<()>
     {
         match ty {
             ir::Type::Struct(_) => {
@@ -715,7 +715,7 @@ impl Vm {
 
                 let (def, _) = self.heap.marshaller.add_struct_type(ty)?;
                 for (field_id, field_def) in &def.fields {
-                    if let Some(field_val) = struct_val.fields.get(field_id.0) {
+                    if let Some(field_val) = struct_val.fields.get_mut(field_id.0) {
                         self.visit_deep(field_val, &field_def.ty, f)?;
                     }
                 }
@@ -744,7 +744,7 @@ impl Vm {
                     })?;
 
                 if let Some(value_type) = &active_case.ty {
-                    self.visit_deep(&variant_val.data, value_type, f)?;
+                    self.visit_deep(&mut variant_val.data, value_type, f)?;
                 }
             }
 
@@ -756,7 +756,7 @@ impl Vm {
 
                 for i in 0..*dim {
                     let element_val = array_val.elements
-                        .get(i)
+                        .get_mut(i)
                         .ok_or_else(|| {
                             let msg = format!("invalid element index {} for array {}", i, ty.to_pretty_string(self.metadata()));
                             ExecError::illegal_state(msg)
@@ -774,7 +774,10 @@ impl Vm {
         f(self, ty, val)
     }
 
-    fn release_dyn_val(&mut self, val: &DynValue, value_type: &ir::Type) -> ExecResult<()> {
+    fn release_dyn_val(&mut self, val: &mut DynValue, value_type: &ir::Type) -> ExecResult<bool> {
+        // if any values in this structure are destroyed, we should store the updated value
+        let mut destroyed_any = false;
+
         self.visit_deep(val, value_type, &mut |vm, val_type, val| {
             let weak = match val_type {
                 ir::Type::Object(..) => false,
@@ -866,7 +869,10 @@ impl Vm {
 
                 vm.dynfree(ptr)?;
 
-                // TODO: store the null ref
+                // assign nil to the reference
+                *val = DynValue::nil(ptr.ty.clone());
+
+                destroyed_any = true;
 
                 return Ok(());
             }
@@ -876,10 +882,10 @@ impl Vm {
             Ok(())
         })?;
 
-        Ok(())
+        Ok(destroyed_any)
     }
 
-    fn retain_dyn_val(&mut self, val: &DynValue, value_type: &ir::Type) -> ExecResult<()> {
+    fn retain_dyn_val(&mut self, val: &mut DynValue, value_type: &ir::Type) -> ExecResult<()> {
         self.visit_deep(val, value_type, &mut |vm, val_type, val| {
             let weak = match val_type {
                 ir::Type::Object(..) => false,
@@ -1346,17 +1352,18 @@ impl Vm {
     }
 
     fn exec_retain(&mut self, at: &ir::Ref, value_type: &ir::Type) -> ExecResult<()> {
-        let val = self.load(at)?;
-        self.retain_dyn_val(&val, value_type)?;
+        let mut val = self.load(at)?;
+        self.retain_dyn_val(&mut val, value_type)?;
 
         Ok(())
     }
 
     fn exec_release(&mut self, at: &ir::Ref, value_type: &ir::Type) -> ExecResult<()> {
-        let val = self.load(at)?;
+        let mut val = self.load(at)?;
 
-        // to aid with debugging, set freed RC pointers to a recognizable value
-        self.release_dyn_val(&val, value_type)?;
+        if self.release_dyn_val(&mut val, value_type)? {
+            self.store(at, val)?;
+        }
 
         Ok(())
     }
@@ -3042,9 +3049,9 @@ impl Vm {
                 continue;
             };
 
-            let dyn_val = self.marshaller().unmarshal(&value, &ty)?;
+            let mut dyn_val = self.marshaller().unmarshal(&value, &ty)?;
 
-            self.release_dyn_val(&dyn_val.value, ty)?;
+            self.release_dyn_val(&mut dyn_val.value, ty)?;
             globals.remove(i);
         }
 
