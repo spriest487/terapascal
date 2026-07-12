@@ -601,7 +601,7 @@ public class AssemblyBuilder : IDisposable {
 
     private void BuildFunctionInfoImplObject(ILProcessor body, IR.FunctionID funcID, IR.FunctionID? invokerID) {
         var implTypeDef = this.GetRuntimeTypeRef(nameof(Runtime.FunctionInfoImpl), false).Resolve();
-        var implTypeCtor = this.Module.ImportReference(implTypeDef.FindConstructor([]));
+        var implTypeCtor = this.Module.ImportReference(implTypeDef.FindConstructor(isStatic: false, []));
 
         var implMethodField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.method))!);
         var implInvokerField = this.Module.ImportReference(implTypeDef.GetFieldByName(nameof(Runtime.FunctionInfoImpl.invoker))!);

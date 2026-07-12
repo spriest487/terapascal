@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using MessagePack;
 using MessagePack.Formatters;
 
@@ -22,6 +23,11 @@ public interface IValue {
     IValue ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
         return this;
     }
+
+    bool ToLiteralValue(out object? val) {
+        val = null;
+        return false;
+    }
 }
 
 public record RefValue(IRef Ref) : IValue {
@@ -32,10 +38,20 @@ public record RefValue(IRef Ref) : IValue {
 
 public record LiteralNilValue : IValue {
     public bool IsLiteral => true;
+
+    public bool ToLiteralValue(out object? val) {
+        val = null;
+        return true;
+    }
 }
 
-public record LiteralValue<T>(T Value) : IValue {
+public record LiteralValue<T>(T Value) : IValue where T : unmanaged {
     public bool IsLiteral => true;
+
+    public bool ToLiteralValue([NotNullWhen(true)] out object? val) {
+        val = this.Value;
+        return true;
+    }
 }
 
 public record SizeOfValue(IType Type) : IValue {

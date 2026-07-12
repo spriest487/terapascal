@@ -2,6 +2,7 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using Terapascal.Runtime;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodAttributes = Mono.Cecil.MethodAttributes;
 using MethodInfo = System.Reflection.MethodInfo;
@@ -518,9 +519,25 @@ public class TypeBuilder {
 
         var variantType = variantRef.ToVariantType();
 
-        if (!this.assemblyBuilder.LoadedMetadata.FindVariantDef(variantRef.DefID, out var variantDef)) {
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+
+        if (!metadata.FindVariantDef(variantRef.DefID, out var variantDef)) {
             throw new InvalidDataException($"missing definition for variant {variantRef.DefID}");
         }
+
+        var tagAttrCtor = this.assemblyBuilder
+                .GetRuntimeTypeRef(nameof(VariantTagFieldAttribute), false)
+                .Resolve()?
+                .FindConstructor(isStatic: false, [])
+            ?? throw new InvalidOperationException("missing constructor def for variant tag field attribute type");
+        tagAttrCtor = this.assemblyBuilder.Module.ImportReference(tagAttrCtor);
+
+        var caseAttrCtor = this.assemblyBuilder
+                .GetRuntimeTypeRef(nameof(VariantCaseFieldAttribute), false)
+                .Resolve()?
+                .FindConstructor(isStatic: false, [typeof(object)])
+            ?? throw new InvalidOperationException("missing constructor def for variant case field attribute type");
+        caseAttrCtor = this.assemblyBuilder.Module.ImportReference(caseAttrCtor);
 
         IR.NamePath variantName;
         if (variantDef.Name.HasTypeParams) {
@@ -542,15 +559,19 @@ public class TypeBuilder {
 
         var typeID = this.cache.RegisterType(variantType, typeDef);
 
-        var discTypeRef = this.BuildType(variantDef.TagType);
-        var discField = new FieldDefinition(VariantTagName, FieldAttributes.Assembly, discTypeRef) {
+        var tagTypeRef = this.BuildType(variantDef.TagType);
+        var tagField = new FieldDefinition(VariantTagName, FieldAttributes.Assembly, tagTypeRef) {
             Offset = 0,
         };
 
-        typeDef.Fields.Add(discField);
+        // add the tag field attribute
+        tagField.CustomAttributes.Add(new CustomAttribute(tagAttrCtor));
+
+        typeDef.Fields.Add(tagField);
 
         var caseFieldRefs = new List<LayoutField?>(variantDef.Cases.Count);
         var caseTypeRefs = new (IR.IType defType, TypeReference typeRef)?[variantDef.Cases.Count];
+        var caseTags = new object[variantDef.Cases.Count];
 
         for (var i = 0; i < variantDef.Cases.Count; i += 1) {
             var dataType = variantDef.Cases[i].Type;
@@ -559,6 +580,14 @@ public class TypeBuilder {
             }
 
             caseTypeRefs[i] = (dataType, this.BuildType(dataType));
+
+            var tagVal = variantDef.Cases[i].Tag;
+
+            if (!tagVal.ToLiteralValue(out var tagLiteralVal) || tagLiteralVal == null) {
+                var message = $"tag value {tagVal.ToString(metadata)} of {variantType.ToString(metadata)} is not a numeric literal";
+                throw new InvalidDataException(message);
+            }
+            caseTags[i] = tagLiteralVal;
         }
 
         // it's safe to overlap object references of different types in a union, as long as we use them correctly,
@@ -579,6 +608,11 @@ public class TypeBuilder {
                 Offset = dataTypeRef.IsValueType ? valueDataOffset : PointerSize,
             };
 
+            var caseAttr = new CustomAttribute(caseAttrCtor);
+            caseAttr.ConstructorArguments.Add(new CustomAttributeArgument(tagTypeRef, new CustomAttributeArgument(tagTypeRef, caseTags[i])));
+
+            dataField.CustomAttributes.Add(caseAttr);
+
             typeDef.Fields.Add(dataField);
             caseFieldRefs.Add(new LayoutField {
                 Field = dataField,
@@ -598,7 +632,7 @@ public class TypeBuilder {
 
         this.variantLayouts[typeID] = new VariantLayout {
             TagField = new LayoutField {
-                Field = discField,
+                Field = tagField,
                 Type = variantDef.TagType,
             },
             Cases = caseFieldRefs,

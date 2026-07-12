@@ -20,8 +20,9 @@ public static class CecilExt {
             return typeDef.Fields.SingleOrDefault(f => f.Name == fieldName);
         }
 
-        public MethodReference? FindConstructor(params Type[] paramTypes) {
+        public MethodReference? FindConstructor(bool isStatic, Type[] paramTypes) {
             return typeDef.GetConstructors()
+                .Where(ctor => ctor.IsStatic == isStatic)
                 .SingleOrDefault(ctor => ctor.Parameters
                     .Select(p => p.ParameterType)
                     .Zip(paramTypes)

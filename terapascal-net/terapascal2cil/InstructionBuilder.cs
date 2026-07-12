@@ -678,7 +678,7 @@ public class InstructionBuilder {
             var typeRef = this.assemblyBuilder.TypeBuilder.BuildType(type);
             var typeDef = this.assemblyBuilder.TypeBuilder.ResolveCore(typeRef) ?? typeRef.Resolve();
 
-            if (typeDef?.FindConstructor([]) is { } defaultCtor) {
+            if (typeDef?.FindConstructor(isStatic: false, []) is { } defaultCtor) {
                 this.body.Emit(OpCodes.Newobj, this.assemblyBuilder.Module.ImportReference(defaultCtor));    
             } else {
                 var local = this.AllocLocal(typeRef);
