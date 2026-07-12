@@ -301,10 +301,13 @@ pub fn typecheck_call(
     };
     
     let mut args: Vec<_> = invocation.args().cloned().collect();
+
     // HACK: the call node's arg list should not include the self-arg, but the invocation args
     // will contain it. this is the only case where the arg list lengths differ, and the self
     // can only be arg 0, so if they don't match, simply remove the first arg
-    if args.len() != func_call.args.len() {
+    if matches!(invocation.as_ref(), Invocation::Method { .. })
+        && args.len() != func_call.args.len()
+    {
         assert!(args.len() > func_call.args.len());
         assert_eq!(func_call.args.len(), args.len() - 1);
         
