@@ -174,7 +174,7 @@ pub trait InstructionBuilder {
 
     fn expire_binding(&mut self, binding: &ScopedBinding) {
         if binding.auto_release {
-            self.release(binding.to_ref(), binding.ty.clone(), Ref::Discard);
+            self.release(binding.to_ref(), binding.ty.clone());
         }
 
         // inside a loop scope, these locals may be reused without being reinitialized.
@@ -762,12 +762,11 @@ pub trait InstructionBuilder {
         self.mov(out, instance.into().vardata_ref(instance_type, tag));
     }
 
-    fn release(&mut self, at: impl Into<Ref>, value_type: Type, released_out: impl Into<Ref>) {
+    fn release(&mut self, at: impl Into<Ref>, value_type: Type) {
         if value_type.contains_any_object_refs(self.metadata()) {
             self.emit(Instruction::Release {
                 at: at.into(),
                 value_type,
-                released_out: released_out.into(),
             });
         }
     }

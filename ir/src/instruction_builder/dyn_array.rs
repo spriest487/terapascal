@@ -25,7 +25,7 @@ pub(super) fn gen_dyn_array_dtor_body<B: InstructionBuilder + ?Sized>(
     builder.counter_loop(counter, Value::LiteralI32(1), arr_high, |builder| {
         let element_ref = array_ref.element_ref(array_type.clone(), counter);
 
-        builder.release(element_ref.to_deref(), elem_ty.clone(), Ref::Discard);
+        builder.release(element_ref.to_deref(), elem_ty.clone());
     });
 }
 

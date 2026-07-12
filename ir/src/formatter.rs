@@ -262,13 +262,8 @@ pub trait IRFormatter {
                 Ok(())
             }
 
-            Instruction::Release { at, value_type, released_out } => {
+            Instruction::Release { at, value_type } => {
                 write!(f, "{:>width$} ", "release", width = IX_WIDTH)?;
-                
-                if *released_out != Ref::Discard {
-                    self.format_ref(released_out, f)?;
-                    write!(f, " := ")?;
-                }
 
                 self.format_ref(at, f)?;
 

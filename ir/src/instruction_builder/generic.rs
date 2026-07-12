@@ -166,12 +166,11 @@ pub fn instantiate_function_def(
         }
 
         match instruction {
-            Instruction::Release { at, released_out, value_type } => {
+            Instruction::Release { at, value_type } => {
                 let value_type = instantiate_type(value_type, types);
                 let at = remap_ref(at, &locals, types);
-                let released_out = remap_ref(released_out, &locals, types);
 
-                builder.release(at, value_type, released_out);
+                builder.release(at, value_type);
             },
 
             Instruction::Retain { at, value_type } => {

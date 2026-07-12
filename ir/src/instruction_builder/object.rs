@@ -52,7 +52,7 @@ where
         }
 
         let field_ref = object_ref.field_ref(class_ty.clone(), *field_id);
-        builder.release(field_ref.to_deref(), field_def.ty.clone(), Ref::Discard);
+        builder.release(field_ref.to_deref(), field_def.ty.clone());
 
         released_any = true;
     }

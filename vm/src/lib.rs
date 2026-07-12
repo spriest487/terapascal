@@ -774,9 +774,7 @@ impl Vm {
         f(self, ty, val)
     }
 
-    fn release_dyn_val(&mut self, val: &DynValue, value_type: &ir::Type) -> ExecResult<bool> {
-        let mut released = false;
-
+    fn release_dyn_val(&mut self, val: &DynValue, value_type: &ir::Type) -> ExecResult<()> {
         self.visit_deep(val, value_type, &mut |vm, val_type, val| {
             let weak = match val_type {
                 ir::Type::Object(..) => false,
@@ -868,7 +866,8 @@ impl Vm {
 
                 vm.dynfree(ptr)?;
 
-                released |= true;
+                // TODO: store the null ref
+
                 return Ok(());
             }
 
@@ -877,7 +876,7 @@ impl Vm {
             Ok(())
         })?;
 
-        Ok(released)
+        Ok(())
     }
 
     fn retain_dyn_val(&mut self, val: &DynValue, value_type: &ir::Type) -> ExecResult<()> {
@@ -1190,7 +1189,7 @@ impl Vm {
             ir::Instruction::Jump { dest } => self.exec_jump(pc, *dest, labels)?,
             ir::Instruction::JumpIf { dest, test } => self.exec_jmpif(pc, &labels, *dest, test)?,
 
-            ir::Instruction::Release { at, value_type, released_out } => self.exec_release(at, value_type, released_out)?,
+            ir::Instruction::Release { at, value_type } => self.exec_release(at, value_type)?,
             ir::Instruction::Retain { at, value_type } => self.exec_retain(at, value_type)?,
 
             ir::Instruction::Raise { val } => self.exec_raise(&val)?,
@@ -1353,20 +1352,11 @@ impl Vm {
         Ok(())
     }
 
-    fn exec_release(&mut self, at: &ir::Ref, value_type: &ir::Type, released_out: &ir::Ref) -> ExecResult<()> {
+    fn exec_release(&mut self, at: &ir::Ref, value_type: &ir::Type) -> ExecResult<()> {
         let val = self.load(at)?;
 
         // to aid with debugging, set freed RC pointers to a recognizable value
-        let released = self.release_dyn_val(&val, value_type)?;
-
-        if released {
-            self.store(at, DynValue::Pointer(Pointer {
-                ty: ir::Type::Nothing,
-                addr: 0xDEAD,
-            }))?;
-        }
-
-        self.store(released_out, DynValue::Bool(released))?;
+        self.release_dyn_val(&val, value_type)?;
 
         Ok(())
     }
@@ -3054,9 +3044,8 @@ impl Vm {
 
             let dyn_val = self.marshaller().unmarshal(&value, &ty)?;
 
-            if self.release_dyn_val(&dyn_val.value, ty)? {
-                globals.remove(i);
-            }
+            self.release_dyn_val(&dyn_val.value, ty)?;
+            globals.remove(i);
         }
 
         if self.opts.leak_check {

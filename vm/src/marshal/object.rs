@@ -258,7 +258,7 @@ impl Marshaller {
 
         self.gen_runtime_dtor(&box_type, |builder, self_arg| {
             let value_ref = self_arg.to_ref().element_ref(box_type.clone(), ir::Value::I32_0);
-            builder.release(value_ref.to_deref(), value_type.clone(), ir::Ref::Discard);
+            builder.release(value_ref.to_deref(), value_type.clone());
             true
         })
     }

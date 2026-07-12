@@ -573,7 +573,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                 self.stmts.extend(retain_stmts);
             },
 
-            ir::Instruction::Release { at, value_type, released_out } => {
+            ir::Instruction::Release { at, value_type } => {
                 let at_expr = Expr::translate_ref(at, self);
 
                 let mut release_stmts = Vec::new();
@@ -582,7 +582,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                     at_expr,
                     value_type,
                     &mut release_stmts,
-                    &|builder, value_expr, value_type, stmts| {
+                    &|_builder, value_expr, value_type, stmts| {
                         if !value_type.is_object() {
                             return;
                         }
@@ -592,12 +592,7 @@ impl<'a, 'b> CBuilder<'a, 'b> {
                         let rc_ptr = value_expr.cast(Type::object_ptr());
                         let call_release = release.call([rc_ptr, Expr::LitBool(value_type.is_weak())]);
 
-                        if *released_out != ir::Ref::Discard {
-                            let lhs = Expr::translate_ref(released_out, builder);
-                            stmts.push(Statement::assign(lhs, call_release));
-                        } else {
-                            stmts.push(Statement::Expr(call_release));
-                        }
+                        stmts.push(Statement::Expr(call_release));
                     }
                 );
 

@@ -330,7 +330,7 @@ impl Class {
             dtor = Self::gen_runtime_dtor(unit, &box_type, box_def_name, |builder, self_ref| {
                 let value_ref = self_ref.element_ref(box_type.clone(), ir::Value::I32_0);
 
-                builder.release(value_ref.to_deref(), value_type.clone(), ir::Ref::Discard);
+                builder.release(value_ref.to_deref(), value_type.clone());
                 true
             });
         }

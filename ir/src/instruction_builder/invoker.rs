@@ -248,7 +248,7 @@ where
     builder.mov(ref_out, new_box.to_ref().element_ref(box_type.clone(), Value::I32_0));
     builder.mov(ref_out.to_deref(), boxed_value);
 
-    builder.release(boxed_arg.to_deref(), box_type, Ref::Discard);
+    builder.release(boxed_arg.to_deref(), box_type);
     builder.cast(boxed_arg.to_deref(), new_box, Type::any());
 }
 

@@ -465,7 +465,7 @@ fn build_array_sequence_loop<ElementFn>(
                 let first_iter = builder.eq_to_val(counter_ref.clone(), ir::Value::LiteralI32(0));
                 builder.jmpif(skip_release_label, first_iter);
 
-                builder.release(binding_ref.clone(), binding_ty.clone(), ir::Ref::Discard);
+                builder.release(binding_ref.clone(), binding_ty.clone());
             });
             
             builder.label(skip_release_label);
@@ -538,7 +538,7 @@ pub fn translate_assignment(assignment: &typ::ast::Assignment, builder: &mut IRB
     //
     // the alternative would be to store an initialization flag alongside each rc variable
     let lhs_ty = builder.translate_type(&assignment.lhs.annotation().ty());
-    builder.release(lhs.clone(), lhs_ty, ir::Ref::Discard);
+    builder.release(lhs.clone(), lhs_ty);
 
     builder.mov(lhs, rhs)
 }
@@ -572,7 +572,7 @@ pub fn translate_compound_assignment(
 
         // the new value is being stored in a new location, release the old value and retain it
         builder.retain(op_result.clone(), lhs_ty.clone());
-        builder.release(lhs.clone(), lhs_ty, ir::Ref::Discard);
+        builder.release(lhs.clone(), lhs_ty);
 
         builder.mov(lhs, op_result);
     });

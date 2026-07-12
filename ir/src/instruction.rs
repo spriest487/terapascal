@@ -119,7 +119,6 @@ pub enum Instruction {
     Release {
         at: Ref,
         value_type: Type,
-        released_out: Ref,
     },
     Retain {
         at: Ref,
@@ -304,9 +303,8 @@ impl Instruction {
                 Self::visit_ref(out, f, arg);
             },
 
-            Instruction::Release { at, released_out, .. }  => {
+            Instruction::Release { at, .. }  => {
                 Self::visit_ref(at, f, arg);
-                Self::visit_ref(released_out, f, arg);
             },
             Instruction::Retain { at, .. } => {
                 Self::visit_ref(at, f, arg);
