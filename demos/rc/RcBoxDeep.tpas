@@ -3,6 +3,7 @@ program RcBoxDeep;
 type
     MyObject = class
         value: Integer;
+        destructor Destroy;
     end;
 
     MyArr = array[3] of MyObject;
@@ -11,6 +12,11 @@ type
         obj1: MyObject;
         obj2: MyArr;
     end;
+
+destructor MyObject.Destroy;
+begin
+    WriteLn('destroyed item: ' + self.value);
+end;
 
 begin
     var objBox: box of MyRecord := [(

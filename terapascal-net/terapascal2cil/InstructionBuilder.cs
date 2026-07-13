@@ -534,11 +534,11 @@ public class InstructionBuilder {
             }
 
             case IR.ObjectType(IR.BoxObjectID(var valueType)): {
-                typeBuilder.BuildType(valueType, out var valueTypeID);
-                var boxTypeInfo = typeBuilder.GetBoxTypeInfo(valueTypeID);
+                var elementTypeRef = typeBuilder.BuildType(valueType);
 
                 this.LoadRef(baseRef);
-                this.body.Emit(OpCodes.Ldflda, boxTypeInfo.ValueFieldRef);
+                this.body.Emit(OpCodes.Ldc_I4_0);
+                this.body.Emit(OpCodes.Ldelema, elementTypeRef);
                 break;
             }
 
@@ -638,10 +638,10 @@ public class InstructionBuilder {
     }
     
     private void BuildNewBox(IR.IRef outRef, IR.IType valueType, bool immortal) {
-        var boxObjectID = new IR.BoxObjectID(valueType);
-        var boxCreateMethod = this.assemblyBuilder.TypeBuilder.GetObjectCreateMethod(boxObjectID);
+        var boxCreateMethod = this.assemblyBuilder.TypeBuilder.GetArrayCreateMethod(valueType);
 
         this.StoreRef(outRef, () => {
+            this.body.Emit(OpCodes.Ldc_I4_1);
             this.body.Emit(immortal ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
             this.body.Emit(OpCodes.Call, boxCreateMethod);
         });

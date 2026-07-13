@@ -44,8 +44,6 @@ public class TypeBuilder {
     private readonly SortedDictionary<TypeID, StructLayout> structLayouts;
     private readonly SortedDictionary<TypeID, VariantLayout> variantLayouts;
 
-    private readonly SortedDictionary<TypeID, BoxTypeInfo> boxTypes;
-
     private readonly Dictionary<(TypeID, IR.MethodID), MethodReference> interfaceMethods;
 
     private readonly FieldReference closurePointerField;
@@ -93,7 +91,6 @@ public class TypeBuilder {
 
         this.rcMethodTables = [];
 
-        this.boxTypes = [];
         this.staticArrayElementMethods = [];
 
         this.ValueType = this.ImportCoreReference(typeof(ValueType));
@@ -1013,42 +1010,13 @@ public class TypeBuilder {
     }
 
     private TypeReference BuildBoxTypeRef(IR.IType valueType) {
-        this.BuildType(valueType, out var valueTypeID);
+        var valueTypeRef = this.BuildType(valueType);
 
-        if (this.boxTypes.TryGetValue(valueTypeID, out var boxInfo)) {
-            return boxInfo.TypeRef;
-        }
+        // boxes just translate to 1-sized arrays
+        var arrayType = valueTypeRef.MakeArrayType();
+        this.RegisterSimpleType(valueType.MakeBox(), arrayType);
 
-        var attrs = TypeAttributes.Sealed
-            | TypeAttributes.NotPublic
-            | TypeAttributes.AnsiClass
-            | TypeAttributes.BeforeFieldInit
-            | TypeAttributes.Class
-            | TypeAttributes.AutoLayout;
-
-        var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
-        var typeName = $"Box_{valueType.GetUniqueName(this.cache)}";
-
-        var typeDef = new TypeDefinition(systemTypesNamespace, typeName, attrs, this.ObjectBaseType);
-
-        var valueFieldType = this.BuildType(valueType);
-        var valueFieldDef = new FieldDefinition("value", FieldAttributes.Assembly, valueFieldType);
-        typeDef.Fields.Add(valueFieldDef);
-
-        this.boxTypes.Add(valueTypeID, new BoxTypeInfo {
-            TypeRef = typeDef,
-            ValueFieldRef = valueFieldDef,
-        });
-
-        this.BuildDefaultConstructor(typeDef);
-
-        this.assemblyBuilder.Module.Types.Add(typeDef);
-
-        return typeDef;
-    }
-
-    internal BoxTypeInfo GetBoxTypeInfo(TypeID valueTypeID) {
-        return this.boxTypes[valueTypeID];
+        return arrayType;
     }
 
     private FunctionPointerType BuildFunctionTypeDef(IR.FunctionSig sig) {
