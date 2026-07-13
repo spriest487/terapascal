@@ -184,8 +184,18 @@ public static class SystemFunctions {
         return DateTime.UtcNow.Subtract(startTime).TotalSeconds;
     }
 
-    public static void RegisterRcActions(Type type, RcAction retainer, RcAction releaser) {
-        Object.rcActions[type] = (retainer, releaser);
+    public static void RegisterRcMethodTable<T>(RcMethod retainer, RcMethod releaser) {
+        Object.rcMethods[typeof(T)] = new RcMethodTable {
+            Retain = retainer,
+            Release = releaser,
+            ArrayRelease = (erasedArray, weak) => {
+                var array = (T[])erasedArray;
+                for (var i = 0; i < array.Length; i += 1) {
+                    var elementRef = __makeref(array[i]);
+                    releaser(elementRef, weak);
+                }
+            },
+        };
     }
 
     public static void RcRetain<T>(ref T? obj, bool weak) {
@@ -195,9 +205,9 @@ public static class SystemFunctions {
             }
 
             case var _ when obj.GetType().IsValueType: {
-                if (Object.rcActions.TryGetValue(obj.GetType(), out var rcActions)) {
+                if (Object.rcMethods.TryGetValue(obj.GetType(), out var rcMethodTable)) {
                     var objRef = __makeref(obj);
-                    rcActions.Retain(objRef, weak);
+                    rcMethodTable.Retain(objRef, weak);
                 }
 
                 break;
@@ -236,9 +246,9 @@ public static class SystemFunctions {
             }
 
             case var value when obj.GetType().IsValueType: {
-                if (Object.rcActions.TryGetValue(obj.GetType(), out var rcActions)) {
+                if (Object.rcMethods.TryGetValue(obj.GetType(), out var rcMethodTable)) {
                     var objRef = __makeref(obj);
-                    rcActions.Release(objRef, weak);
+                    rcMethodTable.Release(objRef, weak);
                 }
 
                 break;

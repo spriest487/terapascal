@@ -4,10 +4,8 @@
 
 namespace Terapascal.Runtime;
 
-public delegate void RcAction(TypedReference obj, bool weak);
-
 public class Object {
-    internal static readonly Dictionary<Type, (RcAction Retain, RcAction Release)> rcActions = [];
+    internal static readonly Dictionary<Type, RcMethodTable> rcMethods = [];
 
     internal int strongCount;
     internal int weakCount;

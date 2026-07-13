@@ -55,6 +55,8 @@ public static class ArrayManager {
     }
 
     public static bool ReleaseArray(Array? array, bool weak) {
+        bool dead;
+
         lock (globalLock) {
             if (array == null || !arrayObjects.TryGetValue(array, out var arrayObj)) {
                 return false;
@@ -62,13 +64,32 @@ public static class ArrayManager {
 
             SystemFunctions.RcRelease(ref arrayObj, weak);
 
-            var dead = arrayObj == null;
+            dead = arrayObj == null;
             if (dead) {
                 arrayObjects.Remove(array);
             }
-
-            return dead;
         }
+
+        if (dead) {
+            var arrayType = array.GetType();
+            var elementType = arrayType.GetElementType()!;
+
+            if (elementType.IsValueType) {
+                if (Object.rcMethods.TryGetValue(elementType, out var rcMethodTable)) {
+                    rcMethodTable.ArrayRelease(array, weak: false);
+                }
+            } else {
+                for (var i = 0; i < array.Length; i += 1) {
+                    var element = array.GetValue(i);
+                    switch (element) {
+                        case Object: SystemFunctions.RcRelease(ref element, weak: false); break;
+                        case Array elementArray: ReleaseArray(elementArray, weak: false); break;
+                    }
+                }
+            }
+        }
+
+        return dead;
     }
 
 }

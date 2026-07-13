@@ -103,9 +103,9 @@ public class TypeBuilder {
         this.TypedReferenceType = this.ImportCoreReference(typeof(TypedReference));
         this.MethodInfoType = this.ImportCoreReference(typeof(MethodInfo));
 
-        this.rcActionTypeDef = this.assemblyBuilder.GetRuntimeTypeRef("RcAction", false).Resolve();
+        this.rcActionTypeDef = this.assemblyBuilder.GetRuntimeTypeRef("RcMethod", false).Resolve();
 
-        this.registerRcActionsMethodRef = this.assemblyBuilder.FindRuntimeFunction("RegisterRcActions");
+        this.registerRcActionsMethodRef = this.assemblyBuilder.FindRuntimeFunction("RegisterRcMethodTable");
 
         var typeTypeDef = this.ResolveCore(this.TypeType)!;
         this.GetTypeFromHandleMethod = this.ImportCoreReference(typeTypeDef.GetAllMethods()
@@ -444,11 +444,13 @@ public class TypeBuilder {
         cctorBody.Emit(OpCodes.Newobj, rcActionCtor);
         cctorBody.Emit(OpCodes.Stloc, releaserVar);
 
-        cctorBody.Emit(OpCodes.Ldtoken, typeDef);
-        cctorBody.Emit(OpCodes.Call, this.GetTypeFromHandleMethod);
+        var registerRcInstance = new GenericInstanceMethod(this.registerRcActionsMethodRef) {
+            GenericArguments = { typeDef },
+        };
+
         cctorBody.Emit(OpCodes.Ldloc, retainerVar);
         cctorBody.Emit(OpCodes.Ldloc, releaserVar);
-        cctorBody.Emit(OpCodes.Call, this.registerRcActionsMethodRef);
+        cctorBody.Emit(OpCodes.Call, registerRcInstance);
 
         cctorBody.Emit(OpCodes.Ret);
     }
