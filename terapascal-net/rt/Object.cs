@@ -2,6 +2,8 @@
 
 #nullable disable
 
+using System.Runtime.CompilerServices;
+
 namespace Terapascal.Runtime;
 
 public class Object {
@@ -10,9 +12,11 @@ public class Object {
     internal int strongCount;
     internal int weakCount;
 
+    [SpecialName]
     protected internal virtual void Destroy() {
     }
 
+    [SpecialName]
     public static T Create<T>(bool immortal) where T : Object, new() {
         return new T {
             strongCount = immortal ? -1 : 1,
@@ -20,6 +24,7 @@ public class Object {
         };
     }
 
+    [SpecialName]
     public static bool Is<T>(object any) {
         if (any is not T instance) {
             return false;

@@ -333,7 +333,7 @@ public class TypeBuilder {
             if (isValueType) {
                 this.BuildStructRCMethods(typeID, structDef, typeDef);
             } else {
-                this.BuildClassDestructorMethod(structType, typeDef);
+                this.BuildClassDestroyMethod(typeID, typeDef, structType);
             }
         }
 
@@ -360,10 +360,13 @@ public class TypeBuilder {
         return false;
     }
 
-    private void BuildClassDestructorMethod(
-        IR.IType classType,
-        TypeDefinition typeDef
+    private void BuildClassDestroyMethod(
+        TypeID typeID,
+        TypeDefinition typeDef,
+        IR.IType classType
     ) {
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+
         var baseDestroy = this.assemblyBuilder.Module.ImportReference(typeDef.BaseType
             .Resolve().Methods
             .Single(this.OverridesObjectDestroyMethod));
@@ -379,7 +382,8 @@ public class TypeBuilder {
 
         var destroyBody = destroyMethod.Body.GetILProcessor();
 
-        if (this.assemblyBuilder.LoadedMetadata.FindDestructor(classType, out var dtorFunc)) {
+        // call user destructor
+        if (metadata.FindDestructor(classType, out var dtorFunc)) {
             destroyBody.Emit(OpCodes.Ldarg_0);
             destroyBody.Emit(OpCodes.Call, baseDestroy);
 
@@ -388,6 +392,30 @@ public class TypeBuilder {
 
             destroyBody.Emit(OpCodes.Ldarg_0);
             destroyBody.Emit(OpCodes.Call, dtorMethod);
+        }
+
+        // release fields
+        var classLayout = this.structLayouts[typeID];
+        var releaseFunc = this.assemblyBuilder.FindRuntimeFunction(nameof(Runtime.SystemFunctions.RcRelease));
+
+        foreach (var (_, layoutField) in classLayout.Fields) {
+            if (!metadata.TypeContainsObjectRefs(layoutField.Type)) {
+                continue;
+            }
+
+            // call the system release/retain func on an object ref
+            var releaseInstance = new GenericInstanceMethod(releaseFunc);
+            releaseInstance.GenericArguments.Add(layoutField.Field.FieldType);
+
+            // load field ref
+            destroyBody.Emit(OpCodes.Ldarg_0);
+            destroyBody.Emit(OpCodes.Ldflda, layoutField.Field);
+
+            // load weak arg
+            destroyBody.Emit(layoutField.Type is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+
+            // Release(ref field, fieldType is weak)
+            destroyBody.Emit(OpCodes.Call, releaseInstance);
         }
 
         destroyBody.Emit(OpCodes.Ret);
@@ -629,7 +657,7 @@ public class TypeBuilder {
         TypeReference structTypeRef,
         StructLayout structLayout,
         Func<LayoutField, bool> predicate,
-        Action<LayoutField> emit
+        Action<LayoutField> emitVisit
     ) {
         var body = methodDef.Body.GetILProcessor();
 
@@ -649,7 +677,7 @@ public class TypeBuilder {
             body.Emit(OpCodes.Ldloc, selfRefVar);
             body.Emit(OpCodes.Ldflda, layoutField.Field);
 
-            emit(layoutField);
+            emitVisit(layoutField);
         }
     }
 
