@@ -761,4 +761,80 @@ public interface IMetadataSource {
             && typeImpls.TryGetValue(ifaceRef, out var ifaceImpl)
             && ifaceImpl.Methods.TryGetValue(methodID, out methodFuncID);
     }
+
+    bool InstantiateStructDef(TypeRef typeRef, [NotNullWhen(true)] out StructDef? structDef) {
+        structDef = null;
+        if (!this.FindStructDef(typeRef.DefID, out var genericDef)) {
+            return false;
+        }
+
+        var declName = genericDef.Identity.GetDeclPath();
+
+        if (declName is not { HasTypeParams: true }) {
+            structDef = genericDef;
+            return true;
+        }
+
+        if (!typeRef.HasArgs) {
+            return false;
+        }
+
+        var typeMap = Util.BuildGenericTypeMap(declName.TypeParams, typeRef.Args);
+        structDef = genericDef.ResolveGeneric(typeMap);
+        return true;
+    }
+
+    bool InstantiateVariantDef(TypeRef typeRef, [NotNullWhen(true)] out VariantDef? variantDef) {
+        variantDef = null;
+        if (!this.FindVariantDef(typeRef.DefID, out var genericDef)) {
+            return false;
+        }
+
+        if (!genericDef.Name.HasTypeParams) {
+            variantDef = genericDef;
+            return true;
+        }
+
+        if (!typeRef.HasArgs) {
+            return false;
+        }
+
+        var typeMap = Util.BuildGenericTypeMap(genericDef.Name.TypeParams, typeRef.Args);
+        variantDef = genericDef.ResolveGeneric(typeMap);
+        return true;
+    }
+
+    bool TypeContainsObjectRefs(IType type) {
+        switch (type) {
+            case ObjectType(_):
+            case WeakObjectType(_): return true;
+
+            // generic params may be resolved into objects - generated code should always be able to handle both
+            case GenericType(_): return true;
+
+            case StructType(var typeRef): {
+                if (!this.InstantiateStructDef(typeRef, out var structDef)) {
+                    return false;
+                }
+
+                return structDef.Fields.Values.Any(fieldDef => this.TypeContainsObjectRefs(fieldDef.Type));
+            }
+
+            case VariantType(var typeRef): {
+                if (!this.InstantiateVariantDef(typeRef, out var structDef)) {
+                    return false;
+                }
+
+                return structDef.Cases.Any(caseDef => caseDef.Type != null && this.TypeContainsObjectRefs(caseDef.Type));
+            }
+
+            case ArrayType arrayType: {
+                return arrayType.Length > 0 && this.TypeContainsObjectRefs(arrayType.Element);
+            }
+
+            default: {
+                return false;
+            }
+        }
+    }
 }

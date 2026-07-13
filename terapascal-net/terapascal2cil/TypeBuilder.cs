@@ -2,7 +2,6 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
-using Terapascal.Runtime;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodAttributes = Mono.Cecil.MethodAttributes;
 using MethodInfo = System.Reflection.MethodInfo;
@@ -42,7 +41,7 @@ public class TypeBuilder {
 
     private readonly Dictionary<ArraySig, MethodReference> staticArrayElementMethods;
 
-    private readonly SortedDictionary<TypeID, StructLayout> structFieldMaps;
+    private readonly SortedDictionary<TypeID, StructLayout> structLayouts;
     private readonly SortedDictionary<TypeID, VariantLayout> variantLayouts;
 
     private readonly SortedDictionary<TypeID, BoxTypeInfo> boxTypes;
@@ -54,6 +53,8 @@ public class TypeBuilder {
     private readonly StaticArrayTypeBuilder staticArrayBuilder;
 
     private readonly SortedDictionary<IR.TypeDefID, string> builtinStructNames;
+
+    private readonly SortedDictionary<TypeID, (MethodReference Retain, MethodReference Release)> rcFuncs;
 
     public TypeReference ExceptionType { get; }
     public TypeReference CLRStringType { get; }
@@ -81,10 +82,15 @@ public class TypeBuilder {
 
         this.cache = new TypeCache();
 
-        this.structFieldMaps = new SortedDictionary<TypeID, StructLayout>();
-        this.variantLayouts = new SortedDictionary<TypeID, VariantLayout>();
+        this.structLayouts = [];
+        this.variantLayouts = [];
 
-        this.interfaceMethods = new Dictionary<(TypeID, IR.MethodID), MethodReference>();
+        this.interfaceMethods = [];
+
+        this.rcFuncs = [];
+
+        this.boxTypes = [];
+        this.staticArrayElementMethods = [];
 
         this.ValueType = this.ImportCoreReference(typeof(ValueType));
         this.ExceptionType = this.ImportCoreReference(typeof(Exception));
@@ -133,10 +139,7 @@ public class TypeBuilder {
             .Single(f => f.Name == nameof(Runtime.ClosureBase.functionPointer));
         this.closurePointerField = this.assemblyBuilder.Module.ImportReference(this.closurePointerField);
 
-        this.boxTypes = new SortedDictionary<TypeID, BoxTypeInfo>();
-
         this.staticArrayBuilder = new StaticArrayTypeBuilder(this.assemblyBuilder, this);
-        this.staticArrayElementMethods = new Dictionary<ArraySig, MethodReference>();
     }
 
     public TypeReference BuildType(IR.IType type) {
@@ -316,12 +319,119 @@ public class TypeBuilder {
 
             this.BuildDefaultConstructor(typeDef);
 
+            if (isValueType) {
+                this.BuildStructRCMethods(typeID, structDef, typeDef);
+            }
+
             this.assemblyBuilder.Module.Types.Add(typeDef);
         }
 
         Debug.Assert(isValueType == typeRef.IsValueType);
 
         return typeRef;
+    }
+
+    private void BuildStructRCMethods(
+        TypeID typeID,
+        IR.StructDef structDef,
+        TypeDefinition typeDef
+    ) {
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+
+        if (!structDef.Fields.Values.Any(fieldDef => metadata.TypeContainsObjectRefs(fieldDef.Type))) {
+            return;
+        }
+
+        var retainMethodDef = this.BuildStructRCMethod(typeDef, typeID, retain: true);
+        var releaseMethodDef = this.BuildStructRCMethod(typeDef, typeID, retain: false);
+
+        this.rcFuncs.Add(typeID, (retainMethodDef, releaseMethodDef));
+        typeDef.Methods.Add(retainMethodDef);
+        typeDef.Methods.Add(releaseMethodDef);
+    }
+
+    private MethodDefinition BuildStructRCMethod(
+        TypeDefinition structTypeDef,
+        TypeID structTypeID,
+        bool retain
+    ) {
+        const MethodAttributes attrs = MethodAttributes.Assembly
+            | MethodAttributes.Final
+            | MethodAttributes.SpecialName
+            | MethodAttributes.Static;
+
+        var actionName = retain ? "retain" : "release";
+        var methodDef = new MethodDefinition($"<{actionName}>", attrs, this.assemblyBuilder.TypeSystem.Void);
+
+        var objParamPtrType = this.assemblyBuilder.TypeSystem.Void.MakePointerType();
+        methodDef.Parameters.Add(new ParameterDefinition(objParamPtrType));
+
+        var retainBody = methodDef.Body.GetILProcessor();
+        var retainBuilder = new InstructionBuilder(this.assemblyBuilder, methodDef);
+
+        var structLayout = this.structLayouts[structTypeID];
+
+        VisitStructFields(
+            methodDef,
+            structTypeDef,
+            structLayout,
+            field => {
+                if (field.Type.IsObjectType()) {
+                    return true;
+                }
+
+                var fieldTypeID = this.cache.GetTypeID(field.Type);
+                return this.rcFuncs.ContainsKey(fieldTypeID);
+            },
+            field => {
+                // if it's a complex type, it must have been translated already, and we'll have a retain method
+                // in the cache for it. if it's not, it isn't complex so we only need to release it if it's an object
+                if (field.Type.IsObjectType()) {
+                    if (retain) {
+                        retainBuilder.EmitRetain(field.Type, () => { });
+                    } else {
+                        retainBuilder.EmitRelease(field.Type, () => { });
+                    }
+                } else {
+                    var fieldTypeID = this.cache.GetTypeID(field.Type);
+                    if (this.rcFuncs.TryGetValue(fieldTypeID, out var rcFuncs)) {
+                        retainBody.Emit(OpCodes.Call, retain ? rcFuncs.Retain : rcFuncs.Release);
+                    }
+                }
+            });
+
+        retainBody.Emit(OpCodes.Pop); // pop self ref
+        retainBuilder.Finish();
+
+        return methodDef;
+    }
+
+    private static void VisitStructFields(
+        MethodDefinition methodDef,
+        TypeReference structTypeRef,
+        StructLayout structLayout,
+        Func<LayoutField, bool> predicate,
+        Action<LayoutField> emit
+    ) {
+        var body = methodDef.Body.GetILProcessor();
+
+        var selfRefVar = new VariableDefinition(structTypeRef.MakeByReferenceType());
+        methodDef.Body.Variables.Add(selfRefVar);
+
+        // cast object pointer to a ref to the struct
+        body.Emit(OpCodes.Ldarg_0);
+        body.Emit(OpCodes.Stloc, selfRefVar);
+
+        foreach (var (_, layoutField) in structLayout.Fields) {
+            if (!predicate(layoutField)) {
+                continue;
+            }
+
+            body.Emit(OpCodes.Ldloc, selfRefVar);
+            body.Emit(OpCodes.Ldflda, layoutField.Field);
+
+            emit(layoutField);
+        }
     }
 
     private void BuildStructLayoutFromDef(
@@ -331,7 +441,7 @@ public class TypeBuilder {
         IR.FunctionSig? closureSig
     ) {
         var fieldLayout = new SortedDictionary<IR.FieldID, LayoutField>();
-        this.structFieldMaps[typeID] = new StructLayout {
+        this.structLayouts[typeID] = new StructLayout {
             Fields = fieldLayout,
         };
 
@@ -381,7 +491,7 @@ public class TypeBuilder {
         IR.StructDef structDef
     ) {
         var fieldLayout = new SortedDictionary<IR.FieldID, LayoutField>();
-        this.structFieldMaps[typeID] = new StructLayout {
+        this.structLayouts[typeID] = new StructLayout {
             Fields = fieldLayout,
         };
 
@@ -526,14 +636,14 @@ public class TypeBuilder {
         }
 
         var tagAttrCtor = this.assemblyBuilder
-                .GetRuntimeTypeRef(nameof(VariantTagFieldAttribute), false)
+                .GetRuntimeTypeRef(nameof(Runtime.VariantTagFieldAttribute), false)
                 .Resolve()?
                 .FindConstructor(isStatic: false, [])
             ?? throw new InvalidOperationException("missing constructor def for variant tag field attribute type");
         tagAttrCtor = this.assemblyBuilder.Module.ImportReference(tagAttrCtor);
 
         var caseAttrCtor = this.assemblyBuilder
-                .GetRuntimeTypeRef(nameof(VariantCaseFieldAttribute), false)
+                .GetRuntimeTypeRef(nameof(Runtime.VariantCaseFieldAttribute), false)
                 .Resolve()?
                 .FindConstructor(isStatic: false, [typeof(object)])
             ?? throw new InvalidOperationException("missing constructor def for variant case field attribute type");
@@ -826,7 +936,7 @@ public class TypeBuilder {
 
         this.BuildType(baseType, out var baseTypeID);
 
-        if (!this.structFieldMaps.TryGetValue(baseTypeID, out var structFieldRefs)
+        if (!this.structLayouts.TryGetValue(baseTypeID, out var structFieldRefs)
             || !structFieldRefs.Fields.TryGetValue(fieldID, out var fieldRef)
         ) {
             var typeDisplay = baseType.ToString(this.assemblyBuilder.LoadedMetadata);

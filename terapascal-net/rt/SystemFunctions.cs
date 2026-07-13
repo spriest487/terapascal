@@ -186,8 +186,12 @@ public static class SystemFunctions {
 
     public static void RcRetain<T>(ref T? obj, bool weak) {
         switch (obj) {
-            case var value when typeof(T).IsValueType: {
-                if (Object.retainers.TryGetValue(typeof(T), out var retainer)) {
+            case null: {
+                return;
+            }
+
+            case var value when obj.GetType().IsValueType: {
+                if (Object.retainers.TryGetValue(obj.GetType(), out var retainer)) {
                     unsafe {
 #pragma warning disable CS8500
                         retainer(&value, weak);
@@ -226,8 +230,12 @@ public static class SystemFunctions {
 
     public static void RcRelease<T>(ref T? obj, bool weak) {
         switch (obj) {
-            case var value when typeof(T).IsValueType: {
-                if (Object.releasers.TryGetValue(typeof(T), out var releaser)) {
+            case null: {
+                return;
+            }
+
+            case var value when obj.GetType().IsValueType: {
+                if (Object.releasers.TryGetValue(obj.GetType(), out var releaser)) {
                     unsafe {
 #pragma warning disable CS8500
                         if (releaser(&value, weak)) {

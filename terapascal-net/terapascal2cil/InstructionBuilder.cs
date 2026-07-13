@@ -68,6 +68,7 @@ public class InstructionBuilder {
 
     public void AddInstructions(IReadOnlyList<IR.IInstruction> instructions) {
         var typeBuilder = this.assemblyBuilder.TypeBuilder;
+        var metadata = this.assemblyBuilder.LoadedMetadata;
 
         for (var pc = 0; pc < instructions.Count; pc += 1) {
             var instruction = instructions[pc];
@@ -82,49 +83,27 @@ public class InstructionBuilder {
                     // TODO: native generics
                     // TODO: deep object refs in structs
                     // TODO: generic param types may be objects
-                    if (!valueType.IsObjectType()) {
+                    if (!metadata.TypeContainsObjectRefs(valueType)) {
                         continue;
                     }
 
-                    var retainType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
-
-                    const string methodName = nameof(Runtime.SystemFunctions.RcRetain);
-                    this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
-
-                    var retainInstance = new GenericInstanceMethod(this.rcRetainMethod);
-                    retainInstance.GenericArguments.Add(retainType);
-
-                    // weak flag
-                    this.LoadRefAddr(atRef);
-                    this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
-                    
-                    this.body.Emit(OpCodes.Call, retainInstance);
-                    break;
+                    this.EmitRetain(valueType, () => {
+                        this.LoadRefAddr(atRef);
+                    });
+                    continue;
                 }
 
                 case IR.ReleaseInstruction { At: var atRef, ValueType: var valueType }: {
                     // TODO: native generics
                     // TODO: deep object refs in structs
                     // TODO: generic param types may be objects
-                    if (!valueType.IsObjectType()) {
+                    if (!metadata.TypeContainsObjectRefs(valueType)) {
                         continue;
                     }
 
-                    var releaseType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
-
-                    const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
-                    this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
-
-                    var releaseInstance = new GenericInstanceMethod(this.rcReleaseMethod);
-                    releaseInstance.GenericArguments.Add(releaseType);
-
-                    // pass arg by ref
-                    this.LoadRefAddr(atRef);
-
-                    // weak flag
-                    this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
-
-                    this.body.Emit(OpCodes.Call, releaseInstance);
+                    this.EmitRelease(valueType, () => {
+                        this.LoadRefAddr(atRef);
+                    });
                     break;
                 }
 
@@ -264,7 +243,7 @@ public class InstructionBuilder {
                             }
                             
                             default: {
-                                throw new NotImplementedException($"conversion to {castToType.ToString(this.assemblyBuilder.LoadedMetadata)}");
+                                throw new NotImplementedException($"conversion to {castToType.ToString(metadata)}");
                             }
                         }
                     });
@@ -469,6 +448,41 @@ public class InstructionBuilder {
                 }
             }
         }
+    }
+
+    public void EmitRelease(IR.IType valueType, Action loadValueAddr) {
+        var releaseType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
+
+        const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
+        this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
+
+        var releaseInstance = new GenericInstanceMethod(this.rcReleaseMethod);
+        releaseInstance.GenericArguments.Add(releaseType);
+
+        // pass arg by ref
+        loadValueAddr();
+
+        // weak flag
+        this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+
+        this.body.Emit(OpCodes.Call, releaseInstance);
+    }
+
+    public void EmitRetain(IR.IType valueType, Action loadValueAddr) {
+        var retainType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
+
+        const string methodName = nameof(Runtime.SystemFunctions.RcRetain);
+        this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
+
+        var retainInstance = new GenericInstanceMethod(this.rcRetainMethod);
+        retainInstance.GenericArguments.Add(retainType);
+
+        loadValueAddr();
+
+        // weak flag
+        this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+
+        this.body.Emit(OpCodes.Call, retainInstance);
     }
 
     private void LoadFieldRef(IR.IRef argRef, IR.FieldID fieldID, IR.IType baseType) {
