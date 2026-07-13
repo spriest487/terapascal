@@ -805,6 +805,28 @@ public interface IMetadataSource {
         return true;
     }
 
+    bool InstantiateInterfaceDef(InterfaceRef ifaceRef, [NotNullWhen(true)] out InterfaceDef? ifaceDef) {
+        ifaceDef = null;
+        if (!this.FindInterfaceDecl(ifaceRef.DefID, out var genericDecl)
+            || genericDecl is not DefInterfaceDecl(var genericDef)
+        ) {
+            return false;
+        }
+
+        if (!genericDef.Name.HasTypeParams) {
+            ifaceDef = genericDef;
+            return true;
+        }
+
+        if (!ifaceRef.HasArgs) {
+            return false;
+        }
+
+        var typeMap = Util.BuildGenericTypeMap(genericDef.Name.TypeParams, ifaceRef.Args);
+        ifaceDef = genericDef.ResolveGeneric(typeMap);
+        return true;
+    }
+
     bool TypeContainsObjectRefs(IType type) {
         switch (type) {
             case ObjectType(_):

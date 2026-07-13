@@ -67,6 +67,28 @@ public record InterfaceDef {
         result = this.Methods[(int)id.ID];
         return true;
     }
+
+    public InterfaceDef ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
+        return new InterfaceDef {
+            Name = this.Name,
+            Visibility = this.Visibility,
+            Tags = this.Tags,
+            Methods = this.Methods
+                .Select(method => new InterfaceMethod {
+                    Name = method.Name,
+                    IsInstanceMethod = method.IsInstanceMethod,
+                    ResultType = method.ResultType.ResolveGeneric(typeMap),
+                    Params = method.Params
+                        .Select(param => new FunctionParamInfo {
+                            Type = param.Type.ResolveGeneric(typeMap),
+                            Tags = param.Tags,
+                            Name = param.Name,
+                        })
+                        .ToArray(),
+                })
+                .ToArray(),
+        };
+    }
 }
 
 [MessagePackObject]

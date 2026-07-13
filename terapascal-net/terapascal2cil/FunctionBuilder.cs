@@ -254,7 +254,7 @@ public class FunctionBuilder {
     }
 
     private MethodDefinition CreateFunctionMethod(IR.FunctionRef funcRef) {
-        const MethodAttributes attrs = MethodAttributes.Static | MethodAttributes.Assembly;
+        var attrs = MethodAttributes.Static | MethodAttributes.Assembly;
 
         var metadata = this.assemblyBuilder.LoadedMetadata;
 
@@ -297,6 +297,8 @@ public class FunctionBuilder {
             }
 
             case IR.InternalFunctionIdentity internalIdentity: {
+                attrs |= MethodAttributes.SpecialName;
+
                 name = internalIdentity.Name;
                 declaringTypeDef = this.assemblyBuilder.GetInternalClass();
                 break;
@@ -310,6 +312,8 @@ public class FunctionBuilder {
             }
 
             case IR.DestructorFunctionIdentity: {
+                attrs |= MethodAttributes.SpecialName;
+
                 name = FunctionMethodName(funcRef.DefID);
                 declaringTypeDef = this.assemblyBuilder.GetInternalClass();
                 break;

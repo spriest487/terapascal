@@ -31,13 +31,13 @@ public class StaticArrayTypeBuilder {
         var arrayType = new ArrayType { Element = element, Length = length };
 
         var (_, typeDef) = this.typeBuilder.Cache.RegisterTypeWith(arrayType, typeID => {
-            var typeName = $"StaticArray_Internal_{typeID}";
+            var typeName = $"StaticArray_Internal_{element.GetUniqueName(this.typeBuilder.Cache)}";
 
-            var systemTypesNamespace = typeof(Runtime.SystemFunctions).Namespace;
+            var internalNS = this.assemblyBuilder.GetInternalClass().Namespace;
 
             var typeAttributes = TypeAttributes.Public | TypeAttributes.Sealed | TypeAttributes.SequentialLayout |
                 TypeAttributes.AnsiClass | TypeAttributes.BeforeFieldInit;
-            var typeDef = new TypeDefinition(systemTypesNamespace, typeName, typeAttributes, this.typeBuilder.ValueType);
+            var typeDef = new TypeDefinition(internalNS, typeName, typeAttributes, this.typeBuilder.ValueType);
 
             return typeDef;
         });
@@ -101,6 +101,8 @@ public class StaticArrayTypeBuilder {
 
                 elementRefMethod = this.BuildElementReferenceFunction(typeDef, elementTypeRef);
                 this.BuildElementReferenceMethodBody(elementRefMethod, typeDef);
+
+                this.BuildRCMethods(element, typeDef);
 
                 break;
             }
@@ -397,5 +399,50 @@ public class StaticArrayTypeBuilder {
         }
 
         body.Append(retInstruction);
+    }
+
+    private void BuildRCMethods(IR.IType elementType, TypeDefinition arrayTypeDef) {
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+
+        if (!metadata.TypeContainsObjectRefs(elementType)) {
+            return;
+        }
+
+        var retainMethod = this.BuildRCMethod(arrayTypeDef, retain: true);
+        var releaseMethod = this.BuildRCMethod(arrayTypeDef, retain: false);
+
+        this.typeBuilder.RegisterRCMethodTable(arrayTypeDef, retainMethod, releaseMethod);
+    }
+
+    private MethodDefinition BuildRCMethod(TypeDefinition arrayTypeDef, bool retain) {
+        var methodDef = this.typeBuilder.CreateRCMethod(arrayTypeDef, retain);
+
+        var body = methodDef.Body.GetILProcessor();
+
+        var systemFunc = this.assemblyBuilder.FindRuntimeFunction(retain
+            ? nameof(Runtime.SystemFunctions.RcRetain)
+            : nameof(Runtime.SystemFunctions.RcRelease));
+
+        var selfVar = new VariableDefinition(arrayTypeDef.MakeByReferenceType());
+        methodDef.Body.Variables.Add(selfVar);
+
+        body.Emit(OpCodes.Ldarg_0);
+        body.Emit(OpCodes.Refanyval, arrayTypeDef);
+        body.Emit(OpCodes.Stloc, selfVar);
+
+        for (var i = 0; i < arrayTypeDef.Fields.Count; i += 1) {
+            body.Emit(OpCodes.Ldloc, selfVar);
+            body.Emit(OpCodes.Ldflda, arrayTypeDef.Fields[i]);
+
+            var systemFuncInstance = new GenericInstanceMethod(systemFunc);
+            systemFuncInstance.GenericArguments.Add(arrayTypeDef.Fields[i].FieldType);
+
+            body.Emit(OpCodes.Ldarg_1);
+            body.Emit(OpCodes.Call, systemFuncInstance);
+        }
+
+        body.Emit(OpCodes.Ret);
+
+        return methodDef;
     }
 }

@@ -7,6 +7,11 @@ public readonly record struct TypeID(int ID) : IComparable<TypeID> {
     public int CompareTo(TypeID other) {
         return this.ID.CompareTo(other.ID);
     }
+
+
+    public override string ToString() {
+        return $"Type{this.ID}";
+    }
 };
 
 internal class TypeCache {

@@ -3,12 +3,20 @@ using System.Diagnostics.CodeAnalysis;
 namespace Terapascal.IR;
 
 public class MetadataCollection : IMetadataSource {
-    public delegate bool TryFindFunc<T>(Metadata metadata, [NotNullWhen(true)] out T? result);
+    private delegate bool TryFindFunc<T>(Metadata metadata, [NotNullWhen(true)] out T? result);
 
     private readonly List<Metadata> collection;
 
+    private readonly Dictionary<TypeRef, StructDef> structCache;
+    private readonly Dictionary<TypeRef, StructDef> variantCache;
+    private readonly Dictionary<InterfaceRef, StructDef> ifaceCache;
+
     public MetadataCollection() {
         this.collection = [];
+
+        this.structCache = [];
+        this.variantCache = [];
+        this.ifaceCache = [];
     }
 
     public void Add(Metadata metadata) {

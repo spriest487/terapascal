@@ -1,0 +1,8 @@
+{
+  "steps": [
+    { "output": "Hello, World" },
+    { "output": "Hello, Everyone" },
+    { "output": "destroyed: Hello, World" },
+    { "output": "destroyed: Hello, Everyone" }
+  ]
+}

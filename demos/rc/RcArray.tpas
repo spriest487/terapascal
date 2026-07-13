@@ -1,16 +1,27 @@
 implementation
 uses System;
 
-function PrintNth(xs: array[2] of String; n: Integer);
+type
+    MyClass = class
+        name: String;
+        destructor Destroy;
+    end;
+
+destructor MyClass.Destroy;
+begin
+    WriteLn('destroyed: ' + self.name);
+end;
+
+function PrintNth(xs: array[2] of MyClass; n: Integer);
 begin
     var first := xs[n];
-    WriteLn(first);
+    WriteLn(first.name);
 end;
 
 initialization
     var x := [
-        StringConcat('Hello, ', 'World'), 
-        StringConcat('Hello, ', 'Everyone')
+        MyClass(name: StringConcat('Hello, ', 'World')),
+        MyClass(name: StringConcat('Hello, ', 'Everyone'))
     ];
 
     var y := x;
