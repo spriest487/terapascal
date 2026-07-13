@@ -1,4 +1,5 @@
 ﻿using Mono.Cecil;
+using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
 
 namespace Terapascal.CIL;
@@ -50,6 +51,73 @@ public static class CecilExt {
 
             typeDef.Methods.Add(methodDef);
             return methodDef;
+        }
+    }
+
+    extension(ILProcessor ilProcessor) {
+        public void EmitLoadLiteral(IR.IValue value) {
+            switch (value) {
+                case IR.LiteralNilValue: {
+                    ilProcessor.Emit(OpCodes.Ldnull);
+                    break;
+                }
+                case IR.LiteralValue<byte>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I4, (int)val);
+                    break;
+                }
+                case IR.LiteralValue<sbyte>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I4, (int)val);
+                    break;
+                }
+                case IR.LiteralValue<ushort>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I4, (int)val);
+                    break;
+                }
+                case IR.LiteralValue<short>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I4, (int)val);
+                    break;
+                }
+                case IR.LiteralValue<uint>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I4, (int)val);
+                    break;
+                }
+                case IR.LiteralValue<int>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I4, (int)val);
+                    break;
+                }
+                case IR.LiteralValue<ulong>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I8, (long)val);
+                    break;
+                }
+                case IR.LiteralValue<long>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I8, (long)val);
+                    break;
+                }
+                case IR.LiteralValue<bool>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I4, val ? 1 : 0);
+                    break;
+                }
+                case IR.LiteralValue<nint>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I8, val);
+                    break;
+                }
+                case IR.LiteralValue<nuint>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_I8, (long)val);
+                    break;
+                }
+                case IR.LiteralValue<float>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_R4, val);
+                    break;
+                }
+                case IR.LiteralValue<double>(var val): {
+                    ilProcessor.Emit(OpCodes.Ldc_R8, val);
+                    break;
+                }
+
+                default: {
+                    throw new ArgumentException($"value is not a literal: {value}");
+                }
+            }
         }
     }
 }

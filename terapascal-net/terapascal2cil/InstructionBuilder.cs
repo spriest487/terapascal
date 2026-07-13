@@ -875,62 +875,6 @@ public class InstructionBuilder {
 
     private void LoadValue(IR.IValue loadValue) {
         switch (loadValue) {
-            case IR.LiteralNilValue: {
-                this.body.Emit(OpCodes.Ldnull);
-                break;
-            }
-            case IR.LiteralValue<byte>(var val): {
-                this.body.Emit(OpCodes.Ldc_I4, (int)val);
-                break;
-            }
-            case IR.LiteralValue<sbyte>(var val): {
-                this.body.Emit(OpCodes.Ldc_I4, (int)val);
-                break;
-            }
-            case IR.LiteralValue<ushort>(var val): {
-                this.body.Emit(OpCodes.Ldc_I4, (int)val);
-                break;
-            }
-            case IR.LiteralValue<short>(var val): {
-                this.body.Emit(OpCodes.Ldc_I4, (int)val);
-                break;
-            }
-            case IR.LiteralValue<uint>(var val): {
-                this.body.Emit(OpCodes.Ldc_I4, (int)val);
-                break;
-            }
-            case IR.LiteralValue<int>(var val): {
-                this.body.Emit(OpCodes.Ldc_I4, (int)val);
-                break;
-            }
-            case IR.LiteralValue<ulong>(var val): {
-                this.body.Emit(OpCodes.Ldc_I8, (long)val);
-                break;
-            }
-            case IR.LiteralValue<long>(var val): {
-                this.body.Emit(OpCodes.Ldc_I8, (long)val);
-                break;
-            }
-            case IR.LiteralValue<bool>(var val): {
-                this.body.Emit(OpCodes.Ldc_I4, val ? 1 : 0);
-                break;
-            }
-            case IR.LiteralValue<nint>(var val): {
-                this.body.Emit(OpCodes.Ldc_I8, val);
-                break;
-            }
-            case IR.LiteralValue<nuint>(var val): {
-                this.body.Emit(OpCodes.Ldc_I8, (long)val);
-                break;
-            }
-            case IR.LiteralValue<float>(var val): {
-                this.body.Emit(OpCodes.Ldc_R4, val);
-                break;
-            }
-            case IR.LiteralValue<double>(var val): {
-                this.body.Emit(OpCodes.Ldc_R8, val);
-                break;
-            }
             case IR.RefValue(var loadRef): {
                 this.LoadRef(loadRef);
                 break;
@@ -947,6 +891,11 @@ public class InstructionBuilder {
             }
 
             default: {
+                if (loadValue.IsLiteral) {
+                    this.body.EmitLoadLiteral(loadValue);
+                    break;
+                }
+
                 throw new NotSupportedException($"unsupported value: {loadValue}");
             }
         }

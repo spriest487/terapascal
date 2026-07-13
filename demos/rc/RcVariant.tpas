@@ -1,14 +1,39 @@
 implementation
 uses System;
 
+type
+    MyText = class
+        value: String;
+        destructor Destroy;
+    end;
+
+destructor MyText.Destroy;
+begin
+    WriteLn('destroyed: ' + self.value);
+end;
+
 type Things = variant
     Box: box of Integer;
-    Text: String;
+    Text: MyText;
     None;
 end;
 
 initialization
     var v := Things.Box([123]);
-    v := Things.Text('hello world');
-    v := Things.None();
+
+    {
+        Even though the value of `v` is being replaced here, the instances
+        of the variant live until the end of the scope they're created in
+    }
+    begin
+        v := Things.Text(MyText(value: 'hello world'));
+    end;
+
+    begin
+        WriteLn('clearing greeting...');
+        v := Things.None();
+    end;
+
+    WriteLn('saying goodbye...');
+    v := Things.Text(MyText(value: 'goodbye, world'));
 end

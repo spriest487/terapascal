@@ -54,7 +54,7 @@ public class TypeBuilder {
 
     private readonly SortedDictionary<IR.TypeDefID, string> builtinStructNames;
 
-    private readonly SortedDictionary<TypeID, (MethodReference Retain, MethodReference Release)> rcFuncs;
+    private readonly SortedDictionary<TypeID, (MethodReference Retain, MethodReference Release)> rcMethodTables;
 
     private readonly TypeDefinition rcActionTypeDef;
     private readonly MethodReference registerRcActionsMethodRef;
@@ -91,7 +91,7 @@ public class TypeBuilder {
 
         this.interfaceMethods = [];
 
-        this.rcFuncs = [];
+        this.rcMethodTables = [];
 
         this.boxTypes = [];
         this.staticArrayElementMethods = [];
@@ -407,9 +407,120 @@ public class TypeBuilder {
         var retainMethodDef = this.BuildStructRCMethod(typeDef, typeID, retain: true);
         var releaseMethodDef = this.BuildStructRCMethod(typeDef, typeID, retain: false);
 
-        this.rcFuncs.Add(typeID, (retainMethodDef, releaseMethodDef));
+        this.rcMethodTables.Add(typeID, (retainMethodDef, releaseMethodDef));
 
         this.RegisterRCMethodTable(typeDef, retainMethodDef, releaseMethodDef);
+    }
+
+    private void BuildVariantRCMethods(
+        TypeID typeID,
+        IR.VariantDef variantDef,
+        TypeDefinition typeDef
+    ) {
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+
+        if (!variantDef.Cases.Any(c => c.Type != null && metadata.TypeContainsObjectRefs(c.Type))) {
+            return;
+        }
+
+        var retainMethodDef = this.BuildVariantRCMethod(typeDef, typeID, variantDef, retain: true);
+        var releaseMethodDef = this.BuildVariantRCMethod(typeDef, typeID, variantDef, retain: false);
+
+        this.rcMethodTables.Add(typeID, (retainMethodDef, releaseMethodDef));
+
+        this.RegisterRCMethodTable(typeDef, retainMethodDef, releaseMethodDef);
+    }
+
+    private MethodDefinition BuildVariantRCMethod(
+        TypeDefinition variantTypeDef,
+        TypeID variantTypeID,
+        IR.VariantDef variantDef,
+        bool retain
+    ) {
+        var methodDef = this.CreateRCMethod(variantTypeDef, retain);
+
+        var body = methodDef.Body.GetILProcessor();
+
+        var variantLayout = this.variantLayouts[variantTypeID];
+
+        var systemFunc = this.assemblyBuilder.FindRuntimeFunction(retain
+            ? nameof(Runtime.SystemFunctions.RcRetain)
+            : nameof(Runtime.SystemFunctions.RcRelease));
+
+        this.VisitVariantCurrentCase(
+            methodDef,
+            variantTypeDef,
+            variantDef,
+            variantLayout,
+            field => this.assemblyBuilder.LoadedMetadata.TypeContainsObjectRefs(field.Type),
+            field => {
+                // call the system release/retain func on an object ref
+                var systemFuncInstance = new GenericInstanceMethod(systemFunc);
+                systemFuncInstance.GenericArguments.Add(field.Field.FieldType);
+
+                body.Emit(OpCodes.Ldarg_1);
+                body.Emit(OpCodes.Call, systemFuncInstance);
+            });
+
+        body.Emit(OpCodes.Ret);
+
+        return methodDef;
+    }
+
+    private void VisitVariantCurrentCase(
+        MethodDefinition methodDef,
+        TypeReference variantTypeRef,
+        IR.VariantDef variantDef,
+        VariantLayout variantLayout,
+        Func<LayoutField, bool> predicate,
+        Action<LayoutField> emit
+    ) {
+        var typeSystem = this.assemblyBuilder.TypeSystem;
+        var body = methodDef.Body.GetILProcessor();
+
+        var selfRefVar = new VariableDefinition(variantTypeRef.MakeByReferenceType());
+        methodDef.Body.Variables.Add(selfRefVar);
+
+        // cast object pointer to a ref to the struct
+        body.Emit(OpCodes.Ldarg_0);
+        body.Emit(OpCodes.Refanyval, variantTypeRef);
+        body.Emit(OpCodes.Stloc, selfRefVar);
+
+        var breakLabel = body.Create(OpCodes.Nop);
+
+        for (var i = 0; i < variantDef.Cases.Count; i += 1) {
+            var defCase = variantDef.Cases[i];
+            var layoutCase = variantLayout.Cases[i];
+
+            if (defCase.Type == null
+                || !defCase.Tag.ToLiteralValue(out var caseTagVal)
+                || layoutCase == null
+                || !predicate(layoutCase.Value)) {
+                continue;
+            }
+
+            // compare case tag to active tag value
+            var falseLabel = body.Create(OpCodes.Nop);
+
+            body.Emit(OpCodes.Ldloc, selfRefVar);
+            body.Emit(OpCodes.Ldfld, variantLayout.TagField.Field);
+            body.EmitLoadLiteral(defCase.Tag);
+
+            body.Emit(OpCodes.Ceq);
+            body.Emit(OpCodes.Brfalse, falseLabel);
+
+            body.Emit(OpCodes.Ldloc, selfRefVar);
+            body.Emit(OpCodes.Ldflda, layoutCase.Value.Field);
+            emit(layoutCase.Value);
+
+            body.Emit(OpCodes.Br, breakLabel);
+
+            body.Append(falseLabel);
+        }
+
+        body.Append(breakLabel);
+
+        body.Emit(OpCodes.Ret);
     }
 
     internal void RegisterRCMethodTable(
@@ -775,6 +886,8 @@ public class TypeBuilder {
             this.ValueType
         );
 
+        this.assemblyBuilder.Module.Types.Add(typeDef);
+
         var typeID = this.cache.RegisterType(variantType, typeDef);
 
         var tagTypeRef = this.BuildType(variantDef.TagType);
@@ -807,6 +920,14 @@ public class TypeBuilder {
             }
             caseTags[i] = tagLiteralVal;
         }
+
+        this.variantLayouts[typeID] = new VariantLayout {
+            TagField = new LayoutField {
+                Field = tagField,
+                Type = variantDef.TagType,
+            },
+            Cases = caseFieldRefs,
+        };
 
         // it's safe to overlap object references of different types in a union, as long as we use them correctly,
         // which should be enforced by the source language. if there are any object references cases, store them
@@ -844,17 +965,9 @@ public class TypeBuilder {
 
         this.BuildInterfaceImpls(new IR.VariantType(variantRef), typeDef);
 
+        this.BuildVariantRCMethods(typeID, variantDef, typeDef);
+
         this.BuildDefaultConstructor(typeDef);
-
-        this.assemblyBuilder.Module.Types.Add(typeDef);
-
-        this.variantLayouts[typeID] = new VariantLayout {
-            TagField = new LayoutField {
-                Field = tagField,
-                Type = variantDef.TagType,
-            },
-            Cases = caseFieldRefs,
-        };
 
         return typeDef;
     }
