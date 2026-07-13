@@ -357,6 +357,23 @@ public class TypeBuilder {
         return false;
     }
 
+    private MethodDefinition FindClassDestroyMethod(TypeDefinition typeDef) {
+        while (true) {
+            foreach (var method in typeDef.Methods) {
+                if (this.OverridesObjectDestroyMethod(method)) {
+                    return method;
+                }
+            }
+
+            if (typeDef.BaseType != null) {
+                typeDef = typeDef.BaseType.Resolve();
+            } else {
+                var err = $"class objects must descend from the base Object type (couldn't find Destroy method in {typeDef})";
+                throw new InvalidOperationException(err);
+            }
+        }
+    }
+
     private void BuildClassDestroyMethod(
         TypeID typeID,
         TypeDefinition typeDef,
@@ -364,9 +381,8 @@ public class TypeBuilder {
     ) {
         var metadata = this.assemblyBuilder.LoadedMetadata;
 
-        var baseDestroy = this.assemblyBuilder.Module.ImportReference(typeDef.BaseType
-            .Resolve().Methods
-            .Single(this.OverridesObjectDestroyMethod));
+        var baseTypeDef = typeDef.BaseType.Resolve();
+        var baseDestroy = this.assemblyBuilder.Module.ImportReference(this.FindClassDestroyMethod(baseTypeDef));
 
         var baseDestroyDef = baseDestroy.Resolve();
 
