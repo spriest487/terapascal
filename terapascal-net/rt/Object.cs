@@ -4,26 +4,15 @@
 
 namespace Terapascal.Runtime;
 
-internal unsafe delegate void RetainDelegate(void* obj, bool weak);
-internal unsafe delegate bool ReleaseDelegate(void* obj, bool weak);
+public delegate void RcAction(TypedReference obj, bool weak);
 
 public class Object {
-    internal static readonly Dictionary<Type, RetainDelegate> retainers = [];
-    internal static readonly Dictionary<Type, ReleaseDelegate> releasers = [];
+    internal static readonly Dictionary<Type, (RcAction Retain, RcAction Release)> rcActions = [];
 
     internal int strongCount;
     internal int weakCount;
 
-    internal static void RegisterRetainer(Type type, RetainDelegate retainer) {
-        retainers[type] = retainer;
-    }
-
-    internal static void RegisterReleaser(Type type, ReleaseDelegate releaser) {
-        releasers[type] = releaser;
-    }
-
     protected internal virtual void Destroy() {
-
     }
 
     public static T Create<T>(bool immortal) where T : Object, new() {

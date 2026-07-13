@@ -87,9 +87,20 @@ public class InstructionBuilder {
                         continue;
                     }
 
-                    this.EmitRetain(valueType, () => {
-                        this.LoadRefAddr(atRef);
-                    });
+                    var retainType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
+
+                    const string methodName = nameof(Runtime.SystemFunctions.RcRetain);
+                    this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
+
+                    var retainInstance = new GenericInstanceMethod(this.rcRetainMethod);
+                    retainInstance.GenericArguments.Add(retainType);
+
+                    this.LoadRefAddr(atRef);
+
+                    // weak flag
+                    this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+
+                    this.body.Emit(OpCodes.Call, retainInstance);
                     continue;
                 }
 
@@ -101,9 +112,21 @@ public class InstructionBuilder {
                         continue;
                     }
 
-                    this.EmitRelease(valueType, () => {
-                        this.LoadRefAddr(atRef);
-                    });
+                    var releaseType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
+
+                    const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
+                    this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
+
+                    var releaseInstance = new GenericInstanceMethod(this.rcReleaseMethod);
+                    releaseInstance.GenericArguments.Add(releaseType);
+
+                    // pass arg by ref
+                    this.LoadRefAddr(atRef);
+
+                    // weak flag
+                    this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+                    this.body.Emit(OpCodes.Call, releaseInstance);
+
                     break;
                 }
 
@@ -450,25 +473,11 @@ public class InstructionBuilder {
         }
     }
 
-    public void EmitRelease(IR.IType valueType, Action loadValueAddr) {
-        var releaseType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
+    private void EmitRelease(IR.IType valueType) {
 
-        const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
-        this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
-
-        var releaseInstance = new GenericInstanceMethod(this.rcReleaseMethod);
-        releaseInstance.GenericArguments.Add(releaseType);
-
-        // pass arg by ref
-        loadValueAddr();
-
-        // weak flag
-        this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
-
-        this.body.Emit(OpCodes.Call, releaseInstance);
     }
 
-    public void EmitRetain(IR.IType valueType, Action loadValueAddr) {
+    private void EmitRetain(IR.IType valueType, Action loadValueAddr) {
         var retainType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
 
         const string methodName = nameof(Runtime.SystemFunctions.RcRetain);

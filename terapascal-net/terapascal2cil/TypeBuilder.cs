@@ -56,10 +56,14 @@ public class TypeBuilder {
 
     private readonly SortedDictionary<TypeID, (MethodReference Retain, MethodReference Release)> rcFuncs;
 
+    private readonly TypeDefinition rcActionTypeDef;
+    private readonly MethodReference registerRcActionsMethodRef;
+
     public TypeReference ExceptionType { get; }
     public TypeReference CLRStringType { get; }
     public TypeReference ValueType { get; }
     public TypeReference TypeType { get; }
+    public TypeReference TypedReferenceType { get; }
     public TypeReference MethodInfoType { get; }
     public TypeReference ErrorType { get; }
 
@@ -96,7 +100,12 @@ public class TypeBuilder {
         this.ExceptionType = this.ImportCoreReference(typeof(Exception));
         this.CLRStringType = this.ImportCoreReference(typeof(string));
         this.TypeType = this.ImportCoreReference(typeof(Type));
+        this.TypedReferenceType = this.ImportCoreReference(typeof(TypedReference));
         this.MethodInfoType = this.ImportCoreReference(typeof(MethodInfo));
+
+        this.rcActionTypeDef = this.assemblyBuilder.GetRuntimeTypeRef("RcAction", false).Resolve();
+
+        this.registerRcActionsMethodRef = this.assemblyBuilder.FindRuntimeFunction("RegisterRcActions");
 
         var typeTypeDef = this.ResolveCore(this.TypeType)!;
         this.GetTypeFromHandleMethod = this.ImportCoreReference(typeTypeDef.GetAllMethods()
@@ -308,6 +317,8 @@ public class TypeBuilder {
             this.BuildStructLayoutFromBuiltinType(builtinTypeDef, builtinTypeID, structDef);
         } else {
             var typeDef = new TypeDefinition(ns, name, attrs, baseType);
+            this.assemblyBuilder.Module.Types.Add(typeDef);
+
             typeRef = typeDef;
 
             var typeID = this.cache.RegisterType(structType, typeRef);
@@ -322,8 +333,6 @@ public class TypeBuilder {
             if (isValueType) {
                 this.BuildStructRCMethods(typeID, structDef, typeDef);
             }
-
-            this.assemblyBuilder.Module.Types.Add(typeDef);
         }
 
         Debug.Assert(isValueType == typeRef.IsValueType);
@@ -337,6 +346,7 @@ public class TypeBuilder {
         TypeDefinition typeDef
     ) {
         var metadata = this.assemblyBuilder.LoadedMetadata;
+        var module = this.assemblyBuilder.Module;
 
         if (!structDef.Fields.Values.Any(fieldDef => metadata.TypeContainsObjectRefs(fieldDef.Type))) {
             return;
@@ -348,6 +358,46 @@ public class TypeBuilder {
         this.rcFuncs.Add(typeID, (retainMethodDef, releaseMethodDef));
         typeDef.Methods.Add(retainMethodDef);
         typeDef.Methods.Add(releaseMethodDef);
+
+        var cctor = this.assemblyBuilder.GetInternalClass().GetOrCreateCCtor();
+        var cctorBody = cctor.Body.GetILProcessor();
+
+        // if there's already a cctor, we're appending to it, so remove the ret for now
+        var lastInstruction = cctorBody.Body.Instructions.LastOrDefault();
+        if (lastInstruction?.OpCode == OpCodes.Ret) {
+            cctorBody.Body.Instructions.Remove(lastInstruction);
+        }
+
+        var rcActionCtor = this.rcActionTypeDef
+            .FindConstructor(isStatic: false, [typeof(object), typeof(IntPtr)])
+            ?? throw new InvalidOperationException("unable to find constructor for RC delegate type");
+
+        rcActionCtor = module.ImportReference(rcActionCtor);
+
+        var rcActionTypeRef = module.ImportReference(this.rcActionTypeDef);
+        var retainerVar = new VariableDefinition(rcActionTypeRef);
+        var releaserVar = new VariableDefinition(rcActionTypeRef);
+
+        cctor.Body.Variables.Add(retainerVar);
+        cctor.Body.Variables.Add(releaserVar);
+
+        cctorBody.Emit(OpCodes.Ldnull);
+        cctorBody.Emit(OpCodes.Ldftn, retainMethodDef);
+        cctorBody.Emit(OpCodes.Newobj, rcActionCtor);
+        cctorBody.Emit(OpCodes.Stloc, retainerVar);
+
+        cctorBody.Emit(OpCodes.Ldnull);
+        cctorBody.Emit(OpCodes.Ldftn, releaseMethodDef);
+        cctorBody.Emit(OpCodes.Newobj, rcActionCtor);
+        cctorBody.Emit(OpCodes.Stloc, releaserVar);
+
+        cctorBody.Emit(OpCodes.Ldtoken, typeDef);
+        cctorBody.Emit(OpCodes.Call, this.GetTypeFromHandleMethod);
+        cctorBody.Emit(OpCodes.Ldloc, retainerVar);
+        cctorBody.Emit(OpCodes.Ldloc, releaserVar);
+        cctorBody.Emit(OpCodes.Call, this.registerRcActionsMethodRef);
+
+        cctorBody.Emit(OpCodes.Ret);
     }
 
     private MethodDefinition BuildStructRCMethod(
@@ -355,21 +405,28 @@ public class TypeBuilder {
         TypeID structTypeID,
         bool retain
     ) {
-        const MethodAttributes attrs = MethodAttributes.Assembly
-            | MethodAttributes.Final
-            | MethodAttributes.SpecialName
-            | MethodAttributes.Static;
+        var typeSystem = this.assemblyBuilder.TypeSystem;
+
+        const MethodAttributes attrs =
+            MethodAttributes.HideBySig | MethodAttributes.Assembly | MethodAttributes.Static;
 
         var actionName = retain ? "retain" : "release";
-        var methodDef = new MethodDefinition($"<{actionName}>", attrs, this.assemblyBuilder.TypeSystem.Void);
+        var methodDef = new MethodDefinition($"__{actionName}", attrs, typeSystem.Void);
 
-        var objParamPtrType = this.assemblyBuilder.TypeSystem.Void.MakePointerType();
-        methodDef.Parameters.Add(new ParameterDefinition(objParamPtrType));
+        methodDef.Parameters.Add(new ParameterDefinition(this.TypedReferenceType) {
+            Name = "self",
+        });
+        methodDef.Parameters.Add(new ParameterDefinition(typeSystem.Boolean) {
+            Name = "weak",
+        });
 
-        var retainBody = methodDef.Body.GetILProcessor();
-        var retainBuilder = new InstructionBuilder(this.assemblyBuilder, methodDef);
+        var body = methodDef.Body.GetILProcessor();
 
         var structLayout = this.structLayouts[structTypeID];
+
+        var systemFunc = this.assemblyBuilder.FindRuntimeFunction(retain
+            ? nameof(Runtime.SystemFunctions.RcRetain)
+            : nameof(Runtime.SystemFunctions.RcRelease));
 
         VisitStructFields(
             methodDef,
@@ -384,24 +441,33 @@ public class TypeBuilder {
                 return this.rcFuncs.ContainsKey(fieldTypeID);
             },
             field => {
-                // if it's a complex type, it must have been translated already, and we'll have a retain method
-                // in the cache for it. if it's not, it isn't complex so we only need to release it if it's an object
+                // the field ref is already on the stack for each call here,
+                // so we just need to load the weak flag (arg1)
+
+                // if it's a complex type, it must have been translated already, and we'll have a generated rc method
+                // in the cache for it. if it's not, it isn't complex so we only need to touch it if it's an object
                 if (field.Type.IsObjectType()) {
-                    if (retain) {
-                        retainBuilder.EmitRetain(field.Type, () => { });
-                    } else {
-                        retainBuilder.EmitRelease(field.Type, () => { });
-                    }
+                    // call the system release/retain func on an object ref
+                    var systemFuncInstance = new GenericInstanceMethod(systemFunc);
+                    systemFuncInstance.GenericArguments.Add(field.Field.FieldType);
+
+                    body.Emit(OpCodes.Ldarg_1);
+                    body.Emit(OpCodes.Call, systemFuncInstance);
                 } else {
+                    // call a generated release/retain method for a complex type
+                    // (must exist or the predicate above would have filtered this field out)
                     var fieldTypeID = this.cache.GetTypeID(field.Type);
-                    if (this.rcFuncs.TryGetValue(fieldTypeID, out var rcFuncs)) {
-                        retainBody.Emit(OpCodes.Call, retain ? rcFuncs.Retain : rcFuncs.Release);
-                    }
+                    var rcFuncs = this.rcFuncs[fieldTypeID];
+
+                    // the field pointer is on the stack now - convert it to a typed reference
+                    body.Emit(OpCodes.Mkrefany, field.Field.FieldType);
+                    body.Emit(OpCodes.Ldarg_1);
+
+                    body.Emit(OpCodes.Call, retain ? rcFuncs.Retain : rcFuncs.Release);
                 }
             });
 
-        retainBody.Emit(OpCodes.Pop); // pop self ref
-        retainBuilder.Finish();
+        body.Emit(OpCodes.Ret);
 
         return methodDef;
     }
@@ -420,6 +486,7 @@ public class TypeBuilder {
 
         // cast object pointer to a ref to the struct
         body.Emit(OpCodes.Ldarg_0);
+        body.Emit(OpCodes.Refanyval, structTypeRef);
         body.Emit(OpCodes.Stloc, selfRefVar);
 
         foreach (var (_, layoutField) in structLayout.Fields) {

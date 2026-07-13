@@ -150,27 +150,7 @@ public class AssemblyBuilder : IDisposable {
 
     private MethodDefinition GetGlobalsCCtor() {
         var globalsClass = this.GetInternalClass();
-
-        var cctor = globalsClass.GetStaticConstructor();
-        if (cctor != null) {
-            return cctor;
-        }
-
-        var attrs = MethodAttributes.Assembly
-            | MethodAttributes.Static
-            | MethodAttributes.HideBySig
-            | MethodAttributes.RTSpecialName
-            | MethodAttributes.SpecialName;
-
-        var methodDef = new MethodDefinition(
-            ".cctor",
-            attrs,
-            this.TypeSystem.Void
-        );
-
-        globalsClass.Methods.Add(methodDef);
-
-        return methodDef;
+        return globalsClass.GetOrCreateCCtor();
     }
 
     public MethodReference FindRuntimeFunction(string name) {

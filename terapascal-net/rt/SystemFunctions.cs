@@ -184,19 +184,20 @@ public static class SystemFunctions {
         return DateTime.UtcNow.Subtract(startTime).TotalSeconds;
     }
 
+    public static void RegisterRcActions(Type type, RcAction retainer, RcAction releaser) {
+        Object.rcActions[type] = (retainer, releaser);
+    }
+
     public static void RcRetain<T>(ref T? obj, bool weak) {
         switch (obj) {
             case null: {
                 return;
             }
 
-            case var value when obj.GetType().IsValueType: {
-                if (Object.retainers.TryGetValue(obj.GetType(), out var retainer)) {
-                    unsafe {
-#pragma warning disable CS8500
-                        retainer(&value, weak);
-#pragma warning restore CS8500
-                    }
+            case var _ when obj.GetType().IsValueType: {
+                if (Object.rcActions.TryGetValue(obj.GetType(), out var rcActions)) {
+                    var objRef = __makeref(obj);
+                    rcActions.Retain(objRef, weak);
                 }
 
                 break;
@@ -235,14 +236,9 @@ public static class SystemFunctions {
             }
 
             case var value when obj.GetType().IsValueType: {
-                if (Object.releasers.TryGetValue(obj.GetType(), out var releaser)) {
-                    unsafe {
-#pragma warning disable CS8500
-                        if (releaser(&value, weak)) {
-#pragma warning restore CS8500
-                            obj = default;
-                        }
-                    }
+                if (Object.rcActions.TryGetValue(obj.GetType(), out var rcActions)) {
+                    var objRef = __makeref(obj);
+                    rcActions.Release(objRef, weak);
                 }
 
                 break;

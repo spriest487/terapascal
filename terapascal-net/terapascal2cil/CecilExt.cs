@@ -29,5 +29,27 @@ public static class CecilExt {
                     .All((pair) => pair.First.Namespace == pair.Second.Namespace
                         && pair.First.Name == pair.Second.Name));
         }
+
+        public MethodDefinition GetOrCreateCCtor() {
+            var cctor = typeDef.GetStaticConstructor();
+            if (cctor != null) {
+                return cctor;
+            }
+
+            var attrs = MethodAttributes.Assembly
+                | MethodAttributes.Static
+                | MethodAttributes.HideBySig
+                | MethodAttributes.RTSpecialName
+                | MethodAttributes.SpecialName;
+
+            var methodDef = new MethodDefinition(
+                ".cctor",
+                attrs,
+                typeDef.Module.TypeSystem.Void
+            );
+
+            typeDef.Methods.Add(methodDef);
+            return methodDef;
+        }
     }
 }
