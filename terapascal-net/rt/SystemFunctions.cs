@@ -179,7 +179,7 @@ public static class SystemFunctions {
     public static bool IsNaN(float f) {
         return float.IsNaN(f);
     }
-    
+
     public static double Time() {
         return DateTime.UtcNow.Subtract(startTime).TotalSeconds;
     }

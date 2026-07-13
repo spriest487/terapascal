@@ -332,12 +332,65 @@ public class TypeBuilder {
 
             if (isValueType) {
                 this.BuildStructRCMethods(typeID, structDef, typeDef);
+            } else {
+                this.BuildClassDestructorMethod(structType, typeDef);
             }
         }
 
         Debug.Assert(isValueType == typeRef.IsValueType);
 
         return typeRef;
+    }
+
+    private bool OverridesObjectDestroyMethod(MethodDefinition methodDef) {
+        if (methodDef.MetadataToken.Equals(this.ObjectDestroyMethod.MetadataToken)) {
+            return true;
+        }
+
+        if (!methodDef.HasOverrides) {
+            return false;
+        }
+
+        foreach (var overrideMethod in methodDef.Overrides) {
+            if (this.OverridesObjectDestroyMethod(overrideMethod.Resolve())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void BuildClassDestructorMethod(
+        IR.IType classType,
+        TypeDefinition typeDef
+    ) {
+        var baseDestroy = this.assemblyBuilder.Module.ImportReference(typeDef.BaseType
+            .Resolve().Methods
+            .Single(this.OverridesObjectDestroyMethod));
+
+        var baseDestroyDef = baseDestroy.Resolve();
+
+        var attrs = baseDestroyDef.Attributes & ~MethodAttributes.NewSlot;
+
+        var destroyMethod = new MethodDefinition(baseDestroy.Name, attrs, baseDestroyDef.ReturnType);
+        destroyMethod.Overrides.Add(baseDestroy);
+
+        typeDef.Methods.Add(destroyMethod);
+
+        var destroyBody = destroyMethod.Body.GetILProcessor();
+
+        if (this.assemblyBuilder.LoadedMetadata.FindDestructor(classType, out var dtorFunc)) {
+            destroyBody.Emit(OpCodes.Ldarg_0);
+            destroyBody.Emit(OpCodes.Call, baseDestroy);
+
+            var dtorTypeArgs = classType.GetTypeRef()?.Args ?? [];
+            var dtorMethod = this.assemblyBuilder.FunctionBuilder.GetFunctionMethod(dtorFunc.ToFunctionRef(dtorTypeArgs));
+
+            destroyBody.Emit(OpCodes.Ldarg_0);
+            destroyBody.Emit(OpCodes.Call, dtorMethod);
+        }
+
+        destroyBody.Emit(OpCodes.Ret);
     }
 
     private void BuildStructRCMethods(

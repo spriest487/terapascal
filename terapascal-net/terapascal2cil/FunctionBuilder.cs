@@ -45,11 +45,7 @@ public class FunctionBuilder {
                     funcInfo.Identity.GetInvocationTypeParams(this.assemblyBuilder.LoadedMetadata, invocationParams);
 
                     if (invocationParams.Count == 0) {
-                        var funcRef = id.ToFunctionRef([]);
-                        var methodDef = this.CreateFunctionMethod(funcRef);
-
-                        this.funcInstances.Add(funcRef, methodDef);
-                        this.funcsToBuild.Enqueue(funcRef);
+                        _ = this.GetFunctionMethod(id.ToFunctionRef([]));
                     }
                     
                     break;

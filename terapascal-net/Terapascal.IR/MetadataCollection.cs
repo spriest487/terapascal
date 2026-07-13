@@ -94,6 +94,10 @@ public class MetadataCollection : IMetadataSource {
         return this.TryFind((m, out result) => m.FindFunction(id, out result), out functionInfo);
     }
 
+    public bool FindDestructor(IType type, out FunctionID functionID) {
+        return this.TryFind((m, out result) => m.FindDestructor(type, out result), out functionID);
+    }
+
     public bool FindClosureSig(TypeDefID id, [NotNullWhen(true)] out FunctionSig? sig) {
         return this.TryFind((m, out result) => m.FindClosureSig(id, out result), out sig);
     }

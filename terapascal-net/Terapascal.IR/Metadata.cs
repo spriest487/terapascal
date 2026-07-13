@@ -238,6 +238,22 @@ public class Metadata : IMetadataSource {
         return this.Functions.TryGetValue(id, out functionInfo);
     }
 
+    public bool FindDestructor(IType type, out FunctionID functionID) {
+        foreach (var (id, funcInfo) in this.Functions) {
+            if (funcInfo.Identity is not DestructorFunctionIdentity destructorIdentity) {
+                continue;
+            }
+
+            if (destructorIdentity.DeclaringType.Equals(type)) {
+                functionID = id;
+                return true;
+            }
+        }
+
+        functionID = default;
+        return false;
+    }
+
     public bool FindClosureSig(TypeDefID closureStructID, [NotNullWhen(true)] out FunctionSig? sig) {
         foreach (var (closureSig, closureTypeIDs) in this.Closures) {
             if (closureTypeIDs.Contains(closureStructID)) {

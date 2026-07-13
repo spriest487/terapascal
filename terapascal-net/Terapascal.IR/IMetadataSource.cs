@@ -32,6 +32,7 @@ public interface IMetadataSource {
     );
 
     bool FindFunction(FunctionID id, [NotNullWhen(true)] out FunctionInfo? functionInfo);
+    bool FindDestructor(IType type, out FunctionID functionID);
 
     bool FindClosureSig(TypeDefID closureStructID, [NotNullWhen(true)] out FunctionSig? sig);
 
