@@ -738,7 +738,7 @@ public sealed record AnyClosureObjectID(FunctionSig Sig) : IObjectID {
     }
 
     public IObjectID ResolveGeneric(IReadOnlyDictionary<string, IType> typeMap) {
-        return this;
+        return new AnyClosureObjectID(this.Sig.ResolveGeneric(typeMap));
     }
 }
 
