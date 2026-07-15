@@ -924,7 +924,7 @@ public class InstructionBuilder {
             }
 
             case IR.Deref(var targetVal): {
-                if (targetVal is not IR.RefValue(var targetRef)) {
+                if (targetVal is not IR.RefValue(_)) {
                     throw new InvalidDataException($"invalid value for dereference instruction: {targetVal}");
                 }
 
@@ -934,8 +934,11 @@ public class InstructionBuilder {
                 break;
             }
 
-            case IR.GlobalRef(IR.StringLiteralGlobalRef): {
-                throw new InvalidDataException("invalid instruction: can't address a string global");
+            case IR.GlobalRef(IR.StringLiteralGlobalRef(var stringID)): {
+                var stringField = this.assemblyBuilder.GetStringLiteralRef(stringID);
+                this.body.Emit(OpCodes.Ldsflda, stringField);
+
+                break;
             }
             
             case IR.GlobalRef(IR.FunctionGlobalRef): {

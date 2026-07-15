@@ -97,7 +97,10 @@ public class AssemblyBuilder : IDisposable {
             return this.globalsClass;
         }
 
-        this.globalsClass = this.CreateClass(this.Assembly.Name.Name,$"{this.Assembly.Name.Name}_<Internal>");
+
+        var assemblyName = this.Assembly.Name.Name;
+
+        this.globalsClass = this.CreateInternalClass(assemblyName,$"<Internal>");
         return this.globalsClass;
     }
 
@@ -115,15 +118,15 @@ public class AssemblyBuilder : IDisposable {
             }
         }
 
-        return this.CreateClass(ns, name);
+        return this.CreateInternalClass(ns, name);
     }
 
-    private TypeDefinition CreateClass(string ns, string name) {
+    private TypeDefinition CreateInternalClass(string ns, string name) {
         var objectType = this.Module.TypeSystem.Object;
         var newClass = new TypeDefinition(
             ns,
             name,
-            TypeAttributes.Sealed | TypeAttributes.Class | TypeAttributes.Public,
+            TypeAttributes.Sealed | TypeAttributes.Class | TypeAttributes.Public | TypeAttributes.SpecialName | TypeAttributes.Sealed,
             objectType
         );
 
