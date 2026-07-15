@@ -52,11 +52,13 @@ try {
         libSearchPaths.Add(libEnvDir);
     }
 
+    const string rtLibPath = "Terapascal.Runtime.dll";
+
     using var assemblyBuilder = new AssemblyBuilder(
         mainLib.Name,
         mainLib.Version,
         moduleKind,
-        "Terapascal.Runtime.dll",
+        rtLibPath,
         refLibPath);
 
     var loadedRefs = new HashSet<string>();
@@ -86,14 +88,7 @@ try {
         Console.WriteLine($"output directory: {outputDir}");
     }
 
-    var rtOutputPath = Path.Join(outputDir, assemblyBuilder.RuntimeLibrary.Name.Name + ".dll");
-    rtOutputPath = Path.GetFullPath(rtOutputPath);
-
-    assemblyBuilder.RuntimeLibrary.Write(rtOutputPath);
-
-    if (parsedArgs.Verbose) {
-        Console.WriteLine($"RT assembly written to {rtOutputPath}");
-    }
+    CopyToOutput(rtLibPath, outputDir);
 
     if (assemblyBuilder.IsExecutable) {
         // for now assume all DLLs are runnable and output a runtime config file too
@@ -159,4 +154,36 @@ async Task AddLibraryRecursive(
 
     Console.WriteLine($"Building {library.Name} ({library.Version})...");
     builder.AddLibrary(library);
+}
+
+void CopyToOutput(string filename, string outputDir) {
+    if (!File.Exists(filename)) {
+        throw new FileNotFoundException(filename);
+    }
+
+    if (Path.IsPathRooted(filename)) {
+        throw new InvalidOperationException($"expected a relative path: {filename}");
+    }
+
+    var outPath = Path.Join(outputDir, filename);
+    outPath = Path.GetFullPath(outPath);
+
+    if (parsedArgs.Verbose) {
+        Console.Write("copying {0} to output at {1}...", filename, outPath);
+    }
+
+    if (File.Exists(outPath)) {
+        var createdDateNew = File.GetCreationTime(filename);
+        var createdDateOld = File.GetCreationTime(outPath);
+
+        if (createdDateOld >= createdDateNew) {
+            // nothing to do
+            if (parsedArgs.Verbose) {
+                Console.WriteLine("existing file is up to date");
+            }
+            return;
+        }
+        File.Delete(outPath);
+    }
+    File.Copy(filename, outPath);
 }
