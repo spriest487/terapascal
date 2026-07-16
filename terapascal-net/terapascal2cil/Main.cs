@@ -151,8 +151,10 @@ async Task AddLibraryRecursive(
         await AddLibraryRecursive(builder, refLib, libSearchPaths, mpOptions, loadedRefs);
     }
 
+    if (parsedArgs.Verbose) {
+        Console.WriteLine($"Building {library.Name} ({library.Version})...");
+    }
 
-    Console.WriteLine($"Building {library.Name} ({library.Version})...");
     builder.AddLibrary(library);
 }
 
