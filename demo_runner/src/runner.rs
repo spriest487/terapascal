@@ -1,10 +1,11 @@
 use crate::build::*;
-use crate::opts::*;
 use crate::concat_reader::ConcatReader;
+use crate::error::RunError;
+use crate::error::RunResult;
+use crate::opts::*;
 use crate::test_case::TestCase;
 use crate::test_script::TestScriptStep;
 use regex::Regex;
-use std::env;
 use std::env::consts::EXE_EXTENSION;
 use std::fs;
 use std::io;
@@ -19,19 +20,20 @@ use std::process::Command;
 use std::process::ExitStatus;
 use std::process::Output;
 use std::process::Stdio;
+use terapascal_common::IR_LIB_EXT;
 
-fn run_vm<RunFn>(case: &TestCase, opts: &Opts, run: RunFn) -> io::Result<ExitStatus>
-where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
+fn run_vm<RunFn>(case: &TestCase, opts: &Opts, run: RunFn) -> RunResult<()>
+where
+    RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
 {
     let mut build_stdout = Vec::new();
     let mut build_stderr = Vec::new();
 
-    let lib_path = match compile_lib(case, opts, &mut build_stdout, &mut build_stderr)? {
-        Ok(path) => path,
-        Err(status) => {
-            run_after_build_err(&mut build_stdout, &mut build_stderr, run);
-            return Ok(status);
-        }
+    let lib_path = target_file_path(&case.path, opts, IR_LIB_EXT)?;
+
+    if let Err(err) = compile_lib(case, &lib_path, opts, &mut build_stdout, &mut build_stderr) {
+        run_after_build_err(&mut build_stdout, &mut build_stderr, run);
+        return Err(err);
     };
 
     let mut run_command = find_command(&opts.compiler)?;
@@ -47,11 +49,14 @@ where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
             let mut stdout = ConcatReader::new(build_stdout.as_slice(), stdout);
             let mut stderr = ConcatReader::new(build_stderr.as_slice(), stderr);
             run(stdin, &mut stdout, &mut stderr)
-        })
+        })?;
+
+    Ok(())
 }
 
-fn run_dotnet<RunFn>(case: &TestCase, opts: &Opts, run: RunFn) -> io::Result<ExitStatus>
-where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
+fn run_dotnet<RunFn>(case: &TestCase, opts: &Opts, run: RunFn) -> RunResult<()>
+where
+    RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
 {
     let mut build_stdout = Vec::new();
     let mut build_stderr = Vec::new();
@@ -77,7 +82,7 @@ where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
 
         if !build_status.success() || !dll_path.exists() {
             run_after_build_err(&mut build_stdout, &mut build_stderr, run);
-            return Ok(build_status);
+            return Err(RunError::BuildBinaryFailed);
         }
     }
 
@@ -92,7 +97,9 @@ where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
             let mut stdout = ConcatReader::new(build_stdout.as_slice(), stdout);
             let mut stderr = ConcatReader::new(build_stderr.as_slice(), stderr);
             run(stdin, &mut stdout, &mut stderr)
-        })
+        })?;
+
+    Ok(())
 }
 
 fn build_clang(
@@ -101,16 +108,15 @@ fn build_clang(
     build_stdout: &mut Vec<u8>,
     build_stderr: &mut Vec<u8>,
     opts: &Opts
-) -> io::Result<Result<(), ExitStatus>> {
+) -> RunResult<()> {
     if !is_dirty(exe_path, &case.path, opts)? {
-        return Ok(Ok(()));
+        return Ok(());
     }
 
-    let lib_path = match compile_lib(case, opts, build_stdout, build_stderr)? {
-        Ok(path) => path,
-        Err(err_status) => {
-            return Ok(Err(err_status));
-        }
+    let lib_path = target_file_path(&case.path, opts, IR_LIB_EXT)?;
+
+    if let Err(err) = compile_lib(case, &lib_path, opts, build_stdout, build_stderr) {
+        return Err(err);
     };
 
     let mut exe_file_path = exe_path.clone();
@@ -130,27 +136,24 @@ fn build_clang(
     )?;
 
     if !compile_status.success() {
-        return Ok(Err(compile_status));
+        return Err(RunError::BuildBinaryFailed);
     }
 
-    Ok(Ok(()))
+    Ok(())
 }
 
-fn run_clang<RunFn>(case: &TestCase, opts: &Opts, run: RunFn) -> io::Result<ExitStatus>
+fn run_clang<RunFn>(case: &TestCase, opts: &Opts, run: RunFn) -> RunResult<()>
 where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
 {
-    let exe_path = target_file_path(&case.path, opts, env::consts::EXE_EXTENSION)?;
+    let exe_path = target_file_path(&case.path, opts, EXE_EXTENSION)?;
 
     let mut build_stdout = Vec::new();
     let mut build_stderr = Vec::new();
 
-    if let Err(err_status) = build_clang(case, &exe_path, &mut build_stdout, &mut build_stderr, opts)? {
-        let mut no_write = Vec::new();
-        run(&mut no_write, &mut build_stdout.as_slice(), &mut build_stderr.as_slice());
+    if let Err(err) = build_clang(case, &exe_path, &mut build_stdout, &mut build_stderr, opts) {
+        run_after_build_err(&mut build_stdout, &mut build_stderr, run);
 
-        dump_output_buffers(&build_stdout, &build_stderr);
-
-        return Ok(err_status);
+        return Err(err);
     }
 
     try_run_interactive(
@@ -162,7 +165,9 @@ where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
 
             run(stdin, &mut concat_stdout, &mut concat_stderr);
         },
-    )
+    )?;
+
+    Ok(())
 }
 
 fn try_run(case: &TestCase, opts: &Opts) -> io::Result<bool> {
@@ -175,7 +180,7 @@ fn try_run(case: &TestCase, opts: &Opts) -> io::Result<bool> {
         ExecutionMethod::Clang => run_clang,
     };
 
-    let status = runner(case, opts, |stdin: &mut dyn Write, stdout: &mut dyn Read, stderr: &mut dyn Read| {
+    let result = runner(case, opts, |stdin: &mut dyn Write, stdout: &mut dyn Read, stderr: &mut dyn Read| {
         let mut line_buf = Vec::new();
         for step in &case.script.steps {
             match run_step(step, &mut *stdin, stdout, stderr, &mut line_buf) {
@@ -196,25 +201,17 @@ fn try_run(case: &TestCase, opts: &Opts) -> io::Result<bool> {
                 }
             }
         }
-    })?;
+    });
 
     let expect_error = case.script.steps.iter().any(|step| step.error_regex.is_some());
-    let is_error = !status.success();
 
-    let ok = !step_failed && !io_error && (!is_error || expect_error);
+    let ok = !step_failed && !io_error && (result.is_ok() || expect_error);
 
     let completed = if ok {
         println!("OK");
 
         true
     } else {
-        let code = status
-            .code()
-            .map(|code| code.to_string())
-            .unwrap_or_else(|| String::from("(UNKNOWN)"));
-
-        println!("ERROR {}", code);
-
         false
     };
 

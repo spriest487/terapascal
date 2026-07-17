@@ -4,46 +4,20 @@ mod concat_reader;
 mod runner;
 mod test_case;
 mod build;
+mod error;
 
+use crate::build::check_environment;
 use crate::runner::run;
 use crate::test_case::TestCase;
-use chrono::DateTime;
-use chrono::Utc;
 use opts::Opts;
-use std::process::Command;
 use structopt::StructOpt;
 
 fn main() -> Result<(), i32> {
     let opts = Opts::from_args();
 
-    let exists = opts.compiler.exists();
-    if !exists {
-        eprintln!("frontend not found! expected at {}", opts.compiler.display());
-        return Err(1);
+    if !check_environment(&opts) {
+        return Err(2);
     }
-
-    println!("using frontend: {}", opts.compiler.display());
-
-    let timestamp = match opts.compiler.metadata().and_then(|metadata| metadata.modified()) {
-        Ok(modified) => {
-            let modified_date = DateTime::<Utc>::from(modified);
-            format!("{}", modified_date.format("%Y-%m-%d %H:%M"))
-        }
-        Err(err) => {
-            eprintln!("unable to read compiler timestamp: {}", err);
-            "unknown timestamp".to_string()
-        },
-    };
-
-    let version_check_out = Command::new(opts.compiler.clone())
-        .arg("--version")
-        .output()
-        .map_err(|err| {
-            eprintln!("version check failed: {}", err);
-            1
-        })?;
-
-    println!("{} ({})", String::from_utf8(version_check_out.stdout).unwrap().trim(), timestamp);
 
     let test_files = TestCase::find_at_path(&opts.search_path);
 

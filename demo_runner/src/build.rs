@@ -1,25 +1,67 @@
-use std::ffi::OsStr;
-use std::{env, io};
-use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus};
-use std::time::SystemTime;
-use terapascal_common::IR_LIB_EXT;
+use crate::error::RunError;
+use crate::error::RunResult;
 use crate::opts::Opts;
 use crate::test_case::TestCase;
+use chrono::DateTime;
+use chrono::Utc;
+use std::env;
+use std::ffi::OsStr;
+use std::io;
+use std::path::Path;
+use std::path::PathBuf;
+use std::process::Command;
+use std::process::ExitStatus;
+use std::time::SystemTime;
+
+pub fn check_environment(opts: &Opts) -> bool {
+    let compiler_exists = opts.compiler.exists();
+    if !compiler_exists {
+        eprintln!("frontend not found! expected at {}", opts.compiler.display());
+        return false;
+    }
+
+    println!("using frontend: {}", opts.compiler.display());
+
+    let timestamp = match opts.compiler.metadata().and_then(|metadata| metadata.modified()) {
+        Ok(modified) => {
+            let modified_date = DateTime::<Utc>::from(modified);
+            format!("{}", modified_date.format("%Y-%m-%d %H:%M"))
+        }
+        Err(err) => {
+            eprintln!("unable to read compiler timestamp: {}", err);
+            "unknown timestamp".to_string()
+        },
+    };
+
+    let Some(version_check_out) = Command::new(opts.compiler.clone())
+        .arg("--version")
+        .output()
+        .map(Some)
+        .unwrap_or_else(|err| {
+            eprintln!("version check failed: {}", err);
+            None
+        })
+    else {
+        return false;
+    };
+
+    println!("{} ({})", String::from_utf8(version_check_out.stdout).unwrap().trim(), timestamp);
+
+    true
+}
 
 pub fn compile_lib(
     case: &TestCase,
+    lib_path: &Path,
     opts: &Opts,
     build_stdout: &mut Vec<u8>,
     build_stderr: &mut Vec<u8>,
-) -> io::Result<Result<PathBuf, ExitStatus>> {
-    let lib_path = target_file_path(&case.path, opts, IR_LIB_EXT)?;
+) -> RunResult<()> {
     // eprintln!("module path: {}", module_path.display());
-
-    if is_dirty(&lib_path, &case.path, opts)? {
+    if is_dirty(lib_path, &case.path, opts)? {
         let mut build_command = Command::new(&opts.compiler);
         build_command.arg(&case.path);
-        build_command.arg("-o").arg(&lib_path);
+        build_command.arg("-o").arg(lib_path);
 
         apply_compiler_args(&case, opts, &mut build_command);
 
@@ -30,11 +72,11 @@ pub fn compile_lib(
         )?;
 
         if !build_status.success() {
-            return Ok(Err(build_status));
+            return Err(RunError::BuildLibFailed);
         }
     }
 
-    Ok(Ok(lib_path))
+    Ok(())
 }
 
 pub fn target_file_path(src_path: &Path, opts: &Opts, target_ext: impl AsRef<OsStr>) -> io::Result<PathBuf> {

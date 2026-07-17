@@ -18,34 +18,43 @@ impl TestCase {
     fn find_from_entry(entry: DirEntry) -> io::Result<Vec<TestCase>> {
         let file_type = entry.file_type()?;
 
-        let paths = if file_type.is_dir() {
-            TestCase::find_at_path(&entry.path())
+        if file_type.is_dir() {
+            return Ok(TestCase::find_at_path(&entry.path()));
+        }
+
+        let file_path = entry.path();
+
+        let paths = if let Some(ext) = file_path.extension()
+            && ext == SRC_FILE_DEFAULT_EXT
+            && let Some(case) = Self::read_file(&file_path)
+        {
+            vec![case]
         } else {
-            let path = entry.path();
-
-            match path.extension() {
-                Some(ext) if ext.eq_ignore_ascii_case(SRC_FILE_DEFAULT_EXT) => {
-                    let script = TestScript::find_for_path(&path)
-                        .unwrap_or_else(|err| {
-                            eprintln!("failed to read test script: {err}");
-                            TestScript::default()
-                        });
-
-                    if script.ignore {
-                        Vec::new()
-                    } else {
-                        vec![TestCase { path, script }]
-                    }
-                }
-
-                _ => Vec::new(),
-            }
+            Vec::new()
         };
 
         Ok(paths)
     }
 
+    fn read_file(path: &Path) -> Option<TestCase> {
+        let script = TestScript::find_for_path(&path)
+            .unwrap_or_else(|err| {
+                eprintln!("failed to read test script: {err}");
+                TestScript::default()
+            });
+
+        if script.ignore {
+            None
+        } else {
+            Some(TestCase { path: path.to_path_buf(), script })
+        }
+    }
+
     pub fn find_at_path(root: &Path) -> Vec<TestCase> {
+        if root.is_file() {
+            return Self::read_file(root).into_iter().collect();
+        }
+
         root.read_dir()
             .ok()
             .map(|read_dir|
