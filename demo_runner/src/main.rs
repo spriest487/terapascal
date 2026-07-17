@@ -1,14 +1,17 @@
 mod opts;
 mod test_script;
 mod concat_reader;
+mod runner;
 mod test_case;
+mod build;
 
+use crate::runner::run;
+use crate::test_case::TestCase;
 use chrono::DateTime;
 use chrono::Utc;
 use opts::Opts;
 use std::process::Command;
 use structopt::StructOpt;
-use test_case::TestCase;
 
 fn main() -> Result<(), i32> {
     let opts = Opts::from_args();
@@ -60,7 +63,7 @@ fn main() -> Result<(), i32> {
     for (i, test_file) in test_files.into_iter().enumerate() {
         println!("RUNNING: {} ({}/{})", test_file.path.display(), i + 1, test_count);
 
-        if !test_file.run(&opts) {
+        if !run(&test_file, &opts) {
             error_count += 1;
             if !opts.error_continue {
                 break;
