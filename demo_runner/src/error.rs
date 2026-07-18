@@ -6,7 +6,7 @@ pub enum RunError {
     #[error("Building library file failed")]
     BuildLibFailed,
 
-    #[error("Building test binary failed")]
+    #[error("Building test binary failed: {0}")]
     BuildBinaryFailed(String),
 
     #[error("Invalid regular expression '{src}': {err}")]

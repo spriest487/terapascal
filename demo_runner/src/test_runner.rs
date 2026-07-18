@@ -74,6 +74,43 @@ fn build_and_run_clang(case: &TestCase, lib_path: &Path, opts: &Opts, log: &mut 
     Ok(TestProcess::from_process(process))
 }
 
+fn build_and_run_dotnet(case: &TestCase, lib_path: &Path, opts: &Opts, log: &mut String) -> RunResult<TestProcess> {
+    const DOTNET_DLL_EXT: &str = "dll";
+
+    let dll_file_path = target_file_path(&case.path, opts, DOTNET_DLL_EXT)?;
+
+    if is_dirty(&dll_file_path, &case.path, opts)? {
+        let mut compiler_command = find_command(&opts.compiler)?;
+        compiler_command.arg(lib_path);
+        compiler_command.arg("-o").arg(&dll_file_path);
+        compiler_command.arg("-a").arg("cil");
+
+        if opts.verbose {
+            log.push_str(&format!("building .NET DLL at {}...\n", dll_file_path.display()))
+        }
+
+        apply_compiler_args(&case, opts, &mut compiler_command);
+        run_build_command(compiler_command)?;
+    }
+
+    let dll_file_path = dll_file_path.canonicalize()?;
+
+    if opts.verbose {
+        log.push_str(&format!("running .NET program at {}...\n", dll_file_path.display()));
+    }
+
+    let mut exe_command = Command::new("dotnet");
+    exe_command.arg(dll_file_path);
+    exe_command.current_dir(case.working_dir());
+    exe_command.stdin(Stdio::piped());
+    exe_command.stdout(Stdio::piped());
+    exe_command.stderr(Stdio::piped());
+
+    let process = exe_command.spawn()?;
+
+    Ok(TestProcess::from_process(process))
+}
+
 pub struct TestRunner<'a> {
     output: TestOutput,
 
@@ -113,7 +150,7 @@ impl<'a> TestRunner<'a> {
         let spawn_fn = match self.opts.exec {
             ExecutionMethod::Vm => spawn_vm,
             ExecutionMethod::Clang => build_and_run_clang,
-            _ => todo!(),
+            ExecutionMethod::Dotnet => build_and_run_dotnet,
         };
 
         let lib_path = match self.build_lib() {
