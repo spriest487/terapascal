@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "runner2"
-path = "src/main2.rs"
+name = "terapascal-demo-runner"
+path = "src/main.rs"
 
 [dependencies]
 structopt = "0.3.25"

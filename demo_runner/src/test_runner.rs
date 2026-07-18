@@ -23,10 +23,14 @@ enum StepStatus {
 }
 
 fn spawn_vm(case: &TestCase, lib_path: &Path, opts: &Opts, log: &mut String) -> RunResult<TestProcess> {
-    let mut compiler_command = find_command(&opts.compiler)?;
-
     // use the canonical lib path because we're setting the cwd for the VM
     let lib_path = lib_path.canonicalize()?;
+
+    if opts.verbose {
+        log.push_str(&format!("executing IR library at {}...\n", lib_path.display()))
+    }
+
+    let mut compiler_command = find_command(&opts.compiler)?;
     compiler_command.arg(lib_path);
 
     apply_compiler_args(&case, opts, &mut compiler_command);

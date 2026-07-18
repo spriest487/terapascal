@@ -5,7 +5,6 @@ use crate::test_case::TestCase;
 use chrono::DateTime;
 use chrono::Utc;
 use std::env;
-use std::env::consts::EXE_EXTENSION;
 use std::ffi::OsStr;
 use std::io;
 use std::path::Path;
@@ -13,7 +12,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::process::ExitStatus;
 use std::time::SystemTime;
-use terapascal_common::IR_LIB_EXT;
 
 pub fn check_environment(opts: &Opts) -> bool {
     let compiler_exists = opts.compiler.exists();
@@ -76,46 +74,6 @@ pub fn compile_lib(
         if !build_status.success() {
             return Err(RunError::BuildLibFailed);
         }
-    }
-
-    Ok(())
-}
-
-pub fn build_clang(
-    case: &TestCase,
-    exe_path: &PathBuf,
-    build_stdout: &mut Vec<u8>,
-    build_stderr: &mut Vec<u8>,
-    opts: &Opts
-) -> RunResult<()> {
-    if !is_dirty(exe_path, &case.path, opts)? {
-        return Ok(());
-    }
-
-    let lib_path = target_file_path(&case.path, opts, IR_LIB_EXT)?;
-
-    if let Err(err) = compile_lib(case, &lib_path, opts, build_stdout, build_stderr) {
-        return Err(err);
-    };
-
-    let mut exe_file_path = exe_path.clone();
-    exe_file_path.set_extension(EXE_EXTENSION);
-
-    let mut compile_command = find_command(&opts.compiler)?;
-
-    compile_command.arg(&lib_path);
-    compile_command.arg("-o").arg(&exe_file_path);
-
-    apply_compiler_args(&case, opts, &mut compile_command);
-
-    let compile_status = try_run_command(
-        &mut compile_command,
-        build_stdout,
-        build_stderr
-    )?;
-
-    if !compile_status.success() {
-        return Err(RunError::BuildBinaryFailed(compile_status.to_string()));
     }
 
     Ok(())
