@@ -83,7 +83,7 @@ where
 
         if !build_status.success() || !dll_path.exists() {
             run_after_build_err(&mut build_stdout, &mut build_stderr, run);
-            return Err(RunError::BuildBinaryFailed);
+            return Err(RunError::BuildBinaryFailed(build_status.to_string()));
         }
     }
 
@@ -292,7 +292,7 @@ fn try_run_interactive<RunFn>(command: &mut Command, opts: &Opts, f: RunFn) -> i
 // run the test on the output of a failed build
 // (a failure might be OK, we need to verify some build errors log correctly)
 fn run_after_build_err<RunFn>(stdout: &mut Vec<u8>, stderr: &mut Vec<u8>, run: RunFn)
-where 
+where
     RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
 {
     let mut no_write = Vec::new();
