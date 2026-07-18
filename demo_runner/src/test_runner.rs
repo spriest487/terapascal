@@ -10,6 +10,7 @@ use crate::error::RunResult;
 use crate::opts::*;
 use crate::test_case::TestCase;
 use crate::test_output::*;
+use crate::util::*;
 use regex::Regex;
 use std::io::Read;
 use std::path::Path;
@@ -18,37 +19,28 @@ use std::process::Stdio;
 use terapascal_common::IR_LIB_EXT;
 
 enum StepStatus {
-    Ok,
-    Failed,
-    FailedOk,
+    Passed,
+    Failed(FailureReason),
+    ErrMatched,
 }
 
-trait TestExecutor {
-    fn spawn(&mut self, case: &TestCase, lib_path: &Path, opts: &Opts) -> RunResult<TestProcess>;
-}
+fn spawn_vm(case: &TestCase, lib_path: &Path, opts: &Opts) -> RunResult<TestProcess> {
+    let mut compiler_command = find_command(&opts.compiler)?;
 
-struct VmExecutor {
-}
+    // use the canonical lib path because we're setting the cwd for the VM
+    let lib_path = lib_path.canonicalize()?;
+    compiler_command.arg(lib_path);
 
-impl TestExecutor for VmExecutor {
-    fn spawn(&mut self, case: &TestCase, lib_path: &Path, opts: &Opts) -> RunResult<TestProcess> {
-        let mut compiler_command = find_command(&opts.compiler)?;
+    apply_compiler_args(&case, opts, &mut compiler_command);
 
-        // use the canonical lib path because we're setting the cwd for the VM
-        let lib_path = lib_path.canonicalize()?;
-        compiler_command.arg(lib_path);
+    let child = compiler_command
+        .current_dir(case.working_dir())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
 
-        apply_compiler_args(&case, opts, &mut compiler_command);
-
-        let child = compiler_command
-            .current_dir(case.working_dir())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-
-        Ok(TestProcess::from_process(child))
-    }
+    Ok(TestProcess::from_process(child))
 }
 
 pub struct TestRunner<'a> {
@@ -87,8 +79,8 @@ impl<'a> TestRunner<'a> {
     }
 
     pub fn run(mut self) -> TestOutput {
-        let mut executor: Box<dyn TestExecutor> = match self.opts.exec {
-            ExecutionMethod::Vm => Box::new(VmExecutor {}),
+        let spawn_fn = match self.opts.exec {
+            ExecutionMethod::Vm => spawn_vm,
             _ => todo!(),
         };
 
@@ -104,7 +96,7 @@ impl<'a> TestRunner<'a> {
             }
         };
 
-        let mut process = match executor.spawn(&self.case, &lib_path, &self.opts) {
+        let mut process = match spawn_fn(&self.case, &lib_path, &self.opts) {
             Ok(child) => child,
 
             Err(err) => {
@@ -112,10 +104,10 @@ impl<'a> TestRunner<'a> {
             },
         };
 
-        let mut ok = true;
-        let mut can_continue = true;
+        let mut failure_reason = None;
+        let mut handled_error = false;
 
-        while can_continue && self.step < self.case.script.steps.len() {
+        while self.step < self.case.script.steps.len()  {
             let step_status = match self.run_step(&mut process) {
                 Ok(status) => status,
                 Err(err) => {
@@ -124,30 +116,49 @@ impl<'a> TestRunner<'a> {
             };
 
             match step_status {
-                StepStatus::Ok => {
+                StepStatus::Passed => {
+                    self.flush_to_log();
                 },
-                StepStatus::FailedOk => {
-                    ok = false;
+                StepStatus::ErrMatched => {
+                    handled_error = true;
+                    break;
                 }
-                StepStatus::Failed => {
-                    ok = false;
-                    can_continue = false;
+                StepStatus::Failed(fail) => {
+                    handled_error = true;
+                    failure_reason = Some(fail);
+                    break;
                 },
             };
-
-            self.flush_to_log();
         }
 
-        if let Err(err) = process.wait(&mut self.out_buf, &mut self.err_buf) {
+        // there's output remaining that no step matched, report it as an error now
+        if failure_reason.is_none() {
+            process.close_stdin();
+
+            if let Err(err) = process.stdout.read_to_end(&mut self.out_buf) {
+                return self.handle_error(err);
+            }
+
+            let out_text = String::from_utf8_lossy(&self.out_buf);
+            if !out_text.is_empty() {
+                failure_reason = Some(FailureReason::UnexpectedOut);
+                handled_error = true;
+            }
+        }
+
+        // if a step failed, we expect the process to exit with an error status, and that
+        // error should not affect the outcome
+        if let Err(err) = process.wait(&mut self.out_buf, &mut self.err_buf)
+            && !handled_error
+        {
             return self.handle_error(err);
         }
 
         self.flush_to_log();
 
-        self.output.status = if ok {
-            TestStatus::OK
-        } else {
-            TestStatus::Failed
+        self.output.status = match failure_reason {
+            None => TestStatus::OK,
+            Some(reason) => TestStatus::Failed(reason),
         };
 
         self.output
@@ -180,7 +191,45 @@ impl<'a> TestRunner<'a> {
             process.write_stdin(input.as_bytes())?;
         }
 
-        // 2. if an error is expected, read the entire remaining contents of stderr and compare it
+        // 2. if output is expected for this step, the out buf contents must match it,
+        // and the test fails if there is no output
+        if let Some(expect_output_pattern) = &current_step.output_regex {
+            read_to_line_feed(&mut process.stdout, &mut self.out_buf)?;
+            let line_text = String::from_utf8_lossy(&self.out_buf);
+
+            if line_text.is_empty() {
+                let failure = FailureReason::MissingOut(expect_output_pattern.clone());
+                return Ok(StepStatus::Failed(failure));
+            }
+
+            let regex = Regex::new(&format!("(?s){}", expect_output_pattern))
+                .map_err(|err| RunError::InvalidRegex {
+                    err,
+                    src: expect_output_pattern.clone(),
+                })?;
+
+            if !regex.is_match(&line_text) {
+                return Ok(StepStatus::Failed(FailureReason::UnexpectedOut));
+            }
+
+            self.out_buf.push('\n' as u8);
+        } else if let Some(expect_output) = &current_step.output {
+            read_to_line_feed(&mut process.stdout, &mut self.out_buf)?;
+            let line_text = String::from_utf8_lossy(&self.out_buf);
+
+            if line_text.is_empty() {
+                let failure = FailureReason::MissingOut(expect_output.clone());
+                return Ok(StepStatus::Failed(failure));
+            }
+
+            if *expect_output != line_text {
+                return Ok(StepStatus::Failed(FailureReason::UnexpectedOut));
+            }
+
+            self.out_buf.push('\n' as u8);
+        }
+
+        // 3. if an error is expected, read the entire remaining contents of stderr and compare it
         if let Some(expect_err) = &current_step.error_regex {
             process.close_stdin();
             process.stderr.read_to_end(&mut self.err_buf)?;
@@ -188,21 +237,16 @@ impl<'a> TestRunner<'a> {
             let err_text = String::from_utf8_lossy(&self.err_buf);
 
             let status = if self.is_expected_error(expect_err, &err_text)? {
-                StepStatus::FailedOk
+                StepStatus::ErrMatched
             } else {
-                StepStatus::Failed
+                StepStatus::Failed(FailureReason::UnexpectedErr(err_text.to_string()))
             };
 
             return Ok(status)
         }
 
-        // 3. if output is expected for this step, read one line
-        if let Some(expect_output) = &current_step.output {
-
-        }
-
         self.step += 1;
-        Ok(StepStatus::Ok)
+        Ok(StepStatus::Passed)
     }
 
     fn is_expected_error(&self, pattern: &str, text: &str) -> RunResult<bool> {

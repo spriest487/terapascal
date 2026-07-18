@@ -6,7 +6,7 @@ pub enum TestStatus {
     Running,
     Skipped,
     OK,
-    Failed,
+    Failed(FailureReason),
     Error(RunError),
 }
 
@@ -14,6 +14,17 @@ impl TestStatus {
     pub fn is_ok(&self) -> bool {
         matches!(self, TestStatus::OK)
     }
+    
+    pub fn is_skipped(&self) -> bool {
+        matches!(self, TestStatus::Skipped)
+    }
+}
+
+#[derive(Debug)]
+pub enum FailureReason {
+    MissingOut(String),
+    UnexpectedOut,
+    UnexpectedErr(String),
 }
 
 pub struct TestOutput {

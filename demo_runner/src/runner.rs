@@ -5,6 +5,7 @@ use crate::error::RunResult;
 use crate::opts::*;
 use crate::test_case::TestCase;
 use crate::test_script::TestScriptStep;
+use crate::util::*;
 use regex::Regex;
 use std::env::consts::EXE_EXTENSION;
 use std::fs;
@@ -294,31 +295,6 @@ fn run_step(
     }
 
     Ok(true)
-}
-
-fn read_to_line_feed(mut src: impl Read, buf: &mut Vec<u8>) -> io::Result<String> {
-    loop {
-        let mut next = [0];
-        src.read_exact(&mut next)?;
-
-        if next[0] == b'\n' {
-            break buf_to_string(buf.clone());
-        }
-
-        if next[0] != b'\r' {
-            buf.push(next[0]);
-        }
-    }
-}
-
-fn buf_to_string(buf: Vec<u8>) -> io::Result<String> {
-    match String::from_utf8(buf) {
-        Ok(string) => Ok(string.trim_end().to_string()),
-        Err(err) => {
-            let msg = format!("unreadable output: {}", err);
-            Err(io::Error::new(io::ErrorKind::InvalidData, msg))
-        }
-    }
 }
 
 fn try_run_interactive<RunFn>(command: &mut Command, opts: &Opts, f: RunFn) -> io::Result<ExitStatus>

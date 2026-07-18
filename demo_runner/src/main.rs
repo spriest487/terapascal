@@ -5,6 +5,7 @@ mod runner;
 mod test_case;
 mod build;
 mod error;
+mod util;
 
 use crate::build::check_environment;
 use crate::runner::run;

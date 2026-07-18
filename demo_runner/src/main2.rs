@@ -5,6 +5,7 @@ mod build;
 mod test_runner;
 mod error;
 mod test_output;
+mod util;
 
 use crate::test_output::*;
 use crate::build::*;
@@ -56,6 +57,15 @@ fn main() -> Result<(), i32> {
             while let Some(output)= outputs[next_index].take() {
                 next_index += 1;
 
+                if next_index >= case_count {
+                    break;
+                }
+
+                if output.status.is_skipped() {
+                    skipped_count += 1;
+                    continue;
+                }
+
                 println!();
                 println!("TEST: {} ({}/{})", output.path.display(), output.index + 1, case_count);
                 if !output.log.is_empty() {
@@ -63,17 +73,23 @@ fn main() -> Result<(), i32> {
                 }
 
                 match output.status {
-                    TestStatus::Skipped => {
-                        skipped_count += 1;
-                        continue;
-                    }
-
                     TestStatus::OK => {
                         println!("OK");
                     }
 
-                    TestStatus::Failed => {
-                        println!("FAILED");
+                    TestStatus::Failed(reason) => {
+                        print!("FAILED: ");
+                        match reason {
+                            FailureReason::MissingOut(expected) => {
+                                println!("expected output '{expected}'");
+                            },
+                            FailureReason::UnexpectedOut => {
+                                println!("unexpected output");
+                            }
+                            FailureReason::UnexpectedErr(output) => {
+                                println!("unexpected error output '{output}'");
+                            }
+                        }
                         failed_paths.push(output.path);
                     }
 
@@ -82,13 +98,9 @@ fn main() -> Result<(), i32> {
                         failed_paths.push(output.path);
                     }
 
-                    TestStatus::Running => {
-                        panic!("running tests should never complete");
+                    TestStatus::Skipped | TestStatus::Running => {
+                        unreachable!()
                     }
-                }
-
-                if next_index >= case_count {
-                    break;
                 }
             }
         }
