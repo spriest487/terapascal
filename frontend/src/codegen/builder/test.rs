@@ -65,7 +65,6 @@ fn break_cleans_up_loop_locals() {
         ir::Instruction::Release {
             at: ir::Ref::Local(ir::LocalID(1)),
             value_type: ir::ANY_TYPE,
-            released_out: ir::Ref::Discard,
         },
         ir::Instruction::Move {
             out: ir::Ref::Local(ir::LocalID(1)),
@@ -74,7 +73,6 @@ fn break_cleans_up_loop_locals() {
         ir::Instruction::Release {
             at: ir::Ref::Local(ir::LocalID(0)),
             value_type: ir::ANY_TYPE,
-            released_out: ir::Ref::Discard,
         },
         ir::Instruction::Move {
             out: ir::Ref::Local(ir::LocalID(0)),
