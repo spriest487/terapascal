@@ -1,8 +1,9 @@
+use crate::test_script::TestScript;
 use std::fs::DirEntry;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
 use terapascal_common::SRC_FILE_DEFAULT_EXT;
-use crate::test_script::TestScript;
 
 #[derive(Clone)]
 pub struct TestCase {

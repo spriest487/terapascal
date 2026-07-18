@@ -1,7 +1,8 @@
+use crate::error::RunError;
+use crate::error::RunResult;
 use std::io;
 use std::io::Write;
 use std::process::*;
-use crate::error::{RunError, RunResult};
 
 pub struct TestProcess {
     pub process: Child,

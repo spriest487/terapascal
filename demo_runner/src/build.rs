@@ -5,6 +5,7 @@ use crate::test_case::TestCase;
 use chrono::DateTime;
 use chrono::Utc;
 use std::env;
+use std::env::consts::EXE_EXTENSION;
 use std::ffi::OsStr;
 use std::io;
 use std::path::Path;
@@ -12,6 +13,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::process::ExitStatus;
 use std::time::SystemTime;
+use terapascal_common::IR_LIB_EXT;
 
 pub fn check_environment(opts: &Opts) -> bool {
     let compiler_exists = opts.compiler.exists();
@@ -74,6 +76,46 @@ pub fn compile_lib(
         if !build_status.success() {
             return Err(RunError::BuildLibFailed);
         }
+    }
+
+    Ok(())
+}
+
+pub fn build_clang(
+    case: &TestCase,
+    exe_path: &PathBuf,
+    build_stdout: &mut Vec<u8>,
+    build_stderr: &mut Vec<u8>,
+    opts: &Opts
+) -> RunResult<()> {
+    if !is_dirty(exe_path, &case.path, opts)? {
+        return Ok(());
+    }
+
+    let lib_path = target_file_path(&case.path, opts, IR_LIB_EXT)?;
+
+    if let Err(err) = compile_lib(case, &lib_path, opts, build_stdout, build_stderr) {
+        return Err(err);
+    };
+
+    let mut exe_file_path = exe_path.clone();
+    exe_file_path.set_extension(EXE_EXTENSION);
+
+    let mut compile_command = find_command(&opts.compiler)?;
+
+    compile_command.arg(&lib_path);
+    compile_command.arg("-o").arg(&exe_file_path);
+
+    apply_compiler_args(&case, opts, &mut compile_command);
+
+    let compile_status = try_run_command(
+        &mut compile_command,
+        build_stdout,
+        build_stderr
+    )?;
+
+    if !compile_status.success() {
+        return Err(RunError::BuildBinaryFailed(compile_status.to_string()));
     }
 
     Ok(())
@@ -187,4 +229,28 @@ pub fn try_run_command(
     stderr.append(&mut output.stderr);
 
     Ok(output.status)
+}
+
+pub fn run_build_command(mut command: Command) -> RunResult<()> {
+    let output = command.output()?;
+
+    if !output.status.success() {
+        let mut msg = output.status.to_string();
+
+        let compile_stdout = String::from_utf8_lossy(&output.stdout);
+        if !compile_stdout.is_empty() {
+            msg.push_str("\n");
+            msg.push_str(&compile_stdout);
+        }
+
+        let compile_stderr = String::from_utf8_lossy(&output.stderr);
+        if !compile_stderr.is_empty() {
+            msg.push_str("\n");
+            msg.push_str(&compile_stderr);
+        }
+
+        return Err(RunError::BuildBinaryFailed(msg));
+    }
+
+    Ok(())
 }

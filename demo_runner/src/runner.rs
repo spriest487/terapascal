@@ -103,46 +103,6 @@ where
     Ok(())
 }
 
-fn build_clang(
-    case: &TestCase,
-    exe_path: &PathBuf,
-    build_stdout: &mut Vec<u8>,
-    build_stderr: &mut Vec<u8>,
-    opts: &Opts
-) -> RunResult<()> {
-    if !is_dirty(exe_path, &case.path, opts)? {
-        return Ok(());
-    }
-
-    let lib_path = target_file_path(&case.path, opts, IR_LIB_EXT)?;
-
-    if let Err(err) = compile_lib(case, &lib_path, opts, build_stdout, build_stderr) {
-        return Err(err);
-    };
-
-    let mut exe_file_path = exe_path.clone();
-    exe_file_path.set_extension(EXE_EXTENSION);
-
-    let mut compile_command = find_command(&opts.compiler)?;
-
-    compile_command.arg(&lib_path);
-    compile_command.arg("-o").arg(&exe_file_path);
-
-    apply_compiler_args(&case, opts, &mut compile_command);
-
-    let compile_status = try_run_command(
-        &mut compile_command,
-        build_stdout,
-        build_stderr
-    )?;
-
-    if !compile_status.success() {
-        return Err(RunError::BuildBinaryFailed);
-    }
-
-    Ok(())
-}
-
 fn run_clang<RunFn>(case: &TestCase, opts: &Opts, run: RunFn) -> RunResult<()>
 where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
 {

@@ -104,7 +104,7 @@ fn main() -> Result<(), i32> {
 
         let failed_count = failed_paths.len();
         let ok_count = case_count - (skipped_count + failed_count);
-        println!("OK: {ok_count} FAILED: {failed_count} SKIPPED: {skipped_count}");
+        println!("OK: {ok_count} / FAILED: {failed_count} / SKIPPED: {skipped_count}");
 
         if failed_count > 0 {
             println!("Failed:");

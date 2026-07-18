@@ -7,7 +7,7 @@ pub enum RunError {
     BuildLibFailed,
 
     #[error("Building test binary failed")]
-    BuildBinaryFailed,
+    BuildBinaryFailed(String),
 
     #[error("Invalid regular expression '{src}': {err}")]
     InvalidRegex {

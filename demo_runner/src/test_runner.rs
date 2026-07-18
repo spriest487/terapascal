@@ -1,20 +1,18 @@
 mod test_process;
 
 use self::test_process::*;
-use crate::build::apply_compiler_args;
-use crate::build::compile_lib;
-use crate::build::find_command;
-use crate::build::target_file_path;
-use crate::error::RunError;
-use crate::error::RunResult;
+use crate::build::*;
+use crate::error::*;
 use crate::opts::*;
-use crate::test_case::TestCase;
+use crate::test_case::*;
 use crate::test_output::*;
 use crate::util::*;
 use regex::Regex;
+use std::env::consts::EXE_EXTENSION;
 use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
 use std::process::Stdio;
 use terapascal_common::IR_LIB_EXT;
 
@@ -24,7 +22,7 @@ enum StepStatus {
     ErrMatched,
 }
 
-fn spawn_vm(case: &TestCase, lib_path: &Path, opts: &Opts) -> RunResult<TestProcess> {
+fn spawn_vm(case: &TestCase, lib_path: &Path, opts: &Opts, log: &mut String) -> RunResult<TestProcess> {
     let mut compiler_command = find_command(&opts.compiler)?;
 
     // use the canonical lib path because we're setting the cwd for the VM
@@ -41,6 +39,39 @@ fn spawn_vm(case: &TestCase, lib_path: &Path, opts: &Opts) -> RunResult<TestProc
         .spawn()?;
 
     Ok(TestProcess::from_process(child))
+}
+
+fn build_and_run_clang(case: &TestCase, lib_path: &Path, opts: &Opts, log: &mut String) -> RunResult<TestProcess> {
+    let exe_file_path = target_file_path(&case.path, opts, EXE_EXTENSION)?;
+
+    if is_dirty(&exe_file_path, &case.path, opts)? {
+        let mut compiler_command = find_command(&opts.compiler)?;
+        compiler_command.arg(lib_path);
+        compiler_command.arg("-o").arg(&exe_file_path);
+
+        if opts.verbose {
+            log.push_str(&format!("building executable at {}...\n", exe_file_path.display()))
+        }
+
+        apply_compiler_args(&case, opts, &mut compiler_command);
+        run_build_command(compiler_command)?;
+    }
+
+    let exe_file_path = exe_file_path.canonicalize()?;
+
+    if opts.verbose {
+        log.push_str(&format!("running executable at {}...\n", exe_file_path.display()));
+    }
+
+    let mut exe_command = Command::new(exe_file_path);
+    exe_command.current_dir(case.working_dir());
+    exe_command.stdin(Stdio::piped());
+    exe_command.stdout(Stdio::piped());
+    exe_command.stderr(Stdio::piped());
+
+    let process = exe_command.spawn()?;
+
+    Ok(TestProcess::from_process(process))
 }
 
 pub struct TestRunner<'a> {
@@ -81,6 +112,7 @@ impl<'a> TestRunner<'a> {
     pub fn run(mut self) -> TestOutput {
         let spawn_fn = match self.opts.exec {
             ExecutionMethod::Vm => spawn_vm,
+            ExecutionMethod::Clang => build_and_run_clang,
             _ => todo!(),
         };
 
@@ -96,7 +128,7 @@ impl<'a> TestRunner<'a> {
             }
         };
 
-        let mut process = match spawn_fn(&self.case, &lib_path, &self.opts) {
+        let mut process = match spawn_fn(&self.case, &lib_path, &self.opts, &mut self.output.log) {
             Ok(child) => child,
 
             Err(err) => {
@@ -277,6 +309,16 @@ impl<'a> TestRunner<'a> {
 
     fn build_lib(&mut self) -> RunResult<PathBuf> {
         let lib_path = target_file_path(&self.case.path, &self.opts, IR_LIB_EXT)?;
+
+        if self.opts.verbose {
+            self.output.log.push_str(&format!(
+                "building library...\n\
+                source path: {}\n\
+                lib path: {}\n",
+                self.case.path.display(),
+                lib_path.display(),
+            ));
+        }
 
         compile_lib(&self.case, &lib_path, &self.opts, &mut self.out_buf, &mut self.err_buf)?;
 
