@@ -441,10 +441,7 @@ pub fn check_overload_visibility(
         OverloadCandidate::Function { visibility, decl_name, .. } => {
             if *visibility < Visibility::Interface
                 && !ctx.is_current_namespace_child(&decl_name.full_path) {
-                Err(TypeError::NameNotVisible {
-                    name: decl_name.full_path.clone(),
-                    span: span.clone(),
-                })
+                Err(TypeError::name_not_visible(decl_name.full_path.clone(), span.clone()))
             } else {
                 Ok(())
             }
@@ -561,11 +558,9 @@ fn typecheck_ufcs_invocation(
     ctx: &mut Context,
 ) -> TypeResult<Invocation> {
     if ufcs.visibility < Visibility::Interface
-        && !ctx.is_current_namespace_child(&ufcs.function_name.full_path) {
-        return Err(TypeError::NameNotVisible {
-            name: ufcs.function_name.full_path.clone(),
-            span: span.clone(),
-        });
+        && !ctx.is_current_namespace_child(&ufcs.function_name.full_path)
+    {
+        return Err(TypeError::name_not_visible(ufcs.function_name.full_path.clone(), span.clone()));
     }
 
     let mut specialized_call_args = specialize_call_args(

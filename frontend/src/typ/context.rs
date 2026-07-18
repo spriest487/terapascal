@@ -23,6 +23,7 @@ pub use self::result::*;
 pub use self::scope::*;
 pub use self::ufcs::InstanceMethod;
 pub use self::value_kind::*;
+
 use crate::ast::Access;
 use crate::ast::MethodOwner;
 use crate::ast::StructKind;
@@ -2279,10 +2280,7 @@ impl Context {
             return Ok(());
         }
 
-        Err(TypeError::NameNotVisible {
-            name: name.clone(),
-            span: at.clone(),
-        })
+        Err(TypeError::name_not_visible(name.clone(), at.clone()))
     }
 
     pub fn get_visibility(&self, name: &IdentPath) -> Option<Visibility> {

@@ -147,11 +147,9 @@ impl VariantCaseValue {
         ctx: &mut Context,
     ) -> TypeResult<Invocation> {
         // validate visibility
-        if !ctx.is_visible(&self.variant_name.full_path) {
-            return Err(TypeError::NameNotVisible {
-                name: self.variant_name.full_path.clone(),
-                span: span.clone(),
-            });
+        let variant_path = &self.variant_name.full_path;
+        if !ctx.is_visible(variant_path) {
+            return Err(TypeError::name_not_visible(variant_path.clone(), span.clone()));
         }
 
         let variant_sym = match (type_args, &self.variant_name.type_params) {

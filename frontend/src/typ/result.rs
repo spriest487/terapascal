@@ -437,6 +437,13 @@ impl TypeError {
     pub fn name_not_found(name: impl Into<IdentPath>, span: impl Into<Span>) -> Self {
         TypeError::from_name_err(NameError::NotFound { ident: name.into() }, span.into())
     }
+    
+    pub fn name_not_visible(name: impl Into<IdentPath>, span: impl Into<Span>) -> Self {
+        TypeError::NameNotVisible { 
+            name: name.into(),
+            span: span.into()
+        }
+    }
 
     pub fn invalid_args_with_sig(
         sig: &FunctionSig,

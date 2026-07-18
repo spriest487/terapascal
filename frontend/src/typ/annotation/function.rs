@@ -70,10 +70,7 @@ impl FunctionValue {
         if self.visibility < Visibility::Interface
             && !ctx.is_current_namespace_child(&self.name.full_path)
         {
-            return Err(TypeError::NameNotVisible {
-                name: self.name.full_path.clone(),
-                span: at.clone(),
-            });
+            return Err(TypeError::name_not_visible(self.name.full_path.clone(), at.clone()));
         }
 
         Ok(())

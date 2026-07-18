@@ -115,6 +115,15 @@ impl<'a> ImportBuilder<'a> {
             }
         }
 
+        for (iface_id, iface_def) in self.library.metadata.interface_defs() {
+            let iface_type = iface_id.to_interface_type(iface_def.name.generic_args());
+
+            if let Err(err) = self.read_type(&iface_type) {
+                let type_name = iface_type.to_pretty_string(self);
+                self.warnings.push(ImportWarning::InvalidType(type_name, Box::new(err)));
+            }
+        }
+
         for (func_id, func_info) in self.library.metadata.functions() {
             if let Err(err) = self.read_function(func_id, func_info) {
                 let func_name = ir::FunctionRef::new(func_id).to_pretty_string(self);
